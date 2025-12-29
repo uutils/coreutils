@@ -6,10 +6,13 @@
 // spell-checker:ignore (words) ints (linux) NOFILE
 #![allow(clippy::cast_possible_wrap)]
 
+use std::env;
+use std::fmt::Write as FmtWrite;
 use std::time::Duration;
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
+use uutests::util::TestScenario;
 
 fn test_helper(file_name: &str, possible_args: &[&str]) {
     for args in possible_args {
@@ -1897,6 +1900,409 @@ fn test_argument_suggestion_colors_enabled() {
         );
     }
 }
+
+#[test]
+fn test_debug_key_annotations() {
+    let ts = TestScenario::new("sort");
+    let output = debug_key_annotation_output(&ts);
+
+    assert_eq!(output, EXPECTED_DEBUG_KEY_ANNOTATION);
+}
+
+#[test]
+fn test_debug_key_annotations_locale() {
+    let ts = TestScenario::new("sort");
+
+    if let Ok(locale_fr_utf8) = env::var("LOCALE_FR_UTF8") {
+        if locale_fr_utf8 != "none" {
+            let probe = ts
+                .ucmd()
+                .args(&["-g", "--debug", "/dev/null"])
+                .env("LC_NUMERIC", &locale_fr_utf8)
+                .env("LC_MESSAGES", "C")
+                .run();
+            if probe
+                .stderr_str()
+                .contains("numbers use .*,.* as a decimal point")
+            {
+                let mut locale_output = String::new();
+                locale_output.push_str(
+                    &ts.ucmd()
+                        .env("LC_ALL", "C")
+                        .args(&["--debug", "-k2g", "-k1b,1"])
+                        .pipe_in("   1²---++3   1,234  Mi\n")
+                        .succeeds()
+                        .stdout_move_str(),
+                );
+                locale_output.push_str(
+                    &ts.ucmd()
+                        .env("LC_ALL", &locale_fr_utf8)
+                        .args(&["--debug", "-k2g", "-k1b,1"])
+                        .pipe_in("   1²---++3   1,234  Mi\n")
+                        .succeeds()
+                        .stdout_move_str(),
+                );
+                locale_output.push_str(
+                    &ts.ucmd()
+                        .env("LC_ALL", &locale_fr_utf8)
+                        .args(&[
+                            "--debug", "-k1,1n", "-k1,1g", "-k1,1h", "-k2,2n", "-k2,2g", "-k2,2h",
+                            "-k3,3n", "-k3,3g", "-k3,3h",
+                        ])
+                        .pipe_in("+1234 1234Gi 1,234M\n")
+                        .succeeds()
+                        .stdout_move_str(),
+                );
+
+                let normalized = locale_output
+                    .lines()
+                    .map(|line| {
+                        if line.starts_with("^^ ") {
+                            "^ no match for key".to_string()
+                        } else {
+                            line.to_string()
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+                    + "\n";
+
+                assert_eq!(normalized, EXPECTED_DEBUG_KEY_ANNOTATION_LOCALE);
+            }
+        }
+    }
+}
+
+fn debug_key_annotation_output(ts: &TestScenario) -> String {
+    let number = |input: &str| -> String {
+        let mut out = String::new();
+        for (idx, line) in input.split_terminator('\n').enumerate() {
+            // build efficiently without collecting intermediary Strings
+            writeln!(&mut out, "{}\t{line}", idx + 1).unwrap();
+        }
+        out
+    };
+
+    let run_sort = |args: &[&str], input: &str| -> String {
+        ts.ucmd()
+            .args(args)
+            .pipe_in(input)
+            .succeeds()
+            .stdout_move_str()
+    };
+
+    let mut output = String::new();
+    for mode in ["n", "h", "g"] {
+        output.push_str(&run_sort(
+            &["-s", &format!("-k2{mode}"), "--debug"],
+            "1\n\n44\n33\n2\n",
+        ));
+        output.push_str(&run_sort(
+            &["-s", &format!("-k1.3{mode}"), "--debug"],
+            "1\n\n44\n33\n2\n",
+        ));
+        output.push_str(&run_sort(
+            &["-s", &format!("-k1{mode}"), "--debug"],
+            "1\n\n44\n33\n2\n",
+        ));
+        output.push_str(&run_sort(&["-s", "-k2g", "--debug"], &number("2\n\n1\n")));
+    }
+
+    output.push_str(&run_sort(&["-s", "-k1M", "--debug"], "FEB\n\nJAN\n"));
+    output.push_str(&run_sort(&["-s", "-k2,2M", "--debug"], "FEB\n\nJAN\n"));
+    output.push_str(&run_sort(&["-s", "-k1M", "--debug"], "FEB\nJAZZ\n\nJAN\n"));
+    output.push_str(&run_sort(
+        &["-s", "-k2,2M", "--debug"],
+        &number("FEB\nJAZZ\n\nJAN\n"),
+    ));
+    output.push_str(&run_sort(&["-s", "-k1M", "--debug"], "FEB\nJANZ\n\nJAN\n"));
+    output.push_str(&run_sort(
+        &["-s", "-k2,2M", "--debug"],
+        &number("FEB\nJANZ\n\nJAN\n"),
+    ));
+
+    output.push_str(&run_sort(
+        &["-s", "-g", "--debug"],
+        " 1.2ignore\n 1.1e4ignore\n",
+    ));
+    output.push_str(&run_sort(&["-s", "-d", "--debug"], "\tb\n\t\ta\n"));
+    output.push_str(&run_sort(&["-s", "-k2,2", "--debug"], "a\n\n"));
+    output.push_str(&run_sort(&["-s", "-k1", "--debug"], "b\na\n"));
+    output.push_str(&run_sort(
+        &["-s", "--debug", "-k1,1h"],
+        "-0\n1\n-2\n--Mi-1\n-3\n-0\n",
+    ));
+    output.push_str(&run_sort(&["-b", "--debug"], " 1\n1\n"));
+    output.push_str(&run_sort(&["-s", "-b", "--debug"], " 1\n1\n"));
+    output.push_str(&run_sort(&["--debug"], " 1\n1\n"));
+    output.push_str(&run_sort(&["-s", "-k1n", "--debug"], "2,5\n2.4\n"));
+    output.push_str(&run_sort(&["-s", "-k1n", "--debug"], "2.,,3\n2.4\n"));
+    output.push_str(&run_sort(&["-s", "-k1n", "--debug"], "2,,3\n2.4\n"));
+    output.push_str(&run_sort(
+        &["-s", "-n", "-z", "--debug"],
+        concat!("1a\0", "2b\0"),
+    ));
+
+    let mut zero_mix = ts
+        .ucmd()
+        .args(&["-s", "-k2b,2", "--debug"])
+        .pipe_in("\0\ta\n")
+        .succeeds()
+        .stdout_move_bytes();
+    zero_mix.retain(|b| *b != 0);
+    output.push_str(&String::from_utf8(zero_mix).unwrap());
+
+    output.push_str(&run_sort(
+        &["-s", "-k2.4b,2.3n", "--debug"],
+        "A\tchr10\nB\tchr1\n",
+    ));
+    output.push_str(&run_sort(&["-s", "-k1.2b", "--debug"], "1 2\n1 3\n"));
+
+    output
+}
+
+const EXPECTED_DEBUG_KEY_ANNOTATION: &str = r"1
+ ^ no match for key
+
+^ no match for key
+44
+  ^ no match for key
+33
+  ^ no match for key
+2
+ ^ no match for key
+1
+ ^ no match for key
+
+^ no match for key
+44
+  ^ no match for key
+33
+  ^ no match for key
+2
+ ^ no match for key
+
+^ no match for key
+1
+_
+2
+_
+33
+__
+44
+__
+2>
+  ^ no match for key
+3>1
+  _
+1>2
+  _
+1
+ ^ no match for key
+
+^ no match for key
+44
+  ^ no match for key
+33
+  ^ no match for key
+2
+ ^ no match for key
+1
+ ^ no match for key
+
+^ no match for key
+44
+  ^ no match for key
+33
+  ^ no match for key
+2
+ ^ no match for key
+
+^ no match for key
+1
+_
+2
+_
+33
+__
+44
+__
+2>
+  ^ no match for key
+3>1
+  _
+1>2
+  _
+1
+ ^ no match for key
+
+^ no match for key
+44
+  ^ no match for key
+33
+  ^ no match for key
+2
+ ^ no match for key
+1
+ ^ no match for key
+
+^ no match for key
+44
+  ^ no match for key
+33
+  ^ no match for key
+2
+ ^ no match for key
+
+^ no match for key
+1
+_
+2
+_
+33
+__
+44
+__
+2>
+  ^ no match for key
+3>1
+  _
+1>2
+  _
+
+^ no match for key
+JAN
+___
+FEB
+___
+FEB
+   ^ no match for key
+
+^ no match for key
+JAN
+   ^ no match for key
+JAZZ
+^ no match for key
+
+^ no match for key
+JAN
+___
+FEB
+___
+2>JAZZ
+  ^ no match for key
+3>
+  ^ no match for key
+4>JAN
+  ___
+1>FEB
+  ___
+
+^ no match for key
+JANZ
+___
+JAN
+___
+FEB
+___
+3>
+  ^ no match for key
+2>JANZ
+  ___
+4>JAN
+  ___
+1>FEB
+  ___
+ 1.2ignore
+ ___
+ 1.1e4ignore
+ _____
+>>a
+___
+>b
+__
+a
+ ^ no match for key
+
+^ no match for key
+a
+_
+b
+_
+-3
+__
+-2
+__
+-0
+__
+--Mi-1
+^ no match for key
+-0
+__
+1
+_
+ 1
+ _
+__
+1
+_
+_
+ 1
+ _
+1
+_
+ 1
+__
+1
+_
+2,5
+_
+2.4
+___
+2.,,3
+__
+2.4
+___
+2,,3
+_
+2.4
+___
+1a
+_
+2b
+_
+>a
+ _
+A>chr10
+     ^ no match for key
+B>chr1
+     ^ no match for key
+1 2
+ __
+1 3
+ __
+";
+
+const EXPECTED_DEBUG_KEY_ANNOTATION_LOCALE: &str = r"   1²---++3   1,234  Mi
+               _
+   _________
+________________________
+   1²---++3   1,234  Mi
+              _____
+   ________
+_______________________
++1234 1234Gi 1,234M
+^ no match for key
+_____
+^ no match for key
+      ____
+      ____
+      _____
+             _____
+             _____
+             ______
+___________________
+";
 
 #[test]
 fn test_color_environment_variables() {

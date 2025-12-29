@@ -65,6 +65,10 @@ feat_selinux = [
   "selinux",
   "stat/selinux",
 ]
+# "feat_smack" == enable support for SMACK Security Context (by using `--features feat_smack`)
+# NOTE:
+# * Running a uutils compiled with `feat_smack` requires a SMACK enabled Kernel at run time.
+feat_smack = ["ls/smack"]
 ##
 ## feature sets
 ## (common/core and Tier1) feature sets
@@ -379,7 +383,7 @@ walkdir = "2.5"
 winapi-util = "0.1.8"
 windows-sys = { version = "0.61.0", default-features = false }
 xattr = "1.3.1"
-zip = { version = "6.0.0", default-features = false, features = ["deflate"] }
+zip = { version = "7.0.0", default-features = false, features = ["deflate"] }
 
 hex = "0.4.3"
 md-5 = "0.10.6"
@@ -667,7 +671,6 @@ should_panic_without_expect = "allow"        # 2
 doc_markdown = "allow"
 unused_self = "allow"
 enum_glob_use = "allow"
-needless_raw_string_hashes = "allow"
 unreadable_literal = "allow"
 unnested_or_patterns = "allow"
 implicit_hasher = "allow"

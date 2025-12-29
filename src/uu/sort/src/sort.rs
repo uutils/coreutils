@@ -157,10 +157,10 @@ pub enum SortError {
     #[error("{}", translate!("sort-compress-prog-terminated-abnormally", "prog" => .prog.quote()))]
     CompressProgTerminatedAbnormally { prog: String },
 
-    #[error("{}", translate!("sort-cannot-create-tmp-file", "path" => format!("{}", .path.display())))]
+    #[error("{}", translate!("sort-cannot-create-tmp-file", "path" => format!("{}", .path.quote())))]
     TmpFileCreationFailed { path: PathBuf },
 
-    #[error("{}", translate!("sort-file-operands-combined", "file" => format!("{}", .file.display()), "help" => uucore::execution_phrase()))]
+    #[error("{}", translate!("sort-file-operands-combined", "file" => format!("{}", .file.quote()), "help" => uucore::execution_phrase()))]
     FileOperandsCombined { file: PathBuf },
 
     #[error("{error}")]
@@ -172,10 +172,10 @@ pub enum SortError {
     #[error("{}", translate!("sort-minus-in-stdin"))]
     MinusInStdIn,
 
-    #[error("{}", translate!("sort-no-input-from", "file" => format!("{}", .file.display())))]
+    #[error("{}", translate!("sort-no-input-from", "file" => format!("{}", .file.quote())))]
     EmptyInputFile { file: PathBuf },
 
-    #[error("{}", translate!("sort-invalid-zero-length-filename", "file" => format!("{}", .file.display()), "line_num" => .line_num))]
+    #[error("{}", translate!("sort-invalid-zero-length-filename", "file" => .file.maybe_quote(), "line_num" => .line_num))]
     ZeroLengthFileName { file: PathBuf, line_num: usize },
 }
 
@@ -219,6 +219,11 @@ impl SortMode {
             Self::Default => None,
         }
     }
+}
+
+/// Return the length of the byte slice while ignoring embedded NULs (used for debug underline alignment).
+fn count_non_null_bytes(bytes: &[u8]) -> usize {
+    bytes.iter().filter(|&&c| c != b'\0').count()
 }
 
 pub struct Output {
@@ -670,14 +675,19 @@ impl<'a> Line<'a> {
                 _ => {}
             }
 
+            // Don't let embedded NUL bytes influence column alignment in the
+            // debug underline output, since they are often filtered out (e.g.
+            // via `tr -d '\0'`) before inspection.
             let select = &line[..selection.start];
-            write!(writer, "{}", " ".repeat(select.len()))?;
+            let indent = count_non_null_bytes(select);
+            write!(writer, "{}", " ".repeat(indent))?;
 
             if selection.is_empty() {
                 writeln!(writer, "{}", translate!("sort-error-no-match-for-key"))?;
             } else {
                 let select = &line[selection];
-                writeln!(writer, "{}", "_".repeat(select.len()))?;
+                let underline_len = count_non_null_bytes(select);
+                writeln!(writer, "{}", "_".repeat(underline_len))?;
             }
         }
 
@@ -1073,11 +1083,25 @@ fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
 
 #[cfg(target_os = "linux")]
 fn get_rlimit() -> UResult<usize> {
-    use nix::sys::resource::{Resource, getrlimit};
+    use nix::sys::resource::{RLIM_INFINITY, Resource, getrlimit};
 
-    getrlimit(Resource::RLIMIT_NOFILE)
-        .map(|(rlim_cur, _)| rlim_cur as usize)
+    let (rlim_cur, _rlim_max) = getrlimit(Resource::RLIMIT_NOFILE)
+        .map_err(|_| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))?;
+    if rlim_cur == RLIM_INFINITY {
+        return Err(UUsageError::new(2, translate!("sort-failed-fetch-rlimit")));
+    }
+    usize::try_from(rlim_cur)
         .map_err(|_| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn fd_soft_limit() -> Option<usize> {
+    get_rlimit().ok()
+}
+
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn fd_soft_limit() -> Option<usize> {
+    None
 }
 
 const STDIN_FILE: &str = "-";
@@ -1232,12 +1256,12 @@ fn default_merge_batch_size() -> usize {
     #[cfg(target_os = "linux")]
     {
         // Adjust merge batch size dynamically based on available file descriptors.
-        match get_rlimit() {
-            Ok(limit) => {
+        match fd_soft_limit() {
+            Some(limit) => {
                 let usable_limit = limit.saturating_div(LINUX_BATCH_DIVISOR);
                 usable_limit.clamp(LINUX_BATCH_MIN, LINUX_BATCH_MAX)
             }
-            Err(_) => 64,
+            None => 64,
         }
     }
 
@@ -1366,9 +1390,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         settings.threads = matches
             .get_one::<String>(options::PARALLEL)
             .map_or_else(|| "0".to_string(), String::from);
-        unsafe {
-            env::set_var("RAYON_NUM_THREADS", &settings.threads);
-        }
+        let num_threads = match settings.threads.parse::<usize>() {
+            Ok(0) | Err(_) => std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
+            Ok(n) => n,
+        };
+        let _ = rayon::ThreadPoolBuilder::new()
+            .num_threads(num_threads)
+            .build_global();
     }
 
     if let Some(size_str) = matches.get_one::<String>(options::BUF_SIZE) {
@@ -1419,7 +1449,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
                         translate!(
                             "sort-maximum-batch-size-rlimit",
-                            "rlimit" =>  get_rlimit()?
+                            "rlimit" => {
+                                let Some(rlimit) = fd_soft_limit() else {
+                                    return Err(UUsageError::new(
+                                        2,
+                                        translate!("sort-failed-fetch-rlimit"),
+                                    ));
+                                };
+                                rlimit
+                            }
                         )
                     }
                     #[cfg(not(target_os = "linux"))]

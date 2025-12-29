@@ -188,18 +188,18 @@ enum LsError {
     IOError(#[from] std::io::Error),
 
     #[error("{}", match .1.kind() {
-        ErrorKind::NotFound => translate!("ls-error-cannot-access-no-such-file", "path" => .0.to_string_lossy()),
+        ErrorKind::NotFound => translate!("ls-error-cannot-access-no-such-file", "path" => .0.quote()),
         ErrorKind::PermissionDenied => match .1.raw_os_error().unwrap_or(1) {
-            1 => translate!("ls-error-cannot-access-operation-not-permitted", "path" => .0.to_string_lossy()),
+            1 => translate!("ls-error-cannot-access-operation-not-permitted", "path" => .0.quote()),
             _ => if .0.is_dir() {
-                translate!("ls-error-cannot-open-directory-permission-denied", "path" => .0.to_string_lossy())
+                translate!("ls-error-cannot-open-directory-permission-denied", "path" => .0.quote())
             } else {
-                translate!("ls-error-cannot-open-file-permission-denied", "path" => .0.to_string_lossy())
+                translate!("ls-error-cannot-open-file-permission-denied", "path" => .0.quote())
             },
         },
         _ => match .1.raw_os_error().unwrap_or(1) {
-            9 => translate!("ls-error-cannot-open-directory-bad-descriptor", "path" => .0.to_string_lossy()),
-            _ => translate!("ls-error-unknown-io-error", "path" => .0.to_string_lossy(), "error" => format!("{:?}", .1)),
+            9 => translate!("ls-error-cannot-open-directory-bad-descriptor", "path" => .0.quote()),
+            _ => translate!("ls-error-unknown-io-error", "path" => .0.quote(), "error" => format!("{:?}", .1)),
         },
     })]
     IOErrorContext(PathBuf, std::io::Error, bool),
@@ -210,7 +210,7 @@ enum LsError {
     #[error("{}", translate!("ls-error-dired-and-zero-incompatible"))]
     DiredAndZeroAreIncompatible,
 
-    #[error("{}", translate!("ls-error-not-listing-already-listed", "path" => .0.to_string_lossy()))]
+    #[error("{}", translate!("ls-error-not-listing-already-listed", "path" => .0.maybe_quote()))]
     AlreadyListedError(PathBuf),
 
     #[error("{}", translate!("ls-error-invalid-time-style", "style" => .0.quote()))]
@@ -369,7 +369,10 @@ pub struct Config {
     time_format_recent: String,        // Time format for recent dates
     time_format_older: Option<String>, // Time format for older dates (optional, if not present, time_format_recent is used)
     context: bool,
+    #[cfg(all(feature = "selinux", target_os = "linux"))]
     selinux_supported: bool,
+    #[cfg(all(feature = "smack", target_os = "linux"))]
+    smack_supported: bool,
     group_directories_first: bool,
     line_ending: LineEnding,
     dired: bool,
@@ -1161,16 +1164,10 @@ impl Config {
             time_format_recent,
             time_format_older,
             context,
-            selinux_supported: {
-                #[cfg(all(feature = "selinux", target_os = "linux"))]
-                {
-                    uucore::selinux::is_selinux_enabled()
-                }
-                #[cfg(not(all(feature = "selinux", target_os = "linux")))]
-                {
-                    false
-                }
-            },
+            #[cfg(all(feature = "selinux", target_os = "linux"))]
+            selinux_supported: uucore::selinux::is_selinux_enabled(),
+            #[cfg(all(feature = "smack", target_os = "linux"))]
+            smack_supported: uucore::smack::is_smack_enabled(),
             group_directories_first: options.get_flag(options::GROUP_DIRECTORIES_FIRST),
             line_ending: LineEnding::from_zero_flag(options.get_flag(options::ZERO)),
             dired,
@@ -2519,6 +2516,117 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
 }
 
 #[allow(clippy::cognitive_complexity)]
+fn enter_directory(
+    path_data: &PathData,
+    mut read_dir: ReadDir,
+    config: &Config,
+    state: &mut ListState,
+    listed_ancestors: &mut HashSet<FileInformation>,
+    dired: &mut DiredOutput,
+) -> UResult<()> {
+    // Create vec of entries with initial dot files
+    let mut entries: Vec<PathData> = if config.files == Files::All {
+        vec![
+            PathData::new(
+                path_data.path().to_path_buf(),
+                None,
+                Some(".".into()),
+                config,
+                false,
+            ),
+            PathData::new(
+                path_data.path().join(".."),
+                None,
+                Some("..".into()),
+                config,
+                false,
+            ),
+        ]
+    } else {
+        vec![]
+    };
+
+    // Convert those entries to the PathData struct
+    for raw_entry in read_dir.by_ref() {
+        let dir_entry = match raw_entry {
+            Ok(path) => path,
+            Err(err) => {
+                state.out.flush()?;
+                show!(LsError::IOError(err));
+                continue;
+            }
+        };
+
+        if should_display(&dir_entry, config) {
+            let entry_path_data =
+                PathData::new(dir_entry.path(), Some(dir_entry), None, config, false);
+            entries.push(entry_path_data);
+        }
+    }
+
+    sort_entries(&mut entries, config);
+
+    // Print total after any error display
+    if config.format == Format::Long || config.alloc_size {
+        let total = return_total(&entries, config, &mut state.out)?;
+        write!(state.out, "{}", total.as_str())?;
+        if config.dired {
+            dired::add_total(dired, total.len());
+        }
+    }
+
+    display_items(&entries, config, state, dired)?;
+
+    if config.recursive {
+        for e in entries
+            .iter()
+            .skip(if config.files == Files::All { 2 } else { 0 })
+            .filter(|p| p.file_type().is_some_and(|ft| ft.is_dir()))
+        {
+            match fs::read_dir(e.path()) {
+                Err(err) => {
+                    state.out.flush()?;
+                    show!(LsError::IOErrorContext(
+                        e.path().to_path_buf(),
+                        err,
+                        e.command_line
+                    ));
+                }
+                Ok(rd) => {
+                    if listed_ancestors
+                        .insert(FileInformation::from_path(e.path(), e.must_dereference)?)
+                    {
+                        // when listing several directories in recursive mode, we show
+                        // "dirname:" at the beginning of the file list
+                        writeln!(state.out)?;
+                        if config.dired {
+                            // We already injected the first dir
+                            // Continue with the others
+                            // 2 = \n + \n
+                            dired.padding = 2;
+                            dired::indent(&mut state.out)?;
+                            let dir_name_size = e.path().as_os_str().len();
+                            dired::calculate_subdired(dired, dir_name_size);
+                            // inject dir name
+                            dired::add_dir_name(dired, dir_name_size);
+                        }
+
+                        show_dir_name(e, &mut state.out, config)?;
+                        writeln!(state.out)?;
+                        enter_directory(e, rd, config, state, listed_ancestors, dired)?;
+                        listed_ancestors
+                            .remove(&FileInformation::from_path(e.path(), e.must_dereference)?);
+                    } else {
+                        state.out.flush()?;
+                        show!(LsError::AlreadyListedError(e.path().to_path_buf()));
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
 
 fn get_metadata_with_deref_opt(p_buf: &Path, dereference: bool) -> std::io::Result<Metadata> {
     if dereference {
@@ -3472,35 +3580,57 @@ fn get_security_context<'a>(
         }
     }
 
+    #[cfg(all(feature = "selinux", target_os = "linux"))]
     if config.selinux_supported {
-        #[cfg(all(feature = "selinux", target_os = "linux"))]
-        {
-            match selinux::SecurityContext::of_path(path, must_dereference, false) {
-                Err(_r) => {
-                    // TODO: show the actual reason why it failed
-                    show_warning!("failed to get security context of: {}", path.quote());
-                    return Cow::Borrowed(SUBSTITUTE_STRING);
-                }
-                Ok(None) => return Cow::Borrowed(SUBSTITUTE_STRING),
-                Ok(Some(context)) => {
-                    let context = context.as_bytes();
+        match selinux::SecurityContext::of_path(path, must_dereference, false) {
+            Err(_r) => {
+                // TODO: show the actual reason why it failed
+                show_warning!(
+                    "{}",
+                    translate!(
+                        "ls-warning-failed-to-get-security-context",
+                        "path" => path.quote().to_string()
+                    )
+                );
+                return Cow::Borrowed(SUBSTITUTE_STRING);
+            }
+            Ok(None) => return Cow::Borrowed(SUBSTITUTE_STRING),
+            Ok(Some(context)) => {
+                let context = context.as_bytes();
 
-                    let context = context.strip_suffix(&[0]).unwrap_or(context);
+                let context = context.strip_suffix(&[0]).unwrap_or(context);
 
-                    let res: String = String::from_utf8(context.to_vec()).unwrap_or_else(|e| {
-                        show_warning!(
-                            "getting security context of: {}: {}",
-                            path.quote(),
-                            e.to_string()
-                        );
+                let res: String = String::from_utf8(context.to_vec()).unwrap_or_else(|e| {
+                    show_warning!(
+                        "{}",
+                        translate!(
+                            "ls-warning-getting-security-context",
+                            "path" => path.quote().to_string(),
+                            "error" => e.to_string()
+                        )
+                    );
 
-                        String::from_utf8_lossy(context).to_string()
-                    });
+                    String::from_utf8_lossy(context).to_string()
+                });
 
-                    return Cow::Owned(res);
-                }
+                return Cow::Owned(res);
             }
         }
+    }
+
+    #[cfg(all(feature = "smack", target_os = "linux"))]
+    if config.smack_supported {
+        // For SMACK, use the path to get the label
+        // If must_dereference is true, we follow the symlink
+        let target_path = if must_dereference {
+            std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+        } else {
+            path.to_path_buf()
+        };
+
+        return uucore::smack::get_smack_label_for_path(&target_path)
+            .map(Cow::Owned)
+            .unwrap_or(Cow::Borrowed(SUBSTITUTE_STRING));
     }
 
     Cow::Borrowed(SUBSTITUTE_STRING)
