@@ -28,7 +28,7 @@ use walkdir::{DirEntry, WalkDir};
 
 use crate::{
     CopyMode, CopyResult, CpError, Options, aligned_ancestors, context_for, copy_attributes,
-    copy_file,
+    copy_file, write_stdout_line,
 };
 
 /// Ensure a Windows path starts with a `\\?`.
@@ -271,10 +271,10 @@ fn copy_direntry(
                 Some(&entry.source_absolute),
             )?;
             if options.verbose {
-                println!(
+                write_stdout_line(format_args!(
                     "{}",
                     context_for(&entry.source_relative, &entry.local_to_target)
-                );
+                ))?;
             }
             Ok(())
         };
@@ -392,7 +392,7 @@ pub(crate) fn copy_directory(
                 //     a/b -> d/a/b
                 //
                 for (x, y) in aligned_ancestors(root, &target.join(root)) {
-                    println!("{} -> {}", x.display(), y.display());
+                    write_stdout_line(format_args!("{} -> {}", x.display(), y.display()))?;
                 }
             }
 

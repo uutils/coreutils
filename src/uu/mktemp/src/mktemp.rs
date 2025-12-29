@@ -14,12 +14,11 @@ use uucore::translate;
 
 use std::env;
 use std::ffi::{OsStr, OsString};
+use std::fs;
 use std::io::ErrorKind;
 use std::iter;
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 
-#[cfg(unix)]
-use std::fs;
 #[cfg(unix)]
 use std::os::unix::prelude::PermissionsExt;
 
@@ -410,7 +409,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         res
     };
-    println_verbatim(res?).map_err_context(|| translate!("mktemp-error-failed-print"))
+
+    let path = res?;
+    if let Err(err) =
+        println_verbatim(&path).map_err_context(|| translate!("mktemp-error-failed-print"))
+    {
+        if !dry_run {
+            cleanup_created_path(&path, make_dir);
+        }
+        if suppress_file_err {
+            return Err(1.into());
+        }
+        return Err(err);
+    }
+
+    Ok(())
 }
 
 pub fn uu_app() -> Command {
@@ -593,6 +606,15 @@ fn exec(dir: &Path, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> 
     let path = Path::new(dir).join(filename);
 
     Ok(path)
+}
+
+fn cleanup_created_path(path: &Path, make_dir: bool) {
+    let result = if make_dir {
+        fs::remove_dir(path)
+    } else {
+        fs::remove_file(path)
+    };
+    let _ = result;
 }
 
 /// Create a temporary file or directory
