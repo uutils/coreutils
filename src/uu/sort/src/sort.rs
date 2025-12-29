@@ -157,10 +157,10 @@ pub enum SortError {
     #[error("{}", translate!("sort-compress-prog-terminated-abnormally", "prog" => .prog.quote()))]
     CompressProgTerminatedAbnormally { prog: String },
 
-    #[error("{}", translate!("sort-cannot-create-tmp-file", "path" => format!("{}", .path.display())))]
+    #[error("{}", translate!("sort-cannot-create-tmp-file", "path" => format!("{}", .path.quote())))]
     TmpFileCreationFailed { path: PathBuf },
 
-    #[error("{}", translate!("sort-file-operands-combined", "file" => format!("{}", .file.display()), "help" => uucore::execution_phrase()))]
+    #[error("{}", translate!("sort-file-operands-combined", "file" => format!("{}", .file.quote()), "help" => uucore::execution_phrase()))]
     FileOperandsCombined { file: PathBuf },
 
     #[error("{error}")]
@@ -172,10 +172,10 @@ pub enum SortError {
     #[error("{}", translate!("sort-minus-in-stdin"))]
     MinusInStdIn,
 
-    #[error("{}", translate!("sort-no-input-from", "file" => format!("{}", .file.display())))]
+    #[error("{}", translate!("sort-no-input-from", "file" => format!("{}", .file.quote())))]
     EmptyInputFile { file: PathBuf },
 
-    #[error("{}", translate!("sort-invalid-zero-length-filename", "file" => format!("{}", .file.display()), "line_num" => .line_num))]
+    #[error("{}", translate!("sort-invalid-zero-length-filename", "file" => .file.maybe_quote(), "line_num" => .line_num))]
     ZeroLengthFileName { file: PathBuf, line_num: usize },
 }
 

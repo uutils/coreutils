@@ -162,6 +162,7 @@ ranges = []
 ringbuffer = []
 safe-traversal = ["libc"]
 selinux = ["dep:selinux"]
+smack = ["xattr"]
 signals = []
 sum = [
   "digest",
