@@ -212,13 +212,42 @@ macro_rules! bin {
                     std::process::exit(99)
                 });
 
+            // Capture whether stdout was already closed before we run the utility.
+            // This avoids treating a closed stdout as a flush failure for "silent" commands.
+            let stdout_was_closed = {
+                #[cfg(unix)]
+                {
+                    use nix::fcntl::{fcntl, FcntlArg};
+                    match fcntl(std::io::stdout(), FcntlArg::F_GETFL) {
+                        Ok(_) => false,
+                        Err(nix::errno::Errno::EBADF) => true,
+                        Err(_) => false,
+                    }
+                }
+                #[cfg(not(unix))]
+                {
+                    false
+                }
+            };
+
             // execute utility code
             let mut code = $util::uumain(uucore::args_os());
             // (defensively) flush stdout for utility prior to exit; see <https://github.com/rust-lang/rust/issues/23818>
             if let Err(e) = std::io::stdout().flush() {
                 // Treat write errors as a failure, but ignore BrokenPipe to avoid
                 // breaking utilities that intentionally silence it (e.g., seq).
-                if e.kind() != std::io::ErrorKind::BrokenPipe {
+                let ignore_closed_stdout = stdout_was_closed
+                    && {
+                        #[cfg(unix)]
+                        {
+                            e.raw_os_error() == Some(nix::errno::Errno::EBADF as i32)
+                        }
+                        #[cfg(not(unix))]
+                        {
+                            false
+                        }
+                    };
+                if e.kind() != std::io::ErrorKind::BrokenPipe && !ignore_closed_stdout {
                     eprintln!("Error flushing stdout: {e}");
                     if code == 0 {
                         code = 1;
