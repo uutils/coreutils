@@ -1461,3 +1461,34 @@ fn test_emoji_formatting() {
         .succeeds()
         .stdout_only("Status: Success 🚀 🎯 Count: 42\n");
 }
+
+#[test]
+fn test_large_width_format() {
+    // Test that extremely large width specifications fail gracefully with an error
+    // rather than panicking. This tests the fix for the printf-surprise.sh GNU test.
+    // When printf tries to format with a width of 20 million, it should return
+    // an error message and exit code 1, not panic with exit code 101.
+    let test_cases = [
+        ("%20000000f", "0"),    // float formatting
+        ("%10000000s", "test"), // string formatting
+        ("%15000000d", "42"),   // integer formatting
+    ];
+
+    for (format, arg) in test_cases {
+        new_ucmd!()
+            .args(&[format, arg])
+            .fails_with_code(1)
+            .stderr_contains("write error")
+            .stdout_is("");
+    }
+}
+
+#[test]
+fn test_extreme_field_width_overflow() {
+    // Test the specific case that was causing panic due to integer overflow
+    // in the field width parsing.
+    new_ucmd!()
+        .args(&["%999999999999999999999999d", "1"])
+        .fails_with_code(1)
+        .stderr_only("printf: write error\n");
+}

@@ -5762,6 +5762,15 @@ fn test_acl_display() {
         .succeeds()
         .stdout_matches(&re_with_acl)
         .stdout_matches(&re_without_acl);
+
+    // Verify that it also works if the current dir is different from the ucmd temporary dir
+    scene
+        .ucmd()
+        .current_dir("/")
+        .args(&["-la", &at.as_string()])
+        .succeeds()
+        .stdout_matches(&re_with_acl)
+        .stdout_matches(&re_without_acl);
 }
 
 // Make sure that "ls --color" correctly applies color "normal" to text and
@@ -6664,4 +6673,19 @@ fn test_f_with_long_format() {
     assert!(result.contains("file1"));
     // Long format should still work (contains permissions, etc.)
     assert!(result.contains("-rw"));
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_ls_proc_self_fd_no_errors() {
+    // Regression test: ReadDir must stay alive until metadata() is called
+    // to prevent "cannot access '/proc/self/fd/3'" errors.
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("/proc/self/fd")
+        .succeeds()
+        .stderr_does_not_contain("cannot access");
 }

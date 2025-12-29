@@ -42,21 +42,33 @@ impl<R: Read> Read for PartialReader<R> {
             while self.skip > 0 {
                 let skip_count: usize = cmp::min(self.skip as usize, MAX_SKIP_BUFFER);
 
-                match self.inner.read(&mut bytes[..skip_count])? {
-                    0 => {
-                        // this is an error as we still have more to skip
-                        return Err(io::Error::new(
-                            io::ErrorKind::UnexpectedEof,
-                            translate!("od-error-skip-past-end"),
-                        ));
+                loop {
+                    match self.inner.read(&mut bytes[..skip_count]) {
+                        Ok(0) => {
+                            // this is an error as we still have more to skip
+                            return Err(io::Error::new(
+                                io::ErrorKind::UnexpectedEof,
+                                translate!("od-error-skip-past-end"),
+                            ));
+                        }
+                        Ok(n) => {
+                            self.skip -= n as u64;
+                            break;
+                        }
+                        Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                        Err(e) => return Err(e),
                     }
-                    n => self.skip -= n as u64,
                 }
             }
         }
 
         match self.limit {
-            None => self.inner.read(out),
+            None => loop {
+                match self.inner.read(out) {
+                    Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                    result => return result,
+                }
+            },
             Some(0) => Ok(0),
             Some(ref mut limit) => {
                 let slice = if *limit > (out.len() as u64) {
@@ -64,11 +76,14 @@ impl<R: Read> Read for PartialReader<R> {
                 } else {
                     &mut out[0..(*limit as usize)]
                 };
-                match self.inner.read(slice) {
-                    Err(e) => Err(e),
-                    Ok(r) => {
-                        *limit -= r as u64;
-                        Ok(r)
+                loop {
+                    match self.inner.read(slice) {
+                        Ok(r) => {
+                            *limit -= r as u64;
+                            return Ok(r);
+                        }
+                        Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                        Err(e) => return Err(e),
                     }
                 }
             }

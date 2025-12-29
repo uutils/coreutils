@@ -8,10 +8,8 @@ cksum-after-help = DIGEST determines the digest algorithm and default output for
   - crc32b: (only available through cksum)
   - md5: (equivalent to md5sum)
   - sha1: (equivalent to sha1sum)
-  - sha224: (equivalent to sha224sum)
-  - sha256: (equivalent to sha256sum)
-  - sha384: (equivalent to sha384sum)
-  - sha512: (equivalent to sha512sum)
+  - sha2: (equivalent to sha{"{224,256,384,512}"}sum)
+  - sha3: (only available through cksum)
   - blake2b: (equivalent to b2sum)
   - sm3: (only available through cksum)
 
@@ -29,7 +27,4 @@ cksum-help-status = don't output anything, status code shows success
 cksum-help-quiet = don't print OK for each successfully verified file
 cksum-help-ignore-missing = don't fail or report status for missing files
 cksum-help-zero = end each output line with NUL, not newline, and disable file name escaping
-
-# Error messages
-cksum-error-is-directory = { $file }: Is a directory
-cksum-error-failed-to-read-input = failed to read input
+cksum-help-debug = print CPU hardware capability detection info used by cksum

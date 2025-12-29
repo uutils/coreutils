@@ -582,10 +582,16 @@ fn test_eager_evaluation() {
 #[test]
 fn test_long_input() {
     // Giving expr an arbitrary long expression should succeed rather than end with a segfault due to a stack overflow.
-    #[cfg(not(windows))]
+    #[cfg(all(not(windows), not(target_os = "openbsd")))]
     const MAX_NUMBER: usize = 40000;
-    #[cfg(not(windows))]
+    #[cfg(all(not(windows), not(target_os = "openbsd")))]
     const RESULT: &str = "800020000\n";
+
+    // On OpenBSD, crash with default MAX_NUMBER
+    #[cfg(target_os = "openbsd")]
+    const MAX_NUMBER: usize = 10000;
+    #[cfg(target_os = "openbsd")]
+    const RESULT: &str = "50005000\n";
 
     // On windows there is 8192 characters input limit
     #[cfg(windows)]

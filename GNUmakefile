@@ -1,15 +1,15 @@
 # spell-checker:ignore (misc) testsuite runtest findstring (targets) busytest toybox distclean pkgs nextest ; (vars/env) BINDIR BUILDDIR CARGOFLAGS DESTDIR DOCSDIR INSTALLDIR INSTALLEES MULTICALL DATAROOTDIR TESTDIR manpages
 
 # Config options
+ifneq (,$(filter install, $(MAKECMDGOALS)))
+ PROFILE?=release
+endif
 PROFILE         ?= debug
 MULTICALL       ?= n
 COMPLETIONS     ?= y
 MANPAGES        ?= y
 LOCALES         ?= y
 INSTALL         ?= install
-ifneq (,$(filter install, $(MAKECMDGOALS)))
-override PROFILE:=release
-endif
 
 # Needed for the foreach loops to split each loop into a separate command
 define newline
@@ -17,30 +17,29 @@ define newline
 
 endef
 
-PROFILE_CMD :=
-ifeq ($(PROFILE),release)
-	PROFILE_CMD = --release
+PROFILE_CMD := --profile=${PROFILE}
+ifeq ($(PROFILE),debug)
+	PROFILE_CMD =
 endif
-
-RM := rm -rf
 
 # Binaries
 CARGO  ?= cargo
 CARGOFLAGS ?=
+RUSTC_ARCH ?= # should be empty except for cross-build, not --target $(shell rustc --print host-tuple)
+
+#prefix prepended to all binaries and library dir
+PROG_PREFIX ?=
 
 # Install directories
 PREFIX ?= /usr/local
 DESTDIR ?=
 BINDIR ?= $(PREFIX)/bin
 DATAROOTDIR ?= $(PREFIX)/share
-LIBSTDBUF_DIR ?= $(PREFIX)/libexec/coreutils
+LIBSTDBUF_DIR ?= $(PREFIX)/libexec/$(PROG_PREFIX)coreutils
 # Export variable so that it is used during the build
 export LIBSTDBUF_DIR
 
 INSTALLDIR_BIN=$(DESTDIR)$(BINDIR)
-
-#prefix to apply to coreutils binary and all tool binaries
-PROG_PREFIX ?=
 
 # This won't support any directory with spaces in its name, but you can just
 # make a symlink without spaces that points to the directory.
@@ -63,31 +62,18 @@ TOYBOX_SRC  := $(TOYBOX_ROOT)/toybox-$(TOYBOX_VER)
 
 #------------------------------------------------------------------------
 # Detect the host system.
-# On Windows the environment already sets  OS = Windows_NT.
+# On Windows uname -s might return MINGW_NT-* or CYGWIN_NT-*.
 # Otherwise let it default to the kernel name returned by uname -s
 # (Linux, Darwin, FreeBSD, …).
 #------------------------------------------------------------------------
-OS ?= $(shell uname -s)
+OS := $(shell uname -s)
 
 # Windows does not allow symlink by default.
 # Allow to override LN for AppArmor.
-ifeq ($(OS),Windows_NT)
+ifneq (,$(findstring _NT,$(OS)))
 	LN ?= ln -f
 endif
 LN ?= ln -sf
-
-ifdef SELINUX_ENABLED
-	override SELINUX_ENABLED := 0
-# Now check if we should enable it (only on non-Windows)
-	ifneq ($(OS),Windows_NT)
-		ifeq ($(shell if [ -x /sbin/selinuxenabled ] && /sbin/selinuxenabled 2>/dev/null; then echo 0; else echo 1; fi),0)
-			override SELINUX_ENABLED := 1
-$(info /sbin/selinuxenabled successful)
-	    else
-$(info SELINUX_ENABLED=1 but /sbin/selinuxenabled failed)
-		endif
-	endif
-endif
 
 # Possible programs
 PROGS       := \
@@ -200,35 +186,26 @@ SELINUX_PROGS := \
 
 HASHSUM_PROGS := \
 	b2sum \
-	b3sum \
 	md5sum \
 	sha1sum \
 	sha224sum \
 	sha256sum \
-	sha3-224sum \
-	sha3-256sum \
-	sha3-384sum \
-	sha3-512sum \
 	sha384sum \
-	sha3sum \
-	sha512sum \
-	shake128sum \
-	shake256sum
+	sha512sum
 
 $(info Detected OS = $(OS))
 
-# Don't build the SELinux programs on macOS (Darwin) and FreeBSD
-ifeq ($(filter $(OS),Darwin FreeBSD),$(OS))
-	SELINUX_PROGS :=
+ifeq (,$(findstring MINGW,$(OS)))
+	PROGS += $(UNIX_PROGS)
 endif
-
-ifneq ($(OS),Windows_NT)
-	PROGS := $(PROGS) $(UNIX_PROGS)
-# Build the selinux command even if not on the system
-	PROGS := $(PROGS) $(SELINUX_PROGS)
+ifeq ($(SELINUX_ENABLED),1)
+	PROGS += $(SELINUX_PROGS)
 endif
 
 UTILS ?= $(filter-out $(SKIP_UTILS),$(PROGS))
+ifneq ($(filter hashsum,$(UTILS)),hashsum)
+	HASHSUM_PROGS :=
+endif
 
 ifneq ($(findstring stdbuf,$(UTILS)),)
     # Use external libstdbuf per default. It is more robust than embedding libstdbuf.
@@ -302,6 +279,7 @@ TEST_PROGS  := \
 	unexpand \
 	uniq \
 	unlink \
+	uudoc \
 	wc \
 	who
 
@@ -335,30 +313,27 @@ endif
 
 all: build
 
-do_install = $(INSTALL) ${1}
-use_default := 1
-
 build-pkgs:
 ifneq (${MULTICALL}, y)
 ifdef BUILD_SPEC_FEATURE
-	${CARGO} build ${CARGOFLAGS} --features "$(BUILD_SPEC_FEATURE)" ${PROFILE_CMD} $(foreach pkg,$(EXES),-p uu_$(pkg))
+	${CARGO} build ${CARGOFLAGS} --features "$(BUILD_SPEC_FEATURE)" ${PROFILE_CMD} $(foreach pkg,$(EXES),-p uu_$(pkg)) $(RUSTC_ARCH)
 else
-	${CARGO} build ${CARGOFLAGS} ${PROFILE_CMD} $(foreach pkg,$(EXES),-p uu_$(pkg))
+	${CARGO} build ${CARGOFLAGS} ${PROFILE_CMD} $(foreach pkg,$(EXES),-p uu_$(pkg)) $(RUSTC_ARCH)
 endif
 endif
 
 build-coreutils:
-	${CARGO} build ${CARGOFLAGS} --features "${EXES} $(BUILD_SPEC_FEATURE)" ${PROFILE_CMD} --no-default-features
+	${CARGO} build ${CARGOFLAGS} --features "${EXES} $(BUILD_SPEC_FEATURE)" ${PROFILE_CMD} --no-default-features $(RUSTC_ARCH)
 
 build: build-coreutils build-pkgs locales
 
 $(foreach test,$(UTILS),$(eval $(call TEST_BUSYBOX,$(test))))
 
 test:
-	${CARGO} test ${CARGOFLAGS} --features "$(TESTS) $(TEST_SPEC_FEATURE)" --no-default-features $(TEST_NO_FAIL_FAST)
+	${CARGO} test ${CARGOFLAGS} --features "$(TESTS) $(TEST_SPEC_FEATURE)" $(PROFILE_CMD) --no-default-features $(TEST_NO_FAIL_FAST)
 
 nextest:
-	${CARGO} nextest run ${CARGOFLAGS} --features "$(TESTS) $(TEST_SPEC_FEATURE)" --no-default-features $(TEST_NO_FAIL_FAST)
+	${CARGO} nextest run ${CARGOFLAGS} --features "$(TESTS) $(TEST_SPEC_FEATURE)" $(PROFILE_CMD) --no-default-features $(TEST_NO_FAIL_FAST)
 
 test_toybox:
 	-(cd $(TOYBOX_SRC)/ && make tests)
@@ -366,7 +341,7 @@ test_toybox:
 toybox-src:
 	if [ ! -e "$(TOYBOX_SRC)" ] ; then \
 		mkdir -p "$(TOYBOX_ROOT)" ; \
-		wget "https://github.com/landley/toybox/archive/refs/tags/$(TOYBOX_VER).tar.gz" -P "$(TOYBOX_ROOT)" ; \
+		curl -Ls "https://github.com/landley/toybox/archive/refs/tags/$(TOYBOX_VER).tar.gz" -o "$(TOYBOX_ROOT)/$(TOYBOX_VER).tar.gz" ; \
 		tar -C "$(TOYBOX_ROOT)" -xf "$(TOYBOX_ROOT)/$(TOYBOX_VER).tar.gz" ; \
 		sed -i -e "s|TESTDIR=\".*\"|TESTDIR=\"$(BUILDDIR)\"|g" $(TOYBOX_SRC)/scripts/test.sh; \
 		sed -i -e "s/ || exit 1//g" $(TOYBOX_SRC)/scripts/test.sh; \
@@ -375,18 +350,17 @@ toybox-src:
 busybox-src:
 	if [ ! -e "$(BUSYBOX_SRC)" ] ; then \
 		mkdir -p "$(BUSYBOX_ROOT)" ; \
-		wget "https://busybox.net/downloads/busybox-$(BUSYBOX_VER).tar.bz2" -P "$(BUSYBOX_ROOT)" ; \
-		tar -C "$(BUSYBOX_ROOT)" -xf "$(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER).tar.bz2" ; \
+		curl -Ls "https://github.com/mirror/busybox/archive/refs/tags/$(subst .,_,$(BUSYBOX_VER)).tar.gz" -o "$(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER).tar.gz" ; \
+		tar -C "$(BUSYBOX_ROOT)" -xf "$(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER).tar.gz" ; \
 	fi ;
 
 # This is a busybox-specific config file their test suite wants to parse.
 $(BUILDDIR)/.config: $(BASEDIR)/.busybox-config
-	cp $< $@
+	$(INSTALL) -m 644 $< $@
 
 # Test under the busybox test suite
 $(BUILDDIR)/busybox: busybox-src build-coreutils $(BUILDDIR)/.config
-	cp "$(BUILDDIR)/coreutils" "$(BUILDDIR)/busybox"
-	chmod +x $@
+	$(INSTALL) -m 755 "$(BUILDDIR)/coreutils" "$(BUILDDIR)/busybox"
 
 prepare-busytest: $(BUILDDIR)/busybox
 	# disable inapplicable tests
@@ -399,45 +373,36 @@ busytest: $(BUILDDIR)/busybox $(addprefix test_busybox_,$(filter-out $(SKIP_UTIL
 endif
 
 clean:
-	cargo clean
-	cd $(DOCSDIR) && $(MAKE) clean
+	cargo clean $(RUSTC_ARCH)
+	cd $(DOCSDIR) && $(MAKE) clean $(RUSTC_ARCH)
 
 distclean: clean
-	$(CARGO) clean $(CARGOFLAGS) && $(CARGO) update $(CARGOFLAGS)
+	$(CARGO) clean $(CARGOFLAGS) $(RUSTC_ARCH) && $(CARGO) update $(CARGOFLAGS) $(RUSTC_ARCH)
 
 ifeq ($(MANPAGES),y)
-manpages: build-coreutils
-	mkdir -p $(BUILDDIR)/man/
-	$(foreach prog, $(INSTALLEES) $(HASHSUM_PROGS), \
-		$(BUILDDIR)/coreutils manpage $(prog) > $(BUILDDIR)/man/$(PROG_PREFIX)$(prog).1 $(newline) \
-	)
+build-uudoc:
+	# Use same PROFILE with coreutils to share crates (if not cross-build)
+	${CARGO} build ${CARGOFLAGS} --bin uudoc --features "uudoc ${EXES}" ${PROFILE_CMD} --no-default-features
 
-install-manpages: manpages
+install-manpages: build-uudoc
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/man/man1
 	$(foreach prog, $(INSTALLEES) $(HASHSUM_PROGS), \
-		$(INSTALL) -m 644 $(BUILDDIR)/man/$(PROG_PREFIX)$(prog).1 $(DESTDIR)$(DATAROOTDIR)/man/man1/ $(newline) \
+		$(BUILDDIR)/uudoc manpage $(prog) > $(DESTDIR)$(DATAROOTDIR)/man/man1/$(PROG_PREFIX)$(prog).1 $(newline) \
 	)
 else
 install-manpages:
 endif
 
 ifeq ($(COMPLETIONS),y)
-completions: build-coreutils
-	mkdir -p $(BUILDDIR)/completions/zsh $(BUILDDIR)/completions/bash $(BUILDDIR)/completions/fish
-	$(foreach prog, $(INSTALLEES) $(HASHSUM_PROGS) , \
-		$(BUILDDIR)/coreutils completion $(prog) zsh > $(BUILDDIR)/completions/zsh/_$(PROG_PREFIX)$(prog) $(newline) \
-		$(BUILDDIR)/coreutils completion $(prog) bash > $(BUILDDIR)/completions/bash/$(PROG_PREFIX)$(prog) $(newline) \
-		$(BUILDDIR)/coreutils completion $(prog) fish > $(BUILDDIR)/completions/fish/$(PROG_PREFIX)$(prog).fish $(newline) \
-	)
 
-install-completions: completions
+install-completions: build-uudoc
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d
 	$(foreach prog, $(INSTALLEES) $(HASHSUM_PROGS) , \
-		$(INSTALL) -m 644 $(BUILDDIR)/completions/zsh/_$(PROG_PREFIX)$(prog) $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions/ $(newline) \
-		$(INSTALL) -m 644 $(BUILDDIR)/completions/bash/$(PROG_PREFIX)$(prog) $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/ $(newline) \
-		$(INSTALL) -m 644 $(BUILDDIR)/completions/fish/$(PROG_PREFIX)$(prog).fish $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/ $(newline) \
+		$(BUILDDIR)/uudoc completion $(prog) zsh > $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions/_$(PROG_PREFIX)$(prog) $(newline) \
+		$(BUILDDIR)/uudoc completion $(prog) bash > $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/$(PROG_PREFIX)$(prog).bash $(newline) \
+		$(BUILDDIR)/uudoc completion $(prog) fish > $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/$(PROG_PREFIX)$(prog).fish $(newline) \
 	)
 else
 install-completions:
@@ -449,7 +414,7 @@ locales:
 	@if [ -d "$(BASEDIR)/src/uucore/locales" ]; then \
 		mkdir -p "$(BUILDDIR)/locales/uucore"; \
 		for locale_file in "$(BASEDIR)"/src/uucore/locales/*.ftl; do \
-			$(INSTALL) -m 644 -v "$$locale_file" "$(BUILDDIR)/locales/uucore/"; \
+			$(INSTALL) -m 644 "$$locale_file" "$(BUILDDIR)/locales/uucore/"; \
 		done; \
 	fi; \
 	# Copy utility-specific locales
@@ -458,7 +423,7 @@ locales:
 			mkdir -p "$(BUILDDIR)/locales/$$prog"; \
 			for locale_file in "$(BASEDIR)"/src/uu/$$prog/locales/*.ftl; do \
 				if [ "$$(basename "$$locale_file")" != "en-US.ftl" ]; then \
-					$(INSTALL) -m 644 -v "$$locale_file" "$(BUILDDIR)/locales/$$prog/"; \
+					$(INSTALL) -m 644 "$$locale_file" "$(BUILDDIR)/locales/$$prog/"; \
 				fi; \
 			done; \
 		fi; \
@@ -471,12 +436,13 @@ install-locales:
 			mkdir -p "$(DESTDIR)$(DATAROOTDIR)/locales/$$prog"; \
 			for locale_file in "$(BASEDIR)"/src/uu/$$prog/locales/*.ftl; do \
 				if [ "$$(basename "$$locale_file")" != "en-US.ftl" ]; then \
-					$(INSTALL) -m 644 -v "$$locale_file" "$(DESTDIR)$(DATAROOTDIR)/locales/$$prog/"; \
+					$(INSTALL) -m 644 "$$locale_file" "$(DESTDIR)$(DATAROOTDIR)/locales/$$prog/"; \
 				fi; \
 			done; \
 		fi; \
 	done
 else
+locales:
 install-locales:
 endif
 
@@ -484,7 +450,11 @@ install: build install-manpages install-completions install-locales
 	mkdir -p $(INSTALLDIR_BIN)
 ifneq (,$(and $(findstring stdbuf,$(UTILS)),$(findstring feat_external_libstdbuf,$(CARGOFLAGS))))
 	mkdir -p $(DESTDIR)$(LIBSTDBUF_DIR)
-	$(INSTALL) -m 755 $(BUILDDIR)/deps/libstdbuf* $(DESTDIR)$(LIBSTDBUF_DIR)/
+ifneq (,$(findstring CYGWIN,$(OS)))
+	$(INSTALL) -m 755 $(BUILDDIR)/deps/stdbuf.dll $(DESTDIR)$(LIBSTDBUF_DIR)/libstdbuf.dll
+else
+	$(INSTALL) -m 755 $(BUILDDIR)/deps/libstdbuf.* $(DESTDIR)$(LIBSTDBUF_DIR)/
+endif
 endif
 ifeq (${MULTICALL}, y)
 	$(INSTALL) -m 755 $(BUILDDIR)/coreutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)coreutils
@@ -506,9 +476,9 @@ else
 endif
 
 uninstall:
-ifneq ($(OS),Windows_NT)
-	rm -f $(DESTDIR)$(LIBSTDBUF_DIR)/libstdbuf*
-	-rmdir $(DESTDIR)$(LIBSTDBUF_DIR) 2>/dev/null || true
+ifeq (,$(findstring MINGW,$(OS)))
+	rm -f $(DESTDIR)$(LIBSTDBUF_DIR)/libstdbuf.*
+	-rm -d $(DESTDIR)$(LIBSTDBUF_DIR) 2>/dev/null || true
 endif
 ifeq (${MULTICALL}, y)
 	rm -f $(addprefix $(INSTALLDIR_BIN)/,$(PROG_PREFIX)coreutils)
@@ -516,8 +486,8 @@ endif
 	rm -f $(addprefix $(INSTALLDIR_BIN)/$(PROG_PREFIX),$(PROGS))
 	rm -f $(INSTALLDIR_BIN)/$(PROG_PREFIX)[
 	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions/_$(PROG_PREFIX),$(PROGS))
-	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/$(PROG_PREFIX),$(PROGS))
+	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/$(PROG_PREFIX),$(PROGS).bash)
 	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/$(PROG_PREFIX),$(addsuffix .fish,$(PROGS)))
 	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/man/man1/$(PROG_PREFIX),$(addsuffix .1,$(PROGS)))
 
-.PHONY: all build build-coreutils build-pkgs test distclean clean busytest install uninstall
+.PHONY: all build build-coreutils build-pkgs build-uudoc test distclean clean busytest install uninstall

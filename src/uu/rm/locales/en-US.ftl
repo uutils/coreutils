@@ -28,6 +28,10 @@ rm-help-preserve-root = do not remove '/' (default)
 rm-help-recursive = remove directories and their contents recursively
 rm-help-dir = remove empty directories
 rm-help-verbose = explain what is being done
+rm-help-progress = display a progress bar. Note: this feature is not supported by GNU coreutils.
+
+# Progress messages
+rm-progress-removing = Removing
 
 # Error messages
 rm-error-missing-operand = missing operand
@@ -37,7 +41,7 @@ rm-error-cannot-remove-permission-denied = cannot remove {$file}: Permission den
 rm-error-cannot-remove-is-directory = cannot remove {$file}: Is a directory
 rm-error-dangerous-recursive-operation = it is dangerous to operate recursively on '/'
 rm-error-use-no-preserve-root = use --no-preserve-root to override this failsafe
-rm-error-refusing-to-remove-directory = refusing to remove '.' or '..' directory: skipping '{$path}'
+rm-error-refusing-to-remove-directory = refusing to remove '.' or '..' directory: skipping {$path}
 rm-error-cannot-remove = cannot remove {$file}
 
 # Verbose messages
