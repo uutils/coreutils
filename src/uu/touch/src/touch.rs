@@ -17,7 +17,7 @@ use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command};
 use filetime::{FileTime, set_file_times, set_symlink_file_times};
 use jiff::{Timestamp, Zoned};
 use std::borrow::Cow;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs::{self, File};
 use std::io::{Error, ErrorKind};
 use std::path::{Path, PathBuf};
@@ -431,9 +431,9 @@ fn touch_file(
     mtime: FileTime,
 ) -> UResult<()> {
     let filename = if is_stdout {
-        String::from("-")
+        OsStr::new("-")
     } else {
-        path.display().to_string()
+        path.as_os_str()
     };
 
     let metadata_result = if opts.no_deref {
