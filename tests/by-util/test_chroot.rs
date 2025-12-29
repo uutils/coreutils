@@ -189,6 +189,53 @@ fn test_default_shell() {
 }
 
 #[test]
+fn test_chroot_command_not_found_error() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let dir = "CHROOT_DIR";
+    at.mkdir(dir);
+
+    let missing = "definitely_missing_command";
+
+    if let Ok(result) = run_ucmd_as_root(&ts, &[dir, missing]) {
+        result
+            .failure()
+            .code_is(127)
+            .stderr_contains(format!("failed to run command '{missing}'"))
+            .stderr_contains("No such file or directory");
+    } else {
+        print!("Test skipped; requires root user");
+    }
+}
+
+#[test]
+fn test_chroot_command_permission_denied_error() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let dir = "CHROOT_DIR";
+    at.mkdir(dir);
+
+    let script_path = format!("{dir}/noexec.sh");
+    at.write(&script_path, "#!/bin/sh\necho unreachable\n");
+    #[cfg(not(windows))]
+    {
+        at.set_mode(&script_path, 0o644);
+    }
+
+    if let Ok(result) = run_ucmd_as_root(&ts, &[dir, "/noexec.sh"]) {
+        result
+            .failure()
+            .code_is(126)
+            .stderr_contains("failed to run command '/noexec.sh'")
+            .stderr_contains("Permission denied");
+    } else {
+        print!("Test skipped; requires root user");
+    }
+}
+
+#[test]
 fn test_chroot() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -203,6 +250,27 @@ fn test_chroot() {
 
     if let Ok(result) = run_ucmd_as_root(&ts, &[dir, "pwd"]) {
         result.success().no_stderr().stdout_is("/");
+    } else {
+        print!("Test skipped; requires root user");
+    }
+}
+
+#[test]
+fn test_chroot_retains_uid_gid() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let dir = "CHROOT_DIR";
+    at.mkdir(dir);
+
+    if let Ok(result) = run_ucmd_as_root(&ts, &[dir, "id", "-u"]) {
+        result.success().no_stderr().stdout_is("0");
+    } else {
+        print!("Test skipped; requires root user");
+    }
+
+    if let Ok(result) = run_ucmd_as_root(&ts, &[dir, "id", "-g"]) {
+        result.success().no_stderr().stdout_is("0");
     } else {
         print!("Test skipped; requires root user");
     }

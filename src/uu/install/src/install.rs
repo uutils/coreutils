@@ -84,10 +84,10 @@ enum InstallError {
     #[error("{}", translate!("install-error-target-not-dir", "path" => .0.quote()))]
     TargetDirIsntDir(PathBuf),
 
-    #[error("{}", translate!("install-error-backup-failed", "from" => .0.to_string_lossy(), "to" => .1.to_string_lossy()))]
+    #[error("{}", translate!("install-error-backup-failed", "from" => .0.quote(), "to" => .1.quote()))]
     BackupFailed(PathBuf, PathBuf, #[source] std::io::Error),
 
-    #[error("{}", translate!("install-error-install-failed", "from" => .0.to_string_lossy(), "to" => .1.to_string_lossy()))]
+    #[error("{}", translate!("install-error-install-failed", "from" => .0.quote(), "to" => .1.quote()))]
     InstallFailed(PathBuf, PathBuf, #[source] std::io::Error),
 
     #[error("{}", translate!("install-error-strip-failed", "error" => .0.clone()))]
@@ -111,11 +111,11 @@ enum InstallError {
     #[error("{}", translate!("install-error-override-directory-failed", "dir" => .0.quote(), "file" => .1.quote()))]
     OverrideDirectoryFailed(PathBuf, PathBuf),
 
-    #[error("{}", translate!("install-error-same-file", "file1" => .0.to_string_lossy(), "file2" => .1.to_string_lossy()))]
+    #[error("{}", translate!("install-error-same-file", "file1" => .0.quote(), "file2" => .1.quote()))]
     SameFile(PathBuf, PathBuf),
 
     #[error("{}", translate!("install-error-extra-operand", "operand" => .0.quote(), "usage" => .1.clone()))]
-    ExtraOperand(String, String),
+    ExtraOperand(OsString, String),
 
     #[cfg(feature = "selinux")]
     #[error("{}", .0)]
@@ -554,7 +554,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
     }
     if b.no_target_dir && paths.len() > 2 {
         return Err(InstallError::ExtraOperand(
-            paths[2].to_string_lossy().into_owned(),
+            paths[2].clone(),
             format_usage(&translate!("install-usage")),
         )
         .into());
@@ -570,7 +570,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
         if paths.is_empty() {
             return Err(UUsageError::new(
                 1,
-                translate!("install-error-missing-destination-operand", "path" => last_path.to_string_lossy()),
+                translate!("install-error-missing-destination-operand", "path" => last_path.quote()),
             ));
         }
 
@@ -831,7 +831,7 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
         if e.kind() != std::io::ErrorKind::NotFound {
             show_error!(
                 "{}",
-                translate!("install-error-failed-to-remove", "path" => to.display(), "error" => format!("{e:?}"))
+                translate!("install-error-failed-to-remove", "path" => to.quote(), "error" => format!("{e:?}"))
             );
         }
     }

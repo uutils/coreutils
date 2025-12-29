@@ -214,7 +214,7 @@ fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
     if path_exists && !config.recursive {
         return Err(USimpleError::new(
             1,
-            translate!("mkdir-error-file-exists", "path" => path.to_string_lossy()),
+            translate!("mkdir-error-file-exists", "path" => path.maybe_quote()),
         ));
     }
     if path == Path::new("") {

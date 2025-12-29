@@ -14,7 +14,7 @@ wc-help-total = quand afficher une ligne avec les totaux ;
 wc-help-words = afficher le nombre de mots
 
 # Messages d'erreur
-wc-error-files-disabled = opérande supplémentaire '{ $extra }'
+wc-error-files-disabled = opérande supplémentaire { $extra }
   les opérandes de fichier ne peuvent pas être combinées avec --files0-from
 wc-error-stdin-repr-not-allowed = lors de la lecture des noms de fichiers depuis l'entrée standard, aucun nom de fichier '-' autorisé
 wc-error-zero-length-filename = nom de fichier de longueur nulle invalide
@@ -31,3 +31,10 @@ decoder-error-io = erreur du flux d'octets sous-jacent : { $error }
 # Autres messages
 wc-standard-input = entrée standard
 wc-total = total
+
+# Messages de débogage
+wc-debug-hw-unavailable = debug : prise en charge matérielle indisponible sur ce CPU
+wc-debug-hw-using = debug : utilisation de l'accélération matérielle (fonctions : { $features })
+wc-debug-hw-disabled-env = debug : prise en charge matérielle désactivée par l'environnement
+wc-debug-hw-disabled-glibc = debug : prise en charge matérielle désactivée par GLIBC_TUNABLES ({ $features })
+wc-debug-hw-limited-glibc = debug : prise en charge matérielle limitée par GLIBC_TUNABLES (désactivé : { $disabled } ; activé : { $enabled })

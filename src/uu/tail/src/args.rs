@@ -363,22 +363,24 @@ pub fn parse_obsolete(arg: &OsString, input: Option<&OsString>) -> UResult<Optio
         Some(Ok(args)) => Ok(Some(Settings::from_obsolete_args(&args, input))),
         None => Ok(None),
         Some(Err(e)) => {
-            let arg_str = arg.to_string_lossy();
             Err(USimpleError::new(
                 1,
                 match e {
                     parse::ParseError::OutOfRange => {
-                        translate!("tail-error-invalid-number-out-of-range", "arg" => arg_str.quote())
+                        translate!("tail-error-invalid-number-out-of-range", "arg" => arg.quote())
                     }
                     parse::ParseError::Overflow => {
-                        translate!("tail-error-invalid-number-overflow", "arg" => arg_str.quote())
+                        translate!("tail-error-invalid-number-overflow", "arg" => arg.quote())
                     }
                     // this ensures compatibility to GNU's error message (as tested in misc/tail)
                     parse::ParseError::Context => {
-                        translate!("tail-error-option-used-in-invalid-context", "option" => arg_str.chars().nth(1).unwrap_or_default())
+                        translate!(
+                            "tail-error-option-used-in-invalid-context",
+                            "option" => arg.to_string_lossy().chars().nth(1).unwrap_or_default(),
+                        )
                     }
                     parse::ParseError::InvalidEncoding => {
-                        translate!("tail-error-bad-argument-encoding", "arg" => arg_str)
+                        translate!("tail-error-bad-argument-encoding", "arg" => arg.quote())
                     }
                 },
             ))
