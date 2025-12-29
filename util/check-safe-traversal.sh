@@ -167,6 +167,14 @@ fi
 if echo "$AVAILABLE_UTILS" | grep -q "rm"; then
     cp -r test_dir test_rm
     check_utility "rm" "openat,unlinkat,newfstatat,unlink,rmdir" "openat" "-rf test_rm" "recursive_remove"
+
+    # Regression guard: rm must not issue path-based statx calls (should rely on dirfd-relative newfstatat)
+    if grep -qE 'statx\(AT_FDCWD, "/' strace_rm_recursive_remove.log; then
+        fail_immediately "rm is using path-based statx (absolute path); expected dirfd-relative newfstatat"
+    fi
+    if grep -qE 'statx\(AT_FDCWD, "[^"]*/' strace_rm_recursive_remove.log; then
+        fail_immediately "rm is using path-based statx (multi-component relative path); expected dirfd-relative newfstatat"
+    fi
 fi
 
 # Test chmod - should use openat, fchmodat, newfstatat

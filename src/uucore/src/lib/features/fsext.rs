@@ -201,9 +201,9 @@ fn replace_special_chars(s: &[u8]) -> Vec<u8> {
     // * \011 ASCII horizontal tab with a tab character,
     // * ASCII backslash with an actual backslash character.
     //
-    s.replace(r#"\040"#, " ")
-        .replace(r#"\011"#, "	")
-        .replace(r#"\134"#, r#"\"#)
+    s.replace(r"\040", " ")
+        .replace(r"\011", "	")
+        .replace(r"\134", r"\")
 }
 
 impl MountInfo {
@@ -1171,23 +1171,23 @@ mod tests {
     fn test_mountinfo_dir_special_chars() {
         let info = MountInfo::new(
             LINUX_MOUNTINFO,
-            &br#"317 61 7:0 / /mnt/f\134\040\011oo rw,relatime shared:641 - ext4 /dev/loop0 rw"#
+            &br"317 61 7:0 / /mnt/f\134\040\011oo rw,relatime shared:641 - ext4 /dev/loop0 rw"
                 .split(|c| *c == b' ')
                 .collect::<Vec<_>>(),
         )
         .unwrap();
 
-        assert_eq!(info.mount_dir, r#"/mnt/f\ 	oo"#);
+        assert_eq!(info.mount_dir, r"/mnt/f\ 	oo");
 
         let info = MountInfo::new(
             LINUX_MTAB,
-            &br#"/dev/loop0 /mnt/f\134\040\011oo ext4 rw,relatime 0 0"#
+            &br"/dev/loop0 /mnt/f\134\040\011oo ext4 rw,relatime 0 0"
                 .split(|c| *c == b' ')
                 .collect::<Vec<_>>(),
         )
         .unwrap();
 
-        assert_eq!(info.mount_dir, r#"/mnt/f\ 	oo"#);
+        assert_eq!(info.mount_dir, r"/mnt/f\ 	oo");
     }
 
     #[test]

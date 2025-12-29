@@ -60,3 +60,4 @@ harness = false
 
 [features]
 feat_selinux = ["selinux", "uucore/selinux"]
+smack = ["uucore/smack"]
