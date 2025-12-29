@@ -176,7 +176,7 @@ fn tee(options: &Options) -> Result<()> {
     writers.insert(
         0,
         NamedWriter {
-            name: translate!("tee-standard-output"),
+            name: translate!("tee-standard-output").into(),
             inner: Box::new(stdout()),
         },
     );
@@ -267,10 +267,10 @@ fn open(
     match mode.write(true).create(true).open(path.as_path()) {
         Ok(file) => Some(Ok(NamedWriter {
             inner: Box::new(file),
-            name: name.to_string_lossy().to_string(),
+            name: name.clone(),
         })),
         Err(f) => {
-            show_error!("{}: {f}", name.to_string_lossy().maybe_quote());
+            show_error!("{}: {f}", name.maybe_quote());
             match output_error {
                 Some(OutputErrorMode::Exit | OutputErrorMode::ExitNoPipe) => Some(Err(f)),
                 _ => None,
@@ -394,7 +394,7 @@ impl Write for MultiWriter {
 
 struct NamedWriter {
     inner: Box<dyn Write>,
-    pub name: String,
+    pub name: OsString,
 }
 
 impl Write for NamedWriter {
