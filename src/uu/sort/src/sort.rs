@@ -1158,8 +1158,6 @@ struct GlobalOptionFlags {
     ignore_case: bool,
     ignore_non_printing: bool,
     reverse: bool,
-    stable: bool,
-    unique: bool,
     mode_numeric: bool,
     mode_general: bool,
     mode_human: bool,
@@ -1180,8 +1178,6 @@ impl GlobalOptionFlags {
             ignore_case: matches.get_flag(options::IGNORE_CASE),
             ignore_non_printing: matches.get_flag(options::IGNORE_NONPRINTING),
             reverse: matches.get_flag(options::REVERSE),
-            stable: matches.get_flag(options::STABLE),
-            unique: matches.get_flag(options::UNIQUE),
             mode_human: matches.get_flag(options::modes::HUMAN_NUMERIC)
                 || sort_value == Some("human-numeric"),
             mode_month: matches.get_flag(options::modes::MONTH) || sort_value == Some("month"),
