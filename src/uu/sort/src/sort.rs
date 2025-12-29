@@ -1084,7 +1084,16 @@ fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
         )
 }
 
-#[cfg(unix)]
+#[cfg(all(
+    unix,
+    not(any(
+        target_os = "redox",
+        target_os = "fuchsia",
+        target_os = "haiku",
+        target_os = "solaris",
+        target_os = "illumos"
+    ))
+))]
 fn get_rlimit() -> UResult<usize> {
     use nix::sys::resource::{RLIM_INFINITY, Resource, getrlimit};
 
@@ -1097,12 +1106,28 @@ fn get_rlimit() -> UResult<usize> {
         .map_err(|_| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))
 }
 
-#[cfg(unix)]
+#[cfg(all(
+    unix,
+    not(any(
+        target_os = "redox",
+        target_os = "fuchsia",
+        target_os = "haiku",
+        target_os = "solaris",
+        target_os = "illumos"
+    ))
+))]
 pub(crate) fn fd_soft_limit() -> Option<usize> {
     get_rlimit().ok()
 }
 
-#[cfg(not(unix))]
+#[cfg(any(
+    not(unix),
+    target_os = "redox",
+    target_os = "fuchsia",
+    target_os = "haiku",
+    target_os = "solaris",
+    target_os = "illumos"
+))]
 pub(crate) fn fd_soft_limit() -> Option<usize> {
     None
 }
