@@ -14,6 +14,9 @@ echo "Setting up SMACK test environment..."
 rm -rf "$SMACK_DIR"
 mkdir -p "$SMACK_DIR"/{rootfs/{bin,lib64,proc,sys,dev,tmp,etc,gnu},kernel}
 
+: ${PROFILE:=release-fast}
+export PROFILE
+
 # Download Arch Linux kernel (has SMACK built-in)
 if [ ! -f /tmp/arch-vmlinuz ]; then
     echo "Downloading Arch Linux kernel..."
@@ -32,8 +35,7 @@ cp /tmp/arch-vmlinuz "$SMACK_DIR/kernel/vmlinuz"
 # Setup busybox
 BUSYBOX=/tmp/busybox
 [ -f "$BUSYBOX" ] || curl -sL -o "$BUSYBOX" https://busybox.net/downloads/binaries/1.35.0-x86_64-linux-musl/busybox
-chmod +x "$BUSYBOX"
-cp "$BUSYBOX" "$SMACK_DIR/rootfs/bin/"
+install -Dm755 "$BUSYBOX" "$SMACK_DIR/rootfs/bin/busybox"
 (cd "$SMACK_DIR/rootfs/bin" && "$BUSYBOX" --list | xargs -I{} ln -sf busybox {} 2>/dev/null)
 
 # Copy required libraries
@@ -75,10 +77,10 @@ chmod +x "$SMACK_DIR/rootfs/init"
 # Build utilities with SMACK support (only ls has SMACK support for now)
 # TODO: When other utilities have SMACK support, build: ls id mkdir mknod mkfifo
 echo "Building utilities with SMACK support..."
-cargo build --release --manifest-path="$REPO_DIR/Cargo.toml" --package uu_ls --bin ls --features uu_ls/smack
+cargo build --profile="${PROFILE}" --manifest-path="$REPO_DIR/Cargo.toml" --package uu_ls --bin ls --features uu_ls/smack
 
 # Find SMACK tests
-SMACK_TESTS=$(grep -l 'require_smack_' -r "$GNU_DIR/tests/" 2>/dev/null || true)
+SMACK_TESTS=$(grep -l 'require_smack_' -r "$GNU_DIR/tests/" 2>/dev/null || :)
 [ -z "$SMACK_TESTS" ] && { echo "No SMACK tests found"; exit 0; }
 
 echo "Found $(echo "$SMACK_TESTS" | wc -l) SMACK tests"
@@ -102,9 +104,9 @@ for TEST_PATH in $SMACK_TESTS; do
 
     # Copy built utilities (only ls has SMACK support for now)
     # TODO: When other utilities have SMACK support, use:
-    # for U in ls id mkdir mknod mkfifo; do cp "$REPO_DIR/target/release/$U" "$WORK/bin/$U"; done
+    # for U in ls id mkdir mknod mkfifo; do cp "$REPO_DIR/target/${PROFILE}/$U" "$WORK/bin/$U"; done
     rm -f "$WORK/bin/ls"
-    cp "$REPO_DIR/target/release/ls" "$WORK/bin/ls"
+    cp "$REPO_DIR/target/${PROFILE}/ls" "$WORK/bin/ls"
 
     # Set test script path
     sed -i "s|\$TEST_SCRIPT|$TEST_REL|g" "$WORK/init"
