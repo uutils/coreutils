@@ -129,7 +129,8 @@ impl OsWrite for Box<dyn OsWrite> {
 /// This function handles non-UTF-8 environment variable names and values correctly by using
 /// raw bytes on Unix systems.
 pub fn print_all_env_vars<T: fmt::Display>(line_ending: T) -> io::Result<()> {
-    // Trigger stdout-closed check and mark "write attempted"; 1 is a non-zero sentinel.
+    // This path writes via OsWrite and bypasses TrackingWriter, so mark stdout as "written"
+    // and fail early if fd 1 was already closed.
     crate::check_stdout_write(1)?;
     let mut stdout = io::stdout().lock();
     for (name, value) in env::vars_os() {
