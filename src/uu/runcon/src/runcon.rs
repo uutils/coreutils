@@ -15,9 +15,10 @@ use uucore::format_usage;
 
 use std::borrow::Cow;
 use std::ffi::{CStr, CString, OsStr, OsString};
-use std::os::raw::c_char;
+use std::io;
 use std::os::unix::ffi::OsStrExt;
-use std::{io, ptr};
+use std::os::unix::process::CommandExt;
+use std::process;
 
 mod errors;
 
@@ -367,23 +368,8 @@ fn get_custom_context(
 /// compiler the only valid return type is to say "if this returns, it will
 /// always return an error".
 fn execute_command(command: &OsStr, arguments: &[OsString]) -> UResult<()> {
-    let c_command = os_str_to_c_string(command).map_err(RunconError::new)?;
+    let err = process::Command::new(command).args(arguments).exec();
 
-    let argv_storage: Vec<CString> = arguments
-        .iter()
-        .map(AsRef::as_ref)
-        .map(os_str_to_c_string)
-        .collect::<Result<_>>()
-        .map_err(RunconError::new)?;
-
-    let mut argv: Vec<*const c_char> = Vec::with_capacity(arguments.len().saturating_add(2));
-    argv.push(c_command.as_ptr());
-    argv.extend(argv_storage.iter().map(AsRef::as_ref).map(CStr::as_ptr));
-    argv.push(ptr::null());
-
-    unsafe { libc::execvp(c_command.as_ptr(), argv.as_ptr()) };
-
-    let err = io::Error::last_os_error();
     let exit_status = if err.kind() == io::ErrorKind::NotFound {
         error_exit_status::NOT_FOUND
     } else {

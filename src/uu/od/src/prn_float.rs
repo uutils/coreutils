@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-use half::f16;
+use half::{bf16, f16};
 use std::num::FpCategory;
 
 use crate::formatter_item_info::{FormatWriter, FormatterItemInfo};
@@ -25,14 +25,73 @@ pub static FORMAT_ITEM_F64: FormatterItemInfo = FormatterItemInfo {
     formatter: FormatWriter::FloatWriter(format_item_f64),
 };
 
+pub static FORMAT_ITEM_LONG_DOUBLE: FormatterItemInfo = FormatterItemInfo {
+    byte_size: 16,
+    print_width: 40,
+    formatter: FormatWriter::LongDoubleWriter(format_item_long_double),
+};
+
 pub static FORMAT_ITEM_BF16: FormatterItemInfo = FormatterItemInfo {
     byte_size: 2,
     print_width: 16,
     formatter: FormatWriter::BFloatWriter(format_item_bf16),
 };
 
+/// Clean up a normalized float string by removing unnecessary padding and digits.
+/// - Strip leading spaces.
+/// - Trim trailing zeros after the decimal point (and the dot itself if empty).
+/// - Leave the exponent part (e/E...) untouched.
+fn trim_float_repr(raw: &str) -> String {
+    // Drop padding added by `format!` width specification
+    let mut s = raw.trim_start().to_string();
+
+    // Keep NaN/Inf representations as-is
+    let lower = s.to_ascii_lowercase();
+    if lower == "nan" || lower == "inf" || lower == "-inf" {
+        return s;
+    }
+
+    // Separate exponent from mantissa
+    let mut exp_part = String::new();
+    if let Some(idx) = s.find(['e', 'E']) {
+        exp_part = s[idx..].to_string();
+        s.truncate(idx);
+    }
+
+    // Trim trailing zeros in mantissa, then remove trailing dot if left alone
+    if s.contains('.') {
+        while s.ends_with('0') {
+            s.pop();
+        }
+        if s.ends_with('.') {
+            s.pop();
+        }
+    }
+
+    // If everything was trimmed, leave a single zero
+    if s.is_empty() || s == "-" || s == "+" {
+        s.push('0');
+    }
+
+    s.push_str(&exp_part);
+    s
+}
+
+/// Pad a floating value to a fixed width for column alignment while keeping
+/// the original precision (including trailing zeros). This mirrors the
+/// behavior of other float formatters (`f32`, `f64`) and keeps the output
+/// stable across platforms.
+fn pad_float_repr(raw: &str, width: usize) -> String {
+    format!("{raw:>width$}")
+}
+
 pub fn format_item_f16(f: f64) -> String {
-    format!(" {}", format_f16(f16::from_f64(f)))
+    let value = f16::from_f64(f);
+    let width = FORMAT_ITEM_F16.print_width - 1;
+    // Format once, trim redundant zeros, then re-pad to the canonical width
+    let raw = format_f16(value);
+    let trimmed = trim_float_repr(&raw);
+    format!(" {}", pad_float_repr(&trimmed, width))
 }
 
 pub fn format_item_f32(f: f64) -> String {
@@ -41,6 +100,10 @@ pub fn format_item_f32(f: f64) -> String {
 
 pub fn format_item_f64(f: f64) -> String {
     format!(" {}", format_f64(f))
+}
+
+pub fn format_item_long_double(f: f64) -> String {
+    format!(" {}", format_long_double(f))
 }
 
 fn format_f32_exp(f: f32, width: usize) -> String {
@@ -71,11 +134,33 @@ fn format_f64_exp_precision(f: f64, width: usize, precision: usize) -> String {
 }
 
 pub fn format_item_bf16(f: f64) -> String {
-    format!(" {}", format_f32(f as f32))
+    let bf = bf16::from_f32(f as f32);
+    let width = FORMAT_ITEM_BF16.print_width - 1;
+    let raw = format_binary16_like(f64::from(bf), width, 8, is_subnormal_bf16(bf));
+    let trimmed = trim_float_repr(&raw);
+    format!(" {}", pad_float_repr(&trimmed, width))
 }
 
 fn format_f16(f: f16) -> String {
-    format_float(f64::from(f), 15, 8)
+    let value = f64::from(f);
+    format_binary16_like(value, 15, 8, is_subnormal_f16(f))
+}
+
+fn format_binary16_like(value: f64, width: usize, precision: usize, force_exp: bool) -> String {
+    if force_exp {
+        return format_f64_exp_precision(value, width, precision - 1);
+    }
+    format_float(value, width, precision)
+}
+
+fn is_subnormal_f16(value: f16) -> bool {
+    let bits = value.to_bits();
+    (bits & 0x7C00) == 0 && (bits & 0x03FF) != 0
+}
+
+fn is_subnormal_bf16(value: bf16) -> bool {
+    let bits = value.to_bits();
+    (bits & 0x7F80) == 0 && (bits & 0x007F) != 0
 }
 
 /// formats float with 8 significant digits, eg 12345678 or -1.2345678e+12
@@ -122,6 +207,34 @@ fn format_float(f: f64, width: usize, precision: usize) -> String {
     } else {
         format_f64_exp_precision(f, width, precision - 1) // subnormal numbers
     }
+}
+
+fn format_long_double(f: f64) -> String {
+    // On most platforms, long double is either 64-bit (same as f64) or 80-bit/128-bit
+    // Since we're reading it as f64, we format it with extended precision
+    // Width is 39 (40 - 1 for leading space), precision is 21 significant digits
+    let width: usize = 39;
+    let precision: usize = 21;
+
+    // Handle special cases
+    if f.is_nan() {
+        return format!("{:>width$}", "NaN");
+    }
+    if f.is_infinite() {
+        if f.is_sign_negative() {
+            return format!("{:>width$}", "-inf");
+        }
+        return format!("{:>width$}", "inf");
+    }
+    if f == 0.0 {
+        if f.is_sign_negative() {
+            return format!("{:>width$}", "-0");
+        }
+        return format!("{:>width$}", "0");
+    }
+
+    // For normal numbers, format with appropriate precision using exponential notation
+    format!("{f:>width$.precision$e}")
 }
 
 #[test]

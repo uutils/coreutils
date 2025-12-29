@@ -6,12 +6,12 @@ ls-after-help = The TIME_STYLE argument can be full-iso, long-iso, iso, locale o
 # Error messages
 ls-error-invalid-line-width = invalid line width: {$width}
 ls-error-general-io = general io error: {$error}
-ls-error-cannot-access-no-such-file = cannot access '{$path}': No such file or directory
-ls-error-cannot-access-operation-not-permitted = cannot access '{$path}': Operation not permitted
-ls-error-cannot-open-directory-permission-denied = cannot open directory '{$path}': Permission denied
-ls-error-cannot-open-file-permission-denied = cannot open file '{$path}': Permission denied
-ls-error-cannot-open-directory-bad-descriptor = cannot open directory '{$path}': Bad file descriptor
-ls-error-unknown-io-error = unknown io error: '{$path}', '{$error}'
+ls-error-cannot-access-no-such-file = cannot access {$path}: No such file or directory
+ls-error-cannot-access-operation-not-permitted = cannot access {$path}: Operation not permitted
+ls-error-cannot-open-directory-permission-denied = cannot open directory {$path}: Permission denied
+ls-error-cannot-open-file-permission-denied = cannot open file {$path}: Permission denied
+ls-error-cannot-open-directory-bad-descriptor = cannot open directory {$path}: Bad file descriptor
+ls-error-unknown-io-error = unknown io error: {$path}, '{$error}'
 ls-error-invalid-block-size = invalid --block-size argument {$size}
 ls-error-dired-and-zero-incompatible = --dired and --zero are incompatible
 ls-error-not-listing-already-listed = {$path}: not listing already-listed directory
@@ -124,3 +124,13 @@ ls-invalid-columns-width = ignoring invalid width in environment variable COLUMN
 ls-invalid-ignore-pattern = Invalid pattern for ignore: {$pattern}
 ls-invalid-hide-pattern = Invalid pattern for hide: {$pattern}
 ls-total = total {$size}
+
+# Security context warnings
+ls-warning-failed-to-get-security-context = failed to get security context of: {$path}
+ls-warning-getting-security-context = getting security context of: {$path}: {$error}
+
+# SMACK error messages (used by uucore::smack when called from ls)
+smack-error-not-enabled = SMACK is not enabled on this system
+smack-error-label-retrieval-failure = failed to get SMACK label: { $error }
+smack-error-label-set-failure = failed to set SMACK label to '{ $context }': { $error }
+smack-error-no-label-set = no SMACK label set

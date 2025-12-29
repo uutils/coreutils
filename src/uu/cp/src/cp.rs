@@ -987,8 +987,6 @@ impl Options {
         let not_implemented_opts = vec![
             #[cfg(not(any(windows, unix)))]
             options::ONE_FILE_SYSTEM,
-            #[cfg(windows)]
-            options::FORCE,
         ];
 
         for not_implemented_opt in not_implemented_opts {
@@ -1375,10 +1373,19 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
             {
                 // There is already a file and it isn't a symlink (managed in a different place)
                 if copied_destinations.contains(&dest) && options.backup != BackupMode::Numbered {
-                    // If the target file was already created in this cp call, do not overwrite
-                    return Err(CpError::Error(
-                        translate!("cp-error-will-not-overwrite-just-created", "dest" => dest.quote(), "source" => source.quote()),
-                    ));
+                    // If the target was already created in this cp call, check if it's a directory.
+                    // Directories should be merged (GNU cp behavior), but files should not be overwritten.
+                    let dest_is_dir = fs::metadata(&dest).is_ok_and(|m| m.is_dir());
+                    let source_is_dir = fs::metadata(source).is_ok_and(|m| m.is_dir());
+
+                    // Only prevent overwriting if both source and dest are files (not directories)
+                    // Directories should be merged, which is handled by copy_directory
+                    if !dest_is_dir || !source_is_dir {
+                        // If the target file was already created in this cp call, do not overwrite
+                        return Err(CpError::Error(
+                            translate!("cp-error-will-not-overwrite-just-created", "dest" => dest.quote(), "source" => source.quote()),
+                        ));
+                    }
                 }
             }
 
@@ -1732,13 +1739,13 @@ pub(crate) fn copy_attributes(
             if let Some(context) = context {
                 if let Err(e) = context.set_for_path(dest, false, false) {
                     return Err(CpError::Error(
-                        translate!("cp-error-selinux-set-context", "path" => dest.display(), "error" => e),
+                        translate!("cp-error-selinux-set-context", "path" => dest.quote(), "error" => e),
                     ));
                 }
             }
         } else {
             return Err(CpError::Error(
-                translate!("cp-error-selinux-get-context", "path" => source.display()),
+                translate!("cp-error-selinux-get-context", "path" => source.quote()),
             ));
         }
         Ok(())
@@ -1982,6 +1989,16 @@ fn delete_dest_if_needed_and_allowed(
 }
 
 fn delete_path(path: &Path, options: &Options) -> CopyResult<()> {
+    // Windows requires clearing readonly attribute before deletion when using --force
+    #[cfg(windows)]
+    if options.force() {
+        if let Ok(mut perms) = fs::metadata(path).map(|m| m.permissions()) {
+            #[allow(clippy::permissions_set_readonly_false)]
+            perms.set_readonly(false);
+            let _ = fs::set_permissions(path, perms);
+        }
+    }
+
     match fs::remove_file(path) {
         Ok(()) => {
             if options.verbose {
@@ -2302,8 +2319,7 @@ fn copy_file(
     let initial_dest_metadata = dest.symlink_metadata().ok();
     let dest_is_symlink = initial_dest_metadata
         .as_ref()
-        .map(|md| md.file_type().is_symlink())
-        .unwrap_or(false);
+        .is_some_and(|md| md.file_type().is_symlink());
     let dest_target_exists = dest.try_exists().unwrap_or(false);
     // Fail if dest is a dangling symlink or a symlink this program created previously
     if dest_is_symlink {

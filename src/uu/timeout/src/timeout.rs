@@ -250,8 +250,7 @@ fn wait_or_kill_process(
             process.wait()?;
             Ok(ExitStatus::SignalSent(signal).into())
         }
-        Ok(WaitOrTimeoutRet::CustomSignaled) => unreachable!(), // We did not set it up.
-        Err(_) => Ok(ExitStatus::WaitingFailed.into()),
+        Err(_) => Ok(ExitStatus::CommandTimedOut.into()),
     }
 }
 
@@ -281,7 +280,6 @@ fn preserve_signal_info(signal: libc::c_int) -> libc::c_int {
     signal
 }
 
-/// TODO: Improve exit codes, and make them consistent with the GNU Coreutils exit codes.
 fn timeout(
     cmd: &[String],
     duration: Duration,
@@ -302,21 +300,21 @@ fn timeout(
         .args(&cmd[1..])
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit());
-    let mut self_pipe = command.set_up_timeout(Some(Signal::SIGTERM))?;
-    let process = &mut command.spawn().map_err(|err| {
-        let status_code = if err.kind() == ErrorKind::NotFound {
-            // FIXME: not sure which to use
-            127
-        } else {
-            // FIXME: this may not be 100% correct...
-            126
-        };
-        USimpleError::new(
-            status_code,
-            translate!("timeout-error-failed-to-execute-process", "error" => err),
-        )
-    })?;
+        .stderr(Stdio::inherit())
+        .spawn()
+        .map_err(|err| {
+            let status_code = match err.kind() {
+                ErrorKind::NotFound => ExitStatus::CommandNotFound.into(),
+                ErrorKind::PermissionDenied => ExitStatus::CannotInvoke.into(),
+                _ => ExitStatus::CannotInvoke.into(),
+            };
+            USimpleError::new(
+                status_code,
+                translate!("timeout-error-failed-to-execute-process", "error" => err),
+            )
+        })?;
+    unblock_sigchld();
+    catch_sigterm();
     // Wait for the child process for the specified time period.
     //
     // TODO The structure of this block is extremely similar to the
