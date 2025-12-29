@@ -1,15 +1,15 @@
 # spell-checker:ignore (misc) testsuite runtest findstring (targets) busytest toybox distclean pkgs nextest ; (vars/env) BINDIR BUILDDIR CARGOFLAGS DESTDIR DOCSDIR INSTALLDIR INSTALLEES MULTICALL DATAROOTDIR TESTDIR manpages
 
 # Config options
+ifneq (,$(filter install, $(MAKECMDGOALS)))
+ PROFILE?=release
+endif
 PROFILE         ?= debug
 MULTICALL       ?= n
 COMPLETIONS     ?= y
 MANPAGES        ?= y
 LOCALES         ?= y
 INSTALL         ?= install
-ifneq (,$(filter install, $(MAKECMDGOALS)))
-override PROFILE:=release
-endif
 
 # Needed for the foreach loops to split each loop into a separate command
 define newline
@@ -17,9 +17,9 @@ define newline
 
 endef
 
-PROFILE_CMD :=
-ifeq ($(PROFILE),release)
-	PROFILE_CMD = --release
+PROFILE_CMD := --profile=${PROFILE}
+ifeq ($(PROFILE),debug)
+	PROFILE_CMD =
 endif
 
 # Binaries
@@ -27,19 +27,19 @@ CARGO  ?= cargo
 CARGOFLAGS ?=
 RUSTC_ARCH ?= # should be empty except for cross-build, not --target $(shell rustc --print host-tuple)
 
+#prefix prepended to all binaries and library dir
+PROG_PREFIX ?=
+
 # Install directories
 PREFIX ?= /usr/local
 DESTDIR ?=
 BINDIR ?= $(PREFIX)/bin
 DATAROOTDIR ?= $(PREFIX)/share
-LIBSTDBUF_DIR ?= $(PREFIX)/libexec/coreutils
+LIBSTDBUF_DIR ?= $(PREFIX)/libexec/$(PROG_PREFIX)coreutils
 # Export variable so that it is used during the build
 export LIBSTDBUF_DIR
 
 INSTALLDIR_BIN=$(DESTDIR)$(BINDIR)
-
-#prefix to apply to coreutils binary and all tool binaries
-PROG_PREFIX ?=
 
 # This won't support any directory with spaces in its name, but you can just
 # make a symlink without spaces that points to the directory.
@@ -62,15 +62,15 @@ TOYBOX_SRC  := $(TOYBOX_ROOT)/toybox-$(TOYBOX_VER)
 
 #------------------------------------------------------------------------
 # Detect the host system.
-# On Windows the environment already sets  OS = Windows_NT.
+# On Windows uname -s might return MINGW_NT-* or CYGWIN_NT-*.
 # Otherwise let it default to the kernel name returned by uname -s
 # (Linux, Darwin, FreeBSD, …).
 #------------------------------------------------------------------------
-OS ?= $(shell uname -s)
+OS := $(shell uname -s)
 
 # Windows does not allow symlink by default.
 # Allow to override LN for AppArmor.
-ifeq ($(OS),Windows_NT)
+ifneq (,$(findstring _NT,$(OS)))
 	LN ?= ln -f
 endif
 LN ?= ln -sf
@@ -195,15 +195,11 @@ HASHSUM_PROGS := \
 
 $(info Detected OS = $(OS))
 
-# Build the SELinux programs only on Linux
-ifeq ($(filter $(OS),Linux),)
-	SELINUX_PROGS :=
+ifeq (,$(findstring MINGW,$(OS)))
+	PROGS += $(UNIX_PROGS)
 endif
-
-ifneq ($(OS),Windows_NT)
-	PROGS := $(PROGS) $(UNIX_PROGS)
-# Build the selinux command even if not on the system
-	PROGS := $(PROGS) $(SELINUX_PROGS)
+ifeq ($(SELINUX_ENABLED),1)
+	PROGS += $(SELINUX_PROGS)
 endif
 
 UTILS ?= $(filter-out $(SKIP_UTILS),$(PROGS))
@@ -337,7 +333,7 @@ test:
 	${CARGO} test ${CARGOFLAGS} --features "$(TESTS) $(TEST_SPEC_FEATURE)" $(PROFILE_CMD) --no-default-features $(TEST_NO_FAIL_FAST)
 
 nextest:
-	${CARGO} nextest run ${CARGOFLAGS} --features "$(TESTS) $(TEST_SPEC_FEATURE)" --no-default-features $(TEST_NO_FAIL_FAST)
+	${CARGO} nextest run ${CARGOFLAGS} --features "$(TESTS) $(TEST_SPEC_FEATURE)" $(PROFILE_CMD) --no-default-features $(TEST_NO_FAIL_FAST)
 
 test_toybox:
 	-(cd $(TOYBOX_SRC)/ && make tests)
@@ -345,7 +341,7 @@ test_toybox:
 toybox-src:
 	if [ ! -e "$(TOYBOX_SRC)" ] ; then \
 		mkdir -p "$(TOYBOX_ROOT)" ; \
-		wget "https://github.com/landley/toybox/archive/refs/tags/$(TOYBOX_VER).tar.gz" -P "$(TOYBOX_ROOT)" ; \
+		curl -Ls "https://github.com/landley/toybox/archive/refs/tags/$(TOYBOX_VER).tar.gz" -o "$(TOYBOX_ROOT)/$(TOYBOX_VER).tar.gz" ; \
 		tar -C "$(TOYBOX_ROOT)" -xf "$(TOYBOX_ROOT)/$(TOYBOX_VER).tar.gz" ; \
 		sed -i -e "s|TESTDIR=\".*\"|TESTDIR=\"$(BUILDDIR)\"|g" $(TOYBOX_SRC)/scripts/test.sh; \
 		sed -i -e "s/ || exit 1//g" $(TOYBOX_SRC)/scripts/test.sh; \
@@ -354,8 +350,8 @@ toybox-src:
 busybox-src:
 	if [ ! -e "$(BUSYBOX_SRC)" ] ; then \
 		mkdir -p "$(BUSYBOX_ROOT)" ; \
-		wget "https://busybox.net/downloads/busybox-$(BUSYBOX_VER).tar.bz2" -P "$(BUSYBOX_ROOT)" ; \
-		tar -C "$(BUSYBOX_ROOT)" -xf "$(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER).tar.bz2" ; \
+		curl -Ls "https://github.com/mirror/busybox/archive/refs/tags/$(subst .,_,$(BUSYBOX_VER)).tar.gz" -o "$(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER).tar.gz" ; \
+		tar -C "$(BUSYBOX_ROOT)" -xf "$(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER).tar.gz" ; \
 	fi ;
 
 # This is a busybox-specific config file their test suite wants to parse.
@@ -454,7 +450,11 @@ install: build install-manpages install-completions install-locales
 	mkdir -p $(INSTALLDIR_BIN)
 ifneq (,$(and $(findstring stdbuf,$(UTILS)),$(findstring feat_external_libstdbuf,$(CARGOFLAGS))))
 	mkdir -p $(DESTDIR)$(LIBSTDBUF_DIR)
-	$(INSTALL) -m 755 $(BUILDDIR)/deps/libstdbuf* $(DESTDIR)$(LIBSTDBUF_DIR)/
+ifneq (,$(findstring CYGWIN,$(OS)))
+	$(INSTALL) -m 755 $(BUILDDIR)/deps/stdbuf.dll $(DESTDIR)$(LIBSTDBUF_DIR)/libstdbuf.dll
+else
+	$(INSTALL) -m 755 $(BUILDDIR)/deps/libstdbuf.* $(DESTDIR)$(LIBSTDBUF_DIR)/
+endif
 endif
 ifeq (${MULTICALL}, y)
 	$(INSTALL) -m 755 $(BUILDDIR)/coreutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)coreutils
@@ -476,8 +476,8 @@ else
 endif
 
 uninstall:
-ifneq ($(OS),Windows_NT)
-	rm -f $(DESTDIR)$(LIBSTDBUF_DIR)/libstdbuf*
+ifeq (,$(findstring MINGW,$(OS)))
+	rm -f $(DESTDIR)$(LIBSTDBUF_DIR)/libstdbuf.*
 	-rm -d $(DESTDIR)$(LIBSTDBUF_DIR) 2>/dev/null || true
 endif
 ifeq (${MULTICALL}, y)

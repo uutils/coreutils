@@ -395,3 +395,27 @@ fn test_kill_with_signal_and_table() {
         .arg("-t")
         .fails();
 }
+
+/// Test that `kill -1` (signal without PID) reports "no process ID" error
+/// instead of being misinterpreted as pid=-1 which would kill all processes.
+/// This matches GNU kill behavior.
+#[test]
+fn test_kill_signal_only_no_pid() {
+    // Test with -1 (SIGHUP)
+    new_ucmd!()
+        .arg("-1")
+        .fails()
+        .stderr_contains("no process ID specified");
+
+    // Test with -9 (SIGKILL)
+    new_ucmd!()
+        .arg("-9")
+        .fails()
+        .stderr_contains("no process ID specified");
+
+    // Test with -TERM
+    new_ucmd!()
+        .arg("-TERM")
+        .fails()
+        .stderr_contains("no process ID specified");
+}
