@@ -202,6 +202,8 @@ jobs:
           export PATH=~/.cargo/bin:${PATH}
           export RUST_BACKTRACE=1
           export CARGO_TERM_COLOR=always
+          # Avoid filling disk space
+          export RUSTFLAGS="-C strip=symbols"
           # Use cargo test since nextest might not support OpenBSD
           if (test -z "\$FAULT"); then cargo test --features '${{ matrix.job.features }}' || FAULT=1 ; fi
           # There is no systemd-logind on OpenBSD, so test all features except feat_systemd_logind
