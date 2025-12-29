@@ -20,6 +20,8 @@ use std::os::unix::ffi::OsStrExt;
 use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd, RawFd};
 use std::path::{Path, PathBuf};
 
+#[cfg(target_os = "redox")]
+use libc;
 #[cfg(not(target_os = "redox"))]
 use nix::dir::Dir;
 #[cfg(not(target_os = "redox"))]
@@ -30,8 +32,6 @@ use nix::libc;
 use nix::sys::stat::{FchmodatFlags, FileStat, Mode, fchmodat, fstatat};
 #[cfg(not(target_os = "redox"))]
 use nix::unistd::{Gid, Uid, UnlinkatFlags, fchown, fchownat, unlinkat};
-#[cfg(target_os = "redox")]
-use libc;
 use os_display::Quotable;
 
 use crate::translate;

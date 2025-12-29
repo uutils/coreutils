@@ -345,6 +345,7 @@ pub fn safe_remove_dir_recursive(
     }
 }
 
+#[cfg(not(target_os = "redox"))]
 pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Options) -> bool {
     // Read directory entries using safe traversal
     let entries = match dir_fd.read_dir() {
@@ -431,4 +432,11 @@ pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Opt
     }
 
     error
+}
+
+#[cfg(target_os = "redox")]
+pub fn safe_remove_dir_recursive_impl(_path: &Path, _dir_fd: &DirFd, _options: &Options) -> bool {
+    // safe_traversal stat_at is not supported on Redox
+    // This shouldn't be called on Redox, but provide a stub for compilation
+    true // Return error
 }
