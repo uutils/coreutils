@@ -119,19 +119,11 @@ pub fn uu_app() -> Command {
 
 fn calculate_mode(mode_option: Option<&String>) -> Result<u32, String> {
     let umask = uucore::mode::get_umask();
-    let mut mode = 0o666; // Default mode for FIFOs
+    let mode = 0o666; // Default mode for FIFOs
 
     if let Some(m) = mode_option {
-        if m.chars().any(|c| c.is_ascii_digit()) {
-            mode = uucore::mode::parse_numeric(mode, m, false)?;
-        } else {
-            for item in m.split(',') {
-                mode = uucore::mode::parse_symbolic(mode, item, umask, false)?;
-            }
-        }
+        uucore::mode::parse_chmod(mode, m, false, umask)
     } else {
-        mode &= !umask; // Apply umask if no mode is specified
+        Ok(mode & !umask) // Apply umask if no mode is specified
     }
-
-    Ok(mode)
 }
