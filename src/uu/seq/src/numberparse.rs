@@ -76,7 +76,7 @@ fn compute_num_digits(input: &str, ebd: ExtendedBigDecimal) -> PreciseNumber {
         // Also ignore overflowed exponents (unwrap_or(0)).
         if exp > 0 {
             int_digits += exp.try_into().unwrap_or(0);
-        };
+        }
         frac_digits = if exp < frac_digits as i64 {
             // Subtract from i128 to avoid any overflow
             (frac_digits as i128 - exp as i128).try_into().unwrap_or(0)
