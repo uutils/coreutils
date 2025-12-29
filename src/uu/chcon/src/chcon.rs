@@ -760,7 +760,7 @@ fn root_dev_ino_warn(dir_name: &Path) {
     } else {
         show_warning!(
             "{}",
-            translate!("chcon-warning-dangerous-recursive-dir", "dir" => dir_name.to_string_lossy(), "option" => options::preserve_root::NO_PRESERVE_ROOT)
+            translate!("chcon-warning-dangerous-recursive-dir", "dir" => dir_name.quote(), "option" => options::preserve_root::NO_PRESERVE_ROOT)
         );
     }
 }
@@ -782,7 +782,7 @@ fn cycle_warning_required(fts_options: c_int, entry: &fts::EntryRef) -> bool {
 fn emit_cycle_warning(file_name: &Path) {
     show_warning!(
         "{}",
-        translate!("chcon-warning-circular-directory", "file" => file_name.to_string_lossy())
+        translate!("chcon-warning-circular-directory", "file" => file_name.quote())
     );
 }
 

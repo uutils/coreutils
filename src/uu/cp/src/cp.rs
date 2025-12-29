@@ -1739,13 +1739,13 @@ pub(crate) fn copy_attributes(
             if let Some(context) = context {
                 if let Err(e) = context.set_for_path(dest, false, false) {
                     return Err(CpError::Error(
-                        translate!("cp-error-selinux-set-context", "path" => dest.display(), "error" => e),
+                        translate!("cp-error-selinux-set-context", "path" => dest.quote(), "error" => e),
                     ));
                 }
             }
         } else {
             return Err(CpError::Error(
-                translate!("cp-error-selinux-get-context", "path" => source.display()),
+                translate!("cp-error-selinux-get-context", "path" => source.quote()),
             ));
         }
         Ok(())
