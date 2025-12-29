@@ -144,7 +144,10 @@ use std::iter;
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::str;
 use std::str::Utf8Chunk;
-use std::sync::{LazyLock, atomic::Ordering};
+use std::sync::{
+    LazyLock,
+    atomic::{AtomicBool, Ordering},
+};
 
 /// Disables the custom signal handlers installed by Rust for stack-overflow handling. With those custom signal handlers processes ignore the first SIGBUS and SIGSEGV signal they receive.
 /// See <https://github.com/rust-lang/rust/blob/8ac1525e091d3db28e67adcbbd6db1e1deaa37fb/src/libstd/sys/unix/stack_overflow.rs#L71-L92> for details.
@@ -169,16 +172,115 @@ pub fn disable_rust_signal_handlers() -> Result<(), Errno> {
 pub fn stdout_is_closed() -> bool {
     #[cfg(unix)]
     {
-        use nix::fcntl::{FcntlArg, fcntl};
-        match fcntl(std::io::stdout(), FcntlArg::F_GETFL) {
-            Ok(_) => false,
-            Err(nix::errno::Errno::EBADF) => true,
-            Err(_) => false,
+        let res = unsafe { nix::libc::fcntl(nix::libc::STDOUT_FILENO, nix::libc::F_GETFL) };
+        if res != -1 {
+            return false;
         }
+        matches!(nix::errno::Errno::last(), nix::errno::Errno::EBADF)
     }
     #[cfg(not(unix))]
     {
         false
+    }
+}
+
+static STDOUT_WRITTEN: AtomicBool = AtomicBool::new(false);
+static STDOUT_WAS_CLOSED: AtomicBool = AtomicBool::new(false);
+static STDOUT_WAS_CLOSED_SET: AtomicBool = AtomicBool::new(false);
+
+/// Reset the stdout-written flag for the current process.
+pub fn reset_stdout_written() {
+    STDOUT_WRITTEN.store(false, Ordering::Relaxed);
+}
+
+/// Record whether stdout was closed at process start.
+pub fn set_stdout_was_closed(value: bool) {
+    STDOUT_WAS_CLOSED.store(value, Ordering::Relaxed);
+    STDOUT_WAS_CLOSED_SET.store(true, Ordering::Relaxed);
+}
+
+/// Returns true if stdout was closed at process start.
+pub fn stdout_was_closed() -> bool {
+    STDOUT_WAS_CLOSED.load(Ordering::Relaxed)
+}
+
+/// Initialize stdout state if it wasn't set by early startup code.
+pub fn init_stdout_state() {
+    if !STDOUT_WAS_CLOSED_SET.load(Ordering::Relaxed) {
+        set_stdout_was_closed(stdout_is_closed());
+    }
+}
+
+/// Mark that at least one non-empty write to stdout was attempted.
+pub fn mark_stdout_written() {
+    STDOUT_WRITTEN.store(true, Ordering::Relaxed);
+}
+
+/// Returns true if any write to stdout was attempted.
+pub fn stdout_was_written() -> bool {
+    STDOUT_WRITTEN.load(Ordering::Relaxed)
+}
+
+#[cfg(unix)]
+mod early_stdout_state {
+    use super::set_stdout_was_closed;
+
+    extern "C" fn init() {
+        set_stdout_was_closed(super::stdout_is_closed());
+    }
+
+    #[used]
+    #[cfg_attr(
+        target_os = "macos",
+        unsafe(link_section = "__DATA,__mod_init_func")
+    )]
+    #[cfg_attr(not(target_os = "macos"), unsafe(link_section = ".init_array"))]
+    static INIT: extern "C" fn() = init;
+}
+
+/// Record a pending stdout write and error if stdout was closed at startup.
+pub fn check_stdout_write(len: usize) -> std::io::Result<()> {
+    if len == 0 {
+        return Ok(());
+    }
+    mark_stdout_written();
+    if stdout_was_closed() {
+        #[cfg(unix)]
+        {
+            return Err(std::io::Error::from_raw_os_error(
+                nix::errno::Errno::EBADF as i32,
+            ));
+        }
+        #[cfg(not(unix))]
+        {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                "stdout was closed",
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// A writer wrapper that marks stdout as written when non-empty data is written.
+pub struct TrackingWriter<W> {
+    inner: W,
+}
+
+impl<W> TrackingWriter<W> {
+    pub fn new(inner: W) -> Self {
+        Self { inner }
+    }
+}
+
+impl<W: std::io::Write> std::io::Write for TrackingWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        check_stdout_write(buf.len())?;
+        self.inner.write(buf)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
     }
 }
 
@@ -228,6 +330,12 @@ macro_rules! bin {
             use std::io::Write;
             use uucore::locale;
 
+            // Capture whether stdout was already closed before we run the utility.
+            // This must happen before any setup that might open files and reuse fd 1.
+            uucore::init_stdout_state();
+            uucore::reset_stdout_written();
+            let stdout_was_closed = uucore::stdout_was_closed();
+
             // Preserve inherited SIGPIPE settings (e.g., from env --default-signal=PIPE)
             uucore::panic::preserve_inherited_sigpipe();
 
@@ -245,17 +353,15 @@ macro_rules! bin {
                     std::process::exit(99)
                 });
 
-            // Capture whether stdout was already closed before we run the utility.
-            // This avoids treating a closed stdout as a flush failure for "silent" commands.
-            let stdout_was_closed = uucore::stdout_is_closed();
-
             // execute utility code
             let mut code = $util::uumain(uucore::args_os());
             // (defensively) flush stdout for utility prior to exit; see <https://github.com/rust-lang/rust/issues/23818>
             if let Err(e) = std::io::stdout().flush() {
                 // Treat write errors as a failure, but ignore BrokenPipe to avoid
                 // breaking utilities that intentionally silence it (e.g., seq).
-                let ignore_closed_stdout = uucore::is_closed_stdout_error(&e, stdout_was_closed);
+                let stdout_was_written = uucore::stdout_was_written();
+                let ignore_closed_stdout = uucore::is_closed_stdout_error(&e, stdout_was_closed)
+                    && !stdout_was_written;
                 if e.kind() != std::io::ErrorKind::BrokenPipe && !ignore_closed_stdout {
                     eprintln!("Error flushing stdout: {e}");
                     if code == 0 {

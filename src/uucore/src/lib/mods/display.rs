@@ -49,6 +49,7 @@ pub use os_display::{Quotable, Quoted};
 /// using low-level library calls and bypassing `io::Write`. This is not a big priority
 /// because broken filenames are much rarer on Windows than on Unix.
 pub fn println_verbatim<S: AsRef<OsStr>>(text: S) -> io::Result<()> {
+    crate::check_stdout_write(1)?;
     let mut stdout = io::stdout().lock();
     stdout.write_all_os(text.as_ref())?;
     stdout.write_all(b"\n")?;
@@ -57,6 +58,9 @@ pub fn println_verbatim<S: AsRef<OsStr>>(text: S) -> io::Result<()> {
 
 /// Like `println_verbatim`, without the trailing newline.
 pub fn print_verbatim<S: AsRef<OsStr>>(text: S) -> io::Result<()> {
+    if !text.as_ref().is_empty() {
+        crate::check_stdout_write(1)?;
+    }
     io::stdout().write_all_os(text.as_ref())
 }
 
@@ -125,6 +129,7 @@ impl OsWrite for Box<dyn OsWrite> {
 /// This function handles non-UTF-8 environment variable names and values correctly by using
 /// raw bytes on Unix systems.
 pub fn print_all_env_vars<T: fmt::Display>(line_ending: T) -> io::Result<()> {
+    crate::check_stdout_write(1)?;
     let mut stdout = io::stdout().lock();
     for (name, value) in env::vars_os() {
         stdout.write_all_os(&name)?;
