@@ -14,8 +14,17 @@ use uutests::util_name;
 // All that can be tested is the side-effects.
 
 #[test]
-fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails_with_code(125);
+fn test_nohup_exit_codes() {
+    // No args: 125 default, 127 with POSIXLY_CORRECT
+    new_ucmd!().fails_with_code(125);
+    new_ucmd!().env("POSIXLY_CORRECT", "1").fails_with_code(127);
+
+    // Invalid arg: 125 default, 127 with POSIXLY_CORRECT
+    new_ucmd!().arg("--invalid").fails_with_code(125);
+    new_ucmd!()
+        .env("POSIXLY_CORRECT", "1")
+        .arg("--invalid")
+        .fails_with_code(127);
 }
 
 #[test]

@@ -60,7 +60,7 @@ enum LnError {
     #[error("{}", translate!("ln-error-missing-destination", "operand" => _0.quote()))]
     MissingDestination(PathBuf),
 
-    #[error("{}", translate!("ln-error-extra-operand", "operand" => _0.to_string_lossy(), "program" => _1.clone()))]
+    #[error("{}", translate!("ln-error-extra-operand", "operand" => _0.quote(), "program" => _1.clone()))]
     ExtraOperand(OsString, String),
 
     #[error("{}", translate!("ln-failed-to-create-hard-link-dir", "source" => _0.to_string_lossy()))]
@@ -345,7 +345,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
             // If the target file was already created in this ln call, do not overwrite
             show_error!(
                 "{}",
-                translate!("ln-error-will-not-overwrite", "target" => targetpath.display(), "source" => srcpath.display())
+                translate!("ln-error-will-not-overwrite", "target" => targetpath.quote(), "source" => srcpath.quote())
             );
             all_successful = false;
         } else if let Err(e) = link(srcpath, &targetpath, settings) {

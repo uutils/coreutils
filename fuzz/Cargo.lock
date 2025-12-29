@@ -1575,7 +1575,6 @@ version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
- "hex",
  "uucore",
 ]
 
@@ -1597,7 +1596,7 @@ dependencies = [
  "clap",
  "fluent",
  "jiff",
- "libc",
+ "nix",
  "parse_datetime",
  "uucore",
  "windows-sys 0.61.2",

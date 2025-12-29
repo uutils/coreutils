@@ -2,10 +2,11 @@ name: GnuTests
 
 # spell-checker:ignore (abbrev/names) CodeCov gnulib GnuTests Swatinem
 # spell-checker:ignore (jargon) submodules devel
-# spell-checker:ignore (libs/utils) autopoint chksum getenforce gperf lcov libexpect limactl pyinotify setenforce shopt texinfo valgrind libattr libcap taiki-e
+# spell-checker:ignore (libs/utils) autopoint chksum dpkg getenforce getlimits gperf lcov libexpect limactl pyinotify setenforce shopt texinfo valgrind libattr libcap taiki-e zstd cpio
 # spell-checker:ignore (options) Ccodegen Coverflow Cpanic Zpanic
 # spell-checker:ignore (people) Dawid Dziurla * dawidd dtolnay
 # spell-checker:ignore (vars) FILESET SUBDIRS XPASS
+# spell-checker:ignore userns
 
 # * note: to run a single test => `REPO/util/run-gnu-test.sh PATH/TO/TEST/SCRIPT`
 
@@ -30,6 +31,7 @@ env:
   TEST_STTY_FULL_SUMMARY_FILE: 'gnu-stty-full-result.json'
   TEST_SELINUX_FULL_SUMMARY_FILE: 'selinux-gnu-full-result.json'
   TEST_SELINUX_ROOT_FULL_SUMMARY_FILE: 'selinux-root-gnu-full-result.json'
+  TEST_SMACK_FULL_SUMMARY_FILE: 'smack-gnu-full-result.json'
 
 jobs:
   native:
@@ -42,16 +44,6 @@ jobs:
       with:
         path: 'uutils'
         persist-credentials: false
-    - name: Extract GNU version from build-gnu.sh
-      id: gnu-version
-      run: |
-        GNU_VERSION=$(grep '^release_tag_GNU=' uutils/util/build-gnu.sh | cut -d'"' -f2)
-        if [ -z "$GNU_VERSION" ]; then
-          echo "Error: Failed to extract GNU version from build-gnu.sh"
-          exit 1
-        fi
-        echo "REPO_GNU_REF=${GNU_VERSION}" >> $GITHUB_ENV
-        echo "Extracted GNU version: ${GNU_VERSION}"
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: stable
@@ -60,20 +52,15 @@ jobs:
       with:
         workspaces: "./uutils -> target"
     - name: Checkout code (GNU coreutils)
-      uses: actions/checkout@v6
+      run: (mkdir -p gnu && cd gnu && bash ../uutils/util/fetch-gnu.sh)
+    - name: Restore files for faster configure and skipping make
+      uses: actions/cache@v5
+      id: cache-config-gnu
       with:
-        repository: 'coreutils/coreutils'
-        path: 'gnu'
-        ref: ${{ env.REPO_GNU_REF }}
-        submodules: false
-        persist-credentials: false
-    - name: Override submodule URL and initialize submodules
-      # Use github instead of upstream git server
-      run: |
-        git submodule sync --recursive
-        git config submodule.gnulib.url https://github.com/coreutils/gnulib.git
-        git submodule update --init --recursive --depth 1
-      working-directory: gnu
+        path: |
+          gnu/config.cache
+          gnu/src/getlimits
+        key: ${{ runner.os }}-gnu-config-${{ hashFiles('gnu/NEWS') }}-${{ hashFiles('uutils/util/build-gnu.sh') }} # use build-gnu.sh for extremely safe caching
 
     #### Build environment setup
     - name: Install dependencies
@@ -83,6 +70,8 @@ jobs:
         sudo apt-get update
         ## Check that build-gnu.sh works on the non SELinux system by installing libselinux only on lima
         sudo apt-get install -y autopoint gperf gdb python3-pyinotify valgrind libexpect-perl libacl1-dev libattr1-dev libcap-dev attr quilt
+        curl http://launchpadlibrarian.net/831710181/automake_1.18.1-3_all.deb > automake-1.18.deb
+        sudo dpkg -i --force-depends automake-1.18.deb
     - name: Add various locales
       shell: bash
       run: |
@@ -103,6 +92,7 @@ jobs:
         sudo locale-gen --keep-existing fa_IR.UTF-8 # Iran
         sudo locale-gen --keep-existing am_ET.UTF-8 # Ethiopia
         sudo locale-gen --keep-existing th_TH.UTF-8 # Thailand
+        sudo locale-gen --keep-existing zh_CN.GB18030 # China
 
         sudo update-locale
         echo "After:"
@@ -115,11 +105,23 @@ jobs:
         ## Build binaries
         cd 'uutils'
         env PROFILE=release-small bash util/build-gnu.sh
+        
+    - name: Save files for faster configure and skipping make
+      uses: actions/cache/save@v5
+      if: always() && steps.cache-config-gnu.outputs.cache-hit != 'true'
+      with:
+        path: |
+          gnu/config.cache
+          gnu/src/getlimits
+        key: ${{ runner.os }}-gnu-config-${{ hashFiles('gnu/NEWS') }}-${{ hashFiles('uutils/util/build-gnu.sh') }}
 
     ### Run tests as user
     - name: Run GNU tests
       shell: bash
       run: |
+        ## Use unshare
+        sudo sysctl -w kernel.unprivileged_userns_clone=1
+        sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
         ## Run GNU tests
         path_GNU='gnu'
         path_UUTILS='uutils'
@@ -206,16 +208,6 @@ jobs:
       with:
         path: 'uutils'
         persist-credentials: false
-    - name: Extract GNU version from build-gnu.sh
-      id: gnu-version-selinux
-      run: |
-        GNU_VERSION=$(grep '^release_tag_GNU=' uutils/util/build-gnu.sh | cut -d'"' -f2)
-        if [ -z "$GNU_VERSION" ]; then
-          echo "Error: Failed to extract GNU version from build-gnu.sh"
-          exit 1
-        fi
-        echo "REPO_GNU_REF=${GNU_VERSION}" >> $GITHUB_ENV
-        echo "Extracted GNU version: ${GNU_VERSION}"
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: stable
@@ -224,20 +216,7 @@ jobs:
       with:
         workspaces: "./uutils -> target"
     - name: Checkout code (GNU coreutils)
-      uses: actions/checkout@v6
-      with:
-        repository: 'coreutils/coreutils'
-        path: 'gnu'
-        ref: ${{ env.REPO_GNU_REF }}
-        submodules: false
-        persist-credentials: false
-    - name: Override submodule URL and initialize submodules
-      # Use github instead of upstream git server
-      run: |
-        git submodule sync --recursive
-        git config submodule.gnulib.url https://github.com/coreutils/gnulib.git
-        git submodule update --init --recursive --depth 1
-      working-directory: gnu
+      run: (mkdir -p gnu && cd gnu && bash ../uutils/util/fetch-gnu.sh)
 
     #### Lima build environment setup
     - name: Setup Lima
@@ -340,8 +319,52 @@ jobs:
           gnu/tests-selinux/*.log
           gnu/tests-selinux/*/*.log.gz
 
+  smack:
+    name: Run GNU tests (SMACK)
+    runs-on: ubuntu-24.04
+    steps:
+    - name: Checkout code (uutils)
+      uses: actions/checkout@v6
+      with:
+        path: 'uutils'
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+        components: rustfmt
+    - uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: "./uutils -> target"
+    - name: Checkout code (GNU coreutils)
+      run: (mkdir -p gnu && cd gnu && bash ../uutils/util/fetch-gnu.sh)
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y qemu-system-x86 zstd cpio
+    - name: Run GNU SMACK tests
+      run: |
+        cd uutils
+        bash util/run-gnu-tests-smack-ci.sh "$GITHUB_WORKSPACE/gnu" "$GITHUB_WORKSPACE/gnu/tests-smack"
+    - name: Extract testing info into JSON
+      run: |
+        python3 uutils/util/gnu-json-result.py gnu/tests-smack > ${{ env.TEST_SMACK_FULL_SUMMARY_FILE }}
+    - name: Upload SMACK json results
+      uses: actions/upload-artifact@v6
+      with:
+        name: smack-gnu-full-result
+        path: ${{ env.TEST_SMACK_FULL_SUMMARY_FILE }}
+    - name: Compress SMACK test logs
+      run: gzip gnu/tests-smack/*/*.log 2>/dev/null || true
+    - name: Upload SMACK test logs
+      uses: actions/upload-artifact@v6
+      with:
+        name: smack-test-logs
+        path: |
+          gnu/tests-smack/*.log
+          gnu/tests-smack/*/*.log.gz
+
   aggregate:
-    needs: [native, selinux]
+    needs: [native, selinux, smack]
     permissions:
       actions: read  # for dawidd6/action-download-artifact to query and download artifacts
       contents: read  # for actions/checkout to fetch code
@@ -366,7 +389,7 @@ jobs:
         path: 'uutils'
         persist-credentials: false
     - name: Retrieve reference artifacts
-      uses: dawidd6/action-download-artifact@v11
+      uses: dawidd6/action-download-artifact@v12
       # ref: <https://github.com/dawidd6/action-download-artifact>
       continue-on-error: true ## don't break the build for missing reference artifacts (may be expired or just not generated yet)
       with:
@@ -406,6 +429,12 @@ jobs:
         name: selinux-root-gnu-full-result
         path: results
         merge-multiple: true
+    - name: Download smack json results
+      uses: actions/download-artifact@v7
+      with:
+        name: smack-gnu-full-result
+        path: results
+        merge-multiple: true
     - name: Extract/summarize testing info
       id: summary
       shell: bash
@@ -416,8 +445,8 @@ jobs:
         path_UUTILS='uutils'
 
         json_count=$(ls -l results/*.json | wc -l)
-        if [[ "$json_count" -ne 5 ]]; then
-          echo "::error ::Failed to download all results json files (expected 4 files, found $json_count); failing early"
+        if [[ "$json_count" -ne 6 ]]; then
+          echo "::error ::Failed to download all results json files (expected 6 files, found $json_count); failing early"
           ls -lR results || true
           exit 1
         fi

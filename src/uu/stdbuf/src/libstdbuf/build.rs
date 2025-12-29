@@ -11,8 +11,8 @@ fn main() {
     println!("cargo:rustc-link-arg=-fPIC");
 
     let target = env::var("TARGET").unwrap_or_else(|_| "unknown".to_string());
-    // Ensure the library doesn't have any undefined symbols (-z flag not supported on macOS)
-    if !target.contains("apple-darwin") {
+    // Ensure the library doesn't have any undefined symbols (-z flag not supported on macOS and Cygwin)
+    if !target.contains("apple-darwin") && !target.contains("cygwin") {
         println!("cargo:rustc-link-arg=-z");
         println!("cargo:rustc-link-arg=defs");
     }

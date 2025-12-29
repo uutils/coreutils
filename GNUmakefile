@@ -27,19 +27,19 @@ CARGO  ?= cargo
 CARGOFLAGS ?=
 RUSTC_ARCH ?= # should be empty except for cross-build, not --target $(shell rustc --print host-tuple)
 
+#prefix prepended to all binaries and library dir
+PROG_PREFIX ?=
+
 # Install directories
 PREFIX ?= /usr/local
 DESTDIR ?=
 BINDIR ?= $(PREFIX)/bin
 DATAROOTDIR ?= $(PREFIX)/share
-LIBSTDBUF_DIR ?= $(PREFIX)/libexec/coreutils
+LIBSTDBUF_DIR ?= $(PREFIX)/libexec/$(PROG_PREFIX)coreutils
 # Export variable so that it is used during the build
 export LIBSTDBUF_DIR
 
 INSTALLDIR_BIN=$(DESTDIR)$(BINDIR)
-
-#prefix to apply to coreutils binary and all tool binaries
-PROG_PREFIX ?=
 
 # This won't support any directory with spaces in its name, but you can just
 # make a symlink without spaces that points to the directory.
@@ -62,15 +62,15 @@ TOYBOX_SRC  := $(TOYBOX_ROOT)/toybox-$(TOYBOX_VER)
 
 #------------------------------------------------------------------------
 # Detect the host system.
-# On Windows the environment already sets  OS = Windows_NT.
+# On Windows uname -s might return MINGW_NT-* or CYGWIN_NT-*.
 # Otherwise let it default to the kernel name returned by uname -s
 # (Linux, Darwin, FreeBSD, …).
 #------------------------------------------------------------------------
-OS ?= $(shell uname -s)
+OS := $(shell uname -s)
 
 # Windows does not allow symlink by default.
 # Allow to override LN for AppArmor.
-ifeq ($(OS),Windows_NT)
+ifneq (,$(findstring _NT,$(OS)))
 	LN ?= ln -f
 endif
 LN ?= ln -sf
@@ -195,7 +195,7 @@ HASHSUM_PROGS := \
 
 $(info Detected OS = $(OS))
 
-ifneq ($(OS),Windows_NT)
+ifeq (,$(findstring MINGW,$(OS)))
 	PROGS += $(UNIX_PROGS)
 endif
 ifeq ($(SELINUX_ENABLED),1)
@@ -450,7 +450,11 @@ install: build install-manpages install-completions install-locales
 	mkdir -p $(INSTALLDIR_BIN)
 ifneq (,$(and $(findstring stdbuf,$(UTILS)),$(findstring feat_external_libstdbuf,$(CARGOFLAGS))))
 	mkdir -p $(DESTDIR)$(LIBSTDBUF_DIR)
+ifneq (,$(findstring CYGWIN,$(OS)))
+	$(INSTALL) -m 755 $(BUILDDIR)/deps/stdbuf.dll $(DESTDIR)$(LIBSTDBUF_DIR)/libstdbuf.dll
+else
 	$(INSTALL) -m 755 $(BUILDDIR)/deps/libstdbuf.* $(DESTDIR)$(LIBSTDBUF_DIR)/
+endif
 endif
 ifeq (${MULTICALL}, y)
 	$(INSTALL) -m 755 $(BUILDDIR)/coreutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)coreutils
@@ -472,7 +476,7 @@ else
 endif
 
 uninstall:
-ifneq ($(OS),Windows_NT)
+ifeq (,$(findstring MINGW,$(OS)))
 	rm -f $(DESTDIR)$(LIBSTDBUF_DIR)/libstdbuf.*
 	-rm -d $(DESTDIR)$(LIBSTDBUF_DIR) 2>/dev/null || true
 endif
