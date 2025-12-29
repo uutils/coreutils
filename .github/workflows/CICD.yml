@@ -246,6 +246,8 @@ jobs:
     - name: "`cargo update` testing"
       shell: bash
       run: |
+        command -v sudo && sudo rm -rf /usr/local/lib/android /usr/share/dotnet # avoid no space left
+        df -h ||:
         ## `cargo update` testing
         # * convert any errors/warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
         for dir in "." "fuzz"; do
@@ -1194,8 +1196,6 @@ jobs:
     - name: build and test all features individually
       shell: bash
       run: |
-        command -v sudo && sudo rm -rf /usr/local/lib/android /usr/share/dotnet # avoid no space left
-        df -h ||:
         CARGO_FEATURES_OPTION='--features=${{ matrix.job.features }}' ;
         for f in $(util/show-utils.sh ${CARGO_FEATURES_OPTION})
         do
