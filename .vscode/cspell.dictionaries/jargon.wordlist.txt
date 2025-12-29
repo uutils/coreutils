@@ -1,4 +1,6 @@
 AFAICT
+asimd
+ASIMD
 alloc
 arity
 autogenerate
@@ -71,11 +73,13 @@ hardlink
 hardlinks
 hasher
 hashsums
+hwcaps
 infile
 iflag
 iflags
 kibi
 kibibytes
+langinfo
 libacl
 lcase
 listxattr
@@ -98,6 +102,7 @@ nocache
 nocreat
 noctty
 noerror
+noexec
 nofollow
 nolinks
 nonblock
@@ -131,6 +136,7 @@ semiprimes
 setcap
 setfacl
 setfattr
+setlocale
 shortcode
 shortcodes
 siginfo
@@ -149,6 +155,8 @@ tokenize
 toolchain
 totalram
 truthy
+tunables
+TUNABLES
 ucase
 unbuffered
 udeps
@@ -165,6 +173,8 @@ xattrs
 xpass
 
 # * abbreviations
+AMPM
+ampm
 consts
 deps
 dev
