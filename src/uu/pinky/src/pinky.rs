@@ -13,6 +13,7 @@ mod platform;
 
 mod options {
     pub const LONG_FORMAT: &str = "long_format";
+    pub const LOOKUP: &str = "lookup";
     pub const OMIT_HOME_DIR: &str = "omit_home_dir";
     pub const OMIT_PROJECT_FILE: &str = "omit_project_file";
     pub const OMIT_PLAN_FILE: &str = "omit_plan_file";
@@ -34,12 +35,12 @@ pub fn uu_app() -> Command {
     #[cfg(target_env = "musl")]
     let about = translate!("pinky-about") + &translate!("pinky-about-musl-warning");
 
-    Command::new(uucore::util_name())
+    let cmd = Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(about)
         .override_usage(format_usage(&translate!("pinky-usage")))
-        .infer_long_args(true)
+        .infer_long_args(true);
+    uucore::clap_localization::configure_localized_command(cmd)
         .disable_help_flag(true)
         .arg(
             Arg::new(options::LONG_FORMAT)
@@ -102,6 +103,12 @@ pub fn uu_app() -> Command {
                 .value_hint(clap::ValueHint::Username),
         )
         .arg(
+            Arg::new(options::LOOKUP)
+                .long(options::LOOKUP)
+                .help(translate!("pinky-help-lookup"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
             // Redefine the help argument to not include the short flag
             // since that conflicts with omit_project_file.
             Arg::new(options::HELP)
@@ -126,5 +133,18 @@ impl Capitalize for str {
                 }
                 acc
             })
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_capitalize() {
+        assert_eq!("Zbnmasd", "zbnmasd".capitalize()); // spell-checker:disable-line
+        assert_eq!("Abnmasd", "Abnmasd".capitalize()); // spell-checker:disable-line
+        assert_eq!("1masd", "1masd".capitalize()); // spell-checker:disable-line
+        assert_eq!("", "".capitalize());
     }
 }

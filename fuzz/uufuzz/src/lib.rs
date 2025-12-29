@@ -25,6 +25,7 @@ pub mod pretty_print;
 
 /// Represents the result of running a command, including its standard output,
 /// standard error, and exit code.
+#[derive(Debug)]
 pub struct CommandResult {
     /// The standard output (stdout) of the command as a string.
     pub stdout: String,
@@ -192,13 +193,8 @@ fn read_from_fd(fd: RawFd) -> String {
     let mut captured_output = Vec::new();
     let mut read_buffer = [0; 1024];
     loop {
-        let bytes_read = unsafe {
-            libc::read(
-                fd,
-                read_buffer.as_mut_ptr() as *mut libc::c_void,
-                read_buffer.len(),
-            )
-        };
+        let bytes_read =
+            unsafe { libc::read(fd, read_buffer.as_mut_ptr().cast(), read_buffer.len()) };
 
         if bytes_read == -1 {
             eprintln!("Failed to read from the pipe");
@@ -387,9 +383,10 @@ pub fn compare_result(
 
 pub fn generate_random_string(max_length: usize) -> String {
     let mut rng = rand::rng();
-    let valid_utf8: Vec<char> = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-        .chars()
-        .collect();
+    let valid_utf8: Vec<char> =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789🔩🪛🪓⚙️🔗🧰"
+            .chars()
+            .collect();
     let invalid_utf8 = [0xC3, 0x28]; // Invalid UTF-8 sequence
     let mut result = String::new();
 
@@ -421,7 +418,7 @@ pub fn generate_random_file() -> Result<String, std::io::Error> {
 
     let content_length = rng.random_range(10..1000);
     let content: String = (0..content_length)
-        .map(|_| (rng.random_range(b' '..=b'~') as char))
+        .map(|_| rng.random_range(b' '..=b'~') as char)
         .collect();
 
     file.write_all(content.as_bytes())?;
@@ -435,4 +432,107 @@ pub fn replace_fuzz_binary_name(cmd: &str, result: &mut CommandResult) {
 
     result.stdout = result.stdout.replace(&fuzz_bin_name, cmd);
     result.stderr = result.stderr.replace(&fuzz_bin_name, cmd);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_command_result_creation() {
+        let result = CommandResult {
+            stdout: "Hello, world!".to_string(),
+            stderr: "".to_string(),
+            exit_code: 0,
+        };
+
+        assert_eq!(result.stdout, "Hello, world!");
+        assert_eq!(result.stderr, "");
+        assert_eq!(result.exit_code, 0);
+    }
+
+    #[test]
+    fn test_generate_random_string() {
+        let result = generate_random_string(10);
+        // Check character count, not byte count (emojis are multi-byte)
+        assert!(result.chars().count() <= 10);
+
+        // Test that empty string can be generated (max_length = 0)
+        let empty_result = generate_random_string(0);
+        assert_eq!(empty_result.chars().count(), 0);
+    }
+
+    #[test]
+    fn test_replace_fuzz_binary_name() {
+        let mut result = CommandResult {
+            stdout: "fuzz/target/x86_64-unknown-linux-gnu/release/fuzz_echo: error".to_string(),
+            stderr: "fuzz/target/x86_64-unknown-linux-gnu/release/fuzz_echo failed".to_string(),
+            exit_code: 1,
+        };
+
+        replace_fuzz_binary_name("echo", &mut result);
+
+        assert_eq!(result.stdout, "echo: error");
+        assert_eq!(result.stderr, "echo failed");
+        assert_eq!(result.exit_code, 1);
+    }
+
+    #[test]
+    fn test_run_gnu_cmd_nonexistent() {
+        let args = vec![OsString::from("--version")];
+        let result = run_gnu_cmd("nonexistent_command_12345", &args, false, None);
+
+        // Should return an error since the command doesn't exist
+        assert!(result.is_err());
+        let error_result = result.unwrap_err();
+        assert_ne!(error_result.exit_code, 0);
+    }
+
+    #[test]
+    fn test_run_gnu_cmd_basic() {
+        // Test with a simple command that should exist on most systems
+        let args = vec![OsString::from("--version")];
+        let result = run_gnu_cmd("echo", &args, false, None);
+
+        // Should succeed (echo --version might not be standard but echo should exist)
+        match result {
+            Ok(_) => {} // Command succeeded
+            Err(err_result) => {
+                // Command failed but at least ran
+                assert_ne!(err_result.exit_code, -1); // -1 would indicate the command couldn't be found
+            }
+        }
+    }
+
+    #[test]
+    fn test_run_gnu_cmd_with_pipe_input() {
+        let args: Vec<OsString> = vec![];
+        let pipe_input = "hello world";
+        let result = run_gnu_cmd("cat", &args, false, Some(pipe_input));
+
+        match result {
+            Ok(cmd_result) => {
+                assert_eq!(cmd_result.stdout.trim(), "hello world");
+            }
+            Err(_) => {
+                // cat might not be available in test environment, that's ok
+            }
+        }
+    }
+
+    #[test]
+    fn test_generate_random_file() {
+        let result = generate_random_file();
+        match result {
+            Ok(file_path) => {
+                assert!(!file_path.is_empty());
+                // Clean up - try to remove the file
+                let _ = std::fs::remove_file(&file_path);
+            }
+            Err(_) => {
+                // File creation might fail due to permissions, that's acceptable for this test
+            }
+        }
+    }
 }

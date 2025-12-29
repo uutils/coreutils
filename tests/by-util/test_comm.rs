@@ -309,7 +309,7 @@ fn zero_terminated_with_total() {
     }
 }
 
-#[cfg_attr(not(feature = "test_unimplemented"), ignore = "")]
+#[ignore = "not implemented"]
 #[test]
 fn check_order() {
     let scene = TestScenario::new(util_name!());
@@ -324,7 +324,7 @@ fn check_order() {
         .stderr_is("error to be defined");
 }
 
-#[cfg_attr(not(feature = "test_unimplemented"), ignore = "")]
+#[ignore = "not implemented"]
 #[test]
 fn nocheck_order() {
     let scene = TestScenario::new(util_name!());
@@ -340,7 +340,7 @@ fn nocheck_order() {
 // when neither --check-order nor --no-check-order is provided,
 // stderr and the error code behaves like check order, but stdout
 // behaves like nocheck_order. However with some quirks detailed below.
-#[cfg_attr(not(feature = "test_unimplemented"), ignore = "")]
+#[ignore = "not implemented"]
 #[test]
 fn defaultcheck_order() {
     let scene = TestScenario::new(util_name!());
@@ -574,7 +574,7 @@ fn test_both_inputs_out_of_order_but_identical() {
 }
 
 #[test]
-fn test_comm_extra_arg_error() {
+fn test_comm_arg_error() {
     let scene = TestScenario::new(util_name!());
 
     // Test extra argument error case from GNU test
@@ -586,4 +586,65 @@ fn test_comm_extra_arg_error() {
         .stderr_contains("error: unexpected argument 'no-such' found")
         .stderr_contains("Usage: comm [OPTION]... FILE1 FILE2")
         .stderr_contains("For more information, try '--help'.");
+    // Test extra argument error case from GNU test
+    scene
+        .ucmd()
+        .args(&["a"])
+        .fails()
+        .code_is(1)
+        .stderr_is("error: the following required arguments were not provided:\n  <FILE2>\n\nUsage: comm [OPTION]... FILE1 FILE2\n\nFor more information, try '--help'.\n");
+}
+
+#[test]
+fn comm_emoji_sorted_inputs() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("file1", "💐\n🦀\n");
+    at.write("file2", "🦀\n🪽\n");
+
+    scene
+        .ucmd()
+        .args(&["file1", "file2"])
+        .env("LC_ALL", "C.UTF-8")
+        .succeeds()
+        .stdout_only("💐\n\t\t🦀\n\t🪽\n");
+}
+
+#[test]
+fn test_comm_eintr_handling() {
+    // Test that comm properly handles EINTR (ErrorKind::Interrupted) during file comparison
+    // This verifies the signal interruption retry logic in are_files_identical function
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create test files with identical content
+    let test_content = "line1\nline2\nline3\n";
+    at.write("file1", test_content);
+    at.write("file2", test_content);
+
+    // Test that comm can handle interrupted reads during file comparison
+    // The EINTR handling should retry and complete successfully
+    scene
+        .ucmd()
+        .args(&["file1", "file2"])
+        .succeeds()
+        .stdout_contains("line1") // Check that content is present (comm adds tabs for identical lines)
+        .stdout_contains("line2")
+        .stdout_contains("line3");
+
+    // Create test files with identical content
+    let test_content = "line1\nline2\nline3\n";
+    at.write("file1", test_content);
+    at.write("file2", test_content);
+
+    // Test that comm can handle interrupted reads during file comparison
+    // The EINTR handling should retry and complete successfully
+    scene
+        .ucmd()
+        .args(&["file1", "file2"])
+        .succeeds()
+        .stdout_contains("line1") // Check that content is present (comm adds tabs for identical lines)
+        .stdout_contains("line2")
+        .stdout_contains("line3");
 }

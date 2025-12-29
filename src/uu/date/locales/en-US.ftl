@@ -82,6 +82,8 @@ date-help-iso-8601 = output date/time in ISO 8601 format.
   'hours', 'minutes', 'seconds', or 'ns'
   for date and time to the indicated precision.
   Example: 2006-08-14T02:34:56-06:00
+date-help-resolution = output the available resolution of timestamps
+  Example: 0.000000001
 date-help-rfc-email = output date and time in RFC 5322 format.
   Example: Mon, 14 Aug 2006 02:34:56 -0600
 date-help-rfc-3339 = output date/time in RFC 3339 format.
@@ -97,8 +99,9 @@ date-help-universal = print or set Coordinated Universal Time (UTC)
 
 date-error-invalid-date = invalid date '{$date}'
 date-error-invalid-format = invalid format '{$format}' ({$error})
-date-error-expected-file-got-directory = expected file, got directory '{$path}'
+date-error-expected-file-got-directory = expected file, got directory {$path}
 date-error-date-overflow = date overflow '{$date}'
 date-error-setting-date-not-supported-macos = setting the date is not supported by macOS
 date-error-setting-date-not-supported-redox = setting the date is not supported by Redox
 date-error-cannot-set-date = cannot set date
+date-error-extra-operand = extra operand '{$operand}'

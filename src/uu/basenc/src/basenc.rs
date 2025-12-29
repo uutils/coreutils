@@ -7,7 +7,6 @@
 
 use clap::{Arg, ArgAction, Command};
 use uu_base32::base_common::{self, BASE_CMD_PARSE_ERROR, Config};
-use uucore::error::UClapError;
 use uucore::translate;
 use uucore::{
     encoding::Format,
@@ -40,15 +39,13 @@ fn get_encodings() -> Vec<(&'static str, Format, String)> {
             translate!("basenc-help-base2msbf"),
         ),
         ("z85", Format::Z85, translate!("basenc-help-z85")),
+        ("base58", Format::Base58, translate!("basenc-help-base58")),
     ]
 }
 
 pub fn uu_app() -> Command {
-    let about: &'static str = Box::leak(translate!("basenc-about").into_boxed_str());
-    let usage: &'static str = Box::leak(translate!("basenc-usage").into_boxed_str());
-
     let encodings = get_encodings();
-    let mut command = base_common::base_app(about, usage);
+    let mut command = base_common::base_app(translate!("basenc-about"), translate!("basenc-usage"));
 
     for encoding in &encodings {
         let raw_arg = Arg::new(encoding.0)
@@ -64,9 +61,7 @@ pub fn uu_app() -> Command {
 }
 
 fn parse_cmd_args(args: impl uucore::Args) -> UResult<(Config, Format)> {
-    let matches = uu_app()
-        .try_get_matches_from(args.collect_lossy())
-        .with_exit_code(1)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let encodings = get_encodings();
     let format = encodings

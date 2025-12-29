@@ -12,12 +12,12 @@ RUN apt-get update \
        gcc \
        gdb \
        gperf \
-       jq \
        libacl1-dev \
        libattr1-dev \
        libcap-dev \
        libexpect-perl \
        libselinux1-dev \
+       libsystemd-dev \
        python3-pyinotify \
        quilt \
        texinfo \

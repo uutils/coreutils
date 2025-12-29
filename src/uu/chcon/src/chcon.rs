@@ -7,12 +7,11 @@
 #![allow(clippy::upper_case_acronyms)]
 
 use clap::builder::ValueParser;
-use uucore::LocalizedCommand;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::translate;
 use uucore::{display::Quotable, format_usage, show_error, show_warning};
 
-use clap::{Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command};
 use selinux::{OpaqueSecurityContext, SecurityContext};
 
 use std::borrow::Cow;
@@ -58,9 +57,9 @@ pub mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let config = uu_app();
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
-    let options = match parse_command_line(config, args) {
+    let options = match parse_command_line(&matches) {
         Ok(r) => r,
         Err(r) => {
             if let Error::CommandLine(r) = r {
@@ -155,20 +154,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    let cmd = Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("chcon-about"))
         .override_usage(format_usage(&translate!("chcon-usage")))
-        .infer_long_args(true)
-        .disable_help_flag(true)
+        .infer_long_args(true);
+    uucore::clap_localization::configure_localized_command(cmd)
         .args_override_self(true)
-        .arg(
-            Arg::new(options::HELP)
-                .long(options::HELP)
-                .help(translate!("chcon-help-help"))
-                .action(ArgAction::Help),
-        )
+        .disable_help_flag(true)
         .arg(
             Arg::new(options::dereference::DEREFERENCE)
                 .long(options::dereference::DEREFERENCE)
@@ -182,6 +175,12 @@ pub fn uu_app() -> Command {
                 .long(options::dereference::NO_DEREFERENCE)
                 .help(translate!("chcon-help-no-dereference"))
                 .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("help")
+                .long("help")
+                .help(translate!("help"))
+                .action(ArgAction::Help),
         )
         .arg(
             Arg::new(options::preserve_root::PRESERVE_ROOT)
@@ -304,9 +303,7 @@ struct Options {
     files: Vec<PathBuf>,
 }
 
-fn parse_command_line(config: Command, args: impl uucore::Args) -> Result<Options> {
-    let matches = config.get_matches_from_localized(args);
-
+fn parse_command_line(matches: &ArgMatches) -> Result<Options> {
     let verbose = matches.get_flag(options::VERBOSE);
 
     let (recursive_mode, affect_symlink_referent) = if matches.get_flag(options::RECURSIVE) {
@@ -763,7 +760,7 @@ fn root_dev_ino_warn(dir_name: &Path) {
     } else {
         show_warning!(
             "{}",
-            translate!("chcon-warning-dangerous-recursive-dir", "dir" => dir_name.to_string_lossy(), "option" => options::preserve_root::NO_PRESERVE_ROOT)
+            translate!("chcon-warning-dangerous-recursive-dir", "dir" => dir_name.quote(), "option" => options::preserve_root::NO_PRESERVE_ROOT)
         );
     }
 }
@@ -785,7 +782,7 @@ fn cycle_warning_required(fts_options: c_int, entry: &fts::EntryRef) -> bool {
 fn emit_cycle_warning(file_name: &Path) {
     show_warning!(
         "{}",
-        translate!("chcon-warning-circular-directory", "file" => file_name.to_string_lossy())
+        translate!("chcon-warning-circular-directory", "file" => file_name.quote())
     );
 }
 

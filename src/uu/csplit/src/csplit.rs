@@ -26,7 +26,6 @@ mod split_name;
 use crate::csplit_error::CsplitError;
 use crate::split_name::SplitName;
 
-use uucore::LocalizedCommand;
 use uucore::translate;
 
 mod options {
@@ -121,18 +120,27 @@ where
         .enumerate();
     let mut input_iter = InputSplitter::new(enumerated_input_lines);
     let mut split_writer = SplitWriter::new(options);
-    let patterns: Vec<patterns::Pattern> = patterns::get_patterns(patterns)?;
-    let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
+    let patterns_vec: Vec<patterns::Pattern> = patterns::get_patterns(patterns)?;
+    let all_up_to_line = patterns_vec
+        .iter()
+        .all(|p| matches!(p, patterns::Pattern::UpToLine(_, _)));
+    let ret = do_csplit(&mut split_writer, patterns_vec, &mut input_iter);
 
     // consume the rest, unless there was an error
     if ret.is_ok() {
         input_iter.rewind_buffer();
         if let Some((_, line)) = input_iter.next() {
+            // There is remaining input: create a final split and copy remainder
             split_writer.new_writer()?;
             split_writer.writeln(&line?)?;
             for (_, line) in input_iter {
                 split_writer.writeln(&line?)?;
             }
+            split_writer.finish_split();
+        } else if all_up_to_line && options.suppress_matched {
+            // GNU semantics for integer patterns with --suppress-matched:
+            // even if no remaining input, create a final (possibly empty) split
+            split_writer.new_writer()?;
             split_writer.finish_split();
         }
     }
@@ -164,7 +172,7 @@ where
                         // the error happened when applying the pattern more than once
                         Err(CsplitError::LineOutOfRange(_)) if ith != 1 => {
                             return Err(CsplitError::LineOutOfRangeOnRepetition(
-                                pattern_as_str.to_string(),
+                                pattern_as_str,
                                 ith - 1,
                             ));
                         }
@@ -196,7 +204,7 @@ where
                         // the error happened when applying the pattern more than once
                         (Err(CsplitError::MatchNotFound(_)), Some(m)) if m != 1 && ith != 1 => {
                             return Err(CsplitError::MatchNotFoundOnRepetition(
-                                pattern_as_str.to_string(),
+                                pattern_as_str,
                                 ith - 1,
                             ));
                         }
@@ -272,7 +280,7 @@ impl SplitWriter<'_> {
     }
 
     /// Writes the line to the current split.
-    /// If [`self.dev_null`] is true, then the line is discarded.
+    /// If `self.dev_null` is true, then the line is discarded.
     ///
     /// # Errors
     ///
@@ -564,7 +572,7 @@ where
         self.size = size;
     }
 
-    /// Add a line to the buffer. If the buffer has [`self.size`] elements, then its head is removed and
+    /// Add a line to the buffer. If the buffer has `self.size` elements, then its head is removed and
     /// the new line is pushed to the buffer. The removed head is then available in the returned
     /// option.
     fn add_line_to_buffer(&mut self, ln: usize, line: String) -> Option<String> {
@@ -606,7 +614,7 @@ where
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     // get the file to split
     let file_name = matches.get_one::<OsString>(options::FILE).unwrap();
@@ -615,7 +623,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let patterns: Vec<String> = matches
         .get_many::<String>(options::PATTERN)
         .unwrap()
-        .map(|s| s.to_string())
+        .map(ToOwned::to_owned)
         .collect();
     let options = CsplitOptions::new(&matches)?;
     if file_name == "-" {

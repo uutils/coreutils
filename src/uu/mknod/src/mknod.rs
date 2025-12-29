@@ -10,7 +10,6 @@ use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOT
 use libc::{dev_t, mode_t};
 use std::ffi::CString;
 
-use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::format_usage;
@@ -112,7 +111,7 @@ fn mknod(file_name: &str, config: Config) -> i32 {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let file_type = matches.get_one::<FileType>("type").unwrap();
 
@@ -226,8 +225,10 @@ pub fn uu_app() -> Command {
         )
 }
 
+#[allow(clippy::unnecessary_cast)]
 fn parse_mode(str_mode: &str) -> Result<mode_t, String> {
-    uucore::mode::parse_mode(str_mode)
+    let default_mode = (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
+    uucore::mode::parse_chmod(default_mode, str_mode, true, uucore::mode::get_umask())
         .map_err(|e| {
             translate!(
                 "mknod-error-invalid-mode",
@@ -238,7 +239,7 @@ fn parse_mode(str_mode: &str) -> Result<mode_t, String> {
             if mode > 0o777 {
                 Err(translate!("mknod-error-mode-permission-bits-only"))
             } else {
-                Ok(mode)
+                Ok(mode as mode_t)
             }
         })
 }

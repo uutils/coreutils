@@ -5,7 +5,6 @@
 
 use clap::Command;
 use std::ffi::OsString;
-use uucore::LocalizedCommand;
 use uucore::display::println_verbatim;
 use uucore::error::{FromIo, UResult};
 use uucore::translate;
@@ -14,7 +13,7 @@ mod platform;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    uu_app().get_matches_from_localized(args);
+    uucore::clap_localization::handle_clap_result(uu_app(), args)?;
     let username = whoami()?;
     println_verbatim(username).map_err_context(|| translate!("whoami-error-failed-to-print"))?;
     Ok(())

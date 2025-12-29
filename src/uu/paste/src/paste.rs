@@ -12,7 +12,6 @@ use std::iter::Cycle;
 use std::path::Path;
 use std::rc::Rc;
 use std::slice::Iter;
-use uucore::LocalizedCommand;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
 use uucore::line_ending::LineEnding;
@@ -27,7 +26,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let serial = matches.get_flag(options::SERIAL);
     let delimiters = matches.get_one::<String>(options::DELIMITER).unwrap();
@@ -272,7 +271,7 @@ enum DelimiterState<'a> {
 }
 
 impl<'a> DelimiterState<'a> {
-    fn new(unescaped_and_encoded_delimiters: &'a [Box<[u8]>]) -> DelimiterState<'a> {
+    fn new(unescaped_and_encoded_delimiters: &'a [Box<[u8]>]) -> Self {
         match unescaped_and_encoded_delimiters {
             [] => DelimiterState::NoDelimiters,
             [only_delimiter] => {
@@ -365,8 +364,8 @@ enum InputSource {
 impl InputSource {
     fn read_until(&mut self, byte: u8, buf: &mut Vec<u8>) -> UResult<usize> {
         let us = match self {
-            InputSource::File(bu) => bu.read_until(byte, buf)?,
-            InputSource::StandardInput(rc) => rc
+            Self::File(bu) => bu.read_until(byte, buf)?,
+            Self::StandardInput(rc) => rc
                 .try_borrow()
                 .map_err(|bo| {
                     USimpleError::new(1, translate!("paste-error-stdin-borrow", "error" => bo))

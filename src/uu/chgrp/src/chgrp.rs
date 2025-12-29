@@ -98,12 +98,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    let cmd = Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("chgrp-about"))
         .override_usage(format_usage(&translate!("chgrp-usage")))
-        .infer_long_args(true)
+        .infer_long_args(true);
+    uucore::clap_localization::configure_localized_command(cmd)
         .disable_help_flag(true)
         .arg(
             Arg::new(options::HELP)

@@ -20,7 +20,13 @@ path = "src/chmod.rs"
 [dependencies]
 clap = { workspace = true }
 thiserror = { workspace = true }
-uucore = { workspace = true, features = ["entries", "fs", "mode", "perms"] }
+uucore = { workspace = true, features = [
+  "entries",
+  "fs",
+  "mode",
+  "perms",
+  "safe-traversal",
+] }
 fluent = { workspace = true }
 
 [[bin]]

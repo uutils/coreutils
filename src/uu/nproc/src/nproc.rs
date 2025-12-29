@@ -7,7 +7,6 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::{env, thread};
-use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
@@ -27,7 +26,7 @@ static OPT_IGNORE: &str = "ignore";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let ignore = match matches.get_one::<String>(OPT_IGNORE) {
         Some(numstr) => match numstr.trim().parse::<usize>() {

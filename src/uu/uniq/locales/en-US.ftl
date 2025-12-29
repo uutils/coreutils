@@ -21,6 +21,7 @@ uniq-help-zero-terminated = end lines with 0 byte, not newline
 # Error messages
 uniq-error-write-line-terminator = Could not write line terminator
 uniq-error-write-error = write error
+uniq-error-read-error = read error
 uniq-error-invalid-argument = Invalid argument for { $opt_name }: { $arg }
 uniq-error-try-help = Try 'uniq --help' for more information.
 uniq-error-group-mutually-exclusive = --group is mutually exclusive with -c/-d/-D/-u

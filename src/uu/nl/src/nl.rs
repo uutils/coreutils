@@ -4,15 +4,13 @@
 // file that was distributed with this source code.
 
 use clap::{Arg, ArgAction, Command};
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, stdin};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::path::Path;
+use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
-use uucore::translate;
-
-use uucore::LocalizedCommand;
-use uucore::{format_usage, show_error};
+use uucore::{format_usage, show_error, translate};
 
 mod helper;
 
@@ -23,7 +21,7 @@ pub struct Settings {
     body_numbering: NumberingStyle,
     footer_numbering: NumberingStyle,
     // The variable corresponding to -d
-    section_delimiter: String,
+    section_delimiter: OsString,
     // The variables corresponding to the options -v, -i, -l, -w.
     starting_line_number: i64,
     line_increment: i64,
@@ -43,7 +41,7 @@ impl Default for Settings {
             header_numbering: NumberingStyle::None,
             body_numbering: NumberingStyle::NonEmpty,
             footer_numbering: NumberingStyle::None,
-            section_delimiter: String::from("\\:"),
+            section_delimiter: OsString::from("\\:"),
             starting_line_number: 1,
             line_increment: 1,
             join_blank_lines: 1,
@@ -79,7 +77,7 @@ enum NumberingStyle {
     All,
     NonEmpty,
     None,
-    Regex(Box<regex::Regex>),
+    Regex(Box<regex::bytes::Regex>),
 }
 
 impl TryFrom<&str> for NumberingStyle {
@@ -90,7 +88,7 @@ impl TryFrom<&str> for NumberingStyle {
             "a" => Ok(Self::All),
             "t" => Ok(Self::NonEmpty),
             "n" => Ok(Self::None),
-            _ if s.starts_with('p') => match regex::Regex::new(&s[1..]) {
+            _ if s.starts_with('p') => match regex::bytes::Regex::new(&s[1..]) {
                 Ok(re) => Ok(Self::Regex(Box::new(re))),
                 Err(_) => Err(translate!("nl-error-invalid-regex")),
             },
@@ -143,19 +141,30 @@ enum SectionDelimiter {
 impl SectionDelimiter {
     /// A valid section delimiter contains the pattern one to three times,
     /// and nothing else.
-    fn parse(s: &str, pattern: &str) -> Option<Self> {
-        if s.is_empty() || pattern.is_empty() {
+    fn parse(bytes: &[u8], pattern: &OsStr) -> Option<Self> {
+        let pattern = pattern.as_encoded_bytes();
+
+        if bytes.is_empty() || pattern.is_empty() || bytes.len() % pattern.len() != 0 {
             return None;
         }
 
-        let pattern_count = s.matches(pattern).count();
-        let is_length_ok = pattern_count * pattern.len() == s.len();
+        let count = bytes.len() / pattern.len();
+        if !(1..=3).contains(&count) {
+            return None;
+        }
 
-        match (pattern_count, is_length_ok) {
-            (3, true) => Some(Self::Header),
-            (2, true) => Some(Self::Body),
-            (1, true) => Some(Self::Footer),
-            _ => None,
+        if bytes
+            .chunks_exact(pattern.len())
+            .all(|chunk| chunk == pattern)
+        {
+            match count {
+                1 => Some(Self::Footer),
+                2 => Some(Self::Body),
+                3 => Some(Self::Header),
+                _ => unreachable!(),
+            }
+        } else {
+            None
         }
     }
 }
@@ -178,7 +187,7 @@ pub mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let mut settings = Settings::default();
 
@@ -213,12 +222,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             if path.is_dir() {
                 show_error!(
                     "{}",
-                    translate!("nl-error-is-directory", "path" => path.display())
+                    translate!("nl-error-is-directory", "path" => path.maybe_quote())
                 );
                 set_exit_code(1);
             } else {
-                let reader =
-                    File::open(path).map_err_context(|| file.to_string_lossy().to_string())?;
+                let reader = File::open(path).map_err_context(|| file.maybe_quote().to_string())?;
                 let mut buffer = BufReader::new(reader);
                 nl(&mut buffer, &mut stats, &settings)?;
             }
@@ -237,6 +245,7 @@ pub fn uu_app() -> Command {
         .after_help(translate!("nl-after-help"))
         .infer_long_args(true)
         .disable_help_flag(true)
+        .args_override_self(true)
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
@@ -262,6 +271,7 @@ pub fn uu_app() -> Command {
                 .short('d')
                 .long(options::SECTION_DELIMITER)
                 .help(translate!("nl-help-section-delimiter"))
+                .value_parser(clap::value_parser!(OsString))
                 .value_name("CC"),
         )
         .arg(
@@ -335,12 +345,32 @@ pub fn uu_app() -> Command {
         )
 }
 
+/// Helper to write: prefix bytes + line bytes + newline
+fn write_line(writer: &mut impl Write, prefix: &[u8], line: &[u8]) -> std::io::Result<()> {
+    writer.write_all(prefix)?;
+    writer.write_all(line)?;
+    writeln!(writer)
+}
+
 /// `nl` implements the main functionality for an individual buffer.
 fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings) -> UResult<()> {
+    let mut writer = BufWriter::new(stdout());
     let mut current_numbering_style = &settings.body_numbering;
+    let mut line = Vec::new();
 
-    for line in reader.lines() {
-        let line = line.map_err_context(|| translate!("nl-error-could-not-read-line"))?;
+    loop {
+        line.clear();
+        // reads up to and including b'\n'; returns 0 on EOF
+        let n = reader
+            .read_until(b'\n', &mut line)
+            .map_err_context(|| translate!("nl-error-could-not-read-line"))?;
+        if n == 0 {
+            break;
+        }
+
+        if line.last().copied() == Some(b'\n') {
+            line.pop();
+        }
 
         if line.is_empty() {
             stats.consecutive_empty_lines += 1;
@@ -361,13 +391,14 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
             if settings.renumber {
                 stats.line_number = Some(settings.starting_line_number);
             }
-            println!();
+            writeln!(writer).map_err_context(|| translate!("nl-error-could-not-write"))?;
         } else {
             let is_line_numbered = match current_numbering_style {
                 // consider $join_blank_lines consecutive empty lines to be one logical line
                 // for numbering, and only number the last one
                 NumberingStyle::All
                     if line.is_empty()
+                        && settings.join_blank_lines > 0
                         && stats.consecutive_empty_lines % settings.join_blank_lines != 0 =>
                 {
                     false
@@ -385,24 +416,24 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
                         translate!("nl-error-line-number-overflow"),
                     ));
                 };
-                println!(
-                    "{}{}{line}",
-                    settings
-                        .number_format
-                        .format(line_number, settings.number_width),
-                    settings.number_separator.to_string_lossy(),
-                );
-                // update line number for the potential next line
-                match line_number.checked_add(settings.line_increment) {
-                    Some(new_line_number) => stats.line_number = Some(new_line_number),
-                    None => stats.line_number = None, // overflow
-                }
+                let mut prefix = settings
+                    .number_format
+                    .format(line_number, settings.number_width)
+                    .into_bytes();
+                prefix.extend_from_slice(settings.number_separator.as_encoded_bytes());
+                write_line(&mut writer, &prefix, &line)
+                    .map_err_context(|| translate!("nl-error-could-not-write"))?;
+                stats.line_number = line_number.checked_add(settings.line_increment);
             } else {
-                let spaces = " ".repeat(settings.number_width + 1);
-                println!("{spaces}{line}");
+                let prefix = " ".repeat(settings.number_width + 1);
+                write_line(&mut writer, prefix.as_bytes(), &line)
+                    .map_err_context(|| translate!("nl-error-could-not-write"))?;
             }
         }
     }
+    writer
+        .flush()
+        .map_err_context(|| translate!("nl-error-could-not-write"))?;
     Ok(())
 }
 

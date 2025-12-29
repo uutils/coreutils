@@ -24,6 +24,15 @@ memchr = { workspace = true }
 bstr = { workspace = true }
 fluent = { workspace = true }
 
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
 [[bin]]
 name = "cut"
 path = "src/main.rs"
+
+[[bench]]
+name = "cut_bench"
+harness = false

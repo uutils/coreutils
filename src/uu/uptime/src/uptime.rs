@@ -17,7 +17,6 @@ use uucore::uptime::*;
 
 use clap::{Arg, ArgAction, Command, ValueHint, builder::ValueParser};
 
-use uucore::LocalizedCommand;
 use uucore::format_usage;
 
 #[cfg(unix)]
@@ -48,7 +47,7 @@ impl UError for UptimeError {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     #[cfg(unix)]
     let file_path = matches.get_one::<OsString>(options::PATH);
@@ -169,7 +168,7 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
 
     #[cfg(target_os = "openbsd")]
     {
-        let upsecs = get_uptime(None);
+        let upsecs = get_uptime(None)?;
         if upsecs >= 0 {
             print_uptime(Some(upsecs))?;
         } else {

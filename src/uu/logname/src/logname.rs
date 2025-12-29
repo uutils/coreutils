@@ -7,7 +7,6 @@
 
 use clap::Command;
 use std::ffi::CStr;
-use uucore::LocalizedCommand;
 use uucore::translate;
 use uucore::{error::UResult, show_error};
 
@@ -24,7 +23,7 @@ fn get_userlogin() -> Option<String> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let _ = uu_app().get_matches_from_localized(args);
+    let _ = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     match get_userlogin() {
         Some(userlogin) => println!("{userlogin}"),

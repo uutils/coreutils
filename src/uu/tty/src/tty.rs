@@ -7,6 +7,7 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::io::{IsTerminal, Write};
+use uucore::display::OsWrite;
 use uucore::error::{UResult, set_exit_code};
 use uucore::format_usage;
 
@@ -18,10 +19,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args).unwrap_or_else(|e| {
-        use uucore::clap_localization::handle_clap_error_with_exit_code;
-        handle_clap_error_with_exit_code(e, uucore::util_name(), 2)
-    });
+    let matches = uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 2)?;
 
     let silent = matches.get_flag(options::SILENT);
 
@@ -39,7 +37,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let name = nix::unistd::ttyname(std::io::stdin());
 
     let write_result = match name {
-        Ok(name) => writeln!(stdout, "{}", name.display()),
+        Ok(name) => stdout.write_all_os(name.as_os_str()),
         Err(_) => {
             set_exit_code(1);
             writeln!(stdout, "{}", translate!("tty-not-a-tty"))
@@ -56,18 +54,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    let cmd = Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("tty-about"))
         .override_usage(format_usage(&translate!("tty-usage")))
-        .infer_long_args(true)
-        .arg(
-            Arg::new(options::SILENT)
-                .long(options::SILENT)
-                .visible_alias("quiet")
-                .short('s')
-                .help(translate!("tty-help-silent"))
-                .action(ArgAction::SetTrue),
-        )
+        .infer_long_args(true);
+    uucore::clap_localization::configure_localized_command(cmd).arg(
+        Arg::new(options::SILENT)
+            .long(options::SILENT)
+            .visible_alias("quiet")
+            .short('s')
+            .help(translate!("tty-help-silent"))
+            .action(ArgAction::SetTrue),
+    )
 }

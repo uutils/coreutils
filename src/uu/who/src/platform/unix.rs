@@ -13,7 +13,6 @@ use uucore::error::{FromIo, UResult};
 use uucore::libc::{S_IWGRP, STDIN_FILENO, ttyname};
 use uucore::translate;
 
-use uucore::LocalizedCommand;
 use uucore::utmpx::{self, UtmpxRecord, time};
 
 use std::borrow::Cow;
@@ -27,9 +26,8 @@ fn get_long_usage() -> String {
 }
 
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app()
-        .after_help(get_long_usage())
-        .get_matches_from_localized(args);
+    let matches =
+        uucore::clap_localization::handle_clap_result(uu_app().after_help(get_long_usage()), args)?;
 
     let files: Vec<String> = matches
         .get_many::<String>(options::FILE)
@@ -163,11 +161,20 @@ fn idle_string<'a>(when: i64, boottime: i64) -> Cow<'a, str> {
 }
 
 fn time_string(ut: &UtmpxRecord) -> String {
-    // "%b %e %H:%M"
-    let time_format: Vec<time::format_description::FormatItem> =
+    let lc_time = std::env::var("LC_ALL")
+        .or_else(|_| std::env::var("LC_TIME"))
+        .or_else(|_| std::env::var("LANG"))
+        .unwrap_or_default();
+
+    let time_format: Vec<time::format_description::FormatItem> = if lc_time == "C" {
+        // "%b %e %H:%M"
         time::format_description::parse("[month repr:short] [day padding:space] [hour]:[minute]")
-            .unwrap();
-    ut.login_time().format(&time_format).unwrap() // LC_ALL=C
+            .unwrap()
+    } else {
+        // "%Y-%m-%d %H:%M"
+        time::format_description::parse("[year]-[month]-[day] [hour]:[minute]").unwrap()
+    };
+    ut.login_time().format(&time_format).unwrap()
 }
 
 #[inline]
@@ -224,20 +231,20 @@ impl Who {
                 if !self.my_line_only || cur_tty == ut.tty_device() {
                     if self.need_users && ut.is_user_process() {
                         self.print_user(&ut)?;
-                    } else if self.need_runlevel && run_level_chk(ut.record_type()) {
-                        if cfg!(target_os = "linux") {
-                            self.print_runlevel(&ut);
+                    } else {
+                        match ut.record_type() {
+                            rt if self.need_runlevel && run_level_chk(rt) => {
+                                if cfg!(target_os = "linux") {
+                                    self.print_runlevel(&ut);
+                                }
+                            }
+                            utmpx::BOOT_TIME if self.need_boottime => self.print_boottime(&ut),
+                            utmpx::NEW_TIME if self.need_clockchange => self.print_clockchange(&ut),
+                            utmpx::INIT_PROCESS if self.need_initspawn => self.print_initspawn(&ut),
+                            utmpx::LOGIN_PROCESS if self.need_login => self.print_login(&ut),
+                            utmpx::DEAD_PROCESS if self.need_deadprocs => self.print_deadprocs(&ut),
+                            _ => {}
                         }
-                    } else if self.need_boottime && ut.record_type() == utmpx::BOOT_TIME {
-                        self.print_boottime(&ut);
-                    } else if self.need_clockchange && ut.record_type() == utmpx::NEW_TIME {
-                        self.print_clockchange(&ut);
-                    } else if self.need_initspawn && ut.record_type() == utmpx::INIT_PROCESS {
-                        self.print_initspawn(&ut);
-                    } else if self.need_login && ut.record_type() == utmpx::LOGIN_PROCESS {
-                        self.print_login(&ut);
-                    } else if self.need_deadprocs && ut.record_type() == utmpx::DEAD_PROCESS {
-                        self.print_deadprocs(&ut);
                     }
                 }
 

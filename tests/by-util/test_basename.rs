@@ -278,3 +278,21 @@ fn test_suffix_implies_multiple() {
         .succeeds()
         .stdout_is("foo\no\n");
 }
+
+#[test]
+fn test_emoji_handling() {
+    new_ucmd!()
+        .arg("/path/to/🦀.txt")
+        .succeeds()
+        .stdout_only("🦀.txt\n");
+
+    new_ucmd!()
+        .arg("/🌍/path/to/🚀.exe")
+        .succeeds()
+        .stdout_only("🚀.exe\n");
+
+    new_ucmd!()
+        .args(&["/path/to/file🎯.emoji", ".emoji"])
+        .succeeds()
+        .stdout_only("file🎯\n");
+}

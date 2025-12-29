@@ -24,6 +24,7 @@ ansi-width = { workspace = true }
 clap = { workspace = true, features = ["env"] }
 glob = { workspace = true }
 hostname = { workspace = true }
+fnv = { workspace = true }
 lscolors = { workspace = true }
 selinux = { workspace = true, optional = true }
 terminal_size = { workspace = true }
@@ -35,7 +36,8 @@ uucore = { workspace = true, features = [
   "fs",
   "fsext",
   "fsxattr",
-  "parser",
+  "parser-size",
+  "parser-glob",
   "quoting-style",
   "time",
   "version-cmp",
@@ -47,5 +49,15 @@ fluent = { workspace = true }
 name = "ls"
 path = "src/main.rs"
 
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
+[[bench]]
+name = "ls_bench"
+harness = false
+
 [features]
 feat_selinux = ["selinux", "uucore/selinux"]
+smack = ["uucore/smack"]

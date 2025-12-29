@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+// spell-checker:ignore (words) dirfd subdirs openat FDCWD
 
 use std::fs::{OpenOptions, Permissions, metadata, set_permissions};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
@@ -232,14 +233,21 @@ fn test_chmod_ugoa() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-// TODO fix android, it has 0777
-// We should force for the umask on startup
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "android"))]
+#[allow(clippy::cast_lossless)]
 fn test_chmod_umask_expected() {
+    // Get the actual system umask using libc
+    let system_umask = unsafe {
+        let mask = libc::umask(0);
+        libc::umask(mask);
+        mask
+    };
+
+    // Now verify that get_umask() returns the same value
     let current_umask = uucore::mode::get_umask();
     assert_eq!(
-        current_umask, 0o022,
-        "Unexpected umask value: expected 022 (octal), but got {current_umask:03o}. Please adjust the test environment.",
+        current_umask, system_umask as u32,
+        "get_umask() returned {current_umask:03o}, but system umask is {system_umask:03o}",
     );
 }
 
@@ -364,7 +372,7 @@ fn test_permission_denied() {
         .arg("o=r")
         .arg("d")
         .fails()
-        .stderr_is("chmod: 'd/no-x/y': Permission denied\n");
+        .stderr_is("chmod: cannot access 'd/no-x/y': Permission denied\n");
 }
 
 #[test]
@@ -384,6 +392,10 @@ fn test_chmod_recursive() {
     make_file(&at.plus_as_string("a/b/b"), 0o100444);
     make_file(&at.plus_as_string("a/b/c/c"), 0o100444);
     make_file(&at.plus_as_string("z/y"), 0o100444);
+    #[cfg(not(target_os = "linux"))]
+    let err_msg = "chmod: Permission denied\n";
+    #[cfg(target_os = "linux")]
+    let err_msg = "chmod: cannot access 'z': Permission denied\n";
 
     // only the permissions of folder `a` and `z` are changed
     // folder can't be read after read permission is removed
@@ -394,7 +406,7 @@ fn test_chmod_recursive() {
         .arg("z")
         .umask(0)
         .fails()
-        .stderr_is("chmod: Permission denied\n");
+        .stderr_is(err_msg);
 
     assert_eq!(at.metadata("z/y").permissions().mode(), 0o100444);
     assert_eq!(at.metadata("a/a").permissions().mode(), 0o100444);
@@ -1267,4 +1279,81 @@ fn test_chmod_non_utf8_paths() {
             & 0o777,
         0o644
     );
+}
+
+#[cfg(all(target_os = "linux", feature = "chmod"))]
+#[test]
+#[ignore = "covered by util/check-safe-traversal.sh"]
+fn test_chmod_recursive_uses_dirfd_for_subdirs() {
+    use std::process::Command;
+    use uutests::get_tests_binary;
+
+    // strace is required; fail fast if it is missing or not runnable
+    let output = Command::new("strace")
+        .arg("-V")
+        .output()
+        .expect("strace not found; install strace to run this test");
+    assert!(
+        output.status.success(),
+        "strace -V failed; ensure strace is installed and usable"
+    );
+
+    let (at, _ucmd) = at_and_ucmd!();
+    at.mkdir("x");
+    at.mkdir("x/y");
+    at.mkdir("x/y/z");
+
+    let log_path = at.plus_as_string("strace.log");
+
+    let status = Command::new("strace")
+        .arg("-e")
+        .arg("openat")
+        .arg("-o")
+        .arg(&log_path)
+        .arg(get_tests_binary!())
+        .args(["chmod", "-R", "+x", "x"])
+        .current_dir(&at.subdir)
+        .status()
+        .expect("failed to run strace");
+    assert!(status.success(), "strace run failed");
+
+    let log = at.read("strace.log");
+
+    // Regression guard: ensure recursion uses dirfd-relative openat instead of AT_FDCWD with a multi-component path
+    assert!(
+        !log.contains("openat(AT_FDCWD, \"x/y"),
+        "chmod recursed using AT_FDCWD with a multi-component path; expected dirfd-relative openat"
+    );
+}
+
+#[test]
+fn test_chmod_colored_output() {
+    // Test colored help message
+    new_ucmd!()
+        .arg("--help")
+        .env("CLICOLOR_FORCE", "1")
+        .env("LANG", "en_US.UTF-8")
+        .succeeds()
+        .stdout_contains("\x1b[1m\x1b[4mUsage:\x1b[0m") // Bold+underline "Usage:"
+        .stdout_contains("\x1b[1m\x1b[4mArguments:\x1b[0m"); // Bold+underline "Arguments:"
+
+    // Test colored error message for invalid option
+    new_ucmd!()
+        .arg("--invalid-option")
+        .env("CLICOLOR_FORCE", "1")
+        .env("LANG", "en_US.UTF-8")
+        .fails()
+        .code_is(1)
+        .stderr_contains("\x1b[31merror\x1b[0m") // Red "error"
+        .stderr_contains("\x1b[33m--invalid-option\x1b[0m"); // Yellow invalid option
+
+    // Test French localized colored error message
+    new_ucmd!()
+        .arg("--invalid-option")
+        .env("CLICOLOR_FORCE", "1")
+        .env("LANG", "fr_FR.UTF-8")
+        .fails()
+        .code_is(1)
+        .stderr_contains("\x1b[31merreur\x1b[0m") // Red "erreur" in French
+        .stderr_contains("\x1b[33m--invalid-option\x1b[0m"); // Yellow invalid option
 }

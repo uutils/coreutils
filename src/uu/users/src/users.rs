@@ -16,7 +16,6 @@ use uucore::translate;
 
 #[cfg(target_os = "openbsd")]
 use utmp_classic::{UtmpEntry, parse_from_path};
-use uucore::LocalizedCommand;
 #[cfg(not(target_os = "openbsd"))]
 use uucore::utmpx::{self, Utmpx};
 
@@ -36,9 +35,7 @@ fn get_long_usage() -> String {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app()
-        .after_help(get_long_usage())
-        .get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let maybe_file: Option<&Path> = matches.get_one::<OsString>(ARG_FILE).map(AsRef::as_ref);
 
@@ -94,6 +91,7 @@ pub fn uu_app() -> Command {
         .about(about)
         .override_usage(format_usage(&translate!("users-usage")))
         .infer_long_args(true)
+        .after_help(get_long_usage())
         .arg(
             Arg::new(ARG_FILE)
                 .num_args(1)

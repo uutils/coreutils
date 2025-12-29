@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker:ignore logind
+// spell-checker:ignore IDLEN logind
 
 //! Aims to provide platform-independent methods to obtain login records
 //!
@@ -56,7 +56,12 @@ pub use libc::getutxent;
 #[cfg_attr(target_env = "musl", allow(deprecated))]
 pub use libc::setutxent;
 use libc::utmpx;
-#[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "netbsd"))]
+#[cfg(any(
+    target_vendor = "apple",
+    target_os = "linux",
+    target_os = "netbsd",
+    target_os = "cygwin"
+))]
 #[cfg_attr(target_env = "musl", allow(deprecated))]
 pub use libc::utmpxname;
 
@@ -179,6 +184,25 @@ mod ut {
     pub use libc::USER_PROCESS;
 }
 
+#[cfg(target_os = "cygwin")]
+mod ut {
+    pub static DEFAULT_FILE: &str = "";
+
+    pub use libc::UT_HOSTSIZE;
+    pub use libc::UT_IDLEN;
+    pub use libc::UT_LINESIZE;
+    pub use libc::UT_NAMESIZE;
+
+    pub use libc::BOOT_TIME;
+    pub use libc::DEAD_PROCESS;
+    pub use libc::INIT_PROCESS;
+    pub use libc::LOGIN_PROCESS;
+    pub use libc::NEW_TIME;
+    pub use libc::OLD_TIME;
+    pub use libc::RUN_LVL;
+    pub use libc::USER_PROCESS;
+}
+
 /// A login record
 pub struct Utmpx {
     inner: utmpx,
@@ -275,7 +299,7 @@ impl Utmpx {
             }
         }
 
-        Ok(host.to_string())
+        Ok(host)
     }
 
     /// Iterate through all the utmp records.
@@ -412,63 +436,63 @@ impl UtmpxRecord {
     /// A.K.A. ut.ut_type
     pub fn record_type(&self) -> i16 {
         match self {
-            UtmpxRecord::Traditional(utmpx) => utmpx.record_type(),
+            Self::Traditional(utmpx) => utmpx.record_type(),
             #[cfg(feature = "feat_systemd_logind")]
-            UtmpxRecord::Systemd(systemd) => systemd.record_type(),
+            Self::Systemd(systemd) => systemd.record_type(),
         }
     }
 
     /// A.K.A. ut.ut_pid
     pub fn pid(&self) -> i32 {
         match self {
-            UtmpxRecord::Traditional(utmpx) => utmpx.pid(),
+            Self::Traditional(utmpx) => utmpx.pid(),
             #[cfg(feature = "feat_systemd_logind")]
-            UtmpxRecord::Systemd(systemd) => systemd.pid(),
+            Self::Systemd(systemd) => systemd.pid(),
         }
     }
 
     /// A.K.A. ut.ut_id
     pub fn terminal_suffix(&self) -> String {
         match self {
-            UtmpxRecord::Traditional(utmpx) => utmpx.terminal_suffix(),
+            Self::Traditional(utmpx) => utmpx.terminal_suffix(),
             #[cfg(feature = "feat_systemd_logind")]
-            UtmpxRecord::Systemd(systemd) => systemd.terminal_suffix(),
+            Self::Systemd(systemd) => systemd.terminal_suffix(),
         }
     }
 
     /// A.K.A. ut.ut_user
     pub fn user(&self) -> String {
         match self {
-            UtmpxRecord::Traditional(utmpx) => utmpx.user(),
+            Self::Traditional(utmpx) => utmpx.user(),
             #[cfg(feature = "feat_systemd_logind")]
-            UtmpxRecord::Systemd(systemd) => systemd.user(),
+            Self::Systemd(systemd) => systemd.user(),
         }
     }
 
     /// A.K.A. ut.ut_host
     pub fn host(&self) -> String {
         match self {
-            UtmpxRecord::Traditional(utmpx) => utmpx.host(),
+            Self::Traditional(utmpx) => utmpx.host(),
             #[cfg(feature = "feat_systemd_logind")]
-            UtmpxRecord::Systemd(systemd) => systemd.host(),
+            Self::Systemd(systemd) => systemd.host(),
         }
     }
 
     /// A.K.A. ut.ut_line
     pub fn tty_device(&self) -> String {
         match self {
-            UtmpxRecord::Traditional(utmpx) => utmpx.tty_device(),
+            Self::Traditional(utmpx) => utmpx.tty_device(),
             #[cfg(feature = "feat_systemd_logind")]
-            UtmpxRecord::Systemd(systemd) => systemd.tty_device(),
+            Self::Systemd(systemd) => systemd.tty_device(),
         }
     }
 
     /// A.K.A. ut.ut_tv
     pub fn login_time(&self) -> time::OffsetDateTime {
         match self {
-            UtmpxRecord::Traditional(utmpx) => utmpx.login_time(),
+            Self::Traditional(utmpx) => utmpx.login_time(),
             #[cfg(feature = "feat_systemd_logind")]
-            UtmpxRecord::Systemd(systemd) => systemd.login_time(),
+            Self::Systemd(systemd) => systemd.login_time(),
         }
     }
 
@@ -477,27 +501,27 @@ impl UtmpxRecord {
     /// Return (e_termination, e_exit)
     pub fn exit_status(&self) -> (i16, i16) {
         match self {
-            UtmpxRecord::Traditional(utmpx) => utmpx.exit_status(),
+            Self::Traditional(utmpx) => utmpx.exit_status(),
             #[cfg(feature = "feat_systemd_logind")]
-            UtmpxRecord::Systemd(systemd) => systemd.exit_status(),
+            Self::Systemd(systemd) => systemd.exit_status(),
         }
     }
 
     /// check if the record is a user process
     pub fn is_user_process(&self) -> bool {
         match self {
-            UtmpxRecord::Traditional(utmpx) => utmpx.is_user_process(),
+            Self::Traditional(utmpx) => utmpx.is_user_process(),
             #[cfg(feature = "feat_systemd_logind")]
-            UtmpxRecord::Systemd(systemd) => systemd.is_user_process(),
+            Self::Systemd(systemd) => systemd.is_user_process(),
         }
     }
 
     /// Canonicalize host name using DNS
     pub fn canon_host(&self) -> IOResult<String> {
         match self {
-            UtmpxRecord::Traditional(utmpx) => utmpx.canon_host(),
+            Self::Traditional(utmpx) => utmpx.canon_host(),
             #[cfg(feature = "feat_systemd_logind")]
-            UtmpxRecord::Systemd(systemd) => systemd.canon_host(),
+            Self::Systemd(systemd) => systemd.canon_host(),
         }
     }
 }
@@ -525,7 +549,7 @@ impl Iterator for UtmpxIter {
                 // All the strings live inline in the struct as arrays, which
                 // makes things easier.
                 Some(UtmpxRecord::Traditional(Box::new(Utmpx {
-                    inner: ptr::read(res as *const _),
+                    inner: ptr::read(res.cast_const()),
                 })))
             }
         }

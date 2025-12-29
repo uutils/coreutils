@@ -16,11 +16,13 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) ->
     // This vector holds error messages encountered.
     let mut errs: Vec<String> = vec![];
     settings.renumber = opts.get_flag(options::NO_RENUMBER);
-    if let Some(delimiter) = opts.get_one::<String>(options::SECTION_DELIMITER) {
-        // check whether the delimiter is a single ASCII char (1 byte)
-        // because GNU nl doesn't add a ':' to single non-ASCII chars
+    if let Some(delimiter) = opts.get_one::<OsString>(options::SECTION_DELIMITER) {
+        // GNU nl determines whether a delimiter is a "single character" based on byte length, not
+        // character length. A "single character" implies the second character is a ':'.
         settings.section_delimiter = if delimiter.len() == 1 {
-            format!("{delimiter}:")
+            let mut delimiter = delimiter.clone();
+            delimiter.push(":");
+            delimiter
         } else {
             delimiter.clone()
         };
@@ -64,10 +66,8 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) ->
         Some(num) if *num > 0 => settings.number_width = *num,
         Some(_) => errs.push(translate!("nl-error-invalid-line-width", "value" => "0")),
     }
-    match opts.get_one::<u64>(options::JOIN_BLANK_LINES) {
-        None => {}
-        Some(num) if *num > 0 => settings.join_blank_lines = *num,
-        Some(_) => errs.push(translate!("nl-error-invalid-blank-lines", "value" => "0")),
+    if let Some(num) = opts.get_one::<u64>(options::JOIN_BLANK_LINES) {
+        settings.join_blank_lines = *num;
     }
     if let Some(num) = opts.get_one::<i64>(options::LINE_INCREMENT) {
         settings.line_increment = *num;

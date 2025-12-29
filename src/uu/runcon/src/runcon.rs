@@ -6,7 +6,7 @@
 #![cfg(target_os = "linux")]
 
 use clap::builder::ValueParser;
-use uucore::error::{UClapError, UError, UResult};
+use uucore::error::{UError, UResult};
 use uucore::translate;
 
 use clap::{Arg, ArgAction, Command};
@@ -15,9 +15,10 @@ use uucore::format_usage;
 
 use std::borrow::Cow;
 use std::ffi::{CStr, CString, OsStr, OsString};
-use std::os::raw::c_char;
+use std::io;
 use std::os::unix::ffi::OsStrExt;
-use std::{io, ptr};
+use std::os::unix::process::CommandExt;
+use std::process;
 
 mod errors;
 
@@ -37,12 +38,7 @@ pub mod options {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let config = uu_app();
 
-    let options = match parse_command_line(config, args) {
-        Ok(r) => r,
-        Err(r) => {
-            return Err(r);
-        }
-    };
+    let options = parse_command_line(config, args)?;
 
     match &options.mode {
         CommandLineMode::Print => print_current_context().map_err(|e| RunconError::new(e).into()),
@@ -85,13 +81,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    let cmd = Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("runcon-about"))
         .after_help(translate!("runcon-after-help"))
         .override_usage(format_usage(&translate!("runcon-usage")))
-        .infer_long_args(true)
+        .infer_long_args(true);
+    uucore::clap_localization::configure_localized_command(cmd)
         .arg(
             Arg::new(options::COMPUTE)
                 .short('c')
@@ -185,7 +181,7 @@ struct Options {
 }
 
 fn parse_command_line(config: Command, args: impl uucore::Args) -> UResult<Options> {
-    let matches = config.try_get_matches_from(args).with_exit_code(125)?;
+    let matches = uucore::clap_localization::handle_clap_result_with_exit_code(config, args, 125)?;
 
     let compute_transition_context = matches.get_flag(options::COMPUTE);
 
@@ -372,23 +368,8 @@ fn get_custom_context(
 /// compiler the only valid return type is to say "if this returns, it will
 /// always return an error".
 fn execute_command(command: &OsStr, arguments: &[OsString]) -> UResult<()> {
-    let c_command = os_str_to_c_string(command).map_err(RunconError::new)?;
+    let err = process::Command::new(command).args(arguments).exec();
 
-    let argv_storage: Vec<CString> = arguments
-        .iter()
-        .map(AsRef::as_ref)
-        .map(os_str_to_c_string)
-        .collect::<Result<_>>()
-        .map_err(RunconError::new)?;
-
-    let mut argv: Vec<*const c_char> = Vec::with_capacity(arguments.len().saturating_add(2));
-    argv.push(c_command.as_ptr());
-    argv.extend(argv_storage.iter().map(AsRef::as_ref).map(CStr::as_ptr));
-    argv.push(ptr::null());
-
-    unsafe { libc::execvp(c_command.as_ptr(), argv.as_ptr()) };
-
-    let err = io::Error::last_os_error();
     let exit_status = if err.kind() == io::ErrorKind::NotFound {
         error_exit_status::NOT_FOUND
     } else {

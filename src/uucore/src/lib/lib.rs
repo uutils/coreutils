@@ -23,7 +23,6 @@ pub use uucore_procs::*;
 
 // * cross-platform modules
 pub use crate::mods::clap_localization;
-pub use crate::mods::clap_localization::LocalizedCommand;
 pub use crate::mods::display;
 pub use crate::mods::error;
 #[cfg(feature = "fs")]
@@ -37,6 +36,8 @@ pub use crate::mods::posix;
 // * feature-gated modules
 #[cfg(feature = "backup-control")]
 pub use crate::features::backup_control;
+#[cfg(feature = "benchmark")]
+pub use crate::features::benchmark;
 #[cfg(feature = "buf-copy")]
 pub use crate::features::buf_copy;
 #[cfg(feature = "checksum")]
@@ -53,11 +54,18 @@ pub use crate::features::fast_inc;
 pub use crate::features::format;
 #[cfg(feature = "fs")]
 pub use crate::features::fs;
+#[cfg(feature = "hardware")]
+pub use crate::features::hardware;
 #[cfg(feature = "i18n-common")]
 pub use crate::features::i18n;
 #[cfg(feature = "lines")]
 pub use crate::features::lines;
-#[cfg(feature = "parser")]
+#[cfg(any(
+    feature = "parser",
+    feature = "parser-num",
+    feature = "parser-size",
+    feature = "parser-glob"
+))]
 pub use crate::features::parser;
 #[cfg(feature = "quoting-style")]
 pub use crate::features::quoting_style;
@@ -91,6 +99,8 @@ pub use crate::features::perms;
 pub use crate::features::pipes;
 #[cfg(all(unix, feature = "process"))]
 pub use crate::features::process;
+#[cfg(target_os = "linux")]
+pub use crate::features::safe_traversal;
 #[cfg(all(unix, not(target_os = "fuchsia"), feature = "signals"))]
 pub use crate::features::signals;
 #[cfg(all(
@@ -114,6 +124,9 @@ pub use crate::features::fsxattr;
 
 #[cfg(all(target_os = "linux", feature = "selinux"))]
 pub use crate::features::selinux;
+
+#[cfg(all(target_os = "linux", feature = "smack"))]
+pub use crate::features::smack;
 
 //## core functions
 
@@ -160,9 +173,9 @@ pub fn get_canonical_util_name(util_name: &str) -> &str {
         "[" => "test",
 
         // hashsum aliases - all these hash commands are aliases for hashsum
-        "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum"
-        | "sha3sum" | "sha3-224sum" | "sha3-256sum" | "sha3-384sum" | "sha3-512sum"
-        | "shake128sum" | "shake256sum" | "b2sum" | "b3sum" => "hashsum",
+        "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum" | "b2sum" => {
+            "hashsum"
+        }
 
         "dir" => "ls", // dir is an alias for ls
 
@@ -181,6 +194,10 @@ macro_rules! bin {
         pub fn main() {
             use std::io::Write;
             use uucore::locale;
+
+            // Preserve inherited SIGPIPE settings (e.g., from env --default-signal=PIPE)
+            uucore::panic::preserve_inherited_sigpipe();
+
             // suppress extraneous error output for SIGPIPE failures/panics
             uucore::panic::mute_sigpipe_panic();
             locale::setup_localization(uucore::get_canonical_util_name(stringify!($util)))
@@ -252,17 +269,56 @@ pub fn format_usage(s: &str) -> String {
 ///     .help_template(localized_help_template("myutil"));
 /// ```
 pub fn localized_help_template(util_name: &str) -> clap::builder::StyledStr {
+    use std::io::IsTerminal;
+
+    // Determine if colors should be enabled - same logic as configure_localized_command
+    let colors_enabled = if std::env::var("NO_COLOR").is_ok() {
+        false
+    } else if std::env::var("CLICOLOR_FORCE").is_ok() || std::env::var("FORCE_COLOR").is_ok() {
+        true
+    } else {
+        IsTerminal::is_terminal(&std::io::stdout())
+            && std::env::var("TERM").unwrap_or_default() != "dumb"
+    };
+
+    localized_help_template_with_colors(util_name, colors_enabled)
+}
+
+/// Create a localized help template with explicit color control
+/// This ensures color detection consistency between clap and our template
+pub fn localized_help_template_with_colors(
+    util_name: &str,
+    colors_enabled: bool,
+) -> clap::builder::StyledStr {
+    use std::fmt::Write;
+
     // Ensure localization is initialized for this utility
     let _ = crate::locale::setup_localization(util_name);
 
+    // Get the localized "Usage" label
     let usage_label = crate::locale::translate!("common-usage");
 
-    // Create a template that avoids clap's hardcoded {usage-heading}
-    let template = format!(
-        "{{before-help}}{{about-with-newline}}\n{usage_label}: {{usage}}\n\n{{all-args}}{{after-help}}"
-    );
+    // Create a styled template
+    let mut template = clap::builder::StyledStr::new();
 
-    clap::builder::StyledStr::from(template)
+    // Add the basic template parts
+    writeln!(template, "{{before-help}}{{about-with-newline}}").unwrap();
+
+    // Add styled usage header (bold + underline like clap's default)
+    if colors_enabled {
+        write!(
+            template,
+            "\x1b[1m\x1b[4m{usage_label}:\x1b[0m {{usage}}\n\n"
+        )
+        .unwrap();
+    } else {
+        write!(template, "{usage_label}: {{usage}}\n\n").unwrap();
+    }
+
+    // Add the rest
+    write!(template, "{{all-args}}{{after-help}}").unwrap();
+
+    template
 }
 
 /// Used to check if the utility is the second argument.
@@ -279,14 +335,24 @@ pub fn set_utility_is_second_arg() {
 
 // args_os() can be expensive to call, it copies all of argv before iterating.
 // So if we want only the first arg or so it's overkill. We cache it.
+#[cfg(windows)]
 static ARGV: LazyLock<Vec<OsString>> = LazyLock::new(|| wild::args_os().collect());
+#[cfg(not(windows))]
+static ARGV: LazyLock<Vec<OsString>> = LazyLock::new(|| std::env::args_os().collect());
 
 static UTIL_NAME: LazyLock<String> = LazyLock::new(|| {
     let base_index = usize::from(get_utility_is_second_arg());
     let is_man = usize::from(ARGV[base_index].eq("manpage"));
     let argv_index = base_index + is_man;
 
-    ARGV[argv_index].to_string_lossy().into_owned()
+    // Strip directory path to show only utility name
+    // (e.g., "mkdir" instead of "./target/debug/mkdir")
+    // in version output, error messages, and other user-facing output
+    std::path::Path::new(&ARGV[argv_index])
+        .file_name()
+        .unwrap_or(&ARGV[argv_index])
+        .to_string_lossy()
+        .into_owned()
 });
 
 /// Derive the utility name.
@@ -333,6 +399,13 @@ impl<T: Iterator<Item = OsString> + Sized> Args for T {}
 /// args_os() can be expensive to call
 pub fn args_os() -> impl Iterator<Item = OsString> {
     ARGV.iter().cloned()
+}
+
+/// Returns an iterator over the command line arguments as `OsString`s, filtering out empty arguments.
+/// This is useful for handling cases where extra whitespace or empty arguments are present.
+/// args_os_filtered() can be expensive to call
+pub fn args_os_filtered() -> impl Iterator<Item = OsString> {
+    ARGV.iter().filter(|arg| !arg.is_empty()).cloned()
 }
 
 /// Read a line from stdin and check whether the first character is `'y'` or `'Y'`
@@ -517,19 +590,19 @@ pub enum CharByte {
 
 impl From<char> for CharByte {
     fn from(value: char) -> Self {
-        CharByte::Char(value)
+        Self::Char(value)
     }
 }
 
 impl From<u8> for CharByte {
     fn from(value: u8) -> Self {
-        CharByte::Byte(value)
+        Self::Byte(value)
     }
 }
 
 impl From<&u8> for CharByte {
     fn from(value: &u8) -> Self {
-        CharByte::Byte(*value)
+        Self::Byte(*value)
     }
 }
 
@@ -546,7 +619,7 @@ impl Iterator for Utf8ChunkIterator<'_> {
 }
 
 impl<'a> From<Utf8Chunk<'a>> for Utf8ChunkIterator<'a> {
-    fn from(chk: Utf8Chunk<'a>) -> Utf8ChunkIterator<'a> {
+    fn from(chk: Utf8Chunk<'a>) -> Self {
         Self {
             iter: Box::new(
                 chk.valid()
@@ -567,7 +640,7 @@ pub struct CharByteIterator<'a> {
 impl<'a> CharByteIterator<'a> {
     /// Make a `CharByteIterator` from a byte slice.
     /// [`CharByteIterator`]
-    pub fn new(input: &'a [u8]) -> CharByteIterator<'a> {
+    pub fn new(input: &'a [u8]) -> Self {
         Self {
             iter: Box::new(input.utf8_chunks().flat_map(Utf8ChunkIterator::from)),
         }

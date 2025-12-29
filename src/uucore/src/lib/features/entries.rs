@@ -290,7 +290,7 @@ macro_rules! f {
                 unsafe {
                     let data = $fid(k);
                     if !data.is_null() {
-                        Ok($st::from_raw(ptr::read(data as *const _)))
+                        Ok($st::from_raw(ptr::read(data.cast_const())))
                     } else {
                         // FIXME: Resource limits, signals and I/O failure may
                         // cause this too. See getpwnam(3).
@@ -309,29 +309,28 @@ macro_rules! f {
         impl<'a> Locate<&'a str> for $st {
             fn locate(k: &'a str) -> IOResult<Self> {
                 let _guard = PW_LOCK.lock();
-                if let Ok(id) = k.parse::<$t>() {
-                    // SAFETY: We're holding PW_LOCK.
-                    unsafe {
+                // SAFETY: We're holding PW_LOCK.
+                unsafe {
+                    let cstring = CString::new(k)?;
+                    // try to get user or group with name matching the input with these tow lines:
+                    // f!(getpwnam, getpwuid, uid_t, Passwd);
+                    // f!(getgrnam, getgrgid, gid_t, Group);
+                    let data = $fnam(cstring.as_ptr());
+                    if !data.is_null() {
+                        return Ok($st::from_raw(ptr::read(data.cast_const())));
+                    }
+                    if let Ok(id) = k.parse::<$t>() {
                         let data = $fid(id);
                         if !data.is_null() {
-                            Ok($st::from_raw(ptr::read(data as *const _)))
+                            Ok($st::from_raw(ptr::read(data.cast_const())))
                         } else {
                             Err(IOError::new(
                                 ErrorKind::NotFound,
                                 format!("No such id: {id}"),
                             ))
                         }
-                    }
-                } else {
-                    // SAFETY: We're holding PW_LOCK.
-                    unsafe {
-                        let cstring = CString::new(k).unwrap();
-                        let data = $fnam(cstring.as_ptr());
-                        if !data.is_null() {
-                            Ok($st::from_raw(ptr::read(data as *const _)))
-                        } else {
-                            Err(IOError::new(ErrorKind::NotFound, format!("Not found: {k}")))
-                        }
+                    } else {
+                        Err(IOError::new(ErrorKind::NotFound, format!("Not found: {k}")))
                     }
                 }
             }

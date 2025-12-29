@@ -15,7 +15,6 @@ use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
 use uucore::translate;
 
-use uucore::LocalizedCommand;
 #[cfg(not(windows))]
 use uucore::mode;
 use uucore::{display::Quotable, fs::dir_strip_dot_for_creation};
@@ -58,20 +57,11 @@ fn get_mode(_matches: &ArgMatches) -> Result<u32, String> {
 #[cfg(not(windows))]
 fn get_mode(matches: &ArgMatches) -> Result<u32, String> {
     // Not tested on Windows
-    let mut new_mode = DEFAULT_PERM;
-
     if let Some(m) = matches.get_one::<String>(options::MODE) {
-        for mode in m.split(',') {
-            if mode.chars().any(|c| c.is_ascii_digit()) {
-                new_mode = mode::parse_numeric(new_mode, m, true)?;
-            } else {
-                new_mode = mode::parse_symbolic(new_mode, mode, mode::get_umask(), true)?;
-            }
-        }
-        Ok(new_mode)
+        mode::parse_chmod(DEFAULT_PERM, m, true, mode::get_umask())
     } else {
         // If no mode argument is specified return the mode derived from umask
-        Ok(!mode::get_umask() & 0o0777)
+        Ok(!mode::get_umask() & DEFAULT_PERM)
     }
 }
 
@@ -80,9 +70,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Linux-specific options, not implemented
     // opts.optflag("Z", "context", "set SELinux security context" +
     // " of each created directory to CTX"),
-    let matches = uu_app()
-        .after_help(translate!("mkdir-after-help"))
-        .get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let dirs = matches
         .get_many::<OsString>(options::DIRS)
@@ -116,6 +104,7 @@ pub fn uu_app() -> Command {
         .about(translate!("mkdir-about"))
         .override_usage(format_usage(&translate!("mkdir-usage")))
         .infer_long_args(true)
+        .after_help(translate!("mkdir-after-help"))
         .arg(
             Arg::new(options::MODE)
                 .short('m')
@@ -218,29 +207,54 @@ fn chmod(_path: &Path, _mode: u32) -> UResult<()> {
     Ok(())
 }
 
-// Return true if the directory at `path` has been created by this call.
-// `is_parent` argument is not used on windows
-#[allow(unused_variables)]
+// Create a directory at the given path.
+// Uses iterative approach instead of recursion to avoid stack overflow with deep nesting.
 fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
     let path_exists = path.exists();
     if path_exists && !config.recursive {
         return Err(USimpleError::new(
             1,
-            translate!("mkdir-error-file-exists", "path" => path.to_string_lossy()),
+            translate!("mkdir-error-file-exists", "path" => path.maybe_quote()),
         ));
     }
     if path == Path::new("") {
         return Ok(());
     }
 
+    // Iterative implementation: collect all directories to create, then create them
+    // This avoids stack overflow with deeply nested directories
     if config.recursive {
-        match path.parent() {
-            Some(p) => create_dir(p, true, config)?,
-            None => {
-                USimpleError::new(1, translate!("mkdir-error-failed-to-create-tree"));
+        // Pre-allocate approximate capacity to avoid reallocations
+        let mut dirs_to_create = Vec::with_capacity(16);
+        let mut current = path;
+
+        // First pass: collect all parent directories
+        while let Some(parent) = current.parent() {
+            if parent == Path::new("") {
+                break;
+            }
+            dirs_to_create.push(parent);
+            current = parent;
+        }
+
+        // Second pass: create directories from root to leaf
+        // Only create those that don't exist
+        for dir in dirs_to_create.iter().rev() {
+            if !dir.exists() {
+                create_single_dir(dir, true, config)?;
             }
         }
     }
+
+    // Create the target directory
+    create_single_dir(path, is_parent, config)
+}
+
+// Helper function to create a single directory with appropriate permissions
+// `is_parent` argument is not used on windows
+#[allow(unused_variables)]
+fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
+    let path_exists = path.exists();
 
     match std::fs::create_dir(path) {
         Ok(()) => {
@@ -289,7 +303,24 @@ fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
             Ok(())
         }
 
-        Err(_) if path.is_dir() => Ok(()),
+        Err(_) if path.is_dir() => {
+            // Directory already exists - check if this is a logical directory creation
+            // (i.e., not just a parent reference like "test_dir/..")
+            let ends_with_parent_dir = matches!(
+                path.components().next_back(),
+                Some(std::path::Component::ParentDir)
+            );
+
+            // Print verbose message for logical directories, even if they exist
+            // This matches GNU behavior for paths like "test_dir/../test_dir_a"
+            if config.verbose && is_parent && config.recursive && !ends_with_parent_dir {
+                println!(
+                    "{}",
+                    translate!("mkdir-verbose-created-directory", "util_name" => uucore::util_name(), "path" => path.quote())
+                );
+            }
+            Ok(())
+        }
         Err(e) => Err(e.into()),
     }
 }

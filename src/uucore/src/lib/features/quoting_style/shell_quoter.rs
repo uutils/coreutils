@@ -212,7 +212,7 @@ fn shell_escaped_char_set(is_dirname: bool) -> &'static [u8] {
     // the ':' colon character only induce quoting in the
     // context of ls displaying a directory name before listing its content.
     // (e.g. with the recursive flag -R)
-    let start_index = if is_dirname { 0 } else { 1 };
+    let start_index = usize::from(!is_dirname);
     &ESCAPED_CHARS[start_index..]
 }
 

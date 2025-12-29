@@ -8,6 +8,8 @@
 
 #[cfg(feature = "backup-control")]
 pub mod backup_control;
+#[cfg(feature = "benchmark")]
+pub mod benchmark;
 #[cfg(feature = "buf-copy")]
 pub mod buf_copy;
 #[cfg(feature = "checksum")]
@@ -30,7 +32,12 @@ pub mod fsext;
 pub mod i18n;
 #[cfg(feature = "lines")]
 pub mod lines;
-#[cfg(feature = "parser")]
+#[cfg(any(
+    feature = "parser",
+    feature = "parser-num",
+    feature = "parser-size",
+    feature = "parser-glob"
+))]
 pub mod parser;
 #[cfg(feature = "quoting-style")]
 pub mod quoting_style;
@@ -65,15 +72,21 @@ pub mod pipes;
 pub mod proc_info;
 #[cfg(all(unix, feature = "process"))]
 pub mod process;
+#[cfg(target_os = "linux")]
+pub mod safe_traversal;
 #[cfg(all(target_os = "linux", feature = "tty"))]
 pub mod tty;
 
 #[cfg(all(unix, feature = "fsxattr"))]
 pub mod fsxattr;
+#[cfg(feature = "hardware")]
+pub mod hardware;
 #[cfg(all(target_os = "linux", feature = "selinux"))]
 pub mod selinux;
 #[cfg(all(unix, not(target_os = "fuchsia"), feature = "signals"))]
 pub mod signals;
+#[cfg(all(target_os = "linux", feature = "smack"))]
+pub mod smack;
 #[cfg(feature = "feat_systemd_logind")]
 pub mod systemd_logind;
 #[cfg(all(

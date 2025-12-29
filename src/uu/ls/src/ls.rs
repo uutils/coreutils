@@ -6,7 +6,10 @@
 // spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly nohash strtime
 
 #[cfg(unix)]
-use std::collections::HashMap;
+use fnv::FnvHashMap as HashMap;
+use fnv::FnvHashSet as HashSet;
+use std::borrow::Cow;
+use std::cell::RefCell;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
@@ -14,7 +17,6 @@ use std::os::windows::fs::MetadataExt;
 use std::{
     cell::{LazyCell, OnceCell},
     cmp::Reverse,
-    collections::HashSet,
     ffi::{OsStr, OsString},
     fmt::Write as FmtWrite,
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
@@ -32,7 +34,7 @@ use clap::{
     builder::{NonEmptyStringValueParser, PossibleValue, ValueParser},
 };
 use glob::{MatchOptions, Pattern};
-use lscolors::LsColors;
+use lscolors::{Colorable, LsColors};
 use term_grid::{DEFAULT_SEPARATOR_SIZE, Direction, Filling, Grid, GridOptions, SPACES_IN_TAB};
 use thiserror::Error;
 
@@ -66,7 +68,7 @@ use uucore::{
     line_ending::LineEnding,
     os_str_as_bytes_lossy,
     parser::parse_glob,
-    parser::parse_size::parse_size_u64,
+    parser::parse_size::parse_size_non_zero_u64,
     parser::shortcut_value_parser::ShortcutValueParser,
     quoting_style::{QuotingStyle, locale_aware_escape_dir_name, locale_aware_escape_name},
     show, show_error, show_warning,
@@ -97,6 +99,7 @@ pub mod options {
     pub mod files {
         pub static ALL: &str = "all";
         pub static ALMOST_ALL: &str = "almost-all";
+        pub static UNSORTED_ALL: &str = "f";
     }
 
     pub mod sort {
@@ -181,18 +184,18 @@ enum LsError {
     IOError(#[from] std::io::Error),
 
     #[error("{}", match .1.kind() {
-        ErrorKind::NotFound => translate!("ls-error-cannot-access-no-such-file", "path" => .0.to_string_lossy()),
+        ErrorKind::NotFound => translate!("ls-error-cannot-access-no-such-file", "path" => .0.quote()),
         ErrorKind::PermissionDenied => match .1.raw_os_error().unwrap_or(1) {
-            1 => translate!("ls-error-cannot-access-operation-not-permitted", "path" => .0.to_string_lossy()),
+            1 => translate!("ls-error-cannot-access-operation-not-permitted", "path" => .0.quote()),
             _ => if .0.is_dir() {
-                translate!("ls-error-cannot-open-directory-permission-denied", "path" => .0.to_string_lossy())
+                translate!("ls-error-cannot-open-directory-permission-denied", "path" => .0.quote())
             } else {
-                translate!("ls-error-cannot-open-file-permission-denied", "path" => .0.to_string_lossy())
+                translate!("ls-error-cannot-open-file-permission-denied", "path" => .0.quote())
             },
         },
         _ => match .1.raw_os_error().unwrap_or(1) {
-            9 => translate!("ls-error-cannot-open-directory-bad-descriptor", "path" => .0.to_string_lossy()),
-            _ => translate!("ls-error-unknown-io-error", "path" => .0.to_string_lossy(), "error" => format!("{:?}", .1)),
+            9 => translate!("ls-error-cannot-open-directory-bad-descriptor", "path" => .0.quote()),
+            _ => translate!("ls-error-unknown-io-error", "path" => .0.quote(), "error" => format!("{:?}", .1)),
         },
     })]
     IOErrorContext(PathBuf, std::io::Error, bool),
@@ -203,7 +206,7 @@ enum LsError {
     #[error("{}", translate!("ls-error-dired-and-zero-incompatible"))]
     DiredAndZeroAreIncompatible,
 
-    #[error("{}", translate!("ls-error-not-listing-already-listed", "path" => .0.to_string_lossy()))]
+    #[error("{}", translate!("ls-error-not-listing-already-listed", "path" => .0.maybe_quote()))]
     AlreadyListedError(PathBuf),
 
     #[error("{}", translate!("ls-error-invalid-time-style", "style" => .0.quote()))]
@@ -362,7 +365,10 @@ pub struct Config {
     time_format_recent: String,        // Time format for recent dates
     time_format_older: Option<String>, // Time format for older dates (optional, if not present, time_format_recent is used)
     context: bool,
+    #[cfg(all(feature = "selinux", target_os = "linux"))]
     selinux_supported: bool,
+    #[cfg(all(feature = "smack", target_os = "linux"))]
+    smack_supported: bool,
     group_directories_first: bool,
     line_ending: LineEnding,
     dired: bool,
@@ -435,12 +441,27 @@ fn extract_format(options: &clap::ArgMatches) -> (Format, Option<&'static str>) 
 ///
 /// A Files variant representing the type of files to display.
 fn extract_files(options: &clap::ArgMatches) -> Files {
-    if options.get_flag(options::files::ALL) {
-        Files::All
-    } else if options.get_flag(options::files::ALMOST_ALL) {
+    let get_last_index = |flag: &str| -> usize {
+        if options.value_source(flag) == Some(clap::parser::ValueSource::CommandLine) {
+            options.index_of(flag).unwrap_or(0)
+        } else {
+            0
+        }
+    };
+
+    let all_index = get_last_index(options::files::ALL);
+    let almost_all_index = get_last_index(options::files::ALMOST_ALL);
+    let unsorted_all_index = get_last_index(options::files::UNSORTED_ALL);
+
+    let max_index = all_index.max(almost_all_index).max(unsorted_all_index);
+
+    if max_index == 0 {
+        Files::Normal
+    } else if max_index == almost_all_index {
         Files::AlmostAll
     } else {
-        Files::Normal
+        // Either -a or -f wins, both show all files
+        Files::All
     }
 }
 
@@ -450,37 +471,68 @@ fn extract_files(options: &clap::ArgMatches) -> Files {
 ///
 /// A Sort variant representing the sorting method to use.
 fn extract_sort(options: &clap::ArgMatches) -> Sort {
-    if let Some(field) = options.get_one::<String>(options::SORT) {
-        match field.as_str() {
-            "none" => Sort::None,
-            "name" => Sort::Name,
-            "time" => Sort::Time,
-            "size" => Sort::Size,
-            "version" => Sort::Version,
-            "extension" => Sort::Extension,
-            "width" => Sort::Width,
-            // below should never happen as clap already restricts the values.
-            _ => unreachable!("Invalid field for --sort"),
+    let get_last_index = |flag: &str| -> usize {
+        if options.value_source(flag) == Some(clap::parser::ValueSource::CommandLine) {
+            options.index_of(flag).unwrap_or(0)
+        } else {
+            0
         }
-    } else if options.get_flag(options::sort::TIME) {
-        Sort::Time
-    } else if options.get_flag(options::sort::SIZE) {
-        Sort::Size
-    } else if options.get_flag(options::sort::NONE) {
-        Sort::None
-    } else if options.get_flag(options::sort::VERSION) {
-        Sort::Version
-    } else if options.get_flag(options::sort::EXTENSION) {
-        Sort::Extension
-    } else if !options.get_flag(options::format::LONG)
-        && (options.get_flag(options::time::ACCESS)
-            || options.get_flag(options::time::CHANGE)
-            || options.get_one::<String>(options::TIME).is_some())
-    {
-        // If -l is not specified, -u/-c/--time controls sorting.
-        Sort::Time
-    } else {
-        Sort::Name
+    };
+
+    let sort_index = options
+        .get_one::<String>(options::SORT)
+        .and_then(|_| options.indices_of(options::SORT))
+        .map_or(0, |mut indices| indices.next_back().unwrap_or(0));
+    let time_index = get_last_index(options::sort::TIME);
+    let size_index = get_last_index(options::sort::SIZE);
+    let none_index = get_last_index(options::sort::NONE);
+    let version_index = get_last_index(options::sort::VERSION);
+    let extension_index = get_last_index(options::sort::EXTENSION);
+    let unsorted_all_index = get_last_index(options::files::UNSORTED_ALL);
+
+    let max_sort_index = sort_index
+        .max(time_index)
+        .max(size_index)
+        .max(none_index)
+        .max(version_index)
+        .max(extension_index)
+        .max(unsorted_all_index);
+
+    match max_sort_index {
+        0 => {
+            // No sort flags specified, use default behavior
+            if !options.get_flag(options::format::LONG)
+                && (options.get_flag(options::time::ACCESS)
+                    || options.get_flag(options::time::CHANGE)
+                    || options.get_one::<String>(options::TIME).is_some())
+            {
+                Sort::Time
+            } else {
+                Sort::Name
+            }
+        }
+        idx if idx == unsorted_all_index || idx == none_index => Sort::None,
+        idx if idx == sort_index => {
+            if let Some(field) = options.get_one::<String>(options::SORT) {
+                match field.as_str() {
+                    "none" => Sort::None,
+                    "name" => Sort::Name,
+                    "time" => Sort::Time,
+                    "size" => Sort::Size,
+                    "version" => Sort::Version,
+                    "extension" => Sort::Extension,
+                    "width" => Sort::Width,
+                    _ => unreachable!("Invalid field for --sort"),
+                }
+            } else {
+                Sort::Name
+            }
+        }
+        idx if idx == time_index => Sort::Time,
+        idx if idx == size_index => Sort::Size,
+        idx if idx == version_index => Sort::Version,
+        idx if idx == extension_index => Sort::Extension,
+        _ => Sort::Name,
     }
 }
 
@@ -538,13 +590,39 @@ fn extract_color(options: &clap::ArgMatches) -> bool {
         return false;
     }
 
-    match options.get_one::<String>(options::COLOR) {
+    let get_last_index = |flag: &str| -> usize {
+        if options.value_source(flag) == Some(clap::parser::ValueSource::CommandLine) {
+            options.index_of(flag).unwrap_or(0)
+        } else {
+            0
+        }
+    };
+
+    let color_index = options
+        .get_one::<String>(options::COLOR)
+        .and_then(|_| options.indices_of(options::COLOR))
+        .map_or(0, |mut indices| indices.next_back().unwrap_or(0));
+    let unsorted_all_index = get_last_index(options::files::UNSORTED_ALL);
+
+    let color_enabled = match options.get_one::<String>(options::COLOR) {
         None => options.contains_id(options::COLOR),
         Some(val) => match val.as_str() {
             "" | "always" | "yes" | "force" => true,
             "auto" | "tty" | "if-tty" => stdout().is_terminal(),
             /* "never" | "no" | "none" | */ _ => false,
         },
+    };
+
+    // If --color was explicitly specified, always honor it regardless of -f
+    // Otherwise, if -f is present without explicit color, disable color
+    if color_index > 0 {
+        // Color was explicitly specified
+        color_enabled
+    } else if unsorted_all_index > 0 {
+        // -f present without explicit color, disable implicit color
+        false
+    } else {
+        color_enabled
     }
 }
 
@@ -825,7 +903,7 @@ impl Config {
 
         let (file_size_block_size, block_size) = if !opt_si && !opt_hr && !raw_block_size.is_empty()
         {
-            match parse_size_u64(&raw_block_size.to_string_lossy()) {
+            match parse_size_non_zero_u64(&raw_block_size.to_string_lossy()) {
                 Ok(size) => match (is_env_var_blocksize, opt_kb) {
                     (true, true) => (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE),
                     (true, false) => (DEFAULT_FILE_SIZE_BLOCK_SIZE, size),
@@ -1082,16 +1160,10 @@ impl Config {
             time_format_recent,
             time_format_older,
             context,
-            selinux_supported: {
-                #[cfg(feature = "selinux")]
-                {
-                    uucore::selinux::is_selinux_enabled()
-                }
-                #[cfg(not(feature = "selinux"))]
-                {
-                    false
-                }
-            },
+            #[cfg(all(feature = "selinux", target_os = "linux"))]
+            selinux_supported: uucore::selinux::is_selinux_enabled(),
+            #[cfg(all(feature = "smack", target_os = "linux"))]
+            smack_supported: uucore::smack::is_smack_enabled(),
             group_directories_first: options.get_flag(options::GROUP_DIRECTORIES_FIRST),
             line_ending: LineEnding::from_zero_flag(options.get_flag(options::ZERO)),
             dired,
@@ -1103,13 +1175,7 @@ impl Config {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = match uu_app().try_get_matches_from(args) {
-        Ok(matches) => matches,
-        Err(e) => {
-            // Use localization handler for all clap errors
-            uucore::clap_localization::handle_clap_error_with_exit_code(e, "ls", 2);
-        }
-    };
+    let matches = uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 2)?;
 
     let config = Config::from(&matches)?;
 
@@ -1121,652 +1187,659 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(uucore::crate_version!())
-        .override_usage(format_usage(&translate!("ls-usage")))
-        .about(translate!("ls-about"))
-        .help_template(uucore::localized_help_template(uucore::util_name()))
-        .infer_long_args(true)
-        .disable_help_flag(true)
-        .args_override_self(true)
-        .arg(
-            Arg::new(options::HELP)
-                .long(options::HELP)
-                .help(translate!("ls-help-print-help"))
-                .action(ArgAction::Help),
-        )
-        // Format arguments
-        .arg(
-            Arg::new(options::FORMAT)
-                .long(options::FORMAT)
-                .help(translate!("ls-help-set-display-format"))
-                .value_parser(ShortcutValueParser::new([
-                    "long",
-                    "verbose",
-                    "single-column",
-                    "columns",
-                    "vertical",
-                    "across",
-                    "horizontal",
-                    "commas",
-                ]))
-                .hide_possible_values(true)
-                .require_equals(true)
-                .overrides_with_all([
-                    options::FORMAT,
-                    options::format::COLUMNS,
-                    options::format::LONG,
-                    options::format::ACROSS,
-                    options::format::COLUMNS,
-                    options::DIRED,
-                ]),
-        )
-        .arg(
-            Arg::new(options::format::COLUMNS)
-                .short('C')
-                .help(translate!("ls-help-display-files-columns"))
-                .overrides_with_all([
-                    options::FORMAT,
-                    options::format::COLUMNS,
-                    options::format::LONG,
-                    options::format::ACROSS,
-                    options::format::COLUMNS,
-                ])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::format::LONG)
-                .short('l')
-                .long(options::format::LONG)
-                .help(translate!("ls-help-display-detailed-info"))
-                .overrides_with_all([
-                    options::FORMAT,
-                    options::format::COLUMNS,
-                    options::format::LONG,
-                    options::format::ACROSS,
-                    options::format::COLUMNS,
-                ])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::format::ACROSS)
-                .short('x')
-                .help(translate!("ls-help-list-entries-rows"))
-                .overrides_with_all([
-                    options::FORMAT,
-                    options::format::COLUMNS,
-                    options::format::LONG,
-                    options::format::ACROSS,
-                    options::format::COLUMNS,
-                ])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::format::TAB_SIZE)
-                .short('T')
-                .long(options::format::TAB_SIZE)
-                .env("TABSIZE")
-                .value_name("COLS")
-                .help(translate!("ls-help-assume-tab-stops")),
-        )
-        .arg(
-            Arg::new(options::format::COMMAS)
-                .short('m')
-                .help(translate!("ls-help-list-entries-commas"))
-                .overrides_with_all([
-                    options::FORMAT,
-                    options::format::COLUMNS,
-                    options::format::LONG,
-                    options::format::ACROSS,
-                    options::format::COLUMNS,
-                ])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::ZERO)
-                .long(options::ZERO)
-                .overrides_with(options::ZERO)
-                .help(translate!("ls-help-list-entries-nul"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::DIRED)
-                .long(options::DIRED)
-                .short('D')
-                .help(translate!("ls-help-generate-dired-output"))
-                .action(ArgAction::SetTrue)
-                .overrides_with(options::HYPERLINK),
-        )
-        .arg(
-            Arg::new(options::HYPERLINK)
-                .long(options::HYPERLINK)
-                .help(translate!("ls-help-hyperlink-filenames"))
-                .value_parser(ShortcutValueParser::new([
-                    PossibleValue::new("always").alias("yes").alias("force"),
-                    PossibleValue::new("auto").alias("tty").alias("if-tty"),
-                    PossibleValue::new("never").alias("no").alias("none"),
-                ]))
-                .require_equals(true)
-                .num_args(0..=1)
-                .default_missing_value("always")
-                .default_value("never")
-                .value_name("WHEN")
-                .overrides_with(options::DIRED),
-        )
-        // The next four arguments do not override with the other format
-        // options, see the comment in Config::from for the reason.
-        // Ideally, they would use Arg::override_with, with their own name
-        // but that doesn't seem to work in all cases. Example:
-        // ls -1g1
-        // even though `ls -11` and `ls -1 -g -1` work.
-        .arg(
-            Arg::new(options::format::ONE_LINE)
-                .short('1')
-                .help(translate!("ls-help-list-one-file-per-line"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::format::LONG_NO_GROUP)
-                .short('o')
-                .help(translate!("ls-help-long-format-no-group"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::format::LONG_NO_OWNER)
-                .short('g')
-                .help(translate!("ls-help-long-no-owner"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::format::LONG_NUMERIC_UID_GID)
-                .short('n')
-                .long(options::format::LONG_NUMERIC_UID_GID)
-                .help(translate!("ls-help-long-numeric-uid-gid"))
-                .action(ArgAction::SetTrue),
-        )
-        // Quoting style
-        .arg(
-            Arg::new(QUOTING_STYLE)
-                .long(QUOTING_STYLE)
-                .help(translate!("ls-help-set-quoting-style"))
-                .value_parser(ShortcutValueParser::new([
-                    PossibleValue::new("literal"),
-                    PossibleValue::new("shell"),
-                    PossibleValue::new("shell-escape"),
-                    PossibleValue::new("shell-always"),
-                    PossibleValue::new("shell-escape-always"),
-                    PossibleValue::new("c").alias("c-maybe"),
-                    PossibleValue::new("escape"),
-                ]))
-                .overrides_with_all([
-                    QUOTING_STYLE,
-                    options::quoting::LITERAL,
-                    options::quoting::ESCAPE,
-                    options::quoting::C,
-                ]),
-        )
-        .arg(
-            Arg::new(options::quoting::LITERAL)
-                .short('N')
-                .long(options::quoting::LITERAL)
-                .alias("l")
-                .help(translate!("ls-help-literal-quoting-style"))
-                .overrides_with_all([
-                    QUOTING_STYLE,
-                    options::quoting::LITERAL,
-                    options::quoting::ESCAPE,
-                    options::quoting::C,
-                ])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::quoting::ESCAPE)
-                .short('b')
-                .long(options::quoting::ESCAPE)
-                .help(translate!("ls-help-escape-quoting-style"))
-                .overrides_with_all([
-                    QUOTING_STYLE,
-                    options::quoting::LITERAL,
-                    options::quoting::ESCAPE,
-                    options::quoting::C,
-                ])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::quoting::C)
-                .short('Q')
-                .long(options::quoting::C)
-                .help(translate!("ls-help-c-quoting-style"))
-                .overrides_with_all([
-                    QUOTING_STYLE,
-                    options::quoting::LITERAL,
-                    options::quoting::ESCAPE,
-                    options::quoting::C,
-                ])
-                .action(ArgAction::SetTrue),
-        )
-        // Control characters
-        .arg(
-            Arg::new(options::HIDE_CONTROL_CHARS)
-                .short('q')
-                .long(options::HIDE_CONTROL_CHARS)
-                .help(translate!("ls-help-replace-control-chars"))
-                .overrides_with_all([options::HIDE_CONTROL_CHARS, options::SHOW_CONTROL_CHARS])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::SHOW_CONTROL_CHARS)
-                .long(options::SHOW_CONTROL_CHARS)
-                .help(translate!("ls-help-show-control-chars"))
-                .overrides_with_all([options::HIDE_CONTROL_CHARS, options::SHOW_CONTROL_CHARS])
-                .action(ArgAction::SetTrue),
-        )
-        // Time arguments
-        .arg(
-            Arg::new(options::TIME)
-                .long(options::TIME)
-                .help(translate!("ls-help-show-time-field"))
-                .value_name("field")
-                .value_parser(ShortcutValueParser::new([
-                    PossibleValue::new("atime").alias("access").alias("use"),
-                    PossibleValue::new("ctime").alias("status"),
-                    PossibleValue::new("mtime").alias("modification"),
-                    PossibleValue::new("birth").alias("creation"),
-                ]))
-                .hide_possible_values(true)
-                .require_equals(true)
-                .overrides_with_all([options::TIME, options::time::ACCESS, options::time::CHANGE]),
-        )
-        .arg(
-            Arg::new(options::time::CHANGE)
-                .short('c')
-                .help(translate!("ls-help-time-change"))
-                .overrides_with_all([options::TIME, options::time::ACCESS, options::time::CHANGE])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::time::ACCESS)
-                .short('u')
-                .help(translate!("ls-help-time-access"))
-                .overrides_with_all([options::TIME, options::time::ACCESS, options::time::CHANGE])
-                .action(ArgAction::SetTrue),
-        )
-        // Hide and ignore
-        .arg(
-            Arg::new(options::HIDE)
-                .long(options::HIDE)
-                .action(ArgAction::Append)
-                .value_name("PATTERN")
-                .help(translate!("ls-help-hide-pattern")),
-        )
-        .arg(
-            Arg::new(options::IGNORE)
-                .short('I')
-                .long(options::IGNORE)
-                .action(ArgAction::Append)
-                .value_name("PATTERN")
-                .help(translate!("ls-help-ignore-pattern")),
-        )
-        .arg(
-            Arg::new(options::IGNORE_BACKUPS)
-                .short('B')
-                .long(options::IGNORE_BACKUPS)
-                .help(translate!("ls-help-ignore-backups"))
-                .action(ArgAction::SetTrue),
-        )
-        // Sort arguments
-        .arg(
-            Arg::new(options::SORT)
-                .long(options::SORT)
-                .help(translate!("ls-help-sort-by-field"))
-                .value_name("field")
-                .value_parser(ShortcutValueParser::new([
-                    "name",
-                    "none",
-                    "time",
-                    "size",
-                    "version",
-                    "extension",
-                    "width",
-                ]))
-                .require_equals(true)
-                .overrides_with_all([
-                    options::SORT,
-                    options::sort::SIZE,
-                    options::sort::TIME,
-                    options::sort::NONE,
-                    options::sort::VERSION,
-                    options::sort::EXTENSION,
-                ]),
-        )
-        .arg(
-            Arg::new(options::sort::SIZE)
-                .short('S')
-                .help(translate!("ls-help-sort-by-size"))
-                .overrides_with_all([
-                    options::SORT,
-                    options::sort::SIZE,
-                    options::sort::TIME,
-                    options::sort::NONE,
-                    options::sort::VERSION,
-                    options::sort::EXTENSION,
-                ])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::sort::TIME)
-                .short('t')
-                .help(translate!("ls-help-sort-by-time"))
-                .overrides_with_all([
-                    options::SORT,
-                    options::sort::SIZE,
-                    options::sort::TIME,
-                    options::sort::NONE,
-                    options::sort::VERSION,
-                    options::sort::EXTENSION,
-                ])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::sort::VERSION)
-                .short('v')
-                .help(translate!("ls-help-sort-by-version"))
-                .overrides_with_all([
-                    options::SORT,
-                    options::sort::SIZE,
-                    options::sort::TIME,
-                    options::sort::NONE,
-                    options::sort::VERSION,
-                    options::sort::EXTENSION,
-                ])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::sort::EXTENSION)
-                .short('X')
-                .help(translate!("ls-help-sort-by-extension"))
-                .overrides_with_all([
-                    options::SORT,
-                    options::sort::SIZE,
-                    options::sort::TIME,
-                    options::sort::NONE,
-                    options::sort::VERSION,
-                    options::sort::EXTENSION,
-                ])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::sort::NONE)
-                .short('U')
-                .help(translate!("ls-help-sort-none"))
-                .overrides_with_all([
-                    options::SORT,
-                    options::sort::SIZE,
-                    options::sort::TIME,
-                    options::sort::NONE,
-                    options::sort::VERSION,
-                    options::sort::EXTENSION,
-                ])
-                .action(ArgAction::SetTrue),
-        )
-        // Dereferencing
-        .arg(
-            Arg::new(options::dereference::ALL)
-                .short('L')
-                .long(options::dereference::ALL)
-                .help(translate!("ls-help-dereference-all"))
-                .overrides_with_all([
-                    options::dereference::ALL,
-                    options::dereference::DIR_ARGS,
-                    options::dereference::ARGS,
-                ])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::dereference::DIR_ARGS)
-                .long(options::dereference::DIR_ARGS)
-                .help(translate!("ls-help-dereference-dir-args"))
-                .overrides_with_all([
-                    options::dereference::ALL,
-                    options::dereference::DIR_ARGS,
-                    options::dereference::ARGS,
-                ])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::dereference::ARGS)
-                .short('H')
-                .long(options::dereference::ARGS)
-                .help(translate!("ls-help-dereference-args"))
-                .overrides_with_all([
-                    options::dereference::ALL,
-                    options::dereference::DIR_ARGS,
-                    options::dereference::ARGS,
-                ])
-                .action(ArgAction::SetTrue),
-        )
-        // Long format options
-        .arg(
-            Arg::new(options::NO_GROUP)
-                .long(options::NO_GROUP)
-                .short('G')
-                .help(translate!("ls-help-no-group"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::AUTHOR)
-                .long(options::AUTHOR)
-                .help(translate!("ls-help-author"))
-                .action(ArgAction::SetTrue),
-        )
-        // Other Flags
-        .arg(
-            Arg::new(options::files::ALL)
-                .short('a')
-                .long(options::files::ALL)
-                // Overrides -A (as the order matters)
-                .overrides_with_all([options::files::ALL, options::files::ALMOST_ALL])
-                .help(translate!("ls-help-all-files"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::files::ALMOST_ALL)
-                .short('A')
-                .long(options::files::ALMOST_ALL)
-                // Overrides -a (as the order matters)
-                .overrides_with_all([options::files::ALL, options::files::ALMOST_ALL])
-                .help(translate!("ls-help-almost-all"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::DIRECTORY)
-                .short('d')
-                .long(options::DIRECTORY)
-                .help(translate!("ls-help-directory"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::size::HUMAN_READABLE)
-                .short('h')
-                .long(options::size::HUMAN_READABLE)
-                .help(translate!("ls-help-human-readable"))
-                .overrides_with_all([options::size::BLOCK_SIZE, options::size::SI])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::size::KIBIBYTES)
-                .short('k')
-                .long(options::size::KIBIBYTES)
-                .help(translate!("ls-help-kibibytes"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::size::SI)
-                .long(options::size::SI)
-                .help(translate!("ls-help-si"))
-                .overrides_with_all([options::size::BLOCK_SIZE, options::size::HUMAN_READABLE])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::size::BLOCK_SIZE)
-                .long(options::size::BLOCK_SIZE)
-                .require_equals(true)
-                .value_name("BLOCK_SIZE")
-                .help(translate!("ls-help-block-size"))
-                .overrides_with_all([options::size::SI, options::size::HUMAN_READABLE]),
-        )
-        .arg(
-            Arg::new(options::INODE)
-                .short('i')
-                .long(options::INODE)
-                .help(translate!("ls-help-print-inode"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::REVERSE)
-                .short('r')
-                .long(options::REVERSE)
-                .help(translate!("ls-help-reverse-sort"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::RECURSIVE)
-                .short('R')
-                .long(options::RECURSIVE)
-                .help(translate!("ls-help-recursive"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::WIDTH)
-                .long(options::WIDTH)
-                .short('w')
-                .help(translate!("ls-help-terminal-width"))
-                .value_name("COLS"),
-        )
-        .arg(
-            Arg::new(options::size::ALLOCATION_SIZE)
-                .short('s')
-                .long(options::size::ALLOCATION_SIZE)
-                .help(translate!("ls-help-allocation-size"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::COLOR)
-                .long(options::COLOR)
-                .help(translate!("ls-help-color-output"))
-                .value_parser(ShortcutValueParser::new([
-                    PossibleValue::new("always").alias("yes").alias("force"),
-                    PossibleValue::new("auto").alias("tty").alias("if-tty"),
-                    PossibleValue::new("never").alias("no").alias("none"),
-                ]))
-                .require_equals(true)
-                .num_args(0..=1),
-        )
-        .arg(
-            Arg::new(options::INDICATOR_STYLE)
-                .long(options::INDICATOR_STYLE)
-                .help(translate!("ls-help-indicator-style"))
-                .value_parser(ShortcutValueParser::new([
-                    "none",
-                    "slash",
-                    "file-type",
-                    "classify",
-                ]))
-                .overrides_with_all([
-                    options::indicator_style::FILE_TYPE,
-                    options::indicator_style::SLASH,
-                    options::indicator_style::CLASSIFY,
-                    options::INDICATOR_STYLE,
-                ]),
-        )
-        .arg(
-            // The --classify flag can take an optional when argument to
-            // control its behavior from version 9 of GNU coreutils.
-            // There is currently an inconsistency where GNU coreutils allows only
-            // the long form of the flag to take the argument while we allow it
-            // for both the long and short form of the flag.
-            Arg::new(options::indicator_style::CLASSIFY)
-                .short('F')
-                .long(options::indicator_style::CLASSIFY)
-                .help(translate!("ls-help-classify"))
-                .value_name("when")
-                .value_parser(ShortcutValueParser::new([
-                    PossibleValue::new("always").alias("yes").alias("force"),
-                    PossibleValue::new("auto").alias("tty").alias("if-tty"),
-                    PossibleValue::new("never").alias("no").alias("none"),
-                ]))
-                .default_missing_value("always")
-                .require_equals(true)
-                .num_args(0..=1)
-                .overrides_with_all([
-                    options::indicator_style::FILE_TYPE,
-                    options::indicator_style::SLASH,
-                    options::indicator_style::CLASSIFY,
-                    options::INDICATOR_STYLE,
-                ]),
-        )
-        .arg(
-            Arg::new(options::indicator_style::FILE_TYPE)
-                .long(options::indicator_style::FILE_TYPE)
-                .help(translate!("ls-help-file-type"))
-                .overrides_with_all([
-                    options::indicator_style::FILE_TYPE,
-                    options::indicator_style::SLASH,
-                    options::indicator_style::CLASSIFY,
-                    options::INDICATOR_STYLE,
-                ])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::indicator_style::SLASH)
-                .short('p')
-                .help(translate!("ls-help-slash-directories"))
-                .overrides_with_all([
-                    options::indicator_style::FILE_TYPE,
-                    options::indicator_style::SLASH,
-                    options::indicator_style::CLASSIFY,
-                    options::INDICATOR_STYLE,
-                ])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            //This still needs support for posix-*
-            Arg::new(options::TIME_STYLE)
-                .long(options::TIME_STYLE)
-                .help(translate!("ls-help-time-style"))
-                .value_name("TIME_STYLE")
-                .env("TIME_STYLE")
-                .value_parser(NonEmptyStringValueParser::new())
-                .overrides_with_all([options::TIME_STYLE]),
-        )
-        .arg(
-            Arg::new(options::FULL_TIME)
-                .long(options::FULL_TIME)
-                .overrides_with(options::FULL_TIME)
-                .help(translate!("ls-help-full-time"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::CONTEXT)
-                .short('Z')
-                .long(options::CONTEXT)
-                .help(translate!("ls-help-context"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::GROUP_DIRECTORIES_FIRST)
-                .long(options::GROUP_DIRECTORIES_FIRST)
-                .help(translate!("ls-help-group-directories-first"))
-                .action(ArgAction::SetTrue),
-        )
-        // Positional arguments
-        .arg(
-            Arg::new(options::PATHS)
-                .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::AnyPath)
-                .value_parser(ValueParser::os_string()),
-        )
-        .after_help(translate!("ls-after-help"))
+    uucore::clap_localization::configure_localized_command(
+        Command::new(uucore::util_name())
+            .version(uucore::crate_version!())
+            .override_usage(format_usage(&translate!("ls-usage")))
+            .about(translate!("ls-about")),
+    )
+    .infer_long_args(true)
+    .disable_help_flag(true)
+    .args_override_self(true)
+    .arg(
+        Arg::new(options::HELP)
+            .long(options::HELP)
+            .help(translate!("ls-help-print-help"))
+            .action(ArgAction::Help),
+    )
+    // Format arguments
+    .arg(
+        Arg::new(options::FORMAT)
+            .long(options::FORMAT)
+            .help(translate!("ls-help-set-display-format"))
+            .value_parser(ShortcutValueParser::new([
+                "long",
+                "verbose",
+                "single-column",
+                "columns",
+                "vertical",
+                "across",
+                "horizontal",
+                "commas",
+            ]))
+            .hide_possible_values(true)
+            .require_equals(true)
+            .overrides_with_all([
+                options::FORMAT,
+                options::format::COLUMNS,
+                options::format::LONG,
+                options::format::ACROSS,
+                options::format::COLUMNS,
+                options::DIRED,
+            ]),
+    )
+    .arg(
+        Arg::new(options::format::COLUMNS)
+            .short('C')
+            .help(translate!("ls-help-display-files-columns"))
+            .overrides_with_all([
+                options::FORMAT,
+                options::format::COLUMNS,
+                options::format::LONG,
+                options::format::ACROSS,
+                options::format::COLUMNS,
+            ])
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::format::LONG)
+            .short('l')
+            .long(options::format::LONG)
+            .help(translate!("ls-help-display-detailed-info"))
+            .overrides_with_all([
+                options::FORMAT,
+                options::format::COLUMNS,
+                options::format::LONG,
+                options::format::ACROSS,
+                options::format::COLUMNS,
+            ])
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::format::ACROSS)
+            .short('x')
+            .help(translate!("ls-help-list-entries-rows"))
+            .overrides_with_all([
+                options::FORMAT,
+                options::format::COLUMNS,
+                options::format::LONG,
+                options::format::ACROSS,
+                options::format::COLUMNS,
+            ])
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::format::TAB_SIZE)
+            .short('T')
+            .long(options::format::TAB_SIZE)
+            .env("TABSIZE")
+            .value_name("COLS")
+            .help(translate!("ls-help-assume-tab-stops")),
+    )
+    .arg(
+        Arg::new(options::format::COMMAS)
+            .short('m')
+            .help(translate!("ls-help-list-entries-commas"))
+            .overrides_with_all([
+                options::FORMAT,
+                options::format::COLUMNS,
+                options::format::LONG,
+                options::format::ACROSS,
+                options::format::COLUMNS,
+            ])
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::ZERO)
+            .long(options::ZERO)
+            .overrides_with(options::ZERO)
+            .help(translate!("ls-help-list-entries-nul"))
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::DIRED)
+            .long(options::DIRED)
+            .short('D')
+            .help(translate!("ls-help-generate-dired-output"))
+            .action(ArgAction::SetTrue)
+            .overrides_with(options::HYPERLINK),
+    )
+    .arg(
+        Arg::new(options::HYPERLINK)
+            .long(options::HYPERLINK)
+            .help(translate!("ls-help-hyperlink-filenames"))
+            .value_parser(ShortcutValueParser::new([
+                PossibleValue::new("always").alias("yes").alias("force"),
+                PossibleValue::new("auto").alias("tty").alias("if-tty"),
+                PossibleValue::new("never").alias("no").alias("none"),
+            ]))
+            .require_equals(true)
+            .num_args(0..=1)
+            .default_missing_value("always")
+            .default_value("never")
+            .value_name("WHEN")
+            .overrides_with(options::DIRED),
+    )
+    // The next four arguments do not override with the other format
+    // options, see the comment in Config::from for the reason.
+    // Ideally, they would use Arg::override_with, with their own name
+    // but that doesn't seem to work in all cases. Example:
+    // ls -1g1
+    // even though `ls -11` and `ls -1 -g -1` work.
+    .arg(
+        Arg::new(options::format::ONE_LINE)
+            .short('1')
+            .help(translate!("ls-help-list-one-file-per-line"))
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::format::LONG_NO_GROUP)
+            .short('o')
+            .help(translate!("ls-help-long-format-no-group"))
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::format::LONG_NO_OWNER)
+            .short('g')
+            .help(translate!("ls-help-long-no-owner"))
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::format::LONG_NUMERIC_UID_GID)
+            .short('n')
+            .long(options::format::LONG_NUMERIC_UID_GID)
+            .help(translate!("ls-help-long-numeric-uid-gid"))
+            .action(ArgAction::SetTrue),
+    )
+    // Quoting style
+    .arg(
+        Arg::new(QUOTING_STYLE)
+            .long(QUOTING_STYLE)
+            .help(translate!("ls-help-set-quoting-style"))
+            .value_parser(ShortcutValueParser::new([
+                PossibleValue::new("literal"),
+                PossibleValue::new("shell"),
+                PossibleValue::new("shell-escape"),
+                PossibleValue::new("shell-always"),
+                PossibleValue::new("shell-escape-always"),
+                PossibleValue::new("c").alias("c-maybe"),
+                PossibleValue::new("escape"),
+            ]))
+            .overrides_with_all([
+                QUOTING_STYLE,
+                options::quoting::LITERAL,
+                options::quoting::ESCAPE,
+                options::quoting::C,
+            ]),
+    )
+    .arg(
+        Arg::new(options::quoting::LITERAL)
+            .short('N')
+            .long(options::quoting::LITERAL)
+            .alias("l")
+            .help(translate!("ls-help-literal-quoting-style"))
+            .overrides_with_all([
+                QUOTING_STYLE,
+                options::quoting::LITERAL,
+                options::quoting::ESCAPE,
+                options::quoting::C,
+            ])
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::quoting::ESCAPE)
+            .short('b')
+            .long(options::quoting::ESCAPE)
+            .help(translate!("ls-help-escape-quoting-style"))
+            .overrides_with_all([
+                QUOTING_STYLE,
+                options::quoting::LITERAL,
+                options::quoting::ESCAPE,
+                options::quoting::C,
+            ])
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::quoting::C)
+            .short('Q')
+            .long(options::quoting::C)
+            .help(translate!("ls-help-c-quoting-style"))
+            .overrides_with_all([
+                QUOTING_STYLE,
+                options::quoting::LITERAL,
+                options::quoting::ESCAPE,
+                options::quoting::C,
+            ])
+            .action(ArgAction::SetTrue),
+    )
+    // Control characters
+    .arg(
+        Arg::new(options::HIDE_CONTROL_CHARS)
+            .short('q')
+            .long(options::HIDE_CONTROL_CHARS)
+            .help(translate!("ls-help-replace-control-chars"))
+            .overrides_with_all([options::HIDE_CONTROL_CHARS, options::SHOW_CONTROL_CHARS])
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::SHOW_CONTROL_CHARS)
+            .long(options::SHOW_CONTROL_CHARS)
+            .help(translate!("ls-help-show-control-chars"))
+            .overrides_with_all([options::HIDE_CONTROL_CHARS, options::SHOW_CONTROL_CHARS])
+            .action(ArgAction::SetTrue),
+    )
+    // Time arguments
+    .arg(
+        Arg::new(options::TIME)
+            .long(options::TIME)
+            .help(translate!("ls-help-show-time-field"))
+            .value_name("field")
+            .value_parser(ShortcutValueParser::new([
+                PossibleValue::new("atime").alias("access").alias("use"),
+                PossibleValue::new("ctime").alias("status"),
+                PossibleValue::new("mtime").alias("modification"),
+                PossibleValue::new("birth").alias("creation"),
+            ]))
+            .hide_possible_values(true)
+            .require_equals(true)
+            .overrides_with_all([options::TIME, options::time::ACCESS, options::time::CHANGE]),
+    )
+    .arg(
+        Arg::new(options::time::CHANGE)
+            .short('c')
+            .help(translate!("ls-help-time-change"))
+            .overrides_with_all([options::TIME, options::time::ACCESS, options::time::CHANGE])
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::time::ACCESS)
+            .short('u')
+            .help(translate!("ls-help-time-access"))
+            .overrides_with_all([options::TIME, options::time::ACCESS, options::time::CHANGE])
+            .action(ArgAction::SetTrue),
+    )
+    // Hide and ignore
+    .arg(
+        Arg::new(options::HIDE)
+            .long(options::HIDE)
+            .action(ArgAction::Append)
+            .value_name("PATTERN")
+            .help(translate!("ls-help-hide-pattern")),
+    )
+    .arg(
+        Arg::new(options::IGNORE)
+            .short('I')
+            .long(options::IGNORE)
+            .action(ArgAction::Append)
+            .value_name("PATTERN")
+            .help(translate!("ls-help-ignore-pattern")),
+    )
+    .arg(
+        Arg::new(options::IGNORE_BACKUPS)
+            .short('B')
+            .long(options::IGNORE_BACKUPS)
+            .help(translate!("ls-help-ignore-backups"))
+            .action(ArgAction::SetTrue),
+    )
+    // Sort arguments
+    .arg(
+        Arg::new(options::SORT)
+            .long(options::SORT)
+            .help(translate!("ls-help-sort-by-field"))
+            .value_name("field")
+            .value_parser(ShortcutValueParser::new([
+                "name",
+                "none",
+                "time",
+                "size",
+                "version",
+                "extension",
+                "width",
+            ]))
+            .require_equals(true)
+            .overrides_with_all([
+                options::SORT,
+                options::sort::SIZE,
+                options::sort::TIME,
+                options::sort::NONE,
+                options::sort::VERSION,
+                options::sort::EXTENSION,
+            ]),
+    )
+    .arg(
+        Arg::new(options::sort::SIZE)
+            .short('S')
+            .help(translate!("ls-help-sort-by-size"))
+            .overrides_with_all([
+                options::SORT,
+                options::sort::SIZE,
+                options::sort::TIME,
+                options::sort::NONE,
+                options::sort::VERSION,
+                options::sort::EXTENSION,
+            ])
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::sort::TIME)
+            .short('t')
+            .help(translate!("ls-help-sort-by-time"))
+            .overrides_with_all([
+                options::SORT,
+                options::sort::SIZE,
+                options::sort::TIME,
+                options::sort::NONE,
+                options::sort::VERSION,
+                options::sort::EXTENSION,
+            ])
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::sort::VERSION)
+            .short('v')
+            .help(translate!("ls-help-sort-by-version"))
+            .overrides_with_all([
+                options::SORT,
+                options::sort::SIZE,
+                options::sort::TIME,
+                options::sort::NONE,
+                options::sort::VERSION,
+                options::sort::EXTENSION,
+            ])
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::sort::EXTENSION)
+            .short('X')
+            .help(translate!("ls-help-sort-by-extension"))
+            .overrides_with_all([
+                options::SORT,
+                options::sort::SIZE,
+                options::sort::TIME,
+                options::sort::NONE,
+                options::sort::VERSION,
+                options::sort::EXTENSION,
+            ])
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::sort::NONE)
+            .short('U')
+            .help(translate!("ls-help-sort-none"))
+            .overrides_with_all([
+                options::SORT,
+                options::sort::SIZE,
+                options::sort::TIME,
+                options::sort::NONE,
+                options::sort::VERSION,
+                options::sort::EXTENSION,
+            ])
+            .action(ArgAction::SetTrue),
+    )
+    // Dereferencing
+    .arg(
+        Arg::new(options::dereference::ALL)
+            .short('L')
+            .long(options::dereference::ALL)
+            .help(translate!("ls-help-dereference-all"))
+            .overrides_with_all([
+                options::dereference::ALL,
+                options::dereference::DIR_ARGS,
+                options::dereference::ARGS,
+            ])
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::dereference::DIR_ARGS)
+            .long(options::dereference::DIR_ARGS)
+            .help(translate!("ls-help-dereference-dir-args"))
+            .overrides_with_all([
+                options::dereference::ALL,
+                options::dereference::DIR_ARGS,
+                options::dereference::ARGS,
+            ])
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::dereference::ARGS)
+            .short('H')
+            .long(options::dereference::ARGS)
+            .help(translate!("ls-help-dereference-args"))
+            .overrides_with_all([
+                options::dereference::ALL,
+                options::dereference::DIR_ARGS,
+                options::dereference::ARGS,
+            ])
+            .action(ArgAction::SetTrue),
+    )
+    // Long format options
+    .arg(
+        Arg::new(options::NO_GROUP)
+            .long(options::NO_GROUP)
+            .short('G')
+            .help(translate!("ls-help-no-group"))
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::AUTHOR)
+            .long(options::AUTHOR)
+            .help(translate!("ls-help-author"))
+            .action(ArgAction::SetTrue),
+    )
+    // Other Flags
+    .arg(
+        Arg::new(options::files::ALL)
+            .short('a')
+            .long(options::files::ALL)
+            // Overrides -A (as the order matters)
+            .overrides_with_all([options::files::ALL, options::files::ALMOST_ALL])
+            .help(translate!("ls-help-all-files"))
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::files::ALMOST_ALL)
+            .short('A')
+            .long(options::files::ALMOST_ALL)
+            // Overrides -a (as the order matters)
+            .overrides_with_all([options::files::ALL, options::files::ALMOST_ALL])
+            .help(translate!("ls-help-almost-all"))
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::files::UNSORTED_ALL)
+            .short('f')
+            .help(translate!("ls-help-unsorted-all"))
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::DIRECTORY)
+            .short('d')
+            .long(options::DIRECTORY)
+            .help(translate!("ls-help-directory"))
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::size::HUMAN_READABLE)
+            .short('h')
+            .long(options::size::HUMAN_READABLE)
+            .help(translate!("ls-help-human-readable"))
+            .overrides_with_all([options::size::BLOCK_SIZE, options::size::SI])
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::size::KIBIBYTES)
+            .short('k')
+            .long(options::size::KIBIBYTES)
+            .help(translate!("ls-help-kibibytes"))
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::size::SI)
+            .long(options::size::SI)
+            .help(translate!("ls-help-si"))
+            .overrides_with_all([options::size::BLOCK_SIZE, options::size::HUMAN_READABLE])
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::size::BLOCK_SIZE)
+            .long(options::size::BLOCK_SIZE)
+            .require_equals(true)
+            .value_name("BLOCK_SIZE")
+            .help(translate!("ls-help-block-size"))
+            .overrides_with_all([options::size::SI, options::size::HUMAN_READABLE]),
+    )
+    .arg(
+        Arg::new(options::INODE)
+            .short('i')
+            .long(options::INODE)
+            .help(translate!("ls-help-print-inode"))
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::REVERSE)
+            .short('r')
+            .long(options::REVERSE)
+            .help(translate!("ls-help-reverse-sort"))
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::RECURSIVE)
+            .short('R')
+            .long(options::RECURSIVE)
+            .help(translate!("ls-help-recursive"))
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::WIDTH)
+            .long(options::WIDTH)
+            .short('w')
+            .help(translate!("ls-help-terminal-width"))
+            .value_name("COLS"),
+    )
+    .arg(
+        Arg::new(options::size::ALLOCATION_SIZE)
+            .short('s')
+            .long(options::size::ALLOCATION_SIZE)
+            .help(translate!("ls-help-allocation-size"))
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::COLOR)
+            .long(options::COLOR)
+            .help(translate!("ls-help-color-output"))
+            .value_parser(ShortcutValueParser::new([
+                PossibleValue::new("always").alias("yes").alias("force"),
+                PossibleValue::new("auto").alias("tty").alias("if-tty"),
+                PossibleValue::new("never").alias("no").alias("none"),
+            ]))
+            .require_equals(true)
+            .num_args(0..=1),
+    )
+    .arg(
+        Arg::new(options::INDICATOR_STYLE)
+            .long(options::INDICATOR_STYLE)
+            .help(translate!("ls-help-indicator-style"))
+            .value_parser(ShortcutValueParser::new([
+                "none",
+                "slash",
+                "file-type",
+                "classify",
+            ]))
+            .overrides_with_all([
+                options::indicator_style::FILE_TYPE,
+                options::indicator_style::SLASH,
+                options::indicator_style::CLASSIFY,
+                options::INDICATOR_STYLE,
+            ]),
+    )
+    .arg(
+        // The --classify flag can take an optional when argument to
+        // control its behavior from version 9 of GNU coreutils.
+        // There is currently an inconsistency where GNU coreutils allows only
+        // the long form of the flag to take the argument while we allow it
+        // for both the long and short form of the flag.
+        Arg::new(options::indicator_style::CLASSIFY)
+            .short('F')
+            .long(options::indicator_style::CLASSIFY)
+            .help(translate!("ls-help-classify"))
+            .value_name("when")
+            .value_parser(ShortcutValueParser::new([
+                PossibleValue::new("always").alias("yes").alias("force"),
+                PossibleValue::new("auto").alias("tty").alias("if-tty"),
+                PossibleValue::new("never").alias("no").alias("none"),
+            ]))
+            .default_missing_value("always")
+            .require_equals(true)
+            .num_args(0..=1)
+            .overrides_with_all([
+                options::indicator_style::FILE_TYPE,
+                options::indicator_style::SLASH,
+                options::indicator_style::CLASSIFY,
+                options::INDICATOR_STYLE,
+            ]),
+    )
+    .arg(
+        Arg::new(options::indicator_style::FILE_TYPE)
+            .long(options::indicator_style::FILE_TYPE)
+            .help(translate!("ls-help-file-type"))
+            .overrides_with_all([
+                options::indicator_style::FILE_TYPE,
+                options::indicator_style::SLASH,
+                options::indicator_style::CLASSIFY,
+                options::INDICATOR_STYLE,
+            ])
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::indicator_style::SLASH)
+            .short('p')
+            .help(translate!("ls-help-slash-directories"))
+            .overrides_with_all([
+                options::indicator_style::FILE_TYPE,
+                options::indicator_style::SLASH,
+                options::indicator_style::CLASSIFY,
+                options::INDICATOR_STYLE,
+            ])
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        //This still needs support for posix-*
+        Arg::new(options::TIME_STYLE)
+            .long(options::TIME_STYLE)
+            .help(translate!("ls-help-time-style"))
+            .value_name("TIME_STYLE")
+            .env("TIME_STYLE")
+            .value_parser(NonEmptyStringValueParser::new())
+            .overrides_with_all([options::TIME_STYLE]),
+    )
+    .arg(
+        Arg::new(options::FULL_TIME)
+            .long(options::FULL_TIME)
+            .overrides_with(options::FULL_TIME)
+            .help(translate!("ls-help-full-time"))
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::CONTEXT)
+            .short('Z')
+            .long(options::CONTEXT)
+            .help(translate!("ls-help-context"))
+            .action(ArgAction::SetTrue),
+    )
+    .arg(
+        Arg::new(options::GROUP_DIRECTORIES_FIRST)
+            .long(options::GROUP_DIRECTORIES_FIRST)
+            .help(translate!("ls-help-group-directories-first"))
+            .action(ArgAction::SetTrue),
+    )
+    // Positional arguments
+    .arg(
+        Arg::new(options::PATHS)
+            .action(ArgAction::Append)
+            .value_hint(clap::ValueHint::AnyPath)
+            .value_parser(ValueParser::os_string()),
+    )
+    .after_help(translate!("ls-after-help"))
 }
 
 /// Represents a Path along with it's associated data.
@@ -1777,22 +1850,22 @@ struct PathData {
     // Result<MetaData> got from symlink_metadata() or metadata() based on config
     md: OnceCell<Option<Metadata>>,
     ft: OnceCell<Option<FileType>>,
-    // can be used to avoid reading the metadata. Can be also called d_type:
+    // can be used to avoid reading the filetype. Can be also called d_type:
     // https://www.gnu.org/software/libc/manual/html_node/Directory-Entries.html
-    de: Option<DirEntry>,
+    de: RefCell<Option<Box<DirEntry>>>,
+    security_context: OnceCell<Box<str>>,
     // Name of the file - will be empty for . or ..
     display_name: OsString,
     // PathBuf that all above data corresponds to
     p_buf: PathBuf,
     must_dereference: bool,
-    security_context: String,
     command_line: bool,
 }
 
 impl PathData {
     fn new(
         p_buf: PathBuf,
-        dir_entry: Option<std::io::Result<DirEntry>>,
+        dir_entry: Option<DirEntry>,
         file_name: Option<OsString>,
         config: &Config,
         command_line: bool,
@@ -1802,13 +1875,14 @@ impl PathData {
         let display_name = if let Some(name) = file_name {
             name
         } else if command_line {
-            p_buf.clone().into()
+            p_buf.as_os_str().to_os_string()
         } else {
-            p_buf
-                .file_name()
-                .unwrap_or_else(|| p_buf.iter().next_back().unwrap())
-                .to_owned()
+            dir_entry
+                .as_ref()
+                .map(|inner| inner.file_name())
+                .unwrap_or_default()
         };
+
         let must_dereference = match &config.dereference {
             Dereference::All => true,
             Dereference::Args => command_line,
@@ -1826,78 +1900,67 @@ impl PathData {
             Dereference::None => false,
         };
 
-        let de: Option<DirEntry> = match dir_entry {
-            Some(de) => de.ok(),
-            None => None,
-        };
-
         // Why prefer to check the DirEntry file_type()?  B/c the call is
         // nearly free compared to a metadata() call on a Path
-        fn get_file_type(
-            de: &DirEntry,
-            p_buf: &Path,
-            must_dereference: bool,
-        ) -> OnceCell<Option<FileType>> {
+        let ft: OnceCell<Option<FileType>> = OnceCell::new();
+        let md: OnceCell<Option<Metadata>> = OnceCell::new();
+        let security_context: OnceCell<Box<str>> = OnceCell::new();
+
+        let de: RefCell<Option<Box<DirEntry>>> = if let Some(de) = dir_entry {
             if must_dereference {
                 if let Ok(md_pb) = p_buf.metadata() {
-                    return OnceCell::from(Some(md_pb.file_type()));
+                    md.get_or_init(|| Some(md_pb.clone()));
+                    ft.get_or_init(|| Some(md_pb.file_type()));
                 }
             }
+
             if let Ok(ft_de) = de.file_type() {
-                OnceCell::from(Some(ft_de))
-            } else if let Ok(md_pb) = p_buf.symlink_metadata() {
-                OnceCell::from(Some(md_pb.file_type()))
-            } else {
-                OnceCell::new()
+                ft.get_or_init(|| Some(ft_de));
             }
-        }
-        let ft = match de {
-            Some(ref de) => get_file_type(de, &p_buf, must_dereference),
-            None => OnceCell::new(),
+
+            RefCell::new(Some(de.into()))
+        } else {
+            RefCell::new(None)
         };
 
-        let security_context = get_security_context(config, &p_buf, must_dereference);
-
         Self {
-            md: OnceCell::new(),
+            md,
             ft,
             de,
+            security_context,
             display_name,
             p_buf,
             must_dereference,
-            security_context,
             command_line,
         }
     }
 
-    fn get_metadata(&self, out: &mut BufWriter<Stdout>) -> Option<&Metadata> {
+    fn metadata(&self) -> Option<&Metadata> {
         self.md
             .get_or_init(|| {
-                // check if we can use DirEntry metadata
-                // it will avoid a call to stat()
                 if !self.must_dereference {
-                    if let Some(dir_entry) = &self.de {
+                    if let Some(dir_entry) = RefCell::take(&self.de).as_deref() {
                         return dir_entry.metadata().ok();
                     }
                 }
 
-                // if not, check if we can use Path metadata
-                match get_metadata_with_deref_opt(self.p_buf.as_path(), self.must_dereference) {
+                match get_metadata_with_deref_opt(self.path(), self.must_dereference) {
                     Err(err) => {
                         // FIXME: A bit tricky to propagate the result here
-                        out.flush().unwrap();
+                        let mut out: std::io::StdoutLock<'static> = stdout().lock();
+                        let _ = out.flush();
                         let errno = err.raw_os_error().unwrap_or(1i32);
                         // a bad fd will throw an error when dereferenced,
                         // but GNU will not throw an error until a bad fd "dir"
                         // is entered, here we match that GNU behavior, by handing
                         // back the non-dereferenced metadata upon an EBADF
                         if self.must_dereference && errno == 9i32 {
-                            if let Some(dir_entry) = &self.de {
-                                return dir_entry.metadata().ok();
+                            if let Ok(file) = self.path().read_link() {
+                                return file.symlink_metadata().ok();
                             }
                         }
                         show!(LsError::IOErrorContext(
-                            self.p_buf.clone(),
+                            self.path().to_path_buf(),
                             err,
                             self.command_line
                         ));
@@ -1909,10 +1972,49 @@ impl PathData {
             .as_ref()
     }
 
-    fn file_type(&self, out: &mut BufWriter<Stdout>) -> Option<&FileType> {
+    fn file_type(&self) -> Option<&FileType> {
         self.ft
-            .get_or_init(|| self.get_metadata(out).map(|md| md.file_type()))
+            .get_or_init(|| self.metadata().map(|md| md.file_type()))
             .as_ref()
+    }
+
+    fn is_dangling_link(&self) -> bool {
+        // deref enabled, self is real dir entry, self has metadata associated with link, but not with target
+        self.must_dereference && self.file_type().is_none() && self.metadata().is_none()
+    }
+
+    #[cfg(unix)]
+    fn is_executable_file(&self) -> bool {
+        self.file_type().is_some_and(|f| f.is_file())
+            && self.metadata().is_some_and(file_is_executable)
+    }
+
+    fn security_context(&self, config: &Config) -> &str {
+        self.security_context
+            .get_or_init(|| get_security_context(&self.p_buf, self.must_dereference, config).into())
+    }
+
+    fn path(&self) -> &Path {
+        &self.p_buf
+    }
+
+    fn display_name(&self) -> &OsStr {
+        &self.display_name
+    }
+}
+
+impl Colorable for PathData {
+    fn file_name(&self) -> OsString {
+        self.display_name().to_os_string()
+    }
+    fn file_type(&self) -> Option<FileType> {
+        self.file_type().copied()
+    }
+    fn metadata(&self) -> Option<Metadata> {
+        self.metadata().cloned()
+    }
+    fn path(&self) -> PathBuf {
+        self.path().to_path_buf()
     }
 }
 
@@ -1933,7 +2035,7 @@ fn show_dir_name(
     config: &Config,
 ) -> std::io::Result<()> {
     let escaped_name =
-        locale_aware_escape_dir_name(path_data.p_buf.as_os_str(), config.quoting_style);
+        locale_aware_escape_dir_name(path_data.path().as_os_str(), config.quoting_style);
 
     let name = if config.hyperlink && !config.dired {
         create_hyperlink(&escaped_name, path_data)
@@ -1972,9 +2074,9 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         out: BufWriter::new(stdout()),
         style_manager: config.color.as_ref().map(StyleManager::new),
         #[cfg(unix)]
-        uid_cache: HashMap::new(),
+        uid_cache: HashMap::default(),
         #[cfg(unix)]
-        gid_cache: HashMap::new(),
+        gid_cache: HashMap::default(),
         // Time range for which to use the "recent" format. Anything from 0.5 year in the past to now
         // (files with modification time in the future use "old" format).
         // According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
@@ -1991,11 +2093,11 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         // Proper GNU handling is don't show if dereferenced symlink DNE
         // but only for the base dir, for a child dir show, and print ?s
         // in long format
-        if path_data.get_metadata(&mut state.out).is_none() {
+        if path_data.metadata().is_none() {
             continue;
         }
 
-        let show_dir_contents = match path_data.file_type(&mut state.out) {
+        let show_dir_contents = match path_data.file_type() {
             Some(ft) => !config.directory && ft.is_dir(),
             None => {
                 set_exit_code(1);
@@ -2010,8 +2112,8 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         }
     }
 
-    sort_entries(&mut files, config, &mut state.out);
-    sort_entries(&mut dirs, config, &mut state.out);
+    sort_entries(&mut files, config);
+    sort_entries(&mut dirs, config);
 
     if let Some(style_manager) = state.style_manager.as_mut() {
         // ls will try to write a reset before anything is written if normal
@@ -2027,12 +2129,12 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     for (pos, path_data) in dirs.iter().enumerate() {
         // Do read_dir call here to match GNU semantics by printing
         // read_dir errors before directory headings, names and totals
-        let read_dir = match fs::read_dir(&path_data.p_buf) {
+        let read_dir = match fs::read_dir(path_data.path()) {
             Err(err) => {
                 // flush stdout buffer before the error to preserve formatting and order
                 state.out.flush()?;
                 show!(LsError::IOErrorContext(
-                    path_data.p_buf.clone(),
+                    path_data.path().to_path_buf(),
                     err,
                     path_data.command_line
                 ));
@@ -2051,7 +2153,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
                 writeln!(state.out)?;
                 if config.dired {
                     // First directory displayed
-                    let dir_len = path_data.display_name.len();
+                    let dir_len = path_data.display_name().len();
                     // add the //SUBDIRED// coordinates
                     dired::calculate_subdired(&mut dired, dir_len);
                     // Add the padding for the dir name
@@ -2063,9 +2165,9 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
                 writeln!(state.out)?;
             }
         }
-        let mut listed_ancestors = HashSet::new();
+        let mut listed_ancestors = HashSet::default();
         listed_ancestors.insert(FileInformation::from_path(
-            &path_data.p_buf,
+            path_data.path(),
             path_data.must_dereference,
         )?);
         enter_directory(
@@ -2083,38 +2185,38 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     Ok(())
 }
 
-fn sort_entries(entries: &mut [PathData], config: &Config, out: &mut BufWriter<Stdout>) {
+fn sort_entries(entries: &mut [PathData], config: &Config) {
     match config.sort {
         Sort::Time => entries.sort_by_key(|k| {
             Reverse(
-                k.get_metadata(out)
+                k.metadata()
                     .and_then(|md| metadata_get_time(md, config.time))
                     .unwrap_or(UNIX_EPOCH),
             )
         }),
         Sort::Size => {
-            entries.sort_by_key(|k| Reverse(k.get_metadata(out).map_or(0, |md| md.len())));
+            entries.sort_by_key(|k| Reverse(k.metadata().map_or(0, |md| md.len())));
         }
         // The default sort in GNU ls is case insensitive
-        Sort::Name => entries.sort_by(|a, b| a.display_name.cmp(&b.display_name)),
+        Sort::Name => entries.sort_by(|a, b| a.display_name().cmp(b.display_name())),
         Sort::Version => entries.sort_by(|a, b| {
             version_cmp(
-                os_str_as_bytes_lossy(a.p_buf.as_os_str()).as_ref(),
-                os_str_as_bytes_lossy(b.p_buf.as_os_str()).as_ref(),
+                os_str_as_bytes_lossy(a.path().as_os_str()).as_ref(),
+                os_str_as_bytes_lossy(b.path().as_os_str()).as_ref(),
             )
-            .then(a.p_buf.to_string_lossy().cmp(&b.p_buf.to_string_lossy()))
+            .then(a.path().to_string_lossy().cmp(&b.path().to_string_lossy()))
         }),
         Sort::Extension => entries.sort_by(|a, b| {
-            a.p_buf
+            a.path()
                 .extension()
-                .cmp(&b.p_buf.extension())
-                .then(a.p_buf.file_stem().cmp(&b.p_buf.file_stem()))
+                .cmp(&b.path().extension())
+                .then(a.path().file_stem().cmp(&b.path().file_stem()))
         }),
         Sort::Width => entries.sort_by(|a, b| {
-            a.display_name
+            a.display_name()
                 .len()
-                .cmp(&b.display_name.len())
-                .then(a.display_name.cmp(&b.display_name))
+                .cmp(&b.display_name().len())
+                .then(a.display_name().cmp(b.display_name()))
         }),
         Sort::None => {}
     }
@@ -2125,19 +2227,23 @@ fn sort_entries(entries: &mut [PathData], config: &Config, out: &mut BufWriter<S
 
     if config.group_directories_first && config.sort != Sort::None {
         entries.sort_by_key(|p| {
-            let md = {
+            let ft = {
                 // We will always try to deref symlinks to group directories, so PathData.md
                 // is not always useful.
-                if p.must_dereference { p.md.get() } else { None }
+                if p.must_dereference {
+                    p.file_type()
+                } else {
+                    None
+                }
             };
 
-            !match md {
-                None | Some(None) => {
+            !match ft {
+                None => {
                     // If it metadata cannot be determined, treat as a file.
                     get_metadata_with_deref_opt(p.p_buf.as_path(), true)
                         .map_or_else(|_| false, |m| m.is_dir())
                 }
-                Some(Some(m)) => m.is_dir(),
+                Some(ft) => ft.is_dir(),
             }
         });
     }
@@ -2172,16 +2278,19 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
         require_literal_separator: false,
         case_sensitive: true,
     };
+
     let file_name = entry.file_name();
     // If the decoding fails, still match best we can
     // FIXME: use OsStrings or Paths once we have a glob crate that supports it:
     // https://github.com/rust-lang/glob/issues/23
     // https://github.com/rust-lang/glob/issues/78
     // https://github.com/BurntSushi/ripgrep/issues/1250
+
     let file_name = match file_name.to_str() {
-        Some(s) => s.to_string(),
-        None => file_name.to_string_lossy().into_owned(),
+        Some(s) => Cow::Borrowed(s),
+        None => file_name.to_string_lossy(),
     };
+
     !config
         .ignore_patterns
         .iter()
@@ -2191,7 +2300,7 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
 #[allow(clippy::cognitive_complexity)]
 fn enter_directory(
     path_data: &PathData,
-    read_dir: ReadDir,
+    mut read_dir: ReadDir,
     config: &Config,
     state: &mut ListState,
     listed_ancestors: &mut HashSet<FileInformation>,
@@ -2201,14 +2310,14 @@ fn enter_directory(
     let mut entries: Vec<PathData> = if config.files == Files::All {
         vec![
             PathData::new(
-                path_data.p_buf.clone(),
+                path_data.path().to_path_buf(),
                 None,
                 Some(".".into()),
                 config,
                 false,
             ),
             PathData::new(
-                path_data.p_buf.join(".."),
+                path_data.path().join(".."),
                 None,
                 Some("..".into()),
                 config,
@@ -2220,7 +2329,7 @@ fn enter_directory(
     };
 
     // Convert those entries to the PathData struct
-    for raw_entry in read_dir {
+    for raw_entry in read_dir.by_ref() {
         let dir_entry = match raw_entry {
             Ok(path) => path,
             Err(err) => {
@@ -2232,12 +2341,12 @@ fn enter_directory(
 
         if should_display(&dir_entry, config) {
             let entry_path_data =
-                PathData::new(dir_entry.path(), Some(Ok(dir_entry)), None, config, false);
+                PathData::new(dir_entry.path(), Some(dir_entry), None, config, false);
             entries.push(entry_path_data);
         }
     }
 
-    sort_entries(&mut entries, config, &mut state.out);
+    sort_entries(&mut entries, config);
 
     // Print total after any error display
     if config.format == Format::Long || config.alloc_size {
@@ -2254,23 +2363,20 @@ fn enter_directory(
         for e in entries
             .iter()
             .skip(if config.files == Files::All { 2 } else { 0 })
-            .filter(|p| {
-                p.ft.get()
-                    .is_some_and(|o_ft| o_ft.is_some_and(|ft| ft.is_dir()))
-            })
+            .filter(|p| p.file_type().is_some_and(|ft| ft.is_dir()))
         {
-            match fs::read_dir(&e.p_buf) {
+            match fs::read_dir(e.path()) {
                 Err(err) => {
                     state.out.flush()?;
                     show!(LsError::IOErrorContext(
-                        e.p_buf.clone(),
+                        e.path().to_path_buf(),
                         err,
                         e.command_line
                     ));
                 }
                 Ok(rd) => {
                     if listed_ancestors
-                        .insert(FileInformation::from_path(&e.p_buf, e.must_dereference)?)
+                        .insert(FileInformation::from_path(e.path(), e.must_dereference)?)
                     {
                         // when listing several directories in recursive mode, we show
                         // "dirname:" at the beginning of the file list
@@ -2281,7 +2387,7 @@ fn enter_directory(
                             // 2 = \n + \n
                             dired.padding = 2;
                             dired::indent(&mut state.out)?;
-                            let dir_name_size = e.p_buf.to_string_lossy().len();
+                            let dir_name_size = e.path().as_os_str().len();
                             dired::calculate_subdired(dired, dir_name_size);
                             // inject dir name
                             dired::add_dir_name(dired, dir_name_size);
@@ -2291,10 +2397,10 @@ fn enter_directory(
                         writeln!(state.out)?;
                         enter_directory(e, rd, config, state, listed_ancestors, dired)?;
                         listed_ancestors
-                            .remove(&FileInformation::from_path(&e.p_buf, e.must_dereference)?);
+                            .remove(&FileInformation::from_path(e.path(), e.must_dereference)?);
                     } else {
                         state.out.flush()?;
-                        show!(LsError::AlreadyListedError(e.p_buf.clone()));
+                        show!(LsError::AlreadyListedError(e.path().to_path_buf()));
                     }
                 }
             }
@@ -2318,7 +2424,7 @@ fn display_dir_entry_size(
     state: &mut ListState,
 ) -> (usize, usize, usize, usize, usize, usize) {
     // TODO: Cache/memorize the display_* results so we don't have to recalculate them.
-    if let Some(md) = entry.get_metadata(&mut state.out) {
+    if let Some(md) = entry.metadata() {
         let (size_len, major_len, minor_len) = match display_len_or_rdev(md, config) {
             SizeOrDeviceId::Device(major, minor) => {
                 (major.len() + minor.len() + 2usize, major.len(), minor.len())
@@ -2375,7 +2481,7 @@ fn return_total(
     let mut total_size = 0;
     for item in items {
         total_size += item
-            .get_metadata(out)
+            .metadata()
             .as_ref()
             .map_or(0, |md| get_block_size(md, config));
     }
@@ -2393,13 +2499,12 @@ fn display_additional_leading_info(
     item: &PathData,
     padding: &PaddingCollection,
     config: &Config,
-    out: &mut BufWriter<Stdout>,
 ) -> UResult<String> {
     let mut result = String::new();
     #[cfg(unix)]
     {
         if config.inode {
-            let i = if let Some(md) = item.get_metadata(out) {
+            let i = if let Some(md) = item.metadata() {
                 get_inode(md)
             } else {
                 "?".to_owned()
@@ -2409,7 +2514,7 @@ fn display_additional_leading_info(
     }
 
     if config.alloc_size {
-        let s = if let Some(md) = item.get_metadata(out) {
+        let s = if let Some(md) = item.metadata() {
             display_size(get_block_size(md, config), config)
         } else {
             "?".to_owned()
@@ -2436,7 +2541,7 @@ fn display_items(
     // option, print the security context to the left of the size column.
 
     let quoted = items.iter().any(|item| {
-        let name = locale_aware_escape_name(&item.display_name, config.quoting_style);
+        let name = locale_aware_escape_name(item.display_name(), config.quoting_style);
         os_str_starts_with(&name, b"'")
     });
 
@@ -2450,12 +2555,7 @@ fn display_items(
             let should_display_leading_info = config.alloc_size;
 
             if should_display_leading_info {
-                let more_info = display_additional_leading_info(
-                    item,
-                    &padding_collection,
-                    config,
-                    &mut state.out,
-                )?;
+                let more_info = display_additional_leading_info(item, &padding_collection, config)?;
 
                 write!(state.out, "{more_info}")?;
             }
@@ -2466,7 +2566,7 @@ fn display_items(
         let mut longest_context_len = 1;
         let prefix_context = if config.context {
             for item in items {
-                let context_len = item.security_context.len();
+                let context_len = item.security_context(config).len();
                 longest_context_len = context_len.max(longest_context_len);
             }
             Some(longest_context_len)
@@ -2482,8 +2582,18 @@ fn display_items(
         }
 
         let mut names_vec = Vec::new();
+
+        #[cfg(unix)]
+        let should_display_leading_info = config.inode || config.alloc_size;
+        #[cfg(not(unix))]
+        let should_display_leading_info = config.alloc_size;
+
         for i in items {
-            let more_info = display_additional_leading_info(i, &padding, config, &mut state.out)?;
+            let more_info = if should_display_leading_info {
+                Some(display_additional_leading_info(i, &padding, config)?)
+            } else {
+                None
+            };
             // it's okay to set current column to zero which is used to decide
             // whether text will wrap or not, because when format is grid or
             // column ls will try to place the item name in a new line if it
@@ -2707,14 +2817,14 @@ fn display_item_long(
     if config.dired {
         output_display.extend(b"  ");
     }
-    if let Some(md) = item.get_metadata(&mut state.out) {
+    if let Some(md) = item.metadata() {
         #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
         // TODO: See how Mac should work here
         let is_acl_set = false;
         #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-        let is_acl_set = has_acl(item.display_name.as_os_str());
+        let is_acl_set = has_acl(item.path());
         output_display.extend(display_permissions(md, true).as_bytes());
-        if item.security_context.len() > 1 {
+        if item.security_context(config).len() > 1 {
             // GNU `ls` uses a "." character to indicate a file with a security context,
             // but not other alternate access method.
             output_display.extend(b".");
@@ -2736,7 +2846,7 @@ fn display_item_long(
 
         if config.context {
             output_display.extend(b" ");
-            output_display.extend_pad_right(&item.security_context, padding.context);
+            output_display.extend_pad_right(item.security_context(config), padding.context);
         }
 
         // Author is only different from owner on GNU/Hurd, so we reuse
@@ -2783,7 +2893,7 @@ fn display_item_long(
             item,
             config,
             None,
-            String::new(),
+            None,
             state,
             LazyCell::new(Box::new(|| {
                 ansi_width(&String::from_utf8_lossy(&output_display))
@@ -2811,7 +2921,7 @@ fn display_item_long(
     } else {
         #[cfg(unix)]
         let leading_char = {
-            if let Some(Some(ft)) = item.ft.get() {
+            if let Some(ft) = item.file_type() {
                 if ft.is_char_device() {
                     "c"
                 } else if ft.is_block_device() {
@@ -2823,13 +2933,15 @@ fn display_item_long(
                 } else {
                     "-"
                 }
+            } else if item.is_dangling_link() {
+                "l"
             } else {
                 "-"
             }
         };
         #[cfg(not(unix))]
         let leading_char = {
-            if let Some(Some(ft)) = item.ft.get() {
+            if let Some(ft) = item.file_type() {
                 if ft.is_symlink() {
                     "l"
                 } else if ft.is_dir() {
@@ -2837,6 +2949,8 @@ fn display_item_long(
                 } else {
                     "-"
                 }
+            } else if item.is_dangling_link() {
+                "l"
             } else {
                 "-"
             }
@@ -2844,7 +2958,7 @@ fn display_item_long(
 
         output_display.extend(leading_char.as_bytes());
         output_display.extend(b"?????????");
-        if item.security_context.len() > 1 {
+        if item.security_context(config).len() > 1 {
             // GNU `ls` uses a "." character to indicate a file with a security context,
             // but not other alternate access method.
             output_display.extend(b".");
@@ -2864,7 +2978,7 @@ fn display_item_long(
 
         if config.context {
             output_display.extend(b" ");
-            output_display.extend_pad_right(&item.security_context, padding.context);
+            output_display.extend_pad_right(item.security_context(config), padding.context);
         }
 
         // Author is only different from owner on GNU/Hurd, so we reuse
@@ -2878,7 +2992,7 @@ fn display_item_long(
             item,
             config,
             None,
-            String::new(),
+            None,
             state,
             LazyCell::new(Box::new(|| {
                 ansi_width(&String::from_utf8_lossy(&output_display))
@@ -2931,7 +3045,7 @@ fn display_uname<'a>(metadata: &Metadata, config: &Config, state: &'a mut ListSt
 fn display_group<'a>(metadata: &Metadata, config: &Config, state: &'a mut ListState) -> &'a String {
     let gid = metadata.gid();
     state.gid_cache.entry(gid).or_insert_with(|| {
-        if cfg!(target_os = "redox") || config.long.numeric_uid_gid {
+        if config.long.numeric_uid_gid {
             gid.to_string()
         } else {
             entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string())
@@ -3022,8 +3136,8 @@ fn file_is_executable(md: &Metadata) -> bool {
     return md.mode() & ((S_IXUSR | S_IXGRP | S_IXOTH) as u32) != 0;
 }
 
-fn classify_file(path: &PathData, out: &mut BufWriter<Stdout>) -> Option<char> {
-    let file_type = path.file_type(out)?;
+fn classify_file(path: &PathData) -> Option<char> {
+    let file_type = path.file_type()?;
 
     if file_type.is_dir() {
         Some('/')
@@ -3036,11 +3150,9 @@ fn classify_file(path: &PathData, out: &mut BufWriter<Stdout>) -> Option<char> {
                 Some('=')
             } else if file_type.is_fifo() {
                 Some('|')
-            } else if file_type.is_file()
                 // Safe unwrapping if the file was removed between listing and display
                 // See https://github.com/uutils/coreutils/issues/5371
-                && path.get_metadata(out).is_some_and(file_is_executable)
-            {
+            } else if path.is_executable_file() {
                 Some('*')
             } else {
                 None
@@ -3070,12 +3182,12 @@ fn display_item_name(
     path: &PathData,
     config: &Config,
     prefix_context: Option<usize>,
-    more_info: String,
+    more_info: Option<String>,
     state: &mut ListState,
     current_column: LazyCell<usize, Box<dyn FnOnce() -> usize + '_>>,
 ) -> OsString {
     // This is our return value. We start by `&path.display_name` and modify it along the way.
-    let mut name = locale_aware_escape_name(&path.display_name, config.quoting_style);
+    let mut name = locale_aware_escape_name(path.display_name(), config.quoting_style);
 
     let is_wrap =
         |namelen: usize| config.width != 0 && *current_column + namelen > config.width.into();
@@ -3086,24 +3198,19 @@ fn display_item_name(
 
     if let Some(style_manager) = &mut state.style_manager {
         let len = name.len();
-        name = color_name(
-            name,
-            path,
-            style_manager,
-            &mut state.out,
-            None,
-            is_wrap(len),
-        );
+        name = color_name(name, path, style_manager, None, is_wrap(len));
     }
 
-    if config.format != Format::Long && !more_info.is_empty() {
-        let old_name = name;
-        name = more_info.into();
-        name.push(&old_name);
+    if config.format != Format::Long {
+        if let Some(info) = more_info {
+            let old_name = name;
+            name = info.into();
+            name.push(&old_name);
+        }
     }
 
     if config.indicator_style != IndicatorStyle::None {
-        let sym = classify_file(path, &mut state.out);
+        let sym = classify_file(path);
 
         let char_opt = match config.indicator_style {
             IndicatorStyle::Classify => sym,
@@ -3130,12 +3237,11 @@ fn display_item_name(
     }
 
     if config.format == Format::Long
-        && path.file_type(&mut state.out).is_some()
-        && path.file_type(&mut state.out).unwrap().is_symlink()
+        && path.file_type().is_some_and(|ft| ft.is_symlink())
         && !path.must_dereference
     {
-        match path.p_buf.read_link() {
-            Ok(target) => {
+        match path.path().read_link() {
+            Ok(target_path) => {
                 name.push(" -> ");
 
                 // We might as well color the symlink output after the arrow.
@@ -3144,9 +3250,9 @@ fn display_item_name(
                 if let Some(style_manager) = &mut state.style_manager {
                     // We get the absolute path to be able to construct PathData with valid Metadata.
                     // This is because relative symlinks will fail to get_metadata.
-                    let mut absolute_target = target.clone();
-                    if target.is_relative() {
-                        if let Some(parent) = path.p_buf.parent() {
+                    let mut absolute_target = target_path.clone();
+                    if target_path.is_relative() {
+                        if let Some(parent) = path.path().parent() {
                             absolute_target = parent.join(absolute_target);
                         }
                     }
@@ -3157,20 +3263,13 @@ fn display_item_name(
                     // Because we use an absolute path, we can assume this is guaranteed to exist.
                     // Otherwise, we use path.md(), which will guarantee we color to the same
                     // color of non-existent symlinks according to style_for_path_with_metadata.
-                    if path.get_metadata(&mut state.out).is_none()
-                        && get_metadata_with_deref_opt(
-                            target_data.p_buf.as_path(),
-                            target_data.must_dereference,
-                        )
-                        .is_err()
-                    {
-                        name.push(path.p_buf.read_link().unwrap());
+                    if path.metadata().is_none() && target_data.metadata().is_none() {
+                        name.push(target_path);
                     } else {
                         name.push(color_name(
-                            locale_aware_escape_name(target.as_os_str(), config.quoting_style),
+                            locale_aware_escape_name(target_path.as_os_str(), config.quoting_style),
                             path,
                             style_manager,
-                            &mut state.out,
                             Some(&target_data),
                             is_wrap(name.len()),
                         ));
@@ -3179,13 +3278,17 @@ fn display_item_name(
                     // If no coloring is required, we just use target as is.
                     // Apply the right quoting
                     name.push(locale_aware_escape_name(
-                        target.as_os_str(),
+                        target_path.as_os_str(),
                         config.quoting_style,
                     ));
                 }
             }
             Err(err) => {
-                show!(LsError::IOErrorContext(path.p_buf.clone(), err, false));
+                show!(LsError::IOErrorContext(
+                    path.path().to_path_buf(),
+                    err,
+                    false
+                ));
             }
         }
     }
@@ -3195,10 +3298,11 @@ fn display_item_name(
     if config.context {
         if let Some(pad_count) = prefix_context {
             let security_context = if matches!(config.format, Format::Commas) {
-                path.security_context.clone()
+                path.security_context(config).to_string()
             } else {
-                pad_left(&path.security_context, pad_count)
+                pad_left(path.security_context(config), pad_count)
             };
+
             let old_name = name;
             name = format!("{security_context} ").into();
             name.push(old_name);
@@ -3212,7 +3316,7 @@ fn create_hyperlink(name: &OsStr, path: &PathData) -> OsString {
     let hostname = hostname::get().unwrap_or_else(|_| OsString::from(""));
     let hostname = hostname.to_string_lossy();
 
-    let absolute_path = fs::canonicalize(&path.p_buf).unwrap_or_default();
+    let absolute_path = fs::canonicalize(path.path()).unwrap_or_default();
     let absolute_path = absolute_path.to_string_lossy();
 
     #[cfg(not(target_os = "windows"))]
@@ -3258,57 +3362,82 @@ fn display_inode(metadata: &Metadata) -> String {
 
 /// This returns the `SELinux` security context as UTF8 `String`.
 /// In the long term this should be changed to [`OsStr`], see discussions at #2621/#2656
-fn get_security_context(config: &Config, p_buf: &Path, must_dereference: bool) -> String {
-    let substitute_string = "?".to_string();
+fn get_security_context<'a>(
+    path: &'a Path,
+    must_dereference: bool,
+    config: &'a Config,
+) -> Cow<'a, str> {
+    static SUBSTITUTE_STRING: &str = "?";
+
     // If we must dereference, ensure that the symlink is actually valid even if the system
     // does not support SELinux.
     // Conforms to the GNU coreutils where a dangling symlink results in exit code 1.
     if must_dereference {
-        match get_metadata_with_deref_opt(p_buf, must_dereference) {
-            Err(err) => {
-                // The Path couldn't be dereferenced, so return early and set exit code 1
-                // to indicate a minor error
-                // Only show error when context display is requested to avoid duplicate messages
-                if config.context {
-                    show!(LsError::IOErrorContext(p_buf.to_path_buf(), err, false));
-                }
-                return substitute_string;
+        if let Err(err) = get_metadata_with_deref_opt(path, must_dereference) {
+            // The Path couldn't be dereferenced, so return early and set exit code 1
+            // to indicate a minor error
+            // Only show error when context display is requested to avoid duplicate messages
+            if config.context {
+                show!(LsError::IOErrorContext(path.to_path_buf(), err, false));
             }
-            Ok(_md) => (),
+            return Cow::Borrowed(SUBSTITUTE_STRING);
         }
     }
-    if config.selinux_supported {
-        #[cfg(feature = "selinux")]
-        {
-            match selinux::SecurityContext::of_path(p_buf, must_dereference.to_owned(), false) {
-                Err(_r) => {
-                    // TODO: show the actual reason why it failed
-                    show_warning!("failed to get security context of: {}", p_buf.quote());
-                    substitute_string
-                }
-                Ok(None) => substitute_string,
-                Ok(Some(context)) => {
-                    let context = context.as_bytes();
 
-                    let context = context.strip_suffix(&[0]).unwrap_or(context);
-                    String::from_utf8(context.to_vec()).unwrap_or_else(|e| {
-                        show_warning!(
-                            "getting security context of: {}: {}",
-                            p_buf.quote(),
-                            e.to_string()
-                        );
-                        String::from_utf8_lossy(context).into_owned()
-                    })
-                }
+    #[cfg(all(feature = "selinux", target_os = "linux"))]
+    if config.selinux_supported {
+        match selinux::SecurityContext::of_path(path, must_dereference, false) {
+            Err(_r) => {
+                // TODO: show the actual reason why it failed
+                show_warning!(
+                    "{}",
+                    translate!(
+                        "ls-warning-failed-to-get-security-context",
+                        "path" => path.quote().to_string()
+                    )
+                );
+                return Cow::Borrowed(SUBSTITUTE_STRING);
+            }
+            Ok(None) => return Cow::Borrowed(SUBSTITUTE_STRING),
+            Ok(Some(context)) => {
+                let context = context.as_bytes();
+
+                let context = context.strip_suffix(&[0]).unwrap_or(context);
+
+                let res: String = String::from_utf8(context.to_vec()).unwrap_or_else(|e| {
+                    show_warning!(
+                        "{}",
+                        translate!(
+                            "ls-warning-getting-security-context",
+                            "path" => path.quote().to_string(),
+                            "error" => e.to_string()
+                        )
+                    );
+
+                    String::from_utf8_lossy(context).to_string()
+                });
+
+                return Cow::Owned(res);
             }
         }
-        #[cfg(not(feature = "selinux"))]
-        {
-            substitute_string
-        }
-    } else {
-        substitute_string
     }
+
+    #[cfg(all(feature = "smack", target_os = "linux"))]
+    if config.smack_supported {
+        // For SMACK, use the path to get the label
+        // If must_dereference is true, we follow the symlink
+        let target_path = if must_dereference {
+            std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+        } else {
+            path.to_path_buf()
+        };
+
+        return uucore::smack::get_smack_label_for_path(&target_path)
+            .map(Cow::Owned)
+            .unwrap_or(Cow::Borrowed(SUBSTITUTE_STRING));
+    }
+
+    Cow::Borrowed(SUBSTITUTE_STRING)
 }
 
 #[cfg(unix)]
@@ -3332,7 +3461,7 @@ fn calculate_padding_collection(
     for item in items {
         #[cfg(unix)]
         if config.inode {
-            let inode_len = if let Some(md) = item.get_metadata(&mut state.out) {
+            let inode_len = if let Some(md) = item.metadata() {
                 display_inode(md).len()
             } else {
                 continue;
@@ -3341,14 +3470,14 @@ fn calculate_padding_collection(
         }
 
         if config.alloc_size {
-            if let Some(md) = item.get_metadata(&mut state.out) {
+            if let Some(md) = item.metadata() {
                 let block_size_len = display_size(get_block_size(md, config), config).len();
                 padding_collections.block_size = block_size_len.max(padding_collections.block_size);
             }
         }
 
         if config.format == Format::Long {
-            let context_len = item.security_context.len();
+            let context_len = item.security_context(config).len();
             let (link_count_len, uname_len, group_len, size_len, major_len, minor_len) =
                 display_dir_entry_size(item, config, state);
             padding_collections.link_count = link_count_len.max(padding_collections.link_count);
@@ -3391,13 +3520,13 @@ fn calculate_padding_collection(
 
     for item in items {
         if config.alloc_size {
-            if let Some(md) = item.get_metadata(&mut state.out) {
+            if let Some(md) = item.metadata() {
                 let block_size_len = display_size(get_block_size(md, config), config).len();
                 padding_collections.block_size = block_size_len.max(padding_collections.block_size);
             }
         }
 
-        let context_len = item.security_context.len();
+        let context_len = item.security_context(config).len();
         let (link_count_len, uname_len, group_len, size_len, _major_len, _minor_len) =
             display_dir_entry_size(item, config, state);
         padding_collections.link_count = link_count_len.max(padding_collections.link_count);

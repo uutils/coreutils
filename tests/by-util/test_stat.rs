@@ -194,14 +194,14 @@ fn test_char() {
 
 #[cfg(target_os = "linux")]
 #[test]
-fn test_printf_mtime_precision() {
+fn test_printf_atime_ctime_mtime_precision() {
     // TODO Higher precision numbers (`%.3Y`, `%.4Y`, etc.) are
     // formatted correctly, but we are not precise enough when we do
     // some `mtime` computations, so we get `.7640` instead of
     // `.7639`. This can be fixed by being more careful when
     // transforming the number from `Metadata::mtime_nsec()` to the form
     // used in rendering.
-    let args = ["-c", "%.0Y %.1Y %.2Y", "/dev/pts/ptmx"];
+    let args = ["-c", "%.0Y %.1Y %.2X %.2Y %.2Z", "/dev/pts/ptmx"];
     let ts = TestScenario::new(util_name!());
     let expected_stdout = unwrap_or_return!(expected_result(&ts, &args)).stdout_move_str();
     eprintln!("{expected_stdout}");
@@ -435,6 +435,13 @@ fn test_quoting_style_locale() {
         .args(&["-c", "%N", "'"])
         .succeeds()
         .stdout_only("\"'\"\n");
+
+    // testing file having "
+    at.touch("\"");
+    ts.ucmd()
+        .args(&["-c", "%N", "\""])
+        .succeeds()
+        .stdout_only("\'\"\'\n");
 }
 
 #[test]
@@ -513,4 +520,50 @@ fn test_stat_selinux() {
     let result = ts.ucmd().arg("--printf='%C'").arg("/bin/").succeeds();
     let s: Vec<_> = result.stdout_str().split(':').collect();
     assert!(s.len() == 4);
+}
+
+#[cfg(unix)]
+#[test]
+fn test_mount_point_basic() {
+    let ts = TestScenario::new(util_name!());
+    let result = ts.ucmd().args(&["-c", "%m", "/"]).succeeds();
+    let output = result.stdout_str().trim();
+    assert!(!output.is_empty(), "Mount point should not be empty");
+    assert_eq!(output, "/");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_mount_point_width_and_alignment() {
+    let ts = TestScenario::new(util_name!());
+
+    // Right-aligned, width 15
+    let result = ts.ucmd().args(&["-c", "%15m", "/"]).succeeds();
+    let output = result.stdout_str();
+    assert!(
+        output.trim().len() <= 15 && output.len() >= 15,
+        "Output should be padded to width 15"
+    );
+
+    // Left-aligned, width 15
+    let result = ts.ucmd().args(&["-c", "%-15m", "/"]).succeeds();
+    let output = result.stdout_str();
+
+    assert!(
+        output.trim().len() <= 15 && output.len() >= 15,
+        "Output should be padded to width 15 (left-aligned)"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn test_mount_point_combined_with_other_specifiers() {
+    let ts = TestScenario::new(util_name!());
+    let result = ts.ucmd().args(&["-c", "%m %n %s", "/bin/sh"]).succeeds();
+    let output = result.stdout_str();
+    let parts: Vec<&str> = output.split_whitespace().collect();
+    assert!(
+        parts.len() >= 3,
+        "Should print mount point, file name, and size"
+    );
 }

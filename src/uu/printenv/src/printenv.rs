@@ -3,10 +3,15 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use clap::{Arg, ArgAction, Command};
 use std::env;
-use uucore::translate;
-use uucore::{error::UResult, format_usage};
+use std::io::Write;
+
+use clap::{Arg, ArgAction, Command};
+
+use uucore::display::{OsWrite, print_all_env_vars};
+use uucore::error::UResult;
+use uucore::line_ending::LineEnding;
+use uucore::{format_usage, translate};
 
 static OPT_NULL: &str = "null";
 
@@ -14,26 +19,17 @@ static ARG_VARIABLES: &str = "variables";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args).unwrap_or_else(|e| {
-        use uucore::clap_localization::handle_clap_error_with_exit_code;
-        handle_clap_error_with_exit_code(e, uucore::util_name(), 2)
-    });
+    let matches = uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 2)?;
 
     let variables: Vec<String> = matches
         .get_many::<String>(ARG_VARIABLES)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
-    let separator = if matches.get_flag(OPT_NULL) {
-        "\x00"
-    } else {
-        "\n"
-    };
+    let separator = LineEnding::from_zero_flag(matches.get_flag(OPT_NULL));
 
     if variables.is_empty() {
-        for (env_var, value) in env::vars() {
-            print!("{env_var}={value}{separator}");
-        }
+        print_all_env_vars(separator)?;
         return Ok(());
     }
 
@@ -44,8 +40,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             error_found = true;
             continue;
         }
-        if let Ok(var) = env::var(env_var) {
-            print!("{var}{separator}");
+        if let Some(var) = env::var_os(env_var) {
+            let mut stdout = std::io::stdout().lock();
+            stdout.write_all_os(&var)?;
+            write!(stdout, "{separator}")?;
         } else {
             error_found = true;
         }
@@ -55,12 +53,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    let cmd = Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("printenv-about"))
         .override_usage(format_usage(&translate!("printenv-usage")))
-        .infer_long_args(true)
+        .infer_long_args(true);
+    uucore::clap_localization::configure_localized_command(cmd)
         .arg(
             Arg::new(OPT_NULL)
                 .short('0')

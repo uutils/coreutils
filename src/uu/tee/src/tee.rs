@@ -18,7 +18,6 @@ use uucore::{format_usage, show_error};
 
 // spell-checker:ignore nopipe
 
-use uucore::LocalizedCommand;
 #[cfg(unix)]
 use uucore::signals::{enable_pipe_errors, ignore_interrupts};
 
@@ -53,7 +52,7 @@ enum OutputErrorMode {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let append = matches.get_flag(options::APPEND);
     let ignore_interrupts = matches.get_flag(options::IGNORE_INTERRUPTS);
@@ -177,7 +176,7 @@ fn tee(options: &Options) -> Result<()> {
     writers.insert(
         0,
         NamedWriter {
-            name: translate!("tee-standard-output"),
+            name: translate!("tee-standard-output").into(),
             inner: Box::new(stdout()),
         },
     );
@@ -268,10 +267,10 @@ fn open(
     match mode.write(true).create(true).open(path.as_path()) {
         Ok(file) => Some(Ok(NamedWriter {
             inner: Box::new(file),
-            name: name.to_string_lossy().to_string(),
+            name: name.clone(),
         })),
         Err(f) => {
-            show_error!("{}: {f}", name.to_string_lossy().maybe_quote());
+            show_error!("{}: {f}", name.maybe_quote());
             match output_error {
                 Some(OutputErrorMode::Exit | OutputErrorMode::ExitNoPipe) => Some(Err(f)),
                 _ => None,
@@ -395,7 +394,7 @@ impl Write for MultiWriter {
 
 struct NamedWriter {
     inner: Box<dyn Write>,
-    pub name: String,
+    pub name: OsString,
 }
 
 impl Write for NamedWriter {
@@ -444,11 +443,12 @@ pub fn ensure_stdout_not_broken() -> Result<bool> {
     // POLLRDBAND is the flag used by GNU tee.
     let mut pfds = [PollFd::new(out.as_fd(), PollFlags::POLLRDBAND)];
 
-    // Then, ensure that the pipe is not broken
-    let res = nix::poll::poll(&mut pfds, PollTimeout::NONE)?;
+    // Then, ensure that the pipe is not broken.
+    // Use ZERO timeout to return immediately - we just want to check the current state.
+    let res = nix::poll::poll(&mut pfds, PollTimeout::ZERO)?;
 
     if res > 0 {
-        // poll succeeded;
+        // poll returned with events ready - check if POLLERR is set (pipe broken)
         let error = pfds.iter().any(|pfd| {
             if let Some(revents) = pfd.revents() {
                 revents.contains(PollFlags::POLLERR)
@@ -459,8 +459,8 @@ pub fn ensure_stdout_not_broken() -> Result<bool> {
         return Ok(!error);
     }
 
-    // if res == 0, it means that timeout was reached, which is impossible
-    // because we set infinite timeout.
-    // And if res < 0, the nix wrapper should have sent back an error.
-    unreachable!();
+    // res == 0 means no events ready (timeout reached immediately with ZERO timeout).
+    // This means the pipe is healthy (not broken).
+    // res < 0 would be an error, but nix returns Err in that case.
+    Ok(true)
 }

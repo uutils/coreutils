@@ -15,7 +15,6 @@ use uucore::error::{UResult, UUsageError};
 use uucore::format_usage;
 use uucore::line_ending::LineEnding;
 
-use uucore::LocalizedCommand;
 use uucore::translate;
 
 pub mod options {
@@ -30,7 +29,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     //
     // Argument parsing
     //
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));
 

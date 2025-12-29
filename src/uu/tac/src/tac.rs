@@ -21,7 +21,6 @@ use uucore::{format_usage, show};
 
 use crate::error::TacError;
 
-use uucore::LocalizedCommand;
 use uucore::translate;
 
 mod options {
@@ -33,7 +32,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let before = matches.get_flag(options::BEFORE);
     let regex = matches.get_flag(options::REGEX);

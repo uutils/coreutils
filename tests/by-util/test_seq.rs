@@ -11,6 +11,27 @@ fn test_invalid_arg() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_broken_pipe_still_exits_success() {
+    use std::process::Stdio;
+
+    let mut child = new_ucmd!()
+        // Use an infinite sequence so a burst of output happens immediately after spawn.
+        // With small output the process can finish before stdout is closed and the Broken pipe never occurs.
+        .args(&["inf"])
+        .set_stdout(Stdio::piped())
+        .run_no_wait();
+
+    // Trigger a Broken pipe by writing to a pipe whose reader closed first.
+    child.close_stdout();
+    let result = child.wait().unwrap();
+
+    result
+        .code_is(0)
+        .stderr_contains("write error: Broken pipe");
+}
+
+#[test]
 fn test_no_args() {
     new_ucmd!()
         .fails_with_code(1)
@@ -226,6 +247,52 @@ fn test_separator_and_terminator() {
         .args(&["-s", "\\n", "2", "6"])
         .succeeds()
         .stdout_is("2\\n3\\n4\\n5\\n6\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_separator_non_utf8() {
+    use std::{ffi::OsString, os::unix::ffi::OsStringExt};
+
+    fn create_arg(prefix: &[u8]) -> OsString {
+        let separator = [0xFF, 0xFE];
+        OsString::from_vec([prefix, &separator].concat())
+    }
+
+    let short = create_arg(b"-s");
+    let long = create_arg(b"--separator=");
+    let expected = [b'1', 0xFF, 0xFE, b'2', b'\n'];
+
+    for arg in [short, long] {
+        new_ucmd!()
+            .arg(&arg)
+            .arg("2")
+            .succeeds()
+            .stdout_is_bytes(expected);
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_terminator_non_utf8() {
+    use std::{ffi::OsString, os::unix::ffi::OsStringExt};
+
+    fn create_arg(prefix: &[u8]) -> OsString {
+        let terminator = [0xFF, 0xFE];
+        OsString::from_vec([prefix, &terminator].concat())
+    }
+
+    let short = create_arg(b"-t");
+    let long = create_arg(b"--terminator=");
+    let expected = [b'1', b'\n', b'2', 0xFF, 0xFE];
+
+    for arg in [short, long] {
+        new_ucmd!()
+            .arg(&arg)
+            .arg("2")
+            .succeeds()
+            .stdout_is_bytes(expected);
+    }
 }
 
 #[test]

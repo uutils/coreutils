@@ -9,7 +9,6 @@ use clap::{Arg, ArgAction, Command, builder::ValueParser};
 use std::error::Error;
 use std::ffi::OsString;
 use std::io::{self, Write};
-use uucore::LocalizedCommand;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
 #[cfg(unix)]
@@ -22,7 +21,7 @@ const BUF_SIZE: usize = 16 * 1024;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let mut buffer = Vec::with_capacity(BUF_SIZE);
     args_into_buffer(&mut buffer, matches.get_many::<OsString>("STRING")).unwrap();

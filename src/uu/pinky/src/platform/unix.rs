@@ -9,7 +9,6 @@ use crate::Capitalize;
 use crate::options;
 use crate::uu_app;
 
-use uucore::LocalizedCommand;
 use uucore::entries::{Locate, Passwd};
 use uucore::error::{FromIo, UResult};
 use uucore::libc::S_IWGRP;
@@ -33,9 +32,8 @@ fn get_long_usage() -> String {
 }
 
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app()
-        .after_help(get_long_usage())
-        .get_matches_from_localized(args);
+    let matches =
+        uucore::clap_localization::handle_clap_result(uu_app().after_help(get_long_usage()), args)?;
 
     let users: Vec<String> = matches
         .get_many::<String>(options::USER)
@@ -66,6 +64,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // if true, use the "short" output format.
     let do_short_format = !matches.get_flag(options::LONG_FORMAT);
 
+    // If true, attempt to canonicalize hostname via a DNS lookup.
+    let do_lookup = matches.get_flag(options::LOOKUP);
+
     /* if true, display the ut_host field. */
     let mut include_where = true;
 
@@ -83,6 +84,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let pk = Pinky {
+        do_lookup,
         include_idle,
         include_heading,
         include_fullname,
@@ -105,6 +107,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 struct Pinky {
+    do_lookup: bool,
     include_idle: bool,
     include_heading: bool,
     include_fullname: bool,
@@ -138,11 +141,20 @@ fn idle_string(when: i64) -> String {
 }
 
 fn time_string(ut: &UtmpxRecord) -> String {
-    // "%b %e %H:%M"
-    let time_format: Vec<time::format_description::FormatItem> =
+    let lc_time: String = std::env::var("LC_ALL")
+        .or_else(|_| std::env::var("LC_TIME"))
+        .or_else(|_| std::env::var("LANG"))
+        .unwrap_or_default();
+
+    let time_format: Vec<time::format_description::FormatItem> = if lc_time == "C" {
+        // "%b %e %H:%M"
         time::format_description::parse("[month repr:short] [day padding:space] [hour]:[minute]")
-            .unwrap();
-    ut.login_time().format(&time_format).unwrap() // LC_ALL=C
+            .unwrap()
+    } else {
+        // "%Y-%m-%d %H:%M"
+        time::format_description::parse("[year]-[month]-[day] [hour]:[minute]").unwrap()
+    };
+    ut.login_time().format(&time_format).unwrap()
 }
 
 fn gecos_to_fullname(pw: &Passwd) -> Option<String> {
@@ -208,10 +220,16 @@ impl Pinky {
 
         print!(" {}", time_string(ut));
 
-        let mut s = ut.host();
-        if self.include_where && !s.is_empty() {
-            s = ut.canon_host()?;
-            print!(" {s}");
+        if self.include_where {
+            let s: String = if self.do_lookup {
+                ut.canon_host().unwrap_or(ut.host())
+            } else {
+                ut.host()
+            };
+
+            if !s.is_empty() {
+                print!(" {s}");
+            }
         }
 
         println!();

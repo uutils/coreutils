@@ -16,7 +16,6 @@ use std::num::IntErrorKind;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 use thiserror::Error;
-use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::format_usage;
@@ -436,8 +435,7 @@ impl<'a> State<'a> {
         let file_buf = if name == "-" {
             Box::new(stdin.lock()) as Box<dyn BufRead>
         } else {
-            let file = File::open(name)
-                .map_err_context(|| format!("{}", name.to_string_lossy().maybe_quote()))?;
+            let file = File::open(name).map_err_context(|| format!("{}", name.maybe_quote()))?;
             Box::new(BufReader::new(file)) as Box<dyn BufRead>
         };
 
@@ -640,7 +638,7 @@ impl<'a> State<'a> {
                 && (input.check_order == CheckOrder::Enabled
                     || (self.has_unpaired && !self.has_failed))
             {
-                let err_msg = translate!("join-error-not-sorted", "file" => self.file_name.to_string_lossy().maybe_quote(), "line_num" => self.line_num, "content" => String::from_utf8_lossy(&line.string));
+                let err_msg = translate!("join-error-not-sorted", "file" => self.file_name.maybe_quote(), "line_num" => self.line_num, "content" => String::from_utf8_lossy(&line.string));
                 // This is fatal if the check is enabled.
                 if input.check_order == CheckOrder::Enabled {
                     return Err(JoinError::UnorderedInput(err_msg));
@@ -823,7 +821,7 @@ fn parse_settings(matches: &clap::ArgMatches) -> UResult<Settings> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let settings = parse_settings(&matches)?;
 

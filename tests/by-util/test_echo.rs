@@ -785,3 +785,21 @@ fn test_escape_sequence_ctrl_c() {
         .success()
         .stdout_only("show");
 }
+
+#[test]
+fn test_emoji_output() {
+    new_ucmd!()
+        .arg("Hello 🌍 World 🚀")
+        .succeeds()
+        .stdout_only("Hello 🌍 World 🚀\n");
+
+    new_ucmd!()
+        .args(&["-n", "Status: 🎯 Complete"])
+        .succeeds()
+        .stdout_only("Status: 🎯 Complete");
+
+    new_ucmd!()
+        .args(&["🦀", "loves", "🚀", "and", "🌟"])
+        .succeeds()
+        .stdout_only("🦀 loves 🚀 and 🌟\n");
+}

@@ -15,7 +15,6 @@ use uucore::display::Quotable;
 use uucore::error::{UResult, set_exit_code, strip_errno};
 use uucore::translate;
 
-use uucore::LocalizedCommand;
 use uucore::{format_usage, show_error, util_name};
 
 static OPT_IGNORE_FAIL_NON_EMPTY: &str = "ignore-fail-on-non-empty";
@@ -26,7 +25,7 @@ static ARG_DIRS: &str = "dirs";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let opts = Opts {
         ignore: matches.get_flag(OPT_IGNORE_FAIL_NON_EMPTY),

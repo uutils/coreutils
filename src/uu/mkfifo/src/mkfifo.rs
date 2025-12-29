@@ -12,7 +12,6 @@ use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::translate;
 
-use uucore::LocalizedCommand;
 use uucore::{format_usage, show};
 
 mod options {
@@ -24,7 +23,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let mode = calculate_mode(matches.get_one::<String>(options::MODE))
         .map_err(|e| USimpleError::new(1, translate!("mkfifo-error-invalid-mode", "error" => e)))?;
@@ -120,19 +119,11 @@ pub fn uu_app() -> Command {
 
 fn calculate_mode(mode_option: Option<&String>) -> Result<u32, String> {
     let umask = uucore::mode::get_umask();
-    let mut mode = 0o666; // Default mode for FIFOs
+    let mode = 0o666; // Default mode for FIFOs
 
     if let Some(m) = mode_option {
-        if m.chars().any(|c| c.is_ascii_digit()) {
-            mode = uucore::mode::parse_numeric(mode, m, false)?;
-        } else {
-            for item in m.split(',') {
-                mode = uucore::mode::parse_symbolic(mode, item, umask, false)?;
-            }
-        }
+        uucore::mode::parse_chmod(mode, m, false, umask)
     } else {
-        mode &= !umask; // Apply umask if no mode is specified
+        Ok(mode & !umask) // Apply umask if no mode is specified
     }
-
-    Ok(mode)
 }

@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) asid auditid auditinfo auid cstr egid emod euid getaudit getlogin gflag nflag pline rflag termid uflag gsflag zflag cflag
+// spell-checker:ignore (ToDO) asid auditid auditinfo auid cstr egid rgid emod euid getaudit getlogin gflag nflag pline rflag termid uflag gsflag zflag cflag
 
 // README:
 // This was originally based on BSD's `id`
@@ -44,7 +44,6 @@ use uucore::libc::{getlogin, uid_t};
 use uucore::line_ending::LineEnding;
 use uucore::translate;
 
-use uucore::LocalizedCommand;
 use uucore::process::{getegid, geteuid, getgid, getuid};
 use uucore::{format_usage, show_error};
 
@@ -70,6 +69,7 @@ fn get_context_help_text() -> String {
 }
 
 mod options {
+    pub const OPT_IGNORE: &str = "ignore";
     pub const OPT_AUDIT: &str = "audit"; // GNU's id does not have this
     pub const OPT_CONTEXT: &str = "context";
     pub const OPT_EFFECTIVE_USER: &str = "user";
@@ -120,9 +120,7 @@ struct State {
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app()
-        .after_help(translate!("id-after-help"))
-        .get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let users: Vec<String> = matches
         .get_many::<String>(options::ARG_USERS)
@@ -355,6 +353,14 @@ pub fn uu_app() -> Command {
         .override_usage(format_usage(&translate!("id-usage")))
         .infer_long_args(true)
         .args_override_self(true)
+        .after_help(translate!("id-after-help"))
+        .arg(
+            Arg::new(options::OPT_IGNORE)
+                .short('a')
+                .long(options::OPT_IGNORE)
+                .help(translate!("id-help-ignore"))
+                .action(ArgAction::SetTrue),
+        )
         .arg(
             Arg::new(options::OPT_AUDIT)
                 .short('A')
@@ -462,37 +468,38 @@ fn pretty(possible_pw: Option<Passwd>) {
             "{}",
             p.belongs_to()
                 .iter()
-                .map(|&gr| entries::gid2grp(gr).unwrap())
+                .map(|&gr| entries::gid2grp(gr).unwrap_or_else(|_| gr.to_string()))
                 .collect::<Vec<_>>()
                 .join(" ")
         );
     } else {
         let login = cstr2cow!(getlogin().cast_const());
-        let rid = getuid();
-        if let Ok(p) = Passwd::locate(rid) {
+        let uid = getuid();
+        if let Ok(p) = Passwd::locate(uid) {
             if let Some(user_name) = login {
                 println!("{}\t{user_name}", translate!("id-output-login"));
             }
             println!("{}\t{}", translate!("id-output-uid"), p.name);
         } else {
-            println!("{}\t{rid}", translate!("id-output-uid"));
+            println!("{}\t{uid}", translate!("id-output-uid"));
         }
 
-        let eid = getegid();
-        if eid == rid {
-            if let Ok(p) = Passwd::locate(eid) {
+        let euid = geteuid();
+        if euid != uid {
+            if let Ok(p) = Passwd::locate(euid) {
                 println!("{}\t{}", translate!("id-output-euid"), p.name);
             } else {
-                println!("{}\t{eid}", translate!("id-output-euid"));
+                println!("{}\t{euid}", translate!("id-output-euid"));
             }
         }
 
-        let rid = getgid();
-        if rid != eid {
-            if let Ok(g) = Group::locate(rid) {
-                println!("{}\t{}", translate!("id-output-euid"), g.name);
+        let rgid = getgid();
+        let egid = getegid();
+        if egid != rgid {
+            if let Ok(g) = Group::locate(rgid) {
+                println!("{}\t{}", translate!("id-output-rgid"), g.name);
             } else {
-                println!("{}\t{rid}", translate!("id-output-euid"));
+                println!("{}\t{rgid}", translate!("id-output-rgid"));
             }
         }
 
@@ -502,7 +509,7 @@ fn pretty(possible_pw: Option<Passwd>) {
             entries::get_groups_gnu(None)
                 .unwrap()
                 .iter()
-                .map(|&gr| entries::gid2grp(gr).unwrap())
+                .map(|&gr| entries::gid2grp(gr).unwrap_or_else(|_| gr.to_string()))
                 .collect::<Vec<_>>()
                 .join(" ")
         );
@@ -529,7 +536,12 @@ fn pline(possible_uid: Option<uid_t>) {
     );
 }
 
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "openbsd"))]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "openbsd",
+    target_os = "cygwin"
+))]
 fn pline(possible_uid: Option<uid_t>) {
     let uid = possible_uid.unwrap_or_else(getuid);
     let pw = Passwd::locate(uid).unwrap();
@@ -546,10 +558,20 @@ fn pline(possible_uid: Option<uid_t>) {
     );
 }
 
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "openbsd"))]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "openbsd",
+    target_os = "cygwin"
+))]
 fn auditid() {}
 
-#[cfg(not(any(target_os = "linux", target_os = "android", target_os = "openbsd")))]
+#[cfg(not(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "openbsd",
+    target_os = "cygwin"
+)))]
 fn auditid() {
     use std::mem::MaybeUninit;
 

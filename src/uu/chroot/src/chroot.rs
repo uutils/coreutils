@@ -9,12 +9,13 @@ mod error;
 use crate::error::ChrootError;
 use clap::{Arg, ArgAction, Command};
 use std::ffi::CString;
-use std::io::Error;
+use std::io::{Error, ErrorKind};
 use std::os::unix::prelude::OsStrExt;
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
 use uucore::entries::{Locate, Passwd, grp2gid, usr2uid};
-use uucore::error::{UClapError, UResult, UUsageError, set_exit_code};
+use uucore::error::{UResult, UUsageError};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 use uucore::libc::{self, chroot, setgid, setgroups, setuid};
 use uucore::{format_usage, show};
@@ -155,7 +156,8 @@ impl Options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args).with_exit_code(125)?;
+    let matches =
+        uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 125)?;
 
     let default_shell: &'static str = "/bin/sh";
     let default_option: &'static str = "-i";
@@ -181,7 +183,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     if !options.newroot.is_dir() {
-        return Err(ChrootError::NoSuchDirectory(format!("{}", options.newroot.display())).into());
+        return Err(ChrootError::NoSuchDirectory(options.newroot).into());
     }
 
     let commands = match matches.get_many::<String>(options::COMMAND) {
@@ -204,43 +206,30 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     assert!(!command.is_empty());
     let chroot_command = command[0];
-    let chroot_args = &command[1..];
 
     // NOTE: Tests can only trigger code beyond this point if they're invoked with root permissions
     set_context(&options)?;
 
-    let pstatus = match process::Command::new(chroot_command)
-        .args(chroot_args)
-        .status()
-    {
-        Ok(status) => status,
-        Err(e) => {
-            return Err(if e.kind() == std::io::ErrorKind::NotFound {
-                ChrootError::CommandNotFound(command[0].to_string(), e)
-            } else {
-                ChrootError::CommandFailed(command[0].to_string(), e)
-            }
-            .into());
-        }
-    };
+    let err = process::Command::new(chroot_command)
+        .args(&command[1..])
+        .exec();
 
-    let code = if pstatus.success() {
-        0
+    Err(if err.kind() == ErrorKind::NotFound {
+        ChrootError::CommandNotFound(chroot_command.to_owned(), err)
     } else {
-        pstatus.code().unwrap_or(-1)
-    };
-    set_exit_code(code);
-    Ok(())
+        ChrootError::CommandFailed(chroot_command.to_owned(), err)
+    }
+    .into())
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    let cmd = Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("chroot-about"))
         .override_usage(format_usage(&translate!("chroot-usage")))
         .infer_long_args(true)
-        .trailing_var_arg(true)
+        .trailing_var_arg(true);
+    uucore::clap_localization::configure_localized_command(cmd)
         .arg(
             Arg::new(options::NEWROOT)
                 .value_hint(clap::ValueHint::DirPath)
@@ -318,7 +307,12 @@ fn supplemental_gids(uid: libc::uid_t) -> Vec<libc::gid_t> {
 
 /// Set the supplemental group IDs for this process.
 fn set_supplemental_gids(gids: &[libc::gid_t]) -> std::io::Result<()> {
-    #[cfg(any(target_vendor = "apple", target_os = "freebsd", target_os = "openbsd"))]
+    #[cfg(any(
+        target_vendor = "apple",
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "cygwin"
+    ))]
     let n = gids.len() as libc::c_int;
     #[cfg(any(target_os = "linux", target_os = "android"))]
     let n = gids.len() as libc::size_t;
@@ -410,22 +404,22 @@ fn set_context(options: &Options) -> UResult<()> {
             let gid = uid as libc::gid_t;
             let strategy = Strategy::FromUID(uid, false);
             set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
-            set_gid(gid).map_err(|e| ChrootError::SetGidFailed(user.to_string(), e))?;
-            set_uid(uid).map_err(|e| ChrootError::SetUserFailed(user.to_string(), e))?;
+            set_gid(gid).map_err(|e| ChrootError::SetGidFailed(user.to_owned(), e))?;
+            set_uid(uid).map_err(|e| ChrootError::SetUserFailed(user.to_owned(), e))?;
         }
         Some(UserSpec::GroupOnly(group)) => {
             let gid = name_to_gid(group)?;
             let strategy = Strategy::Nothing;
             set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
-            set_gid(gid).map_err(|e| ChrootError::SetGidFailed(group.to_string(), e))?;
+            set_gid(gid).map_err(|e| ChrootError::SetGidFailed(group.to_owned(), e))?;
         }
         Some(UserSpec::UserAndGroup(user, group)) => {
             let uid = name_to_uid(user)?;
             let gid = name_to_gid(group)?;
             let strategy = Strategy::FromUID(uid, true);
             set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
-            set_gid(gid).map_err(|e| ChrootError::SetGidFailed(group.to_string(), e))?;
-            set_uid(uid).map_err(|e| ChrootError::SetUserFailed(user.to_string(), e))?;
+            set_gid(gid).map_err(|e| ChrootError::SetGidFailed(group.to_owned(), e))?;
+            set_uid(uid).map_err(|e| ChrootError::SetUserFailed(user.to_owned(), e))?;
         }
     }
     Ok(())
@@ -435,10 +429,10 @@ fn enter_chroot(root: &Path, skip_chdir: bool) -> UResult<()> {
     let err = unsafe {
         chroot(
             CString::new(root.as_os_str().as_bytes().to_vec())
-                .map_err(|e| ChrootError::CannotEnter("root".to_string(), e.into()))?
+                .map_err(|e| ChrootError::CannotEnter("root".into(), e.into()))?
                 .as_bytes_with_nul()
                 .as_ptr()
-                .cast::<libc::c_char>(),
+                .cast(),
         )
     };
 
@@ -448,6 +442,6 @@ fn enter_chroot(root: &Path, skip_chdir: bool) -> UResult<()> {
         }
         Ok(())
     } else {
-        Err(ChrootError::CannotEnter(format!("{}", root.display()), Error::last_os_error()).into())
+        Err(ChrootError::CannotEnter(root.into(), Error::last_os_error()).into())
     }
 }

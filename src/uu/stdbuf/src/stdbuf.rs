@@ -7,13 +7,12 @@
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
-use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
 use std::process;
 use tempfile::TempDir;
 use tempfile::tempdir;
 use thiserror::Error;
-use uucore::error::{FromIo, UClapError, UResult, USimpleError, UUsageError};
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::parser::parse_size::parse_size_u64;
 use uucore::translate;
@@ -35,6 +34,7 @@ mod options {
         target_os = "android",
         target_os = "freebsd",
         target_os = "netbsd",
+        target_os = "openbsd",
         target_os = "dragonfly"
     )
 ))]
@@ -42,6 +42,9 @@ const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf
 
 #[cfg(all(not(feature = "feat_external_libstdbuf"), target_vendor = "apple"))]
 const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.dylib"));
+
+#[cfg(all(not(feature = "feat_external_libstdbuf"), target_os = "cygwin"))]
+const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.dll"));
 
 enum BufferType {
     Default,
@@ -82,6 +85,7 @@ enum ProgramOptionsError {
     target_os = "android",
     target_os = "freebsd",
     target_os = "netbsd",
+    target_os = "openbsd",
     target_os = "dragonfly"
 ))]
 fn preload_strings() -> UResult<(&'static str, &'static str)> {
@@ -98,6 +102,7 @@ fn preload_strings() -> UResult<(&'static str, &'static str)> {
     target_os = "android",
     target_os = "freebsd",
     target_os = "netbsd",
+    target_os = "openbsd",
     target_os = "dragonfly",
     target_vendor = "apple"
 )))]
@@ -179,16 +184,23 @@ fn get_preload_env(_tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args).with_exit_code(125)?;
+    let matches =
+        uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 125)?;
 
     let options =
         ProgramOptions::try_from(&matches).map_err(|e| UUsageError::new(125, e.to_string()))?;
 
-    let mut command_values = matches.get_many::<OsString>(options::COMMAND).unwrap();
-    let mut command = process::Command::new(command_values.next().unwrap());
+    let mut command_values = matches
+        .get_many::<OsString>(options::COMMAND)
+        .ok_or_else(|| UUsageError::new(125, "no command specified".to_string()))?;
+    let Some(first_command) = command_values.next() else {
+        return Err(UUsageError::new(125, "no command specified".to_string()));
+    };
+    let mut command = process::Command::new(first_command);
     let command_params: Vec<&OsString> = command_values.collect();
 
-    let tmp_dir = tempdir().unwrap();
+    let tmp_dir = tempdir()
+        .map_err(|e| UUsageError::new(125, format!("failed to create temp directory: {e}")))?;
     let (preload_env, libstdbuf) = get_preload_env(&tmp_dir)?;
     command.env(preload_env, libstdbuf);
     set_command_env(&mut command, "_STDBUF_I", &options.stdin);
@@ -225,10 +237,26 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 Err(i.into())
             }
         }
-        None => Err(USimpleError::new(
-            1,
-            translate!("stdbuf-error-killed-by-signal", "signal" => status.signal().unwrap()),
-        )),
+        None => {
+            #[cfg(unix)]
+            {
+                use std::os::unix::process::ExitStatusExt;
+                let signal_msg = status
+                    .signal()
+                    .map_or_else(|| "unknown".to_string(), |s| s.to_string());
+                Err(USimpleError::new(
+                    1,
+                    translate!("stdbuf-error-killed-by-signal", "signal" => signal_msg),
+                ))
+            }
+            #[cfg(not(unix))]
+            {
+                Err(USimpleError::new(
+                    1,
+                    "process terminated abnormally".to_string(),
+                ))
+            }
+        }
     }
 }
 

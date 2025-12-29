@@ -2,9 +2,11 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) bamf chdir rlimit prlimit COMSPEC cout cerr FFFD winsize xpixel ypixel
+// spell-checker:ignore (words) bamf chdir rlimit prlimit COMSPEC cout cerr FFFD winsize xpixel ypixel Secho sighandler
 #![allow(clippy::missing_errors_doc)]
 
+#[cfg(unix)]
+use nix::libc;
 #[cfg(unix)]
 use nix::sys::signal::Signal;
 #[cfg(feature = "echo")]
@@ -15,6 +17,8 @@ use std::path::Path;
 use std::process::Command;
 use tempfile::tempdir;
 use uutests::new_ucmd;
+#[cfg(unix)]
+use uutests::util::PATH;
 #[cfg(unix)]
 use uutests::util::TerminalSimulation;
 use uutests::util::TestScenario;
@@ -29,13 +33,13 @@ struct Target {
 #[cfg(unix)]
 impl Target {
     fn new(signals: &[&str]) -> Self {
-        let mut child = new_ucmd!()
-            .args(&[
-                format!("--ignore-signal={}", signals.join(",")).as_str(),
-                "sleep",
-                "1000",
-            ])
-            .run_no_wait();
+        let mut cmd = new_ucmd!();
+        if signals.is_empty() {
+            cmd.arg("--ignore-signal");
+        } else {
+            cmd.arg(format!("--ignore-signal={}", signals.join(",")));
+        }
+        let mut child = cmd.args(&["sleep", "1000"]).run_no_wait();
         child.delay(500);
         Self { child }
     }
@@ -937,6 +941,89 @@ fn test_env_arg_ignore_signal_empty() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_env_arg_ignore_signal_all_signals() {
+    let mut target = Target::new(&[]);
+    target.send_signal(Signal::SIGINT);
+    assert!(target.is_alive());
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_default_signal_pipe() {
+    let ts = TestScenario::new(util_name!());
+    run_sigpipe_script(&ts, &["--default-signal=PIPE"]);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_default_signal_all_signals() {
+    let ts = TestScenario::new(util_name!());
+    run_sigpipe_script(&ts, &["--default-signal"]);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_block_signal_flag() {
+    new_ucmd!()
+        .env("PATH", PATH)
+        .args(&["--block-signal", "true"])
+        .succeeds()
+        .no_stderr();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_list_signal_handling_reports_ignore() {
+    let result = new_ucmd!()
+        .env("PATH", PATH)
+        .args(&["--ignore-signal=INT", "--list-signal-handling", "true"])
+        .succeeds();
+    let stderr = result.stderr_str();
+    assert!(
+        stderr.contains("INT") && stderr.contains("IGNORE"),
+        "unexpected signal listing: {stderr}"
+    );
+}
+
+#[cfg(unix)]
+fn run_sigpipe_script(ts: &TestScenario, extra_args: &[&str]) {
+    let shell = env::var("SHELL").unwrap_or_else(|_| String::from("sh"));
+    let _guard = SigpipeGuard::new();
+    let mut cmd = ts.ucmd();
+    cmd.env("PATH", PATH);
+    cmd.args(extra_args);
+    cmd.arg(shell);
+    cmd.arg("-c");
+    cmd.arg("trap - PIPE; seq 999999 2>err | head -n1 > out");
+    cmd.succeeds();
+    assert_eq!(ts.fixtures.read("out"), "1\n");
+    assert_eq!(ts.fixtures.read("err"), "");
+}
+
+#[cfg(unix)]
+struct SigpipeGuard {
+    previous: libc::sighandler_t,
+}
+
+#[cfg(unix)]
+impl SigpipeGuard {
+    fn new() -> Self {
+        let previous = unsafe { libc::signal(libc::SIGPIPE, libc::SIG_IGN) };
+        Self { previous }
+    }
+}
+
+#[cfg(unix)]
+impl Drop for SigpipeGuard {
+    fn drop(&mut self) {
+        unsafe {
+            libc::signal(libc::SIGPIPE, self.previous);
+        }
+    }
+}
+
+#[test]
 fn disallow_equals_sign_on_short_unset_option() {
     let ts = TestScenario::new(util_name!());
 
@@ -1755,6 +1842,17 @@ fn test_simulation_of_terminal_pty_pipes_into_data_and_sends_eot_automatically()
     std::assert_eq!(String::from_utf8_lossy(out.stderr()), "");
 }
 
+#[test]
+#[cfg(not(windows))]
+fn test_emoji_env_vars() {
+    new_ucmd!()
+        .arg("🎯_VAR=Hello 🌍")
+        .arg("printenv")
+        .arg("🎯_VAR")
+        .succeeds()
+        .stdout_contains("Hello 🌍");
+}
+
 #[cfg(unix)]
 #[test]
 fn test_simulation_of_terminal_pty_write_in_data_and_sends_eot_automatically() {
@@ -1772,4 +1870,95 @@ fn test_simulation_of_terminal_pty_write_in_data_and_sends_eot_automatically() {
         "Hello stdin forwarding via write_in!\r\n"
     );
     std::assert_eq!(String::from_utf8_lossy(out.stderr()), "");
+}
+
+#[test]
+fn test_env_french() {
+    new_ucmd!()
+        .arg("--verbo")
+        .env("LANG", "fr_FR")
+        .fails()
+        .stderr_contains("erreur : argument inattendu");
+}
+
+#[test]
+fn test_shebang_error() {
+    new_ucmd!()
+        .arg("\'-v \'")
+        .fails()
+        .stderr_contains("use -[v]S to pass options in shebang lines");
+}
+
+#[test]
+#[cfg(not(target_os = "windows"))]
+fn test_braced_variable_with_default_value() {
+    new_ucmd!()
+        .arg("-Secho ${UNSET_VAR_UNLIKELY_12345:fallback}")
+        .succeeds()
+        .stdout_is("fallback\n");
+}
+
+#[test]
+#[cfg(not(target_os = "windows"))]
+fn test_braced_variable_with_default_when_set() {
+    new_ucmd!()
+        .env("TEST_VAR_12345", "actual")
+        .arg("-Secho ${TEST_VAR_12345:fallback}")
+        .succeeds()
+        .stdout_is("actual\n");
+}
+
+#[test]
+#[cfg(not(target_os = "windows"))]
+fn test_simple_braced_variable() {
+    new_ucmd!()
+        .env("TEST_VAR_12345", "value")
+        .arg("-Secho ${TEST_VAR_12345}")
+        .succeeds()
+        .stdout_is("value\n");
+}
+
+#[test]
+fn test_braced_variable_error_missing_closing_brace() {
+    new_ucmd!()
+        .arg("-Secho ${FOO")
+        .fails_with_code(125)
+        .stderr_contains("Missing closing brace");
+}
+
+#[test]
+fn test_braced_variable_error_missing_closing_brace_after_default() {
+    new_ucmd!()
+        .arg("-Secho ${FOO:-value")
+        .fails_with_code(125)
+        .stderr_contains("Missing closing brace after default value");
+}
+
+#[test]
+fn test_braced_variable_error_starts_with_digit() {
+    new_ucmd!()
+        .arg("-Secho ${1FOO}")
+        .fails_with_code(125)
+        .stderr_contains("Unexpected character: '1'");
+}
+
+#[test]
+fn test_braced_variable_error_unexpected_character() {
+    new_ucmd!()
+        .arg("-Secho ${FOO?}")
+        .fails_with_code(125)
+        .stderr_contains("Unexpected character: '?'");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_non_utf8_env_vars() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    let non_utf8_value = OsString::from_vec(b"hello\x80world".to_vec());
+    new_ucmd!()
+        .env("NON_UTF8_VAR", &non_utf8_value)
+        .succeeds()
+        .stdout_contains_bytes(b"NON_UTF8_VAR=hello\x80world");
 }

@@ -62,15 +62,7 @@ where
     let dst_file = File::create(&dest)?;
     let src_fd = src_file.as_raw_fd();
     let dst_fd = dst_file.as_raw_fd();
-    // Using .try_into().unwrap() is required as glibc, musl & android all have different type for ioctl()
-    #[allow(clippy::unnecessary_fallible_conversions)]
-    let result = unsafe {
-        libc::ioctl(
-            dst_fd,
-            linux_raw_sys::ioctl::FICLONE.try_into().unwrap(),
-            src_fd,
-        )
-    };
+    let result = unsafe { libc::ioctl(dst_fd, libc::FICLONE, src_fd) };
     if result == 0 {
         return Ok(());
     }

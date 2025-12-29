@@ -47,6 +47,15 @@ exacl = { workspace = true, optional = true }
 name = "cp"
 path = "src/main.rs"
 
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
+[[bench]]
+name = "cp_bench"
+harness = false
+
 [features]
 feat_selinux = ["selinux", "uucore/selinux"]
 feat_acl = ["exacl"]

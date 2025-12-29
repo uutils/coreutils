@@ -6,6 +6,7 @@
 // spell-checker:ignore (ToDOs) corasick memchr Roff trunc oset iset CHARCLASS
 
 use std::cmp;
+use std::cmp::PartialEq;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::ffi::{OsStr, OsString};
 use std::fmt::Write as FmtWrite;
@@ -17,13 +18,12 @@ use std::path::Path;
 use clap::{Arg, ArgAction, Command};
 use regex::Regex;
 use thiserror::Error;
-use uucore::LocalizedCommand;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult, UUsageError};
+use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::translate;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum OutFormat {
     Dumb,
     Roff,
@@ -43,6 +43,7 @@ struct Config {
     context_regex: String,
     line_width: usize,
     gap_size: usize,
+    sentence_regex: Option<String>,
 }
 
 impl Default for Config {
@@ -59,6 +60,7 @@ impl Default for Config {
             context_regex: "\\w+".to_owned(),
             line_width: 72,
             gap_size: 3,
+            sentence_regex: None,
         }
     }
 }
@@ -152,7 +154,7 @@ impl WordFilter {
                     if v.is_empty() {
                         None
                     } else {
-                        Some(v.to_string())
+                        Some(v.to_owned())
                     }
                 }
                 None => None,
@@ -197,46 +199,49 @@ struct WordRef {
 
 #[derive(Debug, Error)]
 enum PtxError {
-    #[error("{}", translate!("ptx-error-dumb-format"))]
-    DumbFormat,
-
-    #[error("{}", translate!("ptx-error-not-implemented", "feature" => (*.0)))]
-    NotImplemented(&'static str),
-
     #[error("{0}")]
     ParseError(ParseIntError),
 }
 
 impl UError for PtxError {}
 
-fn get_config(matches: &clap::ArgMatches) -> UResult<Config> {
+fn get_config(matches: &mut clap::ArgMatches) -> UResult<Config> {
     let mut config = Config::default();
     let err_msg = "parsing options failed";
     if matches.get_flag(options::TRADITIONAL) {
         config.gnu_ext = false;
         config.format = OutFormat::Roff;
         "[^ \t\n]+".clone_into(&mut config.context_regex);
-    } else {
-        return Err(PtxError::NotImplemented("GNU extensions").into());
     }
-    if matches.contains_id(options::SENTENCE_REGEXP) {
-        return Err(PtxError::NotImplemented("-S").into());
+    if let Some(regex) = matches.remove_one::<String>(options::SENTENCE_REGEXP) {
+        // TODO: The regex crate used here is not fully compatible with GNU's regex implementation.
+        // For example, it does not support backreferences.
+        // In the future, we might want to switch to the onig crate (like expr does) for better compatibility.
+
+        // Verify regex is valid and doesn't match empty string
+        if let Ok(re) = Regex::new(&regex) {
+            if re.is_match("") {
+                return Err(USimpleError::new(1, translate!("ptx-error-empty-regexp")));
+            }
+        }
+
+        config.sentence_regex = Some(regex);
     }
     config.auto_ref = matches.get_flag(options::AUTO_REFERENCE);
     config.input_ref = matches.get_flag(options::REFERENCES);
-    config.right_ref &= matches.get_flag(options::RIGHT_SIDE_REFS);
+    config.right_ref = matches.get_flag(options::RIGHT_SIDE_REFS);
     config.ignore_case = matches.get_flag(options::IGNORE_CASE);
     if matches.contains_id(options::MACRO_NAME) {
-        config.macro_name = matches
+        matches
             .get_one::<String>(options::MACRO_NAME)
             .expect(err_msg)
-            .to_string();
+            .clone_into(&mut config.macro_name);
     }
     if matches.contains_id(options::FLAG_TRUNCATION) {
-        config.trunc_str = matches
+        matches
             .get_one::<String>(options::FLAG_TRUNCATION)
             .expect(err_msg)
-            .to_string();
+            .clone_into(&mut config.trunc_str);
     }
     if matches.contains_id(options::WIDTH) {
         config.line_width = matches
@@ -276,17 +281,30 @@ struct FileContent {
 
 type FileMap = HashMap<OsString, FileContent>;
 
-fn read_input(input_files: &[OsString]) -> std::io::Result<FileMap> {
+fn read_input(input_files: &[OsString], config: &Config) -> std::io::Result<FileMap> {
     let mut file_map: FileMap = HashMap::new();
     let mut offset: usize = 0;
+
+    let sentence_splitter = if let Some(re_str) = &config.sentence_regex {
+        Some(Regex::new(re_str).map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                translate!("ptx-error-invalid-regexp", "error" => e),
+            )
+        })?)
+    } else {
+        None
+    };
+
     for filename in input_files {
-        let reader: BufReader<Box<dyn Read>> = BufReader::new(if filename == "-" {
+        let mut reader: BufReader<Box<dyn Read>> = BufReader::new(if filename == "-" {
             Box::new(stdin())
         } else {
             let file = File::open(Path::new(filename))?;
             Box::new(file)
         });
-        let lines: Vec<String> = reader.lines().collect::<std::io::Result<Vec<String>>>()?;
+
+        let lines = read_lines(sentence_splitter.as_ref(), &mut reader)?;
 
         // Indexing UTF-8 string requires walking from the beginning, which can hurts performance badly when the line is long.
         // Since we will be jumping around the line a lot, we dump the content into a Vec<char>, which can be indexed in constant time.
@@ -303,6 +321,24 @@ fn read_input(input_files: &[OsString]) -> std::io::Result<FileMap> {
         offset += size;
     }
     Ok(file_map)
+}
+
+fn read_lines(
+    sentence_splitter: Option<&Regex>,
+    reader: &mut dyn BufRead,
+) -> std::io::Result<Vec<String>> {
+    if let Some(re) = sentence_splitter {
+        let mut buffer = String::new();
+        reader.read_to_string(&mut buffer)?;
+
+        Ok(re
+            .split(&buffer)
+            .map(|s| s.replace('\n', " ")) // ptx behavior: newlines become spaces inside sentences
+            .filter(|s| !s.is_empty()) // remove empty sentences
+            .collect())
+    } else {
+        reader.lines().collect()
+    }
 }
 
 /// Go through every lines in the input files and record each match occurrence as a `WordRef`.
@@ -352,11 +388,15 @@ fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> 
 
 fn get_reference(config: &Config, word_ref: &WordRef, line: &str, context_reg: &Regex) -> String {
     if config.auto_ref {
-        format!(
-            "{}:{}",
-            word_ref.filename.maybe_quote(),
-            word_ref.local_line_nr + 1
-        )
+        if word_ref.filename == "-" {
+            format!(":{}", word_ref.local_line_nr + 1)
+        } else {
+            format!(
+                "{}:{}",
+                word_ref.filename.maybe_quote(),
+                word_ref.local_line_nr + 1
+            )
+        }
     } else if config.input_ref {
         let (beg, end) = match context_reg.find(line) {
             Some(x) => (x.start(), x.end()),
@@ -404,7 +444,7 @@ fn trim_idx(s: &[char], beg: usize, end: usize) -> (usize, usize) {
     while b < e && s[b].is_whitespace() {
         b += 1;
     }
-    while b < e && s[e - 1].is_whitespace() {
+    while beg < e && s[e - 1].is_whitespace() {
         e -= 1;
     }
     (b, e)
@@ -484,7 +524,18 @@ fn get_output_chunks(
     let tail_end = trim_broken_word_right(all_after, tail_beg, tail_end);
 
     // trim away whitespace again.
-    let (tail_beg, tail_end) = trim_idx(all_after, tail_beg, tail_end);
+    let (tail_beg, mut tail_end) = trim_idx(all_after, tail_beg, tail_end);
+    // Fix: Manually trim trailing char (like "a") that are preceded by a space.
+    // This handles cases like "is a" which are not correctly trimmed by the
+    // preceding functions.
+    if tail_end >= 2
+        && (tail_end - 2) > tail_beg
+        && all_after[tail_end - 2].is_whitespace()
+        && !all_after[tail_end - 1].is_whitespace()
+    {
+        tail_end -= 1;
+        (_, tail_end) = trim_idx(all_after, tail_beg, tail_end);
+    }
 
     // and get the string
     let tail_str: String = all_after[tail_beg..tail_end].iter().collect();
@@ -512,19 +563,21 @@ fn get_output_chunks(
     // and get the string.
     let head_str: String = all_before[head_beg..head_end].iter().collect();
     head.push_str(&head_str);
+    //The TeX mode does not output truncation characters.
+    if config.format != OutFormat::Tex {
+        // put right context truncation string if needed
+        if after_end != all_after.len() && tail_beg == tail_end {
+            after.push_str(&config.trunc_str);
+        } else if after_end != all_after.len() && tail_end != all_after.len() {
+            tail.push_str(&config.trunc_str);
+        }
 
-    // put right context truncation string if needed
-    if after_end != all_after.len() && tail_beg == tail_end {
-        after.push_str(&config.trunc_str);
-    } else if after_end != all_after.len() && tail_end != all_after.len() {
-        tail.push_str(&config.trunc_str);
-    }
-
-    // put left context truncation string if needed
-    if before_beg != 0 && head_beg == head_end {
-        before = format!("{}{before}", config.trunc_str);
-    } else if before_beg != 0 && head_beg != 0 {
-        head = format!("{}{head}", config.trunc_str);
+        // put left context truncation string if needed
+        if before_beg != 0 && head_beg == head_end {
+            before = format!("{}{before}", config.trunc_str);
+        } else if before_beg != 0 && head_beg != 0 {
+            head = format!("{}{head}", config.trunc_str);
+        }
     }
 
     (tail, before, after, head)
@@ -569,6 +622,75 @@ fn format_tex_line(
     if config.auto_ref || config.input_ref {
         write!(output, "{{{}}}", format_tex_field(reference)).unwrap();
     }
+    output
+}
+
+fn format_dumb_line(
+    config: &Config,
+    word_ref: &WordRef,
+    line: &str,
+    chars_line: &[char],
+    reference: &str,
+) -> String {
+    let (tail, before, keyword, after, head) =
+        prepare_line_chunks(config, word_ref, line, chars_line, reference);
+
+    // Calculate the position for the left part
+    // The left part consists of tail (if present) + space + before
+    let left_part = if tail.is_empty() {
+        before
+    } else if before.is_empty() {
+        tail
+    } else {
+        format!("{tail} {before}")
+    };
+
+    // Calculate the position for the right part
+    let right_part = if head.is_empty() {
+        after
+    } else if after.is_empty() {
+        head
+    } else {
+        format!("{after} {head}")
+    };
+
+    // Calculate the width for the left half (before the keyword)
+    let half_width = cmp::max(config.line_width / 2, config.gap_size);
+
+    let left_part_len = if left_part.contains(&config.trunc_str) {
+        left_part.len() - config.trunc_str.len()
+    } else {
+        left_part.len()
+    };
+
+    // Right-justify the left part within the left half
+    let padding = if left_part.len() < half_width {
+        half_width - left_part_len
+    } else {
+        0
+    };
+
+    // Build the output line with padding, left part, gap, keyword, and right part
+    let mut output = String::new();
+    output.push_str(&" ".repeat(padding));
+    output.push_str(&left_part);
+
+    // Add gap before keyword
+    output.push_str(&" ".repeat(config.gap_size));
+
+    output.push_str(&keyword);
+    output.push_str(&right_part);
+
+    // Add reference if needed
+    if config.auto_ref || config.input_ref {
+        if config.right_ref {
+            output.push(' ');
+            output.push_str(reference);
+        } else {
+            output = format!("{reference} {output}");
+        }
+    }
+
     output
 }
 
@@ -644,7 +766,7 @@ fn prepare_line_chunks(
 }
 
 fn write_traditional_output(
-    config: &Config,
+    config: &mut Config,
     file_map: &FileMap,
     words: &BTreeSet<WordRef>,
     output_filename: &OsStr,
@@ -654,11 +776,20 @@ fn write_traditional_output(
             Box::new(stdout())
         } else {
             let file = File::create(output_filename)
-                .map_err_context(|| output_filename.to_string_lossy().quote().to_string())?;
+                .map_err_context(|| output_filename.quote().to_string())?;
             Box::new(file)
         });
 
     let context_reg = Regex::new(&config.context_regex).unwrap();
+
+    if !config.right_ref {
+        let max_ref_len = if config.auto_ref {
+            get_auto_max_reference_len(words)
+        } else {
+            0
+        };
+        config.line_width -= max_ref_len;
+    }
 
     for word_ref in words {
         let file_map_value: &FileContent = file_map
@@ -690,9 +821,13 @@ fn write_traditional_output(
                 &chars_lines[word_ref.local_line_nr],
                 &reference,
             ),
-            OutFormat::Dumb => {
-                return Err(PtxError::DumbFormat.into());
-            }
+            OutFormat::Dumb => format_dumb_line(
+                config,
+                word_ref,
+                &lines[word_ref.local_line_nr],
+                &chars_lines[word_ref.local_line_nr],
+                &reference,
+            ),
         };
         writeln!(writer, "{output_line}")
             .map_err_context(|| translate!("ptx-error-write-failed"))?;
@@ -703,6 +838,31 @@ fn write_traditional_output(
         .map_err_context(|| translate!("ptx-error-write-failed"))?;
 
     Ok(())
+}
+
+fn get_auto_max_reference_len(words: &BTreeSet<WordRef>) -> usize {
+    //Get the maximum length of the reference field
+    let line_num = words
+        .iter()
+        .map(|w| {
+            if w.local_line_nr == 0 {
+                1
+            } else {
+                (w.local_line_nr as f64).log10() as usize + 1
+            }
+        })
+        .max()
+        .unwrap_or(0);
+
+    let filename_len = words
+        .iter()
+        .filter(|w| w.filename != "-")
+        .map(|w| w.filename.maybe_quote().to_string().len())
+        .max()
+        .unwrap_or(0);
+
+    // +1 for the colon
+    line_num + filename_len + 1
 }
 
 mod options {
@@ -731,8 +891,8 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
-    let config = get_config(&matches)?;
+    let mut matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    let mut config = get_config(&mut matches)?;
 
     let input_files;
     let output_file: OsString;
@@ -758,15 +918,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if let Some(file) = files.next() {
             return Err(UUsageError::new(
                 1,
-                translate!("ptx-error-extra-operand", "operand" => file.to_string_lossy().quote()),
+                translate!("ptx-error-extra-operand", "operand" => file.quote()),
             ));
         }
     }
 
     let word_filter = WordFilter::new(&matches, &config)?;
-    let file_map = read_input(&input_files).map_err_context(String::new)?;
+    let file_map = read_input(&input_files, &config).map_err_context(String::new)?;
     let word_set = create_word_set(&config, &word_filter, &file_map);
-    write_traditional_output(&config, &file_map, &word_set, &output_file)
+    write_traditional_output(&mut config, &file_map, &word_set, &output_file)
 }
 
 pub fn uu_app() -> Command {

@@ -10,11 +10,10 @@ use std::ffi::OsString;
 use std::fs::File;
 use std::io::{ErrorKind, Read, Write, stdin, stdout};
 use std::path::Path;
-use uucore::display::Quotable;
+use uucore::display::{OsWrite, Quotable};
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::translate;
 
-use uucore::LocalizedCommand;
 use uucore::{format_usage, show};
 
 fn bsd_sum(mut reader: impl Read) -> std::io::Result<(usize, u16)> {
@@ -76,14 +75,14 @@ fn open(name: &OsString) -> UResult<Box<dyn Read>> {
         if path.is_dir() {
             return Err(USimpleError::new(
                 2,
-                translate!("sum-error-is-directory", "name" => name.to_string_lossy().maybe_quote()),
+                translate!("sum-error-is-directory", "name" => name.maybe_quote()),
             ));
         }
         // Silent the warning as we want to the error message
         if path.metadata().is_err() {
             return Err(USimpleError::new(
                 2,
-                translate!("sum-error-no-such-file-or-directory", "name" => name.to_string_lossy().maybe_quote()),
+                translate!("sum-error-no-such-file-or-directory", "name" => name.maybe_quote()),
             ));
         }
         let f = File::open(path).map_err_context(String::new)?;
@@ -99,7 +98,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let files: Vec<OsString> = match matches.get_many::<OsString>(options::FILE) {
         Some(v) => v.cloned().collect(),
@@ -127,11 +126,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         let mut stdout = stdout().lock();
         if print_names {
-            writeln!(
-                stdout,
-                "{sum:0width$} {blocks:width$} {}",
-                file.to_string_lossy()
-            )?;
+            write!(stdout, "{sum:0width$} {blocks:width$} ")?;
+            stdout.write_all_os(file)?;
+            stdout.write_all(b"\n")?;
         } else {
             writeln!(stdout, "{sum:0width$} {blocks:width$}")?;
         }

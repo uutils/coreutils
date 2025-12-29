@@ -1,5 +1,4 @@
 #!/bin/sh
-# spell-checker:ignore uuhelp
 ARG=""
 if test "$1" != "--do-it"; then
     ARG="--dry-run --allow-dirty"
@@ -54,7 +53,15 @@ TOTAL_ORDER=${TOTAL_ORDER#ROOT}
 CRATE_VERSION=$(grep '^version =' Cargo.toml | head -n1 | cut -d '"' -f2)
 
 set -e
-for dir in src/uuhelp_parser/ src/uucore_procs/ src/uucore/ src/uu/stdbuf/src/libstdbuf/ tests/uutests/; do
+CORE_DIRS="src/uucore_procs/ src/uucore/ src/uu/stdbuf/src/libstdbuf/ tests/uutests/ fuzz/uufuzz/"
+CORE_COUNT=$(echo $CORE_DIRS | wc -w)
+UTIL_COUNT=$(echo $TOTAL_ORDER | wc -w)
+TOTAL_COUNT=$((CORE_COUNT + UTIL_COUNT + 1))
+CURRENT=0
+
+for dir in $CORE_DIRS; do
+    CURRENT=$((CURRENT + 1))
+    echo "[$CURRENT/$TOTAL_COUNT] Processing: $dir"
     (
         cd "$dir"
         CRATE_NAME=$(grep '^name =' "Cargo.toml" | head -n1 | cut -d '"' -f2)
@@ -69,6 +76,8 @@ for dir in src/uuhelp_parser/ src/uucore_procs/ src/uucore/ src/uu/stdbuf/src/li
 done
 
 for p in $TOTAL_ORDER; do
+    CURRENT=$((CURRENT + 1))
+    echo "[$CURRENT/$TOTAL_COUNT] Processing: $p"
     (
         cd "src/uu/$p"
         CRATE_NAME=$(grep '^name =' "Cargo.toml" | head -n1 | cut -d '"' -f2)
@@ -81,5 +90,7 @@ for p in $TOTAL_ORDER; do
     )
 done
 
+CURRENT=$((CURRENT + 1))
+echo "[$CURRENT/$TOTAL_COUNT] Processing: main coreutils crate"
 #shellcheck disable=SC2086
 cargo publish $ARG

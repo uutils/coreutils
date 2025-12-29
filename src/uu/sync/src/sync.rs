@@ -13,7 +13,6 @@ use nix::fcntl::{OFlag, open};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::sys::stat::Mode;
 use std::path::Path;
-use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use uucore::error::FromIo;
@@ -174,7 +173,7 @@ mod platform {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
     let files: Vec<String> = matches
         .get_many::<String>(ARG_FILES)
         .map(|v| v.map(ToString::to_string).collect())

@@ -15,7 +15,6 @@ use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::{fmt, io};
-use uucore::LocalizedCommand;
 #[cfg(all(unix, not(target_os = "android")))]
 use uucore::fsxattr::copy_xattrs;
 use uucore::translate;
@@ -176,11 +175,11 @@ impl Default for ReflinkMode {
     fn default() -> Self {
         #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
         {
-            ReflinkMode::Auto
+            Self::Auto
         }
         #[cfg(not(any(target_os = "linux", target_os = "android", target_os = "macos")))]
         {
-            ReflinkMode::Never
+            Self::Never
         }
     }
 }
@@ -782,7 +781,7 @@ pub fn uu_app() -> Command {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let options = Options::from_matches(&matches)?;
 
@@ -988,8 +987,6 @@ impl Options {
         let not_implemented_opts = vec![
             #[cfg(not(any(windows, unix)))]
             options::ONE_FILE_SYSTEM,
-            #[cfg(windows)]
-            options::FORCE,
         ];
 
         for not_implemented_opt in not_implemented_opts {
@@ -1336,6 +1333,7 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
     // remember the copied destinations for further usage.
     // we can't use copied_files as it is because the key is the source file's information.
     let mut copied_destinations: HashSet<PathBuf> = HashSet::with_capacity(sources.len());
+    let mut created_parent_dirs: HashSet<PathBuf> = HashSet::new();
 
     let progress_bar = if options.progress_bar {
         let pb = ProgressBar::new(disk_usage(sources, options.recursive)?)
@@ -1375,10 +1373,19 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
             {
                 // There is already a file and it isn't a symlink (managed in a different place)
                 if copied_destinations.contains(&dest) && options.backup != BackupMode::Numbered {
-                    // If the target file was already created in this cp call, do not overwrite
-                    return Err(CpError::Error(
-                        translate!("cp-error-will-not-overwrite-just-created", "dest" => dest.quote(), "source" => source.quote()),
-                    ));
+                    // If the target was already created in this cp call, check if it's a directory.
+                    // Directories should be merged (GNU cp behavior), but files should not be overwritten.
+                    let dest_is_dir = fs::metadata(&dest).is_ok_and(|m| m.is_dir());
+                    let source_is_dir = fs::metadata(source).is_ok_and(|m| m.is_dir());
+
+                    // Only prevent overwriting if both source and dest are files (not directories)
+                    // Directories should be merged, which is handled by copy_directory
+                    if !dest_is_dir || !source_is_dir {
+                        // If the target file was already created in this cp call, do not overwrite
+                        return Err(CpError::Error(
+                            translate!("cp-error-will-not-overwrite-just-created", "dest" => dest.quote(), "source" => source.quote()),
+                        ));
+                    }
                 }
             }
 
@@ -1391,6 +1398,7 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
                 &mut symlinked_files,
                 &copied_destinations,
                 &mut copied_files,
+                &mut created_parent_dirs,
             ) {
                 show_error_if_needed(&error);
                 if !matches!(error, CpError::Skipped(false)) {
@@ -1441,6 +1449,13 @@ fn construct_dest_path(
                     Path::new("")
                 }
             } else {
+                if source_path == Path::new(".") && target.is_dir() {
+                    // Special case: when copying current directory (.) to an existing directory,
+                    // return the target path directly instead of trying to construct a path
+                    // relative to the source's parent. This ensures we copy the contents of
+                    // the current directory into the target directory, not create a subdirectory.
+                    return Ok(target.to_path_buf());
+                }
                 source_path.parent().unwrap_or(source_path)
             };
             localize_to_target(root, source_path, target)?
@@ -1458,6 +1473,7 @@ fn copy_source(
     symlinked_files: &mut HashSet<FileInformation>,
     copied_destinations: &HashSet<PathBuf>,
     copied_files: &mut HashMap<FileInformation, PathBuf>,
+    created_parent_dirs: &mut HashSet<PathBuf>,
 ) -> CopyResult<()> {
     let source_path = Path::new(&source);
     if source_path.is_dir() && (options.dereference || !source_path.is_symlink()) {
@@ -1470,6 +1486,7 @@ fn copy_source(
             symlinked_files,
             copied_destinations,
             copied_files,
+            created_parent_dirs,
             true,
         )
     } else {
@@ -1483,6 +1500,7 @@ fn copy_source(
             symlinked_files,
             copied_destinations,
             copied_files,
+            created_parent_dirs,
             true,
         );
         if options.parents {
@@ -1508,6 +1526,7 @@ fn copy_source(
 // This fix adds yet another metadata read.
 // Should this metadata be read once and then reused throughout the execution?
 // https://github.com/uutils/coreutils/issues/6658
+#[allow(clippy::if_not_else)]
 fn file_mode_for_interactive_overwrite(
     #[cfg_attr(not(unix), allow(unused_variables))] path: &Path,
 ) -> Option<(String, String)> {
@@ -1720,13 +1739,13 @@ pub(crate) fn copy_attributes(
             if let Some(context) = context {
                 if let Err(e) = context.set_for_path(dest, false, false) {
                     return Err(CpError::Error(
-                        translate!("cp-error-selinux-set-context", "path" => dest.display(), "error" => e),
+                        translate!("cp-error-selinux-set-context", "path" => dest.quote(), "error" => e),
                     ));
                 }
             }
         } else {
             return Err(CpError::Error(
-                translate!("cp-error-selinux-get-context", "path" => source.display()),
+                translate!("cp-error-selinux-get-context", "path" => source.quote()),
             ));
         }
         Ok(())
@@ -1925,7 +1944,6 @@ fn delete_dest_if_needed_and_allowed(
     let delete_dest = match options.overwrite {
         OverwriteMode::Clobber(cl) | OverwriteMode::Interactive(cl) => {
             match cl {
-                // FIXME: print that the file was removed if --verbose is enabled
                 ClobberMode::Force => {
                     // TODO
                     // Using `readonly` here to check if `dest` needs to be deleted is not correct:
@@ -1964,19 +1982,39 @@ fn delete_dest_if_needed_and_allowed(
     };
 
     if delete_dest {
-        fs::remove_file(dest)?;
+        delete_path(dest, options)
+    } else {
+        Ok(())
+    }
+}
+
+fn delete_path(path: &Path, options: &Options) -> CopyResult<()> {
+    // Windows requires clearing readonly attribute before deletion when using --force
+    #[cfg(windows)]
+    if options.force() {
+        if let Ok(mut perms) = fs::metadata(path).map(|m| m.permissions()) {
+            #[allow(clippy::permissions_set_readonly_false)]
+            perms.set_readonly(false);
+            let _ = fs::set_permissions(path, perms);
+        }
+    }
+
+    match fs::remove_file(path) {
+        Ok(()) => {
+            if options.verbose {
+                println!(
+                    "{}",
+                    translate!("cp-verbose-removed", "path" => path.quote())
+                );
+            }
+        }
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {
+            // target could have been deleted earlier (e.g. same-file with --remove-destination)
+        }
+        Err(err) => return Err(err.into()),
     }
 
     Ok(())
-}
-
-/// Decide whether the given path exists.
-fn file_or_link_exists(path: &Path) -> bool {
-    // Using `Path.exists()` or `Path.try_exists()` is not sufficient,
-    // because if `path` is a symbolic link and there are too many
-    // levels of symbolic link, then those methods will return false
-    // or an OS error.
-    path.symlink_metadata().is_ok()
 }
 
 /// Zip the ancestors of a source path and destination path.
@@ -2076,6 +2114,7 @@ fn handle_copy_mode(
     source_in_command_line: bool,
     source_is_fifo: bool,
     source_is_socket: bool,
+    created_parent_dirs: &mut HashSet<PathBuf>,
     #[cfg(unix)] source_is_stream: bool,
 ) -> CopyResult<PerformedAction> {
     let source_is_symlink = source_metadata.is_symlink();
@@ -2117,6 +2156,7 @@ fn handle_copy_mode(
                 source_is_fifo,
                 source_is_socket,
                 symlinked_files,
+                created_parent_dirs,
                 #[cfg(unix)]
                 source_is_stream,
             )?;
@@ -2140,6 +2180,7 @@ fn handle_copy_mode(
                             source_is_fifo,
                             source_is_socket,
                             symlinked_files,
+                            created_parent_dirs,
                             #[cfg(unix)]
                             source_is_stream,
                         )?;
@@ -2176,6 +2217,7 @@ fn handle_copy_mode(
                             source_is_fifo,
                             source_is_socket,
                             symlinked_files,
+                            created_parent_dirs,
                             #[cfg(unix)]
                             source_is_stream,
                         )?;
@@ -2191,6 +2233,7 @@ fn handle_copy_mode(
                     source_is_fifo,
                     source_is_socket,
                     symlinked_files,
+                    created_parent_dirs,
                     #[cfg(unix)]
                     source_is_stream,
                 )?;
@@ -2222,16 +2265,14 @@ fn handle_copy_mode(
 // Allow unused variables for Windows (on options)
 #[allow(unused_variables)]
 fn calculate_dest_permissions(
+    dest_metadata: Option<&Metadata>,
     dest: &Path,
     source_metadata: &Metadata,
     options: &Options,
     context: &str,
 ) -> CopyResult<Permissions> {
-    if dest.exists() {
-        Ok(dest
-            .symlink_metadata()
-            .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?
-            .permissions())
+    if let Some(metadata) = dest_metadata {
+        Ok(metadata.permissions())
     } else {
         #[cfg(unix)]
         {
@@ -2271,10 +2312,15 @@ fn copy_file(
     symlinked_files: &mut HashSet<FileInformation>,
     copied_destinations: &HashSet<PathBuf>,
     copied_files: &mut HashMap<FileInformation, PathBuf>,
+    created_parent_dirs: &mut HashSet<PathBuf>,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
     let source_is_symlink = source.is_symlink();
-    let dest_is_symlink = dest.is_symlink();
+    let initial_dest_metadata = dest.symlink_metadata().ok();
+    let dest_is_symlink = initial_dest_metadata
+        .as_ref()
+        .is_some_and(|md| md.file_type().is_symlink());
+    let dest_target_exists = dest.try_exists().unwrap_or(false);
     // Fail if dest is a dangling symlink or a symlink this program created previously
     if dest_is_symlink {
         if FileInformation::from_path(dest, false)
@@ -2296,7 +2342,7 @@ fn copy_file(
 
         let copy_contents = options.dereference(source_in_command_line) || !source_is_symlink;
         if copy_contents
-            && !dest.exists()
+            && !dest_target_exists
             && !matches!(
                 options.overwrite,
                 OverwriteMode::Clobber(ClobberMode::RemoveDestination)
@@ -2329,7 +2375,7 @@ fn copy_file(
         fs::remove_file(dest)?;
     }
 
-    if file_or_link_exists(dest)
+    if initial_dest_metadata.is_some()
         && (!options.attributes_only
             || matches!(
                 options.overwrite,
@@ -2412,7 +2458,15 @@ fn copy_file(
         })?
     };
 
-    let dest_permissions = calculate_dest_permissions(dest, &source_metadata, options, context)?;
+    let dest_metadata = dest.symlink_metadata().ok();
+
+    let dest_permissions = calculate_dest_permissions(
+        dest_metadata.as_ref(),
+        dest,
+        &source_metadata,
+        options,
+        context,
+    )?;
 
     #[cfg(unix)]
     let source_is_fifo = source_metadata.file_type().is_fifo();
@@ -2435,6 +2489,7 @@ fn copy_file(
         source_in_command_line,
         source_is_fifo,
         source_is_socket,
+        created_parent_dirs,
         #[cfg(unix)]
         source_is_stream,
     )?;
@@ -2487,7 +2542,7 @@ fn copy_file(
     );
 
     if let Some(progress_bar) = progress_bar {
-        progress_bar.inc(fs::metadata(source)?.len());
+        progress_bar.inc(source_metadata.len());
     }
 
     Ok(())
@@ -2563,11 +2618,14 @@ fn copy_helper(
     source_is_fifo: bool,
     source_is_socket: bool,
     symlinked_files: &mut HashSet<FileInformation>,
+    created_parent_dirs: &mut HashSet<PathBuf>,
     #[cfg(unix)] source_is_stream: bool,
 ) -> CopyResult<()> {
     if options.parents {
         let parent = dest.parent().unwrap_or(dest);
-        fs::create_dir_all(parent)?;
+        if created_parent_dirs.insert(parent.to_path_buf()) {
+            fs::create_dir_all(parent)?;
+        }
     }
 
     if path_ends_with_terminator(dest) && !dest.is_dir() {
@@ -2636,7 +2694,7 @@ fn copy_link(
     // we always need to remove the file to be able to create a symlink,
     // even if it is writeable.
     if dest.is_symlink() || dest.is_file() {
-        fs::remove_file(dest)?;
+        delete_path(dest, options)?;
     }
     symlink_file(&link, dest, symlinked_files)?;
     copy_attributes(source, dest, &options.attributes)

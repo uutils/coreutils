@@ -41,7 +41,7 @@ fn get_locale_from_env(locale_name: &str) -> (Locale, UEncoding) {
             // Naively convert the locale name to BCP47 tag format.
             //
             // See https://en.wikipedia.org/wiki/IETF_language_tag
-            let bcp47 = simple.replace("_", "-");
+            let bcp47 = simple.replace('_', "-");
             let locale = Locale::try_from_str(&bcp47).unwrap_or(DEFAULT_LOCALE);
 
             // If locale parsing failed, parse the encoding part of the

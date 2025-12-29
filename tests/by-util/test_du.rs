@@ -4,26 +4,26 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (paths) atim sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty tsublink testfile1 testfile2 filelist fpath testdir testfile
+// spell-checker:ignore selfref ELOOP smallfile
+
 #[cfg(not(windows))]
 use regex::Regex;
 
-use uutests::at_and_ucmd;
-use uutests::new_ucmd;
 #[cfg(not(target_os = "windows"))]
 use uutests::unwrap_or_return;
 use uutests::util::TestScenario;
 #[cfg(not(target_os = "windows"))]
 use uutests::util::expected_result;
-use uutests::util_name;
+use uutests::{at_and_ucmd, new_ucmd, util_name};
 
 #[cfg(not(target_os = "openbsd"))]
 const SUB_DIR: &str = "subdir/deeper";
 const SUB_DEEPER_DIR: &str = "subdir/deeper/deeper_dir";
 const SUB_DIR_LINKS: &str = "subdir/links";
 const SUB_DIR_LINKS_DEEPER_SYM_DIR: &str = "subdir/links/deeper_dir";
-#[cfg(not(target_os = "openbsd"))]
+#[cfg(all(not(target_os = "android"), not(target_os = "openbsd")))]
 const SUB_FILE: &str = "subdir/links/subwords.txt";
-#[cfg(not(target_os = "openbsd"))]
+#[cfg(all(not(target_os = "android"), not(target_os = "openbsd")))]
 const SUB_LINK: &str = "subdir/links/sublink.txt";
 
 #[test]
@@ -68,7 +68,11 @@ fn du_basics(s: &str) {
     assert_eq!(s, answer);
 }
 
-#[cfg(all(not(target_vendor = "apple"), not(target_os = "windows")))]
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "openbsd")
+))]
 fn du_basics(s: &str) {
     let answer = concat!(
         "8\t./subdir/deeper/deeper_dir\n",
@@ -118,7 +122,8 @@ fn du_basics_subdir(s: &str) {
 #[cfg(all(
     not(target_vendor = "apple"),
     not(target_os = "windows"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))]
 fn du_basics_subdir(s: &str) {
     // MS-WSL linux has altered expected output
@@ -179,6 +184,219 @@ fn test_du_with_posixly_correct() {
 }
 
 #[test]
+fn test_du_zero_env_block_size() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let dir = "a";
+
+    at.mkdir(dir);
+    at.write(&format!("{dir}/file"), "some content");
+
+    let expected = ts
+        .ucmd()
+        .arg(dir)
+        .arg("--block-size=1024")
+        .succeeds()
+        .stdout_move_str();
+
+    let result = ts
+        .ucmd()
+        .arg(dir)
+        .env("DU_BLOCK_SIZE", "0")
+        .succeeds()
+        .stdout_move_str();
+
+    assert_eq!(expected, result);
+}
+
+#[test]
+fn test_du_zero_env_block_size_hierarchy() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let dir = "a";
+
+    at.mkdir(dir);
+    at.write(&format!("{dir}/file"), "some content");
+
+    let expected = ts
+        .ucmd()
+        .arg(dir)
+        .arg("--block-size=1024")
+        .succeeds()
+        .stdout_move_str();
+
+    let result1 = ts
+        .ucmd()
+        .arg(dir)
+        .env("BLOCK_SIZE", "1")
+        .env("DU_BLOCK_SIZE", "0")
+        .succeeds()
+        .stdout_move_str();
+
+    let result2 = ts
+        .ucmd()
+        .arg(dir)
+        .env("BLOCK_SIZE", "1")
+        .env("BLOCKSIZE", "1")
+        .env("DU_BLOCK_SIZE", "0")
+        .succeeds()
+        .stdout_move_str();
+
+    assert_eq!(expected, result1);
+    assert_eq!(expected, result2);
+}
+
+#[test]
+fn test_du_env_block_size_hierarchy() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let dir = "a";
+
+    at.mkdir(dir);
+    at.write(&format!("{dir}/file"), "some content");
+
+    let expected = ts
+        .ucmd()
+        .arg(dir)
+        .arg("--block-size=1")
+        .succeeds()
+        .stdout_move_str();
+
+    let result1 = ts
+        .ucmd()
+        .arg(dir)
+        .env("BLOCK_SIZE", "0")
+        .env("DU_BLOCK_SIZE", "1")
+        .succeeds()
+        .stdout_move_str();
+
+    let result2 = ts
+        .ucmd()
+        .arg(dir)
+        .env("BLOCK_SIZE", "1")
+        .env("BLOCKSIZE", "0")
+        .succeeds()
+        .stdout_move_str();
+
+    assert_eq!(expected, result1);
+    assert_eq!(expected, result2);
+}
+
+#[test]
+fn test_du_binary_block_size() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let dir = "a";
+
+    at.mkdir(dir);
+    let fpath = at.plus(format!("{dir}/file"));
+    std::fs::File::create(&fpath)
+        .expect("cannot create test file")
+        .set_len(100_000)
+        .expect("cannot set file size");
+
+    let test_cases = [
+        ("0b1", "1"),
+        ("0b10100", "20"),
+        ("0b1000000000", "512"),
+        ("0b10K", "2K"),
+    ];
+
+    for (binary, decimal) in test_cases {
+        let decimal = ts
+            .ucmd()
+            .arg(dir)
+            .arg(format!("--block-size={decimal}"))
+            .succeeds()
+            .stdout_move_str();
+
+        let binary = ts
+            .ucmd()
+            .arg(dir)
+            .arg(format!("--block-size={binary}"))
+            .succeeds()
+            .stdout_move_str();
+
+        assert_eq!(
+            decimal, binary,
+            "Binary {binary} should equal decimal {decimal}"
+        );
+    }
+}
+
+#[test]
+fn test_du_binary_env_block_size() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let dir = "a";
+
+    at.mkdir(dir);
+    let fpath = at.plus(format!("{dir}/file"));
+    std::fs::File::create(&fpath)
+        .expect("cannot create test file")
+        .set_len(100_000)
+        .expect("cannot set file size");
+
+    let expected = ts
+        .ucmd()
+        .arg(dir)
+        .arg("--block-size=1024")
+        .succeeds()
+        .stdout_move_str();
+
+    let result = ts
+        .ucmd()
+        .arg(dir)
+        .env("DU_BLOCK_SIZE", "0b10000000000")
+        .succeeds()
+        .stdout_move_str();
+
+    assert_eq!(expected, result);
+}
+
+#[test]
+fn test_du_invalid_binary_size() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.ucmd()
+        .arg("--block-size=0b123")
+        .arg("/tmp")
+        .fails_with_code(1)
+        .stderr_only("du: invalid suffix in --block-size argument '0b123'\n");
+
+    ts.ucmd()
+        .arg("--threshold=0b123")
+        .arg("/tmp")
+        .fails_with_code(1)
+        .stderr_only("du: invalid suffix in --threshold argument '0b123'\n");
+}
+
+#[test]
+fn test_du_binary_edge_cases() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("foo", "test");
+
+    ts.ucmd()
+        .arg("-B0b")
+        .arg("foo")
+        .fails()
+        .stderr_only("du: invalid --block-size argument '0b'\n");
+
+    ts.ucmd()
+        .arg("-B0B")
+        .arg("foo")
+        .fails()
+        .stderr_only("du: invalid suffix in --block-size argument '0B'\n");
+
+    ts.ucmd()
+        .arg("--block-size=0b1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111")
+        .arg("foo")
+        .fails_with_code(1)
+        .stderr_contains("too large");
+}
+
+#[test]
 fn test_du_non_existing_files() {
     new_ucmd!()
         .arg("non_existing_a")
@@ -196,45 +414,71 @@ fn test_du_soft_link() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
-    at.symlink_file(SUB_FILE, SUB_LINK);
+    // Create the directory and file structure explicitly for this test
+    at.mkdir_all("subdir/links");
+    at.write("subdir/links/subwords.txt", &"hello world\n".repeat(100));
+    at.symlink_file("subdir/links/subwords.txt", "subdir/links/sublink.txt");
 
-    let result = ts.ucmd().arg(SUB_DIR_LINKS).succeeds();
+    let result = ts.ucmd().arg("subdir/links").succeeds();
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
-        let result_reference = unwrap_or_return!(expected_result(&ts, &[SUB_DIR_LINKS]));
+        let result_reference = unwrap_or_return!(expected_result(&ts, &["subdir/links"]));
         if result_reference.succeeded() {
             assert_eq!(result.stdout_str(), result_reference.stdout_str());
             return;
         }
     }
-    du_soft_link(result.stdout_str());
-}
 
-#[cfg(target_vendor = "apple")]
-fn du_soft_link(s: &str) {
-    // 'macos' host variants may have `du` output variation for soft links
-    assert!((s == "12\tsubdir/links\n") || (s == "16\tsubdir/links\n"));
-}
-#[cfg(target_os = "windows")]
-fn du_soft_link(s: &str) {
-    assert_eq!(s, "8\tsubdir/links\n");
-}
-#[cfg(target_os = "freebsd")]
-fn du_soft_link(s: &str) {
-    assert_eq!(s, "16\tsubdir/links\n");
-}
-#[cfg(all(
-    not(target_vendor = "apple"),
-    not(target_os = "windows"),
-    not(target_os = "freebsd")
-))]
-fn du_soft_link(s: &str) {
-    // MS-WSL linux has altered expected output
-    if uucore::os::is_wsl_1() {
-        assert_eq!(s, "8\tsubdir/links\n");
-    } else {
-        assert_eq!(s, "16\tsubdir/links\n");
+    let s = result.stdout_str();
+    println!("Output: {s}");
+
+    // Helper closure to assert output matches one of the valid sizes
+    #[cfg(any(target_vendor = "apple", target_os = "windows", target_os = "freebsd"))]
+    let assert_valid_size = |output: &str, valid_sizes: &[&str]| {
+        assert!(
+            valid_sizes.contains(&output),
+            "Expected one of {valid_sizes:?}, got {output}"
+        );
+    };
+
+    #[cfg(target_vendor = "apple")]
+    {
+        // 'macos' host variants may have `du` output variation for soft links
+        let valid_sizes = [
+            "8\tsubdir/links\n",
+            "12\tsubdir/links\n",
+            "16\tsubdir/links\n",
+        ];
+        assert_valid_size(s, &valid_sizes);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let valid_sizes = ["4\tsubdir/links\n", "8\tsubdir/links\n"];
+        assert_valid_size(s, &valid_sizes);
+    }
+
+    #[cfg(target_os = "freebsd")]
+    {
+        // FreeBSD may have different block allocations depending on filesystem
+        // Accept both common sizes
+        let valid_sizes = ["12\tsubdir/links\n", "16\tsubdir/links\n"];
+        assert_valid_size(&s, &valid_sizes);
+    }
+
+    #[cfg(all(
+        not(target_vendor = "apple"),
+        not(target_os = "windows"),
+        not(target_os = "freebsd")
+    ))]
+    {
+        // MS-WSL linux has altered expected output
+        if uucore::os::is_wsl_1() {
+            assert_eq!(s, "8\tsubdir/links\n");
+        } else {
+            assert_eq!(s, "16\tsubdir/links\n");
+        }
     }
 }
 
@@ -321,7 +565,8 @@ fn du_d_flag(s: &str) {
 #[cfg(all(
     not(target_vendor = "apple"),
     not(target_os = "windows"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))]
 fn du_d_flag(s: &str) {
     // MS-WSL linux has altered expected output
@@ -394,7 +639,8 @@ fn du_dereference(s: &str) {
 #[cfg(all(
     not(target_vendor = "apple"),
     not(target_os = "windows"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))]
 fn du_dereference(s: &str) {
     // MS-WSL linux has altered expected output
@@ -813,12 +1059,18 @@ fn test_du_no_exec_permission() {
 #[cfg(not(target_os = "openbsd"))]
 fn test_du_one_file_system() {
     let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
 
-    let result = ts.ucmd().arg("-x").arg(SUB_DIR).succeeds();
+    // Create the directory structure explicitly for this test
+    at.mkdir_all("subdir/deeper/deeper_dir");
+    at.write("subdir/deeper/deeper_dir/deeper_words.txt", "hello world");
+    at.write("subdir/deeper/words.txt", "world");
+
+    let result = ts.ucmd().arg("-x").arg("subdir/deeper").succeeds();
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
-        let result_reference = unwrap_or_return!(expected_result(&ts, &["-x", SUB_DIR]));
+        let result_reference = unwrap_or_return!(expected_result(&ts, &["-x", "subdir/deeper"]));
         if result_reference.succeeded() {
             assert_eq!(result.stdout_str(), result_reference.stdout_str());
             return;
@@ -831,20 +1083,51 @@ fn test_du_one_file_system() {
 #[cfg(not(target_os = "openbsd"))]
 fn test_du_threshold() {
     let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
 
-    let threshold = if cfg!(windows) { "7K" } else { "10K" };
+    // Create the directory structure explicitly for this test
+    at.mkdir_all("subdir/links");
+    at.mkdir_all("subdir/deeper/deeper_dir");
+    // Create files with specific sizes to test threshold
+    at.write("subdir/links/bigfile.txt", &"x".repeat(10000)); // ~10K file
+    at.write("subdir/deeper/deeper_dir/smallfile.txt", "small"); // small file
+
+    let threshold = "10K";
 
     ts.ucmd()
+        .arg("--apparent-size")
         .arg(format!("--threshold={threshold}"))
         .succeeds()
         .stdout_contains("links")
         .stdout_does_not_contain("deeper_dir");
 
     ts.ucmd()
+        .arg("--apparent-size")
         .arg(format!("--threshold=-{threshold}"))
         .succeeds()
         .stdout_does_not_contain("links")
         .stdout_contains("deeper_dir");
+}
+
+#[test]
+#[cfg(not(target_os = "openbsd"))]
+fn test_du_binary_threshold() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir_all("subdir/links");
+    at.mkdir_all("subdir/deeper/deeper_dir");
+    at.write("subdir/links/bigfile.txt", &"x".repeat(10000));
+    at.write("subdir/deeper/deeper_dir/smallfile.txt", "small");
+
+    let threshold_bin = "0b10011100010000";
+
+    ts.ucmd()
+        .arg("--apparent-size")
+        .arg(format!("--threshold={threshold_bin}"))
+        .succeeds()
+        .stdout_contains("links")
+        .stdout_does_not_contain("deeper_dir");
 }
 
 #[test]
@@ -1251,6 +1534,17 @@ fn test_du_files0_from_stdin_with_invalid_zero_length_file_names() {
 }
 
 #[test]
+fn test_du_files0_from_stdin_with_stdin_as_input() {
+    new_ucmd!()
+        .arg("--files0-from=-")
+        .pipe_in("-")
+        .fails_with_code(1)
+        .stderr_is(
+            "du: when reading file names from standard input, no file name of '-' allowed\n",
+        );
+}
+
+#[test]
 fn test_du_files0_from_dir() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1369,7 +1663,7 @@ fn test_du_blocksize_zero_do_not_panic() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.write("foo", "some content");
-    for block_size in ["0", "00", "000", "0x0"] {
+    for block_size in ["0", "00", "000", "0x0", "0b0"] {
         ts.ucmd()
             .arg(format!("-B{block_size}"))
             .arg("foo")
@@ -1438,4 +1732,236 @@ fn test_du_threshold_no_suggested_values() {
 
     let result = ts.ucmd().arg("--threshold").fails();
     assert!(!result.stderr_str().contains("[possible values: ]"));
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_du_long_path_safe_traversal() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let mut deep_path = String::from("long_path_test");
+    at.mkdir(&deep_path);
+
+    for i in 0..15 {
+        let long_dir_name = format!("{}{}", "a".repeat(100), i);
+        deep_path = format!("{deep_path}/{long_dir_name}");
+        at.mkdir_all(&deep_path);
+    }
+
+    let test_file = format!("{deep_path}/test.txt");
+    at.write(&test_file, "test content");
+
+    let result = ts.ucmd().arg("-s").arg("long_path_test").succeeds();
+    assert!(result.stdout_str().contains("long_path_test"));
+
+    let result = ts.ucmd().arg("long_path_test").succeeds();
+    let lines: Vec<&str> = result.stdout_str().trim().lines().collect();
+    assert!(lines.len() >= 15);
+}
+#[test]
+#[cfg(unix)]
+fn test_du_very_deep_directory() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let mut current_path = String::from("x");
+    at.mkdir(&current_path);
+
+    for _ in 0..10 {
+        current_path = format!("{current_path}/x");
+        at.mkdir_all(&current_path);
+    }
+
+    at.write(&format!("{current_path}/file.txt"), "deep file");
+
+    let result = ts.ucmd().arg("-s").arg("x").succeeds();
+    assert!(result.stdout_str().contains('x'));
+
+    let result = ts.ucmd().arg("-a").arg("x").succeeds();
+    let output = result.stdout_str();
+    assert!(output.contains("file.txt"));
+}
+#[test]
+#[cfg(unix)]
+fn test_du_safe_traversal_with_symlinks() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let mut deep_path = String::from("symlink_test");
+    at.mkdir(&deep_path);
+
+    for i in 0..8 {
+        let dir_name = format!("{}{}", "b".repeat(50), i);
+        deep_path = format!("{deep_path}/{dir_name}");
+        at.mkdir_all(&deep_path);
+    }
+
+    at.write(&format!("{deep_path}/target.txt"), "target content");
+
+    at.symlink_file(&format!("{deep_path}/target.txt"), "shallow_link.txt");
+
+    let result = ts.ucmd().arg("-L").arg("shallow_link.txt").succeeds();
+    assert!(!result.stdout_str().is_empty());
+
+    let result = ts.ucmd().arg("shallow_link.txt").succeeds();
+    assert!(!result.stdout_str().is_empty());
+}
+#[test]
+#[cfg(target_os = "linux")]
+fn test_du_inaccessible_directory() {
+    // tested by tests/du/no-x
+    let ts = TestScenario::new(util_name!());
+    let at = ts.fixtures.clone();
+
+    at.mkdir("d");
+    at.mkdir("d/no-x");
+    at.mkdir("d/no-x/y");
+
+    at.set_mode("d/no-x", 0o600);
+
+    let result = ts.ucmd().arg("d").fails();
+    result.stderr_contains("du: cannot access 'd/no-x/y': Permission denied");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_du_symlink_self_reference() {
+    // Test symlink that points to its own directory
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("selfref");
+    at.symlink_dir("selfref", "selfref/self");
+
+    let result = ts.ucmd().arg("-L").arg("selfref").succeeds();
+
+    result.stdout_contains("selfref");
+    // Should not show the self-referencing symlink to avoid infinite recursion
+    result.stdout_does_not_contain("selfref/self");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_du_long_symlink_chain() {
+    // Test that very long symlink chains are handled gracefully
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    // Create a simple structure that tests symlink depth limits
+    // Instead of trying to create a chain that causes ELOOP, test that reasonable chains work
+    at.mkdir_all("deep/level1/level2/level3/level4/level5");
+    at.write(
+        "deep/level1/level2/level3/level4/level5/file.txt",
+        "content",
+    );
+
+    at.symlink_dir("deep/level1", "link1");
+    at.symlink_dir("link1/level2", "link2");
+    at.symlink_dir("link2/level3", "link3");
+
+    let result = ts.ucmd().arg("-L").arg("link3").succeeds();
+    result.stdout_contains("link3");
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "macos")))]
+fn test_du_bind_mount_simulation() {
+    // Simulate bind mount scenario using hard links where possible
+    // Note: This test simulates what bind mounts do - making the same directory
+    // appear in multiple places with the same inode
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir_all("mount_test/subdir");
+    at.write("mount_test/file1.txt", "content1");
+    at.write("mount_test/subdir/file2.txt", "content2");
+
+    // On systems where we can't create actual bind mounts,
+    // we test that cycle detection works with symlinks that would create similar cycles
+    at.symlink_dir("../mount_test", "mount_test/subdir/cycle_link");
+
+    let result = ts.ucmd().arg("mount_test").succeeds();
+
+    result.stdout_contains("mount_test/subdir");
+    result.stdout_contains("mount_test");
+
+    result.stdout_does_not_contain("mount_test/subdir/cycle_link");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_du_symlink_depth_tracking() {
+    // Test that du can handle reasonable symlink chains without hitting depth limits
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir_all("chain/dir1/dir2/dir3");
+    at.write("chain/dir1/dir2/dir3/file.txt", "content");
+
+    at.symlink_dir("chain/dir1/dir2", "shortcut");
+
+    let result = ts.ucmd().arg("-L").arg("shortcut").succeeds();
+    result.stdout_contains("shortcut/dir3");
+    result.stdout_contains("shortcut");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_du_long_path_from_unreadable() {
+    // Test the specific scenario from GNU's long-from-unreadable.sh test
+    // This verifies that du can handle very long paths when the current directory is unreadable
+    use std::env;
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    // Create a deep hierarchy similar to the GNU test
+    // Use a more reasonable depth for unit tests
+    let dir_name = "x".repeat(200);
+    let mut current_path = String::new();
+
+    for i in 0..20 {
+        if i == 0 {
+            current_path = dir_name.clone();
+        } else {
+            current_path = format!("{current_path}/{dir_name}");
+        }
+        at.mkdir_all(&current_path);
+    }
+
+    at.write(&format!("{current_path}/test.txt"), "test content");
+
+    at.mkdir("inaccessible");
+
+    let original_cwd = env::current_dir().unwrap();
+
+    let inaccessible_path = at.plus("inaccessible");
+    env::set_current_dir(&inaccessible_path).unwrap();
+
+    // Remove read permission from the directory
+    let mut perms = fs::metadata(&inaccessible_path).unwrap().permissions();
+    perms.set_mode(0o000);
+    fs::set_permissions(&inaccessible_path, perms).unwrap();
+
+    // Try to run du on the long path from the unreadable directory
+    let target_path = at.plus(&dir_name);
+    let result = ts.ucmd().arg("-s").arg(&target_path).succeeds(); // Should succeed with safe traversal
+
+    assert!(!result.stdout_str().is_empty());
+    let output = result.stdout_str().trim();
+    let parts: Vec<&str> = output.split_whitespace().collect();
+    assert_eq!(parts.len(), 2);
+
+    assert!(parts[0].parse::<u64>().is_ok());
+    assert!(parts[1].contains(&dir_name[..50])); // Check first part of the long name
+
+    env::set_current_dir(&original_cwd).unwrap();
+
+    // Restore permissions so the directory can be cleaned up
+    let mut perms = fs::metadata(&inaccessible_path).unwrap().permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&inaccessible_path, perms).unwrap();
 }

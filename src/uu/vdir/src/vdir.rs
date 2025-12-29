@@ -13,7 +13,7 @@ use uucore::quoting_style::QuotingStyle;
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let command = uu_app();
-    let matches = command.get_matches_from(args);
+    let matches = uucore::clap_localization::handle_clap_result_with_exit_code(command, args, 2)?;
 
     let mut default_quoting_style = false;
     let mut default_format_style = false;

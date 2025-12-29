@@ -23,7 +23,6 @@ use std::os::unix::fs::symlink;
 #[cfg(windows)]
 use std::os::windows::fs::{symlink_dir, symlink_file};
 use std::path::{Path, PathBuf};
-use uucore::LocalizedCommand;
 use uucore::backup_control::{self, BackupMode};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 
@@ -61,8 +60,11 @@ enum LnError {
     #[error("{}", translate!("ln-error-missing-destination", "operand" => _0.quote()))]
     MissingDestination(PathBuf),
 
-    #[error("{}", translate!("ln-error-extra-operand", "operand" => _0.to_string_lossy(), "program" => _1.clone()))]
+    #[error("{}", translate!("ln-error-extra-operand", "operand" => _0.quote(), "program" => _1.clone()))]
     ExtraOperand(OsString, String),
+
+    #[error("{}", translate!("ln-failed-to-create-hard-link-dir", "source" => _0.to_string_lossy()))]
+    FailedToCreateHardLinkDir(PathBuf),
 }
 
 impl UError for LnError {
@@ -89,15 +91,7 @@ static ARG_FILES: &str = "files";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let after_help = format!(
-        "{}\n\n{}",
-        translate!("ln-after-help"),
-        backup_control::BACKUP_CONTROL_LONG_HELP
-    );
-
-    let matches = uu_app()
-        .after_help(after_help)
-        .get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     /* the list of files */
 
@@ -142,12 +136,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
+    let after_help = format!(
+        "{}\n\n{}",
+        translate!("ln-after-help"),
+        backup_control::BACKUP_CONTROL_LONG_HELP
+    );
+
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("ln-about"))
         .override_usage(format_usage(&translate!("ln-usage")))
         .infer_long_args(true)
+        .after_help(after_help)
         .arg(backup_control::arguments::backup())
         .arg(backup_control::arguments::backup_no_args())
         /*.arg(
@@ -344,7 +345,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
             // If the target file was already created in this ln call, do not overwrite
             show_error!(
                 "{}",
-                translate!("ln-error-will-not-overwrite", "target" => targetpath.display(), "source" => srcpath.display())
+                translate!("ln-error-will-not-overwrite", "target" => targetpath.quote(), "source" => srcpath.quote())
             );
             all_successful = false;
         } else if let Err(e) = link(srcpath, &targetpath, settings) {
@@ -412,7 +413,17 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
             }
             OverwriteMode::Force => {
                 if !dst.is_symlink() && paths_refer_to_same_file(src, dst, true) {
-                    return Err(LnError::SameFile(src.to_owned(), dst.to_owned()).into());
+                    // Even in force overwrite mode, verify we are not targeting the same entry and return a SameFile error if so
+                    let same_entry = match (
+                        canonicalize(src, MissingHandling::Missing, ResolveMode::Physical),
+                        canonicalize(dst, MissingHandling::Missing, ResolveMode::Physical),
+                    ) {
+                        (Ok(src), Ok(dst)) => src == dst,
+                        _ => true,
+                    };
+                    if same_entry {
+                        return Err(LnError::SameFile(src.to_owned(), dst.to_owned()).into());
+                    }
                 }
                 if fs::remove_file(dst).is_ok() {}
                 // In case of error, don't do anything
@@ -423,6 +434,12 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
     if settings.symbolic {
         symlink(&source, dst)?;
     } else {
+        // Cannot create hard link to a directory directly
+        // We can however create hard link to a symlink that points to a directory, so long as -L is not passed
+        if src.is_dir() && (!src.is_symlink() || settings.logical) {
+            return Err(LnError::FailedToCreateHardLinkDir(source.to_path_buf()).into());
+        }
+
         let p = if settings.logical && source.is_symlink() {
             // if we want to have an hard link,
             // source is a symlink and -L is passed

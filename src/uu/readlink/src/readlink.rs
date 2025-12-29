@@ -10,9 +10,10 @@ use std::ffi::OsString;
 use std::fs;
 use std::io::{Write, stdout};
 use std::path::{Path, PathBuf};
-use uucore::LocalizedCommand;
-use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+use uucore::display::Quotable;
+use uucore::error::{FromIo, UResult, UUsageError};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
+use uucore::libc::EINVAL;
 use uucore::line_ending::LineEnding;
 use uucore::translate;
 use uucore::{format_usage, show_error};
@@ -30,18 +31,21 @@ const ARG_FILES: &str = "files";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let mut no_trailing_delimiter = matches.get_flag(OPT_NO_NEWLINE);
     let use_zero = matches.get_flag(OPT_ZERO);
     let silent = matches.get_flag(OPT_SILENT) || matches.get_flag(OPT_QUIET);
     let verbose = matches.get_flag(OPT_VERBOSE);
 
+    // GNU readlink -f/-e/-m follows symlinks first and then applies `..` (physical resolution).
+    // ResolveMode::Logical collapses `..` before following links, which yields the opposite order,
+    // so we choose Physical here for GNU compatibility.
     let res_mode = if matches.get_flag(OPT_CANONICALIZE)
         || matches.get_flag(OPT_CANONICALIZE_EXISTING)
         || matches.get_flag(OPT_CANONICALIZE_MISSING)
     {
-        ResolveMode::Logical
+        ResolveMode::Physical
     } else {
         ResolveMode::None
     };
@@ -89,15 +93,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 show(&path, line_ending).map_err_context(String::new)?;
             }
             Err(err) => {
-                return if verbose {
-                    Err(USimpleError::new(
-                        1,
-                        err.map_err_context(move || p.to_string_lossy().to_string())
-                            .to_string(),
-                    ))
+                if silent && !verbose {
+                    return Err(1.into());
+                }
+
+                let message = if err.raw_os_error() == Some(EINVAL) {
+                    translate!("readlink-error-invalid-argument", "path" => p.maybe_quote())
                 } else {
-                    Err(1.into())
+                    err.map_err_context(|| p.maybe_quote().to_string())
+                        .to_string()
                 };
+                show_error!("{message}");
+                return Err(1.into());
             }
         }
     }

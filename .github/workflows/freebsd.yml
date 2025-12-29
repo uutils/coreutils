@@ -34,14 +34,16 @@ jobs:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
+      with:
+        disable_annotations: true
     - name: Prepare, build and test
-      uses: vmactions/freebsd-vm@v1.2.3
+      uses: vmactions/freebsd-vm@v1.2.9
       with:
         usesh: true
         sync: rsync
@@ -128,14 +130,16 @@ jobs:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
+      with:
+        disable_annotations: true
     - name: Prepare, build and test
-      uses: vmactions/freebsd-vm@v1.2.3
+      uses: vmactions/freebsd-vm@v1.2.9
       with:
         usesh: true
         sync: rsync
@@ -156,7 +160,6 @@ jobs:
           WORKSPACE="${WORKSPACE_PARENT}/${REPO_NAME}"
           #
           pw adduser -n ${TEST_USER} -d /root/ -g wheel -c "Coreutils user to build" -w random
-          # chown -R ${TEST_USER}:wheel /root/ "${WORKSPACE_PARENT}"/
           chown -R ${TEST_USER}:wheel /root/ "${WORKSPACE_PARENT}"/
           whoami
           #
@@ -196,11 +199,11 @@ jobs:
           if (test -z "\$FAULT"); then cargo nextest run --hide-progress-bar --profile ci --features '${{ matrix.job.features }}' || FAULT=1 ; fi
           # There is no systemd-logind on FreeBSD, so test all features except feat_systemd_logind ( https://github.com/rust-lang/cargo/issues/3126#issuecomment-2523441905 )
           if (test -z "\$FAULT"); then
-            UUCORE_FEATURES=\$(cargo metadata --format-version=1 --no-deps -p uucore | jq -r '.packages[] | select(.name == "uucore") | .features | keys | .[]' | grep -v "feat_systemd_logind" | paste -s -d "," -)
+            UUCORE_FEATURES=\$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "uucore") | .features | keys | .[]' | grep -v "feat_systemd_logind" | paste -s -d "," -)
             cargo nextest run --hide-progress-bar --profile ci --features "\$UUCORE_FEATURES" -p uucore || FAULT=1
           fi
           # Test building with make
-          if (test -z "\$FAULT"); then make PROFILE=ci || FAULT=1 ; fi
+          if (test -z "\$FAULT"); then make || FAULT=1 ; fi
           # Clean to avoid to rsync back the files
           cargo clean
           if (test -n "\$FAULT"); then exit 1 ; fi

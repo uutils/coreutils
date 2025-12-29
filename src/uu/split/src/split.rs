@@ -26,7 +26,6 @@ use uucore::translate;
 
 use uucore::parser::parse_size::parse_size_u64;
 
-use uucore::LocalizedCommand;
 use uucore::format_usage;
 use uucore::uio_error;
 
@@ -52,7 +51,7 @@ static ARG_PREFIX: &str = "prefix";
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (args, obs_lines) = handle_obsolete(args);
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     match Settings::from(&matches, obs_lines.as_deref()) {
         Ok(settings) => split(&settings),
@@ -486,9 +485,9 @@ impl Settings {
 
         let io_blksize: Option<u64> = if let Some(s) = matches.get_one::<String>(OPT_IO_BLKSIZE) {
             match parse_size_u64(s) {
-                Ok(0) => return Err(SettingsError::InvalidIOBlockSize(s.to_string())),
+                Ok(0) => return Err(SettingsError::InvalidIOBlockSize(s.to_owned())),
                 Ok(n) if n <= uucore::fs::sane_blksize::MAX => Some(n),
-                _ => return Err(SettingsError::InvalidIOBlockSize(s.to_string())),
+                _ => return Err(SettingsError::InvalidIOBlockSize(s.to_owned())),
             }
         } else {
             None
@@ -639,7 +638,7 @@ where
         // STDIN stream that did not fit all content into a buffer
         // Most likely continuous/infinite input stream
         Err(io::Error::other(
-            translate!("split-error-cannot-determine-input-size", "input" => input.to_string_lossy()),
+            translate!("split-error-cannot-determine-input-size", "input" => input.maybe_quote()),
         ))
     } else {
         // Could be that file size is larger than set read limit
@@ -664,7 +663,7 @@ where
                 // TODO It might be possible to do more here
                 // to address all possible file types and edge cases
                 Err(io::Error::other(
-                    translate!("split-error-cannot-determine-file-size", "input" => input.to_string_lossy()),
+                    translate!("split-error-cannot-determine-file-size", "input" => input.maybe_quote()),
                 ))
             }
         }
@@ -1173,7 +1172,7 @@ where
                 Err(error) => {
                     return Err(USimpleError::new(
                         1,
-                        translate!("split-error-cannot-read-from-input", "input" => settings.input.to_string_lossy(), "error" => error),
+                        translate!("split-error-cannot-read-from-input", "input" => settings.input.maybe_quote(), "error" => error),
                     ));
                 }
             }
@@ -1535,7 +1534,7 @@ fn split(settings: &Settings) -> UResult<()> {
         Box::new(stdin()) as Box<dyn Read>
     } else {
         let r = File::open(Path::new(&settings.input)).map_err_context(
-            || translate!("split-error-cannot-open-for-reading", "file" => settings.input.to_string_lossy().quote()),
+            || translate!("split-error-cannot-open-for-reading", "file" => settings.input.quote()),
         )?;
         Box::new(r) as Box<dyn Read>
     };

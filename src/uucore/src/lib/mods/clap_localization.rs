@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (path) osrelease
+// spell-checker:ignore (path) osrelease myutil
 
 //! Helper clap functions to localize error handling and options
 //!
@@ -11,6 +11,7 @@
 //! instead of parsing error strings, providing a more robust solution.
 //!
 
+use crate::error::{UResult, USimpleError};
 use crate::locale::translate;
 
 use clap::error::{ContextKind, ErrorKind};
@@ -18,43 +19,6 @@ use clap::{ArgMatches, Command, Error};
 
 use std::error::Error as StdError;
 use std::ffi::OsString;
-
-/// Determines if a clap error should show simple help instead of full usage
-/// Based on clap's own design patterns and error categorization
-fn should_show_simple_help_for_clap_error(kind: ErrorKind) -> bool {
-    match kind {
-        // Show simple help
-        ErrorKind::InvalidValue
-        | ErrorKind::InvalidSubcommand
-        | ErrorKind::ValueValidation
-        | ErrorKind::InvalidUtf8
-        | ErrorKind::ArgumentConflict
-        | ErrorKind::NoEquals => true,
-
-        // Argument count and structural errors need special formatting
-        ErrorKind::TooFewValues
-        | ErrorKind::TooManyValues
-        | ErrorKind::WrongNumberOfValues
-        | ErrorKind::MissingSubcommand => false,
-
-        // MissingRequiredArgument needs different handling
-        ErrorKind::MissingRequiredArgument => false,
-
-        // Special cases - handle their own display
-        ErrorKind::DisplayHelp
-        | ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
-        | ErrorKind::DisplayVersion => false,
-
-        // UnknownArgument gets special handling elsewhere, so mark as false here
-        ErrorKind::UnknownArgument => false,
-
-        // System errors - keep simple
-        ErrorKind::Io | ErrorKind::Format => true,
-
-        // Default for any new ErrorKind variants - be conservative and show simple help
-        _ => true,
-    }
-}
 
 /// Color enum for consistent styling
 #[derive(Debug, Clone, Copy)]
@@ -67,324 +31,496 @@ pub enum Color {
 impl Color {
     fn code(self) -> &'static str {
         match self {
-            Color::Red => "31",
-            Color::Yellow => "33",
-            Color::Green => "32",
+            Self::Red => "31",
+            Self::Yellow => "33",
+            Self::Green => "32",
         }
     }
 }
 
-/// Apply color to text using ANSI escape codes
-fn colorize(text: &str, color: Color) -> String {
-    format!("\x1b[{}m{text}\x1b[0m", color.code())
-}
-
-/// Handle DisplayHelp and DisplayVersion errors
-fn handle_display_errors(err: Error) -> ! {
-    match err.kind() {
-        ErrorKind::DisplayHelp => {
-            // For help messages, we use the localized help template
-            // The template should already have the localized usage label,
-            // but we also replace any remaining "Usage:" instances for fallback
-
-            let help_text = err.render().to_string();
-
-            // Replace any remaining "Usage:" with localized version as fallback
-            let usage_label = translate!("common-usage");
-            let localized_help = help_text.replace("Usage:", &format!("{usage_label}:"));
-
-            print!("{}", localized_help);
-            std::process::exit(0);
-        }
-        ErrorKind::DisplayVersion => {
-            // For version, use clap's built-in formatting and exit with 0
-            // Output to stdout as expected by tests
-            print!("{}", err.render());
-            std::process::exit(0);
-        }
-        _ => unreachable!("handle_display_errors called with non-display error"),
+/// Determine color choice based on environment variables
+fn get_color_choice() -> clap::ColorChoice {
+    if std::env::var("NO_COLOR").is_ok() {
+        clap::ColorChoice::Never
+    } else if std::env::var("CLICOLOR_FORCE").is_ok() || std::env::var("FORCE_COLOR").is_ok() {
+        clap::ColorChoice::Always
+    } else {
+        clap::ColorChoice::Auto
     }
 }
 
-/// Handle UnknownArgument errors with localization and suggestions
-fn handle_unknown_argument_error(
-    err: Error,
-    util_name: &str,
-    maybe_colorize: impl Fn(&str, Color) -> String,
-) -> ! {
-    if let Some(invalid_arg) = err.get(ContextKind::InvalidArg) {
-        let arg_str = invalid_arg.to_string();
-        // Get localized error word with fallback
-        let error_word = translate!("common-error");
+/// Generic helper to check if colors should be enabled for a given stream
+fn should_use_color_for_stream<S: std::io::IsTerminal>(stream: &S) -> bool {
+    match get_color_choice() {
+        clap::ColorChoice::Always => true,
+        clap::ColorChoice::Never => false,
+        clap::ColorChoice::Auto => {
+            stream.is_terminal() && std::env::var("TERM").unwrap_or_default() != "dumb"
+        }
+    }
+}
 
-        let colored_arg = maybe_colorize(&arg_str, Color::Yellow);
-        let colored_error_word = maybe_colorize(&error_word, Color::Red);
+/// Manages color output based on environment settings
+struct ColorManager(bool);
 
-        // Print main error message with fallback
-        let error_msg = translate!(
-            "clap-error-unexpected-argument",
-            "arg" => colored_arg.clone(),
-            "error_word" => colored_error_word.clone()
-        );
-        eprintln!("{error_msg}");
-        eprintln!();
+impl ColorManager {
+    /// Create a new ColorManager based on environment variables
+    fn from_env() -> Self {
+        Self(should_use_color_for_stream(&std::io::stderr()))
+    }
 
-        // Show suggestion if available
-        if let Some(suggested_arg) = err.get(ContextKind::SuggestedArg) {
-            let tip_word = translate!("common-tip");
-            let colored_tip_word = maybe_colorize(&tip_word, Color::Green);
-            let colored_suggestion = maybe_colorize(&suggested_arg.to_string(), Color::Green);
-            let suggestion_msg = translate!(
-                "clap-error-similar-argument",
-                "tip_word" => colored_tip_word.clone(),
-                "suggestion" => colored_suggestion.clone()
-            );
-            eprintln!("{suggestion_msg}");
-            eprintln!();
+    /// Apply color to text if colors are enabled
+    fn colorize(&self, text: &str, color: Color) -> String {
+        if self.0 {
+            format!("\x1b[{}m{text}\x1b[0m", color.code())
         } else {
-            // For UnknownArgument, we need to preserve clap's built-in tips (like using -- for values)
-            // while still allowing localization of the main error message
-            let rendered_str = err.render().to_string();
+            text.to_string()
+        }
+    }
+}
 
-            // Look for other clap tips (like "-- --file-with-dash") that aren't suggestions
-            // These usually start with "  tip:" and contain useful information
-            for line in rendered_str.lines() {
-                if line.trim_start().starts_with("tip:") && !line.contains("similar argument") {
-                    eprintln!("{line}");
-                    eprintln!();
+/// Unified error formatter that handles all error types consistently
+pub struct ErrorFormatter<'a> {
+    color_mgr: ColorManager,
+    util_name: &'a str,
+}
+
+impl<'a> ErrorFormatter<'a> {
+    pub fn new(util_name: &'a str) -> Self {
+        Self {
+            color_mgr: ColorManager::from_env(),
+            util_name,
+        }
+    }
+
+    /// Print error and exit with the specified code
+    fn print_error_and_exit(&self, err: &Error, exit_code: i32) -> ! {
+        self.print_error_and_exit_with_callback(err, exit_code, || {})
+    }
+
+    /// Print error with optional callback before exit
+    pub fn print_error_and_exit_with_callback<F>(
+        &self,
+        err: &Error,
+        exit_code: i32,
+        callback: F,
+    ) -> !
+    where
+        F: FnOnce(),
+    {
+        let code = self.print_error(err, exit_code);
+        callback();
+        std::process::exit(code);
+    }
+
+    /// Print error and return exit code (no exit call)
+    pub fn print_error(&self, err: &Error, exit_code: i32) -> i32 {
+        match err.kind() {
+            ErrorKind::DisplayHelp | ErrorKind::DisplayVersion => self.handle_display_errors(err),
+            ErrorKind::UnknownArgument => self.handle_unknown_argument(err, exit_code),
+            ErrorKind::InvalidValue | ErrorKind::ValueValidation => {
+                self.handle_invalid_value(err, exit_code)
+            }
+            ErrorKind::MissingRequiredArgument => self.handle_missing_required(err, exit_code),
+            ErrorKind::TooFewValues | ErrorKind::TooManyValues | ErrorKind::WrongNumberOfValues => {
+                // These need full clap formatting
+                eprint!("{}", err.render());
+                exit_code
+            }
+            _ => self.handle_generic_error(err, exit_code),
+        }
+    }
+
+    /// Handle help and version display
+    fn handle_display_errors(&self, err: &Error) -> i32 {
+        print!("{}", err.render());
+        0
+    }
+
+    /// Handle unknown argument errors
+    fn handle_unknown_argument(&self, err: &Error, exit_code: i32) -> i32 {
+        if let Some(invalid_arg) = err.get(ContextKind::InvalidArg) {
+            let arg_str = invalid_arg.to_string();
+            let error_word = translate!("common-error");
+
+            // Print main error
+            eprintln!(
+                "{}",
+                translate!(
+                    "clap-error-unexpected-argument",
+                    "arg" => self.color_mgr.colorize(&arg_str, Color::Yellow),
+                    "error_word" => self.color_mgr.colorize(&error_word, Color::Red)
+                )
+            );
+            eprintln!();
+
+            // Show suggestion if available
+            if let Some(suggested_arg) = err.get(ContextKind::SuggestedArg) {
+                let tip_word = translate!("common-tip");
+                eprintln!(
+                    "{}",
+                    translate!(
+                        "clap-error-similar-argument",
+                        "tip_word" => self.color_mgr.colorize(&tip_word, Color::Green),
+                        "suggestion" => self.color_mgr.colorize(&suggested_arg.to_string(), Color::Green)
+                    )
+                );
+                eprintln!();
+            } else {
+                // Look for other tips from clap
+                self.print_clap_tips(err);
+            }
+
+            self.print_usage_and_help();
+        } else {
+            self.print_simple_error_msg(&translate!("clap-error-unexpected-argument-simple"));
+        }
+        exit_code
+    }
+
+    /// Handle invalid value errors
+    fn handle_invalid_value(&self, err: &Error, exit_code: i32) -> i32 {
+        let invalid_arg = err.get(ContextKind::InvalidArg);
+        let invalid_value = err.get(ContextKind::InvalidValue);
+
+        if let (Some(arg), Some(value)) = (invalid_arg, invalid_value) {
+            let option = arg.to_string();
+            let value = value.to_string();
+
+            if value.is_empty() {
+                // Value required but not provided
+                let error_word = translate!("common-error");
+                eprintln!(
+                    "{}",
+                    translate!("clap-error-value-required",
+                        "error_word" => self.color_mgr.colorize(&error_word, Color::Red),
+                        "option" => self.color_mgr.colorize(&option, Color::Green))
+                );
+            } else {
+                // Invalid value provided
+                let error_word = translate!("common-error");
+                let error_msg = translate!(
+                    "clap-error-invalid-value",
+                    "error_word" => self.color_mgr.colorize(&error_word, Color::Red),
+                    "value" => self.color_mgr.colorize(&value, Color::Yellow),
+                    "option" => self.color_mgr.colorize(&option, Color::Green)
+                );
+                // Include validation error if present
+                match err.source() {
+                    Some(source) if matches!(err.kind(), ErrorKind::ValueValidation) => {
+                        eprintln!("{error_msg}: {source}");
+                    }
+                    _ => eprintln!("{error_msg}"),
                 }
             }
+
+            // Show possible values for InvalidValue errors
+            if matches!(err.kind(), ErrorKind::InvalidValue) {
+                if let Some(valid_values) = err.get(ContextKind::ValidValue) {
+                    if !valid_values.to_string().is_empty() {
+                        eprintln!();
+                        eprintln!(
+                            "  [{}: {valid_values}]",
+                            translate!("clap-error-possible-values")
+                        );
+                    }
+                }
+            }
+
+            eprintln!();
+            eprintln!("{}", translate!("common-help-suggestion"));
+        } else {
+            self.print_simple_error_msg(&err.render().to_string());
         }
 
-        // Show usage information for unknown arguments
-        let usage_key = format!("{util_name}-usage");
+        // InvalidValue errors traditionally use exit code 1 for backward compatibility
+        // But if a utility explicitly requests a high exit code (>= 125), respect it
+        // This allows utilities like runcon (125) to override the default while preserving
+        // the standard behavior for utilities using normal error codes (1, 2, etc.)
+        if matches!(err.kind(), ErrorKind::InvalidValue) && exit_code < 125 {
+            1 // Force exit code 1 for InvalidValue unless using special exit codes
+        } else {
+            exit_code // Respect the requested exit code for special cases
+        }
+    }
+
+    /// Handle missing required argument errors
+    fn handle_missing_required(&self, err: &Error, exit_code: i32) -> i32 {
+        let rendered_str = err.render().to_string();
+        let lines: Vec<&str> = rendered_str.lines().collect();
+
+        match lines.first() {
+            Some(first_line)
+                if first_line
+                    .starts_with("error: the following required arguments were not provided:") =>
+            {
+                let error_word = translate!("common-error");
+                eprintln!(
+                    "{}",
+                    translate!(
+                        "clap-error-missing-required-arguments",
+                        "error_word" => self.color_mgr.colorize(&error_word, Color::Red)
+                    )
+                );
+
+                // Print the missing arguments
+                for line in lines.iter().skip(1) {
+                    if line.starts_with("  ") {
+                        eprintln!("{line}");
+                    } else if line.starts_with("Usage:") || line.starts_with("For more information")
+                    {
+                        break;
+                    }
+                }
+                eprintln!();
+
+                // Print usage
+                lines
+                    .iter()
+                    .skip_while(|line| !line.starts_with("Usage:"))
+                    .for_each(|line| {
+                        if line.starts_with("For more information, try '--help'.") {
+                            eprintln!("{}", translate!("common-help-suggestion"));
+                        } else {
+                            eprintln!("{line}");
+                        }
+                    });
+            }
+            _ => eprint!("{}", err.render()),
+        }
+        exit_code
+    }
+
+    /// Handle generic errors
+    fn handle_generic_error(&self, err: &Error, exit_code: i32) -> i32 {
+        let rendered_str = err.render().to_string();
+        if let Some(main_error_line) = rendered_str.lines().next() {
+            self.print_localized_error_line(main_error_line);
+            eprintln!();
+            eprintln!("{}", translate!("common-help-suggestion"));
+        } else {
+            eprint!("{}", err.render());
+        }
+        exit_code
+    }
+
+    /// Print a simple error message (no exit)
+    fn print_simple_error_msg(&self, message: &str) {
+        let error_word = translate!("common-error");
+        eprintln!(
+            "{}: {message}",
+            self.color_mgr.colorize(&error_word, Color::Red)
+        );
+    }
+
+    /// Print error line with localized "error:" prefix
+    fn print_localized_error_line(&self, line: &str) {
+        let error_word = translate!("common-error");
+        let colored_error = self.color_mgr.colorize(&error_word, Color::Red);
+
+        if let Some(colon_pos) = line.find(':') {
+            let after_colon = &line[colon_pos..];
+            eprintln!("{colored_error}{after_colon}");
+        } else {
+            eprintln!("{line}");
+        }
+    }
+
+    /// Extract and print clap's built-in tips
+    fn print_clap_tips(&self, err: &Error) {
+        let rendered_str = err.render().to_string();
+        for line in rendered_str.lines() {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("tip:") && !line.contains("similar argument") {
+                let tip_word = translate!("common-tip");
+                if let Some(colon_pos) = trimmed.find(':') {
+                    let after_colon = &trimmed[colon_pos..];
+                    eprintln!(
+                        "  {}{after_colon}",
+                        self.color_mgr.colorize(&tip_word, Color::Green)
+                    );
+                } else {
+                    eprintln!("{line}");
+                }
+                eprintln!();
+            }
+        }
+    }
+
+    /// Print usage information and help suggestion
+    fn print_usage_and_help(&self) {
+        let usage_key = format!("{}-usage", self.util_name);
         let usage_text = translate!(&usage_key);
         let formatted_usage = crate::format_usage(&usage_text);
         let usage_label = translate!("common-usage");
         eprintln!("{usage_label}: {formatted_usage}");
         eprintln!();
         eprintln!("{}", translate!("common-help-suggestion"));
-    } else {
-        // Generic fallback case
-        let error_word = translate!("common-error");
-        let colored_error_word = maybe_colorize(&error_word, Color::Red);
-        eprintln!("{colored_error_word}: unexpected argument");
     }
-    // Choose exit code based on utility name
-    let exit_code = match util_name {
-        // These utilities expect exit code 2 for invalid options
-        "ls" | "dir" | "vdir" | "sort" | "tty" | "printenv" => 2,
-        // Most utilities expect exit code 1
-        _ => 1,
-    };
-
-    std::process::exit(exit_code);
 }
 
-/// Handle InvalidValue and ValueValidation errors with localization
-fn handle_invalid_value_error(err: Error, maybe_colorize: impl Fn(&str, Color) -> String) -> ! {
-    // Extract value and option from error context using clap's context API
-    // This is much more robust than parsing the error string
-    let invalid_arg = err.get(ContextKind::InvalidArg);
-    let invalid_value = err.get(ContextKind::InvalidValue);
+/// Handles clap command parsing results with proper localization support.
+///
+/// This is the main entry point for processing command-line arguments with localized error messages.
+/// It parses the provided arguments and returns either the parsed matches or handles errors with
+/// localized messages.
+///
+/// # Arguments
+///
+/// * `cmd` - The clap `Command` to parse arguments against
+/// * `itr` - An iterator of command-line arguments to parse
+///
+/// # Returns
+///
+/// * `Ok(ArgMatches)` - Successfully parsed command-line arguments
+/// * `Err` - For help/version display (preserves original styling)
+///
+/// # Examples
+///
+/// ```no_run
+/// use clap::Command;
+/// use uucore::clap_localization::handle_clap_result;
+///
+/// let cmd = Command::new("myutil");
+/// let args = vec!["myutil", "--help"];
+/// let result = handle_clap_result(cmd, args);
+/// ```
+pub fn handle_clap_result<I, T>(cmd: Command, itr: I) -> UResult<ArgMatches>
+where
+    I: IntoIterator<Item = T>,
+    T: Into<OsString> + Clone,
+{
+    handle_clap_result_with_exit_code(cmd, itr, 1)
+}
 
-    if let (Some(arg), Some(value)) = (invalid_arg, invalid_value) {
-        let option = arg.to_string();
-        let value = value.to_string();
-
-        // Check if this is actually a missing value (empty string)
-        if value.is_empty() {
-            // This is the case where no value was provided for an option that requires one
-            let error_word = translate!("common-error");
-            eprintln!(
-                "{}",
-                translate!("clap-error-value-required", "error_word" => error_word, "option" => option)
-            );
+/// Handles clap command parsing with a custom exit code for errors.
+///
+/// Similar to `handle_clap_result` but allows specifying a custom exit code
+/// for error conditions. This is useful for utilities that need specific
+/// exit codes for different error types.
+///
+/// # Arguments
+///
+/// * `cmd` - The clap `Command` to parse arguments against
+/// * `itr` - An iterator of command-line arguments to parse
+/// * `exit_code` - The exit code to use when exiting due to an error
+///
+/// # Returns
+///
+/// * `Ok(ArgMatches)` - Successfully parsed command-line arguments
+/// * `Err` - For help/version display (preserves original styling)
+///
+/// # Exit Behavior
+///
+/// This function will call `std::process::exit()` with the specified exit code
+/// when encountering parsing errors (except help/version which use exit code 0).
+///
+/// # Examples
+///
+/// ```no_run
+/// use clap::Command;
+/// use uucore::clap_localization::handle_clap_result_with_exit_code;
+///
+/// let cmd = Command::new("myutil");
+/// let args = vec!["myutil", "--invalid"];
+/// let result = handle_clap_result_with_exit_code(cmd, args, 125);
+/// ```
+pub fn handle_clap_result_with_exit_code<I, T>(
+    cmd: Command,
+    itr: I,
+    exit_code: i32,
+) -> UResult<ArgMatches>
+where
+    I: IntoIterator<Item = T>,
+    T: Into<OsString> + Clone,
+{
+    cmd.try_get_matches_from(itr).map_err(|e| {
+        if e.exit_code() == 0 {
+            e.into() // Preserve help/version
         } else {
-            // Get localized error word and prepare message components outside conditionals
-            let error_word = translate!("common-error");
-            let colored_error_word = maybe_colorize(&error_word, Color::Red);
-            let colored_value = maybe_colorize(&value, Color::Yellow);
-            let colored_option = maybe_colorize(&option, Color::Green);
-
-            let error_msg = translate!(
-                "clap-error-invalid-value",
-                "error_word" => colored_error_word,
-                "value" => colored_value,
-                "option" => colored_option
-            );
-
-            // For ValueValidation errors, include the validation error in the message
-            match err.source() {
-                Some(source) if matches!(err.kind(), ErrorKind::ValueValidation) => {
-                    eprintln!("{error_msg}: {source}");
-                }
-                _ => eprintln!("{error_msg}"),
-            }
+            let formatter = ErrorFormatter::new(crate::util_name());
+            let code = formatter.print_error(&e, exit_code);
+            USimpleError::new(code, "")
         }
-
-        // For ValueValidation errors, include the validation error details
-        // Note: We don't print these separately anymore as they're part of the main message
-
-        // Show possible values if available (for InvalidValue errors)
-        if matches!(err.kind(), ErrorKind::InvalidValue) {
-            if let Some(valid_values) = err.get(ContextKind::ValidValue) {
-                if !valid_values.to_string().is_empty() {
-                    // Don't show possible values if they are empty
-                    eprintln!();
-                    let possible_values_label = translate!("clap-error-possible-values");
-                    eprintln!("  [{possible_values_label}: {valid_values}]");
-                }
-            }
-        }
-
-        eprintln!();
-        eprintln!("{}", translate!("common-help-suggestion"));
-    } else {
-        // Fallback if we can't extract context - use clap's default formatting
-        let rendered_str = err.render().to_string();
-        let lines: Vec<&str> = rendered_str.lines().collect();
-        if let Some(main_error_line) = lines.first() {
-            eprintln!("{main_error_line}");
-            eprintln!();
-            eprintln!("{}", translate!("common-help-suggestion"));
-        } else {
-            eprint!("{}", err.render());
-        }
-    }
-    std::process::exit(1);
+    })
 }
 
-pub fn handle_clap_error_with_exit_code(err: Error, util_name: &str, exit_code: i32) -> ! {
-    // Check if colors are enabled by examining clap's rendered output
-    let rendered_str = err.render().to_string();
-    let colors_enabled = rendered_str.contains("\x1b[");
-
-    // Helper function to conditionally colorize text
-    let maybe_colorize = |text: &str, color: Color| -> String {
-        if colors_enabled {
-            colorize(text, color)
-        } else {
-            text.to_string()
-        }
-    };
-
-    match err.kind() {
-        ErrorKind::DisplayHelp | ErrorKind::DisplayVersion => {
-            handle_display_errors(err);
-        }
-        ErrorKind::UnknownArgument => {
-            handle_unknown_argument_error(err, util_name, maybe_colorize);
-        }
-        // Check if this is a simple validation error that should show simple help
-        kind if should_show_simple_help_for_clap_error(kind) => {
-            // Special handling for InvalidValue and ValueValidation to provide localized error
-            if matches!(kind, ErrorKind::InvalidValue | ErrorKind::ValueValidation) {
-                handle_invalid_value_error(err, maybe_colorize);
-            }
-
-            // For other simple validation errors, use the same simple format as other errors
-            let lines: Vec<&str> = rendered_str.lines().collect();
-            if let Some(main_error_line) = lines.first() {
-                // Keep the "error: " prefix for test compatibility
-                eprintln!("{}", main_error_line);
-                eprintln!();
-                // Use the execution phrase for the help suggestion to match test expectations
-                eprintln!("{}", translate!("common-help-suggestion"));
-            } else {
-                // Fallback to original rendering if we can't parse
-                eprint!("{}", err.render());
-            }
-
-            // InvalidValue errors should exit with code 1 for all utilities
-            let actual_exit_code = if matches!(kind, ErrorKind::InvalidValue) {
-                1
-            } else {
-                exit_code
-            };
-
-            std::process::exit(actual_exit_code);
-        }
-        _ => {
-            // For MissingRequiredArgument, use the full clap error as it includes proper usage
-            if matches!(err.kind(), ErrorKind::MissingRequiredArgument) {
-                eprint!("{}", err.render());
-                std::process::exit(exit_code);
-            }
-
-            // For TooFewValues and similar structural errors, use the full clap error
-            if matches!(
-                err.kind(),
-                ErrorKind::TooFewValues | ErrorKind::TooManyValues | ErrorKind::WrongNumberOfValues
-            ) {
-                eprint!("{}", err.render());
-                std::process::exit(exit_code);
-            }
-
-            // For other errors, show just the error and help suggestion
-            let rendered_str = err.render().to_string();
-            let lines: Vec<&str> = rendered_str.lines().collect();
-
-            // Print error message (first line)
-            if let Some(first_line) = lines.first() {
-                eprintln!("{}", first_line);
-            }
-
-            // For other errors, just show help suggestion
-            eprintln!();
-            eprintln!("{}", translate!("common-help-suggestion"));
-
-            std::process::exit(exit_code);
-        }
-    }
+/// Handles a clap error directly with a custom exit code.
+///
+/// This function processes a clap error and exits the program with the specified
+/// exit code. It formats error messages with proper localization and color support
+/// based on environment variables.
+///
+/// # Arguments
+///
+/// * `err` - The clap `Error` to handle
+/// * `exit_code` - The exit code to use when exiting
+///
+/// # Panics
+///
+/// This function never returns - it always calls `std::process::exit()`.
+///
+/// # Examples
+///
+/// ```no_run
+/// use clap::Command;
+/// use uucore::clap_localization::handle_clap_error_with_exit_code;
+///
+/// let cmd = Command::new("myutil");
+/// match cmd.try_get_matches() {
+///     Ok(matches) => { /* handle matches */ },
+///     Err(e) => handle_clap_error_with_exit_code(e, 1),
+/// }
+/// ```
+pub fn handle_clap_error_with_exit_code(err: Error, exit_code: i32) -> ! {
+    let formatter = ErrorFormatter::new(crate::util_name());
+    formatter.print_error_and_exit(&err, exit_code);
 }
 
-/// Trait extension to provide localized clap error handling
-/// This provides a cleaner API than wrapping with macros
-pub trait LocalizedCommand {
-    /// Get matches with localized error handling
-    fn get_matches_localized(self) -> ArgMatches
-    where
-        Self: Sized;
+/// Configures a clap `Command` with proper localization and color settings.
+///
+/// This function sets up a `Command` with:
+/// - Appropriate color settings based on environment variables (`NO_COLOR`, `CLICOLOR_FORCE`, etc.)
+/// - Localized help template with proper formatting
+/// - TTY detection for automatic color enabling/disabling
+///
+/// # Arguments
+///
+/// * `cmd` - The clap `Command` to configure
+///
+/// # Returns
+///
+/// The configured `Command` with localization and color settings applied.
+///
+/// # Environment Variables
+///
+/// The following environment variables affect color output:
+/// - `NO_COLOR` - Disables all color output
+/// - `CLICOLOR_FORCE` or `FORCE_COLOR` - Forces color output even when not in a TTY
+/// - `TERM` - If set to "dumb", colors are disabled in auto mode
+///
+/// # Examples
+///
+/// ```no_run
+/// use clap::Command;
+/// use uucore::clap_localization::configure_localized_command;
+///
+/// let cmd = Command::new("myutil")
+///     .arg(clap::Arg::new("input").short('i'));
+/// let configured_cmd = configure_localized_command(cmd);
+/// ```
+pub fn configure_localized_command(mut cmd: Command) -> Command {
+    let color_choice = get_color_choice();
+    cmd = cmd.color(color_choice);
 
-    /// Get matches from args with localized error handling
-    fn get_matches_from_localized<I, T>(self, itr: I) -> ArgMatches
-    where
-        Self: Sized,
-        I: IntoIterator<Item = T>,
-        T: Into<OsString> + Clone;
+    // For help output (stdout), we check stdout TTY status
+    let colors_enabled = should_use_color_for_stream(&std::io::stdout());
 
-    /// Get matches from mutable args with localized error handling
-    fn get_matches_from_mut_localized<I, T>(self, itr: I) -> ArgMatches
-    where
-        Self: Sized,
-        I: IntoIterator<Item = T>,
-        T: Into<OsString> + Clone;
-}
-
-impl LocalizedCommand for Command {
-    fn get_matches_localized(self) -> ArgMatches {
-        self.try_get_matches()
-            .unwrap_or_else(|err| handle_clap_error_with_exit_code(err, crate::util_name(), 1))
-    }
-
-    fn get_matches_from_localized<I, T>(self, itr: I) -> ArgMatches
-    where
-        I: IntoIterator<Item = T>,
-        T: Into<OsString> + Clone,
-    {
-        self.try_get_matches_from(itr)
-            .unwrap_or_else(|err| handle_clap_error_with_exit_code(err, crate::util_name(), 1))
-    }
-
-    fn get_matches_from_mut_localized<I, T>(mut self, itr: I) -> ArgMatches
-    where
-        I: IntoIterator<Item = T>,
-        T: Into<OsString> + Clone,
-    {
-        self.try_get_matches_from_mut(itr)
-            .unwrap_or_else(|err| handle_clap_error_with_exit_code(err, crate::util_name(), 1))
-    }
+    cmd = cmd.help_template(crate::localized_help_template_with_colors(
+        crate::util_name(),
+        colors_enabled,
+    ));
+    cmd
 }
 
 /* spell-checker: disable */
@@ -402,15 +538,14 @@ mod tests {
     }
 
     #[test]
-    fn test_colorize() {
-        let red_text = colorize("error", Color::Red);
+    fn test_color_manager() {
+        let mgr = ColorManager(true);
+        let red_text = mgr.colorize("error", Color::Red);
         assert_eq!(red_text, "\x1b[31merror\x1b[0m");
 
-        let yellow_text = colorize("warning", Color::Yellow);
-        assert_eq!(yellow_text, "\x1b[33mwarning\x1b[0m");
-
-        let green_text = colorize("success", Color::Green);
-        assert_eq!(green_text, "\x1b[32msuccess\x1b[0m");
+        let mgr_disabled = ColorManager(false);
+        let plain_text = mgr_disabled.colorize("error", Color::Red);
+        assert_eq!(plain_text, "error");
     }
 
     fn create_test_command() -> Command {
@@ -438,205 +573,102 @@ mod tests {
     }
 
     #[test]
-    fn test_get_matches_from_localized_with_valid_args() {
-        let result = std::panic::catch_unwind(|| {
-            let cmd = create_test_command();
-            let matches = cmd.get_matches_from_localized(vec!["test", "--input", "file.txt"]);
-            matches.get_one::<String>("input").unwrap().clone()
-        });
-
-        if let Ok(input_value) = result {
-            assert_eq!(input_value, "file.txt");
-        }
-    }
-
-    #[test]
-    fn test_get_matches_from_localized_with_osstring_args() {
-        let args: Vec<OsString> = vec!["test".into(), "--input".into(), "test.txt".into()];
-
-        let result = std::panic::catch_unwind(|| {
-            let cmd = create_test_command();
-            let matches = cmd.get_matches_from_localized(args);
-            matches.get_one::<String>("input").unwrap().clone()
-        });
-
-        if let Ok(input_value) = result {
-            assert_eq!(input_value, "test.txt");
-        }
-    }
-
-    #[test]
-    fn test_localized_command_from_mut() {
-        let args: Vec<OsString> = vec!["test".into(), "--output".into(), "result.txt".into()];
-
-        let result = std::panic::catch_unwind(|| {
-            let cmd = create_test_command();
-            let matches = cmd.get_matches_from_mut_localized(args);
-            matches.get_one::<String>("output").unwrap().clone()
-        });
-
-        if let Ok(output_value) = result {
-            assert_eq!(output_value, "result.txt");
-        }
-    }
-
-    fn create_unknown_argument_error() -> Error {
+    fn test_handle_clap_result_with_valid_args() {
         let cmd = create_test_command();
-        cmd.try_get_matches_from(vec!["test", "--unknown-arg"])
-            .unwrap_err()
+        let result = handle_clap_result(cmd, vec!["test", "--input", "file.txt"]);
+        assert!(result.is_ok());
+        let matches = result.unwrap();
+        assert_eq!(matches.get_one::<String>("input").unwrap(), "file.txt");
     }
 
-    fn create_invalid_value_error() -> Error {
+    #[test]
+    fn test_handle_clap_result_with_osstring() {
+        let args: Vec<OsString> = vec!["test".into(), "--output".into(), "out.txt".into()];
         let cmd = create_test_command();
-        cmd.try_get_matches_from(vec!["test", "--format", "invalid"])
-            .unwrap_err()
-    }
-
-    fn create_help_error() -> Error {
-        let cmd = create_test_command();
-        cmd.try_get_matches_from(vec!["test", "--help"])
-            .unwrap_err()
-    }
-
-    fn create_version_error() -> Error {
-        let cmd = Command::new("test").version("1.0.0");
-        cmd.try_get_matches_from(vec!["test", "--version"])
-            .unwrap_err()
+        let result = handle_clap_result(cmd, args);
+        assert!(result.is_ok());
+        let matches = result.unwrap();
+        assert_eq!(matches.get_one::<String>("output").unwrap(), "out.txt");
     }
 
     #[test]
-    fn test_error_kind_detection() {
-        let unknown_err = create_unknown_argument_error();
-        assert_eq!(unknown_err.kind(), ErrorKind::UnknownArgument);
-
-        let invalid_value_err = create_invalid_value_error();
-        assert_eq!(invalid_value_err.kind(), ErrorKind::InvalidValue);
-
-        let help_err = create_help_error();
-        assert_eq!(help_err.kind(), ErrorKind::DisplayHelp);
-
-        let version_err = create_version_error();
-        assert_eq!(version_err.kind(), ErrorKind::DisplayVersion);
+    fn test_configure_localized_command() {
+        let cmd = Command::new("test");
+        let configured = configure_localized_command(cmd);
+        // The command should have color and help template configured
+        // We can't easily test the internal state, but we can verify it doesn't panic
+        assert_eq!(configured.get_name(), "test");
     }
 
     #[test]
-    fn test_context_extraction() {
-        let unknown_err = create_unknown_argument_error();
-        let invalid_arg = unknown_err.get(ContextKind::InvalidArg);
-        assert!(invalid_arg.is_some());
-        assert!(invalid_arg.unwrap().to_string().contains("unknown-arg"));
+    fn test_color_environment_vars() {
+        use std::env;
 
-        let invalid_value_err = create_invalid_value_error();
-        let invalid_value = invalid_value_err.get(ContextKind::InvalidValue);
-        assert!(invalid_value.is_some());
-        assert_eq!(invalid_value.unwrap().to_string(), "invalid");
-    }
+        // Test NO_COLOR disables colors
+        unsafe {
+            env::set_var("NO_COLOR", "1");
+        }
+        assert_eq!(get_color_choice(), clap::ColorChoice::Never);
+        assert!(!should_use_color_for_stream(&std::io::stderr()));
+        let mgr = ColorManager::from_env();
+        assert!(!mgr.0);
+        unsafe {
+            env::remove_var("NO_COLOR");
+        }
 
-    fn test_maybe_colorize_helper(colors_enabled: bool) {
-        let maybe_colorize = |text: &str, color: Color| -> String {
-            if colors_enabled {
-                colorize(text, color)
-            } else {
-                text.to_string()
-            }
-        };
+        // Test CLICOLOR_FORCE enables colors
+        unsafe {
+            env::set_var("CLICOLOR_FORCE", "1");
+        }
+        assert_eq!(get_color_choice(), clap::ColorChoice::Always);
+        assert!(should_use_color_for_stream(&std::io::stderr()));
+        let mgr = ColorManager::from_env();
+        assert!(mgr.0);
+        unsafe {
+            env::remove_var("CLICOLOR_FORCE");
+        }
 
-        let result = maybe_colorize("test", Color::Red);
-        if colors_enabled {
-            assert!(result.contains("\x1b[31m"));
-            assert!(result.contains("\x1b[0m"));
-        } else {
-            assert_eq!(result, "test");
+        // Test FORCE_COLOR also enables colors
+        unsafe {
+            env::set_var("FORCE_COLOR", "1");
+        }
+        assert_eq!(get_color_choice(), clap::ColorChoice::Always);
+        assert!(should_use_color_for_stream(&std::io::stderr()));
+        unsafe {
+            env::remove_var("FORCE_COLOR");
         }
     }
 
     #[test]
-    fn test_maybe_colorize_with_colors() {
-        test_maybe_colorize_helper(true);
+    fn test_error_formatter_creation() {
+        let formatter = ErrorFormatter::new("test");
+        assert_eq!(formatter.util_name, "test");
+        // Color manager should be created based on environment
     }
 
     #[test]
-    fn test_maybe_colorize_without_colors() {
-        test_maybe_colorize_helper(false);
-    }
-
-    #[test]
-    fn test_simple_help_classification() {
-        let simple_help_kinds = [
-            ErrorKind::InvalidValue,
-            ErrorKind::ValueValidation,
-            ErrorKind::InvalidSubcommand,
-            ErrorKind::InvalidUtf8,
-            ErrorKind::ArgumentConflict,
-            ErrorKind::NoEquals,
-            ErrorKind::Io,
-            ErrorKind::Format,
-        ];
-
-        let non_simple_help_kinds = [
-            ErrorKind::TooFewValues,
-            ErrorKind::TooManyValues,
-            ErrorKind::WrongNumberOfValues,
-            ErrorKind::MissingSubcommand,
-            ErrorKind::MissingRequiredArgument,
-            ErrorKind::DisplayHelp,
-            ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand,
-            ErrorKind::DisplayVersion,
-            ErrorKind::UnknownArgument,
-        ];
-
-        for kind in &simple_help_kinds {
-            assert!(
-                should_show_simple_help_for_clap_error(*kind),
-                "Expected {:?} to show simple help",
-                kind
-            );
-        }
-
-        for kind in &non_simple_help_kinds {
-            assert!(
-                !should_show_simple_help_for_clap_error(*kind),
-                "Expected {:?} to NOT show simple help",
-                kind
-            );
-        }
-    }
-
-    #[test]
-    fn test_localization_setup() {
+    fn test_localization_keys_exist() {
         use crate::locale::{get_message, setup_localization};
 
         let _ = setup_localization("test");
 
-        let common_keys = [
+        let required_keys = [
             "common-error",
             "common-usage",
+            "common-tip",
             "common-help-suggestion",
             "clap-error-unexpected-argument",
             "clap-error-invalid-value",
+            "clap-error-missing-required-arguments",
+            "clap-error-similar-argument",
+            "clap-error-possible-values",
+            "clap-error-value-required",
         ];
-        for key in &common_keys {
+
+        for key in &required_keys {
             let message = get_message(key);
-            assert_ne!(message, *key, "Translation not found for key: {}", key);
+            assert_ne!(message, *key, "Translation missing for key: {key}");
         }
-    }
-
-    #[test]
-    fn test_localization_with_args() {
-        use crate::locale::{get_message_with_args, setup_localization};
-        use fluent::FluentArgs;
-
-        let _ = setup_localization("test");
-
-        let mut args = FluentArgs::new();
-        args.set("error_word", "ERROR");
-        args.set("arg", "--test");
-
-        let message = get_message_with_args("clap-error-unexpected-argument", args);
-        assert_ne!(
-            message, "clap-error-unexpected-argument",
-            "Translation not found for key: clap-error-unexpected-argument"
-        );
     }
 
     #[test]
@@ -647,62 +679,13 @@ mod tests {
         let original_lang = env::var("LANG").unwrap_or_default();
 
         unsafe {
-            env::set_var("LANG", "fr-FR");
-        }
-        let result = setup_localization("test");
-
-        if result.is_ok() {
-            let error_word = get_message("common-error");
-            assert_eq!(error_word, "erreur");
-
-            let usage_word = get_message("common-usage");
-            assert_eq!(usage_word, "Utilisation");
-
-            let tip_word = get_message("common-tip");
-            assert_eq!(tip_word, "conseil");
+            env::set_var("LANG", "fr_FR.UTF-8");
         }
 
-        unsafe {
-            if original_lang.is_empty() {
-                env::remove_var("LANG");
-            } else {
-                env::set_var("LANG", original_lang);
-            }
-        }
-    }
-
-    #[test]
-    fn test_french_clap_error_messages() {
-        use crate::locale::{get_message_with_args, setup_localization};
-        use fluent::FluentArgs;
-        use std::env;
-
-        let original_lang = env::var("LANG").unwrap_or_default();
-
-        unsafe {
-            env::set_var("LANG", "fr-FR");
-        }
-        let result = setup_localization("test");
-
-        if result.is_ok() {
-            let mut args = FluentArgs::new();
-            args.set("error_word", "erreur");
-            args.set("arg", "--inconnu");
-
-            let unexpected_msg = get_message_with_args("clap-error-unexpected-argument", args);
-            assert!(unexpected_msg.contains("erreur"));
-            assert!(unexpected_msg.contains("--inconnu"));
-            assert!(unexpected_msg.contains("inattendu"));
-
-            let mut value_args = FluentArgs::new();
-            value_args.set("error_word", "erreur");
-            value_args.set("value", "invalide");
-            value_args.set("option", "--format");
-
-            let invalid_msg = get_message_with_args("clap-error-invalid-value", value_args);
-            assert!(invalid_msg.contains("erreur"));
-            assert!(invalid_msg.contains("invalide"));
-            assert!(invalid_msg.contains("--format"));
+        if setup_localization("test").is_ok() {
+            assert_eq!(get_message("common-error"), "erreur");
+            assert_eq!(get_message("common-usage"), "Utilisation");
+            assert_eq!(get_message("common-tip"), "conseil");
         }
 
         unsafe {

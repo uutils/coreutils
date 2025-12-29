@@ -2,15 +2,15 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+//
+// spell-checker:ignore fstatat openat dirfd
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::PossibleValue};
 use glob::Pattern;
 use std::collections::HashSet;
 use std::env;
-use std::ffi::OsStr;
-use std::ffi::OsString;
-use std::fs::Metadata;
-use std::fs::{self, DirEntry, File};
+use std::ffi::{OsStr, OsString};
+use std::fs::{self, DirEntry, File, Metadata};
 use std::io::{BufRead, BufReader, stdout};
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
@@ -25,11 +25,12 @@ use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::fsext::{MetadataTimeField, metadata_get_time};
 use uucore::line_ending::LineEnding;
+#[cfg(target_os = "linux")]
+use uucore::safe_traversal::DirFd;
 use uucore::translate;
 
-use uucore::LocalizedCommand;
 use uucore::parser::parse_glob;
-use uucore::parser::parse_size::{ParseSizeError, parse_size_u64};
+use uucore::parser::parse_size::{ParseSizeError, parse_size_non_zero_u64, parse_size_u64};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::time::{FormatSystemTimeFallback, format, format_system_time};
 use uucore::{format_usage, show, show_error, show_warning};
@@ -161,6 +162,40 @@ impl Stat {
             metadata,
         })
     }
+
+    /// Create a Stat using safe traversal methods with `DirFd` for the root directory
+    #[cfg(target_os = "linux")]
+    fn new_from_dirfd(dir_fd: &DirFd, full_path: &Path) -> std::io::Result<Self> {
+        // Get metadata for the directory itself using fstat
+        let safe_metadata = dir_fd.metadata()?;
+
+        // Create file info from the safe metadata
+        let file_info = safe_metadata.file_info();
+        let file_info_option = Some(FileInfo {
+            file_id: file_info.inode() as u128,
+            dev_id: file_info.device(),
+        });
+
+        let blocks = safe_metadata.blocks();
+
+        // Create a temporary std::fs::Metadata by reading the same path
+        // This is still needed for compatibility but should work since we're dealing with
+        // the root path which should be accessible
+        let std_metadata = fs::symlink_metadata(full_path)?;
+
+        Ok(Self {
+            path: full_path.to_path_buf(),
+            size: if safe_metadata.is_dir() {
+                0
+            } else {
+                safe_metadata.len()
+            },
+            blocks,
+            inodes: 1,
+            inode: file_info_option,
+            metadata: std_metadata,
+        })
+    }
 }
 
 #[cfg(not(windows))]
@@ -235,35 +270,320 @@ fn get_file_info(path: &Path, _metadata: &Metadata) -> Option<FileInfo> {
     result
 }
 
+fn block_size_from_env() -> Option<u64> {
+    for env_var in ["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
+        if let Ok(env_size) = env::var(env_var) {
+            return parse_size_non_zero_u64(&env_size).ok();
+        }
+    }
+
+    None
+}
+
 fn read_block_size(s: Option<&str>) -> UResult<u64> {
     if let Some(s) = s {
         parse_size_u64(s)
             .map_err(|e| USimpleError::new(1, format_error_message(&e, s, options::BLOCK_SIZE)))
+    } else if let Some(bytes) = block_size_from_env() {
+        Ok(bytes)
+    } else if env::var("POSIXLY_CORRECT").is_ok() {
+        Ok(512)
     } else {
-        for env_var in ["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
-            if let Ok(env_size) = env::var(env_var) {
-                if let Ok(v) = parse_size_u64(&env_size) {
-                    return Ok(v);
-                }
-            }
-        }
-        if env::var("POSIXLY_CORRECT").is_ok() {
-            Ok(512)
-        } else {
-            Ok(1024)
-        }
+        Ok(1024)
     }
 }
 
+#[cfg(target_os = "linux")]
+// For now, implement safe_du only on Linux
+// This is done for Ubuntu but should be extended to other platforms that support openat
+fn safe_du(
+    path: &Path,
+    options: &TraversalOptions,
+    depth: usize,
+    seen_inodes: &mut HashSet<FileInfo>,
+    print_tx: &mpsc::Sender<UResult<StatPrintInfo>>,
+    parent_fd: Option<&DirFd>,
+) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
+    // Get initial stat for this path - use DirFd if available to avoid path length issues
+    let mut my_stat = if let Some(parent_fd) = parent_fd {
+        // We have a parent fd, this is a subdirectory - use openat
+        let dir_name = path.file_name().unwrap_or(path.as_os_str());
+        match parent_fd.metadata_at(dir_name, false) {
+            Ok(safe_metadata) => {
+                // Create Stat from safe metadata
+                let file_info = safe_metadata.file_info();
+                let file_info_option = Some(FileInfo {
+                    file_id: file_info.inode() as u128,
+                    dev_id: file_info.device(),
+                });
+                let blocks = safe_metadata.blocks();
+
+                // For compatibility, still try to get std::fs::Metadata
+                // but fallback to a minimal approach if it fails
+                let std_metadata = fs::symlink_metadata(path).unwrap_or_else(|_| {
+                    // If we can't get std metadata, create a minimal fake one
+                    // This should rarely happen but provides a fallback
+                    fs::symlink_metadata("/").expect("root should be accessible")
+                });
+
+                Stat {
+                    path: path.to_path_buf(),
+                    size: if safe_metadata.is_dir() {
+                        0
+                    } else {
+                        safe_metadata.len()
+                    },
+                    blocks,
+                    inodes: 1,
+                    inode: file_info_option,
+                    metadata: std_metadata,
+                }
+            }
+            Err(e) => {
+                let error = e.map_err_context(
+                    || translate!("du-error-cannot-access", "path" => path.quote()),
+                );
+                if let Err(send_error) = print_tx.send(Err(error)) {
+                    return Err(Box::new(send_error));
+                }
+                return Err(Box::new(mpsc::SendError(Err(USimpleError::new(
+                    0,
+                    "Error already handled",
+                )))));
+            }
+        }
+    } else {
+        // This is the initial directory - try regular Stat::new first, then fallback to DirFd
+        match Stat::new(path, None, options) {
+            Ok(s) => s,
+            Err(_e) => {
+                // Try using our new DirFd method for the root directory
+                match DirFd::open(path) {
+                    Ok(dir_fd) => match Stat::new_from_dirfd(&dir_fd, path) {
+                        Ok(s) => s,
+                        Err(e) => {
+                            let error = e.map_err_context(
+                                || translate!("du-error-cannot-access", "path" => path.quote()),
+                            );
+                            if let Err(send_error) = print_tx.send(Err(error)) {
+                                return Err(Box::new(send_error));
+                            }
+                            return Err(Box::new(mpsc::SendError(Err(USimpleError::new(
+                                0,
+                                "Error already handled",
+                            )))));
+                        }
+                    },
+                    Err(e) => {
+                        let error = e.map_err_context(
+                            || translate!("du-error-cannot-access", "path" => path.quote()),
+                        );
+                        if let Err(send_error) = print_tx.send(Err(error)) {
+                            return Err(Box::new(send_error));
+                        }
+                        return Err(Box::new(mpsc::SendError(Err(USimpleError::new(
+                            0,
+                            "Error already handled",
+                        )))));
+                    }
+                }
+            }
+        }
+    };
+    if !my_stat.metadata.is_dir() {
+        return Ok(my_stat);
+    }
+
+    // Open the directory using DirFd
+    let open_result = match parent_fd {
+        Some(parent) => parent.open_subdir(path.file_name().unwrap_or(path.as_os_str())),
+        None => DirFd::open(path),
+    };
+
+    let dir_fd = match open_result {
+        Ok(fd) => fd,
+        Err(e) => {
+            print_tx.send(Err(e.map_err_context(
+                || translate!("du-error-cannot-read-directory", "path" => path.quote()),
+            )))?;
+            return Ok(my_stat);
+        }
+    };
+
+    // Read directory entries
+    let entries = match dir_fd.read_dir() {
+        Ok(entries) => entries,
+        Err(e) => {
+            print_tx.send(Err(e.map_err_context(
+                || translate!("du-error-cannot-read-directory", "path" => path.quote()),
+            )))?;
+            return Ok(my_stat);
+        }
+    };
+
+    'file_loop: for entry_name in entries {
+        let entry_path = path.join(&entry_name);
+
+        // First get the lstat (without following symlinks) to check if it's a symlink
+        let lstat = match dir_fd.stat_at(&entry_name, false) {
+            Ok(stat) => stat,
+            Err(e) => {
+                print_tx.send(Err(e.map_err_context(
+                    || translate!("du-error-cannot-access", "path" => entry_path.quote()),
+                )))?;
+                continue;
+            }
+        };
+
+        // Check if it's a symlink
+        const S_IFMT: u32 = 0o170_000;
+        const S_IFDIR: u32 = 0o040_000;
+        const S_IFLNK: u32 = 0o120_000;
+        let is_symlink = (lstat.st_mode & S_IFMT) == S_IFLNK;
+
+        // Handle symlinks with -L option
+        // For safe traversal with -L, we skip symlinks to directories entirely
+        // and let the non-safe traversal handle them at the top level
+        if is_symlink && options.dereference == Deref::All {
+            // Skip symlinks to directories when using safe traversal with -L
+            // They will be handled by regular traversal
+            continue;
+        }
+
+        let is_dir = (lstat.st_mode & S_IFMT) == S_IFDIR;
+        let entry_stat = lstat;
+
+        let file_info = (entry_stat.st_ino != 0).then_some(FileInfo {
+            file_id: entry_stat.st_ino as u128,
+            dev_id: entry_stat.st_dev,
+        });
+
+        // For safe traversal, we need to handle stats differently
+        // We can't use std::fs::Metadata since that requires the full path
+        let this_stat = if is_dir {
+            // For directories, recurse using safe_du
+            Stat {
+                path: entry_path.clone(),
+                size: 0,
+                blocks: entry_stat.st_blocks as u64,
+                inodes: 1,
+                inode: file_info,
+                // We need a fake metadata - create one from symlink_metadata of parent
+                // This is a workaround since we can't get real metadata without the full path
+                metadata: my_stat.metadata.clone(),
+            }
+        } else {
+            // For files
+            Stat {
+                path: entry_path.clone(),
+                size: entry_stat.st_size as u64,
+                blocks: entry_stat.st_blocks as u64,
+                inodes: 1,
+                inode: file_info,
+                metadata: my_stat.metadata.clone(),
+            }
+        };
+
+        // Check excludes
+        for pattern in &options.excludes {
+            if pattern.matches(&this_stat.path.to_string_lossy())
+                || pattern.matches(&entry_name.to_string_lossy())
+            {
+                if options.verbose {
+                    println!(
+                        "{}",
+                        translate!("du-verbose-ignored", "path" => this_stat.path.quote())
+                    );
+                }
+                continue 'file_loop;
+            }
+        }
+
+        // Handle inodes
+        if let Some(inode) = this_stat.inode {
+            if seen_inodes.contains(&inode) && (!options.count_links || !options.all) {
+                if options.count_links && !options.all {
+                    my_stat.inodes += 1;
+                }
+                continue;
+            }
+            seen_inodes.insert(inode);
+        }
+
+        // Process directories recursively
+        if is_dir {
+            if options.one_file_system {
+                if let (Some(this_inode), Some(my_inode)) = (this_stat.inode, my_stat.inode) {
+                    if this_inode.dev_id != my_inode.dev_id {
+                        continue;
+                    }
+                }
+            }
+
+            let this_stat = safe_du(
+                &entry_path,
+                options,
+                depth + 1,
+                seen_inodes,
+                print_tx,
+                Some(&dir_fd),
+            )?;
+
+            if !options.separate_dirs {
+                my_stat.size += this_stat.size;
+                my_stat.blocks += this_stat.blocks;
+                my_stat.inodes += this_stat.inodes;
+            }
+            print_tx.send(Ok(StatPrintInfo {
+                stat: this_stat,
+                depth: depth + 1,
+            }))?;
+        } else {
+            my_stat.size += this_stat.size;
+            my_stat.blocks += this_stat.blocks;
+            my_stat.inodes += 1;
+            if options.all {
+                print_tx.send(Ok(StatPrintInfo {
+                    stat: this_stat,
+                    depth: depth + 1,
+                }))?;
+            }
+        }
+    }
+
+    Ok(my_stat)
+}
+
 // this takes `my_stat` to avoid having to stat files multiple times.
+// Only used on non-Linux platforms
+// Regular traversal using std::fs
+// Used on non-Linux platforms and as fallback for symlinks on Linux
 #[allow(clippy::cognitive_complexity)]
-fn du(
+fn du_regular(
     mut my_stat: Stat,
     options: &TraversalOptions,
     depth: usize,
     seen_inodes: &mut HashSet<FileInfo>,
     print_tx: &mpsc::Sender<UResult<StatPrintInfo>>,
+    ancestors: Option<&mut HashSet<FileInfo>>,
+    symlink_depth: Option<usize>,
 ) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
+    let mut default_ancestors = HashSet::new();
+    let ancestors = ancestors.unwrap_or(&mut default_ancestors);
+    let symlink_depth = symlink_depth.unwrap_or(0);
+    // Maximum symlink depth to prevent infinite loops
+    const MAX_SYMLINK_DEPTH: usize = 40;
+
+    // Add current directory to ancestors if it's a directory
+    let my_inode = if my_stat.metadata.is_dir() {
+        my_stat.inode
+    } else {
+        None
+    };
+
+    if let Some(inode) = my_inode {
+        ancestors.insert(inode);
+    }
     if my_stat.metadata.is_dir() {
         let read = match fs::read_dir(&my_stat.path) {
             Ok(read) => read,
@@ -278,8 +598,46 @@ fn du(
         'file_loop: for f in read {
             match f {
                 Ok(entry) => {
-                    match Stat::new(&entry.path(), Some(&entry), options) {
+                    let entry_path = entry.path();
+
+                    // Check if this is a symlink when using -L
+                    let mut current_symlink_depth = symlink_depth;
+                    let is_symlink = match entry.file_type() {
+                        Ok(ft) => ft.is_symlink(),
+                        Err(_) => false,
+                    };
+
+                    if is_symlink && options.dereference == Deref::All {
+                        // Increment symlink depth
+                        current_symlink_depth += 1;
+
+                        // Check symlink depth limit
+                        if current_symlink_depth > MAX_SYMLINK_DEPTH {
+                            print_tx.send(Err(std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                "Too many levels of symbolic links",
+                            ).map_err_context(
+                                || translate!("du-error-cannot-access", "path" => entry_path.quote()),
+                            )))?;
+                            continue 'file_loop;
+                        }
+                    }
+
+                    match Stat::new(&entry_path, Some(&entry), options) {
                         Ok(this_stat) => {
+                            // Check if symlink with -L points to an ancestor (cycle detection)
+                            if is_symlink
+                                && options.dereference == Deref::All
+                                && this_stat.metadata.is_dir()
+                            {
+                                if let Some(inode) = this_stat.inode {
+                                    if ancestors.contains(&inode) {
+                                        // This symlink points to an ancestor directory - skip to avoid cycle
+                                        continue 'file_loop;
+                                    }
+                                }
+                            }
+
                             // We have an exclude list
                             for pattern in &options.excludes {
                                 // Look at all patterns with both short and long paths
@@ -327,8 +685,15 @@ fn du(
                                     }
                                 }
 
-                                let this_stat =
-                                    du(this_stat, options, depth + 1, seen_inodes, print_tx)?;
+                                let this_stat = du_regular(
+                                    this_stat,
+                                    options,
+                                    depth + 1,
+                                    seen_inodes,
+                                    print_tx,
+                                    Some(ancestors),
+                                    Some(current_symlink_depth),
+                                )?;
 
                                 if !options.separate_dirs {
                                     my_stat.size += this_stat.size;
@@ -351,14 +716,21 @@ fn du(
                                 }
                             }
                         }
-                        Err(e) => print_tx.send(Err(e.map_err_context(
-                            || translate!("du-error-cannot-access", "path" => entry.path().quote()),
-                        )))?,
+                        Err(e) => {
+                            print_tx.send(Err(e.map_err_context(
+                                    || translate!("du-error-cannot-access", "path" => entry_path.quote()),
+                                )))?;
+                        }
                     }
                 }
                 Err(error) => print_tx.send(Err(error.into()))?,
             }
         }
+    }
+
+    // Remove current directory from ancestors before returning
+    if let Some(inode) = my_inode {
+        ancestors.remove(&inode);
     }
 
     Ok(my_stat)
@@ -541,7 +913,7 @@ fn read_files_from(file_name: &OsStr) -> Result<Vec<PathBuf>, std::io::Error> {
         let path = PathBuf::from(file_name);
         if path.is_dir() {
             return Err(std::io::Error::other(
-                translate!("du-error-read-error-is-directory", "file" => file_name.to_string_lossy()),
+                translate!("du-error-read-error-is-directory", "file" => file_name.maybe_quote()),
             ));
         }
 
@@ -550,7 +922,7 @@ fn read_files_from(file_name: &OsStr) -> Result<Vec<PathBuf>, std::io::Error> {
             Ok(file) => Box::new(BufReader::new(file)),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 return Err(std::io::Error::other(
-                    translate!("du-error-cannot-open-for-reading", "file" => file_name.to_string_lossy()),
+                    translate!("du-error-cannot-open-for-reading", "file" => file_name.quote()),
                 ));
             }
             Err(e) => return Err(e),
@@ -566,8 +938,11 @@ fn read_files_from(file_name: &OsStr) -> Result<Vec<PathBuf>, std::io::Error> {
             let line_number = i + 1;
             show_error!(
                 "{}",
-                translate!("du-error-invalid-zero-length-file-name", "file" => file_name.to_string_lossy(), "line" => line_number)
+                translate!("du-error-invalid-zero-length-file-name", "file" => file_name.maybe_quote(), "line" => line_number)
             );
+            set_exit_code(1);
+        } else if path == b"-" && file_name == "-" {
+            show_error!("{}", translate!("du-error-hyphen-file-name-not-allowed"));
             set_exit_code(1);
         } else {
             let p = PathBuf::from(&*uucore::os_str_from_bytes(&path).unwrap());
@@ -583,7 +958,7 @@ fn read_files_from(file_name: &OsStr) -> Result<Vec<PathBuf>, std::io::Error> {
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let summarize = matches.get_flag(options::SUMMARIZE);
 
@@ -603,7 +978,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     "file" => matches
                         .get_one::<OsString>(options::FILE)
                         .unwrap()
-                        .to_string_lossy()
                         .quote()
                 ),
             )
@@ -728,25 +1102,81 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
 
         // Check existence of path provided in argument
-        if let Ok(stat) = Stat::new(&path, None, &traversal_options) {
-            // Kick off the computation of disk usage from the initial path
-            let mut seen_inodes: HashSet<FileInfo> = HashSet::new();
-            if let Some(inode) = stat.inode {
-                seen_inodes.insert(inode);
+        let mut seen_inodes: HashSet<FileInfo> = HashSet::new();
+
+        // Determine which traversal method to use
+        #[cfg(target_os = "linux")]
+        let use_safe_traversal = traversal_options.dereference != Deref::All;
+        #[cfg(not(target_os = "linux"))]
+        let use_safe_traversal = false;
+
+        if use_safe_traversal {
+            // Use safe traversal (Linux only, when not using -L)
+            #[cfg(target_os = "linux")]
+            {
+                // Pre-populate seen_inodes with the starting directory to detect cycles
+                if let Ok(stat) = Stat::new(&path, None, &traversal_options) {
+                    if let Some(inode) = stat.inode {
+                        seen_inodes.insert(inode);
+                    }
+                }
+
+                match safe_du(
+                    &path,
+                    &traversal_options,
+                    0,
+                    &mut seen_inodes,
+                    &print_tx,
+                    None,
+                ) {
+                    Ok(stat) => {
+                        print_tx
+                            .send(Ok(StatPrintInfo { stat, depth: 0 }))
+                            .map_err(|e| USimpleError::new(1, e.to_string()))?;
+                    }
+                    Err(e) => {
+                        // Check if this is our "already handled" error
+                        if let mpsc::SendError(Err(simple_error)) = e.as_ref() {
+                            if simple_error.code() == 0 {
+                                // Error already handled, continue to next file
+                                continue 'loop_file;
+                            }
+                        }
+                        return Err(USimpleError::new(1, e.to_string()));
+                    }
+                }
             }
-            let stat = du(stat, &traversal_options, 0, &mut seen_inodes, &print_tx)
+        } else {
+            // Use regular traversal (non-Linux or when -L is used)
+            if let Ok(stat) = Stat::new(&path, None, &traversal_options) {
+                if let Some(inode) = stat.inode {
+                    seen_inodes.insert(inode);
+                }
+                let stat = du_regular(
+                    stat,
+                    &traversal_options,
+                    0,
+                    &mut seen_inodes,
+                    &print_tx,
+                    None,
+                    None,
+                )
                 .map_err(|e| USimpleError::new(1, e.to_string()))?;
 
-            print_tx
-                .send(Ok(StatPrintInfo { stat, depth: 0 }))
-                .map_err(|e| USimpleError::new(1, e.to_string()))?;
-        } else {
-            print_tx
-                .send(Err(USimpleError::new(
-                    1,
-                    translate!("du-error-cannot-access-no-such-file", "path" => path.to_string_lossy().quote()),
-                )))
-                .map_err(|e| USimpleError::new(1, e.to_string()))?;
+                print_tx
+                    .send(Ok(StatPrintInfo { stat, depth: 0 }))
+                    .map_err(|e| USimpleError::new(1, e.to_string()))?;
+            } else {
+                #[cfg(target_os = "linux")]
+                let error_msg = translate!("du-error-cannot-access", "path" => path.quote());
+                #[cfg(not(target_os = "linux"))]
+                let error_msg =
+                    translate!("du-error-cannot-access-no-such-file", "path" => path.quote());
+
+                print_tx
+                    .send(Err(USimpleError::new(1, error_msg)))
+                    .map_err(|e| USimpleError::new(1, e.to_string()))?;
+            }
         }
     }
 
@@ -829,6 +1259,7 @@ pub fn uu_app() -> Command {
         )
         .arg(
             Arg::new(options::APPARENT_SIZE)
+                .short('A')
                 .long(options::APPARENT_SIZE)
                 .help(translate!("du-help-apparent-size"))
                 .action(ArgAction::SetTrue),

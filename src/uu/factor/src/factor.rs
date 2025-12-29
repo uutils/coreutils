@@ -12,7 +12,6 @@ use std::io::{self, Write, stdin, stdout};
 use clap::{Arg, ArgAction, Command};
 use num_bigint::BigUint;
 use num_traits::FromPrimitive;
-use uucore::LocalizedCommand;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
 use uucore::translate;
@@ -37,26 +36,95 @@ fn print_factors_str(
         return Ok(());
     };
 
-    let (factorization, remaining) = if x > BigUint::from_u32(1).unwrap() {
-        num_prime::nt_funcs::factors(x.clone(), None)
+    if x > BigUint::from_u32(1).unwrap() {
+        // use num_prime's factorize64 algorithm for u64 integers
+        if x <= BigUint::from_u64(u64::MAX).unwrap() {
+            let prime_factors = num_prime::nt_funcs::factorize64(x.clone().to_u64_digits()[0]);
+            write_result_u64(w, &x, prime_factors, print_exponents)
+                .map_err_context(|| translate!("factor-error-write-error"))?;
+        }
+        // use num_prime's factorize128 algorithm for u128 integers
+        else if x <= BigUint::from_u128(u128::MAX).unwrap() {
+            let rx = num_str.trim().parse::<u128>();
+            let Ok(x) = rx else {
+                // return Ok(). it's non-fatal and we should try the next number.
+                show_warning!("{}: {}", num_str.maybe_quote(), rx.unwrap_err());
+                set_exit_code(1);
+                return Ok(());
+            };
+            let prime_factors = num_prime::nt_funcs::factorize128(x);
+            write_result_u128(w, &x, prime_factors, print_exponents)
+                .map_err_context(|| translate!("factor-error-write-error"))?;
+        }
+        // use num_prime's fallible factorization for anything greater than u128::MAX
+        else {
+            let (prime_factors, remaining) = num_prime::nt_funcs::factors(x.clone(), None);
+            if let Some(_remaining) = remaining {
+                return Err(USimpleError::new(
+                    1,
+                    translate!("factor-error-factorization-incomplete"),
+                ));
+            }
+            write_result_big_uint(w, &x, prime_factors, print_exponents)
+                .map_err_context(|| translate!("factor-error-write-error"))?;
+        }
     } else {
-        (BTreeMap::new(), None)
-    };
-
-    if let Some(_remaining) = remaining {
-        return Err(USimpleError::new(
-            1,
-            translate!("factor-error-factorization-incomplete"),
-        ));
+        let empty_primes: BTreeMap<BigUint, usize> = BTreeMap::new();
+        write_result_big_uint(w, &x, empty_primes, print_exponents)
+            .map_err_context(|| translate!("factor-error-write-error"))?;
     }
-
-    write_result(w, &x, factorization, print_exponents)
-        .map_err_context(|| translate!("factor-error-write-error"))?;
 
     Ok(())
 }
 
-fn write_result(
+/// Writing out the prime factors for u64 integers
+fn write_result_u64(
+    w: &mut io::BufWriter<impl Write>,
+    x: &BigUint,
+    factorization: BTreeMap<u64, usize>,
+    print_exponents: bool,
+) -> io::Result<()> {
+    write!(w, "{x}:")?;
+    for (factor, n) in factorization {
+        if print_exponents {
+            if n > 1 {
+                write!(w, " {factor}^{n}")?;
+            } else {
+                write!(w, " {factor}")?;
+            }
+        } else {
+            w.write_all(format!(" {factor}").repeat(n).as_bytes())?;
+        }
+    }
+    writeln!(w)?;
+    w.flush()
+}
+
+/// Writing out the prime factors for u128 integers
+fn write_result_u128(
+    w: &mut io::BufWriter<impl Write>,
+    x: &u128,
+    factorization: BTreeMap<u128, usize>,
+    print_exponents: bool,
+) -> io::Result<()> {
+    write!(w, "{x}:")?;
+    for (factor, n) in factorization {
+        if print_exponents {
+            if n > 1 {
+                write!(w, " {factor}^{n}")?;
+            } else {
+                write!(w, " {factor}")?;
+            }
+        } else {
+            w.write_all(format!(" {factor}").repeat(n).as_bytes())?;
+        }
+    }
+    writeln!(w)?;
+    w.flush()
+}
+
+/// Writing out the prime factors for BigUint integers
+fn write_result_big_uint(
     w: &mut io::BufWriter<impl Write>,
     x: &BigUint,
     factorization: BTreeMap<BigUint, usize>,
@@ -80,7 +148,7 @@ fn write_result(
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from_localized(args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     // If matches find --exponents flag than variable print_exponents is true and p^e output format will be used.
     let print_exponents = matches.get_flag(options::EXPONENTS);

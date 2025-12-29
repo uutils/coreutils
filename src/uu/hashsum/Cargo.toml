@@ -19,9 +19,18 @@ path = "src/hashsum.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["checksum", "sum"] }
+uucore = { workspace = true, features = ["checksum", "encoding", "sum"] }
 fluent = { workspace = true }
 
 [[bin]]
 name = "hashsum"
 path = "src/main.rs"
+
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
+[[bench]]
+name = "hashsum_bench"
+harness = false

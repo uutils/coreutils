@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker: ignore: AEDT AEST EEST NZDT NZST Kolkata
+// spell-checker: ignore: AEDT AEST EEST NZDT NZST Kolkata Iseconds
 
 use chrono::{DateTime, Datelike, Duration, NaiveTime, Utc}; // spell-checker:disable-line
 use regex::Regex;
@@ -18,10 +18,60 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_empty_arguments() {
+    new_ucmd!().arg("").fails_with_code(1);
+    new_ucmd!().args(&["", ""]).fails_with_code(1);
+    new_ucmd!().args(&["", "", ""]).fails_with_code(1);
+}
+
+#[test]
+fn test_extra_operands() {
+    new_ucmd!()
+        .args(&["test", "extra"])
+        .fails_with_code(1)
+        .stderr_contains("extra operand 'extra'");
+}
+
+#[test]
+fn test_invalid_long_option() {
+    new_ucmd!()
+        .arg("--fB")
+        .fails_with_code(1)
+        .stderr_contains("unexpected argument '--fB'");
+}
+
+#[test]
+fn test_invalid_short_option() {
+    new_ucmd!()
+        .arg("-w")
+        .fails_with_code(1)
+        .stderr_contains("unexpected argument '-w'");
+}
+
+#[test]
+fn test_single_dash_as_date() {
+    new_ucmd!()
+        .arg("-")
+        .fails_with_code(1)
+        .stderr_contains("invalid date");
+}
+
+#[test]
 fn test_date_email() {
-    for param in ["--rfc-email", "--rfc-e", "-R"] {
+    for param in ["--rfc-email", "--rfc-e", "-R", "--rfc-2822", "--rfc-822"] {
         new_ucmd!().arg(param).succeeds();
     }
+}
+
+#[test]
+fn test_date_email_multiple_aliases() {
+    // Test that multiple RFC email aliases can be used together
+    // This matches GNU behavior where all aliases map to the same option
+    new_ucmd!()
+        .arg("--rfc-email")
+        .arg("--rfc-822")
+        .arg("--rfc-2822")
+        .succeeds();
 }
 
 #[test]
@@ -141,9 +191,20 @@ fn test_date_rfc_8601_date() {
 
 #[test]
 fn test_date_utc() {
-    for param in ["--universal", "--utc", "--uni", "--u"] {
+    for param in ["--universal", "--utc", "--uct", "--uni", "--u"] {
         new_ucmd!().arg(param).succeeds();
     }
+}
+
+#[test]
+fn test_date_utc_multiple_aliases() {
+    // Test that multiple UTC aliases can be used together
+    // This matches GNU behavior where all aliases map to the same option
+    new_ucmd!()
+        .arg("--uct")
+        .arg("--utc")
+        .arg("--universal")
+        .succeeds();
 }
 
 #[test]
@@ -272,6 +333,27 @@ fn test_date_set_permissions_error() {
 }
 
 #[test]
+#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+fn test_date_set_hyphen_prefixed_values() {
+    // test -s flag accepts hyphen-prefixed values like "-3 days"
+    if !(geteuid() == 0 || uucore::os::is_wsl_1()) {
+        let test_cases = vec!["-1 hour", "-2 days", "-3 weeks", "-1 month"];
+
+        for date_str in test_cases {
+            let result = new_ucmd!().arg("--set").arg(date_str).fails();
+            result.no_stdout();
+            // permission error, not argument parsing error
+            assert!(
+                result.stderr_str().starts_with("date: cannot set date: "),
+                "Expected permission error for '{}', but got: {}",
+                date_str,
+                result.stderr_str()
+            );
+        }
+    }
+}
+
+#[test]
 #[cfg(target_os = "macos")]
 fn test_date_set_mac_unavailable() {
     let result = new_ucmd!()
@@ -288,15 +370,14 @@ fn test_date_set_mac_unavailable() {
 
 #[test]
 #[cfg(all(unix, not(target_os = "macos")))]
-/// TODO: expected to fail currently; change to `succeeds()` when required.
 fn test_date_set_valid_2() {
     if geteuid() == 0 {
-        let result = new_ucmd!()
+        new_ucmd!()
             .arg("--set")
             .arg("Sat 20 Mar 2021 14:53:01 AWST") // spell-checker:disable-line
-            .fails();
-        result.no_stdout();
-        assert!(result.stderr_str().starts_with("date: invalid date "));
+            .succeeds()
+            .no_stdout()
+            .no_stderr();
     }
 }
 
@@ -353,30 +434,44 @@ fn test_date_for_file() {
 }
 
 #[test]
+fn test_date_for_file_mtime() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "reference_file";
+    at.touch(file);
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    let result = ucmd.arg("--reference").arg(file).arg("+%s%N").succeeds();
+    let mtime = at.metadata(file).modified().unwrap();
+    let mtime_nanos = mtime
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos()
+        .to_string();
+    assert_eq!(result.stdout_str().trim(), &mtime_nanos[..]);
+}
+
+#[test]
 #[cfg(all(unix, not(target_os = "macos")))]
-/// TODO: expected to fail currently; change to `succeeds()` when required.
 fn test_date_set_valid_3() {
     if geteuid() == 0 {
-        let result = new_ucmd!()
+        new_ucmd!()
             .arg("--set")
             .arg("Sat 20 Mar 2021 14:53:01") // Local timezone
-            .fails();
-        result.no_stdout();
-        assert!(result.stderr_str().starts_with("date: invalid date "));
+            .succeeds()
+            .no_stdout()
+            .no_stderr();
     }
 }
 
 #[test]
 #[cfg(all(unix, not(target_os = "macos")))]
-/// TODO: expected to fail currently; change to `succeeds()` when required.
 fn test_date_set_valid_4() {
     if geteuid() == 0 {
-        let result = new_ucmd!()
+        new_ucmd!()
             .arg("--set")
             .arg("2020-03-11 21:45:00") // Local timezone
-            .fails();
-        result.no_stdout();
-        assert!(result.stderr_str().starts_with("date: invalid date "));
+            .succeeds()
+            .no_stdout()
+            .no_stderr();
     }
 }
 
@@ -647,7 +742,7 @@ fn test_date_tz_various_formats() {
         "-0800 -08:00 -08:00:00 -08 PST\n",
     );
     // Half-hour timezone
-    test_tz("Asia/Kolkata", JAN2, "+0530 +05:30 +05:30:00 +05:30 IST\n");
+    test_tz("Asia/Kolkata", JAN2, "+0530 +05:30 +05:30:00 +05:30 IST\n"); // spell-checker:disable-line
     test_tz("Europe/Berlin", JAN2, "+0100 +01:00 +01:00:00 +01 CET\n");
     test_tz(
         "Australia/Sydney",
@@ -728,4 +823,584 @@ fn test_date_empty_tz_time() {
         .arg("@0")
         .succeeds()
         .stdout_only("Thu Jan  1 00:00:00 UTC 1970\n");
+}
+
+#[test]
+fn test_date_resolution() {
+    // Test that --resolution flag returns a floating point number by default
+    new_ucmd!()
+        .arg("--resolution")
+        .succeeds()
+        .stdout_str_check(|s| s.trim().parse::<f64>().is_ok());
+
+    // Test that --resolution flag can be passed twice to match gnu
+    new_ucmd!()
+        .arg("--resolution")
+        .arg("--resolution")
+        .succeeds()
+        .stdout_str_check(|s| s.trim().parse::<f64>().is_ok());
+
+    // Test that can --resolution output can be formatted as a date
+    new_ucmd!()
+        .arg("--resolution")
+        .arg("-Iseconds")
+        .succeeds()
+        .stdout_only("1970-01-01T00:00:00+00:00\n");
+}
+
+#[test]
+fn test_date_resolution_no_combine() {
+    // Test that date fails when --resolution flag is passed with date flag
+    new_ucmd!()
+        .arg("--resolution")
+        .arg("-d")
+        .arg("2025-01-01")
+        .fails();
+}
+
+#[test]
+fn test_date_numeric_d_basic_utc() {
+    // Verify GNU-compatible pure-digit parsing for -d STRING under UTC
+    // 0/00 -> today at 00:00; 7/07 -> today at 07:00; 0700 -> today at 07:00
+    let today = Utc::now().date_naive();
+    let yyyy = today.year();
+    let mm = today.month();
+    let dd = today.day();
+
+    let mk =
+        |h: u32, m: u32| -> String { format!("{yyyy:04}-{mm:02}-{dd:02} {h:02}:{m:02}:00 UTC\n") };
+
+    new_ucmd!()
+        .env("TZ", "UTC0")
+        .arg("-d")
+        .arg("0")
+        .arg("+%F %T %Z")
+        .succeeds()
+        .stdout_only(mk(0, 0));
+
+    new_ucmd!()
+        .env("TZ", "UTC0")
+        .arg("-d")
+        .arg("7")
+        .arg("+%F %T %Z")
+        .succeeds()
+        .stdout_only(mk(7, 0));
+
+    new_ucmd!()
+        .env("TZ", "UTC0")
+        .arg("-d")
+        .arg("0700")
+        .arg("+%F %T %Z")
+        .succeeds()
+        .stdout_only(mk(7, 0));
+}
+
+#[test]
+fn test_date_numeric_d_invalid_numbers() {
+    // Ensure invalid HHMM values are rejected (GNU-compatible)
+    new_ucmd!()
+        .env("TZ", "UTC0")
+        .arg("-d")
+        .arg("2400")
+        .arg("+%F %T %Z")
+        .fails()
+        .stderr_contains("invalid date");
+
+    new_ucmd!()
+        .env("TZ", "UTC0")
+        .arg("-d")
+        .arg("2360")
+        .arg("+%F %T %Z")
+        .fails()
+        .stderr_contains("invalid date");
+}
+
+#[test]
+fn test_date_tz_abbreviation_utc_gmt() {
+    // Test UTC and GMT timezone abbreviations
+    new_ucmd!()
+        .arg("-d")
+        .arg("2021-03-20 14:53:01 UTC")
+        .arg("+%Y-%m-%d %H:%M:%S")
+        .succeeds();
+
+    new_ucmd!()
+        .arg("-d")
+        .arg("2021-03-20 14:53:01 GMT")
+        .arg("+%Y-%m-%d %H:%M:%S")
+        .succeeds();
+}
+
+#[test]
+fn test_date_tz_abbreviation_us_timezones() {
+    // Test US timezone abbreviations (uutils supports, GNU also supports these)
+    let us_zones = vec![
+        ("PST", "2021-03-20 14:53:01 PST"),
+        ("PDT", "2021-03-20 14:53:01 PDT"),
+        ("MST", "2021-03-20 14:53:01 MST"),
+        ("MDT", "2021-03-20 14:53:01 MDT"),
+        ("CST", "2021-03-20 14:53:01 CST"),
+        ("CDT", "2021-03-20 14:53:01 CDT"),
+        ("EST", "2021-03-20 14:53:01 EST"),
+        ("EDT", "2021-03-20 14:53:01 EDT"),
+    ];
+
+    for (_tz_name, date_str) in us_zones {
+        new_ucmd!()
+            .arg("-d")
+            .arg(date_str)
+            .arg("+%Y-%m-%d %H:%M:%S")
+            .succeeds()
+            .no_stderr();
+    }
+}
+
+#[test]
+fn test_date_tz_abbreviation_australian_timezones() {
+    // Test Australian timezone abbreviations (uutils supports, GNU does NOT)
+    // This demonstrates uutils date going beyond GNU capabilities
+    let au_zones = vec![
+        ("AWST", "2021-03-20 14:53:01 AWST"), // Western Australia // spell-checker:disable-line
+        ("ACST", "2021-03-20 14:53:01 ACST"), // Central Australia (Standard) // spell-checker:disable-line
+        ("ACDT", "2021-03-20 14:53:01 ACDT"), // Central Australia (Daylight) // spell-checker:disable-line
+        ("AEST", "2021-03-20 14:53:01 AEST"), // Eastern Australia (Standard)
+        ("AEDT", "2021-03-20 14:53:01 AEDT"), // Eastern Australia (Daylight)
+    ];
+
+    for (_tz_name, date_str) in au_zones {
+        new_ucmd!()
+            .arg("-d")
+            .arg(date_str)
+            .arg("+%Y-%m-%d %H:%M:%S")
+            .succeeds()
+            .no_stderr();
+    }
+}
+
+#[test]
+fn test_date_tz_abbreviation_dst_handling() {
+    // Test that timezone abbreviations correctly handle DST
+    // PST is UTC-8, PDT is UTC-7
+    // March 20, 2021 was during PDT period in Pacific timezone
+
+    new_ucmd!()
+        .arg("-d")
+        .arg("2021-03-20 14:53:01 PST")
+        .arg("+%z")
+        .succeeds()
+        .no_stderr();
+
+    new_ucmd!()
+        .arg("-d")
+        .arg("2021-03-20 14:53:01 PDT")
+        .arg("+%z")
+        .succeeds()
+        .no_stderr();
+}
+
+#[test]
+fn test_date_tz_abbreviation_with_day_of_week() {
+    // Test timezone abbreviations with full date format including day of week
+    new_ucmd!()
+        .arg("-d")
+        .arg("Sat 20 Mar 2021 14:53:01 AWST") // spell-checker:disable-line
+        .arg("+%Y-%m-%d %H:%M:%S")
+        .succeeds()
+        .no_stderr();
+
+    new_ucmd!()
+        .arg("-d")
+        .arg("Sat 20 Mar 2021 14:53:01 EST")
+        .arg("+%Y-%m-%d %H:%M:%S")
+        .succeeds()
+        .no_stderr();
+}
+
+#[test]
+fn test_date_tz_abbreviation_unknown() {
+    // Test that unknown timezone abbreviations fall back gracefully
+    // XYZ is not a valid timezone abbreviation
+    new_ucmd!()
+        .arg("-d")
+        .arg("2021-03-20 14:53:01 XYZ")
+        .fails()
+        .stderr_contains("invalid date");
+}
+
+#[test]
+fn test_date_military_timezone_j_variations() {
+    // Test multiple variations of 'J' input (case insensitive, with whitespace)
+    // All should produce midnight (00:00:00)
+    let test_cases = vec!["J", "j", " J ", " j ", "\tJ\t"];
+
+    for input in test_cases {
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg(input)
+            .arg("+%T")
+            .succeeds()
+            .stdout_is("00:00:00\n");
+    }
+
+    // Test with -u flag to verify UTC behavior
+    new_ucmd!()
+        .arg("-u")
+        .arg("-d")
+        .arg("J")
+        .arg("+%T %Z")
+        .succeeds()
+        .stdout_contains("00:00:00")
+        .stdout_contains("UTC");
+}
+
+#[test]
+fn test_date_empty_string() {
+    // Empty string should be treated as midnight today
+    new_ucmd!()
+        .env("TZ", "UTC+1")
+        .arg("-d")
+        .arg("")
+        .succeeds()
+        .stdout_contains("00:00:00");
+}
+
+#[test]
+fn test_date_empty_string_variations() {
+    // Test multiple variations of empty/whitespace strings
+    // All should produce midnight (00:00:00)
+    let test_cases = vec!["", " ", "  ", "\t", "\n", " \t ", "\t\n\t"];
+
+    for input in test_cases {
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg(input)
+            .arg("+%T")
+            .succeeds()
+            .stdout_is("00:00:00\n");
+    }
+
+    // Test with -u flag to verify UTC behavior
+    new_ucmd!()
+        .arg("-u")
+        .arg("-d")
+        .arg("")
+        .arg("+%T %Z")
+        .succeeds()
+        .stdout_contains("00:00:00")
+        .stdout_contains("UTC");
+}
+
+#[test]
+fn test_date_relative_m9() {
+    // Military timezone "m9" should be parsed as noon + 9 hours = 21:00 UTC
+    // When displayed in TZ=UTC+9 (which is UTC-9), this shows as 12:00 local time
+    new_ucmd!()
+        .env("TZ", "UTC+9")
+        .arg("-d")
+        .arg("m9")
+        .succeeds()
+        .stdout_contains("12:00:00");
+}
+
+#[test]
+fn test_date_military_timezone_with_offset_variations() {
+    // Test various military timezone + offset combinations
+    // Format: single letter (a-z except j) optionally followed by 1-2 digits
+
+    // Test cases: (input, expected_time_utc)
+    let test_cases = vec![
+        ("a", "23:00:00"),  // A = UTC+1, midnight in UTC+1 = 23:00 UTC
+        ("m", "12:00:00"),  // M = UTC+12, midnight in UTC+12 = 12:00 UTC
+        ("z", "00:00:00"),  // Z = UTC+0, midnight in UTC+0 = 00:00 UTC
+        ("m9", "21:00:00"), // M + 9 hours = 12 + 9 = 21:00 UTC
+        ("a5", "04:00:00"), // A + 5 hours = 23 + 5 = 04:00 UTC (next day)
+        ("z3", "03:00:00"), // Z + 3 hours = 00 + 3 = 03:00 UTC
+        ("M", "12:00:00"),  // Uppercase should work too
+        ("A5", "04:00:00"), // Uppercase with offset
+    ];
+
+    for (input, expected) in test_cases {
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg(input)
+            .arg("+%T")
+            .succeeds()
+            .stdout_is(format!("{expected}\n"));
+    }
+}
+
+// Locale-aware hour formatting tests
+#[test]
+#[cfg(unix)]
+fn test_date_locale_hour_c_locale() {
+    // C locale should use 24-hour format
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-10-11T13:00")
+        .succeeds()
+        .stdout_contains("13:00");
+}
+
+#[test]
+#[cfg(any(
+    target_os = "linux",
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd",
+    target_os = "dragonfly"
+))]
+fn test_date_locale_hour_en_us() {
+    // en_US locale typically uses 12-hour format when available
+    // Note: If locale is not installed on system, falls back to C locale (24-hour)
+    let result = new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-10-11T13:00")
+        .succeeds();
+
+    let stdout = result.stdout_str();
+    // Accept either 12-hour (if locale available) or 24-hour (if locale unavailable)
+    // The important part is that the code doesn't crash and handles locale detection gracefully
+    assert!(
+        stdout.contains("1:00") || stdout.contains("13:00"),
+        "date output should contain either 1:00 (12-hour) or 13:00 (24-hour), got: {stdout}"
+    );
+}
+
+#[test]
+fn test_date_explicit_format_overrides_locale() {
+    // Explicit format should override locale preferences
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-10-11T13:00")
+        .arg("+%H:%M")
+        .succeeds()
+        .stdout_is("13:00\n");
+}
+
+// Comprehensive locale formatting tests to verify actual locale format strings are used
+#[test]
+#[cfg(any(
+    target_os = "linux",
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd",
+    target_os = "dragonfly"
+))]
+fn test_date_locale_leading_zeros_en_us() {
+    // Test for leading zeros in en_US locale
+    // en_US uses %I (01-12) with leading zeros, not %l (1-12) without
+    let result = new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-12-14T01:00")
+        .succeeds();
+
+    let stdout = result.stdout_str();
+    // If locale is available, should have leading zero: "01:00"
+    // If locale unavailable (falls back to C), may have "01:00" (24-hour) or " 1:00"
+    // Key point: output should match what nl_langinfo(D_T_FMT) specifies
+    if stdout.contains("AM") || stdout.contains("PM") {
+        // 12-hour format detected - should have leading zero in en_US
+        assert!(
+            stdout.contains("01:00") || stdout.contains(" 1:00"),
+            "en_US 12-hour format should show '01:00 AM' or ' 1:00 AM', got: {stdout}"
+        );
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_date_locale_c_uses_24_hour() {
+    // C/POSIX locale must use 24-hour format
+    let result = new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-12-14T13:00")
+        .succeeds();
+
+    let stdout = result.stdout_str();
+    // C locale uses 24-hour format, no AM/PM
+    assert!(
+        !stdout.contains("AM") && !stdout.contains("PM"),
+        "C locale should not use AM/PM, got: {stdout}"
+    );
+    assert!(
+        stdout.contains("13"),
+        "C locale should show 13 (24-hour), got: {stdout}"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn test_date_locale_timezone_included() {
+    // Verify timezone is included in output (implementation adds %Z if missing)
+    let result = new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-12-14T13:00")
+        .succeeds();
+
+    let stdout = result.stdout_str();
+    assert!(
+        stdout.contains("UTC") || stdout.contains("+00"),
+        "Output should contain timezone information, got: {stdout}"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn test_date_locale_format_structure() {
+    // Test that output follows locale-defined structure (not hardcoded)
+    let result = new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-12-14T13:00:00")
+        .succeeds();
+
+    let stdout = result.stdout_str();
+
+    // Should contain weekday abbreviation
+    let weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    assert!(
+        weekdays.iter().any(|day| stdout.contains(day)),
+        "Output should contain weekday, got: {stdout}"
+    );
+
+    // Should contain month
+    let months = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ];
+    assert!(
+        months.iter().any(|month| stdout.contains(month)),
+        "Output should contain month, got: {stdout}"
+    );
+
+    // Should contain year
+    assert!(
+        stdout.contains("2025"),
+        "Output should contain year, got: {stdout}"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn test_date_locale_format_not_hardcoded() {
+    // This test verifies we're not using hardcoded format strings
+    // by checking that the format actually comes from the locale system
+
+    // Test with C locale
+    let c_result = new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-12-14T01:00:00")
+        .succeeds();
+
+    let c_output = c_result.stdout_str();
+
+    // C locale should use 24-hour format
+    assert!(
+        c_output.contains("01:00") || c_output.contains(" 1:00"),
+        "C locale output: {c_output}"
+    );
+    assert!(
+        !c_output.contains("AM") && !c_output.contains("PM"),
+        "C locale should not have AM/PM: {c_output}"
+    );
+}
+
+#[test]
+#[cfg(any(
+    target_os = "linux",
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd",
+    target_os = "dragonfly"
+))]
+fn test_date_locale_en_us_vs_c_difference() {
+    // Verify that en_US and C locales produce different outputs
+    // (if en_US locale is available on the system)
+
+    let c_result = new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-12-14T13:00:00")
+        .succeeds();
+
+    let en_us_result = new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-12-14T13:00:00")
+        .succeeds();
+
+    let c_output = c_result.stdout_str();
+    let en_us_output = en_us_result.stdout_str();
+
+    // C locale: 24-hour, no AM/PM
+    assert!(
+        !c_output.contains("AM") && !c_output.contains("PM"),
+        "C locale should not have AM/PM: {c_output}"
+    );
+
+    // en_US: If locale is installed, should have AM/PM (12-hour)
+    // If not installed, falls back to C locale
+    if en_us_output.contains("PM") {
+        // Locale is available and using 12-hour format
+        assert!(
+            en_us_output.contains("1:00") || en_us_output.contains("01:00"),
+            "en_US with 12-hour should show 1:00 PM or 01:00 PM, got: {en_us_output}"
+        );
+    }
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple",))]
+fn test_date_locale_fr_french() {
+    // Test French locale (fr_FR.UTF-8) behavior
+    // French typically uses 24-hour format and may have localized day/month names
+
+    let result = new_ucmd!()
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-12-14T13:00:00")
+        .succeeds();
+
+    let stdout = result.stdout_str();
+
+    // French locale should use 24-hour format (no AM/PM)
+    assert!(
+        !stdout.contains("AM") && !stdout.contains("PM"),
+        "French locale should use 24-hour format (no AM/PM), got: {stdout}"
+    );
+
+    // Should have 13:00 (not 1:00)
+    assert!(
+        stdout.contains("13:00"),
+        "French locale should show 13:00 for 1 PM, got: {stdout}"
+    );
+
+    // Timezone should be included (our implementation adds %Z if missing)
+    assert!(
+        stdout.contains("UTC") || stdout.contains("+00") || stdout.contains('Z'),
+        "Output should include timezone information, got: {stdout}"
+    );
 }
