@@ -99,8 +99,9 @@ date-help-universal = print or set Coordinated Universal Time (UTC)
 
 date-error-invalid-date = invalid date '{$date}'
 date-error-invalid-format = invalid format '{$format}' ({$error})
-date-error-expected-file-got-directory = expected file, got directory '{$path}'
+date-error-expected-file-got-directory = expected file, got directory {$path}
 date-error-date-overflow = date overflow '{$date}'
 date-error-setting-date-not-supported-macos = setting the date is not supported by macOS
 date-error-setting-date-not-supported-redox = setting the date is not supported by Redox
 date-error-cannot-set-date = cannot set date
+date-error-extra-operand = extra operand '{$operand}'
