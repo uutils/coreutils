@@ -21,7 +21,7 @@ chmod-error-dangling-symlink = impossible d'opérer sur le lien symbolique pendo
 chmod-error-no-such-file = impossible d'accéder à {$file} : Aucun fichier ou répertoire de ce type
 chmod-error-preserve-root = il est dangereux d'opérer récursivement sur {$file}
   chmod: utiliser --no-preserve-root pour outrepasser cette protection
-chmod-error-permission-denied = {$file} : Permission refusée
+chmod-error-permission-denied = impossible d'accéder à {$file} : Permission refusée
 chmod-error-new-permissions = {$file} : les nouvelles permissions sont {$actual}, pas {$expected}
 chmod-error-missing-operand = opérande manquant
 

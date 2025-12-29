@@ -43,6 +43,9 @@ const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf
 #[cfg(all(not(feature = "feat_external_libstdbuf"), target_vendor = "apple"))]
 const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.dylib"));
 
+#[cfg(all(not(feature = "feat_external_libstdbuf"), target_os = "cygwin"))]
+const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.dll"));
+
 enum BufferType {
     Default,
     Line,
@@ -240,8 +243,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 use std::os::unix::process::ExitStatusExt;
                 let signal_msg = status
                     .signal()
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| "unknown".to_string());
+                    .map_or_else(|| "unknown".to_string(), |s| s.to_string());
                 Err(USimpleError::new(
                     1,
                     translate!("stdbuf-error-killed-by-signal", "signal" => signal_msg),

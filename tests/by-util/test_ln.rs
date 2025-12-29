@@ -195,6 +195,31 @@ fn test_symlink_custom_backup_suffix() {
 }
 
 #[test]
+fn test_symlink_suffix_without_backup_option() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("a", "a\n");
+    at.write("b", "b2\n");
+
+    assert!(at.file_exists("a"));
+    assert!(at.file_exists("b"));
+    let suffix = ".sfx";
+    let suffix_arg = &format!("--suffix={suffix}");
+    scene
+        .ucmd()
+        .args(&["-s", "-f", suffix_arg, "a", "b"])
+        .succeeds()
+        .no_stderr();
+    assert!(at.file_exists("a"));
+    assert!(at.file_exists("b"));
+    assert_eq!(at.read("a"), "a\n");
+    assert_eq!(at.read("b"), "a\n");
+    // we should have created backup for b file
+    assert_eq!(at.read(&format!("b{suffix}")), "b2\n");
+}
+
+#[test]
 fn test_symlink_custom_backup_suffix_hyphen_value() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_symlink_custom_backup_suffix";
