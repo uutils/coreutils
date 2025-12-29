@@ -125,6 +125,9 @@ pub use crate::features::fsxattr;
 #[cfg(all(target_os = "linux", feature = "selinux"))]
 pub use crate::features::selinux;
 
+#[cfg(all(target_os = "linux", feature = "smack"))]
+pub use crate::features::smack;
+
 //## core functions
 
 #[cfg(unix)]
@@ -170,9 +173,9 @@ pub fn get_canonical_util_name(util_name: &str) -> &str {
         "[" => "test",
 
         // hashsum aliases - all these hash commands are aliases for hashsum
-        "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum"
-        | "sha3sum" | "sha3-224sum" | "sha3-256sum" | "sha3-384sum" | "sha3-512sum"
-        | "shake128sum" | "shake256sum" | "b2sum" | "b3sum" => "hashsum",
+        "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum" | "b2sum" => {
+            "hashsum"
+        }
 
         "dir" => "ls", // dir is an alias for ls
 
@@ -191,6 +194,10 @@ macro_rules! bin {
         pub fn main() {
             use std::io::Write;
             use uucore::locale;
+
+            // Preserve inherited SIGPIPE settings (e.g., from env --default-signal=PIPE)
+            uucore::panic::preserve_inherited_sigpipe();
+
             // suppress extraneous error output for SIGPIPE failures/panics
             uucore::panic::mute_sigpipe_panic();
             locale::setup_localization(uucore::get_canonical_util_name(stringify!($util)))

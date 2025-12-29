@@ -15,8 +15,6 @@ hashsum-help-ignore-missing = ne pas échouer ou rapporter le statut pour les fi
 hashsum-help-warn = avertir des lignes de somme de contrôle mal formatées
 hashsum-help-zero = terminer chaque ligne de sortie avec NUL, pas de retour à la ligne
 hashsum-help-length = longueur de l'empreinte en bits ; ne doit pas dépasser le maximum pour l'algorithme blake2 et doit être un multiple de 8
-hashsum-help-no-names = Omet les noms de fichiers dans la sortie (option non présente dans GNU/Coreutils)
-hashsum-help-bits = définir la taille de la sortie (uniquement pour SHAKE)
 
 # Messages d'aide des algorithmes
 hashsum-help-md5 = travailler avec MD5

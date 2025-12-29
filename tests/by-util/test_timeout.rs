@@ -15,9 +15,6 @@ fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(125);
 }
 
-// FIXME: this depends on the system having true and false in PATH
-//        the best solution is probably to generate some test binaries that we can call for any
-//        utility that requires executing another program (kill, for instance)
 #[test]
 fn test_subcommand_return_code() {
     new_ucmd!().arg("1").arg("true").succeeds();
@@ -222,4 +219,19 @@ fn test_terminate_child_on_receiving_terminate() {
         .with_current_output()
         .code_is(143)
         .stdout_contains("child received TERM");
+}
+
+#[test]
+fn test_command_not_found() {
+    // Test exit code 127 when command doesn't exist
+    new_ucmd!()
+        .args(&["1", "/this/command/definitely/does/not/exist"])
+        .fails_with_code(127);
+}
+
+#[test]
+fn test_command_cannot_invoke() {
+    // Test exit code 126 when command exists but cannot be invoked
+    // Try to execute a directory (should give permission denied or similar)
+    new_ucmd!().args(&["1", "/"]).fails_with_code(126);
 }

@@ -2756,6 +2756,20 @@ mod gnu_cksum_c {
     }
 
     #[test]
+    fn test_ignore_missing_stdin() {
+        let scene = make_scene_with_checksum_missing();
+
+        scene
+            .ucmd()
+            .arg("--ignore-missing")
+            .arg("--check")
+            .pipe_in_fixture("CHECKSUMS-missing")
+            .fails()
+            .no_stdout()
+            .stderr_contains("'standard input': no file was verified");
+    }
+
+    #[test]
     fn test_status_and_warn() {
         let scene = make_scene_with_checksum_missing();
 

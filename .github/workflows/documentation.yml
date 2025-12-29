@@ -34,7 +34,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Download tldr
-        run: curl https://tldr.sh/assets/tldr.zip -o docs/tldr.zip
+        run: curl -L https://github.com/tldr-pages/tldr/releases/latest/download/tldr.zip -o docs/tldr.zip
 
       - name: Generate documentation
         run: cargo run --bin uudoc --all-features

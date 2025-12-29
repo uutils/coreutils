@@ -359,6 +359,14 @@ pub fn determine_backup_mode(matches: &ArgMatches) -> UResult<BackupMode> {
         } else {
             Ok(BackupMode::Existing)
         }
+    } else if matches.contains_id(arguments::OPT_SUFFIX) {
+        // Suffix option is enough to determine mode even if --backup is not set.
+        // If VERSION_CONTROL is not set, the default backup type is 'existing'.
+        if let Ok(method) = env::var("VERSION_CONTROL") {
+            match_method(&method, "$VERSION_CONTROL")
+        } else {
+            Ok(BackupMode::Existing)
+        }
     } else {
         // No option was present at all
         Ok(BackupMode::None)
@@ -470,8 +478,9 @@ fn existing_backup_path(path: &Path, suffix: &str) -> PathBuf {
 /// ```
 ///
 pub fn source_is_target_backup(source: &Path, target: &Path, suffix: &str) -> bool {
-    let source_filename = source.to_string_lossy();
-    let target_backup_filename = format!("{}{suffix}", target.to_string_lossy());
+    let source_filename = source.as_os_str();
+    let mut target_backup_filename = target.as_os_str().to_owned();
+    target_backup_filename.push(suffix);
     source_filename == target_backup_filename
 }
 
@@ -650,6 +659,30 @@ mod tests {
         let result = determine_backup_mode(&matches).unwrap();
 
         assert_eq!(result, BackupMode::Simple);
+        unsafe { env::remove_var(ENV_VERSION_CONTROL) };
+    }
+
+    // Using --suffix without --backup defaults to --backup=existing
+    #[test]
+    fn test_backup_mode_suffix_without_backup_option() {
+        let _dummy = TEST_MUTEX.lock().unwrap();
+        let matches = make_app().get_matches_from(vec!["command", "--suffix", ".bak"]);
+
+        let result = determine_backup_mode(&matches).unwrap();
+
+        assert_eq!(result, BackupMode::Existing);
+    }
+
+    // Using --suffix without --backup uses env var if existing
+    #[test]
+    fn test_backup_mode_suffix_without_backup_option_with_env_var() {
+        let _dummy = TEST_MUTEX.lock().unwrap();
+        unsafe { env::set_var(ENV_VERSION_CONTROL, "numbered") };
+        let matches = make_app().get_matches_from(vec!["command", "--suffix", ".bak"]);
+
+        let result = determine_backup_mode(&matches).unwrap();
+
+        assert_eq!(result, BackupMode::Numbered);
         unsafe { env::remove_var(ENV_VERSION_CONTROL) };
     }
 
