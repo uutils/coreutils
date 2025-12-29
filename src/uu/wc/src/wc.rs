@@ -24,7 +24,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
 use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use utf8::{BufReadDecoder, BufReadDecoderError};
-use uucore::translate;
+use uucore::{display::Quotable, translate};
 
 use uucore::{
     error::{FromIo, UError, UResult},
@@ -345,8 +345,8 @@ impl TotalWhen {
 
 #[derive(Debug, Error)]
 enum WcError {
-    #[error("{}", translate!("wc-error-files-disabled", "extra" => extra))]
-    FilesDisabled { extra: Cow<'static, str> },
+    #[error("{}", translate!("wc-error-files-disabled", "extra" => extra.quote()))]
+    FilesDisabled { extra: Cow<'static, OsStr> },
     #[error("{}", translate!("wc-error-stdin-repr-not-allowed"))]
     StdinReprNotAllowed,
     #[error("{}", translate!("wc-error-zero-length-filename"))]
@@ -369,7 +369,7 @@ impl WcError {
         }
     }
     fn files_disabled(first_extra: &OsString) -> Self {
-        let extra = first_extra.to_string_lossy().into_owned().into();
+        let extra = first_extra.clone().into();
         Self::FilesDisabled { extra }
     }
 }
