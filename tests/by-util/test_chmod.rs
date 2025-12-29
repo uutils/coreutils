@@ -372,7 +372,7 @@ fn test_permission_denied() {
         .arg("o=r")
         .arg("d")
         .fails()
-        .stderr_is("chmod: 'd/no-x/y': Permission denied\n");
+        .stderr_is("chmod: cannot access 'd/no-x/y': Permission denied\n");
 }
 
 #[test]
@@ -395,7 +395,7 @@ fn test_chmod_recursive() {
     #[cfg(not(target_os = "linux"))]
     let err_msg = "chmod: Permission denied\n";
     #[cfg(target_os = "linux")]
-    let err_msg = "chmod: 'z': Permission denied\n";
+    let err_msg = "chmod: cannot access 'z': Permission denied\n";
 
     // only the permissions of folder `a` and `z` are changed
     // folder can't be read after read permission is removed

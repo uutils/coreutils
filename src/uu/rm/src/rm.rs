@@ -43,7 +43,7 @@ enum RmError {
     DangerousRecursiveOperation,
     #[error("{}", translate!("rm-error-use-no-preserve-root"))]
     UseNoPreserveRoot,
-    #[error("{}", translate!("rm-error-refusing-to-remove-directory", "path" => _0.to_string_lossy()))]
+    #[error("{}", translate!("rm-error-refusing-to-remove-directory", "path" => _0.quote()))]
     RefusingToRemoveDirectory(OsString),
 }
 

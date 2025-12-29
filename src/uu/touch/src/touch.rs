@@ -21,7 +21,7 @@ use nix::sys::stat::futimens;
 #[cfg(unix)]
 use nix::sys::time::TimeSpec;
 use std::borrow::Cow;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 #[cfg(unix)]
 use std::fs::OpenOptions;
 use std::fs::{self, File};
@@ -437,9 +437,9 @@ fn touch_file(
     mtime: FileTime,
 ) -> UResult<()> {
     let filename = if is_stdout {
-        String::from("-")
+        OsStr::new("-")
     } else {
-        path.display().to_string()
+        path.as_os_str()
     };
 
     let metadata_result = if opts.no_deref {
