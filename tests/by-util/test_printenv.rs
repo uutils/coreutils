@@ -90,3 +90,43 @@ fn test_null_separator() {
             .stdout_is("FOO\x00VALUE\x00");
     }
 }
+
+#[test]
+#[cfg(unix)]
+#[cfg(not(any(target_os = "freebsd", target_os = "android", target_os = "openbsd")))]
+fn test_non_utf8_value() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+    // Environment variable values can contain non-UTF-8 bytes on Unix.
+    // printenv should output them correctly, matching GNU behavior.
+    // Reproduces: LD_PRELOAD=$'/tmp/lib.so\xff' printenv LD_PRELOAD
+    let value_with_invalid_utf8 = OsStr::from_bytes(b"/tmp/lib.so\xff");
+
+    let result = new_ucmd!()
+        .env("LD_PRELOAD", value_with_invalid_utf8)
+        .arg("LD_PRELOAD")
+        .run();
+
+    // Use byte-based assertions to avoid UTF-8 conversion issues
+    // when the test framework tries to format error messages
+    assert!(
+        result.succeeded(),
+        "Command failed with exit code: {:?}, stderr: {:?}",
+        result.code(),
+        String::from_utf8_lossy(result.stderr())
+    );
+    result.stdout_is_bytes(b"/tmp/lib.so\xff\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_non_utf8_env_vars() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    let non_utf8_value = OsString::from_vec(b"hello\x80world".to_vec());
+    new_ucmd!()
+        .env("NON_UTF8_VAR", &non_utf8_value)
+        .succeeds()
+        .stdout_contains_bytes(b"NON_UTF8_VAR=hello\x80world");
+}

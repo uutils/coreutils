@@ -65,3 +65,10 @@ shred-couldnt-rename = {$file}: Couldn't rename to {$new_name}: {$error}
 shred-failed-to-open-for-writing = {$file}: failed to open for writing
 shred-file-write-pass-failed = {$file}: File write pass failed
 shred-failed-to-remove-file = {$file}: failed to remove file
+
+# File I/O error messages
+shred-failed-to-clone-file-handle = failed to clone file handle
+shred-failed-to-seek-file = failed to seek in file
+shred-failed-to-read-seed-bytes = failed to read seed bytes from file
+shred-failed-to-get-metadata = failed to get file metadata
+shred-failed-to-set-permissions = failed to set file permissions

@@ -300,22 +300,22 @@ jobs:
       run: make nextest PROFILE=ci CARGOFLAGS="--hide-progress-bar"
       env:
         RUST_BACKTRACE: "1"
-
-    - name: "`make install PROFILE=release-fast COMPLETIONS=n MANPAGES=n LOCALES=n`"
+    - name: "`make install PROG_PREFIX=uu- PROFILE=release-fast COMPLETIONS=n MANPAGES=n LOCALES=n`"
       shell: bash
       run: |
         set -x
-        DESTDIR=/tmp/ make PROFILE=release-fast COMPLETIONS=n MANPAGES=n LOCALES=n install
+        DESTDIR=/tmp/ make install PROG_PREFIX=uu- PROFILE=release-fast COMPLETIONS=n MANPAGES=n LOCALES=n
         # Check that utils are built with given profile
         ./target/release-fast/true
-        # Check that the utils are present
-        test -f /tmp/usr/local/bin/tty
+        # Check that the progs have prefix
+        test -f /tmp/usr/local/bin/uu-tty
+        test -f /tmp/usr/local/libexec/uu-coreutils/libstdbuf.*   
         # Check that the manpage is not present
-        ! test -f /tmp/usr/local/share/man/man1/whoami.1
+        ! test -f /tmp/usr/local/share/man/man1/uu-whoami.1
         # Check that the completion is not present
-        ! test -f /tmp/usr/local/share/zsh/site-functions/_install
-        ! test -f /tmp/usr/local/share/bash-completion/completions/head.bash
-        ! test -f /tmp/usr/local/share/fish/vendor_completions.d/cat.fish
+        ! test -f /tmp/usr/local/share/zsh/site-functions/_uu-install
+        ! test -f /tmp/usr/local/share/bash-completion/completions/uu-head.bash
+        ! test -f /tmp/usr/local/share/fish/vendor_completions.d/uu-cat.fish
       env:
         RUST_BACKTRACE: "1"
     - name: "`make install`"
@@ -502,14 +502,14 @@ jobs:
               --arg multisize "$SIZE_MULTI" \
               '{($date): { sha: $sha, size: $size, multisize: $multisize, }}' > size-result.json
     - name: Download the previous individual size result
-      uses: dawidd6/action-download-artifact@v11
+      uses: dawidd6/action-download-artifact@v12
       with:
         workflow: CICD.yml
         name: individual-size-result
         repo: uutils/coreutils
         path: dl
     - name: Download the previous size result
-      uses: dawidd6/action-download-artifact@v11
+      uses: dawidd6/action-download-artifact@v12
       with:
         workflow: CICD.yml
         name: size-result

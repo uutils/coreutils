@@ -42,7 +42,7 @@ rm-error-cannot-remove-is-directory = impossible de supprimer {$file} : C'est un
 rm-error-dangerous-recursive-operation = il est dangereux d'opérer récursivement sur '/'
 rm-error-dangerous-recursive-operation-same-as-root = il est dangereux d'opérer récursivement sur '{$path}' (identique à '/')
 rm-error-use-no-preserve-root = utilisez --no-preserve-root pour outrepasser cette protection
-rm-error-refusing-to-remove-directory = refus de supprimer le répertoire '.' ou '..' : ignorer '{$path}'
+rm-error-refusing-to-remove-directory = refus de supprimer le répertoire '.' ou '..' : ignorer {$path}
 rm-error-cannot-remove = impossible de supprimer {$file}
 
 # Messages verbeux

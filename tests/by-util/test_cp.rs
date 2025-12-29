@@ -1124,6 +1124,23 @@ fn test_cp_arg_suffix() {
 }
 
 #[test]
+fn test_cp_arg_suffix_without_backup_option() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg("--suffix")
+        .arg(".bak")
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert_eq!(
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}.bak")),
+        "How are you?\n"
+    );
+}
+
+#[test]
 fn test_cp_arg_suffix_hyphen_value() {
     let (at, mut ucmd) = at_and_ucmd!();
 

@@ -7,6 +7,7 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::io::{IsTerminal, Write};
+use uucore::display::OsWrite;
 use uucore::error::{UResult, set_exit_code};
 use uucore::format_usage;
 
@@ -36,7 +37,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let name = nix::unistd::ttyname(std::io::stdin());
 
     let write_result = match name {
-        Ok(name) => writeln!(stdout, "{}", name.display()),
+        Ok(name) => stdout.write_all_os(name.as_os_str()),
         Err(_) => {
             set_exit_code(1);
             writeln!(stdout, "{}", translate!("tty-not-a-tty"))
