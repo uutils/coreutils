@@ -44,7 +44,14 @@ jobs:
         # We need jq and GNU coreutils to run show-utils.sh and bash to use inline shell string replacement
         # Use sudo-- to get the default sudo package without ambiguity
         # Install rust and cargo from OpenBSD packages
-        prepare: pkg_add curl sudo-- jq coreutils bash rust rust-clippy rust-rustfmt llvm--
+        prepare: |
+          # Clean up disk space before installing packages
+          df -h
+          rm -rf /usr/share/doc/* /usr/share/man/* /var/cache/* /tmp/* || true
+          pkg_add curl sudo-- jq coreutils bash rust rust-clippy rust-rustfmt llvm--
+          # Clean up package cache after installation
+          pkg_delete -a || true
+          df -h
         run: |
           ## Prepare, build, and test
           # implementation modelled after ref: <https://github.com/rust-lang/rustup/pull/2783>
@@ -106,8 +113,10 @@ jobs:
             # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
             S=\$(cargo clippy --all-targets \${CARGO_UTILITY_LIST_OPTIONS} -- -D warnings 2>&1) && printf "%s\n" "\$S" || { printf "%s\n" "\$S" ; printf "%s" "\$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+(.*):([0-9]+):([0-9]+).*\$/::\${FAULT_TYPE} file=\2,line=\3,col=\4::\${FAULT_PREFIX}: \\\`cargo clippy\\\`: \1 (file:'\2', line:\3)/p;" -e '}' ; FAULT=true ; }
           fi
-          # Clean to avoid to rsync back the files
+          # Clean to avoid to rsync back the files and free up disk space
           cargo clean
+          # Additional cleanup to free disk space
+          rm -rf ~/.cargo/registry/cache ~/.cargo/git/db || true
           if [ -n "\${FAIL_ON_FAULT}" ] && [ -n "\${FAULT}" ]; then exit 1 ; fi
           EOF
 
@@ -132,7 +141,14 @@ jobs:
         copyback: false
         mem: 4096
         # Install rust and build dependencies from OpenBSD packages (llvm provides libclang for bindgen)
-        prepare: pkg_add curl gmake sudo-- jq rust llvm--
+        prepare: |
+          # Clean up disk space before installing packages
+          df -h
+          rm -rf /usr/share/doc/* /usr/share/man/* /var/cache/* /tmp/* || true
+          pkg_add curl gmake sudo-- jq rust llvm--
+          # Clean up package cache after installation
+          pkg_delete -a || true
+          df -h
         run: |
           ## Prepare, build, and test
           # implementation modelled after ref: <https://github.com/rust-lang/rustup/pull/2783>
@@ -181,9 +197,13 @@ jobs:
           cd "${WORKSPACE}"
           unset FAULT
           cargo build || FAULT=1
+          # Clean build artifacts to save disk space before testing
+          rm -rf target/debug/build target/debug/incremental || true
           export PATH=~/.cargo/bin:${PATH}
           export RUST_BACKTRACE=1
           export CARGO_TERM_COLOR=always
+          # Avoid filling disk space
+          export RUSTFLAGS="-C strip=symbols"
           # Use cargo test since nextest might not support OpenBSD
           if (test -z "\$FAULT"); then cargo test --features '${{ matrix.job.features }}' || FAULT=1 ; fi
           # There is no systemd-logind on OpenBSD, so test all features except feat_systemd_logind
@@ -193,7 +213,9 @@ jobs:
           fi
           # Test building with make
           if (test -z "\$FAULT"); then make || FAULT=1 ; fi
-          # Clean to avoid to rsync back the files
+          # Clean to avoid to rsync back the files and free up disk space
           cargo clean
+          # Additional cleanup to free disk space
+          rm -rf ~/.cargo/registry/cache ~/.cargo/git/db target/debug/deps target/release/deps || true
           if (test -n "\$FAULT"); then exit 1 ; fi
           EOF
