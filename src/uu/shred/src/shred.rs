@@ -713,12 +713,9 @@ fn wipe_file(
             );
         }
         // size is an optional argument for exactly how many bytes we want to shred
-        // Ignore failed writes; just keep trying
-        show_if_err!(
-            do_pass(&mut file, &pass_type, exact, random_source, size).map_err_context(|| {
-                translate!("shred-file-write-pass-failed", "file" => path.maybe_quote())
-            })
-        );
+        do_pass(&mut file, &pass_type, exact, random_source, size).map_err_context(
+            || translate!("shred-file-write-pass-failed", "file" => path.maybe_quote()),
+        )?;
     }
 
     if remove_method != RemoveMethod::None {
