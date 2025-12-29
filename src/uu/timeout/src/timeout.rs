@@ -159,15 +159,21 @@ pub fn uu_app() -> Command {
                 .help(translate!("timeout-help-verbose"))
                 .action(ArgAction::SetTrue),
         )
-        .arg(Arg::new(options::DURATION).required(true))
+        .arg(
+            Arg::new(options::DURATION)
+                .required(true)
+                .help(translate!("timeout-help-duration")),
+        )
         .arg(
             Arg::new(options::COMMAND)
                 .required(true)
                 .action(ArgAction::Append)
+                .help(translate!("timeout-help-command"))
                 .value_hint(clap::ValueHint::CommandName),
         )
         .trailing_var_arg(true)
         .infer_long_args(true)
+        .after_help(translate!("timeout-after-help"))
 }
 
 /// Remove pre-existing SIGCHLD handlers that would make waiting for the child's exit code fail.
@@ -269,7 +275,7 @@ fn wait_or_kill_process(
             process.wait()?;
             Ok(ExitStatus::SignalSent(signal).into())
         }
-        Err(_) => Ok(ExitStatus::WaitingFailed.into()),
+        Err(_) => Ok(ExitStatus::CommandTimedOut.into()),
     }
 }
 
@@ -299,7 +305,6 @@ fn preserve_signal_info(signal: libc::c_int) -> libc::c_int {
     signal
 }
 
-/// TODO: Improve exit codes, and make them consistent with the GNU Coreutils exit codes.
 fn timeout(
     cmd: &[String],
     duration: Duration,
@@ -322,12 +327,10 @@ fn timeout(
         .stderr(Stdio::inherit())
         .spawn()
         .map_err(|err| {
-            let status_code = if err.kind() == ErrorKind::NotFound {
-                // FIXME: not sure which to use
-                127
-            } else {
-                // FIXME: this may not be 100% correct...
-                126
+            let status_code = match err.kind() {
+                ErrorKind::NotFound => ExitStatus::CommandNotFound.into(),
+                ErrorKind::PermissionDenied => ExitStatus::CannotInvoke.into(),
+                _ => ExitStatus::CannotInvoke.into(),
             };
             USimpleError::new(
                 status_code,

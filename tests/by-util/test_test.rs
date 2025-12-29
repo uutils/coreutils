@@ -5,10 +5,8 @@
 
 // spell-checker:ignore (words) egid euid pseudofloat
 
-use uutests::at_and_ucmd;
-use uutests::new_ucmd;
 use uutests::util::TestScenario;
-use uutests::util_name;
+use uutests::{at_and_ucmd, new_ucmd, util_name};
 
 #[test]
 fn test_empty_test_equivalent_to_false() {
@@ -337,14 +335,26 @@ fn test_file_is_newer_than_and_older_than_itself() {
 }
 
 #[test]
-fn test_non_existing_files() {
-    let scenario = TestScenario::new(util_name!());
+fn test_file_is_newer_than_non_existing_file() {
+    new_ucmd!()
+        .args(&["non_existing_file", "-nt", "regular_file"])
+        .fails_with_code(1)
+        .no_output();
 
-    let result = scenario
-        .ucmd()
-        .args(&["newer_file", "-nt", "regular_file"])
-        .fails_with_code(1);
-    assert!(result.stderr().is_empty());
+    new_ucmd!()
+        .args(&["regular_file", "-nt", "non_existing_file"])
+        .succeeds()
+        .no_output();
+
+    new_ucmd!()
+        .args(&["non_existing_file", "-ot", "regular_file"])
+        .succeeds()
+        .no_output();
+
+    new_ucmd!()
+        .args(&["regular_file", "-ot", "non_existing_file"])
+        .fails_with_code(1)
+        .no_output();
 }
 
 #[test]
