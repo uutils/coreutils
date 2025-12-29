@@ -1194,7 +1194,7 @@ jobs:
     - name: build and test all features individually
       shell: bash
       run: |
-        command -v sudo && sudo rm -rf /usr/local/lib/android # avoid no space left
+        command -v sudo && sudo rm -rf /usr/local/lib/android /usr/share/dotnet # avoid no space left
         df -h ||:
         CARGO_FEATURES_OPTION='--features=${{ matrix.job.features }}' ;
         for f in $(util/show-utils.sh ${CARGO_FEATURES_OPTION})
