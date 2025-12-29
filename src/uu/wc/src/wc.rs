@@ -973,6 +973,7 @@ fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
         }
         // Print deferred error after stats to match GNU wc output order
         if let Some(err) = deferred_error {
+            let _ = io::stdout().flush();
             show!(err);
         }
     }
