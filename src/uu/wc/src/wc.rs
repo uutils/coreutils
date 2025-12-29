@@ -950,11 +950,11 @@ fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
             }
         };
 
-        let word_count = match word_count_from_input(&input, settings) {
-            CountResult::Success(word_count) => word_count,
+        // Store any I/O error from reading to print AFTER stats (matches GNU wc behavior)
+        let (word_count, deferred_error) = match word_count_from_input(&input, settings) {
+            CountResult::Success(word_count) => (word_count, None),
             CountResult::Interrupted(word_count, err) => {
-                show!(err.map_err_context(|| input.path_display()));
-                word_count
+                (word_count, Some(err.map_err_context(|| input.path_display())))
             }
             CountResult::Failure(err) => {
                 show!(err.map_err_context(|| input.path_display()));
@@ -969,6 +969,10 @@ fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
                 let title = maybe_title_str.unwrap_or(OsStr::new("<stdin>"));
                 show!(err.map_err_context(|| translate!("wc-error-failed-to-print-result", "title" => title.to_string_lossy())));
             }
+        }
+        // Print deferred error after stats to match GNU wc output order
+        if let Some(err) = deferred_error {
+            show!(err);
         }
     }
 
