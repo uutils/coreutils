@@ -79,8 +79,7 @@ jobs:
       matrix:
         test-target:
           - { name: fuzz_test, should_pass: true }
-          # https://github.com/uutils/coreutils/issues/5311
-          - { name: fuzz_date, should_pass: false }
+          - { name: fuzz_date, should_pass: true }
           - { name: fuzz_expr, should_pass: true }
           - { name: fuzz_printf, should_pass: true }
           - { name: fuzz_echo, should_pass: true }
@@ -110,7 +109,7 @@ jobs:
         shared-key: "cargo-fuzz-cache-key"
         cache-directories: "fuzz/target"
     - name: Restore Cached Corpus
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@v5
       with:
         key: corpus-cache-${{ matrix.test-target.name }}
         path: |
@@ -192,13 +191,13 @@ jobs:
 
         echo "" >> $GITHUB_STEP_SUMMARY
     - name: Save Corpus Cache
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@v5
       with:
         key: corpus-cache-${{ matrix.test-target.name }}
         path: |
           fuzz/corpus/${{ matrix.test-target.name }}
     - name: Upload Stats
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: fuzz-stats-${{ matrix.test-target.name }}
         path: |
@@ -215,7 +214,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Download all stats
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           path: fuzz/stats-artifacts
           pattern: fuzz-stats-*
@@ -309,7 +308,7 @@ jobs:
         run: |
           cat fuzzing_summary.md
       - name: Upload Summary
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: fuzzing-summary
           path: fuzzing_summary.md

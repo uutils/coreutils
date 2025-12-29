@@ -2458,6 +2458,71 @@ mod gnu_cksum_c {
         scene
     }
 
+    fn make_scene_with_comment() -> TestScenario {
+        let scene = make_scene();
+
+        scene
+            .fixtures
+            .append("CHECKSUMS", "# Very important comment\n");
+
+        scene
+    }
+
+    fn make_scene_with_invalid_line() -> TestScenario {
+        let scene = make_scene_with_comment();
+
+        scene.fixtures.append("CHECKSUMS", "invalid_line\n");
+
+        scene
+    }
+
+    #[test]
+    fn test_tagged_invalid_length() {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        at.write(
+            "sha2-bad-length.sum",
+            "SHA2-128 (/dev/null) = 38b060a751ac96384cd9327eb1b1e36a",
+        );
+
+        ucmd.arg("--check")
+            .arg("sha2-bad-length.sum")
+            .fails()
+            .stderr_contains("sha2-bad-length.sum: no properly formatted checksum lines found");
+    }
+
+    #[test]
+    #[cfg_attr(not(unix), ignore = "/dev/null is only available on UNIX")]
+    fn test_untagged_base64_matching_tag() {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        at.write("tag-prefix.sum", "SHA1+++++++++++++++++++++++=  /dev/null");
+
+        ucmd.arg("--check")
+            .arg("-a")
+            .arg("sha1")
+            .arg("tag-prefix.sum")
+            .fails()
+            .stderr_contains("WARNING: 1 computed checksum did NOT match");
+    }
+
+    #[test]
+    #[cfg_attr(windows, ignore = "Awkward filename is not supported on windows")]
+    fn test_awkward_filename() {
+        let ts = TestScenario::new(util_name!());
+        let at = &ts.fixtures;
+
+        let awkward_file = "abc (f) = abc";
+
+        at.touch(awkward_file);
+
+        let result = ts.ucmd().arg("-a").arg("sha1").arg(awkward_file).succeeds();
+
+        at.write_bytes("tag-awkward.sum", result.stdout());
+
+        ts.ucmd().arg("-c").arg("tag-awkward.sum").succeeds();
+    }
+
     #[test]
     #[ignore = "todo"]
     fn test_signed_checksums() {
@@ -2509,16 +2574,6 @@ mod gnu_cksum_c {
             .no_output();
     }
 
-    fn make_scene_with_comment() -> TestScenario {
-        let scene = make_scene();
-
-        scene
-            .fixtures
-            .append("CHECKSUMS", "# Very important comment\n");
-
-        scene
-    }
-
     #[test]
     fn test_status_with_comment() {
         let scene = make_scene_with_comment();
@@ -2530,14 +2585,6 @@ mod gnu_cksum_c {
             .arg("CHECKSUMS")
             .succeeds()
             .no_output();
-    }
-
-    fn make_scene_with_invalid_line() -> TestScenario {
-        let scene = make_scene_with_comment();
-
-        scene.fixtures.append("CHECKSUMS", "invalid_line\n");
-
-        scene
     }
 
     #[test]
@@ -2706,6 +2753,20 @@ mod gnu_cksum_c {
             .stdout_does_not_contain("nonexistent: No such file or directory")
             .stdout_does_not_contain("nonexistent: FAILED open or read")
             .stderr_contains("CHECKSUMS-missing: no file was verified");
+    }
+
+    #[test]
+    fn test_ignore_missing_stdin() {
+        let scene = make_scene_with_checksum_missing();
+
+        scene
+            .ucmd()
+            .arg("--ignore-missing")
+            .arg("--check")
+            .pipe_in_fixture("CHECKSUMS-missing")
+            .fails()
+            .no_stdout()
+            .stderr_contains("'standard input': no file was verified");
     }
 
     #[test]

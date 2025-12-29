@@ -34,8 +34,9 @@ fn test_manpage_generation() {
     );
 
     let output_str = String::from_utf8_lossy(&output.stdout);
-    assert!(output_str.contains("\n.TH"), "{output_str}");
+    assert!(output_str.contains("\n.TH ls"), "{output_str}");
     assert!(output_str.contains('1'), "{output_str}");
+    assert!(output_str.contains("\n.SH NAME\nls"), "{output_str}");
 }
 
 #[test]
@@ -57,8 +58,9 @@ fn test_manpage_coreutils() {
     );
 
     let output_str = String::from_utf8_lossy(&output.stdout);
-    assert!(output_str.contains("\n.TH"), "{output_str}");
+    assert!(output_str.contains("\n.TH coreutils"), "{output_str}");
     assert!(output_str.contains("coreutils"), "{output_str}");
+    assert!(output_str.contains("\n.SH NAME\ncoreutils"), "{output_str}");
 }
 
 #[test]
