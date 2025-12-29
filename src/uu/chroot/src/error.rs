@@ -5,6 +5,7 @@
 // spell-checker:ignore NEWROOT Userspec userspec
 //! Errors returned by chroot.
 use std::io::Error;
+use std::path::PathBuf;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UError;
@@ -16,7 +17,7 @@ use uucore::translate;
 pub enum ChrootError {
     /// Failed to enter the specified directory.
     #[error("{}", translate!("chroot-error-cannot-enter", "dir" => _0.quote(), "err" => _1))]
-    CannotEnter(String, #[source] Error),
+    CannotEnter(PathBuf, #[source] Error),
 
     /// Failed to execute the specified command.
     #[error("{}", translate!("chroot-error-command-failed", "cmd" => _0.quote(), "err" => _1))]
@@ -52,7 +53,7 @@ pub enum ChrootError {
 
     /// The given directory does not exist.
     #[error("{}", translate!("chroot-error-no-such-directory", "dir" => _0.quote()))]
-    NoSuchDirectory(String),
+    NoSuchDirectory(PathBuf),
 
     /// The call to `setgid()` failed.
     #[error("{}", translate!("chroot-error-set-gid-failed", "gid" => _0, "err" => _1))]
