@@ -125,6 +125,9 @@ pub use crate::features::fsxattr;
 #[cfg(all(target_os = "linux", feature = "selinux"))]
 pub use crate::features::selinux;
 
+#[cfg(all(target_os = "linux", feature = "smack"))]
+pub use crate::features::smack;
+
 //## core functions
 
 #[cfg(unix)]
@@ -191,6 +194,10 @@ macro_rules! bin {
         pub fn main() {
             use std::io::Write;
             use uucore::locale;
+
+            // Preserve inherited SIGPIPE settings (e.g., from env --default-signal=PIPE)
+            uucore::panic::preserve_inherited_sigpipe();
+
             // suppress extraneous error output for SIGPIPE failures/panics
             uucore::panic::mute_sigpipe_panic();
             locale::setup_localization(uucore::get_canonical_util_name(stringify!($util)))
