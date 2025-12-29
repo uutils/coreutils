@@ -213,10 +213,17 @@ macro_rules! bin {
                 });
 
             // execute utility code
-            let code = $util::uumain(uucore::args_os());
+            let mut code = $util::uumain(uucore::args_os());
             // (defensively) flush stdout for utility prior to exit; see <https://github.com/rust-lang/rust/issues/23818>
             if let Err(e) = std::io::stdout().flush() {
-                eprintln!("Error flushing stdout: {e}");
+                // Treat write errors as a failure, but ignore BrokenPipe to avoid
+                // breaking utilities that intentionally silence it (e.g., seq).
+                if e.kind() != std::io::ErrorKind::BrokenPipe {
+                    eprintln!("Error flushing stdout: {e}");
+                    if code == 0 {
+                        code = 1;
+                    }
+                }
             }
 
             std::process::exit(code);
