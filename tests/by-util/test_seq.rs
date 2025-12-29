@@ -20,7 +20,9 @@ fn test_broken_pipe_still_exits_success() {
     use std::process::Stdio;
 
     let mut child = new_ucmd!()
-        .args(&["1", "5"])
+        // Use an infinite sequence so a burst of output happens immediately after spawn.
+        // With small output the process can finish before stdout is closed and the Broken pipe never occurs.
+        .args(&["inf"])
         .set_stdout(Stdio::piped())
         .run_no_wait();
 

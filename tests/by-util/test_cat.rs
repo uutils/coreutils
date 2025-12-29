@@ -18,6 +18,32 @@ use uutests::util::TestScenario;
 use uutests::util::vec_of_size;
 use uutests::util_name;
 
+#[cfg(unix)]
+// Verify cat handles a broken pipe on stdout without hanging or crashing and exits nonzero
+#[test]
+fn test_cat_broken_pipe_nonzero_and_message() {
+    use std::fs::File;
+    use std::os::unix::io::FromRawFd;
+    use uutests::new_ucmd;
+
+    unsafe {
+        let mut fds: [libc::c_int; 2] = [0, 0];
+        assert_eq!(libc::pipe(fds.as_mut_ptr()), 0, "Failed to create pipe");
+        // Close the read end to simulate a broken pipe on stdout
+        let read_end = File::from_raw_fd(fds[0]);
+        // Explicitly drop the read-end so writers see EPIPE instead of blocking on a full pipe
+        std::mem::drop(read_end);
+        let write_end = File::from_raw_fd(fds[1]);
+
+        let content = (0..10000).map(|_| "x").collect::<String>();
+        // On Unix, SIGPIPE should lead to a non-zero exit; ensure process exits and fails
+        new_ucmd!()
+            .set_stdout(write_end)
+            .pipe_in(content.as_bytes())
+            .fails();
+    }
+}
+
 #[test]
 fn test_output_simple() {
     new_ucmd!()
@@ -576,37 +602,17 @@ fn test_write_fast_fallthrough_uses_flush() {
 
 #[test]
 #[cfg(unix)]
-#[ignore = ""]
 fn test_domain_socket() {
-    use std::io::prelude::*;
     use std::os::unix::net::UnixListener;
-    use std::sync::{Arc, Barrier};
-    use std::thread;
 
-    let dir = tempfile::Builder::new()
-        .prefix("unix_socket")
-        .tempdir()
-        .expect("failed to create dir");
-    let socket_path = dir.path().join("sock");
-    let listener = UnixListener::bind(&socket_path).expect("failed to create socket");
+    let s = TestScenario::new(util_name!());
+    let socket_path = s.fixtures.plus("sock");
+    let _ = UnixListener::bind(&socket_path).expect("failed to create socket");
 
-    // use a barrier to ensure we don't run cat before the listener is setup
-    let barrier = Arc::new(Barrier::new(2));
-    let barrier2 = Arc::clone(&barrier);
-
-    let thread = thread::spawn(move || {
-        let mut stream = listener.accept().expect("failed to accept connection").0;
-        barrier2.wait();
-        stream
-            .write_all(b"a\tb")
-            .expect("failed to write test data");
-    });
-
-    let child = new_ucmd!().args(&[socket_path]).run_no_wait();
-    barrier.wait();
-    child.wait().unwrap().stdout_is("a\tb");
-
-    thread.join().unwrap();
+    s.ucmd()
+        .args(&[socket_path])
+        .fails()
+        .stderr_contains("No such device or address");
 }
 
 #[test]

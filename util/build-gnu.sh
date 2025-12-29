@@ -3,16 +3,14 @@
 #
 
 # spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW
-# spell-checker:ignore baddecode submodules xstrtol distros ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) gnproc greadlink gsed multihardlink texinfo CARGOFLAGS
-# spell-checker:ignore openat TOCTOU CFLAGS
-# spell-checker:ignore hfsplus casefold chattr
+# spell-checker:ignore baddecode submodules xstrtol distros ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) greadlink gsed multihardlink texinfo CARGOFLAGS
+# spell-checker:ignore openat TOCTOU CFLAGS tmpfs
 
 set -e
 
-# Use system's GNU version for make, nproc, readlink and sed on *BSD and macOS
+# Use GNU make, readlink and sed on *BSD and macOS
 MAKE=$(command -v gmake||command -v make)
-NPROC=$(command -v gnproc||command -v nproc)
-READLINK=$(command -v greadlink||command -v readlink)
+READLINK=$(command -v greadlink||command -v readlink) # Use our readlink to remove a dependency
 SED=$(command -v gsed||command -v sed)
 
 SYSTEM_TIMEOUT=$(command -v timeout)
@@ -34,18 +32,13 @@ path_GNU="$("${READLINK}" -fm -- "${path_GNU:-${path_UUTILS}/../gnu}")"
 
 ###
 
-release_tag_GNU="v9.9"
-
 # check if the GNU coreutils has been cloned, if not print instructions
-# note: the ${path_GNU} might already exist, so we check for the .git directory
-if test ! -d "${path_GNU}/.git"; then
+# note: the ${path_GNU} might already exist, so we check for the configure
+if test ! -f "${path_GNU}/configure"; then
     echo "Could not find the GNU coreutils (expected at '${path_GNU}')"
     echo "Download them to the expected path:"
-    echo "  git clone --recurse-submodules https://github.com/coreutils/coreutils.git \"${path_GNU}\""
-    echo "Afterwards, checkout the latest release tag:"
-    echo "  cd \"${path_GNU}\""
-    echo "  git fetch --all --tags"
-    echo "  git checkout tags/${release_tag_GNU}"
+    echo " (mkdir -p '${path_GNU}' && cd '${path_GNU}' && bash '${path_UUTILS}/util/fetch-gnu.sh')"
+    echo "You can edit fetch-gnu.sh to change the tag"
     exit 1
 fi
 
@@ -95,13 +88,13 @@ fi
 cd -
 
 # Pass the feature flags to make, which will pass them to cargo
-"${MAKE}" PROFILE="${PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}"
+"${MAKE}" PROFILE="${PROFILE}" SKIP_UTILS=more CARGOFLAGS="${CARGO_FEATURE_FLAGS}"
 # min test for SELinux
 [ "${SELINUX_ENABLED}" = 1 ] && touch g && "${PROFILE}"/stat -c%C g && rm g
 
 cp "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests rename this script before running, to avoid confusion with the make target
 # Create *sum binaries
-for sum in b2sum b3sum md5sum sha1sum sha224sum sha256sum sha384sum sha512sum; do
+for sum in b2sum md5sum sha1sum sha224sum sha256sum sha384sum sha512sum; do
     sum_path="${UU_BUILD_DIR}/${sum}"
     test -f "${sum_path}" || (cd ${UU_BUILD_DIR} && ln -s "hashsum" "${sum}")
 done
@@ -111,7 +104,8 @@ test -f "${UU_BUILD_DIR}/[" || (cd ${UU_BUILD_DIR} && ln -s "test" "[")
 
 cd "${path_GNU}" && echo "[ pwd:'${PWD}' ]"
 
-# Any binaries that aren't built become `false` so their tests fail
+# Any binaries that aren't built become `false` to make tests failure
+# Note that some test (e.g. runcon/runcon-compute.sh) incorrectly passes by this
 for binary in $(./build-aux/gen-lists-of-programs.sh --list-progs); do
     bin_path="${UU_BUILD_DIR}/${binary}"
     test -f "${bin_path}" || {
@@ -126,20 +120,24 @@ done
 
 if test -f gnu-built; then
     echo "GNU build already found. Skip"
-    echo "'rm -f $(pwd)/gnu-built' to force the build"
+    echo "'rm -f $(pwd)/{gnu-built,src/getlimits}' to force the build"
     echo "Note: the customization of the tests will still happen"
 else
     # Disable useless checks
     "${SED}" -i 's|check-texinfo: $(syntax_checks)|check-texinfo:|' doc/local.mk
-    ./bootstrap --skip-po
     # Use CFLAGS for best build time since we discard GNU coreutils
-    CFLAGS="${CFLAGS} -pipe -O0 -s" ./configure --quiet --disable-gcc-warnings --disable-nls --disable-dependency-tracking --disable-bold-man-page-references \
+    CFLAGS="${CFLAGS} -pipe -O0 -s" ./configure -C --quiet --disable-gcc-warnings --disable-nls --disable-dependency-tracking --disable-bold-man-page-references \
+      --enable-single-binary=symlinks --enable-install-program="arch,kill,uptime,hostname" \
       "$([ "${SELINUX_ENABLED}" = 1 ] && echo --with-selinux || echo --without-selinux)"
     #Add timeout to to protect against hangs
     "${SED}" -i 's|^"\$@|'"${SYSTEM_TIMEOUT}"' 600 "\$@|' build-aux/test-driver
     # Use a better diff
     "${SED}" -i 's|diff -c|diff -u|g' tests/Coreutils.pm
-    "${MAKE}" -j "$("${NPROC}")"
+
+    # Skip make if possible
+    # Use our nproc for *BSD and macOS
+    test -f src/getlimits || "${MAKE}" -j "$("${UU_BUILD_DIR}/nproc")"
+    cp -f src/getlimits "${UU_BUILD_DIR}"
 
     # Handle generated factor tests
     t_first=00
@@ -168,8 +166,17 @@ grep -rl 'path_prepend_' tests/* | xargs -r "${SED}" -i 's| path_prepend_ ./src|
 # path_prepend_ sets $abs_path_dir_: set it manually instead.
 grep -rl '\$abs_path_dir_' tests/*/*.sh | xargs -r "${SED}" -i "s|\$abs_path_dir_|${UU_BUILD_DIR//\//\\/}|g"
 
-# Remove hfs dependency (should be merged to upstream)
-"${SED}" -i -e "s|hfsplus|ext4 -O casefold|" -e "s|cd mnt|rm -d mnt/lost+found;chattr +F mnt;cd mnt|" tests/mv/hardlink-case.sh
+# We can't build runcon and chcon without libselinux. But GNU no longer builds dummies of them. So consider they are SELinux specific.
+"${SED}" -i 's/^print_ver_.*/require_selinux_/' tests/runcon/runcon-compute.sh
+"${SED}" -i 's/^print_ver_.*/require_selinux_/' tests/runcon/runcon-no-reorder.sh
+"${SED}" -i 's/^print_ver_.*/require_selinux_/' tests/chcon/chcon-fail.sh
+
+# Mask mtab by unshare instead of LD_PRELOAD (able to merge this to GNU?)
+"${SED}" -i -e 's|^export LD_PRELOAD=.*||' -e "s|.*maybe LD_PRELOAD.*|df() { unshare -rm bash -c \"mount -t tmpfs tmpfs /proc \&\& command df \\\\\"\\\\\$@\\\\\"\" -- \"\$@\"; }|" tests/df/no-mtab-status.sh
+# We use coreutils yes
+"${SED}" -i "s|--coreutils-prog=||g" tests/misc/coreutils.sh
+# Different message
+"${SED}" -i "s|coreutils: unknown program 'blah'|blah: function/utility not found|" tests/misc/coreutils.sh
 
 # Use the system coreutils where the test fails due to error in a util that is not the one being tested
 "${SED}" -i "s|grep '^#define HAVE_CAP 1' \$CONFIG_HEADER > /dev/null|true|"  tests/ls/capability.sh
@@ -216,11 +223,9 @@ sed -i -e "s|---dis ||g" tests/tail/overlay-headers.sh
 # Do not FAIL, just do a regular ERROR
 "${SED}" -i -e "s|framework_failure_ 'no inotify_add_watch';|fail=1;|" tests/tail/inotify-rotate-resources.sh
 
-test -f "${UU_BUILD_DIR}/getlimits" || cp src/getlimits "${UU_BUILD_DIR}"
-
-# pr produces very long log and this command isn't super interesting
-# SKIP for now
-"${SED}" -i -e "s|my \$prog = 'pr';$|my \$prog = 'pr';CuSkip::skip \"\$prog: SKIP for producing too long logs\";|" tests/pr/pr-tests.pl
+# pr-tests.pl: Override the comparison function to suppress diff output
+# This prevents the test from overwhelming logs while still reporting failures
+"${SED}" -i '/^my $fail = run_tests/i no warnings "redefine"; *Coreutils::_compare_files = sub { my ($p, $t, $io, $a, $e) = @_; my $d = File::Compare::compare($a, $e); warn "$p: test $t: mismatch\\n" if $d; return $d; };' tests/pr/pr-tests.pl
 
 # We don't have the same error message and no need to be that specific
 "${SED}" -i -e "s|invalid suffix in --pages argument|invalid --pages argument|" \
@@ -238,9 +243,6 @@ test -f "${UU_BUILD_DIR}/getlimits" || cp src/getlimits "${UU_BUILD_DIR}"
 # basenc: swap out error message for unexpected arg
 "${SED}" -i "s/  {ERR=>\"\$prog: foobar\\\\n\" \. \$try_help }/  {ERR=>\"error: unexpected argument '--foobar' found\n\n  tip: to pass '--foobar' as a value, use '-- --foobar'\n\nUsage: basenc [OPTION]... [FILE]\n\nFor more information, try '--help'.\n\"}]/" tests/basenc/basenc.pl
 "${SED}" -i "s/  {ERR_SUBST=>\"s\/(unrecognized|unknown) option \[-' \]\*foobar\[' \]\*\/foobar\/\"}],//" tests/basenc/basenc.pl
-
-# Remove the check whether a util was built. Otherwise tests against utils like "arch" are not run.
-"${SED}" -i "s|require_built_ |# require_built_ |g" init.cfg
 
 # exit early for the selinux check. The first is enough for us.
 "${SED}" -i "s|# Independent of whether SELinux|return 0\n  #|g" init.cfg
@@ -284,7 +286,6 @@ test -f "${UU_BUILD_DIR}/getlimits" || cp src/getlimits "${UU_BUILD_DIR}"
 
 # Remove the extra output check
 "${SED}" -i -e "s|Try '\$prog --help' for more information.\\\n||" tests/du/files0-from.pl
-"${SED}" -i -e "s|when reading file names from stdin, no file name of\"|-: No such file or directory\n\"|" -e "s| '-' allowed\\\n||" tests/du/files0-from.pl
 "${SED}" -i -e "s|-: No such file or directory|cannot access '-': No such file or directory|g" tests/du/files0-from.pl
 
 # Skip the move-dir-while-traversing test - our implementation uses safe traversal with openat()
