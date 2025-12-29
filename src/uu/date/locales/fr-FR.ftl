@@ -94,8 +94,9 @@ date-help-universal = afficher ou définir le Temps Universel Coordonné (UTC)
 
 date-error-invalid-date = date invalide '{$date}'
 date-error-invalid-format = format invalide '{$format}' ({$error})
-date-error-expected-file-got-directory = fichier attendu, répertoire obtenu '{$path}'
+date-error-expected-file-got-directory = fichier attendu, répertoire obtenu {$path}
 date-error-date-overflow = débordement de date '{$date}'
 date-error-setting-date-not-supported-macos = la définition de la date n'est pas prise en charge par macOS
 date-error-setting-date-not-supported-redox = la définition de la date n'est pas prise en charge par Redox
 date-error-cannot-set-date = impossible de définir la date
+date-error-extra-operand = opérande supplémentaire '{$operand}'
