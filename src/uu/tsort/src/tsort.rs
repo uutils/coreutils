@@ -3,14 +3,14 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //spell-checker:ignore TAOCP indegree
-use clap::{Arg, Command};
+use clap::{Arg, ArgAction, Command};
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, VecDeque};
 use std::ffi::OsString;
 use std::path::Path;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{UError, UResult};
+use uucore::error::{UError, UResult, USimpleError};
 use uucore::{format_usage, show};
 
 use uucore::translate;
@@ -22,19 +22,19 @@ mod options {
 #[derive(Debug, Error)]
 enum TsortError {
     /// The input file is actually a directory.
-    #[error("{input}: {message}", input = .0, message = translate!("tsort-error-is-dir"))]
-    IsDir(String),
+    #[error("{input}: {message}", input = .0.maybe_quote(), message = translate!("tsort-error-is-dir"))]
+    IsDir(OsString),
 
     /// The number of tokens in the input data is odd.
     ///
     /// The list of edges must be even because each edge has two
     /// components: a source node and a target node.
     #[error("{input}: {message}", input = .0.maybe_quote(), message = translate!("tsort-error-odd"))]
-    NumTokensOdd(String),
+    NumTokensOdd(OsString),
 
     /// The graph contains a cycle.
-    #[error("{input}: {message}", input = .0, message = translate!("tsort-error-loop"))]
-    Loop(String),
+    #[error("{input}: {message}", input = .0.maybe_quote(), message = translate!("tsort-error-loop"))]
+    Loop(OsString),
 }
 
 // Auxiliary struct, just for printing loop nodes via show! macro
@@ -49,23 +49,44 @@ impl UError for LoopNode<'_> {}
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
-    let input = matches
-        .get_one::<OsString>(options::FILE)
-        .expect("Value is required by clap");
+    let mut inputs: Vec<OsString> = matches
+        .get_many::<OsString>(options::FILE)
+        .map(|vals| vals.cloned().collect())
+        .unwrap_or_default();
+
+    if inputs.is_empty() {
+        inputs.push(OsString::from("-"));
+    }
+
+    if inputs.len() > 1 {
+        return Err(USimpleError::new(
+            1,
+            translate!(
+                "tsort-error-extra-operand",
+                "operand" => inputs[1].quote(),
+                "util" => uucore::util_name()
+            ),
+        ));
+    }
+
+    let input = inputs
+        .into_iter()
+        .next()
+        .expect(translate!("tsort-error-at-least-one-input").as_str());
 
     let data = if input == "-" {
         let stdin = std::io::stdin();
         std::io::read_to_string(stdin)?
     } else {
-        let path = Path::new(input);
+        let path = Path::new(&input);
         if path.is_dir() {
-            return Err(TsortError::IsDir(input.to_string_lossy().to_string()).into());
+            return Err(TsortError::IsDir(input.clone()).into());
         }
         std::fs::read_to_string(path)?
     };
 
     // Create the directed graph from pairs of tokens in the input data.
-    let mut g = Graph::new(input.to_string_lossy().to_string());
+    let mut g = Graph::new(input.clone());
     // Input is considered to be in the format
     // From1 To1 From2 To2 ...
     // with tokens separated by whitespaces
@@ -80,7 +101,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             break;
         };
         let Some(to) = edge_tokens.next() else {
-            return Err(TsortError::NumTokensOdd(input.to_string_lossy().to_string()).into());
+            return Err(TsortError::NumTokensOdd(input.clone()).into());
         };
         g.add_edge(from, to);
     }
@@ -97,11 +118,18 @@ pub fn uu_app() -> Command {
         .about(translate!("tsort-about"))
         .infer_long_args(true)
         .arg(
+            Arg::new("warn")
+                .short('w')
+                .action(ArgAction::SetTrue)
+                .hide(true),
+        )
+        .arg(
             Arg::new(options::FILE)
-                .default_value("-")
                 .hide(true)
                 .value_parser(clap::value_parser!(OsString))
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .num_args(0..)
+                .action(ArgAction::Append),
         )
 }
 
@@ -130,7 +158,7 @@ impl<'input> Node<'input> {
 }
 
 struct Graph<'input> {
-    name: String,
+    name: OsString,
     nodes: HashMap<&'input str, Node<'input>>,
 }
 
@@ -141,7 +169,7 @@ enum VisitedState {
 }
 
 impl<'input> Graph<'input> {
-    fn new(name: String) -> Self {
+    fn new(name: OsString) -> Self {
         Self {
             name,
             nodes: HashMap::default(),
@@ -190,7 +218,7 @@ impl<'input> Graph<'input> {
             let v = self.find_next_node(&mut independent_nodes_queue);
             println!("{v}");
             if let Some(node_to_process) = self.nodes.remove(v) {
-                for successor_name in node_to_process.successor_names {
+                for successor_name in node_to_process.successor_names.into_iter().rev() {
                     let successor_node = self.nodes.get_mut(successor_name).unwrap();
                     successor_node.predecessor_count -= 1;
                     if successor_node.predecessor_count == 0 {

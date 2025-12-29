@@ -2,11 +2,11 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore regfile
-use uutests::new_ucmd;
-use uutests::path_concat;
+//
+// spell-checker:ignore regfile parentdir
+
 use uutests::util::{TestScenario, get_root_path};
-use uutests::{at_and_ucmd, util_name};
+use uutests::{at_and_ucmd, new_ucmd, path_concat, util_name};
 
 static GIBBERISH: &str = "supercalifragilisticexpialidocious";
 
@@ -14,6 +14,14 @@ static GIBBERISH: &str = "supercalifragilisticexpialidocious";
 static NOT_A_DIRECTORY: &str = "Not a directory";
 #[cfg(windows)]
 static NOT_A_DIRECTORY: &str = "The directory name is invalid.";
+
+#[test]
+fn test_no_args() {
+    new_ucmd!()
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("readlink: missing operand");
+}
 
 #[test]
 fn test_invalid_arg() {
@@ -57,6 +65,21 @@ fn test_canonicalize_missing() {
     let expect = path_concat!(at.root_dir_resolved(), GIBBERISH) + "\n";
     println!("actual: {actual:?}");
     println!("expect: {expect:?}");
+    assert_eq!(actual, expect);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_canonicalize_symlink_before_parentdir() {
+    // GNU readlink follows the symlink first and only then evaluates `..`.
+    // Logical resolution would collapse `link/..` up front and return the current directory instead.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("real");
+    at.mkdir("real/sub");
+    at.relative_symlink_dir("real/sub", "link");
+
+    let actual = ucmd.args(&["-f", "link/.."]).succeeds().stdout_move_str();
+    let expect = format!("{}/real\n", at.root_dir_resolved());
     assert_eq!(actual, expect);
 }
 
