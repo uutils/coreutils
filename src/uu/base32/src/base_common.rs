@@ -54,7 +54,7 @@ impl Config {
                 if let Some(extra_op) = values.next() {
                     return Err(UUsageError::new(
                         BASE_CMD_PARSE_ERROR,
-                        translate!("base-common-extra-operand", "operand" => extra_op.to_string_lossy().quote()),
+                        translate!("base-common-extra-operand", "operand" => extra_op.quote()),
                     ));
                 }
 

@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::OnceLock;
 
+use os_display::Quotable;
 use thiserror::Error;
 use unic_langid::LanguageIdentifier;
 
@@ -457,8 +458,8 @@ fn get_locales_dir(p: &str) -> Result<PathBuf, LocalizationError> {
 
         Err(LocalizationError::LocalesDirNotFound(format!(
             "Development locales directory not found at {} or {}",
-            dev_path.display(),
-            fallback_dev_path.display()
+            dev_path.quote(),
+            fallback_dev_path.quote()
         )))
     }
 
@@ -480,7 +481,7 @@ fn get_locales_dir(p: &str) -> Result<PathBuf, LocalizationError> {
 
         Err(LocalizationError::LocalesDirNotFound(format!(
             "Release locales directory not found starting from {}",
-            exe_dir.display()
+            exe_dir.quote()
         )))
     }
 }
@@ -575,7 +576,7 @@ mod tests {
 
         Err(LocalizationError::LocalesDirNotFound(format!(
             "No localization strings found for {locale} in {}",
-            test_locales_dir.display()
+            test_locales_dir.quote()
         )))
     }
 
@@ -617,7 +618,7 @@ mod tests {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
 
         // Create en-US.ftl
-        let en_content = r#"
+        let en_content = r"
 greeting = Hello, world!
 welcome = Welcome, { $name }!
 count-items = You have { $count ->
@@ -625,27 +626,27 @@ count-items = You have { $count ->
    *[other] { $count } items
 }
 missing-in-other = This message only exists in English
-"#;
+";
 
         // Create fr-FR.ftl
-        let fr_content = r#"
+        let fr_content = r"
 greeting = Bonjour, le monde!
 welcome = Bienvenue, { $name }!
 count-items = Vous avez { $count ->
     [one] { $count } élément
    *[other] { $count } éléments
 }
-"#;
+";
 
         // Create ja-JP.ftl (Japanese)
-        let ja_content = r#"
+        let ja_content = r"
 greeting = こんにちは、世界！
 welcome = ようこそ、{ $name }さん！
 count-items = { $count }個のアイテムがあります
-"#;
+";
 
         // Create ar-SA.ftl (Arabic - Right-to-Left)
-        let ar_content = r#"
+        let ar_content = r"
 greeting = أهلاً بالعالم！
 welcome = أهلاً وسهلاً، { $name }！
 count-items = لديك { $count ->
@@ -655,13 +656,13 @@ count-items = لديك { $count ->
     [few] { $count } عناصر
    *[other] { $count } عنصر
 }
-"#;
+";
 
         // Create es-ES.ftl with invalid syntax
-        let es_invalid_content = r#"
+        let es_invalid_content = r"
 greeting = Hola, mundo!
 invalid-syntax = This is { $missing
-"#;
+";
 
         fs::write(temp_dir.path().join("en-US.ftl"), en_content)
             .expect("Failed to write en-US.ftl");
