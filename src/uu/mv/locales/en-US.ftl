@@ -29,14 +29,14 @@ mv-error-failed-access-not-directory = failed to access {$path}: Not a directory
 mv-error-backup-with-no-clobber = cannot combine --backup with -n/--no-clobber or --update=none-fail
 mv-error-extra-operand = mv: extra operand {$operand}
 mv-error-backup-might-destroy-source = backing up {$target} might destroy source;  {$source} not moved
-mv-error-will-not-overwrite-just-created = will not overwrite just-created '{$target}' with '{$source}'
+mv-error-will-not-overwrite-just-created = will not overwrite just-created {$target} with {$source}
 mv-error-not-replacing = not replacing {$target}
 mv-error-cannot-move = cannot move {$source} to {$target}
 mv-error-directory-not-empty = Directory not empty
 mv-error-dangling-symlink = can't determine symlink type, since it is dangling
 mv-error-no-symlink-support = your operating system does not support symlinks
 mv-error-permission-denied = Permission denied
-mv-error-inter-device-move-failed = inter-device move failed: '{$from}' to '{$to}'; unable to remove target: {$err}
+mv-error-inter-device-move-failed = inter-device move failed: {$from} to {$to}; unable to remove target: {$err}
 
 # Help messages
 mv-help-force = do not prompt before overwriting
@@ -61,6 +61,7 @@ mv-debug-skipped = skipped {$target}
 
 # Prompt messages
 mv-prompt-overwrite = overwrite {$target}?
+mv-prompt-overwrite-mode = replace {$target}, overriding mode {$mode_info}?
 
 # Progress messages
 mv-progress-moving = moving
