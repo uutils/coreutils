@@ -17,13 +17,13 @@ sort-cannot-read = cannot read: {$path}: {$error}
 sort-open-tmp-file-failed = failed to open temporary file: {$error}
 sort-compress-prog-execution-failed = could not run compress program '{$prog}': {$error}
 sort-compress-prog-terminated-abnormally = {$prog} terminated abnormally
-sort-cannot-create-tmp-file = cannot create temporary file in '{$path}':
-sort-file-operands-combined = extra operand '{$file}'
+sort-cannot-create-tmp-file = cannot create temporary file in {$path}:
+sort-file-operands-combined = extra operand {$file}
     file operands cannot be combined with --files0-from
     Try '{$help} --help' for more information.
 sort-multiple-output-files = multiple output files specified
 sort-minus-in-stdin = when reading file names from standard input, no file name of '-' allowed
-sort-no-input-from = no input from '{$file}'
+sort-no-input-from = no input from {$file}
 sort-invalid-zero-length-filename = {$file}:{$line_num}: invalid zero-length file name
 sort-options-incompatible = options '-{$opt1}{$opt2}' are incompatible
 sort-invalid-key = invalid key {$key}

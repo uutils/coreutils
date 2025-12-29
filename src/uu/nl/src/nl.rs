@@ -8,6 +8,7 @@ use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::path::Path;
+use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
 use uucore::{format_usage, show_error, translate};
 
@@ -221,12 +222,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             if path.is_dir() {
                 show_error!(
                     "{}",
-                    translate!("nl-error-is-directory", "path" => path.display())
+                    translate!("nl-error-is-directory", "path" => path.maybe_quote())
                 );
                 set_exit_code(1);
             } else {
-                let reader =
-                    File::open(path).map_err_context(|| file.to_string_lossy().to_string())?;
+                let reader = File::open(path).map_err_context(|| file.maybe_quote().to_string())?;
                 let mut buffer = BufReader::new(reader);
                 nl(&mut buffer, &mut stats, &settings)?;
             }
