@@ -169,7 +169,7 @@ pub fn disable_rust_signal_handlers() -> Result<(), Errno> {
 pub fn stdout_is_closed() -> bool {
     #[cfg(unix)]
     {
-        use nix::fcntl::{fcntl, FcntlArg};
+        use nix::fcntl::{FcntlArg, fcntl};
         match fcntl(std::io::stdout(), FcntlArg::F_GETFL) {
             Ok(_) => false,
             Err(nix::errno::Errno::EBADF) => true,
