@@ -139,6 +139,7 @@ pub type CopyResult<T> = Result<T, CpError>;
 fn write_stdout_line(args: fmt::Arguments) -> CopyResult<()> {
     use std::io::Write;
 
+    uucore::check_stdout_write(1)?;
     let mut stdout = io::stdout().lock();
     stdout.write_fmt(args)?;
     stdout.write_all(b"\n")?;
