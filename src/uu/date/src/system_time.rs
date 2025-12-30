@@ -41,10 +41,7 @@ mod unix {
 
     fn gregorian_to_ethiopian(y: i32, m: i32, d: i32) -> (i32, i32, i32) {
         let (m, y) = if m <= 2 { (m + 12, y - 1) } else { (m, y) };
-        let jdn = (1461 * (y + 4800)) / 4
-            + (367 * (m - 2)) / 12
-            - (3 * ((y + 4900) / 100)) / 4
-            + d
+        let jdn = (1461 * (y + 4800)) / 4 + (367 * (m - 2)) / 12 - (3 * ((y + 4900) / 100)) / 4 + d
             - 32075;
 
         let n = jdn - 1724221;
@@ -60,8 +57,7 @@ mod unix {
     }
 
     fn jiff_format(fmt: &str, date: &Zoned) -> UResult<String> {
-        jiff::fmt::strtime::format(fmt, date)
-            .map_err(|e| USimpleError::new(1, e.to_string()))
+        jiff::fmt::strtime::format(fmt, date).map_err(|e| USimpleError::new(1, e.to_string()))
     }
 
     fn preprocess_format(format: &str, date: &Zoned) -> UResult<String> {
@@ -136,11 +132,7 @@ mod unix {
         Ok(spec.literal_formats[count - 1].to_string())
     }
 
-    fn consume_repeats(
-        chars: &mut Peekable<Chars<'_>>,
-        needle: char,
-        max: usize,
-    ) -> usize {
+    fn consume_repeats(chars: &mut Peekable<Chars<'_>>, needle: char, max: usize) -> usize {
         let mut count = 0;
         while count < max && matches!(chars.peek(), Some(ch) if *ch == needle) {
             chars.next();
