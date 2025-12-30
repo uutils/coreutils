@@ -60,5 +60,13 @@ name = "sort_bench"
 harness = false
 
 [[bench]]
-name = "sort_locale_bench"
+name = "sort_locale_c_bench"
+harness = false
+
+[[bench]]
+name = "sort_locale_utf8_bench"
+harness = false
+
+[[bench]]
+name = "sort_locale_de_bench"
 harness = false
