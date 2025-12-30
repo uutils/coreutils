@@ -1337,7 +1337,12 @@ pub struct TestScenario {
     pub util_name: String,
     pub fixtures: AtPath,
     tmpd: Rc<TempDir>,
-    #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "freebsd",
+        target_os = "openbsd"
+    ))]
     tmp_fs_mountpoint: Option<String>,
     #[cfg(target_vendor = "apple")]
     tmp_fs_ramdisk: Option<String>,
@@ -1355,7 +1360,12 @@ impl TestScenario {
             util_name: util_name.as_ref().into(),
             fixtures: AtPath::new(tmpd.as_ref().path()),
             tmpd,
-            #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+            #[cfg(any(
+                target_os = "linux",
+                target_os = "android",
+                target_os = "freebsd",
+                target_os = "openbsd"
+            ))]
             tmp_fs_mountpoint: None,
             #[cfg(target_vendor = "apple")]
             tmp_fs_ramdisk: None,
@@ -1405,7 +1415,12 @@ impl TestScenario {
     }
 
     /// Mounts a temporary filesystem at the specified mount point.
-    #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "freebsd",
+        target_os = "openbsd"
+    ))]
     pub fn mount_temp_fs(&mut self, mount_point: &str) -> core::result::Result<(), String> {
         if self.tmp_fs_mountpoint.is_some() {
             return Err("already mounted".to_string());
@@ -1484,7 +1499,12 @@ impl TestScenario {
         Ok(())
     }
 
-    #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "freebsd",
+        target_os = "openbsd"
+    ))]
     /// Unmounts the temporary filesystem if it is currently mounted.
     pub fn umount_temp_fs(&mut self) {
         if let Some(mount_point) = self.tmp_fs_mountpoint.as_ref() {
@@ -1508,7 +1528,12 @@ impl TestScenario {
 
 impl Drop for TestScenario {
     fn drop(&mut self) {
-        #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+        #[cfg(any(
+            target_os = "linux",
+            target_os = "android",
+            target_os = "freebsd",
+            target_os = "openbsd"
+        ))]
         self.umount_temp_fs();
         #[cfg(target_vendor = "apple")]
         self.umount_temp_fs();
