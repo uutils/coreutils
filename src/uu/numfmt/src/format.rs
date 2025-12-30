@@ -607,23 +607,26 @@ mod tests {
         let error = result.unwrap_err();
         assert!(error.contains("numfmt-error-invalid-number") || error.contains("invalid number"));
         assert!(!error.contains("invalid suffix"));
+    }
 
-        let result = parse_suffix("123i", &Unit::Auto);
-        assert!(result.is_err());
-        let error = result.unwrap_err();
+    #[test]
+    fn test_detailed_error_message() {
+        let result = detailed_error_message("123i", &Unit::Auto);
+        assert!(result.is_some());
+        let error = result.unwrap();
         assert!(error.contains("numfmt-error-invalid-suffix") || error.contains("invalid suffix"));
 
-        let result = parse_suffix("5MF", &Unit::Auto);
-        assert!(result.is_err());
-        let error = result.unwrap_err();
+        let result = detailed_error_message("5MF", &Unit::Auto);
+        assert!(result.is_some());
+        let error = result.unwrap();
         assert!(
             error.contains("numfmt-error-invalid-specific-suffix")
                 || error.contains("invalid suffix")
         );
 
-        let result = parse_suffix("5KM", &Unit::Auto);
-        assert!(result.is_err());
-        let error = result.unwrap_err();
+        let result = detailed_error_message("5KM", &Unit::Auto);
+        assert!(result.is_some());
+        let error = result.unwrap();
         assert!(
             error.contains("numfmt-error-invalid-specific-suffix")
                 || error.contains("invalid suffix")
