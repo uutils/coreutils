@@ -119,9 +119,13 @@ fn bsd_sysctl_memory(hw_constant: libc::c_int, sysctl_name: &str) -> Result<u128
     }
 
     // Fallback to subprocess if native call fails
+    // Configure stdin/stdout/stderr to prevent file descriptor inheritance issues
     let output = std::process::Command::new("sysctl")
         .arg("-n")
         .arg(sysctl_name)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
         .output()?;
 
     let mem_str = String::from_utf8_lossy(&output.stdout);
