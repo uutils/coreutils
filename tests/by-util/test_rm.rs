@@ -767,12 +767,22 @@ fn test_current_or_parent_dir_rm4() {
 
     at.mkdir("d");
 
+    let file_1 = "file1";
+    let file_2 = "d/file2";
+
+    at.touch(file_1);
+    at.touch(file_2);
+
     let answers = [
         "rm: refusing to remove '.' or '..' directory: skipping 'd/.'",
         "rm: refusing to remove '.' or '..' directory: skipping 'd/./'",
         "rm: refusing to remove '.' or '..' directory: skipping 'd/./'",
         "rm: refusing to remove '.' or '..' directory: skipping 'd/..'",
         "rm: refusing to remove '.' or '..' directory: skipping 'd/../'",
+        "rm: refusing to remove '.' or '..' directory: skipping '.'",
+        "rm: refusing to remove '.' or '..' directory: skipping './'",
+        "rm: refusing to remove '.' or '..' directory: skipping '../'",
+        "rm: refusing to remove '.' or '..' directory: skipping '..'",
     ];
     let std_err_str = ts
         .ucmd()
@@ -782,12 +792,20 @@ fn test_current_or_parent_dir_rm4() {
         .arg("d/.////")
         .arg("d/..")
         .arg("d/../")
+        .arg(".")
+        .arg("./")
+        .arg("../")
+        .arg("..")
         .fails()
         .stderr_move_str();
 
     for (idx, line) in std_err_str.lines().enumerate() {
         assert_eq!(line, answers[idx]);
     }
+    // checks that no file was silently removed
+    assert!(at.dir_exists("d"));
+    assert!(at.file_exists(file_1));
+    assert!(at.file_exists(file_2));
 }
 
 #[test]
@@ -798,12 +816,22 @@ fn test_current_or_parent_dir_rm4_windows() {
 
     at.mkdir("d");
 
+    let file_1 = "file1";
+    let file_2 = "d/file2";
+
+    at.touch(file_1);
+    at.touch(file_2);
+
     let answers = [
         "rm: refusing to remove '.' or '..' directory: skipping 'd\\.'",
         "rm: refusing to remove '.' or '..' directory: skipping 'd\\.\\'",
         "rm: refusing to remove '.' or '..' directory: skipping 'd\\.\\'",
         "rm: refusing to remove '.' or '..' directory: skipping 'd\\..'",
         "rm: refusing to remove '.' or '..' directory: skipping 'd\\..\\'",
+        "rm: refusing to remove '.' or '..' directory: skipping '.'",
+        "rm: refusing to remove '.' or '..' directory: skipping '.\\'",
+        "rm: refusing to remove '.' or '..' directory: skipping '..'",
+        "rm: refusing to remove '.' or '..' directory: skipping '..\\'",
     ];
     let std_err_str = ts
         .ucmd()
@@ -813,12 +841,21 @@ fn test_current_or_parent_dir_rm4_windows() {
         .arg("d\\.\\\\\\\\")
         .arg("d\\..")
         .arg("d\\..\\")
+        .arg(".")
+        .arg(".\\")
+        .arg("..")
+        .arg("..\\")
         .fails()
         .stderr_move_str();
 
     for (idx, line) in std_err_str.lines().enumerate() {
         assert_eq!(line, answers[idx]);
     }
+
+    // checks that no file was silently removed
+    assert!(at.dir_exists("d"));
+    assert!(at.file_exists(file_1));
+    assert!(at.file_exists(file_2));
 }
 
 #[test]
