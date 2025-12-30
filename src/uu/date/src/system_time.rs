@@ -40,26 +40,36 @@ mod unix {
     }
 
     fn gregorian_to_ethiopian(year: i32, month: i32, day: i32) -> (i32, i32, i32) {
+        let julian_day = julian_day_number(year, month, day);
+        let days_since_epoch = julian_day - 1724221;
+        let (year, day_of_year) = ethiopian_year_and_day(days_since_epoch);
+        let month = day_of_year / 30 + 1;
+        let day = day_of_year % 30 + 1;
+        (year, month, day)
+    }
+
+    fn julian_day_number(year: i32, month: i32, day: i32) -> i32 {
         let (adj_month, adj_year) = if month <= 2 {
             (month + 12, year - 1)
         } else {
             (month, year)
         };
-        let jdn = (1461 * (adj_year + 4800)) / 4 + (367 * (adj_month - 2)) / 12
+
+        (1461 * (adj_year + 4800)) / 4
+            + (367 * (adj_month - 2)) / 12
             - (3 * ((adj_year + 4900) / 100)) / 4
             + day
-            - 32075;
+            - 32075
+    }
 
-        let days_since_epoch = jdn - 1724221;
+    fn ethiopian_year_and_day(days_since_epoch: i32) -> (i32, i32) {
         let cycle = days_since_epoch / 1461;
         let remainder = days_since_epoch % 1461;
         let year_in_cycle = remainder / 365;
         let year_in_cycle = if remainder == 1460 { 3 } else { year_in_cycle };
         let year = 4 * cycle + year_in_cycle + 1;
         let day_of_year = remainder - year_in_cycle * 365;
-        let month = day_of_year / 30 + 1;
-        let day = day_of_year % 30 + 1;
-        (year, month, day)
+        (year, day_of_year)
     }
 
     fn jiff_format(fmt: &str, date: &Zoned) -> UResult<String> {
@@ -76,6 +86,19 @@ mod unix {
 
     fn nanos_to_u32(nanos: i32) -> UResult<u32> {
         u32::try_from(nanos).map_err(|_| USimpleError::new(1, "nanoseconds out of range"))
+    }
+
+    fn nanos_from(date: &Zoned) -> UResult<u32> {
+        nanos_to_u32(date.timestamp().subsec_nanosecond())
+    }
+
+    fn format_nanos_for_flag(flag: Option<char>, date: &Zoned) -> UResult<String> {
+        let nanos = nanos_from(date)?;
+        if matches!(flag, Some('-')) {
+            Ok(format_nanos_trimmed(nanos))
+        } else {
+            Ok(format_nanos_padded(nanos))
+        }
     }
 
     fn preprocess_format(format: &str, date: &Zoned) -> UResult<String> {
@@ -100,17 +123,13 @@ mod unix {
         };
 
         match next {
-            'N' => {
-                let nanos = nanos_to_u32(date.timestamp().subsec_nanosecond())?;
-                Ok(format_nanos_padded(nanos))
-            }
+            'N' => format_nanos_for_flag(None, date),
             '-' => {
                 let Some(flagged) = chars.next() else {
                     return Ok("%-".to_string());
                 };
                 if flagged == 'N' {
-                    let nanos = nanos_to_u32(date.timestamp().subsec_nanosecond())?;
-                    return Ok(format_nanos_trimmed(nanos));
+                    return format_nanos_for_flag(Some('-'), date);
                 }
                 Ok(format!("%-{flagged}"))
             }
