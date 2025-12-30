@@ -339,12 +339,10 @@ fn maybe_flush_unbroken_output<W: Write>(ctx: &mut FoldContext<'_, W>) -> UResul
         return Ok(());
     }
 
-    if !ctx.output.is_empty() {
-        // Write raw bytes without inserting a newline; folding will continue
-        // based on updated column tracking in the caller.
-        ctx.writer.write_all(ctx.output)?;
-        ctx.output.clear();
-    }
+    // Write raw bytes without inserting a newline; folding will continue
+    // based on updated column tracking in the caller.
+    ctx.writer.write_all(ctx.output)?;
+    ctx.output.clear();
     Ok(())
 }
 
@@ -668,7 +666,7 @@ fn fold_file<T: Read, W: Write>(
     let mut output = Vec::new();
     let mut col_count = 0;
     let mut last_space = None;
-    let mut pending = Vec::new();
+    let mut pending = Vec::with_capacity(8 * 1024);
 
     {
         let mut ctx = FoldContext {
