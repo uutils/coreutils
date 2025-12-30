@@ -45,8 +45,7 @@ mod unix {
         } else {
             (month, year)
         };
-        let jdn = (1461 * (adj_year + 4800)) / 4
-            + (367 * (adj_month - 2)) / 12
+        let jdn = (1461 * (adj_year + 4800)) / 4 + (367 * (adj_month - 2)) / 12
             - (3 * ((adj_year + 4900) / 100)) / 4
             + day
             - 32075;
