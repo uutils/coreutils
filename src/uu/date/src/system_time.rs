@@ -39,18 +39,25 @@ mod unix {
         false
     }
 
-    fn gregorian_to_ethiopian(y: i32, m: i32, d: i32) -> (i32, i32, i32) {
-        let (m, y) = if m <= 2 { (m + 12, y - 1) } else { (m, y) };
-        let jdn = (1461 * (y + 4800)) / 4 + (367 * (m - 2)) / 12 - (3 * ((y + 4900) / 100)) / 4 + d
+    fn gregorian_to_ethiopian(year: i32, month: i32, day: i32) -> (i32, i32, i32) {
+        let (adj_month, adj_year) = if month <= 2 {
+            (month + 12, year - 1)
+        } else {
+            (month, year)
+        };
+        let jdn = (1461 * (adj_year + 4800)) / 4
+            + (367 * (adj_month - 2)) / 12
+            - (3 * ((adj_year + 4900) / 100)) / 4
+            + day
             - 32075;
 
-        let n = jdn - 1724221;
-        let n_cycle = n / 1461;
-        let r = n % 1461;
-        let y_rel = r / 365;
-        let y_rel = if r == 1460 { 3 } else { y_rel };
-        let year = 4 * n_cycle + y_rel + 1;
-        let day_of_year = r - y_rel * 365;
+        let days_since_epoch = jdn - 1724221;
+        let cycle = days_since_epoch / 1461;
+        let remainder = days_since_epoch % 1461;
+        let year_in_cycle = remainder / 365;
+        let year_in_cycle = if remainder == 1460 { 3 } else { year_in_cycle };
+        let year = 4 * cycle + year_in_cycle + 1;
+        let day_of_year = remainder - year_in_cycle * 365;
         let month = day_of_year / 30 + 1;
         let day = day_of_year % 30 + 1;
         (year, month, day)
@@ -61,11 +68,15 @@ mod unix {
     }
 
     fn format_nanos_padded(nanos: u32) -> String {
-        format!("{:09}", nanos)
+        format!("{nanos:09}")
     }
 
     fn format_nanos_trimmed(nanos: u32) -> String {
         format_nanos_padded(nanos).trim_end_matches('0').to_string()
+    }
+
+    fn nanos_to_u32(nanos: i32) -> UResult<u32> {
+        u32::try_from(nanos).map_err(|_| USimpleError::new(1, "nanoseconds out of range"))
     }
 
     fn preprocess_format(format: &str, date: &Zoned) -> UResult<String> {
@@ -91,7 +102,7 @@ mod unix {
 
         match next {
             'N' => {
-                let nanos = date.timestamp().subsec_nanosecond();
+                let nanos = nanos_to_u32(date.timestamp().subsec_nanosecond())?;
                 Ok(format_nanos_padded(nanos))
             }
             '-' => {
@@ -99,7 +110,7 @@ mod unix {
                     return Ok("%-".to_string());
                 };
                 if flagged == 'N' {
-                    let nanos = date.timestamp().subsec_nanosecond();
+                    let nanos = nanos_to_u32(date.timestamp().subsec_nanosecond())?;
                     return Ok(format_nanos_trimmed(nanos));
                 }
                 Ok(format!("%-{flagged}"))
@@ -201,7 +212,7 @@ mod unix {
             .ok()
             .and_then(|abbrev| CString::new(abbrev).ok());
         if let Some(ref zone) = zone_cstring {
-            tm.tm_zone = zone.as_ptr() as *mut i8;
+            tm.tm_zone = zone.as_ptr().cast_mut();
         }
         zone_cstring
     }
@@ -233,10 +244,10 @@ mod unix {
         // SAFETY: `format_c` is NUL-terminated, `tm` is a valid libc::tm, and `buffer` is writable.
         let ret = unsafe {
             libc::strftime(
-                buffer.as_mut_ptr() as *mut _,
+                buffer.as_mut_ptr().cast(),
                 buffer.len(),
                 format_c.as_ptr(),
-                tm as *const _,
+                std::ptr::from_ref(tm),
             )
         };
 
