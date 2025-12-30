@@ -60,6 +60,14 @@ mod unix {
         jiff::fmt::strtime::format(fmt, date).map_err(|e| USimpleError::new(1, e.to_string()))
     }
 
+    fn format_nanos_padded(nanos: u32) -> String {
+        format!("{:09}", nanos)
+    }
+
+    fn format_nanos_trimmed(nanos: u32) -> String {
+        format_nanos_padded(nanos).trim_end_matches('0').to_string()
+    }
+
     fn preprocess_format(format: &str, date: &Zoned) -> UResult<String> {
         let mut output = String::with_capacity(format.len());
         let mut chars = format.chars().peekable();
@@ -84,7 +92,17 @@ mod unix {
         match next {
             'N' => {
                 let nanos = date.timestamp().subsec_nanosecond();
-                Ok(format!("{:09}", nanos))
+                Ok(format_nanos_padded(nanos))
+            }
+            '-' => {
+                let Some(flagged) = chars.next() else {
+                    return Ok("%-".to_string());
+                };
+                if flagged == 'N' {
+                    let nanos = date.timestamp().subsec_nanosecond();
+                    return Ok(format_nanos_trimmed(nanos));
+                }
+                Ok(format!("%-{flagged}"))
             }
             's' => Ok(date.timestamp().as_second().to_string()),
             'q' => {
