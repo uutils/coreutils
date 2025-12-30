@@ -4,25 +4,9 @@
 // file that was distributed with this source code.
 
 use divan::{Bencher, black_box};
-use std::fs::{self, File};
-use std::io::Write;
-use std::path::Path;
 use tempfile::TempDir;
 use uu_dd::uumain;
-use uucore::benchmark::run_util_function;
-
-fn create_test_file(path: &Path, size_mb: usize) {
-    let buffer = vec![b'x'; size_mb * 1024 * 1024];
-    let mut file = File::create(path).unwrap();
-    file.write_all(&buffer).unwrap();
-    file.sync_all().unwrap();
-}
-
-fn remove_file(path: &Path) {
-    if path.exists() {
-        fs::remove_file(path).unwrap();
-    }
-}
+use uucore::benchmark::{binary_data, fs_utils, run_util_function};
 
 /// Benchmark basic dd copy with default settings
 #[divan::bench(args = [32])]
@@ -31,13 +15,13 @@ fn dd_copy_default(bencher: Bencher, size_mb: usize) {
     let input = temp_dir.path().join("input.bin");
     let output = temp_dir.path().join("output.bin");
 
-    create_test_file(&input, size_mb);
+    binary_data::create_file(&input, size_mb, b'x');
 
     let input_str = input.to_str().unwrap();
     let output_str = output.to_str().unwrap();
 
     bencher.bench(|| {
-        remove_file(&output);
+        fs_utils::remove_path(&output);
         black_box(run_util_function(
             uumain,
             &[
@@ -56,13 +40,13 @@ fn dd_copy_4k_blocks(bencher: Bencher, size_mb: usize) {
     let input = temp_dir.path().join("input.bin");
     let output = temp_dir.path().join("output.bin");
 
-    create_test_file(&input, size_mb);
+    binary_data::create_file(&input, size_mb, b'x');
 
     let input_str = input.to_str().unwrap();
     let output_str = output.to_str().unwrap();
 
     bencher.bench(|| {
-        remove_file(&output);
+        fs_utils::remove_path(&output);
         black_box(run_util_function(
             uumain,
             &[
@@ -82,13 +66,13 @@ fn dd_copy_64k_blocks(bencher: Bencher, size_mb: usize) {
     let input = temp_dir.path().join("input.bin");
     let output = temp_dir.path().join("output.bin");
 
-    create_test_file(&input, size_mb);
+    binary_data::create_file(&input, size_mb, b'x');
 
     let input_str = input.to_str().unwrap();
     let output_str = output.to_str().unwrap();
 
     bencher.bench(|| {
-        remove_file(&output);
+        fs_utils::remove_path(&output);
         black_box(run_util_function(
             uumain,
             &[
@@ -108,13 +92,13 @@ fn dd_copy_1m_blocks(bencher: Bencher, size_mb: usize) {
     let input = temp_dir.path().join("input.bin");
     let output = temp_dir.path().join("output.bin");
 
-    create_test_file(&input, size_mb);
+    binary_data::create_file(&input, size_mb, b'x');
 
     let input_str = input.to_str().unwrap();
     let output_str = output.to_str().unwrap();
 
     bencher.bench(|| {
-        remove_file(&output);
+        fs_utils::remove_path(&output);
         black_box(run_util_function(
             uumain,
             &[
@@ -134,13 +118,13 @@ fn dd_copy_separate_blocks(bencher: Bencher, size_mb: usize) {
     let input = temp_dir.path().join("input.bin");
     let output = temp_dir.path().join("output.bin");
 
-    create_test_file(&input, size_mb);
+    binary_data::create_file(&input, size_mb, b'x');
 
     let input_str = input.to_str().unwrap();
     let output_str = output.to_str().unwrap();
 
     bencher.bench(|| {
-        remove_file(&output);
+        fs_utils::remove_path(&output);
         black_box(run_util_function(
             uumain,
             &[
@@ -161,13 +145,13 @@ fn dd_copy_partial(bencher: Bencher, size_mb: usize) {
     let input = temp_dir.path().join("input.bin");
     let output = temp_dir.path().join("output.bin");
 
-    create_test_file(&input, size_mb);
+    binary_data::create_file(&input, size_mb, b'x');
 
     let input_str = input.to_str().unwrap();
     let output_str = output.to_str().unwrap();
 
     bencher.bench(|| {
-        remove_file(&output);
+        fs_utils::remove_path(&output);
         black_box(run_util_function(
             uumain,
             &[
@@ -188,13 +172,13 @@ fn dd_copy_with_skip(bencher: Bencher, size_mb: usize) {
     let input = temp_dir.path().join("input.bin");
     let output = temp_dir.path().join("output.bin");
 
-    create_test_file(&input, size_mb);
+    binary_data::create_file(&input, size_mb, b'x');
 
     let input_str = input.to_str().unwrap();
     let output_str = output.to_str().unwrap();
 
     bencher.bench(|| {
-        remove_file(&output);
+        fs_utils::remove_path(&output);
         black_box(run_util_function(
             uumain,
             &[
@@ -215,13 +199,13 @@ fn dd_copy_with_seek(bencher: Bencher, size_mb: usize) {
     let input = temp_dir.path().join("input.bin");
     let output = temp_dir.path().join("output.bin");
 
-    create_test_file(&input, size_mb);
+    binary_data::create_file(&input, size_mb, b'x');
 
     let input_str = input.to_str().unwrap();
     let output_str = output.to_str().unwrap();
 
     bencher.bench(|| {
-        remove_file(&output);
+        fs_utils::remove_path(&output);
         black_box(run_util_function(
             uumain,
             &[
@@ -242,13 +226,13 @@ fn dd_copy_8k_blocks(bencher: Bencher, size_mb: usize) {
     let input = temp_dir.path().join("input.bin");
     let output = temp_dir.path().join("output.bin");
 
-    create_test_file(&input, size_mb);
+    binary_data::create_file(&input, size_mb, b'x');
 
     let input_str = input.to_str().unwrap();
     let output_str = output.to_str().unwrap();
 
     bencher.bench(|| {
-        remove_file(&output);
+        fs_utils::remove_path(&output);
         black_box(run_util_function(
             uumain,
             &[
