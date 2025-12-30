@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::{fs, io};
 use thiserror::Error;
 use uucore::display::Quotable;
@@ -27,17 +27,17 @@ use uucore::translate;
 #[derive(Debug, Error)]
 enum ChmodError {
     #[error("{}", translate!("chmod-error-cannot-stat", "file" => _0.quote()))]
-    CannotStat(String),
+    CannotStat(PathBuf),
     #[error("{}", translate!("chmod-error-dangling-symlink", "file" => _0.quote()))]
-    DanglingSymlink(String),
+    DanglingSymlink(PathBuf),
     #[error("{}", translate!("chmod-error-no-such-file", "file" => _0.quote()))]
-    NoSuchFile(String),
+    NoSuchFile(PathBuf),
     #[error("{}", translate!("chmod-error-preserve-root", "file" => _0.quote()))]
-    PreserveRoot(String),
+    PreserveRoot(PathBuf),
     #[error("{}", translate!("chmod-error-permission-denied", "file" => _0.quote()))]
-    PermissionDenied(String),
-    #[error("{}", translate!("chmod-error-new-permissions", "file" => _0.clone(), "actual" => _1.clone(), "expected" => _2.clone()))]
-    NewPermissions(String, String, String),
+    PermissionDenied(PathBuf),
+    #[error("{}", translate!("chmod-error-new-permissions", "file" => _0.maybe_quote(), "actual" => _1.clone(), "expected" => _2.clone()))]
+    NewPermissions(PathBuf, String, String),
 }
 
 impl UError for ChmodError {}
@@ -123,7 +123,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Some(fref) => match fs::metadata(fref) {
             Ok(meta) => Some(meta.mode() & 0o7777),
             Err(_) => {
-                return Err(ChmodError::CannotStat(fref.to_string_lossy().to_string()).into());
+                return Err(ChmodError::CannotStat(fref.into()).into());
             }
         },
         None => None,
@@ -388,7 +388,7 @@ impl Chmoder {
 
                             if !self.quiet {
                                 show!(ChmodError::DanglingSymlink(
-                                    filename.to_string_lossy().to_string()
+                                    filename.into()
                                 ));
                                 set_exit_code(1);
                             }
@@ -401,7 +401,7 @@ impl Chmoder {
                             }
                         } else if !self.quiet {
                             show!(ChmodError::NoSuchFile(
-                                filename.to_string_lossy().to_string()
+                                filename.into()
                             ));
                         }
                         // GNU exits with exit code 1 even if -q or --quiet are passed
@@ -416,7 +416,7 @@ impl Chmoder {
                     }
 
                     if self.recursive && self.preserve_root && file == Path::new("/") {
-                        return Err(ChmodError::PreserveRoot("/".to_string()).into());
+                        return Err(ChmodError::PreserveRoot("/".into()).into());
                     }
                     if self.recursive {
                         r = self.walk_dir_with_context(file, true);
@@ -427,7 +427,7 @@ impl Chmoder {
                 Err(e) if e.kind() == io::ErrorKind::PermissionDenied => {
                     if !self.quiet {
                         show!(ChmodError::PermissionDenied(
-                            filename.to_string_lossy().to_string()
+                            filename.into()
                         ));
                     }
                     set_exit_code(1);
@@ -436,7 +436,7 @@ impl Chmoder {
                 Err(_) => {
                     if !self.quiet {
                         show!(ChmodError::NoSuchFile(
-                            filename.to_string_lossy().to_string()
+                            filename.into()
                         ));
                     }
                     set_exit_code(1);
@@ -498,7 +498,7 @@ impl Chmoder {
                     // Handle permission denied errors with proper file path context
                     if err.kind() == std::io::ErrorKind::PermissionDenied {
                         r = r.and(Err(ChmodError::PermissionDenied(
-                            file_path.to_string_lossy().to_string(),
+                            file_path.into(),
                         )
                         .into()));
                     } else {
@@ -527,7 +527,7 @@ impl Chmoder {
                 // Handle permission denied with proper file path context
                 let e = dir_meta.unwrap_err();
                 let error = if e.kind() == std::io::ErrorKind::PermissionDenied {
-                    ChmodError::PermissionDenied(entry_path.to_string_lossy().to_string()).into()
+                    ChmodError::PermissionDenied(entry_path.into()).into()
                 } else {
                     e.into()
                 };
@@ -554,7 +554,7 @@ impl Chmoder {
                         Err(err) => {
                             let error = if err.kind() == std::io::ErrorKind::PermissionDenied {
                                 ChmodError::PermissionDenied(
-                                    entry_path.to_string_lossy().to_string(),
+                                    entry_path.into(),
                                 )
                                 .into()
                             } else {
@@ -623,7 +623,7 @@ impl Chmoder {
                 );
             }
             return Err(
-                ChmodError::PermissionDenied(file_path.to_string_lossy().to_string()).into(),
+                ChmodError::PermissionDenied(file_path.into()).into(),
             );
         }
 
@@ -663,9 +663,9 @@ impl Chmoder {
                 } else if err.kind() == std::io::ErrorKind::PermissionDenied {
                     // These two filenames would normally be conditionally
                     // quoted, but GNU's tests expect them to always be quoted
-                    Err(ChmodError::PermissionDenied(file.to_string_lossy().to_string()).into())
+                    Err(ChmodError::PermissionDenied(file.into()).into())
                 } else {
-                    Err(ChmodError::CannotStat(file.to_string_lossy().to_string()).into())
+                    Err(ChmodError::CannotStat(file.into()).into())
                 };
             }
         };
@@ -695,7 +695,7 @@ impl Chmoder {
                 // if a permission would have been removed if umask was 0, but it wasn't because umask was not 0, print an error and fail
                 if (new_mode & !naively_expected_new_mode) != 0 {
                     return Err(ChmodError::NewPermissions(
-                        file.to_string_lossy().to_string(),
+                        file.into(),
                         display_permissions_unix(new_mode as mode_t, false),
                         display_permissions_unix(naively_expected_new_mode as mode_t, false),
                     )
