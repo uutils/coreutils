@@ -1565,5 +1565,11 @@ mod tests {
             quote_file_name(file_name, &crate::QuotingStyle::ShellEscapeAlways),
             "\'nice\" file\'"
         );
+
+        let file_name = "nice\n file";
+        assert_eq!(
+            quote_file_name(file_name, &crate::QuotingStyle::ShellEscapeAlways),
+            "$'nice\\n file'"
+        );
     }
 }
