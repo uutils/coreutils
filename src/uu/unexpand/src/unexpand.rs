@@ -35,27 +35,71 @@ enum ParseError {
 
 impl UError for ParseError {}
 
-fn tabstops_parse(s: &str) -> Result<Vec<usize>, ParseError> {
+fn parse_tab_num(word: &str) -> Result<usize, ParseError> {
+    match word.parse::<usize>() {
+        Ok(0) => Err(ParseError::TabSizeCannotBeZero),
+        Ok(num) => Ok(num),
+        Err(e) => match e.kind() {
+            IntErrorKind::PosOverflow => Err(ParseError::TabSizeTooLarge),
+            _ => Err(ParseError::InvalidCharacter(
+                word.trim_start_matches(char::is_numeric).to_string(),
+            )),
+        },
+    }
+}
+
+fn parse_tabstops(s: &str) -> Result<TabConfig, ParseError> {
     let words = s.split(',');
 
     let mut nums = Vec::new();
+    let mut increment_size: Option<usize> = None;
+    let mut extend_size: Option<usize> = None;
 
     for word in words {
-        match word.parse::<usize>() {
-            Ok(num) => nums.push(num),
-            Err(e) => {
-                return match e.kind() {
-                    IntErrorKind::PosOverflow => Err(ParseError::TabSizeTooLarge),
-                    _ => Err(ParseError::InvalidCharacter(
-                        word.trim_start_matches(char::is_numeric).to_string(),
-                    )),
-                };
+        if word.is_empty() {
+            continue;
+        }
+
+        // Handle extended syntax: +N (increment) and /N (repeat)
+        if let Some(word) = word.strip_prefix('+') {
+            // +N means N positions after the last tab stop (only allowed at end)
+            if increment_size.is_some() || extend_size.is_some() {
+                return Err(ParseError::InvalidCharacter("+".to_string()));
             }
+            if nums.is_empty() {
+                return Err(ParseError::InvalidCharacter("+".to_string()));
+            }
+            increment_size = Some(parse_tab_num(word)?);
+        } else if let Some(word) = word.strip_prefix('/') {
+            // /N means repeat every N positions after the last tab stop
+            if increment_size.is_some() || extend_size.is_some() {
+                return Err(ParseError::InvalidCharacter("/".to_string()));
+            }
+            if nums.is_empty() {
+                return Err(ParseError::InvalidCharacter("/".to_string()));
+            }
+            extend_size = Some(parse_tab_num(word)?);
+        } else {
+            // Regular number
+            if increment_size.is_some() || extend_size.is_some() {
+                return Err(ParseError::InvalidCharacter(word.to_string()));
+            }
+            nums.push(parse_tab_num(word)?);
         }
     }
 
-    if nums.contains(&0) {
-        return Err(ParseError::TabSizeCannotBeZero);
+    if nums.is_empty() && increment_size.is_none() && extend_size.is_none() {
+        return Ok(TabConfig {
+            tabstops: vec![DEFAULT_TABSTOP],
+            increment_size: None,
+            extend_size: None,
+        });
+    }
+
+    // Handle the increment if specified
+    if let Some(inc) = increment_size {
+        let last = *nums.last().unwrap();
+        nums.push(last + inc);
     }
 
     if let (false, _) = nums
@@ -65,7 +109,11 @@ fn tabstops_parse(s: &str) -> Result<Vec<usize>, ParseError> {
         return Err(ParseError::TabSizesMustBeAscending);
     }
 
-    Ok(nums)
+    Ok(TabConfig {
+        tabstops: nums,
+        increment_size,
+        extend_size,
+    })
 }
 
 mod options {
@@ -76,18 +124,28 @@ mod options {
     pub const NO_UTF8: &str = "no-utf8";
 }
 
+struct TabConfig {
+    tabstops: Vec<usize>,
+    increment_size: Option<usize>,
+    extend_size: Option<usize>,
+}
+
 struct Options {
     files: Vec<OsString>,
-    tabstops: Vec<usize>,
+    tab_config: TabConfig,
     aflag: bool,
     uflag: bool,
 }
 
 impl Options {
     fn new(matches: &clap::ArgMatches) -> Result<Self, ParseError> {
-        let tabstops = match matches.get_many::<String>(options::TABS) {
-            None => vec![DEFAULT_TABSTOP],
-            Some(s) => tabstops_parse(&s.map(|s| s.as_str()).collect::<Vec<_>>().join(","))?,
+        let tab_config = match matches.get_many::<String>(options::TABS) {
+            None => TabConfig {
+                tabstops: vec![DEFAULT_TABSTOP],
+                increment_size: None,
+                extend_size: None,
+            },
+            Some(s) => parse_tabstops(&s.map(|s| s.as_str()).collect::<Vec<_>>().join(","))?,
         };
 
         let aflag = (matches.get_flag(options::ALL) || matches.contains_id(options::TABS))
@@ -101,7 +159,7 @@ impl Options {
 
         Ok(Self {
             files,
-            tabstops,
+            tab_config,
             aflag,
             uflag,
         })
@@ -217,19 +275,46 @@ fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read + 'static>>> {
     }
 }
 
-fn next_tabstop(tabstops: &[usize], col: usize) -> Option<usize> {
-    if tabstops.len() == 1 {
+fn next_tabstop(tab_config: &TabConfig, col: usize) -> Option<usize> {
+    let tabstops = &tab_config.tabstops;
+
+    if tabstops.is_empty() {
+        return None;
+    }
+
+    if tabstops.len() == 1
+        && tab_config.increment_size.is_none()
+        && tab_config.extend_size.is_none()
+    {
+        // Simple case: single tab stop, repeat at that interval
         Some(tabstops[0] - col % tabstops[0])
     } else {
-        // find next larger tab
-        // if there isn't one in the list, tab becomes a single space
-        tabstops.iter().find(|&&t| t > col).map(|t| t - col)
+        // Find next larger tab
+        if let Some(&next_tab) = tabstops.iter().find(|&&t| t > col) {
+            Some(next_tab - col)
+        } else {
+            // We're past the last explicit tab stop
+            if let Some(_last_tab) = tabstops.last() {
+                if let Some(extend_size) = tab_config.extend_size {
+                    // /N: tab stops at multiples of N
+                    Some(extend_size - (col % extend_size))
+                } else if tab_config.increment_size.is_some() {
+                    // +N: increment handled in tabstops_parse, so we should have the tab
+                    None
+                } else {
+                    // No more tabs
+                    None
+                }
+            } else {
+                None
+            }
+        }
     }
 }
 
 fn write_tabs(
     output: &mut BufWriter<Stdout>,
-    tabstops: &[usize],
+    tab_config: &TabConfig,
     mut scol: usize,
     col: usize,
     prevtab: bool,
@@ -241,7 +326,7 @@ fn write_tabs(
     // a tab, unless it's at the start of the line.
     let ai = init || amode;
     if (ai && !prevtab && col > scol + 1) || (col > scol && (init || ai && prevtab)) {
-        while let Some(nts) = next_tabstop(tabstops, scol) {
+        while let Some(nts) = next_tabstop(tab_config, scol) {
             if col < scol + nts {
                 break;
             }
@@ -316,7 +401,7 @@ fn unexpand_line(
     output: &mut BufWriter<Stdout>,
     options: &Options,
     lastcol: usize,
-    ts: &[usize],
+    tab_config: &TabConfig,
 ) -> UResult<()> {
     // Fast path: if we're not converting all spaces (-a flag not set)
     // and the line doesn't start with spaces, just write it directly
@@ -343,7 +428,7 @@ fn unexpand_line(
                     byte += 1;
                 }
                 b'\t' => {
-                    col += next_tabstop(ts, col).unwrap_or(1);
+                    col += next_tabstop(tab_config, col).unwrap_or(1);
                     byte += 1;
                     pctype = CharType::Tab;
                 }
@@ -353,7 +438,15 @@ fn unexpand_line(
 
         // If we found spaces/tabs, write them as tabs
         if byte > 0 {
-            write_tabs(output, ts, 0, col, pctype == CharType::Tab, true, true)?;
+            write_tabs(
+                output,
+                tab_config,
+                0,
+                col,
+                pctype == CharType::Tab,
+                true,
+                true,
+            )?;
         }
 
         // Write the rest of the line directly (no more tab conversion needed)
@@ -367,7 +460,15 @@ fn unexpand_line(
     while byte < buf.len() {
         // when we have a finite number of columns, never convert past the last column
         if lastcol > 0 && col >= lastcol {
-            write_tabs(output, ts, scol, col, pctype == CharType::Tab, init, true)?;
+            write_tabs(
+                output,
+                tab_config,
+                scol,
+                col,
+                pctype == CharType::Tab,
+                init,
+                true,
+            )?;
             output.write_all(&buf[byte..])?;
             scol = col;
             break;
@@ -384,7 +485,7 @@ fn unexpand_line(
                 col += if ctype == CharType::Space {
                     1
                 } else {
-                    next_tabstop(ts, col).unwrap_or(1)
+                    next_tabstop(tab_config, col).unwrap_or(1)
                 };
 
                 if !tabs_buffered {
@@ -396,7 +497,7 @@ fn unexpand_line(
                 // always
                 write_tabs(
                     output,
-                    ts,
+                    tab_config,
                     scol,
                     col,
                     pctype == CharType::Tab,
@@ -423,7 +524,15 @@ fn unexpand_line(
     }
 
     // write out anything remaining
-    write_tabs(output, ts, scol, col, pctype == CharType::Tab, init, true)?;
+    write_tabs(
+        output,
+        tab_config,
+        scol,
+        col,
+        pctype == CharType::Tab,
+        init,
+        true,
+    )?;
     buf.truncate(0); // clear out the buffer
 
     Ok(())
@@ -431,9 +540,13 @@ fn unexpand_line(
 
 fn unexpand(options: &Options) -> UResult<()> {
     let mut output = BufWriter::new(stdout());
-    let ts = &options.tabstops[..];
+    let tab_config = &options.tab_config;
     let mut buf = Vec::new();
-    let lastcol = if ts.len() > 1 { *ts.last().unwrap() } else { 0 };
+    let lastcol = if tab_config.tabstops.len() > 1 {
+        *tab_config.tabstops.last().unwrap()
+    } else {
+        0
+    };
 
     for file in &options.files {
         let mut fh = match open(file) {
@@ -448,7 +561,7 @@ fn unexpand(options: &Options) -> UResult<()> {
             Ok(s) => s > 0,
             Err(_) => !buf.is_empty(),
         } {
-            unexpand_line(&mut buf, &mut output, options, lastcol, ts)?;
+            unexpand_line(&mut buf, &mut output, options, lastcol, tab_config)?;
         }
     }
     output.flush()?;
@@ -457,12 +570,66 @@ fn unexpand(options: &Options) -> UResult<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::is_digit_or_comma;
+    use crate::{ParseError, is_digit_or_comma, parse_tab_num, parse_tabstops};
 
     #[test]
     fn test_is_digit_or_comma() {
         assert!(is_digit_or_comma('1'));
         assert!(is_digit_or_comma(','));
         assert!(!is_digit_or_comma('a'));
+    }
+
+    #[test]
+    fn test_parse_tab_num() {
+        assert_eq!(parse_tab_num("6").unwrap(), 6);
+        assert_eq!(parse_tab_num("12").unwrap(), 12);
+        assert_eq!(parse_tab_num("9").unwrap(), 9);
+        assert_eq!(parse_tab_num("4").unwrap(), 4);
+    }
+
+    #[test]
+    fn test_parse_tab_num_errors() {
+        // Zero is not allowed
+        assert!(matches!(
+            parse_tab_num("0"),
+            Err(ParseError::TabSizeCannotBeZero)
+        ));
+
+        // Invalid character
+        assert!(matches!(
+            parse_tab_num("6x"),
+            Err(ParseError::InvalidCharacter(_))
+        ));
+
+        // Invalid character
+        assert!(matches!(
+            parse_tab_num("9y"),
+            Err(ParseError::InvalidCharacter(_))
+        ));
+    }
+
+    #[test]
+    fn test_parse_tabstops_extended_syntax() {
+        // +N requires previous tab stops
+        assert!(matches!(
+            parse_tabstops("+6"),
+            Err(ParseError::InvalidCharacter(_))
+        ));
+
+        // /N requires previous tab stops
+        assert!(matches!(
+            parse_tabstops("/9"),
+            Err(ParseError::InvalidCharacter(_))
+        ));
+
+        // Valid +N with previous tab stop
+        let config = parse_tabstops("3,+6").unwrap();
+        assert_eq!(config.tabstops, vec![3, 9]);
+        assert_eq!(config.increment_size, Some(6));
+
+        // Valid /N with previous tab stop
+        let config = parse_tabstops("3,/4").unwrap();
+        assert_eq!(config.tabstops, vec![3]);
+        assert_eq!(config.extend_size, Some(4));
     }
 }
