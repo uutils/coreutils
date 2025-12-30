@@ -272,17 +272,21 @@ impl Source {
                         return Ok(len);
                     }
                 }
+                // Get file length before seeking to avoid race condition
+                let file_len = f.metadata().map(|m| m.len()).unwrap_or(u64::MAX);
                 // Try seek first; fall back to read if not seekable
                 match n.try_into().ok().map(|n| f.seek(SeekFrom::Current(n))) {
                     Some(Ok(pos)) => {
-                        if pos > f.metadata().map(|m| m.len()).unwrap_or(u64::MAX) {
+                        if pos > file_len {
                             show_error!(
                                 "{}",
                                 translate!("dd-error-cannot-skip-offset", "file" => "standard input")
                             );
                         }
-                        Ok(pos)
+                        Ok(n)
                     }
+                    // ESPIPE means the file descriptor is not seekable (e.g., a pipe),
+                    // so fall back to reading and discarding bytes
                     Some(Err(e)) if e.raw_os_error() == Some(libc::ESPIPE) => {
                         match io::copy(&mut f.take(n), &mut io::sink()) {
                             Ok(m) if m < n => {
