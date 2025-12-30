@@ -476,6 +476,13 @@ fn test_date_set_valid_4() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_invalid_format_string() {
+    new_ucmd!().arg("+%!").succeeds().stdout_is("!\n");
+}
+
+#[test]
+#[cfg(not(unix))]
 fn test_invalid_format_string() {
     let result = new_ucmd!().arg("+%!").fails();
     result.no_stdout();

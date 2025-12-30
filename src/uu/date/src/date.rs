@@ -6,6 +6,7 @@
 // spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres AWST ACST AEST
 
 mod locale;
+mod system_time;
 
 use clap::{Arg, ArgAction, Command};
 use jiff::fmt::strtime;
@@ -399,16 +400,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Format all the dates
     for date in dates {
         match date {
-            // TODO: Switch to lenient formatting.
-            Ok(date) => match strtime::format(format_string, &date) {
-                Ok(s) => println!("{s}"),
-                Err(e) => {
-                    return Err(USimpleError::new(
-                        1,
-                        translate!("date-error-invalid-format", "format" => format_string, "error" => e),
-                    ));
+            Ok(date) => {
+                #[cfg(unix)]
+                if matches!(settings.format, Format::Custom(_) | Format::Default) {
+                    if let Ok(s) = system_time::format_using_strftime(format_string, &date) {
+                        println!("{s}");
+                        continue;
+                    }
                 }
-            },
+
+                match strtime::format(format_string, &date) {
+                    Ok(s) => println!("{s}"),
+                    Err(e) => {
+                        return Err(USimpleError::new(
+                            1,
+                            translate!("date-error-invalid-format", "format" => format_string, "error" => e),
+                        ));
+                    }
+                }
+            }
             Err((input, _err)) => show!(USimpleError::new(
                 1,
                 translate!("date-error-invalid-date", "date" => input)
