@@ -27,6 +27,7 @@ use nix::sys::termios::{
     SpecialCharacterIndices as S,
 };
 
+#[derive(Debug)]
 pub enum BaudType {
     Input,
     Output,
