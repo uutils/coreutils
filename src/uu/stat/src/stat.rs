@@ -11,8 +11,8 @@ use clap::builder::ValueParser;
 use uucore::display::Quotable;
 use uucore::fs::display_permissions;
 use uucore::fsext::{
-    FsMeta, MetadataTimeField, StatFs, metadata_get_time, pretty_filetype, pretty_fstype,
-    read_fs_list, statfs,
+    metadata_get_time, pretty_filetype, pretty_fstype, read_fs_list, statfs, FsMeta,
+    MetadataTimeField, StatFs,
 };
 use uucore::libc::mode_t;
 use uucore::{entries, format_usage, show_error, show_warning};
@@ -27,7 +27,7 @@ use std::path::Path;
 use std::{env, fs};
 
 use thiserror::Error;
-use uucore::time::{FormatSystemTimeFallback, format_system_time, system_time_to_sec};
+use uucore::time::{format_system_time, system_time_to_sec, FormatSystemTimeFallback};
 
 #[derive(Debug, Error)]
 enum StatError {
@@ -1402,7 +1402,7 @@ fn pretty_time(meta: &Metadata, md_time_field: MetadataTimeField) -> String {
 mod tests {
     use crate::{pad_and_print_bytes, print_padding, quote_file_name};
 
-    use super::{Flags, Precision, ScanUtil, Stater, Token, group_num, precision_trunc};
+    use super::{group_num, precision_trunc, Flags, Precision, ScanUtil, Stater, Token};
 
     #[test]
     fn test_scanners() {
