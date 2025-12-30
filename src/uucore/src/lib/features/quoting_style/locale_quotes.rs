@@ -19,19 +19,25 @@
 //! - U+300C (「) / U+300D (」) - Corner brackets (Japanese)
 //! - U+201C (") / U+201D (") - Curly quotes (Chinese)
 
+// In production, use OnceLock caching for performance
+#[cfg(not(test))]
 use std::sync::OnceLock;
 
 /// Cached locale quote characters to avoid repeated environment variable lookups.
+/// Only used in production builds; tests read fresh environment variables.
+#[cfg(not(test))]
 static LOCALE_QUOTES: OnceLock<(char, char)> = OnceLock::new();
 
 /// Returns locale-specific opening and closing quotation marks.
 ///
-/// The result is cached on first call to avoid repeated environment variable lookups.
+/// In production, the result is cached on first call to avoid repeated environment variable lookups.
+/// In test mode, environment variables are read fresh on each call to support testing different locales.
 ///
 /// # Returns
 ///
 /// A tuple `(opening_quote, closing_quote)` appropriate for the detected locale.
 /// Returns `('"', '"')` (ASCII double quotes) as a safe default for unknown locales.
+#[cfg(not(test))]
 pub fn get_locale_quote_chars() -> (char, char) {
     *LOCALE_QUOTES.get_or_init(|| {
         let locale_str = std::env::var("LC_ALL")
@@ -49,6 +55,26 @@ pub fn get_locale_quote_chars() -> (char, char) {
 
         map_locale_to_quotes(locale)
     })
+}
+
+/// Test version that reads environment variables fresh on each call.
+/// This allows tests to verify behavior with different locale settings.
+#[cfg(test)]
+pub fn get_locale_quote_chars() -> (char, char) {
+    let locale_str = std::env::var("LC_ALL")
+        .or_else(|_| std::env::var("LC_CTYPE"))
+        .or_else(|_| std::env::var("LANG"))
+        .unwrap_or_default();
+
+    // Parse locale identifier: lang_COUNTRY.encoding@modifier -> lang_COUNTRY
+    let locale_end = locale_str.find('.').unwrap_or(locale_str.len());
+    let locale = if let Some(at_pos) = locale_str.find('@') {
+        &locale_str[..at_pos.min(locale_end)]
+    } else {
+        &locale_str[..locale_end]
+    };
+
+    map_locale_to_quotes(locale)
 }
 
 /// Maps a locale identifier to appropriate quotation marks.
