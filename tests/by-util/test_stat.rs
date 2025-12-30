@@ -574,7 +574,7 @@ fn test_quote_file_name_with_newline() {
     let at = &ts.fixtures;
 
     let file_name = "nice\\n file";
-    let formatted_file_name = &format!("$'{}'", file_name);
+    let formatted_file_name = &format!("$'{file_name}'");
     let expected_result = "{\"name\":\"\"$'nice\\n file'\"\"}\n";
     at.touch(formatted_file_name);
 
