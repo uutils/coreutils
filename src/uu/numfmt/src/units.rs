@@ -51,16 +51,16 @@ impl TryFrom<&char> for RawSuffix {
 
     fn try_from(value: &char) -> Result<Self> {
         match value {
-            'K' | 'k' => Ok(RawSuffix::K),
-            'M' => Ok(RawSuffix::M),
-            'G' => Ok(RawSuffix::G),
-            'T' => Ok(RawSuffix::T),
-            'P' => Ok(RawSuffix::P),
-            'E' => Ok(RawSuffix::E),
-            'Z' => Ok(RawSuffix::Z),
-            'Y' => Ok(RawSuffix::Y),
-            'R' => Ok(RawSuffix::R),
-            'Q' => Ok(RawSuffix::Q),
+            'K' | 'k' => Ok(Self::K),
+            'M' => Ok(Self::M),
+            'G' => Ok(Self::G),
+            'T' => Ok(Self::T),
+            'P' => Ok(Self::P),
+            'E' => Ok(Self::E),
+            'Z' => Ok(Self::Z),
+            'Y' => Ok(Self::Y),
+            'R' => Ok(Self::R),
+            'Q' => Ok(Self::Q),
             _ => Err(format!("Invalid suffix: {value}")),
         }
     }

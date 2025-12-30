@@ -64,11 +64,11 @@ impl<'a> Iterator for WhitespaceSplitter<'a> {
 
 fn find_numeric_beginning(s: &str) -> Option<&str> {
     let mut decimal_point_seen = false;
-    if s.len() == 0 {
+    if s.is_empty() {
         return None;
     }
 
-    for (idx, c) in s.chars().enumerate() {
+    for (idx, c) in s.char_indices() {
         if c == '-' && idx == 0 {
             continue;
         }
@@ -85,7 +85,7 @@ fn find_numeric_beginning(s: &str) -> Option<&str> {
         return Some(&s[..idx]);
     }
 
-    Some(&s)
+    Some(s)
 }
 
 // finds the valid beginning part of an input string, or None.
@@ -93,22 +93,27 @@ fn find_valid_number_with_suffix<'a>(s: &'a str, unit: &Unit) -> Option<&'a str>
     let numeric_part = find_numeric_beginning(s)?;
 
     let accepts_suffix = unit != &Unit::None;
-    let accepts_i = [Unit::Auto, Unit::Iec(true)].contains(&unit);
+    let accepts_i = [Unit::Auto, Unit::Iec(true)].contains(unit);
 
     let mut characters = s.chars().skip(numeric_part.len());
     let potential_suffix = characters.next();
     let potential_i = characters.next();
 
-    if accepts_suffix && let Some(suffix) = potential_suffix {
-        if RawSuffix::try_from(&suffix).is_err() {
-            return Some(numeric_part);
+    if !accepts_suffix {
+        return Some(numeric_part);
+    }
+
+    match (potential_suffix, potential_i) {
+        (Some(suffix), None) if RawSuffix::try_from(&suffix).is_ok() => {
+            Some(&s[..=numeric_part.len()])
         }
-        match potential_i {
-            Some('i') if accepts_i => Some(&s[..numeric_part.len() + 2]),
-            _ => Some(&s[..numeric_part.len() + 1]),
+        (Some(suffix), Some('i')) if accepts_i && RawSuffix::try_from(&suffix).is_ok() => {
+            Some(&s[..numeric_part.len() + 2])
         }
-    } else {
-        Some(numeric_part)
+        (Some(suffix), Some(_)) if RawSuffix::try_from(&suffix).is_ok() => {
+            Some(&s[..=numeric_part.len()])
+        }
+        _ => Some(numeric_part),
     }
 }
 
@@ -699,7 +704,7 @@ mod tests {
             Some("0.55K")
         );
         assert_eq!(
-            find_valid_number_with_suffix("123Ktest123", &Unit::Auto),
+            find_valid_number_with_suffix("123KVVVVVVVV", &Unit::Auto),
             Some("123K")
         );
         assert_eq!(find_valid_number_with_suffix("", &Unit::Auto), None);

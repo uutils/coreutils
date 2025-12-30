@@ -289,12 +289,12 @@ fn test_invalid_following_valid_suffix() {
 
 #[test]
 fn test_long_invalid_suffix() {
-    let args = ["--from=si", "--to=si", &format!("1500texthere")];
+    let args = ["--from=si", "--to=si", &format!("1500VVVVVVVV")];
 
     new_ucmd!()
         .args(&args)
         .fails_with_code(2)
-        .stderr_only(format!("numfmt: invalid suffix in input: '1500texthere'\n"));
+        .stderr_only(format!("numfmt: invalid suffix in input: '1500VVVVVVVV'\n"));
 }
 
 #[test]
