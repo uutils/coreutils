@@ -117,30 +117,42 @@ fn find_valid_number_with_suffix<'a>(s: &'a str, unit: &Unit) -> Option<&'a str>
     }
 }
 
+fn detailed_error_message(s: &str, unit: &Unit) -> Option<String> {
+    if s.is_empty() {
+        return Some(translate!("numfmt-error-invalid-number-empty"));
+    }
+
+    let valid_part = find_valid_number_with_suffix(s, unit)
+        .ok_or(translate!("numfmt-error-invalid-number", "input" => s.quote()))
+        .ok()?;
+
+    if valid_part != s && valid_part.parse::<f64>().is_ok() {
+        return match s.chars().nth(valid_part.len()) {
+            Some(v) if RawSuffix::try_from(&v).is_ok() => Some(
+                translate!("numfmt-error-rejecting-suffix", "number" => valid_part, "suffix" => s[valid_part.len()..]),
+            ),
+
+            _ => Some(translate!("numfmt-error-invalid-suffix", "input" => s.quote())),
+        };
+    }
+
+    if valid_part != s && valid_part.parse::<f64>().is_err() {
+        return Some(
+            translate!("numfmt-error-invalid-specific-suffix", "input" => s.quote(), "suffix" => s[valid_part.len()..].quote()),
+        );
+    }
+    None
+}
+
 fn parse_suffix(s: &str, unit: &Unit) -> Result<(f64, Option<Suffix>)> {
     if s.is_empty() {
         return Err(translate!("numfmt-error-invalid-number-empty"));
     }
 
-    let valid_part = find_valid_number_with_suffix(s, unit)
-        .ok_or(translate!("numfmt-error-invalid-number", "input" => s.quote()))?;
-
-    if valid_part != s && valid_part.parse::<f64>().is_ok() {
-        return match s.chars().nth(valid_part.len()) {
-            Some(v) if RawSuffix::try_from(&v).is_ok() => Err(
-                translate!("numfmt-error-rejecting-suffix", "number" => valid_part, "suffix" => s[valid_part.len()..]),
-            ),
-            _ => Err(translate!("numfmt-error-invalid-suffix", "input" => s.quote())),
-        };
-    }
-
-    if valid_part != s && valid_part.parse::<f64>().is_err() {
-        return Err(
-            translate!("numfmt-error-invalid-specific-suffix", "input" => s.quote(), "suffix" => s[valid_part.len()..].quote()),
-        );
-    }
-
     let with_i = s.ends_with('i');
+    if with_i && ![Unit::Auto, Unit::Iec(true)].contains(unit) {
+        return Err(translate!("numfmt-error-invalid-suffix", "input" => s.quote()));
+    }
     let mut iter = s.chars();
     if with_i {
         iter.next_back();
@@ -227,7 +239,8 @@ fn remove_suffix(i: f64, s: Option<Suffix>, u: &Unit) -> Result<f64> {
 }
 
 fn transform_from(s: &str, opts: &TransformOptions) -> Result<f64> {
-    let (i, suffix) = parse_suffix(s, &opts.from)?;
+    let (i, suffix) = parse_suffix(s, &opts.from)
+        .map_err(|original| detailed_error_message(s, &opts.from).unwrap_or(original))?;
     let i = i * (opts.from_unit as f64);
 
     remove_suffix(i, suffix, &opts.from).map(|n| {
