@@ -516,7 +516,7 @@ impl Chmoder {
                 // Handle permission denied with proper file path context
                 let e = dir_meta.unwrap_err();
                 let error = if e.kind() == std::io::ErrorKind::PermissionDenied {
-                    ChmodError::PermissionDenied(entry_path.into()).into()
+                    ChmodError::PermissionDenied(entry_path).into()
                 } else {
                     e.into()
                 };
@@ -542,7 +542,7 @@ impl Chmoder {
                         }
                         Err(err) => {
                             let error = if err.kind() == std::io::ErrorKind::PermissionDenied {
-                                ChmodError::PermissionDenied(entry_path.into()).into()
+                                ChmodError::PermissionDenied(entry_path).into()
                             } else {
                                 err.into()
                             };
