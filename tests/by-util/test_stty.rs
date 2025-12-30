@@ -1561,10 +1561,70 @@ fn test_saved_state_with_control_chars() {
 #[test]
 #[cfg(unix)]
 fn test_stdin_not_tty_fails() {
+    // ENOTTY error message varies by platform/libc:
+    // - glibc: "Inappropriate ioctl for device"
+    // - musl: "Not a tty"
+    // - Android: "Not a typewriter"
+    #[cfg(target_os = "android")]
+    let expected_error = "standard input: Not a typewriter";
+    #[cfg(all(not(target_os = "android"), target_env = "musl"))]
+    let expected_error = "standard input: Not a tty";
+    #[cfg(all(not(target_os = "android"), not(target_env = "musl")))]
+    let expected_error = "standard input: Inappropriate ioctl for device";
+
     new_ucmd!()
         .pipe_in("")
         .fails()
-        .stderr_contains("standard input: Inappropriate ioctl for device");
+        .stderr_contains(expected_error);
+}
+
+// Test that stty uses stdin for TTY operations per POSIX.
+// Verifies: output redirection (#8012), save/restore pattern (#8608), stdin redirection (#8848)
+#[test]
+#[cfg(unix)]
+fn test_stty_uses_stdin() {
+    use std::fs::File;
+    use std::process::Stdio;
+
+    let (path, _controller, _replica) = pty_path();
+
+    // Output redirection: stty > file (stdin is still TTY)
+    let stdin = File::open(&path).unwrap();
+    new_ucmd!()
+        .set_stdin(stdin)
+        .set_stdout(Stdio::piped())
+        .succeeds()
+        .stdout_contains("speed");
+
+    // Save/restore: stty $(stty -g) pattern
+    let stdin = File::open(&path).unwrap();
+    let saved = new_ucmd!()
+        .arg("-g")
+        .set_stdin(stdin)
+        .set_stdout(Stdio::piped())
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .to_string();
+    assert!(saved.contains(':'), "Expected colon-separated saved state");
+
+    let stdin = File::open(&path).unwrap();
+    new_ucmd!().arg(&saved).set_stdin(stdin).succeeds();
+
+    // Stdin redirection: stty rows 30 cols 100 < /dev/pts/N
+    let stdin = File::open(&path).unwrap();
+    new_ucmd!()
+        .args(&["rows", "30", "cols", "100"])
+        .set_stdin(stdin)
+        .succeeds();
+
+    let stdin = File::open(&path).unwrap();
+    new_ucmd!()
+        .arg("--all")
+        .set_stdin(stdin)
+        .succeeds()
+        .stdout_contains("rows 30")
+        .stdout_contains("columns 100");
 }
 
 #[test]
