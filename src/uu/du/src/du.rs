@@ -25,7 +25,7 @@ use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::fsext::{MetadataTimeField, metadata_get_time};
 use uucore::line_ending::LineEnding;
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "redox")))]
 use uucore::safe_traversal::DirFd;
 use uucore::translate;
 
@@ -293,8 +293,8 @@ fn read_block_size(s: Option<&str>) -> UResult<u64> {
     }
 }
 
-#[cfg(unix)]
-// Implement safe_du on Unix
+#[cfg(all(unix, not(target_os = "redox")))]
+// Implement safe_du on Unix (except Redox which lacks full stat support)
 // This is done for TOCTOU safety
 fn safe_du(
     path: &Path,
@@ -1111,14 +1111,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let mut seen_inodes: HashSet<FileInfo> = HashSet::new();
 
         // Determine which traversal method to use
-        #[cfg(unix)]
+        #[cfg(all(unix, not(target_os = "redox")))]
         let use_safe_traversal = traversal_options.dereference != Deref::All;
-        #[cfg(not(unix))]
+        #[cfg(not(all(unix, not(target_os = "redox"))))]
         let use_safe_traversal = false;
 
         if use_safe_traversal {
-            // Use safe traversal (Unix only, when not using -L)
-            #[cfg(unix)]
+            // Use safe traversal (Unix except Redox, when not using -L)
+            #[cfg(all(unix, not(target_os = "redox")))]
             {
                 // Pre-populate seen_inodes with the starting directory to detect cycles
                 if let Ok(stat) = Stat::new(&path, None, &traversal_options) {

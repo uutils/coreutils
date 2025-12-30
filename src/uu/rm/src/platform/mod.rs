@@ -5,8 +5,8 @@
 
 // Platform-specific implementations for the rm utility
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "redox")))]
 pub mod unix;
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "redox")))]
 pub use unix::*;

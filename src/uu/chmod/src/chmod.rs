@@ -18,7 +18,7 @@ use uucore::libc::mode_t;
 use uucore::mode;
 use uucore::perms::{TraverseSymlinks, configure_symlink_and_recursion};
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "redox")))]
 use uucore::safe_traversal::DirFd;
 use uucore::{format_usage, show, show_error};
 
