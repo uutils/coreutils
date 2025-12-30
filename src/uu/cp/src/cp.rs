@@ -2510,11 +2510,13 @@ fn copy_file(
     }
 
     if options.dereference(source_in_command_line) {
-        if let Ok(src) = canonicalize(source, MissingHandling::Normal, ResolveMode::Physical) {
-            if src.exists() {
-                copy_attributes(&src, dest, &options.attributes)?;
-            }
-        }
+        // Try to canonicalize, but if it fails (e.g., due to inaccessible parent directories),
+        // fall back to the original source path
+        let src_for_attrs = canonicalize(source, MissingHandling::Normal, ResolveMode::Physical)
+            .ok()
+            .filter(|p| p.exists())
+            .unwrap_or_else(|| source.to_path_buf());
+        copy_attributes(&src_for_attrs, dest, &options.attributes)?;
     } else if source_is_stream && !source.exists() {
         // Some stream files may not exist after we have copied it,
         // like anonymous pipes. Thus, we can't really copy its
