@@ -26,6 +26,7 @@ conv
 cyclomatic
 dedup
 deduplication
+dired
 demangle
 denoland
 deque
