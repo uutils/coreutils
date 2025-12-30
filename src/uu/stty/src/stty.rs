@@ -976,42 +976,13 @@ fn apply_setting(termios: &mut Termios, setting: &AllFlags) -> nix::Result<()> {
 }
 
 fn apply_baud_rate_flag(termios: &mut Termios, input: &AllFlags) -> nix::Result<()> {
-    // BSDs use a u32 for the baud rate, so any decimal number applies.
-    #[cfg(any(
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    ))]
-    if let AllFlags::Baud(n, baud_type) = input {
+    if let AllFlags::Baud(rate, baud_type) = input {
         match baud_type {
-            flags::BaudType::Input => cfsetispeed(termios, *n)?,
-            flags::BaudType::Output => cfsetospeed(termios, *n)?,
+            flags::BaudType::Input => cfsetispeed(termios, *rate)?,
+            flags::BaudType::Output => cfsetospeed(termios, *rate)?,
             flags::BaudType::Both => {
-                cfsetispeed(termios, *n)?;
-                cfsetospeed(termios, *n)?;
-            }
-        }
-    }
-
-    // Other platforms use an enum.
-    #[cfg(not(any(
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    )))]
-    if let AllFlags::Baud(br, baud_type) = input {
-        match baud_type {
-            flags::BaudType::Input => cfsetispeed(termios, *br)?,
-            flags::BaudType::Output => cfsetospeed(termios, *br)?,
-            flags::BaudType::Both => {
-                cfsetispeed(termios, *br)?;
-                cfsetospeed(termios, *br)?;
+                cfsetispeed(termios, *rate)?;
+                cfsetospeed(termios, *rate)?;
             }
         }
     }
@@ -1478,10 +1449,10 @@ mod tests {
             target_os = "openbsd"
         )))]
         {
-            assert!(string_to_baud("9600").is_some());
-            assert!(string_to_baud("115200").is_some());
-            assert!(string_to_baud("38400").is_some());
-            assert!(string_to_baud("19200").is_some());
+            assert!(string_to_baud("9600", flags::BaudType::Both).is_some());
+            assert!(string_to_baud("115200", flags::BaudType::Both).is_some());
+            assert!(string_to_baud("38400", flags::BaudType::Both).is_some());
+            assert!(string_to_baud("19200", flags::BaudType::Both).is_some());
         }
 
         #[cfg(any(
@@ -1493,10 +1464,10 @@ mod tests {
             target_os = "openbsd"
         ))]
         {
-            assert!(string_to_baud("9600").is_some());
-            assert!(string_to_baud("115200").is_some());
-            assert!(string_to_baud("1000000").is_some());
-            assert!(string_to_baud("0").is_some());
+            assert!(string_to_baud("9600", flags::BaudType::Both).is_some());
+            assert!(string_to_baud("115200", flags::BaudType::Both).is_some());
+            assert!(string_to_baud("1000000", flags::BaudType::Both).is_some());
+            assert!(string_to_baud("0", flags::BaudType::Both).is_some());
         }
     }
 
@@ -1511,10 +1482,10 @@ mod tests {
             target_os = "openbsd"
         )))]
         {
-            assert_eq!(string_to_baud("995"), None);
-            assert_eq!(string_to_baud("invalid"), None);
-            assert_eq!(string_to_baud(""), None);
-            assert_eq!(string_to_baud("abc"), None);
+            assert_eq!(string_to_baud("995", flags::BaudType::Both), None);
+            assert_eq!(string_to_baud("invalid", flags::BaudType::Both), None);
+            assert_eq!(string_to_baud("", flags::BaudType::Both), None);
+            assert_eq!(string_to_baud("abc", flags::BaudType::Both), None);
         }
     }
 
