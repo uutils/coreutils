@@ -476,6 +476,13 @@ fn test_date_set_valid_4() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_invalid_format_string() {
+    new_ucmd!().arg("+%!").succeeds().stdout_is("!\n");
+}
+
+#[test]
+#[cfg(not(unix))]
 fn test_invalid_format_string() {
     let result = new_ucmd!().arg("+%!").fails();
     result.no_stdout();
@@ -1130,6 +1137,85 @@ fn test_date_military_timezone_with_offset_variations() {
             .succeeds()
             .stdout_is(format!("{expected}\n"));
     }
+}
+
+#[cfg(unix)]
+fn ethiopian_locale_available() -> bool {
+    let output = std::process::Command::new("locale")
+        .env("LC_ALL", "am_ET.UTF-8")
+        .arg("charmap")
+        .output();
+    let Ok(output) = output else {
+        return false;
+    };
+    if !output.status.success() {
+        return false;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    stdout.trim() == "UTF-8"
+}
+
+#[test]
+#[cfg(unix)]
+fn test_date_ethiopian_calendar_locale() {
+    if !ethiopian_locale_available() {
+        return;
+    }
+
+    let current_year: i32 = new_ucmd!()
+        .env("LC_ALL", "C")
+        .arg("+%Y")
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .parse()
+        .unwrap();
+
+    let year_september_10: i32 = new_ucmd!()
+        .env("LC_ALL", "am_ET.UTF-8")
+        .arg("-d")
+        .arg(format!("{current_year}-09-10"))
+        .arg("+%Y")
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .parse()
+        .unwrap();
+
+    let year_september_12: i32 = new_ucmd!()
+        .env("LC_ALL", "am_ET.UTF-8")
+        .arg("-d")
+        .arg(format!("{current_year}-09-12"))
+        .arg("+%Y")
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .parse()
+        .unwrap();
+
+    assert_eq!(year_september_10, year_september_12 - 1);
+    assert_eq!(year_september_10, current_year - 8);
+    assert_eq!(year_september_12, current_year - 7);
+
+    let iso_hours = new_ucmd!()
+        .env("LC_ALL", "am_ET.UTF-8")
+        .arg("--iso-8601=hours")
+        .succeeds()
+        .stdout_str();
+    assert!(
+        iso_hours.starts_with(&format!("{current_year}-")),
+        "--iso-8601 should use Gregorian year, got: {iso_hours}"
+    );
+
+    let rfc_date = new_ucmd!()
+        .env("LC_ALL", "am_ET.UTF-8")
+        .arg("--rfc-3339=date")
+        .succeeds()
+        .stdout_str();
+    assert!(
+        rfc_date.starts_with(&format!("{current_year}-")),
+        "--rfc-3339 should use Gregorian year, got: {rfc_date}"
+    );
 }
 
 // Locale-aware hour formatting tests
