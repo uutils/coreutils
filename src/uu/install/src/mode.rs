@@ -4,18 +4,7 @@
 // file that was distributed with this source code.
 use std::fs;
 use std::path::Path;
-#[cfg(not(windows))]
-use uucore::mode;
 use uucore::translate;
-
-/// Takes a user-supplied string and tries to parse to u16 mode bitmask.
-pub fn parse(mode_string: &str, considering_dir: bool, umask: u32) -> Result<u32, String> {
-    if mode_string.chars().any(|c| c.is_ascii_digit()) {
-        mode::parse_numeric(0, mode_string, considering_dir)
-    } else {
-        mode::parse_symbolic(0, mode_string, umask, considering_dir)
-    }
-}
 
 /// chmod a file or directory on UNIX.
 ///

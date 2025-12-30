@@ -17,7 +17,7 @@ use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command};
 use filetime::{FileTime, set_file_times, set_symlink_file_times};
 use jiff::{Timestamp, Zoned};
 use std::borrow::Cow;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs::{self, File};
 use std::io::{Error, ErrorKind};
 use std::path::{Path, PathBuf};
@@ -359,6 +359,7 @@ pub fn uu_app() -> Command {
 /// Possible causes:
 /// - The user doesn't have permission to access the file
 /// - One of the directory components of the file path doesn't exist.
+/// - Dangling symlink is given and -r/--reference is used.
 ///
 /// It will return an `Err` on the first error. However, for any of the files,
 /// if all of the following are true, it will print the error and continue touching
@@ -430,9 +431,9 @@ fn touch_file(
     mtime: FileTime,
 ) -> UResult<()> {
     let filename = if is_stdout {
-        String::from("-")
+        OsStr::new("-")
     } else {
-        path.display().to_string()
+        path.as_os_str()
     };
 
     let metadata_result = if opts.no_deref {
@@ -573,14 +574,21 @@ fn update_times(
 }
 
 /// Get metadata of the provided path
-/// If `follow` is `true`, the function will try to follow symlinks
-/// If `follow` is `false` or the symlink is broken, the function will return metadata of the symlink itself
+/// If `follow` is `true`, the function will try to follow symlinks. Errors if the symlink is dangling, otherwise defaults to symlink metadata.
+/// If `follow` is `false`, the function will return metadata of the symlink itself
 fn stat(path: &Path, follow: bool) -> std::io::Result<(FileTime, FileTime)> {
     let metadata = if follow {
-        fs::metadata(path).or_else(|_| fs::symlink_metadata(path))
+        match fs::metadata(path) {
+            // Successfully followed symlink
+            Ok(meta) => meta,
+            // Dangling symlink
+            Err(e) if e.kind() == ErrorKind::NotFound => return Err(e),
+            // Other error (?), try to get the symlink metadata
+            Err(_) => fs::symlink_metadata(path)?,
+        }
     } else {
-        fs::symlink_metadata(path)
-    }?;
+        fs::symlink_metadata(path)?
+    };
 
     Ok((
         FileTime::from_last_access_time(&metadata),

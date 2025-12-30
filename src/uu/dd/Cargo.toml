@@ -23,7 +23,7 @@ gcd = { workspace = true }
 libc = { workspace = true }
 uucore = { workspace = true, features = [
   "format",
-  "parser",
+  "parser-size",
   "quoting-style",
   "fs",
 ] }
@@ -37,3 +37,12 @@ nix = { workspace = true, features = ["fs"] }
 [[bin]]
 name = "dd"
 path = "src/main.rs"
+
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
+[[bench]]
+name = "dd_bench"
+harness = false

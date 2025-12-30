@@ -44,11 +44,8 @@ fn get_encodings() -> Vec<(&'static str, Format, String)> {
 }
 
 pub fn uu_app() -> Command {
-    let about: &'static str = Box::leak(translate!("basenc-about").into_boxed_str());
-    let usage: &'static str = Box::leak(translate!("basenc-usage").into_boxed_str());
-
     let encodings = get_encodings();
-    let mut command = base_common::base_app(about, usage);
+    let mut command = base_common::base_app(translate!("basenc-about"), translate!("basenc-usage"));
 
     for encoding in &encodings {
         let raw_arg = Arg::new(encoding.0)
