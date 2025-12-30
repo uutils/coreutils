@@ -704,7 +704,7 @@ mod tests {
             Some("0.55K")
         );
         assert_eq!(
-            find_valid_number_with_suffix("123KVVVVVVVV", &Unit::Auto),
+            find_valid_number_with_suffix("123KICK", &Unit::Auto),
             Some("123K")
         );
         assert_eq!(find_valid_number_with_suffix("", &Unit::Auto), None);
