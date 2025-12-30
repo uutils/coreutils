@@ -30,9 +30,10 @@ ln-error-extra-operand = extra operand {$operand}
   Try '{$program} --help' for more information.
 ln-error-could-not-update = Could not update {$target}: {$error}
 ln-error-cannot-stat = cannot stat {$path}: No such file or directory
-ln-error-will-not-overwrite = will not overwrite just-created '{$target}' with '{$source}'
+ln-error-will-not-overwrite = will not overwrite just-created {$target} with {$source}
 ln-prompt-replace = replace {$file}?
 ln-cannot-backup = cannot backup {$file}
 ln-failed-to-access = failed to access {$file}
 ln-failed-to-create-hard-link = failed to create hard link {$source} => {$dest}
+ln-failed-to-create-hard-link-dir = {$source}: hard link not allowed for directory
 ln-backup = backup: {$backup}

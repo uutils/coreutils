@@ -244,8 +244,6 @@ DEBUG=1 bash util/run-gnu-test.sh tests/misc/sm3sum.pl
 
 ***Tip:*** First time you run `bash util/build-gnu.sh` command, it will provide instructions on how to checkout GNU coreutils repository at the correct release tag. Please follow those instructions and when done, run `bash util/build-gnu.sh` command again.
 
-Note that GNU test suite relies on individual utilities (not the multicall binary).
-
 You also need to install [quilt](https://savannah.nongnu.org/projects/quilt), a tool used to manage a stack of patches for modifying GNU tests.
 
 On FreeBSD, you need to install packages for GNU coreutils and sed (used in shell scripts instead of system commands):
@@ -264,6 +262,7 @@ To generate [gcov-based](https://github.com/mozilla/grcov#example-how-to-generat
 export CARGO_INCREMENTAL=0
 export RUSTFLAGS="-Cinstrument-coverage -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
 export RUSTDOCFLAGS="-Cpanic=abort"
+export RUSTUP_TOOLCHAIN="nightly"
 cargo build <options...> # e.g., --features feat_os_unix
 cargo test <options...> # e.g., --features feat_os_unix test_pathchk
 grcov . -s . --binary-path ./target/debug/ -t html --branch --ignore-not-existing --ignore build.rs --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?\#\[derive\()" -o ./target/debug/coverage/
@@ -291,7 +290,6 @@ brew install \
   coreutils \
   autoconf \
   gettext \
-  wget \
   texinfo \
   xz \
   automake \

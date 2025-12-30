@@ -1232,6 +1232,30 @@ fn test_install_backup_short_custom_suffix() {
 }
 
 #[test]
+fn test_install_suffix_without_backup_option() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file_a = "test_install_backup_custom_suffix_file_a";
+    let file_b = "test_install_backup_custom_suffix_file_b";
+    let suffix = "super-suffix-of-the-century";
+
+    at.touch(file_a);
+    at.touch(file_b);
+    scene
+        .ucmd()
+        .arg(format!("--suffix={suffix}"))
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
+    assert!(at.file_exists(format!("{file_b}{suffix}")));
+}
+
+#[test]
 fn test_install_backup_short_custom_suffix_hyphen_value() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -2488,4 +2512,36 @@ fn test_install_non_utf8_paths() {
     at.touch(source_file);
 
     ucmd.arg("-D").arg(source_file).arg(&target_path).succeeds();
+}
+
+#[test]
+fn test_install_unprivileged_option_u_skips_chown() {
+    // This test only makes sense when not running as root.
+    if geteuid() == 0 {
+        return;
+    }
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let src = "source_file";
+    let dst_fail = "target_fail";
+    let dst_ok = "target_ok";
+    at.touch(src);
+
+    // Without -U, attempting to chown to root should fail for an unprivileged user.
+    let res = scene.ucmd().args(&["--owner=root", src, dst_fail]).run();
+
+    res.failure();
+
+    // With -U, install should not require elevated privileges for owner/group changes,
+    // meaning it should succeed and leave ownership as the current user.
+    scene
+        .ucmd()
+        .args(&["-U", "--owner=root", src, dst_ok])
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(dst_ok));
+    assert_eq!(at.metadata(dst_ok).uid(), geteuid());
 }
