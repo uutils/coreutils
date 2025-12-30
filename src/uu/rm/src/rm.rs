@@ -21,6 +21,7 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
+use uucore::fsext::{MountInfo, read_fs_list};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::translate;
 use uucore::{format_usage, os_str_as_bytes, prompt_yes, show_error};
@@ -126,6 +127,13 @@ impl From<&str> for InteractiveMode {
     }
 }
 
+#[derive(PartialEq)]
+pub enum PreserveRoot {
+    Default,
+    YesAll,
+    No,
+}
+
 /// Options for the `rm` command
 ///
 /// All options are public so that the options can be programmatically
@@ -152,7 +160,7 @@ pub struct Options {
     /// `--one-file-system`
     pub one_fs: bool,
     /// `--preserve-root`/`--no-preserve-root`
-    pub preserve_root: bool,
+    pub preserve_root: PreserveRoot,
     /// `-r`, `--recursive`
     pub recursive: bool,
     /// `-d`, `--dir`
@@ -173,7 +181,7 @@ impl Default for Options {
             force: false,
             interactive: InteractiveMode::PromptProtected,
             one_fs: false,
-            preserve_root: true,
+            preserve_root: PreserveRoot::Default,
             recursive: false,
             dir: false,
             verbose: false,
@@ -242,7 +250,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
         },
         one_fs: matches.get_flag(OPT_ONE_FILE_SYSTEM),
-        preserve_root: !matches.get_flag(OPT_NO_PRESERVE_ROOT),
+        preserve_root: if matches.get_flag(OPT_NO_PRESERVE_ROOT) {
+            PreserveRoot::No
+        } else {
+            match matches
+                .get_one::<String>(OPT_PRESERVE_ROOT)
+                .unwrap()
+                .as_str()
+            {
+                "all" => PreserveRoot::YesAll,
+                _ => PreserveRoot::Default,
+            }
+        },
         recursive: matches.get_flag(OPT_RECURSIVE),
         dir: matches.get_flag(OPT_DIR),
         verbose: matches.get_flag(OPT_VERBOSE),
@@ -341,7 +360,10 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_PRESERVE_ROOT)
                 .long(OPT_PRESERVE_ROOT)
                 .help(translate!("rm-help-preserve-root"))
-                .action(ArgAction::SetTrue),
+                .value_parser(["all"])
+                .default_value("all")
+                .default_missing_value("all")
+                .hide_default_value(true),
         )
         .arg(
             Arg::new(OPT_RECURSIVE)
@@ -460,7 +482,6 @@ fn count_files_in_directory(p: &Path) -> u64 {
     1 + entries_count
 }
 
-// TODO: implement one-file-system (this may get partially implemented in walkdir)
 /// Remove (or unlink) the given files
 ///
 /// Returns true if it has encountered an error.
@@ -596,7 +617,19 @@ fn remove_dir_recursive(
         return remove_file(path, options, progress_bar);
     }
 
-    // Base case 2: this is a non-empty directory, but the user
+    // Base case 2: check if a path is on the same file system
+    if let Err(additional_reason) = check_one_fs(path, options) {
+        if !additional_reason.is_empty() {
+            show_error!("{}", additional_reason);
+        }
+        show_error!(
+            "skipping {}, since it's on a different device",
+            path.quote()
+        );
+        return true;
+    }
+
+    // Base case 3: this is a non-empty directory, but the user
     // doesn't want to descend into it.
     if options.interactive == InteractiveMode::Always
         && !is_dir_empty(path)
@@ -684,8 +717,81 @@ fn remove_dir_recursive(
     }
 }
 
+/// Return a reference to the best matching `MountInfo` whose `mount_dir`
+/// is a prefix of the canonicalized `path`.
+fn mount_for_path<'a>(path: &Path, mounts: &'a [MountInfo]) -> Option<&'a MountInfo> {
+    let canonical = path.canonicalize().ok()?;
+    let mut best: Option<(&MountInfo, usize)> = None;
+
+    // Each `MountInfo` has a `mount_dir` that we compare.
+    for mi in mounts {
+        if mi.mount_dir.is_empty() {
+            continue;
+        }
+        let mount_dir = PathBuf::from(&mi.mount_dir);
+        if canonical.starts_with(&mount_dir) {
+            let len = mount_dir.as_os_str().len();
+            // Pick the mount with the longest matching prefix.
+            if best.is_none() || len > best.as_ref().unwrap().1 {
+                best = Some((mi, len));
+            }
+        }
+    }
+
+    best.map(|(mi, _len)| mi)
+}
+
+/// Check if a path is on the same file system when `--one-file-system` or `--preserve-root=all` options are enabled.
+/// Return `OK(())` if the path is on the same file system,
+/// or an additional error describing why it should be skipped.
+fn check_one_fs(path: &Path, options: &Options) -> Result<(), String> {
+    // If neither `--one-file-system` nor `--preserve-root=all` is active,
+    // always proceed
+    if !options.one_fs && options.preserve_root != PreserveRoot::YesAll {
+        return Ok(());
+    }
+
+    // Read mount information
+    let fs_list = read_fs_list().map_err(|err| format!("cannot read mount info: {err}"))?;
+
+    // Canonicalize the path
+    let child_canon = path
+        .canonicalize()
+        .map_err(|err| format!("cannot canonicalize {}: {err}", path.quote()))?;
+
+    // Get parent path, handling root case
+    let parent_canon = child_canon.parent().ok_or("")?.to_path_buf();
+
+    // Find mount points for child and parent
+    let child_mount = mount_for_path(&child_canon, &fs_list).ok_or("")?;
+    let parent_mount = mount_for_path(&parent_canon, &fs_list).ok_or("")?;
+
+    // Check if child and parent are on the same device
+    if child_mount.dev_id != parent_mount.dev_id {
+        return Err(String::new());
+    }
+
+    Ok(())
+}
+
 fn handle_dir(path: &Path, options: &Options, progress_bar: Option<&ProgressBar>) -> bool {
     let mut had_err = false;
+
+    if let Err(additional_reason) = check_one_fs(path, options) {
+        if !additional_reason.is_empty() {
+            show_error!("{}", additional_reason);
+        }
+        show_error!(
+            "skipping {}, since it's on a different device",
+            path.quote()
+        );
+
+        if options.preserve_root == PreserveRoot::YesAll {
+            show_error!("and --preserve-root=all is in effect");
+        }
+
+        return true;
+    }
 
     let path = clean_trailing_slashes(path);
     if path_is_current_or_parent_directory(path) {
@@ -697,9 +803,9 @@ fn handle_dir(path: &Path, options: &Options, progress_bar: Option<&ProgressBar>
     }
 
     let is_root = path.has_root() && path.parent().is_none();
-    if options.recursive && (!is_root || !options.preserve_root) {
+    if options.recursive && (!is_root || options.preserve_root == PreserveRoot::No) {
         had_err = remove_dir_recursive(path, options, progress_bar);
-    } else if options.dir && (!is_root || !options.preserve_root) {
+    } else if options.dir && (!is_root || options.preserve_root == PreserveRoot::No) {
         had_err = remove_dir(path, options, progress_bar).bitor(had_err);
     } else if options.recursive {
         show_error!("{}", RmError::DangerousRecursiveOperation);
