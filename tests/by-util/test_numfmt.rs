@@ -289,7 +289,7 @@ fn test_invalid_following_valid_suffix() {
 
 #[test]
 fn test_long_invalid_suffix() {
-    let args = ["--from=si", "--to=si", &format!("1500VVVVVVVV")];
+    let args = ["--from=si", "--to=si", "1500VVVVVVVV"];
 
     new_ucmd!()
         .args(&args)

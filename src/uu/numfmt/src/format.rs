@@ -140,12 +140,6 @@ fn parse_suffix(s: &str, unit: &Unit) -> Result<(f64, Option<Suffix>)> {
         );
     }
 
-    if valid_part != s && valid_part.parse::<f64>().is_err() {
-        return Err(
-            translate!("numfmt-error-invalid-specific-suffix", "input" => s.quote(), "suffix" => s[valid_part.len()..].quote()),
-        );
-    }
-
     let with_i = s.ends_with('i');
     let mut iter = s.chars();
     if with_i {
