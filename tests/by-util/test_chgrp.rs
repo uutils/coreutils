@@ -231,8 +231,8 @@ fn test_reference_multi_no_equal() {
         .arg("file1")
         .arg("file2")
         .succeeds()
-        .stderr_contains("chgrp: group of 'file1' retained as ")
-        .stderr_contains("\nchgrp: group of 'file2' retained as ");
+        .stderr_contains("chgrp: group of 'file1' retained as {}", getegid())
+        .stderr_contains("\nchgrp: group of 'file2' retained as {}", getegid());
 }
 
 #[test]
@@ -246,9 +246,9 @@ fn test_reference_last() {
         .arg("--reference")
         .arg("ref_file")
         .succeeds()
-        .stderr_contains("chgrp: group of 'file1' retained as ")
-        .stderr_contains("\nchgrp: group of 'file2' retained as ")
-        .stderr_contains("\nchgrp: group of 'file3' retained as ");
+        .stderr_contains("chgrp: group of 'file1' retained as {}", getegid())
+        .stderr_contains("\nchgrp: group of 'file2' retained as {}", getegid())
+        .stderr_contains("\nchgrp: group of 'file3' retained as {}", getegid());
 }
 
 #[test]
@@ -511,7 +511,7 @@ fn test_verbosity_messages() {
         .arg("--reference=ref_file")
         .arg("target_file")
         .succeeds()
-        .stderr_contains("group of 'target_file' retained as ");
+        .stderr_contains("group of 'target_file' retained as {}", getegid());
 }
 
 #[test]
