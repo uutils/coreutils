@@ -294,7 +294,7 @@ fn test_long_invalid_suffix() {
     new_ucmd!()
         .args(&args)
         .fails_with_code(2)
-        .stderr_only(format!("numfmt: invalid suffix in input: '1500VVVVVVVV'\n"));
+        .stderr_only("numfmt: invalid suffix in input: '1500VVVVVVVV'\n");
 }
 
 #[test]
