@@ -279,7 +279,6 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
             #[cfg(any(
                 target_os = "linux",
                 target_os = "hurd",
-                target_os = "redox",
                 target_os = "cygwin",
                 target_os = "solaris",
                 target_os = "illumos"
@@ -308,7 +307,6 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
             #[cfg(not(any(
                 target_os = "linux",
                 target_os = "hurd",
-                target_os = "redox",
                 target_os = "cygwin",
                 target_os = "solaris",
                 target_os = "illumos",
