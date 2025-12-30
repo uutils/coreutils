@@ -20,6 +20,8 @@ const NL: u8 = b'\n';
 const CR: u8 = b'\r';
 const TAB: u8 = b'\t';
 // Implementation threshold (8 KiB) to prevent unbounded buffer growth during streaming.
+// Chosen as a small, fixed cap: large enough to avoid excessive flushes, but
+// small enough to keep memory bounded when the input has no fold points.
 const STREAMING_FLUSH_THRESHOLD: usize = 8 * 1024;
 
 mod options {
@@ -290,8 +292,10 @@ fn compute_col_count(buffer: &[u8], mode: WidthMode) -> usize {
 }
 
 fn emit_output<W: Write>(ctx: &mut FoldContext<'_, W>) -> UResult<()> {
-    // Emit a folded line and keep the remaining buffer (if any) for the next line.
-    // When `-s` is active, we prefer breaking at the last recorded whitespace.
+    // Emit one folded line:
+    // - with `-s`, cut at the last remembered whitespace when possible
+    // - otherwise, cut at the current buffer end
+    // The remainder (if any) stays in the buffer for the next line.
     let consume = match *ctx.last_space {
         Some(index) => index + 1,
         None => ctx.output.len(),
@@ -313,6 +317,7 @@ fn emit_output<W: Write>(ctx: &mut FoldContext<'_, W>) -> UResult<()> {
     *ctx.col_count = compute_col_count(ctx.output, ctx.mode);
 
     if ctx.spaces {
+        // Rebase the remembered whitespace position into the remaining buffer.
         *ctx.last_space = last_space.and_then(|idx| {
             if idx < consume {
                 None
@@ -328,13 +333,15 @@ fn emit_output<W: Write>(ctx: &mut FoldContext<'_, W>) -> UResult<()> {
 
 fn maybe_flush_unbroken_output<W: Write>(ctx: &mut FoldContext<'_, W>) -> UResult<()> {
     // In streaming mode without `-s`, avoid unbounded buffering by periodically
-    // flushing long unbroken output segments. When `-s` is enabled we must keep
-    // the buffer to preserve the last whitespace boundary for folding.
+    // flushing long unbroken segments. With `-s` we must keep the buffer so we
+    // can still break at the last whitespace boundary.
     if ctx.spaces || ctx.output.len() < STREAMING_FLUSH_THRESHOLD {
         return Ok(());
     }
 
     if !ctx.output.is_empty() {
+        // Write raw bytes without inserting a newline; folding will continue
+        // based on updated column tracking in the caller.
         ctx.writer.write_all(ctx.output)?;
         ctx.output.clear();
     }
@@ -342,13 +349,13 @@ fn maybe_flush_unbroken_output<W: Write>(ctx: &mut FoldContext<'_, W>) -> UResul
 }
 
 fn push_byte<W: Write>(ctx: &mut FoldContext<'_, W>, byte: u8) -> UResult<()> {
-    // Append a single byte and flush if the buffer grows too large.
+    // Append a single byte to the buffer and flush if it grows too large.
     ctx.output.push(byte);
     maybe_flush_unbroken_output(ctx)
 }
 
 fn push_bytes<W: Write>(ctx: &mut FoldContext<'_, W>, bytes: &[u8]) -> UResult<()> {
-    // Append a byte slice and flush if the buffer grows too large.
+    // Append a byte slice to the buffer and flush if it grows too large.
     if bytes.is_empty() {
         return Ok(());
     }
