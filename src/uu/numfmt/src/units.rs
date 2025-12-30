@@ -46,6 +46,26 @@ pub enum RawSuffix {
     Q,
 }
 
+impl TryFrom<&char> for RawSuffix {
+    type Error = String;
+
+    fn try_from(value: &char) -> Result<Self> {
+        match value {
+            'K' | 'k' => Ok(RawSuffix::K),
+            'M' => Ok(RawSuffix::M),
+            'G' => Ok(RawSuffix::G),
+            'T' => Ok(RawSuffix::T),
+            'P' => Ok(RawSuffix::P),
+            'E' => Ok(RawSuffix::E),
+            'Z' => Ok(RawSuffix::Z),
+            'Y' => Ok(RawSuffix::Y),
+            'R' => Ok(RawSuffix::R),
+            'Q' => Ok(RawSuffix::Q),
+            _ => Err(format!("Invalid suffix: {value}")),
+        }
+    }
+}
+
 pub type Suffix = (RawSuffix, WithI);
 
 pub struct DisplayableSuffix(pub Suffix, pub Unit);
