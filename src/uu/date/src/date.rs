@@ -399,31 +399,32 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // Format all the dates
     for date in dates {
-        match date {
-            Ok(date) => {
-                #[cfg(unix)]
-                if matches!(settings.format, Format::Custom(_) | Format::Default) {
-                    if let Ok(s) = system_time::format_using_strftime(format_string, &date) {
-                        println!("{s}");
-                        continue;
-                    }
-                }
-
-                match strtime::format(format_string, &date) {
-                    Ok(s) => println!("{s}"),
-                    Err(e) => {
-                        return Err(USimpleError::new(
-                            1,
-                            translate!("date-error-invalid-format", "format" => format_string, "error" => e),
-                        ));
-                    }
-                }
+        let date = match date {
+            Ok(date) => date,
+            Err((input, _err)) => {
+                show!(USimpleError::new(
+                    1,
+                    translate!("date-error-invalid-date", "date" => input)
+                ));
+                continue;
             }
-            Err((input, _err)) => show!(USimpleError::new(
-                1,
-                translate!("date-error-invalid-date", "date" => input)
-            )),
+        };
+
+        #[cfg(unix)]
+        if matches!(settings.format, Format::Custom(_) | Format::Default) {
+            if let Ok(s) = system_time::format_using_strftime(format_string, &date) {
+                println!("{s}");
+                continue;
+            }
         }
+
+        let formatted = strtime::format(format_string, &date).map_err(|e| {
+            USimpleError::new(
+                1,
+                translate!("date-error-invalid-format", "format" => format_string, "error" => e),
+            )
+        })?;
+        println!("{formatted}");
     }
 
     Ok(())

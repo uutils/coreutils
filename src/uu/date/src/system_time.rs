@@ -8,11 +8,25 @@ pub use unix::*;
 
 #[cfg(unix)]
 mod unix {
-    use std::ffi::{CStr, CString};
+    use std::ffi::CString;
+    use std::iter::Peekable;
+    use std::str::Chars;
 
     use jiff::Zoned;
     use nix::libc;
     use uucore::error::{UResult, USimpleError};
+
+    const COLON_Z_FORMATS: [&str; 3] = ["%:z", "%::z", "%:::z"];
+    const COLON_LITERALS: [&str; 3] = ["%:", "%::", "%:::"];
+    const HASH_Z_FORMATS: [&str; 1] = ["%z"];
+    const HASH_LITERALS: [&str; 1] = ["%#"];
+    const STRFTIME_BUF_LEN: usize = 1024;
+
+    struct PrefixSpec<'a> {
+        prefix: char,
+        z_formats: &'a [&'a str],
+        literal_formats: &'a [&'a str],
+    }
 
     fn is_ethiopian_locale() -> bool {
         for var in ["LC_ALL", "LC_TIME", "LANG"] {
@@ -45,220 +59,174 @@ mod unix {
         (year, month, day)
     }
 
-    pub fn format_using_strftime(format: &str, date: &Zoned) -> UResult<String> {
-        // Preprocess format string to handle extensions not supported by standard strftime
-        // or where we want to ensure specific behavior (like %N).
-        // specific specifiers: %N, %q, %:z, %::z, %:::z
-        // We use jiff to format these specific parts.
+    fn jiff_format(fmt: &str, date: &Zoned) -> UResult<String> {
+        jiff::fmt::strtime::format(fmt, date)
+            .map_err(|e| USimpleError::new(1, e.to_string()))
+    }
 
-        let mut new_fmt = String::with_capacity(format.len());
+    fn preprocess_format(format: &str, date: &Zoned) -> UResult<String> {
+        let mut output = String::with_capacity(format.len());
         let mut chars = format.chars().peekable();
 
         while let Some(c) = chars.next() {
             if c == '%' {
-                if let Some(&next) = chars.peek() {
-                    match next {
-                        'N' => {
-                            chars.next();
-                            let nanos = date.timestamp().subsec_nanosecond();
-                            let s = format!("{:09}", nanos);
-                            new_fmt.push_str(&s);
-                        }
-                        's' => {
-                            chars.next();
-                            let s = date.timestamp().as_second().to_string();
-                            new_fmt.push_str(&s);
-                        }
-                        'q' => {
-                            chars.next();
-                            let q = (date.month() - 1) / 3 + 1;
-                            new_fmt.push_str(&q.to_string());
-                        }
-                        'z' => {
-                            chars.next();
-                            // %z -> +hhmm
-                            // jiff %z matches this
-                            new_fmt.push_str(
-                                &jiff::fmt::strtime::format("%z", date)
-                                    .map_err(|e| USimpleError::new(1, e.to_string()))?,
-                            );
-                        }
-                        '#' => {
-                            chars.next(); // eat #
-                            if let Some(&n2) = chars.peek() {
-                                if n2 == 'z' {
-                                    chars.next();
-                                    // %#z -> treated as %z
-                                    new_fmt.push_str(
-                                        &jiff::fmt::strtime::format("%z", date)
-                                            .map_err(|e| USimpleError::new(1, e.to_string()))?,
-                                    );
-                                } else {
-                                    new_fmt.push_str("%#");
-                                }
-                            } else {
-                                new_fmt.push_str("%#");
-                            }
-                        }
-                        ':' => {
-                            // Check for :z, ::z, :::z
-                            chars.next(); // eat :
-                            if let Some(&n2) = chars.peek() {
-                                if n2 == 'z' {
-                                    chars.next();
-                                    // %:z
-                                    new_fmt.push_str(
-                                        &jiff::fmt::strtime::format("%:z", date)
-                                            .map_err(|e| USimpleError::new(1, e.to_string()))?,
-                                    );
-                                } else if n2 == ':' {
-                                    chars.next();
-                                    if let Some(&n3) = chars.peek() {
-                                        if n3 == 'z' {
-                                            chars.next();
-                                            // %::z
-                                            new_fmt.push_str(
-                                                &jiff::fmt::strtime::format("%::z", date)
-                                                    .map_err(|e| {
-                                                        USimpleError::new(1, e.to_string())
-                                                    })?,
-                                            );
-                                        } else if n3 == ':' {
-                                            chars.next();
-                                            if let Some(&n4) = chars.peek() {
-                                                if n4 == 'z' {
-                                                    chars.next();
-                                                    // %:::z
-                                                    new_fmt.push_str(
-                                                        &jiff::fmt::strtime::format("%:::z", date)
-                                                            .map_err(|e| {
-                                                                USimpleError::new(1, e.to_string())
-                                                            })?,
-                                                    );
-                                                } else {
-                                                    new_fmt.push_str("%:::");
-                                                }
-                                            } else {
-                                                new_fmt.push_str("%:::");
-                                            }
-                                        } else {
-                                            new_fmt.push_str("%::");
-                                        }
-                                    } else {
-                                        new_fmt.push_str("%::");
-                                    }
-                                } else {
-                                    new_fmt.push_str("%:");
-                                }
-                            } else {
-                                new_fmt.push_str("%:");
-                            }
-                        }
-                        // Handle standard escape %%
-                        '%' => {
-                            chars.next();
-                            new_fmt.push_str("%%");
-                        }
-                        _ => {
-                            new_fmt.push('%');
-                            // Let strftime handle the next char, just loop around
-                        }
-                    }
-                } else {
-                    new_fmt.push('%');
-                }
+                let replacement = rewrite_directive(&mut chars, date)?;
+                output.push_str(&replacement);
             } else {
-                new_fmt.push(c);
+                output.push(c);
             }
         }
 
-        let format_string = new_fmt;
+        Ok(output)
+    }
 
-        // Convert jiff::Zoned to libc::tm
-        // Use mem::zeroed to handle platform differences in struct fields
+    fn rewrite_directive(chars: &mut Peekable<Chars<'_>>, date: &Zoned) -> UResult<String> {
+        let Some(next) = chars.next() else {
+            return Ok("%".to_string());
+        };
+
+        match next {
+            'N' => {
+                let nanos = date.timestamp().subsec_nanosecond();
+                Ok(format!("{:09}", nanos))
+            }
+            's' => Ok(date.timestamp().as_second().to_string()),
+            'q' => {
+                let q = (date.month() - 1) / 3 + 1;
+                Ok(q.to_string())
+            }
+            'z' => jiff_format("%z", date),
+            '#' => rewrite_prefixed_z(
+                chars,
+                date,
+                PrefixSpec {
+                    prefix: '#',
+                    z_formats: &HASH_Z_FORMATS,
+                    literal_formats: &HASH_LITERALS,
+                },
+            ),
+            ':' => rewrite_prefixed_z(
+                chars,
+                date,
+                PrefixSpec {
+                    prefix: ':',
+                    z_formats: &COLON_Z_FORMATS,
+                    literal_formats: &COLON_LITERALS,
+                },
+            ),
+            '%' => Ok("%%".to_string()),
+            _ => Ok(format!("%{next}")),
+        }
+    }
+
+    fn rewrite_prefixed_z(
+        chars: &mut Peekable<Chars<'_>>,
+        date: &Zoned,
+        spec: PrefixSpec<'_>,
+    ) -> UResult<String> {
+        let max_repeat = spec.z_formats.len();
+        let extra = consume_repeats(chars, spec.prefix, max_repeat.saturating_sub(1));
+        let count = 1 + extra;
+
+        if matches!(chars.peek(), Some(&'z')) {
+            chars.next();
+            return jiff_format(spec.z_formats[count - 1], date);
+        }
+
+        Ok(spec.literal_formats[count - 1].to_string())
+    }
+
+    fn consume_repeats(
+        chars: &mut Peekable<Chars<'_>>,
+        needle: char,
+        max: usize,
+    ) -> usize {
+        let mut count = 0;
+        while count < max && matches!(chars.peek(), Some(ch) if *ch == needle) {
+            chars.next();
+            count += 1;
+        }
+        count
+    }
+
+    fn calendar_date(date: &Zoned) -> (i32, i32, i32) {
+        if is_ethiopian_locale() {
+            gregorian_to_ethiopian(date.year() as i32, date.month() as i32, date.day() as i32)
+        } else {
+            (date.year() as i32, date.month() as i32, date.day() as i32)
+        }
+    }
+
+    fn build_tm(date: &Zoned) -> libc::tm {
         let mut tm: libc::tm = unsafe { std::mem::zeroed() };
 
         tm.tm_sec = date.second() as i32;
         tm.tm_min = date.minute() as i32;
         tm.tm_hour = date.hour() as i32;
 
-        if is_ethiopian_locale() {
-            let (y, m, d) =
-                gregorian_to_ethiopian(date.year() as i32, date.month() as i32, date.day() as i32);
-            tm.tm_year = y - 1900;
-            tm.tm_mon = m - 1;
-            tm.tm_mday = d;
-        } else {
-            tm.tm_mday = date.day() as i32;
-            tm.tm_mon = date.month() as i32 - 1; // tm_mon is 0-11
-            tm.tm_year = date.year() as i32 - 1900; // tm_year is years since 1900
-        }
+        let (year, month, day) = calendar_date(date);
+        tm.tm_year = year - 1900;
+        tm.tm_mon = month - 1;
+        tm.tm_mday = day;
 
         tm.tm_wday = date.weekday().to_sunday_zero_offset() as i32;
-        tm.tm_yday = date.day_of_year() as i32 - 1; // tm_yday is 0-365
-        tm.tm_isdst = -1; // Let libraries determine if needed, though for formatting typically unused/ignored or uses global if zone not set
+        tm.tm_yday = date.day_of_year() as i32 - 1;
+        tm.tm_isdst = -1;
 
-        // We need to keep the CString for tm_zone valid during strftime usage
-        // So we declare it here
-        let zone_cstring;
+        tm
+    }
 
-        // Set timezone fields on supported platforms
-        #[cfg(any(
-            target_os = "linux",
-            target_os = "macos",
-            target_os = "freebsd",
-            target_os = "netbsd",
-            target_os = "openbsd",
-            target_os = "dragonfly"
-        ))]
-        {
-            tm.tm_gmtoff = date.offset().seconds() as _;
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd",
+        target_os = "dragonfly"
+    ))]
+    fn set_tm_zone(tm: &mut libc::tm, date: &Zoned) -> Option<CString> {
+        tm.tm_gmtoff = date.offset().seconds() as _;
 
-            // Populate tm_zone
-            // We can get the abbreviation from date.time_zone().
-            // Note: date.time_zone() returns a TimeZone, we need the abbreviation for the specific instant?
-            // date.datetime() returns civil time.
-            // jiff::Zoned has `time_zone()` and `offset()`.
-            // The abbreviation usually depends on whether DST is active.
-            // checking `date` (Zoned) string representation usually includes it?
-            // `jiff` doesn't seem to expose `abbreviation()` directly on Zoned nicely?
-            // Wait, standard `strftime` (%Z) looks at `tm_zone`.
-            // How do we get abbreviation from jiff::Zoned?
-            // `date.time_zone()` is the TZDB entry.
-            // `date.offset()` is the offset.
-            // We can try to format with %Z using jiff and use that string?
-            if let Ok(abbrev_string) = jiff::fmt::strtime::format("%Z", date) {
-                zone_cstring = CString::new(abbrev_string).ok();
-                if let Some(ref nz) = zone_cstring {
-                    tm.tm_zone = nz.as_ptr() as *mut i8;
-                }
-            } else {
-                zone_cstring = None;
-            }
+        let zone_cstring = jiff::fmt::strtime::format("%Z", date)
+            .ok()
+            .and_then(|abbrev| CString::new(abbrev).ok());
+        if let Some(ref zone) = zone_cstring {
+            tm.tm_zone = zone.as_ptr() as *mut i8;
         }
-        #[cfg(not(any(
-            target_os = "linux",
-            target_os = "macos",
-            target_os = "freebsd",
-            target_os = "netbsd",
-            target_os = "openbsd",
-            target_os = "dragonfly"
-        )))]
-        {
-            zone_cstring = None;
-        }
+        zone_cstring
+    }
 
-        let format_c = CString::new(format_string).map_err(|e| {
-            USimpleError::new(1, format!("Invalid format string: {}", e))
-        })?;
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd",
+        target_os = "dragonfly"
+    )))]
+    fn set_tm_zone(_tm: &mut libc::tm, _date: &Zoned) -> Option<CString> {
+        None
+    }
 
-        let mut buffer = vec![0u8; 1024];
+    pub fn format_using_strftime(format: &str, date: &Zoned) -> UResult<String> {
+        let format_string = preprocess_format(format, date)?;
+        let mut tm = build_tm(date);
+        let _zone_cstring = set_tm_zone(&mut tm, date);
+        call_strftime(&format_string, &tm)
+    }
+
+    fn call_strftime(format_string: &str, tm: &libc::tm) -> UResult<String> {
+        let format_c = CString::new(format_string)
+            .map_err(|e| USimpleError::new(1, format!("Invalid format string: {e}")))?;
+
+        let mut buffer = vec![0u8; STRFTIME_BUF_LEN];
+        // SAFETY: `format_c` is NUL-terminated, `tm` is a valid libc::tm, and `buffer` is writable.
         let ret = unsafe {
             libc::strftime(
                 buffer.as_mut_ptr() as *mut _,
                 buffer.len(),
                 format_c.as_ptr(),
-                &tm as *const _,
+                tm as *const _,
             )
         };
 
@@ -266,8 +234,7 @@ mod unix {
             return Err(USimpleError::new(1, "strftime failed or result too large"));
         }
 
-        let c_str = unsafe { CStr::from_ptr(buffer.as_ptr() as *const _) };
-        let s = c_str.to_string_lossy().into_owned();
-        Ok(s)
+        let len = ret as usize;
+        Ok(String::from_utf8_lossy(&buffer[..len]).into_owned())
     }
 }
