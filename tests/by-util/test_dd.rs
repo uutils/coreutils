@@ -676,47 +676,30 @@ fn test_skip_beyond_file_seekable_stdin() {
     // This tests that skipping beyond the file size issues a warning.
     use std::process::Stdio;
 
-    let (at, mut ucmd) = at_and_ucmd!();
-    at.write("in", "abcd");
+    // Test cases: (bs, skip) pairs that skip beyond a 4-byte file
+    let test_cases = [
+        ("bs=1", "skip=5"), // skip 5 bytes
+        ("bs=3", "skip=2"), // skip 6 bytes
+    ];
 
-    let stdin = OwnedFileDescriptorOrHandle::open_file(
-        OpenOptions::new().read(true),
-        at.plus("in").as_path(),
-    )
-    .unwrap();
+    for (bs, skip) in test_cases {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("in", "abcd");
 
-    // skip=5 with bs=1 means skip 5 bytes, which is beyond the 4-byte file
-    ucmd.args(&["bs=1", "skip=5", "count=0", "status=noxfer"])
-        .set_stdin(Stdio::from(stdin))
-        .succeeds()
-        .no_stdout()
-        .stderr_contains(
-            "'standard input': cannot skip to specified offset\n0+0 records in\n0+0 records out\n",
-        );
-}
+        let stdin = OwnedFileDescriptorOrHandle::open_file(
+            OpenOptions::new().read(true),
+            at.plus("in").as_path(),
+        )
+        .unwrap();
 
-#[test]
-#[cfg(unix)]
-fn test_skip_beyond_file_seekable_stdin_bytes() {
-    use std::process::Stdio;
-
-    let (at, mut ucmd) = at_and_ucmd!();
-    at.write("in", "abcd");
-
-    let stdin = OwnedFileDescriptorOrHandle::open_file(
-        OpenOptions::new().read(true),
-        at.plus("in").as_path(),
-    )
-    .unwrap();
-
-    // skip=2 with bs=3 means skip 6 bytes, which is beyond the 4-byte file
-    ucmd.args(&["bs=3", "skip=2", "count=0", "status=noxfer"])
-        .set_stdin(Stdio::from(stdin))
-        .succeeds()
-        .no_stdout()
-        .stderr_contains(
-            "'standard input': cannot skip to specified offset\n0+0 records in\n0+0 records out\n",
-        );
+        ucmd.args(&[bs, skip, "count=0", "status=noxfer"])
+            .set_stdin(Stdio::from(stdin))
+            .succeeds()
+            .no_stdout()
+            .stderr_contains(
+                "'standard input': cannot skip to specified offset\n0+0 records in\n0+0 records out\n",
+            );
+    }
 }
 
 #[test]
