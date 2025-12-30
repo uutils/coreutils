@@ -513,9 +513,15 @@ fn parse_saved_state(arg: &str) -> Option<Vec<u32>> {
     // Validate all parts are non-empty valid hex
     let mut values = Vec::with_capacity(expected_parts);
     for (i, part) in parts.iter().enumerate() {
+        // `from_str_radix` doesn't document its behavior for this case,
+        // thus, we do this to guarantee stability
         if part.is_empty() {
             return None; // GNU rejects empty hex values
         }
+        // TO-DO: avoid `from_str_radix`
+        if part.as_bytes()[0] == b'+' {
+            return None;
+        };
         let val = u32::from_str_radix(part, 16).ok()?;
 
         // Control characters (indices 4+) must fit in u8
@@ -997,7 +1003,7 @@ fn apply_char_mapping(termios: &mut Termios, mapping: &(S, u8)) {
 ///
 /// The state array contains:
 /// - `state[0]`: input flags
-/// - `state[1]`: output flags  
+/// - `state[1]`: output flags
 /// - `state[2]`: control flags
 /// - `state[3]`: local flags
 /// - `state[4..]`: control characters (optional)
