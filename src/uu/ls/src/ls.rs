@@ -1049,7 +1049,7 @@ impl<'a> TextOutput<'a> {
     }
 }
 
-impl<'a> LsOutput for TextOutput<'a> {
+impl LsOutput for TextOutput<'_> {
     fn write_entries(&mut self, entries: &[PathData], config: &Config) -> UResult<()> {
         display_items(entries, config, &mut self.state, &mut self.dired)
     }
@@ -1095,7 +1095,7 @@ impl<'a> LsOutput for TextOutput<'a> {
             translate!("ls-total", "size" => display_size(total_size, config)),
             config.line_ending
         );
-        write!(self.state.out, "{}", total_str)?;
+        write!(self.state.out, "{total_str}")?;
         if config.dired {
             dired::add_total(&mut self.dired, total_str.len());
         }
@@ -1161,20 +1161,6 @@ pub fn list_with_output<O: LsOutput>(
     let initial_locs_len = locs.len();
     let now = SystemTime::now();
 
-    let mut state = ListState {
-        out: BufWriter::new(stdout()),
-        style_manager: config.color.as_ref().map(StyleManager::new),
-        #[cfg(unix)]
-        uid_cache: HashMap::default(),
-        #[cfg(unix)]
-        gid_cache: HashMap::default(),
-        // Time range for which to use the "recent" format. Anything from 0.5 year in the past to now
-        // (files with modification time in the future use "old" format).
-        // According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
-        recent_time_range: (SystemTime::now() - Duration::new(31_556_952 / 2, 0))
-            ..=SystemTime::now(),
-    };
-
     for loc in locs {
         let path_data = PathData::new(loc.into(), None, None, config, true);
 
@@ -1239,14 +1225,7 @@ pub fn list_with_output<O: LsOutput>(
             path_data.path(),
             path_data.must_dereference,
         )?);
-        enter_directory(
-            path_data,
-            read_dir,
-            config,
-            &mut state,
-            &mut listed_ancestors,
-            output,
-        )?;
+        enter_directory(path_data, read_dir, config, &mut listed_ancestors, output)?;
     }
 
     output.finalize(config)?;
@@ -1257,7 +1236,6 @@ fn enter_directory<O: LsOutput>(
     path_data: &PathData,
     mut read_dir: ReadDir,
     config: &Config,
-    state: &mut ListState,
     listed_ancestors: &mut HashSet<FileInformation>,
     output: &mut O,
 ) -> UResult<()> {
@@ -1339,7 +1317,7 @@ fn enter_directory<O: LsOutput>(
                         // when listing several directories in recursive mode, we show
                         // "dirname:" at the beginning of the file list
                         output.write_dir_header(e, config, false)?;
-                        enter_directory(e, rd, config, state, listed_ancestors, output)?;
+                        enter_directory(e, rd, config, listed_ancestors, output)?;
                         listed_ancestors
                             .remove(&FileInformation::from_path(e.path(), e.must_dereference)?);
                     } else {
