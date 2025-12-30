@@ -55,8 +55,7 @@ mod unix {
             (month, year)
         };
 
-        (1461 * (adj_year + 4800)) / 4
-            + (367 * (adj_month - 2)) / 12
+        (1461 * (adj_year + 4800)) / 4 + (367 * (adj_month - 2)) / 12
             - (3 * ((adj_year + 4900) / 100)) / 4
             + day
             - 32075
