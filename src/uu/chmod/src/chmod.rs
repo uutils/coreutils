@@ -387,9 +387,7 @@ impl Chmoder {
                             }
 
                             if !self.quiet {
-                                show!(ChmodError::DanglingSymlink(
-                                    filename.into()
-                                ));
+                                show!(ChmodError::DanglingSymlink(filename.into()));
                                 set_exit_code(1);
                             }
 
@@ -400,9 +398,7 @@ impl Chmoder {
                                 );
                             }
                         } else if !self.quiet {
-                            show!(ChmodError::NoSuchFile(
-                                filename.into()
-                            ));
+                            show!(ChmodError::NoSuchFile(filename.into()));
                         }
                         // GNU exits with exit code 1 even if -q or --quiet are passed
                         // So we set the exit code, because it hasn't been set yet if `self.quiet` is true.
@@ -426,18 +422,14 @@ impl Chmoder {
                 }
                 Err(e) if e.kind() == io::ErrorKind::PermissionDenied => {
                     if !self.quiet {
-                        show!(ChmodError::PermissionDenied(
-                            filename.into()
-                        ));
+                        show!(ChmodError::PermissionDenied(filename.into()));
                     }
                     set_exit_code(1);
                 }
                 // error must be no such file
                 Err(_) => {
                     if !self.quiet {
-                        show!(ChmodError::NoSuchFile(
-                            filename.into()
-                        ));
+                        show!(ChmodError::NoSuchFile(filename.into()));
                     }
                     set_exit_code(1);
                 }
@@ -497,10 +489,7 @@ impl Chmoder {
                 Err(err) => {
                     // Handle permission denied errors with proper file path context
                     if err.kind() == std::io::ErrorKind::PermissionDenied {
-                        r = r.and(Err(ChmodError::PermissionDenied(
-                            file_path.into(),
-                        )
-                        .into()));
+                        r = r.and(Err(ChmodError::PermissionDenied(file_path.into()).into()));
                     } else {
                         r = r.and(Err(err.into()));
                     }
@@ -553,10 +542,7 @@ impl Chmoder {
                         }
                         Err(err) => {
                             let error = if err.kind() == std::io::ErrorKind::PermissionDenied {
-                                ChmodError::PermissionDenied(
-                                    entry_path.into(),
-                                )
-                                .into()
+                                ChmodError::PermissionDenied(entry_path.into()).into()
                             } else {
                                 err.into()
                             };
@@ -622,9 +608,7 @@ impl Chmoder {
                     new_mode
                 );
             }
-            return Err(
-                ChmodError::PermissionDenied(file_path.into()).into(),
-            );
+            return Err(ChmodError::PermissionDenied(file_path.into()).into());
         }
 
         // Report the change using the helper method
