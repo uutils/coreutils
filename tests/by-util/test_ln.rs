@@ -5,8 +5,7 @@
 #![allow(clippy::similar_names)]
 
 use std::path::PathBuf;
-use uutests::util::TestScenario;
-use uutests::{at_and_ts, at_and_ucmd, new_ucmd, util_name};
+use uutests::{at_and_ts, at_and_ucmd, new_ucmd};
 
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
