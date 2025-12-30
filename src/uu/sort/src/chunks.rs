@@ -18,7 +18,13 @@ use memchr::memchr_iter;
 use self_cell::self_cell;
 use uucore::error::{UResult, USimpleError};
 
-use crate::{GeneralBigDecimalParseResult, GlobalSettings, Line, numeric_str_cmp::NumInfo};
+use crate::{
+    GeneralBigDecimalParseResult, GlobalSettings, Line, SortMode, numeric_str_cmp::NumInfo,
+};
+
+const MAX_TOKEN_BUFFER_BYTES: usize = 4 * 1024 * 1024;
+const MAX_TOKEN_BUFFER_ELEMS: usize =
+    MAX_TOKEN_BUFFER_BYTES / std::mem::size_of::<Range<usize>>();
 
 self_cell!(
     /// The chunk that is passed around between threads.
@@ -237,12 +243,43 @@ fn parse_lines<'a>(
     assert!(line_data.parsed_floats.is_empty());
     assert!(line_data.line_num_floats.is_empty());
     token_buffer.clear();
-    token_buffer.reserve(read.len());
-    lines.extend(
-        read.split(|&c| c == separator)
-            .enumerate()
-            .map(|(index, line)| Line::create(line, index, line_data, token_buffer, settings)),
-    );
+    if token_buffer.capacity() > MAX_TOKEN_BUFFER_ELEMS {
+        token_buffer.shrink_to(MAX_TOKEN_BUFFER_ELEMS);
+    }
+    let line_count = if read.is_empty() {
+        1
+    } else {
+        memchr_iter(separator, read).count() + 1
+    };
+    lines.reserve(line_count);
+    if settings.precomputed.selections_per_line > 0 {
+        line_data
+            .selections
+            .reserve(line_count.saturating_mul(settings.precomputed.selections_per_line));
+    }
+    if settings.precomputed.num_infos_per_line > 0 {
+        line_data
+            .num_infos
+            .reserve(line_count.saturating_mul(settings.precomputed.num_infos_per_line));
+    }
+    if settings.precomputed.floats_per_line > 0 {
+        line_data
+            .parsed_floats
+            .reserve(line_count.saturating_mul(settings.precomputed.floats_per_line));
+    }
+    if settings.mode == SortMode::Numeric {
+        line_data.line_num_floats.reserve(line_count);
+    }
+    let mut start = 0usize;
+    let mut index = 0usize;
+    for sep_idx in memchr_iter(separator, read) {
+        let line = &read[start..sep_idx];
+        lines.push(Line::create(line, index, line_data, token_buffer, settings));
+        index += 1;
+        start = sep_idx + 1;
+    }
+    let line = &read[start..];
+    lines.push(Line::create(line, index, line_data, token_buffer, settings));
 }
 
 /// Read from `file` into `buffer`.
