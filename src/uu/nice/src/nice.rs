@@ -163,7 +163,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let err = process::Command::new(cmd).args(args).exec();
 
-    show_error!("{}: {}", cmd, err);
+    show_error!("{cmd}: {err}");
 
     let exit_code = if err.kind() == ErrorKind::NotFound {
         127
