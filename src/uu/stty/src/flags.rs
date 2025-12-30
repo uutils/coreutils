@@ -28,6 +28,7 @@ use nix::sys::termios::{
 };
 
 #[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub enum BaudType {
     Input,
     Output,
