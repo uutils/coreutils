@@ -108,7 +108,7 @@ fn bsd_sysctl_memory(hw_constant: libc::c_int, sysctl_name: &str) -> Result<u128
             mib.as_mut_ptr(),
             2,
             ptr::from_mut(&mut size).cast::<libc::c_void>(),
-            &mut len,
+            &raw mut len,
             ptr::null_mut(),
             0,
         )
