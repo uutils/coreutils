@@ -1142,7 +1142,7 @@ fn test_date_military_timezone_with_offset_and_date() {
         ("m", -1), // M = UTC+12
         ("a", -1), // A = UTC+1
         ("n", 0),  // N = UTC-1
-        ("y", 0),  // N = UTC-12
+        ("y", 0),  // Y = UTC-12
         ("z", 0),  // Z = UTC
         // same day hour offsets
         ("n2", 0),
@@ -1153,14 +1153,14 @@ fn test_date_military_timezone_with_offset_and_date() {
         // midnight crossings with hour offsets to tomorrow
         ("n23", 1),
         ("y23", 1),
-        // midnight crossing even with positive offset
+        // midnight crossing to yesterday even with positive offset
         ("m9", -1), // M = UTC+12 (-12 h + 9h is still `yesterday`)
     ];
 
     for (input, day_delta) in test_cases {
         let expected_date = today.checked_add_signed(Duration::days(day_delta)).unwrap();
 
-        let expected = format!("{}\n", expected_date.format("%F"),);
+        let expected = format!("{}\n", expected_date.format("%F"));
 
         new_ucmd!()
             .env("TZ", "UTC")
