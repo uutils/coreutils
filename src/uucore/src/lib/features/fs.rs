@@ -538,7 +538,6 @@ pub fn display_permissions_unix(mode: mode_t, display_file_type: bool) -> String
 /// std::fs::create_dir("foo/."); fails in pure Rust
 pub fn dir_strip_dot_for_creation(path: &Path) -> PathBuf {
     let path_str = path.to_string_lossy();
-
     if path_str.ends_with("/.") || path_str.ends_with("/./") {
         // Do a simple dance to strip the "/."
         Path::new(&path).components().collect()
