@@ -761,18 +761,23 @@ fn open(path: &str) -> Result<Box<dyn Read>, PrError> {
                 ft if ft.is_socket() => Err(PrError::IsSocket { file: path_string }),
                 ft if ft.is_dir() => Err(PrError::IsDirectory { file: path_string }),
 
-                ft if ft.is_file()
-                    || ft.is_symlink()
-                    || ft.is_char_device()
-                    || ft.is_block_device()
-                    || ft.is_fifo() =>
-                {
-                    Ok(Box::new(File::open(path).map_err(|e| PrError::Input {
-                        source: e,
-                        file: path.to_string(),
-                    })?) as Box<dyn Read>)
+                ft => {
+                    let mut is_valid = ft.is_file() || ft.is_symlink();
+
+                    #[cfg(unix)]
+                    {
+                        is_valid = is_valid || ft.is_char_device() || ft.is_block_device() || ft.is_fifo();
+                    }
+
+                    if is_valid {
+                        Ok(Box::new(File::open(path).map_err(|e| PrError::Input {
+                            source: e,
+                            file: path.to_string(),
+                        })?) as Box<dyn Read>)
+                    } else {
+                        Err(PrError::UnknownFiletype { file: path_string })
+                    }
                 }
-                _ => Err(PrError::UnknownFiletype { file: path_string }),
             }
         },
     )
