@@ -762,6 +762,7 @@ fn open(path: &str) -> Result<Box<dyn Read>, PrError> {
                 ft if ft.is_dir() => Err(PrError::IsDirectory { file: path_string }),
 
                 ft => {
+                    #[allow(unused_mut)]
                     let mut is_valid = ft.is_file() || ft.is_symlink();
 
                     #[cfg(unix)]
