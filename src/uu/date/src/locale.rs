@@ -135,6 +135,11 @@ cfg_langinfo! {
         }
     }
 
+    /// Distributes the given flag to all format specifiers in the string.
+    ///
+    /// For example, if the format string is "%a %b" and the flag is '^',
+    /// the result will be "%^a %^b". Literal percent signs ("%%") are skipped
+    /// and left as is.
     fn distribute_flag(fmt: &str, flag: char) -> String {
         let mut res = String::with_capacity(fmt.len() * 2);
         let mut chars = fmt.chars().peekable();
@@ -366,5 +371,44 @@ mod tests {
                 "Format should contain timezone indicator: {format}"
             );
         }
+    }
+
+    #[test]
+    #[cfg(any(
+        target_os = "linux",
+        target_vendor = "apple",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd",
+        target_os = "dragonfly"
+    ))]
+    fn test_distribute_flag() {
+        // Standard distribution
+        assert_eq!(distribute_flag("%a %b", '^'), "%^a %^b");
+        // Ignore literals
+        assert_eq!(distribute_flag("foo %a bar", '_'), "foo %_a bar");
+        // Skip escaped percent signs
+        assert_eq!(distribute_flag("%% %a", '^'), "%% %^a");
+        // Handle flags that might already exist
+        assert_eq!(distribute_flag("%_a", '^'), "%^_a");
+    }
+
+    #[test]
+    #[cfg(any(
+        target_os = "linux",
+        target_vendor = "apple",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd",
+        target_os = "dragonfly"
+    ))]
+    fn test_expand_locale_format_basic() {
+        let format = "%^x";
+        let expanded = expand_locale_format(format).to_string().to_lowercase();
+
+        assert_ne!(expanded, "%^x", "Should have expanded %^x");
+        assert!(expanded.contains("%^d"), "Should contain %^d");
+        assert!(expanded.contains("%^m"), "Should contain %^m");
+        assert!(expanded.contains("%^y"), "Should contain %^y");
     }
 }
