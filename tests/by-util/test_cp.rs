@@ -7400,3 +7400,38 @@ fn test_cp_recurse_verbose_output_with_symlink_already_exists() {
         .no_stderr()
         .stdout_is(output);
 }
+
+#[test]
+#[cfg(unix)]
+fn test_cp_preserve_strip_setuid() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source = "/bin/sh";
+    let destination = "sh_copy";
+
+    ucmd.arg("-p").arg(source).arg(destination).succeeds();
+
+    use std::os::unix::fs::PermissionsExt;
+    let mode = at.metadata(destination).permissions().mode();
+
+    #[cfg(not(any(
+        target_os = "android",
+        target_os = "macos",
+        target_os = "freebsd",
+        target_os = "redox",
+    )))]
+    let mask = libc::S_ISUID | libc::S_ISGID;
+
+    #[cfg(any(
+        target_os = "android",
+        target_os = "macos",
+        target_os = "freebsd",
+        target_os = "redox",
+    ))]
+    let mask = (libc::S_ISUID | libc::S_ISGID) as u32;
+
+    assert_eq!(
+        mode & mask,
+        0,
+        "SetUID/SetGID need to be stripped if ownership preservation fails."
+    );
+}
