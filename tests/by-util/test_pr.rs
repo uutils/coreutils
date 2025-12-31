@@ -614,7 +614,5 @@ fn test_version() {
 #[cfg(unix)]
 #[test]
 fn test_pr_char_device_dev_null() {
-    new_ucmd!()
-        .arg("/dev/null")
-        .succeeds();
+    new_ucmd!().arg("/dev/null").succeeds();
 }
