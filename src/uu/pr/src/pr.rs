@@ -766,7 +766,8 @@ fn open(path: &str) -> Result<Box<dyn Read>, PrError> {
 
                     #[cfg(unix)]
                     {
-                        is_valid = is_valid || ft.is_char_device() || ft.is_block_device() || ft.is_fifo();
+                        is_valid =
+                            is_valid || ft.is_char_device() || ft.is_block_device() || ft.is_fifo();
                     }
 
                     if is_valid {
