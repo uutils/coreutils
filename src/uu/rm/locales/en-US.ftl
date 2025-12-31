@@ -21,8 +21,7 @@ rm-help-prompt-once = prompt once before removing more than three files, or when
 rm-help-interactive = prompt according to WHEN: never, once (-I), or always (-i). Without WHEN,
   prompts always
 rm-help-one-file-system = when removing a hierarchy recursively, skip any directory that is on a file
-  system different from that of the corresponding command line argument (NOT
-  IMPLEMENTED)
+  system different from that of the corresponding command line argument
 rm-help-no-preserve-root = do not treat '/' specially
 rm-help-preserve-root = do not remove '/' (default)
 rm-help-recursive = remove directories and their contents recursively
@@ -41,7 +40,9 @@ rm-error-cannot-remove-permission-denied = cannot remove {$file}: Permission den
 rm-error-cannot-remove-is-directory = cannot remove {$file}: Is a directory
 rm-error-dangerous-recursive-operation = it is dangerous to operate recursively on '/'
 rm-error-use-no-preserve-root = use --no-preserve-root to override this failsafe
-rm-error-refusing-to-remove-directory = refusing to remove '.' or '..' directory: skipping {$path}
+rm-error-refusing-to-remove-directory = refusing to remove '.' or '..' directory: skipping '{$path}'
+rm-error-skipping-directory-on-different-device = skipping '{$path}', since it's on a different device
+rm-error-preserve-root-all = and --preserve-root=all is in effect
 rm-error-cannot-remove = cannot remove {$file}
 
 # Verbose messages

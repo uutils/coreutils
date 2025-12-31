@@ -23,6 +23,7 @@ clap = { workspace = true }
 uucore = { workspace = true, features = ["fs", "parser"] }
 fluent = { workspace = true }
 indicatif = { workspace = true }
+fluent = { workspace = true }
 
 [target.'cfg(all(unix, not(target_os = "redox")))'.dependencies]
 uucore = { workspace = true, features = ["safe-traversal"] }
