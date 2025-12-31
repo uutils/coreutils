@@ -2078,3 +2078,14 @@ fn test_split_non_utf8_additional_suffix() {
         "Expected at least one split file to be created"
     );
 }
+
+#[test]
+fn test_split_directory_already_exists() {
+    let(at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("xaa");
+    ucmd.args(&["/dev/zero"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("xaa: Is a directory; aborting");
+}
