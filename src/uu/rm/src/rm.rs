@@ -504,7 +504,11 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
                 any_files_processed = true;
 
                 #[cfg(unix)]
-                let parent_dev_id = if options.one_fs || options.preserve_root_all {
+                let parent_dev_id = if options.preserve_root_all {
+                    file.parent()
+                        .and_then(|p| p.symlink_metadata().ok())
+                        .map(|m| m.dev())
+                } else if options.one_fs {
                     Some(metadata.dev())
                 } else {
                     None
