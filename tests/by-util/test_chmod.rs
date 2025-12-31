@@ -393,7 +393,7 @@ fn test_chmod_recursive_correct_exit_code() {
     #[cfg(not(target_os = "linux"))]
     let err_msg = "chmod: Permission denied\n";
     #[cfg(target_os = "linux")]
-    let err_msg = "chmod: 'a': Permission denied\n";
+    let err_msg = "chmod: cannot access 'a': Permission denied\n";
 
     // order of command is a, a/b then c
     // command is expected to fail and not just take the last exit code
