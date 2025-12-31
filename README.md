@@ -293,6 +293,10 @@ So, to install the manpage for `ls` to `/usr/local/share/man/man1/ls.1` run:
 uudoc manpage ls > /usr/local/share/man/man1/ls.1
 ```
 
+### tldr examples
+
+tldr examples are added to man pages if `docs/tldr.zip` is present. Download it from https://github.com/tldr-pages/tldr/releases
+
 ## Un-installation
 
 Un-installation differs depending on how you have installed uutils. If you used
