@@ -47,7 +47,6 @@ jobs:
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: stable
-        components: rustfmt
     - uses: Swatinem/rust-cache@v2
       with:
         workspaces: "./uutils -> target"
@@ -105,7 +104,7 @@ jobs:
         ## Build binaries
         cd 'uutils'
         env PROFILE=release-small bash util/build-gnu.sh
-        
+
     - name: Save files for faster configure and skipping make
       uses: actions/cache/save@v5
       if: always() && steps.cache-config-gnu.outputs.cache-hit != 'true'
@@ -211,7 +210,6 @@ jobs:
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: stable
-        components: rustfmt
     - uses: Swatinem/rust-cache@v2
       with:
         workspaces: "./uutils -> target"
@@ -331,7 +329,6 @@ jobs:
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: stable
-        components: rustfmt
     - uses: Swatinem/rust-cache@v2
       with:
         workspaces: "./uutils -> target"
