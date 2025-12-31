@@ -100,7 +100,7 @@ fn test_invalid_input() {
         .ucmd()
         .arg("a")
         .fails()
-        .stderr_contains("a: read error: Invalid argument");
+        .stderr_contains("a: read error: Is a directory");
 }
 
 #[test]
