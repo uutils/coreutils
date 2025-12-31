@@ -224,6 +224,14 @@ fn test_reference() {
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
 fn test_reference_multi_no_equal() {
+    use nix::unistd::{Gid, Group};
+    let gid = getegid();
+    let expected_print = Group::from_gid(Gid::from_raw(gid))
+        .ok()
+        .flatten()
+        .map(|g| g.name)
+        .unwrap_or_else(|| gid.to_string());
+
     new_ucmd!()
         .arg("-v")
         .arg("--reference")
@@ -231,16 +239,27 @@ fn test_reference_multi_no_equal() {
         .arg("file1")
         .arg("file2")
         .succeeds()
-        .stderr_contains(format!("chgrp: group of 'file1' retained as {}", getegid()))
+        .stderr_contains(format!(
+            "chgrp: group of 'file1' retained as {}",
+            expected_print
+        ))
         .stderr_contains(format!(
             "\nchgrp: group of 'file2' retained as {}",
-            getegid()
+            expected_print
         ));
 }
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
 fn test_reference_last() {
+    use nix::unistd::{Gid, Group};
+    let gid = getegid();
+    let expected_print = Group::from_gid(Gid::from_raw(gid))
+        .ok()
+        .flatten()
+        .map(|g| g.name)
+        .unwrap_or_else(|| gid.to_string());
+
     new_ucmd!()
         .arg("-v")
         .arg("file1")
@@ -249,14 +268,17 @@ fn test_reference_last() {
         .arg("--reference")
         .arg("ref_file")
         .succeeds()
-        .stderr_contains(format!("chgrp: group of 'file1' retained as {}", getegid()))
+        .stderr_contains(format!(
+            "chgrp: group of 'file1' retained as {}",
+            expected_print
+        ))
         .stderr_contains(format!(
             "\nchgrp: group of 'file2' retained as {}",
-            getegid()
+            expected_print
         ))
         .stderr_contains(format!(
             "\nchgrp: group of 'file3' retained as {}",
-            getegid()
+            expected_print
         ));
 }
 
