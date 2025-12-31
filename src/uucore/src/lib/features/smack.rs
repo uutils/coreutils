@@ -13,7 +13,7 @@ use std::sync::OnceLock;
 
 use thiserror::Error;
 
-use crate::error::{UError, strip_errno};
+use crate::error::{UError, USimpleError, strip_errno};
 use crate::translate;
 
 #[derive(Debug, Error)]
@@ -72,13 +72,9 @@ pub fn set_smack_label_for_self(label: &str) -> Result<(), SmackError> {
         return Err(SmackError::SmackNotEnabled);
     }
 
-    let label_owned = label.to_string();
     fs::File::create("/proc/self/attr/current")
-        .map_err(|e| SmackError::LabelSetFailure(label_owned.clone(), e))?
-        .write_all(label.as_bytes())
-        .map_err(|e| SmackError::LabelSetFailure(label_owned, e))?;
-
-    Ok(())
+        .and_then(|mut f| f.write_all(label.as_bytes()))
+        .map_err(|e| SmackError::LabelSetFailure(label.to_string(), e))
 }
 
 /// Gets the SMACK label for a filesystem path via xattr.
@@ -105,4 +101,36 @@ pub fn set_smack_label_for_path(path: &Path, label: &str) -> Result<(), SmackErr
 
     xattr::set(path, "security.SMACK64", label.as_bytes())
         .map_err(|e| SmackError::LabelSetFailure(label.to_string(), e))
+}
+
+/// Sets SMACK label for a file, removing it on failure.
+pub fn set_smack_label_for_new_file(
+    path: impl AsRef<Path>,
+    context: Option<&String>,
+) -> Result<(), Box<dyn UError>> {
+    let Some(ctx) = context else { return Ok(()) };
+    if !is_smack_enabled() {
+        return Ok(());
+    }
+    let path = path.as_ref();
+    set_smack_label_for_path(path, ctx).map_err(|e| {
+        let _ = fs::remove_file(path);
+        USimpleError::new(1, e.to_string())
+    })
+}
+
+/// Sets SMACK label for a directory, removing it on failure.
+pub fn set_smack_label_for_new_dir(
+    path: impl AsRef<Path>,
+    context: Option<&String>,
+) -> Result<(), Box<dyn UError>> {
+    let Some(ctx) = context else { return Ok(()) };
+    if !is_smack_enabled() {
+        return Ok(());
+    }
+    let path = path.as_ref();
+    set_smack_label_for_path(path, ctx).map_err(|e| {
+        let _ = fs::remove_dir(path);
+        USimpleError::new(1, e.to_string())
+    })
 }

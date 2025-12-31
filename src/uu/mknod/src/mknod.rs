@@ -23,7 +23,7 @@ mod options {
     pub const TYPE: &str = "type";
     pub const MAJOR: &str = "major";
     pub const MINOR: &str = "minor";
-    pub const SELINUX: &str = "z";
+    pub const SECURITY_CONTEXT: &str = "z";
     pub const CONTEXT: &str = "context";
 }
 
@@ -54,10 +54,10 @@ pub struct Config<'a> {
 
     pub dev: dev_t,
 
-    /// Set `SELinux` security context.
-    pub set_selinux_context: bool,
+    /// Set security context (SELinux/SMACK).
+    pub set_security_context: bool,
 
-    /// Specific `SELinux` context.
+    /// Specific security context (SELinux/SMACK).
     pub context: Option<&'a String>,
 }
 
@@ -88,7 +88,7 @@ fn mknod(file_name: &str, config: Config) -> i32 {
 
         // Apply SELinux context if requested
         #[cfg(feature = "selinux")]
-        if config.set_selinux_context {
+        if config.set_security_context {
             if let Err(e) = uucore::selinux::set_selinux_security_context(
                 std::path::Path::new(file_name),
                 config.context,
@@ -102,16 +102,10 @@ fn mknod(file_name: &str, config: Config) -> i32 {
 
         // Apply SMACK context if requested
         #[cfg(feature = "smack")]
-        if config.set_selinux_context && uucore::smack::is_smack_enabled() {
-            if let Some(ctx) = config.context {
-                if let Err(e) =
-                    uucore::smack::set_smack_label_for_path(std::path::Path::new(file_name), ctx)
-                {
-                    // if it fails, delete the file
-                    let _ = std::fs::remove_file(file_name);
-                    eprintln!("{}: {}", uucore::util_name(), e);
-                    return 1;
-                }
+        if config.set_security_context {
+            if let Err(e) = uucore::smack::set_smack_label_for_new_file(file_name, config.context) {
+                eprintln!("{}: {}", uucore::util_name(), e);
+                return 1;
             }
         }
 
@@ -139,8 +133,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .get_one::<String>("name")
         .expect("Missing argument 'NAME'");
 
-    // Extract the SELinux related flags and options
-    let set_selinux_context = matches.get_flag(options::SELINUX);
+    // Extract the security context related flags and options
+    let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
     let context = matches.get_one::<String>(options::CONTEXT);
 
     let dev = match (
@@ -168,7 +162,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         mode,
         use_umask,
         dev,
-        set_selinux_context: set_selinux_context || context.is_some(),
+        set_security_context: set_security_context || context.is_some(),
         context,
     };
 
@@ -219,7 +213,7 @@ pub fn uu_app() -> Command {
                 .value_parser(value_parser!(u64)),
         )
         .arg(
-            Arg::new(options::SELINUX)
+            Arg::new(options::SECURITY_CONTEXT)
                 .short('Z')
                 .help(translate!("mknod-help-selinux"))
                 .action(ArgAction::SetTrue),
