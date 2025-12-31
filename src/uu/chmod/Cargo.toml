@@ -25,9 +25,11 @@ uucore = { workspace = true, features = [
   "fs",
   "mode",
   "perms",
-  "safe-traversal",
 ] }
 fluent = { workspace = true }
+
+[target.'cfg(all(unix, not(target_os = "redox")))'.dependencies]
+uucore = { workspace = true, features = ["safe-traversal"] }
 
 [[bin]]
 name = "chmod"

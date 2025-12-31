@@ -164,7 +164,7 @@ impl Stat {
     }
 
     /// Create a Stat using safe traversal methods with `DirFd` for the root directory
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "redox")))]
     fn new_from_dirfd(dir_fd: &DirFd, full_path: &Path) -> std::io::Result<Self> {
         // Get metadata for the directory itself using fstat
         let safe_metadata = dir_fd.metadata()?;
