@@ -226,7 +226,7 @@ def main():
     if real_newly_failing:
         print("\nNEWLY FAILING TESTS (previously skipped):", file=sys.stderr)
         for test in sorted(real_newly_failing):
-            msg = f"Note: The gnu test {test} was skipped on 'main' but is now failing."
+            msg = f"Good: The gnu test {test} was skipped on 'main' but is now failing."
             print(f"::warning ::{msg}", file=sys.stderr)
             output_lines.append(msg)
 
