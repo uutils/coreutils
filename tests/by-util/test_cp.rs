@@ -25,7 +25,7 @@ use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::os::windows::fs::symlink_file;
 #[cfg(not(windows))]
 use std::path::Path;
-#[cfg(target_os = "linux")]
+
 use std::path::PathBuf;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
