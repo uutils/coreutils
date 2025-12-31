@@ -166,6 +166,7 @@ impl<'a> Context<'a> {
 ///     }
 /// ];
 /// ```
+#[derive(Debug)]
 struct Entry {
     /// The absolute path to file or directory to copy.
     source_absolute: PathBuf,
@@ -178,6 +179,9 @@ struct Entry {
 
     /// Whether the destination is a file.
     target_is_file: bool,
+
+    /// Whether we created the destination dir
+    target_is_created: bool,
 }
 
 impl Entry {
@@ -231,6 +235,7 @@ impl Entry {
             source_relative,
             local_to_target,
             target_is_file,
+            target_is_created: false,
         })
     }
 }
@@ -239,7 +244,7 @@ impl Entry {
 /// Copy a single entry during a directory traversal.
 fn copy_direntry(
     progress_bar: Option<&ProgressBar>,
-    entry: &Entry,
+    entry: &mut Entry,
     entry_is_symlink: bool,
     entry_is_dir_no_follow: bool,
     options: &Options,
@@ -270,6 +275,7 @@ fn copy_direntry(
                 options,
                 Some(&entry.source_absolute),
             )?;
+            entry.target_is_created = true;
             if options.verbose {
                 println!(
                     "{}",
@@ -421,7 +427,7 @@ pub(crate) fn copy_directory(
     let mut last_iter: Option<DirEntry> = None;
 
     // Keep track of all directories we've created that need permission fixes
-    let mut dirs_needing_permissions: Vec<(PathBuf, PathBuf)> = Vec::new();
+    let mut dirs_needing_permissions: Vec<(PathBuf, PathBuf, bool)> = Vec::new();
 
     // Traverse the contents of the directory, copying each one.
     for direntry_result in WalkDir::new(root)
@@ -440,11 +446,11 @@ pub(crate) fn copy_directory(
                         }
                         Err(_) => (direntry_type.is_symlink(), direntry_type.is_dir()),
                     };
-                let entry = Entry::new(&context, direntry_path, options.no_target_dir)?;
+                let mut entry = Entry::new(&context, direntry_path, options.no_target_dir)?;
 
                 copy_direntry(
                     progress_bar,
-                    &entry,
+                    &mut entry,
                     entry_is_symlink,
                     entry_is_dir_no_follow,
                     options,
@@ -479,8 +485,11 @@ pub(crate) fn copy_directory(
                         continue;
                     }
                     // Add this directory to our list for permission fixing later
-                    dirs_needing_permissions
-                        .push((entry.source_absolute.clone(), entry.local_to_target.clone()));
+                    dirs_needing_permissions.push((
+                        entry.source_absolute.clone(),
+                        entry.local_to_target.clone(),
+                        entry.target_is_created,
+                    ));
 
                     // If true, last_iter is not a parent of this iter.
                     // The means we just exited a directory.
@@ -513,6 +522,7 @@ pub(crate) fn copy_directory(
                                 &entry.source_absolute,
                                 &entry.local_to_target,
                                 options,
+                                entry.target_is_created,
                             )?;
                         }
                     }
@@ -528,8 +538,8 @@ pub(crate) fn copy_directory(
 
     // Fix permissions for all directories we created
     // This ensures that even sibling directories get their permissions fixed
-    for (source_path, dest_path) in dirs_needing_permissions {
-        copy_attributes(&source_path, &dest_path, options)?;
+    for (source_path, dest_path, is_dir_created) in dirs_needing_permissions {
+        copy_attributes(&source_path, &dest_path, options, is_dir_created)?;
     }
 
     // Also fix permissions for parent directories,
@@ -538,7 +548,7 @@ pub(crate) fn copy_directory(
         let dest = target.join(root.file_name().unwrap());
         for (x, y) in aligned_ancestors(root, dest.as_path()) {
             if let Ok(src) = canonicalize(x, MissingHandling::Normal, ResolveMode::Physical) {
-                copy_attributes(&src, y, options)?;
+                copy_attributes(&src, y, options, false)?;
             }
         }
     }

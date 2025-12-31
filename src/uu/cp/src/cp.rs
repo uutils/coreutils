@@ -194,7 +194,7 @@ pub enum SparseMode {
 }
 
 /// The expected file type of copy target
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum TargetType {
     Directory,
     File,
@@ -1551,7 +1551,7 @@ fn copy_source(
         if options.parents {
             for (x, y) in aligned_ancestors(source, dest.as_path()) {
                 if let Ok(src) = canonicalize(x, MissingHandling::Normal, ResolveMode::Physical) {
-                    copy_attributes(&src, y, options)?;
+                    copy_attributes(&src, y, options, false)?;
                 }
             }
         }
@@ -1714,10 +1714,23 @@ fn copy_extended_attrs(source: &Path, dest: &Path) -> CopyResult<()> {
 }
 
 /// Copy the specified attributes from one path to another.
-pub(crate) fn copy_attributes(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
+pub(crate) fn copy_attributes(
+    source: &Path,
+    dest: &Path,
+    options: &Options,
+    is_dir_created: bool,
+) -> CopyResult<()> {
     let context = &*format!("{} -> {}", source.quote(), dest.quote());
     let source_metadata =
         fs::symlink_metadata(source).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+
+    let is_preserve_required = matches!(options.attributes.mode, Preserve::Yes { required: true });
+
+    let mode = if !is_preserve_required && dest.is_dir() && is_dir_created {
+        Preserve::Yes { required: false }
+    } else {
+        options.attributes.mode
+    };
 
     // Ownership must be changed first to avoid interfering with mode change.
     #[cfg(unix)]
@@ -1756,22 +1769,22 @@ pub(crate) fn copy_attributes(source: &Path, dest: &Path, options: &Options) -> 
         Ok(())
     })?;
 
-    handle_preserve(&options.attributes.mode, || -> CopyResult<()> {
+    handle_preserve(&mode, || -> CopyResult<()> {
         // The `chmod()` system call that underlies the
         // `fs::set_permissions()` call is unable to change the
         // permissions of a symbolic link. In that case, we just
         // do nothing, since every symbolic link has the same
         // permissions.
         if !dest.is_symlink() {
-            // let dest_permissions = calculate_dest_permissions(
-            //     fs::metadata(dest).ok().as_ref(),
-            //     dest,
-            //     &source_metadata,
-            //     options,
-            //     context,
-            // )?;
-            let dest_permissions = source_metadata.permissions();
-            fs::set_permissions(dest, dest_permissions)
+            let mut perms = source_metadata.permissions();
+            if is_dir_created && !is_preserve_required {
+                let mode = handle_no_preserve_mode(options, perms.mode());
+                use uucore::mode::get_umask;
+                let mode = mode & !get_umask();
+                perms.set_mode(mode);
+            }
+
+            fs::set_permissions(dest, perms)
                 .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
             // FIXME: Implement this for windows as well
             #[cfg(feature = "feat_acl")]
@@ -2581,14 +2594,14 @@ fn copy_file(
             .ok()
             .filter(|p| p.exists())
             .unwrap_or_else(|| source.to_path_buf());
-        copy_attributes(&src_for_attrs, dest, &options)?;
+        copy_attributes(&src_for_attrs, dest, options, false)?;
     } else if source_is_stream && !source.exists() {
         // Some stream files may not exist after we have copied it,
         // like anonymous pipes. Thus, we can't really copy its
         // attributes. However, this is already handled in the stream
         // copy function (see `copy_stream` under platform/linux.rs).
     } else {
-        copy_attributes(source, dest, options)?;
+        copy_attributes(source, dest, options, false)?;
     }
 
     #[cfg(all(feature = "selinux", target_os = "linux"))]
@@ -2770,7 +2783,7 @@ fn copy_link(
         delete_path(dest, options)?;
     }
     symlink_file(&link, dest, symlinked_files)?;
-    copy_attributes(source, dest, options)
+    copy_attributes(source, dest, options, false)
 }
 
 /// Generate an error message if `target` is not the correct `target_type`

@@ -25,7 +25,7 @@ use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::os::windows::fs::symlink_file;
 #[cfg(not(windows))]
 use std::path::Path;
-#[cfg(target_os = "linux")]
+
 use std::path::PathBuf;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -3667,8 +3667,8 @@ fn test_copy_dir_preserve_subdir_permissions() {
 
     ucmd.args(&["-p", "-r", "a1", "b1"])
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_stdout()
+        .no_stderr();
 
     // Make sure everything is preserved
     assert!(at.dir_exists("b1"));
@@ -7586,8 +7586,6 @@ fn test_cp_xattr_enotsup_handling() {
 #[test]
 #[cfg(not(target_os = "windows"))]
 fn test_cp_preserve_directory_permissions_by_default() {
-    use std::io;
-
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
@@ -7603,13 +7601,7 @@ fn test_cp_preserve_directory_permissions_by_default() {
     scene.cmd("chmod").arg("-R").arg("555").arg("a").succeeds();
     scene.cmd("cp").arg("-r").arg("a").arg("b").succeeds();
 
-    scene
-        .ucmd()
-        .arg("-r")
-        .arg("a")
-        .arg("c")
-        .set_stdout(io::stdout())
-        .succeeds();
+    scene.ucmd().arg("-r").arg("a").arg("c").succeeds();
 
     assert_eq!(get_mode(at.plus("b")), 0o40555);
     assert_eq!(get_mode(at.plus("b/b")), 0o40555);
@@ -7625,8 +7617,6 @@ fn test_cp_preserve_directory_permissions_by_default() {
 #[test]
 #[cfg(not(target_os = "windows"))]
 fn test_cp_existing_perm_dir() {
-    use std::io;
-
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
@@ -7647,13 +7637,7 @@ fn test_cp_existing_perm_dir() {
         .umask(0o022)
         .succeeds();
 
-    scene
-        .ucmd()
-        .arg("-r")
-        .arg("src/.")
-        .arg("dst/")
-        .set_stdout(io::stdout())
-        .succeeds();
+    scene.ucmd().arg("-r").arg("src/.").arg("dst/").succeeds();
 
     let mode = get_mode(at.plus("dst/dir"));
 
