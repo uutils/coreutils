@@ -36,6 +36,8 @@ use std::hash::{Hash, Hasher};
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::ops::Range;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::Utf8Error;
@@ -1270,9 +1272,22 @@ where
         return (args.into_iter().map(Into::into).collect(), Vec::new());
     }
 
+    let mut args_vec: Vec<OsString> = Vec::new();
+    let mut has_plus = false;
+    for arg in args {
+        let os_arg: OsString = arg.into();
+        if !has_plus && starts_with_plus(&os_arg) {
+            has_plus = true;
+        }
+        args_vec.push(os_arg);
+    }
+    if !has_plus {
+        return (args_vec, Vec::new());
+    }
+
     let mut processed = Vec::new();
     let mut legacy_warnings = Vec::new();
-    let mut iter = args.into_iter().map(Into::into).peekable();
+    let mut iter = args_vec.into_iter().peekable();
 
     while let Some(arg) = iter.next() {
         if arg == "--" {
@@ -1321,6 +1336,17 @@ where
     }
 
     (processed, legacy_warnings)
+}
+
+fn starts_with_plus(arg: &OsStr) -> bool {
+    #[cfg(unix)]
+    {
+        arg.as_bytes().first() == Some(&b'+')
+    }
+    #[cfg(not(unix))]
+    {
+        arg.to_string_lossy().starts_with('+')
+    }
 }
 
 fn index_legacy_warnings(processed_args: &[OsString], legacy_warnings: &mut [LegacyKeyWarning]) {
