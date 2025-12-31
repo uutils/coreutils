@@ -10,3 +10,4 @@ tac-error-invalid-argument = { $argument } : erreur de lecture : Argument invali
 tac-error-file-not-found = échec de l'ouverture de { $filename } en lecture : Aucun fichier ou répertoire de ce type
 tac-error-read-error = échec de la lecture depuis { $filename } : { $error }
 tac-error-write-error = échec de l'écriture vers stdout : { $error }
+tac-error-invalid-directory-argument = { $argument } : erreur de lecture : Est un répertoire
