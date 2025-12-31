@@ -2081,7 +2081,7 @@ fn test_split_non_utf8_additional_suffix() {
 
 #[test]
 fn test_split_directory_already_exists() {
-    let(at, mut ucmd) = at_and_ucmd!();
+    let (at, mut ucmd) = at_and_ucmd!();
 
     at.mkdir("xaa");
     ucmd.args(&["/dev/zero"])

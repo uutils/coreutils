@@ -3,8 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 use std::ffi::OsStr;
-use std::io::Write;
 use std::io::{BufWriter, Error, Result};
+use std::io::{ErrorKind, Write};
 use std::path::Path;
 use uucore::fs;
 use uucore::translate;
