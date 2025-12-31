@@ -19,7 +19,7 @@ use std::os::fd::AsFd;
 use std::os::unix::fs::FileTypeExt;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::UResult;
+use uucore::error::{UIoError, UResult};
 #[cfg(not(target_os = "windows"))]
 use uucore::libc;
 use uucore::translate;
@@ -86,6 +86,9 @@ enum CatError {
     /// Wrapper around `io::Error`
     #[error("{0}")]
     Io(#[from] io::Error),
+    /// Wrapper around `io::Error` for stdout writes
+    #[error("{0}")]
+    WriteError(io::Error),
     /// Wrapper around `nix::Error`
     #[cfg(any(target_os = "linux", target_os = "android"))]
     #[error("{0}")]
@@ -108,6 +111,11 @@ enum CatError {
 }
 
 type CatResult<T> = Result<T, CatError>;
+
+#[inline]
+fn map_write_err<T>(res: io::Result<T>) -> CatResult<T> {
+    res.map_err(CatError::WriteError)
+}
 
 #[derive(PartialEq)]
 enum NumberingMode {
@@ -416,14 +424,29 @@ fn cat_files(files: &[OsString], options: &OutputOptions) -> UResult<()> {
         one_blank_kept: false,
     };
     let mut error_messages: Vec<String> = Vec::new();
+    let mut write_error: Option<io::Error> = None;
 
     for path in files {
-        if let Err(err) = cat_path(path, options, &mut state) {
-            error_messages.push(format!("{}: {err}", path.maybe_quote()));
+        match cat_path(path, options, &mut state) {
+            Ok(()) => {}
+            Err(CatError::WriteError(err)) => {
+                write_error = Some(err);
+                break;
+            }
+            Err(err) => {
+                error_messages.push(format!("{}: {err}", path.maybe_quote()));
+            }
         }
     }
     if state.skipped_carriage_return {
         print!("\r");
+    }
+    if let Some(err) = write_error {
+        let message = UIoError::from(err);
+        error_messages.push(format!(
+            "{}: {message}",
+            translate!("cat-error-write-error")
+        ));
     }
     if error_messages.is_empty() {
         Ok(())
@@ -505,9 +528,11 @@ fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
                 if n == 0 {
                     break;
                 }
-                stdout_lock
-                    .write_all(&buf[..n])
-                    .inspect_err(handle_broken_pipe)?;
+                map_write_err(
+                    stdout_lock
+                        .write_all(&buf[..n])
+                        .inspect_err(handle_broken_pipe),
+                )?;
             }
             Err(e) if e.kind() == ErrorKind::Interrupted => continue,
             Err(e) => return Err(e.into()),
@@ -519,7 +544,7 @@ fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
     // that will succeed, data pushed through splice will be output before
     // the data buffered in stdout.lock. Therefore additional explicit flush
     // is required here.
-    stdout_lock.flush().inspect_err(handle_broken_pipe)?;
+    map_write_err(stdout_lock.flush().inspect_err(handle_broken_pipe))?;
     Ok(())
 }
 
@@ -554,13 +579,13 @@ fn write_lines<R: FdReadable>(
                 continue;
             }
             if state.skipped_carriage_return {
-                writer.write_all(b"\r")?;
+                map_write_err(writer.write_all(b"\r"))?;
                 state.skipped_carriage_return = false;
                 state.at_line_start = false;
             }
             state.one_blank_kept = false;
             if state.at_line_start && options.number != NumberingMode::None {
-                state.line_number.write(&mut writer)?;
+                map_write_err(state.line_number.write(&mut writer))?;
                 state.line_number.increment();
             }
 
@@ -593,7 +618,7 @@ fn write_lines<R: FdReadable>(
         // and not be buffered internally to the `cat` process.
         // Hence it's necessary to flush our buffer before every time we could potentially block
         // on a `std::io::Read::read` call.
-        writer.flush().inspect_err(handle_broken_pipe)?;
+        map_write_err(writer.flush().inspect_err(handle_broken_pipe))?;
     }
 
     Ok(())
@@ -608,9 +633,9 @@ fn write_new_line<W: Write>(
 ) -> CatResult<()> {
     if state.skipped_carriage_return {
         if options.show_ends {
-            writer.write_all(b"^M")?;
+            map_write_err(writer.write_all(b"^M"))?;
         } else {
-            writer.write_all(b"\r")?;
+            map_write_err(writer.write_all(b"\r"))?;
         }
         state.skipped_carriage_return = false;
 
@@ -620,7 +645,7 @@ fn write_new_line<W: Write>(
     if !state.at_line_start || !options.squeeze_blank || !state.one_blank_kept {
         state.one_blank_kept = true;
         if state.at_line_start && options.number == NumberingMode::All {
-            state.line_number.write(writer)?;
+            map_write_err(state.line_number.write(writer))?;
             state.line_number.increment();
         }
         write_end_of_line(writer, options.end_of_line().as_bytes(), is_interactive)?;
@@ -628,11 +653,7 @@ fn write_new_line<W: Write>(
     Ok(())
 }
 
-fn write_end<W: Write>(
-    writer: &mut W,
-    in_buf: &[u8],
-    options: &OutputOptions,
-) -> io::Result<usize> {
+fn write_end<W: Write>(writer: &mut W, in_buf: &[u8], options: &OutputOptions) -> CatResult<usize> {
     if options.show_nonprint {
         write_nonprint_to_end(in_buf, writer, options.tab().as_bytes())
     } else if options.show_tabs {
@@ -648,21 +669,21 @@ fn write_end<W: Write>(
 // however, write_nonprint_to_end doesn't need to stop at \r because it will always write \r as ^M.
 // Return the number of written symbols
 
-fn write_to_end<W: Write>(in_buf: &[u8], writer: &mut W) -> io::Result<usize> {
+fn write_to_end<W: Write>(in_buf: &[u8], writer: &mut W) -> CatResult<usize> {
     // using memchr2 significantly improves performances
     match memchr2(b'\n', b'\r', in_buf) {
         Some(p) => {
-            writer.write_all(&in_buf[..p])?;
+            map_write_err(writer.write_all(&in_buf[..p]))?;
             Ok(p)
         }
         None => {
-            writer.write_all(in_buf)?;
+            map_write_err(writer.write_all(in_buf))?;
             Ok(in_buf.len())
         }
     }
 }
 
-fn write_tab_to_end<W: Write>(mut in_buf: &[u8], writer: &mut W) -> io::Result<usize> {
+fn write_tab_to_end<W: Write>(mut in_buf: &[u8], writer: &mut W) -> CatResult<usize> {
     let mut count = 0;
     loop {
         match in_buf
@@ -670,9 +691,9 @@ fn write_tab_to_end<W: Write>(mut in_buf: &[u8], writer: &mut W) -> io::Result<u
             .position(|c| *c == b'\n' || *c == b'\t' || *c == b'\r')
         {
             Some(p) => {
-                writer.write_all(&in_buf[..p])?;
+                map_write_err(writer.write_all(&in_buf[..p]))?;
                 if in_buf[p] == b'\t' {
-                    writer.write_all(b"^I")?;
+                    map_write_err(writer.write_all(b"^I"))?;
                     in_buf = &in_buf[p + 1..];
                     count += p + 1;
                 } else {
@@ -681,14 +702,14 @@ fn write_tab_to_end<W: Write>(mut in_buf: &[u8], writer: &mut W) -> io::Result<u
                 }
             }
             None => {
-                writer.write_all(in_buf)?;
+                map_write_err(writer.write_all(in_buf))?;
                 return Ok(in_buf.len() + count);
             }
         }
     }
 }
 
-fn write_nonprint_to_end<W: Write>(in_buf: &[u8], writer: &mut W, tab: &[u8]) -> io::Result<usize> {
+fn write_nonprint_to_end<W: Write>(in_buf: &[u8], writer: &mut W, tab: &[u8]) -> CatResult<usize> {
     let mut count = 0;
 
     for byte in in_buf.iter().copied() {
@@ -696,14 +717,14 @@ fn write_nonprint_to_end<W: Write>(in_buf: &[u8], writer: &mut W, tab: &[u8]) ->
             break;
         }
         match byte {
-            9 => writer.write_all(tab),
-            0..=8 | 10..=31 => writer.write_all(&[b'^', byte + 64]),
-            32..=126 => writer.write_all(&[byte]),
-            127 => writer.write_all(b"^?"),
-            128..=159 => writer.write_all(&[b'M', b'-', b'^', byte - 64]),
-            160..=254 => writer.write_all(&[b'M', b'-', byte - 128]),
-            _ => writer.write_all(b"M-^?"),
-        }?;
+            9 => map_write_err(writer.write_all(tab))?,
+            0..=8 | 10..=31 => map_write_err(writer.write_all(&[b'^', byte + 64]))?,
+            32..=126 => map_write_err(writer.write_all(&[byte]))?,
+            127 => map_write_err(writer.write_all(b"^?"))?,
+            128..=159 => map_write_err(writer.write_all(&[b'M', b'-', b'^', byte - 64]))?,
+            160..=254 => map_write_err(writer.write_all(&[b'M', b'-', byte - 128]))?,
+            _ => map_write_err(writer.write_all(b"M-^?"))?,
+        };
         count += 1;
     }
     Ok(count)
@@ -714,9 +735,9 @@ fn write_end_of_line<W: Write>(
     end_of_line: &[u8],
     is_interactive: bool,
 ) -> CatResult<()> {
-    writer.write_all(end_of_line)?;
+    map_write_err(writer.write_all(end_of_line))?;
     if is_interactive {
-        writer.flush().inspect_err(handle_broken_pipe)?;
+        map_write_err(writer.flush().inspect_err(handle_broken_pipe))?;
     }
     Ok(())
 }

@@ -223,7 +223,7 @@ fn test_piped_to_dev_full() {
                 .pipe_in_fixture("alpha.txt")
                 .ignore_stdin_write_error()
                 .fails()
-                .stderr_contains("No space left on device");
+                .stderr_contains("write error: No space left on device");
         }
     }
 }
