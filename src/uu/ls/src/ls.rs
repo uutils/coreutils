@@ -2827,11 +2827,12 @@ fn display_item_long(
         if item.security_context(config).len() > 1 {
             // GNU `ls` uses a "." character to indicate a file with a security context,
             // but not other alternate access method.
-            output_display.extend(b".");
+            output_display.extend(b". ");
         } else if is_acl_set {
-            output_display.extend(b"+");
+            output_display.extend(b"+ ");
+        } else {
+            output_display.extend(b"  ");
         }
-        output_display.extend(b" ");
         output_display.extend_pad_left(&display_symlink_count(md), padding.link_count);
 
         if config.long.owner {
