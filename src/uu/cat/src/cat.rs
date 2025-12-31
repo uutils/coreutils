@@ -724,7 +724,7 @@ fn write_nonprint_to_end<W: Write>(in_buf: &[u8], writer: &mut W, tab: &[u8]) ->
             128..=159 => map_write_err(writer.write_all(&[b'M', b'-', b'^', byte - 64]))?,
             160..=254 => map_write_err(writer.write_all(&[b'M', b'-', byte - 128]))?,
             _ => map_write_err(writer.write_all(b"M-^?"))?,
-        };
+        }
         count += 1;
     }
     Ok(count)
