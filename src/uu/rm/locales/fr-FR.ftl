@@ -21,8 +21,7 @@ rm-help-prompt-once = demander une fois avant de supprimer plus de trois fichier
 rm-help-interactive = demander selon QUAND : never, once (-I), ou always (-i). Sans QUAND,
   demande toujours
 rm-help-one-file-system = lors de la suppression récursive d'une hiérarchie, ignorer tout répertoire situé sur un
-  système de fichiers différent de celui de l'argument de ligne de commande correspondant (NON
-  IMPLÉMENTÉ)
+  système de fichiers différent de celui de l'argument de ligne de commande correspondant
 rm-help-no-preserve-root = ne pas traiter '/' spécialement
 rm-help-preserve-root = ne pas supprimer '/' (par défaut)
 rm-help-recursive = supprimer les répertoires et leur contenu récursivement
@@ -41,7 +40,9 @@ rm-error-cannot-remove-permission-denied = impossible de supprimer {$file} : Per
 rm-error-cannot-remove-is-directory = impossible de supprimer {$file} : C'est un répertoire
 rm-error-dangerous-recursive-operation = il est dangereux d'opérer récursivement sur '/'
 rm-error-use-no-preserve-root = utilisez --no-preserve-root pour outrepasser cette protection
-rm-error-refusing-to-remove-directory = refus de supprimer le répertoire '.' ou '..' : ignorer {$path}
+rm-error-refusing-to-remove-directory = refus de supprimer le répertoire '.' ou '..' : ignorer '{$path}'
+rm-error-skipping-directory-on-different-device = ignorer '{$path}', car il se trouve sur un périphérique différent
+rm-error-preserve-root-all = et --preserve-root=all est actif
 rm-error-cannot-remove = impossible de supprimer {$file}
 
 # Messages verbeux
