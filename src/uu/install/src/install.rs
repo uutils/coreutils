@@ -178,6 +178,17 @@ static OPT_UNPRIVILEGED: &str = "unprivileged";
 
 static ARG_FILES: &str = "files";
 
+fn is_path_separator_byte(byte: u8) -> bool {
+    #[cfg(windows)]
+    {
+        byte == b'/' || byte == b'\\'
+    }
+    #[cfg(not(windows))]
+    {
+        byte == b'/'
+    }
+}
+
 /// Main install utility function, called from main.rs.
 ///
 /// Returns a program return code.
@@ -399,6 +410,45 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         return Err(1.into());
     }
 
+    #[cfg(windows)]
+    {
+        if strip {
+            show_error!(
+                "{}",
+                translate!("install-error-option-unsupported", "option" => "--strip")
+            );
+            return Err(1.into());
+        }
+        if matches.contains_id(OPT_STRIP_PROGRAM) {
+            show_error!(
+                "{}",
+                translate!("install-error-option-unsupported", "option" => "--strip-program")
+            );
+            return Err(1.into());
+        }
+        if matches.get_flag(OPT_PRESERVE_CONTEXT) {
+            show_error!(
+                "{}",
+                translate!("install-error-option-unsupported", "option" => "--preserve-context")
+            );
+            return Err(1.into());
+        }
+        if matches.get_flag(OPT_DEFAULT_CONTEXT) {
+            show_error!(
+                "{}",
+                translate!("install-error-option-unsupported", "option" => "-Z")
+            );
+            return Err(1.into());
+        }
+        if matches.contains_id(OPT_CONTEXT) {
+            show_error!(
+                "{}",
+                translate!("install-error-option-unsupported", "option" => "--context")
+            );
+            return Err(1.into());
+        }
+    }
+
     // Check if compare is used with non-permission mode bits
     // TODO use a let chain once we have a MSRV of 1.88 or greater
     if compare {
@@ -592,9 +642,12 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
             // if the path ends in /, remove it
             let to_create_owned;
             let to_create = match uucore::os_str_as_bytes(to_create.as_os_str()) {
-                Ok(path_bytes) if path_bytes.ends_with(b"/") => {
+                Ok(path_bytes) if path_bytes.last().map_or(false, |b| is_path_separator_byte(*b)) => {
                     let mut trimmed_bytes = path_bytes;
-                    while trimmed_bytes.ends_with(b"/") {
+                    while trimmed_bytes
+                        .last()
+                        .map_or(false, |b| is_path_separator_byte(*b))
+                    {
                         trimmed_bytes = &trimmed_bytes[..trimmed_bytes.len() - 1];
                     }
                     match os_str_from_bytes(trimmed_bytes) {

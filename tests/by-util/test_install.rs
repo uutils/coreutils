@@ -35,6 +35,28 @@ fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
+#[cfg(windows)]
+#[test]
+fn test_windows_unsupported_options() {
+    let cases: &[(&[&str], &str)] = &[
+        (&["--strip"], "--strip"),
+        (&["--strip-program=strip"], "--strip-program"),
+        (&["--preserve-context"], "--preserve-context"),
+        (&["-Z"], "-Z"),
+        (&["--context=foo"], "--context"),
+        (&["--owner=foo"], "--owner"),
+        (&["--group=foo"], "--group"),
+    ];
+
+    for (args, opt) in cases {
+        new_ucmd!()
+            .args(*args)
+            .fails_with_code(1)
+            .stderr_contains("not supported on this platform")
+            .stderr_contains(opt);
+    }
+}
+
 #[test]
 fn test_install_basic() {
     let (at, mut ucmd) = at_and_ucmd!();
