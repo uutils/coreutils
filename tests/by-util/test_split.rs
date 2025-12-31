@@ -2084,7 +2084,8 @@ fn test_split_directory_already_exists() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.mkdir("xaa");
-    ucmd.args(&["/dev/zero"])
+    at.touch("file");
+    ucmd.args(&["file"])
         .fails()
         .no_stdout()
         .stderr_contains("xaa: Is a directory; aborting");
