@@ -5,6 +5,8 @@
 
 // Redox-specific stub implementations for the rm utility
 //
+// spell-checker:ignore fstatat
+//
 // Redox OS does not support the safe_traversal module from uucore due to
 // missing support for certain Unix syscalls (fstatat, etc.). This module
 // provides stub implementations that signal safe traversal is unavailable,
