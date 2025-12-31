@@ -432,8 +432,7 @@ fn pow_with_context(bd: &BigDecimal, exp: i64, ctx: &Context) -> BigDecimal {
     // Count the number of multiplications we're going to perform, one per "1" binary digit
     // in exp, and the number of times we can divide exp by 2.
     let mut n = exp.unsigned_abs();
-    // Note: 63 - n.leading_zeros() == n.ilog2, but that's only available in recent Rust versions.
-    let muls = (n.count_ones() + (63 - n.leading_zeros()) - 1) as u64;
+    let muls = (n.count_ones() + n.ilog2() - 1) as u64;
     // Note: div_ceil would be nice to use here, but only available in recent Rust versions.
     // (see note above about minimum Rust version in use)
     let margin_extra = (muls + MUL_PER_MARGIN_EXTRA / 2) / MUL_PER_MARGIN_EXTRA;
