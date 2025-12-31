@@ -229,6 +229,21 @@ fn test_piped_to_dev_full() {
 }
 
 #[test]
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+fn test_piped_to_dev_full_from_dev_stdin() {
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+
+    new_ucmd!()
+        .arg("/dev/stdin")
+        .set_stdout(dev_full)
+        .pipe_in("1")
+        .ignore_stdin_write_error()
+        .fails()
+        .stderr_contains("write error: No space left on device")
+        .stderr_does_not_contain("ENOSPC");
+}
+
+#[test]
 fn test_directory() {
     let s = TestScenario::new(util_name!());
     s.fixtures.mkdir("test_directory");
