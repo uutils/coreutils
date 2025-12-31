@@ -1116,7 +1116,8 @@ struct LegacyKeyPart {
 
 #[derive(Debug, Clone)]
 struct LegacyKeyWarning {
-    key_index: usize,
+    arg_index: usize,
+    key_index: Option<usize>,
     from_field: usize,
     to_field: Option<usize>,
     to_char: Option<usize>,
@@ -1271,7 +1272,6 @@ where
 
     let mut processed = Vec::new();
     let mut legacy_warnings = Vec::new();
-    let mut key_index = 0usize;
     let mut iter = args.into_iter().map(Into::into).peekable();
 
     while let Some(arg) = iter.next() {
@@ -1304,9 +1304,10 @@ where
                 }
 
                 let keydef = legacy_key_to_k(&from, to_part.as_ref());
-                key_index = key_index.saturating_add(1);
+                let arg_index = processed.len();
                 legacy_warnings.push(LegacyKeyWarning {
-                    key_index,
+                    arg_index,
+                    key_index: None,
                     from_field: from.field,
                     to_field: to_part.as_ref().map(|p| p.field),
                     to_char: to_part.as_ref().map(|p| p.char_pos),
@@ -1316,35 +1317,61 @@ where
             }
         }
 
-        if as_str == "-k" || as_str == "--key" {
-            processed.push(arg);
-            if let Some(next_arg) = iter.next() {
-                processed.push(next_arg);
-            }
-            key_index = key_index.saturating_add(1);
-            continue;
-        }
-
-        if let Some(spec) = as_str.strip_prefix("-k") {
-            if !spec.is_empty() {
-                processed.push(arg);
-                key_index = key_index.saturating_add(1);
-                continue;
-            }
-        }
-
-        if let Some(spec) = as_str.strip_prefix("--key=") {
-            if !spec.is_empty() {
-                processed.push(arg);
-                key_index = key_index.saturating_add(1);
-                continue;
-            }
-        }
-
         processed.push(arg);
     }
 
     (processed, legacy_warnings)
+}
+
+fn index_legacy_warnings(processed_args: &[OsString], legacy_warnings: &mut [LegacyKeyWarning]) {
+    if legacy_warnings.is_empty() {
+        return;
+    }
+
+    let mut index_by_arg = std::collections::HashMap::new();
+    for (warning_idx, warning) in legacy_warnings.iter().enumerate() {
+        index_by_arg.insert(warning.arg_index, warning_idx);
+    }
+
+    let mut key_index = 0usize;
+    let mut i = 0usize;
+    while i < processed_args.len() {
+        let arg = &processed_args[i];
+        if arg == OsStr::new("--") {
+            break;
+        }
+
+        let mut matched_key = false;
+        if arg == OsStr::new("-k") || arg == OsStr::new("--key") {
+            if i + 1 < processed_args.len() {
+                key_index = key_index.saturating_add(1);
+                matched_key = true;
+                i += 2;
+            } else {
+                i += 1;
+            }
+        } else {
+            let as_str = arg.to_string_lossy();
+            if let Some(spec) = as_str.strip_prefix("-k") {
+                if !spec.is_empty() {
+                    key_index = key_index.saturating_add(1);
+                    matched_key = true;
+                }
+            } else if let Some(spec) = as_str.strip_prefix("--key=") {
+                if !spec.is_empty() {
+                    key_index = key_index.saturating_add(1);
+                    matched_key = true;
+                }
+            }
+            i += 1;
+        }
+
+        if matched_key {
+            if let Some(&warning_idx) = index_by_arg.get(&i.saturating_sub(1)) {
+                legacy_warnings[warning_idx].key_index = Some(key_index);
+            }
+        }
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -1424,7 +1451,7 @@ fn emit_debug_warnings(
         let key_index = idx + 1;
         if let Some(legacy) = legacy_warnings
             .iter()
-            .find(|warning| warning.key_index == key_index)
+            .find(|warning| warning.key_index == Some(key_index))
         {
             show_error!(
                 "{}",
@@ -1593,10 +1620,14 @@ fn emit_debug_warnings(
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut settings = GlobalSettings::default();
 
-    let (processed_args, legacy_warnings) = preprocess_legacy_args(args);
+    let (processed_args, mut legacy_warnings) = preprocess_legacy_args(args);
+    let processed_args_for_debug = if legacy_warnings.is_empty() {
+        None
+    } else {
+        Some(processed_args.clone())
+    };
     let matches =
         uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), processed_args, 2)?;
-    let global_flags = GlobalOptionFlags::from_matches(&matches);
 
     // Prevent -o/--output to be specified multiple times
     if matches
@@ -1886,6 +1917,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let output = Output::new(matches.get_one::<OsString>(options::OUTPUT))?;
 
     if settings.debug {
+        if let Some(ref processed) = processed_args_for_debug {
+            index_legacy_warnings(processed, &mut legacy_warnings);
+        }
+        let global_flags = GlobalOptionFlags::from_matches(&matches);
         emit_debug_warnings(&settings, &global_flags, &legacy_warnings);
     }
 
