@@ -74,7 +74,7 @@ const BUF_INIT_BYTE: u8 = 0xDD;
 fn allocate_aligned_buffer(size: usize) -> Vec<u8> {
     let alignment = unsafe { libc::sysconf(libc::_SC_PAGESIZE) as usize };
     // cspell:disable-next-line
-    let ptr = unsafe { libc::memalign(alignment, size) as *mut u8 };
+    let ptr = unsafe { libc::memalign(alignment, size).cast::<u8>() };
 
     assert!(
         !ptr.is_null(),
@@ -771,18 +771,6 @@ fn handle_o_direct_write(
         // O_DIRECT wasn't set or this is a full block, return original error
         Err(original_error)
     }
-}
-
-/// Stub for non-Linux platforms - just return the original error.
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
-#[allow(dead_code)]
-fn handle_o_direct_write(
-    _f: &mut File,
-    _buf: &[u8],
-    _output_blocksize: usize,
-    original_error: io::Error,
-) -> io::Result<usize> {
-    Err(original_error)
 }
 
 impl Write for Dest {
