@@ -9,7 +9,7 @@ use uucore::translate;
 
 use clap::builder::ValueParser;
 use uucore::display::Quotable;
-use uucore::fs::display_permissions;
+use uucore::fs::{display_permissions, major, minor};
 use uucore::fsext::{
     FsMeta, MetadataTimeField, StatFs, metadata_get_time, pretty_filetype, pretty_fstype,
     read_fs_list, statfs,
@@ -299,16 +299,6 @@ fn group_num(s: &str) -> Cow<'_, str> {
         alone += 3;
     }
     res.into()
-}
-
-/// Keeps major part of an integer
-fn major(n: u64) -> u64 {
-    (n >> 8) & 0xFF
-}
-
-// Keeps minor part of an integer
-fn minor(n: u64) -> u64 {
-    n & 0xFF
 }
 
 struct Stater {
@@ -1075,8 +1065,8 @@ impl Stater {
                         }
                     }
                     // device number in decimal
-                    'd' if flag.major => OutputType::Unsigned(major(meta.dev())),
-                    'd' if flag.minor => OutputType::Unsigned(minor(meta.dev())),
+                    'd' if flag.major => OutputType::Unsigned(major(meta.dev() as _) as u64),
+                    'd' if flag.minor => OutputType::Unsigned(minor(meta.dev() as _) as u64),
                     'd' => OutputType::Unsigned(meta.dev()),
                     // device number in hex
                     'D' => OutputType::UnsignedHex(meta.dev()),
@@ -1115,10 +1105,10 @@ impl Stater {
                     's' => OutputType::Integer(meta.len() as i64),
                     // major device type in hex, for character/block device special
                     // files
-                    't' => OutputType::UnsignedHex(major(meta.rdev())),
+                    't' => OutputType::UnsignedHex(major(meta.rdev() as _) as u64),
                     // minor device type in hex, for character/block device special
                     // files
-                    'T' => OutputType::UnsignedHex(minor(meta.rdev())),
+                    'T' => OutputType::UnsignedHex(minor(meta.rdev() as _) as u64),
                     // user ID of owner
                     'u' => OutputType::Unsigned(meta.uid() as u64),
                     // user name of owner
@@ -1162,8 +1152,8 @@ impl Stater {
                         OutputType::Float(sec as f64 + nsec as f64 / 1_000_000_000.0)
                     }
                     'R' => OutputType::UnsignedHex(meta.rdev()),
-                    'r' if flag.major => OutputType::Unsigned(major(meta.rdev())),
-                    'r' if flag.minor => OutputType::Unsigned(minor(meta.rdev())),
+                    'r' if flag.major => OutputType::Unsigned(major(meta.rdev() as _) as u64),
+                    'r' if flag.minor => OutputType::Unsigned(minor(meta.rdev() as _) as u64),
                     'r' => OutputType::Unsigned(meta.rdev()),
                     _ => OutputType::Unknown,
                 };

@@ -13,6 +13,8 @@ use libc::{
     S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP, S_IWOTH, S_IWUSR, S_IXGRP, S_IXOTH, S_IXUSR,
     mkfifo, mode_t,
 };
+#[cfg(all(unix, not(target_os = "redox")))]
+pub use libc::{major, makedev, minor};
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::env;
@@ -837,6 +839,24 @@ pub fn make_fifo(path: &Path) -> std::io::Result<()> {
     } else {
         Ok(())
     }
+}
+
+// Redox's libc appears not to include the following utilities
+
+#[cfg(target_os = "redox")]
+pub fn major(dev: libc::dev_t) -> libc::c_uint {
+    (((dev >> 8) & 0xFFF) | ((dev >> 32) & 0xFFFFF000)) as _
+}
+
+#[cfg(target_os = "redox")]
+pub fn minor(dev: libc::dev_t) -> libc::c_uint {
+    ((dev & 0xFF) | ((dev >> 12) & 0xFFFFF00)) as _
+}
+
+#[cfg(target_os = "redox")]
+pub fn makedev(maj: libc::c_uint, min: libc::c_uint) -> libc::dev_t {
+    let [maj, min] = [maj as libc::dev_t, min as libc::dev_t];
+    (min & 0xff) | ((maj & 0xfff) << 8) | ((min & !0xff) << 12) | ((maj & !0xfff) << 32)
 }
 
 #[cfg(test)]
