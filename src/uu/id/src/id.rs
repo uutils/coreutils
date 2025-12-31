@@ -210,7 +210,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // Neither SELinux nor SMACK supported
         return Err(USimpleError::new(
             1,
-            translate!("id-error-context-selinux-only"),
+            translate!("id-error-context-security-only"),
         ));
     }
 

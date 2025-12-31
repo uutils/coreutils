@@ -16,7 +16,7 @@ use uucore::{format_usage, show};
 
 mod options {
     pub static MODE: &str = "mode";
-    pub static SELINUX: &str = "Z";
+    pub static SECURITY_CONTEXT: &str = "Z";
     pub static CONTEXT: &str = "context";
     pub static FIFO: &str = "fifo";
 }
@@ -62,10 +62,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         #[cfg(feature = "selinux")]
         {
             // Extract the SELinux related flags and options
-            let set_selinux_context = matches.get_flag(options::SELINUX);
+            let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
             let context = matches.get_one::<String>(options::CONTEXT);
 
-            if set_selinux_context || context.is_some() {
+            if set_security_context || context.is_some() {
                 use std::path::Path;
                 if let Err(e) =
                     uucore::selinux::set_selinux_security_context(Path::new(&f), context)
@@ -79,17 +79,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // Apply SMACK context if requested
         #[cfg(feature = "smack")]
         {
-            let set_smack_context = matches.get_flag(options::SELINUX);
+            let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
             let context = matches.get_one::<String>(options::CONTEXT);
-
-            if (set_smack_context || context.is_some()) && uucore::smack::is_smack_enabled() {
-                if let Some(ctx) = context {
-                    use std::path::Path;
-                    if let Err(e) = uucore::smack::set_smack_label_for_path(Path::new(&f), ctx) {
-                        let _ = fs::remove_file(&f);
-                        return Err(USimpleError::new(1, e.to_string()));
-                    }
-                }
+            if set_security_context || context.is_some() {
+                uucore::smack::set_smack_label_for_new_file(&f, context)?;
             }
         }
     }
@@ -112,7 +105,7 @@ pub fn uu_app() -> Command {
                 .value_name("MODE"),
         )
         .arg(
-            Arg::new(options::SELINUX)
+            Arg::new(options::SECURITY_CONTEXT)
                 .short('Z')
                 .help(translate!("mkfifo-help-selinux"))
                 .action(ArgAction::SetTrue),
