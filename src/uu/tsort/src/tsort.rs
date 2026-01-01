@@ -10,7 +10,6 @@ use std::collections::{HashMap, VecDeque};
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
-use std::path::Path;
 use string_interner::StringInterner;
 use string_interner::backend::StringBackend;
 use thiserror::Error;
@@ -54,41 +53,49 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             ));
         }
     };
-
+    let file: File;
     // Create the directed graph from pairs of tokens in the input data.
     let mut g = Graph::new(input.to_string_lossy().to_string());
     if input == "-" {
         process_input(io::stdin().lock(), &mut g)?;
     } else {
-        let path = Path::new(&input);
-        if path.is_dir() {
-            return Err(TsortError::IsDir(input.to_string_lossy().to_string()).into());
-        }
-
-        let file = File::open(path)?;
-
-        // advise the OS we will access the data sequentially if available.
-        #[cfg(any(
-            target_os = "linux",
-            target_os = "android",
-            target_os = "fuchsia",
-            target_os = "wasi",
-            target_env = "uclibc",
-            target_os = "freebsd",
-        ))]
+        #[cfg(windows)]
         {
-            use nix::fcntl::{PosixFadviseAdvice, posix_fadvise};
-            use std::os::unix::io::AsFd;
+            use std::path::Path;
 
-            posix_fadvise(
-                file.as_fd(), // file descriptor
-                0,            // start of the file
-                0,            // length 0 = all
-                PosixFadviseAdvice::POSIX_FADV_SEQUENTIAL,
-            )
-            .ok();
+            let path = Path::new(input);
+            if path.is_dir() {
+                return Err(TsortError::IsDir(input.to_string_lossy().to_string()).into());
+            }
+
+            file = File::open(path)?;
         }
+        #[cfg(not(windows))]
+        {
+            file = File::open(input)?;
 
+            // advise the OS we will access the data sequentially if available.
+            #[cfg(any(
+                target_os = "linux",
+                target_os = "android",
+                target_os = "fuchsia",
+                target_os = "wasi",
+                target_env = "uclibc",
+                target_os = "freebsd",
+            ))]
+            {
+                use nix::fcntl::{PosixFadviseAdvice, posix_fadvise};
+                use std::os::unix::io::AsFd;
+
+                posix_fadvise(
+                    file.as_fd(), // file descriptor
+                    0,            // start of the file
+                    0,            // length 0 = all
+                    PosixFadviseAdvice::POSIX_FADV_SEQUENTIAL,
+                )
+                .ok();
+            }
+        }
         let reader = BufReader::new(file);
         process_input(reader, &mut g)?;
     }
@@ -160,7 +167,13 @@ fn process_input<R: BufRead>(reader: R, graph: &mut Graph) -> Result<(), TsortEr
     // with tokens separated by whitespaces
 
     for line in reader.lines() {
-        let line = line?;
+        let line = line.map_err(|e| {
+            if e.kind() == io::ErrorKind::IsADirectory {
+                TsortError::IsDir(graph.name())
+            } else {
+                e.into()
+            }
+        })?;
         for token in line.split_whitespace() {
             // Intern the token and get a Sym
             let token_sym = graph.interner.get_or_intern(token);
