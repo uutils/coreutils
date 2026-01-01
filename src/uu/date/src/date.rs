@@ -26,9 +26,9 @@ use uucore::{format_usage, show};
 #[cfg(windows)]
 use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
 
-use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
+use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 
 // Options
 const DATE: &str = "date";
