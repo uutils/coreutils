@@ -231,8 +231,8 @@ fn test_reference_multi_no_equal() {
         .arg("file1")
         .arg("file2")
         .succeeds()
-        .stderr_contains("chgrp: group of 'file1' retained as")
-        .stderr_contains("\nchgrp: group of 'file2' retained as");
+        .stderr_contains("chgrp: group of 'file1' retained as ")
+        .stderr_contains("\nchgrp: group of 'file2' retained as ");
 }
 
 #[test]
@@ -246,9 +246,9 @@ fn test_reference_last() {
         .arg("--reference")
         .arg("ref_file")
         .succeeds()
-        .stderr_contains("chgrp: group of 'file1' retained as")
-        .stderr_contains("\nchgrp: group of 'file2' retained as")
-        .stderr_contains("\nchgrp: group of 'file3' retained as");
+        .stderr_contains("chgrp: group of 'file1' retained as ")
+        .stderr_contains("\nchgrp: group of 'file2' retained as ")
+        .stderr_contains("\nchgrp: group of 'file3' retained as ");
 }
 
 #[test]
@@ -511,7 +511,7 @@ fn test_verbosity_messages() {
         .arg("--reference=ref_file")
         .arg("target_file")
         .succeeds()
-        .stderr_contains("group of 'target_file' retained as");
+        .stderr_contains("group of 'target_file' retained as ");
 }
 
 #[test]
@@ -639,4 +639,22 @@ fn test_chgrp_recursive_on_file() {
         at.plus("regular_file").metadata().unwrap().gid(),
         current_gid
     );
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_chgrp_verbose_for_unmapped_gid() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("tmp");
+
+    ucmd.arg("1337")
+        .arg("tmp")
+        .succeeds()
+        .no_stderr();
+
+    ucmd.arg("-v")
+        .arg("1337")
+        .arg("tmp")
+        .succeeds()
+        .stderr_contains("chgrp: group of 'tmp' retained as 1337");
 }
