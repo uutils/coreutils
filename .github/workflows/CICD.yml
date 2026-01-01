@@ -814,6 +814,8 @@ jobs:
       if: matrix.job.skip-tests != true
       shell: bash
       run: |
+        command -v sudo && sudo rm -rf /usr/local/lib/android /usr/share/dotnet # avoid no space left
+        df -h ||:
         ## Test individual utilities
         ${{ steps.vars.outputs.CARGO_CMD }} ${{ steps.vars.outputs.CARGO_CMD_OPTIONS }} test --target=${{ matrix.job.target }} \
         ${{ matrix.job.cargo-options }} ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}

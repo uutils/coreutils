@@ -501,8 +501,7 @@ mod tests {
         // (This is just a sanity check)
         assert!(
             uptime < 365 * 86400,
-            "Uptime seems unreasonably high: {} seconds",
-            uptime
+            "Uptime seems unreasonably high: {uptime} seconds"
         );
     }
 
@@ -518,9 +517,7 @@ mod tests {
         let diff = (uptime1 - uptime2).abs();
         assert!(
             diff <= 1,
-            "Consecutive uptime calls should be consistent, got {} and {}",
-            uptime1,
-            uptime2
+            "Consecutive uptime calls should be consistent, got {uptime1} and {uptime2}"
         );
     }
 }
