@@ -335,14 +335,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 // the same, moves to the previous day, or advances to the next day.
                 // Changing day can result in error, this closure will help handle these errors
                 // gracefully.
-                let format_date = |date: Result<Zoned, _>| -> String {
+                let format_date_with_epoch_fallback = |date: Result<Zoned, _>| -> String {
                     date.and_then(|d| strtime::format("%F", &d))
                         .unwrap_or_else(|_| String::from("1970-01-01"))
                 };
                 let date_part = match day_delta {
-                    DayDelta::Same => format_date(Ok(now)),
-                    DayDelta::Next => format_date(now.tomorrow()),
-                    DayDelta::Previous => format_date(now.yesterday()),
+                    DayDelta::Same => format_date_with_epoch_fallback(Ok(now)),
+                    DayDelta::Next => format_date_with_epoch_fallback(now.tomorrow()),
+                    DayDelta::Previous => format_date_with_epoch_fallback(now.yesterday()),
                 };
                 let composed = format!("{date_part} {total_hours:02}:00:00 +00:00");
                 parse_date(composed)
