@@ -577,7 +577,8 @@ fn fold_file<T: Read, W: Write>(
     let mut last_space = None;
 
     loop {
-        let buffer = file.fill_buf()
+        let buffer = file
+            .fill_buf()
             .map_err_context(|| translate!("fold-error-read"))?;
 
         if buffer.is_empty() {
@@ -604,7 +605,10 @@ fn fold_file<T: Read, W: Write>(
             let chunk = &buffer[..consume_len];
 
             let mut ctx = FoldContext {
-                spaces, width, mode, writer,
+                spaces,
+                width,
+                mode,
+                writer,
                 output: &mut output,
                 col_count: &mut col_count,
                 last_space: &mut last_space,
@@ -614,7 +618,7 @@ fn fold_file<T: Read, W: Write>(
                 Ok(s) => process_utf8_line(s, &mut ctx)?,
                 Err(_) => process_non_utf8_line(chunk, &mut ctx)?,
             }
-        } 
+        }
         file.consume(consume_len);
 
         if !output.is_empty() {
