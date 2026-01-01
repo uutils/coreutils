@@ -637,45 +637,6 @@ fn compute_next_parent_dev_id(_options: &Options, _metadata: &Metadata) -> Optio
     None
 }
 
-#[cfg(unix)]
-fn remove_dir_recursive(
-    path: &Path,
-    options: &Options,
-    progress_bar: Option<&ProgressBar>,
-    parent_dev_id: Option<u64>,
-) -> bool {
-    remove_dir_recursive_impl(path, options, progress_bar, parent_dev_id)
-}
-
-#[cfg(not(unix))]
-fn remove_dir_recursive(
-    path: &Path,
-    options: &Options,
-    progress_bar: Option<&ProgressBar>,
-) -> bool {
-    remove_dir_recursive_impl(path, options, progress_bar, None)
-}
-
-#[cfg(unix)]
-fn remove_dir_recursive_with_parent(
-    path: &Path,
-    options: &Options,
-    progress_bar: Option<&ProgressBar>,
-    parent_dev_id: Option<u64>,
-) -> bool {
-    remove_dir_recursive(path, options, progress_bar, parent_dev_id)
-}
-
-#[cfg(not(unix))]
-fn remove_dir_recursive_with_parent(
-    path: &Path,
-    options: &Options,
-    progress_bar: Option<&ProgressBar>,
-    _parent_dev_id: Option<u64>,
-) -> bool {
-    remove_dir_recursive(path, options, progress_bar)
-}
-
 /// Recursively remove the directory tree rooted at the given path.
 ///
 /// If `path` is a file or a symbolic link, just remove it. If it is a
@@ -840,6 +801,9 @@ fn handle_dir_impl(
     progress_bar: Option<&ProgressBar>,
     parent_dev_id: Option<u64>,
 ) -> bool {
+    #[cfg(not(unix))]
+    let _ = parent_dev_id;
+
     let mut had_err = false;
 
     let path = clean_trailing_slashes(path);
@@ -853,7 +817,14 @@ fn handle_dir_impl(
 
     let is_root = path.has_root() && path.parent().is_none();
     if options.recursive && (!is_root || !options.preserve_root) {
-        had_err = remove_dir_recursive_with_parent(path, options, progress_bar, parent_dev_id);
+        #[cfg(unix)]
+        {
+            had_err = remove_dir_recursive_impl(path, options, progress_bar, parent_dev_id);
+        }
+        #[cfg(not(unix))]
+        {
+            had_err = remove_dir_recursive_impl(path, options, progress_bar, None);
+        }
     } else if options.dir && (!is_root || !options.preserve_root) {
         had_err = remove_dir(path, options, progress_bar).bitor(had_err);
     } else if options.recursive {
