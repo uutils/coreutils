@@ -246,7 +246,7 @@ jobs:
       run: |
         lima sudo dnf -y update
         lima sudo dnf -y install autoconf bison gperf gcc gdb jq libacl-devel libattr-devel libcap-devel libselinux-devel attr rustup clang-devel automake patch quilt
-        lima rustup-init -y --default-toolchain stable
+        lima rustup-init -y --profile=minimal --default-toolchain stable
     - name: Copy the sources to VM
       run: |
         rsync -a -e ssh . lima-default:~/work/
