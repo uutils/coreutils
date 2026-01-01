@@ -577,7 +577,8 @@ fn fold_file<T: Read, W: Write>(
     let mut last_space = None;
 
     loop {
-        let buffer = file.fill_buf()
+        let buffer = file
+            .fill_buf()
             .map_err_context(|| translate!("fold-error-read"))?;
 
         if buffer.is_empty() {
@@ -589,7 +590,7 @@ fn fold_file<T: Read, W: Write>(
 
         if let Some(pos) = buffer.iter().position(|&b| b == b'\n') {
             consume_len = pos + 1;
-        } 
+        }
         let chunk = buffer[..consume_len].to_vec();
 
         file.consume(consume_len);
