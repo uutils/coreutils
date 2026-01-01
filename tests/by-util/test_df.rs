@@ -1046,3 +1046,35 @@ fn test_nonexistent_file() {
         .stderr_is("df: does-not-exist: No such file or directory\n")
         .stdout_is("File\n.\n");
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_df_all_shows_binfmt_misc() {
+    if std::path::Path::new("/proc/sys/fs/binfmt_misc").exists() {
+        let output = new_ucmd!()
+            .args(&["--all", "--output=fstype,target"])
+            .succeeds()
+            .stdout_str_lossy();
+
+        assert!(
+            output.contains("binfmt_misc"),
+            "Expected binfmt_misc filesystem to appear in df --all output"
+        );
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_df_hides_binfmt_misc_by_default() {
+    if std::path::Path::new("/proc/sys/fs/binfmt_misc").exists() {
+        let output = new_ucmd!()
+            .args(&["--output=fstype,target"])
+            .succeeds()
+            .stdout_str_lossy();
+
+        assert!(
+            !output.contains("binfmt_misc"),
+            "Expected binfmt_misc filesystem to be hidden in df output without --all"
+        );
+    }
+}
