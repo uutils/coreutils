@@ -182,9 +182,9 @@ fn parse_military_timezone_with_offset(s: &str) -> Option<(i32, DayDelta)> {
 
     // Calculate total hours: midnight (0) + tz_offset + additional_hours
     // Midnight in timezone X converted to UTC
-    let total_hours = (0 - tz_offset + additional_hours).rem_euclid(24);
+    let hours_from_midnight = (0 - tz_offset + additional_hours).rem_euclid(24);
 
-    Some((total_hours, day_delta))
+    Some((hours_from_midnight, day_delta))
 }
 
 #[uucore::main]
