@@ -238,7 +238,7 @@ pub fn uu_app() -> Command {
                 .short('b')
                 .long(OPT_BYTES)
                 .allow_hyphen_values(true)
-                .value_name("SIZE")
+                .value_name(translate!("split-var-name-size"))
                 .help(translate!("split-help-bytes")),
         )
         .arg(
@@ -246,7 +246,7 @@ pub fn uu_app() -> Command {
                 .short('C')
                 .long(OPT_LINE_BYTES)
                 .allow_hyphen_values(true)
-                .value_name("SIZE")
+                .value_name(translate!("split-var-name-size"))
                 .help(translate!("split-help-line-bytes")),
         )
         .arg(
@@ -254,7 +254,7 @@ pub fn uu_app() -> Command {
                 .short('l')
                 .long(OPT_LINES)
                 .allow_hyphen_values(true)
-                .value_name("NUMBER")
+                .value_name(translate!("split-var-name-number"))
                 .default_value("1000")
                 .help(translate!("split-help-lines")),
         )
@@ -263,7 +263,7 @@ pub fn uu_app() -> Command {
                 .short('n')
                 .long(OPT_NUMBER)
                 .allow_hyphen_values(true)
-                .value_name("CHUNKS")
+                .value_name(translate!("split-var-name-chunks"))
                 .help(translate!("split-help-number")),
         )
         // rest of the arguments
@@ -271,7 +271,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_ADDITIONAL_SUFFIX)
                 .long(OPT_ADDITIONAL_SUFFIX)
                 .allow_hyphen_values(true)
-                .value_name("SUFFIX")
+                .value_name(translate!("split-var-name-suffix"))
                 .default_value("")
                 .value_parser(clap::value_parser!(OsString))
                 .help(translate!("split-help-additional-suffix")),
@@ -280,7 +280,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_FILTER)
                 .long(OPT_FILTER)
                 .allow_hyphen_values(true)
-                .value_name("COMMAND")
+                .value_name(translate!("split-var-name-command"))
                 .value_hint(ValueHint::CommandName)
                 .help(translate!("split-help-filter")),
         )
@@ -314,7 +314,7 @@ pub fn uu_app() -> Command {
                     OPT_HEX_SUFFIXES,
                     OPT_HEX_SUFFIXES_SHORT,
                 ])
-                .value_name("FROM")
+                .value_name(translate!("split-var-name-from"))
                 .help(translate!("split-help-numeric-suffixes")),
         )
         .arg(
@@ -340,7 +340,7 @@ pub fn uu_app() -> Command {
                     OPT_HEX_SUFFIXES,
                     OPT_HEX_SUFFIXES_SHORT,
                 ])
-                .value_name("FROM")
+                .value_name(translate!("split-var-name-from"))
                 .help(translate!("split-help-hex-suffixes")),
         )
         .arg(
@@ -362,7 +362,7 @@ pub fn uu_app() -> Command {
                 .short('t')
                 .long(OPT_SEPARATOR)
                 .allow_hyphen_values(true)
-                .value_name("SEP")
+                .value_name(translate!("split-var-name-sep"))
                 .action(ArgAction::Append)
                 .help(translate!("split-help-separator")),
         )
@@ -376,12 +376,14 @@ pub fn uu_app() -> Command {
             Arg::new(ARG_INPUT)
                 .default_value("-")
                 .value_hint(ValueHint::FilePath)
-                .value_parser(clap::value_parser!(OsString)),
+                .value_parser(clap::value_parser!(OsString))
+                .value_name(translate!("split-var-name-input")),
         )
         .arg(
             Arg::new(ARG_PREFIX)
                 .default_value("x")
-                .value_parser(clap::value_parser!(OsString)),
+                .value_parser(clap::value_parser!(OsString))
+                .value_name(translate!("split-var-name-prefix")),
         )
 }
 
