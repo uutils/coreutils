@@ -2089,5 +2089,5 @@ fn test_split_directory_already_exists() {
     ucmd.args(&["file"])
         .fails_with_code(1)
         .no_stdout()
-        .stderr_is("split: xaa: Is a directory; aborting\n");
+        .stderr_is("split: xaa: Is a directory\n");
 }
