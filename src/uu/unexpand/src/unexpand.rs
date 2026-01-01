@@ -13,7 +13,6 @@ use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
 use thiserror::Error;
-use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::translate;
@@ -279,11 +278,7 @@ fn next_char_info(uflag: bool, buf: &[u8], byte: usize) -> (CharType, usize, usi
                 Some(' ') => (CharType::Space, 0, 1),
                 Some('\t') => (CharType::Tab, 0, 1),
                 Some('\x08') => (CharType::Backspace, 0, 1),
-                Some(c) => (
-                    CharType::Other,
-                    UnicodeWidthChar::width(c).unwrap_or(0),
-                    nbytes,
-                ),
+                Some(_) => (CharType::Other, nbytes, nbytes),
                 None => {
                     // invalid char snuck past the utf8_validation_iterator somehow???
                     (CharType::Other, 1, 1)
