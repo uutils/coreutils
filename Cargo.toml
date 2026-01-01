@@ -663,7 +663,6 @@ float_cmp = "allow"                          # 12
 items_after_statements = "allow"             # 11
 return_self_not_must_use = "allow"           # 8
 needless_continue = "allow"                  # 6
-inline_always = "allow"                      # 6
 fn_params_excessive_bools = "allow"          # 6
 used_underscore_items = "allow"              # 2
 should_panic_without_expect = "allow"        # 2
