@@ -208,7 +208,8 @@ jobs:
             cargo test --features "\$UUCORE_FEATURES" -p uucore || FAULT=1
           fi
           # Test building with make
-          if (test -z "\$FAULT"); then make || FAULT=1 ; fi
+          # Too slow to build all individual binaries
+          if (test -z "\$FAULT"); then (make UTILS=true && make MULTICALL=y) || FAULT=1 ; fi
           # Clean to avoid to rsync back the files and free up disk space
           cargo clean
           # Additional cleanup to free disk space
