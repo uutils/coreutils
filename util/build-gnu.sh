@@ -139,6 +139,7 @@ else
     # Skip make if possible
     # Use GNU nproc for *BSD and macOS
     NPROC="$(command -v nproc||command -v gnproc)"
+    test "${SELINUX_ENABLED}" = 1 && touch src/getlimits # SELinux tests does not use it
     test -f src/getlimits || "${MAKE}" -j "$("${NPROC}")"
     cp -f src/getlimits "${UU_BUILD_DIR}"
 
