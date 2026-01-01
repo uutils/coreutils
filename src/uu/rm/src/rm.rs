@@ -602,26 +602,6 @@ fn is_writable(_path: &Path) -> bool {
 }
 
 #[cfg(unix)]
-fn should_skip_different_device(
-    parent_dev_id: Option<u64>,
-    metadata: &Metadata,
-    options: &Options,
-    path: &Path,
-) -> bool {
-    should_skip_different_device_with_dev(parent_dev_id, metadata.dev(), options, path)
-}
-
-#[cfg(not(unix))]
-fn should_skip_different_device(
-    _parent_dev_id: Option<u64>,
-    _metadata: &Metadata,
-    _options: &Options,
-    _path: &Path,
-) -> bool {
-    false
-}
-
-#[cfg(unix)]
 fn should_skip_different_device_with_dev(
     parent_dev_id: Option<u64>,
     dev_id: u64,
@@ -749,7 +729,8 @@ fn remove_dir_recursive_with_metadata(
     }
 
     // Base case 3: this is a directory on a different device
-    if should_skip_different_device(parent_dev_id, metadata, options, path) {
+    #[cfg(unix)]
+    if should_skip_different_device_with_dev(parent_dev_id, metadata.dev(), options, path) {
         return true;
     }
 
