@@ -84,6 +84,7 @@ enum DateSource {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum OutputEncoding {
     Utf8,
+    #[cfg_attr(not(unix), allow(dead_code))]
     BytePreserving,
 }
 
@@ -94,6 +95,7 @@ struct CustomFormat {
 
 enum CustomFormatError {
     MissingPlus(String),
+    #[cfg_attr(not(unix), allow(dead_code))]
     InvalidUtf8,
 }
 
@@ -608,6 +610,7 @@ fn parse_custom_format(raw: &OsStr) -> Result<CustomFormat, CustomFormatError> {
     }
 }
 
+#[cfg_attr(not(unix), allow(dead_code))]
 fn locale_output_encoding() -> OutputEncoding {
     let locale_var = ["LC_ALL", "LC_TIME", "LANG"]
         .iter()
@@ -627,6 +630,7 @@ fn locale_output_encoding() -> OutputEncoding {
     OutputEncoding::BytePreserving
 }
 
+#[cfg_attr(not(unix), allow(dead_code))]
 fn decode_byte_preserving(bytes: &[u8]) -> String {
     bytes.iter().map(|&b| char::from(b)).collect()
 }
