@@ -76,5 +76,9 @@ jobs:
           mode: instrumentation
           run: |
             echo "Running benchmarks for ${{ matrix.benchmark-target.package }}"
-            cargo codspeed run -p ${{ matrix.benchmark-target.package }} > /dev/null
+            if [[ "${{ matrix.benchmark-target.package }}" == "uu_factor" ]]; then
+              cargo codspeed run -p ${{ matrix.benchmark-target.package }}
+            else
+              cargo codspeed run -p ${{ matrix.benchmark-target.package }} > /dev/null
+            fi
           token: ${{ secrets.CODSPEED_TOKEN }}
