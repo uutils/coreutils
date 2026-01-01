@@ -1272,22 +1272,9 @@ where
         return (args.into_iter().map(Into::into).collect(), Vec::new());
     }
 
-    let mut args_vec: Vec<OsString> = Vec::new();
-    let mut has_plus = false;
-    for arg in args {
-        let os_arg: OsString = arg.into();
-        if !has_plus && starts_with_plus(&os_arg) {
-            has_plus = true;
-        }
-        args_vec.push(os_arg);
-    }
-    if !has_plus {
-        return (args_vec, Vec::new());
-    }
-
     let mut processed = Vec::new();
     let mut legacy_warnings = Vec::new();
-    let mut iter = args_vec.into_iter().peekable();
+    let mut iter = args.into_iter().map(Into::into).peekable();
 
     while let Some(arg) = iter.next() {
         if arg == "--" {
@@ -1296,39 +1283,41 @@ where
             break;
         }
 
-        let as_str = arg.to_string_lossy();
-        if let Some(from_spec) = as_str.strip_prefix('+') {
-            if let Some(from) = parse_legacy_part(from_spec) {
-                let mut to_part = None;
+        if starts_with_plus(&arg) {
+            let as_str = arg.to_string_lossy();
+            if let Some(from_spec) = as_str.strip_prefix('+') {
+                if let Some(from) = parse_legacy_part(from_spec) {
+                    let mut to_part = None;
 
-                let next_candidate = iter.peek().map(|next| next.to_string_lossy().to_string());
+                    let next_candidate = iter.peek().map(|next| next.to_string_lossy().to_string());
 
-                if let Some(next_str) = next_candidate {
-                    if let Some(stripped) = next_str.strip_prefix('-') {
-                        if stripped.starts_with(|c: char| c.is_ascii_digit()) {
-                            let next_arg = iter.next().unwrap();
-                            if let Some(parsed) = parse_legacy_part(stripped) {
-                                to_part = Some(parsed);
-                            } else {
-                                processed.push(arg);
-                                processed.push(next_arg);
-                                continue;
+                    if let Some(next_str) = next_candidate {
+                        if let Some(stripped) = next_str.strip_prefix('-') {
+                            if stripped.starts_with(|c: char| c.is_ascii_digit()) {
+                                let next_arg = iter.next().unwrap();
+                                if let Some(parsed) = parse_legacy_part(stripped) {
+                                    to_part = Some(parsed);
+                                } else {
+                                    processed.push(arg);
+                                    processed.push(next_arg);
+                                    continue;
+                                }
                             }
                         }
                     }
-                }
 
-                let keydef = legacy_key_to_k(&from, to_part.as_ref());
-                let arg_index = processed.len();
-                legacy_warnings.push(LegacyKeyWarning {
-                    arg_index,
-                    key_index: None,
-                    from_field: from.field,
-                    to_field: to_part.as_ref().map(|p| p.field),
-                    to_char: to_part.as_ref().map(|p| p.char_pos),
-                });
-                processed.push(OsString::from(format!("-k{keydef}")));
-                continue;
+                    let keydef = legacy_key_to_k(&from, to_part.as_ref());
+                    let arg_index = processed.len();
+                    legacy_warnings.push(LegacyKeyWarning {
+                        arg_index,
+                        key_index: None,
+                        from_field: from.field,
+                        to_field: to_part.as_ref().map(|p| p.field),
+                        to_char: to_part.as_ref().map(|p| p.char_pos),
+                    });
+                    processed.push(OsString::from(format!("-k{keydef}")));
+                    continue;
+                }
             }
         }
 
@@ -1647,11 +1636,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut settings = GlobalSettings::default();
 
     let (processed_args, mut legacy_warnings) = preprocess_legacy_args(args);
-    let processed_args_for_debug = if legacy_warnings.is_empty() {
-        None
-    } else {
-        Some(processed_args.clone())
-    };
+    if !legacy_warnings.is_empty() {
+        index_legacy_warnings(&processed_args, &mut legacy_warnings);
+    }
     let matches =
         uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), processed_args, 2)?;
 
@@ -1943,9 +1930,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let output = Output::new(matches.get_one::<OsString>(options::OUTPUT))?;
 
     if settings.debug {
-        if let Some(ref processed) = processed_args_for_debug {
-            index_legacy_warnings(processed, &mut legacy_warnings);
-        }
         let global_flags = GlobalOptionFlags::from_matches(&matches);
         emit_debug_warnings(&settings, &global_flags, &legacy_warnings);
     }
