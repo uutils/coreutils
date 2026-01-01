@@ -22,8 +22,8 @@ REPO_main_dir="$(dirname -- "${ME_dir}")"
 
 
 : ${PROFILE:=debug} # default profile
-export PROFILE
-CARGO_FEATURE_FLAGS=""
+export PROFILE # tell to make
+unset CARGOFLAGS
 
 ### * config (from environment with fallback defaults); note: GNU is expected to be a sibling repo directory
 
@@ -63,15 +63,15 @@ echo "UU_BUILD_DIR='${UU_BUILD_DIR}'"
 cd "${path_UUTILS}" && echo "[ pwd:'${PWD}' ]"
 
 export SELINUX_ENABLED # Run this script with=1 for testing SELinux
-[ "${SELINUX_ENABLED}" = 1 ] && CARGO_FEATURE_FLAGS="${CARGO_FEATURE_FLAGS} selinux"
+[ "${SELINUX_ENABLED}" = 1 ] && CARGOFLAGS="${CARGOFLAGS} selinux"
 
 # Trim leading whitespace from feature flags
-CARGO_FEATURE_FLAGS="$(echo "${CARGO_FEATURE_FLAGS}" | sed -e 's/^[[:space:]]*//')"
+CARGOFLAGS="$(echo "${CARGOFLAGS}" | sed -e 's/^[[:space:]]*//')"
 
 # If we have feature flags, format them correctly for cargo
-if [ ! -z "${CARGO_FEATURE_FLAGS}" ]; then
-    CARGO_FEATURE_FLAGS="--features ${CARGO_FEATURE_FLAGS}"
-    echo "Building with cargo flags: ${CARGO_FEATURE_FLAGS}"
+if [ ! -z "${CARGOFLAGS}" ]; then
+    CARGOFLAGS="--features ${CARGOFLAGS}"
+    echo "Building with cargo flags: ${CARGOFLAGS}"
 fi
 
 # Set up quilt for patch management
@@ -87,15 +87,16 @@ else
 fi
 cd -
 
+export CARGOFLAGS # tell to make
 # bug: seq with MULTICALL=y breaks env-signal-handler.sh
- "${MAKE}" UTILS="install seq" PROFILE="${PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}"
+ "${MAKE}" UTILS="install seq"
 ln -vf "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests use renamed install to ginstall
 if [ "${SELINUX_ENABLED}" = 1 ];then
     # Build few utils for SELinux for faster build. MULTICALL=y fails...
-    "${MAKE}" UTILS="cat chcon cp cut echo env groups id ln ls mkdir mkfifo mknod mktemp mv printf rm rmdir runcon stat test touch tr true uname wc whoami" PROFILE="${PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}"
+    "${MAKE}" UTILS="cat chcon cp cut echo env groups id ln ls mkdir mkfifo mknod mktemp mv printf rm rmdir runcon stat test touch tr true uname wc whoami"
 else
     # Use MULTICALL=y for faster build
-    "${MAKE}" MULTICALL=y SKIP_UTILS="install more seq" PROFILE="${PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}"
+    "${MAKE}" MULTICALL=y SKIP_UTILS="install more seq"
     for binary in $("${UU_BUILD_DIR}"/coreutils --list)
         do ln -vf "${UU_BUILD_DIR}/coreutils" "${UU_BUILD_DIR}/${binary}"
     done
@@ -109,9 +110,7 @@ cd "${path_GNU}" && echo "[ pwd:'${PWD}' ]"
 # Note that some test (e.g. runcon/runcon-compute.sh) incorrectly passes by this
 for binary in $(./build-aux/gen-lists-of-programs.sh --list-progs); do
     bin_path="${UU_BUILD_DIR}/${binary}"
-    test -f "${bin_path}" || {
-        cp -v /usr/bin/false "${bin_path}"
-    }
+    test -f "${bin_path}" || cp -v /usr/bin/false "${bin_path}"
 done
 
 # Always update the PATH to test the uutils coreutils instead of the GNU coreutils
