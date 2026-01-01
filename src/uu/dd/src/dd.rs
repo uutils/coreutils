@@ -81,11 +81,6 @@ fn allocate_aligned_buffer(size: usize) -> Vec<u8> {
         "Failed to allocate aligned buffer of size {size}"
     );
 
-    // Initialize with BUF_INIT_BYTE
-    unsafe {
-        std::ptr::write_bytes(ptr, BUF_INIT_BYTE, size);
-    }
-
     // Convert raw pointer to Vec<u8>
     // cspell:disable-next-line
     // SAFETY: We just allocated this memory with memalign, so it's valid
