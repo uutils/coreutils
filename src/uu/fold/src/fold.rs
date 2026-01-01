@@ -577,8 +577,7 @@ fn fold_file<T: Read, W: Write>(
     let mut last_space = None;
 
     loop {
-        let buffer = file
-            .fill_buf()
+        let buffer = file.fill_buf()
             .map_err_context(|| translate!("fold-error-read"))?;
 
         if buffer.is_empty() {
@@ -590,29 +589,37 @@ fn fold_file<T: Read, W: Write>(
 
         if let Some(pos) = buffer.iter().position(|&b| b == b'\n') {
             consume_len = pos + 1;
+        } else {
+            if let Err(e) = std::str::from_utf8(buffer) {
+                if e.error_len().is_none() {
+                    let valid = e.valid_up_to();
+                    if valid > 0 {
+                        consume_len = valid;
+                    }
+                }
+            }
         }
-        let chunk = buffer[..consume_len].to_vec();
 
+        {
+            let chunk = &buffer[..consume_len];
+
+            let mut ctx = FoldContext {
+                spaces, width, mode, writer,
+                output: &mut output,
+                col_count: &mut col_count,
+                last_space: &mut last_space,
+            };
+
+            match std::str::from_utf8(chunk) {
+                Ok(s) => process_utf8_line(s, &mut ctx)?,
+                Err(_) => process_non_utf8_line(chunk, &mut ctx)?,
+            }
+        } 
         file.consume(consume_len);
-
-        let mut ctx = FoldContext {
-            spaces,
-            width,
-            mode,
-            writer,
-            output: &mut output,
-            col_count: &mut col_count,
-            last_space: &mut last_space,
-        };
-
-        match std::str::from_utf8(&chunk) {
-            Ok(s) => process_utf8_line(s, &mut ctx)?,
-            Err(_) => process_non_utf8_line(&chunk, &mut ctx)?,
-        }
 
         if !output.is_empty() {
             writer.write_all(&output)?;
-            output.clear();
+            output.clear(); // Keeps capacity, avoiding re-allocation
         }
     }
 
