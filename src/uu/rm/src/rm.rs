@@ -670,6 +670,9 @@ fn remove_dir_recursive_with_metadata(
     parent_dev_id: Option<u64>,
     metadata: &Metadata,
 ) -> bool {
+    #[cfg(not(unix))]
+    let _ = parent_dev_id;
+
     // Base case 1: this is a file or a symbolic link.
     //
     // The symbolic link case is important because it could be a link to
