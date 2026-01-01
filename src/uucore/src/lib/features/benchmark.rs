@@ -32,8 +32,9 @@ where
     F: FnOnce(std::vec::IntoIter<std::ffi::OsString>) -> i32,
 {
     // Prepend a dummy program name as argv[0] since clap expects it
-    let mut os_args: Vec<std::ffi::OsString> = vec!["benchmark".into()];
-    os_args.extend(args.iter().map(|s| (*s).into()));
+    let os_args = std::iter::once(std::ffi::OsString::from("benchmark"))
+        .chain(args.iter().map(std::ffi::OsString::from))
+        .collect::<Vec<_>>();
     util_func(os_args.into_iter())
 }
 
