@@ -3783,6 +3783,7 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
+ "nix",
  "num-bigint",
  "num-traits",
  "tempfile",
