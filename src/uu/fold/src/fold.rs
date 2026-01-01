@@ -576,17 +576,23 @@ fn fold_file<T: Read, W: Write>(
     let mut col_count = 0;
     let mut last_space = None;
 
-    let mut buffer = [0u8; 8192];
     loop {
-        let n = file
-            .read(&mut buffer)
+        let buffer = file.fill_buf()
             .map_err_context(|| translate!("fold-error-read"))?;
 
-        if n == 0 {
+        if buffer.is_empty() {
             break;
         }
 
-        let chunk = &buffer[..n];
+        let len = buffer.len();
+        let mut consume_len = len;
+
+        if let Some(pos) = buffer.iter().position(|&b| b == b'\n') {
+            consume_len = pos + 1;
+        } 
+        let chunk = buffer[..consume_len].to_vec();
+
+        file.consume(consume_len);
 
         let mut ctx = FoldContext {
             spaces,
@@ -598,20 +604,15 @@ fn fold_file<T: Read, W: Write>(
             last_space: &mut last_space,
         };
 
-        match std::str::from_utf8(chunk) {
+        match std::str::from_utf8(&chunk) {
             Ok(s) => process_utf8_line(s, &mut ctx)?,
-            Err(_) => process_non_utf8_line(chunk, &mut ctx)?,
+            Err(_) => process_non_utf8_line(&chunk, &mut ctx)?,
         }
 
         if !output.is_empty() {
             writer.write_all(&output)?;
             output.clear();
         }
-    }
-
-    if !output.is_empty() {
-        writer.write_all(&output)?;
-        output.clear();
     }
 
     Ok(())
