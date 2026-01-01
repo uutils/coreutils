@@ -610,3 +610,9 @@ fn test_help() {
 fn test_version() {
     new_ucmd!().arg("--version").succeeds();
 }
+
+#[cfg(unix)]
+#[test]
+fn test_pr_char_device_dev_null() {
+    new_ucmd!().arg("/dev/null").succeeds();
+}
