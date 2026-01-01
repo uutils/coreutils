@@ -572,19 +572,21 @@ fn fold_file<T: Read, W: Write>(
     mode: WidthMode,
     writer: &mut W,
 ) -> UResult<()> {
-    let mut line = Vec::new();
     let mut output = Vec::new();
     let mut col_count = 0;
     let mut last_space = None;
 
+    let mut buffer = [0u8; 8192];
     loop {
-        if file
-            .read_until(NL, &mut line)
-            .map_err_context(|| translate!("fold-error-readline"))?
-            == 0
-        {
+        let n = file
+            .read(&mut buffer)
+            .map_err_context(|| translate!("fold-error-read"))?;
+
+        if n == 0 {
             break;
         }
+
+        let chunk = &buffer[..n];
 
         let mut ctx = FoldContext {
             spaces,
@@ -596,12 +598,15 @@ fn fold_file<T: Read, W: Write>(
             last_space: &mut last_space,
         };
 
-        match std::str::from_utf8(&line) {
+        match std::str::from_utf8(chunk) {
             Ok(s) => process_utf8_line(s, &mut ctx)?,
-            Err(_) => process_non_utf8_line(&line, &mut ctx)?,
+            Err(_) => process_non_utf8_line(chunk, &mut ctx)?,
         }
 
-        line.clear();
+        if !output.is_empty() {
+            writer.write_all(&output)?;
+            output.clear();
+        }
     }
 
     if !output.is_empty() {
