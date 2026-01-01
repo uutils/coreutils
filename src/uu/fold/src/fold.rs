@@ -590,13 +590,11 @@ fn fold_file<T: Read, W: Write>(
 
         if let Some(pos) = buffer.iter().position(|&b| b == b'\n') {
             consume_len = pos + 1;
-        } else {
-            if let Err(e) = std::str::from_utf8(buffer) {
-                if e.error_len().is_none() {
-                    let valid = e.valid_up_to();
-                    if valid > 0 {
-                        consume_len = valid;
-                    }
+        } else if let Err(e) = std::str::from_utf8(buffer) {
+            if e.error_len().is_none() {
+                let valid = e.valid_up_to();
+                if valid > 0 {
+                    consume_len = valid;
                 }
             }
         }
