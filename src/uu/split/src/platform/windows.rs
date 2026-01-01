@@ -25,7 +25,7 @@ pub fn instantiate_current_writer(
             .create(true)
             .truncate(true)
             .open(Path::new(&filename))
-            .map_err(|e| match &e.kind() {
+            .map_err(|e| match e.kind() {
                 ErrorKind::IsADirectory => {
                     Error::other(translate!("split-error-is-a-directory", "dir" => filename))
                 }
