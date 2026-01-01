@@ -43,7 +43,7 @@ split-error-unable-to-reopen-file = unable to re-open { $file }; aborting
 split-error-file-descriptor-limit = at file descriptor limit, but no file descriptor left to close. Closed { $count } writers before.
 split-error-shell-process-returned = Shell process returned { $code }
 split-error-shell-process-terminated = Shell process terminated by signal
-split-error-is-a-directory = { $dir }: Is a directory; aborting
+split-error-is-a-directory = { $dir }: Is a directory
 
 # Help messages for command-line options
 split-help-bytes = put SIZE bytes per output file
