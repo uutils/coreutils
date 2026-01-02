@@ -456,7 +456,6 @@ impl LineInfo {
     /// In case of non-algo-based format, if `cached_line_format` is Some, it must take the priority
     /// over the detected format. Otherwise, we must set it the the detected format.
     /// This specific behavior is emphasized by the test
-    /// `test_hashsum::test_check_md5sum_only_one_space`.
     fn parse(s: impl AsRef<OsStr>, cached_line_format: &mut Option<LineFormat>) -> Option<Self> {
         let line_bytes = os_str_as_bytes(s.as_ref()).ok()?;
 

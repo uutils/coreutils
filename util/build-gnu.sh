@@ -320,7 +320,7 @@ echo "n_stat1 = \$n_stat1"\n\
 echo "n_stat2 = \$n_stat2"\n\
 test \$n_stat1 -ge \$n_stat2 \\' tests/ls/stat-free-color.sh
 
-# no need to replicate this output with hashsum
+# no need to replicate this output with cksum multicall-binary
 "${SED}" -i -e  "s|Try 'md5sum --help' for more information.\\\n||" tests/cksum/md5sum.pl
 
 # Our ls command always outputs ANSI color codes prepended with a zero. However,

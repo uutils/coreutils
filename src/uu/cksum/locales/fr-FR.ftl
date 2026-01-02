@@ -1,22 +1,22 @@
-cksum-about = Afficher le CRC et la taille de chaque fichier
-cksum-usage = cksum [OPTION]... [FICHIER]...
+cksum-about = Afficher le ckecksum et la taille de chaque fichier
+cksum-usage = cksum (multicall-binary for *sum) [OPTION]... [FICHIER]...
 cksum-after-help = DIGEST détermine l'algorithme de condensé et le format de sortie par défaut :
 
   - sysv : (équivalent à sum -s)
   - bsd : (équivalent à sum -r)
   - crc : (équivalent à cksum)
   - crc32b : (disponible uniquement via cksum)
-  - md5 : (équivalent à md5sum)
-  - sha1 : (équivalent à sha1sum)
-  - sha2: (équivalent à sha{"{224,256,384,512}"}sum)
+  - md5 : (binary name : md5sum)
+  - sha1 : (binary name : sha1sum)
+  - sha2: (binary name : sha{"{224,256,384,512}"}sum)
   - sha3 : (disponible uniquement via cksum)
-  - blake2b : (équivalent à b2sum)
+  - blake2b : (binary name : b2sum)
   - sm3 : (disponible uniquement via cksum)
 
 # Messages d'aide
 cksum-help-algorithm = sélectionner le type de condensé à utiliser. Voir DIGEST ci-dessous
 cksum-help-untagged = créer une somme de contrôle de style inversé, sans type de condensé
-cksum-help-tag = créer une somme de contrôle de style BSD, annuler --untagged (par défaut)
+cksum-help-tag = créer une somme de contrôle de style BSD (default if binary name is cksum)
 cksum-help-length = longueur du condensé en bits ; ne doit pas dépasser le maximum pour l'algorithme blake2 et doit être un multiple de 8
 cksum-help-raw = émettre un condensé binaire brut, pas hexadécimal
 cksum-help-strict = sortir avec un code non-zéro pour les lignes de somme de contrôle mal formatées
