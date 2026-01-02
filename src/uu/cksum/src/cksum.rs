@@ -140,19 +140,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let check = matches.get_flag(options::CHECK);
 
-    let check_flag = |flag| match (check, matches.get_flag(flag)) {
-        (_, false) => Ok(false),
-        (true, true) => Ok(true),
-        (false, true) => Err(ChecksumError::CheckOnlyFlag(flag.into())),
-    };
-
-    // Each of the following flags are only expected in --check mode.
-    // If we encounter them otherwise, end with an error.
-    let ignore_missing = check_flag(options::IGNORE_MISSING)?;
-    let warn = check_flag(options::WARN)?;
-    let quiet = check_flag(options::QUIET)?;
-    let strict = check_flag(options::STRICT)?;
-    let status = check_flag(options::STATUS)?;
+    let ignore_missing = matches.get_flag(options::IGNORE_MISSING);
+    let warn = matches.get_flag(options::WARN);
+    let quiet = matches.get_flag(options::QUIET);
+    let strict = matches.get_flag(options::STRICT);
+    let status = matches.get_flag(options::STATUS);
 
     let algo_cli = matches
         .get_one::<String>(options::ALGORITHM)
@@ -284,7 +276,8 @@ pub fn uu_app() -> Command {
             Arg::new(options::STRICT)
                 .long(options::STRICT)
                 .help(translate!("cksum-help-strict"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .requires(options::CHECK),
         )
         .arg(
             Arg::new(options::CHECK)
@@ -324,27 +317,31 @@ pub fn uu_app() -> Command {
                 .long("warn")
                 .help(translate!("cksum-help-warn"))
                 .action(ArgAction::SetTrue)
-                .overrides_with_all([options::STATUS, options::QUIET]),
+                .overrides_with_all([options::STATUS, options::QUIET])
+                .requires(options::CHECK),
         )
         .arg(
             Arg::new(options::STATUS)
                 .long("status")
                 .help(translate!("cksum-help-status"))
                 .action(ArgAction::SetTrue)
-                .overrides_with_all([options::WARN, options::QUIET]),
+                .overrides_with_all([options::WARN, options::QUIET])
+                .requires(options::CHECK),
         )
         .arg(
             Arg::new(options::QUIET)
                 .long(options::QUIET)
                 .help(translate!("cksum-help-quiet"))
                 .action(ArgAction::SetTrue)
-                .overrides_with_all([options::WARN, options::STATUS]),
+                .overrides_with_all([options::WARN, options::STATUS])
+                .requires(options::CHECK),
         )
         .arg(
             Arg::new(options::IGNORE_MISSING)
                 .long(options::IGNORE_MISSING)
                 .help(translate!("cksum-help-ignore-missing"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .requires(options::CHECK),
         )
         .arg(
             Arg::new(options::ZERO)
