@@ -19,7 +19,7 @@ path = "src/join.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true }
+uucore = { workspace = true, features = ["i18n-collator"] }
 memchr = { workspace = true }
 thiserror = { workspace = true }
 fluent = { workspace = true }
