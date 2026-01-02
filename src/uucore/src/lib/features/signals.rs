@@ -448,7 +448,7 @@ pub unsafe extern "C" fn capture_sigpipe_state() {
     if unsafe { libc::sigaction(libc::SIGPIPE, ptr::null(), current.as_mut_ptr()) } == 0 {
         // SAFETY: sigaction succeeded, so current is initialized
         let ignored = unsafe { current.assume_init() }.sa_sigaction == libc::SIG_IGN;
-        SIGPIPE_WAS_IGNORED.store(ignored, Ordering::Relaxed);
+        SIGPIPE_WAS_IGNORED.store(ignored, Ordering::Release);
     }
 }
 
@@ -480,7 +480,7 @@ macro_rules! init_sigpipe_capture {
 /// Returns whether SIGPIPE was ignored at process startup.
 #[cfg(unix)]
 pub fn sigpipe_was_ignored() -> bool {
-    SIGPIPE_WAS_IGNORED.load(Ordering::Relaxed)
+    SIGPIPE_WAS_IGNORED.load(Ordering::Acquire)
 }
 
 #[cfg(not(unix))]
