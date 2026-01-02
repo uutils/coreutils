@@ -120,6 +120,7 @@ fn remove_single(path: &Path, opts: Opts) -> Result<(), Error<'_>> {
     remove_dir(path).map_err(|error| Error { error, path })
 }
 
+#[cfg(unix)]
 fn strip_trailing_slashes_from_path(path: &[u8]) -> &[u8] {
     let mut end = path.len();
     while end > 0 && path[end - 1] == b'/' {
