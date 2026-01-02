@@ -322,6 +322,8 @@ test \$n_stat1 -ge \$n_stat2 \\' tests/ls/stat-free-color.sh
 
 # no need to replicate this output with hashsum
 "${SED}" -i -e  "s|Try 'md5sum --help' for more information.\\\n||" tests/cksum/md5sum.pl
+# clap changes the error message
+ "${SED}" -i '/check-ignore-missing-4/,/EXIT=> 1/ { /ERR=>/,/try_help/d }' tests/cksum/md5sum.pl
 
 # Our ls command always outputs ANSI color codes prepended with a zero. However,
 # in the case of GNU, it seems inconsistent. Nevertheless, it looks like it
