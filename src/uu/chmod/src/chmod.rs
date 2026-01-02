@@ -443,7 +443,7 @@ impl Chmoder {
                         r = r.and(Err(err.into()));
                         continue;
                     }
-                };
+                }
             }
             for path in paths_in_this_dir {
                 if path.is_symlink() {
