@@ -295,3 +295,15 @@ fn test_non_utf8_filename() {
 
     ucmd.arg(&filename).succeeds().stdout_is("\ta\n");
 }
+
+#[test]
+fn unexpand_multibyte_utf8_gnu_compat() {
+    // Verifies GNU-compatible behavior: column position uses byte count, not display width
+    // "1ΔΔΔ5" is 8 bytes (1 + 2*3 + 1), already at tab stop 8
+    // So 3 spaces should NOT convert to tab (would need 8 more to reach tab stop 16)
+    new_ucmd!()
+        .args(&["-a"])
+        .pipe_in("1ΔΔΔ5   99999\n")
+        .succeeds()
+        .stdout_is("1ΔΔΔ5   99999\n");
+}

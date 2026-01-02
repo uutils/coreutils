@@ -65,6 +65,10 @@ feat_selinux = [
   "selinux",
   "stat/selinux",
 ]
+# "feat_smack" == enable support for SMACK Security Context (by using `--features feat_smack`)
+# NOTE:
+# * Running a uutils compiled with `feat_smack` requires a SMACK enabled Kernel at run time.
+feat_smack = ["ls/smack"]
 ##
 ## feature sets
 ## (common/core and Tier1) feature sets
@@ -365,7 +369,7 @@ same-file = "1.0.6"
 self_cell = "1.0.4"
 # FIXME we use the exact version because the new 0.5.3 requires an MSRV of 1.88
 selinux = "=0.5.2"
-signal-hook = "0.3.17"
+signal-hook = "0.4.1"
 tempfile = "3.15.0"
 terminal_size = "0.4.0"
 textwrap = { version = "0.16.1", features = ["terminal_size"] }
@@ -667,7 +671,6 @@ should_panic_without_expect = "allow"        # 2
 doc_markdown = "allow"
 unused_self = "allow"
 enum_glob_use = "allow"
-needless_raw_string_hashes = "allow"
 unreadable_literal = "allow"
 unnested_or_patterns = "allow"
 implicit_hasher = "allow"

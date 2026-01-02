@@ -364,6 +364,23 @@ getcwd
 weblate
 algs
 
+# * stty terminal flags
+brkint
+cstopb
+decctlq
+echoctl
+echoe
+echoke
+ignbrk
+ignpar
+icrnl
+isig
+istrip
+litout
+opost
+parodd
+ENOTTY
+
 # translation tests
 CLICOLOR
 erreur

@@ -501,10 +501,7 @@ fn safe_du(
 
         // Handle inodes
         if let Some(inode) = this_stat.inode {
-            if seen_inodes.contains(&inode) && (!options.count_links || !options.all) {
-                if options.count_links && !options.all {
-                    my_stat.inodes += 1;
-                }
+            if seen_inodes.contains(&inode) && !options.count_links {
                 continue;
             }
             seen_inodes.insert(inode);
@@ -660,13 +657,7 @@ fn du_regular(
 
                             if let Some(inode) = this_stat.inode {
                                 // Check if the inode has been seen before and if we should skip it
-                                if seen_inodes.contains(&inode)
-                                    && (!options.count_links || !options.all)
-                                {
-                                    // If `count_links` is enabled and `all` is not, increment the inode count
-                                    if options.count_links && !options.all {
-                                        my_stat.inodes += 1;
-                                    }
+                                if seen_inodes.contains(&inode) && !options.count_links {
                                     // Skip further processing for this inode
                                     continue;
                                 }
@@ -913,7 +904,7 @@ fn read_files_from(file_name: &OsStr) -> Result<Vec<PathBuf>, std::io::Error> {
         let path = PathBuf::from(file_name);
         if path.is_dir() {
             return Err(std::io::Error::other(
-                translate!("du-error-read-error-is-directory", "file" => file_name.to_string_lossy()),
+                translate!("du-error-read-error-is-directory", "file" => file_name.maybe_quote()),
             ));
         }
 
@@ -922,7 +913,7 @@ fn read_files_from(file_name: &OsStr) -> Result<Vec<PathBuf>, std::io::Error> {
             Ok(file) => Box::new(BufReader::new(file)),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 return Err(std::io::Error::other(
-                    translate!("du-error-cannot-open-for-reading", "file" => file_name.to_string_lossy()),
+                    translate!("du-error-cannot-open-for-reading", "file" => file_name.quote()),
                 ));
             }
             Err(e) => return Err(e),
@@ -938,7 +929,7 @@ fn read_files_from(file_name: &OsStr) -> Result<Vec<PathBuf>, std::io::Error> {
             let line_number = i + 1;
             show_error!(
                 "{}",
-                translate!("du-error-invalid-zero-length-file-name", "file" => file_name.to_string_lossy(), "line" => line_number)
+                translate!("du-error-invalid-zero-length-file-name", "file" => file_name.maybe_quote(), "line" => line_number)
             );
             set_exit_code(1);
         } else if path == b"-" && file_name == "-" {
@@ -978,7 +969,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     "file" => matches
                         .get_one::<OsString>(options::FILE)
                         .unwrap()
-                        .to_string_lossy()
                         .quote()
                 ),
             )
@@ -1171,7 +1161,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 #[cfg(target_os = "linux")]
                 let error_msg = translate!("du-error-cannot-access", "path" => path.quote());
                 #[cfg(not(target_os = "linux"))]
-                let error_msg = translate!("du-error-cannot-access-no-such-file", "path" => path.to_string_lossy().quote());
+                let error_msg =
+                    translate!("du-error-cannot-access-no-such-file", "path" => path.quote());
 
                 print_tx
                     .send(Err(USimpleError::new(1, error_msg)))
