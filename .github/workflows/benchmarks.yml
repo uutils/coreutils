@@ -45,6 +45,7 @@ jobs:
           - { package: uu_uniq }
           - { package: uu_wc }
           - { package: uu_factor }
+          - { package: uu_date }
     steps:
       - uses: actions/checkout@v6
         with:
