@@ -326,8 +326,8 @@ pub fn get_nusers() -> usize {
             WTS_CURRENT_SERVER_HANDLE,
             0,
             1,
-            &mut session_info_ptr,
-            &mut session_count,
+            &raw mut session_info_ptr,
+            &raw mut session_count,
         );
         if result == 0 {
             return 0;
@@ -343,27 +343,27 @@ pub fn get_nusers() -> usize {
                 WTS_CURRENT_SERVER_HANDLE,
                 session.SessionId,
                 5,
-                &mut buffer,
-                &mut bytes_returned,
+                &raw mut buffer,
+                &raw mut bytes_returned,
             );
             if result == 0 || buffer.is_null() {
                 continue;
             }
 
-            let username = if !buffer.is_null() {
+            let username = if buffer.is_null() {
+                String::new()
+            } else {
                 let cstr = std::ffi::CStr::from_ptr(buffer as *const i8);
                 cstr.to_string_lossy().to_string()
-            } else {
-                String::new()
             };
             if !username.is_empty() {
                 num_user += 1;
             }
 
-            WTSFreeMemory(buffer as _);
+            WTSFreeMemory(buffer.cast());
         }
 
-        WTSFreeMemory(session_info_ptr as _);
+        WTSFreeMemory(session_info_ptr.cast());
     }
 
     num_user
