@@ -3208,10 +3208,12 @@ name = "uu_date"
 version = "0.5.0"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
  "jiff",
  "nix",
  "parse_datetime",
+ "tempfile",
  "uucore",
  "windows-sys 0.61.2",
 ]
