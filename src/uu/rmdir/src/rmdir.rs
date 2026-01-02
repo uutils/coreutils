@@ -66,10 +66,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     Ok(path.metadata()?.file_type().is_dir())
                 }
 
-                let bytes = path.as_os_str().as_bytes();
+                let mut bytes = path.as_os_str().as_bytes();
                 if error.raw_os_error() == Some(libc::ENOTDIR) && bytes.ends_with(b"/") {
                     // Strip the trailing slash or .symlink_metadata() will follow the symlink
-                    let no_slash: &Path = OsStr::from_bytes(&bytes[..bytes.len() - 1]).as_ref();
+                    while bytes.ends_with(b"/") {
+                        bytes = &bytes[..bytes.len() - 1];
+                    }
+                    let no_slash: &Path = OsStr::from_bytes(bytes).as_ref();
                     if no_slash.is_symlink() && points_to_directory(no_slash).unwrap_or(true) {
                         show_error!(
                             "{}",
