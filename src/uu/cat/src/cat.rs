@@ -5,8 +5,10 @@
 
 // spell-checker:ignore (ToDO) nonprint nonblank nonprinting ELOOP
 
+mod colors;
 mod platform;
 
+use crate::colors::{ColorMode, ColorWriter};
 use crate::platform::is_unsafe_overwrite;
 use clap::{Arg, ArgAction, Command};
 use memchr::memchr2;
@@ -131,6 +133,9 @@ struct OutputOptions {
 
     /// use ^ and M- notation, except for LF (\\n) and TAB (\\t)
     show_nonprint: bool,
+
+    /// Use colorization mode
+    colorization: Option<ColorMode>,
 }
 
 impl OutputOptions {
@@ -149,7 +154,8 @@ impl OutputOptions {
             || self.show_nonprint
             || self.show_ends
             || self.squeeze_blank
-            || self.number != NumberingMode::None)
+            || self.number != NumberingMode::None
+            || self.colorization.is_some())
     }
 }
 
@@ -167,6 +173,9 @@ struct OutputState {
 
     /// Whether we have already printed a blank line
     one_blank_kept: bool,
+
+    /// The seeds of the color cycle
+    color_seed: [f64; 2],
 }
 
 #[cfg(unix)]
@@ -216,6 +225,7 @@ mod options {
     pub static SHOW_TABS: &str = "show-tabs";
     pub static SHOW_NONPRINTING: &str = "show-nonprinting";
     pub static IGNORED_U: &str = "ignored-u";
+    pub static COLORIZATION: &str = "colorize";
 }
 
 #[uucore::main]
@@ -270,12 +280,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => vec![OsString::from("-")],
     };
 
+    let colorization = if matches.get_flag(options::COLORIZATION) {
+        Some(ColorMode::new())
+    } else {
+        None
+    };
+
     let options = OutputOptions {
         show_ends,
         number: number_mode,
         show_nonprint,
         show_tabs,
         squeeze_blank,
+        colorization,
     };
     cat_files(&files, &options)
 }
@@ -364,6 +381,13 @@ pub fn uu_app() -> Command {
                 .help(translate!("cat-help-ignored-u"))
                 .action(ArgAction::SetTrue),
         )
+        .arg(
+            Arg::new(options::COLORIZATION)
+                // .short("lol")
+                .long("lol")
+                .hide(true)
+                .action(ArgAction::SetTrue),
+        )
 }
 
 fn cat_handle<R: FdReadable>(
@@ -414,6 +438,7 @@ fn cat_files(files: &[OsString], options: &OutputOptions) -> UResult<()> {
         at_line_start: true,
         skipped_carriage_return: false,
         one_blank_kept: false,
+        color_seed: [rand::random::<f64>() * 10e9; 2],
     };
     let mut error_messages: Vec<String> = Vec::new();
 
@@ -563,10 +588,14 @@ fn write_lines<R: FdReadable>(
                 state.line_number.write(&mut writer)?;
                 state.line_number.increment();
             }
-
-            // print to end of line or end of buffer
-            let offset = write_end(&mut writer, &in_buf[pos..], options);
-
+            // print to end of line or end of buffer,
+            // dispatching according to the writer needed.
+            let offset = if let Some(color_mode) = options.colorization {
+                let mut writer = ColorWriter::new(&mut writer, color_mode, state);
+                write_end(&mut writer, &in_buf[pos..], options)
+            } else {
+                write_end(&mut writer, &in_buf[pos..], options)
+            };
             // end of buffer?
             if offset + pos == in_buf.len() {
                 state.at_line_start = false;
@@ -585,6 +614,10 @@ fn write_lines<R: FdReadable>(
                 state.at_line_start = true;
             }
             pos += offset + 1;
+        }
+        // reset foreground at the end.
+        if options.colorization.is_some() {
+            writer.write_all(b"\x1b[39m")?;
         }
         // We need to flush the buffer each time around the loop in order to pass GNU tests.
         // When we are reading the input from a pipe, the `handle.reader.read` call at the top

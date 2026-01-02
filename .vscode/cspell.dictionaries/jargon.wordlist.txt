@@ -20,6 +20,7 @@ codeready
 codegen
 colorizable
 colorize
+colorterm
 coprime
 consts
 conv
@@ -39,6 +40,7 @@ nonprinting
 multibyte
 devs
 discoverability
+distro
 duplicative
 dsync
 endianness
@@ -151,6 +153,7 @@ syscalls
 sysconf
 tokenize
 toolchain
+truecolor
 totalram
 truthy
 tunables

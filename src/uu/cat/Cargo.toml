@@ -23,6 +23,7 @@ memchr = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = ["fast-inc", "fs", "pipes"] }
 fluent = { workspace = true }
+rand = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true }
