@@ -17,10 +17,7 @@ mkdir -p "$SMACK_DIR"/{rootfs/{bin,lib64,proc,sys,dev,tmp,etc,gnu},kernel}
 # Download Arch Linux kernel (has SMACK built-in)
 if [ ! -f /tmp/arch-vmlinuz ]; then
     echo "Downloading Arch Linux kernel..."
-    MIRROR="https://geo.mirror.pkgbuild.com/core/os/x86_64"
-    KERNEL_PKG=$(curl -sL "$MIRROR/" | grep -oP 'linux-[0-9][^"]*-x86_64\.pkg\.tar\.zst' | grep -v headers | sort -V | tail -1)
-    [ -z "$KERNEL_PKG" ] && { echo "Error: Could not find kernel package"; exit 1; }
-    curl -sL -o /tmp/arch-kernel.pkg.tar.zst "$MIRROR/$KERNEL_PKG"
+    curl -sL -o /tmp/arch-kernel.pkg.tar.zst "https://archlinux.org/packages/core/x86_64/linux/download/"
     zstd -d /tmp/arch-kernel.pkg.tar.zst -o /tmp/arch-kernel.pkg.tar 2>/dev/null || unzstd /tmp/arch-kernel.pkg.tar.zst -o /tmp/arch-kernel.pkg.tar
     VMLINUZ_PATH=$(tar -tf /tmp/arch-kernel.pkg.tar | grep 'vmlinuz$' | head -1)
     tar -xf /tmp/arch-kernel.pkg.tar -C /tmp "$VMLINUZ_PATH"
