@@ -585,7 +585,7 @@ fn get_input_file(filename: &OsStr) -> UResult<Box<dyn Read>> {
         Ok(f) => {
             if f.metadata()?.is_dir() {
                 Err(io::Error::other(
-                    translate!("error-is-a-directory", "file" => filename.to_string_lossy()),
+                    translate!("error-is-a-directory", "file" => filename.maybe_quote()),
                 )
                 .into())
             } else {
@@ -594,7 +594,7 @@ fn get_input_file(filename: &OsStr) -> UResult<Box<dyn Read>> {
         }
         Err(_) => Err(io::Error::other(format!(
             "{}: {}",
-            filename.to_string_lossy(),
+            filename.maybe_quote(),
             translate!("error-file-not-found")
         ))
         .into()),

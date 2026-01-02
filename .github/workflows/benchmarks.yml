@@ -27,10 +27,10 @@ jobs:
           - { package: uu_cksum }
           - { package: uu_cp }
           - { package: uu_cut }
+          - { package: uu_dd }
           - { package: uu_du }
           - { package: uu_expand }
           - { package: uu_fold }
-          - { package: uu_hashsum }
           - { package: uu_ls }
           - { package: uu_mv }
           - { package: uu_nl }

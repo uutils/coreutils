@@ -372,7 +372,39 @@ fn test_permission_denied() {
         .arg("o=r")
         .arg("d")
         .fails()
-        .stderr_is("chmod: 'd/no-x/y': Permission denied\n");
+        .stderr_is("chmod: cannot access 'd/no-x/y': Permission denied\n");
+}
+
+#[test]
+#[allow(clippy::unreadable_literal)]
+fn test_chmod_recursive_correct_exit_code() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // create 3 folders to test on
+    at.mkdir("a");
+    at.mkdir("a/b");
+    at.mkdir("z");
+
+    // remove read permissions for folder a so the chmod command for a/b fails
+    let mut perms = at.metadata("a").permissions();
+    perms.set_mode(0o000);
+    set_permissions(at.plus_as_string("a"), perms).unwrap();
+
+    #[cfg(not(target_os = "linux"))]
+    let err_msg = "chmod: Permission denied\n";
+    #[cfg(target_os = "linux")]
+    let err_msg = "chmod: cannot access 'a': Permission denied\n";
+
+    // order of command is a, a/b then c
+    // command is expected to fail and not just take the last exit code
+    ucmd.arg("-R")
+        .arg("--verbose")
+        .arg("a+w")
+        .arg("a")
+        .arg("z")
+        .umask(0)
+        .fails()
+        .stderr_is(err_msg);
 }
 
 #[test]
@@ -395,7 +427,7 @@ fn test_chmod_recursive() {
     #[cfg(not(target_os = "linux"))]
     let err_msg = "chmod: Permission denied\n";
     #[cfg(target_os = "linux")]
-    let err_msg = "chmod: 'z': Permission denied\n";
+    let err_msg = "chmod: cannot access 'z': Permission denied\n";
 
     // only the permissions of folder `a` and `z` are changed
     // folder can't be read after read permission is removed

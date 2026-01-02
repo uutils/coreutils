@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) filetime datetime lpszfilepath mktime DATETIME datelike timelike
+// spell-checker:ignore (ToDO) filetime datetime lpszfilepath mktime DATETIME datelike timelike UTIME
 // spell-checker:ignore (FORMATS) MMDDhhmm YYYYMMDDHHMM YYMMDDHHMM YYYYMMDDHHMMS
 
 pub mod error;
@@ -17,12 +17,14 @@ use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command};
 use filetime::{FileTime, set_file_times, set_symlink_file_times};
 use jiff::{Timestamp, Zoned};
 use std::borrow::Cow;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs::{self, File};
 use std::io::{Error, ErrorKind};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
+#[cfg(target_os = "linux")]
+use uucore::libc;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::translate;
 use uucore::{format_usage, show};
@@ -377,7 +379,19 @@ pub fn touch(files: &[InputFile], opts: &Options) -> Result<(), TouchError> {
             (atime, mtime)
         }
         Source::Now => {
-            let now = datetime_to_filetime(&Local::now());
+            let now: FileTime;
+            #[cfg(target_os = "linux")]
+            {
+                if opts.date.is_none() {
+                    now = FileTime::from_unix_time(0, libc::UTIME_NOW as u32);
+                } else {
+                    now = datetime_to_filetime(&Local::now());
+                }
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                now = datetime_to_filetime(&Local::now());
+            }
             (now, now)
         }
         &Source::Timestamp(ts) => (ts, ts),
@@ -431,9 +445,9 @@ fn touch_file(
     mtime: FileTime,
 ) -> UResult<()> {
     let filename = if is_stdout {
-        String::from("-")
+        OsStr::new("-")
     } else {
-        path.display().to_string()
+        path.as_os_str()
     };
 
     let metadata_result = if opts.no_deref {

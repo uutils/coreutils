@@ -13,7 +13,6 @@ use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
 use thiserror::Error;
-use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::translate;
@@ -207,12 +206,12 @@ fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read + 'static>>> {
     if filename.is_dir() {
         Err(Box::new(USimpleError {
             code: 1,
-            message: translate!("unexpand-error-is-directory", "path" => filename.display()),
+            message: translate!("unexpand-error-is-directory", "path" => filename.maybe_quote()),
         }))
     } else if path == "-" {
         Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))
     } else {
-        file_buf = File::open(path).map_err_context(|| path.to_string_lossy().to_string())?;
+        file_buf = File::open(path).map_err_context(|| path.maybe_quote().to_string())?;
         Ok(BufReader::new(Box::new(file_buf) as Box<dyn Read>))
     }
 }
@@ -279,11 +278,7 @@ fn next_char_info(uflag: bool, buf: &[u8], byte: usize) -> (CharType, usize, usi
                 Some(' ') => (CharType::Space, 0, 1),
                 Some('\t') => (CharType::Tab, 0, 1),
                 Some('\x08') => (CharType::Backspace, 0, 1),
-                Some(c) => (
-                    CharType::Other,
-                    UnicodeWidthChar::width(c).unwrap_or(0),
-                    nbytes,
-                ),
+                Some(_) => (CharType::Other, nbytes, nbytes),
                 None => {
                     // invalid char snuck past the utf8_validation_iterator somehow???
                     (CharType::Other, 1, 1)

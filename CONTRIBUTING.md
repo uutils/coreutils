@@ -87,6 +87,7 @@ are some tips for writing good issues:
   - What platform are you on?
 - Provide a way to reliably reproduce the issue.
 - Be as specific as possible!
+- Please provide the output with LANG=C, except for locale-related bugs.
 
 ### Writing Documentation
 
