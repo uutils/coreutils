@@ -72,7 +72,7 @@ jobs:
         env:
           CODSPEED_LOG: debug
         with:
-          mode: instrumentation
+          mode: simulation
           run: |
             echo "Running benchmarks for ${{ matrix.benchmark-target.package }}"
             cargo codspeed run -p ${{ matrix.benchmark-target.package }} > /dev/null
