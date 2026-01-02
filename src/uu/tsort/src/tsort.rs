@@ -11,15 +11,15 @@ use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use string_interner::StringInterner;
-use string_interner::backend::StringBackend;
+use string_interner::backend::BucketBackend;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult, USimpleError};
 use uucore::{format_usage, show, translate};
 
 // short types for switching interning behavior on the fly.
-type Sym = string_interner::symbol::SymbolU32;
-type Interner = StringInterner<StringBackend<Sym>>;
+type Sym = string_interner::symbol::SymbolUsize;
+type Interner = StringInterner<BucketBackend<Sym>>;
 
 mod options {
     pub const FILE: &str = "file";
@@ -59,6 +59,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if input == "-" {
         process_input(io::stdin().lock(), &mut g)?;
     } else {
+        // Windows reports a permission denied error when trying to read a directory.
+        // So we check manually beforehand. On other systems, we avoid this extra check for performance.
         #[cfg(windows)]
         {
             use std::path::Path;
@@ -88,9 +90,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 use std::os::unix::io::AsFd;
 
                 posix_fadvise(
-                    file.as_fd(), // file descriptor
-                    0,            // start of the file
-                    0,            // length 0 = all
+                    file.as_fd(),
+                    0, // offset 0 => from the start of the file
+                    0, // length 0 => for the whole file
                     PosixFadviseAdvice::POSIX_FADV_SEQUENTIAL,
                 )
                 .ok();
