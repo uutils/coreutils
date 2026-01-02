@@ -215,7 +215,6 @@ test_digest_with_len! {sha3_224, sha3, 224}
 test_digest_with_len! {sha3_256, sha3, 256}
 test_digest_with_len! {sha3_384, sha3, 384}
 test_digest_with_len! {sha3_512, sha3, 512}
-test_digest_with_len! {b2sum, b2sum, 512}
 
 #[test]
 fn test_check_sha1() {

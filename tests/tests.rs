@@ -64,6 +64,10 @@ mod test_chroot;
 #[path = "by-util/test_cksum.rs"]
 mod test_cksum;
 
+#[cfg(feature = "b2sum")]
+#[path = "by-util/test_b2sum.rs"]
+mod test_b2sum;
+
 #[cfg(feature = "comm")]
 #[path = "by-util/test_comm.rs"]
 mod test_comm;

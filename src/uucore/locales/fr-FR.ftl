@@ -73,3 +73,21 @@ checksum-failed-open-file = { $count ->
    *[other] { $count } fichiers passés n'ont pas pu être lu
 }
 checksum-error-algo-bad-format = { $file }: { $line }: ligne invalide pour { $algo }
+
+# Messages d'aide d'arguments checksum
+checksum-help-algorithm = sélectionner le type de condensé à utiliser. Voir DIGEST ci-dessous
+checksum-help-untagged = créer une somme de contrôle de style inversé, sans type de condensé
+checksum-help-tag-default = créer une somme de contrôle de style BSD (par défaut)
+checksum-help-tag = créer une somme de contrôle de style BSD
+checksum-help-text = lire en mode texte (par défaut)
+checksum-help-length = longueur du condensé en bits ; ne doit pas dépasser le maximum pour l'algorithme blake2 et doit être un multiple de 8
+checksum-help-raw = émettre un condensé binaire brut, pas hexadécimal
+checksum-help-strict = sortir avec un code non-zéro pour les lignes de somme de contrôle mal formatées
+checksum-help-check = lire les sommes de hachage des FICHIERs et les vérifier
+checksum-help-base64 = émettre un condensé base64, pas hexadécimal
+checksum-help-warn = avertir des lignes de somme de contrôle mal formatées
+checksum-help-status = ne rien afficher, le code de statut indique le succès
+checksum-help-quiet = ne pas afficher OK pour chaque fichier vérifié avec succès
+checksum-help-ignore-missing = ne pas échouer ou signaler le statut pour les fichiers manquants
+checksum-help-zero = terminer chaque ligne de sortie avec NUL, pas un saut de ligne, et désactiver l'échappement des noms de fichiers
+checksum-help-debug = afficher les informations de débogage sur la détection de la prise en charge matérielle du processeur

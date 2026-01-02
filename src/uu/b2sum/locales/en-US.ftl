@@ -1,0 +1,3 @@
+b2sum-about = Print or check the BLAKE2b checksums
+b2sum-usage = b2sum [OPTIONS] [FILE]...
+b2sum-after-help = With no FILE or when FILE is -, read standard input
