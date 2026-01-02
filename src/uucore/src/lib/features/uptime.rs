@@ -120,6 +120,12 @@ pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
     }
 }
 
+// TODO implement functionality
+#[cfg(any(target_os = "android", target_os = "redox"))]
+pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
+    Err(UptimeError::SystemUptime)?
+}
+
 /// Get the system uptime
 ///
 /// # Arguments
@@ -130,7 +136,7 @@ pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
 ///
 /// Returns a UResult with the uptime in seconds if successful, otherwise an UptimeError.
 #[cfg(unix)]
-#[cfg(not(target_os = "openbsd"))]
+#[cfg(not(any(target_os = "openbsd", target_os = "android", target_os = "redox")))]
 pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
     use crate::utmpx::Utmpx;
     use libc::BOOT_TIME;
@@ -251,7 +257,7 @@ pub fn get_formatted_uptime(boot_time: Option<time_t>) -> UResult<String> {
 ///
 /// Returns the number of users currently logged in if successful, otherwise 0.
 #[cfg(unix)]
-#[cfg(not(target_os = "openbsd"))]
+#[cfg(not(any(target_os = "openbsd", target_os = "android", target_os = "redox")))]
 // see: https://gitlab.com/procps-ng/procps/-/blob/4740a0efa79cade867cfc7b32955fe0f75bf5173/library/uptime.c#L63-L115
 pub fn get_nusers() -> usize {
     use crate::utmpx::Utmpx;
@@ -293,6 +299,12 @@ pub fn get_nusers(file: &str) -> usize {
         .count()
 }
 
+// TODO implement functionality
+#[cfg(any(target_os = "android", target_os = "redox"))]
+pub fn get_nusers() -> usize {
+    0
+}
+
 /// Get the number of users currently logged in
 ///
 /// # Returns
@@ -314,8 +326,8 @@ pub fn get_nusers() -> usize {
             WTS_CURRENT_SERVER_HANDLE,
             0,
             1,
-            &mut session_info_ptr,
-            &mut session_count,
+            &raw mut session_info_ptr,
+            &raw mut session_count,
         );
         if result == 0 {
             return 0;
@@ -331,27 +343,27 @@ pub fn get_nusers() -> usize {
                 WTS_CURRENT_SERVER_HANDLE,
                 session.SessionId,
                 5,
-                &mut buffer,
-                &mut bytes_returned,
+                &raw mut buffer,
+                &raw mut bytes_returned,
             );
             if result == 0 || buffer.is_null() {
                 continue;
             }
 
-            let username = if !buffer.is_null() {
+            let username = if buffer.is_null() {
+                String::new()
+            } else {
                 let cstr = std::ffi::CStr::from_ptr(buffer as *const i8);
                 cstr.to_string_lossy().to_string()
-            } else {
-                String::new()
             };
             if !username.is_empty() {
                 num_user += 1;
             }
 
-            WTSFreeMemory(buffer as _);
+            WTSFreeMemory(buffer.cast());
         }
 
-        WTSFreeMemory(session_info_ptr as _);
+        WTSFreeMemory(session_info_ptr.cast());
     }
 
     num_user
@@ -391,6 +403,7 @@ pub fn get_formatted_nusers() -> String {
 /// Returns a UResult with the load average if successful, otherwise an UptimeError.
 /// The load average is a tuple of three floating point numbers representing the 1-minute, 5-minute, and 15-minute load averages.
 #[cfg(unix)]
+#[cfg(not(any(target_os = "android", target_os = "redox")))]
 pub fn get_loadavg() -> UResult<(f64, f64, f64)> {
     use crate::libc::c_double;
     use libc::getloadavg;
@@ -404,6 +417,12 @@ pub fn get_loadavg() -> UResult<(f64, f64, f64)> {
     } else {
         Ok((avg[0], avg[1], avg[2]))
     }
+}
+
+// TODO implement functionality
+#[cfg(any(target_os = "android", target_os = "redox"))]
+pub fn get_loadavg() -> UResult<(f64, f64, f64)> {
+    Err(UptimeError::SystemLoadavg)?
 }
 
 /// Get the system load average

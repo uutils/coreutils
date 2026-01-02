@@ -6,9 +6,9 @@
 // spell-checker:ignore bincode serde utmp runlevel testusr testx boottime
 #![allow(clippy::cast_possible_wrap, clippy::unreadable_literal)]
 
+#[cfg(not(any(windows, target_os = "openbsd", target_os = "freebsd")))]
 use uutests::at_and_ucmd;
-use uutests::util::TestScenario;
-use uutests::{new_ucmd, util_name};
+use uutests::new_ucmd;
 
 use regex::Regex;
 
@@ -19,17 +19,21 @@ fn test_invalid_arg() {
 
 #[test]
 fn test_uptime() {
-    new_ucmd!()
-        .succeeds()
-        .stdout_contains("load average:")
-        .stdout_contains(" up ");
+    let result = new_ucmd!().succeeds();
+
+    result.stdout_contains(" up ");
+
+    #[cfg(not(windows))]
+    result.stdout_contains("load average:");
+    #[cfg(windows)]
+    result.stdout_does_not_contain("load average:");
 
     // Don't check for users as it doesn't show in some CI
 }
 
 /// Checks for files without utmpx records for which boot time cannot be calculated
 #[test]
-#[cfg(not(any(target_os = "openbsd", target_os = "freebsd")))]
+#[cfg(not(any(windows, target_os = "openbsd", target_os = "freebsd")))]
 // Disabled for freebsd, since it doesn't use the utmpxname() sys call to change the default utmpx
 // file that is accessed using getutxent()
 fn test_uptime_for_file_without_utmpx_records() {
@@ -47,6 +51,7 @@ fn test_uptime_for_file_without_utmpx_records() {
 #[test]
 #[cfg(all(unix, feature = "cp"))]
 fn test_uptime_with_fifo() {
+    use uutests::{util::TestScenario, util_name};
     // This test can go on forever in the CI in some cases, might need aborting
     // Sometimes writing to the pipe is broken
     let ts = TestScenario::new(util_name!());
@@ -73,7 +78,7 @@ fn test_uptime_with_fifo() {
 }
 
 #[test]
-#[cfg(not(target_os = "freebsd"))]
+#[cfg(not(any(windows, target_os = "freebsd")))]
 fn test_uptime_with_non_existent_file() {
     // Disabled for freebsd, since it doesn't use the utmpxname() sys call to change the default utmpx
     // file that is accessed using getutxent()
@@ -87,7 +92,7 @@ fn test_uptime_with_non_existent_file() {
 // TODO create a similar test for macos
 // This will pass
 #[test]
-#[cfg(not(any(target_os = "openbsd", target_os = "macos")))]
+#[cfg(not(any(windows, target_os = "openbsd", target_os = "macos")))]
 #[cfg(not(target_env = "musl"))]
 #[cfg_attr(
     all(target_arch = "aarch64", target_os = "linux"),
@@ -234,6 +239,7 @@ fn test_uptime_with_file_containing_valid_boot_time_utmpx_record() {
 }
 
 #[test]
+#[cfg(not(windows))]
 fn test_uptime_with_extra_argument() {
     new_ucmd!()
         .arg("a")
@@ -241,8 +247,10 @@ fn test_uptime_with_extra_argument() {
         .fails()
         .stderr_contains("unexpected value 'b'");
 }
+
 /// Checks whether uptime displays the correct stderr msg when its called with a directory
 #[test]
+#[cfg(not(windows))]
 fn test_uptime_with_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
 
