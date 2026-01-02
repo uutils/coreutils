@@ -10,11 +10,8 @@ use clap::{Arg, ArgAction, Command};
 use memchr::memmem;
 use memmap2::Mmap;
 use std::ffi::OsString;
-use std::io::{BufWriter, Read, Write, stdin, stdout};
-use std::{
-    fs::{File, read},
-    path::Path,
-};
+use std::io::{BufWriter, Read, Seek, Write, stdin, stdout};
+use std::{fs::File, path::Path};
 use uucore::error::UError;
 use uucore::error::UResult;
 use uucore::{format_usage, show};
@@ -269,17 +266,23 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &str) -> UR
                 mmap = mmap1;
                 &mmap
             } else {
-                match read(path) {
-                    Ok(buf1) => {
-                        buf = buf1;
-                        &buf
-                    }
-                    Err(e) => {
-                        let e: Box<dyn UError> = TacError::ReadError(filename.clone(), e).into();
-                        show!(e);
-                        continue;
-                    }
+                let mut f = File::open(path)?;
+                let mut buf1;
+
+                if let Some(size) = try_seek_end(&mut f) {
+                    // Normal file with known size
+                    buf1 = Vec::with_capacity(size as usize);
+                } else {
+                    // Unable to determine size - fall back to normal read
+                    buf1 = Vec::new();
                 }
+                if let Err(e) = f.read_to_end(&mut buf1) {
+                    let e: Box<dyn UError> = TacError::ReadError(filename.clone(), e).into();
+                    show!(e);
+                    continue;
+                }
+                buf = buf1;
+                &buf
             }
         };
 
@@ -307,9 +310,57 @@ fn try_mmap_stdin() -> Option<Mmap> {
 fn try_mmap_path(path: &Path) -> Option<Mmap> {
     let file = File::open(path).ok()?;
 
+    // Only mmap regular files.
+    if !file.metadata().ok()?.is_file() {
+        return None;
+    }
+
     // SAFETY: If the file is truncated while we map it, SIGBUS will be raised
     // and our process will be terminated, thus preventing access of invalid memory.
     let mmap = unsafe { Mmap::map(&file).ok()? };
 
     Some(mmap)
+}
+
+/// Attempt to seek to end of file
+///
+/// Returns `Some(size)` if successful, `None` if unable to determine size.
+/// Hangs if file is an infinite stream.
+///
+/// Leaves file cursor at start of file
+fn try_seek_end(file: &mut File) -> Option<u64> {
+    let size = file.seek(std::io::SeekFrom::End(0)).ok();
+
+    if size == Some(0) {
+        // Might be an empty file or infinite stream;
+        // Try reading a byte to distinguish
+        file.seek(std::io::SeekFrom::Start(0)).ok()?;
+        let mut test_byte = [0u8; 1];
+        match file.read(&mut test_byte).ok()? {
+            0 => {
+                // Truly empty file
+                return size;
+            }
+            _ => {
+                // Has data despite size 0 - likely a pipe or special file
+                // Loop forever looking for EOF
+                loop {
+                    let mut byte = [0u8; 1];
+                    match file.read(&mut byte) {
+                        Ok(0) => break,    // Found EOF
+                        Ok(_) => continue, // Keep looking
+                        Err(_) => break,
+                    }
+                }
+
+                // TODO: Prove this is actually unreachable
+                unreachable!();
+            }
+        }
+    }
+
+    // Leave the file cursor at the start
+    file.seek(std::io::SeekFrom::Start(0)).ok()?;
+
+    size
 }
