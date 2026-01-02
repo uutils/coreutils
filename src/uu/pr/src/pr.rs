@@ -48,6 +48,7 @@ mod options {
     pub const COLUMN_WIDTH: &str = "width";
     pub const PAGE_WIDTH: &str = "page-width";
     pub const ACROSS: &str = "across";
+    pub const COLUMN_DOWN: &str = "column-down";
     pub const COLUMN: &str = "column";
     pub const COLUMN_CHAR_SEPARATOR: &str = "separator";
     pub const COLUMN_STRING_SEPARATOR: &str = "sep-string";
@@ -255,6 +256,13 @@ pub fn uu_app() -> Command {
                 .short('a')
                 .long(options::ACROSS)
                 .help(translate!("pr-help-across"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            // -b is a no-op for backwards compatibility (column-down is now the default)
+            Arg::new(options::COLUMN_DOWN)
+                .short('b')
+                .hide(true)
                 .action(ArgAction::SetTrue),
         )
         .arg(

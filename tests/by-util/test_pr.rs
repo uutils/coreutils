@@ -616,3 +616,9 @@ fn test_version() {
 fn test_pr_char_device_dev_null() {
     new_ucmd!().arg("/dev/null").succeeds();
 }
+
+#[test]
+fn test_b_flag_backwards_compat() {
+    // -b is a no-op for backwards compatibility (column-down is now the default)
+    new_ucmd!().args(&["-b", "-t"]).pipe_in("a\nb\n").succeeds();
+}
