@@ -1444,3 +1444,55 @@ fn test_date_locale_fr_french() {
         "Output should include timezone information, got: {stdout}"
     );
 }
+
+#[test]
+#[cfg(any(
+    target_os = "linux",
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd",
+    target_os = "dragonfly"
+))]
+fn test_format_upper_c_locale_expansion() {
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2024-01-01")
+        .arg("+%^c")
+        .succeeds()
+        .stdout_str_check(|out| {
+            // In C locale, %c expands to "%a %b %e %H:%M:%S %Y" (e.g., "Mon Jan  1 ...")
+            // With the ^ flag, we expect "MON JAN  1 ..."
+            out.contains("MON") && out.contains("JAN")
+        });
+}
+
+#[test]
+#[cfg(any(
+    target_os = "linux",
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd",
+    target_os = "dragonfly"
+))]
+fn test_format_upper_c_locale_expansion_french() {
+    let result = new_ucmd!()
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .arg("-d")
+        .arg("2024-01-01T13:00:00")
+        .arg("+%^c")
+        .run();
+
+    let stdout = result.stdout_str();
+
+    // Should have 13:00 (not 1:00)
+    assert!(
+        stdout.contains("13:00"),
+        "French locale should show 13:00 for 1 PM, got: {stdout}"
+    );
+
+    assert_eq!(stdout.to_uppercase(), stdout, "Output should be uppercase");
+}
