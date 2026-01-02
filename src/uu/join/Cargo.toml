@@ -24,6 +24,15 @@ memchr = { workspace = true }
 thiserror = { workspace = true }
 fluent = { workspace = true }
 
+[dev-dependencies]
+divan = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+tempfile = { workspace = true }
+
 [[bin]]
 name = "join"
 path = "src/main.rs"
+
+[[bench]]
+name = "join_bench"
+harness = false
