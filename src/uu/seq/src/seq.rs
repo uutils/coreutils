@@ -103,6 +103,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // signal disposition for proper pipeline behavior (GNU compatibility).
     #[cfg(unix)]
     if !signals::sigpipe_was_ignored() {
+        // Ignore the return value: if setting signal handler fails, we continue anyway.
+        // The worst case is we don't get proper SIGPIPE behavior, but seq will still work.
         let _ = signals::enable_pipe_errors();
     }
 
@@ -223,8 +225,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         padding,
     );
 
-    if let Err(err) = result {
-        if err.kind() == std::io::ErrorKind::BrokenPipe {
+    match result {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => {
             // GNU seq prints the Broken pipe message but still exits with status 0
             // unless SIGPIPE was explicitly ignored, in which case it should fail.
             let err = err.map_err_context(|| "write error".into());
@@ -233,11 +236,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             if signals::sigpipe_was_ignored() {
                 uucore::error::set_exit_code(1);
             }
-            return Ok(());
+            Ok(())
         }
-        return Err(err.map_err_context(|| "write error".into()));
+        Err(err) => Err(err.map_err_context(|| "write error".into())),
     }
-    Ok(())
 }
 
 pub fn uu_app() -> Command {
