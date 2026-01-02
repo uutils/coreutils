@@ -11,8 +11,6 @@ fn test_invalid_arg() {
 
 #[test]
 fn test_missing_operand() {
-    // Test calling dirname with no arguments - should fail
-    // This covers the error path at line 80-82 in dirname.rs
     new_ucmd!().fails_with_code(1);
 }
 
@@ -78,15 +76,11 @@ fn test_dirname_non_utf8_paths() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
 
-    // Create a test file with non-UTF-8 bytes in the name
     let non_utf8_bytes = b"test_\xFF\xFE/file.txt";
     let non_utf8_name = OsStr::from_bytes(non_utf8_bytes);
 
-    // Test that dirname handles non-UTF-8 paths without crashing
     let result = new_ucmd!().arg(non_utf8_name).succeeds();
 
-    // Just verify it didn't crash and produced some output
-    // The exact output format may vary due to lossy conversion
     let output = result.stdout_str_lossy();
     assert!(!output.is_empty());
     assert!(output.contains("test_"));

@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 use clap::{Arg, ArgAction, Command};
+use std::borrow::Cow;
 use std::ffi::OsString;
 #[cfg(unix)]
 use uucore::display::print_verbatim;
@@ -38,9 +39,9 @@ mod options {
 /// - GNU: <https://www.gnu.org/software/coreutils/manual/html_node/dirname-invocation.html>
 ///
 /// See issue #8910 and similar fix in basename (#8373, commit c5268a897).
-fn dirname_string_manipulation(path_bytes: &[u8]) -> Vec<u8> {
+fn dirname_string_manipulation(path_bytes: &[u8]) -> Cow<'_, [u8]> {
     if path_bytes.is_empty() {
-        return b".".to_vec();
+        return Cow::Borrowed(b".");
     }
 
     let mut bytes = path_bytes;
@@ -48,7 +49,7 @@ fn dirname_string_manipulation(path_bytes: &[u8]) -> Vec<u8> {
     // Step 1: Strip trailing slashes (but not if the entire path is slashes)
     let all_slashes = bytes.iter().all(|&b| b == b'/');
     if all_slashes {
-        return b"/".to_vec();
+        return Cow::Borrowed(b"/");
     }
 
     while bytes.len() > 1 && bytes.ends_with(b"/") {
@@ -68,12 +69,12 @@ fn dirname_string_manipulation(path_bytes: &[u8]) -> Vec<u8> {
             if slash_start == 0 {
                 // Result would be empty
                 return if path_bytes.starts_with(b"/") {
-                    b"/".to_vec()
+                    Cow::Borrowed(b"/")
                 } else {
-                    b".".to_vec()
+                    Cow::Borrowed(b".")
                 };
             }
-            return bytes[..slash_start].to_vec();
+            return Cow::Owned(bytes[..slash_start].to_vec());
         }
     }
 
@@ -88,14 +89,14 @@ fn dirname_string_manipulation(path_bytes: &[u8]) -> Vec<u8> {
         }
 
         if result.is_empty() {
-            return b"/".to_vec();
+            return Cow::Borrowed(b"/");
         }
 
-        return result.to_vec();
+        return Cow::Owned(result.to_vec());
     }
 
     // No slash found, return "."
-    b".".to_vec()
+    Cow::Borrowed(b".")
 }
 
 #[uucore::main]
