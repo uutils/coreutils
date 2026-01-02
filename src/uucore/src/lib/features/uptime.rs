@@ -338,13 +338,8 @@ pub fn get_nusers() -> usize {
                 continue;
             }
 
-            let username = if !buffer.is_null() {
-                let cstr = std::ffi::CStr::from_ptr(buffer as *const i8);
-                cstr.to_string_lossy().to_string()
-            } else {
-                String::new()
-            };
-            if !username.is_empty() {
+            let cstr = std::ffi::CStr::from_ptr(buffer.cast());
+            if !cstr.is_empty() {
                 num_user += 1;
             }
 
