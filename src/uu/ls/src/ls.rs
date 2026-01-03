@@ -65,6 +65,7 @@ use uucore::{
     fs::FileInformation,
     fs::display_permissions,
     fsext::{MetadataTimeField, metadata_get_time},
+    i18n,
     line_ending::LineEnding,
     os_str_as_bytes_lossy,
     parser::parse_glob,
@@ -82,6 +83,7 @@ use dired::{DiredOutput, is_dired_arg_present};
 mod colors;
 use crate::options::QUOTING_STYLE;
 use colors::{StyleManager, color_name};
+use uucore::quoting_style::escape_name;
 
 pub mod options {
     pub mod format {
@@ -3187,7 +3189,11 @@ fn display_item_name(
     current_column: LazyCell<usize, Box<dyn FnOnce() -> usize + '_>>,
 ) -> OsString {
     // This is our return value. We start by `&path.display_name` and modify it along the way.
-    let mut name = locale_aware_escape_name(path.display_name(), config.quoting_style);
+    let mut name = escape_name(
+        path.display_name(),
+        config.quoting_style,
+        i18n::get_character_handling_locale().1,
+    );
 
     let is_wrap =
         |namelen: usize| config.width != 0 && *current_column + namelen > config.width.into();
