@@ -163,7 +163,7 @@ pub fn wrap_chown<P: AsRef<Path>>(
             format!(
                 "group of {} retained as {}",
                 path.quote(),
-                entries::gid2grp(dest_gid).unwrap_or_default()
+                entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
             )
         } else {
             format!(
