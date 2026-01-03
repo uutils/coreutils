@@ -861,8 +861,9 @@ fn test_chown_multiple_files_error_on_first_success_on_last() {
 
     std::fs::set_permissions(
         at.plus("a_readonly_dir/subdir"),
-        std::fs::Permissions::from_mode(0o000)
-    ).unwrap();
+        std::fs::Permissions::from_mode(0o000),
+    )
+    .unwrap();
 
     scene
         .ucmd()
