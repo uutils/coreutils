@@ -19,8 +19,9 @@ fn setup_date_file(lines: usize, date_format: &str) -> NamedTempFile {
 }
 
 /// Benchmarks processing a file containing simple ISO dates.
-#[divan::bench(args = [100, 1_000, 10_000])]
-fn file_iso_dates(bencher: Bencher, count: usize) {
+#[divan::bench]
+fn file_iso_dates(bencher: Bencher) {
+    let count = 1_000;
     let file = setup_date_file(count, "2023-05-10 12:00:00");
     let path = file.path().to_str().unwrap();
 
@@ -30,8 +31,9 @@ fn file_iso_dates(bencher: Bencher, count: usize) {
 }
 
 /// Benchmarks processing a file containing dates with Timezone abbreviations.
-#[divan::bench(args = [100, 1_000, 10_000])]
-fn file_tz_abbreviations(bencher: Bencher, count: usize) {
+#[divan::bench]
+fn file_tz_abbreviations(bencher: Bencher) {
+    let count = 1_000;
     // "EST" triggers the abbreviation lookup and double-parsing logic
     let file = setup_date_file(count, "2023-05-10 12:00:00 EST");
     let path = file.path().to_str().unwrap();
@@ -42,8 +44,9 @@ fn file_tz_abbreviations(bencher: Bencher, count: usize) {
 }
 
 /// Benchmarks formatting speed using a custom output format.
-#[divan::bench(args = [1_000])]
-fn file_custom_format(bencher: Bencher, count: usize) {
+#[divan::bench]
+fn file_custom_format(bencher: Bencher) {
+    let count = 1_000;
     let file = setup_date_file(count, "2023-05-10 12:00:00");
     let path = file.path().to_str().unwrap();
 
