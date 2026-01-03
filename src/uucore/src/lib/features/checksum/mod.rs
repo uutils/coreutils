@@ -368,7 +368,7 @@ impl SizedAlgoKind {
         matches!(self, Sysv | Bsd | Crc | Crc32b)
     }
 }
-
+// TODO: Switch to cla and drop unused error messages
 #[derive(Debug, Error)]
 pub enum ChecksumError {
     #[error("the --raw option is not supported with multiple files")]
