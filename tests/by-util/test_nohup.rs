@@ -248,7 +248,6 @@ fn test_nohup_stderr_to_stdout() {
     assert!(content.contains("stderr message"));
 }
 
-
 // Test nohup.out has 0600 permissions
 #[test]
 #[cfg(any(
@@ -274,7 +273,11 @@ fn test_nohup_output_permissions() {
     let metadata = std::fs::metadata(at.plus("nohup.out")).unwrap();
     let mode = metadata.permissions().mode();
 
-    assert_eq!(mode & 0o777, 0o600, "nohup.out should have 0600 permissions");
+    assert_eq!(
+        mode & 0o777,
+        0o600,
+        "nohup.out should have 0600 permissions"
+    );
 }
 
 // Test that the fallback nohup.out (in $HOME) also has 0600 permissions
@@ -313,7 +316,9 @@ fn test_nohup_fallback_output_permissions() {
 
     // Run nohup inside the read-only dir
     // This forces it to fail writing to CWD and fall back to custom HOME
-    ts.ucmd() .env("HOME", &home_dir_str) .current_dir(&readonly_path)
+    ts.ucmd()
+        .env("HOME", &home_dir_str)
+        .current_dir(&readonly_path)
         .terminal_simulation(true)
         .arg("true")
         .run();
@@ -330,5 +335,9 @@ fn test_nohup_fallback_output_permissions() {
     let metadata = fs::metadata(home_nohup).expect("nohup.out should have been created in HOME");
     let mode = metadata.permissions().mode();
 
-    assert_eq!(mode & 0o777, 0o600, "Fallback nohup.out should have 0600 permissions");
+    assert_eq!(
+        mode & 0o777,
+        0o600,
+        "Fallback nohup.out should have 0600 permissions"
+    );
 }
