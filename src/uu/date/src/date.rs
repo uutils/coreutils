@@ -671,9 +671,12 @@ fn tz_abbrev_to_iana(abbrev: &str) -> Option<&str> {
     cache.get(abbrev).map(|s| s.as_str())
 }
 
-/// Resolve timezone abbreviation in date string and replace with numeric offset.
-/// Returns the modified string with offset, or original if no abbreviation found.
-fn resolve_tz_abbreviation<S: AsRef<str>>(date_str: S) -> String {
+/// Attempts to parse a date string that contains a timezone abbreviation (e.g. "EST").
+///
+/// If an abbreviation is found and the date is parsable, returns `Some(Zoned)`.
+/// Returns `None` if no abbreviation is detected or if parsing fails, indicating
+/// that standard parsing should be attempted.
+fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S) -> Option<Zoned> {
     let s = date_str.as_ref();
 
     // Look for timezone abbreviation at the end of the string
@@ -697,11 +700,7 @@ fn resolve_tz_abbreviation<S: AsRef<str>>(date_str: S) -> String {
                         let ts = parsed.timestamp();
 
                         // Get the offset for this specific timestamp in the target timezone
-                        let zoned = ts.to_zoned(tz);
-                        let offset_str = format!("{}", zoned.offset());
-
-                        // Replace abbreviation with offset
-                        return format!("{date_part} {offset_str}");
+                        return Some(ts.to_zoned(tz));
                     }
                 }
             }
@@ -709,7 +708,7 @@ fn resolve_tz_abbreviation<S: AsRef<str>>(date_str: S) -> String {
     }
 
     // No abbreviation found or couldn't resolve, return original
-    s.to_string()
+    None
 }
 
 /// Parse a `String` into a `DateTime`.
@@ -724,10 +723,12 @@ fn resolve_tz_abbreviation<S: AsRef<str>>(date_str: S) -> String {
 fn parse_date<S: AsRef<str> + Clone>(
     s: S,
 ) -> Result<Zoned, (String, parse_datetime::ParseDateTimeError)> {
-    // First, try to resolve any timezone abbreviations
-    let resolved = resolve_tz_abbreviation(s.as_ref());
+    // First, try to parse any timezone abbreviations
+    if let Some(zoned) = try_parse_with_abbreviation(s.as_ref()) {
+        return Ok(zoned);
+    }
 
-    match parse_datetime::parse_datetime(&resolved) {
+    match parse_datetime::parse_datetime(s.as_ref()) {
         Ok(date) => {
             // Convert to system timezone for display
             // (parse_datetime 0.13 returns Zoned in the input's timezone)
