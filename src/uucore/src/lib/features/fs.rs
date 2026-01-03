@@ -138,7 +138,6 @@ impl FileInformation {
             any(
                 target_vendor = "apple",
                 target_os = "android",
-                target_os = "freebsd",
                 target_os = "netbsd",
                 target_os = "openbsd",
                 target_os = "illumos",
@@ -152,6 +151,8 @@ impl FileInformation {
             )
         ))]
         return self.0.st_nlink.into();
+        #[cfg(target_os = "freebsd")]
+        return self.0.st_nlink;
         #[cfg(target_os = "aix")]
         return self.0.st_nlink.try_into().unwrap();
         #[cfg(windows)]
@@ -160,16 +161,9 @@ impl FileInformation {
 
     #[cfg(unix)]
     pub fn inode(&self) -> u64 {
-        #[cfg(all(
-            not(any(target_os = "freebsd", target_os = "netbsd")),
-            target_pointer_width = "64"
-        ))]
+        #[cfg(all(not(any(target_os = "netbsd")), target_pointer_width = "64"))]
         return self.0.st_ino;
-        #[cfg(any(
-            target_os = "freebsd",
-            target_os = "netbsd",
-            not(target_pointer_width = "64")
-        ))]
+        #[cfg(any(target_os = "netbsd", not(target_pointer_width = "64")))]
         return self.0.st_ino.into();
     }
 }
