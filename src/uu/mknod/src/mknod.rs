@@ -26,7 +26,6 @@ mod options {
     pub const CONTEXT: &str = "context";
 }
 
-#[inline(always)]
 fn makedev(maj: u64, min: u64) -> dev_t {
     // pick up from <sys/sysmacros.h>
     ((min & 0xff) | ((maj & 0xfff) << 8) | ((min & !0xff) << 12) | ((maj & !0xfff) << 32)) as dev_t

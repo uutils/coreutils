@@ -223,7 +223,6 @@ pub fn human_numeric_str_cmp(
 
 /// Compare two numbers as strings without parsing them as a number first. This should be more performant and can handle numbers more precisely.
 /// [`NumInfo`] is needed to provide a fast path for most numbers.
-#[inline(always)]
 pub fn numeric_str_cmp((a, a_info): (&[u8], &NumInfo), (b, b_info): (&[u8], &NumInfo)) -> Ordering {
     // check for a difference in the sign
     if a_info.sign != b_info.sign {
