@@ -11,6 +11,7 @@ use std::{
     fs::File,
     io::{self, Read, Seek, Write},
     process,
+    sync::OnceLock,
 };
 
 use clap::{Arg, Command};
@@ -133,17 +134,20 @@ fn gen_completions<T: Args>(args: impl Iterator<Item = OsString>, util_map: &Uti
     process::exit(0);
 }
 
-/// print tldr error
+/// print tldr error (only once per process)
 fn print_tldr_error() {
-    eprintln!("Warning: No tldr archive found, so the documentation will not include examples.");
-    eprintln!(
-        "To include examples in the documentation, download the tldr archive and put it in the docs/ folder."
-    );
-    eprintln!();
-    eprintln!(
-        "  curl -L https://github.com/tldr-pages/tldr/releases/latest/download/tldr.zip -o docs/tldr.zip"
-    );
-    eprintln!();
+    static PRINTED: OnceLock<()> = OnceLock::new();
+    PRINTED.get_or_init(|| {
+        eprintln!("Warning: No tldr archive found, so the documentation will not include examples.");
+        eprintln!(
+            "To include examples in the documentation, download the tldr archive and put it in the docs/ folder."
+        );
+        eprintln!();
+        eprintln!(
+            "  curl -L https://github.com/tldr-pages/tldr/releases/latest/download/tldr.zip -o docs/tldr.zip"
+        );
+        eprintln!();
+    });
 }
 
 /// # Errors
