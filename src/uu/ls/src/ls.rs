@@ -664,6 +664,9 @@ fn match_quoting_style_name(style: &str, show_control: bool) -> Option<QuotingSt
         "shell-escape-always" => Some(QuotingStyle::SHELL_ESCAPE_QUOTE),
         "c" => Some(QuotingStyle::C_DOUBLE),
         "escape" => Some(QuotingStyle::C_NO_QUOTES),
+        "locale" => Some(QuotingStyle::C {
+            quotes: uucore::quoting_style::Quotes::Locale,
+        }),
         _ => None,
     }
     .map(|qs| qs.show_control(show_control))
@@ -1364,6 +1367,7 @@ pub fn uu_app() -> Command {
                 PossibleValue::new("shell-escape-always"),
                 PossibleValue::new("c").alias("c-maybe"),
                 PossibleValue::new("escape"),
+                PossibleValue::new("locale"),
             ]))
             .overrides_with_all([
                 QUOTING_STYLE,

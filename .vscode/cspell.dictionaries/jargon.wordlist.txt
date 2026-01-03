@@ -214,3 +214,8 @@ TUNABLES
 tunables
 VMULL
 vmull
+
+# * locale and typography
+CTYPE
+Guillemets
+guillemets
