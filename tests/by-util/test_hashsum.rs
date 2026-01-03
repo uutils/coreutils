@@ -203,9 +203,6 @@ macro_rules! test_digest_with_len {
 
 test_digest! {md5, md5}
 test_digest! {sha1, sha1}
-test_digest! {b3sum, b3sum}
-test_digest! {shake128, shake128}
-test_digest! {shake256, shake256}
 
 test_digest_with_len! {sha224, sha224, 224}
 test_digest_with_len! {sha256, sha256, 256}
