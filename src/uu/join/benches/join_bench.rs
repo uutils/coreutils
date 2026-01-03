@@ -110,6 +110,22 @@ fn join_custom_separator(bencher: Bencher) {
     });
 }
 
+/// Benchmark join with French locale (fr_FR.UTF-8)
+#[divan::bench]
+fn join_french_locale(bencher: Bencher) {
+    let num_lines = 10000;
+    let temp_dir = TempDir::new().unwrap();
+    let (file1, file2) = create_join_files(&temp_dir, num_lines);
+
+    bencher
+        .with_inputs(|| unsafe {
+            std::env::set_var("LC_ALL", "fr_FR.UTF-8");
+        })
+        .bench_values(|_| {
+            black_box(run_util_function(uumain, &[&file1, &file2]));
+        });
+}
+
 fn main() {
     divan::main();
 }
