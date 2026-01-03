@@ -118,6 +118,12 @@ enum InstallError {
     #[error("{}", translate!("install-error-extra-operand", "operand" => .0.quote(), "usage" => .1.clone()))]
     ExtraOperand(OsString, String),
 
+    #[error("{}", translate!("install-error-failed-to-remove", "path" => .0.quote(), "error" => .1.clone()))]
+    FailedToRemove(PathBuf, String),
+
+    #[error("{}", translate!("install-error-cannot-stat", "path" => .0.quote(), "error" => .1.clone()))]
+    CannotStat(PathBuf, String),
+
     #[cfg(feature = "selinux")]
     #[error("{}", .0)]
     SelinuxContextFailed(String),
@@ -675,7 +681,19 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
             return copy_files_into_dir(sources, &target, b);
         }
 
-        if target.is_file() || is_new_file_path(&target) {
+        // target.is_file does not detect special files like character/block devices
+        // So, in a unix environment, we need to check the file type from metadata and
+        // not just trust is_file().
+        #[cfg(unix)]
+        let is_file = match metadata(&target) {
+            Ok(meta) => !meta.file_type().is_dir(),
+            Err(_) => false,
+        };
+
+        #[cfg(not(unix))]
+        let is_file = target.is_file();
+
+        if is_file || is_new_file_path(&target) {
             copy(source, &target, b)
         } else {
             Err(InstallError::InvalidTarget(target).into())
@@ -831,6 +849,17 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
         }
     }
 
+    // If we don't include this check, then the `remove_file` below will fail
+    // and it will give an incorrect error message. However, if we check to
+    // see if the file exists, and it can't even be checked, this means we
+    // don't have permission to access the file, so we should return an error.
+    if let Err(to_stat) = to.try_exists() {
+        return Err(InstallError::CannotStat(
+            to.to_path_buf(),
+            to_stat.to_string(),
+        ).into());
+    }
+
     if to.is_dir() && !from.is_dir() {
         return Err(InstallError::OverrideDirectoryFailed(
             to.to_path_buf().clone(),
@@ -842,10 +871,10 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
     // so lets just remove all existing files at destination before copy.
     if let Err(e) = fs::remove_file(to) {
         if e.kind() != std::io::ErrorKind::NotFound {
-            show_error!(
-                "{}",
-                translate!("install-error-failed-to-remove", "path" => to.quote(), "error" => format!("{e:?}"))
-            );
+            // If we get here, then remove_file failed for some
+            // reason other than the file not existing. This means
+            // this should be a fatal error, not a warning.
+            return Err(InstallError::FailedToRemove(to.to_path_buf(), e.to_string()).into());
         }
     }
 
