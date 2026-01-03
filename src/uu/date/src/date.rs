@@ -13,7 +13,7 @@ use jiff::tz::{TimeZone, TimeZoneDatabase};
 use jiff::{Timestamp, Zoned};
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use uucore::display::Quotable;
@@ -428,24 +428,31 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let format_string = make_format_string(&settings);
+    let mut stdout = BufWriter::new(std::io::stdout().lock());
 
     // Format all the dates
     for date in dates {
         match date {
             // TODO: Switch to lenient formatting.
             Ok(date) => match strtime::format(format_string, &date) {
-                Ok(s) => println!("{s}"),
+                Ok(s) => writeln!(stdout, "{s}").map_err(|e| {
+                    USimpleError::new(1, translate!("date-error-write", "error" => e))
+                })?,
                 Err(e) => {
+                    let _ = stdout.flush();
                     return Err(USimpleError::new(
                         1,
                         translate!("date-error-invalid-format", "format" => format_string, "error" => e),
                     ));
                 }
             },
-            Err((input, _err)) => show!(USimpleError::new(
-                1,
-                translate!("date-error-invalid-date", "date" => input)
-            )),
+            Err((input, _err)) => {
+                let _ = stdout.flush();
+                show!(USimpleError::new(
+                    1,
+                    translate!("date-error-invalid-date", "date" => input)
+                ));
+            }
         }
     }
 
