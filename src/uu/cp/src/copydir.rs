@@ -89,8 +89,8 @@ fn skip_last<T>(mut iter: impl Iterator<Item = T>) -> impl Iterator<Item = T> {
 
 /// Paths that are invariant throughout the traversal when copying a directory.
 struct Context<'a> {
-    /// The current working directory at the time of starting the traversal.
-    current_dir: PathBuf,
+    /// The current working directory at the time of starting the traversal (if root is relative).
+    current_dir: Option<PathBuf>,
 
     /// The path to the parent of the source directory, if any.
     root_parent: Option<PathBuf>,
@@ -107,10 +107,37 @@ struct Context<'a> {
 
 impl<'a> Context<'a> {
     fn new(root: &'a Path, target: &'a Path) -> io::Result<Self> {
-        let current_dir = env::current_dir()?;
-        let root_path = current_dir.join(root);
         let target_is_file = target.is_file();
-        let root_parent = if target.exists() && !root.to_str().unwrap().ends_with("/.") {
+
+        // Only get the current directory if root is a relative path.
+        // This avoids unnecessary getcwd() syscall failures when the current
+        // directory has been deleted (issue #9105), and matches GNU cp behavior.
+        let (current_dir, root_path) = if root.is_absolute() {
+            (None, root.to_path_buf())
+        } else {
+            let cwd = env::current_dir()?;
+            let root_path = cwd.join(root);
+            (Some(cwd), root_path)
+        };
+
+        let root_parent = Self::determine_root_parent(root, target, &root_path);
+
+        Ok(Self {
+            current_dir,
+            root_parent,
+            target,
+            target_is_file,
+            root,
+        })
+    }
+
+    /// Determine root_parent for path resolution during traversal.
+    fn determine_root_parent(root: &Path, target: &Path, root_path: &Path) -> Option<PathBuf> {
+        // Check if root path ends with "/." (e.g., "dir/.")
+        let root_ends_with_dot = root.to_str().is_some_and(|s| s.ends_with("/."));
+
+        if target.exists() && !root_ends_with_dot {
+            // Normal case: use parent of resolved root path
             root_path.parent().map(|p| p.to_path_buf())
         } else if root == Path::new(".") && target.is_dir() {
             // Special case: when copying current directory (.) to an existing directory,
@@ -119,15 +146,9 @@ impl<'a> Context<'a> {
             // not create a subdirectory with the current directory's name.
             None
         } else {
-            Some(root_path)
-        };
-        Ok(Self {
-            current_dir,
-            root_parent,
-            target,
-            target_is_file,
-            root,
-        })
+            // Use the root path itself when target doesn't exist yet
+            Some(root_path.to_path_buf())
+        }
     }
 }
 
@@ -188,7 +209,11 @@ impl Entry {
     ) -> Result<Self, StripPrefixError> {
         let source = source.as_ref();
         let source_relative = source.to_path_buf();
-        let source_absolute = context.current_dir.join(&source_relative);
+        let source_absolute = if let Some(ref current_dir) = context.current_dir {
+            current_dir.join(&source_relative)
+        } else {
+            source_relative.clone()
+        };
         let mut descendant =
             get_local_to_root_parent(&source_absolute, context.root_parent.as_deref())?;
         if no_target_dir {
@@ -217,9 +242,11 @@ impl Entry {
             // an extra level of nesting. For example, if we're in /home/user/source_dir
             // and copying . to /home/user/dest_dir, we want to copy source_dir/file.txt
             // to dest_dir/file.txt, not dest_dir/source_dir/file.txt.
-            if let Some(current_dir_name) = context.current_dir.file_name() {
-                if let Ok(stripped) = descendant.strip_prefix(current_dir_name) {
-                    descendant = stripped.to_path_buf();
+            if let Some(current_dir) = &context.current_dir {
+                if let Some(current_dir_name) = current_dir.file_name() {
+                    if let Ok(stripped) = descendant.strip_prefix(current_dir_name) {
+                        descendant = stripped.to_path_buf();
+                    }
                 }
             }
         }

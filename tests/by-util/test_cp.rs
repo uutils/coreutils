@@ -7444,3 +7444,54 @@ fn test_cp_archive_deref_flag_ordering() {
         assert_eq!(at.is_symlink(&dest), expect_symlink, "failed for {flags}");
     }
 }
+
+#[test]
+#[cfg(unix)]
+fn test_cp_absolute_paths_with_relative_source() {
+    // Test that cp works with absolute target when using relative source path
+    // This tests the path resolution logic in issue #9105
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("src");
+    at.touch("src/file.txt");
+    at.mkdir("dst");
+
+    ucmd.arg("-r").arg("src").arg("dst").succeeds();
+
+    assert!(at.file_exists("dst/src/file.txt"));
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_absolute_source_and_target() {
+    // Test that cp works with both absolute source and target paths
+    // This tests issue #9105 fix: avoiding getcwd() for absolute paths
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let temp_dir = std::env::temp_dir();
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let src_dir = temp_dir.join(format!("cp_test_src_{timestamp}"));
+    let dst_dir = temp_dir.join(format!("cp_test_dst_{timestamp}"));
+
+    // Create source directory with test files
+    fs::create_dir_all(&src_dir).unwrap();
+    fs::write(src_dir.join("file1.txt"), "content1").unwrap();
+    fs::write(src_dir.join("file2.txt"), "content2").unwrap();
+
+    // Perform copy with absolute paths
+    let (_at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("-r").arg(&src_dir).arg(&dst_dir).succeeds();
+
+    // Verify files were copied
+    assert!(dst_dir.exists());
+    assert!(dst_dir.join("file1.txt").exists());
+    assert!(dst_dir.join("file2.txt").exists());
+
+    // Clean up
+    let _ = fs::remove_dir_all(&src_dir);
+    let _ = fs::remove_dir_all(&dst_dir);
+}
