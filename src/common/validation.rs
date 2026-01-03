@@ -50,9 +50,9 @@ fn get_canonical_util_name(util_name: &str) -> &str {
         // uu_test aliases - '[' is an alias for test
         "[" => "test",
 
-        // hashsum aliases - all these hash commands are aliases for hashsum
+        // cksum aliases - all these hash commands are aliases for cksum
         "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum" | "b2sum" => {
-            "hashsum"
+            "cksum"
         }
 
         "dir" => "ls", // dir is an alias for ls
@@ -98,7 +98,7 @@ mod tests {
     fn test_get_canonical_util_name() {
         // Test a few key aliases
         assert_eq!(get_canonical_util_name("["), "test");
-        assert_eq!(get_canonical_util_name("md5sum"), "hashsum");
+        assert_eq!(get_canonical_util_name("md5sum"), "cksum");
         assert_eq!(get_canonical_util_name("dir"), "ls");
 
         // Test passthrough case

@@ -83,7 +83,6 @@ static PATH_PROGRAMS: &[&str] = &[
     "vdir",
     "mkfifo",
     "mknod",
-    "hashsum",
     // File I/O utilities
     "dd",
     "sync",
@@ -251,12 +250,6 @@ fn test_program_with_non_utf8_path(program: &str, path: &PathBuf) -> CommandResu
             OsString::from("of=/dev/null"),
             OsString::from("bs=1"),
             OsString::from("count=1"),
-        ],
-        // Hashsum needs algorithm
-        "hashsum" => vec![
-            OsString::from(program),
-            OsString::from("--md5"),
-            path_os.to_owned(),
         ],
         // Encoding/decoding programs
         "base32" | "base64" | "basenc" => vec![OsString::from(program), path_os.to_owned()],

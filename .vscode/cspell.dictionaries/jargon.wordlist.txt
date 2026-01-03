@@ -72,7 +72,6 @@ hardfloat
 hardlink
 hardlinks
 hasher
-hashsums
 hwcaps
 infile
 iflag
