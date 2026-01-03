@@ -838,3 +838,38 @@ fn test_chown_reference_file() {
         .stderr_contains("ownership of 'b' retained as")
         .no_stdout();
 }
+
+#[test]
+#[cfg(unix)]
+fn test_chown_multiple_files_error_on_first_success_on_last() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let result = scene.cmd("whoami").run();
+    if skipping_test_is_okay(&result, "whoami: cannot find name for user ID") {
+        return;
+    }
+    let user_name = String::from(result.stdout_str().trim());
+    assert!(!user_name.is_empty());
+
+    at.mkdir("a_readonly_dir");
+    at.mkdir("a_readonly_dir/subdir");
+    at.touch("a_readonly_dir/subdir/file");
+    at.touch("b_writable_file");
+
+    std::fs::set_permissions(
+        at.plus("a_readonly_dir/subdir"),
+        std::fs::Permissions::from_mode(0o000)
+    ).unwrap();
+
+    scene
+        .ucmd()
+        .arg("-R")
+        .arg(&user_name)
+        .arg("a_readonly_dir")
+        .arg("b_writable_file")
+        .fails()
+        .stderr_contains("Permission denied");
+}
