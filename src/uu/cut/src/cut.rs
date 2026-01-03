@@ -265,12 +265,34 @@ fn cut_fields_newline_char_delim<R: Read, W: Write>(
     reader: R,
     out: &mut W,
     ranges: &[Range],
+    only_delimited: bool,
     newline_char: u8,
     out_delim: &[u8],
 ) -> UResult<()> {
-    let buf_in = BufReader::new(reader);
+    let mut buf_in = BufReader::new(reader);
+    let mut segments: Vec<Vec<u8>> = Vec::new();
+    let mut found_delimiter = false;
 
-    let segments: Vec<_> = buf_in.split(newline_char).filter_map(|x| x.ok()).collect();
+    // Read segments using read_until, which includes the delimiter in the buffer
+    // This lets us detect whether a delimiter was actually found
+    loop {
+        let mut segment = Vec::new();
+        if buf_in.read_until(newline_char, &mut segment)? == 0 {
+            break;
+        }
+        // If segment ends with delimiter, we found one - remove it from segment
+        if segment.last() == Some(&newline_char) {
+            found_delimiter = true;
+            segment.pop();
+        }
+        segments.push(segment);
+    }
+
+    // With -s (only_delimited), suppress output if no delimiter found
+    if only_delimited && !found_delimiter {
+        return Ok(());
+    }
+
     let mut print_delim = false;
 
     for &Range { low, high } in ranges {
@@ -303,7 +325,14 @@ fn cut_fields<R: Read, W: Write>(
     match field_opts.delimiter {
         Delimiter::Slice(delim) if delim == [newline_char] => {
             let out_delim = opts.out_delimiter.unwrap_or(delim);
-            cut_fields_newline_char_delim(reader, out, ranges, newline_char, out_delim)
+            cut_fields_newline_char_delim(
+                reader,
+                out,
+                ranges,
+                field_opts.only_delimited,
+                newline_char,
+                out_delim,
+            )
         }
         Delimiter::Slice(delim) => {
             let matcher = ExactMatcher::new(delim);
