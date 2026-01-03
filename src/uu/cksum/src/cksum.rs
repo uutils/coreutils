@@ -111,21 +111,18 @@ fn handle_tag_text_binary_flags<S: AsRef<OsStr>>(
 }
 
 /// Sanitize the `--length` argument depending on `--algorithm` and `--length`.
-fn maybe_sanitize_length(
-    algo_cli: Option<AlgoKind>,
-    input_length: Option<&str>,
-) -> UResult<Option<usize>> {
+fn maybe_sanitize_length(algo_cli: AlgoKind, input_length: Option<&str>) -> UResult<Option<usize>> {
     match (algo_cli, input_length) {
         // No provided length is not a problem so far.
         (_, None) => Ok(None),
 
         // For SHA2 and SHA3, if a length is provided, ensure it is correct.
-        (Some(algo @ (AlgoKind::Sha2 | AlgoKind::Sha3)), Some(s_len)) => {
+        (algo @ (AlgoKind::Sha2 | AlgoKind::Sha3), Some(s_len)) => {
             sanitize_sha2_sha3_length_str(algo, s_len).map(Some)
         }
 
         // For BLAKE2b, if a length is provided, validate it.
-        (Some(AlgoKind::Blake2b), Some(len)) => calculate_blake2b_length_str(len),
+        (AlgoKind::Blake2b, Some(len)) => calculate_blake2b_length_str(len),
 
         // For any other provided algorithm, check if length is 0.
         // Otherwise, this is an error.
@@ -157,7 +154,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let algo_cli = matches
         .get_one::<String>(options::ALGORITHM)
         .map(AlgoKind::from_cksum)
-        .transpose()?;
+        .transpose()?
+        .unwrap_or(AlgoKind::Crc);
 
     let input_length = matches
         .get_one::<String>(options::LENGTH)
@@ -174,7 +172,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if check {
         // cksum does not support '--check'ing legacy algorithms
-        if algo_cli.is_some_and(AlgoKind::is_legacy) {
+        let algo_specified = matches.contains_id(options::ALGORITHM);
+        if algo_cli.is_legacy() && algo_specified {
             return Err(ChecksumError::AlgorithmNotSupportedWithCheck.into());
         }
 
@@ -195,7 +194,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             verbose,
         };
 
-        return perform_checksum_validation(files, algo_cli, length, opts);
+        if algo_specified {
+            return perform_checksum_validation(files, Some(algo_cli), length, opts);
+        }
+        return perform_checksum_validation(files, None, length, opts);
     }
 
     // Not --check
@@ -206,11 +208,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     // Set the default algorithm to CRC when not '--check'ing.
-    let algo_kind = algo_cli.unwrap_or(AlgoKind::Crc);
-
     let (tag, binary) = handle_tag_text_binary_flags(std::env::args_os())?;
 
-    let algo = SizedAlgoKind::from_unsized(algo_kind, length)?;
+    let algo = SizedAlgoKind::from_unsized(algo_cli, length)?;
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));
 
     let opts = ChecksumComputeOptions {
