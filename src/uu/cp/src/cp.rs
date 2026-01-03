@@ -825,7 +825,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|v| v.map(PathBuf::from).collect())
         .unwrap_or_default();
 
-    let (sources, target) = parse_path_args(paths, &options)?;
+    let (sources, target) = parse_path_args(paths, &options)?; //
 
     if let Err(error) = copy(&sources, &target, &options) {
         match error {
@@ -1399,6 +1399,7 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
             {
                 // There is already a file and it isn't a symlink (managed in a different place)
                 if copied_destinations.contains(&dest) && options.backup != BackupMode::Numbered {
+                    // NOT IN HERE
                     // If the target was already created in this cp call, check if it's a directory.
                     // Directories should be merged (GNU cp behavior), but files should not be overwritten.
                     let dest_is_dir = fs::metadata(&dest).is_ok_and(|m| m.is_dir());
@@ -1517,6 +1518,7 @@ fn copy_source(
         )
     } else {
         // Copy as file
+        // HERE
         let dest = construct_dest_path(source_path, target, target_type, options)?;
         let res = copy_file(
             progress_bar,
@@ -2143,6 +2145,7 @@ fn handle_copy_mode(
     created_parent_dirs: &mut HashSet<PathBuf>,
     #[cfg(unix)] source_is_stream: bool,
 ) -> CopyResult<PerformedAction> {
+    // Need to put perms in here
     let source_is_symlink = source_metadata.is_symlink();
 
     match options.copy_mode {
@@ -2483,6 +2486,7 @@ fn copy_file(
             err.to_string()
         })?
     };
+    dbg!(&source_metadata); // This contains the perms
 
     let dest_metadata = dest.symlink_metadata().ok();
 
@@ -2493,6 +2497,7 @@ fn copy_file(
         options,
         context,
     )?;
+    dbg!(&dest_permissions);
 
     #[cfg(unix)]
     let source_is_fifo = source_metadata.file_type().is_fifo();
@@ -2532,7 +2537,7 @@ fn copy_file(
         //
         // FWIW, the OS will throw an error later, on the write op, if
         // the user does not have permission to write to the file.
-        fs::set_permissions(dest, dest_permissions).ok();
+        // fs::set_permissions(dest, dest_permissions).ok();
     }
 
     if options.dereference(source_in_command_line) {
@@ -2649,6 +2654,7 @@ fn copy_helper(
     created_parent_dirs: &mut HashSet<PathBuf>,
     #[cfg(unix)] source_is_stream: bool,
 ) -> CopyResult<()> {
+    dbg!("We get here");
     if options.parents {
         let parent = dest.parent().unwrap_or(dest);
         if created_parent_dirs.insert(parent.to_path_buf()) {
@@ -2669,6 +2675,7 @@ fn copy_helper(
     } else if source_is_symlink {
         copy_link(source, dest, symlinked_files, options)?;
     } else {
+        dbg!("and here");
         let copy_debug = copy_on_write(
             source,
             dest,

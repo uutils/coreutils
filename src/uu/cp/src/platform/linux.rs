@@ -58,8 +58,16 @@ fn clone<P>(source: P, dest: P, fallback: CloneFallback) -> std::io::Result<()>
 where
     P: AsRef<Path>,
 {
+    dbg!("THE CREATION BEGINS");
     let src_file = File::open(&source)?;
-    let dst_file = File::create(&dest)?;
+    dbg!("dest");
+    // Use open options to allow us to set the mode of the file
+    let dst_file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(&dest)?;
     let src_fd = src_file.as_raw_fd();
     let dst_fd = dst_file.as_raw_fd();
     let result = unsafe { libc::ioctl(dst_fd, libc::FICLONE, src_fd) };
@@ -270,6 +278,7 @@ pub(crate) fn copy_on_write(
         reflink: OffloadReflinkDebug::Unsupported,
         sparse_detection: SparseDebug::No,
     };
+    dbg!(&reflink_mode, &sparse_mode);
     let result = match (reflink_mode, sparse_mode) {
         (ReflinkMode::Never, SparseMode::Always) => {
             copy_debug.sparse_detection = SparseDebug::Zeros;
