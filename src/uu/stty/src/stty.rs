@@ -10,8 +10,7 @@
 // spell-checker:ignore isig icanon iexten echoe crterase echok echonl noflsh xcase tostop echoprt prterase echoctl ctlecho echoke crtkill flusho extproc
 // spell-checker:ignore lnext rprnt susp swtch vdiscard veof veol verase vintr vkill vlnext vquit vreprint vstart vstop vsusp vswtc vwerase werase
 // spell-checker:ignore sigquit sigtstp
-// spell-checker:ignore cbreak decctlq evenp litout oddp tcsadrain exta extb NCCS
-// spell-checker:ignore notaflag notacombo notabaud
+// spell-checker:ignore cbreak decctlq evenp litout oddp tcsadrain tcflag bitflag lflags cflags NCCS exta extb notaflag notacombo notabaud
 
 mod flags;
 
@@ -214,7 +213,7 @@ impl<'a> Options<'a> {
             device_name,
             settings: matches
                 .get_many::<String>(options::SETTINGS)
-                .map(|v| v.map(|s| s.as_ref()).collect()),
+                .map(|v| v.map(String::as_str).collect()),
         })
     }
 }
@@ -267,12 +266,50 @@ fn stty(opts: &Options) -> UResult<()> {
         ));
     }
 
+    // Lazily fetch termios when first needed and cache it for reuse
+    let mut base_termios: Option<Termios> = None;
+    let mut get_base_termios = |fd: BorrowedFd<'_>| -> UResult<Termios> {
+        if let Some(ref termios) = base_termios {
+            Ok(termios.clone())
+        } else {
+            let termios = tcgetattr(fd).map_err_context(|| opts.device_name.clone())?;
+            base_termios = Some(termios.clone());
+            Ok(termios)
+        }
+    };
+
     let mut set_arg = SetArg::TCSADRAIN;
     let mut valid_args: Vec<ArgOptions> = Vec::new();
 
+    // GNU compatible: If the first argument is a -g save format (hexadecimal colon-separated),
+    // restore termios from it before applying the remaining arguments.
+    let mut restored_from_save: Option<Termios> = None;
+    let mut settings_iter: Box<dyn Iterator<Item = &str>> = Box::new([].iter().copied());
+
     if let Some(args) = &opts.settings {
-        let mut args_iter = args.iter();
-        while let Some(&arg) = args_iter.next() {
+        if let Some((first, rest)) = args.split_first() {
+            if first.contains(':') {
+                // Only attempt to parse saved state when the first arg actually looks like one.
+                let base = get_base_termios(opts.file.as_fd())?;
+                let mut restored = base.clone();
+                match parse_save_format(first, &mut restored) {
+                    Ok(()) => {
+                        restored_from_save = Some(restored);
+                        settings_iter = Box::new(rest.iter().copied());
+                    }
+                    // GNU stty errors immediately when the first argument looks like save format but cannot be parsed
+                    Err(e) => return Err(e),
+                }
+            } else {
+                // First argument is not a saved state; treat the whole list as regular settings.
+                settings_iter = Box::new(args.iter().map(|s| &**s));
+            }
+        }
+    }
+
+    if restored_from_save.is_some() || opts.settings.is_some() {
+        let mut args_iter = settings_iter;
+        while let Some(arg) = args_iter.next() {
             match arg {
                 "ispeed" | "ospeed" => match args_iter.next() {
                     Some(speed) => {
@@ -403,15 +440,20 @@ fn stty(opts: &Options) -> UResult<()> {
                     // combination setting
                     } else if let Some(combo) = string_to_combo(arg) {
                         valid_args.append(&mut combo_to_flags(combo));
+                    } else if arg.starts_with('-') {
+                        // For unknown options beginning with '-', treat them as invalid arguments.
+                        return invalid_arg(arg);
                     } else {
+                        // For bare words that are not recognized as flags, baud rates,
+                        // control chars, or combinations, treat them as invalid arguments
+                        // to match project test expectations.
                         return invalid_arg(arg);
                     }
                 }
             }
         }
-
-        let mut termios =
-            tcgetattr(opts.file.as_fd()).map_err_context(|| opts.device_name.clone())?;
+        let base = get_base_termios(opts.file.as_fd())?;
+        let mut termios = restored_from_save.unwrap_or(base);
 
         // iterate over valid_args, match on the arg type, do the matching apply function
         for arg in &valid_args {
@@ -431,35 +473,29 @@ fn stty(opts: &Options) -> UResult<()> {
         }
         tcsetattr(opts.file.as_fd(), set_arg, &termios)?;
     } else {
-        let termios = tcgetattr(opts.file.as_fd()).map_err_context(|| opts.device_name.clone())?;
-        print_settings(&termios, opts)?;
+        let base = get_base_termios(opts.file.as_fd())?;
+        print_settings(&base, opts)?;
     }
     Ok(())
 }
 
 // The GNU implementation adds the --help message when the args are incorrectly formatted
 fn missing_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
-    Err(UUsageError::new(
+    Err(USimpleError::new(
         1,
-        translate!(
-            "stty-error-missing-argument",
-            "arg" => *arg
-        ),
+        translate!("stty-error-missing-argument", "arg" => arg.to_string()),
     ))
 }
 
 fn invalid_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
-    Err(UUsageError::new(
+    Err(USimpleError::new(
         1,
-        translate!(
-            "stty-error-invalid-argument",
-            "arg" => *arg
-        ),
+        translate!("stty-error-invalid-argument", "arg" => arg.to_string()),
     ))
 }
 
 fn invalid_integer_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
-    Err(UUsageError::new(
+    Err(USimpleError::new(
         1,
         translate!(
             "stty-error-invalid-integer-argument",
@@ -868,6 +904,68 @@ fn print_in_save_format(termios: &Termios) {
         print!(":{cc:x}");
     }
     println!();
+}
+
+/// GNU stty -g compatibility: restore Termios from the colon-separated hexadecimal representation
+/// produced by print_in_save_format. Caller clones before passing and this function overwrites it.
+fn parse_save_format(s: &str, termios: &mut Termios) -> Result<(), Box<dyn UError>> {
+    // Expect exactly four flag values + NCCS control chars (no more, no less).
+    let parts: Vec<&str> = s.split(':').collect();
+    let expected_cc = termios.control_chars.len();
+    let expected_parts = 4 + expected_cc;
+    if parts.len() != expected_parts {
+        return Err(UUsageError::new(
+            1,
+            translate!("stty-error-invalid-argument", "arg" => s.to_string()),
+        ));
+    }
+
+    // Parse a hex string into tcflag_t (shared helper) to match the underlying bitflag type.
+    fn parse_hex_tcflag(x: &str, original: &str) -> Result<nix::libc::tcflag_t, Box<dyn UError>> {
+        nix::libc::tcflag_t::from_str_radix(x, 16).map_err(|_| {
+            UUsageError::new(
+                1,
+                translate!("stty-error-invalid-argument", "arg" => original.to_string()),
+            )
+        })
+    }
+
+    let iflags_bits = parse_hex_tcflag(parts[0], s)?;
+    let oflags_bits = parse_hex_tcflag(parts[1], s)?;
+    let cflags_bits = parse_hex_tcflag(parts[2], s)?;
+    let lflags_bits = parse_hex_tcflag(parts[3], s)?;
+
+    // Remaining segments are control_chars.
+    let cc_hex = &parts[4..];
+
+    termios.input_flags = InputFlags::from_bits_truncate(iflags_bits);
+    termios.output_flags = OutputFlags::from_bits_truncate(oflags_bits);
+    termios.control_flags = ControlFlags::from_bits_truncate(cflags_bits);
+    termios.local_flags = LocalFlags::from_bits_truncate(lflags_bits);
+
+    // The length of control_chars depends on the runtime environment; fill only up to the
+    // length of the local array.
+    let max_cc = termios.control_chars.len();
+    for (i, &hex) in cc_hex.iter().enumerate() {
+        if i >= max_cc {
+            break;
+        }
+        let val = u32::from_str_radix(hex, 16).map_err(|_| {
+            UUsageError::new(
+                1,
+                translate!("stty-error-invalid-argument", "arg" => s.to_string()),
+            )
+        })?;
+        if val > u8::MAX as u32 {
+            return Err(UUsageError::new(
+                1,
+                translate!("stty-error-invalid-argument", "arg" => s.to_string()),
+            ));
+        }
+        termios.control_chars[i] = val as u8;
+    }
+
+    Ok(())
 }
 
 /// Gets terminal size using the tiocgwinsz ioctl system call.
