@@ -2659,6 +2659,45 @@ fn test_fifo() {
     }
 }
 
+/// Test that tail with --pid exits when the monitored process dies, even with a FIFO.
+/// Without non-blocking FIFO open, tail would block forever waiting for a writer.
+#[test]
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "android"),
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
+))]
+fn test_fifo_with_pid() {
+    use std::process::Command;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("FIFO");
+
+    let mut dummy = Command::new("sh").spawn().unwrap();
+    let pid = dummy.id();
+
+    let mut child = ucmd
+        .arg("-f")
+        .arg(format!("--pid={pid}"))
+        .arg("FIFO")
+        .run_no_wait();
+
+    child.make_assertion_with_delay(500).is_alive();
+
+    kill(Pid::from_raw(i32::try_from(pid).unwrap()), Signal::SIGUSR1).unwrap();
+    let _ = dummy.wait();
+
+    child
+        .make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
+        .is_not_alive()
+        .with_all_output()
+        .no_stderr()
+        .no_stdout()
+        .success();
+}
+
 #[test]
 #[cfg(unix)]
 #[ignore = "disabled until fixed"]
