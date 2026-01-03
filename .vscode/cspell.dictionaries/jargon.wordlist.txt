@@ -199,6 +199,7 @@ nofield
 # * clippy
 uninlined
 nonminimal
+rposition
 
 # * CPU/hardware features
 ASIMD
