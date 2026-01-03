@@ -140,6 +140,7 @@ fn find_stdout() -> UResult<File> {
     match OpenOptions::new()
         .create(true)
         .append(true)
+        .mode(0o600)
         .open(Path::new(NOHUP_OUT))
     {
         Ok(t) => {
@@ -156,7 +157,12 @@ fn find_stdout() -> UResult<File> {
             let mut homeout = PathBuf::from(home);
             homeout.push(NOHUP_OUT);
             let homeout_str = homeout.to_str().unwrap();
-            match OpenOptions::new().create(true).append(true).open(&homeout) {
+            match OpenOptions::new()
+                .create(true)
+                .append(true)
+                .mode(0o600)
+                .open(&homeout)
+            {
                 Ok(t) => {
                     show_error!(
                         "{}",
