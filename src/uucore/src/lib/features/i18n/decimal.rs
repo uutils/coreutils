@@ -12,7 +12,7 @@ use icu_provider::prelude::*;
 use crate::i18n::get_numeric_locale;
 
 /// Return the decimal separator for the given locale
-fn get_decimal_separator(loc: Locale) -> String {
+fn get_decimal_separator(loc: &Locale) -> String {
     let data_locale = DataLocale::from(loc);
 
     let request = DataRequest {
@@ -34,7 +34,7 @@ fn get_decimal_separator(loc: Locale) -> String {
 pub fn locale_decimal_separator() -> &'static str {
     static DECIMAL_SEP: OnceLock<String> = OnceLock::new();
 
-    DECIMAL_SEP.get_or_init(|| get_decimal_separator(get_numeric_locale().0.clone()))
+    DECIMAL_SEP.get_or_init(|| get_decimal_separator(&get_numeric_locale().0))
 }
 
 #[cfg(test)]
@@ -45,7 +45,7 @@ mod tests {
 
     #[test]
     fn test_simple_separator() {
-        assert_eq!(get_decimal_separator(locale!("en")), ".");
-        assert_eq!(get_decimal_separator(locale!("fr")), ",");
+        assert_eq!(get_decimal_separator(&locale!("en")), ".");
+        assert_eq!(get_decimal_separator(&locale!("fr")), ",");
     }
 }
