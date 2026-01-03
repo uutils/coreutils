@@ -1074,6 +1074,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (print_tx, rx) = mpsc::channel::<UResult<StatPrintInfo>>();
     let printing_thread = thread::spawn(move || stat_printer.print_stats(&rx));
 
+    // Check existence of path provided in argument and duplicates
+    let mut seen_inodes: HashSet<FileInfo> = HashSet::new();
+
     'loop_file: for path in files {
         // Skip if we don't want to ignore anything
         if !&traversal_options.excludes.is_empty() {
@@ -1091,9 +1094,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 }
             }
         }
-
-        // Check existence of path provided in argument
-        let mut seen_inodes: HashSet<FileInfo> = HashSet::new();
 
         // Determine which traversal method to use
         #[cfg(target_os = "linux")]
