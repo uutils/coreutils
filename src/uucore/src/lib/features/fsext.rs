@@ -446,11 +446,8 @@ unsafe extern "C" {
     #[link_name = "getmntinfo"]
     fn get_mount_info(mount_buffer_p: *mut *mut StatFs, flags: c_int) -> c_int;
 
-    // Rust on FreeBSD uses 11.x ABI for filesystem metadata syscalls.
-    // Call the right version of the symbol for getmntinfo() result to
-    // match libc StatFS layout.
     #[cfg(target_os = "freebsd")]
-    #[link_name = "getmntinfo@FBSD_1.0"]
+    #[link_name = "getmntinfo"]
     fn get_mount_info(mount_buffer_p: *mut *mut StatFs, flags: c_int) -> c_int;
 }
 
