@@ -640,3 +640,24 @@ fn test_chgrp_recursive_on_file() {
         current_gid
     );
 }
+
+#[test]
+#[cfg(not(target_vendor = "apple"))]
+fn test_chgrp_exit_code_not_being_overwritten_by_last_file() {
+    use std::os::unix::prelude::PermissionsExt;
+
+    if let Some(group) = nix::unistd::getgroups().unwrap().first() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkdir("dir");
+        at.mkdir("dir/subdir");
+        at.touch("dir/subdir/file");
+        at.touch("a");
+        std::fs::set_permissions(at.plus("dir/subdir"), PermissionsExt::from_mode(0o0000)).unwrap();
+        ucmd.arg("-R")
+            .arg(group.as_raw().to_string())
+            .arg("dir")
+            .arg("a")
+            .fails()
+            .stderr_only("chgrp: cannot access 'dir/subdir': Permission denied\n");
+    }
+}
