@@ -712,6 +712,74 @@ fn resolve_tz_abbreviation<S: AsRef<str>>(date_str: S) -> String {
     s.to_string()
 }
 
+/// Normalize ISO-8601 date with 12-hour time to separate date and time items.
+///
+/// The parse_datetime crate's combined datetime parser only accepts 24-hour time format.
+/// To support ISO-8601 dates with 12-hour time (e.g., "2025-01-01 12:00am"), we need to
+/// convert the format to use slashes instead of dashes, which forces parse_datetime to
+/// parse date and time as separate items.
+///
+/// Pattern: YYYY-MM-DD HH:MM[am|pm] or YYYY-MM-DD HH:MM:SS[am|pm]
+/// Converts to: YYYY/MM/DD HH:MM[am|pm] (slash format prevents combined parsing)
+fn normalize_iso8601_12hour_time(date_str: &str) -> String {
+    let s = date_str.trim();
+
+    // Quick check: must contain at least one dash and end with meridiem indicator
+    if !s.contains('-') {
+        return s.to_string();
+    }
+
+    // Check if string ends with am/pm (case-insensitive) in one pass
+    let s_lower = s.to_ascii_lowercase();
+    if !(s_lower.ends_with("am")
+        || s_lower.ends_with("pm")
+        || s_lower.ends_with("a.m.")
+        || s_lower.ends_with("p.m."))
+    {
+        return s.to_string();
+    }
+
+    // Split on first space to separate date from time+meridiem
+    let Some(space_pos) = s.find(' ') else {
+        return s.to_string();
+    };
+
+    let date_part = &s[..space_pos];
+    let time_part = &s[space_pos + 1..];
+
+    // Parse ISO-8601 date: YYYY-MM-DD (must have exactly 2 dashes)
+    let mut dash_iter = date_part.match_indices('-');
+    let Some((first_dash, _)) = dash_iter.next() else {
+        return s.to_string();
+    };
+    let Some((second_dash, _)) = dash_iter.next() else {
+        return s.to_string();
+    };
+
+    // Ensure no more dashes
+    if dash_iter.next().is_some() {
+        return s.to_string();
+    }
+
+    let year = &date_part[..first_dash];
+    let month = &date_part[first_dash + 1..second_dash];
+    let day = &date_part[second_dash + 1..];
+
+    // Validate components: year must be 4 digits, month and day must be 1-2 digits
+    if year.len() == 4
+        && year.bytes().all(|b| b.is_ascii_digit())
+        && (1..=2).contains(&month.len())
+        && month.bytes().all(|b| b.is_ascii_digit())
+        && (1..=2).contains(&day.len())
+        && day.bytes().all(|b| b.is_ascii_digit())
+    {
+        // Convert YYYY-MM-DD to YYYY/MM/DD to prevent combined datetime parsing
+        format!("{year}/{month}/{day} {time_part}")
+    } else {
+        s.to_string()
+    }
+}
+
 /// Parse a `String` into a `DateTime`.
 /// If it fails, return a tuple of the `String` along with its `ParseError`.
 ///
@@ -724,8 +792,11 @@ fn resolve_tz_abbreviation<S: AsRef<str>>(date_str: S) -> String {
 fn parse_date<S: AsRef<str> + Clone>(
     s: S,
 ) -> Result<Zoned, (String, parse_datetime::ParseDateTimeError)> {
-    // First, try to resolve any timezone abbreviations
-    let resolved = resolve_tz_abbreviation(s.as_ref());
+    // First, normalize ISO-8601 dates with 12-hour time (issue #9253)
+    let normalized = normalize_iso8601_12hour_time(s.as_ref());
+
+    // Then, try to resolve any timezone abbreviations
+    let resolved = resolve_tz_abbreviation(&normalized);
 
     match parse_datetime::parse_datetime(&resolved) {
         Ok(date) => {
