@@ -5,8 +5,14 @@
 
 // Platform-specific implementations for the rm utility
 
-#[cfg(target_os = "linux")]
-pub mod linux;
+#[cfg(all(unix, not(target_os = "redox")))]
+pub mod unix;
 
-#[cfg(target_os = "linux")]
-pub use linux::*;
+#[cfg(all(unix, not(target_os = "redox")))]
+pub use unix::*;
+
+#[cfg(target_os = "redox")]
+pub mod redox;
+
+#[cfg(target_os = "redox")]
+pub use redox::*;

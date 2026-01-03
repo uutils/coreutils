@@ -62,9 +62,9 @@ macro_rules! cstr2cow {
 }
 
 fn get_context_help_text() -> String {
-    #[cfg(not(feature = "selinux"))]
+    #[cfg(not(all(feature = "selinux", target_os = "linux")))]
     return translate!("id-context-help-disabled");
-    #[cfg(feature = "selinux")]
+    #[cfg(all(feature = "selinux", target_os = "linux"))]
     return translate!("id-context-help-enabled");
 }
 
@@ -137,11 +137,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         cflag: matches.get_flag(options::OPT_CONTEXT),
 
         selinux_supported: {
-            #[cfg(feature = "selinux")]
+            #[cfg(all(feature = "selinux", target_os = "linux"))]
             {
                 uucore::selinux::is_selinux_enabled()
             }
-            #[cfg(not(feature = "selinux"))]
+            #[cfg(not(all(feature = "selinux", target_os = "linux")))]
             {
                 false
             }
