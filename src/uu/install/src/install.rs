@@ -854,10 +854,7 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
     // see if the file exists, and it can't even be checked, this means we
     // don't have permission to access the file, so we should return an error.
     if let Err(to_stat) = to.try_exists() {
-        return Err(InstallError::CannotStat(
-            to.to_path_buf(),
-            to_stat.to_string(),
-        ).into());
+        return Err(InstallError::CannotStat(to.to_path_buf(), to_stat.to_string()).into());
     }
 
     if to.is_dir() && !from.is_dir() {
