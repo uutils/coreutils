@@ -134,14 +134,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             return Err(ChecksumError::AlgorithmNotSupportedWithCheck.into());
         }
 
-        let text_flag = matches.get_flag(options::TEXT);
-        let binary_flag = matches.get_flag(options::BINARY);
-        let tag = matches.get_flag(options::TAG);
-
-        if tag || binary_flag || text_flag {
-            return Err(ChecksumError::BinaryTextConflict.into());
-        }
-
         // Execute the checksum validation based on the presence of files or the use of stdin
 
         let verbose = ChecksumVerbose::new(status, quiet, warn);
@@ -251,6 +243,9 @@ pub fn uu_app() -> Command {
                 .short('c')
                 .long(options::CHECK)
                 .help(translate!("cksum-help-check"))
+                .conflicts_with(options::TAG)
+                .conflicts_with(options::BINARY)
+                .conflicts_with(options::TEXT)
                 .action(ArgAction::SetTrue),
         )
         .arg(
