@@ -233,6 +233,28 @@ fn test_nc_0_wo_follow2() {
         .no_output();
 }
 
+#[test]
+#[cfg(not(target_os = "windows"))]
+fn test_n0_with_follow() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let test_file = "test.txt";
+    // Create file with multiple lines
+    at.write(test_file, "line1\nline2\nline3\n");
+
+    let mut child = ucmd.arg("-n0").arg("-f").arg(test_file).run_no_wait();
+    child.make_assertion_with_delay(500).is_alive();
+
+    // Append a new line
+    at.append(test_file, "new\n");
+
+    // Should only print the newly appended line
+    child
+        .make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
+        .with_current_output()
+        .stdout_only("new\n");
+    child.kill();
+}
+
 // TODO: Add similar test for windows
 #[test]
 #[cfg(unix)]
