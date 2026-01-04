@@ -318,6 +318,21 @@ fn test_newline_as_delimiter_with_only_delimited() {
         .pipe_in("line1\nline2")
         .succeeds()
         .stdout_only_bytes("line1\n");
+
+    // Edge case: input is just a newline (delimiter exists, fields are empty)
+    // GNU cut outputs the newline because the delimiter is present
+    new_ucmd!()
+        .args(&["-f1-", "-d", "\n", "-s"])
+        .pipe_in("\n")
+        .succeeds()
+        .stdout_only_bytes("\n");
+
+    // Edge case: empty input should produce no output
+    new_ucmd!()
+        .args(&["-f1-", "-d", "\n"])
+        .pipe_in("")
+        .succeeds()
+        .stdout_only_bytes("");
 }
 
 #[test]

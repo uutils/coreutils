@@ -9,7 +9,7 @@ use bstr::io::BufReadExt;
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, IsTerminal, Read, Write, stdin, stdout};
+use std::io::{BufReader, BufWriter, IsTerminal, Read, Write, stdin, stdout};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
@@ -262,34 +262,31 @@ fn cut_fields_implicit_out_delim<R: Read, W: Write, M: Matcher>(
 
 /// The input delimiter is identical to `newline_char`
 fn cut_fields_newline_char_delim<R: Read, W: Write>(
-    reader: R,
+    mut reader: R,
     out: &mut W,
     ranges: &[Range],
     only_delimited: bool,
     newline_char: u8,
     out_delim: &[u8],
 ) -> UResult<()> {
-    let mut buf_in = BufReader::new(reader);
-    let mut segments: Vec<Vec<u8>> = Vec::new();
-    let mut found_delimiter = false;
+    // Read entire input - we need all of it since fields are lines
+    let mut buffer = Vec::new();
+    reader.read_to_end(&mut buffer)?;
 
-    // Read segments using read_until, which includes the delimiter in the buffer
-    // This lets us detect whether a delimiter was actually found
-    loop {
-        let mut segment = Vec::new();
-        if buf_in.read_until(newline_char, &mut segment)? == 0 {
-            break;
-        }
-        // If segment ends with delimiter, we found one - remove it from segment
-        if segment.last() == Some(&newline_char) {
-            found_delimiter = true;
-            segment.pop();
-        }
-        segments.push(segment);
+    // Split by newline to get fields
+    let mut segments: Vec<&[u8]> = buffer.split(|&b| b == newline_char).collect();
+
+    // Check for delimiter BEFORE removing trailing empty (split always gives at least 1 element)
+    let has_delimiter = segments.len() > 1;
+
+    // Remove trailing empty segment if present
+    // (artifact of split when input ends with delimiter - GNU cut doesn't count it as a field)
+    if segments.last() == Some(&b"".as_slice()) {
+        segments.pop();
     }
 
     // With -s (only_delimited), suppress output if no delimiter found
-    if only_delimited && !found_delimiter {
+    if only_delimited && !has_delimiter {
         return Ok(());
     }
 
@@ -304,13 +301,16 @@ fn cut_fields_newline_char_delim<R: Read, W: Write>(
                 } else {
                     print_delim = true;
                 }
-                out.write_all(segment.as_slice())?;
+                out.write_all(segment)?;
             } else {
                 break;
             }
         }
     }
-    out.write_all(&[newline_char])?;
+    // Only write newline if we output something
+    if print_delim {
+        out.write_all(&[newline_char])?;
+    }
     Ok(())
 }
 
