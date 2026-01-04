@@ -620,7 +620,7 @@ impl ChownExecutor {
                 continue;
             }
 
-            ret = match wrap_chown(
+            ret |= match wrap_chown(
                 path,
                 &meta,
                 self.dest_uid,
