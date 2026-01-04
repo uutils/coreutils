@@ -384,8 +384,7 @@ fn print_seq(
             stdout.write_all(separator.as_encoded_bytes())?;
         }
         format.fmt(&mut stdout, &value)?;
-        // TODO Implement augmenting addition.
-        value = value + increment.clone();
+        value += &increment;
         is_first_iteration = false;
     }
     if !is_first_iteration {

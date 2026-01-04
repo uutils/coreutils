@@ -22,6 +22,7 @@
 //! ```
 use std::cmp::Ordering;
 use std::ops::Add;
+use std::ops::AddAssign;
 use std::ops::Neg;
 
 use bigdecimal::BigDecimal;
@@ -182,6 +183,22 @@ impl Add for ExtendedBigDecimal {
     }
 }
 
+impl AddAssign<&ExtendedBigDecimal> for ExtendedBigDecimal {
+    fn add_assign(&mut self, rhs: &ExtendedBigDecimal) {
+        match (self, rhs) {
+            (Self::BigDecimal(lhs), Self::BigDecimal(rhs)) => {
+                *lhs += rhs;
+            }
+            // Adding MinusZero is a no-op
+            (_, Self::MinusZero) => {}
+            // Fallback to the Add implementation for all other cases
+            (lhs, rhs) => {
+                *lhs = lhs.clone() + rhs.clone();
+            }
+        }
+    }
+}
+
 impl PartialEq for ExtendedBigDecimal {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -288,5 +305,70 @@ mod tests {
             ExtendedBigDecimal::Nan => (),
             _ => unreachable!(),
         }
+    }
+
+    #[test]
+    fn test_add_assign_bigdecimal() {
+        let mut a = ExtendedBigDecimal::from(10u8);
+        let b = ExtendedBigDecimal::from(20u8);
+        a += &b;
+        assert_eq!(a, ExtendedBigDecimal::from(30u8));
+
+        let c = ExtendedBigDecimal::from(5u8);
+        a += &c;
+        assert_eq!(a, ExtendedBigDecimal::from(35u8));
+    }
+
+    #[test]
+    fn test_add_assign_minus_zero() {
+        let mut a = ExtendedBigDecimal::from(42u8);
+        let b = ExtendedBigDecimal::MinusZero;
+        a += &b;
+        assert_eq!(a, ExtendedBigDecimal::from(42u8));
+
+        let mut z = ExtendedBigDecimal::MinusZero;
+        let n = ExtendedBigDecimal::from(10u8);
+        z += &n;
+        assert_eq!(z, ExtendedBigDecimal::from(10u8));
+    }
+
+    #[test]
+    fn test_add_assign_infinity() {
+        let mut a = ExtendedBigDecimal::from(10u8);
+        a += &ExtendedBigDecimal::Infinity;
+        assert_eq!(a, ExtendedBigDecimal::Infinity);
+
+        let mut b = ExtendedBigDecimal::Infinity;
+        b += &ExtendedBigDecimal::from(10u8);
+        assert_eq!(b, ExtendedBigDecimal::Infinity);
+
+        let mut c = ExtendedBigDecimal::Infinity;
+        c += &ExtendedBigDecimal::Infinity;
+        assert_eq!(c, ExtendedBigDecimal::Infinity);
+    }
+
+    #[test]
+    fn test_add_assign_minus_infinity() {
+        let mut a = ExtendedBigDecimal::from(10u8);
+        a += &ExtendedBigDecimal::MinusInfinity;
+        assert_eq!(a, ExtendedBigDecimal::MinusInfinity);
+    }
+
+    #[test]
+    fn test_add_assign_nan_generation() {
+        let mut a = ExtendedBigDecimal::Infinity;
+        a += &ExtendedBigDecimal::MinusInfinity;
+        assert!(matches!(a, ExtendedBigDecimal::Nan));
+
+        let mut b = ExtendedBigDecimal::MinusInfinity;
+        b += &ExtendedBigDecimal::Infinity;
+        assert!(matches!(b, ExtendedBigDecimal::Nan));
+    }
+
+    #[test]
+    fn test_add_assign_propagate_nan() {
+        let mut a = ExtendedBigDecimal::from(10u8);
+        a += &ExtendedBigDecimal::Nan;
+        assert!(matches!(a, ExtendedBigDecimal::Nan));
     }
 }
