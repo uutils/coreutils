@@ -85,6 +85,7 @@ listxattr
 llistxattr
 lossily
 lstat
+makedev
 mebi
 mebibytes
 mergeable
