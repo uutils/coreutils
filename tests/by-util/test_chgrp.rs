@@ -642,7 +642,7 @@ fn test_chgrp_recursive_on_file() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(not(target_vendor = "apple"))]
 fn test_chgrp_multiple_files_error_on_first_success_on_last() {
     use std::os::unix::fs::PermissionsExt;
 
@@ -650,7 +650,6 @@ fn test_chgrp_multiple_files_error_on_first_success_on_last() {
     let at = &scene.fixtures;
 
     let groups = nix::unistd::getgroups().unwrap();
-    // Skip test if we don't have at least one group to work with
     if groups.is_empty() {
         return;
     }
