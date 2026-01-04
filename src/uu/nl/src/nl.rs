@@ -442,7 +442,6 @@ mod test {
     use super::*;
 
     #[test]
-    #[allow(clippy::cognitive_complexity)]
     fn test_format() {
         assert_eq!(NumberFormat::Left.format(12, 1), "12");
         assert_eq!(NumberFormat::Left.format(-12, 1), "-12");

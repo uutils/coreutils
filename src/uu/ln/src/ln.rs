@@ -281,7 +281,6 @@ fn exec(files: &[PathBuf], settings: &Settings) -> UResult<()> {
     link(&files[0], &files[1], settings)
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) -> UResult<()> {
     if !target_dir.is_dir() {
         return Err(LnError::TargetIsNotADirectory(target_dir.to_owned()).into());
@@ -375,7 +374,6 @@ fn relative_path<'a>(src: &'a Path, dst: &Path) -> Cow<'a, Path> {
     src.into()
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
     let mut backup_path = None;
     let source: Cow<'_, Path> = if settings.relative {

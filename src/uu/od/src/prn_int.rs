@@ -89,7 +89,6 @@ int_writer_signed!(FORMAT_ITEM_DEC32S, 4, 12, format_item_dec_s32, DEC!()); // m
 int_writer_signed!(FORMAT_ITEM_DEC64S, 8, 21, format_item_dec_s64, DEC!()); // max: -9223372036854775808
 
 #[test]
-#[allow(clippy::cognitive_complexity)]
 fn test_sign_extend() {
     assert_eq!(
         0xffff_ffff_ffff_ff80u64 as i64,
@@ -180,7 +179,6 @@ fn test_format_item_dec_u() {
 }
 
 #[test]
-#[allow(clippy::cognitive_complexity)]
 fn test_format_item_dec_s() {
     assert_eq!("    0", format_item_dec_s8(0));
     assert_eq!("  127", format_item_dec_s8(0x7f));

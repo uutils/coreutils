@@ -572,7 +572,6 @@ pub fn mv(files: &[OsString], opts: &Options) -> UResult<()> {
     }
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) -> UResult<()> {
     // remember the moved destinations for further usage
     let mut moved_destinations: HashSet<PathBuf> = HashSet::with_capacity(files.len());

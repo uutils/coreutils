@@ -564,7 +564,6 @@ fn process_non_utf8_line<W: Write>(line: &[u8], ctx: &mut FoldContext<'_, W>) ->
 ///
 /// If `spaces` is `true`, attempt to break lines at whitespace boundaries.
 #[allow(unused_assignments)]
-#[allow(clippy::cognitive_complexity)]
 fn fold_file<T: Read, W: Write>(
     mut file: BufReader<T>,
     spaces: bool,

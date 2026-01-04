@@ -39,7 +39,6 @@ const NAME: &str = "hashsum";
 /// Returns a [`UResult`] of a tuple containing the algorithm name, the hasher instance, and
 /// the output length in bits or an Err if multiple hash algorithms are specified or if a
 /// required flag is missing.
-#[allow(clippy::cognitive_complexity)]
 fn create_algorithm_from_flags(matches: &ArgMatches) -> UResult<(AlgoKind, Option<usize>)> {
     let mut alg: Option<(AlgoKind, Option<usize>)> = None;
 

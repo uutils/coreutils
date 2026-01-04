@@ -1296,7 +1296,6 @@ fn finalize<T>(
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-#[allow(clippy::cognitive_complexity)]
 fn make_linux_oflags(oflags: &OFlags) -> Option<libc::c_int> {
     let mut flag = 0;
 

@@ -399,7 +399,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cognitive_complexity)]
     fn test_dynamic_width_number_display_alphabetic() {
         fn num(n: usize) -> Number {
             let mut number = Number::DynamicWidth(DynamicWidthNumber::new(26, 0));
@@ -445,7 +444,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cognitive_complexity)]
     fn test_dynamic_width_number_display_numeric_hexadecimal() {
         fn num(n: usize) -> Number {
             let mut number = Number::DynamicWidth(DynamicWidthNumber::new(16, 0));
@@ -470,7 +468,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cognitive_complexity)]
     fn test_fixed_width_number_increment() {
         let mut n = Number::FixedWidth(FixedWidthNumber::new(3, 2, 0).unwrap());
         assert_eq!(n.digits(), vec![0, 0]);
@@ -494,7 +491,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cognitive_complexity)]
     fn test_fixed_width_number_display_alphabetic() {
         fn num(n: usize) -> Result<Number, Overflow> {
             let mut number = Number::FixedWidth(FixedWidthNumber::new(26, 2, 0).unwrap());

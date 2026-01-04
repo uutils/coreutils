@@ -39,7 +39,6 @@ fn usage<T>(utils: &UtilityMap<T>, name: &str) {
     );
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn main() {
     uucore::panic::mute_sigpipe_panic();
 

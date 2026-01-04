@@ -102,7 +102,6 @@ fn od_argument_with_option(ch: char) -> bool {
 /// arguments with parameters like -w16 can only appear at the end: -fvoxw16
 /// parameters of -t/--format specify 1 or more formats.
 /// if -- appears on the command line, parsing should stop.
-#[allow(clippy::cognitive_complexity)]
 pub fn parse_format_flags(args: &[String]) -> Result<Vec<ParsedFormatterItemInfo>, String> {
     let mut formats = Vec::new();
 

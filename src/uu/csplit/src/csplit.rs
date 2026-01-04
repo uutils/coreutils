@@ -406,7 +406,6 @@ impl SplitWriter<'_> {
     /// - if no line matched, an [`CsplitError::MatchNotFound`].
     /// - if there are not enough lines to accommodate the offset, an
     ///   [`CsplitError::LineOutOfRange`].
-    #[allow(clippy::cognitive_complexity)]
     fn do_to_match<I>(
         &mut self,
         pattern_as_str: &str,
@@ -728,7 +727,6 @@ mod tests {
     use super::*;
 
     #[test]
-    #[allow(clippy::cognitive_complexity)]
     fn input_splitter() {
         let input = vec![
             Ok(String::from("aaa")),
@@ -801,7 +799,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cognitive_complexity)]
     fn input_splitter_interrupt_rewind() {
         let input = vec![
             Ok(String::from("aaa")),

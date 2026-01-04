@@ -112,7 +112,6 @@ impl FromStr for FormatOptions {
     // An optional zero (%010f) will zero pad the number.
     // An optional negative value (%-10f) will left align.
     // An optional precision (%.1f) determines the precision of the number.
-    #[allow(clippy::cognitive_complexity)]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut iter = s.chars().peekable();
         let mut options = Self::default();
@@ -267,7 +266,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cognitive_complexity)]
     fn test_parse_format_with_invalid_formats() {
         assert!("".parse::<FormatOptions>().is_err());
         assert!("hello".parse::<FormatOptions>().is_err());
