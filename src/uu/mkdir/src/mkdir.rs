@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) ugoa cmode
+// spell-checker:ignore (ToDO) ugoa cmode RAII
 
 use clap::builder::ValueParser;
 use clap::parser::ValuesRef;
@@ -191,7 +191,8 @@ pub fn mkdir(path: &Path, config: &Config) -> UResult<()> {
     create_dir(path, false, config)
 }
 
-#[cfg(any(unix, target_os = "redox"))]
+/// Only needed on Linux to add ACL permission bits after directory creation.
+#[cfg(all(unix, target_os = "linux"))]
 fn chmod(path: &Path, mode: u32) -> UResult<()> {
     use std::fs::{Permissions, set_permissions};
     use std::os::unix::fs::PermissionsExt;
@@ -199,12 +200,6 @@ fn chmod(path: &Path, mode: u32) -> UResult<()> {
     set_permissions(path, mode).map_err_context(
         || translate!("mkdir-error-cannot-set-permissions", "path" => path.quote()),
     )
-}
-
-#[cfg(windows)]
-fn chmod(_path: &Path, _mode: u32) -> UResult<()> {
-    // chmod on Windows only sets the readonly flag, which isn't even honored on directories
-    Ok(())
 }
 
 // Create a directory at the given path.
