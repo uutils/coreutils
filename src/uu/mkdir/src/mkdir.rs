@@ -10,7 +10,7 @@ use clap::parser::ValuesRef;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
-#[cfg(not(windows))]
+#[cfg(all(unix, target_os = "linux"))]
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
 use uucore::translate;
