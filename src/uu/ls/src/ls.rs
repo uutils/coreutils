@@ -801,7 +801,6 @@ fn parse_width(width_match: Option<&String>) -> Result<u16, LsError> {
 }
 
 impl Config {
-    #[allow(clippy::cognitive_complexity)]
     pub fn from(options: &clap::ArgMatches) -> UResult<Self> {
         let context = options.get_flag(options::CONTEXT);
         let (mut format, opt) = extract_format(options);
@@ -2063,7 +2062,6 @@ struct ListState<'a> {
     recent_time_range: RangeInclusive<SystemTime>,
 }
 
-#[allow(clippy::cognitive_complexity)]
 pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     let mut files = Vec::<PathData>::new();
     let mut dirs = Vec::<PathData>::new();
@@ -2297,7 +2295,6 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
         .any(|p| p.matches_with(&file_name, options))
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn enter_directory(
     path_data: &PathData,
     mut read_dir: ReadDir,
@@ -2529,7 +2526,6 @@ fn display_additional_leading_info(
     Ok(result)
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn display_items(
     items: &[PathData],
     config: &Config,
@@ -2799,7 +2795,6 @@ fn display_grid(
 /// ```
 /// that decide the maximum possible character count of each field.
 #[allow(clippy::write_literal)]
-#[allow(clippy::cognitive_complexity)]
 fn display_item_long(
     item: &PathData,
     padding: &PaddingCollection,
@@ -3177,7 +3172,6 @@ fn classify_file(path: &PathData) -> Option<char> {
 ///
 /// Note that non-unicode sequences in symlink targets are dealt with using
 /// [`std::path::Path::to_string_lossy`].
-#[allow(clippy::cognitive_complexity)]
 fn display_item_name(
     path: &PathData,
     config: &Config,

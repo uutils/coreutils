@@ -188,7 +188,6 @@ fn parse_military_timezone_with_offset(s: &str) -> Option<(i32, DayDelta)> {
 }
 
 #[uucore::main]
-#[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 

@@ -437,7 +437,6 @@ fn get_date_format(matches: &ArgMatches) -> String {
     .to_string()
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn build_options(
     matches: &ArgMatches,
     paths: &[&str],
@@ -1003,7 +1002,6 @@ fn print_page(
     Ok(lines_written)
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn write_columns(
     lines: &[FileLine],
     options: &OutputOptions,

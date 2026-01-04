@@ -284,7 +284,6 @@ impl ChownExecutor {
         Ok(())
     }
 
-    #[allow(clippy::cognitive_complexity)]
     fn traverse<P: AsRef<Path>>(&self, root: P) -> i32 {
         let path = root.as_ref();
         let Some(meta) = self.obtain_meta(path, self.dereference) else {
@@ -557,7 +556,6 @@ impl ChownExecutor {
     }
 
     #[cfg(not(target_os = "linux"))]
-    #[allow(clippy::cognitive_complexity)]
     fn dive_into<P: AsRef<Path>>(&self, root: P) -> i32 {
         let root = root.as_ref();
 
@@ -851,7 +849,6 @@ pub fn configure_symlink_and_recursion(
 /// `parse_gid_uid_and_filter` will be called to obtain the target gid and uid, and the filter,
 /// from `ArgMatches`.
 /// `groups_only` determines whether verbose output will only mention the group.
-#[allow(clippy::cognitive_complexity)]
 pub fn chown_base(
     mut command: Command,
     args: impl crate::Args,

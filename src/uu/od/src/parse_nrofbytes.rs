@@ -79,7 +79,6 @@ pub fn parse_number_of_bytes(s: &str) -> Result<u64, ParseSizeError> {
 }
 
 #[test]
-#[allow(clippy::cognitive_complexity)]
 fn test_parse_number_of_bytes() {
     // octal input
     assert_eq!(8, parse_number_of_bytes("010").unwrap());

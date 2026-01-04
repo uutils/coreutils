@@ -1010,7 +1010,6 @@ impl Attributes {
 }
 
 impl Options {
-    #[allow(clippy::cognitive_complexity)]
     fn from_matches(matches: &ArgMatches) -> CopyResult<Self> {
         let not_implemented_opts = vec![
             #[cfg(not(any(windows, unix)))]
@@ -2329,7 +2328,7 @@ fn calculate_dest_permissions(
 ///
 /// The original permissions of `source` will be copied to `dest`
 /// after a successful copy.
-#[allow(clippy::cognitive_complexity, clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 fn copy_file(
     progress_bar: Option<&ProgressBar>,
     source: &Path,

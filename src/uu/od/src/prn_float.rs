@@ -239,7 +239,6 @@ fn format_long_double(f: f64) -> String {
 
 #[test]
 #[allow(clippy::excessive_precision)]
-#[allow(clippy::cognitive_complexity)]
 fn test_format_f32() {
     assert_eq!(format_f32(1.0), "      1.0000000");
     assert_eq!(format_f32(9.999_999_0), "      9.9999990");
@@ -316,7 +315,6 @@ fn test_format_f32() {
 }
 
 #[test]
-#[allow(clippy::cognitive_complexity)]
 fn test_format_f64() {
     assert_eq!(format_f64(1.0), "      1.0000000000000000");
     assert_eq!(format_f64(10.0), "      10.000000000000000");
@@ -349,7 +347,6 @@ fn test_format_f64() {
 }
 
 #[test]
-#[allow(clippy::cognitive_complexity)]
 fn test_format_f16() {
     assert_eq!(format_f16(f16::from_bits(0x8400u16)), "  -6.1035156e-5");
     assert_eq!(format_f16(f16::from_bits(0x8401u16)), "  -6.1094761e-5");

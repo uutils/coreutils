@@ -473,7 +473,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cognitive_complexity)]
     fn test_take_all_lines_buffer() {
         // 3 lines with new-lines and one partial line.
         let input_buffer = "a\nb\nc\ndef";

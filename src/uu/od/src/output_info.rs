@@ -235,7 +235,6 @@ fn assert_alignment(
 }
 
 #[test]
-#[allow(clippy::cognitive_complexity)]
 fn test_calculate_alignment() {
     // For this example `byte_size_block` is 8 and 'print_width_block' is 23:
     // 1777777777777777777777 1777777777777777777777
