@@ -171,18 +171,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     );
 
     if check {
-        // on Windows, allow --binary/--text to be used with --check
-        // and keep the behavior of defaulting to binary
-        #[cfg(not(windows))]
-        {
-            let text_flag = matches.get_flag("text");
-            let binary_flag = matches.get_flag("binary");
-
-            if binary_flag || text_flag {
-                return Err(ChecksumError::BinaryTextConflict.into());
-            }
-        }
-
+        // No reason to allow --check with --binary/--text on Cygwin. It want to be same with Linux and --text was broken for a long time.
         let verbose = ChecksumVerbose::new(status, quiet, warn);
 
         let opts = ChecksumValidateOptions {
@@ -261,7 +250,9 @@ pub fn uu_app_common() -> Command {
                 .long("check")
                 .help(translate!("hashsum-help-check"))
                 .action(ArgAction::SetTrue)
-                .conflicts_with("tag"),
+                .conflicts_with(options::BINARY)
+                .conflicts_with(options::TEXT)
+                .conflicts_with(options::TAG),
         )
         .arg(
             Arg::new(options::TAG)
