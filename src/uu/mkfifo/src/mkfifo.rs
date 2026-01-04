@@ -4,10 +4,8 @@
 // file that was distributed with this source code.
 
 use clap::{Arg, ArgAction, Command, value_parser};
-use libc::mkfifo;
+use libc::{mkfifo, mode_t, umask};
 use std::ffi::CString;
-use std::fs;
-use std::os::unix::fs::PermissionsExt;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::translate;
@@ -38,24 +36,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
+    let has_mode = matches.contains_id(options::MODE);
+    // Set umask to 0 temporarily if -m option is applied
+    // mkfifo applies umask to requested mode
+    let old_umask = if has_mode { unsafe { umask(0) } } else { 0 };
+
     for f in fifos {
-        let err = unsafe {
-            let name = CString::new(f.as_bytes()).unwrap();
-            mkfifo(name.as_ptr(), 0o666)
-        };
+        let name = CString::new(f.as_bytes()).unwrap();
+        let err = unsafe { mkfifo(name.as_ptr(), mode as mode_t) };
+
         if err == -1 {
             show!(USimpleError::new(
                 1,
                 translate!("mkfifo-error-cannot-create-fifo", "path" => f.quote()),
             ));
-        }
-
-        // Explicitly set the permissions to ignore umask
-        if let Err(e) = fs::set_permissions(&f, fs::Permissions::from_mode(mode)) {
-            return Err(USimpleError::new(
-                1,
-                translate!("mkfifo-error-cannot-set-permissions", "path" => f.quote(), "error" => e),
-            ));
+            continue;
         }
 
         // Apply SELinux context if requested
@@ -70,11 +65,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 if let Err(e) =
                     uucore::selinux::set_selinux_security_context(Path::new(&f), context)
                 {
-                    let _ = fs::remove_file(f);
+                    let _ = std::fs::remove_file(f);
                     return Err(USimpleError::new(1, e.to_string()));
                 }
             }
         }
+    }
+
+    if has_mode {
+        unsafe { umask(old_umask) };
     }
 
     Ok(())
@@ -124,6 +123,6 @@ fn calculate_mode(mode_option: Option<&String>) -> Result<u32, String> {
     if let Some(m) = mode_option {
         uucore::mode::parse_chmod(mode, m, false, umask)
     } else {
-        Ok(mode & !umask) // Apply umask if no mode is specified
+        Ok(mode) // current mask will be applied automatically
     }
 }

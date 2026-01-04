@@ -139,7 +139,6 @@ fn test_create_fifo_permission_denied() {
 
     let err_msg = format!(
         "mkfifo: cannot create fifo '{named_pipe}': File exists
-mkfifo: cannot set permissions on '{named_pipe}': Permission denied (os error 13)
 "
     );
 
