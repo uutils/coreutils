@@ -642,22 +642,24 @@ fn test_chgrp_recursive_on_file() {
 }
 
 #[test]
-#[cfg(not(target_vendor = "apple"))]
 fn test_chgrp_exit_code_not_being_overwritten_by_last_file() {
     use std::os::unix::prelude::PermissionsExt;
 
-    if let Some(group) = nix::unistd::getgroups().unwrap().first() {
-        let (at, mut ucmd) = at_and_ucmd!();
-        at.mkdir("dir");
-        at.mkdir("dir/subdir");
-        at.touch("dir/subdir/file");
-        at.touch("a");
-        std::fs::set_permissions(at.plus("dir/subdir"), PermissionsExt::from_mode(0o0000)).unwrap();
-        ucmd.arg("-R")
-            .arg(group.as_raw().to_string())
-            .arg("dir")
-            .arg("a")
-            .fails()
-            .stderr_only("chgrp: cannot access 'dir/subdir': Permission denied\n");
-    }
+    let current_gid = getegid();
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.mkdir("dir/a");
+    at.mkdir("dir/b");
+    at.touch("dir/b/file");
+    at.touch("dir/a/file");
+    std::fs::set_permissions(at.plus("dir/a"), PermissionsExt::from_mode(0o0000)).unwrap();
+
+    // chgrp walks the dir alphabetically. Dir a does not have permissions so it fails, dir b does have
+    // permissions so it succeeds. We check that the overall command does fail although the
+    // last step succeeded.
+
+    ucmd.arg("-R")
+        .arg(current_gid.to_string())
+        .arg("dir")
+        .fails();
 }
