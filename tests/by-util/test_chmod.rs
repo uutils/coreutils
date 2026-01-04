@@ -377,6 +377,48 @@ fn test_permission_denied() {
 
 #[test]
 #[allow(clippy::unreadable_literal)]
+fn test_chmod_recursive_correct_exit_code() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // create 3 folders to test on
+    at.mkdir("a");
+    at.mkdir("a/b");
+    at.mkdir("z");
+
+    // remove read permissions for folder a so the chmod command for a/b fails
+    let mut perms = at.metadata("a").permissions();
+    perms.set_mode(0o000);
+    set_permissions(at.plus_as_string("a"), perms).unwrap();
+
+    #[cfg(not(target_os = "linux"))]
+    let err_msg = "chmod: Permission denied\n";
+    #[cfg(target_os = "linux")]
+    let err_msg = "chmod: cannot access 'a': Permission denied\n";
+
+    // order of command is a, a/b then c
+    // command is expected to fail and not just take the last exit code
+    ucmd.arg("-R")
+        .arg("--verbose")
+        .arg("a+w")
+        .arg("a")
+        .arg("z")
+        .umask(0)
+        .fails()
+        .stderr_is(err_msg);
+}
+
+#[test]
+fn test_chmod_hyper_recursive_directory_tree_does_not_fail() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mkdir = "a/".repeat(400);
+
+    at.mkdir_all(&mkdir);
+
+    ucmd.arg("-R").arg("777").arg("a").succeeds();
+}
+
+#[test]
+#[allow(clippy::unreadable_literal)]
 fn test_chmod_recursive() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("a");

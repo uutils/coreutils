@@ -7402,6 +7402,50 @@ fn test_cp_recurse_verbose_output_with_symlink_already_exists() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_cp_hlp_flag_ordering() {
+    // GNU cp: "If more than one of -H, -L, and -P is specified, only the final one takes effect"
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file.txt");
+    at.symlink_file("file.txt", "symlink");
+
+    // -HP: P wins, copy symlink as symlink
+    ucmd.args(&["-HP", "symlink", "dest_hp"]).succeeds();
+    assert!(at.is_symlink("dest_hp"));
+
+    // -PH: H wins, copy target file
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file.txt");
+    at.symlink_file("file.txt", "symlink");
+    ucmd.args(&["-PH", "symlink", "dest_ph"]).succeeds();
+    assert!(!at.is_symlink("dest_ph"));
+    assert!(at.file_exists("dest_ph"));
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_archive_deref_flag_ordering() {
+    // (flags, expect_symlink): last flag wins; a/d imply -P, H/L dereference
+    for (flags, expect_symlink) in [
+        ("-Ha", true),
+        ("-aH", false),
+        ("-Hd", true),
+        ("-dH", false),
+        ("-La", true),
+        ("-aL", false),
+        ("-Ld", true),
+        ("-dL", false),
+    ] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("file.txt");
+        at.symlink_file("file.txt", "symlink");
+        let dest = format!("dest{flags}");
+        ucmd.args(&[flags, "symlink", &dest]).succeeds();
+        assert_eq!(at.is_symlink(&dest), expect_symlink, "failed for {flags}");
+    }
+}
+
+#[test]
 fn test_cp_circular_symbolic_links_in_directory() {
     let source_dir = "source_dir";
     let target_dir = "target_dir";
