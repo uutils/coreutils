@@ -7444,3 +7444,28 @@ fn test_cp_archive_deref_flag_ordering() {
         assert_eq!(at.is_symlink(&dest), expect_symlink, "failed for {flags}");
     }
 }
+
+/// Test that copying to an existing file maintains its permissions, unix only because .mode() only
+/// works on Unix
+#[test]
+#[cfg(unix)]
+fn test_cp_to_existing_file_permissions() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("src");
+    at.touch("dst");
+
+    let src_path = at.plus("src");
+    let dst_path = at.plus("dst");
+
+    let mut src_permissions = std::fs::metadata(&src_path).unwrap().permissions();
+    src_permissions.set_readonly(true);
+    std::fs::set_permissions(&src_path, src_permissions).unwrap();
+
+    let dst_mode = std::fs::metadata(&dst_path).unwrap().permissions().mode();
+
+    ucmd.args(&["src", "dst"]).succeeds();
+
+    let new_dst_mode = std::fs::metadata(&dst_path).unwrap().permissions().mode();
+    assert_eq!(dst_mode, new_dst_mode);
+}
