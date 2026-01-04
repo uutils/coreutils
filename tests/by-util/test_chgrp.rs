@@ -642,18 +642,13 @@ fn test_chgrp_recursive_on_file() {
 }
 
 #[test]
-#[cfg(not(target_vendor = "apple"))]
 fn test_chgrp_multiple_files_error_on_first_success_on_last() {
     use std::os::unix::fs::PermissionsExt;
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    let groups = nix::unistd::getgroups().unwrap();
-    if groups.is_empty() {
-        return;
-    }
-    let current_group = groups[0];
+    let current_gid = getegid();
 
     at.mkdir("a_readonly_dir");
     at.mkdir("a_readonly_dir/subdir");
@@ -669,7 +664,7 @@ fn test_chgrp_multiple_files_error_on_first_success_on_last() {
     scene
         .ucmd()
         .arg("-R")
-        .arg(current_group.to_string())
+        .arg(current_gid.to_string())
         .arg("a_readonly_dir")
         .arg("b_writable_file")
         .fails()
