@@ -61,8 +61,6 @@ struct Uniq {
 struct LineMeta {
     key_start: usize,
     key_end: usize,
-    lowercase: Vec<u8>,
-    use_lowercase: bool,
 }
 
 macro_rules! write_line_terminator {
@@ -152,18 +150,7 @@ impl Uniq {
             return first_slice != second_slice;
         }
 
-        let first_cmp = if first_meta.use_lowercase {
-            first_meta.lowercase.as_slice()
-        } else {
-            first_slice
-        };
-        let second_cmp = if second_meta.use_lowercase {
-            second_meta.lowercase.as_slice()
-        } else {
-            second_slice
-        };
-
-        first_cmp != second_cmp
+        !first_slice.eq_ignore_ascii_case(second_slice)
     }
 
     fn key_bounds(&self, line: &[u8]) -> (usize, usize) {
@@ -230,20 +217,6 @@ impl Uniq {
         let (key_start, key_end) = self.key_bounds(line);
         meta.key_start = key_start;
         meta.key_end = key_end;
-
-        if self.ignore_case && key_start < key_end {
-            let slice = &line[key_start..key_end];
-            if slice.iter().any(|b| b.is_ascii_uppercase()) {
-                meta.lowercase.clear();
-                meta.lowercase.reserve(slice.len());
-                meta.lowercase
-                    .extend(slice.iter().map(|b| b.to_ascii_lowercase()));
-                meta.use_lowercase = true;
-                return;
-            }
-        }
-
-        meta.use_lowercase = false;
     }
 
     fn read_line(
