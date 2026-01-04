@@ -1725,8 +1725,9 @@ pub(crate) fn copy_attributes(
         fs::symlink_metadata(source).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
 
     let is_preserve_required = matches!(options.attributes.mode, Preserve::Yes { required: true });
+    let is_explicit_true = matches!(options.attributes.mode, Preserve::No { explicit: true });
 
-    let mode = if !is_preserve_required && dest.is_dir() && is_dir_created {
+    let mode = if !is_preserve_required && !is_explicit_true && dest.is_dir() && is_dir_created {
         Preserve::Yes { required: false }
     } else {
         options.attributes.mode
@@ -1776,12 +1777,16 @@ pub(crate) fn copy_attributes(
         // do nothing, since every symbolic link has the same
         // permissions.
         if !dest.is_symlink() {
-            let mut perms = source_metadata.permissions();
-            if is_dir_created && !is_preserve_required {
-                let mode = handle_no_preserve_mode(options, perms.mode());
-                use uucore::mode::get_umask;
-                let mode = mode & !get_umask();
-                perms.set_mode(mode);
+            let perms = source_metadata.permissions();
+            #[cfg(unix)]
+            {
+                let mut perms = source_metadata.permissions();
+                if is_dir_created && !is_preserve_required && !is_explicit_true {
+                    let mode = handle_no_preserve_mode(options, perms.mode());
+                    use uucore::mode::get_umask;
+                    let mode = mode & !get_umask();
+                    perms.set_mode(mode);
+                }
             }
 
             fs::set_permissions(dest, perms)

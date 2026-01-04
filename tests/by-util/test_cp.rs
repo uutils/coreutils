@@ -25,7 +25,6 @@ use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::os::windows::fs::symlink_file;
 #[cfg(not(windows))]
 use std::path::Path;
-
 use std::path::PathBuf;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -7642,4 +7641,31 @@ fn test_cp_existing_perm_dir() {
     let mode = get_mode(at.plus("dst/dir"));
 
     assert_eq!(mode, 0o40700);
+}
+
+#[test]
+#[cfg(not(target_os = "windows"))]
+fn test_cp_gnu_preserve_mode() {
+    use std::io;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene.cmd("mkdir").arg("d1").succeeds();
+    scene.cmd("mkdir").arg("d2").succeeds();
+    scene.cmd("chmod").arg("705").arg("d2").succeeds();
+
+    scene
+        .ucmd()
+        .arg("--no-preserve=mode")
+        .arg("-r")
+        .arg("d2")
+        .arg("d3")
+        .set_stdout(io::stdout())
+        .succeeds();
+
+    let d1_mode = get_mode(at.plus("d1"));
+    let d3_mode = get_mode(at.plus("d3"));
+
+    assert_eq!(d1_mode, d3_mode);
 }
