@@ -250,6 +250,28 @@ fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
     create_single_dir(path, is_parent, config)
 }
 
+/// RAII guard to restore umask on drop, ensuring cleanup even on panic.
+#[cfg(unix)]
+struct UmaskGuard(uucore::libc::mode_t);
+
+#[cfg(unix)]
+impl UmaskGuard {
+    /// Set umask to the given value and return a guard that restores the original on drop.
+    fn set(new_mask: uucore::libc::mode_t) -> Self {
+        let old_mask = unsafe { uucore::libc::umask(new_mask) };
+        Self(old_mask)
+    }
+}
+
+#[cfg(unix)]
+impl Drop for UmaskGuard {
+    fn drop(&mut self) {
+        unsafe {
+            uucore::libc::umask(self.0);
+        }
+    }
+}
+
 /// Create a directory with the exact mode specified, bypassing umask.
 ///
 /// GNU mkdir temporarily sets umask to 0 before calling mkdir(2), ensuring the
@@ -258,19 +280,12 @@ fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
 #[cfg(unix)]
 fn create_dir_with_mode(path: &Path, mode: u32) -> std::io::Result<()> {
     use std::os::unix::fs::DirBuilderExt;
-    use uucore::libc;
 
-    // Save current umask and temporarily set to 0
-    let old_umask = unsafe { libc::umask(0) };
+    // Temporarily set umask to 0 so the directory is created with the exact mode.
+    // The guard restores the original umask on drop, even if we panic.
+    let _guard = UmaskGuard::set(0);
 
-    let result = std::fs::DirBuilder::new().mode(mode).create(path);
-
-    // Restore original umask immediately
-    unsafe {
-        libc::umask(old_umask);
-    }
-
-    result
+    std::fs::DirBuilder::new().mode(mode).create(path)
 }
 
 #[cfg(not(unix))]

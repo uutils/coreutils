@@ -826,7 +826,8 @@ fn test_mkdir_mode_ignores_umask() {
 
         let perms = at.metadata("test_777").permissions().mode() as mode_t;
         assert_eq!(
-            perms, 0o40777,
+            perms,
+            0o40777,
             "Expected 0777 (umask should be ignored with -m), got {:o}",
             perms & 0o777
         );
@@ -883,14 +884,16 @@ fn test_mkdir_parent_mode_with_explicit_mode() {
     let parent_perms = at.metadata("parent").permissions().mode() as mode_t;
     let expected_parent = ((!umask & 0o777) | 0o300) + 0o40000;
     assert_eq!(
-        parent_perms, expected_parent,
+        parent_perms,
+        expected_parent,
         "Parent should have umask-derived mode, got {:o}",
         parent_perms & 0o777
     );
 
     let child_perms = at.metadata("parent/child").permissions().mode() as mode_t;
     assert_eq!(
-        child_perms, expected_parent,
+        child_perms,
+        expected_parent,
         "Intermediate dir should have umask-derived mode, got {:o}",
         child_perms & 0o777
     );
@@ -898,7 +901,8 @@ fn test_mkdir_parent_mode_with_explicit_mode() {
     // Final directory should have exactly the requested mode
     let target_perms = at.metadata("parent/child/target").permissions().mode() as mode_t;
     assert_eq!(
-        target_perms, 0o40700,
+        target_perms,
+        0o40700,
         "Target should have exact requested mode 0700, got {:o}",
         target_perms & 0o777
     );
