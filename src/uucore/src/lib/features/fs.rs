@@ -630,6 +630,46 @@ pub fn is_symlink_loop(path: &Path) -> bool {
     false
 }
 
+#[cfg(unix)]
+pub fn is_symlink_with_trailing(path: &Path) -> bool {
+    use std::os::unix::prelude::OsStrExt;
+
+    let bytes = path.as_os_str().as_bytes();
+    // Not reusing path_ends_with_terminator for best performance on unix
+    if bytes.last().is_some_and(|&last| last == b'/') {
+        let len = bytes.len();
+        let stripped = &bytes[..len - 1];
+        Path::new(OsStr::from_bytes(stripped)).is_symlink()
+    } else {
+        false
+    }
+}
+
+#[cfg(windows)]
+pub fn is_symlink_with_trailing(path: &Path) -> bool {
+    if !path_ends_with_terminator(path) {
+        return false;
+    }
+
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStrExt;
+    use std::os::windows::ffi::OsStringExt;
+
+    let mut wides: Vec<u16> = path.as_os_str().encode_wide().collect();
+    // Handle multiple trailing separators on Windows
+    while wides
+        .last()
+        .is_some_and(|&last| last == b'/'.into() || last == b'\\'.into())
+    {
+        wides.pop();
+    }
+    if wides.is_empty() {
+        return false;
+    }
+    let stripped = OsString::from_wide(&wides);
+    std::path::Path::new(&stripped).is_symlink()
+}
+
 #[cfg(not(unix))]
 // Hard link comparison is not supported on non-Unix platforms
 pub fn are_hardlinks_to_same_file(_source: &Path, _target: &Path) -> bool {
