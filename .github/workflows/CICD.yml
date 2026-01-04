@@ -568,6 +568,8 @@ jobs:
       DOCKER_OPTS: '--volume /etc/passwd:/etc/passwd --volume /etc/group:/etc/group'
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
+      RUST_LIBC_UNSTABLE_MUSL_V1_2_3: 1 # Avoid build failure on i686-musl
+      RUST_LIBC_UNSTABLE_GNU_TIME_BITS: 64 # Avoid build failure on i686-musl
     strategy:
       fail-fast: false
       matrix:
