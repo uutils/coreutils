@@ -302,6 +302,25 @@ fn test_newline_as_delimiter_with_output_delimiter() {
 }
 
 #[test]
+fn test_newline_as_delimiter_with_only_delimited() {
+    // When input has no newline delimiter and -s is specified,
+    // the line should be suppressed (no output)
+    new_ucmd!()
+        .args(&["-f1", "-d", "\n", "-s"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_only_bytes("");
+
+    // When input has newline delimiter and -s is specified,
+    // it should output the selected field
+    new_ucmd!()
+        .args(&["-f1", "-d", "\n", "-s"])
+        .pipe_in("line1\nline2")
+        .succeeds()
+        .stdout_only_bytes("line1\n");
+}
+
+#[test]
 fn test_multiple_delimiters() {
     new_ucmd!()
         .args(&["-f2", "-d:", "-d="])
