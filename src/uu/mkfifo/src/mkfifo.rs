@@ -10,7 +10,7 @@ use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::translate;
 
-use uucore::{format_usage, show};
+use uucore::format_usage;
 
 mod options {
     pub static MODE: &str = "mode";
@@ -46,11 +46,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let err = unsafe { mkfifo(name.as_ptr(), mode as mode_t) };
 
         if err == -1 {
-            show!(USimpleError::new(
-                1,
-                translate!("mkfifo-error-cannot-create-fifo", "path" => f.quote()),
-            ));
-            continue;
+            let e = std::io::Error::last_os_error();
+
+            let err_msg = match e.kind() {
+                std::io::ErrorKind::PermissionDenied => {
+                    translate!(
+                        "mkfifo-error-cannot-set-permissions",
+                        "path" => f.quote(),
+                        "error" => e
+                    )
+                }
+                _ => {
+                    translate!("mkfifo-error-cannot-create-fifo", "path" => f.quote())
+                }
+            };
+
+            return Err(USimpleError::new(1, err_msg));
         }
 
         // Apply SELinux context if requested
