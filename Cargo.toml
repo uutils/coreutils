@@ -619,9 +619,12 @@ workspace = true
 # This is the linting configuration for all crates.
 # In order to use these, all crates have `[lints] workspace = true` section.
 [workspace.lints.rust]
-# Allow "fuzzing" as a "cfg" condition name
+# Allow "fuzzing" as a "cfg" condition name and "cygwin" as a value for "target_os"
 # https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
+unexpected_cfgs = { level = "warn", check-cfg = [
+  'cfg(fuzzing)',
+  'cfg(target_os, values("cygwin"))',
+] }
 #unused_qualifications = "warn" // TODO: fix warnings in uucore, then re-enable this lint
 
 [workspace.lints.clippy]
