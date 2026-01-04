@@ -645,8 +645,7 @@ fn test_chgrp_recursive_on_file() {
 fn test_chgrp_multiple_files_error_on_first_success_on_last() {
     use std::os::unix::fs::PermissionsExt;
 
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
 
     let current_gid = getegid();
 
@@ -661,9 +660,7 @@ fn test_chgrp_multiple_files_error_on_first_success_on_last() {
     )
     .unwrap();
 
-    scene
-        .ucmd()
-        .arg("-R")
+    ucmd.arg("-R")
         .arg(current_gid.to_string())
         .arg("a_readonly_dir")
         .arg("b_writable_file")
