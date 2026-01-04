@@ -247,3 +247,97 @@ fn test_nohup_stderr_to_stdout() {
     assert!(content.contains("stdout message"));
     assert!(content.contains("stderr message"));
 }
+
+// Test nohup.out has 0600 permissions
+#[test]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "freebsd",
+    target_os = "openbsd",
+    target_vendor = "apple"
+))]
+fn test_nohup_output_permissions() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    ts.ucmd()
+        .terminal_simulation(true)
+        .args(&["echo", "perms"])
+        .succeeds();
+
+    sleep(std::time::Duration::from_millis(10));
+
+    let metadata = std::fs::metadata(at.plus("nohup.out")).unwrap();
+    let mode = metadata.permissions().mode();
+
+    assert_eq!(
+        mode & 0o777,
+        0o600,
+        "nohup.out should have 0600 permissions"
+    );
+}
+
+// Test that the fallback nohup.out (in $HOME) also has 0600 permissions
+#[test]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "freebsd",
+    target_os = "openbsd"
+))]
+fn test_nohup_fallback_output_permissions() {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+
+    // Skip if root
+    if unsafe { libc::geteuid() } == 0 {
+        println!("Skipping test when running as root");
+        return;
+    }
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    // Create a fake HOME directory
+    at.mkdir("home");
+    let home_dir_str = at.plus_as_string("home");
+
+    // Create a read-only directory
+    at.mkdir("readonly_dir");
+    let readonly_path = at.plus("readonly_dir");
+
+    // Make directory read-only
+    let mut perms = fs::metadata(&readonly_path).unwrap().permissions();
+    perms.set_mode(0o555);
+    fs::set_permissions(&readonly_path, perms).unwrap();
+
+    // Run nohup inside the read-only dir
+    // This forces it to fail writing to CWD and fall back to custom HOME
+    ts.ucmd()
+        .env("HOME", &home_dir_str)
+        .current_dir(&readonly_path)
+        .terminal_simulation(true)
+        .arg("true")
+        .run();
+
+    // Restore permissions so the test runner can delete the folder later!
+    let mut perms = fs::metadata(&readonly_path).unwrap().permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&readonly_path, perms).unwrap();
+
+    sleep(std::time::Duration::from_millis(50));
+
+    // Verify the file exists in HOME and has 0600 permissions
+    let home_nohup = at.plus("home/nohup.out");
+    let metadata = fs::metadata(home_nohup).expect("nohup.out should have been created in HOME");
+    let mode = metadata.permissions().mode();
+
+    assert_eq!(
+        mode & 0o777,
+        0o600,
+        "Fallback nohup.out should have 0600 permissions"
+    );
+}
