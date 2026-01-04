@@ -765,10 +765,13 @@ pub mod sane_blksize {
     ///
     /// If the metadata contain invalid values a meaningful adaption
     /// of that value is done.
-    pub fn sane_blksize_from_metadata(_metadata: &std::fs::Metadata) -> u64 {
+    pub fn sane_blksize_from_metadata(
+        #[cfg(unix)] metadata: &std::fs::Metadata,
+        #[cfg(not(unix))] _: &std::fs::Metadata,
+    ) -> u64 {
         #[cfg(not(target_os = "windows"))]
         {
-            sane_blksize(_metadata.blksize())
+            sane_blksize(metadata.blksize())
         }
 
         #[cfg(target_os = "windows")]

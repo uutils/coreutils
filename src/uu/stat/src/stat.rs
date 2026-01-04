@@ -1004,7 +1004,8 @@ impl Stater {
         file: &OsString,
         file_type: &FileType,
         from_user: bool,
-        _follow_symbolic_links: bool,
+        #[cfg(feature = "selinux")] follow_symbolic_links: bool,
+        #[cfg(not(feature = "selinux"))] _: bool,
     ) -> Result<(), i32> {
         match *t {
             Token::Byte(byte) => write_raw_byte(byte),
@@ -1035,7 +1036,7 @@ impl Stater {
                             if uucore::selinux::is_selinux_enabled() {
                                 match uucore::selinux::get_selinux_security_context(
                                     Path::new(file),
-                                    _follow_symbolic_links,
+                                    follow_symbolic_links,
                                 ) {
                                     Ok(ctx) => OutputType::Str(ctx),
                                     Err(_) => OutputType::Str(translate!(
