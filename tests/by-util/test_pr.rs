@@ -5,6 +5,7 @@
 // spell-checker:ignore (ToDO) Sdivide
 
 use chrono::{DateTime, Duration, Utc};
+use regex::Regex;
 use std::fs::metadata;
 use uutests::new_ucmd;
 use uutests::util::UCommand;
@@ -78,21 +79,22 @@ fn test_with_numbering_option_with_number_width() {
 
 #[test]
 fn test_with_long_header_option() {
-    let test_file_path = "test_one_page.log";
-    let expected_test_file_path = "test_one_page_header.log.expected";
-    let header = "new file";
-    for args in [&["-h", header][..], &["--header=new file"][..]] {
-        let mut scenario = new_ucmd!();
-        let value = file_last_modified_time(&scenario, test_file_path);
-        scenario
-            .args(args)
-            .arg(test_file_path)
-            .succeeds()
-            .stdout_is_templated_fixture(
-                expected_test_file_path,
-                &[("{last_modified_time}", &value), ("{header}", header)],
-            );
-    }
+    let whitespace = " ".repeat(21);
+    let blank_lines = "\n".repeat(61);
+    let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
+    let pattern =
+        format!("\n\n{datetime_pattern}{whitespace}new file{whitespace}Page 1\n\n\na{blank_lines}");
+    let regex = Regex::new(&pattern).unwrap();
+    new_ucmd!()
+        .args(&["-h", "new file"])
+        .pipe_in("a")
+        .succeeds()
+        .stdout_matches(&regex);
+    new_ucmd!()
+        .args(&["--header=new file"])
+        .pipe_in("a")
+        .succeeds()
+        .stdout_matches(&regex);
 }
 
 #[test]
@@ -400,99 +402,92 @@ fn test_with_offset_space_option() {
 
 #[test]
 fn test_with_date_format() {
-    let test_file_path = "test_one_page.log";
-    let expected_test_file_path = "test_one_page.log.expected";
-    let mut scenario = new_ucmd!();
-    let value = file_last_modified_time_format(&scenario, test_file_path, "%Y__%s");
-    scenario
-        .args(&[test_file_path, "-D", "%Y__%s"])
+    let whitespace = " ".repeat(50);
+    let blank_lines = "\n".repeat(61);
+    let datetime_pattern = r"\d{4}__\d{10}";
+    let pattern = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\na{blank_lines}");
+    let regex = Regex::new(&pattern).unwrap();
+    new_ucmd!()
+        .args(&["-D", "%Y__%s"])
+        .pipe_in("a")
         .succeeds()
-        .stdout_is_templated_fixture(expected_test_file_path, &[("{last_modified_time}", &value)]);
+        .stdout_matches(&regex);
 
     // "Format" doesn't need to contain any replaceable token.
+    let whitespace = " ".repeat(60);
+    let blank_lines = "\n".repeat(61);
     new_ucmd!()
-        .args(&[test_file_path, "-D", "Hello!"])
+        .args(&["-D", "Hello!"])
+        .pipe_in("a")
         .succeeds()
-        .stdout_is_templated_fixture(
-            expected_test_file_path,
-            &[("{last_modified_time}", "Hello!")],
-        );
+        .stdout_only(format!("\n\nHello!{whitespace}Page 1\n\n\na{blank_lines}"));
 
     // Long option also works
     new_ucmd!()
-        .args(&[test_file_path, "--date-format=Hello!"])
+        .args(&["--date-format=Hello!"])
+        .pipe_in("a")
         .succeeds()
-        .stdout_is_templated_fixture(
-            expected_test_file_path,
-            &[("{last_modified_time}", "Hello!")],
-        );
+        .stdout_only(format!("\n\nHello!{whitespace}Page 1\n\n\na{blank_lines}"));
 
     // Option takes precedence over environment variables
     new_ucmd!()
         .env("POSIXLY_CORRECT", "1")
         .env("LC_TIME", "POSIX")
-        .args(&[test_file_path, "-D", "Hello!"])
+        .args(&["--date-format=Hello!"])
+        .pipe_in("a")
         .succeeds()
-        .stdout_is_templated_fixture(
-            expected_test_file_path,
-            &[("{last_modified_time}", "Hello!")],
-        );
+        .stdout_only(format!("\n\nHello!{whitespace}Page 1\n\n\na{blank_lines}"));
 }
 
 #[test]
 fn test_with_date_format_env() {
-    const POSIXLY_FORMAT: &str = "%b %e %H:%M %Y";
-
     // POSIXLY_CORRECT + LC_ALL/TIME=POSIX uses "%b %e %H:%M %Y" date format
-    let test_file_path = "test_one_page.log";
-    let expected_test_file_path = "test_one_page.log.expected";
-    let mut scenario = new_ucmd!();
-    let value = file_last_modified_time_format(&scenario, test_file_path, POSIXLY_FORMAT);
-    scenario
+    let whitespace = " ".repeat(49);
+    let blank_lines = "\n".repeat(61);
+    let datetime_pattern = r"[A-Z][a-z][a-z] [ \d]\d \d\d:\d\d \d{4}";
+    let pattern = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\na{blank_lines}");
+    let regex = Regex::new(&pattern).unwrap();
+    new_ucmd!()
         .env("POSIXLY_CORRECT", "1")
         .env("LC_ALL", "POSIX")
-        .args(&[test_file_path])
+        .pipe_in("a")
         .succeeds()
-        .stdout_is_templated_fixture(expected_test_file_path, &[("{last_modified_time}", &value)]);
-
-    let mut scenario = new_ucmd!();
-    let value = file_last_modified_time_format(&scenario, test_file_path, POSIXLY_FORMAT);
-    scenario
+        .stdout_matches(&regex);
+    new_ucmd!()
         .env("POSIXLY_CORRECT", "1")
         .env("LC_TIME", "POSIX")
-        .args(&[test_file_path])
+        .pipe_in("a")
         .succeeds()
-        .stdout_is_templated_fixture(expected_test_file_path, &[("{last_modified_time}", &value)]);
+        .stdout_matches(&regex);
 
     // But not if POSIXLY_CORRECT/LC_ALL is something else.
-    let mut scenario = new_ucmd!();
-    let value = file_last_modified_time_format(&scenario, test_file_path, DATE_TIME_FORMAT_DEFAULT);
-    scenario
+    let whitespace = " ".repeat(50);
+    let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
+    let pattern = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\na{blank_lines}");
+    let regex = Regex::new(&pattern).unwrap();
+    new_ucmd!()
         .env("LC_TIME", "POSIX")
-        .args(&[test_file_path])
+        .pipe_in("a")
         .succeeds()
-        .stdout_is_templated_fixture(expected_test_file_path, &[("{last_modified_time}", &value)]);
-
-    let mut scenario = new_ucmd!();
-    let value = file_last_modified_time_format(&scenario, test_file_path, DATE_TIME_FORMAT_DEFAULT);
-    scenario
+        .stdout_matches(&regex);
+    new_ucmd!()
         .env("POSIXLY_CORRECT", "1")
         .env("LC_TIME", "C")
-        .args(&[test_file_path])
+        .pipe_in("a")
         .succeeds()
-        .stdout_is_templated_fixture(expected_test_file_path, &[("{last_modified_time}", &value)]);
+        .stdout_matches(&regex);
 }
 
 #[test]
 fn test_with_pr_core_utils_tests() {
     let test_cases = vec![
         ("", vec!["0Ft"], vec!["0F"], 0),
-        ("", vec!["0Fnt"], vec!["0F"], 0),
+        ("", vec!["0Fnt"], vec!["0Fnt-expected"], 0),
         ("+3", vec!["0Ft"], vec!["3-0F"], 0),
         ("+3 -f", vec!["0Ft"], vec!["3f-0F"], 0),
         ("-a -3", vec!["0Ft"], vec!["a3-0F"], 0),
         ("-a -3 -f", vec!["0Ft"], vec!["a3f-0F"], 0),
-        ("-a -3 -f", vec!["0Fnt"], vec!["a3f-0F"], 0),
+        ("-a -3 -f", vec!["0Fnt"], vec!["a3f-0Fnt-expected"], 0),
         ("+3 -a -3 -f", vec!["0Ft"], vec!["3a3f-0F"], 0),
         ("-l 24", vec!["FnFn"], vec!["l24-FF"], 0),
         ("-W 20 -l24 -f", vec!["tFFt-ll"], vec!["W20l24f-ll"], 0),
@@ -621,4 +616,14 @@ fn test_pr_char_device_dev_null() {
 fn test_b_flag_backwards_compat() {
     // -b is a no-op for backwards compatibility (column-down is now the default)
     new_ucmd!().args(&["-b", "-t"]).pipe_in("a\nb\n").succeeds();
+}
+
+#[test]
+fn test_page_header_width() {
+    let whitespace = " ".repeat(50);
+    let blank_lines = "\n".repeat(61);
+    let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
+    let pattern = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\na{blank_lines}");
+    let regex = Regex::new(&pattern).unwrap();
+    new_ucmd!().pipe_in("a").succeeds().stdout_matches(&regex);
 }

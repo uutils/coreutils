@@ -1,6 +1,6 @@
 
 
-{last_modified_time} test.log Page 2
+{last_modified_time}                     test.log                     Page 2
 
 
    91	Mon Dec 10 11:43:31.748 )} took 0.0025 seconds, returned 10 results
@@ -100,7 +100,7 @@
 
 
 
-{last_modified_time} test.log Page 3
+{last_modified_time}                     test.log                     Page 3
 
 
   181	Mon Dec 10 11:52:32.715 AutoJoin: <airportd[160]> Successful cache-assisted scan request for locationd with channels {(
