@@ -1,4 +1,5 @@
-use std::time::Duration;
+use std::time::{Duration, Instant};
+use uutests::util::TestScenario;
 
 // This file is part of the uutils coreutils package.
 //
@@ -52,11 +53,13 @@ fn test_command_with_args() {
 fn test_verbose() {
     for verbose_flag in ["-v", "--verbose"] {
         new_ucmd!()
-            .args(&[verbose_flag, ".1", "sleep", "1"])
+            .args(&[verbose_flag, ".1", "sleep", "10"])
+            .timeout(Duration::from_secs(1))
             .fails()
             .stderr_only("timeout: sending signal TERM to command 'sleep'\n");
         new_ucmd!()
-            .args(&[verbose_flag, "-s0", "-k.1", ".1", "sleep", "1"])
+            .args(&[verbose_flag, "-s0", "-k.1", ".1", "sleep", "10"])
+            .timeout(Duration::from_secs(1))
             .fails()
             .stderr_only("timeout: sending signal EXIT to command 'sleep'\ntimeout: sending signal KILL to command 'sleep'\n");
     }
@@ -107,22 +110,26 @@ fn test_preserve_status() {
 fn test_preserve_status_even_when_send_signal() {
     // When sending CONT signal, process doesn't get killed or stopped.
     // So, expected result is success and code 0.
+    let time = Instant::now();
     for cont_spelling in ["CONT", "cOnT", "SIGcont"] {
         new_ucmd!()
-            .args(&["-s", cont_spelling, "--preserve-status", ".1", "sleep", "1"])
+            .args(&["-s", cont_spelling, "--preserve-status", ".1", "sleep", "2"])
             .succeeds()
             .no_output();
     }
+    assert!(time.elapsed().as_secs() >= 6); // Assert they run for one second each.
 }
 
 #[test]
 fn test_dont_overflow() {
     new_ucmd!()
         .args(&["9223372036854775808d", "sleep", "0"])
+        .timeout(Duration::from_secs(2))
         .succeeds()
         .no_output();
     new_ucmd!()
         .args(&["-k", "9223372036854775808d", "10", "sleep", "0"])
+        .timeout(Duration::from_secs(2))
         .succeeds()
         .no_output();
 }
@@ -183,11 +190,12 @@ fn test_kill_subprocess() {
     new_ucmd!()
         .args(&[
             // Make sure the CI can spawn the subprocess.
-            "1",
+            "5",
             "sh",
             "-c",
-            "trap 'echo inside_trap' TERM; sleep 5",
+            "trap 'echo inside_trap' TERM; sleep 30",
         ])
+        .timeout(Duration::from_secs(6)) // assert it exits when it times out.
         .fails_with_code(124)
         .stdout_contains("inside_trap");
 }
@@ -242,4 +250,44 @@ fn test_command_cannot_invoke() {
     // Test exit code 126 when command exists but cannot be invoked
     // Try to execute a directory (should give permission denied or similar)
     new_ucmd!().args(&["1", "/"]).fails_with_code(126);
+}
+
+#[test]
+fn test_cascaded_timeout_with_bash_trap() {
+    // Use bash if available, otherwise skip
+    if std::process::Command::new("bash")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
+        // Skip test if bash is not available
+        return;
+    }
+
+    // Test with bash explicitly to ensure SIGINT handlers work
+    let script = r"
+        trap 'echo bash_trap_fired; exit 0' INT
+        sleep 10
+    ";
+
+    let ts = TestScenario::new("timeout");
+    let timeout_bin = ts.bin_path.to_str().unwrap();
+
+    ts.ucmd()
+        .args(&[
+            "-s",
+            "ALRM",
+            "0.3",
+            timeout_bin,
+            "timeout",
+            "-s",
+            "INT",
+            "5",
+            "bash",
+            "-c",
+            script,
+        ])
+        .timeout(Duration::from_secs(6))
+        .fails_with_code(124)
+        .stdout_contains("bash_trap_fired");
 }

@@ -1,4 +1,7 @@
 AFAICT
+alrm
+sigalrm
+SIGALRM
 asimd
 ASIMD
 alloc
