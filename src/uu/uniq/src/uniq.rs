@@ -95,7 +95,15 @@ impl Uniq {
 
             self.build_meta(&next_buf, &mut next_meta);
 
-            if self.keys_differ(&current_buf, &current_meta, &next_buf, &next_meta) {
+            if self.keys_are_equal(&current_buf, &current_meta, &next_buf, &next_meta) {
+                if self.all_repeated {
+                    self.print_line(writer, &current_buf, group_count, first_line_printed)?;
+                    first_line_printed = true;
+                    std::mem::swap(&mut current_buf, &mut next_buf);
+                    std::mem::swap(&mut current_meta, &mut next_meta);
+                }
+                group_count += 1;
+            } else {
                 if (group_count == 1 && !self.repeats_only)
                     || (group_count > 1 && !self.uniques_only)
                 {
@@ -105,14 +113,6 @@ impl Uniq {
                 std::mem::swap(&mut current_buf, &mut next_buf);
                 std::mem::swap(&mut current_meta, &mut next_meta);
                 group_count = 1;
-            } else {
-                if self.all_repeated {
-                    self.print_line(writer, &current_buf, group_count, first_line_printed)?;
-                    first_line_printed = true;
-                    std::mem::swap(&mut current_buf, &mut next_buf);
-                    std::mem::swap(&mut current_meta, &mut next_meta);
-                }
-                group_count += 1;
             }
             next_buf.clear();
         }
@@ -136,7 +136,7 @@ impl Uniq {
         if self.zero_terminated { 0 } else { b'\n' }
     }
 
-    fn keys_differ(
+    fn keys_are_equal(
         &self,
         first_line: &[u8],
         first_meta: &LineMeta,
@@ -146,11 +146,11 @@ impl Uniq {
         let first_slice = &first_line[first_meta.key_start..first_meta.key_end];
         let second_slice = &second_line[second_meta.key_start..second_meta.key_end];
 
-        if !self.ignore_case {
-            return first_slice != second_slice;
+        if self.ignore_case {
+            first_slice.eq_ignore_ascii_case(second_slice)
+        } else {
+            first_slice == second_slice
         }
-
-        !first_slice.eq_ignore_ascii_case(second_slice)
     }
 
     fn key_bounds(&self, line: &[u8]) -> (usize, usize) {
