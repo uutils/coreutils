@@ -493,12 +493,18 @@ fn touch_file(
         // Any errors that make it here are considered errors of file creation/opening, otherwise
         // we let update_times() handle them.
         if err_good_cause {
+            // permission denied when using to_string is lowercase....but it's uppercase everywhere else.
+            let err_kind_str = e.kind().to_string();
+            let err_string = match err_kind_str.chars().next() {
+                Some(c) => c.to_uppercase().collect::<String>() + &err_kind_str[1..],
+                None => err_kind_str,
+            };
             return Err(TouchError::TouchFileError {
             path: path.to_owned(),
             index: 0,
             error: USimpleError::new(
             1,
-            translate!("touch-error-cannot-touch", "filename" => path.quote(), "error" => e.to_string()),
+            translate!("touch-error-cannot-touch", "filename" => path.quote(), "error" => err_string),
         ),
             }.into());
         }
