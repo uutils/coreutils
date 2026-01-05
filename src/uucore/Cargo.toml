@@ -164,7 +164,7 @@ ringbuffer = []
 safe-traversal = ["libc"]
 selinux = ["dep:selinux"]
 smack = ["xattr"]
-signals = []
+signals = ["libc"]
 sum = [
   "digest",
   "hex",

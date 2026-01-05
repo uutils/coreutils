@@ -102,6 +102,7 @@ multicall
 nmerge
 noatime
 nocache
+NOCLDSTOP
 nocreat
 noctty
 noerror
@@ -129,6 +130,7 @@ primality
 pselect
 pseudoprime
 pseudoprimes
+pthread
 quantiles
 readonly
 reparse
@@ -144,10 +146,15 @@ setmask
 setlocale
 shortcode
 shortcodes
+sigaction
+sigaddset
 siginfo
 sigmask
 sigusr
 sigprocmask
+SIGRTMAX
+SIGRTMIN
+sigset
 strcasecmp
 subcommand
 subexpression

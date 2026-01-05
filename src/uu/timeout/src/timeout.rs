@@ -285,14 +285,17 @@ fn preserve_signal_info(signal: libc::c_int) -> libc::c_int {
 }
 
 #[cfg(unix)]
-#[allow(clippy::reversed_empty_ranges)]
 fn block_ignored_signals() -> nix::Result<()> {
-    let mut set = SigSet::empty();
-    let rt_signals = if cfg!(target_os = "linux") {
+    #[cfg(target_os = "linux")]
+    fn rt_signals() -> impl Iterator<Item = i32> {
         libc::SIGRTMIN()..=libc::SIGRTMAX()
-    } else {
-        0..=(-1)
-    };
+    }
+    #[cfg(not(target_os = "linux"))]
+    fn rt_signals() -> impl Iterator<Item = i32> {
+        std::iter::empty()
+    }
+
+    let mut set = SigSet::empty();
     for s in Signal::iterator()
         .filter_map(|s| {
             if matches!(s, Signal::SIGSTOP | Signal::SIGKILL | Signal::SIGTERM) {
@@ -301,12 +304,12 @@ fn block_ignored_signals() -> nix::Result<()> {
                 Some(s as i32)
             }
         })
-        .chain(rt_signals)
+        .chain(rt_signals())
     {
         if is_ignored(s)? {
             // We use raw libc bindings because [`nix`] does not support RT signals.
             // SAFETY: SigSet is repr(transparent) over sigset_t.
-            unsafe { libc::sigaddset((&mut set as *mut SigSet).cast(), s) };
+            unsafe { libc::sigaddset((&raw mut set).cast(), s) };
         }
     }
     pthread_sigmask(SigmaskHow::SIG_BLOCK, Some(&set), None)

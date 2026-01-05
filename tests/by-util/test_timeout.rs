@@ -290,6 +290,9 @@ fn test_cascaded_timeout_with_bash_trap() {
 }
 
 #[test]
+// We have to work around a bug in BSD `sh`. The GNU Test Suite also skips
+// this kind of test on the platform for this reason.
+#[cfg(not(any(target_os = "freebsd", target_os = "openbsd")))]
 fn test_signal_block_on_ignore() {
     let ts = TestScenario::new("timeout");
     let res = ts
@@ -308,6 +311,10 @@ fn test_signal_block_on_ignore() {
             .to_string()
             .trim_end_matches('\n')
             .trim_end_matches('\r'),
-        "yes: standard output: Broken pipe"
+        if cfg!(any(target_os = "macos", target_os = "ios")) {
+            "yes: stdout: Broken pipe"
+        } else {
+            "yes: standard output: Broken pipe"
+        }
     );
 }
