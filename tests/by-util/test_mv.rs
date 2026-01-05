@@ -2871,21 +2871,21 @@ fn test_mv_cross_device_symlink_overwrite() {
     let target_file = at.plus_as_string("file_in_src");
 
     // Cleanup any leftover files from previous failed runs
-    let _ = fs::remove_file(&src_symlink);
+    let _ = fs::remove_file(src_symlink);
     let _ = fs::remove_file(&dst_file);
     let _ = fs::remove_file(&target_file);
 
     // Create target file and symlink
     fs::write(&target_file, "contents").unwrap();
-    symlink(&target_file, &src_symlink).unwrap();
+    symlink(&target_file, src_symlink).unwrap();
 
     // Create an existing destination file to test overwrite
     at.touch("uutils_mv_dst_exists");
 
-    scene.ucmd().arg(&src_symlink).arg(&dst_file).succeeds();
+    scene.ucmd().arg(src_symlink).arg(&dst_file).succeeds();
 
     // Cleanup
     let _ = fs::remove_file(&dst_file);
-    let _ = fs::remove_file(&src_symlink);
+    let _ = fs::remove_file(src_symlink);
     let _ = fs::remove_file(&target_file);
 }
