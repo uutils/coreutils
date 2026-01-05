@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) ints (linux) NOFILE
+// spell-checker:ignore (words) ints (linux) NOFILE dfgi
 #![allow(clippy::cast_possible_wrap)]
 
 use std::env;
@@ -1223,7 +1223,10 @@ fn test_conflict_check_out() {
     let cases = [
         ("-c=silent", "sort: options '-Co' are incompatible\n"),
         ("-c=quiet", "sort: options '-Co' are incompatible\n"),
-        ("-c=diagnose-first", "sort: options '-co' are incompatible\n"),
+        (
+            "-c=diagnose-first",
+            "sort: options '-co' are incompatible\n",
+        ),
         ("-c", "sort: options '-co' are incompatible\n"),
         ("-C", "sort: options '-Co' are incompatible\n"),
     ];
@@ -1232,9 +1235,7 @@ fn test_conflict_check_out() {
             .arg(check_flag)
             .arg("-o=/dev/null")
             .fails()
-            .stderr_contains(
-                expected,
-            );
+            .stderr_contains(expected);
     }
 }
 
