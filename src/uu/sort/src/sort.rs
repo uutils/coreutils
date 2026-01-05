@@ -355,6 +355,10 @@ impl GlobalSettings {
 
     /// Returns true when the fast lexicographic path can be used safely.
     fn can_use_fast_lexicographic(&self) -> bool {
+        // Fast path can only be used when locale is C (byte-wise comparison is correct)
+        if uucore::i18n::should_use_locale_collation() {
+            return false;
+        }
         self.mode == SortMode::Default
             && !self.ignore_case
             && !self.dictionary_order

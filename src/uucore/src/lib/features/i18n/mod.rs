@@ -70,6 +70,11 @@ pub fn get_collating_locale() -> &'static (Locale, UEncoding) {
     COLLATING_LOCALE.get_or_init(|| get_locale_from_env("LC_COLLATE"))
 }
 
+/// Check if locale-aware collation should be used (i.e., not C/POSIX locale)
+pub fn should_use_locale_collation() -> bool {
+    get_collating_locale().0 != DEFAULT_LOCALE
+}
+
 /// Get the numeric locale from the environment
 pub fn get_numeric_locale() -> &'static (Locale, UEncoding) {
     static NUMERIC_LOCALE: OnceLock<(Locale, UEncoding)> = OnceLock::new();
