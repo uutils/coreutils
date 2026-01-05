@@ -120,18 +120,9 @@ pub struct CmdResult {
     stdout: Vec<u8>,
     /// captured standard error after running the Command
     stderr: Vec<u8>,
-    /// arguments used to run the command
-    args: Vec<OsString>,
-    /// environment variables passed to the command
-    env_vars: Vec<(OsString, OsString)>,
-    /// current directory used to run the command
-    current_dir: Option<PathBuf>,
-    /// stdin bytes provided to the command (if any)
-    stdin_bytes: Option<Vec<u8>>,
 }
 
 impl CmdResult {
-    #[allow(clippy::too_many_arguments)]
     pub fn new<S, T, U, V>(
         bin_path: S,
         util_name: Option<T>,
@@ -139,10 +130,6 @@ impl CmdResult {
         exit_status: Option<ExitStatus>,
         stdout: U,
         stderr: V,
-        args: Vec<OsString>,
-        env_vars: Vec<(OsString, OsString)>,
-        current_dir: Option<PathBuf>,
-        stdin_bytes: Option<Vec<u8>>,
     ) -> Self
     where
         S: Into<PathBuf>,
@@ -157,10 +144,6 @@ impl CmdResult {
             exit_status,
             stdout: stdout.into(),
             stderr: stderr.into(),
-            args,
-            env_vars,
-            current_dir,
-            stdin_bytes,
         }
     }
 
@@ -177,10 +160,6 @@ impl CmdResult {
             self.exit_status,
             function(&self.stdout),
             self.stderr.as_slice(),
-            self.args.clone(),
-            self.env_vars.clone(),
-            self.current_dir.clone(),
-            self.stdin_bytes.clone(),
         )
     }
 
@@ -197,10 +176,6 @@ impl CmdResult {
             self.exit_status,
             function(self.stdout_str()),
             self.stderr.as_slice(),
-            self.args.clone(),
-            self.env_vars.clone(),
-            self.current_dir.clone(),
-            self.stdin_bytes.clone(),
         )
     }
 
@@ -217,10 +192,6 @@ impl CmdResult {
             self.exit_status,
             self.stdout.as_slice(),
             function(&self.stderr),
-            self.args.clone(),
-            self.env_vars.clone(),
-            self.current_dir.clone(),
-            self.stdin_bytes.clone(),
         )
     }
 
@@ -2231,10 +2202,6 @@ impl<'a> UChildAssertion<'a> {
             exit_status,
             stdout,
             stderr,
-            self.uchild.args.clone(),
-            self.uchild.env_vars.clone(),
-            self.uchild.current_dir.clone(),
-            self.uchild.stdin_bytes.clone(),
         )
     }
 
@@ -2309,10 +2276,6 @@ pub struct UChild {
     raw: Child,
     bin_path: PathBuf,
     util_name: Option<String>,
-    args: Vec<OsString>,
-    env_vars: Vec<(OsString, OsString)>,
-    current_dir: Option<PathBuf>,
-    stdin_bytes: Option<Vec<u8>>,
     captured_stdout: Option<CapturedOutput>,
     captured_stderr: Option<CapturedOutput>,
     stdin_pty: Option<File>,
@@ -2335,10 +2298,6 @@ impl UChild {
             raw: child,
             bin_path: ucommand.bin_path.clone().unwrap(),
             util_name: ucommand.util_name.clone(),
-            args: ucommand.args.iter().cloned().collect(),
-            env_vars: ucommand.env_vars.clone(),
-            current_dir: ucommand.current_dir.clone(),
-            stdin_bytes: ucommand.bytes_into_stdin.clone(),
             captured_stdout,
             captured_stderr,
             stdin_pty,
@@ -2520,14 +2479,10 @@ impl UChild {
     ///
     /// Returns the error from the call to `wait_with_output` if any
     pub fn wait(self) -> io::Result<CmdResult> {
-        let (bin_path, util_name, tmpd, args, env_vars, current_dir, stdin_bytes) = (
+        let (bin_path, util_name, tmpd) = (
             self.bin_path.clone(),
             self.util_name.clone(),
             self.tmpd.clone(),
-            self.args.clone(),
-            self.env_vars.clone(),
-            self.current_dir.clone(),
-            self.stdin_bytes.clone(),
         );
 
         let output = self.wait_with_output()?;
@@ -2539,10 +2494,6 @@ impl UChild {
             exit_status: Some(output.status),
             stdout: output.stdout,
             stderr: output.stderr,
-            args,
-            env_vars,
-            current_dir,
-            stdin_bytes,
         })
     }
 
@@ -3128,10 +3079,6 @@ pub fn gnu_cmd_result(
         result.exit_status,
         stdout.as_bytes(),
         stderr.as_bytes(),
-        result.args.clone(),
-        result.env_vars.clone(),
-        result.current_dir.clone(),
-        result.stdin_bytes.clone(),
     ))
 }
 
