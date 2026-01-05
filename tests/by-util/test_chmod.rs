@@ -390,10 +390,12 @@ fn test_chmod_recursive_correct_exit_code() {
     perms.set_mode(0o000);
     set_permissions(at.plus_as_string("a"), perms).unwrap();
 
-    #[cfg(not(target_os = "linux"))]
-    let err_msg = "chmod: Permission denied\n";
-    #[cfg(target_os = "linux")]
+    // With safe_traversal enabled on all Unix platforms (except Redox),
+    // we get detailed error messages that include the file path
+    #[cfg(all(unix, not(target_os = "redox")))]
     let err_msg = "chmod: cannot access 'a': Permission denied\n";
+    #[cfg(not(all(unix, not(target_os = "redox"))))]
+    let err_msg = "chmod: Permission denied\n";
 
     // order of command is a, a/b then c
     // command is expected to fail and not just take the last exit code
