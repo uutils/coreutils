@@ -651,6 +651,39 @@ macro_rules! translate {
 // Re-export the macro for easier access
 pub use translate;
 
+/// Helper function for test code that needs to set up localization with the C locale.
+///
+/// This is a common pattern in tests where we want predictable, English-only output
+/// and need to ensure consistent locale behavior across different test environments.
+///
+/// # Safety
+///
+/// This function uses `env::set_var` which is unsafe because environment variables
+/// are shared across threads. This should only be used in test code where you control
+/// the execution environment.
+///
+/// # Arguments
+///
+/// * `util_name` - The name of the utility to set up localization for
+///
+/// # Examples
+///
+/// ```no_run
+/// # use uucore::locale::setup_test_locale;
+/// #[test]
+/// fn test_something() {
+///     setup_test_locale("cat").unwrap();
+///     // Your test code here
+/// }
+/// ```
+pub fn setup_test_locale(util_name: &str) -> Result<(), LocalizationError> {
+    // SAFETY: This is test-only code. Tests should be run in isolation.
+    unsafe {
+        std::env::set_var("LANG", "C");
+    }
+    setup_localization(util_name)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
