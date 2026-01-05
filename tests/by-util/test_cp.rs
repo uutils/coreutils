@@ -24,8 +24,7 @@ use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
 use std::os::windows::fs::symlink_file;
 #[cfg(not(windows))]
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use filetime::FileTime;
@@ -3666,8 +3665,8 @@ fn test_copy_dir_preserve_subdir_permissions() {
 
     ucmd.args(&["-p", "-r", "a1", "b1"])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_stderr()
+        .no_stdout();
 
     // Make sure everything is preserved
     assert!(at.dir_exists("b1"));
@@ -7584,6 +7583,7 @@ fn test_cp_xattr_enotsup_handling() {
 
 #[test]
 #[cfg(not(target_os = "windows"))]
+#[test]
 fn test_cp_preserve_directory_permissions_by_default() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -7602,15 +7602,28 @@ fn test_cp_preserve_directory_permissions_by_default() {
 
     scene.ucmd().arg("-r").arg("a").arg("c").succeeds();
 
-    assert_eq!(get_mode(at.plus("b")), 0o40555);
-    assert_eq!(get_mode(at.plus("b/b")), 0o40555);
-    assert_eq!(get_mode(at.plus("b/b/c")), 0o40555);
-    assert_eq!(get_mode(at.plus("b/b/c/d")), 0o40555);
+    // only verify owner bits on Android
+    if cfg!(target_os = "android") {
+        assert_eq!(get_mode(at.plus("b")) & 0o700, 0o500);
+        assert_eq!(get_mode(at.plus("b/b")) & 0o700, 0o500);
+        assert_eq!(get_mode(at.plus("b/b/c")) & 0o700, 0o500);
+        assert_eq!(get_mode(at.plus("b/b/c/d")) & 0o700, 0o500);
 
-    assert_eq!(get_mode(at.plus("c")), 0o40555);
-    assert_eq!(get_mode(at.plus("c/b")), 0o40555);
-    assert_eq!(get_mode(at.plus("c/b/c")), 0o40555);
-    assert_eq!(get_mode(at.plus("c/b/c/d")), 0o40555);
+        assert_eq!(get_mode(at.plus("c")) & 0o700, 0o500);
+        assert_eq!(get_mode(at.plus("c/b")) & 0o700, 0o500);
+        assert_eq!(get_mode(at.plus("c/b/c")) & 0o700, 0o500);
+        assert_eq!(get_mode(at.plus("c/b/c/d")) & 0o700, 0o500);
+    } else {
+        assert_eq!(get_mode(at.plus("b")), 0o40555);
+        assert_eq!(get_mode(at.plus("b/b")), 0o40555);
+        assert_eq!(get_mode(at.plus("b/b/c")), 0o40555);
+        assert_eq!(get_mode(at.plus("b/b/c/d")), 0o40555);
+
+        assert_eq!(get_mode(at.plus("c")), 0o40555);
+        assert_eq!(get_mode(at.plus("c/b")), 0o40555);
+        assert_eq!(get_mode(at.plus("c/b/c")), 0o40555);
+        assert_eq!(get_mode(at.plus("c/b/c/d")), 0o40555);
+    }
 }
 
 #[test]

@@ -166,7 +166,6 @@ impl<'a> Context<'a> {
 ///     }
 /// ];
 /// ```
-#[derive(Debug)]
 struct Entry {
     /// The absolute path to file or directory to copy.
     source_absolute: PathBuf,
@@ -179,9 +178,6 @@ struct Entry {
 
     /// Whether the destination is a file.
     target_is_file: bool,
-
-    /// Whether we created the destination dir
-    target_is_created: bool,
 }
 
 impl Entry {
@@ -235,16 +231,16 @@ impl Entry {
             source_relative,
             local_to_target,
             target_is_file,
-            target_is_created: false,
         })
     }
 }
 
 #[allow(clippy::too_many_arguments)]
 /// Copy a single entry during a directory traversal.
+/// Returns a value indicating whether we created a directory or not
 fn copy_direntry(
     progress_bar: Option<&ProgressBar>,
-    entry: &mut Entry,
+    entry: &Entry,
     entry_is_symlink: bool,
     entry_is_dir_no_follow: bool,
     options: &Options,
@@ -253,7 +249,7 @@ fn copy_direntry(
     copied_destinations: &HashSet<PathBuf>,
     copied_files: &mut HashMap<FileInformation, PathBuf>,
     created_parent_dirs: &mut HashSet<PathBuf>,
-) -> CopyResult<()> {
+) -> CopyResult<bool> {
     let source_is_symlink = entry_is_symlink;
     let source_is_dir = if source_is_symlink && !options.dereference {
         false
@@ -275,14 +271,13 @@ fn copy_direntry(
                 options,
                 Some(&entry.source_absolute),
             )?;
-            entry.target_is_created = true;
             if options.verbose {
                 println!(
                     "{}",
                     context_for(&entry.source_relative, &entry.local_to_target)
                 );
             }
-            Ok(())
+            Ok(true)
         };
     }
 
@@ -332,7 +327,7 @@ fn copy_direntry(
 
     // In any other case, there is nothing to do, so we just return to
     // continue the traversal.
-    Ok(())
+    Ok(false)
 }
 
 /// Read the contents of the directory `root` and recursively copy the
@@ -446,11 +441,11 @@ pub(crate) fn copy_directory(
                         }
                         Err(_) => (direntry_type.is_symlink(), direntry_type.is_dir()),
                     };
-                let mut entry = Entry::new(&context, direntry_path, options.no_target_dir)?;
+                let entry = Entry::new(&context, direntry_path, options.no_target_dir)?;
 
-                copy_direntry(
+                let created_dir = copy_direntry(
                     progress_bar,
-                    &mut entry,
+                    &entry,
                     entry_is_symlink,
                     entry_is_dir_no_follow,
                     options,
@@ -488,7 +483,7 @@ pub(crate) fn copy_directory(
                     dirs_needing_permissions.push((
                         entry.source_absolute.clone(),
                         entry.local_to_target.clone(),
-                        entry.target_is_created,
+                        created_dir,
                     ));
 
                     // If true, last_iter is not a parent of this iter.
@@ -522,7 +517,7 @@ pub(crate) fn copy_directory(
                                 &entry.source_absolute,
                                 &entry.local_to_target,
                                 options,
-                                entry.target_is_created,
+                                created_dir,
                             )?;
                         }
                     }

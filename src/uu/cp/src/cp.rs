@@ -194,7 +194,7 @@ pub enum SparseMode {
 }
 
 /// The expected file type of copy target
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone)]
 pub enum TargetType {
     Directory,
     File,
@@ -1782,9 +1782,8 @@ pub(crate) fn copy_attributes(
             {
                 let mut perms = source_metadata.permissions();
                 if is_dir_created && !is_preserve_required && !is_explicit_true {
-                    let mode = handle_no_preserve_mode(options, perms.mode());
                     use uucore::mode::get_umask;
-                    let mode = mode & !get_umask();
+                    let mode = perms.mode() & !get_umask();
                     perms.set_mode(mode);
                 }
             }
