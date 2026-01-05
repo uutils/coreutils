@@ -4,10 +4,10 @@
 // file that was distributed with this source code.
 
 use divan::{Bencher, black_box};
-use std::{fs::File, io::Write};
+use std::{ffi::OsStr, fs::File, io::Write};
 use tempfile::TempDir;
 use uu_join::uumain;
-use uucore::benchmark::run_util_function;
+use uucore::{benchmark::run_util_function, env_helper};
 
 /// Create two sorted files with matching keys for join benchmarking
 fn create_join_files(temp_dir: &TempDir, num_lines: usize) -> (String, String) {
@@ -118,8 +118,8 @@ fn join_french_locale(bencher: Bencher) {
     let (file1, file2) = create_join_files(&temp_dir, num_lines);
 
     bencher
-        .with_inputs(|| unsafe {
-            std::env::set_var("LC_ALL", "fr_FR.UTF-8");
+        .with_inputs(|| {
+            env_helper::set_var(OsStr::new("LC_ALL"), OsStr::new("fr_FR.UTF-8"));
         })
         .bench_values(|_| {
             black_box(run_util_function(uumain, &[&file1, &file2]));
