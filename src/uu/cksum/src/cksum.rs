@@ -101,6 +101,12 @@ fn maybe_sanitize_length(
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let binary_name = uucore::util_name();
+    // Put --\0untagged to make logic simpler
+    let mut args: Vec<OsString> = args.collect();
+    if !binary_name.ends_with("cksum") && !args.is_empty() {
+        args.insert(1, OsString::from("--\0untagged"));
+    }
+
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let check = matches.get_flag(options::CHECK);
@@ -177,11 +183,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Set the default algorithm to CRC when not '--check'ing.
     let algo_kind = algo_cli.unwrap_or(AlgoKind::Crc);
 
-    // --untagged is cksum specific. So we use this form...
-    let is_cksum = binary_name.ends_with("cksum");
     // clap cannot overrides_with --binary by --tag unilaterally...
-    let tag = (!is_cksum && std::env::args().any(|a| a == "--tag" || a == "-t"))
-        || (is_cksum && !matches.get_flag(options::UNTAGGED));
+    let tag = !matches.get_flag(options::UNTAGGED);
     let binary = matches.get_flag(options::BINARY);
 
     let algo = SizedAlgoKind::from_unsized(algo_kind, length)?;
@@ -225,6 +228,7 @@ pub fn uu_app() -> Command {
                 .long(options::TAG)
                 .help(translate!("cksum-help-tag"))
                 .action(ArgAction::SetTrue)
+                .overrides_with(options::UNTAGGED)
                 .overrides_with(options::BINARY)
                 .overrides_with(options::TEXT),
         )
@@ -262,13 +266,15 @@ pub fn uu_app() -> Command {
                 .long(options::TEXT)
                 .short('t')
                 .hide(true)
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .requires(options::UNTAGGED),
         )
         .arg(
             Arg::new(options::BINARY)
                 .long(options::BINARY)
                 .short('b')
                 .hide(true)
+                .overrides_with(options::TEXT)
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -327,7 +333,6 @@ pub fn uu_app() -> Command {
     }
     if binary_name.ends_with("cksum") {
         app = app
-            .mut_arg(options::TEXT, |a: Arg| a.requires(options::UNTAGGED))
             .arg(
                 Arg::new(options::ALGORITHM)
                     .long(options::ALGORITHM)
@@ -340,9 +345,15 @@ pub fn uu_app() -> Command {
                 Arg::new(options::UNTAGGED)
                     .long(options::UNTAGGED)
                     .help(translate!("cksum-help-untagged"))
-                    .action(ArgAction::SetTrue)
-                    .overrides_with(options::TAG),
+                    .action(ArgAction::SetTrue),
             );
+    } else {
+        app = app.arg(
+            Arg::new(options::UNTAGGED)
+                .long("\0untagged")
+                .hide(true)
+                .action(ArgAction::SetTrue),
+        );
     }
     app.after_help(translate!("cksum-after-help"))
 }
