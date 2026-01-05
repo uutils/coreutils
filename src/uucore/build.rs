@@ -149,6 +149,21 @@ fn embed_single_utility_locale(
         project_root.join(format!("src/uucore/locales/{locale}.ftl"))
     })?;
 
+    // Conditionally embed SELinux locales when the selinux feature is enabled
+    #[cfg(feature = "selinux")]
+    embed_component_locales(
+        embedded_file,
+        locales_to_embed,
+        "uucore/selinux",
+        |locale| project_root.join(format!("src/uucore/locales/selinux/{locale}.ftl")),
+    )?;
+
+    // Conditionally embed SMACK locales when the smack feature is enabled
+    #[cfg(feature = "smack")]
+    embed_component_locales(embedded_file, locales_to_embed, "uucore/smack", |locale| {
+        project_root.join(format!("src/uucore/locales/smack/{locale}.ftl"))
+    })?;
+
     Ok(())
 }
 
@@ -199,6 +214,21 @@ fn embed_all_utility_locales(
         project_root.join(format!("src/uucore/locales/{locale}.ftl"))
     })?;
 
+    // Conditionally embed SELinux locales when the selinux feature is enabled
+    #[cfg(feature = "selinux")]
+    embed_component_locales(
+        embedded_file,
+        locales_to_embed,
+        "uucore/selinux",
+        |locale| project_root.join(format!("src/uucore/locales/selinux/{locale}.ftl")),
+    )?;
+
+    // Conditionally embed SMACK locales when the smack feature is enabled
+    #[cfg(feature = "smack")]
+    embed_component_locales(embedded_file, locales_to_embed, "uucore/smack", |locale| {
+        project_root.join(format!("src/uucore/locales/smack/{locale}.ftl"))
+    })?;
+
     embedded_file.flush()?;
     Ok(())
 }
@@ -228,6 +258,21 @@ fn embed_static_utility_locales(
     // First, try to embed uucore locales - critical for common translations like "Usage:"
     embed_component_locales(embedded_file, locales_to_embed, "uucore", |locale| {
         Path::new(&manifest_dir).join(format!("locales/{locale}.ftl"))
+    })?;
+
+    // Conditionally embed SELinux locales when the selinux feature is enabled
+    #[cfg(feature = "selinux")]
+    embed_component_locales(
+        embedded_file,
+        locales_to_embed,
+        "uucore/selinux",
+        |locale| Path::new(&manifest_dir).join(format!("locales/selinux/{locale}.ftl")),
+    )?;
+
+    // Conditionally embed SMACK locales when the smack feature is enabled
+    #[cfg(feature = "smack")]
+    embed_component_locales(embedded_file, locales_to_embed, "uucore/smack", |locale| {
+        Path::new(&manifest_dir).join(format!("locales/smack/{locale}.ftl"))
     })?;
 
     // Collect and sort for deterministic builds
