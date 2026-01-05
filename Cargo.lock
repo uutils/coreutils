@@ -345,18 +345,18 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.5.53"
+version = "4.5.54"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9e340e012a1bf4935f5282ed1436d1489548e8f72308207ea5df0e23d2d03f8"
+checksum = "c6e6ff9dcd79cff5cd969a17a545d79e84ab086e444102a591e288a8aa3ce394"
 dependencies = [
  "clap_builder",
 ]
 
 [[package]]
 name = "clap_builder"
-version = "4.5.53"
+version = "4.5.54"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d76b5d13eaa18c901fd2f7fca939fefe3a0727a953561fefdf3b2922b8569d00"
+checksum = "fa42cf4d2b7a41bc8f663a7cab4031ebafa1bf3875705bfaf8466dc60ab52c00"
 dependencies = [
  "anstream",
  "anstyle",
@@ -1651,9 +1651,9 @@ checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
 name = "libc"
-version = "0.2.175"
+version = "0.2.178"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a82ae493e598baaea5209805c49bbf2ea7de956d50d7da0da1164f9c6d28543"
+checksum = "37c93d8daa9d8a012fd8ab92f088405fb202ea0b6ab73ee2482ae66af4f42091"
 
 [[package]]
 name = "libloading"
@@ -2712,6 +2712,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "string-interner"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "23de088478b31c349c9ba67816fa55d9355232d63c3afea8bf513e31f0f1d2c0"
+dependencies = [
+ "hashbrown 0.15.4",
+ "serde",
+]
+
+[[package]]
 name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3198,10 +3208,12 @@ name = "uu_date"
 version = "0.5.0"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
  "jiff",
  "nix",
  "parse_datetime",
+ "tempfile",
  "uucore",
  "windows-sys 0.61.2",
 ]
@@ -3450,8 +3462,10 @@ name = "uu_join"
 version = "0.5.0"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
  "memchr",
+ "tempfile",
  "thiserror 2.0.17",
  "uucore",
 ]
@@ -4043,6 +4057,8 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
+ "nix",
+ "string-interner",
  "tempfile",
  "thiserror 2.0.17",
  "uucore",

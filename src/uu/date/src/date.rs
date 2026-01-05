@@ -13,7 +13,7 @@ use jiff::tz::{TimeZone, TimeZoneDatabase};
 use jiff::{Timestamp, Zoned};
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use uucore::display::Quotable;
@@ -428,24 +428,31 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let format_string = make_format_string(&settings);
+    let mut stdout = BufWriter::new(std::io::stdout().lock());
 
     // Format all the dates
     for date in dates {
         match date {
             // TODO: Switch to lenient formatting.
             Ok(date) => match strtime::format(format_string, &date) {
-                Ok(s) => println!("{s}"),
+                Ok(s) => writeln!(stdout, "{s}").map_err(|e| {
+                    USimpleError::new(1, translate!("date-error-write", "error" => e))
+                })?,
                 Err(e) => {
+                    let _ = stdout.flush();
                     return Err(USimpleError::new(
                         1,
                         translate!("date-error-invalid-format", "format" => format_string, "error" => e),
                     ));
                 }
             },
-            Err((input, _err)) => show!(USimpleError::new(
-                1,
-                translate!("date-error-invalid-date", "date" => input)
-            )),
+            Err((input, _err)) => {
+                let _ = stdout.flush();
+                show!(USimpleError::new(
+                    1,
+                    translate!("date-error-invalid-date", "date" => input)
+                ));
+            }
         }
     }
 
@@ -671,9 +678,12 @@ fn tz_abbrev_to_iana(abbrev: &str) -> Option<&str> {
     cache.get(abbrev).map(|s| s.as_str())
 }
 
-/// Resolve timezone abbreviation in date string and replace with numeric offset.
-/// Returns the modified string with offset, or original if no abbreviation found.
-fn resolve_tz_abbreviation<S: AsRef<str>>(date_str: S) -> String {
+/// Attempts to parse a date string that contains a timezone abbreviation (e.g. "EST").
+///
+/// If an abbreviation is found and the date is parsable, returns `Some(Zoned)`.
+/// Returns `None` if no abbreviation is detected or if parsing fails, indicating
+/// that standard parsing should be attempted.
+fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S) -> Option<Zoned> {
     let s = date_str.as_ref();
 
     // Look for timezone abbreviation at the end of the string
@@ -697,11 +707,7 @@ fn resolve_tz_abbreviation<S: AsRef<str>>(date_str: S) -> String {
                         let ts = parsed.timestamp();
 
                         // Get the offset for this specific timestamp in the target timezone
-                        let zoned = ts.to_zoned(tz);
-                        let offset_str = format!("{}", zoned.offset());
-
-                        // Replace abbreviation with offset
-                        return format!("{date_part} {offset_str}");
+                        return Some(ts.to_zoned(tz));
                     }
                 }
             }
@@ -709,7 +715,7 @@ fn resolve_tz_abbreviation<S: AsRef<str>>(date_str: S) -> String {
     }
 
     // No abbreviation found or couldn't resolve, return original
-    s.to_string()
+    None
 }
 
 /// Parse a `String` into a `DateTime`.
@@ -724,10 +730,12 @@ fn resolve_tz_abbreviation<S: AsRef<str>>(date_str: S) -> String {
 fn parse_date<S: AsRef<str> + Clone>(
     s: S,
 ) -> Result<Zoned, (String, parse_datetime::ParseDateTimeError)> {
-    // First, try to resolve any timezone abbreviations
-    let resolved = resolve_tz_abbreviation(s.as_ref());
+    // First, try to parse any timezone abbreviations
+    if let Some(zoned) = try_parse_with_abbreviation(s.as_ref()) {
+        return Ok(zoned);
+    }
 
-    match parse_datetime::parse_datetime(&resolved) {
+    match parse_datetime::parse_datetime(s.as_ref()) {
         Ok(date) => {
             // Convert to system timezone for display
             // (parse_datetime 0.13 returns Zoned in the input's timezone)

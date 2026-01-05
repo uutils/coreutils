@@ -433,17 +433,20 @@ impl Chmoder {
         // If the path is a directory (or we should follow symlinks), recurse into it
         if (!file_path.is_symlink() || should_follow_symlink) && file_path.is_dir() {
             // `read_dir` keeps a file descriptor open for the directory while
-            // the iterator is alive. Collect the entries first so the iterator
+            // the iterator is alive. Collect paths first so the iterator
             // (and thus the FD) is dropped before we recurse into children.
-            let entries: Vec<_> = file_path.read_dir()?.collect();
-            for dir_entry in entries {
-                let path = match dir_entry {
-                    Ok(entry) => entry.path(),
+            let mut paths_in_this_dir = Vec::new();
+
+            for dir_entry in file_path.read_dir()? {
+                match dir_entry {
+                    Ok(entry) => paths_in_this_dir.push(entry.path()),
                     Err(err) => {
                         r = r.and(Err(err.into()));
                         continue;
                     }
-                };
+                }
+            }
+            for path in paths_in_this_dir {
                 if path.is_symlink() {
                     r = self.handle_symlink_during_recursion(&path).and(r);
                 } else {

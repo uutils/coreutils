@@ -100,3 +100,4 @@ date-error-setting-date-not-supported-macos = la définition de la date n'est pa
 date-error-setting-date-not-supported-redox = la définition de la date n'est pas prise en charge par Redox
 date-error-cannot-set-date = impossible de définir la date
 date-error-extra-operand = opérande supplémentaire '{$operand}'
+date-error-write = erreur d'écriture: {$error}
