@@ -689,7 +689,12 @@ pub fn uu_app() -> Command {
             Arg::new(options::NO_DEREFERENCE)
                 .short('P')
                 .long(options::NO_DEREFERENCE)
-                .overrides_with(options::DEREFERENCE)
+                .overrides_with_all([
+                    options::DEREFERENCE,
+                    options::CLI_SYMBOLIC_LINKS,
+                    options::ARCHIVE,
+                    options::NO_DEREFERENCE_PRESERVE_LINKS,
+                ])
                 // -d sets this option
                 .help(translate!("cp-help-no-dereference"))
                 .action(ArgAction::SetTrue),
@@ -698,13 +703,24 @@ pub fn uu_app() -> Command {
             Arg::new(options::DEREFERENCE)
                 .short('L')
                 .long(options::DEREFERENCE)
-                .overrides_with(options::NO_DEREFERENCE)
+                .overrides_with_all([
+                    options::NO_DEREFERENCE,
+                    options::CLI_SYMBOLIC_LINKS,
+                    options::ARCHIVE,
+                    options::NO_DEREFERENCE_PRESERVE_LINKS,
+                ])
                 .help(translate!("cp-help-dereference"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::CLI_SYMBOLIC_LINKS)
                 .short('H')
+                .overrides_with_all([
+                    options::DEREFERENCE,
+                    options::NO_DEREFERENCE,
+                    options::ARCHIVE,
+                    options::NO_DEREFERENCE_PRESERVE_LINKS,
+                ])
                 .help(translate!("cp-help-cli-symbolic-links"))
                 .action(ArgAction::SetTrue),
         )
@@ -712,12 +728,24 @@ pub fn uu_app() -> Command {
             Arg::new(options::ARCHIVE)
                 .short('a')
                 .long(options::ARCHIVE)
+                .overrides_with_all([
+                    options::DEREFERENCE,
+                    options::NO_DEREFERENCE,
+                    options::CLI_SYMBOLIC_LINKS,
+                    options::NO_DEREFERENCE_PRESERVE_LINKS,
+                ])
                 .help(translate!("cp-help-archive"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NO_DEREFERENCE_PRESERVE_LINKS)
                 .short('d')
+                .overrides_with_all([
+                    options::DEREFERENCE,
+                    options::NO_DEREFERENCE,
+                    options::CLI_SYMBOLIC_LINKS,
+                    options::ARCHIVE,
+                ])
                 .help(translate!("cp-help-no-dereference-preserve-links"))
                 .action(ArgAction::SetTrue),
         )
@@ -1279,9 +1307,7 @@ fn parse_path_args(
     };
 
     if options.strip_trailing_slashes {
-        // clippy::assigning_clones added with Rust 1.78
-        // Rust version = 1.76 on OpenBSD stable/7.5
-        #[cfg_attr(not(target_os = "openbsd"), allow(clippy::assigning_clones))]
+        #[allow(clippy::assigning_clones)]
         for source in &mut paths {
             *source = source.components().as_path().to_owned();
         }
@@ -2516,11 +2542,13 @@ fn copy_file(
     }
 
     if options.dereference(source_in_command_line) {
-        if let Ok(src) = canonicalize(source, MissingHandling::Normal, ResolveMode::Physical) {
-            if src.exists() {
-                copy_attributes(&src, dest, &options.attributes)?;
-            }
-        }
+        // Try to canonicalize, but if it fails (e.g., due to inaccessible parent directories),
+        // fall back to the original source path
+        let src_for_attrs = canonicalize(source, MissingHandling::Normal, ResolveMode::Physical)
+            .ok()
+            .filter(|p| p.exists())
+            .unwrap_or_else(|| source.to_path_buf());
+        copy_attributes(&src_for_attrs, dest, &options.attributes)?;
     } else if source_is_stream && !source.exists() {
         // Some stream files may not exist after we have copied it,
         // like anonymous pipes. Thus, we can't really copy its
