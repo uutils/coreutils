@@ -7466,6 +7466,10 @@ fn test_cp_circular_symbolic_links_in_directory() {
         .arg(target_dir)
         .arg("-rL")
         .fails_with_code(1)
-        .stderr_contains(format!("IO error for operation on {source_dir}{separator}a"))
-        .stderr_contains(format!("IO error for operation on {source_dir}{separator}b"));
+        .stderr_contains(format!(
+            "IO error for operation on {source_dir}{separator}a"
+        ))
+        .stderr_contains(format!(
+            "IO error for operation on {source_dir}{separator}b"
+        ));
 }
