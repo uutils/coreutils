@@ -29,7 +29,7 @@ use uucore::format_usage;
 #[cfg(unix)]
 use uucore::libc;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
-use uucore::translate;
+use uucore::{show, translate};
 
 use crate::error::TouchError;
 
@@ -419,13 +419,19 @@ pub fn touch(files: &[InputFile], opts: &Options) -> Result<(), TouchError> {
             InputFile::Stdout => (Cow::Owned(pathbuf_from_stdout()?), true),
             InputFile::Path(path) => (Cow::Borrowed(path), false),
         };
-        touch_file(&path, is_stdout, opts, atime, mtime).map_err(|e| {
+        if let Err(e) = touch_file(&path, is_stdout, opts, atime, mtime).map_err(|e| {
             TouchError::TouchFileError {
                 path: path.into_owned(),
                 index: ind,
                 error: e,
             }
-        })?;
+        }) {
+            if opts.strict {
+                return Err(e);
+            }
+            // If not in strict mode, show the error, but move to the next file.
+            show!(e);
+        }
     }
 
     Ok(())
@@ -500,7 +506,7 @@ fn touch_file(
                 ErrorKind::PermissionDenied => "Permission denied".to_string(),
                 ErrorKind::QuotaExceeded => "Quota exceeded".to_string(),
                 ErrorKind::ReadOnlyFilesystem => "Read only file system".to_string(),
-                _ => e.to_string()
+                _ => e.to_string(),
             };
             return Err(TouchError::TouchFileError {
             path: path.to_owned(),
@@ -513,11 +519,6 @@ fn touch_file(
         }
     }
 
-    // Let update_times handle the errors from setting times. If above fails, then
-    // the same thing should happen in update_times(). There are errors that could
-    // cause creating the file to fail that we might not be able to handle, such as
-    // ENXIO for a special file. Rust's ErrorKind categorizes it as Uncategorized, which
-    // is currently marked 'unstable'.
     update_times(path, is_stdout, opts, atime, mtime)
 }
 
