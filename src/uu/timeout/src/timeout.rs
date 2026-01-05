@@ -263,7 +263,14 @@ fn wait_or_kill_process(
     match process.wait_or_timeout(duration, None) {
         Ok(Some(status)) => {
             if preserve_status {
-                Ok(status.code().unwrap_or_else(|| status.signal().unwrap()))
+                let exit_code = status.code().unwrap_or_else(|| {
+                    status.signal().unwrap_or_else(|| {
+                        // Extremely rare: process exited but we have neither exit code nor signal.
+                        // This can happen on some platforms or in unusual termination scenarios.
+                        ExitStatus::TimeoutFailed.into()
+                    })
+                });
+                Ok(exit_code)
             } else {
                 Ok(ExitStatus::TimeoutFailed.into())
             }
@@ -351,10 +358,14 @@ fn timeout(
     // structure of `wait_or_kill_process()`. They can probably be
     // refactored into some common function.
     match process.wait_or_timeout(duration, Some(&SIGNALED)) {
-        Ok(Some(status)) => Err(status
-            .code()
-            .unwrap_or_else(|| preserve_signal_info(status.signal().unwrap()))
-            .into()),
+        Ok(Some(status)) => {
+            let exit_code = status.code().unwrap_or_else(|| {
+                status
+                    .signal()
+                    .map_or_else(|| ExitStatus::TimeoutFailed.into(), preserve_signal_info)
+            });
+            Err(exit_code.into())
+        }
         Ok(None) => {
             report_if_verbose(signal, &cmd[0], verbose);
             send_signal(process, signal, foreground);
