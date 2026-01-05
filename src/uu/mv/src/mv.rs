@@ -1099,7 +1099,13 @@ fn copy_dir_contents_recursive(
             }
             #[cfg(not(unix))]
             {
-                fs::copy(&from_path, &to_path)?;
+                if from_path.is_symlink() {
+                    // Copy a symlink file (no-follow).
+                    rename_symlink_fallback(&from_path, &to_path)?;
+                } else {
+                    // Copy a regular file.
+                    fs::copy(&from_path, &to_path)?;
+                }
             }
 
             // Print verbose message for file
@@ -1142,14 +1148,19 @@ fn copy_file_with_hardlinks_helper(
         return Ok(());
     }
 
-    // Regular file copy
-    #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-    {
-        fs::copy(from, to).and_then(|_| fsxattr::copy_xattrs(&from, &to))?;
-    }
-    #[cfg(any(target_os = "macos", target_os = "redox"))]
-    {
-        fs::copy(from, to)?;
+    if from.is_symlink() {
+        // Copy a symlink file (no-follow).
+        rename_symlink_fallback(from, to)?;
+    } else {
+        // Copy a regular file.
+        #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
+        {
+            fs::copy(from, to).and_then(|_| fsxattr::copy_xattrs(&from, &to))?;
+        }
+        #[cfg(any(target_os = "macos", target_os = "redox"))]
+        {
+            fs::copy(from, to)?;
+        }
     }
 
     Ok(())

@@ -1052,3 +1052,10 @@ fn test_touch_non_utf8_paths() {
     scene.ucmd().arg(non_utf8_name).succeeds().no_output();
     assert!(std::fs::metadata(at.plus(non_utf8_name)).is_ok());
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_touch_dev_full() {
+    let (_, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["/dev/full"]).succeeds().no_output();
+}

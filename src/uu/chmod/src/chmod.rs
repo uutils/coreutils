@@ -411,7 +411,7 @@ impl Chmoder {
                 return Err(ChmodError::PreserveRoot("/".into()).into());
             }
             if self.recursive {
-                r = self.walk_dir_with_context(file, true);
+                r = self.walk_dir_with_context(file, true).and(r);
             } else {
                 r = self.chmod_file(file).and(r);
             }
@@ -432,14 +432,20 @@ impl Chmoder {
 
         // If the path is a directory (or we should follow symlinks), recurse into it
         if (!file_path.is_symlink() || should_follow_symlink) && file_path.is_dir() {
+            // We buffer all paths in this dir to not keep to be able to close the fd so not
+            // too many fd's are open during the recursion
+            let mut paths_in_this_dir = Vec::new();
+
             for dir_entry in file_path.read_dir()? {
-                let path = match dir_entry {
-                    Ok(entry) => entry.path(),
+                match dir_entry {
+                    Ok(entry) => paths_in_this_dir.push(entry.path()),
                     Err(err) => {
                         r = r.and(Err(err.into()));
                         continue;
                     }
-                };
+                }
+            }
+            for path in paths_in_this_dir {
                 if path.is_symlink() {
                     r = self.handle_symlink_during_recursion(&path).and(r);
                 } else {

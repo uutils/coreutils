@@ -309,7 +309,7 @@ jobs:
         ./target/release-fast/true
         # Check that the progs have prefix
         test -f /tmp/usr/local/bin/uu-tty
-        test -f /tmp/usr/local/libexec/uu-coreutils/libstdbuf.*   
+        test -f /tmp/usr/local/libexec/uu-coreutils/libstdbuf.*
         # Check that the manpage is not present
         ! test -f /tmp/usr/local/share/man/man1/uu-whoami.1
         # Check that the completion is not present
@@ -576,6 +576,7 @@ jobs:
           - { os: ubuntu-latest  , target: arm-unknown-linux-gnueabihf , features: feat_os_unix_gnueabihf , use-cross: use-cross , skip-tests: true }
           - { os: ubuntu-24.04-arm  , target: aarch64-unknown-linux-gnu   , features: feat_os_unix_gnueabihf }
           - { os: ubuntu-latest  , target: aarch64-unknown-linux-musl  , features: feat_os_unix_musl , use-cross: use-cross , skip-tests: true }
+          - { os: ubuntu-latest  , target: riscv64gc-unknown-linux-musl  , features: feat_os_unix_musl , use-cross: use-cross , skip-tests: true }
           # - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: feat_selinux           , use-cross: use-cross }
           - { os: ubuntu-latest  , target: i686-unknown-linux-gnu      , features: "feat_os_unix,test_risky_names", use-cross: use-cross }
           - { os: ubuntu-latest  , target: i686-unknown-linux-musl     , features: feat_os_unix_musl , use-cross: use-cross }
@@ -636,6 +637,7 @@ jobs:
         unset TARGET_ARCH
         case '${{ matrix.job.target }}' in
           aarch64-*) TARGET_ARCH=arm64 ;;
+          riscv64gc-*) TARGET_ARCH=riscv64 ;;
           arm-*-*hf) TARGET_ARCH=armhf ;;
           i686-*) TARGET_ARCH=i686 ;;
           x86_64-*) TARGET_ARCH=x86_64 ;;
@@ -700,6 +702,7 @@ jobs:
         STRIP="strip"
         case ${{ matrix.job.target }} in
           aarch64-*-linux-*) STRIP="aarch64-linux-gnu-strip" ;;
+          riscv64gc-*-linux-*) STRIP="riscv64-linux-gnu-strip" ;;
           arm-*-linux-gnueabihf) STRIP="arm-linux-gnueabihf-strip" ;;
           *-pc-windows-msvc) STRIP="" ;;
         esac;
@@ -725,6 +728,10 @@ jobs:
           aarch64-unknown-linux-*)
             sudo apt-get -y update
             sudo apt-get -y install gcc-aarch64-linux-gnu
+          ;;
+          riscv64gc-unknown-linux-*)
+            sudo apt-get -y update
+            sudo apt-get -y install gcc-riscv64-linux-gnu
           ;;
           *-redox*)
             sudo apt-get -y update
@@ -799,6 +806,8 @@ jobs:
       if: matrix.job.skip-tests != true
       shell: bash
       run: |
+        command -v sudo && sudo rm -rf /usr/local/lib/android /usr/share/dotnet # avoid no space left
+        df -h ||:
         ## Test individual utilities
         ${{ steps.vars.outputs.CARGO_CMD }} ${{ steps.vars.outputs.CARGO_CMD_OPTIONS }} test --target=${{ matrix.job.target }} \
         ${{ matrix.job.cargo-options }} ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
