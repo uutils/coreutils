@@ -314,7 +314,6 @@ fn timeout(
             translate!("timeout-error-failed-to-execute-process", "error" => err),
         )
     })?;
-
     // Wait for the child process for the specified time period.
     //
     // TODO The structure of this block is extremely similar to the
