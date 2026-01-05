@@ -1115,3 +1115,22 @@ fn test_zero_terminated_embedded_newline() {
         // Newlines get replaced by a single space
         .stdout_is("1000 2000\x003000 4000\x00");
 }
+
+#[cfg(unix)]
+#[test]
+fn test_non_utf8_delimiter() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    // Single-byte non-UTF8 (0xFF) and multi-byte (0xA2E3, e.g. GB18030)
+    for delim in [&[0xFFu8][..], &[0xA2, 0xE3]] {
+        let input: Vec<u8> = [b"1", delim, b"2K"].concat();
+        let expected: Vec<u8> = [b"1", delim, b"2000\n"].concat();
+        new_ucmd!()
+            .args(&["--from=si", "--field=2", "-d"])
+            .arg(OsStr::from_bytes(delim))
+            .arg(OsStr::from_bytes(&input))
+            .succeeds()
+            .stdout_is_bytes(expected);
+    }
+}
