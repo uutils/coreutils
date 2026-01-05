@@ -20,7 +20,7 @@ use uucore::process::{ChildExt, CommandExt, SelfPipe, WaitOrTimeoutRet};
 use uucore::translate;
 
 #[cfg(unix)]
-use uucore::signals::enable_pipe_errors;
+use uucore::signals::{enable_pipe_errors, is_ignored};
 
 use uucore::{
     format_usage, show_error,
@@ -280,6 +280,34 @@ fn preserve_signal_info(signal: libc::c_int) -> libc::c_int {
     signal
 }
 
+#[cfg(unix)]
+#[allow(clippy::reversed_empty_ranges)]
+fn block_ignored_signals() -> nix::Result<()> {
+    let mut set = SigSet::empty();
+    let rt_signals = if cfg!(target_os = "linux") {
+        libc::SIGRTMIN()..=libc::SIGRTMAX()
+    } else {
+        0..=(-1)
+    };
+    for s in Signal::iterator()
+        .filter_map(|s| {
+            if matches!(s, Signal::SIGSTOP | Signal::SIGKILL | Signal::SIGTERM) {
+                None
+            } else {
+                Some(s as i32)
+            }
+        })
+        .chain(rt_signals)
+    {
+        if is_ignored(s)? {
+            // We use raw libc bindings because [`nix`] does not support RT signals.
+            // SAFETY: SigSet is repr(transparent) over sigset_t.
+            unsafe { libc::sigaddset((&mut set as *mut SigSet).cast(), s) };
+        }
+    }
+    pthread_sigmask(SigmaskHow::SIG_BLOCK, Some(&set), None)
+}
+
 fn timeout(
     cmd: &[String],
     duration: Duration,
@@ -293,7 +321,10 @@ fn timeout(
         unsafe { libc::setpgid(0, 0) };
     }
     #[cfg(unix)]
-    enable_pipe_errors()?;
+    // We keep the inherited SIGPIPE disposition if ignored.
+    if !is_ignored(Signal::SIGPIPE as _)? {
+        enable_pipe_errors()?;
+    }
 
     let mut command = process::Command::new(&cmd[0]);
     command
@@ -301,6 +332,8 @@ fn timeout(
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
+    #[cfg(unix)]
+    block_ignored_signals()?;
     let mut self_pipe = command.set_up_timeout(Some(Signal::SIGTERM))?;
     let process = &mut command.spawn().map_err(|err| {
         let status_code = match err.kind() {

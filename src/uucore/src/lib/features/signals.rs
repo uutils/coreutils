@@ -10,6 +10,9 @@
 //! It provides a way to convert signal names to their corresponding values and vice versa.
 //! It also provides a way to ignore the SIGINT signal and enable pipe errors.
 
+use std::mem::MaybeUninit;
+use std::ptr::null;
+
 #[cfg(unix)]
 use nix::errno::Errno;
 #[cfg(unix)]
@@ -408,6 +411,17 @@ pub fn is_signal(num: usize) -> bool {
 /// Returns the signal name for a given signal value.
 pub fn signal_name_by_value(signal_value: usize) -> Option<&'static str> {
     ALL_SIGNALS.get(signal_value).copied()
+}
+
+/// Returns whether signal disposition is to ignore. We use raw i32 because [`nix`] does not currently
+/// support RT signals.
+#[cfg(unix)]
+pub fn is_ignored(signal: i32) -> Result<bool, Errno> {
+    let mut prev_handler = MaybeUninit::uninit();
+    // We use libc functions here because nix does not properly
+    // support real-time signals nor null sigaction handlers.
+    Errno::result(unsafe { libc::sigaction(signal, null(), prev_handler.as_mut_ptr()) })?;
+    Ok(unsafe { prev_handler.assume_init() }.sa_sigaction == libc::SIG_IGN)
 }
 
 /// Returns the default signal value.

@@ -1,3 +1,4 @@
+use std::process::Command;
 use std::time::{Duration, Instant};
 use uutests::util::TestScenario;
 
@@ -255,11 +256,7 @@ fn test_command_cannot_invoke() {
 #[test]
 fn test_cascaded_timeout_with_bash_trap() {
     // Use bash if available, otherwise skip
-    if std::process::Command::new("bash")
-        .arg("--version")
-        .output()
-        .is_err()
-    {
+    if Command::new("bash").arg("--version").output().is_err() {
         // Skip test if bash is not available
         return;
     }
@@ -290,4 +287,27 @@ fn test_cascaded_timeout_with_bash_trap() {
         .timeout(Duration::from_secs(6))
         .fails_with_code(124)
         .stdout_contains("bash_trap_fired");
+}
+
+#[test]
+fn test_signal_block_on_ignore() {
+    let ts = TestScenario::new("timeout");
+    let res = ts
+        .cmd("/bin/sh")
+        .arg("-c")
+        .arg(format!(
+            "(trap '' PIPE; {} timeout -v 10 yes | :)",
+            ts.bin_path.to_str().unwrap()
+        ))
+        .timeout(Duration::from_secs(2))
+        .succeeds();
+    // If the signal disposition is correct, instead of being silently killed
+    // by SIGPIPE, `yes` receives an EPIPE error and outputs it.
+    assert_eq!(
+        res.stderr_str()
+            .to_string()
+            .trim_end_matches('\n')
+            .trim_end_matches('\r'),
+        "yes: standard output: Broken pipe"
+    );
 }
