@@ -607,7 +607,9 @@ fn update_times(
             #[cfg(not(unix))]
             return Ok(());
         }
-        return result.map_err_context(|| translate!("touch-error-setting-times-of-path", "path" => path.quote()))
+        return result.map_err_context(
+            || translate!("touch-error-setting-times-of-path", "path" => path.quote()),
+        );
     }
     Ok(())
 }
