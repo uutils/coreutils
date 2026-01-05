@@ -46,6 +46,7 @@ pub use crate::features::checksum;
 pub use crate::features::colors;
 #[cfg(feature = "encoding")]
 pub use crate::features::encoding;
+pub use crate::features::env_helper;
 #[cfg(feature = "extendedbigdecimal")]
 pub use crate::features::extendedbigdecimal;
 #[cfg(feature = "fast-inc")]

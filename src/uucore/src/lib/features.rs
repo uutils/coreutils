@@ -18,6 +18,7 @@ pub mod checksum;
 pub mod colors;
 #[cfg(feature = "encoding")]
 pub mod encoding;
+pub mod env_helper;
 #[cfg(feature = "extendedbigdecimal")]
 pub mod extendedbigdecimal;
 #[cfg(feature = "fast-inc")]
