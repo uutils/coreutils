@@ -573,7 +573,10 @@ fn update_times(
 
     #[cfg(unix)]
     {
-        if opts.source == Source::Now && opts.date.is_none() {
+        if opts.source == Source::Now
+            && opts.date.is_none()
+            && opts.change_times == ChangeTimes::Both
+        {
             let flags = if opts.no_deref && !is_stdout {
                 libc::AT_SYMLINK_NOFOLLOW
             } else {
