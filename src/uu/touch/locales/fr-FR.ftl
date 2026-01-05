@@ -18,7 +18,7 @@ touch-error-missing-file-operand = opérande de fichier manquant
   Essayez '{ $help_command } --help' pour plus d'informations.
 touch-error-setting-times-of = définition des temps de { $filename }
 touch-error-setting-times-no-such-file = définition des temps de { $filename } : Aucun fichier ou répertoire de ce type
-touch-error-cannot-touch = impossible de toucher { $filename }
+touch-error-cannot-touch = impossible de toucher { $filename }: { $error }
 touch-error-no-such-file-or-directory = Aucun fichier ou répertoire de ce type
 touch-error-failed-to-get-attributes = échec d'obtention des attributs de { $path }
 touch-error-setting-times-of-path = définition des temps de { $path }
