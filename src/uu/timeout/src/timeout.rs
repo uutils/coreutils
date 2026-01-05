@@ -20,7 +20,10 @@ use uucore::process::{ChildExt, CommandExt, SelfPipe, WaitOrTimeoutRet};
 use uucore::translate;
 
 #[cfg(unix)]
-use uucore::signals::{enable_pipe_errors, is_ignored};
+use ::{
+    nix::sys::signal::{SigSet, SigmaskHow, pthread_sigmask},
+    uucore::signals::{enable_pipe_errors, is_ignored},
+};
 
 use uucore::{
     format_usage, show_error,
@@ -233,7 +236,7 @@ fn wait_or_kill_process(
     self_pipe: &mut SelfPipe,
 ) -> std::io::Result<i32> {
     // ignore `SIGTERM` here
-    self_pipe.unset_other()?;
+    self_pipe.unset_other(Signal::SIGTERM)?;
 
     match process.wait_or_timeout(duration, self_pipe) {
         Ok(WaitOrTimeoutRet::InTime(status)) => {
@@ -250,7 +253,8 @@ fn wait_or_kill_process(
             process.wait()?;
             Ok(ExitStatus::SignalSent(signal).into())
         }
-        Ok(WaitOrTimeoutRet::CustomSignaled) | Err(_) => Ok(ExitStatus::TimeoutFailed.into()),
+        Ok(WaitOrTimeoutRet::CustomSignaled(n)) => Ok(ExitStatus::SignalSent(n as _).into()),
+        Err(_) => Ok(ExitStatus::TimeoutFailed.into()),
     }
 }
 
@@ -334,7 +338,10 @@ fn timeout(
         .stderr(Stdio::inherit());
     #[cfg(unix)]
     block_ignored_signals()?;
-    let mut self_pipe = command.set_up_timeout(Some(Signal::SIGTERM))?;
+    let mut set = SigSet::empty();
+    set.add(Signal::SIGTERM);
+    set.add(Signal::SIGUSR1);
+    let mut self_pipe = command.set_up_timeout(set)?;
     let process = &mut command.spawn().map_err(|err| {
         let status_code = match err.kind() {
             ErrorKind::NotFound => ExitStatus::CommandNotFound.into(),
@@ -356,11 +363,15 @@ fn timeout(
             .code()
             .unwrap_or_else(|| preserve_signal_info(status.signal().unwrap()))
             .into()),
-        Ok(WaitOrTimeoutRet::CustomSignaled) => {
+        Ok(WaitOrTimeoutRet::CustomSignaled(n)) => {
             report_if_verbose(signal, &cmd[0], verbose);
             send_signal(process, signal, foreground);
             process.wait()?;
-            Err(ExitStatus::Terminated.into())
+            if n == Signal::SIGTERM as i32 {
+                Err(ExitStatus::Terminated.into())
+            } else {
+                Err(ExitStatus::SignalSent(n as _).into())
+            }
         }
         Ok(WaitOrTimeoutRet::TimedOut) => {
             report_if_verbose(signal, &cmd[0], verbose);

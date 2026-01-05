@@ -16,7 +16,7 @@ use crate::pipes::pipe;
 use ::{
     nix::sys::select::FdSet,
     nix::sys::select::select,
-    nix::sys::signal::{self, signal},
+    nix::sys::signal::{SaFlags, SigAction, SigHandler, SigSet, sigaction},
     nix::sys::time::TimeVal,
     std::fs::File,
     std::io::{Read, Write},
@@ -126,11 +126,11 @@ pub trait ChildExt {
 }
 
 #[cfg(feature = "pipes")]
-pub struct SelfPipe(File, Option<Signal>, PhantomData<*mut ()>);
+pub struct SelfPipe(File, SigSet, PhantomData<*mut ()>);
 
 #[cfg(feature = "pipes")]
 pub trait CommandExt {
-    fn set_up_timeout(&mut self, other: Option<Signal>) -> io::Result<SelfPipe>;
+    fn set_up_timeout(&mut self, others: SigSet) -> io::Result<SelfPipe>;
 }
 
 /// Concise enum of [`ChildExt::wait_or_timeout`] possible returns.
@@ -138,7 +138,7 @@ pub trait CommandExt {
 #[cfg(feature = "pipes")]
 pub enum WaitOrTimeoutRet {
     InTime(ExitStatus),
-    CustomSignaled,
+    CustomSignaled(i32),
     TimedOut,
 }
 
@@ -197,24 +197,24 @@ impl ChildExt for Child {
                     // if empty, we'd stall on the read. However, this may
                     // happen spuriously, so we try to select again.
                     if fd_set.contains(self_pipe.0.as_fd()) {
-                        let mut buf = [0];
+                        let mut buf = [0; std::mem::size_of::<Signal>()];
                         self_pipe.0.read_exact(&mut buf)?;
-                        return match buf[0] {
+                        let sig = i32::from_ne_bytes(buf);
+                        return match sig {
                             // SIGCHLD
-                            1 => match self.try_wait()? {
+                            libc::SIGCHLD => match self.try_wait()? {
                                 Some(e) => Ok(WaitOrTimeoutRet::InTime(e)),
                                 None => Ok(WaitOrTimeoutRet::InTime(ExitStatus::default())),
                             },
                             // Received SIGALRM externally, for compat with
                             // GNU timeout we act as if it had timed out.
-                            2 => Ok(WaitOrTimeoutRet::TimedOut),
+                            libc::SIGALRM => Ok(WaitOrTimeoutRet::TimedOut),
                             // Custom signals on zero timeout still succeed.
-                            3 if timeout.is_zero() => {
+                            _ if timeout.is_zero() => {
                                 Ok(WaitOrTimeoutRet::InTime(ExitStatus::default()))
                             }
                             // We received a custom signal and fail.
-                            3 => Ok(WaitOrTimeoutRet::CustomSignaled),
-                            _ => unreachable!(),
+                            x => Ok(WaitOrTimeoutRet::CustomSignaled(x)),
                         };
                     }
                 }
@@ -250,7 +250,7 @@ fn duration_to_timeval_elapsed(time: Duration, start: Instant) -> Option<TimeVal
 
 #[cfg(feature = "pipes")]
 impl CommandExt for Command {
-    fn set_up_timeout(&mut self, other: Option<Signal>) -> io::Result<SelfPipe> {
+    fn set_up_timeout(&mut self, others: SigSet) -> io::Result<SelfPipe> {
         static SELF_PIPE_W: Mutex<Option<File>> = Mutex::new(None);
         let (r, w) = pipe()?;
         *SELF_PIPE_W.lock().unwrap() = Some(w);
@@ -259,31 +259,33 @@ impl CommandExt for Command {
             let Ok(&mut Some(ref mut writer)) = lock.as_deref_mut() else {
                 return;
             };
-            if signal == Signal::SIGCHLD as c_int {
-                let _ = writer.write(&[1]);
-            } else if signal == Signal::SIGALRM as c_int {
-                let _ = writer.write(&[2]);
-            } else {
-                let _ = writer.write(&[3]);
-            }
+            let _ = writer.write(&signal.to_ne_bytes());
         }
+        let action = SigAction::new(
+            SigHandler::Handler(sig_handler),
+            SaFlags::SA_NOCLDSTOP,
+            SigSet::all(),
+        );
         unsafe {
-            signal(Signal::SIGCHLD, signal::SigHandler::Handler(sig_handler))?;
-            signal(Signal::SIGALRM, signal::SigHandler::Handler(sig_handler))?;
-            if let Some(other) = other {
-                signal(other, signal::SigHandler::Handler(sig_handler))?;
+            sigaction(Signal::SIGCHLD, &action)?;
+            sigaction(Signal::SIGALRM, &action)?;
+            for signal in &others {
+                sigaction(signal, &action)?;
             }
         };
-        Ok(SelfPipe(r, other, PhantomData))
+        Ok(SelfPipe(r, others, PhantomData))
     }
 }
 
 #[cfg(feature = "pipes")]
 impl SelfPipe {
-    pub fn unset_other(&self) -> io::Result<()> {
-        if let Some(other) = self.1 {
+    pub fn unset_other(&self, signal: Signal) -> io::Result<()> {
+        if self.1.contains(signal) {
             unsafe {
-                signal(other, signal::SigHandler::SigDfl)?;
+                sigaction(
+                    signal,
+                    &SigAction::new(SigHandler::SigDfl, SaFlags::empty(), SigSet::empty()),
+                )?;
             }
         }
         Ok(())
@@ -293,8 +295,11 @@ impl SelfPipe {
 #[cfg(feature = "pipes")]
 impl Drop for SelfPipe {
     fn drop(&mut self) {
-        let _ = unsafe { signal(Signal::SIGCHLD, signal::SigHandler::SigDfl) };
-        let _ = self.unset_other();
+        let action = SigAction::new(SigHandler::SigDfl, SaFlags::empty(), SigSet::empty());
+        let _ = unsafe { sigaction(Signal::SIGCHLD, &action) };
+        for signal in &self.1 {
+            let _ = unsafe { sigaction(signal, &action) };
+        }
     }
 }
 
