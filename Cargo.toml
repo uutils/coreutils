@@ -350,7 +350,9 @@ memmap2 = "0.9.4"
 nix = { version = "0.30", default-features = false }
 nom = "8.0.0"
 notify = { version = "=8.2.0", features = ["macos_kqueue"] }
+crypto-bigint = "0.5"
 num-bigint = "0.4.4"
+num-integer = "0.1"
 num-prime = "0.4.4"
 num-traits = "0.2.19"
 onig = { version = "~6.5.1", default-features = false }
