@@ -595,11 +595,21 @@ fn update_times(
 
     // Originally, the metadata stat() in touch_file() would catch "no create",
     // but since it was removed to fix TOCTOU issues, we need to handle it here.
-    if opts.no_create {
-        return Ok(());
+    if let Err(ref e) = result {
+        if opts.no_create && e.kind() != ErrorKind::NotADirectory {
+            #[cfg(unix)]
+            if e.raw_os_error() != Some(libc::ELOOP) {
+                // ELOOP is returned when trying to stat a dangling symlink with -h/--no-dereference.
+                // However, the ErrorKind is unstable in Rust, so we have to kind
+                // of hack it like this.
+                return Ok(());
+            }
+            #[cfg(not(unix))]
+            return Ok(());
+        }
+        return result.map_err_context(|| translate!("touch-error-setting-times-of-path", "path" => path.quote()))
     }
-    result
-        .map_err_context(|| translate!("touch-error-setting-times-of-path", "path" => path.quote()))
+    Ok(())
 }
 
 /// Get metadata of the provided path
