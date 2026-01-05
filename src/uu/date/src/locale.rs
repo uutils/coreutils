@@ -124,6 +124,7 @@ pub fn get_locale_default_format() -> &'static str {
 mod tests {
     cfg_langinfo! {
         use super::*;
+        use uucore::env_helper;
 
         #[test]
         fn test_locale_detection() {
@@ -189,12 +190,10 @@ mod tests {
                 }
             };
 
-            unsafe {
-                // Set C locale
-                std::env::set_var("LC_ALL", "C");
-                std::env::remove_var("LC_TIME");
-                std::env::remove_var("LANG");
-            }
+            // Set C locale
+            env_helper::set_var(std::ffi::OsStr::new("LC_ALL"), std::ffi::OsStr::new("C"));
+            env_helper::remove_var(std::ffi::OsStr::new("LC_TIME"));
+            env_helper::remove_var(std::ffi::OsStr::new("LANG"));
 
             // Get the locale format
             let format = unsafe {
@@ -217,22 +216,20 @@ mod tests {
             }
 
             // Restore original environment variables
-            unsafe {
-                if let Some(val) = original_lc_all {
-                    std::env::set_var("LC_ALL", val);
-                } else {
-                    std::env::remove_var("LC_ALL");
-                }
-                if let Some(val) = original_lc_time {
-                    std::env::set_var("LC_TIME", val);
-                } else {
-                    std::env::remove_var("LC_TIME");
-                }
-                if let Some(val) = original_lang {
-                    std::env::set_var("LANG", val);
-                } else {
-                    std::env::remove_var("LANG");
-                }
+            if let Some(val) = original_lc_all {
+                env_helper::set_var(std::ffi::OsStr::new("LC_ALL"), std::ffi::OsStr::new(&val));
+            } else {
+                env_helper::remove_var(std::ffi::OsStr::new("LC_ALL"));
+            }
+            if let Some(val) = original_lc_time {
+                env_helper::set_var(std::ffi::OsStr::new("LC_TIME"), std::ffi::OsStr::new(&val));
+            } else {
+                env_helper::remove_var(std::ffi::OsStr::new("LC_TIME"));
+            }
+            if let Some(val) = original_lang {
+                env_helper::set_var(std::ffi::OsStr::new("LANG"), std::ffi::OsStr::new(&val));
+            } else {
+                env_helper::remove_var(std::ffi::OsStr::new("LANG"));
             }
 
             // Restore original process locale
