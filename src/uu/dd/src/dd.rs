@@ -30,7 +30,7 @@ use std::cmp;
 use std::env;
 use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
-use std::io::{self, BufReader, Read, Seek, SeekFrom, Stdout, Write};
+use std::io::{self, Read, Seek, SeekFrom, Stdout, Write};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::fd::AsFd;
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -183,6 +183,32 @@ impl Num {
     }
 }
 
+/// Read and discard `n` bytes from `reader` using a buffer of size `buf_size`.
+///
+/// This is more efficient than `io::copy` with `BufReader` because it reads
+/// directly in `buf_size`-sized chunks, matching GNU dd's behavior.
+/// Returns the total number of bytes actually read.
+fn read_and_discard<R: Read>(reader: &mut R, n: u64, buf_size: usize) -> io::Result<u64> {
+    let mut buf = vec![0u8; buf_size];
+    let mut total = 0u64;
+    let mut remaining = n;
+
+    while remaining > 0 {
+        let to_read = cmp::min(remaining, buf_size as u64) as usize;
+        match reader.read(&mut buf[..to_read]) {
+            Ok(0) => break, // EOF
+            Ok(bytes_read) => {
+                total += bytes_read as u64;
+                remaining -= bytes_read as u64;
+            }
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+            Err(e) => return Err(e),
+        }
+    }
+
+    Ok(total)
+}
+
 /// Data sources.
 ///
 /// Use [`Source::stdin_as_file`] if available to enable more
@@ -222,20 +248,16 @@ impl Source {
     fn skip(&mut self, n: u64, ibs: usize) -> io::Result<u64> {
         match self {
             #[cfg(not(unix))]
-            Self::Stdin(stdin) => match io::copy(
-                &mut BufReader::with_capacity(ibs, stdin.take(n)),
-                &mut io::sink(),
-            ) {
-                Ok(m) if m < n => {
+            Self::Stdin(stdin) => {
+                let m = read_and_discard(stdin, n, ibs)?;
+                if m < n {
                     show_error!(
                         "{}",
                         translate!("dd-error-cannot-skip-offset", "file" => "standard input")
                     );
-                    Ok(m)
                 }
-                Ok(m) => Ok(m),
-                Err(e) => Err(e),
-            },
+                Ok(m)
+            }
             #[cfg(unix)]
             Self::StdinFile(f) => {
                 if let Ok(Some(len)) = try_get_len_of_block_device(f) {
@@ -250,27 +272,18 @@ impl Source {
                         return Ok(len);
                     }
                 }
-                match io::copy(
-                    &mut BufReader::with_capacity(ibs, f.take(n)),
-                    &mut io::sink(),
-                ) {
-                    Ok(m) if m < n => {
-                        show_error!(
-                            "{}",
-                            translate!("dd-error-cannot-skip-offset", "file" => "standard input")
-                        );
-                        Ok(m)
-                    }
-                    Ok(m) => Ok(m),
-                    Err(e) => Err(e),
+                let m = read_and_discard(f, n, ibs)?;
+                if m < n {
+                    show_error!(
+                        "{}",
+                        translate!("dd-error-cannot-skip-offset", "file" => "standard input")
+                    );
                 }
+                Ok(m)
             }
             Self::File(f) => f.seek(SeekFrom::Current(n.try_into().unwrap())),
             #[cfg(unix)]
-            Self::Fifo(f) => io::copy(
-                &mut BufReader::with_capacity(ibs, f.take(n)),
-                &mut io::sink(),
-            ),
+            Self::Fifo(f) => read_and_discard(f, n, ibs),
         }
     }
 
@@ -637,10 +650,7 @@ impl Dest {
             #[cfg(unix)]
             Self::Fifo(f) => {
                 // Seeking in a named pipe means *reading* from the pipe.
-                io::copy(
-                    &mut BufReader::with_capacity(obs, f.take(n)),
-                    &mut io::sink(),
-                )
+                read_and_discard(f, n, obs)
             }
             #[cfg(unix)]
             Self::Sink => Ok(0),
