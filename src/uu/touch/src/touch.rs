@@ -493,18 +493,21 @@ fn touch_file(
         // Any errors that make it here are considered errors of file creation/opening, otherwise
         // we let update_times() handle them.
         if err_good_cause {
-            // permission denied when using to_string is lowercase....but it's uppercase everywhere else.
-            let err_kind_str = e.kind().to_string();
-            let err_string = match err_kind_str.chars().next() {
-                Some(c) => c.to_uppercase().collect::<String>() + &err_kind_str[1..],
-                None => err_kind_str,
+            // Rust's e.kind().to_string() doesn't always give good descriptions for certain errors.
+            let err_str: String = match e.kind() {
+                ErrorKind::NotFound => "No such file or directory".to_string(),
+                ErrorKind::TooManyLinks => "Too many links".to_string(),
+                ErrorKind::PermissionDenied => "Permission denied".to_string(),
+                ErrorKind::QuotaExceeded => "Quota exceeded".to_string(),
+                ErrorKind::ReadOnlyFilesystem => "Read only file system".to_string(),
+                _ => e.to_string()
             };
             return Err(TouchError::TouchFileError {
             path: path.to_owned(),
             index: 0,
             error: USimpleError::new(
             1,
-            translate!("touch-error-cannot-touch", "filename" => path.quote(), "error" => err_string),
+            translate!("touch-error-cannot-touch", "filename" => path.quote(), "error" => err_str),
         ),
             }.into());
         }
