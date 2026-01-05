@@ -24,9 +24,9 @@ use std::io::ErrorKind;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::error::{FromIo, UIoError, UResult, USimpleError};
 use uucore::format_usage;
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "macos"))]
 use uucore::libc;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::{show, translate};
@@ -482,38 +482,25 @@ fn touch_file(
         .open(path);
 
     if let Err(e) = touched_file {
-        // It's better to take the negative approach here, but there's an issue with
-        // Rust's standard library when it comes to mapping certain OS errors to ErrorKind.
-        // Those map to ErrorKind::Uncategorized, which is currently marked 'unstable'.
-        // So, as a work-around, we look at raw_os_error for libc::ENXIO (6) directly on unix systems.
-        // We always ignore IsADirectory since directories are fair game to be touched.
-        #[cfg(unix)]
-        // If we can't unwrap a raw OS error, default it to 0 so that it's considered true
-        // for the first Boolean condition.
-        let err_good_cause =
-            e.raw_os_error().unwrap_or(0) != libc::ENXIO && e.kind() != ErrorKind::IsADirectory;
-
-        #[cfg(not(unix))]
+        // We have to check to see if the reason .open() failed above is something
+        // that is fatal or something expected. The former is handled here, whereas
+        // the latter is handled in update_times().
         let err_good_cause = e.kind() != ErrorKind::IsADirectory;
 
-        // Any errors that make it here are considered errors of file creation/opening, otherwise
-        // we let update_times() handle them.
+        // For UNIX/MAC, we also have to check special files, like FIFOs.
+        // If we can't unwrap a raw OS error, default it to 0 so that it's considered true
+        // for the first Boolean condition.
+        #[cfg(any(unix, target_os = "macos"))]
+        let err_good_cause = e.raw_os_error().unwrap_or(0) != libc::ENXIO && err_good_cause;
+
+        // err_good_cause indicates that the error is not one we should ignore
         if err_good_cause {
-            // Rust's e.kind().to_string() doesn't always give good descriptions for certain errors.
-            let err_str: String = match e.kind() {
-                ErrorKind::NotFound => "No such file or directory".to_string(),
-                ErrorKind::TooManyLinks => "Too many links".to_string(),
-                ErrorKind::PermissionDenied => "Permission denied".to_string(),
-                ErrorKind::QuotaExceeded => "Quota exceeded".to_string(),
-                ErrorKind::ReadOnlyFilesystem => "Read only file system".to_string(),
-                _ => e.to_string(),
-            };
             return Err(TouchError::TouchFileError {
             path: path.to_owned(),
             index: 0,
             error: USimpleError::new(
             1,
-            translate!("touch-error-cannot-touch", "filename" => path.quote(), "error" => err_str),
+            translate!("touch-error-cannot-touch", "filename" => path.quote(), "error" => UIoError::from(e)),
         ),
             }.into());
         }
@@ -597,14 +584,14 @@ fn update_times(
     // but since it was removed to fix TOCTOU issues, we need to handle it here.
     if let Err(ref e) = result {
         if opts.no_create && e.kind() != ErrorKind::NotADirectory {
-            #[cfg(unix)]
+            #[cfg(any(unix, target_os = "macos"))]
             if e.raw_os_error() != Some(libc::ELOOP) {
                 // ELOOP is returned when trying to stat a dangling symlink with -h/--no-dereference.
                 // However, the ErrorKind is unstable in Rust, so we have to kind
                 // of hack it like this.
                 return Ok(());
             }
-            #[cfg(not(unix))]
+            #[cfg(not(any(unix, target_os = "macos")))]
             return Ok(());
         }
         return result.map_err_context(
