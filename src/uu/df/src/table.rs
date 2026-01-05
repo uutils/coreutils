@@ -573,7 +573,6 @@ impl Table {
 mod tests {
 
     use std::vec;
-    use uucore::locale::setup_localization;
 
     use crate::blocks::HumanReadable;
     use crate::columns::Column;
@@ -581,10 +580,7 @@ mod tests {
     use crate::{BlockSize, Options};
 
     fn init() {
-        unsafe {
-            std::env::set_var("LANG", "C");
-        }
-        let _ = setup_localization("df");
+        let _ = uucore::locale::setup_test_locale("df");
     }
 
     const COLUMNS_WITH_FS_TYPE: [Column; 7] = [

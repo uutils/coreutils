@@ -513,17 +513,13 @@ pub(crate) fn gen_prog_updater(
 
 #[cfg(test)]
 mod tests {
-    use std::env;
     use std::io::Cursor;
     use std::time::Duration;
-    use uucore::locale::setup_localization;
+    use uucore::locale::setup_test_locale;
 
     use super::{ProgUpdate, ReadStat, WriteStat};
     fn init() {
-        unsafe {
-            env::set_var("LANG", "C");
-        }
-        let _ = setup_localization("dd");
+        let _ = setup_test_locale("dd");
     }
 
     fn prog_update_write(n: u128) -> ProgUpdate {
