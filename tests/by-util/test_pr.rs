@@ -627,3 +627,18 @@ fn test_page_header_width() {
     let regex = Regex::new(&pattern).unwrap();
     new_ucmd!().pipe_in("a").succeeds().stdout_matches(&regex);
 }
+
+#[test]
+fn test_separator_options_default_values() {
+    // -s and -S without arguments should use default values (TAB and empty string)
+    new_ucmd!()
+        .args(&["-t", "-2", "-s"])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_contains("\t");
+    new_ucmd!()
+        .args(&["-t", "-2", "-S"])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_does_not_contain("\t");
+}
