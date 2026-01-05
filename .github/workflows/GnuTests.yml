@@ -2,7 +2,7 @@ name: GnuTests
 
 # spell-checker:ignore (abbrev/names) CodeCov gnulib GnuTests Swatinem
 # spell-checker:ignore (jargon) submodules devel
-# spell-checker:ignore (libs/utils) autopoint chksum dpkg getenforce getlimits gperf lcov libexpect limactl pyinotify setenforce shopt texinfo valgrind libattr libcap taiki-e zstd cpio
+# spell-checker:ignore (libs/utils) chksum dpkg getenforce getlimits gperf lcov libexpect limactl pyinotify setenforce shopt valgrind libattr libcap taiki-e zstd cpio
 # spell-checker:ignore (options) Ccodegen Coverflow Cpanic Zpanic
 # spell-checker:ignore (people) Dawid Dziurla * dawidd dtolnay
 # spell-checker:ignore (vars) FILESET SUBDIRS XPASS
@@ -47,7 +47,6 @@ jobs:
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: stable
-        components: rustfmt
     - uses: Swatinem/rust-cache@v2
       with:
         workspaces: "./uutils -> target"
@@ -69,7 +68,7 @@ jobs:
         ## Install dependencies
         sudo apt-get update
         ## Check that build-gnu.sh works on the non SELinux system by installing libselinux only on lima
-        sudo apt-get install -y autopoint gperf gdb python3-pyinotify valgrind libexpect-perl libacl1-dev libattr1-dev libcap-dev attr quilt
+        sudo apt-get install -y gperf gdb python3-pyinotify valgrind libexpect-perl libacl1-dev libattr1-dev libcap-dev attr quilt
         curl http://launchpadlibrarian.net/831710181/automake_1.18.1-3_all.deb > automake-1.18.deb
         sudo dpkg -i --force-depends automake-1.18.deb
     - name: Add various locales
@@ -105,7 +104,7 @@ jobs:
         ## Build binaries
         cd 'uutils'
         env PROFILE=release-small bash util/build-gnu.sh
-        
+
     - name: Save files for faster configure and skipping make
       uses: actions/cache/save@v5
       if: always() && steps.cache-config-gnu.outputs.cache-hit != 'true'
@@ -211,7 +210,6 @@ jobs:
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: stable
-        components: rustfmt
     - uses: Swatinem/rust-cache@v2
       with:
         workspaces: "./uutils -> target"
@@ -247,8 +245,8 @@ jobs:
     - name: Install dependencies in VM
       run: |
         lima sudo dnf -y update
-        lima sudo dnf -y install git autoconf autopoint bison texinfo gperf gcc gdb jq libacl-devel libattr-devel libcap-devel libselinux-devel attr rustup clang-devel texinfo-tex automake patch quilt
-        lima rustup-init -y --default-toolchain stable
+        lima sudo dnf -y install autoconf bison gperf gcc gdb jq libacl-devel libattr-devel libcap-devel libselinux-devel attr rustup clang-devel automake patch quilt
+        lima rustup-init -y --profile=minimal --default-toolchain stable
     - name: Copy the sources to VM
       run: |
         rsync -a -e ssh . lima-default:~/work/
@@ -331,7 +329,6 @@ jobs:
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: stable
-        components: rustfmt
     - uses: Swatinem/rust-cache@v2
       with:
         workspaces: "./uutils -> target"

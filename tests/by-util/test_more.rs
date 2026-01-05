@@ -35,7 +35,7 @@ fn run_more_with_pty(
         .arg(file)
         .run_no_wait();
 
-    child.delay(100);
+    child.delay(200);
     let mut output = vec![0u8; 1024];
     let n = read(&controller, &mut output).unwrap();
     let output_str = String::from_utf8_lossy(&output[..n]).to_string();

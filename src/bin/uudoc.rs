@@ -465,7 +465,9 @@ impl MDWriter<'_, '_> {
     /// # Errors
     /// Returns an error if the writer fails.
     fn options(&mut self) -> io::Result<()> {
-        writeln!(self.w, "<h2>Options</h2>")?;
+        writeln!(self.w)?;
+        writeln!(self.w, "## Options")?;
+        writeln!(self.w)?;
         write!(self.w, "<dl>")?;
         for arg in self.command.get_arguments() {
             write!(self.w, "<dt>")?;
@@ -576,7 +578,7 @@ fn format_examples(content: String, output_markdown: bool) -> Result<String, std
     use std::fmt::Write;
     let mut s = String::new();
     writeln!(s)?;
-    writeln!(s, "Examples")?;
+    writeln!(s, "## Examples")?;
     writeln!(s)?;
     for line in content.lines().skip_while(|l| !l.starts_with('-')) {
         if let Some(l) = line.strip_prefix("- ") {

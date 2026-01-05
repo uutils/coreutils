@@ -338,13 +338,8 @@ pub fn get_nusers() -> usize {
                 continue;
             }
 
-            let username = if !buffer.is_null() {
-                let cstr = std::ffi::CStr::from_ptr(buffer as *const i8);
-                cstr.to_string_lossy().to_string()
-            } else {
-                String::new()
-            };
-            if !username.is_empty() {
+            let cstr = std::ffi::CStr::from_ptr(buffer.cast());
+            if !cstr.is_empty() {
                 num_user += 1;
             }
 
@@ -501,8 +496,7 @@ mod tests {
         // (This is just a sanity check)
         assert!(
             uptime < 365 * 86400,
-            "Uptime seems unreasonably high: {} seconds",
-            uptime
+            "Uptime seems unreasonably high: {uptime} seconds"
         );
     }
 
@@ -518,9 +512,7 @@ mod tests {
         let diff = (uptime1 - uptime2).abs();
         assert!(
             diff <= 1,
-            "Consecutive uptime calls should be consistent, got {} and {}",
-            uptime1,
-            uptime2
+            "Consecutive uptime calls should be consistent, got {uptime1} and {uptime2}"
         );
     }
 }
