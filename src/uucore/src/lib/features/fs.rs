@@ -902,6 +902,78 @@ pub fn makedev(maj: libc::c_uint, min: libc::c_uint) -> libc::dev_t {
     (min & 0xff) | ((maj & 0xfff) << 8) | ((min & !0xff) << 12) | ((maj & !0xfff) << 32)
 }
 
+/// Set the file mode creation mask (umask) and return the previous value.
+///
+/// This is a safe wrapper around `libc::umask`. The umask is used to turn off
+/// permission bits when creating new files and directories.
+///
+/// # Arguments
+///
+/// * `mask` - The new umask value
+///
+/// # Returns
+///
+/// The previous umask value
+///
+/// # Examples
+///
+/// ```no_run
+/// use uucore::fs::set_umask;
+///
+/// let old_mask = set_umask(0o022);
+/// // ... do something with restrictive umask ...
+/// set_umask(old_mask); // Restore previous mask
+/// ```
+#[cfg(unix)]
+pub fn set_umask(mask: mode_t) -> mode_t {
+    // SAFETY: umask always succeeds and doesn't operate on memory.
+    // It's a simple integer operation that sets process state.
+    unsafe { libc::umask(mask) }
+}
+
+/// Create a special or ordinary file (device node).
+///
+/// This is a safe wrapper around `libc::mknod`. It creates a filesystem node
+/// (file, device special file, or named pipe).
+///
+/// # Arguments
+///
+/// * `path` - The path where the node should be created
+/// * `mode` - The file type and permissions (includes S_IFBLK, S_IFCHR, S_IFIFO bits)
+/// * `dev` - The device number (for block and character special files)
+///
+/// # Errors
+///
+/// Returns an error if the system call fails.
+///
+/// # Examples
+///
+/// ```no_run
+/// use uucore::fs::safe_mknod;
+/// use std::path::Path;
+/// use libc::{S_IFCHR, S_IRUSR, S_IWUSR};
+///
+/// // Create a character device node
+/// let mode = S_IFCHR | S_IRUSR | S_IWUSR;
+/// let dev = uucore::fs::makedev(1, 3); // /dev/null is major=1, minor=3
+/// safe_mknod(Path::new("/tmp/test_null"), mode, dev).unwrap();
+/// ```
+#[cfg(unix)]
+pub fn safe_mknod(path: &Path, mode: mode_t, dev: libc::dev_t) -> IOResult<()> {
+    let c_path = CString::new(path.as_os_str().as_encoded_bytes())
+        .map_err(|_| Error::new(ErrorKind::InvalidInput, "path contains null byte"))?;
+
+    // SAFETY: mknod is safe to call with a valid C string path.
+    // The kernel validates all parameters and returns appropriate errors.
+    let result = unsafe { libc::mknod(c_path.as_ptr(), mode, dev) };
+
+    if result == -1 {
+        Err(Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
