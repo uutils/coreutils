@@ -208,10 +208,6 @@ impl CmdResult {
             self.exit_status,
             self.stdout.as_slice(),
             function(self.stderr_str()),
-            self.args.clone(),
-            self.env_vars.clone(),
-            self.current_dir.clone(),
-            self.stdin_bytes.clone(),
         )
     }
 
