@@ -380,7 +380,7 @@ impl From<StatFs> for MountInfo {
     }
 }
 
-#[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
+#[cfg(all(unix, not(target_os = "redox")))]
 fn is_dummy_filesystem(fs_type: &str, mount_option: &str) -> bool {
     // spell-checker:disable
     match fs_type {
@@ -392,7 +392,9 @@ fn is_dummy_filesystem(fs_type: &str, mount_option: &str) -> bool {
         // for NetBSD 3.0
         | "kernfs"
         // for Irix 6.5
-        | "ignore" => true,
+        | "ignore"
+        // Binary format support pseudo-filesystem
+        | "binfmt_misc" => true,
         _ => fs_type == "none"
             && !mount_option.contains(MOUNT_OPT_BIND)
     }
@@ -444,11 +446,8 @@ unsafe extern "C" {
     #[link_name = "getmntinfo"]
     fn get_mount_info(mount_buffer_p: *mut *mut StatFs, flags: c_int) -> c_int;
 
-    // Rust on FreeBSD uses 11.x ABI for filesystem metadata syscalls.
-    // Call the right version of the symbol for getmntinfo() result to
-    // match libc StatFS layout.
     #[cfg(target_os = "freebsd")]
-    #[link_name = "getmntinfo@FBSD_1.0"]
+    #[link_name = "getmntinfo"]
     fn get_mount_info(mount_buffer_p: *mut *mut StatFs, flags: c_int) -> c_int;
 }
 
@@ -1219,5 +1218,13 @@ mod tests {
             info.mount_dir,
             crate::os_str_from_bytes(b"/mnt/some- -dir-\xf3").unwrap()
         );
+    }
+
+    #[test]
+    #[cfg(all(unix, not(target_os = "redox")))]
+    // spell-checker:ignore (word) binfmt
+    fn test_binfmt_misc_is_dummy() {
+        use super::is_dummy_filesystem;
+        assert!(is_dummy_filesystem("binfmt_misc", ""));
     }
 }

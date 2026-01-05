@@ -157,19 +157,11 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     };
     let check = matches.get_flag("check");
 
-    let check_flag = |flag| match (check, matches.get_flag(flag)) {
-        (_, false) => Ok(false),
-        (true, true) => Ok(true),
-        (false, true) => Err(ChecksumError::CheckOnlyFlag(flag.into())),
-    };
-
-    // Each of the following flags are only expected in --check mode.
-    // If we encounter them otherwise, end with an error.
-    let ignore_missing = check_flag("ignore-missing")?;
-    let warn = check_flag("warn")?;
-    let quiet = check_flag("quiet")?;
-    let strict = check_flag("strict")?;
-    let status = check_flag("status")?;
+    let ignore_missing = matches.get_flag("ignore-missing");
+    let warn = matches.get_flag("warn");
+    let quiet = matches.get_flag("quiet");
+    let strict = matches.get_flag("strict");
+    let status = matches.get_flag("status");
 
     let files = matches.get_many::<OsString>(options::FILE).map_or_else(
         // No files given, read from stdin.
@@ -301,7 +293,8 @@ pub fn uu_app_common() -> Command {
                 .long(options::QUIET)
                 .help(translate!("hashsum-help-quiet"))
                 .action(ArgAction::SetTrue)
-                .overrides_with_all([options::STATUS, options::WARN]),
+                .overrides_with_all([options::STATUS, options::WARN])
+                .requires(options::CHECK),
         )
         .arg(
             Arg::new(options::STATUS)
@@ -309,19 +302,22 @@ pub fn uu_app_common() -> Command {
                 .long("status")
                 .help(translate!("hashsum-help-status"))
                 .action(ArgAction::SetTrue)
-                .overrides_with_all([options::QUIET, options::WARN]),
+                .overrides_with_all([options::QUIET, options::WARN])
+                .requires(options::CHECK),
         )
         .arg(
             Arg::new(options::STRICT)
                 .long("strict")
                 .help(translate!("hashsum-help-strict"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .requires(options::CHECK),
         )
         .arg(
             Arg::new("ignore-missing")
                 .long("ignore-missing")
                 .help(translate!("hashsum-help-ignore-missing"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .requires(options::CHECK),
         )
         .arg(
             Arg::new(options::WARN)
@@ -329,7 +325,8 @@ pub fn uu_app_common() -> Command {
                 .long("warn")
                 .help(translate!("hashsum-help-warn"))
                 .action(ArgAction::SetTrue)
-                .overrides_with_all([options::QUIET, options::STATUS]),
+                .overrides_with_all([options::QUIET, options::STATUS])
+                .requires(options::CHECK),
         )
         .arg(
             Arg::new("zero")

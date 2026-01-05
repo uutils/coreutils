@@ -48,6 +48,7 @@ mod options {
     pub const COLUMN_WIDTH: &str = "width";
     pub const PAGE_WIDTH: &str = "page-width";
     pub const ACROSS: &str = "across";
+    pub const COLUMN_DOWN: &str = "column-down";
     pub const COLUMN: &str = "column";
     pub const COLUMN_CHAR_SEPARATOR: &str = "separator";
     pub const COLUMN_STRING_SEPARATOR: &str = "sep-string";
@@ -255,6 +256,13 @@ pub fn uu_app() -> Command {
                 .short('a')
                 .long(options::ACROSS)
                 .help(translate!("pr-help-across"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            // -b is a no-op for backwards compatibility (column-down is now the default)
+            Arg::new(options::COLUMN_DOWN)
+                .short('b')
+                .hide(true)
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -758,21 +766,28 @@ fn open(path: &str) -> Result<Box<dyn Read>, PrError> {
             let path_string = path.to_string();
             match i.file_type() {
                 #[cfg(unix)]
-                ft if ft.is_block_device() => Err(PrError::UnknownFiletype { file: path_string }),
-                #[cfg(unix)]
-                ft if ft.is_char_device() => Err(PrError::UnknownFiletype { file: path_string }),
-                #[cfg(unix)]
-                ft if ft.is_fifo() => Err(PrError::UnknownFiletype { file: path_string }),
-                #[cfg(unix)]
                 ft if ft.is_socket() => Err(PrError::IsSocket { file: path_string }),
                 ft if ft.is_dir() => Err(PrError::IsDirectory { file: path_string }),
-                ft if ft.is_file() || ft.is_symlink() => {
-                    Ok(Box::new(File::open(path).map_err(|e| PrError::Input {
-                        source: e,
-                        file: path.to_string(),
-                    })?) as Box<dyn Read>)
+
+                ft => {
+                    #[allow(unused_mut)]
+                    let mut is_valid = ft.is_file() || ft.is_symlink();
+
+                    #[cfg(unix)]
+                    {
+                        is_valid =
+                            is_valid || ft.is_char_device() || ft.is_block_device() || ft.is_fifo();
+                    }
+
+                    if is_valid {
+                        Ok(Box::new(File::open(path).map_err(|e| PrError::Input {
+                            source: e,
+                            file: path.to_string(),
+                        })?) as Box<dyn Read>)
+                    } else {
+                        Err(PrError::UnknownFiletype { file: path_string })
+                    }
                 }
-                _ => Err(PrError::UnknownFiletype { file: path_string }),
             }
         },
     )
@@ -1165,34 +1180,23 @@ fn header_content(options: &OutputOptions, page: usize) -> Vec<String> {
     // Use the line width if available, otherwise use default of 72
     let total_width = options.line_width.unwrap_or(DEFAULT_COLUMN_WIDTH);
 
-    // GNU pr uses a specific layout:
-    // Date takes up the left part, filename is centered, page is right-aligned
     let date_len = date_part.chars().count();
     let filename_len = filename.chars().count();
     let page_len = page_part.chars().count();
 
     let header_line = if date_len + filename_len + page_len + 2 < total_width {
-        // Check if we're using a custom date format that needs centered alignment
-        // This preserves backward compatibility while fixing the GNU time-style test
-        if date_part.starts_with('+') {
-            // GNU pr uses centered layout for headers with custom date formats
-            // The filename should be centered between the date and page parts
-            let space_for_filename = total_width - date_len - page_len;
-            let padding_before_filename = (space_for_filename - filename_len) / 2;
-            let padding_after_filename =
-                space_for_filename - filename_len - padding_before_filename;
+        // The filename should be centered between the date and page parts
+        let space_for_filename = total_width - date_len - page_len;
+        let padding_before_filename = (space_for_filename - filename_len) / 2;
+        let padding_after_filename = space_for_filename - filename_len - padding_before_filename;
 
-            format!(
-                "{date_part}{:width1$}{filename}{:width2$}{page_part}",
-                "",
-                "",
-                width1 = padding_before_filename,
-                width2 = padding_after_filename
-            )
-        } else {
-            // For standard date formats, use simple spacing for backward compatibility
-            format!("{date_part} {filename} {page_part}")
-        }
+        format!(
+            "{date_part}{:width1$}{filename}{:width2$}{page_part}",
+            "",
+            "",
+            width1 = padding_before_filename,
+            width2 = padding_after_filename
+        )
     } else {
         // If content is too long, just use single spaces
         format!("{date_part} {filename} {page_part}")

@@ -804,6 +804,44 @@ fn test_du_inodes_with_count_links_all() {
     assert_eq!(result_seq, ["1\td/d", "1\td/f", "1\td/h", "4\td"]);
 }
 
+#[cfg(not(target_os = "android"))]
+#[test]
+fn test_du_count_links_hardlinks_separately() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("dir");
+    at.touch("dir/file");
+    at.hard_link("dir/file", "dir/hard_link");
+
+    let result_without_l = ts.ucmd().arg("-b").arg("dir").succeeds();
+    let size_without_l: u64 = result_without_l
+        .stdout_str()
+        .split('\t')
+        .next()
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap();
+
+    for arg in ["-l", "--count-links"] {
+        let result_with_l = ts.ucmd().arg("-b").arg(arg).arg("dir").succeeds();
+        let size_with_l: u64 = result_with_l
+            .stdout_str()
+            .split('\t')
+            .next()
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap();
+
+        assert!(
+            size_with_l >= size_without_l,
+            "With {arg}, size ({size_with_l}) should be >= size without -l ({size_without_l})"
+        );
+    }
+}
+
 #[test]
 fn test_du_h_flag_empty_file() {
     new_ucmd!()

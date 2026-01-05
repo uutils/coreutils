@@ -501,10 +501,7 @@ fn safe_du(
 
         // Handle inodes
         if let Some(inode) = this_stat.inode {
-            if seen_inodes.contains(&inode) && (!options.count_links || !options.all) {
-                if options.count_links && !options.all {
-                    my_stat.inodes += 1;
-                }
+            if seen_inodes.contains(&inode) && !options.count_links {
                 continue;
             }
             seen_inodes.insert(inode);
@@ -660,13 +657,7 @@ fn du_regular(
 
                             if let Some(inode) = this_stat.inode {
                                 // Check if the inode has been seen before and if we should skip it
-                                if seen_inodes.contains(&inode)
-                                    && (!options.count_links || !options.all)
-                                {
-                                    // If `count_links` is enabled and `all` is not, increment the inode count
-                                    if options.count_links && !options.all {
-                                        my_stat.inodes += 1;
-                                    }
+                                if seen_inodes.contains(&inode) && !options.count_links {
                                     // Skip further processing for this inode
                                     continue;
                                 }

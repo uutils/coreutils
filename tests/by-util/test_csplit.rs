@@ -1551,3 +1551,35 @@ fn test_csplit_non_utf8_paths() {
 
     ucmd.arg(&filename).arg("3").succeeds();
 }
+
+/// Test write error detection using /dev/full
+#[test]
+#[cfg(target_os = "linux")]
+fn test_write_error_dev_full() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.symlink_file("/dev/full", "xx01");
+
+    ucmd.args(&["-", "2"])
+        .pipe_in("1\n2\n")
+        .fails_with_code(1)
+        .stderr_contains("xx01: No space left on device");
+
+    // Files cleaned up by default
+    assert!(!at.file_exists("xx00"));
+}
+
+/// Test write error with -k keeps files
+#[test]
+#[cfg(target_os = "linux")]
+fn test_write_error_dev_full_keep_files() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.symlink_file("/dev/full", "xx01");
+
+    ucmd.args(&["-k", "-", "2"])
+        .pipe_in("1\n2\n")
+        .fails_with_code(1)
+        .stderr_contains("xx01: No space left on device");
+
+    assert!(at.file_exists("xx00"));
+    assert_eq!(at.read("xx00"), "1\n");
+}

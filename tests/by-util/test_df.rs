@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore udev pcent iuse itotal iused ipcent
+// spell-checker:ignore udev pcent iuse itotal iused ipcent binfmt
 #![allow(
     clippy::similar_names,
     clippy::cast_possible_truncation,
@@ -1045,4 +1045,49 @@ fn test_nonexistent_file() {
         .fails()
         .stderr_is("df: does-not-exist: No such file or directory\n")
         .stdout_is("File\n.\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_df_all_shows_binfmt_misc() {
+    // Check if binfmt_misc is mounted
+    let is_mounted = std::fs::read_to_string("/proc/self/mountinfo")
+        .map(|content| content.lines().any(|line| line.contains("binfmt_misc")))
+        .unwrap_or(false);
+
+    if is_mounted {
+        let output = new_ucmd!()
+            .args(&["--all", "--output=fstype,target"])
+            .succeeds()
+            .stdout_str_lossy();
+
+        assert!(
+            output.contains("binfmt_misc"),
+            "Expected binfmt_misc filesystem to appear in df --all output when it's mounted"
+        );
+    }
+    // If binfmt_misc is not mounted, skip the test silently
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_df_hides_binfmt_misc_by_default() {
+    // Check if binfmt_misc is mounted
+    let is_mounted = std::fs::read_to_string("/proc/self/mountinfo")
+        .map(|content| content.lines().any(|line| line.contains("binfmt_misc")))
+        .unwrap_or(false);
+
+    if is_mounted {
+        let output = new_ucmd!()
+            .args(&["--output=fstype,target"])
+            .succeeds()
+            .stdout_str_lossy();
+
+        // binfmt_misc should NOT appear in the output without --all
+        assert!(
+            !output.contains("binfmt_misc"),
+            "Expected binfmt_misc filesystem to be hidden in df output without --all"
+        );
+    }
+    // If binfmt_misc is not mounted, skip the test silently
 }
