@@ -408,6 +408,16 @@ fn test_chmod_recursive_correct_exit_code() {
 }
 
 #[test]
+fn test_chmod_hyper_recursive_directory_tree_does_not_fail() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mkdir = "a/".repeat(400);
+
+    at.mkdir_all(&mkdir);
+
+    ucmd.arg("-R").arg("777").arg("a").succeeds();
+}
+
+#[test]
 #[allow(clippy::unreadable_literal)]
 fn test_chmod_recursive() {
     let (at, mut ucmd) = at_and_ucmd!();
