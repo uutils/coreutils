@@ -32,6 +32,7 @@ mv-error-backup-might-destroy-source = backing up {$target} might destroy source
 mv-error-will-not-overwrite-just-created = will not overwrite just-created {$target} with {$source}
 mv-error-not-replacing = not replacing {$target}
 mv-error-cannot-move = cannot move {$source} to {$target}
+mv-error-cannot-overwrite-non-empty-directory = cannot overwrite {$target}
 mv-error-directory-not-empty = Directory not empty
 mv-error-dangling-symlink = can't determine symlink type, since it is dangling
 mv-error-no-symlink-support = your operating system does not support symlinks
