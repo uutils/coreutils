@@ -16,7 +16,6 @@ use crate::pipes::pipe;
 use ::{
     nix::sys::select::FdSet,
     nix::sys::select::select,
-    nix::sys::signal::Signal,
     nix::sys::signal::{self, signal},
     nix::sys::time::TimeVal,
     std::fs::File,
@@ -31,6 +30,7 @@ use ::{
 use libc::{c_int, gid_t, pid_t, uid_t};
 #[cfg(not(target_os = "redox"))]
 use nix::errno::Errno;
+use nix::sys::signal::Signal;
 use std::{io, process::Child};
 
 /// Not all platforms support uncapped times (read: macOS). However,
@@ -144,23 +144,21 @@ pub enum WaitOrTimeoutRet {
 
 impl ChildExt for Child {
     fn send_signal(&mut self, signal: usize) -> io::Result<()> {
-        if unsafe { libc::kill(self.id() as pid_t, signal as i32) } == 0 {
-            Ok(())
-        } else {
-            Err(io::Error::last_os_error())
-        }
+        nix::Error::result(unsafe { libc::kill(self.id() as pid_t, signal as i32) })?;
+        Ok(())
     }
 
     fn send_signal_group(&mut self, signal: usize) -> io::Result<()> {
-        // Ignore the signal, so we don't go into a signal loop.
-        if unsafe { libc::signal(signal as i32, libc::SIG_IGN) } == usize::MAX {
-            return Err(io::Error::last_os_error());
+        // Ignore the signal, so we don't go into a signal loop. Some signals will fail
+        // the call because they cannot be ignored, but they insta-kill so it's fine.
+        if signal != Signal::SIGSTOP as _ && signal != Signal::SIGKILL as _ {
+            let err = unsafe { libc::signal(signal as i32, libc::SIG_IGN) } == usize::MAX;
+            if err {
+                return Err(io::Error::last_os_error());
+            }
         }
-        if unsafe { libc::kill(0, signal as i32) } == 0 {
-            Ok(())
-        } else {
-            Err(io::Error::last_os_error())
-        }
+        nix::Error::result(unsafe { libc::kill(0, signal as i32) })?;
+        Ok(())
     }
 
     #[cfg(feature = "pipes")]

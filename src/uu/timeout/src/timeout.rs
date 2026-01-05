@@ -250,8 +250,7 @@ fn wait_or_kill_process(
             process.wait()?;
             Ok(ExitStatus::SignalSent(signal).into())
         }
-        Ok(WaitOrTimeoutRet::CustomSignaled) => unreachable!(), // We did not set it up.
-        Err(_) => Ok(ExitStatus::TimeoutFailed.into()),
+        Ok(WaitOrTimeoutRet::CustomSignaled) | Err(_) => Ok(ExitStatus::TimeoutFailed.into()),
     }
 }
 
