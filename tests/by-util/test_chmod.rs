@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+// spell-checker:ignore (words) dirfd subdirs openat FDCWD
 
 use std::fs::{OpenOptions, Permissions, metadata, set_permissions};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
@@ -371,7 +372,49 @@ fn test_permission_denied() {
         .arg("o=r")
         .arg("d")
         .fails()
-        .stderr_is("chmod: 'd/no-x/y': Permission denied\n");
+        .stderr_is("chmod: cannot access 'd/no-x/y': Permission denied\n");
+}
+
+#[test]
+#[allow(clippy::unreadable_literal)]
+fn test_chmod_recursive_correct_exit_code() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // create 3 folders to test on
+    at.mkdir("a");
+    at.mkdir("a/b");
+    at.mkdir("z");
+
+    // remove read permissions for folder a so the chmod command for a/b fails
+    let mut perms = at.metadata("a").permissions();
+    perms.set_mode(0o000);
+    set_permissions(at.plus_as_string("a"), perms).unwrap();
+
+    #[cfg(not(target_os = "linux"))]
+    let err_msg = "chmod: Permission denied\n";
+    #[cfg(target_os = "linux")]
+    let err_msg = "chmod: cannot access 'a': Permission denied\n";
+
+    // order of command is a, a/b then c
+    // command is expected to fail and not just take the last exit code
+    ucmd.arg("-R")
+        .arg("--verbose")
+        .arg("a+w")
+        .arg("a")
+        .arg("z")
+        .umask(0)
+        .fails()
+        .stderr_is(err_msg);
+}
+
+#[test]
+fn test_chmod_hyper_recursive_directory_tree_does_not_fail() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mkdir = "a/".repeat(400);
+
+    at.mkdir_all(&mkdir);
+
+    ucmd.arg("-R").arg("777").arg("a").succeeds();
 }
 
 #[test]
@@ -394,7 +437,7 @@ fn test_chmod_recursive() {
     #[cfg(not(target_os = "linux"))]
     let err_msg = "chmod: Permission denied\n";
     #[cfg(target_os = "linux")]
-    let err_msg = "chmod: 'z': Permission denied\n";
+    let err_msg = "chmod: cannot access 'z': Permission denied\n";
 
     // only the permissions of folder `a` and `z` are changed
     // folder can't be read after read permission is removed
@@ -1277,6 +1320,51 @@ fn test_chmod_non_utf8_paths() {
             .mode()
             & 0o777,
         0o644
+    );
+}
+
+#[cfg(all(target_os = "linux", feature = "chmod"))]
+#[test]
+#[ignore = "covered by util/check-safe-traversal.sh"]
+fn test_chmod_recursive_uses_dirfd_for_subdirs() {
+    use std::process::Command;
+    use uutests::get_tests_binary;
+
+    // strace is required; fail fast if it is missing or not runnable
+    let output = Command::new("strace")
+        .arg("-V")
+        .output()
+        .expect("strace not found; install strace to run this test");
+    assert!(
+        output.status.success(),
+        "strace -V failed; ensure strace is installed and usable"
+    );
+
+    let (at, _ucmd) = at_and_ucmd!();
+    at.mkdir("x");
+    at.mkdir("x/y");
+    at.mkdir("x/y/z");
+
+    let log_path = at.plus_as_string("strace.log");
+
+    let status = Command::new("strace")
+        .arg("-e")
+        .arg("openat")
+        .arg("-o")
+        .arg(&log_path)
+        .arg(get_tests_binary!())
+        .args(["chmod", "-R", "+x", "x"])
+        .current_dir(&at.subdir)
+        .status()
+        .expect("failed to run strace");
+    assert!(status.success(), "strace run failed");
+
+    let log = at.read("strace.log");
+
+    // Regression guard: ensure recursion uses dirfd-relative openat instead of AT_FDCWD with a multi-component path
+    assert!(
+        !log.contains("openat(AT_FDCWD, \"x/y"),
+        "chmod recursed using AT_FDCWD with a multi-component path; expected dirfd-relative openat"
     );
 }
 

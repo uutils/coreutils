@@ -1,4 +1,6 @@
 AFAICT
+asimd
+ASIMD
 alloc
 arity
 autogenerate
@@ -42,6 +44,7 @@ duplicative
 dsync
 endianness
 enqueue
+ERANGE
 errored
 executable
 executables
@@ -71,17 +74,20 @@ hardlink
 hardlinks
 hasher
 hashsums
+hwcaps
 infile
 iflag
 iflags
 kibi
 kibibytes
+langinfo
 libacl
 lcase
 listxattr
 llistxattr
 lossily
 lstat
+makedev
 mebi
 mebibytes
 mergeable
@@ -96,6 +102,7 @@ nocache
 nocreat
 noctty
 noerror
+noexec
 nofollow
 nolinks
 nonblock
@@ -131,6 +138,7 @@ setcap
 setfacl
 setfattr
 setmask
+setlocale
 shortcode
 shortcodes
 siginfo
@@ -153,6 +161,8 @@ tokenize
 toolchain
 totalram
 truthy
+tunables
+TUNABLES
 ucase
 unbuffered
 udeps
@@ -169,6 +179,8 @@ xattrs
 xpass
 
 # * abbreviations
+AMPM
+ampm
 consts
 deps
 dev
@@ -195,3 +207,18 @@ nofield
 # * clippy
 uninlined
 nonminimal
+
+# * CPU/hardware features
+ASIMD
+asimd
+hwcaps
+PCLMUL
+pclmul
+PCLMULQDQ
+pclmulqdq
+PMULL
+pmull
+TUNABLES
+tunables
+VMULL
+vmull

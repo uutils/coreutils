@@ -34,9 +34,11 @@ self_cell = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 unicode-width = { workspace = true }
-uucore = { workspace = true, features = ["fs", "parser", "version-cmp"] }
+uucore = { workspace = true, features = ["fs", "parser-size", "version-cmp"] }
 fluent = { workspace = true }
-nix = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true, features = ["resource"] }
 
 [dev-dependencies]
 divan = { workspace = true }
@@ -44,7 +46,7 @@ tempfile = { workspace = true }
 uucore = { workspace = true, features = [
   "benchmark",
   "fs",
-  "parser",
+  "parser-size",
   "version-cmp",
   "i18n-collator",
 ] }
@@ -58,5 +60,13 @@ name = "sort_bench"
 harness = false
 
 [[bench]]
-name = "sort_locale_bench"
+name = "sort_locale_c_bench"
+harness = false
+
+[[bench]]
+name = "sort_locale_utf8_bench"
+harness = false
+
+[[bench]]
+name = "sort_locale_de_bench"
 harness = false

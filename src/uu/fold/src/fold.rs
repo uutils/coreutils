@@ -434,7 +434,16 @@ fn process_utf8_line<W: Write>(line: &str, ctx: &mut FoldContext<'_, W>) -> URes
     let mut iter = line.char_indices().peekable();
 
     while let Some((byte_idx, ch)) = iter.next() {
-        let next_idx = iter.peek().map(|(idx, _)| *idx).unwrap_or(line_bytes.len());
+        // Include combining characters with the base character
+        while let Some(&(_, next_ch)) = iter.peek() {
+            if unicode_width::UnicodeWidthChar::width(next_ch).unwrap_or(1) == 0 {
+                iter.next();
+            } else {
+                break;
+            }
+        }
+
+        let next_idx = iter.peek().map_or(line_bytes.len(), |(idx, _)| *idx);
 
         if ch == '\n' {
             *ctx.last_space = None;

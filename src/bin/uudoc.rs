@@ -66,6 +66,7 @@ fn gen_manpage<T: Args>(
     args: impl Iterator<Item = OsString>,
     util_map: &UtilityMap<T>,
 ) -> ! {
+    uucore::set_utility_is_second_arg();
     let all_utilities = validation::get_all_utilities(util_map);
 
     let matches = Command::new("manpage")
@@ -139,7 +140,9 @@ fn print_tldr_error() {
         "To include examples in the documentation, download the tldr archive and put it in the docs/ folder."
     );
     eprintln!();
-    eprintln!("  curl https://tldr.sh/assets/tldr.zip -o docs/tldr.zip");
+    eprintln!(
+        "  curl -L https://github.com/tldr-pages/tldr/releases/latest/download/tldr.zip -o docs/tldr.zip"
+    );
     eprintln!();
 }
 
@@ -462,7 +465,9 @@ impl MDWriter<'_, '_> {
     /// # Errors
     /// Returns an error if the writer fails.
     fn options(&mut self) -> io::Result<()> {
-        writeln!(self.w, "<h2>Options</h2>")?;
+        writeln!(self.w)?;
+        writeln!(self.w, "## Options")?;
+        writeln!(self.w)?;
         write!(self.w, "<dl>")?;
         for arg in self.command.get_arguments() {
             write!(self.w, "<dt>")?;
@@ -573,7 +578,7 @@ fn format_examples(content: String, output_markdown: bool) -> Result<String, std
     use std::fmt::Write;
     let mut s = String::new();
     writeln!(s)?;
-    writeln!(s, "Examples")?;
+    writeln!(s, "## Examples")?;
     writeln!(s)?;
     for line in content.lines().skip_while(|l| !l.starts_with('-')) {
         if let Some(l) = line.strip_prefix("- ") {

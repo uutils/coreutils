@@ -253,7 +253,8 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &str) -> UR
         } else {
             let path = Path::new(filename);
             if path.is_dir() {
-                let e: Box<dyn UError> = TacError::InvalidArgument(filename.clone()).into();
+                let e: Box<dyn UError> =
+                    TacError::InvalidDirectoryArgument(filename.clone()).into();
                 show!(e);
                 continue;
             }

@@ -27,16 +27,18 @@ jobs:
           - { package: uu_cksum }
           - { package: uu_cp }
           - { package: uu_cut }
+          - { package: uu_dd }
           - { package: uu_du }
           - { package: uu_expand }
           - { package: uu_fold }
-          - { package: uu_hashsum }
+          - { package: uu_join }
           - { package: uu_ls }
           - { package: uu_mv }
           - { package: uu_nl }
           - { package: uu_numfmt }
           - { package: uu_rm }
           - { package: uu_seq }
+          - { package: uu_shuf }
           - { package: uu_sort }
           - { package: uu_split }
           - { package: uu_tsort }
@@ -44,16 +46,11 @@ jobs:
           - { package: uu_uniq }
           - { package: uu_wc }
           - { package: uu_factor }
+          - { package: uu_date }
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           persist-credentials: false
-
-      - name: Install system dependencies
-        shell: bash
-        run: |
-          sudo apt-get -y update
-          sudo apt-get -y install libselinux1-dev
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -77,7 +74,7 @@ jobs:
         env:
           CODSPEED_LOG: debug
         with:
-          mode: instrumentation
+          mode: simulation
           run: |
             echo "Running benchmarks for ${{ matrix.benchmark-target.package }}"
             cargo codspeed run -p ${{ matrix.benchmark-target.package }} > /dev/null

@@ -464,6 +464,31 @@ fn test_touch_reference() {
 }
 
 #[test]
+fn test_touch_reference_dangling() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let nonexistent_target = temp_dir.path().join("nonexistent_target");
+    let dangling_symlink = temp_dir.path().join("test_touch_reference_dangling");
+
+    #[cfg(not(windows))]
+    {
+        std::os::unix::fs::symlink(&nonexistent_target, &dangling_symlink).unwrap();
+    }
+    #[cfg(windows)]
+    {
+        std::os::windows::fs::symlink_file(&nonexistent_target, &dangling_symlink).unwrap();
+    }
+
+    new_ucmd!()
+        .args(&[
+            "--reference",
+            dangling_symlink.to_str().unwrap(),
+            "some_file",
+        ])
+        .fails()
+        .stderr_contains("touch: failed to get attributes of");
+}
+
+#[test]
 fn test_touch_set_date() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_set_date";
@@ -1026,4 +1051,11 @@ fn test_touch_non_utf8_paths() {
 
     scene.ucmd().arg(non_utf8_name).succeeds().no_output();
     assert!(std::fs::metadata(at.plus(non_utf8_name)).is_ok());
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_touch_dev_full() {
+    let (_, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["/dev/full"]).succeeds().no_output();
 }
