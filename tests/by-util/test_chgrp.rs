@@ -640,3 +640,30 @@ fn test_chgrp_recursive_on_file() {
         current_gid
     );
 }
+
+#[test]
+fn test_chgrp_multiple_files_error_on_first_success_on_last() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let current_gid = getegid();
+
+    at.mkdir("a_readonly_dir");
+    at.mkdir("a_readonly_dir/subdir");
+    at.touch("a_readonly_dir/subdir/file");
+    at.touch("b_writable_file");
+
+    std::fs::set_permissions(
+        at.plus("a_readonly_dir/subdir"),
+        std::fs::Permissions::from_mode(0o000),
+    )
+    .unwrap();
+
+    ucmd.arg("-R")
+        .arg(current_gid.to_string())
+        .arg("a_readonly_dir")
+        .arg("b_writable_file")
+        .fails()
+        .stderr_contains("Permission denied");
+}
