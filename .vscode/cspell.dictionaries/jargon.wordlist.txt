@@ -90,6 +90,7 @@ makedev
 mebi
 mebibytes
 mergeable
+metacharacters
 microbenchmark
 microbenchmarks
 microbenchmarking
