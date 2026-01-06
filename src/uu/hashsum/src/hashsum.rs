@@ -216,7 +216,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
 mod options {
     //pub const ALGORITHM: &str = "algorithm";
     pub const FILE: &str = "file";
-    //pub const UNTAGGED: &str = "untagged";
+    pub const UNTAGGED: &str = "untagged"; //We have this only for supporting --text --tag
     pub const TAG: &str = "tag";
     pub const LENGTH: &str = "length";
     //pub const RAW: &str = "raw";
@@ -238,6 +238,12 @@ pub fn uu_app_common() -> Command {
         .override_usage(format_usage(&translate!("hashsum-usage")))
         .infer_long_args(true)
         .args_override_self(true)
+        .arg(
+            Arg::new(options::UNTAGGED)
+                .long(options::UNTAGGED)
+                .hide(true)
+                .action(ArgAction::SetTrue),
+        )
         .arg(
             Arg::new(options::BINARY)
                 .short('b')
@@ -267,7 +273,7 @@ pub fn uu_app_common() -> Command {
                 .long("tag")
                 .help(translate!("hashsum-help-tag"))
                 .action(ArgAction::SetTrue)
-                .conflicts_with("text"),
+                .overrides_with(options::TEXT),
         )
         .arg(
             Arg::new(options::TEXT)
@@ -284,6 +290,7 @@ pub fn uu_app_common() -> Command {
                     }
                 })
                 .conflicts_with("binary")
+                .requires(options::UNTAGGED)
                 .action(ArgAction::SetTrue),
         )
         .arg(
