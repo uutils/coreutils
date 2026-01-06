@@ -546,6 +546,7 @@ dependencies = [
  "fluent-syntax",
  "glob",
  "hex-literal",
+ "jiff",
  "libc",
  "nix",
  "num-prime",
