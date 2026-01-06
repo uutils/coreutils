@@ -187,21 +187,75 @@ fn unblock_sigchld() {
     }
 }
 
-/// We should terminate child process when receiving TERM signal.
+/// We should terminate child process when receiving signals.
+/// This is set to true when we receive a signal that should trigger timeout behavior.
 static SIGNALED: AtomicBool = AtomicBool::new(false);
+/// The PID of the monitored child process (0 if not set)
+static MONITORED_PID: atomic::AtomicI32 = atomic::AtomicI32::new(0);
+/// The signal to send to the child process when timeout occurs
+static TERM_SIGNAL: atomic::AtomicI32 = atomic::AtomicI32::new(0);
+/// Whether we're running in foreground mode
+static FOREGROUND: AtomicBool = AtomicBool::new(false);
+/// The signal that was received (0 if none, or signal number)
+static RECEIVED_SIGNAL: atomic::AtomicI32 = atomic::AtomicI32::new(0);
 
-fn catch_sigterm() {
+fn catch_signals() {
     use nix::sys::signal;
 
-    extern "C" fn handle_sigterm(signal: libc::c_int) {
-        let signal = signal::Signal::try_from(signal).unwrap();
-        if signal == signal::Signal::SIGTERM {
-            SIGNALED.store(true, atomic::Ordering::Relaxed);
+    extern "C" fn handle_signal(sig: libc::c_int) {
+        // Avoid any Rust functions that aren't async-signal-safe
+        SIGNALED.store(true, atomic::Ordering::Relaxed);
+        RECEIVED_SIGNAL.store(sig, atomic::Ordering::Relaxed);
+
+        // Send signal to child process directly from handler (like GNU timeout)
+        let pid = MONITORED_PID.load(atomic::Ordering::Relaxed);
+        let term_sig = TERM_SIGNAL.load(atomic::Ordering::Relaxed);
+        let foreground = FOREGROUND.load(atomic::Ordering::Relaxed);
+
+        if pid > 0 {
+            // Send the signal directly to the monitored child (like GNU lines 215-226)
+            unsafe { libc::kill(pid, term_sig) };
+
+            // The normal case is the job has remained in our newly created process group,
+            // so send to all processes in that (GNU lines 228-238)
+            if !foreground {
+                // Send to child's process group using negative PID
+                // This avoids sending to ourselves (timeout process)
+                unsafe { libc::kill(-pid, term_sig) };
+
+                // Also send SIGCONT if needed
+                let kill_signal = 9; // SIGKILL
+                let cont_signal = 19; // SIGCONT on most systems
+                if term_sig != kill_signal && term_sig != cont_signal {
+                    unsafe { libc::kill(pid, cont_signal) };
+                    unsafe { libc::kill(-pid, cont_signal) };
+                }
+            }
         }
     }
 
-    let handler = signal::SigHandler::Handler(handle_sigterm);
-    unsafe { signal::signal(signal::Signal::SIGTERM, handler) }.unwrap();
+    let handler = signal::SigHandler::Handler(handle_signal);
+
+    // Install signal handlers using sigaction with SA_RESTART (like GNU timeout)
+    let signals_to_catch = [
+        signal::Signal::SIGTERM,
+        signal::Signal::SIGINT,
+        signal::Signal::SIGHUP,
+        signal::Signal::SIGQUIT,
+        signal::Signal::SIGALRM,
+        signal::Signal::SIGUSR1,
+        signal::Signal::SIGUSR2,
+    ];
+
+    let sa = signal::SigAction::new(
+        handler,
+        signal::SaFlags::SA_RESTART, // Restart syscalls if possible
+        signal::SigSet::empty(),     // Allow concurrent calls to handler
+    );
+
+    for sig in &signals_to_catch {
+        unsafe { signal::sigaction(*sig, &sa) }.unwrap();
+    }
 }
 
 /// Report that a signal is being sent if the verbose flag is set.
@@ -320,25 +374,82 @@ fn timeout(
     #[cfg(unix)]
     enable_pipe_errors()?;
 
-    let process = &mut process::Command::new(&cmd[0])
+    let mut cmd_builder = process::Command::new(&cmd[0]);
+    cmd_builder
         .args(&cmd[1..])
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .map_err(|err| {
-            let status_code = match err.kind() {
-                ErrorKind::NotFound => ExitStatus::CommandNotFound.into(),
-                ErrorKind::PermissionDenied => ExitStatus::CannotInvoke.into(),
-                _ => ExitStatus::CannotInvoke.into(),
-            };
-            USimpleError::new(
-                status_code,
-                translate!("timeout-error-failed-to-execute-process", "error" => err),
-            )
-        })?;
+        .stderr(Stdio::inherit());
+
+    // Block signals in parent BEFORE spawning child (like GNU timeout line 548)
+    // This prevents signals from arriving before handlers are installed
+    #[cfg(unix)]
+    let orig_set = unsafe {
+        let mut blocked_set: libc::sigset_t = std::mem::zeroed();
+        let mut orig_set: libc::sigset_t = std::mem::zeroed();
+
+        libc::sigemptyset(&raw mut blocked_set);
+        libc::sigaddset(&raw mut blocked_set, libc::SIGALRM);
+        libc::sigaddset(&raw mut blocked_set, libc::SIGINT);
+        libc::sigaddset(&raw mut blocked_set, libc::SIGTERM);
+        libc::sigaddset(&raw mut blocked_set, libc::SIGHUP);
+        libc::sigaddset(&raw mut blocked_set, libc::SIGQUIT);
+        libc::sigaddset(&raw mut blocked_set, libc::SIGCHLD);
+
+        libc::pthread_sigmask(libc::SIG_BLOCK, &raw const blocked_set, &raw mut orig_set);
+        orig_set
+    };
+
+    // On Unix, reset signal handlers in child before exec (like GNU timeout lines 556-567)
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        unsafe {
+            cmd_builder.pre_exec(|| {
+                // Reset signal mask to empty (unblock all signals)
+                let mut set: libc::sigset_t = std::mem::zeroed();
+                libc::sigemptyset(&raw mut set);
+                libc::pthread_sigmask(libc::SIG_SETMASK, &raw const set, std::ptr::null_mut());
+
+                // Reset signal handlers that might have been set to SIG_IGN
+                libc::signal(libc::SIGTTIN, libc::SIG_DFL);
+                libc::signal(libc::SIGTTOU, libc::SIG_DFL);
+                libc::signal(libc::SIGINT, libc::SIG_DFL);
+                libc::signal(libc::SIGTERM, libc::SIG_DFL);
+                libc::signal(libc::SIGHUP, libc::SIG_DFL);
+                libc::signal(libc::SIGQUIT, libc::SIG_DFL);
+
+                Ok(())
+            });
+        }
+    }
+
+    let process = &mut cmd_builder.spawn().map_err(|err| {
+        let status_code = match err.kind() {
+            ErrorKind::NotFound => ExitStatus::CommandNotFound.into(),
+            ErrorKind::PermissionDenied => ExitStatus::CannotInvoke.into(),
+            _ => ExitStatus::CannotInvoke.into(),
+        };
+        USimpleError::new(
+            status_code,
+            translate!("timeout-error-failed-to-execute-process", "error" => err),
+        )
+    })?;
     unblock_sigchld();
-    catch_sigterm();
+
+    // Store child PID and signal configuration in statics for signal handler
+    MONITORED_PID.store(process.id() as i32, atomic::Ordering::Relaxed);
+    TERM_SIGNAL.store(signal as i32, atomic::Ordering::Relaxed);
+    FOREGROUND.store(foreground, atomic::Ordering::Relaxed);
+
+    catch_signals();
+
+    // Unblock signals now that handlers are installed (like GNU timeout line 584)
+    #[cfg(unix)]
+    unsafe {
+        libc::pthread_sigmask(libc::SIG_SETMASK, &raw const orig_set, std::ptr::null_mut());
+    }
+
     // Wait for the child process for the specified time period.
     //
     // If the process exits within the specified time period (the
@@ -360,19 +471,36 @@ fn timeout(
             send_signal(process, signal, foreground);
             match kill_after {
                 None => {
-                    let status = process.wait()?;
+                    // If we already received a signal (e.g., external SIGTERM), we should
+                    // exit quickly rather than waiting indefinitely for the child.
+                    // Check SIGNALED before wait() to avoid hanging with SA_RESTART.
                     if SIGNALED.load(atomic::Ordering::Relaxed) {
-                        Err(ExitStatus::Terminated.into())
-                    } else if preserve_status {
-                        if let Some(ec) = status.code() {
-                            Err(ec.into())
-                        } else if let Some(sc) = status.signal() {
-                            Err(ExitStatus::SignalSent(sc.try_into().unwrap()).into())
+                        let received_sig = RECEIVED_SIGNAL.load(atomic::Ordering::Relaxed);
+                        if received_sig == libc::SIGALRM {
+                            // Timeout expired - wait for child and return 124
+                            let _status = process.wait()?;
+                            Err(ExitStatus::CommandTimedOut.into())
+                        } else {
+                            // External signal - timeout should exit with 128 + signal_number
+                            // Wait for child to exit first, then return 128 + signal_number
+                            let _status = process.wait()?;
+                            // Use ExitStatus::SignalSent which converts to 128 + signal_number
+                            Err(ExitStatus::SignalSent(received_sig.try_into().unwrap()).into())
+                        }
+                    } else {
+                        // Normal timeout - wait for child
+                        let status = process.wait()?;
+                        if preserve_status {
+                            if let Some(ec) = status.code() {
+                                Err(ec.into())
+                            } else if let Some(sc) = status.signal() {
+                                Err(ExitStatus::SignalSent(sc.try_into().unwrap()).into())
+                            } else {
+                                Err(ExitStatus::CommandTimedOut.into())
+                            }
                         } else {
                             Err(ExitStatus::CommandTimedOut.into())
                         }
-                    } else {
-                        Err(ExitStatus::CommandTimedOut.into())
                     }
                 }
                 Some(kill_after) => {
