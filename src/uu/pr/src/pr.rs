@@ -287,7 +287,7 @@ pub fn uu_app() -> Command {
                 .help(translate!("pr-help-column-string-separator"))
                 .value_name("string")
                 .num_args(0..=1)
-                .default_missing_value(""),
+                .default_missing_value(" "),
         )
         .arg(
             Arg::new(options::MERGE)
