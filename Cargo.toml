@@ -407,6 +407,7 @@ uucore = { version = "0.6.0", package = "uucore", path = "src/uucore" }
 uucore_procs = { version = "0.6.0", package = "uucore_procs", path = "src/uucore_procs" }
 uu_ls = { version = "0.6.0", path = "src/uu/ls" }
 uu_base32 = { version = "0.6.0", path = "src/uu/base32" }
+uu_checksum_common = { version = "0.6.0", path = "src/uu/checksum_common" }
 uutests = { version = "0.6.0", package = "uutests", path = "tests/uutests" }
 
 [dependencies]
