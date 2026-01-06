@@ -255,8 +255,18 @@ fn parse_lines<'a>(
     if token_buffer.capacity() > MAX_TOKEN_BUFFER_ELEMS {
         token_buffer.shrink_to(MAX_TOKEN_BUFFER_ELEMS);
     }
+    const SMALL_CHUNK_BYTES: usize = 64 * 1024;
     let mut estimated = (*line_count_hint).max(1);
-    if estimated == 1 {
+    let mut exact_line_count = None;
+    if *line_count_hint == 0 || read.len() <= SMALL_CHUNK_BYTES {
+        let count = if read.is_empty() {
+            1
+        } else {
+            memchr_iter(separator, read).count() + 1
+        };
+        exact_line_count = Some(count);
+        estimated = count;
+    } else if estimated == 1 {
         const LINE_LEN_HINT: usize = 32;
         estimated = (read.len() / LINE_LEN_HINT).max(1);
     }
@@ -281,18 +291,15 @@ fn parse_lines<'a>(
     }
     let mut start = 0usize;
     let mut index = 0usize;
-    let mut line_count = 0usize;
     for sep_idx in memchr_iter(separator, read) {
         let line = &read[start..sep_idx];
         lines.push(Line::create(line, index, line_data, token_buffer, settings));
-        line_count += 1;
         index += 1;
         start = sep_idx + 1;
     }
     let line = &read[start..];
     lines.push(Line::create(line, index, line_data, token_buffer, settings));
-    line_count += 1;
-    *line_count_hint = line_count;
+    *line_count_hint = exact_line_count.unwrap_or(index + 1);
 }
 
 /// Read from `file` into `buffer`.
