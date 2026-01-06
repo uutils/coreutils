@@ -9,7 +9,7 @@ use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
 use std::ffi::{OsStr, OsString};
 use uucore::checksum::compute::{
-    ChecksumComputeOptions, figure_out_output_format, perform_checksum_computation,
+    ChecksumComputeOptions, OutputFormat, perform_checksum_computation,
 };
 use uucore::checksum::validate::{
     ChecksumValidateOptions, ChecksumVerbose, perform_checksum_validation,
@@ -208,18 +208,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let (tag, binary) = handle_tag_text_binary_flags(std::env::args_os())?;
 
+    let output_format = OutputFormat::from_cksum(
+        algo_kind,
+        tag,
+        binary,
+        matches.get_flag(options::RAW),
+        matches.get_flag(options::BASE64),
+    );
+
     let algo = SizedAlgoKind::from_unsized(algo_kind, length)?;
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));
 
     let opts = ChecksumComputeOptions {
         algo_kind: algo,
-        output_format: figure_out_output_format(
-            algo,
-            tag,
-            binary,
-            matches.get_flag(options::RAW),
-            matches.get_flag(options::BASE64),
-        ),
+        output_format,
         line_ending,
     };
 
