@@ -29,6 +29,32 @@ pub fn copy_xattrs<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
     Ok(())
 }
 
+/// Copies only ACL-related xattrs (system.posix_acl_*) from source to dest.
+///
+/// This is used for preserving ACLs with `-p` flag, which should preserve
+/// ACLs but not other extended attributes.
+///
+/// # Arguments
+///
+/// * `source` - A reference to the source path.
+/// * `dest` - A reference to the destination path.
+///
+/// # Returns
+///
+/// A result indicating success or failure.
+pub fn copy_acl_xattrs<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
+    for attr_name in xattr::list(&source)? {
+        if let Some(name_str) = attr_name.to_str() {
+            if name_str.starts_with("system.posix_acl_") {
+                if let Some(value) = xattr::get(&source, &attr_name)? {
+                    xattr::set(&dest, &attr_name, &value)?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Retrieves the extended attributes (xattrs) of a given file or directory.
 ///
 /// # Arguments
