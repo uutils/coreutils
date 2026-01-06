@@ -2862,30 +2862,44 @@ fn test_mv_no_prompt_unwriteable_file_with_no_tty() {
 fn test_mv_cross_device_symlink_overwrite() {
     use std::fs;
     use std::os::unix::fs::symlink;
+    use tempfile::TempDir;
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    let src_symlink = "/dev/shm/uutils_mv_src_link_fixed";
-    let dst_file = at.plus_as_string("uutils_mv_dst_exists");
-    let target_file = at.plus_as_string("file_in_src");
+    let target_file = "file_in_src";
+    at.touch(target_file);
+    at.write(target_file, "contents");
 
-    // Cleanup any leftover files from previous failed runs
-    let _ = fs::remove_file(src_symlink);
-    let _ = fs::remove_file(&dst_file);
-    let _ = fs::remove_file(&target_file);
+    let other_fs_tempdir = TempDir::new_in("/dev/shm/")
+        .expect("Unable to create temp directory in /dev/shm - test requires tmpfs");
 
-    // Create target file and symlink
-    fs::write(&target_file, "contents").unwrap();
-    symlink(&target_file, src_symlink).unwrap();
+    let src_symlink = other_fs_tempdir.path().join("uutils_mv_src_link");
+    symlink(at.plus_as_string(target_file), &src_symlink).expect("Unable to create symlink");
 
-    // Create an existing destination file to test overwrite
     at.touch("uutils_mv_dst_exists");
 
-    scene.ucmd().arg(src_symlink).arg(&dst_file).succeeds();
+    scene
+        .ucmd()
+        .arg(&src_symlink)
+        .arg("uutils_mv_dst_exists")
+        .succeeds()
+        .no_stderr();
 
-    // Cleanup
-    let _ = fs::remove_file(&dst_file);
-    let _ = fs::remove_file(src_symlink);
-    let _ = fs::remove_file(&target_file);
+    assert!(
+        !src_symlink.exists(),
+        "Source symlink should not exist after move"
+    );
+    assert!(
+        at.is_symlink("uutils_mv_dst_exists"),
+        "Destination should be a symlink"
+    );
+
+    let link_target =
+        fs::read_link(at.plus("uutils_mv_dst_exists")).expect("Failed to read symlink");
+    assert_eq!(
+        link_target,
+        at.plus(target_file),
+        "Symlink should point to original target"
+    );
 }
