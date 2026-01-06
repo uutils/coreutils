@@ -12,3 +12,4 @@ curl -L ${repo}/raw/refs/heads/master/tests/csplit/csplit-io-err.sh > tests/cspl
 curl -L ${repo}/raw/refs/heads/master/tests/stty/bad-speed.sh > tests/stty/bad-speed.sh
 # Avoid incorrect PASS
 curl -L ${repo}/raw/refs/heads/master/tests/runcon/runcon-compute.sh > tests/runcon/runcon-compute.sh
+curl -L ${repo}/raw/refs/heads/master/tests/tac/tac-continue.sh > tests/tac/tac-continue.sh

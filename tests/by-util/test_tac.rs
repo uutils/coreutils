@@ -335,3 +335,17 @@ fn test_failed_write_is_reported() {
         .fails()
         .stderr_is("tac: failed to write to stdout: No space left on device (os error 28)\n");
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_stdin_tempfile_error_continues() {
+    // Set TMPDIR to a non-writable location to force temp file creation to fail
+    new_ucmd!()
+        .env("TMPDIR", "/proc")
+        .arg("-")
+        .arg("prime_per_line.txt")
+        .pipe_in("a\nb\nc\n")
+        .fails()
+        .stderr_contains("stdin")
+        .stdout_is_fixture("prime_per_line.expected");
+}

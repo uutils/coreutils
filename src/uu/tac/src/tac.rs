@@ -10,9 +10,10 @@ use clap::{Arg, ArgAction, Command};
 use memchr::memmem;
 use memmap2::Mmap;
 use std::ffi::OsString;
-use std::io::{BufWriter, Read, Write, stdin, stdout};
+use std::io::{BufWriter, Read, Seek, Write, stdin, stdout};
 use std::{
     fs::{File, read},
+    io::copy,
     path::Path,
 };
 use uucore::error::UError;
@@ -241,14 +242,18 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &str) -> UR
                 mmap = mmap1;
                 &mmap
             } else {
-                let mut buf1 = Vec::new();
-                if let Err(e) = stdin().read_to_end(&mut buf1) {
-                    let e: Box<dyn UError> = TacError::ReadError(OsString::from("stdin"), e).into();
-                    show!(e);
-                    continue;
+                // Copy stdin to a temp file (respects TMPDIR), then read it back.
+                // This allows proper error handling when disk space is exhausted.
+                match read_stdin_to_buf() {
+                    Ok(buf1) => {
+                        buf = buf1;
+                        &buf
+                    }
+                    Err(e) => {
+                        show!(TacError::ReadError(OsString::from("stdin"), e));
+                        continue;
+                    }
                 }
-                buf = buf1;
-                &buf
             }
         } else {
             let path = Path::new(filename);
@@ -302,6 +307,16 @@ fn try_mmap_stdin() -> Option<Mmap> {
     // SAFETY: If the file is truncated while we map it, SIGBUS will be raised
     // and our process will be terminated, thus preventing access of invalid memory.
     unsafe { Mmap::map(&stdin()).ok() }
+}
+
+/// Copy stdin to a temp file, then read it into a buffer.
+fn read_stdin_to_buf() -> std::io::Result<Vec<u8>> {
+    let mut tmp = tempfile::tempfile()?;
+    copy(&mut stdin(), &mut tmp)?;
+    tmp.rewind()?;
+    let mut buf = Vec::new();
+    tmp.read_to_end(&mut buf)?;
+    Ok(buf)
 }
 
 fn try_mmap_path(path: &Path) -> Option<Mmap> {

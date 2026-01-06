@@ -3968,6 +3968,7 @@ dependencies = [
  "memchr",
  "memmap2",
  "regex",
+ "tempfile",
  "thiserror 2.0.17",
  "uucore",
 ]
