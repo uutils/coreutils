@@ -50,6 +50,7 @@ jobs:
         copyback: false
         # We need jq and GNU coreutils to run show-utils.sh and bash to use inline shell string replacement
         prepare: |
+          mkdir -p /usr/local/etc/pkg/repos
           printf '%s\n' \
             'FreeBSD: {' \
             '  url: "pkg+https://pkg.FreeBSD.org/${ABI}/latest",' \
@@ -152,6 +153,7 @@ jobs:
         sync: rsync
         copyback: false
         prepare: |
+          mkdir -p /usr/local/etc/pkg/repos
           printf '%s\n' \
             'FreeBSD: {' \
             '  url: "pkg+https://pkg.FreeBSD.org/${ABI}/latest",' \
