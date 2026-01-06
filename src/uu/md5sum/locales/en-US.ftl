@@ -1,0 +1,3 @@
+md5sum-about = Print or check the MD5 checksums
+md5sum-usage = md5sum [OPTIONS] [FILE]...
+md5sum-after-help = With no FILE or when FILE is -, read standard input
