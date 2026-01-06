@@ -246,29 +246,35 @@ fn parse_lines<'a>(
     if token_buffer.capacity() > MAX_TOKEN_BUFFER_ELEMS {
         token_buffer.shrink_to(MAX_TOKEN_BUFFER_ELEMS);
     }
-    let line_count = if read.is_empty() {
-        1
-    } else {
-        memchr_iter(separator, read).count() + 1
-    };
-    lines.reserve(line_count);
-    if settings.precomputed.selections_per_line > 0 {
-        line_data
-            .selections
-            .reserve(line_count.saturating_mul(settings.precomputed.selections_per_line));
-    }
-    if settings.precomputed.num_infos_per_line > 0 {
-        line_data
-            .num_infos
-            .reserve(line_count.saturating_mul(settings.precomputed.num_infos_per_line));
-    }
-    if settings.precomputed.floats_per_line > 0 {
-        line_data
-            .parsed_floats
-            .reserve(line_count.saturating_mul(settings.precomputed.floats_per_line));
-    }
-    if settings.mode == SortMode::Numeric {
-        line_data.line_num_floats.reserve(line_count);
+    let needs_line_count = settings.precomputed.selections_per_line > 0
+        || settings.precomputed.num_infos_per_line > 0
+        || settings.precomputed.floats_per_line > 0
+        || settings.mode == SortMode::Numeric;
+    if needs_line_count {
+        let line_count = if read.is_empty() {
+            1
+        } else {
+            memchr_iter(separator, read).count() + 1
+        };
+        lines.reserve(line_count);
+        if settings.precomputed.selections_per_line > 0 {
+            line_data
+                .selections
+                .reserve(line_count.saturating_mul(settings.precomputed.selections_per_line));
+        }
+        if settings.precomputed.num_infos_per_line > 0 {
+            line_data
+                .num_infos
+                .reserve(line_count.saturating_mul(settings.precomputed.num_infos_per_line));
+        }
+        if settings.precomputed.floats_per_line > 0 {
+            line_data
+                .parsed_floats
+                .reserve(line_count.saturating_mul(settings.precomputed.floats_per_line));
+        }
+        if settings.mode == SortMode::Numeric {
+            line_data.line_num_floats.reserve(line_count);
+        }
     }
     let mut start = 0usize;
     let mut index = 0usize;
