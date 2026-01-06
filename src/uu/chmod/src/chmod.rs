@@ -7,9 +7,9 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
-use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
+use std::{fs, io};
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError, set_exit_code};
@@ -372,48 +372,67 @@ impl Chmoder {
 
         for filename in files {
             let file = Path::new(filename);
-            if !file.exists() {
-                if file.is_symlink() {
-                    if !self.dereference && !self.recursive {
-                        // The file is a symlink and we should not follow it
-                        // Don't try to change the mode of the symlink itself
-                        continue;
-                    }
-                    if self.recursive && self.traverse_symlinks == TraverseSymlinks::None {
-                        continue;
-                    }
 
-                    if !self.quiet {
-                        show!(ChmodError::DanglingSymlink(filename.into()));
+            match file.try_exists() {
+                Ok(exists) => {
+                    if !(exists) {
+                        if file.is_symlink() {
+                            if !self.dereference && !self.recursive {
+                                // The file is a symlink and we should not follow it
+                                // Don't try to change the mode of the symlink itself
+                                continue;
+                            }
+                            if self.recursive && self.traverse_symlinks == TraverseSymlinks::None {
+                                continue;
+                            }
+
+                            if !self.quiet {
+                                show!(ChmodError::DanglingSymlink(filename.into()));
+                                set_exit_code(1);
+                            }
+
+                            if self.verbose {
+                                println!(
+                                    "{}",
+                                    translate!("chmod-verbose-failed-dangling", "file" => filename.to_string_lossy().quote())
+                                );
+                            }
+                        } else if !self.quiet {
+                            show!(ChmodError::NoSuchFile(filename.into()));
+                        }
+                        // GNU exits with exit code 1 even if -q or --quiet are passed
+                        // So we set the exit code, because it hasn't been set yet if `self.quiet` is true.
                         set_exit_code(1);
+                        continue;
+                    } else if !self.dereference && file.is_symlink() {
+                        // The file is a symlink and we should not follow it
+                        // chmod 755 --no-dereference a/link
+                        // should not change the permissions in this case
+                        continue;
                     }
 
-                    if self.verbose {
-                        println!(
-                            "{}",
-                            translate!("chmod-verbose-failed-dangling", "file" => filename.quote())
-                        );
+                    if self.recursive && self.preserve_root && file == Path::new("/") {
+                        return Err(ChmodError::PreserveRoot("/".into()).into());
                     }
-                } else if !self.quiet {
-                    show!(ChmodError::NoSuchFile(filename.into()));
+                    if self.recursive {
+                        r = self.walk_dir_with_context(file, true).and(r);
+                    } else {
+                        r = self.chmod_file(file).and(r);
+                    }
                 }
-                // GNU exits with exit code 1 even if -q or --quiet are passed
-                // So we set the exit code, because it hasn't been set yet if `self.quiet` is true.
-                set_exit_code(1);
-                continue;
-            } else if !self.dereference && file.is_symlink() {
-                // The file is a symlink and we should not follow it
-                // chmod 755 --no-dereference a/link
-                // should not change the permissions in this case
-                continue;
-            }
-            if self.recursive && self.preserve_root && file == Path::new("/") {
-                return Err(ChmodError::PreserveRoot("/".into()).into());
-            }
-            if self.recursive {
-                r = self.walk_dir_with_context(file, true).and(r);
-            } else {
-                r = self.chmod_file(file).and(r);
+                Err(e) if e.kind() == io::ErrorKind::PermissionDenied => {
+                    if !self.quiet {
+                        show!(ChmodError::PermissionDenied(filename.into()));
+                    }
+                    set_exit_code(1);
+                }
+                // error must be no such file
+                Err(_) => {
+                    if !self.quiet {
+                        show!(ChmodError::NoSuchFile(filename.into()));
+                    }
+                    set_exit_code(1);
+                }
             }
         }
         r
@@ -632,6 +651,8 @@ impl Chmoder {
                     }
                     Ok(()) // Skip dangling symlinks
                 } else if err.kind() == std::io::ErrorKind::PermissionDenied {
+                    // These two filenames would normally be conditionally
+                    // quoted, but GNU's tests expect them to always be quoted
                     Err(ChmodError::PermissionDenied(file.into()).into())
                 } else {
                     Err(ChmodError::CannotStat(file.into()).into())

@@ -1399,3 +1399,23 @@ fn test_chmod_colored_output() {
         .stderr_contains("\x1b[31merreur\x1b[0m") // Red "erreur" in French
         .stderr_contains("\x1b[33m--invalid-option\x1b[0m"); // Yellow invalid option
 }
+
+#[test]
+fn test_chmod_locked_dir_permission_denied() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let locked_dir = "locked";
+    let file = "file";
+
+    at.mkdir(locked_dir);
+    at.touch(format!("{locked_dir}/{file}"));
+    at.set_mode(locked_dir, 0o000);
+
+    scene
+        .ucmd()
+        .arg("000")
+        .arg(format!("{locked_dir}/{file}"))
+        .fails()
+        .stderr_contains("chmod: cannot access 'locked/file': Permission denied");
+}
