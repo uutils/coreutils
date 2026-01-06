@@ -158,6 +158,22 @@ fn parse_unit_size_suffix(s: &str) -> Option<usize> {
     None
 }
 
+/// Parse delimiter argument, ensuring it's a single character.
+/// For non-UTF8 locales, we allow up to 4 bytes (max UTF-8 char length).
+fn parse_delimiter(arg: &OsString) -> Result<Vec<u8>> {
+    let bytes = os_str_as_bytes(arg).map_err(|e| e.to_string())?;
+    // TODO: Cut, NL and here need to find a better way to do locale specific character count
+    if arg.to_str().is_some_and(|s| s.chars().count() > 1)
+        || (arg.to_str().is_none() && bytes.len() > 4)
+    {
+        Err(translate!(
+            "numfmt-error-delimiter-must-be-single-character"
+        ))
+    } else {
+        Ok(bytes.to_vec())
+    }
+}
+
 fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
     let from = parse_unit(args.get_one::<String>(FROM).unwrap())?;
     let to = parse_unit(args.get_one::<String>(TO).unwrap())?;
@@ -222,19 +238,8 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
 
     let delimiter = args
         .get_one::<OsString>(DELIMITER)
-        .map_or(Ok(None), |arg| {
-            let bytes = os_str_as_bytes(arg).map_err(|e| e.to_string())?;
-            // TODO: Cut, NL and here need to find a better way to do locale specific character count
-            if arg.to_str().is_some_and(|s| s.chars().count() > 1)
-                || (arg.to_str().is_none() && bytes.len() > 4)
-            {
-                Err(translate!(
-                    "numfmt-error-delimiter-must-be-single-character"
-                ))
-            } else {
-                Ok(Some(bytes.to_vec()))
-            }
-        })?;
+        .map(parse_delimiter)
+        .transpose()?;
 
     // unwrap is fine because the argument has a default value
     let round = match args.get_one::<String>(ROUND).unwrap().as_str() {
@@ -275,8 +280,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let result = match matches.get_many::<OsString>(NUMBER) {
         Some(values) => {
             let byte_args: Vec<&[u8]> = values
-                .map(|s| os_str_as_bytes(s).expect("invalid argument"))
-                .collect();
+                .map(|s| os_str_as_bytes(s).map_err(|e| e.to_string()))
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(NumfmtError::IllegalArgument)?;
             handle_args(byte_args.into_iter(), &options)
         }
         None => {
