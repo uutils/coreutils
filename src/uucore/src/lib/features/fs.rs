@@ -166,6 +166,16 @@ impl FileInformation {
         #[cfg(any(target_os = "netbsd", not(target_pointer_width = "64")))]
         return self.0.st_ino.into();
     }
+
+    #[cfg(unix)]
+    pub fn is_symlink(&self) -> bool {
+        (self.0.st_mode as mode_t & S_IFMT) == S_IFLNK
+    }
+
+    #[cfg(windows)]
+    pub fn is_symlink(&self) -> bool {
+        (self.0.file_attributes() & windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT) != 0
+    }
 }
 
 #[cfg(unix)]
