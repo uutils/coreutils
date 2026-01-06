@@ -3158,6 +3158,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "tempfile",
+ "uu_checksum_common",
  "uucore",
 ]
 
