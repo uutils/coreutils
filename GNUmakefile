@@ -97,7 +97,6 @@ SELINUX_PROGS := \
 
 HASHSUM_PROGS := \
 	b2sum \
-	md5sum \
 	sha1sum \
 	sha224sum \
 	sha256sum \
