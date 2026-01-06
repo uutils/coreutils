@@ -4,7 +4,7 @@
 
 # spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW
 # spell-checker:ignore baddecode submodules xstrtol distros ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) greadlink gsed multihardlink texinfo CARGOFLAGS
-# spell-checker:ignore openat TOCTOU CFLAGS tmpfs
+# spell-checker:ignore openat TOCTOU CFLAGS tmpfs gnproc
 
 set -e
 
@@ -22,8 +22,8 @@ REPO_main_dir="$(dirname -- "${ME_dir}")"
 
 
 : ${PROFILE:=debug} # default profile
-export PROFILE
-CARGO_FEATURE_FLAGS=""
+export PROFILE # tell to make
+unset CARGOFLAGS
 
 ### * config (from environment with fallback defaults); note: GNU is expected to be a sibling repo directory
 
@@ -63,15 +63,15 @@ echo "UU_BUILD_DIR='${UU_BUILD_DIR}'"
 cd "${path_UUTILS}" && echo "[ pwd:'${PWD}' ]"
 
 export SELINUX_ENABLED # Run this script with=1 for testing SELinux
-[ "${SELINUX_ENABLED}" = 1 ] && CARGO_FEATURE_FLAGS="${CARGO_FEATURE_FLAGS} selinux"
+[ "${SELINUX_ENABLED}" = 1 ] && CARGOFLAGS="${CARGOFLAGS} selinux"
 
 # Trim leading whitespace from feature flags
-CARGO_FEATURE_FLAGS="$(echo "${CARGO_FEATURE_FLAGS}" | sed -e 's/^[[:space:]]*//')"
+CARGOFLAGS="$(echo "${CARGOFLAGS}" | sed -e 's/^[[:space:]]*//')"
 
 # If we have feature flags, format them correctly for cargo
-if [ ! -z "${CARGO_FEATURE_FLAGS}" ]; then
-    CARGO_FEATURE_FLAGS="--features ${CARGO_FEATURE_FLAGS}"
-    echo "Building with cargo flags: ${CARGO_FEATURE_FLAGS}"
+if [ ! -z "${CARGOFLAGS}" ]; then
+    CARGOFLAGS="--features ${CARGOFLAGS}"
+    echo "Building with cargo flags: ${CARGOFLAGS}"
 fi
 
 # Set up quilt for patch management
@@ -87,18 +87,20 @@ else
 fi
 cd -
 
-# Pass the feature flags to make, which will pass them to cargo
-"${MAKE}" PROFILE="${PROFILE}" SKIP_UTILS=more CARGOFLAGS="${CARGO_FEATURE_FLAGS}"
-# min test for SELinux
-[ "${SELINUX_ENABLED}" = 1 ] && touch g && "${PROFILE}"/stat -c%C g && rm g
-
-cp "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests rename this script before running, to avoid confusion with the make target
-# Create *sum binaries
-for sum in b2sum md5sum sha1sum sha224sum sha256sum sha384sum sha512sum; do
-    sum_path="${UU_BUILD_DIR}/${sum}"
-    test -f "${sum_path}" || (cd ${UU_BUILD_DIR} && ln -s "hashsum" "${sum}")
-done
-test -f "${UU_BUILD_DIR}/[" || (cd ${UU_BUILD_DIR} && ln -s "test" "[")
+export CARGOFLAGS # tell to make
+# bug: seq with MULTICALL=y breaks env-signal-handler.sh
+ "${MAKE}" UTILS="install seq"
+ln -vf "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests use renamed install to ginstall
+if [ "${SELINUX_ENABLED}" = 1 ];then
+    # Build few utils for SELinux for faster build. MULTICALL=y fails...
+    "${MAKE}" UTILS="cat chcon cp cut echo env groups id ln ls mkdir mkfifo mknod mktemp mv printf rm rmdir runcon stat test touch tr true uname wc whoami"
+else
+    # Use MULTICALL=y for faster build
+    "${MAKE}" MULTICALL=y SKIP_UTILS="install more seq"
+    for binary in $("${UU_BUILD_DIR}"/coreutils --list)
+        do ln -vf "${UU_BUILD_DIR}/coreutils" "${UU_BUILD_DIR}/${binary}"
+    done
+fi
 
 ##
 
@@ -108,10 +110,7 @@ cd "${path_GNU}" && echo "[ pwd:'${PWD}' ]"
 # Note that some test (e.g. runcon/runcon-compute.sh) incorrectly passes by this
 for binary in $(./build-aux/gen-lists-of-programs.sh --list-progs); do
     bin_path="${UU_BUILD_DIR}/${binary}"
-    test -f "${bin_path}" || {
-        echo "'${binary}' was not built with uutils, using the 'false' program"
-        cp "${UU_BUILD_DIR}/false" "${bin_path}"
-    }
+    test -f "${bin_path}" || cp -v /usr/bin/false "${bin_path}"
 done
 
 # Always update the PATH to test the uutils coreutils instead of the GNU coreutils
@@ -125,6 +124,8 @@ if test -f gnu-built; then
 else
     # Disable useless checks
     "${SED}" -i 's|check-texinfo: $(syntax_checks)|check-texinfo:|' doc/local.mk
+    # Stop manpage generation for cleaner log
+    : > man/local.mk
     # Use CFLAGS for best build time since we discard GNU coreutils
     CFLAGS="${CFLAGS} -pipe -O0 -s" ./configure -C --quiet --disable-gcc-warnings --disable-nls --disable-dependency-tracking --disable-bold-man-page-references \
       --enable-single-binary=symlinks --enable-install-program="arch,kill,uptime,hostname" \
@@ -135,8 +136,10 @@ else
     "${SED}" -i 's|diff -c|diff -u|g' tests/Coreutils.pm
 
     # Skip make if possible
-    # Use our nproc for *BSD and macOS
-    test -f src/getlimits || "${MAKE}" -j "$("${UU_BUILD_DIR}/nproc")"
+    # Use GNU nproc for *BSD and macOS
+    NPROC="$(command -v nproc||command -v gnproc)"
+    test "${SELINUX_ENABLED}" = 1 && touch src/getlimits # SELinux tests does not use it
+    test -f src/getlimits || "${MAKE}" -j "$("${NPROC}")"
     cp -f src/getlimits "${UU_BUILD_DIR}"
 
     # Handle generated factor tests
@@ -317,9 +320,9 @@ echo "n_stat1 = \$n_stat1"\n\
 echo "n_stat2 = \$n_stat2"\n\
 test \$n_stat1 -ge \$n_stat2 \\' tests/ls/stat-free-color.sh
 
-# no need to replicate this output with hashsum
+# clap changes the error message. Check exit code only.
 "${SED}" -i -e  "s|Try 'md5sum --help' for more information.\\\n||" tests/cksum/md5sum.pl
-
+"${SED}" -i '/check-ignore-missing-4/,/EXIT/c \     ['\''check-ignore-missing-4'\'', '\''--ignore-missing'\'', {IN=> {f=> '\'''\''}}, {ERR_SUBST=>"s/.*//s"}, {EXIT=> 1}],' tests/cksum/md5sum.pl
 # Our ls command always outputs ANSI color codes prepended with a zero. However,
 # in the case of GNU, it seems inconsistent. Nevertheless, it looks like it
 # doesn't matter whether we prepend a zero or not.
