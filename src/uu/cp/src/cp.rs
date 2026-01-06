@@ -1325,9 +1325,7 @@ fn is_enotsup_error(error: &CpError) -> bool {
     const EOPNOTSUPP: i32 = 95;
 
     match error {
-        CpError::IoErr(e) | CpError::IoErrContext(e, _) => {
-            e.raw_os_error() == Some(EOPNOTSUPP)
-        }
+        CpError::IoErr(e) | CpError::IoErrContext(e, _) => e.raw_os_error() == Some(EOPNOTSUPP),
         _ => false,
     }
 }

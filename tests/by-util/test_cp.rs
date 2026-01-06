@@ -2605,7 +2605,7 @@ fn test_cp_reflink_insufficient_permission() {
         .arg("unreadable")
         .arg(TEST_EXISTING_FILE)
         .fails()
-        .stderr_only("cp: 'unreadable' -> 'existing_file.txt': Permission denied (os error 13)\n");
+        .stderr_only("cp: 'unreadable' -> 'existing_file.txt': Permission denied\n");
 }
 
 #[cfg(target_os = "linux")]
