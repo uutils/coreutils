@@ -43,6 +43,7 @@ pub struct ChunkContents<'a> {
     pub lines: Vec<Line<'a>>,
     pub line_data: LineData<'a>,
     pub token_buffer: Vec<Range<usize>>,
+    pub line_breaks: Vec<usize>,
 }
 
 #[derive(Debug)]
@@ -63,6 +64,7 @@ impl Chunk {
             contents.line_data.parsed_floats.clear();
             contents.line_data.line_num_floats.clear();
             contents.token_buffer.clear();
+            contents.line_breaks.clear();
             let lines = unsafe {
                 // SAFETY: It is safe to (temporarily) transmute to a vector of lines with a longer lifetime,
                 // because the vector is empty.
@@ -86,6 +88,7 @@ impl Chunk {
                 std::mem::take(&mut contents.line_data.parsed_floats),
                 std::mem::take(&mut contents.line_data.line_num_floats),
                 std::mem::take(&mut contents.token_buffer),
+                std::mem::take(&mut contents.line_breaks),
             )
         });
         RecycledChunk {
@@ -95,6 +98,7 @@ impl Chunk {
             parsed_floats: recycled_contents.3,
             line_num_floats: recycled_contents.4,
             token_buffer: recycled_contents.5,
+            line_breaks: recycled_contents.6,
             buffer: self.into_owner(),
         }
     }
@@ -115,6 +119,7 @@ pub struct RecycledChunk {
     parsed_floats: Vec<GeneralBigDecimalParseResult>,
     line_num_floats: Vec<Option<f64>>,
     token_buffer: Vec<Range<usize>>,
+    line_breaks: Vec<usize>,
     buffer: Vec<u8>,
 }
 
@@ -127,6 +132,7 @@ impl RecycledChunk {
             parsed_floats: Vec::new(),
             line_num_floats: Vec::new(),
             token_buffer: Vec::new(),
+            line_breaks: Vec::new(),
             buffer: vec![0; capacity],
         }
     }
@@ -171,6 +177,7 @@ pub fn read<T: Read>(
         parsed_floats,
         line_num_floats,
         mut token_buffer,
+        mut line_breaks,
         mut buffer,
     } = recycled_chunk;
     if buffer.len() < carry_over.len() {
@@ -212,6 +219,7 @@ pub fn read<T: Read>(
                 &mut lines,
                 &mut line_data,
                 &mut token_buffer,
+                &mut line_breaks,
                 separator,
                 settings,
             );
@@ -219,6 +227,7 @@ pub fn read<T: Read>(
                 lines,
                 line_data,
                 token_buffer,
+                line_breaks,
             })
         });
         sender.send(payload?).unwrap();
@@ -232,6 +241,7 @@ fn parse_lines<'a>(
     lines: &mut Vec<Line<'a>>,
     line_data: &mut LineData<'a>,
     token_buffer: &mut Vec<Range<usize>>,
+    line_breaks: &mut Vec<usize>,
     separator: u8,
     settings: &GlobalSettings,
 ) {
@@ -243,14 +253,14 @@ fn parse_lines<'a>(
     assert!(line_data.parsed_floats.is_empty());
     assert!(line_data.line_num_floats.is_empty());
     token_buffer.clear();
+    line_breaks.clear();
     if token_buffer.capacity() > MAX_TOKEN_BUFFER_ELEMS {
         token_buffer.shrink_to(MAX_TOKEN_BUFFER_ELEMS);
     }
-    let line_count = if read.is_empty() {
-        1
-    } else {
-        memchr_iter(separator, read).count() + 1
-    };
+    for sep_idx in memchr_iter(separator, read) {
+        line_breaks.push(sep_idx);
+    }
+    let line_count = line_breaks.len() + 1;
     lines.reserve(line_count);
     if settings.precomputed.selections_per_line > 0 {
         line_data
@@ -272,7 +282,7 @@ fn parse_lines<'a>(
     }
     let mut start = 0usize;
     let mut index = 0usize;
-    for sep_idx in memchr_iter(separator, read) {
+    for &sep_idx in line_breaks.iter() {
         let line = &read[start..sep_idx];
         lines.push(Line::create(line, index, line_data, token_buffer, settings));
         index += 1;
