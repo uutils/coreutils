@@ -17,7 +17,7 @@ touch-error-missing-file-operand = missing file operand
   Try '{ $help_command } --help' for more information.
 touch-error-setting-times-of = setting times of { $filename }
 touch-error-setting-times-no-such-file = setting times of { $filename }: No such file or directory
-touch-error-cannot-touch = cannot touch { $filename }
+touch-error-cannot-touch = cannot touch { $filename }: { $error }
 touch-error-no-such-file-or-directory = No such file or directory
 touch-error-failed-to-get-attributes = failed to get attributes of { $path }
 touch-error-setting-times-of-path = setting times of { $path }

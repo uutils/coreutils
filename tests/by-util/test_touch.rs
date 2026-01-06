@@ -781,7 +781,8 @@ fn test_touch_system_fails() {
 fn test_touch_trailing_slash() {
     let file = "no-file/";
     new_ucmd!().args(&[file]).fails().stderr_only(format!(
-        "touch: cannot touch '{file}': No such file or directory\n"
+        // This conforms with GNU coreutils 9.9 behavior.
+        "touch: setting times of '{file}': No such file or directory\n"
     ));
 }
 

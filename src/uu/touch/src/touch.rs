@@ -17,17 +17,19 @@ use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command};
 use filetime::{FileTime, set_file_times, set_symlink_file_times};
 use jiff::{Timestamp, Zoned};
 use std::borrow::Cow;
-use std::ffi::{OsStr, OsString};
-use std::fs::{self, File};
-use std::io::{Error, ErrorKind};
+use std::ffi::OsString;
+use std::fs;
+use std::io::ErrorKind;
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError};
-#[cfg(target_os = "linux")]
+use uucore::error::{FromIo, UIoError, UResult, USimpleError};
+use uucore::format_usage;
+#[cfg(any(unix, target_os = "macos"))]
 use uucore::libc;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
-use uucore::translate;
-use uucore::{format_usage, show};
+use uucore::{show, translate};
 
 use crate::error::TouchError;
 
@@ -417,13 +419,19 @@ pub fn touch(files: &[InputFile], opts: &Options) -> Result<(), TouchError> {
             InputFile::Stdout => (Cow::Owned(pathbuf_from_stdout()?), true),
             InputFile::Path(path) => (Cow::Borrowed(path), false),
         };
-        touch_file(&path, is_stdout, opts, atime, mtime).map_err(|e| {
+        if let Err(e) = touch_file(&path, is_stdout, opts, atime, mtime).map_err(|e| {
             TouchError::TouchFileError {
                 path: path.into_owned(),
                 index: ind,
                 error: e,
             }
-        })?;
+        }) {
+            if opts.strict {
+                return Err(e);
+            }
+            // If not in strict mode, show the error, but move to the next file.
+            show!(e);
+        }
     }
 
     Ok(())
@@ -444,70 +452,57 @@ fn touch_file(
     atime: FileTime,
     mtime: FileTime,
 ) -> UResult<()> {
-    let filename = if is_stdout {
-        OsStr::new("-")
-    } else {
-        path.as_os_str()
-    };
+    // A symlink must exist to set its times, even with -h/--no-dereference.
+    // We get "setting times of" error later if it doesn't exist. This is
+    // handled by update_times() and is consistent with GNU.
+    if opts.no_create || opts.no_deref {
+        return update_times(path, is_stdout, opts, atime, mtime);
+    }
 
-    let metadata_result = if opts.no_deref {
-        path.symlink_metadata()
-    } else {
-        path.metadata()
-    };
+    // Use OpenOptions to create the file if it doesn't exist. This is used in lieu of
+    // stat() to avoid TOCTOU issues.
 
-    if let Err(e) = metadata_result {
-        if e.kind() != ErrorKind::NotFound {
-            return Err(e.map_err_context(
-                || translate!("touch-error-setting-times-of", "filename" => filename.quote()),
-            ));
-        }
+    #[cfg(not(unix))]
+    let touched_file = fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(false)
+        .open(path);
 
-        if opts.no_create {
-            return Ok(());
-        }
+    // We need to add UNIX flags O_NOCTTY and O_NONBLOCK to match GNU `touch` behavior when
+    // on UNIX systems. Without O_NONBLOCK, opening something like a FIFO would block indefinitely.
+    #[cfg(unix)]
+    let touched_file = fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(false)
+        // Use custom flags on UNIX targets to add O_NOCTTY and O_NONBLOCK. O_NONBLOCK is
+        // necessary for special files like a FIFO to avoid blocking behavior.
+        .custom_flags(libc::O_NOCTTY | libc::O_NONBLOCK)
+        .open(path);
 
-        if opts.no_deref {
-            let e = USimpleError::new(
-                1,
-                translate!("touch-error-setting-times-no-such-file", "filename" => filename.quote()),
-            );
-            if opts.strict {
-                return Err(e);
-            }
-            show!(e);
-            return Ok(());
-        }
+    if let Err(e) = touched_file {
+        // We have to check to see if the reason .open() failed above is something
+        // that is fatal or something expected. The former is handled here, whereas
+        // the latter is handled in update_times().
+        let err_good_cause = e.kind() != ErrorKind::IsADirectory;
 
-        if let Err(e) = File::create(path) {
-            // we need to check if the path is the path to a directory (ends with a separator)
-            // we can't use File::create to create a directory
-            // we cannot use path.is_dir() because it calls fs::metadata which we already called
-            // when stable, we can change to use e.kind() == std::io::ErrorKind::IsADirectory
-            let is_directory = if let Some(last_char) = path.to_string_lossy().chars().last() {
-                last_char == std::path::MAIN_SEPARATOR
-            } else {
-                false
-            };
-            if is_directory {
-                let custom_err = Error::other(translate!("touch-error-no-such-file-or-directory"));
-                return Err(custom_err.map_err_context(
-                    || translate!("touch-error-cannot-touch", "filename" => filename.quote()),
-                ));
-            }
-            let e = e.map_err_context(
-                || translate!("touch-error-cannot-touch", "filename" => path.quote()),
-            );
-            if opts.strict {
-                return Err(e);
-            }
-            show!(e);
-            return Ok(());
-        }
+        // For UNIX/MAC, we also have to check special files, like FIFOs.
+        // If we can't unwrap a raw OS error, default it to 0 so that it's considered true
+        // for the first Boolean condition.
+        #[cfg(any(unix, target_os = "macos"))]
+        let err_good_cause = e.raw_os_error().unwrap_or(0) != libc::ENXIO && err_good_cause;
 
-        // Minor optimization: if no reference time, timestamp, or date was specified, we're done.
-        if opts.source == Source::Now && opts.date.is_none() {
-            return Ok(());
+        // err_good_cause indicates that the error is not one we should ignore
+        if err_good_cause {
+            return Err(TouchError::TouchFileError {
+            path: path.to_owned(),
+            index: 0,
+            error: USimpleError::new(
+            1,
+            translate!("touch-error-cannot-touch", "filename" => path.quote(), "error" => UIoError::from(e)),
+        ),
+            }.into());
         }
     }
 
@@ -579,12 +574,31 @@ fn update_times(
     // sets the file access and modification times for a file or a symbolic link.
     // The filename, access time (atime), and modification time (mtime) are provided as inputs.
 
-    if opts.no_deref && !is_stdout {
+    let result = if opts.no_deref && !is_stdout {
         set_symlink_file_times(path, atime, mtime)
     } else {
         set_file_times(path, atime, mtime)
+    };
+
+    // Originally, the metadata stat() in touch_file() would catch "no create",
+    // but since it was removed to fix TOCTOU issues, we need to handle it here.
+    if let Err(ref e) = result {
+        if opts.no_create && e.kind() != ErrorKind::NotADirectory {
+            #[cfg(any(unix, target_os = "macos"))]
+            if e.raw_os_error() != Some(libc::ELOOP) {
+                // ELOOP is returned when trying to stat a dangling symlink with -h/--no-dereference.
+                // However, the ErrorKind is unstable in Rust, so we have to kind
+                // of hack it like this.
+                return Ok(());
+            }
+            #[cfg(not(any(unix, target_os = "macos")))]
+            return Ok(());
+        }
+        return result.map_err_context(
+            || translate!("touch-error-setting-times-of-path", "path" => path.quote()),
+        );
     }
-    .map_err_context(|| translate!("touch-error-setting-times-of-path", "path" => path.quote()))
+    Ok(())
 }
 
 /// Get metadata of the provided path
