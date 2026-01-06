@@ -228,6 +228,16 @@ jobs:
       env:
         RUSTFLAGS: "-Awarnings"
         RUST_BACKTRACE: "1"
+    - name: Upload test results to Codecov
+      if: ${{ !cancelled() }}
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        report_type: test_results
+        files: target/nextest/ci/junit.xml
+        disable_search: true
+        flags: msrv,${{ matrix.job.os }}
+        fail_ci_if_error: false
 
   deps:
     name: Dependencies
@@ -300,6 +310,16 @@ jobs:
       run: make nextest PROFILE=ci CARGOFLAGS="--hide-progress-bar"
       env:
         RUST_BACKTRACE: "1"
+    - name: Upload test results to Codecov
+      if: ${{ !cancelled() }}
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        report_type: test_results
+        files: target/nextest/ci/junit.xml
+        disable_search: true
+        flags: makefile,${{ matrix.job.os }}
+        fail_ci_if_error: false
     - name: "`make install PROG_PREFIX=uu- PROFILE=release-fast COMPLETIONS=n MANPAGES=n LOCALES=n`"
       shell: bash
       run: |
@@ -410,6 +430,16 @@ jobs:
       run: cargo nextest run --hide-progress-bar --profile ci --features ${{ matrix.job.features }}
       env:
         RUST_BACKTRACE: "1"
+    - name: Upload test results to Codecov
+      if: ${{ !cancelled() }}
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        report_type: test_results
+        files: target/nextest/ci/junit.xml
+        disable_search: true
+        flags: stable,${{ matrix.job.os }}
+        fail_ci_if_error: false
 
   build_rust_nightly:
     name: Build/nightly
@@ -439,6 +469,16 @@ jobs:
       run: cargo nextest run --hide-progress-bar --profile ci --features ${{ matrix.job.features }}
       env:
         RUST_BACKTRACE: "1"
+    - name: Upload test results to Codecov
+      if: ${{ !cancelled() }}
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        report_type: test_results
+        files: target/nextest/ci/junit.xml
+        disable_search: true
+        flags: nightly,${{ matrix.job.os }}
+        fail_ci_if_error: false
 
   compute_size:
     name: Binary sizes
@@ -1157,6 +1197,16 @@ jobs:
         ## flags: IntegrationTests, UnitTests, ${{ steps.vars.outputs.CODECOV_FLAGS }}
         flags: ${{ steps.vars.outputs.CODECOV_FLAGS }}
         name: codecov-umbrella
+        fail_ci_if_error: false
+    - name: Upload test results to Codecov
+      if: ${{ !cancelled() }}
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        report_type: test_results
+        files: target/nextest/coverage/junit.xml
+        disable_search: true
+        flags: coverage,${{ matrix.job.os }}
         fail_ci_if_error: false
 
   test_separately:
