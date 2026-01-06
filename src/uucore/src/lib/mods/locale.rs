@@ -157,7 +157,7 @@ fn create_bundle(
     try_add_resource_from(get_locales_dir(util_name).ok());
 
     // checksum binaries also require fluent files from the checksum_common crate
-    if ["cksum"].contains(&util_name) {
+    if ["cksum", "md5sum"].contains(&util_name) {
         try_add_resource_from(get_locales_dir("checksum_common").ok());
     }
 
