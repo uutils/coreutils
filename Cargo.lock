@@ -3295,6 +3295,7 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
+ "uu_checksum_common",
  "uucore",
 ]
 
