@@ -13,7 +13,7 @@ use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 
 use uucore::checksum::compute::{
-    ChecksumComputeOptions, figure_out_output_format, perform_checksum_computation,
+    ChecksumComputeOptions, OutputFormat, perform_checksum_computation,
 };
 use uucore::checksum::validate::{
     ChecksumValidateOptions, ChecksumVerbose, perform_checksum_validation,
@@ -121,9 +121,6 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
 
     let args = iter::once(program.clone()).chain(args);
 
-    // Default binary in Windows, text mode otherwise
-    let binary_flag_default = cfg!(windows);
-
     let (command, is_hashsum_bin) = uu_app(&binary_name);
 
     // FIXME: this should use try_get_matches_from() and crash!(), but at the moment that just
@@ -148,13 +145,6 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         (AlgoKind::from_bin_name(&binary_name)?, length)
     };
 
-    let binary = if matches.get_flag("binary") {
-        true
-    } else if matches.get_flag("text") {
-        false
-    } else {
-        binary_flag_default
-    };
     let check = matches.get_flag("check");
 
     let ignore_missing = matches.get_flag("ignore-missing");
@@ -196,16 +186,11 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
 
     let algo = SizedAlgoKind::from_unsized(algo_kind, length)?;
     let line_ending = LineEnding::from_zero_flag(matches.get_flag("zero"));
+    let output_format = OutputFormat::from_standalone(std::env::args_os())?;
 
     let opts = ChecksumComputeOptions {
         algo_kind: algo,
-        output_format: figure_out_output_format(
-            algo,
-            matches.get_flag(options::TAG),
-            binary,
-            /* raw */ false,
-            /* base64: */ false,
-        ),
+        output_format,
         line_ending,
     };
 

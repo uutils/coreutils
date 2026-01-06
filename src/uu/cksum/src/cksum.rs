@@ -9,7 +9,7 @@ use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use uucore::checksum::compute::{
-    ChecksumComputeOptions, figure_out_output_format, perform_checksum_computation,
+    ChecksumComputeOptions, OutputFormat, perform_checksum_computation,
 };
 use uucore::checksum::validate::{
     ChecksumValidateOptions, ChecksumVerbose, perform_checksum_validation,
@@ -162,20 +162,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Set the default algorithm to CRC when not '--check'ing.
     let algo_kind = algo_cli.unwrap_or(AlgoKind::Crc);
 
-    let tag = !matches.get_flag(options::UNTAGGED); // Making TAG default at clap blocks --untagged 
-    let binary = matches.get_flag(options::BINARY);
-
     let algo = SizedAlgoKind::from_unsized(algo_kind, length)?;
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));
 
     let opts = ChecksumComputeOptions {
         algo_kind: algo,
-        output_format: figure_out_output_format(
-            algo,
-            tag,
-            binary,
-            matches.get_flag(options::RAW),
-            matches.get_flag(options::BASE64),
+        output_format: OutputFormat::from_cksum(
+            algo_kind,
+            // Making TAG default at clap blocks --untagged
+            /* tag */
+            !matches.get_flag(options::UNTAGGED),
+            /* binary */ matches.get_flag(options::BINARY),
+            /* raw */ matches.get_flag(options::RAW),
+            /* base64 */ matches.get_flag(options::BASE64),
         ),
         line_ending,
     };
