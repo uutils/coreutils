@@ -7469,3 +7469,28 @@ fn test_cp_to_existing_file_permissions() {
     let new_dst_mode = std::fs::metadata(&dst_path).unwrap().permissions().mode();
     assert_eq!(dst_mode, new_dst_mode);
 }
+
+/// Test xattr ENOTSUP handling: -a/--preserve=all silent, --preserve=xattr errors
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_xattr_enotsup_handling() {
+    use std::process::Command;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("src", "x");
+
+    if Command::new("setfattr")
+        .args(["-n", "user.t", "-v", "v", &at.plus_as_string("src")])
+        .status()
+        .map_or(false, |s| s.success())
+    {
+        // -a: silent success
+        scene.ucmd().args(&["-a", &at.plus_as_string("src"), "/dev/shm/t1"]).succeeds().no_stderr();
+        // --preserve=all: silent success
+        scene.ucmd().args(&["--preserve=all", &at.plus_as_string("src"), "/dev/shm/t2"]).succeeds().no_stderr();
+        // --preserve=xattr: must fail with proper message
+        scene.ucmd().args(&["--preserve=xattr", &at.plus_as_string("src"), "/dev/shm/t3"])
+            .fails().stderr_contains("setting attributes").stderr_contains("Operation not supported");
+        for f in ["/dev/shm/t1", "/dev/shm/t2", "/dev/shm/t3"] { std::fs::remove_file(f).ok(); }
+    }
+}

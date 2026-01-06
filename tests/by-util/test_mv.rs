@@ -2856,3 +2856,22 @@ fn test_mv_no_prompt_unwriteable_file_with_no_tty() {
     assert!(!at.file_exists("source_notty"));
     assert!(at.file_exists("target_notty"));
 }
+
+/// Test mv silently succeeds when dest filesystem doesn't support xattrs (ENOTSUP)
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_xattr_enotsup_silent() {
+    use std::process::Command;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("src", "x");
+
+    if Command::new("setfattr")
+        .args(["-n", "user.t", "-v", "v", &at.plus_as_string("src")])
+        .status()
+        .map_or(false, |s| s.success())
+    {
+        scene.ucmd().arg(&at.plus_as_string("src")).arg("/dev/shm/mv_test").succeeds().no_stderr();
+        std::fs::remove_file("/dev/shm/mv_test").ok();
+    }
+}

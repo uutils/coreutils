@@ -215,3 +215,5 @@ TUNABLES
 tunables
 VMULL
 vmull
+ENOTSUP
+enotsup

@@ -1153,13 +1153,11 @@ fn copy_file_with_hardlinks_helper(
         rename_symlink_fallback(from, to)?;
     } else {
         // Copy a regular file.
+        fs::copy(from, to)?;
+        // Copy xattrs, ignoring ENOTSUP errors (filesystem doesn't support xattrs)
         #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
         {
-            fs::copy(from, to).and_then(|_| fsxattr::copy_xattrs(&from, &to))?;
-        }
-        #[cfg(any(target_os = "macos", target_os = "redox"))]
-        {
-            fs::copy(from, to)?;
+            let _ = copy_xattrs_if_supported(from, to);
         }
     }
 
@@ -1201,16 +1199,30 @@ fn rename_file_fallback(
     }
 
     // Regular file copy
-    #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
     fs::copy(from, to)
-        .and_then(|_| fsxattr::copy_xattrs(&from, &to))
-        .and_then(|_| fs::remove_file(from))
         .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
-    #[cfg(any(target_os = "macos", target_os = "redox", not(unix)))]
-    fs::copy(from, to)
-        .and_then(|_| fs::remove_file(from))
+
+    // Copy xattrs, ignoring ENOTSUP errors (filesystem doesn't support xattrs)
+    #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
+    {
+        let _ = copy_xattrs_if_supported(from, to);
+    }
+
+    fs::remove_file(from)
         .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
     Ok(())
+}
+
+/// Copy xattrs from source to destination, ignoring ENOTSUP/EOPNOTSUPP errors.
+/// These errors indicate the filesystem doesn't support extended attributes,
+/// which is acceptable when moving files across filesystems.
+#[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
+fn copy_xattrs_if_supported(from: &Path, to: &Path) -> io::Result<()> {
+    match fsxattr::copy_xattrs(from, to) {
+        Ok(()) => Ok(()),
+        Err(e) if e.raw_os_error() == Some(libc::EOPNOTSUPP) => Ok(()),
+        Err(e) => Err(e),
+    }
 }
 
 fn is_empty_dir(path: &Path) -> bool {

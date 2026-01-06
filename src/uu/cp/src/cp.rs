@@ -1316,6 +1316,22 @@ fn parse_path_args(
     Ok((paths, target))
 }
 
+/// Check if an error is ENOTSUP/EOPNOTSUPP (operation not supported).
+/// This is used to suppress xattr errors on filesystems that don't support them.
+fn is_enotsup_error(error: &CpError) -> bool {
+    #[cfg(unix)]
+    const EOPNOTSUPP: i32 = libc::EOPNOTSUPP;
+    #[cfg(not(unix))]
+    const EOPNOTSUPP: i32 = 95;
+
+    match error {
+        CpError::IoErr(e) | CpError::IoErrContext(e, _) => {
+            e.raw_os_error() == Some(EOPNOTSUPP)
+        }
+        _ => false,
+    }
+}
+
 /// When handling errors, we don't always want to show them to the user. This function handles that.
 fn show_error_if_needed(error: &CpError) {
     match error {
@@ -1327,6 +1343,11 @@ fn show_error_if_needed(error: &CpError) {
         CpError::Skipped(_) => {
             // touch a b && echo "n"|cp -i a b && echo $?
             // should return an error from GNU 9.2
+        }
+        // Format IoErrContext using strip_errno to remove "(os error N)" suffix
+        // for GNU-compatible output
+        CpError::IoErrContext(io_err, context) => {
+            show_error!("{}: {}", context, uucore::error::strip_errno(io_err));
         }
         _ => {
             show_error!("{error}");
@@ -1629,6 +1650,10 @@ impl OverwriteMode {
 /// Handles errors for attributes preservation. If the attribute is not required, and
 /// errored, tries to show error (see `show_error_if_needed` for additional behavior details).
 /// If it's required, then the error is thrown.
+///
+/// Note: ENOTSUP/EOPNOTSUPP errors are silently ignored when not required, as per GNU cp
+/// documentation: "Try to preserve SELinux security context and extended attributes (xattr),
+/// but ignore any failure to do that and print no corresponding diagnostic."
 fn handle_preserve<F: Fn() -> CopyResult<()>>(p: &Preserve, f: F) -> CopyResult<()> {
     match p {
         Preserve::No { .. } => {}
@@ -1636,8 +1661,12 @@ fn handle_preserve<F: Fn() -> CopyResult<()>>(p: &Preserve, f: F) -> CopyResult<
             let result = f();
             if *required {
                 result?;
-            } else if let Err(error) = result {
-                show_error_if_needed(&error);
+            } else if let Err(ref error) = result {
+                // Suppress ENOTSUP errors when preservation is optional.
+                // This matches GNU cp behavior for -a and --preserve=all.
+                if !is_enotsup_error(error) {
+                    show_error_if_needed(error);
+                }
             }
         }
     }
@@ -1674,8 +1703,13 @@ fn copy_extended_attrs(source: &Path, dest: &Path) -> CopyResult<()> {
         fs::set_permissions(dest, revert_perms)?;
     }
 
-    // If copying xattrs failed, propagate that error now.
-    copy_xattrs_result?;
+    // If copying xattrs failed, propagate that error now with context.
+    copy_xattrs_result.map_err(|e| {
+        CpError::IoErrContext(
+            e,
+            translate!("cp-error-setting-attributes", "path" => dest.quote()),
+        )
+    })?;
 
     Ok(())
 }
