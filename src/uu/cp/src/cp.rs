@@ -1390,7 +1390,8 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
             let dest = construct_dest_path(source, target, target_type, options)
                 .unwrap_or_else(|_| target.to_path_buf());
 
-            if FileInformation::from_path(&dest, false).is_ok_and(|info| !info.is_symlink())
+            if FileInformation::from_path(&dest, true).is_ok()
+                && !fs::symlink_metadata(&dest).is_ok_and(|m| m.file_type().is_symlink())
                 // if both `source` and `dest` are symlinks, it should be considered as an overwrite.
                 || fs::metadata(source).is_ok()
                     && fs::symlink_metadata(source)?.file_type().is_symlink()
