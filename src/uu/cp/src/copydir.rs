@@ -22,7 +22,6 @@ use uucore::fs::{
     FileInformation, MissingHandling, ResolveMode, canonicalize, path_ends_with_terminator,
 };
 use uucore::show;
-use uucore::show_error;
 use uucore::translate;
 use uucore::uio_error;
 use walkdir::{DirEntry, WalkDir};
@@ -513,7 +512,7 @@ pub(crate) fn copy_directory(
             }
 
             // Print an error message, but continue traversing the directory.
-            Err(e) => show_error!("{e}"),
+            Err(e) => show!(CpError::WalkDirErr(e)),
         }
     }
 
