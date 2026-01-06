@@ -5,12 +5,12 @@
 
 // spell-checker:ignore bitlen
 
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{self, BufReader, Read, Write};
 use std::path::Path;
 
-use crate::checksum::{ChecksumError, SizedAlgoKind, digest_reader, escape_filename};
+use crate::checksum::{AlgoKind, ChecksumError, SizedAlgoKind, digest_reader, escape_filename};
 use crate::error::{FromIo, UResult, USimpleError};
 use crate::line_ending::LineEnding;
 use crate::sum::DigestOutput;
@@ -103,42 +103,76 @@ impl OutputFormat {
     fn is_raw(&self) -> bool {
         *self == Self::Raw
     }
-}
 
-/// Use already-processed arguments to decide the output format.
-pub fn figure_out_output_format(
-    algo: SizedAlgoKind,
-    tag: bool,
-    binary: bool,
-    raw: bool,
-    base64: bool,
-) -> OutputFormat {
-    // Raw output format takes precedence over anything else.
-    if raw {
-        return OutputFormat::Raw;
-    }
+    /// Find the correct output format for cksum.
+    pub fn from_cksum(algo: AlgoKind, tag: bool, binary: bool, raw: bool, base64: bool) -> Self {
+        // Raw output format takes precedence over anything else.
+        if raw {
+            return Self::Raw;
+        }
 
-    // Then, if the algo is legacy, takes precedence over the rest
-    if algo.is_legacy() {
-        return OutputFormat::Legacy;
-    }
+        // Then, if the algo is legacy, takes precedence over the rest
+        if algo.is_legacy() {
+            return Self::Legacy;
+        }
 
-    let digest_format = if base64 {
-        DigestFormat::Base64
-    } else {
-        DigestFormat::Hexadecimal
-    };
-
-    // After that, decide between tagged and untagged output
-    if tag {
-        OutputFormat::Tagged(digest_format)
-    } else {
-        let reading_mode = if binary {
-            ReadingMode::Binary
+        let digest_format = if base64 {
+            DigestFormat::Base64
         } else {
-            ReadingMode::Text
+            DigestFormat::Hexadecimal
         };
-        OutputFormat::Untagged(digest_format, reading_mode)
+
+        // After that, decide between tagged and untagged output
+        if tag {
+            Self::Tagged(digest_format)
+        } else {
+            let reading_mode = if binary {
+                ReadingMode::Binary
+            } else {
+                ReadingMode::Text
+            };
+            Self::Untagged(digest_format, reading_mode)
+        }
+    }
+
+    /// Find the correct output format for a standalone checksum util (b2sum,
+    /// md5sum, etc)
+    ///
+    /// Since standalone utils can't use the Raw or Legacy output format, it is
+    /// decided only using the --tag, --binary and --text arguments.
+    pub fn from_standalone(args: impl Iterator<Item = OsString>) -> UResult<Self> {
+        let mut text = true;
+        let mut tag = false;
+
+        for arg in args {
+            if arg == "--" {
+                break;
+            } else if arg == "--tag" {
+                tag = true;
+                text = false;
+            } else if arg == "--binary" || arg == "-b" {
+                text = false;
+            } else if arg == "--text" || arg == "-t" {
+                // Finding a `--text` after `--tag` is an error.
+                if tag {
+                    return Err(ChecksumError::TextAfterTag.into());
+                }
+                text = true;
+            }
+        }
+
+        if tag {
+            Ok(Self::Tagged(DigestFormat::Hexadecimal))
+        } else {
+            Ok(Self::Untagged(
+                DigestFormat::Hexadecimal,
+                if text {
+                    ReadingMode::Text
+                } else {
+                    ReadingMode::Binary
+                },
+            ))
+        }
     }
 }
 
