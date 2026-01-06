@@ -3320,6 +3320,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "glob",
+ "libc",
  "tempfile",
  "thiserror 2.0.18",
  "uucore",
