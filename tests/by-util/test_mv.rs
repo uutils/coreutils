@@ -2869,11 +2869,11 @@ fn test_mv_xattr_enotsup_silent() {
     if Command::new("setfattr")
         .args(["-n", "user.t", "-v", "v", &at.plus_as_string("src")])
         .status()
-        .map_or(false, |s| s.success())
+        .is_ok_and(|s| s.success())
     {
         scene
             .ucmd()
-            .arg(&at.plus_as_string("src"))
+            .arg(at.plus_as_string("src"))
             .arg("/dev/shm/mv_test")
             .succeeds()
             .no_stderr();

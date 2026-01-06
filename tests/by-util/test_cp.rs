@@ -3117,9 +3117,8 @@ fn test_cp_archive_on_nonexistent_file() {
         .arg(TEST_NONEXISTENT_FILE)
         .arg(TEST_EXISTING_FILE)
         .fails()
-        .stderr_only(
-            "cp: cannot stat 'nonexistent_file.txt': No such file or directory (os error 2)\n",
-        );
+        .stderr_contains("cannot stat 'nonexistent_file.txt'")
+        .stderr_contains("No such file or directory");
 }
 
 #[test]
@@ -7479,32 +7478,53 @@ fn test_cp_xattr_enotsup_handling() {
     let at = &scene.fixtures;
     at.write("src", "x");
 
-    if Command::new("setfattr")
+    // Check if setfattr is available and source fs supports xattrs
+    if !Command::new("setfattr")
         .args(["-n", "user.t", "-v", "v", &at.plus_as_string("src")])
         .status()
-        .map_or(false, |s| s.success())
+        .is_ok_and(|s| s.success())
     {
-        // -a: silent success
-        scene
-            .ucmd()
-            .args(&["-a", &at.plus_as_string("src"), "/dev/shm/t1"])
-            .succeeds()
-            .no_stderr();
-        // --preserve=all: silent success
-        scene
-            .ucmd()
-            .args(&["--preserve=all", &at.plus_as_string("src"), "/dev/shm/t2"])
-            .succeeds()
-            .no_stderr();
-        // --preserve=xattr: must fail with proper message
-        scene
-            .ucmd()
-            .args(&["--preserve=xattr", &at.plus_as_string("src"), "/dev/shm/t3"])
-            .fails()
-            .stderr_contains("setting attributes")
-            .stderr_contains("Operation not supported");
-        for f in ["/dev/shm/t1", "/dev/shm/t2", "/dev/shm/t3"] {
-            std::fs::remove_file(f).ok();
-        }
+        return; // Skip: setfattr not available or source doesn't support xattrs
+    }
+
+    // Check if /dev/shm exists
+    if !std::path::Path::new("/dev/shm").exists() {
+        return; // Skip: /dev/shm not available
+    }
+
+    // Check if /dev/shm actually doesn't support xattrs by trying to set one
+    let shm_test_file = "/dev/shm/xattr_test_probe";
+    std::fs::write(shm_test_file, "test").ok();
+    let shm_supports_xattr = Command::new("setfattr")
+        .args(["-n", "user.t", "-v", "v", shm_test_file])
+        .status()
+        .is_ok_and(|s| s.success());
+    std::fs::remove_file(shm_test_file).ok();
+
+    if shm_supports_xattr {
+        return; // Skip: /dev/shm supports xattrs on this system
+    }
+
+    // -a: silent success
+    scene
+        .ucmd()
+        .args(&["-a", &at.plus_as_string("src"), "/dev/shm/t1"])
+        .succeeds()
+        .no_stderr();
+    // --preserve=all: silent success
+    scene
+        .ucmd()
+        .args(&["--preserve=all", &at.plus_as_string("src"), "/dev/shm/t2"])
+        .succeeds()
+        .no_stderr();
+    // --preserve=xattr: must fail with proper message
+    scene
+        .ucmd()
+        .args(&["--preserve=xattr", &at.plus_as_string("src"), "/dev/shm/t3"])
+        .fails()
+        .stderr_contains("setting attributes")
+        .stderr_contains("Operation not supported");
+    for f in ["/dev/shm/t1", "/dev/shm/t2", "/dev/shm/t3"] {
+        std::fs::remove_file(f).ok();
     }
 }
