@@ -3102,6 +3102,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "uu_checksum_common"
+version = "0.5.0"
+dependencies = [
+ "clap",
+ "codspeed-divan-compat",
+ "fluent",
+ "tempfile",
+ "uucore",
+]
+
+[[package]]
 name = "uu_chgrp"
 version = "0.5.0"
 dependencies = [
