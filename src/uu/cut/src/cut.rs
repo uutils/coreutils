@@ -9,7 +9,7 @@ use bstr::io::BufReadExt;
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufReader, BufWriter, IsTerminal, Read, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, BufWriter, IsTerminal, Read, Write, stdin, stdout};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
@@ -260,57 +260,82 @@ fn cut_fields_implicit_out_delim<R: Read, W: Write, M: Matcher>(
     Ok(())
 }
 
+/// Iterator that yields (segment, was_followed_by_delimiter) pairs.
+/// Unlike `BufRead::split`, this correctly tracks whether each segment ended with delimiter.
+struct DelimReader<R> {
+    inner: BufReader<R>,
+    delim: u8,
+}
+
+impl<R: Read> DelimReader<R> {
+    fn new(reader: R, delim: u8) -> Self {
+        Self {
+            inner: BufReader::new(reader),
+            delim,
+        }
+    }
+}
+
+impl<R: Read> Iterator for DelimReader<R> {
+    type Item = std::io::Result<(Vec<u8>, bool)>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut buf = Vec::new();
+        match self.inner.read_until(self.delim, &mut buf) {
+            Ok(0) => None,
+            Ok(_) => {
+                let was_delimited = buf.last() == Some(&self.delim);
+                if was_delimited {
+                    buf.pop();
+                }
+                Some(Ok((buf, was_delimited)))
+            }
+            Err(e) => Some(Err(e)),
+        }
+    }
+}
+
+/// Check if a field number is within any of the given ranges
+fn is_field_in_ranges(field: usize, ranges: &[Range]) -> bool {
+    ranges.iter().any(|r| field >= r.low && field <= r.high)
+}
+
 /// The input delimiter is identical to `newline_char`
 fn cut_fields_newline_char_delim<R: Read, W: Write>(
-    mut reader: R,
+    reader: R,
     out: &mut W,
     ranges: &[Range],
     only_delimited: bool,
     newline_char: u8,
     out_delim: &[u8],
 ) -> UResult<()> {
-    // Read entire input - we need all of it since fields are lines
-    let mut buffer = Vec::new();
-    reader.read_to_end(&mut buffer)?;
+    // Stream through input, collecting only selected fields
+    let mut has_delim = false;
+    let mut selected: Vec<Vec<u8>> = Vec::new();
 
-    // Split by newline to get fields
-    let mut segments: Vec<&[u8]> = buffer.split(|&b| b == newline_char).collect();
-
-    // Check for delimiter BEFORE removing trailing empty (split always gives at least 1 element)
-    let has_delimiter = segments.len() > 1;
-
-    // Remove trailing empty segment if present
-    // (artifact of split when input ends with delimiter - GNU cut doesn't count it as a field)
-    if segments.last() == Some(&b"".as_slice()) {
-        segments.pop();
+    for (idx, result) in DelimReader::new(reader, newline_char).enumerate() {
+        let (segment, was_delimited) = result?;
+        has_delim = has_delim || was_delimited;
+        if is_field_in_ranges(idx + 1, ranges) {
+            selected.push(segment);
+        }
     }
 
-    // With -s (only_delimited), suppress output if no delimiter found
-    if only_delimited && !has_delimiter {
+    // With -s and no delimiter, suppress output
+    if only_delimited && !has_delim {
         return Ok(());
     }
 
-    let mut print_delim = false;
-
-    for &Range { low, high } in ranges {
-        for i in low..=high {
-            // "- 1" is necessary because fields start from 1 whereas a Vec starts from 0
-            if let Some(segment) = segments.get(i - 1) {
-                if print_delim {
-                    out.write_all(out_delim)?;
-                } else {
-                    print_delim = true;
-                }
-                out.write_all(segment)?;
-            } else {
-                break;
-            }
+    // Output selected fields joined by delimiter
+    if let Some((first, rest)) = selected.split_first() {
+        out.write_all(first)?;
+        for seg in rest {
+            out.write_all(out_delim)?;
+            out.write_all(seg)?;
         }
-    }
-    // Only write newline if we output something
-    if print_delim {
         out.write_all(&[newline_char])?;
     }
+
     Ok(())
 }
 
