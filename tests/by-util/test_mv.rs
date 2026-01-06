@@ -2871,7 +2871,12 @@ fn test_mv_xattr_enotsup_silent() {
         .status()
         .map_or(false, |s| s.success())
     {
-        scene.ucmd().arg(&at.plus_as_string("src")).arg("/dev/shm/mv_test").succeeds().no_stderr();
+        scene
+            .ucmd()
+            .arg(&at.plus_as_string("src"))
+            .arg("/dev/shm/mv_test")
+            .succeeds()
+            .no_stderr();
         std::fs::remove_file("/dev/shm/mv_test").ok();
     }
 }

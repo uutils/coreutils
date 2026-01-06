@@ -7485,12 +7485,26 @@ fn test_cp_xattr_enotsup_handling() {
         .map_or(false, |s| s.success())
     {
         // -a: silent success
-        scene.ucmd().args(&["-a", &at.plus_as_string("src"), "/dev/shm/t1"]).succeeds().no_stderr();
+        scene
+            .ucmd()
+            .args(&["-a", &at.plus_as_string("src"), "/dev/shm/t1"])
+            .succeeds()
+            .no_stderr();
         // --preserve=all: silent success
-        scene.ucmd().args(&["--preserve=all", &at.plus_as_string("src"), "/dev/shm/t2"]).succeeds().no_stderr();
+        scene
+            .ucmd()
+            .args(&["--preserve=all", &at.plus_as_string("src"), "/dev/shm/t2"])
+            .succeeds()
+            .no_stderr();
         // --preserve=xattr: must fail with proper message
-        scene.ucmd().args(&["--preserve=xattr", &at.plus_as_string("src"), "/dev/shm/t3"])
-            .fails().stderr_contains("setting attributes").stderr_contains("Operation not supported");
-        for f in ["/dev/shm/t1", "/dev/shm/t2", "/dev/shm/t3"] { std::fs::remove_file(f).ok(); }
+        scene
+            .ucmd()
+            .args(&["--preserve=xattr", &at.plus_as_string("src"), "/dev/shm/t3"])
+            .fails()
+            .stderr_contains("setting attributes")
+            .stderr_contains("Operation not supported");
+        for f in ["/dev/shm/t1", "/dev/shm/t2", "/dev/shm/t3"] {
+            std::fs::remove_file(f).ok();
+        }
     }
 }
