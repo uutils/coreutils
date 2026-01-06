@@ -1202,10 +1202,14 @@ fn rename_file_fallback(
 
     // Regular file copy
     #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-    fs::copy(from, to)
-        .and_then(|_| fsxattr::copy_xattrs(&from, &to))
-        .and_then(|_| fs::remove_file(from))
-        .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
+    {
+        fs::copy(from, to)
+            .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
+        let _ = fsxattr::copy_xattrs(&from, &to); // Not a requirement for compressed FS -> FS without compression support 
+        fs::remove_file(from)
+            .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
+    }
+
     #[cfg(any(target_os = "macos", target_os = "redox", not(unix)))]
     fs::copy(from, to)
         .and_then(|_| fs::remove_file(from))
