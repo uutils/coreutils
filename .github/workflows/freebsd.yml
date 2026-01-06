@@ -49,7 +49,15 @@ jobs:
         sync: rsync
         copyback: false
         # We need jq and GNU coreutils to run show-utils.sh and bash to use inline shell string replacement
-        prepare: pkg install -y curl sudo jq coreutils bash
+        prepare: |
+          mkdir -p /usr/local/etc/pkg/repos
+          printf '%s\n' \
+            'FreeBSD: {' \
+            '  url: "pkg+https://pkg.FreeBSD.org/${ABI}/latest",' \
+            '}' > /usr/local/etc/pkg/repos/FreeBSD.conf
+          rm -f /var/db/pkg/repo-FreeBSD.sqlite
+          pkg update -f
+          pkg install -y curl sudo jq coreutils bash
         run: |
           ## Prepare, build, and test
           # implementation modelled after ref: <https://github.com/rust-lang/rustup/pull/2783>
@@ -146,7 +154,15 @@ jobs:
         usesh: true
         sync: rsync
         copyback: false
-        prepare: pkg install -y curl gmake sudo jq
+        prepare: |
+          mkdir -p /usr/local/etc/pkg/repos
+          printf '%s\n' \
+            'FreeBSD: {' \
+            '  url: "pkg+https://pkg.FreeBSD.org/${ABI}/latest",' \
+            '}' > /usr/local/etc/pkg/repos/FreeBSD.conf
+          rm -f /var/db/pkg/repo-FreeBSD.sqlite
+          pkg update -f
+          pkg install -y curl gmake sudo jq
         run: |
           ## Prepare, build, and test
           # implementation modelled after ref: <https://github.com/rust-lang/rustup/pull/2783>
