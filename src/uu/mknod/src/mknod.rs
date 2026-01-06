@@ -103,7 +103,11 @@ fn mknod(file_name: &str, config: Config) -> i32 {
         // Apply SMACK context if requested
         #[cfg(feature = "smack")]
         if config.set_security_context {
-            if let Err(e) = uucore::smack::set_smack_label_for_new_file(file_name, config.context) {
+            if let Err(e) =
+                uucore::smack::set_smack_label_and_cleanup(file_name, config.context, |p| {
+                    std::fs::remove_file(p)
+                })
+            {
                 eprintln!("{}: {}", uucore::util_name(), e);
                 return 1;
             }

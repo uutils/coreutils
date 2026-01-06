@@ -103,10 +103,11 @@ pub fn set_smack_label_for_path(path: &Path, label: &str) -> Result<(), SmackErr
         .map_err(|e| SmackError::LabelSetFailure(label.to_string(), e))
 }
 
-/// Sets SMACK label for a file, removing it on failure.
-pub fn set_smack_label_for_new_file(
+/// Sets SMACK label for a new path, calling cleanup on failure.
+pub fn set_smack_label_and_cleanup(
     path: impl AsRef<Path>,
     context: Option<&String>,
+    cleanup: impl FnOnce(&Path) -> io::Result<()>,
 ) -> Result<(), Box<dyn UError>> {
     let Some(ctx) = context else { return Ok(()) };
     if !is_smack_enabled() {
@@ -114,23 +115,7 @@ pub fn set_smack_label_for_new_file(
     }
     let path = path.as_ref();
     set_smack_label_for_path(path, ctx).map_err(|e| {
-        let _ = fs::remove_file(path);
-        USimpleError::new(1, e.to_string())
-    })
-}
-
-/// Sets SMACK label for a directory, removing it on failure.
-pub fn set_smack_label_for_new_dir(
-    path: impl AsRef<Path>,
-    context: Option<&String>,
-) -> Result<(), Box<dyn UError>> {
-    let Some(ctx) = context else { return Ok(()) };
-    if !is_smack_enabled() {
-        return Ok(());
-    }
-    let path = path.as_ref();
-    set_smack_label_for_path(path, ctx).map_err(|e| {
-        let _ = fs::remove_dir(path);
+        let _ = cleanup(path);
         USimpleError::new(1, e.to_string())
     })
 }

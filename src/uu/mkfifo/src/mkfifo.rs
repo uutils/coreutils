@@ -82,7 +82,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
             let context = matches.get_one::<String>(options::CONTEXT);
             if set_security_context || context.is_some() {
-                uucore::smack::set_smack_label_for_new_file(&f, context)?;
+                uucore::smack::set_smack_label_and_cleanup(&f, context, |p| {
+                    std::fs::remove_file(p)
+                })?;
             }
         }
     }
