@@ -144,10 +144,6 @@ mod test_fold;
 #[path = "by-util/test_groups.rs"]
 mod test_groups;
 
-#[cfg(feature = "hashsum")]
-#[path = "by-util/test_hashsum.rs"]
-mod test_hashsum;
-
 #[cfg(feature = "head")]
 #[path = "by-util/test_head.rs"]
 mod test_head;

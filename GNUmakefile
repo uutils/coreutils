@@ -103,7 +103,6 @@ PROGS       := \
 	false \
 	fmt \
 	fold \
-	hashsum \
 	head \
 	hostname \
 	join \
@@ -184,7 +183,7 @@ SELINUX_PROGS := \
 	chcon \
 	runcon
 
-HASHSUM_PROGS := \
+CKSUM_PROGS := \
 	b2sum \
 	md5sum \
 	sha1sum \
@@ -203,8 +202,8 @@ ifeq ($(SELINUX_ENABLED),1)
 endif
 
 UTILS ?= $(filter-out $(SKIP_UTILS),$(PROGS))
-ifneq ($(filter hashsum,$(UTILS)),hashsum)
-	HASHSUM_PROGS :=
+ifneq ($(filter cksum,$(UTILS)),cksum)
+	CKSUM_PROGS :=
 endif
 
 ifneq ($(findstring stdbuf,$(UTILS)),)
@@ -236,7 +235,6 @@ TEST_PROGS  := \
 	factor \
 	false \
 	fold \
-	hashsum \
 	head \
 	install \
 	link \
@@ -386,7 +384,7 @@ build-uudoc:
 
 install-manpages: build-uudoc
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/man/man1
-	$(foreach prog, $(INSTALLEES) $(HASHSUM_PROGS), \
+	$(foreach prog, $(INSTALLEES) $(CKSUM_PROGS), \
 		$(BUILDDIR)/uudoc manpage $(prog) > $(DESTDIR)$(DATAROOTDIR)/man/man1/$(PROG_PREFIX)$(prog).1 $(newline) \
 	)
 else
@@ -399,7 +397,7 @@ install-completions: build-uudoc
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d
-	$(foreach prog, $(INSTALLEES) $(HASHSUM_PROGS) , \
+	$(foreach prog, $(INSTALLEES) $(CKSUM_PROGS), \
 		$(BUILDDIR)/uudoc completion $(prog) zsh > $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions/_$(PROG_PREFIX)$(prog) $(newline) \
 		$(BUILDDIR)/uudoc completion $(prog) bash > $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/$(PROG_PREFIX)$(prog).bash $(newline) \
 		$(BUILDDIR)/uudoc completion $(prog) fish > $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/$(PROG_PREFIX)$(prog).fish $(newline) \
@@ -461,7 +459,7 @@ ifeq (${MULTICALL}, y)
 	$(foreach prog, $(filter-out coreutils, $(INSTALLEES)), \
 		cd $(INSTALLDIR_BIN) && $(LN) $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline) \
 	)
-	$(foreach prog, $(HASHSUM_PROGS), \
+	$(foreach prog, $(CKSUM_PROGS), \
 		cd $(INSTALLDIR_BIN) && $(LN) $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline) \
 	)
 	$(if $(findstring test,$(INSTALLEES)), cd $(INSTALLDIR_BIN) && $(LN) $(PROG_PREFIX)coreutils $(PROG_PREFIX)[)
@@ -469,8 +467,8 @@ else
 	$(foreach prog, $(INSTALLEES), \
 		$(INSTALL) -m 755 $(BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog) $(newline) \
 	)
-	$(foreach prog, $(HASHSUM_PROGS), \
-		cd $(INSTALLDIR_BIN) && $(LN) $(PROG_PREFIX)hashsum $(PROG_PREFIX)$(prog) $(newline) \
+	$(foreach prog, $(CKSUM_PROGS), \
+		cd $(INSTALLDIR_BIN) && $(LN) $(PROG_PREFIX)cksum $(PROG_PREFIX)$(prog) $(newline) \
 	)
 	$(if $(findstring test,$(INSTALLEES)), $(INSTALL) -m 755 $(BUILDDIR)/test $(INSTALLDIR_BIN)/$(PROG_PREFIX)[)
 endif

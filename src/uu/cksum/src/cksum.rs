@@ -99,6 +99,14 @@ fn maybe_sanitize_length(
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let binary_name = uucore::util_name();
+    // Mimic md5sum, b2sum,... by putting --untagged. clap can't do it yet.
+    let is_cksum = binary_name.ends_with("cksum");
+    let mut args: Vec<OsString> = args.collect();
+    if !is_cksum && !args.is_empty() {
+        args.insert(1, OsString::from("--untagged"));
+    }
+
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let check = matches.get_flag(options::CHECK);
@@ -109,13 +117,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let strict = matches.get_flag(options::STRICT);
     let status = matches.get_flag(options::STATUS);
 
-    let algo_cli = matches
-        .get_one::<String>(options::ALGORITHM)
-        .map(AlgoKind::from_cksum)
-        .transpose()?;
+    // Set default algo from binary name. We still use None to ignore --check legacy algos.
+    let algo_cli = match binary_name {
+        s if s.ends_with("md5sum") => Some(AlgoKind::Md5),
+        s if s.ends_with("sha1sum") => Some(AlgoKind::Sha1),
+        s if s.ends_with("sha224sum") => Some(AlgoKind::Sha224),
+        s if s.ends_with("sha256sum") => Some(AlgoKind::Sha256),
+        s if s.ends_with("sha384sum") => Some(AlgoKind::Sha384),
+        s if s.ends_with("sha512sum") => Some(AlgoKind::Sha512),
+        s if s.ends_with("b2sum") => Some(AlgoKind::Blake2b),
+        _ => matches
+            .get_one::<String>(options::ALGORITHM)
+            .map(|s| AlgoKind::from_cksum(s))
+            .transpose()?,
+    };
 
     let input_length = matches
-        .get_one::<String>(options::LENGTH)
+        .try_get_one::<String>(options::LENGTH)
+        .ok()
+        .flatten()
         .map(String::as_str);
 
     let length = maybe_sanitize_length(algo_cli, input_length)?;
@@ -126,18 +146,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .unwrap()
         .map(|s| s.as_os_str());
 
+    // https://github.com/clap-rs/clap/issues/4520 bypasses --warn --binary
+    // clap 5 should fix them...
+    if !check & (warn || strict || quiet || ignore_missing || status) {
+        return Err(uucore::error::UUsageError::new(
+            1,
+            "the following required arguments were not provided:\n--check".to_string(),
+        ));
+    }
     if check {
         // cksum does not support '--check'ing legacy algorithms
         if algo_cli.is_some_and(AlgoKind::is_legacy) {
             return Err(ChecksumError::AlgorithmNotSupportedWithCheck.into());
-        }
-
-        let text_flag = matches.get_flag(options::TEXT);
-        let binary_flag = matches.get_flag(options::BINARY);
-        let tag = matches.get_flag(options::TAG);
-
-        if tag || binary_flag || text_flag {
-            return Err(ChecksumError::BinaryTextConflict.into());
         }
 
         // Execute the checksum validation based on the presence of files or the use of stdin
@@ -153,16 +173,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     // Not --check
-
     // Print hardware debug info if requested
-    if matches.get_flag(options::DEBUG) {
+    if is_cksum && matches.get_flag(options::DEBUG) {
         print_cpu_debug_info();
     }
 
     // Set the default algorithm to CRC when not '--check'ing.
     let algo_kind = algo_cli.unwrap_or(AlgoKind::Crc);
+    // clap can't set default args. So we adjust tag related flags.
+    // (Should we use shebang wrapper instead?)
 
-    let tag = !matches.get_flag(options::UNTAGGED); // Making TAG default at clap blocks --untagged 
+    let tag = !matches.get_flag(options::UNTAGGED);
     let binary = matches.get_flag(options::BINARY);
 
     let algo = SizedAlgoKind::from_unsized(algo_kind, length)?;
@@ -186,13 +207,39 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    let binary_name = uucore::util_name();
+    let mut app = Command::new(binary_name)
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template(binary_name))
         .about(translate!("cksum-about"))
         .override_usage(format_usage(&translate!("cksum-usage")))
         .infer_long_args(true)
-        .args_override_self(true)
+        .args_override_self(true);
+    if binary_name.ends_with("cksum") {
+        app = app
+            .arg(
+                Arg::new(options::ALGORITHM)
+                    .long(options::ALGORITHM)
+                    .short('a')
+                    .help(translate!("cksum-help-algorithm"))
+                    .value_name("ALGORITHM")
+                    .value_parser(SUPPORTED_ALGORITHMS),
+            )
+            .arg(
+                Arg::new(options::DEBUG)
+                    .long(options::DEBUG)
+                    .help(translate!("cksum-help-debug"))
+                    .action(ArgAction::SetTrue),
+            );
+    }
+    app = app
+        .arg(
+            Arg::new(options::UNTAGGED)
+                .long(options::UNTAGGED)
+                .help(translate!("cksum-help-untagged"))
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::TAG),
+        )
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
@@ -203,21 +250,6 @@ pub fn uu_app() -> Command {
                 .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
-            Arg::new(options::ALGORITHM)
-                .long(options::ALGORITHM)
-                .short('a')
-                .help(translate!("cksum-help-algorithm"))
-                .value_name("ALGORITHM")
-                .value_parser(SUPPORTED_ALGORITHMS),
-        )
-        .arg(
-            Arg::new(options::UNTAGGED)
-                .long(options::UNTAGGED)
-                .help(translate!("cksum-help-untagged"))
-                .action(ArgAction::SetTrue)
-                .overrides_with(options::TAG),
-        )
-        .arg(
             Arg::new(options::TAG)
                 .long(options::TAG)
                 .help(translate!("cksum-help-tag"))
@@ -225,13 +257,6 @@ pub fn uu_app() -> Command {
                 .overrides_with(options::UNTAGGED)
                 .overrides_with(options::BINARY)
                 .overrides_with(options::TEXT),
-        )
-        .arg(
-            Arg::new(options::LENGTH)
-                .long(options::LENGTH)
-                .short('l')
-                .help(translate!("cksum-help-length"))
-                .action(ArgAction::Set),
         )
         .arg(
             Arg::new(options::RAW)
@@ -251,6 +276,9 @@ pub fn uu_app() -> Command {
                 .short('c')
                 .long(options::CHECK)
                 .help(translate!("cksum-help-check"))
+                .conflicts_with(options::TAG)
+                .conflicts_with(options::BINARY)
+                .conflicts_with(options::TEXT)
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -258,8 +286,6 @@ pub fn uu_app() -> Command {
                 .long(options::BASE64)
                 .help(translate!("cksum-help-base64"))
                 .action(ArgAction::SetTrue)
-                // Even though this could easily just override an earlier '--raw',
-                // GNU cksum does not permit these flags to be combined:
                 .conflicts_with(options::RAW),
         )
         .arg(
@@ -267,7 +293,6 @@ pub fn uu_app() -> Command {
                 .long(options::TEXT)
                 .short('t')
                 .hide(true)
-                .overrides_with(options::BINARY)
                 .action(ArgAction::SetTrue)
                 .requires(options::UNTAGGED),
         )
@@ -317,12 +342,15 @@ pub fn uu_app() -> Command {
                 .short('z')
                 .help(translate!("cksum-help-zero"))
                 .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::DEBUG)
-                .long(options::DEBUG)
-                .help(translate!("cksum-help-debug"))
-                .action(ArgAction::SetTrue),
-        )
-        .after_help(translate!("cksum-after-help"))
+        );
+    if binary_name.ends_with("cksum") || binary_name.ends_with("b2sum") {
+        app = app.arg(
+            Arg::new(options::LENGTH)
+                .long(options::LENGTH)
+                .short('l')
+                .help(translate!("cksum-help-length"))
+                .action(ArgAction::Set),
+        );
+    }
+    app.after_help(translate!("cksum-after-help"))
 }
