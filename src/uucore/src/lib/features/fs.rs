@@ -167,6 +167,9 @@ impl FileInformation {
         return self.0.st_ino.into();
     }
 
+    // The concept of symlinks doesn't map exactly to Windows (which has reparse
+    // points, junctions, etc.), so having our own method lets us control what
+    // we consider a symlink across platforms.
     #[cfg(unix)]
     pub fn is_symlink(&self) -> bool {
         (self.0.st_mode as mode_t & S_IFMT) == S_IFLNK
@@ -174,7 +177,8 @@ impl FileInformation {
 
     #[cfg(windows)]
     pub fn is_symlink(&self) -> bool {
-        (self.0.file_attributes() & windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT) != 0
+        use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
+        self.0.file_attributes() & u64::from(FILE_ATTRIBUTE_REPARSE_POINT) != 0
     }
 }
 
