@@ -13,3 +13,5 @@ curl -L ${repo}/raw/refs/heads/master/tests/stty/bad-speed.sh > tests/stty/bad-s
 # Avoid incorrect PASS
 curl -L ${repo}/raw/refs/heads/master/tests/runcon/runcon-compute.sh > tests/runcon/runcon-compute.sh
 curl -L ${repo}/raw/refs/heads/master/tests/tac/tac-continue.sh > tests/tac/tac-continue.sh
+# Add tac-continue.sh to root tests (it requires root to mount tmpfs)
+sed -i 's|tests/split/l-chunk-root.sh.*|tests/split/l-chunk-root.sh\t\t\t\\\n  tests/tac/tac-continue.sh\t\t\t\\|' tests/local.mk

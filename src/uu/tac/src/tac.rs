@@ -310,13 +310,22 @@ fn try_mmap_stdin() -> Option<Mmap> {
 }
 
 /// Copy stdin to a temp file, then read it into a buffer.
+/// Falls back to reading directly into memory if temp file creation fails.
 fn read_stdin_to_buf() -> std::io::Result<Vec<u8>> {
-    let mut tmp = tempfile::tempfile()?;
-    copy(&mut stdin(), &mut tmp)?;
-    tmp.rewind()?;
-    let mut buf = Vec::new();
-    tmp.read_to_end(&mut buf)?;
-    Ok(buf)
+    // Try to create a temp file (respects TMPDIR)
+    if let Ok(mut tmp) = tempfile::tempfile() {
+        // Temp file created - copy stdin to it, then read back
+        copy(&mut stdin(), &mut tmp)?;
+        tmp.rewind()?;
+        let mut buf = Vec::new();
+        tmp.read_to_end(&mut buf)?;
+        Ok(buf)
+    } else {
+        // Fall back to reading directly into memory (e.g., bad TMPDIR)
+        let mut buf = Vec::new();
+        stdin().read_to_end(&mut buf)?;
+        Ok(buf)
+    }
 }
 
 fn try_mmap_path(path: &Path) -> Option<Mmap> {

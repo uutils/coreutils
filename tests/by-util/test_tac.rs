@@ -338,14 +338,12 @@ fn test_failed_write_is_reported() {
 
 #[cfg(target_os = "linux")]
 #[test]
-fn test_stdin_tempfile_error_continues() {
-    // Set TMPDIR to a non-writable location to force temp file creation to fail
+fn test_stdin_bad_tmpdir_fallback() {
+    // When TMPDIR is invalid, tac falls back to reading stdin directly into memory
     new_ucmd!()
-        .env("TMPDIR", "/proc")
+        .env("TMPDIR", "/nonexistent/dir")
         .arg("-")
-        .arg("prime_per_line.txt")
         .pipe_in("a\nb\nc\n")
-        .fails()
-        .stderr_contains("stdin")
-        .stdout_is_fixture("prime_per_line.expected");
+        .succeeds()
+        .stdout_is("c\nb\na\n");
 }
