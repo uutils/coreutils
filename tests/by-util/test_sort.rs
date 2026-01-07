@@ -1552,7 +1552,6 @@ fn test_files0_from_zero_length() {
 fn test_files0_from_non_utf8_filename() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
-    use std::path::Path;
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.touch("file1.txt");
@@ -1561,15 +1560,15 @@ fn test_files0_from_non_utf8_filename() {
     at.append("file2.txt", "apple\n");
 
     // Create a file with non-UTF-8 bytes in filename
-    let non_utf8_name = OsStr::from_bytes(b"\xff\xfefile3.txt");
-    let non_utf8_path = at.plus_as_string("").to_owned() + "/";
-    let full_path = Path::new(&non_utf8_path).join(non_utf8_name);
+    // spell-checker:ignore fffile
+    let non_utf8_name = OsStr::from_bytes(b"\xff\xff_file3.txt");
+    let full_path = at.plus(non_utf8_name);
     std::fs::write(&full_path, "banana\n").unwrap();
 
     // Create files0-from input containing the non-UTF-8 filename bytes
     let mut files0_input = Vec::new();
     files0_input.extend_from_slice(b"file1.txt\0");
-    files0_input.extend_from_slice(b"\xff\xfefile3.txt\0");
+    files0_input.extend_from_slice(b"\xff\xff_file3.txt\0");
     files0_input.extend_from_slice(b"file2.txt\0");
 
     ucmd.args(&["--files0-from", "-"])
