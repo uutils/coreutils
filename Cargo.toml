@@ -1,7 +1,7 @@
 # coreutils (uutils)
 # * see the repository LICENSE, README, and CONTRIBUTING files for more information
 
-# spell-checker:ignore (libs) bigdecimal datetime serde bincode gethostid kqueue libselinux mangen memmap uuhelp startswith constness expl unnested logind cfgs
+# spell-checker:ignore (libs) bigdecimal datetime serde bincode gethostid kqueue libselinux mangen memmap uuhelp startswith constness expl unnested logind cfgs interner
 
 [package]
 name = "coreutils"
@@ -369,7 +369,8 @@ same-file = "1.0.6"
 self_cell = "1.0.4"
 # FIXME we use the exact version because the new 0.5.3 requires an MSRV of 1.88
 selinux = "=0.5.2"
-signal-hook = "0.3.17"
+string-interner = "0.19.0"
+signal-hook = "0.4.1"
 tempfile = "3.15.0"
 terminal_size = "0.4.0"
 textwrap = { version = "0.16.1", features = ["terminal_size"] }
@@ -538,6 +539,7 @@ chrono.workspace = true
 ctor.workspace = true
 filetime.workspace = true
 glob.workspace = true
+jiff.workspace = true
 libc.workspace = true
 num-prime.workspace = true
 pretty_assertions = "1.4.0"
@@ -618,9 +620,12 @@ workspace = true
 # This is the linting configuration for all crates.
 # In order to use these, all crates have `[lints] workspace = true` section.
 [workspace.lints.rust]
-# Allow "fuzzing" as a "cfg" condition name
+# Allow "fuzzing" as a "cfg" condition name and "cygwin" as a value for "target_os"
 # https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
+unexpected_cfgs = { level = "warn", check-cfg = [
+  'cfg(fuzzing)',
+  'cfg(target_os, values("cygwin"))',
+] }
 #unused_qualifications = "warn" // TODO: fix warnings in uucore, then re-enable this lint
 
 [workspace.lints.clippy]
@@ -657,7 +662,6 @@ ignored_unit_patterns = "allow"              # 21
 similar_names = "allow"                      # 20
 large_stack_arrays = "allow"                 # 20
 wildcard_imports = "allow"                   # 18
-used_underscore_binding = "allow"            # 18
 needless_pass_by_value = "allow"             # 16
 float_cmp = "allow"                          # 12
 items_after_statements = "allow"             # 11
