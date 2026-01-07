@@ -20,7 +20,7 @@ const EMPTY_STYLE: &str = "\x1b[m";
 
 enum RawIndicatorStyle {
     Empty,
-    Code(String),
+    Code(Indicator),
 }
 
 /// We need this struct to be able to store the previous style.
@@ -77,8 +77,8 @@ impl<'a> StyleManager<'a> {
                     // bypasses fallbacks, matching GNU ls behavior.
                     return self.apply_empty_style(name, wrap);
                 }
-                Some(RawIndicatorStyle::Code(raw)) => {
-                    style_code.push_str(&self.build_raw_style_code(&raw));
+                Some(RawIndicatorStyle::Code(indicator)) => {
+                    self.append_raw_style_code_for_indicator(indicator, &mut style_code);
                     applied_raw_code = true;
                     self.current_style = None;
                     force_suffix_reset = true;
@@ -119,7 +119,25 @@ impl<'a> StyleManager<'a> {
         if raw.is_empty() {
             Some(RawIndicatorStyle::Empty)
         } else {
-            Some(RawIndicatorStyle::Code(raw.clone()))
+            Some(RawIndicatorStyle::Code(indicator))
+        }
+    }
+
+    // Append a raw SGR sequence for a validated LS_COLORS indicator.
+    fn append_raw_style_code_for_indicator(
+        &mut self,
+        indicator: Indicator,
+        style_code: &mut String,
+    ) {
+        if !self.indicator_codes.contains_key(&indicator) {
+            return;
+        }
+        style_code.push_str(self.reset(!self.initial_reset_is_done));
+        style_code.push_str(ANSI_CSI);
+        if let Some(raw) = self.indicator_codes.get(&indicator) {
+            debug_assert!(!raw.is_empty());
+            style_code.push_str(raw);
+            style_code.push_str(ANSI_SGR_END);
         }
     }
 
@@ -521,6 +539,7 @@ pub(crate) fn validate_ls_colors_env() -> Result<(), LsColorsParseError> {
     validate_ls_colors(&ls_colors)
 }
 
+// GNU-like parser: ensure LS_COLORS has valid labels and well-formed escapes.
 fn validate_ls_colors(ls_colors: &str) -> Result<(), LsColorsParseError> {
     let bytes = ls_colors.as_bytes();
     let mut idx = 0;
@@ -567,6 +586,7 @@ fn validate_ls_colors(ls_colors: &str) -> Result<(), LsColorsParseError> {
     Ok(())
 }
 
+// Parse a value with GNU-compatible escape sequences, returning the index of the terminator.
 fn parse_funky_string(
     bytes: &[u8],
     mut idx: usize,
