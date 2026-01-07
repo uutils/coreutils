@@ -641,3 +641,14 @@ fn test_separator_options_default_values() {
         .pipe_in("a\nb\n")
         .succeeds();
 }
+
+#[test]
+fn test_omit_pagination_option() {
+    // -T/--omit-pagination omits headers/trailers and eliminates form feeds
+    // TODO: verify output matches GNU pr behavior (form feed elimination)
+    new_ucmd!().args(&["-T"]).pipe_in("a\nb\n").succeeds();
+    new_ucmd!()
+        .args(&["--omit-pagination"])
+        .pipe_in("a\nb\n")
+        .succeeds();
+}
