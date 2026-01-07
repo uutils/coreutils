@@ -5092,10 +5092,7 @@ fn test_debug_flag_with_inotify() {
     let at = &ts.fixtures;
     at.touch("f");
 
-    let mut child = ts
-        .ucmd()
-        .args(&["--debug", "-f", "f"])
-        .run_no_wait();
+    let mut child = ts.ucmd().args(&["--debug", "-f", "f"]).run_no_wait();
 
     child.make_assertion_with_delay(500).is_alive();
     child
