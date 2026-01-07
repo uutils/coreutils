@@ -82,7 +82,7 @@ mod dired;
 use dired::{DiredOutput, is_dired_arg_present};
 mod colors;
 use crate::options::QUOTING_STYLE;
-use colors::{StyleManager, color_name};
+use colors::{LsColorsParseError, StyleManager, color_name, validate_ls_colors_env};
 
 pub mod options {
     pub mod format {
@@ -1151,6 +1151,22 @@ impl Config {
             locale_quoting = None;
         }
 
+        if needs_color {
+            if let Err(err) = validate_ls_colors_env() {
+                if let LsColorsParseError::UnrecognizedPrefix(prefix) = &err {
+                    show_warning!(
+                        "{}",
+                        translate!(
+                            "ls-warning-unrecognized-ls-colors-prefix",
+                            "prefix" => prefix.quote()
+                        )
+                    );
+                }
+                show_warning!("{}", translate!("ls-warning-unparsable-ls-colors"));
+                needs_color = false;
+            }
+        }
+
         let color = if needs_color {
             Some(LsColors::from_env().unwrap_or_default())
         } else {
@@ -2105,20 +2121,23 @@ fn show_dir_name(
     write!(out, ":")
 }
 
-fn escape_dir_name_with_locale(name: &OsStr, config: &Config) -> OsString {
+fn escape_with_locale<F>(name: &OsStr, config: &Config, fallback: F) -> OsString
+where
+    F: FnOnce(&OsStr, QuotingStyle) -> OsString,
+{
     if let Some(locale) = config.locale_quoting {
         locale_quote(name, locale)
     } else {
-        locale_aware_escape_dir_name(name, config.quoting_style)
+        fallback(name, config.quoting_style)
     }
 }
 
+fn escape_dir_name_with_locale(name: &OsStr, config: &Config) -> OsString {
+    escape_with_locale(name, config, locale_aware_escape_dir_name)
+}
+
 fn escape_name_with_locale(name: &OsStr, config: &Config) -> OsString {
-    if let Some(locale) = config.locale_quoting {
-        locale_quote(name, locale)
-    } else {
-        locale_aware_escape_name(name, config.quoting_style)
-    }
+    escape_with_locale(name, config, locale_aware_escape_name)
 }
 
 fn locale_quote(name: &OsStr, style: LocaleQuoting) -> OsString {

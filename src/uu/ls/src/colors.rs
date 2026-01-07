@@ -18,6 +18,11 @@ const ANSI_RESET: &str = "\x1b[0m";
 const ANSI_CLEAR_EOL: &str = "\x1b[K";
 const EMPTY_STYLE: &str = "\x1b[m";
 
+enum RawIndicatorStyle {
+    Empty,
+    Code(String),
+}
+
 /// We need this struct to be able to store the previous style.
 /// This because we need to check the previous value in case we don't need
 /// the reset
@@ -66,46 +71,24 @@ impl<'a> StyleManager<'a> {
             // Fast-path: apply LS_COLORS raw SGR codes verbatim,
             // bypassing LsColors fallbacks so the entry from LS_COLORS
             // is honored exactly as specified.
-            if let Some(indicator) = self.indicator_for_raw_code(path) {
-                let should_skip = indicator == Indicator::SymbolicLink
-                    && self.ln_color_from_target
-                    && path.path().exists();
-
-                if !should_skip {
-                    if let Some(raw) = self.indicator_codes.get(&indicator).cloned() {
-                        if raw.is_empty() {
-                            return self.apply_empty_style(name, wrap);
-                        }
-                        style_code.push_str(self.reset(!self.initial_reset_is_done));
-                        style_code.push_str(ANSI_CSI);
-                        style_code.push_str(&raw);
-                        style_code.push_str(ANSI_SGR_END);
-                        applied_raw_code = true;
-                        self.current_style = None;
-                        force_suffix_reset = true;
-                    }
+            match self.raw_indicator_style_for_path(path) {
+                Some(RawIndicatorStyle::Empty) => {
+                    // An explicit empty entry (e.g. "or=") disables coloring and
+                    // bypasses fallbacks, matching GNU ls behavior.
+                    return self.apply_empty_style(name, wrap);
                 }
+                Some(RawIndicatorStyle::Code(raw)) => {
+                    style_code.push_str(&self.build_raw_style_code(&raw));
+                    applied_raw_code = true;
+                    self.current_style = None;
+                    force_suffix_reset = true;
+                }
+                None => {}
             }
         }
 
         if !applied_raw_code {
-            if let Some(new_style) = new_style {
-                // we only need to apply a new style if it's not the same as the current
-                // style for example if normal is the current style and a file with
-                // normal style is to be printed we could skip printing new color
-                // codes
-                if !self.is_current_style(new_style) {
-                    style_code.push_str(self.reset(!self.initial_reset_is_done));
-                    style_code.push_str(&self.get_style_code(new_style));
-                }
-            }
-            // if new style is None and current style is Normal we should reset it
-            else if matches!(self.get_normal_style().copied(), Some(norm_style) if self.is_current_style(&norm_style))
-            {
-                style_code.push_str(self.reset(false));
-                // even though this is an unnecessary reset for gnu compatibility we allow it here
-                force_suffix_reset = true;
-            }
+            self.append_style_code_for_style(new_style, &mut style_code, &mut force_suffix_reset);
         }
 
         // we need this clear to eol code in some terminals, for instance if the
@@ -120,6 +103,58 @@ impl<'a> StyleManager<'a> {
         ret.push(self.reset(force_suffix_reset));
         ret.push(clear_to_eol);
         ret
+    }
+
+    fn raw_indicator_style_for_path(&self, path: &PathData) -> Option<RawIndicatorStyle> {
+        let indicator = self.indicator_for_raw_code(path)?;
+        let should_skip = indicator == Indicator::SymbolicLink
+            && self.ln_color_from_target
+            && path.path().exists();
+
+        if should_skip {
+            return None;
+        }
+
+        let raw = self.indicator_codes.get(&indicator)?;
+        if raw.is_empty() {
+            Some(RawIndicatorStyle::Empty)
+        } else {
+            Some(RawIndicatorStyle::Code(raw.clone()))
+        }
+    }
+
+    fn build_raw_style_code(&mut self, raw: &str) -> String {
+        let mut style_code = String::new();
+        style_code.push_str(self.reset(!self.initial_reset_is_done));
+        style_code.push_str(ANSI_CSI);
+        style_code.push_str(raw);
+        style_code.push_str(ANSI_SGR_END);
+        style_code
+    }
+
+    fn append_style_code_for_style(
+        &mut self,
+        new_style: Option<&Style>,
+        style_code: &mut String,
+        force_suffix_reset: &mut bool,
+    ) {
+        if let Some(new_style) = new_style {
+            // we only need to apply a new style if it's not the same as the current
+            // style for example if normal is the current style and a file with
+            // normal style is to be printed we could skip printing new color
+            // codes
+            if !self.is_current_style(new_style) {
+                style_code.push_str(self.reset(!self.initial_reset_is_done));
+                style_code.push_str(&self.get_style_code(new_style));
+            }
+        }
+        // if new style is None and current style is Normal we should reset it
+        else if matches!(self.get_normal_style().copied(), Some(norm_style) if self.is_current_style(&norm_style))
+        {
+            style_code.push_str(self.reset(false));
+            // even though this is an unnecessary reset for gnu compatibility we allow it here
+            *force_suffix_reset = true;
+        }
     }
 
     /// Resets the current style and returns the default ANSI reset code to
@@ -201,13 +236,7 @@ impl<'a> StyleManager<'a> {
                 return self.apply_empty_style(name, wrap);
             }
 
-            let mut style_code = String::new();
-            style_code.push_str(self.reset(!self.initial_reset_is_done));
-            style_code.push_str(ANSI_CSI);
-            style_code.push_str(&raw);
-            style_code.push_str(ANSI_SGR_END);
-
-            let mut ret: OsString = style_code.into();
+            let mut ret: OsString = self.build_raw_style_code(&raw).into();
             ret.push(name);
             ret.push(self.reset(true));
             if wrap {
@@ -474,10 +503,188 @@ pub(crate) fn color_name(
     style_manager.apply_style_based_on_metadata(path, md_option.as_ref(), name, wrap)
 }
 
+#[derive(Debug)]
+pub(crate) enum LsColorsParseError {
+    UnrecognizedPrefix(String),
+    InvalidSyntax,
+}
+
+pub(crate) fn validate_ls_colors_env() -> Result<(), LsColorsParseError> {
+    let Ok(ls_colors) = env::var("LS_COLORS") else {
+        return Ok(());
+    };
+
+    if ls_colors.is_empty() {
+        return Ok(());
+    }
+
+    validate_ls_colors(&ls_colors)
+}
+
+fn validate_ls_colors(ls_colors: &str) -> Result<(), LsColorsParseError> {
+    let bytes = ls_colors.as_bytes();
+    let mut idx = 0;
+
+    while idx < bytes.len() {
+        match bytes[idx] {
+            b':' => {
+                idx += 1;
+            }
+            b'*' => {
+                idx += 1;
+                idx = parse_funky_string(bytes, idx, true)?;
+                if idx >= bytes.len() || bytes[idx] != b'=' {
+                    return Err(LsColorsParseError::InvalidSyntax);
+                }
+                idx += 1;
+                idx = parse_funky_string(bytes, idx, false)?;
+                if idx < bytes.len() && bytes[idx] == b':' {
+                    idx += 1;
+                }
+            }
+            _ => {
+                if idx + 1 >= bytes.len() {
+                    return Err(LsColorsParseError::InvalidSyntax);
+                }
+                let label = [bytes[idx], bytes[idx + 1]];
+                idx += 2;
+                if idx >= bytes.len() || bytes[idx] != b'=' {
+                    return Err(LsColorsParseError::InvalidSyntax);
+                }
+                if !is_valid_ls_colors_prefix(label) {
+                    let prefix = String::from_utf8_lossy(&label).into_owned();
+                    return Err(LsColorsParseError::UnrecognizedPrefix(prefix));
+                }
+                idx += 1;
+                idx = parse_funky_string(bytes, idx, false)?;
+                if idx < bytes.len() && bytes[idx] == b':' {
+                    idx += 1;
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn parse_funky_string(
+    bytes: &[u8],
+    mut idx: usize,
+    equals_end: bool,
+) -> Result<usize, LsColorsParseError> {
+    enum State {
+        Ground,
+        Backslash,
+        Octal(u8),
+        Hex(u8),
+        Caret,
+    }
+
+    let mut state = State::Ground;
+    loop {
+        let byte = if idx < bytes.len() { bytes[idx] } else { 0 };
+        match state {
+            State::Ground => match byte {
+                b':' | 0 => return Ok(idx),
+                b'=' if equals_end => return Ok(idx),
+                b'\\' => {
+                    state = State::Backslash;
+                    idx += 1;
+                }
+                b'^' => {
+                    state = State::Caret;
+                    idx += 1;
+                }
+                _ => idx += 1,
+            },
+            State::Backslash => match byte {
+                0 => return Err(LsColorsParseError::InvalidSyntax),
+                b'0'..=b'7' => {
+                    state = State::Octal(byte - b'0');
+                    idx += 1;
+                }
+                b'x' | b'X' => {
+                    state = State::Hex(0);
+                    idx += 1;
+                }
+                b'a' | b'b' | b'e' | b'f' | b'n' | b'r' | b't' | b'v' | b'?' | b'_' => {
+                    state = State::Ground;
+                    idx += 1;
+                }
+                _ => {
+                    state = State::Ground;
+                    idx += 1;
+                }
+            },
+            State::Octal(num) => match byte {
+                b'0'..=b'7' => {
+                    state = State::Octal(num.wrapping_mul(8).wrapping_add(byte - b'0'));
+                    idx += 1;
+                }
+                _ => state = State::Ground,
+            },
+            State::Hex(num) => match byte {
+                b'0'..=b'9' => {
+                    state = State::Hex(num.wrapping_mul(16).wrapping_add(byte - b'0'));
+                    idx += 1;
+                }
+                b'a'..=b'f' => {
+                    state = State::Hex(num.wrapping_mul(16).wrapping_add(byte - b'a' + 10));
+                    idx += 1;
+                }
+                b'A'..=b'F' => {
+                    state = State::Hex(num.wrapping_mul(16).wrapping_add(byte - b'A' + 10));
+                    idx += 1;
+                }
+                _ => state = State::Ground,
+            },
+            State::Caret => match byte {
+                b'@'..=b'~' | b'?' => {
+                    state = State::Ground;
+                    idx += 1;
+                }
+                _ => return Err(LsColorsParseError::InvalidSyntax),
+            },
+        }
+    }
+}
+
+fn is_valid_ls_colors_prefix(label: [u8; 2]) -> bool {
+    matches!(
+        label,
+        [b'l', b'c']
+            | [b'r', b'c']
+            | [b'e', b'c']
+            | [b'r', b's']
+            | [b'n', b'o']
+            | [b'f', b'i']
+            | [b'd', b'i']
+            | [b'l', b'n']
+            | [b'p', b'i']
+            | [b's', b'o']
+            | [b'b', b'd']
+            | [b'c', b'd']
+            | [b'm', b'i']
+            | [b'o', b'r']
+            | [b'e', b'x']
+            | [b'd', b'o']
+            | [b's', b'u']
+            | [b's', b'g']
+            | [b's', b't']
+            | [b'o', b'w']
+            | [b't', b'w']
+            | [b'c', b'a']
+            | [b'm', b'h']
+            | [b'c', b'l']
+    )
+}
+
 fn parse_indicator_codes() -> (HashMap<Indicator, String>, bool) {
     let mut indicator_codes = HashMap::new();
     let mut ln_color_from_target = false;
 
+    // LS_COLORS validity is checked before enabling color output, so parse
+    // entries directly here for raw indicator overrides.
     if let Ok(ls_colors) = env::var("LS_COLORS") {
         for entry in ls_colors.split(':') {
             if entry.is_empty() {
