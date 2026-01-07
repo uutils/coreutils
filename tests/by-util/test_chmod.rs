@@ -509,6 +509,17 @@ fn test_chmod_preserve_root() {
 }
 
 #[test]
+fn test_chmod_preserve_root_with_paths_that_resolve_to_root() {
+    new_ucmd!()
+        .arg("-R")
+        .arg("--preserve-root")
+        .arg("755")
+        .arg("/../")
+        .fails_with_code(1)
+        .stderr_contains("chmod: it is dangerous to operate recursively on '/'");
+}
+
+#[test]
 fn test_chmod_symlink_non_existing_file() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
