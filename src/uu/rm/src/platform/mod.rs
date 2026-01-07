@@ -10,9 +10,3 @@ pub mod unix;
 
 #[cfg(all(unix, not(target_os = "redox")))]
 pub use unix::*;
-
-#[cfg(target_os = "redox")]
-pub mod redox;
-
-#[cfg(target_os = "redox")]
-pub use redox::*;

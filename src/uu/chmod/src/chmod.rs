@@ -419,7 +419,8 @@ impl Chmoder {
         r
     }
 
-    #[cfg(not(unix))]
+    // Non-safe traversal implementation for platforms without safe_traversal support
+    #[cfg(any(not(unix), target_os = "redox"))]
     fn walk_dir_with_context(&self, file_path: &Path, is_command_line_arg: bool) -> UResult<()> {
         let mut r = self.chmod_file(file_path);
 
@@ -432,8 +433,7 @@ impl Chmoder {
 
         // If the path is a directory (or we should follow symlinks), recurse into it
         if (!file_path.is_symlink() || should_follow_symlink) && file_path.is_dir() {
-            // We buffer all paths in this dir to not keep to be able to close the fd so not
-            // too many fd's are open during the recursion
+            // We buffer all paths in this dir to not keep too many fd's open during recursion
             let mut paths_in_this_dir = Vec::new();
 
             for dir_entry in file_path.read_dir()? {
@@ -446,38 +446,18 @@ impl Chmoder {
                 }
             }
             for path in paths_in_this_dir {
-                if path.is_symlink() {
-                    r = self.handle_symlink_during_recursion(&path).and(r);
-                } else {
+                #[cfg(not(unix))]
+                {
+                    if path.is_symlink() {
+                        r = self.handle_symlink_during_recursion(&path).and(r);
+                    } else {
+                        r = self.walk_dir_with_context(path.as_path(), false).and(r);
+                    }
+                }
+                #[cfg(target_os = "redox")]
+                {
                     r = self.walk_dir_with_context(path.as_path(), false).and(r);
                 }
-            }
-        }
-        r
-    }
-
-    #[cfg(target_os = "redox")]
-    fn walk_dir_with_context(&self, file_path: &Path, is_command_line_arg: bool) -> UResult<()> {
-        let mut r = self.chmod_file(file_path);
-
-        // Determine whether to traverse symlinks based on context and traversal mode
-        let should_follow_symlink = match self.traverse_symlinks {
-            TraverseSymlinks::All => true,
-            TraverseSymlinks::First => is_command_line_arg, // Only follow symlinks that are command line args
-            TraverseSymlinks::None => false,
-        };
-
-        // If the path is a directory (or we should follow symlinks), recurse into it
-        if (!file_path.is_symlink() || should_follow_symlink) && file_path.is_dir() {
-            for dir_entry in file_path.read_dir()? {
-                let path = match dir_entry {
-                    Ok(entry) => entry.path(),
-                    Err(err) => {
-                        r = r.and(Err(err.into()));
-                        continue;
-                    }
-                };
-                r = self.walk_dir_with_context(path.as_path(), false).and(r);
             }
         }
         r
