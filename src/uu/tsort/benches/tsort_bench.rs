@@ -184,6 +184,7 @@ fn tsort_wide_dag(bencher: Bencher, num_nodes: usize) {
     });
 }
 
+/*
 /// Benchmark input parsing vs computation by using files with different edge densities
 #[divan::bench(args = [5_000])]
 fn tsort_input_parsing_heavy(bencher: Bencher, num_edges: usize) {
@@ -195,6 +196,7 @@ fn tsort_input_parsing_heavy(bencher: Bencher, num_edges: usize) {
         black_box(run_util_function(uumain, &[file_path_str]));
     });
 }
+*/
 
 fn main() {
     divan::main();
