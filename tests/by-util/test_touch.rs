@@ -1054,8 +1054,15 @@ fn test_touch_non_utf8_paths() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(all(unix, not(target_os = "openbsd")))]
 fn test_touch_dev_full() {
     let (_, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["/dev/full"]).succeeds().no_output();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_touch_dev_null() {
+    let (_, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["/dev/null"]).succeeds().no_output();
 }

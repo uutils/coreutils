@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) filetime datetime lpszfilepath mktime DATETIME datelike timelike UTIME
+// spell-checker:ignore (ToDO) filetime datetime lpszfilepath mktime DATETIME datelike timelike utimensat FDCWD
 // spell-checker:ignore (FORMATS) MMDDhhmm YYYYMMDDHHMM YYMMDDHHMM YYYYMMDDHHMMS
 
 pub mod error;
@@ -17,13 +17,17 @@ use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command};
 use filetime::{FileTime, set_file_times, set_symlink_file_times};
 use jiff::{Timestamp, Zoned};
 use std::borrow::Cow;
+#[cfg(unix)]
+use std::ffi::CString;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, File};
 use std::io::{Error, ErrorKind};
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 use uucore::libc;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::translate;
@@ -379,19 +383,7 @@ pub fn touch(files: &[InputFile], opts: &Options) -> Result<(), TouchError> {
             (atime, mtime)
         }
         Source::Now => {
-            let now: FileTime;
-            #[cfg(target_os = "linux")]
-            {
-                if opts.date.is_none() {
-                    now = FileTime::from_unix_time(0, libc::UTIME_NOW as u32);
-                } else {
-                    now = datetime_to_filetime(&Local::now());
-                }
-            }
-            #[cfg(not(target_os = "linux"))]
-            {
-                now = datetime_to_filetime(&Local::now());
-            }
+            let now = datetime_to_filetime(&Local::now());
             (now, now)
         }
         &Source::Timestamp(ts) => (ts, ts),
@@ -579,12 +571,59 @@ fn update_times(
     // sets the file access and modification times for a file or a symbolic link.
     // The filename, access time (atime), and modification time (mtime) are provided as inputs.
 
-    if opts.no_deref && !is_stdout {
-        set_symlink_file_times(path, atime, mtime)
-    } else {
-        set_file_times(path, atime, mtime)
+    #[cfg(unix)]
+    {
+        if opts.source == Source::Now
+            && opts.date.is_none()
+            && opts.change_times == ChangeTimes::Both
+        {
+            let flags = if opts.no_deref && !is_stdout {
+                libc::AT_SYMLINK_NOFOLLOW
+            } else {
+                0
+            };
+
+            let p = CString::new(path.as_os_str().as_bytes()).map_err(|_| {
+                USimpleError::new(
+                    1,
+                    translate!(
+                        "touch-error-setting-times-of-path",
+                        "path" => path.quote()
+                    ),
+                )
+            })?;
+
+            let rc =
+                unsafe { libc::utimensat(libc::AT_FDCWD, p.as_ptr(), std::ptr::null(), flags) };
+            if rc == 0 {
+                Ok(())
+            } else {
+                Err(Error::last_os_error())
+            }
+            .map_err_context(
+                || translate!("touch-error-setting-times-of-path", "path" => path.quote()),
+            )
+        } else {
+            if opts.no_deref && !is_stdout {
+                set_symlink_file_times(path, atime, mtime)
+            } else {
+                set_file_times(path, atime, mtime)
+            }
+            .map_err_context(
+                || translate!("touch-error-setting-times-of-path", "path" => path.quote()),
+            )
+        }
     }
-    .map_err_context(|| translate!("touch-error-setting-times-of-path", "path" => path.quote()))
+
+    #[cfg(not(unix))]
+    {
+        if opts.no_deref && !is_stdout {
+            set_symlink_file_times(path, atime, mtime)
+        } else {
+            set_file_times(path, atime, mtime)
+        }
+        .map_err_context(|| translate!("touch-error-setting-times-of-path", "path" => path.quote()))
+    }
 }
 
 /// Get metadata of the provided path
