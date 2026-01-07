@@ -35,6 +35,7 @@ use uucore::selinux::{
 };
 use uucore::translate;
 use uucore::{format_usage, show, show_error, show_if_err};
+use uucore::error::UIoError;
 
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
@@ -843,7 +844,8 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
     // see if the file exists, and it can't even be checked, this means we
     // don't have permission to access the file, so we should return an error.
     if let Err(to_stat) = to.try_exists() {
-        return Err(InstallError::CannotStat(to.to_path_buf(), to_stat.to_string()).into());
+        let err = UIoError::from(to_stat);
+        return Err(InstallError::CannotStat(to.to_path_buf(), err.to_string()).into());
     }
 
     if to.is_dir() && !from.is_dir() {
@@ -862,7 +864,8 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
             // If we get here, then remove_file failed for some
             // reason other than the file not existing. This means
             // this should be a fatal error, not a warning.
-            return Err(InstallError::FailedToRemove(to.to_path_buf(), e.to_string()).into());
+            let err = UIoError::from(e);
+            return Err(InstallError::FailedToRemove(to.to_path_buf(), err.to_string()).into());
         }
     }
 
