@@ -1140,9 +1140,10 @@ fn test_rm_directory_not_writable() {
 
     // Check for expected error message
     // When the parent directory (b/a) doesn't have write permission,
-    // we get "Permission denied" when trying to remove the subdirectory
-    let stderr = result.stderr_str();
-    assert!(stderr.contains("rm: cannot remove 'b/a/p': Permission denied"));
+    // we get "Permission denied" when trying to remove the subdirectory.
+    // The error tracking must be correct so we don't attempt to remove the parent
+    // directory after child failure (which would produce extra "Directory not empty" errors).
+    result.stderr_only("rm: cannot remove 'b/a/p': Permission denied\n");
 
     // Check which directories still exist
     assert!(at.dir_exists("b/a/p")); // Should still exist (parent not writable)
