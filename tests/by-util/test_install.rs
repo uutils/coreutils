@@ -120,6 +120,24 @@ fn test_install_ancestors_mode_directories() {
 }
 
 #[test]
+fn test_install_remove_impermissible_dst_file() {
+    let src_file = "/dev/null";
+    let dst_file = "/dev/full";
+    new_ucmd!().args(&[src_file, dst_file]).fails().stderr_only(format!(
+        "install: failed to remove existing file '{dst_file}': Permission denied\n"
+    ));
+}
+
+#[test]
+fn test_install_remove_inaccessible_dst_file() {
+    let src_file = "/dev/null";
+    let dst_file = "/root/file";
+    new_ucmd!().args(&[src_file, dst_file]).fails().stderr_only(format!(
+        "install: cannot stat '{dst_file}': Permission denied\n"
+    ));
+}
+
+#[test]
 fn test_install_ancestors_mode_directories_with_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     let ancestor1 = "ancestor1";
