@@ -129,7 +129,7 @@ fn sort_numeric(bencher: Bencher, num_lines: usize) {
 }
 
 /// Benchmark general numeric sorting (-g) with decimal and exponent notation
-#[divan::bench(args = [500_000])]
+#[divan::bench(args = [200_000])]
 fn sort_general_numeric(bencher: Bencher, num_lines: usize) {
     let mut data = Vec::new();
 
