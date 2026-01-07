@@ -24,6 +24,7 @@ use uucore::backup_control::{self, BackupMode};
 use uucore::buf_copy::copy_stream;
 use uucore::display::Quotable;
 use uucore::entries::{grp2gid, usr2uid};
+use uucore::error::UIoError;
 use uucore::error::{FromIo, UError, UResult, UUsageError};
 use uucore::fs::dir_strip_dot_for_creation;
 use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
@@ -35,7 +36,6 @@ use uucore::selinux::{
 };
 use uucore::translate;
 use uucore::{format_usage, show, show_error, show_if_err};
-use uucore::error::UIoError;
 
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
