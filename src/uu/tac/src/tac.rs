@@ -10,7 +10,7 @@ use clap::{Arg, ArgAction, Command};
 use memchr::memmem;
 use memmap2::Mmap;
 use std::ffi::OsString;
-use std::io::{BufWriter, Read, Seek, Write, stdin, stdout};
+use std::io::{BufWriter, Read, Write, stdin, stdout};
 use std::{
     fs::{File, read},
     io::copy,
@@ -242,10 +242,14 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &str) -> UR
                 mmap = mmap1;
                 &mmap
             } else {
-                // Copy stdin to a temp file (respects TMPDIR), then read it back.
-                // This allows proper error handling when disk space is exhausted.
-                match read_stdin_to_buf() {
-                    Ok(buf1) => {
+                // Copy stdin to a temp file (respects TMPDIR), then mmap it.
+                // Falls back to Vec buffer if temp file creation fails (e.g., bad TMPDIR).
+                match buffer_stdin() {
+                    Ok(StdinData::Mmap(mmap1)) => {
+                        mmap = mmap1;
+                        &mmap
+                    }
+                    Ok(StdinData::Vec(buf1)) => {
                         buf = buf1;
                         &buf
                     }
@@ -309,22 +313,27 @@ fn try_mmap_stdin() -> Option<Mmap> {
     unsafe { Mmap::map(&stdin()).ok() }
 }
 
-/// Copy stdin to a temp file, then read it into a buffer.
+enum StdinData {
+    Mmap(Mmap),
+    Vec(Vec<u8>),
+}
+
+/// Copy stdin to a temp file, then memory-map it.
 /// Falls back to reading directly into memory if temp file creation fails.
-fn read_stdin_to_buf() -> std::io::Result<Vec<u8>> {
+fn buffer_stdin() -> std::io::Result<StdinData> {
     // Try to create a temp file (respects TMPDIR)
     if let Ok(mut tmp) = tempfile::tempfile() {
         // Temp file created - copy stdin to it, then read back
         copy(&mut stdin(), &mut tmp)?;
-        tmp.rewind()?;
-        let mut buf = Vec::new();
-        tmp.read_to_end(&mut buf)?;
-        Ok(buf)
+        // SAFETY: If the file is truncated while we map it, SIGBUS will be raised
+        // and our process will be terminated, thus preventing access of invalid memory.
+        let mmap = unsafe { Mmap::map(&tmp)? };
+        Ok(StdinData::Mmap(mmap))
     } else {
         // Fall back to reading directly into memory (e.g., bad TMPDIR)
         let mut buf = Vec::new();
         stdin().read_to_end(&mut buf)?;
-        Ok(buf)
+        Ok(StdinData::Vec(buf))
     }
 }
 
