@@ -7400,3 +7400,101 @@ fn test_cp_recurse_verbose_output_with_symlink_already_exists() {
         .no_stderr()
         .stdout_is(output);
 }
+
+#[test]
+#[cfg(unix)]
+fn test_cp_hlp_flag_ordering() {
+    // GNU cp: "If more than one of -H, -L, and -P is specified, only the final one takes effect"
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file.txt");
+    at.symlink_file("file.txt", "symlink");
+
+    // -HP: P wins, copy symlink as symlink
+    ucmd.args(&["-HP", "symlink", "dest_hp"]).succeeds();
+    assert!(at.is_symlink("dest_hp"));
+
+    // -PH: H wins, copy target file
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file.txt");
+    at.symlink_file("file.txt", "symlink");
+    ucmd.args(&["-PH", "symlink", "dest_ph"]).succeeds();
+    assert!(!at.is_symlink("dest_ph"));
+    assert!(at.file_exists("dest_ph"));
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_archive_deref_flag_ordering() {
+    // (flags, expect_symlink): last flag wins; a/d imply -P, H/L dereference
+    for (flags, expect_symlink) in [
+        ("-Ha", true),
+        ("-aH", false),
+        ("-Hd", true),
+        ("-dH", false),
+        ("-La", true),
+        ("-aL", false),
+        ("-Ld", true),
+        ("-dL", false),
+    ] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("file.txt");
+        at.symlink_file("file.txt", "symlink");
+        let dest = format!("dest{flags}");
+        ucmd.args(&[flags, "symlink", &dest]).succeeds();
+        assert_eq!(at.is_symlink(&dest), expect_symlink, "failed for {flags}");
+    }
+}
+
+#[test]
+fn test_cp_circular_symbolic_links_in_directory() {
+    let source_dir = "source_dir";
+    let target_dir = "target_dir";
+    let (at, mut ucmd) = at_and_ucmd!();
+    let separator = std::path::MAIN_SEPARATOR_STR;
+
+    at.mkdir(source_dir);
+    at.symlink_file(
+        format!("{source_dir}/a").as_str(),
+        format!("{source_dir}/b").as_str(),
+    );
+    at.symlink_file(
+        format!("{source_dir}/b").as_str(),
+        format!("{source_dir}/a").as_str(),
+    );
+
+    ucmd.arg(source_dir)
+        .arg(target_dir)
+        .arg("-rL")
+        .fails_with_code(1)
+        .stderr_contains(format!(
+            "IO error for operation on {source_dir}{separator}a"
+        ))
+        .stderr_contains(format!(
+            "IO error for operation on {source_dir}{separator}b"
+        ));
+}
+
+/// Test that copying to an existing file maintains its permissions, unix only because .mode() only
+/// works on Unix
+#[test]
+#[cfg(unix)]
+fn test_cp_to_existing_file_permissions() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("src");
+    at.touch("dst");
+
+    let src_path = at.plus("src");
+    let dst_path = at.plus("dst");
+
+    let mut src_permissions = std::fs::metadata(&src_path).unwrap().permissions();
+    src_permissions.set_readonly(true);
+    std::fs::set_permissions(&src_path, src_permissions).unwrap();
+
+    let dst_mode = std::fs::metadata(&dst_path).unwrap().permissions().mode();
+
+    ucmd.args(&["src", "dst"]).succeeds();
+
+    let new_dst_mode = std::fs::metadata(&dst_path).unwrap().permissions().mode();
+    assert_eq!(dst_mode, new_dst_mode);
+}

@@ -219,17 +219,6 @@ impl Source {
         Self::StdinFile(f)
     }
 
-    /// The length of the data source in number of bytes.
-    ///
-    /// If it cannot be determined, then this function returns 0.
-    fn len(&self) -> io::Result<i64> {
-        #[allow(clippy::match_wildcard_for_single_variants)]
-        match self {
-            Self::File(f) => Ok(f.metadata()?.len().try_into().unwrap_or(i64::MAX)),
-            _ => Ok(0),
-        }
-    }
-
     fn skip(&mut self, n: u64) -> io::Result<u64> {
         match self {
             #[cfg(not(unix))]
@@ -673,17 +662,6 @@ impl Dest {
             _ => Err(Errno::ESPIPE), // "Illegal seek"
         }
     }
-
-    /// The length of the data destination in number of bytes.
-    ///
-    /// If it cannot be determined, then this function returns 0.
-    fn len(&self) -> io::Result<i64> {
-        #[allow(clippy::match_wildcard_for_single_variants)]
-        match self {
-            Self::File(f, _) => Ok(f.metadata()?.len().try_into().unwrap_or(i64::MAX)),
-            _ => Ok(0),
-        }
-    }
 }
 
 /// Decide whether the given buffer is all zeros.
@@ -1063,21 +1041,12 @@ impl BlockWriter<'_> {
 /// depending on the command line arguments, this function
 /// informs the OS to flush/discard the caches for input and/or output file.
 fn flush_caches_full_length(i: &Input, o: &Output) -> io::Result<()> {
-    // TODO Better error handling for overflowing `len`.
+    // Using len=0 in posix_fadvise means "to end of file"
     if i.settings.iflags.nocache {
-        let offset = 0;
-        #[allow(clippy::useless_conversion)]
-        let len = i.src.len()?.try_into().unwrap();
-        i.discard_cache(offset, len);
+        i.discard_cache(0, 0);
     }
-    // Similarly, discard the system cache for the output file.
-    //
-    // TODO Better error handling for overflowing `len`.
     if i.settings.oflags.nocache {
-        let offset = 0;
-        #[allow(clippy::useless_conversion)]
-        let len = o.dst.len()?.try_into().unwrap();
-        o.discard_cache(offset, len);
+        o.discard_cache(0, 0);
     }
 
     Ok(())
@@ -1185,6 +1154,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
 
     let input_nocache = i.settings.iflags.nocache;
     let output_nocache = o.settings.oflags.nocache;
+    let output_direct = o.settings.oflags.direct;
 
     // Add partial block buffering, if needed.
     let mut o = if o.settings.buffered {
@@ -1208,6 +1178,12 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         let loop_bsize = calc_loop_bsize(i.settings.count, &rstat, &wstat, i.settings.ibs, bsize);
         let rstat_update = read_helper(&mut i, &mut buf, loop_bsize)?;
         if rstat_update.is_empty() {
+            if input_nocache {
+                i.discard_cache(read_offset.try_into().unwrap(), 0);
+            }
+            if output_nocache || output_direct {
+                o.discard_cache(write_offset.try_into().unwrap(), 0);
+            }
             break;
         }
         let wstat_update = o.write_blocks(&buf)?;
