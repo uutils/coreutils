@@ -537,6 +537,7 @@ chrono.workspace = true
 ctor.workspace = true
 filetime.workspace = true
 glob.workspace = true
+jiff.workspace = true
 libc.workspace = true
 num-prime.workspace = true
 pretty_assertions = "1.4.0"

@@ -1216,7 +1216,7 @@ fn test_conflicting_options() {
         .fails_with_code(1)
         .no_stdout()
         .stderr_contains(
-            "cannot be used with", //clap generated message
+            "cannot be used with", //clap generated error
         );
 
     scene
@@ -1228,7 +1228,7 @@ fn test_conflicting_options() {
         .fails_with_code(1)
         .no_stdout()
         .stderr_contains(
-            "cannot be used with", //clap generated message
+            "cannot be used with", //clap generated error
         );
 }
 

@@ -393,8 +393,6 @@ pub enum ChecksumError {
     #[error("--length is only supported with --algorithm blake2b, sha2, or sha3")]
     LengthOnlyForBlake2bSha2Sha3,
 
-    #[error("the --binary and --text options are meaningless when verifying checksums")]
-    BinaryTextConflict,
     #[error("--text mode is only supported with --untagged")]
     TextWithoutUntagged,
     #[error("--check is not supported with --algorithm={{bsd,sysv,crc,crc32b}}")]
