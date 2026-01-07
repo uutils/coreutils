@@ -4961,3 +4961,42 @@ fn tail_n_lines_with_emoji() {
         .succeeds()
         .stdout_only("💐\n");
 }
+
+#[test]
+fn test_debug_flag_with_polling() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("f");
+
+    let mut child = ts
+        .ucmd()
+        .args(&["--debug", "-f", "--use-polling", "f"])
+        .run_no_wait();
+
+    child.make_assertion_with_delay(500).is_alive();
+    child
+        .kill()
+        .make_assertion()
+        .with_all_output()
+        .stderr_contains("tail: using polling mode");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_debug_flag_with_inotify() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("f");
+
+    let mut child = ts
+        .ucmd()
+        .args(&["--debug", "-f", "f"])
+        .run_no_wait();
+
+    child.make_assertion_with_delay(500).is_alive();
+    child
+        .kill()
+        .make_assertion()
+        .with_all_output()
+        .stderr_contains("tail: using notification mode");
+}
