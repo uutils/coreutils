@@ -20,7 +20,7 @@ pub enum UEncoding {
     Utf8,
 }
 
-const DEFAULT_LOCALE: Locale = locale!("en-US-posix");
+pub const DEFAULT_LOCALE: Locale = locale!("en-US-posix");
 
 /// Look at 3 environment variables in the following order
 ///
@@ -64,10 +64,15 @@ fn get_locale_from_env(locale_name: &str) -> (Locale, UEncoding) {
 }
 
 /// Get the collating locale from the environment
-fn get_collating_locale() -> &'static (Locale, UEncoding) {
+pub fn get_collating_locale() -> &'static (Locale, UEncoding) {
     static COLLATING_LOCALE: OnceLock<(Locale, UEncoding)> = OnceLock::new();
 
     COLLATING_LOCALE.get_or_init(|| get_locale_from_env("LC_COLLATE"))
+}
+
+/// Check if locale-aware collation should be used (i.e., not C/POSIX locale)
+pub fn should_use_locale_collation() -> bool {
+    get_collating_locale().0 != DEFAULT_LOCALE
 }
 
 /// Get the numeric locale from the environment
