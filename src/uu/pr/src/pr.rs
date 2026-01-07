@@ -276,14 +276,18 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .long(options::COLUMN_CHAR_SEPARATOR)
                 .help(translate!("pr-help-column-char-separator"))
-                .value_name("char"),
+                .value_name("char")
+                .num_args(0..=1)
+                .default_missing_value("\t"),
         )
         .arg(
             Arg::new(options::COLUMN_STRING_SEPARATOR)
                 .short('S')
                 .long(options::COLUMN_STRING_SEPARATOR)
                 .help(translate!("pr-help-column-string-separator"))
-                .value_name("string"),
+                .value_name("string")
+                .num_args(0..=1)
+                .default_missing_value(" "),
         )
         .arg(
             Arg::new(options::MERGE)
