@@ -93,7 +93,7 @@ export CARGOFLAGS # tell to make
 ln -vf "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests use renamed install to ginstall
 if [ "${SELINUX_ENABLED}" = 1 ];then
     # Build few utils for SELinux for faster build. MULTICALL=y fails...
-    "${MAKE}" UTILS="cat chcon cp cut echo env groups id ln ls mkdir mkfifo mknod mktemp mv printf rm rmdir runcon stat test touch tr true uname wc whoami"
+    "${MAKE}" UTILS="cat chcon chmod cp cut echo env groups id ln ls mkdir mkfifo mknod mktemp mv printf rm rmdir runcon stat test touch tr true uname wc whoami"
 else
     # Use MULTICALL=y for faster build
     "${MAKE}" MULTICALL=y SKIP_UTILS="install more seq"
@@ -320,11 +320,9 @@ echo "n_stat1 = \$n_stat1"\n\
 echo "n_stat2 = \$n_stat2"\n\
 test \$n_stat1 -ge \$n_stat2 \\' tests/ls/stat-free-color.sh
 
-# no need to replicate this output with hashsum
+# clap changes the error message. Check exit code only.
 "${SED}" -i -e  "s|Try 'md5sum --help' for more information.\\\n||" tests/cksum/md5sum.pl
-# clap changes the error message
- "${SED}" -i '/check-ignore-missing-4/,/EXIT=> 1/ { /ERR=>/,/try_help/d }' tests/cksum/md5sum.pl
-
+"${SED}" -i '/check-ignore-missing-4/,/EXIT/c \     ['\''check-ignore-missing-4'\'', '\''--ignore-missing'\'', {IN=> {f=> '\'''\''}}, {ERR_SUBST=>"s/.*//s"}, {EXIT=> 1}],' tests/cksum/md5sum.pl
 # Our ls command always outputs ANSI color codes prepended with a zero. However,
 # in the case of GNU, it seems inconsistent. Nevertheless, it looks like it
 # doesn't matter whether we prepend a zero or not.

@@ -1038,7 +1038,7 @@ fn copy_dir_contents(
     }
     #[cfg(not(unix))]
     {
-        copy_dir_contents_recursive(from, to, None, None, verbose, progress_bar, display_manager)?;
+        copy_dir_contents_recursive(from, to, verbose, progress_bar, display_manager)?;
     }
 
     Ok(())
@@ -1049,8 +1049,6 @@ fn copy_dir_contents_recursive(
     to_dir: &Path,
     #[cfg(unix)] hardlink_tracker: &mut HardlinkTracker,
     #[cfg(unix)] hardlink_scanner: &HardlinkGroupScanner,
-    #[cfg(not(unix))] _hardlink_tracker: Option<()>,
-    #[cfg(not(unix))] _hardlink_scanner: Option<()>,
     verbose: bool,
     progress_bar: Option<&ProgressBar>,
     display_manager: Option<&MultiProgress>,
@@ -1089,10 +1087,6 @@ fn copy_dir_contents_recursive(
                 hardlink_tracker,
                 #[cfg(unix)]
                 hardlink_scanner,
-                #[cfg(not(unix))]
-                _hardlink_tracker,
-                #[cfg(not(unix))]
-                _hardlink_scanner,
                 verbose,
                 progress_bar,
                 display_manager,

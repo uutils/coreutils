@@ -7,8 +7,7 @@
 
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
-use std::ffi::{OsStr, OsString};
-use std::iter;
+use std::ffi::OsString;
 use uucore::checksum::compute::{
     ChecksumComputeOptions, figure_out_output_format, perform_checksum_computation,
 };
@@ -121,25 +120,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let length = maybe_sanitize_length(algo_cli, input_length)?;
 
-    let files = matches.get_many::<OsString>(options::FILE).map_or_else(
-        // No files given, read from stdin.
-        || Box::new(iter::once(OsStr::new("-"))) as Box<dyn Iterator<Item = &OsStr>>,
-        // At least one file given, read from them.
-        |files| Box::new(files.map(OsStr::new)) as Box<dyn Iterator<Item = &OsStr>>,
-    );
+    // clap provides the default value -. So we unwrap() safety.
+    let files = matches
+        .get_many::<OsString>(options::FILE)
+        .unwrap()
+        .map(|s| s.as_os_str());
 
     if check {
         // cksum does not support '--check'ing legacy algorithms
         if algo_cli.is_some_and(AlgoKind::is_legacy) {
             return Err(ChecksumError::AlgorithmNotSupportedWithCheck.into());
-        }
-
-        let text_flag = matches.get_flag(options::TEXT);
-        let binary_flag = matches.get_flag(options::BINARY);
-        let tag = matches.get_flag(options::TAG);
-
-        if tag || binary_flag || text_flag {
-            return Err(ChecksumError::BinaryTextConflict.into());
         }
 
         // Execute the checksum validation based on the presence of files or the use of stdin
@@ -164,7 +154,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Set the default algorithm to CRC when not '--check'ing.
     let algo_kind = algo_cli.unwrap_or(AlgoKind::Crc);
 
-    let tag = matches.get_flag(options::TAG) || !matches.get_flag(options::UNTAGGED);
+    let tag = !matches.get_flag(options::UNTAGGED); // Making TAG default at clap blocks --untagged 
     let binary = matches.get_flag(options::BINARY);
 
     let algo = SizedAlgoKind::from_unsized(algo_kind, length)?;
@@ -200,6 +190,8 @@ pub fn uu_app() -> Command {
                 .hide(true)
                 .action(ArgAction::Append)
                 .value_parser(ValueParser::os_string())
+                .default_value("-")
+                .hide_default_value(true)
                 .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
@@ -251,6 +243,9 @@ pub fn uu_app() -> Command {
                 .short('c')
                 .long(options::CHECK)
                 .help(translate!("cksum-help-check"))
+                .conflicts_with(options::TAG)
+                .conflicts_with(options::BINARY)
+                .conflicts_with(options::TEXT)
                 .action(ArgAction::SetTrue),
         )
         .arg(

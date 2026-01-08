@@ -276,14 +276,18 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .long(options::COLUMN_CHAR_SEPARATOR)
                 .help(translate!("pr-help-column-char-separator"))
-                .value_name("char"),
+                .value_name("char")
+                .num_args(0..=1)
+                .default_missing_value("\t"),
         )
         .arg(
             Arg::new(options::COLUMN_STRING_SEPARATOR)
                 .short('S')
                 .long(options::COLUMN_STRING_SEPARATOR)
                 .help(translate!("pr-help-column-string-separator"))
-                .value_name("string"),
+                .value_name("string")
+                .num_args(0..=1)
+                .default_missing_value(" "),
         )
         .arg(
             Arg::new(options::MERGE)
@@ -1180,34 +1184,23 @@ fn header_content(options: &OutputOptions, page: usize) -> Vec<String> {
     // Use the line width if available, otherwise use default of 72
     let total_width = options.line_width.unwrap_or(DEFAULT_COLUMN_WIDTH);
 
-    // GNU pr uses a specific layout:
-    // Date takes up the left part, filename is centered, page is right-aligned
     let date_len = date_part.chars().count();
     let filename_len = filename.chars().count();
     let page_len = page_part.chars().count();
 
     let header_line = if date_len + filename_len + page_len + 2 < total_width {
-        // Check if we're using a custom date format that needs centered alignment
-        // This preserves backward compatibility while fixing the GNU time-style test
-        if date_part.starts_with('+') {
-            // GNU pr uses centered layout for headers with custom date formats
-            // The filename should be centered between the date and page parts
-            let space_for_filename = total_width - date_len - page_len;
-            let padding_before_filename = (space_for_filename - filename_len) / 2;
-            let padding_after_filename =
-                space_for_filename - filename_len - padding_before_filename;
+        // The filename should be centered between the date and page parts
+        let space_for_filename = total_width - date_len - page_len;
+        let padding_before_filename = (space_for_filename - filename_len) / 2;
+        let padding_after_filename = space_for_filename - filename_len - padding_before_filename;
 
-            format!(
-                "{date_part}{:width1$}{filename}{:width2$}{page_part}",
-                "",
-                "",
-                width1 = padding_before_filename,
-                width2 = padding_after_filename
-            )
-        } else {
-            // For standard date formats, use simple spacing for backward compatibility
-            format!("{date_part} {filename} {page_part}")
-        }
+        format!(
+            "{date_part}{:width1$}{filename}{:width2$}{page_part}",
+            "",
+            "",
+            width1 = padding_before_filename,
+            width2 = padding_after_filename
+        )
     } else {
         // If content is too long, just use single spaces
         format!("{date_part} {filename} {page_part}")

@@ -407,7 +407,7 @@ impl Chmoder {
                 // should not change the permissions in this case
                 continue;
             }
-            if self.recursive && self.preserve_root && file == Path::new("/") {
+            if self.recursive && self.preserve_root && Self::is_root(file) {
                 return Err(ChmodError::PreserveRoot("/".into()).into());
             }
             if self.recursive {
@@ -417,6 +417,10 @@ impl Chmoder {
             }
         }
         r
+    }
+
+    fn is_root(file: impl AsRef<Path>) -> bool {
+        matches!(fs::canonicalize(&file), Ok(p) if p == Path::new("/"))
     }
 
     #[cfg(not(target_os = "linux"))]
