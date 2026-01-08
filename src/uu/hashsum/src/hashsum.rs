@@ -119,7 +119,10 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         .unwrap_or_else(|| OsStr::new(NAME))
         .to_string_lossy();
 
-    let args = iter::once(program.clone()).chain(args);
+    // Add virtual untagged --\0 to use same logic with cksum
+    let args = iter::once(program.clone())
+        .chain(iter::once(OsString::from("--\0")))
+        .chain(args);
 
     // Default binary in Windows, text mode otherwise
     let binary_flag_default = cfg!(windows);
@@ -205,7 +208,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
 mod options {
     //pub const ALGORITHM: &str = "algorithm";
     pub const FILE: &str = "file";
-    //pub const UNTAGGED: &str = "untagged";
+    pub const UNTAGGED: &str = "\0"; // To keep similar logic with cksum
     pub const TAG: &str = "tag";
     pub const LENGTH: &str = "length";
     //pub const RAW: &str = "raw";
@@ -220,10 +223,8 @@ mod options {
 }
 
 pub fn uu_app_common() -> Command {
-    // --text --arg-deps-check should be error by Arg::new(options::CHECK)...conflicts_with(options::TEXT)
-    // https://github.com/clap-rs/clap/issues/4520 ?
-    // Let --{warn,strict,quiet,status,ignore-missing} reject --text and remove them later.
-    // Bad error message, but not a lie...
+    // To keep same logic with cksum and avoid https://github.com/clap-rs/clap/issues/4520,
+    // --text depends on virtual --untagged
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
@@ -258,11 +259,18 @@ pub fn uu_app_common() -> Command {
                 .conflicts_with(options::TAG),
         )
         .arg(
+            Arg::new(options::UNTAGGED)
+                .long(options::UNTAGGED)
+                .overrides_with(options::TAG)
+                .action(ArgAction::SetTrue)
+                .hide(true),
+        )
+        .arg(
             Arg::new(options::TAG)
                 .long("tag")
                 .help(translate!("hashsum-help-tag"))
                 .action(ArgAction::SetTrue)
-                .conflicts_with("text"),
+                .overrides_with(options::TEXT),
         )
         .arg(
             Arg::new(options::TEXT)
@@ -279,6 +287,7 @@ pub fn uu_app_common() -> Command {
                     }
                 })
                 .conflicts_with("binary")
+                .requires(options::UNTAGGED)
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -288,7 +297,6 @@ pub fn uu_app_common() -> Command {
                 .help(translate!("hashsum-help-quiet"))
                 .action(ArgAction::SetTrue)
                 .overrides_with_all([options::STATUS, options::WARN])
-                .conflicts_with("text")
                 .requires(options::CHECK),
         )
         .arg(
@@ -298,7 +306,6 @@ pub fn uu_app_common() -> Command {
                 .help(translate!("hashsum-help-status"))
                 .action(ArgAction::SetTrue)
                 .overrides_with_all([options::QUIET, options::WARN])
-                .conflicts_with("text")
                 .requires(options::CHECK),
         )
         .arg(
@@ -306,7 +313,6 @@ pub fn uu_app_common() -> Command {
                 .long("strict")
                 .help(translate!("hashsum-help-strict"))
                 .action(ArgAction::SetTrue)
-                .conflicts_with("text")
                 .requires(options::CHECK),
         )
         .arg(
@@ -314,7 +320,6 @@ pub fn uu_app_common() -> Command {
                 .long("ignore-missing")
                 .help(translate!("hashsum-help-ignore-missing"))
                 .action(ArgAction::SetTrue)
-                .conflicts_with("text")
                 .requires(options::CHECK),
         )
         .arg(
@@ -324,7 +329,6 @@ pub fn uu_app_common() -> Command {
                 .help(translate!("hashsum-help-warn"))
                 .action(ArgAction::SetTrue)
                 .overrides_with_all([options::QUIET, options::STATUS])
-                .conflicts_with("text")
                 .requires(options::CHECK),
         )
         .arg(
