@@ -38,12 +38,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut format_seen = false;
     // Parse and process the format string
+    let mut stdout = uucore::TrackingWriter::new(stdout());
     let mut args = FormatArguments::new(&values);
     for item in parse_spec_and_escape(format) {
         if let Ok(FormatItem::Spec(_)) = item {
             format_seen = true;
         }
-        match item?.write(stdout(), &mut args)? {
+        match item?.write(&mut stdout, &mut args)? {
             ControlFlow::Continue(()) => {}
             ControlFlow::Break(()) => return Ok(()),
         }
@@ -70,7 +71,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     while !args.is_exhausted() {
         for item in parse_spec_and_escape(format) {
-            match item?.write(stdout(), &mut args)? {
+            match item?.write(&mut stdout, &mut args)? {
                 ControlFlow::Continue(()) => {}
                 ControlFlow::Break(()) => return Ok(()),
             }
