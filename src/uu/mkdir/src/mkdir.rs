@@ -3,14 +3,14 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) ugoa cmode
+// spell-checker:ignore (ToDO) ugoa cmode RAII
 
 use clap::builder::ValueParser;
 use clap::parser::ValuesRef;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
-#[cfg(not(windows))]
+#[cfg(all(unix, target_os = "linux"))]
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
 use uucore::translate;
@@ -191,7 +191,8 @@ pub fn mkdir(path: &Path, config: &Config) -> UResult<()> {
     create_dir(path, false, config)
 }
 
-#[cfg(any(unix, target_os = "redox"))]
+/// Only needed on Linux to add ACL permission bits after directory creation.
+#[cfg(all(unix, target_os = "linux"))]
 fn chmod(path: &Path, mode: u32) -> UResult<()> {
     use std::fs::{Permissions, set_permissions};
     use std::os::unix::fs::PermissionsExt;
@@ -199,12 +200,6 @@ fn chmod(path: &Path, mode: u32) -> UResult<()> {
     set_permissions(path, mode).map_err_context(
         || translate!("mkdir-error-cannot-set-permissions", "path" => path.quote()),
     )
-}
-
-#[cfg(windows)]
-fn chmod(_path: &Path, _mode: u32) -> UResult<()> {
-    // chmod on Windows only sets the readonly flag, which isn't even honored on directories
-    Ok(())
 }
 
 // Create a directory at the given path.
@@ -250,13 +245,67 @@ fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
     create_single_dir(path, is_parent, config)
 }
 
+/// RAII guard to restore umask on drop, ensuring cleanup even on panic.
+#[cfg(unix)]
+struct UmaskGuard(uucore::libc::mode_t);
+
+#[cfg(unix)]
+impl UmaskGuard {
+    /// Set umask to the given value and return a guard that restores the original on drop.
+    fn set(new_mask: uucore::libc::mode_t) -> Self {
+        let old_mask = unsafe { uucore::libc::umask(new_mask) };
+        Self(old_mask)
+    }
+}
+
+#[cfg(unix)]
+impl Drop for UmaskGuard {
+    fn drop(&mut self) {
+        unsafe {
+            uucore::libc::umask(self.0);
+        }
+    }
+}
+
+/// Create a directory with the exact mode specified, bypassing umask.
+///
+/// GNU mkdir temporarily sets umask to 0 before calling mkdir(2), ensuring the
+/// directory is created atomically with the correct permissions. This avoids a
+/// race condition where the directory briefly exists with umask-based permissions.
+#[cfg(unix)]
+fn create_dir_with_mode(path: &Path, mode: u32) -> std::io::Result<()> {
+    use std::os::unix::fs::DirBuilderExt;
+
+    // Temporarily set umask to 0 so the directory is created with the exact mode.
+    // The guard restores the original umask on drop, even if we panic.
+    let _guard = UmaskGuard::set(0);
+
+    std::fs::DirBuilder::new().mode(mode).create(path)
+}
+
+#[cfg(not(unix))]
+fn create_dir_with_mode(path: &Path, _mode: u32) -> std::io::Result<()> {
+    std::fs::create_dir(path)
+}
+
 // Helper function to create a single directory with appropriate permissions
 // `is_parent` argument is not used on windows
 #[allow(unused_variables)]
 fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
     let path_exists = path.exists();
 
-    match std::fs::create_dir(path) {
+    // Calculate the mode to use for directory creation
+    #[cfg(unix)]
+    let create_mode = if is_parent {
+        // For parent directories with -p, use umask-derived mode with u+wx
+        (!mode::get_umask() & 0o777) | 0o300
+    } else {
+        config.mode
+    };
+    #[cfg(not(unix))]
+    let create_mode = config.mode;
+
+    match create_dir_with_mode(path, create_mode) {
         Ok(()) => {
             if config.verbose {
                 println!(
@@ -265,30 +314,17 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
                 );
             }
 
+            // On Linux, we may need to add ACL permission bits via chmod.
+            // On other Unix systems, the directory was already created with the correct mode.
             #[cfg(all(unix, target_os = "linux"))]
-            let new_mode = if path_exists {
-                config.mode
-            } else {
+            if !path_exists {
                 // TODO: Make this macos and freebsd compatible by creating a function to get permission bits from
                 // acl in extended attributes
                 let acl_perm_bits = uucore::fsxattr::get_acl_perm_bits_from_xattr(path);
-
-                if is_parent {
-                    (!mode::get_umask() & 0o777) | 0o300 | acl_perm_bits
-                } else {
-                    config.mode | acl_perm_bits
+                if acl_perm_bits != 0 {
+                    chmod(path, create_mode | acl_perm_bits)?;
                 }
-            };
-            #[cfg(all(unix, not(target_os = "linux")))]
-            let new_mode = if is_parent {
-                (!mode::get_umask() & 0o777) | 0o300
-            } else {
-                config.mode
-            };
-            #[cfg(windows)]
-            let new_mode = config.mode;
-
-            chmod(path, new_mode)?;
+            }
 
             // Apply SELinux context if requested
             #[cfg(feature = "selinux")]
