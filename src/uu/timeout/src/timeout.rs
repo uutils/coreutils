@@ -27,8 +27,8 @@ use uucore::{
     signals::{signal_by_name_or_value, signal_name_by_value},
 };
 
-use nix::sys::signal::{kill, Signal};
-use nix::unistd::{getpid, setpgid, Pid};
+use nix::sys::signal::{Signal, kill};
+use nix::unistd::{Pid, getpid, setpgid};
 
 pub mod options {
     pub static FOREGROUND: &str = "foreground";
