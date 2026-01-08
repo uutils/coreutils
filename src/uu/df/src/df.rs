@@ -311,7 +311,11 @@ fn get_all_filesystems(opt: &Options) -> UResult<Vec<Filesystem>> {
         // but `vmi` is probably not very long in practice.
         if is_included(&mi, opt) && is_best(&mounts, &mi) {
             let dev_path: &Path = Path::new(&mi.dev_name);
-            if dev_path.is_symlink() {
+            // Only check is_symlink() for absolute paths. For non-absolute paths
+            // like "tmpfs", "sysfs", etc., is_symlink() would resolve relative to
+            // the current working directory, which is extremely slow in deeply
+            // nested directories (O(n) syscalls where n is the directory depth).
+            if dev_path.is_absolute() && dev_path.is_symlink() {
                 if let Ok(canonicalized_symlink) = uucore::fs::canonicalize(
                     dev_path,
                     uucore::fs::MissingHandling::Existing,
