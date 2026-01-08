@@ -1551,7 +1551,7 @@ fn copy_source(
         if options.parents {
             for (x, y) in aligned_ancestors(source, dest.as_path()) {
                 if let Ok(src) = canonicalize(x, MissingHandling::Normal, ResolveMode::Physical) {
-                    copy_attributes(&src, y, options, false)?;
+                    copy_attributes(&src, y, &options.attributes, false)?;
                 }
             }
         }
@@ -1717,25 +1717,24 @@ fn copy_extended_attrs(source: &Path, dest: &Path) -> CopyResult<()> {
 pub(crate) fn copy_attributes(
     source: &Path,
     dest: &Path,
-    options: &Options,
-    is_dir_created: bool,
+    attributes: &Attributes,
+    is_dest_created: bool,
 ) -> CopyResult<()> {
     let context = &*format!("{} -> {}", source.quote(), dest.quote());
     let source_metadata =
         fs::symlink_metadata(source).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
 
-    let is_preserve_required = matches!(options.attributes.mode, Preserve::Yes { required: true });
-    let is_explicit_true = matches!(options.attributes.mode, Preserve::No { explicit: true });
+    let is_explicit = matches!(attributes.mode, Preserve::No { explicit: true });
 
-    let mode = if !is_preserve_required && !is_explicit_true && dest.is_dir() && is_dir_created {
+    let mode = if !is_explicit && dest.is_dir() && is_dest_created {
         Preserve::Yes { required: false }
     } else {
-        options.attributes.mode
+        attributes.mode
     };
 
     // Ownership must be changed first to avoid interfering with mode change.
     #[cfg(unix)]
-    handle_preserve(&options.attributes.ownership, || -> CopyResult<()> {
+    handle_preserve(&attributes.ownership, || -> CopyResult<()> {
         use std::os::unix::prelude::MetadataExt;
         use uucore::perms::Verbosity;
         use uucore::perms::VerbosityLevel;
@@ -1781,7 +1780,7 @@ pub(crate) fn copy_attributes(
             #[cfg(unix)]
             {
                 let mut perms = source_metadata.permissions();
-                if is_dir_created && !is_preserve_required && !is_explicit_true {
+                if is_dest_created && !is_explicit {
                     use uucore::mode::get_umask;
                     let mode = perms.mode() & !get_umask();
                     perms.set_mode(mode);
@@ -1800,7 +1799,7 @@ pub(crate) fn copy_attributes(
         Ok(())
     })?;
 
-    handle_preserve(&options.attributes.timestamps, || -> CopyResult<()> {
+    handle_preserve(&attributes.timestamps, || -> CopyResult<()> {
         let atime = FileTime::from_last_access_time(&source_metadata);
         let mtime = FileTime::from_last_modification_time(&source_metadata);
         if dest.is_symlink() {
@@ -1813,7 +1812,7 @@ pub(crate) fn copy_attributes(
     })?;
 
     #[cfg(all(feature = "selinux", target_os = "linux"))]
-    handle_preserve(&options.attributes.context, || -> CopyResult<()> {
+    handle_preserve(&attributes.context, || -> CopyResult<()> {
         // Get the source context and apply it to the destination
         if let Ok(context) = selinux::SecurityContext::of_path(source, false, false) {
             if let Some(context) = context {
@@ -1831,7 +1830,7 @@ pub(crate) fn copy_attributes(
         Ok(())
     })?;
 
-    handle_preserve(&options.attributes.xattr, || -> CopyResult<()> {
+    handle_preserve(&attributes.xattr, || -> CopyResult<()> {
         #[cfg(all(unix, not(target_os = "android")))]
         {
             copy_extended_attrs(source, dest)?;
@@ -2598,14 +2597,14 @@ fn copy_file(
             .ok()
             .filter(|p| p.exists())
             .unwrap_or_else(|| source.to_path_buf());
-        copy_attributes(&src_for_attrs, dest, options, false)?;
+        copy_attributes(&src_for_attrs, dest, &options.attributes, false)?;
     } else if source_is_stream && !source.exists() {
         // Some stream files may not exist after we have copied it,
         // like anonymous pipes. Thus, we can't really copy its
         // attributes. However, this is already handled in the stream
         // copy function (see `copy_stream` under platform/linux.rs).
     } else {
-        copy_attributes(source, dest, options, false)?;
+        copy_attributes(source, dest, &options.attributes, false)?;
     }
 
     #[cfg(all(feature = "selinux", target_os = "linux"))]
@@ -2787,7 +2786,7 @@ fn copy_link(
         delete_path(dest, options)?;
     }
     symlink_file(&link, dest, symlinked_files)?;
-    copy_attributes(source, dest, options, false)
+    copy_attributes(source, dest, &options.attributes, false)
 }
 
 /// Generate an error message if `target` is not the correct `target_type`

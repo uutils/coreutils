@@ -516,7 +516,7 @@ pub(crate) fn copy_directory(
                             copy_attributes(
                                 &entry.source_absolute,
                                 &entry.local_to_target,
-                                options,
+                                &options.attributes,
                                 created_dir,
                             )?;
                         }
@@ -534,7 +534,12 @@ pub(crate) fn copy_directory(
     // Fix permissions for all directories we created
     // This ensures that even sibling directories get their permissions fixed
     for (source_path, dest_path, is_dir_created) in dirs_needing_permissions {
-        copy_attributes(&source_path, &dest_path, options, is_dir_created)?;
+        copy_attributes(
+            &source_path,
+            &dest_path,
+            &options.attributes,
+            is_dir_created,
+        )?;
     }
 
     // Also fix permissions for parent directories,
@@ -543,7 +548,7 @@ pub(crate) fn copy_directory(
         let dest = target.join(root.file_name().unwrap());
         for (x, y) in aligned_ancestors(root, dest.as_path()) {
             if let Ok(src) = canonicalize(x, MissingHandling::Normal, ResolveMode::Physical) {
-                copy_attributes(&src, y, options, false)?;
+                copy_attributes(&src, y, &options.attributes, false)?;
             }
         }
     }
