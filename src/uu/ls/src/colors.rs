@@ -18,6 +18,14 @@ const ANSI_RESET: &str = "\x1b[0m";
 const ANSI_CLEAR_EOL: &str = "\x1b[K";
 const EMPTY_STYLE: &str = "\x1b[m";
 
+// Unix file mode bits
+const MODE_SETUID: u32 = 0o4000;
+const MODE_SETGID: u32 = 0o2000;
+const MODE_EXECUTABLE: u32 = 0o0111;
+const MODE_STICKY_OTHER_WRITABLE: u32 = 0o1002;
+const MODE_OTHER_WRITABLE: u32 = 0o0002;
+const MODE_STICKY: u32 = 0o1000;
+
 enum RawIndicatorStyle {
     Empty,
     Code(Indicator),
@@ -382,13 +390,13 @@ impl<'a> StyleManager<'a> {
             if self.needs_file_metadata() {
                 if let Some(metadata) = path.metadata() {
                     let mode = metadata.mode();
-                    if self.has_indicator_style(Indicator::Setuid) && mode & 0o4000 != 0 {
+                    if self.has_indicator_style(Indicator::Setuid) && mode & MODE_SETUID != 0 {
                         return Some(Indicator::Setuid);
                     }
-                    if self.has_indicator_style(Indicator::Setgid) && mode & 0o2000 != 0 {
+                    if self.has_indicator_style(Indicator::Setgid) && mode & MODE_SETGID != 0 {
                         return Some(Indicator::Setgid);
                     }
-                    if self.has_indicator_style(Indicator::ExecutableFile) && mode & 0o0111 != 0 {
+                    if self.has_indicator_style(Indicator::ExecutableFile) && mode & MODE_EXECUTABLE != 0 {
                         return Some(Indicator::ExecutableFile);
                     }
                     if self.has_indicator_style(Indicator::MultipleHardLinks)
@@ -408,14 +416,14 @@ impl<'a> StyleManager<'a> {
                 if let Some(metadata) = path.metadata() {
                     let mode = metadata.mode();
                     if self.has_indicator_style(Indicator::StickyAndOtherWritable)
-                        && mode & 0o1002 == 0o1002
+                        && mode & MODE_STICKY_OTHER_WRITABLE == MODE_STICKY_OTHER_WRITABLE
                     {
                         return Some(Indicator::StickyAndOtherWritable);
                     }
-                    if self.has_indicator_style(Indicator::OtherWritable) && mode & 0o0002 != 0 {
+                    if self.has_indicator_style(Indicator::OtherWritable) && mode & MODE_OTHER_WRITABLE != 0 {
                         return Some(Indicator::OtherWritable);
                     }
-                    if self.has_indicator_style(Indicator::Sticky) && mode & 0o1000 != 0 {
+                    if self.has_indicator_style(Indicator::Sticky) && mode & MODE_STICKY != 0 {
                         return Some(Indicator::Sticky);
                     }
                 }
