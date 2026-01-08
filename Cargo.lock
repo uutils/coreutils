@@ -537,7 +537,6 @@ name = "coreutils"
 version = "0.5.0"
 dependencies = [
  "bincode",
- "chrono",
  "clap",
  "clap_complete",
  "clap_mangen",
@@ -4011,7 +4010,6 @@ dependencies = [
 name = "uu_touch"
 version = "0.5.0"
 dependencies = [
- "chrono",
  "clap",
  "filetime",
  "fluent",
@@ -4122,9 +4120,9 @@ dependencies = [
 name = "uu_uptime"
 version = "0.5.0"
 dependencies = [
- "chrono",
  "clap",
  "fluent",
+ "jiff",
  "thiserror 2.0.17",
  "utmp-classic",
  "uucore",
@@ -4204,7 +4202,6 @@ dependencies = [
  "blake2b_simd",
  "blake3",
  "bstr",
- "chrono",
  "clap",
  "codspeed-divan-compat",
  "crc-fast",
