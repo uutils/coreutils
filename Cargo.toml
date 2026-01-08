@@ -426,7 +426,6 @@ textwrap.workspace = true
 uucore.workspace = true
 zip = { workspace = true, optional = true }
 
-
 # * uutils
 uu_test = { optional = true, version = "0.5.0", package = "uu_test", path = "src/uu/test" }
 #
