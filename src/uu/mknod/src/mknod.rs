@@ -3,12 +3,10 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) parsemode makedev sysmacros perror IFBLK IFCHR IFIFO
+// spell-checker:ignore (ToDO) parsemode makedev sysmacros perror IFBLK IFCHR IFIFO　sflag
 
 use clap::{Arg, ArgAction, Command, value_parser};
-use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
-use libc::{dev_t, mode_t};
-use std::ffi::CString;
+use nix::sys::stat::{Mode, SFlag, mknod as nix_mknod, umask as nix_umask};
 
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError, set_exit_code};
@@ -16,7 +14,7 @@ use uucore::format_usage;
 use uucore::fs::makedev;
 use uucore::translate;
 
-const MODE_RW_UGO: mode_t = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
+const MODE_RW_UGO: u32 = 0o666;
 
 mod options {
     pub const MODE: &str = "mode";
@@ -28,31 +26,33 @@ mod options {
 }
 
 #[derive(Clone, PartialEq)]
-enum FileType {
+pub enum FileType {
     Block,
     Character,
     Fifo,
 }
 
 impl FileType {
-    fn as_mode(&self) -> mode_t {
+    fn as_sflag(&self) -> SFlag {
         match self {
-            Self::Block => S_IFBLK,
-            Self::Character => S_IFCHR,
-            Self::Fifo => S_IFIFO,
+            Self::Block => SFlag::S_IFBLK,
+            Self::Character => SFlag::S_IFCHR,
+            Self::Fifo => SFlag::S_IFIFO,
         }
     }
 }
 
 /// Configuration for special inode creation.
 pub struct Config<'a> {
-    /// bitmask of inode mode (permissions and file type)
-    pub mode: mode_t,
+    /// Permission bits for the inode
+    pub mode: Mode,
+
+    pub file_type: FileType,
 
     /// when false, the exact mode bits will be set
     pub use_umask: bool,
 
-    pub dev: dev_t,
+    pub dev: u64,
 
     /// Set security context (SELinux/SMACK).
     pub set_security_context: bool,
@@ -62,59 +62,61 @@ pub struct Config<'a> {
 }
 
 fn mknod(file_name: &str, config: Config) -> i32 {
-    let c_str = CString::new(file_name).expect("Failed to convert to CString");
+    // set umask to 0 and store previous umask
+    let have_prev_umask = if config.use_umask {
+        None
+    } else {
+        Some(nix_umask(Mode::empty()))
+    };
 
-    unsafe {
-        // set umask to 0 and store previous umask
-        let have_prev_umask = if config.use_umask {
-            None
-        } else {
-            Some(libc::umask(0))
-        };
+    let mknod_err = nix_mknod(
+        file_name,
+        config.file_type.as_sflag(),
+        config.mode,
+        config.dev as _,
+    )
+    .err();
+    let errno = if mknod_err.is_some() { -1 } else { 0 };
 
-        let errno = libc::mknod(c_str.as_ptr(), config.mode, config.dev);
-
-        // set umask back to original value
-        if let Some(prev_umask) = have_prev_umask {
-            libc::umask(prev_umask);
-        }
-
-        if errno == -1 {
-            let c_str = CString::new(uucore::execution_phrase().as_bytes())
-                .expect("Failed to convert to CString");
-            // shows the error from the mknod syscall
-            libc::perror(c_str.as_ptr());
-        }
-
-        // Apply SELinux context if requested
-        #[cfg(feature = "selinux")]
-        if config.set_security_context {
-            if let Err(e) = uucore::selinux::set_selinux_security_context(
-                std::path::Path::new(file_name),
-                config.context,
-            ) {
-                // if it fails, delete the file
-                let _ = std::fs::remove_file(file_name);
-                eprintln!("{}: {e}", uucore::util_name());
-                return 1;
-            }
-        }
-
-        // Apply SMACK context if requested
-        #[cfg(feature = "smack")]
-        if config.set_security_context {
-            if let Err(e) =
-                uucore::smack::set_smack_label_and_cleanup(file_name, config.context, |p| {
-                    std::fs::remove_file(p)
-                })
-            {
-                eprintln!("{}: {e}", uucore::util_name());
-                return 1;
-            }
-        }
-
-        errno
+    // set umask back to original value
+    if let Some(prev_umask) = have_prev_umask {
+        nix_umask(prev_umask);
     }
+
+    if let Some(err) = mknod_err {
+        eprintln!(
+            "{}: {}",
+            uucore::execution_phrase(),
+            std::io::Error::from(err)
+        );
+    }
+
+    // Apply SELinux context if requested
+    #[cfg(feature = "selinux")]
+    if config.set_security_context {
+        if let Err(e) = uucore::selinux::set_selinux_security_context(
+            std::path::Path::new(file_name),
+            config.context,
+        ) {
+            // if it fails, delete the file
+            let _ = std::fs::remove_dir(file_name);
+            eprintln!("{}: {}", uucore::util_name(), e);
+            return 1;
+        }
+    }
+
+    // Apply SMACK context if requested
+    #[cfg(feature = "smack")]
+    if config.set_security_context {
+        if let Err(e) = uucore::smack::set_smack_label_and_cleanup(file_name, config.context, |p| {
+            std::fs::remove_file(p)
+        }) {
+            eprintln!("{}: {}", uucore::util_name(), e);
+            return 1;
+        }
+    }
+
+    errno
 }
 
 #[uucore::main]
@@ -131,7 +133,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             parse_mode(str_mode).map_err(|e| USimpleError::new(1, e))?
         }
     };
-    let mode = mode_permissions | file_type.as_mode();
+    let mode = Mode::from_bits_truncate(mode_permissions as nix::libc::mode_t);
 
     let file_name = matches
         .get_one::<String>("name")
@@ -153,7 +155,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 translate!("mknod-error-fifo-no-major-minor"),
             ));
         }
-        (_, Some(&major), Some(&minor)) => makedev(major as _, minor as _),
+        (_, Some(&major), Some(&minor)) => makedev(major as _, minor as _) as u64,
         _ => {
             return Err(UUsageError::new(
                 1,
@@ -164,6 +166,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let config = Config {
         mode,
+        file_type: file_type.clone(),
         use_umask,
         dev,
         set_security_context: set_security_context || context.is_some(),
@@ -234,8 +237,8 @@ pub fn uu_app() -> Command {
 }
 
 #[allow(clippy::unnecessary_cast)]
-fn parse_mode(str_mode: &str) -> Result<mode_t, String> {
-    let default_mode = (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
+fn parse_mode(str_mode: &str) -> Result<u32, String> {
+    let default_mode = MODE_RW_UGO;
     uucore::mode::parse_chmod(default_mode, str_mode, true, uucore::mode::get_umask())
         .map_err(|e| {
             translate!(
@@ -247,7 +250,7 @@ fn parse_mode(str_mode: &str) -> Result<mode_t, String> {
             if mode > 0o777 {
                 Err(translate!("mknod-error-mode-permission-bits-only"))
             } else {
-                Ok(mode as mode_t)
+                Ok(mode)
             }
         })
 }
