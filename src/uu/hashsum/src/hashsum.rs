@@ -245,6 +245,7 @@ pub fn uu_app_common() -> Command {
                         translate!("hashsum-help-binary-other")
                     }
                 })
+                .overrides_with(options::TEXT)
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -278,7 +279,6 @@ pub fn uu_app_common() -> Command {
                         translate!("hashsum-help-text-other")
                     }
                 })
-                .conflicts_with("binary")
                 .action(ArgAction::SetTrue),
         )
         .arg(

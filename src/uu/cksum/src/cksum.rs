@@ -262,7 +262,6 @@ pub fn uu_app() -> Command {
                 .long(options::TEXT)
                 .short('t')
                 .hide(true)
-                .overrides_with(options::BINARY)
                 .action(ArgAction::SetTrue)
                 .requires(options::UNTAGGED),
         )

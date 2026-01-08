@@ -237,6 +237,19 @@ fn test_check_sha1() {
         .stderr_is("");
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn test_text_binary_device() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ccmd("md5sum")
+        .arg("--text")
+        .arg("--binary")
+        .arg("/dev/null")
+        .succeeds();
+}
+
 #[test]
 fn test_check_md5_ignore_missing() {
     let scene = TestScenario::new(util_name!());
