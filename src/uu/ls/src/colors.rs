@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 use super::PathData;
 use lscolors::{Indicator, LsColors, Style};
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::env;
 use std::ffi::OsString;
@@ -758,7 +759,7 @@ fn parse_indicator_codes() -> (HashMap<Indicator, String>, bool) {
                     }
                     continue;
                 }
-                indicator_codes.insert(indicator, canonicalize_indicator_value(value));
+                indicator_codes.insert(indicator, canonicalize_indicator_value(value).into_owned());
             }
         }
     }
@@ -766,14 +767,14 @@ fn parse_indicator_codes() -> (HashMap<Indicator, String>, bool) {
     (indicator_codes, ln_color_from_target)
 }
 
-fn canonicalize_indicator_value(value: &str) -> String {
+fn canonicalize_indicator_value(value: &str) -> Cow<'_, str> {
     if value.len() == 1 && value.chars().all(|c| c.is_ascii_digit()) {
         let mut canonical = String::with_capacity(2);
         canonical.push('0');
         canonical.push_str(value);
-        canonical
+        Cow::Owned(canonical)
     } else {
-        value.to_string()
+        Cow::Borrowed(value)
     }
 }
 
