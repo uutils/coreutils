@@ -2858,7 +2858,7 @@ fn test_mv_no_prompt_unwriteable_file_with_no_tty() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 fn test_mv_cross_device_symlink_overwrite() {
     use std::fs;
     use std::os::unix::fs::symlink;
