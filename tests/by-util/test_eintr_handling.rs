@@ -11,9 +11,9 @@
 //! # CI Integration
 //! EINTR handling tests are NOW visible in CI logs through integration tests:
 //! - `test_cat_eintr_handling` in `tests/by-util/test_cat.rs`
-//! - `test_comm_eintr_handling` in `tests/by-util/test_comm.rs`  
+//! - `test_comm_eintr_handling` in `tests/by-util/test_comm.rs`
 //! - `test_od_eintr_handling` in `tests/by-util/test_od.rs`
-//! 
+//!
 //! These integration tests use the mock utilities from this module to verify
 //! that each utility properly handles signal interruptions during I/O operations.
 //! Test results appear in CI logs under the "Test" steps when running `cargo nextest run`.
@@ -171,7 +171,7 @@ mod tests {
         assert_eq!(n, 5);
         assert_eq!(&buf, b"hello");
 
-        // Read rest of data without interruption  
+        // Read rest of data without interruption
         let n = reader.read(&mut buf).unwrap();
         assert_eq!(n, 5);
         assert_eq!(&buf, b" worl"); // Second chunk of "hello world"
