@@ -549,6 +549,7 @@ uutests.workspace = true
 uucore = { workspace = true, features = [
   "mode",
   "entries",
+  "pipes",
   "process",
   "signals",
   "utmpx",
@@ -574,7 +575,6 @@ xattr.workspace = true
 serde = { version = "1.0.202", features = ["derive"] }
 bincode = { version = "2.0.1", features = ["serde"] }
 serde-big-array = "0.5.1"
-
 
 [build-dependencies]
 phf_codegen.workspace = true
