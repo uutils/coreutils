@@ -606,6 +606,19 @@ fn test_conflicting_arg() {
         .fails_with_code(1);
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn test_text_tag_device() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ccmd("md5sum")
+        .arg("--text")
+        .arg("--tag")
+        .arg("/dev/null")
+        .succeeds();
+}
+
 #[test]
 fn test_tag() {
     let scene = TestScenario::new(util_name!());

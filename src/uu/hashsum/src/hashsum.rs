@@ -169,6 +169,15 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         .unwrap()
         .map(|s| s.as_os_str());
 
+    // clap's conflicts_with does each other. So we manually rejects --tag --text while we do --text --tag by clap.
+    // cksum can do it naturally by clap via --untagged dep with correct message.
+    if matches.get_flag(options::TEXT) && std::env::args().any(|x| x == "--tag") {
+        return Err(uucore::error::UUsageError::new(
+            1,
+            "--tag --text is not allowed while --text --tag works (unrecommended)".to_string(),
+        ));
+    }
+
     if check {
         // No reason to allow --check with --binary/--text on Cygwin. It want to be same with Linux and --text was broken for a long time.
         let verbose = ChecksumVerbose::new(status, quiet, warn);
@@ -262,7 +271,7 @@ pub fn uu_app_common() -> Command {
                 .long("tag")
                 .help(translate!("hashsum-help-tag"))
                 .action(ArgAction::SetTrue)
-                .conflicts_with("text"),
+                .overrides_with(options::TEXT),
         )
         .arg(
             Arg::new(options::TEXT)
