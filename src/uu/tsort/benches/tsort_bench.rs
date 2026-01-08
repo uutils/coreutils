@@ -116,6 +116,7 @@ fn generate_wide_dag(num_nodes: usize) -> Vec<u8> {
     data
 }
 
+/*
 /// Generate DAG data for input parsing stress tests
 fn generate_input_parsing_heavy(num_edges: usize) -> Vec<u8> {
     // Create a scenario with many edges but relatively few unique nodes
@@ -133,6 +134,7 @@ fn generate_input_parsing_heavy(num_edges: usize) -> Vec<u8> {
 
     data
 }
+*/
 
 /// Benchmark linear chain graphs of different sizes
 /// This tests the performance improvements mentioned in PR #8694
