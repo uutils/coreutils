@@ -80,6 +80,10 @@ mod test_md5sum;
 #[path = "by-util/test_sha1sum.rs"]
 mod test_sha1sum;
 
+#[cfg(feature = "sha224sum")]
+#[path = "by-util/test_sha224sum.rs"]
+mod test_sha224sum;
+
 #[cfg(feature = "cp")]
 #[path = "by-util/test_cp.rs"]
 mod test_cp;
