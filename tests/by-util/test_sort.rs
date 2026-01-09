@@ -1560,6 +1560,32 @@ fn test_g_float() {
 }
 
 #[test]
+fn test_g_float_locale_decimal_separator() {
+    let Ok(locale_fr_utf8) = env::var("LOCALE_FR_UTF8") else {
+        return;
+    };
+    if locale_fr_utf8 == "none" {
+        return;
+    }
+
+    let ts = TestScenario::new("sort");
+
+    ts.ucmd()
+        .env("LC_ALL", &locale_fr_utf8)
+        .args(&["-g", "--stable"])
+        .pipe_in("1,9\n1,10\n")
+        .succeeds()
+        .stdout_is("1,10\n1,9\n");
+
+    ts.ucmd()
+        .env("LC_ALL", &locale_fr_utf8)
+        .args(&["-g", "--stable"])
+        .pipe_in("1.9\n1.10\n")
+        .succeeds()
+        .stdout_is("1.10\n1.9\n");
+}
+
+#[test]
 // Test misc numbers ("'a" is not interpreted as literal, trailing text is ignored...)
 fn test_g_misc() {
     let input = "1\n100\n90\n'a\n85hello\n";
