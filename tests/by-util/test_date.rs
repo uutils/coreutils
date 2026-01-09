@@ -5,7 +5,10 @@
 //
 // spell-checker: ignore: AEDT AEST EEST NZDT NZST Kolkata Iseconds
 
-use chrono::{DateTime, Datelike, Duration, NaiveTime, Utc}; // spell-checker:disable-line
+use std::cmp::Ordering;
+
+use jiff::tz::TimeZone;
+use jiff::{Timestamp, ToSpan};
 use regex::Regex;
 #[cfg(all(unix, not(target_os = "macos")))]
 use uucore::process::geteuid;
@@ -485,7 +488,7 @@ fn test_invalid_format_string() {
 #[test]
 fn test_capitalized_numeric_time_zone() {
     // %z     +hhmm numeric time zone (e.g., -0400)
-    // # is supposed to capitalize, which makes little sense here, but chrono crashes
+    // # is supposed to capitalize, which makes little sense here, but keep coverage
     // on such format so it's good to test.
     let re = Regex::new(r"^[+-]\d{4,4}\n$").unwrap();
     new_ucmd!().arg("+%#z").succeeds().stdout_matches(&re);
@@ -528,10 +531,10 @@ fn test_date_string_human() {
 #[test]
 fn test_negative_offset() {
     let data_formats = vec![
-        ("-1 hour", Duration::hours(1)),
-        ("-1 hours", Duration::hours(1)),
-        ("-1 day", Duration::days(1)),
-        ("-2 weeks", Duration::weeks(2)),
+        ("-1 hour", 1.hours()),
+        ("-1 hours", 1.hours()),
+        ("-1 day", 24.hours()),
+        ("-2 weeks", (14 * 24).hours()),
     ];
     for (date_format, offset) in data_formats {
         new_ucmd!()
@@ -540,11 +543,10 @@ fn test_negative_offset() {
             .arg("--rfc-3339=seconds")
             .succeeds()
             .stdout_str_check(|out| {
-                let date = DateTime::parse_from_rfc3339(out.trim()).unwrap();
-
+                let date = out.trim().parse::<Timestamp>().unwrap();
                 // Is the resulting date roughly what is expected?
-                let expected_date = Utc::now() - offset;
-                (date.to_utc() - expected_date).abs() < Duration::minutes(10)
+                let expected_date = Timestamp::now() - offset;
+                (date - expected_date).abs().compare(10.minutes()).unwrap() == Ordering::Less
             });
     }
 }
@@ -552,14 +554,15 @@ fn test_negative_offset() {
 #[test]
 fn test_relative_weekdays() {
     // Truncate time component to midnight
-    let today = Utc::now().with_time(NaiveTime::MIN).unwrap();
+    let today = Timestamp::now().to_zoned(TimeZone::UTC).date();
     // Loop through each day of the week, starting with today
     for offset in 0..7 {
         for direction in ["last", "this", "next"] {
-            let weekday = (today + Duration::days(offset))
-                .weekday()
-                .to_string()
-                .to_lowercase();
+            let weekday = today
+                .checked_add(offset.days())
+                .unwrap()
+                .strftime("%a")
+                .to_string();
             new_ucmd!()
                 .arg("-d")
                 .arg(format!("{direction} {weekday}"))
@@ -567,14 +570,15 @@ fn test_relative_weekdays() {
                 .arg("--utc")
                 .succeeds()
                 .stdout_str_check(|out| {
-                    let result = DateTime::parse_from_rfc3339(out.trim()).unwrap().to_utc();
+                    let result = out.trim().parse::<Timestamp>().unwrap();
                     let expected = match (direction, offset) {
-                        ("last", _) => today - Duration::days(7 - offset),
+                        ("last", _) => today.checked_sub((7 - offset).days()).unwrap(),
                         ("this", 0) => today,
-                        ("next", 0) => today + Duration::days(7),
-                        _ => today + Duration::days(offset),
+                        ("next", 0) => today.checked_add(7.days()).unwrap(),
+                        _ => today.checked_add(offset.days()).unwrap(),
                     };
-                    result == expected
+                    let expected_ts = expected.to_zoned(TimeZone::UTC).unwrap().timestamp();
+                    result == expected_ts
                 });
         }
     }
@@ -862,7 +866,7 @@ fn test_date_resolution_no_combine() {
 fn test_date_numeric_d_basic_utc() {
     // Verify GNU-compatible pure-digit parsing for -d STRING under UTC
     // 0/00 -> today at 00:00; 7/07 -> today at 07:00; 0700 -> today at 07:00
-    let today = Utc::now().date_naive();
+    let today = Timestamp::now().to_zoned(TimeZone::UTC).date();
     let yyyy = today.year();
     let mm = today.month();
     let dd = today.day();
@@ -1134,9 +1138,7 @@ fn test_date_military_timezone_with_offset_variations() {
 
 #[test]
 fn test_date_military_timezone_with_offset_and_date() {
-    use chrono::{Duration, Utc};
-
-    let today = Utc::now().date_naive();
+    let today = Timestamp::now().to_zoned(TimeZone::UTC).date();
 
     let test_cases = vec![
         ("m", -1), // M = UTC+12
@@ -1158,9 +1160,9 @@ fn test_date_military_timezone_with_offset_and_date() {
     ];
 
     for (input, day_delta) in test_cases {
-        let expected_date = today.checked_add_signed(Duration::days(day_delta)).unwrap();
+        let expected_date = today.checked_add(day_delta.days()).unwrap();
 
-        let expected = format!("{}\n", expected_date.format("%F"));
+        let expected = format!("{}\n", expected_date.strftime("%F"));
 
         new_ucmd!()
             .env("TZ", "UTC")
