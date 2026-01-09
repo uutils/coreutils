@@ -381,6 +381,22 @@ pub fn format_and_print_delimited(input: &[u8], options: &NumfmtOptions) -> Resu
         b'\n'
     };
 
+    // Empty delimiter means treat entire line as single field
+    if delimiter.is_empty() {
+        if uucore::ranges::contain(&options.fields, 1) {
+            let input_str = std::str::from_utf8(input)
+                .map_err(|_| translate!("numfmt-error-invalid-number", "input" => String::from_utf8_lossy(input).into_owned().quote()))?
+                .trim_start();
+            let formatted = format_string(input_str, options, None)?;
+            output.extend_from_slice(formatted.as_bytes());
+        } else {
+            output.extend_from_slice(input);
+        }
+        output.push(eol);
+        std::io::Write::write_all(&mut std::io::stdout(), &output).map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+
     for (n, field) in (1..).zip(split_bytes(input, delimiter)) {
         let field_selected = uucore::ranges::contain(&options.fields, n);
 

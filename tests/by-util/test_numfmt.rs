@@ -1147,3 +1147,12 @@ fn test_unit_separator() {
         new_ucmd!().args(args).succeeds().stdout_only(expected);
     }
 }
+
+#[test]
+fn test_empty_delimiter() {
+    // Empty delimiter treats entire line as single field
+    new_ucmd!()
+        .args(&["-d", "", "--from=auto", "40M"])
+        .succeeds()
+        .stdout_only("40000000\n");
+}
