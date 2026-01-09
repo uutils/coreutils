@@ -1,7 +1,7 @@
 # coreutils (uutils)
 # * see the repository LICENSE, README, and CONTRIBUTING files for more information
 
-# spell-checker:ignore (libs) bigdecimal datetime serde bincode gethostid kqueue libselinux mangen memmap uuhelp startswith constness expl unnested logind cfgs interner
+# spell-checker:ignore (libs) bigdecimal datetime serde wincode gethostid kqueue libselinux mangen memmap uuhelp startswith constness expl unnested logind cfgs interner
 
 [package]
 name = "coreutils"
@@ -311,11 +311,6 @@ binary-heap-plus = "0.5.0"
 bstr = "1.9.1"
 bytecount = "0.6.8"
 byteorder = "1.5.0"
-chrono = { version = "0.4.41", default-features = false, features = [
-  "std",
-  "alloc",
-  "clock",
-] }
 clap = { version = "4.5", features = ["wrap_help", "cargo", "color"] }
 clap_complete = "4.4"
 clap_mangen = "0.2"
@@ -341,11 +336,7 @@ icu_locale = "2.0.0"
 icu_provider = "2.0.0"
 indicatif = "0.18.0"
 itertools = "0.14.0"
-jiff = { version = "0.2.10", default-features = false, features = [
-  "std",
-  "alloc",
-  "tz-system",
-] }
+jiff = "0.2.18"
 libc = "0.2.172"
 linux-raw-sys = "0.12"
 lscolors = { version = "0.21.0", default-features = false, features = [
@@ -541,7 +532,6 @@ yes = { optional = true, version = "0.5.0", package = "uu_yes", path = "src/uu/y
 #pin_cc = { version="1.0.61, < 1.0.62", package="cc" } ## cc v1.0.62 has compiler errors for MinRustV v1.32.0, requires 1.34 (for `std::str::split_ascii_whitespace()`)
 
 [dev-dependencies]
-chrono.workspace = true
 ctor.workspace = true
 filetime.workspace = true
 glob.workspace = true
@@ -582,9 +572,8 @@ xattr.workspace = true
 # to deserialize an utmpx struct into a binary file
 [target.'cfg(all(target_family= "unix",not(target_os = "macos")))'.dev-dependencies]
 serde = { version = "1.0.202", features = ["derive"] }
-bincode = { version = "2.0.1", features = ["serde"] }
-serde-big-array = "0.5.1"
-
+wincode = "0.2.5"
+wincode-derive = "0.2.3"
 
 [build-dependencies]
 phf_codegen.workspace = true

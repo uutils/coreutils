@@ -27,7 +27,8 @@ use uucore::uio_error;
 use walkdir::{DirEntry, WalkDir};
 
 use crate::{
-    CopyResult, CpError, Options, aligned_ancestors, context_for, copy_attributes, copy_file,
+    CopyMode, CopyResult, CpError, Options, aligned_ancestors, context_for, copy_attributes,
+    copy_file,
 };
 
 /// Ensure a Windows path starts with a `\\?`.
@@ -468,6 +469,15 @@ pub(crate) fn copy_directory(
                 let is_dir_for_permissions =
                     entry_is_dir_no_follow || (options.dereference && direntry_path.is_dir());
                 if is_dir_for_permissions {
+                    // For --link mode, copy attributes immediately to avoid O(n) memory
+                    if options.copy_mode == CopyMode::Link {
+                        copy_attributes(
+                            &entry.source_absolute,
+                            &entry.local_to_target,
+                            &options.attributes,
+                        )?;
+                        continue;
+                    }
                     // Add this directory to our list for permission fixing later
                     dirs_needing_permissions
                         .push((entry.source_absolute.clone(), entry.local_to_target.clone()));

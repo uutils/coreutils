@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (ToDO) Sdivide
 
-use chrono::{DateTime, Duration, Utc};
+use jiff::{Timestamp, ToSpan};
 use regex::Regex;
 use std::fs::metadata;
 use uutests::new_ucmd;
@@ -17,8 +17,8 @@ fn file_last_modified_time_format(ucmd: &UCommand, path: &str, format: &str) -> 
     metadata(tmp_dir_path)
         .and_then(|meta| meta.modified())
         .map(|mtime| {
-            let dt: DateTime<Utc> = mtime.into();
-            dt.format(format).to_string()
+            let dt: Timestamp = mtime.try_into().unwrap();
+            dt.strftime(format).to_string()
         })
         .unwrap_or_default()
 }
@@ -27,19 +27,19 @@ fn file_last_modified_time(ucmd: &UCommand, path: &str) -> String {
     file_last_modified_time_format(ucmd, path, DATE_TIME_FORMAT_DEFAULT)
 }
 
-fn all_minutes(from: DateTime<Utc>, to: DateTime<Utc>) -> Vec<String> {
-    let to = to + Duration::try_minutes(1).unwrap();
+fn all_minutes(from: Timestamp, to: Timestamp) -> Vec<String> {
+    let to = to + 1.minute();
     let mut vec = vec![];
     let mut current = from;
     while current < to {
-        vec.push(current.format(DATE_TIME_FORMAT_DEFAULT).to_string());
-        current += Duration::try_minutes(1).unwrap();
+        vec.push(current.strftime(DATE_TIME_FORMAT_DEFAULT).to_string());
+        current += 1.minute();
     }
     vec
 }
 
-fn valid_last_modified_template_vars(from: DateTime<Utc>) -> Vec<Vec<(String, String)>> {
-    all_minutes(from, Utc::now())
+fn valid_last_modified_template_vars(from: Timestamp) -> Vec<Vec<(String, String)>> {
+    all_minutes(from, Timestamp::now())
         .into_iter()
         .map(|time| vec![("{last_modified_time}".to_string(), time)])
         .collect()
@@ -264,7 +264,7 @@ fn test_with_suppress_error_option() {
 fn test_with_stdin() {
     let expected_file_path = "stdin.log.expected";
     let mut scenario = new_ucmd!();
-    let start = Utc::now();
+    let start = Timestamp::now();
     scenario
         .pipe_in_fixture("stdin.log")
         .args(&["--pages=1:2", "-n", "-"])
@@ -327,7 +327,7 @@ fn test_with_mpr() {
     let expected_test_file_path = "mpr.log.expected";
     let expected_test_file_path1 = "mpr1.log.expected";
     let expected_test_file_path2 = "mpr2.log.expected";
-    let start = Utc::now();
+    let start = Timestamp::now();
     new_ucmd!()
         .args(&["--pages=1:2", "-m", "-n", test_file_path, test_file_path1])
         .succeeds()
@@ -336,7 +336,7 @@ fn test_with_mpr() {
             &valid_last_modified_template_vars(start),
         );
 
-    let start = Utc::now();
+    let start = Timestamp::now();
     new_ucmd!()
         .args(&["--pages=2:4", "-m", "-n", test_file_path, test_file_path1])
         .succeeds()
@@ -345,7 +345,7 @@ fn test_with_mpr() {
             &valid_last_modified_template_vars(start),
         );
 
-    let start = Utc::now();
+    let start = Timestamp::now();
     new_ucmd!()
         .args(&[
             "--pages=1:2",
@@ -530,7 +530,7 @@ fn test_with_join_lines_option() {
     let test_file_2 = "test.log";
     let expected_file_path = "joined.log.expected";
     let mut scenario = new_ucmd!();
-    let start = Utc::now();
+    let start = Timestamp::now();
     scenario
         .args(&["+1:2", "-J", "-m", test_file_1, test_file_2])
         .succeeds()
@@ -638,6 +638,17 @@ fn test_separator_options_default_values() {
         .succeeds();
     new_ucmd!()
         .args(&["-t", "-2", "-S"])
+        .pipe_in("a\nb\n")
+        .succeeds();
+}
+
+#[test]
+fn test_omit_pagination_option() {
+    // -T/--omit-pagination omits headers/trailers and eliminates form feeds
+    // TODO: verify output matches GNU pr behavior (form feed elimination)
+    new_ucmd!().args(&["-T"]).pipe_in("a\nb\n").succeeds();
+    new_ucmd!()
+        .args(&["--omit-pagination"])
         .pipe_in("a\nb\n")
         .succeeds();
 }

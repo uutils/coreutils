@@ -215,3 +215,4 @@ TUNABLES
 tunables
 VMULL
 vmull
+tmpfs

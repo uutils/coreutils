@@ -5,7 +5,8 @@
 
 // spell-checker:ignore getloadavg behaviour loadavg uptime upsecs updays upmins uphours boottime nusers utmpxname gettime clockid couldnt
 
-use chrono::{Local, TimeZone, Utc};
+use jiff::tz::TimeZone;
+use jiff::{Timestamp, ToSpan};
 #[cfg(unix)]
 use std::ffi::OsString;
 use std::io;
@@ -196,10 +197,8 @@ fn uptime_since() -> UResult<()> {
     #[cfg(any(windows, target_os = "openbsd"))]
     let uptime = get_uptime(None)?;
 
-    let since_date = Local
-        .timestamp_opt(Utc::now().timestamp() - uptime, 0)
-        .unwrap();
-    println!("{}", since_date.format("%Y-%m-%d %H:%M:%S"));
+    let since_date = (Timestamp::now() - uptime.seconds()).to_zoned(TimeZone::system());
+    println!("{}", since_date.strftime("%Y-%m-%d %H:%M:%S"));
 
     Ok(())
 }

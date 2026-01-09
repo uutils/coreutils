@@ -275,6 +275,7 @@ fn transform_to(
     opts: &TransformOptions,
     round_method: RoundMethod,
     precision: usize,
+    unit_separator: &str,
 ) -> Result<String> {
     let (i2, s) = consider_suffix(s, &opts.to, round_method, precision)?;
     let i2 = i2 / (opts.to_unit as f64);
@@ -286,10 +287,15 @@ fn transform_to(
             )
         }
         Some(s) if precision > 0 => {
-            format!("{i2:.precision$}{}", DisplayableSuffix(s, opts.to),)
+            format!(
+                "{i2:.precision$}{unit_separator}{}",
+                DisplayableSuffix(s, opts.to),
+            )
         }
-        Some(s) if i2.abs() < 10.0 => format!("{i2:.1}{}", DisplayableSuffix(s, opts.to)),
-        Some(s) => format!("{i2:.0}{}", DisplayableSuffix(s, opts.to)),
+        Some(s) if i2.abs() < 10.0 => {
+            format!("{i2:.1}{unit_separator}{}", DisplayableSuffix(s, opts.to))
+        }
+        Some(s) => format!("{i2:.0}{unit_separator}{}", DisplayableSuffix(s, opts.to)),
     })
 }
 
@@ -317,6 +323,7 @@ fn format_string(
         &options.transform,
         options.round,
         precision,
+        &options.unit_separator,
     )?;
 
     // bring back the suffix before applying padding
