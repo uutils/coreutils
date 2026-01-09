@@ -2632,12 +2632,10 @@ fn test_install_d_symlink_race_condition() {
     let output = install_handle.join().unwrap();
     let wrong_location = target.join("c").join("file");
 
-    if wrong_location.exists() {
-        panic!(
-            "RACE CONDITION NOT PREVENTED: File was created in symlink target {:?} instead of {:?}",
-            wrong_location, dest_path
-        );
-    }
+    assert!(
+        !wrong_location.exists(),
+        "RACE CONDITION NOT PREVENTED: File was created in symlink target {wrong_location:?} instead of {dest_path:?}"
+    );
 
     if dest_path.exists() {
         assert!(dest_path.is_file(), "Destination should be a file");
@@ -2645,12 +2643,10 @@ fn test_install_d_symlink_race_condition() {
         assert_eq!(content, "test content");
     } else {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        if !stderr.contains("chmod") && !stderr.contains("cannot create directory") {
-            panic!(
-                "File was not created and install failed with unexpected error. stderr: {}",
-                stderr
-            );
-        }
+        assert!(
+            stderr.contains("chmod") || stderr.contains("cannot create directory"),
+            "File was not created and install failed with unexpected error. stderr: {stderr}"
+        );
     }
 }
 
