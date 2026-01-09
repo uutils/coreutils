@@ -43,7 +43,7 @@ impl FileType {
 }
 
 /// Configuration for special inode creation.
-pub struct Config<'a> {
+struct Config<'a> {
     /// Permission bits for the inode
     pub mode: Mode,
 
