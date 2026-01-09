@@ -636,7 +636,22 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                 false
             };
 
-            if !dir_exists {
+            if dir_exists {
+                #[cfg(unix)]
+                {
+                    if b.target_dir.is_none()
+                        && sources.len() == 1
+                        && !is_potential_directory_path(&target)
+                    {
+                        if let Ok(dir_fd) = DirFd::open_no_follow(to_create) {
+                            if let Some(filename) = target.file_name() {
+                                target_parent_fd = Some(dir_fd);
+                                target_filename = Some(filename.to_os_string());
+                            }
+                        }
+                    }
+                }
+            } else {
                 if b.verbose {
                     let mut result = PathBuf::new();
                     // When creating directories with -Dv, show directory creations step by step
@@ -657,7 +672,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                 {
                     match create_dir_all_safe(to_create) {
                         Ok(dir_fd) => {
-                            if !b.target_dir.is_some()
+                            if b.target_dir.is_none()
                                 && sources.len() == 1
                                 && !is_potential_directory_path(&target)
                             {
@@ -675,13 +690,14 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                             }
                         }
                         Err(e) => {
-                            if e.kind() == std::io::ErrorKind::AlreadyExists {
-                                if to_create.exists() && !to_create.is_dir() {
-                                    return Err(InstallError::NotADirectory(
-                                        to_create_original.to_path_buf(),
-                                    )
-                                    .into());
-                                }
+                            if e.kind() == std::io::ErrorKind::AlreadyExists
+                                && to_create.exists()
+                                && !to_create.is_dir()
+                            {
+                                return Err(InstallError::NotADirectory(
+                                    to_create_original.to_path_buf(),
+                                )
+                                .into());
                             }
                             return Err(InstallError::CreateDirFailed(
                                 to_create_original.to_path_buf(),
@@ -705,21 +721,6 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                     if should_set_selinux_context(b) {
                         let context = get_context_for_selinux(b);
                         set_selinux_context_for_directories_install(to_create, context);
-                    }
-                }
-            } else {
-                #[cfg(unix)]
-                {
-                    if !b.target_dir.is_some()
-                        && sources.len() == 1
-                        && !is_potential_directory_path(&target)
-                    {
-                        if let Ok(dir_fd) = DirFd::open_no_follow(to_create) {
-                            if let Some(filename) = target.file_name() {
-                                target_parent_fd = Some(dir_fd);
-                                target_filename = Some(filename.to_os_string());
-                            }
-                        }
                     }
                 }
             }
@@ -956,9 +957,7 @@ fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsS
             use std::os::unix::fs::MetadataExt;
             // st_dev and st_ino types vary by platform (i32/u32 on macOS, u64 on Linux)
             #[allow(clippy::unnecessary_cast)]
-            if from_meta.dev() == to_stat.st_dev as u64 && from_meta.ino() == to_stat.st_ino as u64
-            {
-            }
+            if from_meta.dev() == to_stat.st_dev as u64 && from_meta.ino() == to_stat.st_ino as u64 {}
         }
     }
 
