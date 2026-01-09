@@ -76,6 +76,10 @@ mod test_b2sum;
 #[path = "by-util/test_md5sum.rs"]
 mod test_md5sum;
 
+#[cfg(feature = "sha1sum")]
+#[path = "by-util/test_sha1sum.rs"]
+mod test_sha1sum;
+
 #[cfg(feature = "cp")]
 #[path = "by-util/test_cp.rs"]
 mod test_cp;
