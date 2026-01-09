@@ -2448,7 +2448,9 @@ fn copy_file(
         return Err(translate!("cp-error-cannot-change-attribute", "dest" => dest.quote()).into());
     }
 
-    if options.preserve_hard_links() {
+    // When using --link mode, hard link structure is automatically preserved
+    // because we link to source files (which share inodes).
+    if options.preserve_hard_links() && options.copy_mode != CopyMode::Link {
         // if we encounter a matching device/inode pair in the source tree
         // we can arrange to create a hard link between the corresponding names
         // in the destination tree.
@@ -2565,10 +2567,14 @@ fn copy_file(
         }
     }
 
-    copied_files.insert(
-        FileInformation::from_path(source, options.dereference(source_in_command_line))?,
-        dest.to_path_buf(),
-    );
+    // Skip tracking copied files when using --link mode since hard link
+    // structure is automatically preserved
+    if options.copy_mode != CopyMode::Link {
+        copied_files.insert(
+            FileInformation::from_path(source, options.dereference(source_in_command_line))?,
+            dest.to_path_buf(),
+        );
+    }
 
     if let Some(progress_bar) = progress_bar {
         progress_bar.inc(source_metadata.len());
