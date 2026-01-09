@@ -1098,9 +1098,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Rust ignores SIGPIPE (see https://github.com/rust-lang/rust/issues/62569).
     // We restore its default action here.
     #[cfg(unix)]
-    unsafe {
-        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
-    }
+    let _ = uucore::signals::enable_pipe_errors();
     EnvAppData::default().run_env(args)
 }
 
