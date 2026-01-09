@@ -96,7 +96,6 @@ SELINUX_PROGS := \
 	runcon
 
 HASHSUM_PROGS := \
-	b2sum \
 	sha1sum \
 	sha224sum \
 	sha256sum \

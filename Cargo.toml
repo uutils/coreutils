@@ -86,6 +86,7 @@ feat_common_core = [
   "basenc",
   "cat",
   "cksum",
+  "b2sum",
   "md5sum",
   "comm",
   "cp",
@@ -438,6 +439,7 @@ chmod = { optional = true, version = "0.6.0", package = "uu_chmod", path = "src/
 chown = { optional = true, version = "0.6.0", package = "uu_chown", path = "src/uu/chown" }
 chroot = { optional = true, version = "0.6.0", package = "uu_chroot", path = "src/uu/chroot" }
 cksum = { optional = true, version = "0.6.0", package = "uu_cksum", path = "src/uu/cksum" }
+b2sum = { optional = true, version = "0.6.0", package = "uu_b2sum", path = "src/uu/b2sum" }
 md5sum = { optional = true, version = "0.6.0", package = "uu_md5sum", path = "src/uu/md5sum" }
 comm = { optional = true, version = "0.6.0", package = "uu_comm", path = "src/uu/comm" }
 cp = { optional = true, version = "0.6.0", package = "uu_cp", path = "src/uu/cp" }
