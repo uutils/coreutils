@@ -1,7 +1,7 @@
 #!/bin/bash
 # Run GNU SMACK tests in QEMU with SMACK-enabled kernel
 # Usage: run-gnu-tests-smack-ci.sh [GNU_DIR] [OUTPUT_DIR]
-# spell-checker:ignore rootfs zstd unzstd cpio newc nographic smackfs devtmpfs tmpfs poweroff libm libgcc libpthread libdl librt sysfs rwxat
+# spell-checker:ignore rootfs zstd unzstd cpio newc nographic smackfs devtmpfs tmpfs poweroff libm libgcc libpthread libdl librt sysfs rwxat setuidgid
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -17,10 +17,7 @@ mkdir -p "$SMACK_DIR"/{rootfs/{bin,lib64,proc,sys,dev,tmp,etc,gnu},kernel}
 # Download Arch Linux kernel (has SMACK built-in)
 if [ ! -f /tmp/arch-vmlinuz ]; then
     echo "Downloading Arch Linux kernel..."
-    MIRROR="https://geo.mirror.pkgbuild.com/core/os/x86_64"
-    KERNEL_PKG=$(curl -sL "$MIRROR/" | grep -oP 'linux-[0-9][^"]*-x86_64\.pkg\.tar\.zst' | grep -v headers | sort -V | tail -1)
-    [ -z "$KERNEL_PKG" ] && { echo "Error: Could not find kernel package"; exit 1; }
-    curl -sL -o /tmp/arch-kernel.pkg.tar.zst "$MIRROR/$KERNEL_PKG"
+    curl -sL -o /tmp/arch-kernel.pkg.tar.zst "https://archlinux.org/packages/core/x86_64/linux/download/"
     zstd -d /tmp/arch-kernel.pkg.tar.zst -o /tmp/arch-kernel.pkg.tar 2>/dev/null || unzstd /tmp/arch-kernel.pkg.tar.zst -o /tmp/arch-kernel.pkg.tar
     VMLINUZ_PATH=$(tar -tf /tmp/arch-kernel.pkg.tar | grep 'vmlinuz$' | head -1)
     tar -xf /tmp/arch-kernel.pkg.tar -C /tmp "$VMLINUZ_PATH"
@@ -65,17 +62,22 @@ ln -sf /proc/mounts /etc/mtab
 mkdir -p /tmp && mount -t tmpfs tmpfs /tmp
 chmod 1777 /tmp
 export PATH="/bin:$PATH" srcdir="/gnu" LD_LIBRARY_PATH="/lib64"
-cd /gnu/tests
-sh "$TEST_SCRIPT"
+if [ -n "$RUN_AS_USER" ]; then
+    # Run in /tmp so non-root user can create temp directories
+    cd /tmp
+    setuidgid "$RUN_AS_USER" sh "/gnu/tests/$TEST_SCRIPT"
+else
+    cd /gnu/tests
+    sh "$TEST_SCRIPT"
+fi
 echo "EXIT:$?"
 poweroff -f
 INIT
 chmod +x "$SMACK_DIR/rootfs/init"
 
-# Build utilities with SMACK support (only ls has SMACK support for now)
-# TODO: When other utilities have SMACK support, build: ls id mkdir mknod mkfifo
+# Build utilities with SMACK support
 echo "Building utilities with SMACK support..."
-cargo build --release --manifest-path="$REPO_DIR/Cargo.toml" --package uu_ls --bin ls --features uu_ls/smack
+cargo build --release --manifest-path="$REPO_DIR/Cargo.toml" --package uu_id --features uu_id/smack --package uu_ls --features uu_ls/smack --package uu_mkdir --features uu_mkdir/smack --package uu_mkfifo --features uu_mkfifo/smack --package uu_mknod --features uu_mknod/smack
 
 # Find SMACK tests
 SMACK_TESTS=$(grep -l 'require_smack_' -r "$GNU_DIR/tests/" 2>/dev/null || true)
@@ -95,19 +97,30 @@ for TEST_PATH in $SMACK_TESTS; do
 
     echo "Running: $TEST_REL"
 
+    # Determine if test needs non-root user
+    RUN_AS_USER=""
+    if echo "$TEST_REL" | grep -q "no-root"; then
+        RUN_AS_USER="nobody"
+    fi
+
     # Create working copy
     WORK="/tmp/smack-test-$$"
     rm -rf "$WORK" "$WORK.gz"
     cp -a "$SMACK_DIR/rootfs" "$WORK"
 
-    # Copy built utilities (only ls has SMACK support for now)
-    # TODO: When other utilities have SMACK support, use:
-    # for U in ls id mkdir mknod mkfifo; do cp "$REPO_DIR/target/release/$U" "$WORK/bin/$U"; done
-    rm -f "$WORK/bin/ls"
-    cp "$REPO_DIR/target/release/ls" "$WORK/bin/ls"
+    # Copy built utilities with SMACK support
+    for U in id ls mkdir mkfifo mknod; do
+        rm -f "$WORK/bin/$U"
+        cp "$REPO_DIR/target/release/$U" "$WORK/bin/$U"
+    done
 
-    # Set test script path
+    # Set test script path and user
     sed -i "s|\$TEST_SCRIPT|$TEST_REL|g" "$WORK/init"
+    if [ -n "$RUN_AS_USER" ]; then
+        sed -i "s|\$RUN_AS_USER|$RUN_AS_USER|g" "$WORK/init"
+    else
+        sed -i "s|\$RUN_AS_USER||g" "$WORK/init"
+    fi
 
     # Build initramfs and run
     (cd "$WORK" && find . | cpio -o -H newc 2>/dev/null | gzip > "$WORK.gz")

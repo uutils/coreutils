@@ -4,8 +4,8 @@
 // file that was distributed with this source code.
 use std::env;
 use std::ffi::OsStr;
-use std::io::Write;
 use std::io::{BufWriter, Error, Result};
+use std::io::{ErrorKind, Write};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use uucore::error::USimpleError;
@@ -43,9 +43,9 @@ impl Write for FilterWriter {
 /// Have an environment variable set at a value during this lifetime
 struct WithEnvVarSet {
     /// Env var key
-    _previous_var_key: String,
+    previous_var_key: String,
     /// Previous value set to this key
-    _previous_var_value: std::result::Result<String, env::VarError>,
+    previous_var_value: std::result::Result<String, env::VarError>,
 }
 impl WithEnvVarSet {
     /// Save previous value assigned to key, set key=value
@@ -55,8 +55,8 @@ impl WithEnvVarSet {
             env::set_var(key, value);
         }
         Self {
-            _previous_var_key: String::from(key),
-            _previous_var_value: previous_env_value,
+            previous_var_key: String::from(key),
+            previous_var_value: previous_env_value,
         }
     }
 }
@@ -64,13 +64,13 @@ impl WithEnvVarSet {
 impl Drop for WithEnvVarSet {
     /// Restore previous value now that this is being dropped by context
     fn drop(&mut self) {
-        if let Ok(ref prev_value) = self._previous_var_value {
+        if let Ok(ref prev_value) = self.previous_var_value {
             unsafe {
-                env::set_var(&self._previous_var_key, prev_value);
+                env::set_var(&self.previous_var_key, prev_value);
             }
         } else {
             unsafe {
-                env::remove_var(&self._previous_var_key);
+                env::remove_var(&self.previous_var_key);
             }
         }
     }
@@ -139,10 +139,13 @@ pub fn instantiate_current_writer(
                     .create(true)
                     .truncate(true)
                     .open(Path::new(&filename))
-                    .map_err(|_| {
-                        Error::other(
+                    .map_err(|e| match e.kind() {
+                        ErrorKind::IsADirectory => Error::other(
+                            translate!("split-error-is-a-directory", "dir" => filename),
+                        ),
+                        _ => Error::other(
                             translate!("split-error-unable-to-open-file", "file" => filename),
-                        )
+                        ),
                     })?
             } else {
                 // re-open file that we previously created to append to it

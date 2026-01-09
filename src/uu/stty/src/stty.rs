@@ -26,12 +26,12 @@ use nix::sys::termios::{
 use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
 use std::cmp::Ordering;
 use std::fs::File;
-use std::io::{self, Stdout, stdout};
+use std::io::{self, Stdin, stdin, stdout};
 use std::num::IntErrorKind;
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::{AsRawFd, RawFd};
-use uucore::error::{UError, UResult, USimpleError, UUsageError};
+use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::parser::num_parser::ExtendedParser;
 use uucore::translate;
@@ -124,12 +124,13 @@ struct Options<'a> {
     all: bool,
     save: bool,
     file: Device,
+    device_name: String,
     settings: Option<Vec<&'a str>>,
 }
 
 enum Device {
     File(File),
-    Stdout(Stdout),
+    Stdin(Stdin),
 }
 
 #[derive(Debug)]
@@ -166,7 +167,7 @@ impl AsFd for Device {
     fn as_fd(&self) -> BorrowedFd<'_> {
         match self {
             Self::File(f) => f.as_fd(),
-            Self::Stdout(stdout) => stdout.as_fd(),
+            Self::Stdin(stdin) => stdin.as_fd(),
         }
     }
 }
@@ -175,45 +176,42 @@ impl AsRawFd for Device {
     fn as_raw_fd(&self) -> RawFd {
         match self {
             Self::File(f) => f.as_raw_fd(),
-            Self::Stdout(stdout) => stdout.as_raw_fd(),
+            Self::Stdin(stdin) => stdin.as_raw_fd(),
         }
     }
 }
 
 impl<'a> Options<'a> {
     fn from(matches: &'a ArgMatches) -> io::Result<Self> {
-        Ok(Self {
-            all: matches.get_flag(options::ALL),
-            save: matches.get_flag(options::SAVE),
-            file: match matches.get_one::<String>(options::FILE) {
-                // Two notes here:
-                // 1. O_NONBLOCK is needed because according to GNU docs, a
-                //    POSIX tty can block waiting for carrier-detect if the
-                //    "clocal" flag is not set. If your TTY is not connected
-                //    to a modem, it is probably not relevant though.
-                // 2. We never close the FD that we open here, but the OS
-                //    will clean up the FD for us on exit, so it doesn't
-                //    matter. The alternative would be to have an enum of
-                //    BorrowedFd/OwnedFd to handle both cases.
-                Some(f) => Device::File(
+        let (file, device_name) = match matches.get_one::<String>(options::FILE) {
+            // Two notes here:
+            // 1. O_NONBLOCK is needed because according to GNU docs, a
+            //    POSIX tty can block waiting for carrier-detect if the
+            //    "clocal" flag is not set. If your TTY is not connected
+            //    to a modem, it is probably not relevant though.
+            // 2. We never close the FD that we open here, but the OS
+            //    will clean up the FD for us on exit, so it doesn't
+            //    matter. The alternative would be to have an enum of
+            //    BorrowedFd/OwnedFd to handle both cases.
+            Some(f) => (
+                Device::File(
                     std::fs::OpenOptions::new()
                         .read(true)
                         .custom_flags(O_NONBLOCK)
                         .open(f)?,
                 ),
-                // default to /dev/tty, if that does not exist then default to stdout
-                None => {
-                    if let Ok(f) = std::fs::OpenOptions::new()
-                        .read(true)
-                        .custom_flags(O_NONBLOCK)
-                        .open("/dev/tty")
-                    {
-                        Device::File(f)
-                    } else {
-                        Device::Stdout(stdout())
-                    }
-                }
-            },
+                f.clone(),
+            ),
+            // Per POSIX, stdin is used for TTY operations when no device is specified.
+            // This matches GNU coreutils behavior: if stdin is not a TTY,
+            // tcgetattr will fail with "Inappropriate ioctl for device".
+            None => (Device::Stdin(stdin()), "standard input".to_string()),
+        };
+        Ok(Self {
+            all: matches.get_flag(options::ALL),
+            save: matches.get_flag(options::SAVE),
+            file,
+            device_name,
             settings: matches
                 .get_many::<String>(options::SETTINGS)
                 .map(|v| v.map(|s| s.as_ref()).collect()),
@@ -412,8 +410,8 @@ fn stty(opts: &Options) -> UResult<()> {
             }
         }
 
-        // TODO: Figure out the right error message for when tcgetattr fails
-        let mut termios = tcgetattr(opts.file.as_fd())?;
+        let mut termios =
+            tcgetattr(opts.file.as_fd()).map_err_context(|| opts.device_name.clone())?;
 
         // iterate over valid_args, match on the arg type, do the matching apply function
         for arg in &valid_args {
@@ -433,8 +431,7 @@ fn stty(opts: &Options) -> UResult<()> {
         }
         tcsetattr(opts.file.as_fd(), set_arg, &termios)?;
     } else {
-        // TODO: Figure out the right error message for when tcgetattr fails
-        let termios = tcgetattr(opts.file.as_fd())?;
+        let termios = tcgetattr(opts.file.as_fd()).map_err_context(|| opts.device_name.clone())?;
         print_settings(&termios, opts)?;
     }
     Ok(())
@@ -997,7 +994,7 @@ fn apply_char_mapping(termios: &mut Termios, mapping: &(S, u8)) {
 ///
 /// The state array contains:
 /// - `state[0]`: input flags
-/// - `state[1]`: output flags  
+/// - `state[1]`: output flags
 /// - `state[2]`: control flags
 /// - `state[3]`: local flags
 /// - `state[4..]`: control characters (optional)
@@ -1036,11 +1033,15 @@ fn apply_special_setting(
     match setting {
         SpecialSetting::Rows(n) => size.rows = *n,
         SpecialSetting::Cols(n) => size.columns = *n,
-        SpecialSetting::Line(_n) => {
+        #[cfg_attr(
+            not(any(target_os = "linux", target_os = "android")),
+            expect(unused_variables)
+        )]
+        SpecialSetting::Line(n) => {
             // nix only defines Termios's `line_discipline` field on these platforms
             #[cfg(any(target_os = "linux", target_os = "android"))]
             {
-                _termios.line_discipline = *_n;
+                _termios.line_discipline = *n;
             }
         }
     }
