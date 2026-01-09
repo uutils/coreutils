@@ -349,7 +349,7 @@ fn maybe_flush_unbroken_output<W: Write>(ctx: &mut FoldContext<'_, W>) -> UResul
 fn push_byte<W: Write>(ctx: &mut FoldContext<'_, W>, byte: u8) -> UResult<()> {
     // Append a single byte to the buffer.
     ctx.output.push(byte);
-    Ok(())
+    maybe_flush_unbroken_output(ctx)
 }
 
 fn push_bytes<W: Write>(ctx: &mut FoldContext<'_, W>, bytes: &[u8]) -> UResult<()> {
