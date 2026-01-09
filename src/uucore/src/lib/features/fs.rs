@@ -13,6 +13,8 @@ use libc::{
     S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP, S_IWOTH, S_IWUSR, S_IXGRP, S_IXOTH, S_IXUSR,
     mkfifo, mode_t,
 };
+#[cfg(all(unix, not(target_os = "redox")))]
+pub use libc::{major, makedev, minor};
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::env;
@@ -136,7 +138,6 @@ impl FileInformation {
             any(
                 target_vendor = "apple",
                 target_os = "android",
-                target_os = "freebsd",
                 target_os = "netbsd",
                 target_os = "openbsd",
                 target_os = "illumos",
@@ -150,6 +151,8 @@ impl FileInformation {
             )
         ))]
         return self.0.st_nlink.into();
+        #[cfg(target_os = "freebsd")]
+        return self.0.st_nlink;
         #[cfg(target_os = "aix")]
         return self.0.st_nlink.try_into().unwrap();
         #[cfg(windows)]
@@ -158,16 +161,9 @@ impl FileInformation {
 
     #[cfg(unix)]
     pub fn inode(&self) -> u64 {
-        #[cfg(all(
-            not(any(target_os = "freebsd", target_os = "netbsd")),
-            target_pointer_width = "64"
-        ))]
+        #[cfg(all(not(any(target_os = "netbsd")), target_pointer_width = "64"))]
         return self.0.st_ino;
-        #[cfg(any(
-            target_os = "freebsd",
-            target_os = "netbsd",
-            not(target_pointer_width = "64")
-        ))]
+        #[cfg(any(target_os = "netbsd", not(target_pointer_width = "64")))]
         return self.0.st_ino.into();
     }
 }
@@ -765,10 +761,13 @@ pub mod sane_blksize {
     ///
     /// If the metadata contain invalid values a meaningful adaption
     /// of that value is done.
-    pub fn sane_blksize_from_metadata(_metadata: &std::fs::Metadata) -> u64 {
+    pub fn sane_blksize_from_metadata(
+        #[cfg(unix)] metadata: &std::fs::Metadata,
+        #[cfg(not(unix))] _: &std::fs::Metadata,
+    ) -> u64 {
         #[cfg(not(target_os = "windows"))]
         {
-            sane_blksize(_metadata.blksize())
+            sane_blksize(metadata.blksize())
         }
 
         #[cfg(target_os = "windows")]
@@ -837,6 +836,24 @@ pub fn make_fifo(path: &Path) -> std::io::Result<()> {
     } else {
         Ok(())
     }
+}
+
+// Redox's libc appears not to include the following utilities
+
+#[cfg(target_os = "redox")]
+pub fn major(dev: libc::dev_t) -> libc::c_uint {
+    (((dev >> 8) & 0xFFF) | ((dev >> 32) & 0xFFFFF000)) as _
+}
+
+#[cfg(target_os = "redox")]
+pub fn minor(dev: libc::dev_t) -> libc::c_uint {
+    ((dev & 0xFF) | ((dev >> 12) & 0xFFFFF00)) as _
+}
+
+#[cfg(target_os = "redox")]
+pub fn makedev(maj: libc::c_uint, min: libc::c_uint) -> libc::dev_t {
+    let [maj, min] = [maj as libc::dev_t, min as libc::dev_t];
+    (min & 0xff) | ((maj & 0xfff) << 8) | ((min & !0xff) << 12) | ((maj & !0xfff) << 32)
 }
 
 #[cfg(test)]

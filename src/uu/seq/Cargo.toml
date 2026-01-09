@@ -31,6 +31,7 @@ uucore = { workspace = true, features = [
   "format",
   "parser",
   "quoting-style",
+  "signals",
 ] }
 fluent = { workspace = true }
 

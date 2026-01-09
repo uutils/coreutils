@@ -30,6 +30,8 @@ mod numberparse;
 use crate::error::SeqError;
 use crate::number::PreciseNumber;
 
+#[cfg(unix)]
+use uucore::signals;
 use uucore::translate;
 
 const OPT_SEPARATOR: &str = "separator";
@@ -92,8 +94,22 @@ fn select_precision(
     }
 }
 
+// Initialize SIGPIPE state capture at process startup (Unix only)
+#[cfg(unix)]
+uucore::init_sigpipe_capture!();
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    // Restore SIGPIPE to default if it wasn't explicitly ignored by parent.
+    // The Rust runtime ignores SIGPIPE, but we need to respect the parent's
+    // signal disposition for proper pipeline behavior (GNU compatibility).
+    #[cfg(unix)]
+    if !signals::sigpipe_was_ignored() {
+        // Ignore the return value: if setting signal handler fails, we continue anyway.
+        // The worst case is we don't get proper SIGPIPE behavior, but seq will still work.
+        let _ = signals::enable_pipe_errors();
+    }
+
     let matches =
         uucore::clap_localization::handle_clap_result(uu_app(), split_short_args_with_value(args))?;
 
@@ -218,7 +234,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             // unless SIGPIPE was explicitly ignored, in which case it should fail.
             let err = err.map_err_context(|| "write error".into());
             uucore::show_error!("{err}");
-            return if sigpipe_ignored { Err(err) } else { Ok(()) };
+            #[cfg(unix)]
+            if signals::sigpipe_was_ignored() {
+                uucore::error::set_exit_code(1);
+            }
+            Ok(())
         }
         return Err(err.map_err_context(|| "write error".into()));
     }
