@@ -1,3 +1,4 @@
+#spell-checker:ignore (libs) interner
 [package]
 name = "uu_tsort"
 description = "tsort ~ (uutils) topologically sort input (partially ordered) pairs"
@@ -19,9 +20,11 @@ path = "src/tsort.rs"
 
 [dependencies]
 clap = { workspace = true }
-thiserror = { workspace = true }
-uucore = { workspace = true }
 fluent = { workspace = true }
+string-interner = { workspace = true }
+thiserror = { workspace = true }
+nix = { workspace = true, features = ["fs"] }
+uucore = { workspace = true }
 
 [[bin]]
 name = "tsort"

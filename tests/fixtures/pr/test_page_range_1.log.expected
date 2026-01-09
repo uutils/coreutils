@@ -1,6 +1,6 @@
 
 
-{last_modified_time} test.log Page 15
+{last_modified_time}                    test.log                     Page 15
 
 
 Mon Dec 10 12:05:48.183     <CWChannel: 0x7fc3ff50d600> [channelNumber=12(2GHz), channelWidth={20MHz}, active]
@@ -66,7 +66,7 @@ Mon Dec 10 12:06:28.765 Roam: <airportd[160]> ROAMING PROFILES updated to SINGLE
 
 
 
-{last_modified_time} test.log Page 16
+{last_modified_time}                    test.log                     Page 16
 
 
 Mon Dec 10 12:06:28.770 SC: <airportd[160]> airportdProcessSystemConfigurationEvent: Processing 'State:/Network/Interface/en0/AirPort/ProfileID'
@@ -132,7 +132,7 @@ Mon Dec 10 12:06:50.945 BTC: <airportd[160]> __BluetoothCoexHandleUpdateForNode:
 
 
 
-{last_modified_time} test.log Page 17
+{last_modified_time}                    test.log                     Page 17
 
 
 Mon Dec 10 12:06:50.945 BTC: <airportd[160]> BluetoothCoexSetProfile: <en0> profile for band 2.4GHz didn't change
@@ -198,7 +198,7 @@ Mon Dec 10 12:13:27.640 Info: <Wi-Fi Menu Extra[335]> link quality changed
 
 
 
-{last_modified_time} test.log Page 18
+{last_modified_time}                    test.log                     Page 18
 
 
 Mon Dec 10 12:14:46.658 Info: <airportd[160]> SCAN request received from pid 92 (locationd) with priority 2

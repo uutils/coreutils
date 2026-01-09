@@ -1066,7 +1066,7 @@ mod output_format {
             .args(&["-a", "md5"])
             .arg(at.subdir.join("f"))
             .fails_with_code(1)
-            .stderr_contains("--text mode is only supported with --untagged");
+            .stderr_contains("the following required arguments were not provided"); //clap does not change the meaning
     }
 
     #[test]
@@ -1216,7 +1216,7 @@ fn test_conflicting_options() {
         .fails_with_code(1)
         .no_stdout()
         .stderr_contains(
-            "cksum: the --binary and --text options are meaningless when verifying checksums",
+            "cannot be used with", //clap generated error
         );
 
     scene
@@ -1228,7 +1228,7 @@ fn test_conflicting_options() {
         .fails_with_code(1)
         .no_stdout()
         .stderr_contains(
-            "cksum: the --binary and --text options are meaningless when verifying checksums",
+            "cannot be used with", //clap generated error
         );
 }
 

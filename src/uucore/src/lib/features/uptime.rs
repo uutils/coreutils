@@ -14,7 +14,8 @@
 
 use crate::error::{UError, UResult};
 use crate::translate;
-use chrono::Local;
+use jiff::Timestamp;
+use jiff::tz::TimeZone;
 use libc::time_t;
 use thiserror::Error;
 
@@ -38,7 +39,10 @@ impl UError for UptimeError {
 
 /// Returns the formatted time string, e.g. "12:34:56"
 pub fn get_formatted_time() -> String {
-    Local::now().time().format("%H:%M:%S").to_string()
+    Timestamp::now()
+        .to_zoned(TimeZone::system())
+        .strftime("%H:%M:%S")
+        .to_string()
 }
 
 /// Safely get macOS boot time using sysctl command
@@ -187,7 +191,7 @@ pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
     };
 
     if let Some(t) = derived_boot_time {
-        let now = Local::now().timestamp();
+        let now = Timestamp::now().as_second();
         #[cfg(target_pointer_width = "64")]
         let boottime: i64 = t;
         #[cfg(not(target_pointer_width = "64"))]
@@ -338,13 +342,8 @@ pub fn get_nusers() -> usize {
                 continue;
             }
 
-            let username = if !buffer.is_null() {
-                let cstr = std::ffi::CStr::from_ptr(buffer as *const i8);
-                cstr.to_string_lossy().to_string()
-            } else {
-                String::new()
-            };
-            if !username.is_empty() {
+            let cstr = std::ffi::CStr::from_ptr(buffer.cast());
+            if !cstr.is_empty() {
                 num_user += 1;
             }
 
@@ -426,11 +425,13 @@ pub fn get_loadavg() -> UResult<(f64, f64, f64)> {
 #[inline]
 pub fn get_formatted_loadavg() -> UResult<String> {
     let loadavg = get_loadavg()?;
-    Ok(translate!(
+    let mut args = fluent::FluentArgs::new();
+    args.set("avg1", format!("{:.2}", loadavg.0));
+    args.set("avg5", format!("{:.2}", loadavg.1));
+    args.set("avg15", format!("{:.2}", loadavg.2));
+    Ok(crate::locale::get_message_with_args(
         "uptime-lib-format-loadavg",
-        "avg1" => format!("{:.2}", loadavg.0),
-        "avg5" => format!("{:.2}", loadavg.1),
-        "avg15" => format!("{:.2}", loadavg.2),
+        args,
     ))
 }
 
@@ -473,7 +474,7 @@ mod tests {
         assert!(boot_time > 946684800, "Boot time should be after year 2000");
 
         // Boot time should be before current time
-        let now = chrono::Local::now().timestamp();
+        let now = Timestamp::now().as_second();
         assert!(
             (boot_time as i64) < now,
             "Boot time should be before current time"
@@ -501,8 +502,7 @@ mod tests {
         // (This is just a sanity check)
         assert!(
             uptime < 365 * 86400,
-            "Uptime seems unreasonably high: {} seconds",
-            uptime
+            "Uptime seems unreasonably high: {uptime} seconds"
         );
     }
 
@@ -518,9 +518,7 @@ mod tests {
         let diff = (uptime1 - uptime2).abs();
         assert!(
             diff <= 1,
-            "Consecutive uptime calls should be consistent, got {} and {}",
-            uptime1,
-            uptime2
+            "Consecutive uptime calls should be consistent, got {uptime1} and {uptime2}"
         );
     }
 }
