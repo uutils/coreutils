@@ -9,7 +9,7 @@
 // Available on Unix
 //
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
-// spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod
+// spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod mkdirat CREAT WRONLY
 
 #[cfg(test)]
 use std::os::unix::ffi::OsStringExt;
