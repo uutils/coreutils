@@ -109,6 +109,8 @@ skip = [
   { name = "linux-raw-sys", version = "0.11.0" },
   # crossterm
   { name = "signal-hook", version = "0.3.18" },
+  # blake2b_simd
+  { name = "constant_time_eq", version = "0.3.1" },
 ]
 # spell-checker: enable
 
