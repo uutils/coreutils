@@ -43,7 +43,7 @@ impl FileType {
 }
 
 /// Configuration for special inode creation.
-struct Config<'a> {
+struct Config {
     /// Permission bits for the inode
     pub mode: Mode,
 
@@ -60,7 +60,7 @@ struct Config<'a> {
 
     /// Specific security context (SELinux/SMACK).
     #[cfg(any(feature = "selinux", feature = "smack"))]
-    pub context: Option<&'a String>,
+    pub context: Option<String>,
 }
 
 fn mknod(file_name: &str, config: Config) -> i32 {
@@ -98,7 +98,7 @@ fn mknod(file_name: &str, config: Config) -> i32 {
     if config.set_security_context {
         if let Err(e) = uucore::selinux::set_selinux_security_context(
             std::path::Path::new(file_name),
-            config.context,
+            config.context.as_ref(),
         ) {
             // if it fails, delete the file
             let _ = std::fs::remove_dir(file_name);
@@ -110,9 +110,13 @@ fn mknod(file_name: &str, config: Config) -> i32 {
     // Apply SMACK context if requested
     #[cfg(feature = "smack")]
     if config.set_security_context {
-        if let Err(e) = uucore::smack::set_smack_label_and_cleanup(file_name, config.context, |p| {
+        if let Err(e) = uucore::smack::set_smack_label_and_cleanup(
+            file_name,
+            config.context.as_ref(),
+            |p| {
             std::fs::remove_file(p)
-        }) {
+            },
+        ) {
             eprintln!("{}: {}", uucore::util_name(), e);
             return 1;
         }
@@ -145,7 +149,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     #[cfg(any(feature = "selinux", feature = "smack"))]
     let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
     #[cfg(any(feature = "selinux", feature = "smack"))]
-    let context = matches.get_one::<String>(options::CONTEXT);
+    let context = matches.get_one::<String>(options::CONTEXT).cloned();
 
     let dev = match (
         file_type,
