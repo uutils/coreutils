@@ -201,7 +201,6 @@ macro_rules! test_digest_with_len {
     };
 }
 
-test_digest! {sha1, sha1}
 test_digest! {b3sum, b3sum}
 test_digest! {shake128, shake128}
 test_digest! {shake256, shake256}
@@ -215,6 +214,7 @@ test_digest_with_len! {sha3_256, sha3, 256}
 test_digest_with_len! {sha3_384, sha3, 384}
 test_digest_with_len! {sha3_512, sha3, 512}
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_check_sha1() {
     // To make sure that #3815 doesn't happen again
@@ -414,6 +414,7 @@ fn test_check_b2sum_verify() {
         .stdout_only("BLAKE2b-128 (a) = b93e0fc7bb21633c08bba07c5e71dc00\n");
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_check_file_not_found_warning() {
     let scene = TestScenario::new(util_name!());
