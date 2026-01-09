@@ -22,6 +22,7 @@ clap = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = ["entries", "fs"] }
 fluent = { workspace = true }
+nix = { workspace = true }
 
 [[bin]]
 name = "chroot"

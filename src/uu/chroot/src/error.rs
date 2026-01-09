@@ -4,12 +4,12 @@
 // file that was distributed with this source code.
 // spell-checker:ignore NEWROOT Userspec userspec
 //! Errors returned by chroot.
+use nix::unistd::Uid;
 use std::io::Error;
 use std::path::PathBuf;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UError;
-use uucore::libc;
 use uucore::translate;
 
 /// Errors that can happen while executing chroot.
@@ -41,7 +41,7 @@ pub enum ChrootError {
     MissingNewRoot,
 
     #[error("{}", translate!("chroot-error-no-group-specified", "uid" => _0))]
-    NoGroupSpecified(libc::uid_t),
+    NoGroupSpecified(Uid),
 
     /// Failed to find the specified user.
     #[error("{}", translate!("chroot-error-no-such-user"))]
