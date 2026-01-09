@@ -89,6 +89,7 @@ PROGS       := \
 	sha1sum \
 	sha224sum \
 	sha256sum \
+	sha384sum \
 	comm \
 	cp \
 	csplit \
@@ -190,7 +191,6 @@ SELINUX_PROGS := \
 	runcon
 
 HASHSUM_PROGS := \
-	sha384sum \
 	sha512sum
 
 $(info Detected OS = $(OS))
@@ -228,6 +228,7 @@ TEST_PROGS  := \
 	sha1sum \
 	sha224sum \
 	sha256sum \
+	sha384sum \
 	comm \
 	cp \
 	csplit \
