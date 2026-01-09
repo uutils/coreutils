@@ -205,7 +205,6 @@ test_digest! {b3sum, b3sum}
 test_digest! {shake128, shake128}
 test_digest! {shake256, shake256}
 
-test_digest_with_len! {sha512, sha512, 512}
 test_digest_with_len! {sha3_224, sha3, 224}
 test_digest_with_len! {sha3_256, sha3, 256}
 test_digest_with_len! {sha3_384, sha3, 384}

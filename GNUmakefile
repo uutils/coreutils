@@ -92,6 +92,7 @@ PROGS       := \
 	sha224sum \
 	sha256sum \
 	sha384sum \
+	sha512sum \
 	comm \
 	cp \
 	csplit \
@@ -192,9 +193,6 @@ SELINUX_PROGS := \
 	chcon \
 	runcon
 
-HASHSUM_PROGS := \
-	sha512sum
-
 $(info Detected OS = $(OS))
 
 ifeq (,$(findstring MINGW,$(OS)))
@@ -231,6 +229,7 @@ TEST_PROGS  := \
 	sha224sum \
 	sha256sum \
 	sha384sum \
+	sha512sum \
 	comm \
 	cp \
 	csplit \
