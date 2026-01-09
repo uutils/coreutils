@@ -126,6 +126,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .unwrap()
         .map(|s| s.as_os_str());
 
+    // This should be done by clap. But https://github.com/clap-rs/clap/issues/4520
+    if !check & (warn || strict || quiet || ignore_missing || status) {
+        return Err(uucore::error::UUsageError::new(
+            1,
+            "the following required arguments were not provided:\n--check".to_string(),
+        ));
+    }
     if check {
         // cksum does not support '--check'ing legacy algorithms
         if algo_cli.is_some_and(AlgoKind::is_legacy) {
@@ -178,6 +185,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
+    // --warn .requires(options::CHECK) allows bypassing --text --warn. We don't use it until clap 5
+    // https://github.com/clap-rs/clap/issues/4520
+    // even --untagged bypass the bug, we don't for hashsum deletion
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
@@ -235,8 +245,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::STRICT)
                 .long(options::STRICT)
                 .help(translate!("cksum-help-strict"))
-                .action(ArgAction::SetTrue)
-                .requires(options::CHECK),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::CHECK)
@@ -280,31 +289,27 @@ pub fn uu_app() -> Command {
                 .long("warn")
                 .help(translate!("cksum-help-warn"))
                 .action(ArgAction::SetTrue)
-                .overrides_with_all([options::STATUS, options::QUIET])
-                .requires(options::CHECK),
+                .overrides_with_all([options::STATUS, options::QUIET]),
         )
         .arg(
             Arg::new(options::STATUS)
                 .long("status")
                 .help(translate!("cksum-help-status"))
                 .action(ArgAction::SetTrue)
-                .overrides_with_all([options::WARN, options::QUIET])
-                .requires(options::CHECK),
+                .overrides_with_all([options::WARN, options::QUIET]),
         )
         .arg(
             Arg::new(options::QUIET)
                 .long(options::QUIET)
                 .help(translate!("cksum-help-quiet"))
                 .action(ArgAction::SetTrue)
-                .overrides_with_all([options::WARN, options::STATUS])
-                .requires(options::CHECK),
+                .overrides_with_all([options::WARN, options::STATUS]),
         )
         .arg(
             Arg::new(options::IGNORE_MISSING)
                 .long(options::IGNORE_MISSING)
                 .help(translate!("cksum-help-ignore-missing"))
-                .action(ArgAction::SetTrue)
-                .requires(options::CHECK),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ZERO)
