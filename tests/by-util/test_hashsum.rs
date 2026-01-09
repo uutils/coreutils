@@ -214,7 +214,6 @@ test_digest_with_len! {sha3_224, sha3, 224}
 test_digest_with_len! {sha3_256, sha3, 256}
 test_digest_with_len! {sha3_384, sha3, 384}
 test_digest_with_len! {sha3_512, sha3, 512}
-test_digest_with_len! {b2sum, b2sum, 512}
 
 #[test]
 fn test_check_sha1() {
@@ -271,6 +270,7 @@ fn test_check_md5_ignore_missing() {
         .stderr_contains("the --ignore-missing option is meaningful only when verifying checksums");
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_check_b2sum_length_option_0() {
     let scene = TestScenario::new(util_name!());
@@ -288,6 +288,7 @@ fn test_check_b2sum_length_option_0() {
         .stdout_only("testf: OK\n");
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_check_b2sum_length_duplicate() {
     let scene = TestScenario::new(util_name!());
@@ -304,6 +305,7 @@ fn test_check_b2sum_length_duplicate() {
         .stdout_contains("d6d45901dec53e65d2b55fb6e2ab67b0");
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_check_b2sum_length_option_8() {
     let scene = TestScenario::new(util_name!());
@@ -321,6 +323,7 @@ fn test_check_b2sum_length_option_8() {
         .stdout_only("testf: OK\n");
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_invalid_b2sum_length_option_not_multiple_of_8() {
     let scene = TestScenario::new(util_name!());
@@ -338,8 +341,11 @@ fn test_invalid_b2sum_length_option_not_multiple_of_8() {
 }
 
 #[rstest]
+#[ignore = "moved to standalone"]
 #[case("513")]
+#[ignore = "moved to standalone"]
 #[case("1024")]
+#[ignore = "moved to standalone"]
 #[case("18446744073709552000")]
 fn test_invalid_b2sum_length_option_too_large(#[case] len: &str) {
     let scene = TestScenario::new(util_name!());
@@ -358,6 +364,7 @@ fn test_invalid_b2sum_length_option_too_large(#[case] len: &str) {
         .stderr_contains("b2sum: maximum digest length for 'BLAKE2b' is 512 bits");
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_check_b2sum_tag_output() {
     let scene = TestScenario::new(util_name!());
@@ -382,6 +389,7 @@ fn test_check_b2sum_tag_output() {
         .stdout_only("BLAKE2b-128 (f) = cae66941d9efbd404e4d88758ea67670\n");
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_check_b2sum_verify() {
     let scene = TestScenario::new(util_name!());
@@ -1068,6 +1076,7 @@ fn test_star_to_start() {
         .stdout_only("f: OK\n");
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_check_b2sum_strict_check() {
     let scene = TestScenario::new(util_name!());
