@@ -68,6 +68,10 @@ mod test_cksum;
 #[path = "by-util/test_comm.rs"]
 mod test_comm;
 
+#[cfg(feature = "b2sum")]
+#[path = "by-util/test_b2sum.rs"]
+mod test_b2sum;
+
 #[cfg(feature = "md5sum")]
 #[path = "by-util/test_md5sum.rs"]
 mod test_md5sum;
