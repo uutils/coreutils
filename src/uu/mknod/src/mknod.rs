@@ -26,7 +26,7 @@ mod options {
 }
 
 #[derive(Clone, PartialEq)]
-pub enum FileType {
+enum FileType {
     Block,
     Character,
     Fifo,
