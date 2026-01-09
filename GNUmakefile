@@ -89,6 +89,7 @@ PROGS       := \
 	b2sum \
 	md5sum \
 	sha1sum \
+	sha224sum \
 	comm \
 	cp \
 	csplit \
@@ -190,7 +191,6 @@ SELINUX_PROGS := \
 	runcon
 
 HASHSUM_PROGS := \
-	sha224sum \
 	sha256sum \
 	sha384sum \
 	sha512sum
@@ -228,6 +228,7 @@ TEST_PROGS  := \
 	b2sum \
 	md5sum \
 	sha1sum \
+	sha224sum \
 	comm \
 	cp \
 	csplit \
