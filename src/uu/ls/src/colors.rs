@@ -19,13 +19,16 @@ const ANSI_RESET: &str = "\x1b[0m";
 const ANSI_CLEAR_EOL: &str = "\x1b[K";
 const EMPTY_STYLE: &str = "\x1b[m";
 
-// Unix file mode bits
-const MODE_SETUID: u32 = 0o4000;
-const MODE_SETGID: u32 = 0o2000;
-const MODE_EXECUTABLE: u32 = 0o0111;
-const MODE_STICKY_OTHER_WRITABLE: u32 = 0o1002;
-const MODE_OTHER_WRITABLE: u32 = 0o0002;
-const MODE_STICKY: u32 = 0o1000;
+#[cfg(unix)]
+mod mode {
+    // Unix file mode bits
+    pub const SETUID: u32 = 0o4000;
+    pub const SETGID: u32 = 0o2000;
+    pub const EXECUTABLE: u32 = 0o0111;
+    pub const STICKY_OTHER_WRITABLE: u32 = 0o1002;
+    pub const OTHER_WRITABLE: u32 = 0o0002;
+    pub const STICKY: u32 = 0o1000;
+}
 
 enum RawIndicatorStyle {
     Empty,
@@ -361,7 +364,7 @@ impl<'a> StyleManager<'a> {
         };
 
         if file_type.is_symlink() {
-            return self.indicator_for_symlink(path, &mut entry_exists);
+            return self.indicator_for_symlink(&mut entry_exists);
         }
 
         if self.has_indicator_style(Indicator::MissingFile) && !entry_exists() {
@@ -377,11 +380,7 @@ impl<'a> StyleManager<'a> {
         }
     }
 
-    fn indicator_for_symlink(
-        &self,
-        _path: &PathData,
-        entry_exists: &mut dyn FnMut() -> bool,
-    ) -> Option<Indicator> {
+    fn indicator_for_symlink(&self, entry_exists: &mut dyn FnMut() -> bool) -> Option<Indicator> {
         let orphan_enabled = self.has_indicator_style(Indicator::OrphanedSymbolicLink);
         let missing_enabled = self.has_indicator_style(Indicator::MissingFile);
         let needs_target_state = self.ln_color_from_target || orphan_enabled;
@@ -403,19 +402,19 @@ impl<'a> StyleManager<'a> {
         None
     }
 
+    #[cfg(unix)]
     fn indicator_for_file(&self, path: &PathData) -> Option<Indicator> {
-        #[cfg(unix)]
         if self.needs_file_metadata() {
             if let Some(metadata) = path.metadata() {
                 let mode = metadata.mode();
-                if self.has_indicator_style(Indicator::Setuid) && mode & MODE_SETUID != 0 {
+                if self.has_indicator_style(Indicator::Setuid) && mode & mode::SETUID != 0 {
                     return Some(Indicator::Setuid);
                 }
-                if self.has_indicator_style(Indicator::Setgid) && mode & MODE_SETGID != 0 {
+                if self.has_indicator_style(Indicator::Setgid) && mode & mode::SETGID != 0 {
                     return Some(Indicator::Setgid);
                 }
                 if self.has_indicator_style(Indicator::ExecutableFile)
-                    && mode & MODE_EXECUTABLE != 0
+                    && mode & mode::EXECUTABLE != 0
                 {
                     return Some(Indicator::ExecutableFile);
                 }
@@ -432,22 +431,31 @@ impl<'a> StyleManager<'a> {
         }
     }
 
+    #[cfg(not(unix))]
+    fn indicator_for_file(&self, _path: &PathData) -> Option<Indicator> {
+        if self.has_indicator_style(Indicator::RegularFile) {
+            Some(Indicator::RegularFile)
+        } else {
+            None
+        }
+    }
+
+    #[cfg(unix)]
     fn indicator_for_directory(&self, path: &PathData) -> Option<Indicator> {
-        #[cfg(unix)]
         if self.needs_dir_metadata() {
             if let Some(metadata) = path.metadata() {
                 let mode = metadata.mode();
                 if self.has_indicator_style(Indicator::StickyAndOtherWritable)
-                    && mode & MODE_STICKY_OTHER_WRITABLE == MODE_STICKY_OTHER_WRITABLE
+                    && mode & mode::STICKY_OTHER_WRITABLE == mode::STICKY_OTHER_WRITABLE
                 {
                     return Some(Indicator::StickyAndOtherWritable);
                 }
                 if self.has_indicator_style(Indicator::OtherWritable)
-                    && mode & MODE_OTHER_WRITABLE != 0
+                    && mode & mode::OTHER_WRITABLE != 0
                 {
                     return Some(Indicator::OtherWritable);
                 }
-                if self.has_indicator_style(Indicator::Sticky) && mode & MODE_STICKY != 0 {
+                if self.has_indicator_style(Indicator::Sticky) && mode & mode::STICKY != 0 {
                     return Some(Indicator::Sticky);
                 }
             }
@@ -460,22 +468,34 @@ impl<'a> StyleManager<'a> {
         }
     }
 
-    fn indicator_for_special_file(&self, file_type: &std::fs::FileType) -> Option<Indicator> {
-        #[cfg(unix)]
-        {
-            if file_type.is_fifo() && self.has_indicator_style(Indicator::FIFO) {
-                return Some(Indicator::FIFO);
-            }
-            if file_type.is_socket() && self.has_indicator_style(Indicator::Socket) {
-                return Some(Indicator::Socket);
-            }
-            if file_type.is_block_device() && self.has_indicator_style(Indicator::BlockDevice) {
-                return Some(Indicator::BlockDevice);
-            }
-            if file_type.is_char_device() && self.has_indicator_style(Indicator::CharacterDevice) {
-                return Some(Indicator::CharacterDevice);
-            }
+    #[cfg(not(unix))]
+    fn indicator_for_directory(&self, _path: &PathData) -> Option<Indicator> {
+        if self.has_indicator_style(Indicator::Directory) {
+            Some(Indicator::Directory)
+        } else {
+            None
         }
+    }
+
+    #[cfg(unix)]
+    fn indicator_for_special_file(&self, file_type: &std::fs::FileType) -> Option<Indicator> {
+        if file_type.is_fifo() && self.has_indicator_style(Indicator::FIFO) {
+            return Some(Indicator::FIFO);
+        }
+        if file_type.is_socket() && self.has_indicator_style(Indicator::Socket) {
+            return Some(Indicator::Socket);
+        }
+        if file_type.is_block_device() && self.has_indicator_style(Indicator::BlockDevice) {
+            return Some(Indicator::BlockDevice);
+        }
+        if file_type.is_char_device() && self.has_indicator_style(Indicator::CharacterDevice) {
+            return Some(Indicator::CharacterDevice);
+        }
+        None
+    }
+
+    #[cfg(not(unix))]
+    fn indicator_for_special_file(&self, _file_type: &std::fs::FileType) -> Option<Indicator> {
         None
     }
 
