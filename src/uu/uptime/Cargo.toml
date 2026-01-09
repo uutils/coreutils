@@ -23,11 +23,11 @@ feat_systemd_logind = ["uucore/feat_systemd_logind"]
 path = "src/uptime.rs"
 
 [dependencies]
-chrono = { workspace = true }
 clap = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = ["libc", "utmpx", "uptime"] }
 fluent = { workspace = true }
+jiff = { workspace = true }
 
 [target.'cfg(target_os = "openbsd")'.dependencies]
 utmp-classic = { workspace = true }

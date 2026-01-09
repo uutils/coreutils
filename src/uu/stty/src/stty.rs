@@ -1033,11 +1033,15 @@ fn apply_special_setting(
     match setting {
         SpecialSetting::Rows(n) => size.rows = *n,
         SpecialSetting::Cols(n) => size.columns = *n,
-        SpecialSetting::Line(_n) => {
+        #[cfg_attr(
+            not(any(target_os = "linux", target_os = "android")),
+            expect(unused_variables)
+        )]
+        SpecialSetting::Line(n) => {
             // nix only defines Termios's `line_discipline` field on these platforms
             #[cfg(any(target_os = "linux", target_os = "android"))]
             {
-                _termios.line_discipline = *_n;
+                _termios.line_discipline = *n;
             }
         }
     }

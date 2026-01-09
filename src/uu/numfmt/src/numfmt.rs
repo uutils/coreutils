@@ -253,6 +253,11 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
 
     let suffix = args.get_one::<String>(SUFFIX).cloned();
 
+    let unit_separator = args
+        .get_one::<String>(UNIT_SEPARATOR)
+        .cloned()
+        .unwrap_or_default();
+
     let invalid = InvalidModes::from_str(args.get_one::<String>(INVALID).unwrap()).unwrap();
 
     let zero_terminated = args.get_flag(ZERO_TERMINATED);
@@ -265,6 +270,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         delimiter,
         round,
         suffix,
+        unit_separator,
         format,
         invalid,
         zero_terminated,
@@ -397,6 +403,12 @@ pub fn uu_app() -> Command {
                 .value_name("SUFFIX"),
         )
         .arg(
+            Arg::new(UNIT_SEPARATOR)
+                .long(UNIT_SEPARATOR)
+                .help(translate!("numfmt-help-unit-separator"))
+                .value_name("STRING"),
+        )
+        .arg(
             Arg::new(INVALID)
                 .long(INVALID)
                 .help(translate!("numfmt-help-invalid"))
@@ -450,6 +462,7 @@ mod tests {
             delimiter: None,
             round: RoundMethod::Nearest,
             suffix: None,
+            unit_separator: String::new(),
             format: FormatOptions::default(),
             invalid: InvalidModes::Abort,
             zero_terminated: false,

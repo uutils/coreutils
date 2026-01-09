@@ -1132,5 +1132,17 @@ fn test_non_utf8_delimiter() {
             .arg(OsStr::from_bytes(&input))
             .succeeds()
             .stdout_is_bytes(expected);
+}
+  
+#[test]
+fn test_unit_separator() {
+    for (args, expected) in [
+        (&["--to=si", "--unit-separator= ", "1000"][..], "1.0 k\n"),
+        (&["--to=iec", "--unit-separator= ", "1024"], "1.0 K\n"),
+        (&["--to=iec-i", "--unit-separator= ", "2048"], "2.0 Ki\n"),
+        (&["--to=si", "--unit-separator=__", "1000"], "1.0__k\n"),
+        (&["--to=si", "--unit-separator= ", "500"], "500\n"), // no unit = no separator
+    ] {
+        new_ucmd!().args(args).succeeds().stdout_only(expected);
     }
 }

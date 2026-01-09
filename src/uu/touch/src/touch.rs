@@ -3,24 +3,24 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) filetime datetime lpszfilepath mktime DATETIME datelike timelike UTIME
+// spell-checker:ignore (ToDO) datelike datetime filetime lpszfilepath mktime strtime timelike utime
 // spell-checker:ignore (FORMATS) MMDDhhmm YYYYMMDDHHMM YYMMDDHHMM YYYYMMDDHHMMS
 
 pub mod error;
 
-use chrono::{
-    DateTime, Datelike, Duration, Local, LocalResult, NaiveDate, NaiveDateTime, NaiveTime,
-    TimeZone, Timelike,
-};
 use clap::builder::{PossibleValue, ValueParser};
 use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command};
 use filetime::{FileTime, set_file_times, set_symlink_file_times};
-use jiff::{Timestamp, Zoned};
+use jiff::civil::Time;
+use jiff::fmt::strtime;
+use jiff::tz::TimeZone;
+use jiff::{Timestamp, ToSpan, Zoned};
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, File};
 use std::io::{Error, ErrorKind};
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 #[cfg(target_os = "linux")]
@@ -125,16 +125,13 @@ mod format {
     pub(crate) const YYYYMMDDHHMM_OFFSET: &str = "%Y-%m-%d %H:%M %z";
 }
 
-/// Convert a [`DateTime`] with a TZ offset into a [`FileTime`]
-///
-/// The [`DateTime`] is converted into a unix timestamp from which the [`FileTime`] is
-/// constructed.
-fn datetime_to_filetime<T: TimeZone>(dt: &DateTime<T>) -> FileTime {
-    FileTime::from_unix_time(dt.timestamp(), dt.timestamp_subsec_nanos())
+fn timestamp_to_filetime(ts: Timestamp) -> FileTime {
+    FileTime::from_system_time(SystemTime::from(ts))
 }
 
-fn filetime_to_datetime(ft: &FileTime) -> Option<DateTime<Local>> {
-    Some(DateTime::from_timestamp(ft.unix_seconds(), ft.nanoseconds())?.into())
+fn filetime_to_zoned(ft: &FileTime) -> Option<Zoned> {
+    let ts = Timestamp::new(ft.unix_seconds(), ft.nanoseconds() as i32).ok()?;
+    Some(Zoned::new(ts, TimeZone::system()))
 }
 
 /// Whether all characters in the string are digits.
@@ -385,12 +382,12 @@ pub fn touch(files: &[InputFile], opts: &Options) -> Result<(), TouchError> {
                 if opts.date.is_none() {
                     now = FileTime::from_unix_time(0, libc::UTIME_NOW as u32);
                 } else {
-                    now = datetime_to_filetime(&Local::now());
+                    now = timestamp_to_filetime(Timestamp::now());
                 }
             }
             #[cfg(not(target_os = "linux"))]
             {
-                now = datetime_to_filetime(&Local::now());
+                now = timestamp_to_filetime(Timestamp::now());
             }
             (now, now)
         }
@@ -400,11 +397,11 @@ pub fn touch(files: &[InputFile], opts: &Options) -> Result<(), TouchError> {
     let (atime, mtime) = if let Some(date) = &opts.date {
         (
             parse_date(
-                filetime_to_datetime(&atime).ok_or_else(|| TouchError::InvalidFiletime(atime))?,
+                filetime_to_zoned(&atime).ok_or_else(|| TouchError::InvalidFiletime(atime))?,
                 date,
             )?,
             parse_date(
-                filetime_to_datetime(&mtime).ok_or_else(|| TouchError::InvalidFiletime(mtime))?,
+                filetime_to_zoned(&mtime).ok_or_else(|| TouchError::InvalidFiletime(mtime))?,
                 date,
             )?,
         )
@@ -610,7 +607,7 @@ fn stat(path: &Path, follow: bool) -> std::io::Result<(FileTime, FileTime)> {
     ))
 }
 
-fn parse_date(ref_time: DateTime<Local>, s: &str) -> Result<FileTime, TouchError> {
+fn parse_date(ref_zoned: Zoned, s: &str) -> Result<FileTime, TouchError> {
     // This isn't actually compatible with GNU touch, but there doesn't seem to
     // be any simple specification for what format this parameter allows and I'm
     // not about to implement GNU parse_datetime.
@@ -625,8 +622,11 @@ fn parse_date(ref_time: DateTime<Local>, s: &str) -> Result<FileTime, TouchError
     // Tue Dec  3 ...
     // ("%c", POSIX_LOCALE_FORMAT),
     //
-    if let Ok(parsed) = NaiveDateTime::parse_from_str(s, format::POSIX_LOCALE) {
-        return Ok(datetime_to_filetime(&parsed.and_utc()));
+    if let Ok(parsed) = strtime::parse(format::POSIX_LOCALE, s)
+        .and_then(|tm| tm.to_datetime())
+        .and_then(|dt| TimeZone::UTC.to_zoned(dt))
+    {
+        return Ok(timestamp_to_filetime(parsed.timestamp()));
     }
 
     // Also support other formats found in the GNU tests like
@@ -638,18 +638,26 @@ fn parse_date(ref_time: DateTime<Local>, s: &str) -> Result<FileTime, TouchError
         format::YYYY_MM_DD_HH_MM,
         format::YYYYMMDDHHMM_OFFSET,
     ] {
-        if let Ok(parsed) = NaiveDateTime::parse_from_str(s, fmt) {
-            return Ok(datetime_to_filetime(&parsed.and_utc()));
+        if let Ok(parsed) = strtime::parse(fmt, s)
+            .and_then(|tm| tm.to_datetime())
+            .and_then(|dt| TimeZone::UTC.to_zoned(dt))
+        {
+            return Ok(timestamp_to_filetime(parsed.timestamp()));
         }
     }
 
     // "Equivalent to %Y-%m-%d (the ISO 8601 date format). (C99)"
     // ("%F", ISO_8601_FORMAT),
-    if let Ok(parsed_date) = NaiveDate::parse_from_str(s, format::ISO_8601) {
-        let parsed = Local
-            .from_local_datetime(&parsed_date.and_time(NaiveTime::MIN))
-            .unwrap();
-        return Ok(datetime_to_filetime(&parsed));
+    if let Ok(filetime) = strtime::parse(format::ISO_8601, s)
+        .and_then(|tm| tm.to_date())
+        .and_then(|date| {
+            TimeZone::system()
+                .to_ambiguous_zoned(date.to_datetime(Time::midnight()))
+                .unambiguous()
+        })
+        .map(|zdt| timestamp_to_filetime(zdt.timestamp()))
+    {
+        return Ok(filetime);
     }
 
     // "@%s" is "The number of seconds since the Epoch, 1970-01-01 00:00:00 +0000 (UTC). (TZ) (Calculated from mktime(tm).)"
@@ -659,42 +667,8 @@ fn parse_date(ref_time: DateTime<Local>, s: &str) -> Result<FileTime, TouchError
         }
     }
 
-    // **parse_datetime 0.13 API change:**
-    // The parse_datetime crate was updated from 0.11 to 0.13 in commit 2a69918ca to fix
-    // issue #8754 (large second values like "12345.123456789 seconds ago" failing).
-    // This introduced a breaking API change in parse_datetime_at_date:
-    //
-    // Previously (0.11): parse_datetime_at_date(chrono::DateTime) → chrono::DateTime
-    // Now (0.13):        parse_datetime_at_date(jiff::Zoned) → jiff::Zoned
-    //
-    // Commit 4340913c4 initially adapted to this by switching from parse_datetime_at_date
-    // to parse_datetime, which broke deterministic relative date parsing (the ref_time
-    // parameter was no longer used, causing tests/touch/relative to fail in CI).
-    //
-    // This implementation restores parse_datetime_at_date usage with proper conversions:
-    // chrono::DateTime → jiff::Zoned → parse_datetime_at_date → jiff::Zoned → chrono::DateTime
-    //
-    // The use of parse_datetime_at_date (not parse_datetime) is critical for deterministic
-    // behavior with relative dates like "yesterday" or "2 days ago", which must be
-    // calculated relative to ref_time, not the current system time.
-
-    // Convert chrono DateTime to jiff Zoned for parse_datetime_at_date
-    let ref_zoned = {
-        let ts = Timestamp::new(
-            ref_time.timestamp(),
-            ref_time.timestamp_subsec_nanos() as i32,
-        )
-        .map_err(|_| TouchError::InvalidDateFormat(s.to_owned()))?;
-        Zoned::new(ts, jiff::tz::TimeZone::system())
-    };
-
     if let Ok(zoned) = parse_datetime::parse_datetime_at_date(ref_zoned, s) {
-        let timestamp = zoned.timestamp();
-        let dt =
-            DateTime::from_timestamp(timestamp.as_second(), timestamp.subsec_nanosecond() as u32)
-                .map(|dt| dt.with_timezone(&Local))
-                .ok_or_else(|| TouchError::InvalidDateFormat(s.to_owned()))?;
-        return Ok(datetime_to_filetime(&dt));
+        return Ok(timestamp_to_filetime(zoned.timestamp()));
     }
 
     Err(TouchError::InvalidDateFormat(s.to_owned()))
@@ -730,7 +704,7 @@ fn prepend_century(s: &str) -> UResult<String> {
 fn parse_timestamp(s: &str) -> UResult<FileTime> {
     use format::*;
 
-    let current_year = || Local::now().year();
+    let current_year = || Timestamp::now().to_zoned(TimeZone::system()).year();
 
     let (format, ts) = match s.chars().count() {
         15 => (YYYYMMDDHHMM_DOT_SS, s.to_owned()),
@@ -748,41 +722,37 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
         }
     };
 
-    let local = NaiveDateTime::parse_from_str(&ts, format).map_err(|_| {
-        USimpleError::new(
-            1,
-            translate!("touch-error-invalid-date-ts-format", "date" => ts.quote()),
-        )
-    })?;
-    let LocalResult::Single(mut local) = Local.from_local_datetime(&local) else {
-        return Err(USimpleError::new(
-            1,
-            translate!("touch-error-invalid-date-ts-format", "date" => ts.quote()),
-        ));
-    };
+    let mut dt = strtime::parse(format, &ts)
+        .and_then(|parsed| parsed.to_datetime())
+        .map_err(|_| {
+            USimpleError::new(
+                1,
+                translate!("touch-error-invalid-date-ts-format", "date" => ts.quote()),
+            )
+        })?;
 
-    // Chrono caps seconds at 59, but 60 is valid. It might be a leap second
+    // Jiff caps seconds at 59, but 60 is valid. It might be a leap second
     // or wrap to the next minute. But that doesn't really matter, because we
     // only care about the timestamp anyway.
     // Tested in gnu/tests/touch/60-seconds
-    if local.second() == 59 && ts.ends_with(".60") {
-        local += Duration::try_seconds(1).unwrap();
+    if dt.second() == 59 && ts.ends_with(".60") {
+        dt += 1.second();
     }
 
     // Due to daylight saving time switch, local time can jump from 1:59 AM to
-    // 3:00 AM, in which case any time between 2:00 AM and 2:59 AM is not
-    // valid. If we are within this jump, chrono takes the offset from before
-    // the jump. If we then jump forward an hour, we get the new corrected
-    // offset. Jumping back will then now correctly take the jump into account.
-    let local2 = local + Duration::try_hours(1).unwrap() - Duration::try_hours(1).unwrap();
-    if local.hour() != local2.hour() {
-        return Err(USimpleError::new(
-            1,
-            translate!("touch-error-invalid-date-format", "date" => s.quote()),
-        ));
-    }
+    // 3:00 AM, in which case any time between 2:00 AM and 2:59 AM is not valid.
+    // Jiff's `to_ambiguous_zoned(...).unambiguous()` handles this case.
+    let local = TimeZone::system()
+        .to_ambiguous_zoned(dt)
+        .unambiguous()
+        .map_err(|_| {
+            USimpleError::new(
+                1,
+                translate!("touch-error-invalid-date-ts-format", "date" => ts.quote()),
+            )
+        })?;
 
-    Ok(datetime_to_filetime(&local))
+    Ok(timestamp_to_filetime(local.timestamp()))
 }
 
 // TODO: this may be a good candidate to put in fsext.rs
