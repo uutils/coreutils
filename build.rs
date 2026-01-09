@@ -89,9 +89,6 @@ pub fn main() {
             }
             "hashsum" => {
                 phf_map.entry(krate, format!("({krate}::uumain, {krate}::uu_app_custom)"));
-
-                let map_value = format!("({krate}::uumain, {krate}::uu_app_common)");
-                phf_map.entry("sha512sum", map_value.clone());
             }
             _ => {
                 phf_map.entry(krate, map_value.clone());

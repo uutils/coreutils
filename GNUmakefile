@@ -95,9 +95,6 @@ SELINUX_PROGS := \
 	chcon \
 	runcon
 
-HASHSUM_PROGS := \
-	sha512sum
-
 $(info Detected OS = $(OS))
 
 ifeq (,$(findstring MINGW,$(OS)))
