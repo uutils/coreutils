@@ -2567,3 +2567,144 @@ fn test_install_normal_file_replaces_symlink() {
     // Verify sensitive file was NOT modified
     assert_eq!(at.read("sensitive"), "important data");
 }
+
+#[test]
+#[cfg(unix)]
+fn test_install_d_symlink_race_condition() {
+    // Test for symlink race condition fix (issue #10013)
+    // Reproduces the exact scenario: start install -D, wait for directory creation,
+    // replace with symlink, verify file is NOT in symlink target
+    use std::fs;
+    use std::os::unix::fs::symlink;
+    use std::process::Command;
+    use std::thread;
+    use std::time::Duration;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create test directories
+    let testdir = at.plus("testdir");
+    let target = at.plus("target");
+    fs::create_dir_all(&target).unwrap();
+
+    // Create source file
+    let source_file = at.plus("source_file");
+    fs::write(&source_file, "test content").unwrap();
+
+    let dest_path = testdir.join("a").join("b").join("c").join("file");
+    let intermediate_dir = testdir.join("a").join("b");
+
+    let source_file_str = source_file.to_string_lossy().to_string();
+    let dest_path_str = dest_path.to_string_lossy().to_string();
+    let intermediate_dir_str = intermediate_dir.to_string_lossy().to_string();
+    let target_str = target.to_string_lossy().to_string();
+    let bin_path = scene.bin_path.clone();
+    let install_handle = thread::spawn(move || {
+        let output = Command::new(&bin_path)
+            .arg("install")
+            .arg("-D")
+            .arg(&source_file_str)
+            .arg(&dest_path_str)
+            .current_dir(std::env::current_dir().unwrap())
+            .output();
+
+        match output {
+            Ok(output) => output,
+            Err(e) => panic!("Failed to execute install: {e}"),
+        }
+    });
+
+    let mut attempts = 0;
+    let max_attempts = 200;
+    while attempts < max_attempts {
+        if intermediate_dir.exists() && intermediate_dir.is_dir() && !intermediate_dir.is_symlink()
+        {
+            let _ = fs::remove_dir_all(&intermediate_dir);
+            if symlink(&target_str, &intermediate_dir_str).is_ok() {
+                break;
+            }
+        }
+        thread::sleep(Duration::from_millis(5));
+        attempts += 1;
+    }
+
+    let output = install_handle.join().unwrap();
+    let wrong_location = target.join("c").join("file");
+
+    if wrong_location.exists() {
+        panic!(
+            "RACE CONDITION NOT PREVENTED: File was created in symlink target {:?} instead of {:?}",
+            wrong_location, dest_path
+        );
+    }
+
+    if dest_path.exists() {
+        assert!(dest_path.is_file(), "Destination should be a file");
+        let content = fs::read_to_string(&dest_path).unwrap();
+        assert_eq!(content, "test content");
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if !stderr.contains("chmod") && !stderr.contains("cannot create directory") {
+            panic!(
+                "File was not created and install failed with unexpected error. stderr: {}",
+                stderr
+            );
+        }
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_install_d_symlink_race_condition_concurrent() {
+    // Test pre-existing symlinks in intermediate paths are handled correctly
+    use std::fs;
+    use std::os::unix::fs::symlink;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create test directories
+    let testdir = at.plus("testdir2");
+    let target = at.plus("target2");
+    fs::create_dir_all(&target).unwrap();
+
+    // Create source file
+    let source_file = at.plus("source_file2");
+    fs::write(&source_file, "test content 2").unwrap();
+
+    let intermediate_dir = testdir.join("a").join("b");
+    fs::create_dir_all(intermediate_dir.parent().unwrap()).unwrap();
+    fs::create_dir_all(&intermediate_dir).unwrap();
+    fs::remove_dir_all(&intermediate_dir).unwrap();
+    symlink(&target, &intermediate_dir).unwrap();
+
+    let dest_path = testdir.join("a").join("b").join("c").join("file");
+    let result = scene
+        .ucmd()
+        .arg("-D")
+        .arg(&source_file)
+        .arg(&dest_path)
+        .run();
+
+    assert!(
+        dest_path.exists(),
+        "File should be created at the intended destination"
+    );
+    assert!(dest_path.is_file(), "Destination should be a file");
+    let content = fs::read_to_string(&dest_path).unwrap();
+    assert_eq!(content, "test content 2");
+
+    let wrong_location = target.join("c").join("file");
+    assert!(
+        !wrong_location.exists(),
+        "File should NOT be in symlink target location"
+    );
+
+    assert!(
+        intermediate_dir.is_dir() && !intermediate_dir.is_symlink(),
+        "Intermediate directory should be a real directory, not a symlink"
+    );
+
+    result.success();
+}

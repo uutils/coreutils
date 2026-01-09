@@ -15,9 +15,10 @@
 use std::os::unix::ffi::OsStringExt;
 
 use std::ffi::{CString, OsStr, OsString};
+use std::fs;
 use std::io;
 use std::os::unix::ffi::OsStrExt;
-use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd, RawFd};
+use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd, IntoRawFd, OwnedFd, RawFd};
 use std::path::{Path, PathBuf};
 
 use nix::dir::Dir;
@@ -107,6 +108,18 @@ impl DirFd {
     /// Open a directory and return a file descriptor
     pub fn open(path: &Path) -> io::Result<Self> {
         let flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC;
+        let fd = nix::fcntl::open(path, flags, Mode::empty()).map_err(|e| {
+            SafeTraversalError::OpenFailed {
+                path: path.into(),
+                source: io::Error::from_raw_os_error(e as i32),
+            }
+        })?;
+        Ok(Self { fd })
+    }
+
+    /// Open a directory without following symlinks
+    pub fn open_no_follow(path: &Path) -> io::Result<Self> {
+        let flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC | OFlag::O_NOFOLLOW;
         let fd = nix::fcntl::open(path, flags, Mode::empty()).map_err(|e| {
             SafeTraversalError::OpenFailed {
                 path: path.into(),
@@ -267,6 +280,41 @@ impl DirFd {
         Ok(())
     }
 
+    /// Create a directory relative to this directory
+    pub fn mkdir_at(&self, name: &OsStr, mode: u32) -> io::Result<()> {
+        let name_cstr =
+            CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
+        let mode = mode as libc::mode_t;
+        let fd = self.fd.as_raw_fd();
+
+        let result = unsafe { libc::mkdirat(fd, name_cstr.as_ptr(), mode) };
+        if result == -1 {
+            let err = io::Error::last_os_error();
+            return Err(SafeTraversalError::OpenFailed {
+                path: name.into(),
+                source: err,
+            }
+            .into());
+        }
+        Ok(())
+    }
+
+    /// Open a file for writing relative to this directory
+    /// Creates the file if it doesn't exist, truncates if it does
+    pub fn open_file_at(&self, name: &OsStr) -> io::Result<std::fs::File> {
+        let name_cstr =
+            CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
+        let flags = OFlag::O_CREAT | OFlag::O_WRONLY | OFlag::O_TRUNC | OFlag::O_CLOEXEC;
+        let mode = Mode::from_bits_truncate(0o666); // Default file permissions
+
+        let fd: OwnedFd = openat(self.fd.as_fd(), name_cstr.as_c_str(), flags, mode)
+            .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+
+        // Convert OwnedFd to raw fd and create File
+        let raw_fd = fd.into_raw_fd();
+        Ok(unsafe { std::fs::File::from_raw_fd(raw_fd) })
+    }
+
     /// Create a DirFd from an existing file descriptor (takes ownership)
     pub fn from_raw_fd(fd: RawFd) -> io::Result<Self> {
         if fd < 0 {
@@ -279,6 +327,104 @@ impl DirFd {
         let owned_fd = unsafe { OwnedFd::from_raw_fd(fd) };
         Ok(Self { fd: owned_fd })
     }
+}
+
+/// Safely create all parent directories for a path using directory file descriptors.
+/// This prevents symlink race conditions by anchoring all operations to directory fds.
+///
+/// Returns a DirFd for the final created directory, or the first existing parent if
+/// all directories already exist.
+#[cfg(unix)]
+pub fn create_dir_all_safe(path: &Path) -> io::Result<DirFd> {
+    // Find the first existing parent directory
+    let mut current_path = path;
+    let mut components_to_create: Vec<OsString> = Vec::new();
+
+    loop {
+        if current_path.exists() {
+            let is_real_dir = fs::symlink_metadata(current_path)
+                .map(|m| m.is_dir() && !m.file_type().is_symlink())
+                .unwrap_or(false);
+
+            if is_real_dir {
+                let mut dir_fd = DirFd::open_no_follow(current_path)?;
+
+                for component in components_to_create.iter().rev() {
+                    match dir_fd.stat_at(component.as_os_str(), false) {
+                        Ok(stat) => {
+                            if (stat.st_mode as libc::mode_t) & libc::S_IFMT != libc::S_IFDIR {
+                                return Err(io::Error::new(
+                                    io::ErrorKind::AlreadyExists,
+                                    format!(
+                                        "path component exists but is not a directory: {:?}",
+                                        component
+                                    ),
+                                ));
+                            }
+                            dir_fd = dir_fd.open_subdir(component.as_os_str())?;
+                        }
+                        Err(_) => {
+                            dir_fd.mkdir_at(component.as_os_str(), 0o755)?;
+                            dir_fd = dir_fd.open_subdir(component.as_os_str())?;
+                        }
+                    }
+                }
+
+                return Ok(dir_fd);
+            } else {
+                if let Ok(meta) = fs::symlink_metadata(current_path) {
+                    if meta.file_type().is_symlink() {
+                        fs::remove_file(current_path).ok();
+                    } else {
+                        return Err(io::Error::new(
+                            io::ErrorKind::AlreadyExists,
+                            format!("path exists but is not a directory: {:?}", current_path),
+                        ));
+                    }
+                }
+            }
+        }
+
+        if let Some(parent) = current_path.parent() {
+            if let Some(component) = current_path.file_name() {
+                components_to_create.push(component.to_os_string());
+            }
+            current_path = parent;
+        } else {
+            break;
+        }
+    }
+
+    let root_path = if path.is_absolute() {
+        Path::new("/")
+    } else {
+        Path::new(".")
+    };
+
+    let mut dir_fd = DirFd::open(root_path)?;
+
+    for component in components_to_create.iter().rev() {
+        match dir_fd.stat_at(component.as_os_str(), false) {
+            Ok(stat) => {
+                if (stat.st_mode as libc::mode_t) & libc::S_IFMT != libc::S_IFDIR {
+                    return Err(io::Error::new(
+                        io::ErrorKind::AlreadyExists,
+                        format!(
+                            "path component exists but is not a directory: {:?}",
+                            component
+                        ),
+                    ));
+                }
+                dir_fd = dir_fd.open_subdir(component.as_os_str())?;
+            }
+            Err(_) => {
+                dir_fd.mkdir_at(component.as_os_str(), 0o755)?;
+                dir_fd = dir_fd.open_subdir(component.as_os_str())?;
+            }
+        }
+    }
+
+    Ok(dir_fd)
 }
 
 impl AsRawFd for DirFd {

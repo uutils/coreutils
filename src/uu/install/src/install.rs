@@ -28,6 +28,8 @@ use uucore::error::{FromIo, UError, UResult, UUsageError};
 use uucore::fs::dir_strip_dot_for_creation;
 use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
 use uucore::process::{getegid, geteuid};
+#[cfg(unix)]
+use uucore::safe_traversal::{DirFd, create_dir_all_safe};
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::{
     SeLinuxError, contexts_differ, get_selinux_security_context, is_selinux_enabled,
@@ -594,6 +596,11 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
 
     let sources = &paths.iter().map(PathBuf::from).collect::<Vec<_>>();
 
+    #[cfg(unix)]
+    let mut target_parent_fd: Option<DirFd> = None;
+    #[cfg(unix)]
+    let mut target_filename: Option<std::ffi::OsString> = None;
+
     if b.create_leading {
         // if -t is used in combination with -D, create whole target because it does not include filename
         let to_create: Option<&Path> = if b.target_dir.is_some() {
@@ -606,7 +613,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
         };
 
         if let Some(to_create) = to_create {
-            // if the path ends in /, remove it
+            let to_create_original = to_create;
             let to_create_owned;
             let to_create = match uucore::os_str_as_bytes(to_create.as_os_str()) {
                 Ok(path_bytes) if path_bytes.ends_with(b"/") => {
@@ -621,7 +628,15 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                 _ => to_create,
             };
 
-            if !to_create.exists() {
+            let dir_exists = if to_create.exists() {
+                fs::symlink_metadata(to_create)
+                    .map(|m| m.is_dir() && !m.file_type().is_symlink())
+                    .unwrap_or(false)
+            } else {
+                false
+            };
+
+            if !dir_exists {
                 if b.verbose {
                     let mut result = PathBuf::new();
                     // When creating directories with -Dv, show directory creations step by step
@@ -638,15 +653,74 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                     }
                 }
 
-                if let Err(e) = fs::create_dir_all(to_create) {
-                    return Err(InstallError::CreateDirFailed(to_create.to_path_buf(), e).into());
+                #[cfg(unix)]
+                {
+                    match create_dir_all_safe(to_create) {
+                        Ok(dir_fd) => {
+                            if !b.target_dir.is_some()
+                                && sources.len() == 1
+                                && !is_potential_directory_path(&target)
+                            {
+                                if let Some(filename) = target.file_name() {
+                                    target_parent_fd = Some(dir_fd);
+                                    target_filename = Some(filename.to_os_string());
+                                }
+                            }
+
+                            // Set SELinux context for all created directories if needed
+                            #[cfg(feature = "selinux")]
+                            if should_set_selinux_context(b) {
+                                let context = get_context_for_selinux(b);
+                                set_selinux_context_for_directories_install(to_create, context);
+                            }
+                        }
+                        Err(e) => {
+                            if e.kind() == std::io::ErrorKind::AlreadyExists {
+                                if to_create.exists() && !to_create.is_dir() {
+                                    return Err(InstallError::NotADirectory(
+                                        to_create_original.to_path_buf(),
+                                    )
+                                    .into());
+                                }
+                            }
+                            return Err(InstallError::CreateDirFailed(
+                                to_create_original.to_path_buf(),
+                                e,
+                            )
+                            .into());
+                        }
+                    }
                 }
 
-                // Set SELinux context for all created directories if needed
-                #[cfg(feature = "selinux")]
-                if should_set_selinux_context(b) {
-                    let context = get_context_for_selinux(b);
-                    set_selinux_context_for_directories_install(to_create, context);
+                #[cfg(not(unix))]
+                {
+                    if let Err(e) = fs::create_dir_all(to_create) {
+                        return Err(
+                            InstallError::CreateDirFailed(to_create.to_path_buf(), e).into()
+                        );
+                    }
+
+                    // Set SELinux context for all created directories if needed
+                    #[cfg(feature = "selinux")]
+                    if should_set_selinux_context(b) {
+                        let context = get_context_for_selinux(b);
+                        set_selinux_context_for_directories_install(to_create, context);
+                    }
+                }
+            } else {
+                #[cfg(unix)]
+                {
+                    if !b.target_dir.is_some()
+                        && sources.len() == 1
+                        && !is_potential_directory_path(&target)
+                    {
+                        if let Ok(dir_fd) = DirFd::open_no_follow(to_create) {
+                            if let Some(filename) = target.file_name() {
+                                target_parent_fd = Some(dir_fd);
+                                target_filename = Some(filename.to_os_string());
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -679,7 +753,73 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
         }
 
         if target.is_file() || is_new_file_path(&target) {
-            copy(source, &target, b)
+            #[cfg(unix)]
+            if let (Some(ref parent_fd), Some(ref filename)) = (target_parent_fd, target_filename) {
+                if b.compare && !need_copy(source, &target, b) {
+                    return Ok(());
+                }
+
+                let backup_path = perform_backup(&target, b)?;
+
+                if let Err(e) = parent_fd.unlink_at(filename.as_os_str(), false) {
+                    if e.kind() != std::io::ErrorKind::NotFound {
+                        show_error!(
+                            "{}",
+                            translate!("install-error-failed-to-remove", "path" => target.quote(), "error" => format!("{e:?}"))
+                        );
+                    }
+                }
+
+                copy_file_safe(source, parent_fd, filename.as_os_str())?;
+
+                #[cfg(not(windows))]
+                if b.strip {
+                    strip_file(&target, b)?;
+                }
+
+                set_ownership_and_permissions(&target, b)?;
+
+                if b.preserve_timestamps {
+                    preserve_timestamps(source, &target)?;
+                }
+
+                #[cfg(feature = "selinux")]
+                if !b.unprivileged {
+                    if b.preserve_context {
+                        uucore::selinux::preserve_security_context(source, &target)
+                            .map_err(|e| InstallError::SelinuxContextFailed(e.to_string()))?;
+                    } else if b.default_context {
+                        set_selinux_default_context(&target)
+                            .map_err(|e| InstallError::SelinuxContextFailed(e.to_string()))?;
+                    } else if b.context.is_some() {
+                        let context = get_context_for_selinux(b);
+                        set_selinux_security_context(&target, context)
+                            .map_err(|e| InstallError::SelinuxContextFailed(e.to_string()))?;
+                    }
+                }
+
+                if b.verbose {
+                    print!(
+                        "{}",
+                        translate!("install-verbose-copy", "from" => source.quote(), "to" => target.quote())
+                    );
+                    match backup_path {
+                        Some(path) => println!(
+                            " {}",
+                            translate!("install-verbose-backup", "backup" => path.quote())
+                        ),
+                        None => println!(),
+                    }
+                }
+
+                Ok(())
+            } else {
+                copy(source, &target, b)
+            }
+            #[cfg(not(unix))]
+            {
+                copy(source, &target, b)
+            }
         } else {
             Err(InstallError::InvalidTarget(target).into())
         }
@@ -798,6 +938,50 @@ fn perform_backup(to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
     } else {
         Ok(None)
     }
+}
+
+/// Copy a file using directory file descriptor for safe traversal.
+/// This prevents symlink race conditions when creating target files.
+#[cfg(unix)]
+fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsStr) -> UResult<()> {
+    use std::io::Read;
+    use std::io::Write;
+
+    let from_meta = metadata(from)?;
+    let ft = from_meta.file_type();
+
+    if let Ok(to_stat) = to_parent_fd.stat_at(to_filename, true) {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            // st_dev and st_ino types vary by platform (i32/u32 on macOS, u64 on Linux)
+            #[allow(clippy::unnecessary_cast)]
+            if from_meta.dev() == to_stat.st_dev as u64 && from_meta.ino() == to_stat.st_ino as u64
+            {
+            }
+        }
+    }
+
+    if ft.is_char_device() || ft.is_block_device() || ft.is_fifo() {
+        let mut handle = File::open(from)?;
+        let mut dest = to_parent_fd.open_file_at(to_filename)?;
+        copy_stream(&mut handle, &mut dest)?;
+        return Ok(());
+    }
+
+    let mut src = File::open(from)?;
+    let mut dst = to_parent_fd.open_file_at(to_filename)?;
+    let mut buffer = vec![0u8; 8192];
+    loop {
+        let bytes_read = src.read(&mut buffer)?;
+        if bytes_read == 0 {
+            break;
+        }
+        dst.write_all(&buffer[..bytes_read])?;
+    }
+    dst.sync_all()?;
+
+    Ok(())
 }
 
 /// Copy a file from one path to another. Handles the certain cases of special
