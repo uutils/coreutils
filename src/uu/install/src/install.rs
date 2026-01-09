@@ -491,7 +491,7 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
                 }
 
                 // Set SELinux context for all created directories if needed
-                #[cfg(feature = "selinux")]
+                #[cfg(all(feature = "selinux", target_os = "linux"))]
                 if should_set_selinux_context(b) {
                     let context = get_context_for_selinux(b);
                     set_selinux_context_for_directories_install(path_to_create.as_path(), context);
@@ -515,7 +515,7 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
                 show_if_err!(chown_optional_user_group(path, b));
 
                 // Set SELinux context for directory if needed
-                #[cfg(feature = "selinux")]
+                #[cfg(all(feature = "selinux", target_os = "linux"))]
                 if b.default_context {
                     show_if_err!(set_selinux_default_context(path));
                 } else if b.context.is_some() {
@@ -680,7 +680,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                             }
 
                             // Set SELinux context for all created directories if needed
-                            #[cfg(feature = "selinux")]
+                            #[cfg(all(feature = "selinux", target_os = "linux"))]
                             if should_set_selinux_context(b) {
                                 let context = get_context_for_selinux(b);
                                 set_selinux_context_for_directories_install(to_create, context);
@@ -714,7 +714,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                     }
 
                     // Set SELinux context for all created directories if needed
-                    #[cfg(feature = "selinux")]
+                    #[cfg(all(feature = "selinux", target_os = "linux"))]
                     if should_set_selinux_context(b) {
                         let context = get_context_for_selinux(b);
                         set_selinux_context_for_directories_install(to_create, context);
@@ -781,7 +781,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                     preserve_timestamps(source, &target)?;
                 }
 
-                #[cfg(feature = "selinux")]
+                #[cfg(all(feature = "selinux", target_os = "linux"))]
                 if !b.unprivileged {
                     if b.preserve_context {
                         uucore::selinux::preserve_security_context(source, &target)
@@ -967,7 +967,11 @@ fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsS
         #[cfg(unix)]
         {
             use std::os::unix::fs::MetadataExt;
-            if from_meta.dev() == to_stat.st_dev as u64 && from_meta.ino() == to_stat.st_ino {}
+            // st_dev and st_ino types vary by platform (i32/u32 on macOS, u64 on Linux)
+            #[allow(clippy::unnecessary_cast)]
+            if from_meta.dev() == to_stat.st_dev as u64 && from_meta.ino() == to_stat.st_ino as u64
+            {
+            }
         }
     }
 
@@ -1179,7 +1183,7 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
         preserve_timestamps(from, to)?;
     }
 
-    #[cfg(feature = "selinux")]
+    #[cfg(all(feature = "selinux", target_os = "linux"))]
     if !b.unprivileged {
         if b.preserve_context {
             uucore::selinux::preserve_security_context(from, to)
@@ -1220,7 +1224,7 @@ fn get_context_for_selinux(b: &Behavior) -> Option<&String> {
     }
 }
 
-#[cfg(feature = "selinux")]
+#[cfg(all(feature = "selinux", target_os = "linux"))]
 fn should_set_selinux_context(b: &Behavior) -> bool {
     !b.unprivileged && (b.context.is_some() || b.default_context)
 }
@@ -1315,7 +1319,7 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
         return true;
     }
 
-    #[cfg(feature = "selinux")]
+    #[cfg(all(feature = "selinux", target_os = "linux"))]
     if !b.unprivileged && b.preserve_context && contexts_differ(from, to) {
         return true;
     }
