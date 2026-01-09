@@ -356,8 +356,7 @@ pub fn create_dir_all_safe(path: &Path) -> io::Result<DirFd> {
                                 return Err(io::Error::new(
                                     io::ErrorKind::AlreadyExists,
                                     format!(
-                                        "path component exists but is not a directory: {:?}",
-                                        component
+                                        "path component exists but is not a directory: {component:?}"
                                     ),
                                 ));
                             }
@@ -371,16 +370,18 @@ pub fn create_dir_all_safe(path: &Path) -> io::Result<DirFd> {
                 }
 
                 return Ok(dir_fd);
-            } else {
-                if let Ok(meta) = fs::symlink_metadata(current_path) {
-                    if meta.file_type().is_symlink() {
-                        fs::remove_file(current_path).ok();
-                    } else {
-                        return Err(io::Error::new(
-                            io::ErrorKind::AlreadyExists,
-                            format!("path exists but is not a directory: {:?}", current_path),
-                        ));
-                    }
+            }
+            if let Ok(meta) = fs::symlink_metadata(current_path) {
+                if meta.file_type().is_symlink() {
+                    fs::remove_file(current_path).ok();
+                } else {
+                    return Err(io::Error::new(
+                        io::ErrorKind::AlreadyExists,
+                        format!(
+                            "path exists but is not a directory: {}",
+                            current_path.display()
+                        ),
+                    ));
                 }
             }
         }
@@ -409,10 +410,7 @@ pub fn create_dir_all_safe(path: &Path) -> io::Result<DirFd> {
                 if (stat.st_mode as libc::mode_t) & libc::S_IFMT != libc::S_IFDIR {
                     return Err(io::Error::new(
                         io::ErrorKind::AlreadyExists,
-                        format!(
-                            "path component exists but is not a directory: {:?}",
-                            component
-                        ),
+                        format!("path component exists but is not a directory: {component:?}"),
                     ));
                 }
                 dir_fd = dir_fd.open_subdir(component.as_os_str())?;
