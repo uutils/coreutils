@@ -162,7 +162,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Set the default algorithm to CRC when not '--check'ing.
     let algo_kind = algo_cli.unwrap_or(AlgoKind::Crc);
 
-    let tag = !matches.get_flag(options::UNTAGGED); // Making TAG default at clap blocks --untagged 
+    let tag = matches.get_flag(options::TAG) || !matches.get_flag(options::UNTAGGED);
     let binary = matches.get_flag(options::BINARY);
 
     let algo = SizedAlgoKind::from_unsized(algo_kind, length)?;
