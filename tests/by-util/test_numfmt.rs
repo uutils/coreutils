@@ -1132,6 +1132,7 @@ fn test_non_utf8_delimiter() {
             .arg(OsStr::from_bytes(&input))
             .succeeds()
             .stdout_is_bytes(expected);
+    }
 }
   
 #[test]
