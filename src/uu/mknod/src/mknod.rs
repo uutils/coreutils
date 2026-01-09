@@ -45,22 +45,22 @@ impl FileType {
 /// Configuration for special inode creation.
 struct Config {
     /// Permission bits for the inode
-    pub mode: Mode,
+    mode: Mode,
 
-    pub file_type: FileType,
+    file_type: FileType,
 
     /// when false, the exact mode bits will be set
-    pub use_umask: bool,
+    use_umask: bool,
 
-    pub dev: u64,
+    dev: u64,
 
     /// Set security context (SELinux/SMACK).
     #[cfg(any(feature = "selinux", feature = "smack"))]
-    pub set_security_context: bool,
+    set_security_context: bool,
 
     /// Specific security context (SELinux/SMACK).
     #[cfg(any(feature = "selinux", feature = "smack"))]
-    pub context: Option<String>,
+    context: Option<String>,
 }
 
 fn mknod(file_name: &str, config: Config) -> i32 {
