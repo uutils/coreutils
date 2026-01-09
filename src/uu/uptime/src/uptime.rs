@@ -27,6 +27,7 @@ use uucore::utmpx::*;
 pub mod options {
     pub static SINCE: &str = "since";
     pub static PATH: &str = "path";
+    pub static PRETTY: &str = "pretty";
 }
 
 #[derive(Debug, Error)]
@@ -57,6 +58,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if matches.get_flag(options::SINCE) {
         uptime_since()
+    } else if matches.get_flag(options::PRETTY) {
+        pretty_print_uptime()
     } else if let Some(path) = file_path {
         uptime_with_file(path)
     } else {
@@ -91,6 +94,13 @@ pub fn uu_app() -> Command {
             .num_args(0..=1)
             .value_parser(ValueParser::os_string())
             .value_hint(ValueHint::AnyPath),
+    )
+    .arg(
+        Arg::new(options::PRETTY)
+            .short('p')
+            .long(options::PRETTY)
+            .help(translate!("uptime-help-pretty"))
+            .action(ArgAction::SetTrue),
     )
 }
 
@@ -266,6 +276,17 @@ fn print_time() {
 }
 
 fn print_uptime(boot_time: Option<time_t>) -> UResult<()> {
-    print!("up  {},  ", get_formatted_uptime(boot_time)?);
+    print!(
+        "up  {},  ",
+        get_formatted_uptime(boot_time, OutputFormat::HumanReadable)?
+    );
+    Ok(())
+}
+
+fn pretty_print_uptime() -> UResult<()> {
+    println!(
+        "up {}",
+        get_formatted_uptime(None, OutputFormat::PrettyPrint)?
+    );
     Ok(())
 }

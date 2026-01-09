@@ -9,6 +9,7 @@ uptime-about-musl-warning = Warning: When built with musl libc, the `uptime` uti
 # Help messages
 uptime-help-since = system up since
 uptime-help-path = file to search boot time from
+uptime-help-pretty = show uptime in pretty format
 
 # Error messages
 uptime-error-io = couldn't get boot time: { $error }
@@ -35,6 +36,18 @@ uptime-format = { $days ->
     [0] { $time }
     [one] { $days } day, { $time }
    *[other] { $days } days { $time }
+}
+uptime-format-pretty-min = { $min ->
+    [one] { $min } minute
+   *[other] { $min } minutes
+}
+uptime-format-pretty-hour = { $hour ->
+    [one] { $hour } hour
+   *[other] { $hour } hours
+}
+uptime-format-pretty-day = { $day ->
+    [one] { $day } day
+   *[other] { $day } days
 }
 
 # Load average formatting
