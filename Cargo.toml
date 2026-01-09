@@ -91,6 +91,7 @@ feat_common_core = [
   "sha1sum",
   "sha224sum",
   "sha256sum",
+  "sha384sum",
   "comm",
   "cp",
   "csplit",
@@ -447,6 +448,7 @@ md5sum = { optional = true, version = "0.6.0", package = "uu_md5sum", path = "sr
 sha1sum = { optional = true, version = "0.6.0", package = "uu_sha1sum", path = "src/uu/sha1sum" }
 sha224sum = { optional = true, version = "0.6.0", package = "uu_sha224sum", path = "src/uu/sha224sum" }
 sha256sum = { optional = true, version = "0.6.0", package = "uu_sha256sum", path = "src/uu/sha256sum" }
+sha384sum = { optional = true, version = "0.6.0", package = "uu_sha384sum", path = "src/uu/sha384sum" }
 comm = { optional = true, version = "0.6.0", package = "uu_comm", path = "src/uu/comm" }
 cp = { optional = true, version = "0.6.0", package = "uu_cp", path = "src/uu/cp" }
 csplit = { optional = true, version = "0.6.0", package = "uu_csplit", path = "src/uu/csplit" }

@@ -96,7 +96,6 @@ SELINUX_PROGS := \
 	runcon
 
 HASHSUM_PROGS := \
-	sha384sum \
 	sha512sum
 
 $(info Detected OS = $(OS))

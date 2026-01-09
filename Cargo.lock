@@ -630,6 +630,7 @@ dependencies = [
  "uu_sha1sum",
  "uu_sha224sum",
  "uu_sha256sum",
+ "uu_sha384sum",
  "uu_shred",
  "uu_shuf",
  "uu_sleep",
@@ -4013,6 +4014,18 @@ dependencies = [
 
 [[package]]
 name = "uu_sha256sum"
+version = "0.6.0"
+dependencies = [
+ "clap",
+ "codspeed-divan-compat",
+ "fluent",
+ "tempfile",
+ "uu_checksum_common",
+ "uucore",
+]
+
+[[package]]
+name = "uu_sha384sum"
 version = "0.6.0"
 dependencies = [
  "clap",
