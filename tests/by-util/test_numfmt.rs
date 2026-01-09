@@ -1134,7 +1134,7 @@ fn test_non_utf8_delimiter() {
             .stdout_is_bytes(expected);
     }
 }
-  
+
 #[test]
 fn test_unit_separator() {
     for (args, expected) in [
