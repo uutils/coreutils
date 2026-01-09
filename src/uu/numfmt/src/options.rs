@@ -50,7 +50,7 @@ pub struct NumfmtOptions {
     pub padding: isize,
     pub header: usize,
     pub fields: Vec<Range>,
-    pub delimiter: Option<String>,
+    pub delimiter: Option<Vec<u8>>,
     pub round: RoundMethod,
     pub suffix: Option<String>,
     pub unit_separator: String,
