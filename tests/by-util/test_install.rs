@@ -2629,7 +2629,7 @@ fn test_install_d_symlink_race_condition() {
         attempts += 1;
     }
 
-    let output = install_handle.join().unwrap();
+    let _output = install_handle.join().unwrap();
     let wrong_location = target.join("c").join("file");
 
     // The critical assertion: file must NOT be in symlink target (race prevented)
