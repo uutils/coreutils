@@ -4,8 +4,8 @@
 // file that was distributed with this source code.
 
 use clap::{Arg, ArgAction, Command, value_parser};
-use libc::mkfifo;
-use std::ffi::CString;
+use nix::sys::stat::Mode;
+use nix::unistd::mkfifo;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use uucore::display::Quotable;
@@ -39,11 +39,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     for f in fifos {
-        let err = unsafe {
-            let name = CString::new(f.as_bytes()).unwrap();
-            mkfifo(name.as_ptr(), 0o666)
-        };
-        if err == -1 {
+        if mkfifo(f.as_str(), Mode::from_bits_truncate(0o666)).is_err() {
             show!(USimpleError::new(
                 1,
                 translate!("mkfifo-error-cannot-create-fifo", "path" => f.quote()),
