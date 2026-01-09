@@ -338,3 +338,11 @@ fn test_unicode_truncation_alignment() {
         .succeeds()
         .stdout_only("     /   bar\n        föö/\n");
 }
+
+#[test]
+fn test_duplicate_input_files() {
+    new_ucmd!()
+        .args(&["one_word", "one_word"])
+        .succeeds()
+        .stdout_is("                                       rust\n                                       rust\n");
+}
