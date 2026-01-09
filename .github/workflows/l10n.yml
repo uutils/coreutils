@@ -595,6 +595,10 @@ jobs:
         ## Test installation via make with DESTDIR
         echo "Testing make install with l10n features..."
 
+        # Set French locale
+        export LANG=fr_FR.UTF-8
+        export LC_ALL=fr_FR.UTF-8
+
         # Create installation directory
         MAKE_INSTALL_DIR="$PWD/make-install-dir"
         mkdir -p "$MAKE_INSTALL_DIR"
@@ -631,10 +635,6 @@ jobs:
         # Test French localization with make-installed binary (Ubuntu only)
         if [ "${{ matrix.job.os }}" = "ubuntu-latest" ]; then
           echo "Testing French localization with make-installed binary..."
-
-          # Set French locale
-          export LANG=fr_FR.UTF-8
-          export LC_ALL=fr_FR.UTF-8
 
           echo "Testing ls --help with French locale..."
           ls_help=$("$MAKE_INSTALL_DIR/usr/bin/coreutils" ls --help 2>&1 || echo "Command failed")
@@ -697,6 +697,10 @@ jobs:
         ## Test installation via cargo install with DESTDIR-like approach
         echo "Testing cargo install with l10n features..."
 
+        # Set French locale
+        export LANG=fr_FR.UTF-8
+        export LC_ALL=fr_FR.UTF-8
+        
         # Create installation directory
         CARGO_INSTALL_DIR="$PWD/cargo-install-dir"
         mkdir -p "$CARGO_INSTALL_DIR"
