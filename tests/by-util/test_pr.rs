@@ -652,3 +652,20 @@ fn test_omit_pagination_option() {
         .pipe_in("a\nb\n")
         .succeeds();
 }
+
+#[test]
+fn test_expand_tabs_option() {
+    // TODO: implement actual tab expansion and verify output matches GNU pr
+    for arg in [
+        "-e",
+        "-e8",
+        "-e5",
+        "-e300",
+        "-e:8",
+        "--expand-tabs",
+        "--expand-tabs=8",
+        "--expand-tabs=:8",
+    ] {
+        new_ucmd!().args(&["-t", arg]).pipe_in("a\tb\n").succeeds();
+    }
+}

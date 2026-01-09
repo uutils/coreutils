@@ -83,6 +83,7 @@ pr-help-indent =
 pr-help-join-lines =
   fusionner les lignes complètes, désactive la troncature de ligne -W, aucun
                   alignement de colonne, --sep-string[=CHAÎNE] définit les séparateurs
+pr-help-expand-tabs = convertir les CHARs d'entrée (TABs) en largeur de tabulation WIDTH (8)
 pr-help-help = Afficher les informations d'aide
 
 # Texte d'en-tête de page

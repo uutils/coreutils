@@ -56,6 +56,7 @@ mod options {
     pub const MERGE: &str = "merge";
     pub const INDENT: &str = "indent";
     pub const JOIN_LINES: &str = "join-lines";
+    pub const EXPAND_TABS: &str = "expand-tabs";
     pub const HELP: &str = "help";
     pub const FILES: &str = "files";
 }
@@ -80,6 +81,7 @@ struct OutputOptions {
     join_lines: bool,
     col_sep_for_printing: String,
     line_width: Option<usize>,
+    expand_tabs: Option<(char, usize)>,
 }
 
 struct FileLine {
@@ -276,6 +278,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::COLUMN)
                 .long(options::COLUMN)
+                .visible_alias("columns")
                 .help(translate!("pr-help-column"))
                 .value_name("column"),
         )
@@ -310,6 +313,14 @@ pub fn uu_app() -> Command {
                 .long(options::INDENT)
                 .help(translate!("pr-help-indent"))
                 .value_name("margin"),
+        )
+        .arg(
+            Arg::new(options::EXPAND_TABS)
+                .short('e')
+                .long(options::EXPAND_TABS)
+                .help(translate!("pr-help-expand-tabs"))
+                .value_name("[CHAR][WIDTH]")
+                .num_args(0..=1),
         )
         .arg(
             Arg::new(options::JOIN_LINES)
@@ -524,6 +535,24 @@ fn build_options(
                 None
             }
         });
+
+    // If first char is a digit, entire string is WIDTH (e.g., -e8 -> tab, 8)
+    // Otherwise first char is CHAR, rest is WIDTH (e.g., -e:4 -> ':', 4)
+    let expand_tabs = matches
+        .get_one::<String>(options::EXPAND_TABS)
+        .map(|s| {
+            let (c, w) = s.chars().next().map_or((TAB, s.as_str()), |c| {
+                if c.is_ascii_digit() {
+                    (TAB, s.as_str())
+                } else {
+                    (c, &s[1..])
+                }
+            });
+            (c, w.parse().unwrap_or(8))
+        })
+        .or(matches
+            .contains_id(options::EXPAND_TABS)
+            .then_some((TAB, 8)));
 
     let double_space = matches.get_flag(options::DOUBLE_SPACE);
 
@@ -761,6 +790,7 @@ fn build_options(
         join_lines,
         col_sep_for_printing,
         line_width,
+        expand_tabs,
     })
 }
 
