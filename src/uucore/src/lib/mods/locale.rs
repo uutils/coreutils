@@ -164,6 +164,7 @@ fn create_bundle(
         "sha1sum",
         "sha224sum",
         "sha256sum",
+        "sha384sum",
     ]
     .contains(&util_name)
     {
