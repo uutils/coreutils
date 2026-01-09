@@ -3,6 +3,9 @@ ver="9.9"
 repo=https://github.com/coreutils/coreutils
 curl -L "${repo}/releases/download/v${ver}/coreutils-${ver}.tar.xz" | tar --strip-components=1 -xJf -
 
+# Accurate error on *sum
+curl -L ${repo}/raw/refs/heads/master/tests/cksum/cksum-a.sh > tests/cksum/cksum-a.sh
+curl -L ${repo}/raw/refs/heads/master/tests/cksum/cksum-c.sh > tests/cksum/cksum-c.sh
 # TODO stop backporting tests from master at GNU coreutils > 9.9
 curl -L ${repo}/raw/refs/heads/master/tests/mv/hardlink-case.sh > tests/mv/hardlink-case.sh
 curl -L ${repo}/raw/refs/heads/master/tests/mkdir/writable-under-readonly.sh > tests/mkdir/writable-under-readonly.sh

@@ -1010,13 +1010,13 @@ fn test_reset_binary() {
 
     scene
         .ucmd()
-        .arg("--binary") // should disappear because of the following option
+        .arg("--binary")
         .arg("--tag")
         .arg("--untagged")
         .arg("--algorithm=md5")
         .arg(at.subdir.join("f"))
         .succeeds()
-        .stdout_contains("d41d8cd98f00b204e9800998ecf8427e  ");
+        .stdout_contains("d41d8cd98f00b204e9800998ecf8427e *");
 }
 
 #[test]
@@ -1047,13 +1047,11 @@ mod output_format {
         let (at, mut ucmd) = at_and_ucmd!();
         at.touch("f");
 
-        ucmd.arg("--text") // should disappear because of the following option
+        ucmd.arg("--text")
             .arg("--tag")
             .args(&["-a", "md5"])
             .arg(at.subdir.join("f"))
-            .succeeds()
-            // Tagged output is used
-            .stdout_contains("f) = d41d8cd98f00b204e9800998ecf8427e");
+            .fails_with_code(1); // with clap generated message
     }
 
     #[test]
@@ -1179,7 +1177,7 @@ fn test_binary_file() {
         .arg("--untagged")
         .arg("lorem_ipsum.txt")
         .succeeds()
-        .stdout_is("cd724690f7dc61775dfac400a71f2caa  lorem_ipsum.txt\n");
+        .stdout_is("cd724690f7dc61775dfac400a71f2caa *lorem_ipsum.txt\n");
 }
 
 #[test]

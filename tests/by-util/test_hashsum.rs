@@ -604,6 +604,11 @@ fn test_conflicting_arg() {
         .arg("--text")
         .arg("--md5")
         .fails_with_code(1);
+    new_ucmd!()
+        .arg("--text")
+        .arg("--tag")
+        .arg("--b2sum")
+        .fails_with_code(1);
 }
 
 #[test]

@@ -214,9 +214,7 @@ pub fn uu_app() -> Command {
                 .long(options::TAG)
                 .help(translate!("cksum-help-tag"))
                 .action(ArgAction::SetTrue)
-                .overrides_with(options::UNTAGGED)
-                .overrides_with(options::BINARY)
-                .overrides_with(options::TEXT),
+                .conflicts_with(options::TEXT),
         )
         .arg(
             Arg::new(options::LENGTH)
