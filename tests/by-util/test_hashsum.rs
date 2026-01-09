@@ -205,7 +205,6 @@ test_digest! {b3sum, b3sum}
 test_digest! {shake128, shake128}
 test_digest! {shake256, shake256}
 
-test_digest_with_len! {sha256, sha256, 256}
 test_digest_with_len! {sha384, sha384, 384}
 test_digest_with_len! {sha512, sha512, 512}
 test_digest_with_len! {sha3_224, sha3, 224}
@@ -618,6 +617,7 @@ fn test_conflicting_arg() {
         .fails_with_code(1);
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_tag() {
     let scene = TestScenario::new(util_name!());
@@ -1184,6 +1184,7 @@ fn test_check_md5_comment_leading_space() {
         .stderr_contains("WARNING: 1 line is improperly formatted");
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_sha256_binary() {
     let ts = TestScenario::new(util_name!());
@@ -1200,6 +1201,7 @@ fn test_sha256_binary() {
     );
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_sha256_stdin_binary() {
     let ts = TestScenario::new(util_name!());
@@ -1217,8 +1219,8 @@ fn test_sha256_stdin_binary() {
 }
 
 // This test is currently disabled on windows
+#[ignore = "moved to standalone"]
 #[test]
-#[cfg_attr(windows, ignore = "Discussion is in #9168")]
 fn test_check_sha256_binary() {
     new_ucmd!()
         .args(&["--sha256", "--check", "binary.sha256.checkfile"])
@@ -1241,12 +1243,12 @@ fn test_help_shows_correct_utility_name() {
     //     .stdout_does_not_contain("Usage: hashsum");
 
     // Test sha256sum
-    scene
-        .ccmd("sha256sum")
-        .arg("--help")
-        .succeeds()
-        .stdout_contains("Usage: sha256sum")
-        .stdout_does_not_contain("Usage: hashsum");
+    // scene
+    //     .ccmd("sha256sum")
+    //     .arg("--help")
+    //     .succeeds()
+    //     .stdout_contains("Usage: sha256sum")
+    //     .stdout_does_not_contain("Usage: hashsum");
 
     // Test b2sum
     // scene
