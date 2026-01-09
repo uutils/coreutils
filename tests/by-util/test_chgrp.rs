@@ -8,7 +8,6 @@
 use std::os::unix::ffi::OsStringExt;
 use uucore::process::getegid;
 use uutests::{at_and_ucmd, new_ucmd};
-#[cfg(not(target_vendor = "apple"))]
 use uutests::{util::TestScenario, util_name};
 
 #[test]
@@ -639,4 +638,26 @@ fn test_chgrp_recursive_on_file() {
         at.plus("regular_file").metadata().unwrap().gid(),
         current_gid
     );
+}
+
+#[test]
+fn test_chgrp_verbose_for_unmapped_gid() {
+    // To be able to change the gid we need root privileges so we skip if the user running the test
+    // suite does not have root privileges
+    if getegid() == 0 {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        at.touch("tmp");
+
+        scene.ucmd().arg("1337").arg("tmp").succeeds().no_stderr();
+
+        scene
+            .ucmd()
+            .arg("-v")
+            .arg("1337")
+            .arg("tmp")
+            .succeeds()
+            .stderr_contains("chgrp: group of 'tmp' retained as 1337");
+    }
 }
