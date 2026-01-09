@@ -126,6 +126,7 @@ pseudoprime
 pseudoprimes
 quantiles
 readonly
+ROOTFS
 reparse
 rposition
 seedable
