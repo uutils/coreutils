@@ -1372,7 +1372,7 @@ fn calc_loop_bsize(
 ) -> usize {
     match count {
         Some(Num::Blocks(rmax)) => {
-            let rsofar = rstat.reads_complete + rstat.reads_partial;
+            let rsofar = rstat.reads_complete;
             let rremain = rmax - rsofar;
             cmp::min(ideal_bsize as u64, rremain * ibs as u64) as usize
         }
@@ -1389,7 +1389,7 @@ fn calc_loop_bsize(
 /// `true` if no such limit is set.
 fn below_count_limit(count: Option<Num>, rstat: &ReadStat) -> bool {
     match count {
-        Some(Num::Blocks(n)) => rstat.reads_complete + rstat.reads_partial < n,
+        Some(Num::Blocks(n)) => rstat.reads_complete < n,
         Some(Num::Bytes(n)) => rstat.bytes_total < n,
         None => true,
     }
