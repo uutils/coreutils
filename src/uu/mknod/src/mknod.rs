@@ -55,9 +55,11 @@ struct Config<'a> {
     pub dev: u64,
 
     /// Set security context (SELinux/SMACK).
+    #[cfg(any(feature = "selinux", feature = "smack"))]
     pub set_security_context: bool,
 
     /// Specific security context (SELinux/SMACK).
+    #[cfg(any(feature = "selinux", feature = "smack"))]
     pub context: Option<&'a String>,
 }
 
@@ -140,7 +142,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .expect("Missing argument 'NAME'");
 
     // Extract the security context related flags and options
+    #[cfg(any(feature = "selinux", feature = "smack"))]
     let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
+    #[cfg(any(feature = "selinux", feature = "smack"))]
     let context = matches.get_one::<String>(options::CONTEXT);
 
     let dev = match (
@@ -169,7 +173,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         file_type: file_type.clone(),
         use_umask,
         dev,
+        #[cfg(any(feature = "selinux", feature = "smack"))]
         set_security_context: set_security_context || context.is_some(),
+        #[cfg(any(feature = "selinux", feature = "smack"))]
         context,
     };
 
