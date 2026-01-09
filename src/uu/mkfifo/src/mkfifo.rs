@@ -59,7 +59,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
 
         // Apply SELinux context if requested
-        #[cfg(feature = "selinux")]
+        #[cfg(all(feature = "selinux", target_os = "linux"))]
         {
             // Extract the SELinux related flags and options
             let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
