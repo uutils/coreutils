@@ -4,6 +4,7 @@
 # spell-checker:ignore rootfs zstd unzstd cpio newc nographic smackfs devtmpfs tmpfs poweroff libm libgcc libpthread libdl librt sysfs rwxat setuidgid
 set -e
 
+: ${PROFILE:=release-small}
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 GNU_DIR="${1:-$REPO_DIR/../gnu}"
@@ -77,7 +78,7 @@ chmod +x "$SMACK_DIR/rootfs/init"
 
 # Build utilities with SMACK support
 echo "Building utilities with SMACK support..."
-cargo build --release --manifest-path="$REPO_DIR/Cargo.toml" --package uu_id --features uu_id/smack --package uu_ls --features uu_ls/smack --package uu_mkdir --features uu_mkdir/smack --package uu_mkfifo --features uu_mkfifo/smack --package uu_mknod --features uu_mknod/smack
+cargo build --profile="${PROFILE}" --manifest-path="$REPO_DIR/Cargo.toml" --package uu_id --features uu_id/smack --package uu_ls --features uu_ls/smack --package uu_mkdir --features uu_mkdir/smack --package uu_mkfifo --features uu_mkfifo/smack --package uu_mknod --features uu_mknod/smack
 
 # Find SMACK tests
 SMACK_TESTS=$(grep -l 'require_smack_' -r "$GNU_DIR/tests/" 2>/dev/null || true)
@@ -111,7 +112,7 @@ for TEST_PATH in $SMACK_TESTS; do
     # Copy built utilities with SMACK support
     for U in id ls mkdir mkfifo mknod; do
         rm -f "$WORK/bin/$U"
-        cp "$REPO_DIR/target/release/$U" "$WORK/bin/$U"
+        cp "$REPO_DIR/target/${PROFILE}/$U" "$WORK/bin/$U"
     done
 
     # Set test script path and user
