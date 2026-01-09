@@ -138,6 +138,7 @@ setfattr
 setlocale
 shortcode
 shortcodes
+sigaction
 siginfo
 sigusr
 strcasecmp
