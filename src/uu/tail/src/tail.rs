@@ -152,7 +152,10 @@ fn tail_file(
         }
         observer.add_bad_path(path, input.display_name.as_str(), false)?;
     } else {
+        #[cfg(unix)]
         let open_result = open_file(path, settings.pid != 0);
+        #[cfg(not(unix))]
+        let open_result = File::open(path);
 
         match open_result {
             Ok(mut file) => {
@@ -226,20 +229,14 @@ fn open_file(path: &Path, use_nonblock_for_fifo: bool) -> std::io::Result<File> 
             .open(path)?;
 
         // Clear O_NONBLOCK so reads block normally
-        if let Ok(flags) = fcntl(file.as_fd(), FcntlArg::F_GETFL) {
-            let new_flags = OFlag::from_bits_truncate(flags) & !OFlag::O_NONBLOCK;
-            let _ = fcntl(file.as_fd(), FcntlArg::F_SETFL(new_flags));
-        }
+        let flags = fcntl(file.as_fd(), FcntlArg::F_GETFL)?;
+        let new_flags = OFlag::from_bits_truncate(flags) & !OFlag::O_NONBLOCK;
+        fcntl(file.as_fd(), FcntlArg::F_SETFL(new_flags))?;
 
         Ok(file)
     } else {
         File::open(path)
     }
-}
-
-#[cfg(not(unix))]
-fn open_file(path: &Path, _use_nonblock_for_fifo: bool) -> std::io::Result<File> {
-    File::open(path)
 }
 
 fn tail_stdin(
