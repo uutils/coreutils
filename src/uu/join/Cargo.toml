@@ -27,3 +27,12 @@ fluent = { workspace = true }
 [[bin]]
 name = "join"
 path = "src/main.rs"
+
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
+[[bench]]
+name = "join_bench"
+harness = false

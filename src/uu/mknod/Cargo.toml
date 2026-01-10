@@ -21,11 +21,12 @@ path = "src/mknod.rs"
 [dependencies]
 clap = { workspace = true }
 libc = { workspace = true }
-uucore = { workspace = true, features = ["mode"] }
+uucore = { workspace = true, features = ["mode", "fs"] }
 fluent = { workspace = true }
 
 [features]
 selinux = ["uucore/selinux"]
+smack = ["uucore/smack"]
 
 [[bin]]
 name = "mknod"

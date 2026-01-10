@@ -9,7 +9,7 @@ use uucore::translate;
 
 use clap::builder::ValueParser;
 use uucore::display::Quotable;
-use uucore::fs::display_permissions;
+use uucore::fs::{display_permissions, major, minor};
 use uucore::fsext::{
     FsMeta, MetadataTimeField, StatFs, metadata_get_time, pretty_filetype, pretty_fstype,
     read_fs_list, statfs,
@@ -70,6 +70,8 @@ struct Flags {
     space: bool,
     sign: bool,
     group: bool,
+    major: bool,
+    minor: bool,
 }
 
 /// checks if the string is within the specified bound,
@@ -739,7 +741,6 @@ impl Stater {
             return Ok(Token::Char('%'));
         }
         if chars[*i] == '%' {
-            *i += 1;
             return Ok(Token::Char('%'));
         }
 
@@ -794,13 +795,14 @@ impl Stater {
             if let Some(&next_char) = chars.get(*i + 1) {
                 if (chars[*i] == 'H' || chars[*i] == 'L') && (next_char == 'd' || next_char == 'r')
                 {
-                    let specifier = format!("{}{next_char}", chars[*i]);
+                    flag.major = chars[*i] == 'H';
+                    flag.minor = chars[*i] == 'L';
                     *i += 1;
                     return Ok(Token::Directive {
                         flag,
                         width,
                         precision,
-                        format: specifier.chars().next().unwrap(),
+                        format: next_char,
                     });
                 }
             }
@@ -908,6 +910,28 @@ impl Stater {
         Ok(tokens)
     }
 
+    fn populate_mount_list() -> UResult<Vec<OsString>> {
+        let mut mount_list = read_fs_list()
+            .map_err(|e| {
+                USimpleError::new(
+                    e.code(),
+                    StatError::CannotReadFilesystem {
+                        error: e.to_string(),
+                    }
+                    .to_string(),
+                )
+            })?
+            .iter()
+            .map(|mi| mi.mount_dir.clone())
+            .collect::<Vec<_>>();
+
+        // Reverse sort. The longer comes first.
+        mount_list.sort();
+        mount_list.reverse();
+
+        Ok(mount_list)
+    }
+
     fn new(matches: &ArgMatches) -> UResult<Self> {
         let files: Vec<OsString> = matches
             .get_many::<OsString>(options::FILES)
@@ -938,27 +962,16 @@ impl Stater {
         let default_dev_tokens =
             Self::generate_tokens(&Self::default_format(show_fs, terse, true), use_printf)?;
 
-        let mount_list = if show_fs {
-            // mount points aren't displayed when showing filesystem information
+        // mount points aren't displayed when showing filesystem information, or
+        // whenever the format string does not request the mount point.
+        let mount_list = if show_fs
+            || !default_tokens
+                .iter()
+                .any(|tok| matches!(tok, Token::Directive { format: 'm', .. }))
+        {
             None
         } else {
-            let mut mount_list = read_fs_list()
-                .map_err(|e| {
-                    USimpleError::new(
-                        e.code(),
-                        StatError::CannotReadFilesystem {
-                            error: e.to_string(),
-                        }
-                        .to_string(),
-                    )
-                })?
-                .iter()
-                .map(|mi| mi.mount_dir.clone())
-                .collect::<Vec<_>>();
-            // Reverse sort. The longer comes first.
-            mount_list.sort();
-            mount_list.reverse();
-            Some(mount_list)
+            Some(Self::populate_mount_list()?)
         };
 
         Ok(Self {
@@ -1004,7 +1017,8 @@ impl Stater {
         file: &OsString,
         file_type: &FileType,
         from_user: bool,
-        _follow_symbolic_links: bool,
+        #[cfg(feature = "selinux")] follow_symbolic_links: bool,
+        #[cfg(not(feature = "selinux"))] _: bool,
     ) -> Result<(), i32> {
         match *t {
             Token::Byte(byte) => write_raw_byte(byte),
@@ -1030,12 +1044,12 @@ impl Stater {
                     'B' => OutputType::Unsigned(512),
                     // SELinux security context string
                     'C' => {
-                        #[cfg(feature = "selinux")]
+                        #[cfg(all(feature = "selinux", target_os = "linux"))]
                         {
                             if uucore::selinux::is_selinux_enabled() {
                                 match uucore::selinux::get_selinux_security_context(
                                     Path::new(file),
-                                    _follow_symbolic_links,
+                                    follow_symbolic_links,
                                 ) {
                                     Ok(ctx) => OutputType::Str(ctx),
                                     Err(_) => OutputType::Str(translate!(
@@ -1046,12 +1060,14 @@ impl Stater {
                                 OutputType::Str(translate!("stat-selinux-unsupported-system"))
                             }
                         }
-                        #[cfg(not(feature = "selinux"))]
+                        #[cfg(not(all(feature = "selinux", target_os = "linux")))]
                         {
                             OutputType::Str(translate!("stat-selinux-unsupported-os"))
                         }
                     }
                     // device number in decimal
+                    'd' if flag.major => OutputType::Unsigned(major(meta.dev() as _) as u64),
+                    'd' if flag.minor => OutputType::Unsigned(minor(meta.dev() as _) as u64),
                     'd' => OutputType::Unsigned(meta.dev()),
                     // device number in hex
                     'D' => OutputType::UnsignedHex(meta.dev()),
@@ -1090,10 +1106,10 @@ impl Stater {
                     's' => OutputType::Integer(meta.len() as i64),
                     // major device type in hex, for character/block device special
                     // files
-                    't' => OutputType::UnsignedHex(meta.rdev() >> 8),
+                    't' => OutputType::UnsignedHex(major(meta.rdev() as _) as u64),
                     // minor device type in hex, for character/block device special
                     // files
-                    'T' => OutputType::UnsignedHex(meta.rdev() & 0xff),
+                    'T' => OutputType::UnsignedHex(minor(meta.rdev() as _) as u64),
                     // user ID of owner
                     'u' => OutputType::Unsigned(meta.uid() as u64),
                     // user name of owner
@@ -1136,15 +1152,10 @@ impl Stater {
                             .map_or((0, 0), system_time_to_sec);
                         OutputType::Float(sec as f64 + nsec as f64 / 1_000_000_000.0)
                     }
-                    'R' => {
-                        let major = meta.rdev() >> 8;
-                        let minor = meta.rdev() & 0xff;
-                        OutputType::Str(format!("{major},{minor}"))
-                    }
+                    'R' => OutputType::UnsignedHex(meta.rdev()),
+                    'r' if flag.major => OutputType::Unsigned(major(meta.rdev() as _) as u64),
+                    'r' if flag.minor => OutputType::Unsigned(minor(meta.rdev() as _) as u64),
                     'r' => OutputType::Unsigned(meta.rdev()),
-                    'H' => OutputType::Unsigned(meta.rdev() >> 8), // Major in decimal
-                    'L' => OutputType::Unsigned(meta.rdev() & 0xff), // Minor in decimal
-
                     _ => OutputType::Unknown,
                 };
                 print_it(&output, flag, width, precision);
@@ -1269,7 +1280,7 @@ impl Stater {
         } else {
             let device_line = if show_dev_type {
                 format!(
-                    "{}: %Dh/%dd\t{}: %-10i  {}: %-5h {} {}: %t,%T\n",
+                    "{}: %Hd,%Ld\t{}: %-10i  {}: %-5h {} {}: %t,%T\n",
                     translate!("stat-word-device"),
                     translate!("stat-word-inode"),
                     translate!("stat-word-links"),
@@ -1278,7 +1289,7 @@ impl Stater {
                 )
             } else {
                 format!(
-                    "{}: %Dh/%dd\t{}: %-10i  {}: %h\n",
+                    "{}: %Hd,%Ld\t{}: %-10i  {}: %h\n",
                     translate!("stat-word-device"),
                     translate!("stat-word-inode"),
                     translate!("stat-word-links")

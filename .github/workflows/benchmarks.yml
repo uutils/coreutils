@@ -28,10 +28,11 @@ jobs:
           - { package: uu_cp }
           - { package: uu_cut }
           - { package: uu_dd }
+          - { package: uu_df }
           - { package: uu_du }
           - { package: uu_expand }
           - { package: uu_fold }
-          - { package: uu_hashsum }
+          - { package: uu_join }
           - { package: uu_ls }
           - { package: uu_mv }
           - { package: uu_nl }
@@ -46,6 +47,7 @@ jobs:
           - { package: uu_uniq }
           - { package: uu_wc }
           - { package: uu_factor }
+          - { package: uu_date }
     steps:
       - uses: actions/checkout@v6
         with:
@@ -73,7 +75,7 @@ jobs:
         env:
           CODSPEED_LOG: debug
         with:
-          mode: instrumentation
+          mode: simulation
           run: |
             echo "Running benchmarks for ${{ matrix.benchmark-target.package }}"
             cargo codspeed run -p ${{ matrix.benchmark-target.package }} > /dev/null
