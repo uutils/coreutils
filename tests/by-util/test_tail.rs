@@ -140,8 +140,6 @@ fn test_stdin_redirect_file() {
 }
 
 #[test]
-// FIXME: the -f test fails with: Assertion failed. Expected 'tail' to be running but exited with status=exit status: 0
-#[ignore = "disabled until fixed"]
 #[cfg(not(target_vendor = "apple"))] // FIXME: for currently not working platforms
 fn test_stdin_redirect_file_follow() {
     // $ echo foo > f
