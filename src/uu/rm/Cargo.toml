@@ -20,9 +20,12 @@ path = "src/rm.rs"
 [dependencies]
 thiserror = { workspace = true }
 clap = { workspace = true }
-uucore = { workspace = true, features = ["fs", "parser", "safe-traversal"] }
+uucore = { workspace = true, features = ["fs", "parser"] }
 fluent = { workspace = true }
 indicatif = { workspace = true }
+
+[target.'cfg(all(unix, not(target_os = "redox")))'.dependencies]
+uucore = { workspace = true, features = ["safe-traversal"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }

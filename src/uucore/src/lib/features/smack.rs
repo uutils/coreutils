@@ -6,13 +6,14 @@
 // spell-checker:ignore smackfs
 //! SMACK (Simplified Mandatory Access Control Kernel) support
 
-use std::io;
+use std::fs;
+use std::io::{self, Read, Write};
 use std::path::Path;
 use std::sync::OnceLock;
 
 use thiserror::Error;
 
-use crate::error::{UError, strip_errno};
+use crate::error::{UError, USimpleError, strip_errno};
 use crate::translate;
 
 #[derive(Debug, Error)]
@@ -50,6 +51,32 @@ pub fn is_smack_enabled() -> bool {
     *SMACK_ENABLED.get_or_init(|| Path::new("/sys/fs/smackfs").exists())
 }
 
+/// Gets the SMACK label for the current process.
+pub fn get_smack_label_for_self() -> Result<String, SmackError> {
+    if !is_smack_enabled() {
+        return Err(SmackError::SmackNotEnabled);
+    }
+
+    let mut label = String::new();
+    fs::File::open("/proc/self/attr/current")
+        .map_err(SmackError::LabelRetrievalFailure)?
+        .read_to_string(&mut label)
+        .map_err(SmackError::LabelRetrievalFailure)?;
+
+    Ok(label.trim().to_string())
+}
+
+/// Sets the SMACK label for the current process.
+pub fn set_smack_label_for_self(label: &str) -> Result<(), SmackError> {
+    if !is_smack_enabled() {
+        return Err(SmackError::SmackNotEnabled);
+    }
+
+    fs::File::create("/proc/self/attr/current")
+        .and_then(|mut f| f.write_all(label.as_bytes()))
+        .map_err(|e| SmackError::LabelSetFailure(label.to_string(), e))
+}
+
 /// Gets the SMACK label for a filesystem path via xattr.
 pub fn get_smack_label_for_path(path: &Path) -> Result<String, SmackError> {
     if !is_smack_enabled() {
@@ -74,4 +101,21 @@ pub fn set_smack_label_for_path(path: &Path, label: &str) -> Result<(), SmackErr
 
     xattr::set(path, "security.SMACK64", label.as_bytes())
         .map_err(|e| SmackError::LabelSetFailure(label.to_string(), e))
+}
+
+/// Sets SMACK label for a new path, calling cleanup on failure.
+pub fn set_smack_label_and_cleanup(
+    path: impl AsRef<Path>,
+    context: Option<&String>,
+    cleanup: impl FnOnce(&Path) -> io::Result<()>,
+) -> Result<(), Box<dyn UError>> {
+    let Some(ctx) = context else { return Ok(()) };
+    if !is_smack_enabled() {
+        return Ok(());
+    }
+    let path = path.as_ref();
+    set_smack_label_for_path(path, ctx).map_err(|e| {
+        let _ = cleanup(path);
+        USimpleError::new(1, e.to_string())
+    })
 }

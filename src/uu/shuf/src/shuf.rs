@@ -422,7 +422,26 @@ impl Writable for &OsStr {
 
 impl Writable for usize {
     fn write_all_to(&self, output: &mut impl OsWrite) -> Result<(), Error> {
-        write!(output, "{self}")
+        let mut n = *self;
+
+        // Handle the zero case explicitly
+        if n == 0 {
+            return output.write_all(b"0");
+        }
+
+        // Maximum number of digits for u64 is 20 (18446744073709551615)
+        let mut buf = [0u8; 20];
+        let mut i = 20;
+
+        // Write digits from right to left
+        while n > 0 {
+            i -= 1;
+            buf[i] = b'0' + (n % 10) as u8;
+            n /= 10;
+        }
+
+        // Write the relevant part of the buffer to output
+        output.write_all(&buf[i..])
     }
 }
 

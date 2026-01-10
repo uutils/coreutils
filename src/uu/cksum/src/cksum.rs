@@ -7,8 +7,7 @@
 
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
-use std::ffi::{OsStr, OsString};
-use std::iter;
+use std::ffi::OsString;
 use uucore::checksum::compute::{
     ChecksumComputeOptions, figure_out_output_format, perform_checksum_computation,
 };
@@ -74,42 +73,6 @@ mod options {
 /// Returns a pair of boolean. The first one indicates if we should use tagged
 /// output format, the second one indicates if we should use the binary flag in
 /// the untagged case.
-fn handle_tag_text_binary_flags<S: AsRef<OsStr>>(
-    args: impl Iterator<Item = S>,
-) -> UResult<(bool, bool)> {
-    let mut tag = true;
-    let mut binary = false;
-    let mut text = false;
-
-    // --binary, --tag and --untagged are tight together: none of them
-    // conflicts with each other but --tag will reset "binary" and "text" and
-    // set "tag".
-
-    for arg in args {
-        let arg = arg.as_ref();
-        if arg == "-b" || arg == "--binary" {
-            text = false;
-            binary = true;
-        } else if arg == "--text" {
-            text = true;
-            binary = false;
-        } else if arg == "--tag" {
-            tag = true;
-            binary = false;
-            text = false;
-        } else if arg == "--untagged" {
-            tag = false;
-        }
-    }
-
-    // Specifying --text without ever mentioning --untagged fails.
-    if text && tag {
-        return Err(ChecksumError::TextWithoutUntagged.into());
-    }
-
-    Ok((tag, binary))
-}
-
 /// Sanitize the `--length` argument depending on `--algorithm` and `--length`.
 fn maybe_sanitize_length(
     algo_cli: Option<AlgoKind>,
@@ -140,19 +103,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let check = matches.get_flag(options::CHECK);
 
-    let check_flag = |flag| match (check, matches.get_flag(flag)) {
-        (_, false) => Ok(false),
-        (true, true) => Ok(true),
-        (false, true) => Err(ChecksumError::CheckOnlyFlag(flag.into())),
-    };
-
-    // Each of the following flags are only expected in --check mode.
-    // If we encounter them otherwise, end with an error.
-    let ignore_missing = check_flag(options::IGNORE_MISSING)?;
-    let warn = check_flag(options::WARN)?;
-    let quiet = check_flag(options::QUIET)?;
-    let strict = check_flag(options::STRICT)?;
-    let status = check_flag(options::STATUS)?;
+    let ignore_missing = matches.get_flag(options::IGNORE_MISSING);
+    let warn = matches.get_flag(options::WARN);
+    let quiet = matches.get_flag(options::QUIET);
+    let strict = matches.get_flag(options::STRICT);
+    let status = matches.get_flag(options::STATUS);
 
     let algo_cli = matches
         .get_one::<String>(options::ALGORITHM)
@@ -165,25 +120,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let length = maybe_sanitize_length(algo_cli, input_length)?;
 
-    let files = matches.get_many::<OsString>(options::FILE).map_or_else(
-        // No files given, read from stdin.
-        || Box::new(iter::once(OsStr::new("-"))) as Box<dyn Iterator<Item = &OsStr>>,
-        // At least one file given, read from them.
-        |files| Box::new(files.map(OsStr::new)) as Box<dyn Iterator<Item = &OsStr>>,
-    );
+    // clap provides the default value -. So we unwrap() safety.
+    let files = matches
+        .get_many::<OsString>(options::FILE)
+        .unwrap()
+        .map(|s| s.as_os_str());
 
     if check {
         // cksum does not support '--check'ing legacy algorithms
         if algo_cli.is_some_and(AlgoKind::is_legacy) {
             return Err(ChecksumError::AlgorithmNotSupportedWithCheck.into());
-        }
-
-        let text_flag = matches.get_flag(options::TEXT);
-        let binary_flag = matches.get_flag(options::BINARY);
-        let tag = matches.get_flag(options::TAG);
-
-        if tag || binary_flag || text_flag {
-            return Err(ChecksumError::BinaryTextConflict.into());
         }
 
         // Execute the checksum validation based on the presence of files or the use of stdin
@@ -208,7 +154,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Set the default algorithm to CRC when not '--check'ing.
     let algo_kind = algo_cli.unwrap_or(AlgoKind::Crc);
 
-    let (tag, binary) = handle_tag_text_binary_flags(std::env::args_os())?;
+    let tag = !matches.get_flag(options::UNTAGGED); // Making TAG default at clap blocks --untagged 
+    let binary = matches.get_flag(options::BINARY);
 
     let algo = SizedAlgoKind::from_unsized(algo_kind, length)?;
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));
@@ -243,6 +190,8 @@ pub fn uu_app() -> Command {
                 .hide(true)
                 .action(ArgAction::Append)
                 .value_parser(ValueParser::os_string())
+                .default_value("-")
+                .hide_default_value(true)
                 .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
@@ -265,7 +214,9 @@ pub fn uu_app() -> Command {
                 .long(options::TAG)
                 .help(translate!("cksum-help-tag"))
                 .action(ArgAction::SetTrue)
-                .overrides_with(options::UNTAGGED),
+                .overrides_with(options::UNTAGGED)
+                .overrides_with(options::BINARY)
+                .overrides_with(options::TEXT),
         )
         .arg(
             Arg::new(options::LENGTH)
@@ -284,13 +235,17 @@ pub fn uu_app() -> Command {
             Arg::new(options::STRICT)
                 .long(options::STRICT)
                 .help(translate!("cksum-help-strict"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .requires(options::CHECK),
         )
         .arg(
             Arg::new(options::CHECK)
                 .short('c')
                 .long(options::CHECK)
                 .help(translate!("cksum-help-check"))
+                .conflicts_with(options::TAG)
+                .conflicts_with(options::BINARY)
+                .conflicts_with(options::TEXT)
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -308,7 +263,8 @@ pub fn uu_app() -> Command {
                 .short('t')
                 .hide(true)
                 .overrides_with(options::BINARY)
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .requires(options::UNTAGGED),
         )
         .arg(
             Arg::new(options::BINARY)
@@ -324,27 +280,31 @@ pub fn uu_app() -> Command {
                 .long("warn")
                 .help(translate!("cksum-help-warn"))
                 .action(ArgAction::SetTrue)
-                .overrides_with_all([options::STATUS, options::QUIET]),
+                .overrides_with_all([options::STATUS, options::QUIET])
+                .requires(options::CHECK),
         )
         .arg(
             Arg::new(options::STATUS)
                 .long("status")
                 .help(translate!("cksum-help-status"))
                 .action(ArgAction::SetTrue)
-                .overrides_with_all([options::WARN, options::QUIET]),
+                .overrides_with_all([options::WARN, options::QUIET])
+                .requires(options::CHECK),
         )
         .arg(
             Arg::new(options::QUIET)
                 .long(options::QUIET)
                 .help(translate!("cksum-help-quiet"))
                 .action(ArgAction::SetTrue)
-                .overrides_with_all([options::WARN, options::STATUS]),
+                .overrides_with_all([options::WARN, options::STATUS])
+                .requires(options::CHECK),
         )
         .arg(
             Arg::new(options::IGNORE_MISSING)
                 .long(options::IGNORE_MISSING)
                 .help(translate!("cksum-help-ignore-missing"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .requires(options::CHECK),
         )
         .arg(
             Arg::new(options::ZERO)

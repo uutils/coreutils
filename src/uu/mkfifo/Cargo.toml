@@ -20,11 +20,13 @@ path = "src/mkfifo.rs"
 [dependencies]
 clap = { workspace = true }
 libc = { workspace = true }
+nix = { workspace = true, features = ["fs"] }
 uucore = { workspace = true, features = ["fs", "mode"] }
 fluent = { workspace = true }
 
 [features]
 selinux = ["uucore/selinux"]
+smack = ["uucore/smack"]
 
 [[bin]]
 name = "mkfifo"
