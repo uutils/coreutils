@@ -27,6 +27,7 @@ clap = { workspace = true }
 uucore = { workspace = true }
 thiserror = { workspace = true }
 fluent = { workspace = true }
+tempfile = { workspace = true }
 
 [[bin]]
 name = "tac"

@@ -16,7 +16,7 @@ pub enum TouchError {
     #[error("{}", translate!("touch-error-unable-to-parse-date", "date" => .0.clone()))]
     InvalidDateFormat(String),
 
-    /// The source time couldn't be converted to a [`chrono::DateTime`]
+    /// The source time couldn't be converted to a [`jiff::Zoned`]
     #[error("{}", translate!("touch-error-invalid-filetime", "time" => .0))]
     InvalidFiletime(FileTime),
 

@@ -251,7 +251,7 @@ where
     }
 
     let num_bytes_copied = buf_copy::copy_stream(&mut src_file, &mut dst_file)
-        .map_err(|_| std::io::Error::from(std::io::ErrorKind::Other))?;
+        .map_err(|e| std::io::Error::other(format!("{e}")))?;
 
     Ok(num_bytes_copied)
 }

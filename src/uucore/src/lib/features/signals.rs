@@ -426,6 +426,68 @@ pub fn ignore_interrupts() -> Result<(), Errno> {
     unsafe { signal(SIGINT, SigIgn) }.map(|_| ())
 }
 
+// SIGPIPE state capture - captures whether SIGPIPE was ignored at process startup
+#[cfg(unix)]
+use std::sync::atomic::{AtomicBool, Ordering};
+
+#[cfg(unix)]
+static SIGPIPE_WAS_IGNORED: AtomicBool = AtomicBool::new(false);
+
+/// Captures SIGPIPE state at process initialization, before main() runs.
+///
+/// # Safety
+/// Called from `.init_array` before main(). Only reads current SIGPIPE handler state.
+#[cfg(unix)]
+pub unsafe extern "C" fn capture_sigpipe_state() {
+    use nix::libc;
+    use std::mem::MaybeUninit;
+    use std::ptr;
+
+    let mut current = MaybeUninit::<libc::sigaction>::uninit();
+    // SAFETY: sigaction with null new-action just queries current state
+    if unsafe { libc::sigaction(libc::SIGPIPE, ptr::null(), current.as_mut_ptr()) } == 0 {
+        // SAFETY: sigaction succeeded, so current is initialized
+        let ignored = unsafe { current.assume_init() }.sa_sigaction == libc::SIG_IGN;
+        SIGPIPE_WAS_IGNORED.store(ignored, Ordering::Release);
+    }
+}
+
+/// Initializes SIGPIPE state capture. Call once at crate root level.
+#[macro_export]
+#[cfg(unix)]
+macro_rules! init_sigpipe_capture {
+    () => {
+        #[cfg(all(unix, not(target_os = "macos")))]
+        #[used]
+        #[unsafe(link_section = ".init_array")]
+        static CAPTURE_SIGPIPE_STATE: unsafe extern "C" fn() =
+            $crate::signals::capture_sigpipe_state;
+
+        #[cfg(all(unix, target_os = "macos"))]
+        #[used]
+        #[unsafe(link_section = "__DATA,__mod_init_func")]
+        static CAPTURE_SIGPIPE_STATE: unsafe extern "C" fn() =
+            $crate::signals::capture_sigpipe_state;
+    };
+}
+
+#[macro_export]
+#[cfg(not(unix))]
+macro_rules! init_sigpipe_capture {
+    () => {};
+}
+
+/// Returns whether SIGPIPE was ignored at process startup.
+#[cfg(unix)]
+pub fn sigpipe_was_ignored() -> bool {
+    SIGPIPE_WAS_IGNORED.load(Ordering::Acquire)
+}
+
+#[cfg(not(unix))]
+pub const fn sigpipe_was_ignored() -> bool {
+    false
+}
+
 #[test]
 fn signal_by_value() {
     assert_eq!(signal_by_name_or_value("0"), Some(0));
