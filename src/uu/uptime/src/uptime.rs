@@ -276,17 +276,17 @@ fn print_time() {
 }
 
 fn print_uptime(boot_time: Option<time_t>) -> UResult<()> {
-    print!(
-        "up  {},  ",
-        get_formatted_uptime(boot_time, OutputFormat::HumanReadable)?
-    );
+    let localized_text = translate!("uptime-output-up-text");
+    let uptime_message = get_formatted_uptime(boot_time, OutputFormat::HumanReadable)?;
+
+    print!("{localized_text}  {uptime_message},  ");
     Ok(())
 }
 
 fn pretty_print_uptime() -> UResult<()> {
-    println!(
-        "up {}",
-        get_formatted_uptime(None, OutputFormat::PrettyPrint)?
-    );
+    let localized_text = translate!("uptime-output-up-text");
+    let uptime_message = get_formatted_uptime(None, OutputFormat::PrettyPrint)?;
+
+    println!("{localized_text} {uptime_message}");
     Ok(())
 }

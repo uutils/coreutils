@@ -19,6 +19,7 @@ uptime-error-couldnt-get-boot-time = impossible d'obtenir l'heure de démarrage
 
 # Messages de sortie
 uptime-output-unknown-uptime = actif ???? jours ??:??,
+uptime-output-up-text = actif
 
 uptime-user-count = { $count ->
     [one] 1 utilisateur

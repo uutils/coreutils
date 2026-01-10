@@ -19,6 +19,7 @@ uptime-error-couldnt-get-boot-time = couldn't get boot time
 
 # Output messages
 uptime-output-unknown-uptime = up ???? days ??:??,
+uptime-output-up-text = up
 
 uptime-user-count = { $count ->
     [one] 1 user
