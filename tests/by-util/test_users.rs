@@ -7,6 +7,20 @@ use uutests::new_ucmd;
 use uutests::{util::TestScenario, util_name};
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_full_panic() {
+    let full = std::fs::OpenOptions::new()
+        .write(true)
+        .open("/dev/full")
+        .unwrap();
+
+    new_ucmd!()
+        .set_stdout(full)
+        .fails()
+        .stderr_contains("No space");
+}
+
+#[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
