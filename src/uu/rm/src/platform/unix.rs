@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// Linux-specific implementations for the rm utility
+// Unix-specific implementations for the rm utility
 
 // spell-checker:ignore fstatat unlinkat statx behaviour
 
@@ -42,8 +42,8 @@ fn prompt_file_with_stat(path: &Path, stat: &libc::stat, options: &Options) -> b
         return true;
     }
 
-    let is_symlink = (stat.st_mode & libc::S_IFMT) == libc::S_IFLNK;
-    let writable = mode_writable(stat.st_mode);
+    let is_symlink = ((stat.st_mode as libc::mode_t) & libc::S_IFMT) == libc::S_IFLNK;
+    let writable = mode_writable(stat.st_mode as libc::mode_t);
     let len = stat.st_size as u64;
     let stdin_ok = options.__presume_input_tty.unwrap_or(false) || stdin().is_terminal();
 
@@ -82,8 +82,8 @@ fn prompt_dir_with_mode(path: &Path, mode: libc::mode_t, options: &Options) -> b
         return true;
     }
 
-    let readable = mode_readable(mode);
-    let writable = mode_writable(mode);
+    let readable = mode_readable(mode as libc::mode_t);
+    let writable = mode_writable(mode as libc::mode_t);
     let stdin_ok = options.__presume_input_tty.unwrap_or(false) || stdin().is_terminal();
 
     match (stdin_ok, readable, writable, options.interactive) {
@@ -317,7 +317,7 @@ pub fn safe_remove_dir_recursive(
     } else {
         // Ask user permission if needed
         if options.interactive == InteractiveMode::Always
-            && !prompt_dir_with_mode(path, initial_mode, options)
+            && !prompt_dir_with_mode(path, initial_mode as libc::mode_t, options)
         {
             return false;
         }
@@ -345,6 +345,7 @@ pub fn safe_remove_dir_recursive(
     }
 }
 
+#[cfg(not(target_os = "redox"))]
 pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Options) -> bool {
     // Read directory entries using safe traversal
     let entries = match dir_fd.read_dir() {
@@ -376,7 +377,7 @@ pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Opt
         };
 
         // Check if it's a directory
-        let is_dir = (entry_stat.st_mode & libc::S_IFMT) == libc::S_IFDIR;
+        let is_dir = ((entry_stat.st_mode as libc::mode_t) & libc::S_IFMT) == libc::S_IFDIR;
 
         if is_dir {
             // Ask user if they want to descend into this directory
@@ -413,7 +414,7 @@ pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Opt
             // Ask user permission if needed for this subdirectory
             if !child_error
                 && options.interactive == InteractiveMode::Always
-                && !prompt_dir_with_mode(&entry_path, entry_stat.st_mode, options)
+                && !prompt_dir_with_mode(&entry_path, entry_stat.st_mode as libc::mode_t, options)
             {
                 continue;
             }
@@ -431,4 +432,11 @@ pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Opt
     }
 
     error
+}
+
+#[cfg(target_os = "redox")]
+pub fn safe_remove_dir_recursive_impl(_path: &Path, _dir_fd: &DirFd, _options: &Options) -> bool {
+    // safe_traversal stat_at is not supported on Redox
+    // This shouldn't be called on Redox, but provide a stub for compilation
+    true // Return error
 }

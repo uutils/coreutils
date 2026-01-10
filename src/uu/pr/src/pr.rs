@@ -42,6 +42,7 @@ mod options {
     pub const FIRST_LINE_NUMBER: &str = "first-line-number";
     pub const PAGES: &str = "pages";
     pub const OMIT_HEADER: &str = "omit-header";
+    pub const OMIT_PAGINATION: &str = "omit-pagination";
     pub const PAGE_LENGTH: &str = "length";
     pub const NO_FILE_WARNINGS: &str = "no-file-warnings";
     pub const FORM_FEED: &str = "form-feed";
@@ -216,6 +217,13 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
+            Arg::new(options::OMIT_PAGINATION)
+                .short('T')
+                .long(options::OMIT_PAGINATION)
+                .help(translate!("pr-help-omit-pagination"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
             Arg::new(options::PAGE_LENGTH)
                 .short('l')
                 .long(options::PAGE_LENGTH)
@@ -276,14 +284,18 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .long(options::COLUMN_CHAR_SEPARATOR)
                 .help(translate!("pr-help-column-char-separator"))
-                .value_name("char"),
+                .value_name("char")
+                .num_args(0..=1)
+                .default_missing_value("\t"),
         )
         .arg(
             Arg::new(options::COLUMN_STRING_SEPARATOR)
                 .short('S')
                 .long(options::COLUMN_STRING_SEPARATOR)
                 .help(translate!("pr-help-column-string-separator"))
-                .value_name("string"),
+                .value_name("string")
+                .num_args(0..=1)
+                .default_missing_value(" "),
         )
         .arg(
             Arg::new(options::MERGE)
@@ -629,7 +641,9 @@ fn build_options(
 
     let page_length_le_ht = page_length < (HEADER_LINES_PER_PAGE + TRAILER_LINES_PER_PAGE);
 
-    let display_header_and_trailer = !page_length_le_ht && !matches.get_flag(options::OMIT_HEADER);
+    let display_header_and_trailer = !page_length_le_ht
+        && !matches.get_flag(options::OMIT_HEADER)
+        && !matches.get_flag(options::OMIT_PAGINATION);
 
     let content_lines_per_page = if page_length_le_ht {
         page_length
