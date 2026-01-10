@@ -4961,3 +4961,29 @@ fn tail_n_lines_with_emoji() {
         .succeeds()
         .stdout_only("💐\n");
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_follow_pipe_f() {
+    new_ucmd!()
+        .args(&["-f", "-c3", "-s.1", "--max-unchanged-stats=1"])
+        .pipe_in("foo\n")
+        .succeeds()
+        .stdout_only("oo\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_follow_stdout_pipe_close() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "line1\nline2\n");
+
+    let mut child = ucmd
+        .args(&["-f", "-s.1", "--max-unchanged-stats=1", "f"])
+        .set_stdout(Stdio::piped())
+        .run_no_wait();
+
+    child.stdout_exact_bytes(6); // read "line1\n"
+    child.close_stdout();
+    child.delay(2000).make_assertion().is_not_alive();
+}

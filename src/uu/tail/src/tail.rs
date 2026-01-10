@@ -265,7 +265,6 @@ fn tail_stdin(
             } else {
                 let mut reader = BufReader::new(stdin());
                 unbounded_tail(&mut reader, settings)?;
-                observer.add_stdin(input.display_name.as_str(), Some(Box::new(reader)), true)?;
             }
         }
     }
