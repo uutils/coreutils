@@ -633,7 +633,6 @@ impl ChownExecutor {
                 );
                 continue;
             }
-
             ret = match wrap_chown(
                 path,
                 &meta,
@@ -646,7 +645,8 @@ impl ChownExecutor {
                     if !n.is_empty() {
                         show_error!("{n}");
                     }
-                    0
+                    // retain previous errors
+                    ret.max(0)
                 }
                 Err(e) => {
                     if self.verbosity.level != VerbosityLevel::Silent {

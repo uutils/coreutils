@@ -1390,8 +1390,8 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
             let dest = construct_dest_path(source, target, target_type, options)
                 .unwrap_or_else(|_| target.to_path_buf());
 
-            if fs::metadata(&dest).is_ok()
-                && !fs::symlink_metadata(&dest)?.file_type().is_symlink()
+            if FileInformation::from_path(&dest, true).is_ok()
+                && !fs::symlink_metadata(&dest).is_ok_and(|m| m.file_type().is_symlink())
                 // if both `source` and `dest` are symlinks, it should be considered as an overwrite.
                 || fs::metadata(source).is_ok()
                     && fs::symlink_metadata(source)?.file_type().is_symlink()
@@ -1566,6 +1566,7 @@ fn file_mode_for_interactive_overwrite(
             match path.metadata() {
                 Ok(me) => {
                     // Cast is necessary on some platforms
+                    #[allow(clippy::unnecessary_cast)]
                     let mode: mode_t = me.mode() as mode_t;
 
                     // It looks like this extra information is added to the prompt iff the file's user write bit is 0
@@ -1758,7 +1759,7 @@ pub(crate) fn copy_attributes(
         Ok(())
     })?;
 
-    #[cfg(feature = "selinux")]
+    #[cfg(all(feature = "selinux", target_os = "linux"))]
     handle_preserve(&attributes.context, || -> CopyResult<()> {
         // Get the source context and apply it to the destination
         if let Ok(context) = selinux::SecurityContext::of_path(source, false, false) {
@@ -2447,7 +2448,9 @@ fn copy_file(
         return Err(translate!("cp-error-cannot-change-attribute", "dest" => dest.quote()).into());
     }
 
-    if options.preserve_hard_links() {
+    // When using --link mode, hard link structure is automatically preserved
+    // because we link to source files (which share inodes).
+    if options.preserve_hard_links() && options.copy_mode != CopyMode::Link {
         // if we encounter a matching device/inode pair in the source tree
         // we can arrange to create a hard link between the corresponding names
         // in the destination tree.
@@ -2552,7 +2555,7 @@ fn copy_file(
         copy_attributes(source, dest, &options.attributes)?;
     }
 
-    #[cfg(feature = "selinux")]
+    #[cfg(all(feature = "selinux", target_os = "linux"))]
     if options.set_selinux_context && uucore::selinux::is_selinux_enabled() {
         // Set the given selinux permissions on the copied file.
         if let Err(e) =
@@ -2564,10 +2567,14 @@ fn copy_file(
         }
     }
 
-    copied_files.insert(
-        FileInformation::from_path(source, options.dereference(source_in_command_line))?,
-        dest.to_path_buf(),
-    );
+    // Skip tracking copied files when using --link mode since hard link
+    // structure is automatically preserved
+    if options.copy_mode != CopyMode::Link {
+        copied_files.insert(
+            FileInformation::from_path(source, options.dereference(source_in_command_line))?,
+            dest.to_path_buf(),
+        );
+    }
 
     if let Some(progress_bar) = progress_bar {
         progress_bar.inc(source_metadata.len());
@@ -2620,8 +2627,10 @@ fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
             target_os = "redox",
         ))]
         {
+            #[allow(clippy::unnecessary_cast)]
             const MODE_RW_UGO: u32 =
                 (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
+            #[allow(clippy::unnecessary_cast)]
             const S_IRWXUGO: u32 = (S_IRWXU | S_IRWXG | S_IRWXO) as u32;
             return if is_explicit_no_preserve_mode {
                 MODE_RW_UGO

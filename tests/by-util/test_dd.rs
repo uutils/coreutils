@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname seekable
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname seekable fadvise FADV DONTNEED
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -1839,4 +1839,53 @@ fn test_skip_overflow() {
         .stderr_contains(
             "dd: invalid number: ‘9223372036854775808’: Value too large for defined data type",
         );
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_nocache_eof() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write_bytes("in.f", &vec![0u8; 1234567]);
+    ucmd.args(&[
+        "if=in.f",
+        "of=out.f",
+        "bs=1M",
+        "oflag=nocache,sync",
+        "status=noxfer",
+    ])
+    .succeeds();
+    assert_eq!(at.read_bytes("out.f").len(), 1234567);
+}
+
+#[test]
+#[cfg(all(target_os = "linux", feature = "printf"))]
+fn test_nocache_eof_fadvise_zero_length() {
+    use std::process::Command;
+    let (at, _ucmd) = at_and_ucmd!();
+    at.write_bytes("in.f", &vec![0u8; 1234567]);
+
+    let strace_file = at.plus_as_string("strace.out");
+    let result = Command::new("strace")
+        .args(["-o", &strace_file, "-e", "fadvise64,fadvise64_64"])
+        .arg(get_tests_binary())
+        .args([
+            "dd",
+            "if=in.f",
+            "of=out.f",
+            "bs=1M",
+            "oflag=nocache,sync",
+            "status=none",
+        ])
+        .current_dir(at.as_string())
+        .output();
+
+    if result.is_err() {
+        return; // strace not available
+    }
+
+    let strace = at.read("strace.out");
+    assert!(
+        strace.contains(", 0, POSIX_FADV_DONTNEED"),
+        "Expected len=0 at EOF: {strace}"
+    );
 }

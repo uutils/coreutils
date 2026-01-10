@@ -27,6 +27,9 @@ use uucore::{
     signals::{signal_by_name_or_value, signal_name_by_value},
 };
 
+use nix::sys::signal::{Signal, kill};
+use nix::unistd::{Pid, getpid, setpgid};
+
 pub mod options {
     pub static FOREGROUND: &str = "foreground";
     pub static KILL_AFTER: &str = "kill-after";
@@ -293,8 +296,8 @@ fn preserve_signal_info(signal: libc::c_int) -> libc::c_int {
     // The easiest way to preserve the latter seems to be to kill
     // ourselves with whatever signal our child exited with, which is
     // what the following is intended to accomplish.
-    unsafe {
-        libc::kill(libc::getpid(), signal);
+    if let Ok(sig) = Signal::try_from(signal) {
+        let _ = kill(getpid(), Some(sig));
     }
     signal
 }
@@ -315,7 +318,7 @@ fn timeout(
     verbose: bool,
 ) -> UResult<()> {
     if !foreground {
-        unsafe { libc::setpgid(0, 0) };
+        let _ = setpgid(Pid::from_raw(0), Pid::from_raw(0));
     }
     #[cfg(unix)]
     enable_pipe_errors()?;

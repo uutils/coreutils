@@ -10,7 +10,7 @@ mod mode;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use file_diff::diff;
 use filetime::{FileTime, set_file_times};
-#[cfg(feature = "selinux")]
+#[cfg(all(feature = "selinux", target_os = "linux"))]
 use selinux::SecurityContext;
 use std::ffi::OsString;
 use std::fmt::Debug;
@@ -27,7 +27,7 @@ use uucore::error::{FromIo, UError, UResult, UUsageError};
 use uucore::fs::dir_strip_dot_for_creation;
 use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
 use uucore::process::{getegid, geteuid};
-#[cfg(feature = "selinux")]
+#[cfg(all(feature = "selinux", target_os = "linux"))]
 use uucore::selinux::{
     SeLinuxError, contexts_differ, get_selinux_security_context, is_selinux_enabled,
     selinux_error_description, set_selinux_security_context,
@@ -118,7 +118,7 @@ enum InstallError {
     #[error("{}", translate!("install-error-extra-operand", "operand" => .0.quote(), "usage" => .1.clone()))]
     ExtraOperand(OsString, String),
 
-    #[cfg(feature = "selinux")]
+    #[cfg(all(feature = "selinux", target_os = "linux"))]
     #[error("{}", .0)]
     SelinuxContextFailed(String),
 }
@@ -1030,7 +1030,7 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
     Ok(())
 }
 
-#[cfg(feature = "selinux")]
+#[cfg(all(feature = "selinux", target_os = "linux"))]
 fn get_context_for_selinux(b: &Behavior) -> Option<&String> {
     if b.default_context {
         None
@@ -1165,7 +1165,7 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
     false
 }
 
-#[cfg(feature = "selinux")]
+#[cfg(all(feature = "selinux", target_os = "linux"))]
 /// Sets the `SELinux` security context for install's -Z flag behavior.
 ///
 /// This function implements the specific behavior needed for install's -Z flag,
@@ -1199,7 +1199,7 @@ pub fn set_selinux_default_context(path: &Path) -> Result<(), SeLinuxError> {
     }
 }
 
-#[cfg(feature = "selinux")]
+#[cfg(all(feature = "selinux", target_os = "linux"))]
 /// Gets the default `SELinux` context for a path based on the system's security policy.
 ///
 /// This function attempts to determine what the "correct" `SELinux` context should be
@@ -1255,7 +1255,7 @@ fn get_default_context_for_path(path: &Path) -> Result<Option<String>, SeLinuxEr
     Ok(None)
 }
 
-#[cfg(feature = "selinux")]
+#[cfg(all(feature = "selinux", target_os = "linux"))]
 /// Derives an appropriate `SELinux` context based on a parent directory context.
 ///
 /// This is a heuristic function that attempts to generate an appropriate
@@ -1293,7 +1293,7 @@ fn derive_context_from_parent(parent_context: &str) -> String {
     }
 }
 
-#[cfg(feature = "selinux")]
+#[cfg(all(feature = "selinux", target_os = "linux"))]
 /// Helper function to collect paths that need `SELinux` context setting.
 ///
 /// Traverses from the given starting path up to existing parent directories.
@@ -1307,7 +1307,7 @@ fn collect_paths_for_context_setting(starting_path: &Path) -> Vec<&Path> {
     paths
 }
 
-#[cfg(feature = "selinux")]
+#[cfg(all(feature = "selinux", target_os = "linux"))]
 /// Sets the `SELinux` security context for a directory hierarchy.
 ///
 /// This function traverses from the given starting path up to existing parent directories
@@ -1347,7 +1347,7 @@ fn set_selinux_context_for_directories(target_path: &Path, context: Option<&Stri
     }
 }
 
-#[cfg(feature = "selinux")]
+#[cfg(all(feature = "selinux", target_os = "linux"))]
 /// Sets `SELinux` context for created directories using install's -Z default behavior.
 ///
 /// Similar to `set_selinux_context_for_directories` but uses install's
@@ -1371,10 +1371,10 @@ pub fn set_selinux_context_for_directories_install(target_path: &Path, context: 
 
 #[cfg(test)]
 mod tests {
-    #[cfg(feature = "selinux")]
+    #[cfg(all(feature = "selinux", target_os = "linux"))]
     use super::derive_context_from_parent;
 
-    #[cfg(feature = "selinux")]
+    #[cfg(all(feature = "selinux", target_os = "linux"))]
     #[test]
     fn test_derive_context_from_parent() {
         // Test cases: (input_context, file_type, expected_output, description)

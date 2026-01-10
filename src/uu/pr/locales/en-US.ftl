@@ -30,6 +30,9 @@ pr-help-omit-header =
   Write neither the five-line identifying header nor the five-line
                   trailer usually supplied for each page. Quit writing after the last line
                    of each file without spacing to the end of the page.
+pr-help-omit-pagination =
+  omit page headers and trailers, eliminate any pagination
+                  by form feeds set in input files
 pr-help-page-length =
   Override the 66-line default (default number of lines of text 56,
                   and with -F 63) and reset the page length to lines.  If lines is not

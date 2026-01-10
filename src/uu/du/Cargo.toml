@@ -27,10 +27,12 @@ uucore = { workspace = true, features = [
   "parser-size",
   "parser-glob",
   "time",
-  "safe-traversal",
 ] }
 thiserror = { workspace = true }
 fluent = { workspace = true }
+
+[target.'cfg(all(unix, not(target_os = "redox")))'.dependencies]
+uucore = { workspace = true, features = ["safe-traversal"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { workspace = true, features = [

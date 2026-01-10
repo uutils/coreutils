@@ -10,7 +10,7 @@
 // spell-checker:ignore isig icanon iexten echoe crterase echok echonl noflsh xcase tostop echoprt prterase echoctl ctlecho echoke crtkill flusho extproc
 // spell-checker:ignore lnext rprnt susp swtch vdiscard veof veol verase vintr vkill vlnext vquit vreprint vstart vstop vsusp vswtc vwerase werase
 // spell-checker:ignore sigquit sigtstp
-// spell-checker:ignore cbreak decctlq evenp litout oddp tcsadrain exta extb NCCS
+// spell-checker:ignore cbreak decctlq evenp litout oddp tcsadrain exta extb NCCS cfsetispeed
 // spell-checker:ignore notaflag notacombo notabaud
 
 mod flags;
@@ -21,7 +21,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use nix::libc::{O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ, c_ushort};
 use nix::sys::termios::{
     ControlFlags, InputFlags, LocalFlags, OutputFlags, SetArg, SpecialCharacterIndices as S,
-    Termios, cfgetospeed, cfsetospeed, tcgetattr, tcsetattr,
+    Termios, cfgetospeed, cfsetispeed, cfsetospeed, tcgetattr, tcsetattr,
 };
 use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
 use std::cmp::Ordering;
@@ -274,19 +274,24 @@ fn stty(opts: &Options) -> UResult<()> {
         let mut args_iter = args.iter();
         while let Some(&arg) = args_iter.next() {
             match arg {
-                "ispeed" | "ospeed" => match args_iter.next() {
+                "ispeed" => match args_iter.next() {
                     Some(speed) => {
-                        if let Some(baud_flag) = string_to_baud(speed) {
+                        if let Some(baud_flag) = string_to_baud(speed, flags::BaudType::Input) {
                             valid_args.push(ArgOptions::Flags(baud_flag));
                         } else {
-                            return Err(USimpleError::new(
-                                1,
-                                translate!(
-                                    "stty-error-invalid-speed",
-                                    "arg" => *arg,
-                                    "speed" => *speed,
-                                ),
-                            ));
+                            return invalid_speed(arg, speed);
+                        }
+                    }
+                    None => {
+                        return missing_arg(arg);
+                    }
+                },
+                "ospeed" => match args_iter.next() {
+                    Some(speed) => {
+                        if let Some(baud_flag) = string_to_baud(speed, flags::BaudType::Output) {
+                            valid_args.push(ArgOptions::Flags(baud_flag));
+                        } else {
+                            return invalid_speed(arg, speed);
                         }
                     }
                     None => {
@@ -383,12 +388,12 @@ fn stty(opts: &Options) -> UResult<()> {
                             return missing_arg(arg);
                         }
                     // baud rate
-                    } else if let Some(baud_flag) = string_to_baud(arg) {
+                    } else if let Some(baud_flag) = string_to_baud(arg, flags::BaudType::Both) {
                         valid_args.push(ArgOptions::Flags(baud_flag));
                     // non control char flag
                     } else if let Some(flag) = string_to_flag(arg) {
                         let remove_group = match flag {
-                            AllFlags::Baud(_) => false,
+                            AllFlags::Baud(_, _) => false,
                             AllFlags::ControlFlags((flag, remove)) => {
                                 check_flag_group(flag, remove)
                             }
@@ -417,7 +422,7 @@ fn stty(opts: &Options) -> UResult<()> {
         for arg in &valid_args {
             match arg {
                 ArgOptions::Mapping(mapping) => apply_char_mapping(&mut termios, mapping),
-                ArgOptions::Flags(flag) => apply_setting(&mut termios, flag),
+                ArgOptions::Flags(flag) => apply_setting(&mut termios, flag)?,
                 ArgOptions::Special(setting) => {
                     apply_special_setting(&mut termios, setting, opts.file.as_raw_fd())?;
                 }
@@ -464,6 +469,17 @@ fn invalid_integer_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
         translate!(
             "stty-error-invalid-integer-argument",
             "value" => format!("'{arg}'")
+        ),
+    ))
+}
+
+fn invalid_speed<T>(arg: &str, speed: &str) -> Result<T, Box<dyn UError>> {
+    Err(UUsageError::new(
+        1,
+        translate!(
+            "stty-error-invalid-speed",
+            "arg" => arg,
+            "speed" => speed,
         ),
     ))
 }
@@ -719,7 +735,7 @@ fn parse_baud_with_rounding(normalized: &str) -> Option<u32> {
     Some(value)
 }
 
-fn string_to_baud(arg: &str) -> Option<AllFlags<'_>> {
+fn string_to_baud(arg: &str, baud_type: flags::BaudType) -> Option<AllFlags<'_>> {
     // Reject invalid formats
     if arg != arg.trim_end()
         || arg.trim().starts_with('-')
@@ -744,7 +760,7 @@ fn string_to_baud(arg: &str) -> Option<AllFlags<'_>> {
         target_os = "netbsd",
         target_os = "openbsd"
     ))]
-    return Some(AllFlags::Baud(value));
+    return Some(AllFlags::Baud(value, baud_type));
 
     #[cfg(not(any(
         target_os = "freebsd",
@@ -757,7 +773,7 @@ fn string_to_baud(arg: &str) -> Option<AllFlags<'_>> {
     {
         for (text, baud_rate) in BAUD_RATES {
             if text.parse::<u32>().ok() == Some(value) {
-                return Some(AllFlags::Baud(*baud_rate));
+                return Some(AllFlags::Baud(*baud_rate, baud_type));
             }
         }
         None
@@ -940,9 +956,9 @@ fn print_flags<T: TermiosFlag>(
 }
 
 /// Apply a single setting
-fn apply_setting(termios: &mut Termios, setting: &AllFlags) {
+fn apply_setting(termios: &mut Termios, setting: &AllFlags) -> nix::Result<()> {
     match setting {
-        AllFlags::Baud(_) => apply_baud_rate_flag(termios, setting),
+        AllFlags::Baud(_, _) => apply_baud_rate_flag(termios, setting)?,
         AllFlags::ControlFlags((setting, disable)) => {
             setting.flag.apply(termios, !disable);
         }
@@ -956,34 +972,21 @@ fn apply_setting(termios: &mut Termios, setting: &AllFlags) {
             setting.flag.apply(termios, !disable);
         }
     }
+    Ok(())
 }
 
-fn apply_baud_rate_flag(termios: &mut Termios, input: &AllFlags) {
-    // BSDs use a u32 for the baud rate, so any decimal number applies.
-    #[cfg(any(
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    ))]
-    if let AllFlags::Baud(n) = input {
-        cfsetospeed(termios, *n).expect("Failed to set baud rate");
+fn apply_baud_rate_flag(termios: &mut Termios, input: &AllFlags) -> nix::Result<()> {
+    if let AllFlags::Baud(rate, baud_type) = input {
+        match baud_type {
+            flags::BaudType::Input => cfsetispeed(termios, *rate)?,
+            flags::BaudType::Output => cfsetospeed(termios, *rate)?,
+            flags::BaudType::Both => {
+                cfsetispeed(termios, *rate)?;
+                cfsetospeed(termios, *rate)?;
+            }
+        }
     }
-
-    // Other platforms use an enum.
-    #[cfg(not(any(
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    )))]
-    if let AllFlags::Baud(br) = input {
-        cfsetospeed(termios, *br).expect("Failed to set baud rate");
-    }
+    Ok(())
 }
 
 fn apply_char_mapping(termios: &mut Termios, mapping: &(S, u8)) {
@@ -1033,11 +1036,15 @@ fn apply_special_setting(
     match setting {
         SpecialSetting::Rows(n) => size.rows = *n,
         SpecialSetting::Cols(n) => size.columns = *n,
-        SpecialSetting::Line(_n) => {
+        #[cfg_attr(
+            not(any(target_os = "linux", target_os = "android")),
+            expect(unused_variables)
+        )]
+        SpecialSetting::Line(n) => {
             // nix only defines Termios's `line_discipline` field on these platforms
             #[cfg(any(target_os = "linux", target_os = "android"))]
             {
-                _termios.line_discipline = *_n;
+                _termios.line_discipline = *n;
             }
         }
     }
@@ -1442,10 +1449,10 @@ mod tests {
             target_os = "openbsd"
         )))]
         {
-            assert!(string_to_baud("9600").is_some());
-            assert!(string_to_baud("115200").is_some());
-            assert!(string_to_baud("38400").is_some());
-            assert!(string_to_baud("19200").is_some());
+            assert!(string_to_baud("9600", flags::BaudType::Both).is_some());
+            assert!(string_to_baud("115200", flags::BaudType::Both).is_some());
+            assert!(string_to_baud("38400", flags::BaudType::Both).is_some());
+            assert!(string_to_baud("19200", flags::BaudType::Both).is_some());
         }
 
         #[cfg(any(
@@ -1457,10 +1464,10 @@ mod tests {
             target_os = "openbsd"
         ))]
         {
-            assert!(string_to_baud("9600").is_some());
-            assert!(string_to_baud("115200").is_some());
-            assert!(string_to_baud("1000000").is_some());
-            assert!(string_to_baud("0").is_some());
+            assert!(string_to_baud("9600", flags::BaudType::Both).is_some());
+            assert!(string_to_baud("115200", flags::BaudType::Both).is_some());
+            assert!(string_to_baud("1000000", flags::BaudType::Both).is_some());
+            assert!(string_to_baud("0", flags::BaudType::Both).is_some());
         }
     }
 
@@ -1475,10 +1482,10 @@ mod tests {
             target_os = "openbsd"
         )))]
         {
-            assert_eq!(string_to_baud("995"), None);
-            assert_eq!(string_to_baud("invalid"), None);
-            assert_eq!(string_to_baud(""), None);
-            assert_eq!(string_to_baud("abc"), None);
+            assert_eq!(string_to_baud("995", flags::BaudType::Both), None);
+            assert_eq!(string_to_baud("invalid", flags::BaudType::Both), None);
+            assert_eq!(string_to_baud("", flags::BaudType::Both), None);
+            assert_eq!(string_to_baud("abc", flags::BaudType::Both), None);
         }
     }
 
