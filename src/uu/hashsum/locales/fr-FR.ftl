@@ -28,10 +28,7 @@ hashsum-help-sha3-224 = travailler avec SHA3-224
 hashsum-help-sha3-256 = travailler avec SHA3-256
 hashsum-help-sha3-384 = travailler avec SHA3-384
 hashsum-help-sha3-512 = travailler avec SHA3-512
-hashsum-help-shake128 = travailler avec SHAKE128 en utilisant BITS pour la taille de sortie
-hashsum-help-shake256 = travailler avec SHAKE256 en utilisant BITS pour la taille de sortie
 hashsum-help-b2sum = travailler avec BLAKE2
-hashsum-help-b3sum = travailler avec BLAKE3
 
 # Messages d'erreur
 hashsum-error-failed-to-read-input = échec de la lecture de l'entrée
