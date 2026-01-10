@@ -20,7 +20,7 @@ path = "src/tr.rs"
 [dependencies]
 nom = { workspace = true }
 clap = { workspace = true }
-uucore = { workspace = true, features = ["fs"] }
+uucore = { workspace = true, features = ["fs", "signals"] }
 fluent = { workspace = true }
 bytecount = { workspace = true, features = ["runtime-dispatch-simd"] }
 

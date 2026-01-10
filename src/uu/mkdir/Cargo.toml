@@ -24,6 +24,7 @@ fluent = { workspace = true }
 
 [features]
 selinux = ["uucore/selinux"]
+smack = ["uucore/smack"]
 
 [[bin]]
 name = "mkdir"

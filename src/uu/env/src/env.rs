@@ -749,27 +749,25 @@ impl EnvAppData {
         do_debug_printing: bool,
     ) -> Result<(), Box<dyn UError>> {
         let prog = Cow::from(opts.program[0]);
-        #[cfg(unix)]
-        let mut arg0 = prog.clone();
-        #[cfg(not(unix))]
-        let arg0 = prog.clone();
-        let args = &opts.program[1..];
 
-        if let Some(_argv0) = opts.argv0 {
-            #[cfg(unix)]
-            {
-                arg0 = Cow::Borrowed(_argv0);
+        let arg0 = match opts.argv0 {
+            None => prog.clone(),
+            Some(argv0) if cfg!(unix) => {
+                let arg0 = Cow::Borrowed(argv0);
                 if do_debug_printing {
                     eprintln!("argv0:     {}", arg0.quote());
                 }
+                arg0
             }
+            Some(_) => {
+                return Err(USimpleError::new(
+                    2,
+                    translate!("env-error-argv0-not-supported"),
+                ));
+            }
+        };
 
-            #[cfg(not(unix))]
-            return Err(USimpleError::new(
-                2,
-                translate!("env-error-argv0-not-supported"),
-            ));
-        }
+        let args = &opts.program[1..];
 
         if do_debug_printing {
             eprintln!("executing: {}", prog.maybe_quote());
@@ -1100,9 +1098,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Rust ignores SIGPIPE (see https://github.com/rust-lang/rust/issues/62569).
     // We restore its default action here.
     #[cfg(unix)]
-    unsafe {
-        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
-    }
+    let _ = uucore::signals::enable_pipe_errors();
     EnvAppData::default().run_env(args)
 }
 

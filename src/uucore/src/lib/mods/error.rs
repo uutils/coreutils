@@ -748,7 +748,9 @@ impl Error for ClapErrorWrapper {}
 // This is abuse of the Display trait
 impl Display for ClapErrorWrapper {
     fn fmt(&self, _f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        self.error.print().unwrap();
+        // Intentionally ignore the result - error.print() writes directly to stderr
+        // and we always return Ok(()) to satisfy Display's contract
+        let _ = self.error.print();
         Ok(())
     }
 }

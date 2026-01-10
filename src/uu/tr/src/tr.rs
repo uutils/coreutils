@@ -18,8 +18,6 @@ use std::io::{stdin, stdout};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::fs::is_stdin_directory;
-#[cfg(not(target_os = "windows"))]
-use uucore::libc;
 use uucore::translate;
 use uucore::{format_usage, os_str_as_bytes, show};
 
@@ -38,9 +36,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // (see https://github.com/rust-lang/rust/issues/62569), so we restore it's
     // default action here.
     #[cfg(not(target_os = "windows"))]
-    unsafe {
-        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
-    }
+    let _ = uucore::signals::enable_pipe_errors();
 
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 

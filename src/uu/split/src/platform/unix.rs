@@ -43,9 +43,9 @@ impl Write for FilterWriter {
 /// Have an environment variable set at a value during this lifetime
 struct WithEnvVarSet {
     /// Env var key
-    _previous_var_key: String,
+    previous_var_key: String,
     /// Previous value set to this key
-    _previous_var_value: std::result::Result<String, env::VarError>,
+    previous_var_value: std::result::Result<String, env::VarError>,
 }
 impl WithEnvVarSet {
     /// Save previous value assigned to key, set key=value
@@ -55,8 +55,8 @@ impl WithEnvVarSet {
             env::set_var(key, value);
         }
         Self {
-            _previous_var_key: String::from(key),
-            _previous_var_value: previous_env_value,
+            previous_var_key: String::from(key),
+            previous_var_value: previous_env_value,
         }
     }
 }
@@ -64,13 +64,13 @@ impl WithEnvVarSet {
 impl Drop for WithEnvVarSet {
     /// Restore previous value now that this is being dropped by context
     fn drop(&mut self) {
-        if let Ok(ref prev_value) = self._previous_var_value {
+        if let Ok(ref prev_value) = self.previous_var_value {
             unsafe {
-                env::set_var(&self._previous_var_key, prev_value);
+                env::set_var(&self.previous_var_key, prev_value);
             }
         } else {
             unsafe {
-                env::remove_var(&self._previous_var_key);
+                env::remove_var(&self.previous_var_key);
             }
         }
     }

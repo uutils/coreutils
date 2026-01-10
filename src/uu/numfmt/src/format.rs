@@ -275,6 +275,7 @@ fn transform_to(
     opts: &TransformOptions,
     round_method: RoundMethod,
     precision: usize,
+    unit_separator: &str,
 ) -> Result<String> {
     let (i2, s) = consider_suffix(s, &opts.to, round_method, precision)?;
     let i2 = i2 / (opts.to_unit as f64);
@@ -286,10 +287,15 @@ fn transform_to(
             )
         }
         Some(s) if precision > 0 => {
-            format!("{i2:.precision$}{}", DisplayableSuffix(s, opts.to),)
+            format!(
+                "{i2:.precision$}{unit_separator}{}",
+                DisplayableSuffix(s, opts.to),
+            )
         }
-        Some(s) if i2.abs() < 10.0 => format!("{i2:.1}{}", DisplayableSuffix(s, opts.to)),
-        Some(s) => format!("{i2:.0}{}", DisplayableSuffix(s, opts.to)),
+        Some(s) if i2.abs() < 10.0 => {
+            format!("{i2:.1}{unit_separator}{}", DisplayableSuffix(s, opts.to))
+        }
+        Some(s) => format!("{i2:.0}{unit_separator}{}", DisplayableSuffix(s, opts.to)),
     })
 }
 
@@ -317,6 +323,7 @@ fn format_string(
         &options.transform,
         options.round,
         precision,
+        &options.unit_separator,
     )?;
 
     // bring back the suffix before applying padding
@@ -351,32 +358,56 @@ fn format_string(
     ))
 }
 
-fn format_and_print_delimited(s: &str, options: &NumfmtOptions) -> Result<()> {
-    let delimiter = options.delimiter.as_ref().unwrap();
-    let mut output = String::new();
+fn split_bytes<'a>(input: &'a [u8], delim: &'a [u8]) -> impl Iterator<Item = &'a [u8]> {
+    let mut remainder = Some(input);
+    std::iter::from_fn(move || {
+        let input = remainder.take()?;
+        match input.windows(delim.len()).position(|w| w == delim) {
+            Some(pos) => {
+                remainder = Some(&input[pos + delim.len()..]);
+                Some(&input[..pos])
+            }
+            None => Some(input),
+        }
+    })
+}
 
-    for (n, field) in (1..).zip(s.split(delimiter)) {
+pub fn format_and_print_delimited(input: &[u8], options: &NumfmtOptions) -> Result<()> {
+    let delimiter = options.delimiter.as_ref().unwrap();
+    let mut output: Vec<u8> = Vec::new();
+    let eol = if options.zero_terminated {
+        b'\0'
+    } else {
+        b'\n'
+    };
+
+    for (n, field) in (1..).zip(split_bytes(input, delimiter)) {
         let field_selected = uucore::ranges::contain(&options.fields, n);
 
         // add delimiter before second and subsequent fields
         if n > 1 {
-            output.push_str(delimiter);
+            output.extend_from_slice(delimiter);
         }
 
         if field_selected {
-            output.push_str(&format_string(field.trim_start(), options, None)?);
+            // Field must be valid UTF-8 for numeric conversion
+            let field_str = std::str::from_utf8(field)
+                .map_err(|_| translate!("numfmt-error-invalid-number", "input" => String::from_utf8_lossy(field).into_owned().quote()))?
+                .trim_start();
+            let formatted = format_string(field_str, options, None)?;
+            output.extend_from_slice(formatted.as_bytes());
         } else {
             // add unselected field without conversion
-            output.push_str(field);
+            output.extend_from_slice(field);
         }
     }
 
-    println!("{output}");
+    output.push(eol);
+    std::io::Write::write_all(&mut std::io::stdout(), &output).map_err(|e| e.to_string())?;
 
     Ok(())
 }
-
-fn format_and_print_whitespace(s: &str, options: &NumfmtOptions) -> Result<()> {
+pub fn format_and_print_whitespace(s: &str, options: &NumfmtOptions) -> Result<()> {
     let mut output = String::new();
 
     for (n, (prefix, field)) in (1..).zip(WhitespaceSplitter { s: Some(s) }) {
@@ -419,18 +450,6 @@ fn format_and_print_whitespace(s: &str, options: &NumfmtOptions) -> Result<()> {
     print!("{output}");
 
     Ok(())
-}
-
-/// Format a line of text according to the selected options.
-///
-/// Given a line of text `s`, split the line into fields, transform and format
-/// any selected numeric fields, and print the result to stdout. Fields not
-/// selected for conversion are passed through unmodified.
-pub fn format_and_print(s: &str, options: &NumfmtOptions) -> Result<()> {
-    match &options.delimiter {
-        Some(_) => format_and_print_delimited(s, options),
-        None => format_and_print_whitespace(s, options),
-    }
 }
 
 #[cfg(test)]

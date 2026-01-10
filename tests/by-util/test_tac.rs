@@ -335,3 +335,15 @@ fn test_failed_write_is_reported() {
         .fails()
         .stderr_is("tac: failed to write to stdout: No space left on device (os error 28)\n");
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_stdin_bad_tmpdir_fallback() {
+    // When TMPDIR is invalid, tac falls back to reading stdin directly into memory
+    new_ucmd!()
+        .env("TMPDIR", "/nonexistent/dir")
+        .arg("-")
+        .pipe_in("a\nb\nc\n")
+        .succeeds()
+        .stdout_is("c\nb\na\n");
+}
