@@ -9,6 +9,10 @@ use std::process::ExitStatus;
 use std::os::unix::process::ExitStatusExt;
 
 use uutests::new_ucmd;
+#[cfg(unix)]
+use uutests::util::TestScenario;
+#[cfg(unix)]
+use uutests::util_name;
 
 #[cfg(unix)]
 fn check_termination(result: ExitStatus) {
@@ -110,4 +114,17 @@ fn test_non_utf8() {
         ],
         &b"\xbf\xff\xee bar\n".repeat(5000),
     );
+}
+
+/// Test for https://github.com/uutils/coreutils/issues/7252
+#[test]
+#[cfg(unix)]
+fn test_sigpipe_ignored_prints_error() {
+    let ts = TestScenario::new(util_name!());
+    let bin = ts.bin_path.clone().into_os_string();
+    let result = ts
+        .cmd_shell("trap '' PIPE; \"$BIN\" yes 2>err |:; cat err")
+        .env("BIN", &bin)
+        .succeeds();
+    assert!(result.stdout_str().contains("Broken pipe"));
 }

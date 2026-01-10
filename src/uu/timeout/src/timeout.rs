@@ -19,9 +19,6 @@ use uucore::parser::parse_time;
 use uucore::process::ChildExt;
 use uucore::translate;
 
-#[cfg(unix)]
-use uucore::signals::enable_pipe_errors;
-
 use uucore::{
     format_usage, show_error,
     signals::{signal_by_name_or_value, signal_name_by_value},
@@ -105,8 +102,16 @@ impl Config {
     }
 }
 
+#[cfg(unix)]
+uucore::init_sigpipe_capture!();
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    #[cfg(unix)]
+    if !uucore::signals::sigpipe_was_ignored() {
+        uucore::signals::enable_pipe_errors()?;
+    }
+
     let matches =
         uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 125)?;
 
@@ -320,26 +325,28 @@ fn timeout(
     if !foreground {
         let _ = setpgid(Pid::from_raw(0), Pid::from_raw(0));
     }
-    #[cfg(unix)]
-    enable_pipe_errors()?;
 
-    let process = &mut process::Command::new(&cmd[0])
+    let mut cmd_builder = process::Command::new(&cmd[0]);
+    cmd_builder
         .args(&cmd[1..])
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .map_err(|err| {
-            let status_code = match err.kind() {
-                ErrorKind::NotFound => ExitStatus::CommandNotFound.into(),
-                ErrorKind::PermissionDenied => ExitStatus::CannotInvoke.into(),
-                _ => ExitStatus::CannotInvoke.into(),
-            };
-            USimpleError::new(
-                status_code,
-                translate!("timeout-error-failed-to-execute-process", "error" => err),
-            )
-        })?;
+        .stderr(Stdio::inherit());
+
+    #[cfg(unix)]
+    uucore::signals::preserve_sigpipe_for_child(&mut cmd_builder);
+
+    let process = &mut cmd_builder.spawn().map_err(|err| {
+        let status_code = match err.kind() {
+            ErrorKind::NotFound => ExitStatus::CommandNotFound.into(),
+            ErrorKind::PermissionDenied => ExitStatus::CannotInvoke.into(),
+            _ => ExitStatus::CannotInvoke.into(),
+        };
+        USimpleError::new(
+            status_code,
+            translate!("timeout-error-failed-to-execute-process", "error" => err),
+        )
+    })?;
     unblock_sigchld();
     catch_sigterm();
     // Wait for the child process for the specified time period.

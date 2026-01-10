@@ -488,6 +488,25 @@ pub const fn sigpipe_was_ignored() -> bool {
     false
 }
 
+/// Configures a Command to preserve SIGPIPE disposition for child processes.
+/// When the parent had SIGPIPE ignored, this ensures the child also has it ignored.
+#[cfg(unix)]
+pub fn preserve_sigpipe_for_child(cmd: &mut std::process::Command) {
+    use std::os::unix::process::CommandExt;
+    if sigpipe_was_ignored() {
+        unsafe {
+            cmd.pre_exec(|| {
+                nix::sys::signal::signal(
+                    nix::sys::signal::Signal::SIGPIPE,
+                    nix::sys::signal::SigHandler::SigIgn,
+                )
+                .map_err(std::io::Error::other)?;
+                Ok(())
+            });
+        }
+    }
+}
+
 #[cfg(target_os = "linux")]
 pub fn ensure_stdout_not_broken() -> std::io::Result<bool> {
     use nix::{

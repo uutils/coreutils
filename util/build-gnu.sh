@@ -13,9 +13,6 @@ MAKE=$(command -v gmake||command -v make)
 READLINK=$(command -v greadlink||command -v readlink) # Use our readlink to remove a dependency
 SED=$(command -v gsed||command -v sed)
 
-SYSTEM_TIMEOUT=$(command -v timeout)
-SYSTEM_YES=$(command -v yes)
-
 ME="${0}"
 ME_dir="$(dirname -- "$("${READLINK}" -fm -- "${ME}")")"
 REPO_main_dir="$(dirname -- "${ME_dir}")"
@@ -131,7 +128,7 @@ else
       --enable-single-binary=symlinks --enable-install-program="arch,kill,uptime,hostname" \
       "$([ "${SELINUX_ENABLED}" = 1 ] && echo --with-selinux || echo --without-selinux)"
     #Add timeout to to protect against hangs
-    "${SED}" -i 's|^"\$@|'"${SYSTEM_TIMEOUT}"' 600 "\$@|' build-aux/test-driver
+    "${SED}" -i 's|^"\$@|timeout 600 "\$@|' build-aux/test-driver
     # Use a better diff
     "${SED}" -i 's|diff -c|diff -u|g' tests/Coreutils.pm
 
@@ -193,13 +190,6 @@ grep -rl '\$abs_path_dir_' tests/*/*.sh | xargs -r "${SED}" -i "s|\$abs_path_dir
 
 # Our message is better
 "${SED}" -i "s|warning: unrecognized escape|warning: incomplete hex escape|" tests/stat/stat-printf.pl
-
-"${SED}" -i 's|timeout |'"${SYSTEM_TIMEOUT}"' |' tests/tail/follow-stdin.sh
-
-# trap_sigpipe_or_skip_ fails with uutils tools because of a bug in
-# timeout/yes (https://github.com/uutils/coreutils/issues/7252), so we use
-# system's yes/timeout to make sure the tests run (instead of being skipped).
-"${SED}" -i 's|\(trap .* \)timeout\( .* \)yes|'"\1${SYSTEM_TIMEOUT}\2${SYSTEM_YES}"'|' init.cfg
 
 # Remove dup of /usr/bin/ and /usr/local/bin/ when executed several times
 grep -rlE '/usr/bin/\s?/usr/bin' init.cfg tests/* | xargs -r "${SED}" -Ei 's|/usr/bin/\s?/usr/bin/|/usr/bin/|g'
