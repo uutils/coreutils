@@ -11,16 +11,22 @@ use std::ffi::OsString;
 use std::io::{self, Write};
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
-#[cfg(unix)]
-use uucore::signals::enable_pipe_errors;
 use uucore::translate;
 
 // it's possible that using a smaller or larger buffer might provide better performance on some
 // systems, but honestly this is good enough
 const BUF_SIZE: usize = 16 * 1024;
 
+#[cfg(unix)]
+uucore::init_sigpipe_capture!();
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    #[cfg(unix)]
+    if !uucore::signals::sigpipe_was_ignored() {
+        let _ = uucore::signals::enable_pipe_errors();
+    }
+
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let mut buffer = Vec::with_capacity(BUF_SIZE);
@@ -29,7 +35,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     match exec(&buffer) {
         Ok(()) => Ok(()),
-        Err(err) if err.kind() == io::ErrorKind::BrokenPipe => Ok(()),
+        Err(err) if err.kind() == io::ErrorKind::BrokenPipe => {
+            #[cfg(unix)]
+            if uucore::signals::sigpipe_was_ignored() {
+                uucore::show_error!(
+                    "{}",
+                    translate!("yes-error-standard-output", "error" => err)
+                );
+            }
+            Ok(())
+        }
         Err(err) => Err(USimpleError::new(
             1,
             translate!("yes-error-standard-output", "error" => err),
@@ -113,8 +128,6 @@ fn prepare_buffer(buf: &mut Vec<u8>) {
 pub fn exec(bytes: &[u8]) -> io::Result<()> {
     let stdout = io::stdout();
     let mut stdout = stdout.lock();
-    #[cfg(unix)]
-    enable_pipe_errors()?;
 
     loop {
         stdout.write_all(bytes)?;
