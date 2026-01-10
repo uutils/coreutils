@@ -756,3 +756,374 @@ fn test_merge_one_long_one_short() {
         .succeeds()
         .stdout_matches(&regex);
 }
+
+#[test]
+fn test_simple_expand_tab() {
+    let test_cases = vec![
+        (
+            "-e",
+            vec!["test_e1.log"],
+            vec!["test_e_no_args1.log.expected"],
+            0,
+        ),
+        (
+            "-e",
+            vec!["test_e2.log"],
+            vec!["test_e_no_args2.log.expected"],
+            0,
+        ),
+        (
+            "-e",
+            vec!["test_e3.log"],
+            vec!["test_e_no_args3.log.expected"],
+            0,
+        ),
+    ];
+    for test_case in test_cases {
+        let (flags, input_file, expected_file, return_code) = test_case;
+        let mut scenario = new_ucmd!();
+        let input_file_path = input_file.first().unwrap();
+        let test_file_path = expected_file.first().unwrap();
+        let value = file_last_modified_time(&scenario, input_file_path);
+        let mut arguments: Vec<&str> = flags
+            .split(' ')
+            .filter(|i| i.trim() != "")
+            .collect::<Vec<&str>>();
+
+        arguments.extend(input_file.clone());
+
+        let scenario_with_args = scenario.args(&arguments);
+
+        let scenario_with_expected_status = if return_code == 0 {
+            scenario_with_args.succeeds()
+        } else {
+            scenario_with_args.fails()
+        };
+
+        scenario_with_expected_status.stdout_is_templated_fixture(
+            test_file_path,
+            &[
+                ("{last_modified_time}", &value),
+                ("{file_name}", input_file_path),
+            ],
+        );
+    }
+}
+
+#[test]
+fn test_simple_expand_tab_with_digit_argument() {
+    // test different variations of width
+    // 2, 3, 8, 10
+    let test_cases = vec![
+        (
+            "-e2",
+            vec!["test_e1.log"],
+            vec!["test_e_width_2_1.log.expected"],
+            0,
+        ),
+        (
+            "-e2",
+            vec!["test_e2.log"],
+            vec!["test_e_width_2_2.log.expected"],
+            0,
+        ),
+        (
+            "-e2",
+            vec!["test_e3.log"],
+            vec!["test_e_width_2_3.log.expected"],
+            0,
+        ),
+        (
+            "-e3",
+            vec!["test_e1.log"],
+            vec!["test_e_width_3_1.log.expected"],
+            0,
+        ),
+        (
+            "-e3",
+            vec!["test_e2.log"],
+            vec!["test_e_width_3_2.log.expected"],
+            0,
+        ),
+        (
+            "-e3",
+            vec!["test_e3.log"],
+            vec!["test_e_width_3_3.log.expected"],
+            0,
+        ),
+        (
+            "-e8",
+            vec!["test_e1.log"],
+            vec!["test_e_width_8_1.log.expected"],
+            0,
+        ),
+        (
+            "-e8",
+            vec!["test_e2.log"],
+            vec!["test_e_width_8_2.log.expected"],
+            0,
+        ),
+        (
+            "-e8",
+            vec!["test_e3.log"],
+            vec!["test_e_width_8_3.log.expected"],
+            0,
+        ),
+        (
+            "-e10",
+            vec!["test_e1.log"],
+            vec!["test_e_width_10_1.log.expected"],
+            0,
+        ),
+        (
+            "-e10",
+            vec!["test_e2.log"],
+            vec!["test_e_width_10_2.log.expected"],
+            0,
+        ),
+        (
+            "-e10",
+            vec!["test_e3.log"],
+            vec!["test_e_width_10_3.log.expected"],
+            0,
+        ),
+    ];
+    for test_case in test_cases {
+        let (flags, input_file, expected_file, return_code) = test_case;
+        let mut scenario = new_ucmd!();
+        let input_file_path = input_file.first().unwrap();
+        let test_file_path = expected_file.first().unwrap();
+        let value = file_last_modified_time(&scenario, input_file_path);
+        let mut arguments: Vec<&str> = flags
+            .split(' ')
+            .filter(|i| i.trim() != "")
+            .collect::<Vec<&str>>();
+
+        arguments.extend(input_file.clone());
+
+        let scenario_with_args = scenario.args(&arguments);
+
+        let scenario_with_expected_status = if return_code == 0 {
+            scenario_with_args.succeeds()
+        } else {
+            scenario_with_args.fails()
+        };
+
+        scenario_with_expected_status.stdout_is_templated_fixture(
+            test_file_path,
+            &[
+                ("{last_modified_time}", &value),
+                ("{file_name}", input_file_path),
+            ],
+        );
+    }
+}
+
+#[test]
+fn test_simple_expand_tab_with_char_argument() {
+    // test different variations of what char to expand
+    // a, e
+    let test_cases = vec![
+        (
+            "-ea",
+            vec!["test_e1.log"],
+            vec!["test_e_input_char_a_1.log.expected"],
+            0,
+        ),
+        (
+            "-ea",
+            vec!["test_e2.log"],
+            vec!["test_e_input_char_a_2.log.expected"],
+            0,
+        ),
+        (
+            "-ea",
+            vec!["test_e3.log"],
+            vec!["test_e_input_char_a_3.log.expected"],
+            0,
+        ),
+        (
+            "-ee",
+            vec!["test_e1.log"],
+            vec!["test_e_input_char_e_1.log.expected"],
+            0,
+        ),
+        (
+            "-ee",
+            vec!["test_e2.log"],
+            vec!["test_e_input_char_e_2.log.expected"],
+            0,
+        ),
+        (
+            "-ee",
+            vec!["test_e3.log"],
+            vec!["test_e_input_char_e_3.log.expected"],
+            0,
+        ),
+    ];
+    for test_case in test_cases {
+        let (flags, input_file, expected_file, return_code) = test_case;
+        let mut scenario = new_ucmd!();
+        let input_file_path = input_file.first().unwrap();
+        let test_file_path = expected_file.first().unwrap();
+        let value = file_last_modified_time(&scenario, input_file_path);
+        let mut arguments: Vec<&str> = flags
+            .split(' ')
+            .filter(|i| i.trim() != "")
+            .collect::<Vec<&str>>();
+
+        arguments.extend(input_file.clone());
+
+        let scenario_with_args = scenario.args(&arguments);
+
+        let scenario_with_expected_status = if return_code == 0 {
+            scenario_with_args.succeeds()
+        } else {
+            scenario_with_args.fails()
+        };
+
+        scenario_with_expected_status.stdout_is_templated_fixture(
+            test_file_path,
+            &[
+                ("{last_modified_time}", &value),
+                ("{file_name}", input_file_path),
+            ],
+        );
+    }
+}
+
+#[test]
+fn test_simple_expand_tab_with_both_arguments() {
+    // test different variations of what char to expand
+    // a2, e3, t10
+    let test_cases = vec![
+        (
+            "-ea2",
+            vec!["test_e1.log"],
+            vec!["test_e_input_char_a_width_2_1.log.expected"],
+            0,
+        ),
+        (
+            "-ea2",
+            vec!["test_e2.log"],
+            vec!["test_e_input_char_a_width_2_2.log.expected"],
+            0,
+        ),
+        (
+            "-ea2",
+            vec!["test_e3.log"],
+            vec!["test_e_input_char_a_width_2_3.log.expected"],
+            0,
+        ),
+        (
+            "-ee3",
+            vec!["test_e1.log"],
+            vec!["test_e_input_char_e_width_3_1.log.expected"],
+            0,
+        ),
+        (
+            "-ee3",
+            vec!["test_e2.log"],
+            vec!["test_e_input_char_e_width_3_2.log.expected"],
+            0,
+        ),
+        (
+            "-ee3",
+            vec!["test_e3.log"],
+            vec!["test_e_input_char_e_width_3_3.log.expected"],
+            0,
+        ),
+        (
+            "-et10",
+            vec!["test_e1.log"],
+            vec!["test_e_input_char_t_width_10_1.log.expected"],
+            0,
+        ),
+        (
+            "-et10",
+            vec!["test_e2.log"],
+            vec!["test_e_input_char_t_width_10_2.log.expected"],
+            0,
+        ),
+        (
+            "-et10",
+            vec!["test_e3.log"],
+            vec!["test_e_input_char_t_width_10_3.log.expected"],
+            0,
+        ),
+    ];
+    for test_case in test_cases {
+        let (flags, input_file, expected_file, return_code) = test_case;
+        let mut scenario = new_ucmd!();
+        let input_file_path = input_file.first().unwrap();
+        let test_file_path = expected_file.first().unwrap();
+        let value = file_last_modified_time(&scenario, input_file_path);
+        let mut arguments: Vec<&str> = flags
+            .split(' ')
+            .filter(|i| i.trim() != "")
+            .collect::<Vec<&str>>();
+
+        arguments.extend(input_file.clone());
+
+        let scenario_with_args = scenario.args(&arguments);
+
+        let scenario_with_expected_status = if return_code == 0 {
+            scenario_with_args.succeeds()
+        } else {
+            scenario_with_args.fails()
+        };
+
+        scenario_with_expected_status.stdout_is_templated_fixture(
+            test_file_path,
+            &[
+                ("{last_modified_time}", &value),
+                ("{file_name}", input_file_path),
+            ],
+        );
+    }
+}
+
+/* cSpell:disable */
+#[test]
+fn test_invalid_expand_tab_arguments() {
+    let test_file_path = "empty_test_file";
+    // incorrect argument
+    new_ucmd!()
+        .args(&["-esdgjiojiosdgjiogd", test_file_path])
+        .fails()
+        .stderr_contains("pr: '-e' extra characters or invalid number in the argument: ‘dgjiojiosdgjiogd’\nTry 'pr --help' for more information.");
+    // non digit 2 parameter
+    new_ucmd!()
+        .args(&["-eab", test_file_path])
+        .fails()
+        .stderr_contains("pr: '-e' extra characters or invalid number in the argument: ‘b’\nTry 'pr --help' for more information.");
+    // non digit after first digit
+    new_ucmd!()
+        .args(&["-e1a", test_file_path])
+        .fails()
+        .stderr_contains("pr: '-e' extra characters or invalid number in the argument: ‘1a’\nTry 'pr --help' for more information.");
+    // non digit after first digit
+    new_ucmd!()
+        .args(&["-ea1a", test_file_path])
+        .fails()
+        .stderr_contains("pr: '-e' extra characters or invalid number in the argument: ‘1a’\nTry 'pr --help' for more information.");
+    // > i32 max
+    new_ucmd!()
+        .args(&["-e2147483648", test_file_path])
+        .fails()
+        .stderr_contains("pr: '-e' extra characters or invalid number in the argument: ‘2147483648’\nTry 'pr --help' for more information.");
+    // > i32 max after allowed input char
+    new_ucmd!()
+        .args(&["-ea2147483648", test_file_path])
+        .fails()
+        .stderr_contains("pr: '-e' extra characters or invalid number in the argument: ‘2147483648’\nTry 'pr --help' for more information.");
+}
+/* cSpell:enable */
+
+#[test]
+fn test_expand_tab_does_not_consume_next_argument() {
+    let test_file_path = "empty_test_file";
+    new_ucmd!().args(&["-e", test_file_path]).succeeds();
+    new_ucmd!().args(&["-ea", test_file_path]).succeeds();
+    new_ucmd!().args(&["-ea1", test_file_path]).succeeds();
+}
