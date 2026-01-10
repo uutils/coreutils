@@ -127,6 +127,7 @@ pseudoprime
 pseudoprimes
 quantiles
 readonly
+ROOTFS
 reparse
 rposition
 seedable
@@ -139,6 +140,7 @@ setfattr
 setlocale
 shortcode
 shortcodes
+sigaction
 siginfo
 sigusr
 strcasecmp
