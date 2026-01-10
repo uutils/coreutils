@@ -172,9 +172,9 @@ pub fn get_canonical_util_name(util_name: &str) -> &str {
         // uu_test aliases - '[' is an alias for test
         "[" => "test",
 
-        // hashsum aliases - all these hash commands are aliases for hashsum
+        // cksum aliases - all these hash commands are aliases for cksum
         "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum" | "b2sum" => {
-            "hashsum"
+            "cksum"
         }
 
         "dir" => "ls", // dir is an alias for ls

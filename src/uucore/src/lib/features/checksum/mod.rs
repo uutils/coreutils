@@ -374,6 +374,9 @@ pub enum ChecksumError {
     #[error("the --raw option is not supported with multiple files")]
     RawMultipleFiles,
 
+    #[error("the --{0} option is meaningful only when verifying checksums")]
+    CheckOnlyFlag(String),
+
     // --length sanitization errors
     #[error("--length required for {}", .0.quote())]
     LengthRequired(String),

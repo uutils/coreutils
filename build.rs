@@ -75,10 +75,10 @@ pub fn main() {
             "false" | "true" => {
                 phf_map.entry(krate, format!("(r#{krate}::uumain, r#{krate}::uu_app)"));
             }
-            "hashsum" => {
-                phf_map.entry(krate, format!("({krate}::uumain, {krate}::uu_app_custom)"));
+            "cksum" => {
+                phf_map.entry(krate, format!("({krate}::uumain, {krate}::uu_app)"));
 
-                let map_value = format!("({krate}::uumain, {krate}::uu_app_common)");
+                let map_value = format!("({krate}::uumain, {krate}::uu_app)");
                 phf_map.entry("md5sum", map_value.clone());
                 phf_map.entry("sha1sum", map_value.clone());
                 phf_map.entry("sha224sum", map_value.clone());
