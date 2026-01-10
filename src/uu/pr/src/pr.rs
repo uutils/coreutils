@@ -81,6 +81,7 @@ struct OutputOptions {
     join_lines: bool,
     col_sep_for_printing: String,
     line_width: Option<usize>,
+    #[allow(dead_code)] // TODO: implement tab expansion
     expand_tabs: Option<(char, usize)>,
 }
 
