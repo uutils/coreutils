@@ -273,10 +273,17 @@ mod tests {
         assert!(has_acl(&file_path));
         assert!(!has_security_cap_acl(&file_path));
 
-        let test_attr = "security.capability";
-        let test_value = b"";
-        xattr::set(&file_path, test_attr, test_value).unwrap();
+        // FreeBSD/NetBSD's xattr library does not support the "security" namespace
+        // (https://github.com/Stebalien/xattr/blob/master/src/sys/bsd.rs#L148).
+        // However, individual file systems might still implement additional namespaces according to
+        // https://man.freebsd.org/cgi/man.cgi?query=extattr&sektion=9&manpath=FreeBSD+14.3-RELEASE+and+Ports
+        #[cfg(not(any(target_os = "freebsd", target_os = "netbsd")))]
+        {
+            let test_attr = "security.capability";
+            let test_value = b"";
+            xattr::set(&file_path, test_attr, test_value).unwrap();
 
-        assert!(has_security_cap_acl(&file_path));
+            assert!(has_security_cap_acl(&file_path));
+        }
     }
 }
