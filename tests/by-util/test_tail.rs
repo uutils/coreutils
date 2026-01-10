@@ -1201,12 +1201,12 @@ fn test_oversized_num() {
         .no_stdout();
     // Obsolete syntax
     new_ucmd!()
-        .arg(&format!("+{BIG}c"))
+        .arg(format!("+{BIG}c"))
         .pipe_in(DATA)
         .succeeds()
         .no_stdout();
     new_ucmd!()
-        .arg(&format!("-{BIG}c"))
+        .arg(format!("-{BIG}c"))
         .pipe_in(DATA)
         .succeeds()
         .stdout_is(DATA);
