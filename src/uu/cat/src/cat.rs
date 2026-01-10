@@ -20,8 +20,6 @@ use std::os::unix::fs::FileTypeExt;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UResult;
-#[cfg(not(target_os = "windows"))]
-use uucore::libc;
 use uucore::translate;
 use uucore::{fast_inc::fast_inc_one, format_usage};
 
@@ -225,9 +223,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // (see https://github.com/rust-lang/rust/issues/62569), so we restore it's
     // default action here.
     #[cfg(not(target_os = "windows"))]
-    unsafe {
-        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
-    }
+    let _ = uucore::signals::enable_pipe_errors();
 
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 

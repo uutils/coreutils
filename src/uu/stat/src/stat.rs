@@ -1017,7 +1017,8 @@ impl Stater {
         file: &OsString,
         file_type: &FileType,
         from_user: bool,
-        _follow_symbolic_links: bool,
+        #[cfg(feature = "selinux")] follow_symbolic_links: bool,
+        #[cfg(not(feature = "selinux"))] _: bool,
     ) -> Result<(), i32> {
         match *t {
             Token::Byte(byte) => write_raw_byte(byte),
@@ -1043,12 +1044,12 @@ impl Stater {
                     'B' => OutputType::Unsigned(512),
                     // SELinux security context string
                     'C' => {
-                        #[cfg(feature = "selinux")]
+                        #[cfg(all(feature = "selinux", target_os = "linux"))]
                         {
                             if uucore::selinux::is_selinux_enabled() {
                                 match uucore::selinux::get_selinux_security_context(
                                     Path::new(file),
-                                    _follow_symbolic_links,
+                                    follow_symbolic_links,
                                 ) {
                                     Ok(ctx) => OutputType::Str(ctx),
                                     Err(_) => OutputType::Str(translate!(
@@ -1059,7 +1060,7 @@ impl Stater {
                                 OutputType::Str(translate!("stat-selinux-unsupported-system"))
                             }
                         }
-                        #[cfg(not(feature = "selinux"))]
+                        #[cfg(not(all(feature = "selinux", target_os = "linux")))]
                         {
                             OutputType::Str(translate!("stat-selinux-unsupported-os"))
                         }
