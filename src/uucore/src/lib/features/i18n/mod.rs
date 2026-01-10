@@ -11,6 +11,8 @@ use icu_locale::{Locale, locale};
 pub mod collator;
 #[cfg(feature = "i18n-decimal")]
 pub mod decimal;
+#[cfg(feature = "i18n-month")]
+pub mod month;
 
 /// The encoding specified by the locale, if specified
 /// Currently only supports ASCII and UTF-8 for the sake of simplicity.
@@ -75,6 +77,13 @@ pub fn get_numeric_locale() -> &'static (Locale, UEncoding) {
     static NUMERIC_LOCALE: OnceLock<(Locale, UEncoding)> = OnceLock::new();
 
     NUMERIC_LOCALE.get_or_init(|| get_locale_from_env("LC_NUMERIC"))
+}
+
+/// Get the time locale from the environment (used for month names, etc.)
+pub fn get_time_locale() -> &'static (Locale, UEncoding) {
+    static TIME_LOCALE: OnceLock<(Locale, UEncoding)> = OnceLock::new();
+
+    TIME_LOCALE.get_or_init(|| get_locale_from_env("LC_TIME"))
 }
 
 /// Return the encoding deduced from the locale environment variable.
