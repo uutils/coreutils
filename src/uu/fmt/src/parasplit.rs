@@ -39,7 +39,9 @@ fn utf8_char_width(byte: u8) -> Option<usize> {
 
 /// Decode a UTF-8 character starting at `start`, returning the char and bytes consumed.
 fn decode_char(bytes: &[u8], start: usize) -> (Option<char>, usize) {
-    let first = bytes[start];
+    let Some(&first) = bytes.get(start) else {
+        return (None, 1);
+    };
     if first < 0x80 {
         return (Some(first as char), 1);
     }
@@ -58,14 +60,35 @@ fn decode_char(bytes: &[u8], start: usize) -> (Option<char>, usize) {
     }
 }
 
+struct DecodedCharInfo {
+    ch: Option<char>,
+    consumed: usize,
+    width: usize,
+    is_ascii: bool,
+}
+
+fn decode_char_info(bytes: &[u8], start: usize) -> DecodedCharInfo {
+    let (ch, consumed) = decode_char(bytes, start);
+    let (width, is_ascii) = match ch {
+        Some(c) => (char_width(c), c.is_ascii()),
+        None => (1, false),
+    };
+    DecodedCharInfo {
+        ch,
+        consumed,
+        width,
+        is_ascii,
+    }
+}
+
 /// Compute display width for a UTF-8 byte slice, treating invalid bytes as width 1.
 fn byte_display_width(bytes: &[u8]) -> usize {
     let mut width = 0;
     let mut idx = 0;
     while idx < bytes.len() {
-        let (ch, consumed) = decode_char(bytes, idx);
-        width += ch.map_or(1, char_width);
-        idx += consumed;
+        let info = decode_char_info(bytes, idx);
+        width += info.width;
+        idx += info.consumed;
     }
     width
 }
@@ -199,9 +222,9 @@ impl FileLines<'_> {
                 continue;
             }
 
-            let (ch, consumed) = decode_char(bytes, idx);
-            indent_len += ch.map_or(1, char_width);
-            idx += consumed;
+            let info = decode_char_info(bytes, idx);
+            indent_len += info.width;
+            idx += info.consumed;
             continue;
         }
         if indent_end == bytes.len() {
@@ -619,22 +642,18 @@ impl WordSplit<'_> {
         let mut idx = word_start;
         let mut last_ascii = None;
         while idx < self.length {
-            let (ch, consumed) = decode_char(self.bytes, idx);
-            let is_whitespace = ch.filter(|c| c.is_ascii()).is_some_and(is_fmt_whitespace);
+            let info = decode_char_info(self.bytes, idx);
+            let is_whitespace = info.is_ascii && info.ch.is_some_and(is_fmt_whitespace);
             if is_whitespace {
                 break;
             }
-            word_nchars += ch.map_or(1, char_width);
-            if let Some(ch) = ch {
-                if ch.is_ascii() {
-                    last_ascii = Some(ch as u8);
-                } else {
-                    last_ascii = None;
-                }
+            word_nchars += info.width;
+            if info.is_ascii {
+                last_ascii = info.ch.map(|c| c as u8);
             } else {
                 last_ascii = None;
             }
-            idx += consumed;
+            idx += info.consumed;
         }
         (idx, word_nchars, last_ascii)
     }
