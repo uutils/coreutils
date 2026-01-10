@@ -93,6 +93,7 @@ nix = { workspace = true, features = [
   "signal",
   "dir",
   "user",
+  "poll",
 ] }
 xattr = { workspace = true, optional = true }
 
