@@ -84,6 +84,7 @@ pr-help-indent =
 pr-help-join-lines =
   merge full lines, turns off -W line truncation, no column
                   alignment, --sep-string[=STRING] sets separators
+pr-help-expand-tabs = expand input CHARs (TABs) to tab WIDTH (8)
 pr-help-help = Print help information
 
 # Page header text
