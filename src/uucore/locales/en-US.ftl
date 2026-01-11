@@ -39,19 +39,6 @@ action-creating = creating
 action-reading = reading
 action-writing = writing
 
-# SELinux error messages
-selinux-error-not-enabled = SELinux is not enabled on this system
-selinux-error-file-open-failure = failed to open the file: { $error }
-selinux-error-context-retrieval-failure = failed to retrieve the security context: { $error }
-selinux-error-context-set-failure = failed to set default file creation context to '{ $context }': { $error }
-selinux-error-context-conversion-failure = failed to set default file creation context to '{ $context }': { $error }
-
-# SMACK error messages
-smack-error-not-enabled = SMACK is not enabled on this system
-smack-error-label-retrieval-failure = failed to get security context: { $error }
-smack-error-label-set-failure = failed to set default file creation context to '{ $context }': { $error }
-smack-error-no-label-set = no security context set
-
 # Safe traversal error messages
 safe-traversal-error-path-contains-null = path contains null byte
 safe-traversal-error-open-failed = failed to open { $path }: { $source }

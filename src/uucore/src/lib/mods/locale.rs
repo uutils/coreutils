@@ -153,6 +153,15 @@ fn create_bundle(
 
     // Load common strings from uucore locales directory
     try_add_resource_from(find_uucore_locales_dir(locales_dir));
+
+    // Conditionally load SELinux locales when the selinux feature is enabled
+    #[cfg(feature = "selinux")]
+    try_add_resource_from(find_uucore_locales_dir(locales_dir).map(|p| p.join("selinux")));
+
+    // Conditionally load SMACK locales when the smack feature is enabled
+    #[cfg(feature = "smack")]
+    try_add_resource_from(find_uucore_locales_dir(locales_dir).map(|p| p.join("smack")));
+
     // Then, try to load utility-specific strings from the utility's locale directory
     try_add_resource_from(get_locales_dir(util_name).ok());
 
@@ -243,6 +252,20 @@ fn create_english_bundle_from_embedded(
     if let Some(uucore_content) = get_embedded_locale("uucore/en-US.ftl") {
         let uucore_resource = parse_fluent_resource(uucore_content)?;
         bundle.add_resource_overriding(uucore_resource);
+    }
+
+    // Conditionally load SELinux embedded locales when the selinux feature is enabled
+    #[cfg(feature = "selinux")]
+    if let Some(selinux_content) = get_embedded_locale("uucore/selinux/en-US.ftl") {
+        let selinux_resource = parse_fluent_resource(selinux_content)?;
+        bundle.add_resource_overriding(selinux_resource);
+    }
+
+    // Conditionally load SMACK embedded locales when the smack feature is enabled
+    #[cfg(feature = "smack")]
+    if let Some(smack_content) = get_embedded_locale("uucore/smack/en-US.ftl") {
+        let smack_resource = parse_fluent_resource(smack_content)?;
+        bundle.add_resource_overriding(smack_resource);
     }
 
     // Then, try to load utility-specific strings
