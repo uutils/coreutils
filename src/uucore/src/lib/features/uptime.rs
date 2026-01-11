@@ -205,6 +205,56 @@ pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
     Err(UptimeError::SystemUptime)?
 }
 
+/// The format used to display a FormattedUptime.
+pub enum OutputFormat {
+    /// Typical `uptime` output (e.g. 2 days, 3:04).
+    HumanReadable,
+
+    /// Pretty printed output (e.g. 2 days, 3 hours, 04 minutes).
+    PrettyPrint,
+}
+
+struct FormattedUptime {
+    up_days: i64,
+    up_hours: i64,
+    up_mins: i64,
+}
+
+impl FormattedUptime {
+    fn new(up_secs: i64) -> Self {
+        let up_days = up_secs / 86400;
+        let up_hours = (up_secs - (up_days * 86400)) / 3600;
+        let up_mins = (up_secs - (up_days * 86400) - (up_hours * 3600)) / 60;
+
+        Self {
+            up_days,
+            up_hours,
+            up_mins,
+        }
+    }
+
+    fn get_human_readable_uptime(&self) -> String {
+        translate!(
+        "uptime-format",
+        "days" => self.up_days,
+        "time" => format!("{:02}:{:02}", self.up_hours, self.up_mins))
+    }
+
+    fn get_pretty_print_uptime(&self) -> String {
+        let mut parts = Vec::new();
+        if self.up_days > 0 {
+            parts.push(translate!("uptime-format-pretty-day", "day" => self.up_days));
+        }
+        if self.up_hours > 0 {
+            parts.push(translate!("uptime-format-pretty-hour", "hour" => self.up_hours));
+        }
+        if self.up_mins > 0 || parts.is_empty() {
+            parts.push(translate!("uptime-format-pretty-min", "min" => self.up_mins));
+        }
+        parts.join(", ")
+    }
+}
+
 /// Get the system uptime
 ///
 /// # Arguments
@@ -227,26 +277,28 @@ pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
 /// # Arguments
 ///
 /// boot_time: Option<time_t> - Manually specify the boot time, or None to try to get it from the system.
+/// output_format: OutputFormat - Selects the format of the output string.
 ///
 /// # Returns
 ///
 /// Returns a UResult with the uptime in a human-readable format(e.g. "1 day, 3:45") if successful, otherwise an UptimeError.
 #[inline]
-pub fn get_formatted_uptime(boot_time: Option<time_t>) -> UResult<String> {
+pub fn get_formatted_uptime(
+    boot_time: Option<time_t>,
+    output_format: OutputFormat,
+) -> UResult<String> {
     let up_secs = get_uptime(boot_time)?;
 
     if up_secs < 0 {
         Err(UptimeError::SystemUptime)?;
     }
-    let up_days = up_secs / 86400;
-    let up_hours = (up_secs - (up_days * 86400)) / 3600;
-    let up_mins = (up_secs - (up_days * 86400) - (up_hours * 3600)) / 60;
 
-    Ok(translate!(
-        "uptime-format",
-        "days" => up_days,
-        "time" => format!("{up_hours:02}:{up_mins:02}")
-    ))
+    let formatted_uptime = FormattedUptime::new(up_secs);
+
+    match output_format {
+        OutputFormat::HumanReadable => Ok(formatted_uptime.get_human_readable_uptime()),
+        OutputFormat::PrettyPrint => Ok(formatted_uptime.get_pretty_print_uptime()),
+    }
 }
 
 /// Get the number of users currently logged in
