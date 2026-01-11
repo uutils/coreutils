@@ -1446,3 +1446,38 @@ fn test_date_locale_fr_french() {
         "Output should include timezone information, got: {stdout}"
     );
 }
+
+#[test]
+fn test_date_parenthesis_comment() {
+    // GNU compatibility: Text in parentheses is treated as a comment and removed.
+    let cases = [
+        // (input, format, expected_output)
+        ("(", "+%H:%M:%S", "00:00:00\n"),
+        ("1(ignore comment to eol", "+%H:%M:%S", "01:00:00\n"),
+        ("2026-01-05(this is a comment", "+%Y-%m-%d", "2026-01-05\n"),
+        ("2026(this is a comment)-01-05", "+%Y-%m-%d", "2026-01-05\n"),
+    ];
+
+    for (input, format, expected) in cases {
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg(input)
+            .arg("-u")
+            .arg(format)
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
+#[test]
+fn test_date_parenthesis_vs_other_special_chars() {
+    // Ensure parentheses are special but other chars like [, ., ^ are still rejected
+    for special_char in ["[", ".", "^"] {
+        new_ucmd!()
+            .arg("-d")
+            .arg(special_char)
+            .fails()
+            .stderr_contains("invalid date");
+    }
+}
