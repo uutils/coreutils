@@ -84,6 +84,13 @@ PROGS       := \
 	basename \
 	cat \
 	cksum \
+	b2sum \
+	md5sum \
+	sha1sum \
+	sha224sum \
+	sha256sum \
+	sha384sum \
+	sha512sum \
 	comm \
 	cp \
 	csplit \
@@ -184,15 +191,6 @@ SELINUX_PROGS := \
 	chcon \
 	runcon
 
-HASHSUM_PROGS := \
-	b2sum \
-	md5sum \
-	sha1sum \
-	sha224sum \
-	sha256sum \
-	sha384sum \
-	sha512sum
-
 $(info Detected OS = $(OS))
 
 ifeq (,$(findstring MINGW,$(OS)))
@@ -223,6 +221,13 @@ TEST_PROGS  := \
 	chmod \
 	chown \
 	cksum \
+	b2sum \
+	md5sum \
+	sha1sum \
+	sha224sum \
+	sha256sum \
+	sha384sum \
+	sha512sum \
 	comm \
 	cp \
 	csplit \
