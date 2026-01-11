@@ -24,9 +24,7 @@ use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
 use std::os::windows::fs::symlink_file;
 #[cfg(not(windows))]
-use std::path::Path;
-#[cfg(target_os = "linux")]
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use filetime::FileTime;
@@ -86,6 +84,17 @@ macro_rules! assert_metadata_eq {
             "mtime_nsec is different"
         );
     }};
+}
+
+/// Get the permissions of the specified file.
+///
+/// # Panics
+///
+/// This function panics if there is an error loading the metadata
+#[cfg(not(windows))]
+pub fn get_mode(filename: PathBuf) -> u32 {
+    let perms = std::fs::metadata(filename).unwrap().permissions();
+    perms.mode()
 }
 
 #[test]
@@ -7507,4 +7516,105 @@ fn test_cp_to_existing_file_permissions() {
 
     let new_dst_mode = std::fs::metadata(&dst_path).unwrap().permissions().mode();
     assert_eq!(dst_mode, new_dst_mode);
+}
+
+#[cfg(not(target_os = "windows"))]
+#[test]
+fn test_cp_preserve_directory_permissions_by_default() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let dir = "a/b/c/d";
+    let file = "foo.txt";
+
+    at.mkdir_all(dir);
+
+    let file_path = format!("{dir}/{file}");
+
+    at.touch(file_path);
+
+    scene.cmd("chmod").arg("-R").arg("555").arg("a").succeeds();
+    scene.cmd("cp").arg("-r").arg("a").arg("b").succeeds();
+
+    scene.ucmd().arg("-r").arg("a").arg("c").succeeds();
+
+    // only verify owner bits on Android
+    if cfg!(target_os = "android") {
+        assert_eq!(get_mode(at.plus("b")) & 0o700, 0o500);
+        assert_eq!(get_mode(at.plus("b/b")) & 0o700, 0o500);
+        assert_eq!(get_mode(at.plus("b/b/c")) & 0o700, 0o500);
+        assert_eq!(get_mode(at.plus("b/b/c/d")) & 0o700, 0o500);
+
+        assert_eq!(get_mode(at.plus("c")) & 0o700, 0o500);
+        assert_eq!(get_mode(at.plus("c/b")) & 0o700, 0o500);
+        assert_eq!(get_mode(at.plus("c/b/c")) & 0o700, 0o500);
+        assert_eq!(get_mode(at.plus("c/b/c/d")) & 0o700, 0o500);
+    } else {
+        assert_eq!(get_mode(at.plus("b")), 0o40555);
+        assert_eq!(get_mode(at.plus("b/b")), 0o40555);
+        assert_eq!(get_mode(at.plus("b/b/c")), 0o40555);
+        assert_eq!(get_mode(at.plus("b/b/c/d")), 0o40555);
+
+        assert_eq!(get_mode(at.plus("c")), 0o40555);
+        assert_eq!(get_mode(at.plus("c/b")), 0o40555);
+        assert_eq!(get_mode(at.plus("c/b/c")), 0o40555);
+        assert_eq!(get_mode(at.plus("c/b/c/d")), 0o40555);
+    }
+}
+
+#[test]
+#[cfg(not(target_os = "windows"))]
+fn test_cp_existing_perm_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene
+        .cmd("mkdir")
+        .arg("-p")
+        .arg("-m")
+        .arg("ug-s,u=rwx,g=rwx,o=rx")
+        .arg("src/dir")
+        .umask(0o022)
+        .succeeds();
+    scene
+        .cmd("mkdir")
+        .arg("-p")
+        .arg("-m")
+        .arg("ug-s,u=rwx,g=,o=")
+        .arg("dst/dir")
+        .umask(0o022)
+        .succeeds();
+
+    scene.ucmd().arg("-r").arg("src/.").arg("dst/").succeeds();
+
+    let mode = get_mode(at.plus("dst/dir"));
+
+    assert_eq!(mode, 0o40700);
+}
+
+#[test]
+#[cfg(not(target_os = "windows"))]
+fn test_cp_gnu_preserve_mode() {
+    use std::io;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene.cmd("mkdir").arg("d1").succeeds();
+    scene.cmd("mkdir").arg("d2").succeeds();
+    scene.cmd("chmod").arg("705").arg("d2").succeeds();
+
+    scene
+        .ucmd()
+        .arg("--no-preserve=mode")
+        .arg("-r")
+        .arg("d2")
+        .arg("d3")
+        .set_stdout(io::stdout())
+        .succeeds();
+
+    let d1_mode = get_mode(at.plus("d1"));
+    let d3_mode = get_mode(at.plus("d3"));
+
+    assert_eq!(d1_mode, d3_mode);
 }
