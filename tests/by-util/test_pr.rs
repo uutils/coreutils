@@ -708,23 +708,79 @@ fn test_simple_expand_tab() {
 
 #[test]
 fn test_simple_expand_tab_with_digit_argument() {
+    // test different variations of width
+    // 2, 3, 8, 10
     let test_cases = vec![
         (
-            "-e",
+            "-e2",
             vec!["test_e1.log"],
-            vec!["test_e_no_args1.log.expected"],
+            vec!["test_e_width_2_1.log.expected"],
             0,
         ),
         (
-            "-e",
+            "-e2",
             vec!["test_e2.log"],
-            vec!["test_e_no_args2.log.expected"],
+            vec!["test_e_width_2_2.log.expected"],
             0,
         ),
         (
-            "-e",
+            "-e2",
             vec!["test_e3.log"],
-            vec!["test_e_no_args3.log.expected"],
+            vec!["test_e_width_2_3.log.expected"],
+            0,
+        ),
+        (
+            "-e3",
+            vec!["test_e1.log"],
+            vec!["test_e_width_3_1.log.expected"],
+            0,
+        ),
+        (
+            "-e3",
+            vec!["test_e2.log"],
+            vec!["test_e_width_3_2.log.expected"],
+            0,
+        ),
+        (
+            "-e3",
+            vec!["test_e3.log"],
+            vec!["test_e_width_3_3.log.expected"],
+            0,
+        ),
+        (
+            "-e8",
+            vec!["test_e1.log"],
+            vec!["test_e_width_8_1.log.expected"],
+            0,
+        ),
+        (
+            "-e8",
+            vec!["test_e2.log"],
+            vec!["test_e_width_8_2.log.expected"],
+            0,
+        ),
+        (
+            "-e8",
+            vec!["test_e3.log"],
+            vec!["test_e_width_8_3.log.expected"],
+            0,
+        ),
+        (
+            "-e10",
+            vec!["test_e1.log"],
+            vec!["test_e_width_10_1.log.expected"],
+            0,
+        ),
+        (
+            "-e10",
+            vec!["test_e2.log"],
+            vec!["test_e_width_10_2.log.expected"],
+            0,
+        ),
+        (
+            "-e10",
+            vec!["test_e3.log"],
+            vec!["test_e_width_10_3.log.expected"],
             0,
         ),
     ];
