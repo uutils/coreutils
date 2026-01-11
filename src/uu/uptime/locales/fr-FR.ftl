@@ -9,6 +9,7 @@ uptime-about-musl-warning = Avertissement : Lorsque compilé avec musl libc, l'u
 # Messages d'aide
 uptime-help-since = système actif depuis
 uptime-help-path = fichier pour rechercher l'heure de démarrage
+uptime-help-pretty = afficher le temps de disponibilité dans un format agréable
 
 # Messages d'erreur
 uptime-error-io = impossible d'obtenir l'heure de démarrage : { $error }
@@ -18,6 +19,7 @@ uptime-error-couldnt-get-boot-time = impossible d'obtenir l'heure de démarrage
 
 # Messages de sortie
 uptime-output-unknown-uptime = actif ???? jours ??:??,
+uptime-output-up-text = actif
 
 uptime-user-count = { $count ->
     [one] 1 utilisateur
@@ -35,6 +37,18 @@ uptime-format = { $days ->
     [0] { $time }
     [one] { $days } jour, { $time }
    *[other] { $days } jours { $time }
+}
+uptime-format-pretty-min = { $min ->
+    [one] { $min } minute
+   *[other] { $min } minutes
+}
+uptime-format-pretty-hour = { $hour ->
+    [one] { $hour } heure
+   *[other] { $hour } heures
+}
+uptime-format-pretty-day = { $day ->
+    [one] { $day } jour
+   *[other] { $day } jours
 }
 
 # Formatage de la charge moyenne
