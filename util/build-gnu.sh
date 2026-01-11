@@ -70,7 +70,7 @@ CARGOFLAGS="$(echo "${CARGOFLAGS}" | sed -e 's/^[[:space:]]*//')"
 
 # If we have feature flags, format them correctly for cargo
 if [ ! -z "${CARGOFLAGS}" ]; then
-    CARGOFLAGS="--features ${CARGOFLAGS}"
+    CARGOFLAGS="--quiet --features ${CARGOFLAGS}"
     echo "Building with cargo flags: ${CARGOFLAGS}"
 fi
 
@@ -97,7 +97,7 @@ else
     # Use MULTICALL=y for faster build
     "${MAKE}" MULTICALL=y SKIP_UTILS="install more"
     for binary in $("${UU_BUILD_DIR}"/coreutils --list)
-        do ln -vf "${UU_BUILD_DIR}/coreutils" "${UU_BUILD_DIR}/${binary}"
+        do ln -f "${UU_BUILD_DIR}/coreutils" "${UU_BUILD_DIR}/${binary}"
     done
 fi
 
@@ -220,7 +220,7 @@ grep -rlE '/usr/local/bin/\s?/usr/local/bin' init.cfg tests/* | xargs -r "${SED}
 
 # overlay-headers.sh test intends to check for inotify events,
 # however there's a bug because `---dis` is an alias for: `---disable-inotify`
-sed -i -e "s|---dis ||g" tests/tail/overlay-headers.sh
+"${SED}" -i -e "s|---dis ||g" tests/tail/overlay-headers.sh
 
 # Do not FAIL, just do a regular ERROR
 "${SED}" -i -e "s|framework_failure_ 'no inotify_add_watch';|fail=1;|" tests/tail/inotify-rotate-resources.sh
