@@ -979,10 +979,11 @@ fn test_simple_expand_tab_with_both_arguments() {
     }
 }
 
+/* cSpell:disable */
 #[test]
 fn test_invalid_expand_tab_arguments() {
     let test_file_path = "empty_test_file";
-    // incorect argument
+    // incorrect argument
     new_ucmd!()
         .args(&["-esdgjiojiosdgjiogd", test_file_path])
         .fails()
@@ -1013,6 +1014,7 @@ fn test_invalid_expand_tab_arguments() {
         .fails()
         .stderr_contains("pr: '-e' extra characters or invalid number in the argument: ‘2147483648’\nTry 'pr --help' for more information.");
 }
+/* cSpell:enable */
 
 #[test]
 fn test_expand_tab_does_not_consume_next_argument() {

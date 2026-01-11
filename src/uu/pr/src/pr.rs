@@ -905,7 +905,7 @@ fn split_lines_if_form_feed(
                                 chunk.resize(chunk.len() + spaces_needed, b' ');
                             } else if *byte == TAB as u8 {
                                 // If a byte got passed to the -e flag (eg -ea1)  which is not '\t' GNU
-                                // still expands it but does not use an optionally givven width parameter
+                                // still expands it but does not use an optionally given width parameter
                                 // but does the '\t' expansion with the default value (8)
                                 let spaces_needed = 8 - (chunk.len() % 8);
                                 chunk.resize(chunk.len() + spaces_needed, b' ');
