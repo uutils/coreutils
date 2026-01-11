@@ -704,11 +704,6 @@ fn test_simple_expand_tab() {
             ],
         );
     }
-    // new_ucmd!().args(&["-T"]).pipe_in("a\nb\n").succeeds();
-    // new_ucmd!()
-    //     .args(&["--omit-pagination"])
-    //     .pipe_in("a\nb\n")
-    //     .succeeds();
 }
 
 #[test]
