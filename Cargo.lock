@@ -651,7 +651,7 @@ dependencies = [
  "uu_who",
  "uu_whoami",
  "uu_yes",
- "uucore 0.5.0",
+ "uucore",
  "uutests",
  "walkdir",
  "wincode",
@@ -3042,7 +3042,7 @@ dependencies = [
  "clap",
  "fluent",
  "platform-info",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3052,7 +3052,7 @@ dependencies = [
  "base64-simd",
  "clap",
  "fluent",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3064,7 +3064,7 @@ dependencies = [
  "fluent",
  "tempfile",
  "uu_base32",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3073,7 +3073,7 @@ version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3083,7 +3083,7 @@ dependencies = [
  "clap",
  "fluent",
  "uu_base32",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3096,7 +3096,7 @@ dependencies = [
  "nix",
  "tempfile",
  "thiserror 2.0.17",
- "uucore 0.5.0",
+ "uucore",
  "winapi-util",
  "windows-sys 0.61.2",
 ]
@@ -3111,7 +3111,7 @@ dependencies = [
  "libc",
  "selinux",
  "thiserror 2.0.17",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3120,7 +3120,7 @@ version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3130,7 +3130,7 @@ dependencies = [
  "clap",
  "fluent",
  "thiserror 2.0.17",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3139,7 +3139,7 @@ version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3149,7 +3149,7 @@ dependencies = [
  "clap",
  "fluent",
  "thiserror 2.0.17",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3160,7 +3160,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "tempfile",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3169,7 +3169,7 @@ version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3187,7 +3187,7 @@ dependencies = [
  "selinux",
  "tempfile",
  "thiserror 2.0.17",
- "uucore 0.5.0",
+ "uucore",
  "walkdir",
  "xattr",
 ]
@@ -3200,7 +3200,7 @@ dependencies = [
  "fluent",
  "regex",
  "thiserror 2.0.17",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3213,7 +3213,7 @@ dependencies = [
  "fluent",
  "memchr",
  "tempfile",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3227,7 +3227,7 @@ dependencies = [
  "nix",
  "parse_datetime",
  "tempfile",
- "uucore 0.5.0",
+ "uucore",
  "windows-sys 0.61.2",
 ]
 
@@ -3244,7 +3244,7 @@ dependencies = [
  "signal-hook 0.4.1",
  "tempfile",
  "thiserror 2.0.17",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3257,7 +3257,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.17",
  "unicode-width 0.2.2",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3266,7 +3266,7 @@ version = "0.5.0"
 dependencies = [
  "clap",
  "uu_ls",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3275,7 +3275,7 @@ version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3284,7 +3284,7 @@ version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3297,7 +3297,7 @@ dependencies = [
  "glob",
  "tempfile",
  "thiserror 2.0.17",
- "uucore 0.5.0",
+ "uucore",
  "windows-sys 0.61.2",
 ]
 
@@ -3307,7 +3307,7 @@ version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3319,7 +3319,7 @@ dependencies = [
  "nix",
  "rust-ini",
  "thiserror 2.0.17",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3332,7 +3332,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.17",
  "unicode-width 0.2.2",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3345,7 +3345,7 @@ dependencies = [
  "num-traits",
  "onig",
  "thiserror 2.0.17",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3359,7 +3359,7 @@ dependencies = [
  "num-prime",
  "num-traits",
  "rand 0.9.2",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3368,7 +3368,7 @@ version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3379,7 +3379,7 @@ dependencies = [
  "fluent",
  "thiserror 2.0.17",
  "unicode-width 0.2.2",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3391,7 +3391,7 @@ dependencies = [
  "fluent",
  "tempfile",
  "unicode-width 0.2.2",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3401,7 +3401,7 @@ dependencies = [
  "clap",
  "fluent",
  "thiserror 2.0.17",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3412,7 +3412,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "tempfile",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3423,7 +3423,7 @@ dependencies = [
  "fluent",
  "memchr",
  "thiserror 2.0.17",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3433,7 +3433,7 @@ dependencies = [
  "clap",
  "fluent",
  "libc",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3444,7 +3444,7 @@ dependencies = [
  "dns-lookup",
  "fluent",
  "hostname",
- "uucore 0.5.0",
+ "uucore",
  "windows-sys 0.61.2",
 ]
 
@@ -3455,7 +3455,7 @@ dependencies = [
  "clap",
  "fluent",
  "selinux",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3468,7 +3468,7 @@ dependencies = [
  "fluent",
  "selinux",
  "thiserror 2.0.17",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3481,7 +3481,7 @@ dependencies = [
  "memchr",
  "tempfile",
  "thiserror 2.0.17",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3491,7 +3491,7 @@ dependencies = [
  "clap",
  "fluent",
  "nix",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3500,7 +3500,7 @@ version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3510,7 +3510,7 @@ dependencies = [
  "clap",
  "fluent",
  "thiserror 2.0.17",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3520,7 +3520,7 @@ dependencies = [
  "clap",
  "fluent",
  "libc",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3539,16 +3539,8 @@ dependencies = [
  "tempfile",
  "terminal_size",
  "thiserror 2.0.17",
- "uucore 0.5.0",
+ "uucore",
  "uutils_term_grid",
-]
-
-[[package]]
-name = "uu_lsblk"
-version = "0.5.0"
-dependencies = [
- "clap",
- "uucore 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -3557,7 +3549,7 @@ version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3568,7 +3560,7 @@ dependencies = [
  "fluent",
  "libc",
  "nix",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3578,7 +3570,7 @@ dependencies = [
  "clap",
  "fluent",
  "libc",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3590,7 +3582,7 @@ dependencies = [
  "rand 0.9.2",
  "tempfile",
  "thiserror 2.0.17",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3602,7 +3594,7 @@ dependencies = [
  "fluent",
  "nix",
  "tempfile",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3617,7 +3609,7 @@ dependencies = [
  "libc",
  "tempfile",
  "thiserror 2.0.17",
- "uucore 0.5.0",
+ "uucore",
  "windows-sys 0.61.2",
 ]
 
@@ -3629,7 +3621,7 @@ dependencies = [
  "fluent",
  "libc",
  "nix",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3641,7 +3633,7 @@ dependencies = [
  "fluent",
  "regex",
  "tempfile",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3652,7 +3644,7 @@ dependencies = [
  "fluent",
  "libc",
  "thiserror 2.0.17",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3662,7 +3654,7 @@ dependencies = [
  "clap",
  "fluent",
  "libc",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3674,7 +3666,7 @@ dependencies = [
  "fluent",
  "tempfile",
  "thiserror 2.0.17",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3686,7 +3678,7 @@ dependencies = [
  "fluent",
  "half",
  "libc",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3695,7 +3687,7 @@ version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3705,7 +3697,7 @@ dependencies = [
  "clap",
  "fluent",
  "libc",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3714,7 +3706,7 @@ version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3726,7 +3718,7 @@ dependencies = [
  "itertools 0.14.0",
  "regex",
  "thiserror 2.0.17",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3735,7 +3727,7 @@ version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3744,7 +3736,7 @@ version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3755,7 +3747,7 @@ dependencies = [
  "fluent",
  "regex",
  "thiserror 2.0.17",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3764,7 +3756,7 @@ version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3773,7 +3765,7 @@ version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3782,7 +3774,7 @@ version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3796,7 +3788,7 @@ dependencies = [
  "libc",
  "tempfile",
  "thiserror 2.0.17",
- "uucore 0.5.0",
+ "uucore",
  "windows-sys 0.61.2",
 ]
 
@@ -3807,7 +3799,7 @@ dependencies = [
  "clap",
  "fluent",
  "libc",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3819,7 +3811,7 @@ dependencies = [
  "libc",
  "selinux",
  "thiserror 2.0.17",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3834,7 +3826,7 @@ dependencies = [
  "num-traits",
  "tempfile",
  "thiserror 2.0.17",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3845,7 +3837,7 @@ dependencies = [
  "fluent",
  "libc",
  "rand 0.9.2",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3858,7 +3850,7 @@ dependencies = [
  "rand 0.9.2",
  "rand_core 0.9.3",
  "tempfile",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3867,7 +3859,7 @@ version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3891,7 +3883,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.17",
  "unicode-width 0.2.2",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3904,7 +3896,7 @@ dependencies = [
  "memchr",
  "tempfile",
  "thiserror 2.0.17",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3914,7 +3906,7 @@ dependencies = [
  "clap",
  "fluent",
  "thiserror 2.0.17",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3926,7 +3918,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.17",
  "uu_stdbuf_libstdbuf",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3944,7 +3936,7 @@ dependencies = [
  "clap",
  "fluent",
  "nix",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3953,7 +3945,7 @@ version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3963,7 +3955,7 @@ dependencies = [
  "clap",
  "fluent",
  "nix",
- "uucore 0.5.0",
+ "uucore",
  "windows-sys 0.61.2",
 ]
 
@@ -3978,7 +3970,7 @@ dependencies = [
  "regex",
  "tempfile",
  "thiserror 2.0.17",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -3993,7 +3985,7 @@ dependencies = [
  "notify",
  "rstest",
  "same-file",
- "uucore 0.5.0",
+ "uucore",
  "winapi-util",
  "windows-sys 0.61.2",
 ]
@@ -4004,7 +3996,7 @@ version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -4016,7 +4008,7 @@ dependencies = [
  "libc",
  "tempfile",
  "thiserror 2.0.17",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -4027,7 +4019,7 @@ dependencies = [
  "fluent",
  "libc",
  "nix",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -4040,7 +4032,7 @@ dependencies = [
  "jiff",
  "parse_datetime",
  "thiserror 2.0.17",
- "uucore 0.5.0",
+ "uucore",
  "windows-sys 0.61.2",
 ]
 
@@ -4052,7 +4044,7 @@ dependencies = [
  "clap",
  "fluent",
  "nom 8.0.0",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -4061,7 +4053,7 @@ version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -4070,7 +4062,7 @@ version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -4084,7 +4076,7 @@ dependencies = [
  "string-interner",
  "tempfile",
  "thiserror 2.0.17",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -4094,7 +4086,7 @@ dependencies = [
  "clap",
  "fluent",
  "nix",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -4104,7 +4096,7 @@ dependencies = [
  "clap",
  "fluent",
  "platform-info",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -4117,7 +4109,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.17",
  "unicode-width 0.2.2",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -4128,7 +4120,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "tempfile",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -4137,7 +4129,7 @@ version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -4149,7 +4141,7 @@ dependencies = [
  "jiff",
  "thiserror 2.0.17",
  "utmp-classic",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -4159,7 +4151,7 @@ dependencies = [
  "clap",
  "fluent",
  "utmp-classic",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -4168,7 +4160,7 @@ version = "0.5.0"
 dependencies = [
  "clap",
  "uu_ls",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -4184,7 +4176,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.17",
  "unicode-width 0.2.2",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -4193,7 +4185,7 @@ version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -4202,7 +4194,7 @@ version = "0.5.0"
 dependencies = [
  "clap",
  "fluent",
- "uucore 0.5.0",
+ "uucore",
  "windows-sys 0.61.2",
 ]
 
@@ -4214,7 +4206,7 @@ dependencies = [
  "fluent",
  "itertools 0.14.0",
  "nix",
- "uucore 0.5.0",
+ "uucore",
 ]
 
 [[package]]
@@ -4264,7 +4256,7 @@ dependencies = [
  "unic-langid",
  "unit-prefix",
  "utmp-classic",
- "uucore_procs 0.5.0",
+ "uucore_procs",
  "walkdir",
  "wild",
  "winapi-util",
@@ -4274,37 +4266,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "uucore"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b5eddd390f3fdef74f104a948559e6de29203f60f8f563c8c9f528cd4c88ee78"
-dependencies = [
- "clap",
- "fluent",
- "fluent-bundle",
- "fluent-syntax",
- "nix",
- "os_display",
- "phf",
- "thiserror 2.0.17",
- "unic-langid",
- "uucore_procs 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "wild",
-]
-
-[[package]]
 name = "uucore_procs"
 version = "0.5.0"
-dependencies = [
- "proc-macro2",
- "quote",
-]
-
-[[package]]
-name = "uucore_procs"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "47148309a1f7a989d165dabbbc7f2bf156d7ff6affe7d69c1c5bfb822e663ae6"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4332,7 +4295,7 @@ dependencies = [
  "regex",
  "rlimit",
  "tempfile",
- "uucore 0.5.0",
+ "uucore",
  "xattr",
 ]
 
