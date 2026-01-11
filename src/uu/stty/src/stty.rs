@@ -1004,21 +1004,13 @@ fn apply_char_mapping(termios: &mut Termios, mapping: &(S, u8)) {
 ///
 /// If state has fewer than 4 elements, no changes are applied. This is a defensive
 /// check that should never trigger since `parse_saved_state` rejects such states.
-///
-/// Uses `from_bits_retain` to preserve all flag bits, including those not defined
-/// in the nix crate. This matches GNU coreutils behavior which accepts any valid
-/// termios state from the kernel, including vendor-specific or newer flags.
 fn apply_saved_state(termios: &mut Termios, state: &[u32]) -> nix::Result<()> {
     // Require at least 4 elements for the flags (defensive check)
     if state.len() < 4 {
         return Ok(()); // No-op for invalid state (already validated by parser)
     }
 
-    // Apply the four flag groups using from_bits_retain to preserve all bits,
-    // including unknown flags that the nix crate might not define but the kernel accepts.
-    // This is critical for compatibility with GNU stty which tolerates all valid
-    // POSIX termios flag combinations.
-    // The `as _` cast handles MacOS size compatibility (u64 vs u32).
+    // Apply the four flag groups, done (as _) for MacOS size compatibility
     termios.input_flags = InputFlags::from_bits_retain(state[0] as _);
     termios.output_flags = OutputFlags::from_bits_retain(state[1] as _);
     termios.control_flags = ControlFlags::from_bits_retain(state[2] as _);
