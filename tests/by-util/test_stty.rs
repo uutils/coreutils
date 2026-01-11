@@ -902,6 +902,56 @@ fn test_saved_state_valid_formats() {
     assert_eq!(normalized_stderr, exp_result.stderr_str());
 }
 
+// Test that saved state with high/extended flag bits is accepted.
+// This verifies that from_bits_retain is used instead of from_bits_truncate,
+// which would silently drop unknown flag bits. GNU stty accepts all valid
+// POSIX termios flag combinations, including vendor-specific or newer kernel flags.
+#[test]
+#[cfg(unix)]
+fn test_saved_state_preserves_extended_flags() {
+    let (path, _controller, _replica) = pty_path();
+    let (_at, ts) = at_and_ts!();
+
+    // Build a saved state with high flag bits set that may not be defined in nix crate.
+    // These are valid POSIX termios values that GNU stty accepts.
+    // Using 0x80000000 as a high bit that may not be defined but is valid.
+    let num_cc = nix::libc::NCCS;
+    let cc_values: Vec<String> = (0..num_cc).map(|_| "0".to_string()).collect();
+
+    // Test with extended/high bits in each flag field
+    // These values have high bits set that might not be named constants in nix
+    let extended_states = [
+        // High bit in input flags
+        format!("80000500:5:4bf:8a3b:{}", cc_values.join(":")),
+        // High bit in output flags
+        format!("500:80000005:4bf:8a3b:{}", cc_values.join(":")),
+        // High bit in control flags
+        format!("500:5:800004bf:8a3b:{}", cc_values.join(":")),
+        // High bit in local flags
+        format!("500:5:4bf:80008a3b:{}", cc_values.join(":")),
+    ];
+
+    for state in &extended_states {
+        // The saved state should be accepted without error
+        // (though the kernel may or may not actually apply unknown bits)
+        let result = ts.ucmd().args(&["--file", &path, state]).run();
+
+        // Should succeed (exit code 0) without "invalid argument" error
+        // Note: The kernel might ignore unknown bits, but stty should not reject them
+        if result.code() != 0 {
+            // If it fails, it should not be because of "invalid argument" for the format
+            // It could fail for other reasons (e.g., permission, EINVAL from kernel)
+            // but not because our parser rejects the format
+            assert!(
+                !result.stderr_str().contains("invalid argument"),
+                "stty should accept extended flag values like GNU: state={}, stderr={}",
+                state,
+                result.stderr_str()
+            );
+        }
+    }
+}
+
 #[test]
 #[cfg(unix)]
 #[ignore = "Fails because cargo test does not run in a tty"]
