@@ -890,11 +890,93 @@ fn test_simple_expand_tab_with_char_argument() {
 
 #[test]
 fn test_simple_expand_tab_with_both_arguments() {
-    // new_ucmd!().args(&["-T"]).pipe_in("a\nb\n").succeeds();
-    // new_ucmd!()
-    //     .args(&["--omit-pagination"])
-    //     .pipe_in("a\nb\n")
-    //     .succeeds();
+    // test different variations of what char to expand
+    // a2, e3, t10
+    let test_cases = vec![
+        (
+            "-ea2",
+            vec!["test_e1.log"],
+            vec!["test_e_input_char_a_width_2_1.log.expected"],
+            0,
+        ),
+        (
+            "-ea2",
+            vec!["test_e2.log"],
+            vec!["test_e_input_char_a_width_2_2.log.expected"],
+            0,
+        ),
+        (
+            "-ea2",
+            vec!["test_e3.log"],
+            vec!["test_e_input_char_a_width_2_3.log.expected"],
+            0,
+        ),
+        (
+            "-ee3",
+            vec!["test_e1.log"],
+            vec!["test_e_input_char_e_width_3_1.log.expected"],
+            0,
+        ),
+        (
+            "-ee3",
+            vec!["test_e2.log"],
+            vec!["test_e_input_char_e_width_3_2.log.expected"],
+            0,
+        ),
+        (
+            "-ee3",
+            vec!["test_e3.log"],
+            vec!["test_e_input_char_e_width_3_3.log.expected"],
+            0,
+        ),
+        (
+            "-et10",
+            vec!["test_e1.log"],
+            vec!["test_e_input_char_t_width_10_1.log.expected"],
+            0,
+        ),
+        (
+            "-et10",
+            vec!["test_e2.log"],
+            vec!["test_e_input_char_t_width_10_2.log.expected"],
+            0,
+        ),
+        (
+            "-et10",
+            vec!["test_e3.log"],
+            vec!["test_e_input_char_t_width_10_3.log.expected"],
+            0,
+        ),
+    ];
+    for test_case in test_cases {
+        let (flags, input_file, expected_file, return_code) = test_case;
+        let mut scenario = new_ucmd!();
+        let input_file_path = input_file.first().unwrap();
+        let test_file_path = expected_file.first().unwrap();
+        let value = file_last_modified_time(&scenario, input_file_path);
+        let mut arguments: Vec<&str> = flags
+            .split(' ')
+            .filter(|i| i.trim() != "")
+            .collect::<Vec<&str>>();
+
+        arguments.extend(input_file.clone());
+
+        let scenario_with_args = scenario.args(&arguments);
+
+        let scenario_with_expected_status = if return_code == 0 {
+            scenario_with_args.succeeds()
+        } else {
+            scenario_with_args.fails()
+        };
+
+        scenario_with_expected_status.stdout_is_templated_fixture(
+            test_file_path,
+            &[
+                ("{last_modified_time}", &value),
+                ("{file_name}", input_file_path),
+            ],
+        );
+    }
 }
 
 #[test]
