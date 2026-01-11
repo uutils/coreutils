@@ -16,6 +16,42 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_help() {
+    new_ucmd!()
+        .arg("--help")
+        .succeeds()
+        .stdout_contains("Display the full filename of the current working directory")
+        .stdout_contains("--help")
+        .stdout_contains("--version");
+}
+
+#[test]
+fn test_version() {
+    new_ucmd!()
+        .arg("--version")
+        .succeeds()
+        .stdout_contains("uutils coreutils");
+}
+
+#[test]
+fn test_short_help() {
+    new_ucmd!()
+        .arg("-h")
+        .succeeds()
+        .stdout_contains("Display the full filename of the current working directory")
+        .stdout_contains("-h");
+}
+
+#[test]
+fn test_short_version() {
+    new_ucmd!()
+        .arg("-V")
+        .succeeds()
+        .stdout_contains("pwd")
+        .stdout_contains("uutils coreutils");
+}
+
+#[test]
 fn test_default() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.succeeds().stdout_is(at.root_dir_resolved() + "\n");
