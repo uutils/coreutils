@@ -899,10 +899,6 @@ fn split_lines_if_form_feed(
                             if *byte == expand_options.input_char as u8 {
                                 let mut spaces_needed = expand_options.width as usize
                                     - (chunk.len() % expand_options.width as usize);
-                                if spaces_needed == 0 {
-                                    spaces_needed = expand_options.width as usize;
-                                    eprintln!("i fond a 0");
-                                }
                                 chunk.resize(chunk.len() + spaces_needed, b' ');
                             } else {
                                 chunk.push(*byte);
