@@ -7,12 +7,13 @@
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
+use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process;
 use tempfile::TempDir;
 use tempfile::tempdir;
 use thiserror::Error;
-use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::parser::parse_size::parse_size_u64;
 use uucore::translate;
@@ -208,55 +209,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     set_command_env(&mut command, "_STDBUF_E", &options.stderr);
     command.args(command_params);
 
-    let mut process = match command.spawn() {
-        Ok(p) => p,
-        Err(e) => {
-            return match e.kind() {
-                std::io::ErrorKind::PermissionDenied => Err(USimpleError::new(
-                    126,
-                    translate!("stdbuf-error-permission-denied"),
-                )),
-                std::io::ErrorKind::NotFound => Err(USimpleError::new(
-                    127,
-                    translate!("stdbuf-error-no-such-file"),
-                )),
-                _ => Err(USimpleError::new(
-                    1,
-                    translate!("stdbuf-error-failed-to-execute", "error" => e),
-                )),
-            };
-        }
-    };
-
-    let status = process.wait().map_err_context(String::new)?;
-    match status.code() {
-        Some(i) => {
-            if i == 0 {
-                Ok(())
-            } else {
-                Err(i.into())
-            }
-        }
-        None => {
-            #[cfg(unix)]
-            {
-                use std::os::unix::process::ExitStatusExt;
-                let signal_msg = status
-                    .signal()
-                    .map_or_else(|| "unknown".to_string(), |s| s.to_string());
-                Err(USimpleError::new(
-                    1,
-                    translate!("stdbuf-error-killed-by-signal", "signal" => signal_msg),
-                ))
-            }
-            #[cfg(not(unix))]
-            {
-                Err(USimpleError::new(
-                    1,
-                    "process terminated abnormally".to_string(),
-                ))
-            }
-        }
+    // Replace the current process with the target program (no fork) using exec.
+    let e = command.exec();
+    // exec() only returns if there was an error
+    match e.kind() {
+        std::io::ErrorKind::PermissionDenied => Err(USimpleError::new(
+            126,
+            translate!("stdbuf-error-permission-denied"),
+        )),
+        std::io::ErrorKind::NotFound => Err(USimpleError::new(
+            127,
+            translate!("stdbuf-error-no-such-file"),
+        )),
+        _ => Err(USimpleError::new(
+            1,
+            translate!("stdbuf-error-failed-to-execute", "error" => e),
+        )),
     }
 }
 
