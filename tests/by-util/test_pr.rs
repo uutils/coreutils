@@ -658,19 +658,19 @@ fn test_simple_expand_tab() {
     let test_cases = vec![
         (
             "-e",
-            vec!["test_e_no_args1.log"],
+            vec!["test_e1.log"],
             vec!["test_e_no_args1.log.expected"],
             0,
         ),
         (
             "-e",
-            vec!["test_e_no_args2.log"],
+            vec!["test_e2.log"],
             vec!["test_e_no_args2.log.expected"],
             0,
         ),
         (
             "-e",
-            vec!["test_e_no_args3.log"],
+            vec!["test_e3.log"],
             vec!["test_e_no_args3.log.expected"],
             0,
         ),
@@ -708,11 +708,55 @@ fn test_simple_expand_tab() {
 
 #[test]
 fn test_simple_expand_tab_with_digit_argument() {
-    // new_ucmd!().args(&["-T"]).pipe_in("a\nb\n").succeeds();
-    // new_ucmd!()
-    //     .args(&["--omit-pagination"])
-    //     .pipe_in("a\nb\n")
-    //     .succeeds();
+    let test_cases = vec![
+        (
+            "-e",
+            vec!["test_e1.log"],
+            vec!["test_e_no_args1.log.expected"],
+            0,
+        ),
+        (
+            "-e",
+            vec!["test_e2.log"],
+            vec!["test_e_no_args2.log.expected"],
+            0,
+        ),
+        (
+            "-e",
+            vec!["test_e3.log"],
+            vec!["test_e_no_args3.log.expected"],
+            0,
+        ),
+    ];
+    for test_case in test_cases {
+        let (flags, input_file, expected_file, return_code) = test_case;
+        let mut scenario = new_ucmd!();
+        let input_file_path = input_file.first().unwrap();
+        let test_file_path = expected_file.first().unwrap();
+        let value = file_last_modified_time(&scenario, input_file_path);
+        let mut arguments: Vec<&str> = flags
+            .split(' ')
+            .filter(|i| i.trim() != "")
+            .collect::<Vec<&str>>();
+
+        arguments.extend(input_file.clone());
+
+        let scenario_with_args = scenario.args(&arguments);
+
+        let scenario_with_expected_status = if return_code == 0 {
+            scenario_with_args.succeeds()
+        } else {
+            scenario_with_args.fails()
+        };
+
+        scenario_with_expected_status.stdout_is_templated_fixture(
+            test_file_path,
+            &[
+                ("{last_modified_time}", &value),
+                ("{file_name}", input_file_path),
+            ],
+        );
+    }
 }
 
 #[test]
@@ -771,13 +815,7 @@ fn test_invalid_expand_tab_arguments() {
 #[test]
 fn test_expand_tab_does_not_consume_next_argument() {
     let test_file_path = "empty_test_file";
-    new_ucmd!()
-        .args(&["-e", test_file_path])
-        .succeeds();
-    new_ucmd!()
-        .args(&["-ea", test_file_path])
-        .succeeds();
-    new_ucmd!()
-        .args(&["-ea1", test_file_path])
-        .succeeds();
+    new_ucmd!().args(&["-e", test_file_path]).succeeds();
+    new_ucmd!().args(&["-ea", test_file_path]).succeeds();
+    new_ucmd!().args(&["-ea1", test_file_path]).succeeds();
 }

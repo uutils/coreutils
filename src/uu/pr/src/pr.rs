@@ -897,7 +897,7 @@ fn split_lines_if_form_feed(
                     match expand_options {
                         Some(expand_options) => {
                             if *byte == expand_options.input_char as u8 {
-                                let mut spaces_needed = expand_options.width as usize
+                                let spaces_needed = expand_options.width as usize
                                     - (chunk.len() % expand_options.width as usize);
                                 chunk.resize(chunk.len() + spaces_needed, b' ');
                             } else {
