@@ -184,6 +184,7 @@ inacc
 maint
 proc
 procs
+TOCTOU
 
 # * constants
 xffff
