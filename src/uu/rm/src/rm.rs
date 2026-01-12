@@ -207,10 +207,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // manually parse all args to verify --no-preserve-root did not get abbreviated (clap does
     // allow this)
-    if matches.get_flag(OPT_NO_PRESERVE_ROOT) {
-        if !args.iter().any(|arg| arg == "--no-preserve-root") {
-            return Err(RmError::MayNotAbbreviateNoPreserveRoot.into());
-        }
+    if matches.get_flag(OPT_NO_PRESERVE_ROOT) && !args.iter().any(|arg| arg == "--no-preserve-root")
+    {
+        return Err(RmError::MayNotAbbreviateNoPreserveRoot.into());
     }
 
     let files: Vec<_> = matches
