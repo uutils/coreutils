@@ -653,7 +653,7 @@ fn test_comm_eintr_handling() {
 fn test_output_lossy_utf8() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    
+
     // Create files with invalid UTF-8
     // A: \xfe\n\xff\n
     // B: \xff\n\xfe\n
@@ -665,7 +665,7 @@ fn test_output_lossy_utf8() {
     // \t\t\xff\n (col 3)
     // \t\xfe\n (col 2)
     // Hex: fe 0a 09 09 ff 0a 09 fe 0a
-    
+
     scene
         .ucmd()
         .args(&["a", "b"])

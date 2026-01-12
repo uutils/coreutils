@@ -236,7 +236,9 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
                     break;
                 }
                 if !opts.get_flag(options::COLUMN_1) {
-                    stdout.write_all(ra).map_err_context(|| "write error".to_string())?;
+                    stdout
+                        .write_all(ra)
+                        .map_err_context(|| "write error".to_string())?;
                 }
                 ra.clear();
                 na = a.read_line(ra);
@@ -247,8 +249,12 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
                     break;
                 }
                 if !opts.get_flag(options::COLUMN_2) {
-                    stdout.write_all(delim_col_2.as_bytes()).map_err_context(|| "write error".to_string())?;
-                    stdout.write_all(rb).map_err_context(|| "write error".to_string())?;
+                    stdout
+                        .write_all(delim_col_2.as_bytes())
+                        .map_err_context(|| "write error".to_string())?;
+                    stdout
+                        .write_all(rb)
+                        .map_err_context(|| "write error".to_string())?;
                 }
                 rb.clear();
                 nb = b.read_line(rb);
@@ -260,8 +266,12 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
                     break;
                 }
                 if !opts.get_flag(options::COLUMN_3) {
-                    stdout.write_all(delim_col_3.as_bytes()).map_err_context(|| "write error".to_string())?;
-                    stdout.write_all(ra).map_err_context(|| "write error".to_string())?;
+                    stdout
+                        .write_all(delim_col_3.as_bytes())
+                        .map_err_context(|| "write error".to_string())?;
+                    stdout
+                        .write_all(ra)
+                        .map_err_context(|| "write error".to_string())?;
                 }
                 ra.clear();
                 rb.clear();
