@@ -427,7 +427,3 @@ mod test_whoami;
 #[cfg(feature = "yes")]
 #[path = "by-util/test_yes.rs"]
 mod test_yes;
-
-#[cfg(feature = "stty")]
-#[path = "by-util/test_flags.rs"]
-mod test_flags;
