@@ -90,7 +90,7 @@ cd -
 export CARGOFLAGS # tell to make
 if [ "${SELINUX_ENABLED}" = 1 ];then
     # Build few utils for SELinux for faster build. MULTICALL=y fails...
-    make UTILS="cat chcon chmod cp cut dd echo env groups id install ln ls mkdir mkfifo mknod mktemp mv printf rm rmdir runcon seq stat test touch tr true uname wc whoami"
+    "${MAKE}" UTILS="cat chcon chmod cp cut dd echo env groups id install ln ls mkdir mkfifo mknod mktemp mv printf realpath rm rmdir runcon seq stat test touch tr true uname wc whoami"
 else
     # Use MULTICALL=y for faster build
     make MULTICALL=y SKIP_UTILS=more
