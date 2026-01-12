@@ -54,8 +54,6 @@ fn utf8_char_width(byte: u8) -> Option<usize> {
     None
 }
 
-
-
 /// Decode a UTF-8 character starting at `start`, returning the char and bytes consumed.
 fn decode_char(bytes: &[u8], start: usize) -> (Option<char>, usize) {
     let Some(&first) = bytes.get(start) else {
