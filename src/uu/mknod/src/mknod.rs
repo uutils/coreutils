@@ -143,8 +143,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let dev = match (
         file_type,
-        matches.get_one::<u64>(options::MAJOR),
-        matches.get_one::<u64>(options::MINOR),
+        matches.get_one::<u32>(options::MAJOR),
+        matches.get_one::<u32>(options::MINOR),
     ) {
         (FileType::Fifo, None, None) => 0,
         (FileType::Fifo, _, _) => {
@@ -208,13 +208,13 @@ pub fn uu_app() -> Command {
             Arg::new(options::MAJOR)
                 .value_name(options::MAJOR)
                 .help(translate!("mknod-help-major"))
-                .value_parser(value_parser!(u64)),
+                .value_parser(value_parser!(u32)),
         )
         .arg(
             Arg::new(options::MINOR)
                 .value_name(options::MINOR)
                 .help(translate!("mknod-help-minor"))
-                .value_parser(value_parser!(u64)),
+                .value_parser(value_parser!(u32)),
         )
         .arg(
             Arg::new(options::SECURITY_CONTEXT)
