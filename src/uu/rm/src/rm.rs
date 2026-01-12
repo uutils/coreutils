@@ -205,13 +205,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_ignore();
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args.iter())?;
 
-    // manually parse all args to verify --no-preserve-root did not get abbreviated (clap does
-    // allow this)
-    if matches.get_flag(OPT_NO_PRESERVE_ROOT) && !args.iter().any(|arg| arg == "--no-preserve-root")
-    {
-        return Err(RmError::MayNotAbbreviateNoPreserveRoot.into());
-    }
-
     let files: Vec<_> = matches
         .get_many::<OsString>(ARG_FILES)
         .map(|v| v.map(OsString::as_os_str).collect())
@@ -263,6 +256,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             None
         },
     };
+
+    // manually parse all args to verify --no-preserve-root did not get abbreviated (clap does
+    // allow this)
+    if !options.preserve_root && !args.iter().any(|arg| arg == "--no-preserve-root") {
+        return Err(RmError::MayNotAbbreviateNoPreserveRoot.into());
+    }
+
     if options.interactive == InteractiveMode::Once && (options.recursive || files.len() > 3) {
         let msg: String = format!(
             "remove {} {}{}",
