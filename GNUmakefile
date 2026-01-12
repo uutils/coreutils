@@ -45,11 +45,12 @@ INSTALLDIR_BIN=$(DESTDIR)$(BINDIR)
 BASEDIR       ?= $(shell pwd)
 ifdef CARGO_TARGET_DIR
 BUILDDIR 	  := $(CARGO_TARGET_DIR)/${PROFILE}
+BUILDDIR_UUDOC := $(CARGO_TARGET_DIR)/${PROFILE}
 else
 BUILDDIR      := $(BASEDIR)/target/$(CARGO_BUILD_TARGET)/${PROFILE}
-endif
 # uudoc should not be cross build
 BUILDDIR_UUDOC := $(BASEDIR)/target/$(PROFILE)
+endif
 PKG_BUILDDIR  := $(BUILDDIR)/deps
 DOCSDIR       := $(BASEDIR)/docs
 
