@@ -1155,21 +1155,61 @@ fn test_invalid_num() {
         .fails()
         .stderr_str()
         .starts_with("tail: invalid number of lines: '1024R'");
+    // 1Y overflows to u64::MAX (like GNU tail 9.9.x), so it succeeds
     new_ucmd!()
-        .args(&["-c", "1Y", "emptyfile.txt"])
-        .fails()
-        .stderr_str()
-        .starts_with("tail: invalid number of bytes: '1Y': Value too large for defined data type");
+        .args(&["-c", "1Y"])
+        .pipe_in("x")
+        .succeeds()
+        .stdout_is("x");
     new_ucmd!()
-        .args(&["-n", "1Y", "emptyfile.txt"])
-        .fails()
-        .stderr_str()
-        .starts_with("tail: invalid number of lines: '1Y': Value too large for defined data type");
+        .args(&["-n", "1Y"])
+        .pipe_in("x\n")
+        .succeeds()
+        .stdout_is("x\n");
     new_ucmd!()
         .args(&["-c", "-³"])
         .fails()
         .stderr_str()
         .starts_with("tail: invalid number of bytes: '³'");
+}
+
+#[test]
+fn test_oversized_num() {
+    const BIG: &str = "99999999999999999999999999999";
+    const DATA: &str = "abcd";
+    // -c <big> and -n <big>: output all (request more than available)
+    new_ucmd!()
+        .args(&["-c", BIG])
+        .pipe_in(DATA)
+        .succeeds()
+        .stdout_is(DATA);
+    new_ucmd!()
+        .args(&["-n", BIG])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_is("a\nb\n");
+    // +<big>: skip beyond input (empty output)
+    new_ucmd!()
+        .args(&["-c", &format!("+{BIG}")])
+        .pipe_in(DATA)
+        .succeeds()
+        .no_stdout();
+    new_ucmd!()
+        .args(&["-n", &format!("+{BIG}")])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .no_stdout();
+    // Obsolete syntax
+    new_ucmd!()
+        .arg(format!("+{BIG}c"))
+        .pipe_in(DATA)
+        .succeeds()
+        .no_stdout();
+    new_ucmd!()
+        .arg(format!("-{BIG}c"))
+        .pipe_in(DATA)
+        .succeeds()
+        .stdout_is(DATA);
 }
 
 #[test]
@@ -4767,13 +4807,13 @@ fn test_gnu_args_err() {
         .fails_with_code(1)
         .no_stdout()
         .stderr_is("tail: option used in invalid context -- 2\n");
-    // err-5
+    // err-5: large numbers now clamp to u64::MAX
     scene
         .ucmd()
         .arg("-c99999999999999999999")
-        .fails_with_code(1)
-        .no_stdout()
-        .stderr_is("tail: invalid number of bytes: '99999999999999999999'\n");
+        .pipe_in("x")
+        .succeeds()
+        .stdout_is("x");
     // err-6
     scene
         .ucmd()
@@ -4787,20 +4827,19 @@ fn test_gnu_args_err() {
         .fails_with_code(1)
         .no_stdout()
         .stderr_is("tail: option used in invalid context -- 5\n");
+    // Large obsolete-syntax numbers clamp to u64::MAX
     scene
         .ucmd()
         .arg("-9999999999999999999b")
-        .fails_with_code(1)
-        .no_stdout()
-        .stderr_is("tail: invalid number: '-9999999999999999999b'\n");
+        .pipe_in("x")
+        .succeeds()
+        .stdout_is("x");
     scene
         .ucmd()
         .arg("-999999999999999999999b")
-        .fails_with_code(1)
-        .no_stdout()
-        .stderr_is(
-            "tail: invalid number: '-999999999999999999999b': Numerical result out of range\n",
-        );
+        .pipe_in("x")
+        .succeeds()
+        .stdout_is("x");
 }
 
 #[test]
@@ -4999,4 +5038,30 @@ fn tail_n_lines_with_emoji() {
         .pipe_in("a\n💐\n")
         .succeeds()
         .stdout_only("💐\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_follow_pipe_f() {
+    new_ucmd!()
+        .args(&["-f", "-c3", "-s.1", "--max-unchanged-stats=1"])
+        .pipe_in("foo\n")
+        .succeeds()
+        .stdout_only("oo\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_follow_stdout_pipe_close() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "line1\nline2\n");
+
+    let mut child = ucmd
+        .args(&["-f", "-s.1", "--max-unchanged-stats=1", "f"])
+        .set_stdout(Stdio::piped())
+        .run_no_wait();
+
+    child.stdout_exact_bytes(6); // read "line1\n"
+    child.close_stdout();
+    child.delay(2000).make_assertion().is_not_alive();
 }

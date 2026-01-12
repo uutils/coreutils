@@ -184,7 +184,9 @@ also provides a `-v`/`--verbose` flag.
 
 ## `uptime`
 
-Similar to the proc-ps implementation and unlike GNU/Coreutils, `uptime` provides `-s`/`--since` to show since when the system is up.
+Similar to the proc-ps implementation and unlike GNU/Coreutils, `uptime` provides:
+ * `-s`/`--since` to show since when the system is up
+ * `-p`/`--pretty` to display uptime in a pretty-printed format
 
 ## `base32/base64/basenc`
 
