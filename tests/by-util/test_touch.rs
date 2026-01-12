@@ -1055,7 +1055,9 @@ fn test_touch_non_utf8_paths() {
 
 #[test]
 #[cfg(target_os = "linux")]
-fn test_touch_dev_full() {
+fn test_touch_device_files() {
     let (_, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["/dev/full"]).succeeds().no_output();
+    ucmd.args(&["/dev/null", "/dev/zero", "/dev/full", "/dev/random"])
+        .succeeds()
+        .no_output();
 }
