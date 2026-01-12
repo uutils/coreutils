@@ -13,7 +13,7 @@ use std::ffi::OsString;
 use std::io::IsTerminal;
 use std::time::Duration;
 use uucore::error::{UResult, USimpleError, UUsageError};
-use uucore::parser::parse_signed_num::{SignPrefix, parse_signed_num};
+use uucore::parser::parse_signed_num::{SignPrefix, parse_signed_num_max};
 use uucore::parser::parse_size::ParseSizeError;
 use uucore::parser::parse_time;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
@@ -78,7 +78,7 @@ impl FilterMode {
                 Err(e) => {
                     return Err(USimpleError::new(
                         1,
-                        translate!("tail-error-invalid-number-of-bytes", "arg" => format!("'{e}'")),
+                        translate!("tail-error-invalid-number-of-bytes", "arg" => e.to_string()),
                     ));
                 }
             }
@@ -366,12 +366,6 @@ pub fn parse_obsolete(arg: &OsString, input: Option<&OsString>) -> UResult<Optio
             Err(USimpleError::new(
                 1,
                 match e {
-                    parse::ParseError::OutOfRange => {
-                        translate!("tail-error-invalid-number-out-of-range", "arg" => arg.quote())
-                    }
-                    parse::ParseError::Overflow => {
-                        translate!("tail-error-invalid-number-overflow", "arg" => arg.quote())
-                    }
                     // this ensures compatibility to GNU's error message (as tested in misc/tail)
                     parse::ParseError::Context => {
                         translate!(
@@ -389,7 +383,7 @@ pub fn parse_obsolete(arg: &OsString, input: Option<&OsString>) -> UResult<Optio
 }
 
 fn parse_num(src: &str) -> Result<Signum, ParseSizeError> {
-    let result = parse_signed_num(src)?;
+    let result = parse_signed_num_max(src)?;
     // tail: '+' means "starting from line/byte N", default/'-' means "last N"
     let is_plus = result.sign == Some(SignPrefix::Plus);
 

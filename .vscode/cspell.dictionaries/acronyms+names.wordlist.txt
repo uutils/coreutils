@@ -34,6 +34,7 @@ RISCV
 RNG # random number generator
 RNGs
 Solaris
+TOCTOU # time-of-check time-of-use
 UID # user ID
 UIDs
 UUID # universally unique identifier
