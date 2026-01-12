@@ -45,6 +45,8 @@ enum RmError {
     UseNoPreserveRoot,
     #[error("{}", translate!("rm-error-refusing-to-remove-directory", "path" => _0.quote()))]
     RefusingToRemoveDirectory(OsString),
+    #[error("{}", translate!("rm-error-may-not-abbreviate-no-preserve-root"))]
+    MayNotAbbreviateNoPreserveRoot,
 }
 
 impl UError for RmError {}
@@ -200,7 +202,16 @@ static ARG_FILES: &str = "files";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    let args = args.collect_ignore();
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args.iter())?;
+
+    // manually parse all args to verify --no-preserve-root did not get abbreviated (clap does
+    // allow this)
+    if matches.get_flag(OPT_NO_PRESERVE_ROOT) {
+        if !args.iter().any(|arg| arg == "--no-preserve-root") {
+            return Err(RmError::MayNotAbbreviateNoPreserveRoot.into());
+        }
+    }
 
     let files: Vec<_> = matches
         .get_many::<OsString>(ARG_FILES)
