@@ -123,7 +123,7 @@ submit a patch!
 ### Don't `panic!`
 
 The coreutils should be very reliable. This means that we should never `panic!`.
-Therefore, you should avoid using `.unwrap()` and `panic!`. Sometimes the use of
+Therefore, you should avoid using `println!`, `.unwrap()` and `panic!`. Sometimes the use of
 `unreachable!` can be justified with a comment explaining why that code is
 unreachable.
 
