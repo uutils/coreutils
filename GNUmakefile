@@ -42,13 +42,14 @@ INSTALLDIR_BIN=$(DESTDIR)$(BINDIR)
 
 # This won't support any directory with spaces in its name, but you can just
 # make a symlink without spaces that points to the directory.
-# CARGO_BUILD_TARGET should be undefined for native (non-cross) build.
 BASEDIR       ?= $(shell pwd)
 ifdef CARGO_TARGET_DIR
 BUILDDIR 	  := $(CARGO_TARGET_DIR)/${PROFILE}
 else
 BUILDDIR      := $(BASEDIR)/target/$(CARGO_BUILD_TARGET)/${PROFILE}
 endif
+# uudoc should not be cross build
+BUILDDIR_UUDOC := $(BASEDIR)/target/$(PROFILE)
 PKG_BUILDDIR  := $(BUILDDIR)/deps
 DOCSDIR       := $(BASEDIR)/docs
 
@@ -387,7 +388,7 @@ build-uudoc:
 install-manpages: build-uudoc
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/man/man1
 	$(foreach prog, $(INSTALLEES) $(HASHSUM_PROGS), \
-		$(BASEDIR)/target/$(PROFILE)/uudoc manpage $(prog) > $(DESTDIR)$(DATAROOTDIR)/man/man1/$(PROG_PREFIX)$(prog).1 $(newline) \
+		$(BUILDDIR_UUDOC)/uudoc manpage $(prog) > $(DESTDIR)$(DATAROOTDIR)/man/man1/$(PROG_PREFIX)$(prog).1 $(newline) \
 	)
 else
 install-manpages:
@@ -400,9 +401,9 @@ install-completions: build-uudoc
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d
 	$(foreach prog, $(INSTALLEES) $(HASHSUM_PROGS) , \
-		$(BASEDIR)/target/$(PROFILE)/uudoc completion $(prog) zsh > $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions/_$(PROG_PREFIX)$(prog) $(newline) \
-		$(BASEDIR)/target/$(PROFILE)/uudoc completion $(prog) bash > $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/$(PROG_PREFIX)$(prog).bash $(newline) \
-		$(BASEDIR)/target/$(PROFILE)/uudoc completion $(prog) fish > $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/$(PROG_PREFIX)$(prog).fish $(newline) \
+		$(BUILDDIR_UUDOC)/uudoc completion $(prog) zsh > $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions/_$(PROG_PREFIX)$(prog) $(newline) \
+		$(BUILDDIR_UUDOC)/uudoc completion $(prog) bash > $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/$(PROG_PREFIX)$(prog).bash $(newline) \
+		$(BUILDDIR_UUDOC)/uudoc completion $(prog) fish > $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/$(PROG_PREFIX)$(prog).fish $(newline) \
 	)
 else
 install-completions:
