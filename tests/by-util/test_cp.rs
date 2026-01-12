@@ -7508,3 +7508,59 @@ fn test_cp_to_existing_file_permissions() {
     let new_dst_mode = std::fs::metadata(&dst_path).unwrap().permissions().mode();
     assert_eq!(dst_mode, new_dst_mode);
 }
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_cp_a_z_overrides_context() {
+    use std::path::Path;
+    use uucore::selinux::{get_selinux_security_context, set_selinux_security_context};
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("src");
+
+    let ctx = "unconfined_u:object_r:user_tmp_t:s0".to_string();
+    if set_selinux_security_context(Path::new(&at.plus_as_string("src")), Some(&ctx)).is_err() {
+        return;
+    }
+
+    let src_ctx =
+        get_selinux_security_context(Path::new(&at.plus_as_string("src")), false).unwrap();
+    ucmd.args(&["-aZ", "src", "dst"]).succeeds();
+    let dst_ctx =
+        get_selinux_security_context(Path::new(&at.plus_as_string("dst")), false).unwrap();
+
+    assert_ne!(src_ctx, dst_ctx, "-aZ should override context from -a");
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_cp_a_preserves_context() {
+    use std::path::Path;
+    use uucore::selinux::{get_selinux_security_context, set_selinux_security_context};
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("src");
+
+    let ctx = "unconfined_u:object_r:user_tmp_t:s0".to_string();
+    if set_selinux_security_context(Path::new(&at.plus_as_string("src")), Some(&ctx)).is_err() {
+        return;
+    }
+
+    let src_ctx =
+        get_selinux_security_context(Path::new(&at.plus_as_string("src")), false).unwrap();
+    ucmd.args(&["-a", "src", "dst"]).succeeds();
+    let dst_ctx =
+        get_selinux_security_context(Path::new(&at.plus_as_string("dst")), false).unwrap();
+
+    assert_eq!(src_ctx, dst_ctx, "-a should preserve SELinux context");
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_cp_preserve_context_with_z_fails() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("src");
+    ucmd.args(&["--preserve=context", "-Z", "src", "dst"])
+        .fails()
+        .stderr_contains("cannot combine");
+}

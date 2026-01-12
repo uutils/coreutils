@@ -30,6 +30,9 @@ pub enum SeLinuxError {
 
     #[error("{}", translate!("selinux-error-context-conversion-failure", "context" => .0.clone(), "error" => .1.clone()))]
     ContextConversionFailure(String, String),
+
+    #[error("{}", translate!("selinux-error-operation-not-supported"))]
+    OperationNotSupported,
 }
 
 impl UError for SeLinuxError {
@@ -40,6 +43,7 @@ impl UError for SeLinuxError {
             Self::ContextRetrievalFailure(_) => 3,
             Self::ContextSetFailure(_, _) => 4,
             Self::ContextConversionFailure(_, _) => 5,
+            Self::OperationNotSupported => 6,
         }
     }
 }
@@ -154,13 +158,23 @@ pub fn set_selinux_security_context(
             false,
         )
         .set_for_path(path, false, false)
-        .map_err(|e| {
-            SeLinuxError::ContextSetFailure(ctx_str.to_owned(), selinux_error_description(&e))
+        .map_err(|e| match &e {
+            selinux::errors::Error::IO1Path { source, .. }
+                if source.raw_os_error() == Some(libc::ENOTSUP) =>
+            {
+                SeLinuxError::OperationNotSupported
+            }
+            _ => SeLinuxError::ContextSetFailure(ctx_str.to_owned(), selinux_error_description(&e)),
         })
     } else {
         // If no context provided, set the default SELinux context for the path
-        SecurityContext::set_default_for_path(path).map_err(|e| {
-            SeLinuxError::ContextSetFailure(String::new(), selinux_error_description(&e))
+        SecurityContext::set_default_for_path(path).map_err(|e| match &e {
+            selinux::errors::Error::IO1Path { source, .. }
+                if source.raw_os_error() == Some(libc::ENOTSUP) =>
+            {
+                SeLinuxError::OperationNotSupported
+            }
+            _ => SeLinuxError::ContextSetFailure(String::new(), selinux_error_description(&e)),
         })
     }
 }
@@ -531,6 +545,9 @@ mod tests {
                     Path::new(path).exists(),
                     "File open failure occurred despite file being created: {e}"
                 );
+            }
+            Err(e @ SeLinuxError::OperationNotSupported) => {
+                println!("{e}");
             }
         }
     }
