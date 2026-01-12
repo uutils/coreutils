@@ -1,22 +1,22 @@
 cksum-about = Print checksum and size for each file
-cksum-usage = cksum (multicall-binary for *sum) [OPTIONS] [FILE]...
+cksum-usage = cksum (multicall-binary for {md5,b2,sha*}sum) [OPTIONS] [FILE]...
 cksum-after-help = DIGEST determines the digest algorithm and default output format:
 
   - sysv: (equivalent to sum -s)
   - bsd: (equivalent to sum -r)
-  - crc: (default if binary name is cksum)
+  - crc: (equivalent to cksum)
   - crc32b: (only available through cksum)
-  - md5: (binary name : md5sum)
-  - sha1: (binary name : sha1sum)
-  - sha2: (binary name : sha{"{224,256,384,512}"}sum)
+  - md5: (equivalent to md5sum)
+  - sha1: (equivalent to sha1sum)
+  - sha2: (equivalent to sha{"{224,256,384,512}"}sum)
   - sha3: (only available through cksum)
-  - blake2b: (binary name : b2sum)
+  - blake2b: (equivalent to b2sum)
   - sm3: (only available through cksum)
 
 # Help messages
 cksum-help-algorithm = select the digest type to use. See DIGEST below
 cksum-help-untagged = create a reversed style checksum, without digest type
-cksum-help-tag = create a BSD style checksum (default if binary name is cksum)
+cksum-help-tag = create a BSD style checksum (default of cksum)
 cksum-help-length = digest length in bits; must not exceed the max for the blake2 algorithm and must be a multiple of 8
 cksum-help-raw = emit a raw binary digest, not hexadecimal
 cksum-help-strict = exit non-zero for improperly formatted checksum lines
