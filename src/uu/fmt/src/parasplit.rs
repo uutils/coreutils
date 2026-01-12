@@ -28,14 +28,33 @@ fn char_width(c: char) -> usize {
 
 /// Return the UTF-8 sequence length implied by a leading byte, or `None` if invalid.
 fn utf8_char_width(byte: u8) -> Option<usize> {
-    match byte {
-        0x00..=0x7F => Some(1),
-        0xC2..=0xDF => Some(2),
-        0xE0..=0xEF => Some(3),
-        0xF0..=0xF4 => Some(4),
-        _ => None,
+    // UTF-8 leading-byte ranges per Unicode Standard, Ch. 3, Table 3-7 and RFC 3629.
+    // 00..7F => 1 byte; C2..DF => 2 bytes; E0..EF => 3 bytes; F0..F4 => 4 bytes.
+    // Disallowed bytes include C0..C1 and F5..FF.
+    const ASCII_MAX: u8 = 0x7F;
+    const TWO_BYTE_START: u8 = 0xC2;
+    const TWO_BYTE_END: u8 = 0xDF;
+    const THREE_BYTE_START: u8 = 0xE0;
+    const THREE_BYTE_END: u8 = 0xEF;
+    const FOUR_BYTE_START: u8 = 0xF0;
+    const FOUR_BYTE_END: u8 = 0xF4; // up to U+10FFFF
+
+    if byte <= ASCII_MAX {
+        return Some(1);
     }
+    if (TWO_BYTE_START..=TWO_BYTE_END).contains(&byte) {
+        return Some(2);
+    }
+    if (THREE_BYTE_START..=THREE_BYTE_END).contains(&byte) {
+        return Some(3);
+    }
+    if (FOUR_BYTE_START..=FOUR_BYTE_END).contains(&byte) {
+        return Some(4);
+    }
+    None
 }
+
+
 
 /// Decode a UTF-8 character starting at `start`, returning the char and bytes consumed.
 fn decode_char(bytes: &[u8], start: usize) -> (Option<char>, usize) {
