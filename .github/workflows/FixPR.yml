@@ -46,7 +46,7 @@ jobs:
         # Ensure updated '*/Cargo.lock'
         # * '*/Cargo.lock' is required to be in a format that `cargo` of MinSRV can interpret (eg, v1-format for MinSRV < v1.38)
         for dir in "." "fuzz"; do
-          ( cd "$dir" && (cargo fetch --locked --quiet || cargo +${{ steps.vars.outputs.RUST_MIN_SRV }} update) )
+          ( cd "$dir" && (cargo fetch --locked --quiet --target $(rustc --print host-tuple) || cargo +${{ steps.vars.outputs.RUST_MIN_SRV }} update) )
         done
     - name: Info
       shell: bash
@@ -65,7 +65,7 @@ jobs:
         cargo tree -V
         ## dependencies
         echo "## dependency list"
-        cargo fetch --locked --quiet
+        cargo fetch --locked --quiet --target $(rustc --print host-tuple)
         ## * using the 'stable' toolchain is necessary to avoid "unexpected '--filter-platform'" errors
         RUSTUP_TOOLCHAIN=stable cargo tree --locked --no-dedupe -e=no-dev --prefix=none --features ${{ matrix.job.features }} | grep -vE "$PWD" | sort --unique
     - name: Commit any changes (to '${{ env.BRANCH_TARGET }}')

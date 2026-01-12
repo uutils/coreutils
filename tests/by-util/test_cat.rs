@@ -833,6 +833,37 @@ fn test_child_when_pipe_in() {
     ts.ucmd().pipe_in("content").run().stdout_is("content");
 }
 
+/// Regression test for GitHub issue #9769
+/// https://github.com/uutils/coreutils/issues/9769
+///
+/// Bug: Utilities panic when output is redirected to /dev/full
+/// Location: src/uucore/src/lib/mods/error.rs:751 - `.unwrap()` causes panic
+///
+/// This test verifies that cat handles write errors to /dev/full gracefully
+/// instead of panicking with exit code 134 (SIGABRT).
+///
+/// Expected behavior with current BUGGY code:
+/// - Test WILL FAIL (cat panics with exit code 134)
+///
+/// Expected behavior after fix:
+/// - Test SHOULD PASS (cat exits gracefully with error code 1)
+// Regression test for issue #9769: graceful error handling when writing to /dev/full
+#[test]
+#[cfg(target_os = "linux")]
+fn test_write_error_handling() {
+    use std::fs::File;
+
+    let dev_full =
+        File::create("/dev/full").expect("Failed to open /dev/full - test must run on Linux");
+
+    new_ucmd!()
+        .pipe_in("test content that should cause write error to /dev/full")
+        .set_stdout(dev_full)
+        .fails()
+        .code_is(1)
+        .stderr_contains("No space left on device");
+}
+
 #[test]
 fn test_cat_eintr_handling() {
     // Test that cat properly handles EINTR (ErrorKind::Interrupted) during I/O operations

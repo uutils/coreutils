@@ -27,7 +27,7 @@ mod options {
     pub const PARENTS: &str = "parents";
     pub const VERBOSE: &str = "verbose";
     pub const DIRS: &str = "dirs";
-    pub const SELINUX: &str = "z";
+    pub const SECURITY_CONTEXT: &str = "z";
     pub const CONTEXT: &str = "context";
 }
 
@@ -42,8 +42,8 @@ pub struct Config<'a> {
     /// Print message for each created directory.
     pub verbose: bool,
 
-    /// Set `SELinux` security context.
-    pub set_selinux_context: bool,
+    /// Set security context (SELinux/SMACK).
+    pub set_security_context: bool,
 
     /// Specific `SELinux` context.
     pub context: Option<&'a String>,
@@ -79,7 +79,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let recursive = matches.get_flag(options::PARENTS);
 
     // Extract the SELinux related flags and options
-    let set_selinux_context = matches.get_flag(options::SELINUX);
+    let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
     let context = matches.get_one::<String>(options::CONTEXT);
 
     match get_mode(&matches) {
@@ -88,7 +88,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 recursive,
                 mode,
                 verbose,
-                set_selinux_context: set_selinux_context || context.is_some(),
+                set_security_context: set_security_context || context.is_some(),
                 context,
             };
             exec(dirs, &config)
@@ -129,7 +129,7 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(options::SELINUX)
+            Arg::new(options::SECURITY_CONTEXT)
                 .short('Z')
                 .help(translate!("mkdir-help-selinux"))
                 .action(ArgAction::SetTrue),
@@ -292,7 +292,7 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
 
             // Apply SELinux context if requested
             #[cfg(feature = "selinux")]
-            if config.set_selinux_context && uucore::selinux::is_selinux_enabled() {
+            if config.set_security_context && uucore::selinux::is_selinux_enabled() {
                 if let Err(e) = uucore::selinux::set_selinux_security_context(path, config.context)
                 {
                     let _ = std::fs::remove_dir(path);
@@ -300,6 +300,13 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
                 }
             }
 
+            // Apply SMACK context if requested
+            #[cfg(feature = "smack")]
+            if config.set_security_context {
+                uucore::smack::set_smack_label_and_cleanup(path, config.context, |p| {
+                    std::fs::remove_dir(p)
+                })?;
+            }
             Ok(())
         }
 

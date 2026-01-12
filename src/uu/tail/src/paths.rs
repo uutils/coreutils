@@ -179,10 +179,10 @@ impl MetadataExtTail for Metadata {
         Ok(other.len() < self.len() && other.modified()? != self.modified()?)
     }
 
-    fn file_id_eq(&self, _other: &Metadata) -> bool {
+    fn file_id_eq(&self, #[cfg(unix)] other: &Metadata, #[cfg(not(unix))] _: &Metadata) -> bool {
         #[cfg(unix)]
         {
-            self.ino().eq(&_other.ino())
+            self.ino().eq(&other.ino())
         }
         #[cfg(windows)]
         {

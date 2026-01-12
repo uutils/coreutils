@@ -195,13 +195,10 @@ fn current_tty() -> String {
 impl Who {
     #[allow(clippy::cognitive_complexity)]
     fn exec(&mut self) -> UResult<()> {
-        let run_level_chk = |_record: i16| {
-            #[cfg(not(target_os = "linux"))]
-            return false;
-
-            #[cfg(target_os = "linux")]
-            return _record == utmpx::RUN_LVL;
-        };
+        #[cfg(target_os = "linux")]
+        let run_level_chk = |record: i16| record == utmpx::RUN_LVL;
+        #[cfg(not(target_os = "linux"))]
+        let run_level_chk = |_| false;
 
         let f = if self.args.len() == 1 {
             self.args[0].as_ref()

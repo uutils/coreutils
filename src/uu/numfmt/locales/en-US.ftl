@@ -47,6 +47,7 @@ numfmt-help-padding = pad the output to N characters; positive N will right-alig
 numfmt-help-header = print (without converting) the first N header lines; N defaults to 1 if not specified
 numfmt-help-round = use METHOD for rounding when scaling
 numfmt-help-suffix = print SUFFIX after each formatted number, and accept inputs optionally ending with SUFFIX
+numfmt-help-unit-separator = use STRING to separate the number from any unit when printing; by default, no separator is used
 numfmt-help-invalid = set the failure mode for invalid input
 numfmt-help-zero-terminated = line delimiter is NUL, not newline
 
