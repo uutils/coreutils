@@ -8,7 +8,7 @@
 use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::fs::{File, metadata};
-use std::io::{self, BufRead, BufReader, Read, StdinLock, stdin};
+use std::io::{self, BufRead, BufReader, Read, StdinLock, Write, stdin};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
@@ -186,6 +186,8 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
     let delim_col_2 = delim.repeat(width_col_1);
     let delim_col_3 = delim.repeat(width_col_1 + width_col_2);
 
+    let mut stdout = io::stdout().lock();
+
     let ra = &mut Vec::new();
     let mut na = a.read_line(ra);
     let rb = &mut Vec::new();
@@ -234,7 +236,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
                     break;
                 }
                 if !opts.get_flag(options::COLUMN_1) {
-                    print!("{}", String::from_utf8_lossy(ra));
+                    stdout.write_all(ra).map_err_context(|| "write error".to_string())?;
                 }
                 ra.clear();
                 na = a.read_line(ra);
@@ -245,7 +247,8 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
                     break;
                 }
                 if !opts.get_flag(options::COLUMN_2) {
-                    print!("{delim_col_2}{}", String::from_utf8_lossy(rb));
+                    stdout.write_all(delim_col_2.as_bytes()).map_err_context(|| "write error".to_string())?;
+                    stdout.write_all(rb).map_err_context(|| "write error".to_string())?;
                 }
                 rb.clear();
                 nb = b.read_line(rb);
@@ -257,7 +260,8 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
                     break;
                 }
                 if !opts.get_flag(options::COLUMN_3) {
-                    print!("{delim_col_3}{}", String::from_utf8_lossy(ra));
+                    stdout.write_all(delim_col_3.as_bytes()).map_err_context(|| "write error".to_string())?;
+                    stdout.write_all(ra).map_err_context(|| "write error".to_string())?;
                 }
                 ra.clear();
                 rb.clear();
@@ -275,10 +279,12 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
 
     if opts.get_flag(options::TOTAL) {
         let line_ending = LineEnding::from_zero_flag(opts.get_flag(options::ZERO_TERMINATED));
-        print!(
+        write!(
+            stdout,
             "{total_col_1}{delim}{total_col_2}{delim}{total_col_3}{delim}{}{line_ending}",
             translate!("comm-total")
-        );
+        )
+        .map_err_context(|| "write error".to_string())?;
     }
 
     if should_check_order && (checker1.has_error || checker2.has_error) {

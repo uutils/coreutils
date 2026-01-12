@@ -648,3 +648,27 @@ fn test_comm_eintr_handling() {
         .stdout_contains("line2")
         .stdout_contains("line3");
 }
+
+#[test]
+fn test_output_lossy_utf8() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    
+    // Create files with invalid UTF-8
+    // A: \xfe\n\xff\n
+    // B: \xff\n\xfe\n
+    at.write_bytes("a", b"\xfe\n\xff\n");
+    at.write_bytes("b", b"\xff\n\xfe\n");
+
+    // GNU comm output (and uutils with fix):
+    // \xfe\n (col 1)
+    // \t\t\xff\n (col 3)
+    // \t\xfe\n (col 2)
+    // Hex: fe 0a 09 09 ff 0a 09 fe 0a
+    
+    scene
+        .ucmd()
+        .args(&["a", "b"])
+        .fails() // Fails because of unsorted input
+        .stdout_is_bytes(b"\xfe\n\t\t\xff\n\t\xfe\n");
+}
