@@ -45,12 +45,25 @@ pub(crate) enum FsError {
     MountMissing,
 }
 
+// spell-checker:ignore (fs) autofs binfmt
+
 /// Check whether `mount` has been over-mounted.
 ///
-/// `mount` is considered over-mounted if it there is an element in
-/// `mounts` after mount that has the same `mount_dir`.
+/// `mount` is considered over-mounted if there is a later element in
+/// `mounts` that has the same `mount_dir` and a different `dev_name`.
+///
+/// Special case: autofs mounts are NOT considered over-mounted even if
+/// there's a different filesystem at the same path, because autofs acts
+/// as a trigger that mounts other filesystems. Both the autofs entry and
+/// the triggered mount (e.g., binfmt_misc) should be shown.
 #[cfg(not(windows))]
 fn is_over_mounted(mounts: &[MountInfo], mount: &MountInfo) -> bool {
+    // autofs mounts are never considered over-mounted - they coexist with
+    // the filesystems they trigger (e.g., systemd-1 autofs + binfmt_misc)
+    if mount.fs_type == "autofs" {
+        return false;
+    }
+
     let last_mount_for_dir = mounts.iter().rfind(|m| m.mount_dir == mount.mount_dir);
 
     if let Some(lmi) = last_mount_for_dir {
@@ -353,6 +366,33 @@ mod tests {
             assert_eq!(
                 Filesystem::from_mount(&mounts, &mounts[0], None).unwrap_err(),
                 FsError::OverMounted
+            );
+        }
+
+        /// Test for issue #9952: autofs mounts should NOT be considered over-mounted
+        /// even when there's a different filesystem at the same path.
+        /// autofs acts as a trigger that mounts other filesystems (like binfmt_misc),
+        /// and both should be shown in df --all output.
+        #[test]
+        fn test_autofs_not_over_mounted() {
+            // Simulates: systemd-1 (autofs) and binfmt_misc at /proc/sys/fs/binfmt_misc
+            let mut mount_info1 =
+                mount_info_with_dev_name("/proc/sys/fs/binfmt_misc", Some("systemd-1"));
+            mount_info1.fs_type = "autofs".to_string();
+            let mut mount_info2 =
+                mount_info_with_dev_name("/proc/sys/fs/binfmt_misc", Some("binfmt_misc"));
+            mount_info2.fs_type = "binfmt_misc".to_string();
+            let mounts = [mount_info1, mount_info2];
+
+            // autofs mount should NOT be considered over-mounted
+            assert!(
+                !is_over_mounted(&mounts, &mounts[0]),
+                "autofs mount should not be considered over-mounted"
+            );
+            // And neither should the second one (it's the last at this path)
+            assert!(
+                !is_over_mounted(&mounts, &mounts[1]),
+                "Last mount at path should not be considered over-mounted"
             );
         }
     }
