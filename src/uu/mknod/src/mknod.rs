@@ -15,7 +15,8 @@ use uucore::format_usage;
 use uucore::fs::makedev;
 use uucore::translate;
 
-const MODE_RW_UGO: u32 = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
+const MODE_RW_UGO: u32 =
+    (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
 
 mod options {
     pub const MODE: &str = "mode";
