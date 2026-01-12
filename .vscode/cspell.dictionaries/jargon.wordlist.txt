@@ -224,3 +224,4 @@ ENOTSUP
 enotsup
 SETFL
 tmpfs
+ENOTSUP
