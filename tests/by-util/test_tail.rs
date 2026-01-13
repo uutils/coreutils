@@ -296,6 +296,58 @@ fn test_permission_denied_multiple() {
         .stdout_is("==> file1 <==\n\n==> file2 <==\n");
 }
 
+
+// TODO: Add similar test for windows
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_permission_denied_from_metadata_error() {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("noaccess");
+    at.write("noaccess/secret", "topsecret\n");
+
+    // Make the directory non-searchable so path lookup fails with EACCES.
+    fs::set_permissions(at.plus("noaccess"), fs::Permissions::from_mode(0o000)).unwrap();
+
+    ts.ucmd()
+        .arg("noaccess/secret")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("tail: cannot open 'noaccess/secret' for reading: Permission denied\n");
+
+    // Restore permissions so the test harness can clean up the temp directory.
+    fs::set_permissions(at.plus("noaccess"), fs::Permissions::from_mode(0o700)).unwrap();
+}
+
+// Same as above, but ensure we keep processing subsequent files.
+// TODO: Add similar test for windows
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_permission_denied_from_metadata_error_multiple() {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("file1");
+    at.touch("file2");
+
+    at.mkdir("noaccess");
+    at.write("noaccess/secret", "topsecret\n");
+    fs::set_permissions(at.plus("noaccess"), fs::Permissions::from_mode(0o000)).unwrap();
+
+    ucmd.args(&["file1", "noaccess/secret", "file2"])
+        .fails_with_code(1)
+        .stdout_is("==> file1 <==\n\n==> file2 <==\n")
+        .stderr_is("tail: cannot open 'noaccess/secret' for reading: Permission denied\n");
+
+    fs::set_permissions(at.plus("noaccess"), fs::Permissions::from_mode(0o700)).unwrap();
+}
+
 #[test]
 fn test_follow_redirect_stdin_name_retry() {
     // $ touch f && tail -F - < f
