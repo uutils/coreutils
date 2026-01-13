@@ -406,8 +406,6 @@ struct KeySettings {
     reverse: bool,
 }
 
-impl KeySettings {}
-
 impl From<&GlobalSettings> for KeySettings {
     fn from(settings: &GlobalSettings) -> Self {
         Self {
