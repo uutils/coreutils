@@ -342,9 +342,6 @@ Below is the evolution of how many GNU tests uutils passes. A more detailed
 breakdown of the GNU test results of the main branch can be found
 [in the user manual](https://uutils.github.io/coreutils/docs/test_coverage.html).
 
-See <https://github.com/orgs/uutils/projects/1> for the main meta bugs
-(many are missing).
-
 ![Evolution over time](https://github.com/uutils/coreutils-tracking/blob/main/gnu-results.svg?raw=true)
 
 </div> <!-- close oranda-hide div -->
