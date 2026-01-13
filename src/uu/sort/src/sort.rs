@@ -69,15 +69,6 @@ mod options {
         pub const GENERAL_NUMERIC: &str = "general-numeric-sort";
         pub const VERSION: &str = "version-sort";
         pub const RANDOM: &str = "random-sort";
-
-        pub const ALL_SORT_MODES: [&str; 6] = [
-            GENERAL_NUMERIC,
-            HUMAN_NUMERIC,
-            MONTH,
-            NUMERIC,
-            VERSION,
-            RANDOM,
-        ];
     }
 
     pub mod check {
@@ -140,9 +131,6 @@ pub enum SortError {
         path: PathBuf,
         error: std::io::Error,
     },
-
-    #[error("{}", translate!("sort-parse-key-error", "key" => .key.quote(), "msg" => .msg.clone()))]
-    ParseKeyError { key: String, msg: String },
 
     #[error("{}", translate!("sort-cannot-read", "path" => format!("{}", .path.maybe_quote()), "error" => strip_errno(.error)))]
     ReadFailed {
@@ -207,20 +195,6 @@ enum SortMode {
     Version,
     Random,
     Default,
-}
-
-impl SortMode {
-    fn get_short_name(&self) -> Option<char> {
-        match self {
-            Self::Numeric => Some('n'),
-            Self::HumanNumeric => Some('h'),
-            Self::GeneralNumeric => Some('g'),
-            Self::Month => Some('M'),
-            Self::Version => Some('V'),
-            Self::Random => Some('R'),
-            Self::Default => None,
-        }
-    }
 }
 
 /// Return the length of the byte slice while ignoring embedded NULs (used for debug underline alignment).
@@ -432,53 +406,7 @@ struct KeySettings {
     reverse: bool,
 }
 
-impl KeySettings {
-    /// Checks if the supplied combination of `mode`, `ignore_non_printing` and `dictionary_order` is allowed.
-    fn check_compatibility(
-        mode: SortMode,
-        ignore_non_printing: bool,
-        dictionary_order: bool,
-    ) -> Result<(), String> {
-        if matches!(
-            mode,
-            SortMode::Numeric | SortMode::HumanNumeric | SortMode::GeneralNumeric | SortMode::Month
-        ) {
-            if dictionary_order {
-                return Err(
-                    translate!("sort-options-incompatible", "opt1" => "d", "opt2" => mode.get_short_name().unwrap()),
-                );
-            } else if ignore_non_printing {
-                return Err(
-                    translate!("sort-options-incompatible", "opt1" => "i", "opt2" => mode.get_short_name().unwrap()),
-                );
-            }
-        }
-        Ok(())
-    }
-
-    fn set_sort_mode(&mut self, mode: SortMode) -> Result<(), String> {
-        if self.mode != SortMode::Default && self.mode != mode {
-            return Err(
-                translate!("sort-options-incompatible", "opt1" => self.mode.get_short_name().unwrap(), "opt2" => mode.get_short_name().unwrap()),
-            );
-        }
-        Self::check_compatibility(mode, self.ignore_non_printing, self.dictionary_order)?;
-        self.mode = mode;
-        Ok(())
-    }
-
-    fn set_dictionary_order(&mut self) -> Result<(), String> {
-        Self::check_compatibility(self.mode, self.ignore_non_printing, true)?;
-        self.dictionary_order = true;
-        Ok(())
-    }
-
-    fn set_ignore_non_printing(&mut self) -> Result<(), String> {
-        Self::check_compatibility(self.mode, true, self.dictionary_order)?;
-        self.ignore_non_printing = true;
-        Ok(())
-    }
-}
+impl KeySettings {}
 
 impl From<&GlobalSettings> for KeySettings {
     fn from(settings: &GlobalSettings) -> Self {
@@ -497,6 +425,122 @@ impl Default for KeySettings {
     fn default() -> Self {
         Self::from(&GlobalSettings::default())
     }
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct ModeFlags {
+    numeric: bool,
+    general_numeric: bool,
+    human_numeric: bool,
+    month: bool,
+    version: bool,
+    random: bool,
+}
+
+impl ModeFlags {
+    fn from_mode(mode: SortMode) -> Self {
+        let mut flags = Self::default();
+        match mode {
+            SortMode::Numeric => flags.numeric = true,
+            SortMode::GeneralNumeric => flags.general_numeric = true,
+            SortMode::HumanNumeric => flags.human_numeric = true,
+            SortMode::Month => flags.month = true,
+            SortMode::Version => flags.version = true,
+            SortMode::Random => flags.random = true,
+            SortMode::Default => {}
+        }
+        flags
+    }
+
+    fn to_mode(self) -> SortMode {
+        if self.numeric {
+            SortMode::Numeric
+        } else if self.general_numeric {
+            SortMode::GeneralNumeric
+        } else if self.human_numeric {
+            SortMode::HumanNumeric
+        } else if self.month {
+            SortMode::Month
+        } else if self.random {
+            SortMode::Random
+        } else if self.version {
+            SortMode::Version
+        } else {
+            SortMode::Default
+        }
+    }
+}
+
+fn ordering_opts_string(
+    flags: ModeFlags,
+    dictionary_order: bool,
+    ignore_non_printing: bool,
+    ignore_case: bool,
+) -> String {
+    let mut opts = String::new();
+    if dictionary_order {
+        opts.push('d');
+    }
+    if ignore_case {
+        opts.push('f');
+    }
+    if flags.general_numeric {
+        opts.push('g');
+    }
+    if flags.human_numeric {
+        opts.push('h');
+    }
+    if !dictionary_order && ignore_non_printing {
+        opts.push('i');
+    }
+    if flags.month {
+        opts.push('M');
+    }
+    if flags.numeric {
+        opts.push('n');
+    }
+    if flags.random {
+        opts.push('R');
+    }
+    if flags.version {
+        opts.push('V');
+    }
+    opts
+}
+
+fn ordering_incompatible(
+    flags: ModeFlags,
+    dictionary_order: bool,
+    ignore_non_printing: bool,
+) -> bool {
+    let mut count = 0;
+    if flags.numeric {
+        count += 1;
+    }
+    if flags.general_numeric {
+        count += 1;
+    }
+    if flags.human_numeric {
+        count += 1;
+    }
+    if flags.month {
+        count += 1;
+    }
+    if flags.version || flags.random || dictionary_order || ignore_non_printing {
+        count += 1;
+    }
+    count > 1
+}
+
+fn incompatible_options_error(opts: &str) -> Box<dyn UError> {
+    USimpleError::new(
+        2,
+        translate!(
+            "sort-options-incompatible",
+            "opt1" => opts,
+            "opt2" => ""
+        ),
+    )
 }
 enum Selection<'a> {
     AsBigDecimal(GeneralBigDecimalParseResult),
@@ -774,42 +818,6 @@ struct KeyPosition {
     ignore_blanks: bool,
 }
 
-impl KeyPosition {
-    fn new(key: &str, default_char_index: usize, ignore_blanks: bool) -> Result<Self, String> {
-        let mut field_and_char = key.split('.');
-
-        let field = field_and_char
-            .next()
-            .ok_or_else(|| translate!("sort-invalid-key", "key" => key.quote()))?;
-        let char = field_and_char.next();
-
-        let field = match field.parse::<usize>() {
-            Ok(f) => f,
-            Err(e) if *e.kind() == IntErrorKind::PosOverflow => usize::MAX,
-            Err(e) => {
-                return Err(
-                    translate!("sort-failed-parse-field-index", "field" => field.quote(), "error" => e),
-                );
-            }
-        };
-        if field == 0 {
-            return Err(translate!("sort-field-index-cannot-be-zero"));
-        }
-
-        let char = char.map_or(Ok(default_char_index), |char| {
-            char.parse().map_err(|e: std::num::ParseIntError| {
-                translate!("sort-failed-parse-char-index", "char" => char.quote(), "error" => e)
-            })
-        })?;
-
-        Ok(Self {
-            field,
-            char,
-            ignore_blanks,
-        })
-    }
-}
-
 impl Default for KeyPosition {
     fn default() -> Self {
         Self {
@@ -818,6 +826,88 @@ impl Default for KeyPosition {
             ignore_blanks: false,
         }
     }
+}
+
+fn bad_field_spec(spec: &str, msg_key: &str) -> Box<dyn UError> {
+    USimpleError::new(
+        2,
+        translate!(
+            "sort-invalid-field-spec",
+            "msg" => translate!(msg_key),
+            "spec" => spec.quote()
+        ),
+    )
+}
+
+fn invalid_count_error(msg_key: &str, input: &str) -> Box<dyn UError> {
+    USimpleError::new(
+        2,
+        format!(
+            "{}: {}",
+            translate!(msg_key),
+            translate!("sort-invalid-count-at-start-of", "string" => input.quote())
+        ),
+    )
+}
+
+fn parse_field_count<'a>(input: &'a str, msg_key: &str) -> UResult<(usize, &'a str)> {
+    let bytes = input.as_bytes();
+    let mut idx = 0;
+    while idx < bytes.len() && bytes[idx].is_ascii_digit() {
+        idx += 1;
+    }
+    if idx == 0 {
+        return Err(invalid_count_error(msg_key, input));
+    }
+    let (num_str, rest) = input.split_at(idx);
+    let value = match num_str.parse::<usize>() {
+        Ok(v) => v,
+        Err(e) if *e.kind() == IntErrorKind::PosOverflow => usize::MAX,
+        Err(_) => return Err(invalid_count_error(msg_key, input)),
+    };
+    Ok((value, rest))
+}
+
+fn is_ordering_option_char(byte: u8) -> bool {
+    matches!(
+        byte,
+        b'b' | b'd' | b'f' | b'g' | b'h' | b'i' | b'M' | b'n' | b'R' | b'r' | b'V'
+    )
+}
+
+fn parse_ordering_options<'a>(
+    input: &'a str,
+    settings: &mut KeySettings,
+    flags: &mut ModeFlags,
+) -> (&'a str, bool) {
+    let mut ignore_blanks = false;
+    let bytes = input.as_bytes();
+    let mut idx = 0;
+    while idx < bytes.len() {
+        match bytes[idx] {
+            b'b' => ignore_blanks = true,
+            b'd' => {
+                settings.dictionary_order = true;
+                settings.ignore_non_printing = false;
+            }
+            b'f' => settings.ignore_case = true,
+            b'g' => flags.general_numeric = true,
+            b'h' => flags.human_numeric = true,
+            b'i' => {
+                if !settings.dictionary_order {
+                    settings.ignore_non_printing = true;
+                }
+            }
+            b'M' => flags.month = true,
+            b'n' => flags.numeric = true,
+            b'R' => flags.random = true,
+            b'r' => settings.reverse = true,
+            b'V' => flags.version = true,
+            _ => break,
+        }
+        idx += 1;
+    }
+    (&input[idx..], ignore_blanks)
 }
 
 #[derive(Clone, PartialEq, Debug, Default)]
@@ -833,91 +923,106 @@ struct FieldSelector {
 }
 
 impl FieldSelector {
-    /// Splits this position into the actual position and the attached options.
-    fn split_key_options(position: &str) -> (&str, &str) {
-        if let Some((options_start, _)) = position.char_indices().find(|(_, c)| c.is_alphabetic()) {
-            position.split_at(options_start)
-        } else {
-            (position, "")
-        }
-    }
-
     fn parse(key: &str, global_settings: &GlobalSettings) -> UResult<Self> {
-        let mut from_to = key.split(',');
-        let (from, from_options) = Self::split_key_options(from_to.next().unwrap());
-        let to = from_to.next().map(Self::split_key_options);
-        let options_are_empty = from_options.is_empty() && matches!(to, None | Some((_, "")));
-
-        if options_are_empty {
-            // Inherit the global settings if there are no options attached to this key.
-            (|| {
-                // This would be ideal for a try block, I think. In the meantime this closure allows
-                // to use the `?` operator here.
-                Self::new(
-                    KeyPosition::new(from, 1, global_settings.ignore_leading_blanks)?,
-                    to.map(|(to, _)| {
-                        KeyPosition::new(to, 0, global_settings.ignore_leading_blanks)
-                    })
-                    .transpose()?,
-                    KeySettings::from(global_settings),
-                )
-            })()
+        let has_options = key.as_bytes().iter().copied().any(is_ordering_option_char);
+        let mut settings = if has_options {
+            KeySettings::default()
         } else {
-            // Do not inherit from `global_settings`, as there are options attached to this key.
-            Self::parse_with_options((from, from_options), to)
-        }
-        .map_err(|msg| {
-            SortError::ParseKeyError {
-                key: key.to_owned(),
-                msg,
-            }
-            .into()
-        })
-    }
-
-    fn parse_with_options(
-        (from, from_options): (&str, &str),
-        to: Option<(&str, &str)>,
-    ) -> Result<Self, String> {
-        /// Applies `options` to `key_settings`, returning if the 'b'-flag (ignore blanks) was present.
-        fn parse_key_settings(
-            options: &str,
-            key_settings: &mut KeySettings,
-        ) -> Result<bool, String> {
-            let mut ignore_blanks = false;
-            for option in options.chars() {
-                match option {
-                    'M' => key_settings.set_sort_mode(SortMode::Month)?,
-                    'b' => ignore_blanks = true,
-                    'd' => key_settings.set_dictionary_order()?,
-                    'f' => key_settings.ignore_case = true,
-                    'g' => key_settings.set_sort_mode(SortMode::GeneralNumeric)?,
-                    'h' => key_settings.set_sort_mode(SortMode::HumanNumeric)?,
-                    'i' => key_settings.set_ignore_non_printing()?,
-                    'n' => key_settings.set_sort_mode(SortMode::Numeric)?,
-                    'R' => key_settings.set_sort_mode(SortMode::Random)?,
-                    'r' => key_settings.reverse = true,
-                    'V' => key_settings.set_sort_mode(SortMode::Version)?,
-                    c => {
-                        return Err(translate!("sort-invalid-option", "option" => c));
-                    }
-                }
-            }
-            Ok(ignore_blanks)
-        }
-
-        let mut key_settings = KeySettings::default();
-        let from = parse_key_settings(from_options, &mut key_settings)
-            .map(|ignore_blanks| KeyPosition::new(from, 1, ignore_blanks))??;
-        let to = if let Some((to, to_options)) = to {
-            Some(
-                parse_key_settings(to_options, &mut key_settings)
-                    .map(|ignore_blanks| KeyPosition::new(to, 0, ignore_blanks))??,
-            )
-        } else {
-            None
+            KeySettings::from(global_settings)
         };
-        Self::new(from, to, key_settings)
+        let mut flags = if has_options {
+            ModeFlags::default()
+        } else {
+            ModeFlags::from_mode(settings.mode)
+        };
+
+        let mut from_ignore_blanks = if has_options {
+            false
+        } else {
+            settings.ignore_blanks
+        };
+        let mut to_ignore_blanks = if has_options {
+            false
+        } else {
+            settings.ignore_blanks
+        };
+
+        let (from_field, mut rest) = parse_field_count(key, "sort-invalid-number-at-field-start")?;
+        if from_field == 0 {
+            return Err(bad_field_spec(key, "sort-field-number-is-zero"));
+        }
+
+        let mut from_char = 1;
+        if let Some(stripped) = rest.strip_prefix('.') {
+            let (char_idx, rest_after) =
+                parse_field_count(stripped, "sort-invalid-number-after-dot")?;
+            if char_idx == 0 {
+                return Err(bad_field_spec(key, "sort-character-offset-is-zero"));
+            }
+            from_char = char_idx;
+            rest = rest_after;
+        }
+
+        let (rest_after_opts, ignore_blanks) =
+            parse_ordering_options(rest, &mut settings, &mut flags);
+        if ignore_blanks {
+            from_ignore_blanks = true;
+        }
+
+        let mut to = None;
+        if let Some(rest_after_comma) = rest_after_opts.strip_prefix(',') {
+            let (to_field, mut rest) =
+                parse_field_count(rest_after_comma, "sort-invalid-number-after-comma")?;
+            if to_field == 0 {
+                return Err(bad_field_spec(key, "sort-field-number-is-zero"));
+            }
+
+            let mut to_char = 0;
+            if let Some(stripped) = rest.strip_prefix('.') {
+                let (char_idx, rest_after) =
+                    parse_field_count(stripped, "sort-invalid-number-after-dot")?;
+                to_char = char_idx;
+                rest = rest_after;
+            }
+
+            let (rest, ignore_blanks_end) = parse_ordering_options(rest, &mut settings, &mut flags);
+            if ignore_blanks_end {
+                to_ignore_blanks = true;
+            }
+            if !rest.is_empty() {
+                return Err(bad_field_spec(key, "sort-stray-character-field-spec"));
+            }
+            to = Some(KeyPosition {
+                field: to_field,
+                char: to_char,
+                ignore_blanks: to_ignore_blanks,
+            });
+        } else if !rest_after_opts.is_empty() {
+            return Err(bad_field_spec(key, "sort-stray-character-field-spec"));
+        }
+
+        if ordering_incompatible(
+            flags,
+            settings.dictionary_order,
+            settings.ignore_non_printing,
+        ) {
+            let opts = ordering_opts_string(
+                flags,
+                settings.dictionary_order,
+                settings.ignore_non_printing,
+                settings.ignore_case,
+            );
+            return Err(incompatible_options_error(&opts));
+        }
+
+        settings.mode = flags.to_mode();
+
+        let from = KeyPosition {
+            field: from_field,
+            char: from_char,
+            ignore_blanks: from_ignore_blanks,
+        };
+        Self::new(from, to, settings).map_err(|msg| USimpleError::new(2, msg))
     }
 
     fn new(
@@ -1702,49 +1807,59 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .unwrap_or_default()
     };
 
-    settings.mode = if matches.get_flag(options::modes::HUMAN_NUMERIC)
-        || matches
-            .get_one::<String>(options::modes::SORT)
-            .is_some_and(|s| s == "human-numeric")
-    {
-        SortMode::HumanNumeric
-    } else if matches.get_flag(options::modes::MONTH)
-        || matches
-            .get_one::<String>(options::modes::SORT)
-            .is_some_and(|s| s == "month")
-    {
-        SortMode::Month
-    } else if matches.get_flag(options::modes::GENERAL_NUMERIC)
-        || matches
-            .get_one::<String>(options::modes::SORT)
-            .is_some_and(|s| s == "general-numeric")
-    {
-        SortMode::GeneralNumeric
-    } else if matches.get_flag(options::modes::NUMERIC)
-        || matches
-            .get_one::<String>(options::modes::SORT)
-            .is_some_and(|s| s == "numeric")
-    {
-        SortMode::Numeric
-    } else if matches.get_flag(options::modes::VERSION)
-        || matches
-            .get_one::<String>(options::modes::SORT)
-            .is_some_and(|s| s == "version")
-    {
-        SortMode::Version
-    } else if matches.get_flag(options::modes::RANDOM)
-        || matches
-            .get_one::<String>(options::modes::SORT)
-            .is_some_and(|s| s == "random")
-    {
-        settings.salt = Some(get_rand_string());
-        SortMode::Random
-    } else {
-        SortMode::Default
-    };
+    let mut mode_flags = ModeFlags::default();
+    if matches.get_flag(options::modes::HUMAN_NUMERIC) {
+        mode_flags.human_numeric = true;
+    }
+    if matches.get_flag(options::modes::MONTH) {
+        mode_flags.month = true;
+    }
+    if matches.get_flag(options::modes::GENERAL_NUMERIC) {
+        mode_flags.general_numeric = true;
+    }
+    if matches.get_flag(options::modes::NUMERIC) {
+        mode_flags.numeric = true;
+    }
+    if matches.get_flag(options::modes::VERSION) {
+        mode_flags.version = true;
+    }
+    if matches.get_flag(options::modes::RANDOM) {
+        mode_flags.random = true;
+    }
+    if let Some(sort_arg) = matches.get_one::<String>(options::modes::SORT) {
+        match sort_arg.as_str() {
+            "human-numeric" => mode_flags.human_numeric = true,
+            "month" => mode_flags.month = true,
+            "general-numeric" => mode_flags.general_numeric = true,
+            "numeric" => mode_flags.numeric = true,
+            "version" => mode_flags.version = true,
+            "random" => mode_flags.random = true,
+            _ => {}
+        }
+    }
 
-    settings.dictionary_order = matches.get_flag(options::DICTIONARY_ORDER);
-    settings.ignore_non_printing = matches.get_flag(options::IGNORE_NONPRINTING);
+    let dictionary_order = matches.get_flag(options::DICTIONARY_ORDER);
+    let ignore_non_printing = matches.get_flag(options::IGNORE_NONPRINTING);
+    let ignore_case = matches.get_flag(options::IGNORE_CASE);
+
+    if ordering_incompatible(mode_flags, dictionary_order, ignore_non_printing) {
+        let opts = ordering_opts_string(
+            mode_flags,
+            dictionary_order,
+            ignore_non_printing,
+            ignore_case,
+        );
+        return Err(incompatible_options_error(&opts));
+    }
+
+    settings.mode = mode_flags.to_mode();
+    if mode_flags.random {
+        settings.salt = Some(get_rand_string());
+    }
+
+    settings.dictionary_order = dictionary_order;
+    settings.ignore_non_printing = ignore_non_printing;
+    settings.ignore_case = ignore_case;
     if matches.contains_id(options::PARALLEL) {
         // "0" is default - threads = num of cores
         settings.threads = matches
@@ -1840,6 +1955,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     settings.merge = matches.get_flag(options::MERGE);
 
     settings.check = matches.contains_id(options::check::CHECK);
+    if settings.check && matches.get_flag(options::check::CHECK_SILENT) {
+        return Err(incompatible_options_error("cC"));
+    }
     if matches.get_flag(options::check::CHECK_SILENT)
         || matches!(
             matches
@@ -1852,7 +1970,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         settings.check = true;
     }
 
-    settings.ignore_case = matches.get_flag(options::IGNORE_CASE);
+    if matches.contains_id(options::OUTPUT) && settings.check {
+        let opts = if settings.check_silent { "Co" } else { "co" };
+        return Err(incompatible_options_error(opts));
+    }
 
     settings.ignore_leading_blanks = matches.get_flag(options::IGNORE_LEADING_BLANKS);
 
@@ -1977,8 +2098,7 @@ pub fn uu_app() -> Command {
                 "numeric",
                 "version",
                 "random",
-            ]))
-            .conflicts_with_all(options::modes::ALL_SORT_MODES),
+            ])),
     )
     .arg(make_sort_mode_arg(
         options::modes::HUMAN_NUMERIC,
@@ -2015,12 +2135,6 @@ pub fn uu_app() -> Command {
             .short('d')
             .long(options::DICTIONARY_ORDER)
             .help(translate!("sort-help-dictionary-order"))
-            .conflicts_with_all([
-                options::modes::NUMERIC,
-                options::modes::GENERAL_NUMERIC,
-                options::modes::HUMAN_NUMERIC,
-                options::modes::MONTH,
-            ])
             .action(ArgAction::SetTrue),
     )
     .arg(
@@ -2041,14 +2155,12 @@ pub fn uu_app() -> Command {
                 options::check::QUIET,
                 options::check::DIAGNOSE_FIRST,
             ]))
-            .conflicts_with_all([options::OUTPUT, options::check::CHECK_SILENT])
             .help(translate!("sort-help-check")),
     )
     .arg(
         Arg::new(options::check::CHECK_SILENT)
             .short('C')
             .long(options::check::CHECK_SILENT)
-            .conflicts_with_all([options::OUTPUT, options::check::CHECK])
             .help(translate!("sort-help-check-silent"))
             .action(ArgAction::SetTrue),
     )
@@ -2064,12 +2176,6 @@ pub fn uu_app() -> Command {
             .short('i')
             .long(options::IGNORE_NONPRINTING)
             .help(translate!("sort-help-ignore-nonprinting"))
-            .conflicts_with_all([
-                options::modes::NUMERIC,
-                options::modes::GENERAL_NUMERIC,
-                options::modes::HUMAN_NUMERIC,
-                options::modes::MONTH,
-            ])
             .action(ArgAction::SetTrue),
     )
     .arg(
