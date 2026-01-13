@@ -5041,6 +5041,21 @@ fn tail_n_lines_with_emoji() {
 }
 
 #[test]
+fn test_tail_bytes_exceeds_file_size() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("test_file.txt", "small content");
+
+    ts.ucmd()
+        .arg("-c")
+        .arg("1048576")
+        .arg("test_file.txt")
+        .succeeds()
+        .stdout_only("small content");
+}
+
+#[test]
 #[cfg(target_os = "linux")]
 fn test_follow_pipe_f() {
     new_ucmd!()
