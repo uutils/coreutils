@@ -196,6 +196,16 @@ fn find_last_contiguous_block_of_xs(s: &str) -> Option<(usize, usize)> {
     let bytes = s.as_bytes();
     let len = bytes.len();
 
+    // We only accept a template where the *final* (rightmost) characters are Xs,
+    // because mktemp replaces a trailing run of Xs with random characters.
+    //
+    // Implementation detail:
+    // - iterate from the end (`rev()`)
+    // - count how many consecutive trailing bytes are ASCII 'X' (`take_while(...)`)
+    // - if there are at least 3, return the byte index range of that suffix run
+    //
+    // These indices are byte offsets (not char indices), which is OK here because
+    // we only look for ASCII 'X' and later slice using the same UTF-8 string.
     let n = bytes.iter().rev().take_while(|&&b| b == b'X').count();
     (n >= 3).then_some((len - n, len))
 }
