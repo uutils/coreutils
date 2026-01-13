@@ -1,18 +1,19 @@
 #!/bin/bash
-# Run GNU SMACK tests in QEMU with SMACK-enabled kernel
+# Run GNU SMACK/ROOTFS tests in QEMU with SMACK-enabled kernel
 # Usage: run-gnu-tests-smack-ci.sh [GNU_DIR] [OUTPUT_DIR]
 # spell-checker:ignore rootfs zstd unzstd cpio newc nographic smackfs devtmpfs tmpfs poweroff libm libgcc libpthread libdl librt sysfs rwxat setuidgid
 set -e
 
+: ${PROFILE:=release-small}
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 GNU_DIR="${1:-$REPO_DIR/../gnu}"
-OUTPUT_DIR="${2:-$REPO_DIR/target/smack-test-results}"
-SMACK_DIR="$REPO_DIR/target/smack-test"
+OUTPUT_DIR="${2:-$REPO_DIR/target/qemu-test-results}"
+QEMU_DIR="$REPO_DIR/target/qemu-test"
 
-echo "Setting up SMACK test environment..."
-rm -rf "$SMACK_DIR"
-mkdir -p "$SMACK_DIR"/{rootfs/{bin,lib64,proc,sys,dev,tmp,etc,gnu},kernel}
+echo "Setting up SMACK/ROOTFS test environment..."
+rm -rf "$QEMU_DIR"
+mkdir -p "$QEMU_DIR"/{rootfs/{bin,lib64,proc,sys,dev,tmp,etc,gnu},kernel}
 
 # Download Arch Linux kernel (has SMACK built-in)
 if [ ! -f /tmp/arch-vmlinuz ]; then
@@ -24,31 +25,31 @@ if [ ! -f /tmp/arch-vmlinuz ]; then
     mv "/tmp/$VMLINUZ_PATH" /tmp/arch-vmlinuz
     rm -rf /tmp/usr /tmp/arch-kernel.pkg.tar /tmp/arch-kernel.pkg.tar.zst
 fi
-cp /tmp/arch-vmlinuz "$SMACK_DIR/kernel/vmlinuz"
+cp /tmp/arch-vmlinuz "$QEMU_DIR/kernel/vmlinuz"
 
 # Setup busybox
 BUSYBOX=/tmp/busybox
 [ -f "$BUSYBOX" ] || curl -sL -o "$BUSYBOX" https://busybox.net/downloads/binaries/1.35.0-x86_64-linux-musl/busybox
 chmod +x "$BUSYBOX"
-cp "$BUSYBOX" "$SMACK_DIR/rootfs/bin/"
-(cd "$SMACK_DIR/rootfs/bin" && "$BUSYBOX" --list | xargs -I{} ln -sf busybox {} 2>/dev/null)
+cp "$BUSYBOX" "$QEMU_DIR/rootfs/bin/"
+(cd "$QEMU_DIR/rootfs/bin" && "$BUSYBOX" --list | xargs -I{} ln -sf busybox {} 2>/dev/null)
 
 # Copy required libraries
 for lib in ld-linux-x86-64.so.2 libc.so.6 libm.so.6 libgcc_s.so.1 libpthread.so.0 libdl.so.2 librt.so.1; do
     path=$(ldconfig -p | grep "$lib" | head -1 | awk '{print $NF}')
-    [ -n "$path" ] && [ -f "$path" ] && cp -L "$path" "$SMACK_DIR/rootfs/lib64/" 2>/dev/null || true
+    [ -n "$path" ] && [ -f "$path" ] && cp -L "$path" "$QEMU_DIR/rootfs/lib64/" 2>/dev/null || true
 done
 
 # Create minimal config files
-echo -e "root:x:0:0:root:/root:/bin/sh\nnobody:x:65534:65534:nobody:/nonexistent:/bin/sh" > "$SMACK_DIR/rootfs/etc/passwd"
-echo -e "root:x:0:\nnobody:x:65534:" > "$SMACK_DIR/rootfs/etc/group"
-touch "$SMACK_DIR/rootfs/etc/mtab"
+echo -e "root:x:0:0:root:/root:/bin/sh\nnobody:x:65534:65534:nobody:/nonexistent:/bin/sh" > "$QEMU_DIR/rootfs/etc/passwd"
+echo -e "root:x:0:\nnobody:x:65534:" > "$QEMU_DIR/rootfs/etc/group"
+touch "$QEMU_DIR/rootfs/etc/mtab"
 
 # Copy GNU tests
-cp -r "$GNU_DIR/tests" "$SMACK_DIR/rootfs/gnu/"
+cp -r "$GNU_DIR/tests" "$QEMU_DIR/rootfs/gnu/"
 
 # Create init script
-cat > "$SMACK_DIR/rootfs/init" << 'INIT'
+cat > "$QEMU_DIR/rootfs/init" << 'INIT'
 #!/bin/sh
 mount -t proc proc /proc
 mount -t sysfs sys /sys
@@ -73,24 +74,24 @@ fi
 echo "EXIT:$?"
 poweroff -f
 INIT
-chmod +x "$SMACK_DIR/rootfs/init"
+chmod +x "$QEMU_DIR/rootfs/init"
 
-# Build utilities with SMACK support
-echo "Building utilities with SMACK support..."
-cargo build --release --manifest-path="$REPO_DIR/Cargo.toml" --package uu_id --features uu_id/smack --package uu_ls --features uu_ls/smack --package uu_mkdir --features uu_mkdir/smack --package uu_mkfifo --features uu_mkfifo/smack --package uu_mknod --features uu_mknod/smack
+# Build utilities for SMACK/ROOTFS tests
+echo "Building utilities for SMACK/ROOTFS tests..."
+cargo build --profile="${PROFILE}" --features=feat_smack,id,ls,mkdir,mkfifo,mknod,df --no-default-features
 
-# Find SMACK tests
-SMACK_TESTS=$(grep -l 'require_smack_' -r "$GNU_DIR/tests/" 2>/dev/null || true)
-[ -z "$SMACK_TESTS" ] && { echo "No SMACK tests found"; exit 0; }
+# Find SMACK tests and tests requiring rootfs in mtab (only available in QEMU environment)
+QEMU_TESTS=$(grep -l -E 'require_smack_|rootfs in mtab' -r "$GNU_DIR/tests/" 2>/dev/null | sort -u || true)
+[ -z "$QEMU_TESTS" ] && { echo "No SMACK/ROOTFS tests found"; exit 0; }
 
-echo "Found $(echo "$SMACK_TESTS" | wc -l) SMACK tests"
+echo "Found $(echo "$QEMU_TESTS" | wc -l) SMACK/ROOTFS tests"
 
 # Create output directory
 rm -rf "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR"
 
 # Run each test
-for TEST_PATH in $SMACK_TESTS; do
+for TEST_PATH in $QEMU_TESTS; do
     TEST_REL="${TEST_PATH#"$GNU_DIR"/tests/}"
     TEST_DIR=$(dirname "$TEST_REL")
     TEST_NAME=$(basename "$TEST_REL" .sh)
@@ -104,14 +105,13 @@ for TEST_PATH in $SMACK_TESTS; do
     fi
 
     # Create working copy
-    WORK="/tmp/smack-test-$$"
+    WORK="/tmp/qemu-test-$$"
     rm -rf "$WORK" "$WORK.gz"
-    cp -a "$SMACK_DIR/rootfs" "$WORK"
+    cp -a "$QEMU_DIR/rootfs" "$WORK"
 
-    # Copy built utilities with SMACK support
-    for U in id ls mkdir mkfifo mknod; do
-        rm -f "$WORK/bin/$U"
-        cp "$REPO_DIR/target/release/$U" "$WORK/bin/$U"
+    # Hardlink utilities for SMACK/ROOTFS tests
+    for U in $("$REPO_DIR/target/${PROFILE}/coreutils" --list); do
+        ln -vf "$REPO_DIR/target/${PROFILE}/coreutils" "$WORK/bin/$U"
     done
 
     # Set test script path and user
@@ -126,7 +126,7 @@ for TEST_PATH in $SMACK_TESTS; do
     (cd "$WORK" && find . | cpio -o -H newc 2>/dev/null | gzip > "$WORK.gz")
 
     OUTPUT=$(timeout 120 qemu-system-x86_64 \
-        -kernel "$SMACK_DIR/kernel/vmlinuz" \
+        -kernel "$QEMU_DIR/kernel/vmlinuz" \
         -initrd "$WORK.gz" \
         -append "console=ttyS0 quiet panic=-1 security=smack lsm=smack" \
         -nographic -m 256M -no-reboot 2>&1) || true

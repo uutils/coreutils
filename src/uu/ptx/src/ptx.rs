@@ -788,7 +788,9 @@ fn write_traditional_output(
         } else {
             0
         };
-        config.line_width -= max_ref_len;
+
+        // Use saturating_sub to prevent panic if the reference is wider than the line width.
+        config.line_width = config.line_width.saturating_sub(max_ref_len);
     }
 
     for word_ref in words {

@@ -157,11 +157,19 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     };
     let check = matches.get_flag("check");
 
-    let ignore_missing = matches.get_flag("ignore-missing");
-    let warn = matches.get_flag("warn");
-    let quiet = matches.get_flag("quiet");
-    let strict = matches.get_flag("strict");
-    let status = matches.get_flag("status");
+    let check_flag = |flag| match (check, matches.get_flag(flag)) {
+        (_, false) => Ok(false),
+        (true, true) => Ok(true),
+        (false, true) => Err(ChecksumError::CheckOnlyFlag(flag.into())),
+    };
+
+    // Each of the following flags are only expected in --check mode.
+    // If we encounter them otherwise, end with an error.
+    let ignore_missing = check_flag("ignore-missing")?;
+    let warn = check_flag("warn")?;
+    let quiet = check_flag("quiet")?;
+    let strict = check_flag("strict")?;
+    let status = check_flag("status")?;
 
     // clap provides the default value -. So we unwrap() safety.
     let files = matches
@@ -170,7 +178,18 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         .map(|s| s.as_os_str());
 
     if check {
-        // No reason to allow --check with --binary/--text on Cygwin. It want to be same with Linux and --text was broken for a long time.
+        // on Windows, allow --binary/--text to be used with --check
+        // and keep the behavior of defaulting to binary
+        #[cfg(not(windows))]
+        {
+            let text_flag = matches.get_flag("text");
+            let binary_flag = matches.get_flag("binary");
+
+            if binary_flag || text_flag {
+                return Err(ChecksumError::BinaryTextConflict.into());
+            }
+        }
+
         let verbose = ChecksumVerbose::new(status, quiet, warn);
 
         let opts = ChecksumValidateOptions {
@@ -220,10 +239,6 @@ mod options {
 }
 
 pub fn uu_app_common() -> Command {
-    // --text --arg-deps-check should be error by Arg::new(options::CHECK)...conflicts_with(options::TEXT)
-    // https://github.com/clap-rs/clap/issues/4520 ?
-    // Let --{warn,strict,quiet,status,ignore-missing} reject --text and remove them later.
-    // Bad error message, but not a lie...
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
@@ -253,9 +268,7 @@ pub fn uu_app_common() -> Command {
                 .long("check")
                 .help(translate!("hashsum-help-check"))
                 .action(ArgAction::SetTrue)
-                .conflicts_with(options::BINARY)
-                .conflicts_with(options::TEXT)
-                .conflicts_with(options::TAG),
+                .conflicts_with("tag"),
         )
         .arg(
             Arg::new(options::TAG)
@@ -287,9 +300,7 @@ pub fn uu_app_common() -> Command {
                 .long(options::QUIET)
                 .help(translate!("hashsum-help-quiet"))
                 .action(ArgAction::SetTrue)
-                .overrides_with_all([options::STATUS, options::WARN])
-                .conflicts_with("text")
-                .requires(options::CHECK),
+                .overrides_with_all([options::STATUS, options::WARN]),
         )
         .arg(
             Arg::new(options::STATUS)
@@ -297,25 +308,19 @@ pub fn uu_app_common() -> Command {
                 .long("status")
                 .help(translate!("hashsum-help-status"))
                 .action(ArgAction::SetTrue)
-                .overrides_with_all([options::QUIET, options::WARN])
-                .conflicts_with("text")
-                .requires(options::CHECK),
+                .overrides_with_all([options::QUIET, options::WARN]),
         )
         .arg(
             Arg::new(options::STRICT)
                 .long("strict")
                 .help(translate!("hashsum-help-strict"))
-                .action(ArgAction::SetTrue)
-                .conflicts_with("text")
-                .requires(options::CHECK),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("ignore-missing")
                 .long("ignore-missing")
                 .help(translate!("hashsum-help-ignore-missing"))
-                .action(ArgAction::SetTrue)
-                .conflicts_with("text")
-                .requires(options::CHECK),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::WARN)
@@ -323,9 +328,7 @@ pub fn uu_app_common() -> Command {
                 .long("warn")
                 .help(translate!("hashsum-help-warn"))
                 .action(ArgAction::SetTrue)
-                .overrides_with_all([options::QUIET, options::STATUS])
-                .conflicts_with("text")
-                .requires(options::CHECK),
+                .overrides_with_all([options::QUIET, options::STATUS]),
         )
         .arg(
             Arg::new("zero")
