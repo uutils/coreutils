@@ -298,7 +298,7 @@ jobs:
         fi
         # Check that we don't cross-build uudoc
         # also do not try to generate manpages for part of hashsum
-        make install-manpages PREFIX=/tmp/usr UTILS=true RUSTC_ARCH="--target aarch64-unknown-linux-gnu"
+        env CARGO_BUILD_TARGET=aarch64-unknown-linux-gnu make install-manpages PREFIX=/tmp/usr UTILS=true
         # build (host)
         make build
         echo "Check that target directory will be ignored by backup tools"
@@ -898,6 +898,18 @@ jobs:
       if: steps.vars.outputs.DEPLOY && matrix.job.skip-publish != true
       with:
         draft: true
+        files: |
+          ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_NAME }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Publish latest commit
+      uses: softprops/action-gh-release@v2
+      if: steps.vars.outputs.DEPLOY && matrix.job.skip-publish != true
+      with:
+        tag_name: latest-commit
+        force_update: true
+        draft: false
+        prerelease: true
         files: |
           ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_NAME }}
       env:

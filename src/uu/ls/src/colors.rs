@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 use super::PathData;
 use lscolors::{Indicator, LsColors, Style};
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::env;
 use std::ffi::OsString;
@@ -17,6 +18,17 @@ const ANSI_SGR_END: &str = "m";
 const ANSI_RESET: &str = "\x1b[0m";
 const ANSI_CLEAR_EOL: &str = "\x1b[K";
 const EMPTY_STYLE: &str = "\x1b[m";
+
+#[cfg(unix)]
+mod mode {
+    // Unix file mode bits
+    pub const SETUID: u32 = 0o4000;
+    pub const SETGID: u32 = 0o2000;
+    pub const EXECUTABLE: u32 = 0o0111;
+    pub const STICKY_OTHER_WRITABLE: u32 = 0o1002;
+    pub const OTHER_WRITABLE: u32 = 0o0002;
+    pub const STICKY: u32 = 0o1000;
+}
 
 enum RawIndicatorStyle {
     Empty,
@@ -129,14 +141,11 @@ impl<'a> StyleManager<'a> {
         indicator: Indicator,
         style_code: &mut String,
     ) {
-        if !self.indicator_codes.contains_key(&indicator) {
-            return;
-        }
-        style_code.push_str(self.reset(!self.initial_reset_is_done));
-        style_code.push_str(ANSI_CSI);
-        if let Some(raw) = self.indicator_codes.get(&indicator) {
+        if let Some(raw) = self.indicator_codes.get(&indicator).cloned() {
             debug_assert!(!raw.is_empty());
-            style_code.push_str(raw);
+            style_code.push_str(self.reset(!self.initial_reset_is_done));
+            style_code.push_str(ANSI_CSI);
+            style_code.push_str(&raw);
             style_code.push_str(ANSI_SGR_END);
         }
     }
@@ -355,25 +364,7 @@ impl<'a> StyleManager<'a> {
         };
 
         if file_type.is_symlink() {
-            let orphan_enabled = self.has_indicator_style(Indicator::OrphanedSymbolicLink);
-            let missing_enabled = self.has_indicator_style(Indicator::MissingFile);
-            let needs_target_state = self.ln_color_from_target || orphan_enabled;
-            let target_missing = needs_target_state && !entry_exists();
-
-            if target_missing {
-                let orphan_raw = self.indicator_codes.get(&Indicator::OrphanedSymbolicLink);
-                let orphan_raw_is_empty = orphan_raw.is_some_and(|value| value.is_empty());
-                if orphan_enabled && (!orphan_raw_is_empty || self.ln_color_from_target) {
-                    return Some(Indicator::OrphanedSymbolicLink);
-                }
-                if self.ln_color_from_target && missing_enabled {
-                    return Some(Indicator::MissingFile);
-                }
-            }
-            if self.has_indicator_style(Indicator::SymbolicLink) {
-                return Some(Indicator::SymbolicLink);
-            }
-            return None;
+            return self.indicator_for_symlink(&mut entry_exists);
         }
 
         if self.has_indicator_style(Indicator::MissingFile) && !entry_exists() {
@@ -381,72 +372,130 @@ impl<'a> StyleManager<'a> {
         }
 
         if file_type.is_file() {
-            #[cfg(unix)]
-            if self.needs_file_metadata() {
-                if let Some(metadata) = path.metadata() {
-                    let mode = metadata.mode();
-                    if self.has_indicator_style(Indicator::Setuid) && mode & 0o4000 != 0 {
-                        return Some(Indicator::Setuid);
-                    }
-                    if self.has_indicator_style(Indicator::Setgid) && mode & 0o2000 != 0 {
-                        return Some(Indicator::Setgid);
-                    }
-                    if self.has_indicator_style(Indicator::ExecutableFile) && mode & 0o0111 != 0 {
-                        return Some(Indicator::ExecutableFile);
-                    }
-                    if self.has_indicator_style(Indicator::MultipleHardLinks)
-                        && metadata.nlink() > 1
-                    {
-                        return Some(Indicator::MultipleHardLinks);
-                    }
-                }
-            }
-
-            if self.has_indicator_style(Indicator::RegularFile) {
-                return Some(Indicator::RegularFile);
-            }
+            self.indicator_for_file(path)
         } else if file_type.is_dir() {
-            #[cfg(unix)]
-            if self.needs_dir_metadata() {
-                if let Some(metadata) = path.metadata() {
-                    let mode = metadata.mode();
-                    if self.has_indicator_style(Indicator::StickyAndOtherWritable)
-                        && mode & 0o1002 == 0o1002
-                    {
-                        return Some(Indicator::StickyAndOtherWritable);
-                    }
-                    if self.has_indicator_style(Indicator::OtherWritable) && mode & 0o0002 != 0 {
-                        return Some(Indicator::OtherWritable);
-                    }
-                    if self.has_indicator_style(Indicator::Sticky) && mode & 0o1000 != 0 {
-                        return Some(Indicator::Sticky);
-                    }
-                }
-            }
-
-            if self.has_indicator_style(Indicator::Directory) {
-                return Some(Indicator::Directory);
-            }
+            self.indicator_for_directory(path)
         } else {
-            #[cfg(unix)]
-            {
-                if file_type.is_fifo() && self.has_indicator_style(Indicator::FIFO) {
-                    return Some(Indicator::FIFO);
+            self.indicator_for_special_file(file_type)
+        }
+    }
+
+    fn indicator_for_symlink(&self, entry_exists: &mut dyn FnMut() -> bool) -> Option<Indicator> {
+        let orphan_enabled = self.has_indicator_style(Indicator::OrphanedSymbolicLink);
+        let missing_enabled = self.has_indicator_style(Indicator::MissingFile);
+        let needs_target_state = self.ln_color_from_target || orphan_enabled;
+        let target_missing = needs_target_state && !entry_exists();
+
+        if target_missing {
+            let orphan_raw = self.indicator_codes.get(&Indicator::OrphanedSymbolicLink);
+            let orphan_raw_is_empty = orphan_raw.is_some_and(|value| value.is_empty());
+            if orphan_enabled && (!orphan_raw_is_empty || self.ln_color_from_target) {
+                return Some(Indicator::OrphanedSymbolicLink);
+            }
+            if self.ln_color_from_target && missing_enabled {
+                return Some(Indicator::MissingFile);
+            }
+        }
+        if self.has_indicator_style(Indicator::SymbolicLink) {
+            return Some(Indicator::SymbolicLink);
+        }
+        None
+    }
+
+    #[cfg(unix)]
+    fn indicator_for_file(&self, path: &PathData) -> Option<Indicator> {
+        if self.needs_file_metadata() {
+            if let Some(metadata) = path.metadata() {
+                let mode = metadata.mode();
+                if self.has_indicator_style(Indicator::Setuid) && mode & mode::SETUID != 0 {
+                    return Some(Indicator::Setuid);
                 }
-                if file_type.is_socket() && self.has_indicator_style(Indicator::Socket) {
-                    return Some(Indicator::Socket);
+                if self.has_indicator_style(Indicator::Setgid) && mode & mode::SETGID != 0 {
+                    return Some(Indicator::Setgid);
                 }
-                if file_type.is_block_device() && self.has_indicator_style(Indicator::BlockDevice) {
-                    return Some(Indicator::BlockDevice);
-                }
-                if file_type.is_char_device()
-                    && self.has_indicator_style(Indicator::CharacterDevice)
+                if self.has_indicator_style(Indicator::ExecutableFile)
+                    && mode & mode::EXECUTABLE != 0
                 {
-                    return Some(Indicator::CharacterDevice);
+                    return Some(Indicator::ExecutableFile);
+                }
+                if self.has_indicator_style(Indicator::MultipleHardLinks) && metadata.nlink() > 1 {
+                    return Some(Indicator::MultipleHardLinks);
                 }
             }
         }
 
+        if self.has_indicator_style(Indicator::RegularFile) {
+            Some(Indicator::RegularFile)
+        } else {
+            None
+        }
+    }
+
+    #[cfg(not(unix))]
+    fn indicator_for_file(&self, _path: &PathData) -> Option<Indicator> {
+        if self.has_indicator_style(Indicator::RegularFile) {
+            Some(Indicator::RegularFile)
+        } else {
+            None
+        }
+    }
+
+    #[cfg(unix)]
+    fn indicator_for_directory(&self, path: &PathData) -> Option<Indicator> {
+        if self.needs_dir_metadata() {
+            if let Some(metadata) = path.metadata() {
+                let mode = metadata.mode();
+                if self.has_indicator_style(Indicator::StickyAndOtherWritable)
+                    && mode & mode::STICKY_OTHER_WRITABLE == mode::STICKY_OTHER_WRITABLE
+                {
+                    return Some(Indicator::StickyAndOtherWritable);
+                }
+                if self.has_indicator_style(Indicator::OtherWritable)
+                    && mode & mode::OTHER_WRITABLE != 0
+                {
+                    return Some(Indicator::OtherWritable);
+                }
+                if self.has_indicator_style(Indicator::Sticky) && mode & mode::STICKY != 0 {
+                    return Some(Indicator::Sticky);
+                }
+            }
+        }
+
+        if self.has_indicator_style(Indicator::Directory) {
+            Some(Indicator::Directory)
+        } else {
+            None
+        }
+    }
+
+    #[cfg(not(unix))]
+    fn indicator_for_directory(&self, _path: &PathData) -> Option<Indicator> {
+        if self.has_indicator_style(Indicator::Directory) {
+            Some(Indicator::Directory)
+        } else {
+            None
+        }
+    }
+
+    #[cfg(unix)]
+    fn indicator_for_special_file(&self, file_type: &std::fs::FileType) -> Option<Indicator> {
+        if file_type.is_fifo() && self.has_indicator_style(Indicator::FIFO) {
+            return Some(Indicator::FIFO);
+        }
+        if file_type.is_socket() && self.has_indicator_style(Indicator::Socket) {
+            return Some(Indicator::Socket);
+        }
+        if file_type.is_block_device() && self.has_indicator_style(Indicator::BlockDevice) {
+            return Some(Indicator::BlockDevice);
+        }
+        if file_type.is_char_device() && self.has_indicator_style(Indicator::CharacterDevice) {
+            return Some(Indicator::CharacterDevice);
+        }
+        None
+    }
+
+    #[cfg(not(unix))]
+    fn indicator_for_special_file(&self, _file_type: &std::fs::FileType) -> Option<Indicator> {
         None
     }
 
@@ -730,7 +779,7 @@ fn parse_indicator_codes() -> (HashMap<Indicator, String>, bool) {
                     }
                     continue;
                 }
-                indicator_codes.insert(indicator, canonicalize_indicator_value(value));
+                indicator_codes.insert(indicator, canonicalize_indicator_value(value).into_owned());
             }
         }
     }
@@ -738,14 +787,14 @@ fn parse_indicator_codes() -> (HashMap<Indicator, String>, bool) {
     (indicator_codes, ln_color_from_target)
 }
 
-fn canonicalize_indicator_value(value: &str) -> String {
+fn canonicalize_indicator_value(value: &str) -> Cow<'_, str> {
     if value.len() == 1 && value.chars().all(|c| c.is_ascii_digit()) {
         let mut canonical = String::with_capacity(2);
         canonical.push('0');
         canonical.push_str(value);
-        canonical
+        Cow::Owned(canonical)
     } else {
-        value.to_string()
+        Cow::Borrowed(value)
     }
 }
 

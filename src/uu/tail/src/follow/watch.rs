@@ -15,6 +15,8 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, channel};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, set_exit_code};
+#[cfg(target_os = "linux")]
+use uucore::signals::ensure_stdout_not_broken;
 use uucore::translate;
 
 use uucore::show_error;
@@ -153,24 +155,6 @@ impl Observer {
             self.files.insert(
                 &path,
                 PathData::new(reader, metadata, display_name),
-                update_last,
-            );
-        }
-
-        Ok(())
-    }
-
-    pub fn add_stdin(
-        &mut self,
-        display_name: &str,
-        reader: Option<Box<dyn BufRead>>,
-        update_last: bool,
-    ) -> UResult<()> {
-        if self.follow == Some(FollowMode::Descriptor) {
-            return self.add_path(
-                &PathBuf::from(text::DEV_STDIN),
-                display_name,
-                reader,
                 update_last,
             );
         }
@@ -619,6 +603,11 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 timeout_counter += 1;
+                // Check if stdout pipe is still open
+                #[cfg(target_os = "linux")]
+                if let Ok(false) = ensure_stdout_not_broken() {
+                    return Ok(());
+                }
             }
             Err(e) => {
                 return Err(USimpleError::new(
