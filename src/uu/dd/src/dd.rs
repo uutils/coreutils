@@ -286,18 +286,16 @@ impl Source {
                         Ok(n)
                     }
                     // ESPIPE means the file descriptor is not seekable (e.g., a pipe),
-                    // so fall back to reading and discarding bytes
+                    // so fall back to reading and discarding bytes using ibs-sized buffer
                     Some(Err(e)) if e.raw_os_error() == Some(libc::ESPIPE) => {
-                        match io::copy(&mut f.take(n), &mut io::sink()) {
-                            Ok(m) if m < n => {
-                                show_error!(
-                                    "{}",
-                                    translate!("dd-error-cannot-skip-offset", "file" => "standard input")
-                                );
-                                Ok(m)
-                            }
-                            other => other,
+                        let m = read_and_discard(f, n, ibs)?;
+                        if m < n {
+                            show_error!(
+                                "{}",
+                                translate!("dd-error-cannot-skip-offset", "file" => "standard input")
+                            );
                         }
+                        Ok(m)
                     }
                     _ => {
                         show_error!(
