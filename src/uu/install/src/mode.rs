@@ -119,10 +119,10 @@ fn chmod_long_path(path: &Path, mode: u32) -> std::io::Result<()> {
                 if components.peek().is_none() {
                     last_component = Some(CString::new("..").unwrap());
                 } else {
-                    let base_fd = current_fd
-                        .as_ref()
-                        .map(|fd| fd.as_fd())
-                        .unwrap_or_else(|| unsafe { BorrowedFd::borrow_raw(libc::AT_FDCWD) });
+                    let base_fd = current_fd.as_ref().map_or_else(
+                        || unsafe { BorrowedFd::borrow_raw(libc::AT_FDCWD) },
+                        |fd| fd.as_fd(),
+                    );
 
                     let fd = openat(base_fd, OsStr::new(".."), dir_open_flags(), Mode::empty())
                         .map_err(errno_to_io)?;
@@ -130,10 +130,10 @@ fn chmod_long_path(path: &Path, mode: u32) -> std::io::Result<()> {
                 }
             }
             Component::Normal(name) => {
-                let base_fd = current_fd
-                    .as_ref()
-                    .map(|fd| fd.as_fd())
-                    .unwrap_or_else(|| unsafe { BorrowedFd::borrow_raw(libc::AT_FDCWD) });
+                let base_fd = current_fd.as_ref().map_or_else(
+                    || unsafe { BorrowedFd::borrow_raw(libc::AT_FDCWD) },
+                    |fd| fd.as_fd(),
+                );
 
                 let is_last = components.peek().is_none();
 
@@ -167,8 +167,7 @@ fn chmod_long_path(path: &Path, mode: u32) -> std::io::Result<()> {
 
     let dirfd_raw = current_fd
         .as_ref()
-        .map(|fd| fd.as_fd().as_raw_fd())
-        .unwrap_or(libc::AT_FDCWD);
+        .map_or(libc::AT_FDCWD, |fd| fd.as_fd().as_raw_fd());
 
     let result =
         unsafe { libc::fchmodat(dirfd_raw, name_cstring.as_ptr(), mode as libc::mode_t, 0) };

@@ -582,10 +582,10 @@ fn create_dir_all_for_install(path: &Path) -> io::Result<()> {
             Component::Normal(name) => {
                 let mode = Mode::from_bits_truncate(0o777);
 
-                let base_fd = current_fd
-                    .as_ref()
-                    .map(|fd| fd.as_fd())
-                    .unwrap_or_else(|| unsafe { BorrowedFd::borrow_raw(uucore::libc::AT_FDCWD) });
+                let base_fd = current_fd.as_ref().map_or_else(
+                    || unsafe { BorrowedFd::borrow_raw(uucore::libc::AT_FDCWD) },
+                    |fd| fd.as_fd(),
+                );
 
                 if let Err(err) = mkdirat(base_fd, name, mode) {
                     if err == Errno::ENOSYS {
