@@ -1,0 +1,23 @@
+[package]
+name = "uu_b2sum"
+version = "0.0.28"
+authors.workspace = true
+license = "MIT"
+description = "b2sum ~ (uutils) compute and check BLAKE2 message digest"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/b2sum"
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+readme.workspace = true
+
+[dependencies]
+clap = { workspace = true }
+uucore = { workspace = true, features = ["checksum"] }
+uu_hashsum = { path = "../hashsum" }
+
+[[bin]]
+name = "b2sum"
+path = "src/main.rs"
+
+[dev-dependencies]

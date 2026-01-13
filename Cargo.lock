@@ -3040,6 +3040,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "uu_b2sum"
+version = "0.0.28"
+dependencies = [
+ "clap",
+ "uu_hashsum",
+ "uucore",
+]
+
+[[package]]
 name = "uu_base32"
 version = "0.5.0"
 dependencies = [
