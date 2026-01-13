@@ -27,6 +27,9 @@ uucore = { workspace = true, features = ["fs", "parser-size", "signals"] }
 same-file = { workspace = true }
 fluent = { workspace = true }
 
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true, features = ["fs"] }
+
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [
   "Win32_System_Threading",

@@ -288,7 +288,7 @@ pub fn uu_app() -> Command {
 }
 
 /// Integer print, default format, positive increment: fast code path
-/// that avoids reformating digit at all iterations.
+/// that avoids reformatting digit at all iterations.
 fn fast_print_seq(
     mut stdout: impl Write,
     first: &BigUint,

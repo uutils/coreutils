@@ -4,6 +4,7 @@
 # spell-checker:ignore rootfs zstd unzstd cpio newc nographic smackfs devtmpfs tmpfs poweroff libm libgcc libpthread libdl librt sysfs rwxat setuidgid
 set -e
 
+: ${PROFILE:=release-small}
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 GNU_DIR="${1:-$REPO_DIR/../gnu}"
@@ -77,7 +78,7 @@ chmod +x "$QEMU_DIR/rootfs/init"
 
 # Build utilities for SMACK/ROOTFS tests
 echo "Building utilities for SMACK/ROOTFS tests..."
-cargo build --release --manifest-path="$REPO_DIR/Cargo.toml" --package uu_id --features uu_id/smack --package uu_ls --features uu_ls/smack --package uu_mkdir --features uu_mkdir/smack --package uu_mkfifo --features uu_mkfifo/smack --package uu_mknod --features uu_mknod/smack --package uu_df
+cargo build --profile="${PROFILE}" --features=feat_smack,id,ls,mkdir,mkfifo,mknod,df --no-default-features
 
 # Find SMACK tests and tests requiring rootfs in mtab (only available in QEMU environment)
 QEMU_TESTS=$(grep -l -E 'require_smack_|rootfs in mtab' -r "$GNU_DIR/tests/" 2>/dev/null | sort -u || true)
@@ -108,10 +109,9 @@ for TEST_PATH in $QEMU_TESTS; do
     rm -rf "$WORK" "$WORK.gz"
     cp -a "$QEMU_DIR/rootfs" "$WORK"
 
-    # Copy built utilities for SMACK/ROOTFS tests
-    for U in id ls mkdir mkfifo mknod df; do
-        rm -f "$WORK/bin/$U"
-        cp "$REPO_DIR/target/release/$U" "$WORK/bin/$U"
+    # Hardlink utilities for SMACK/ROOTFS tests
+    for U in $("$REPO_DIR/target/${PROFILE}/coreutils" --list); do
+        ln -vf "$REPO_DIR/target/${PROFILE}/coreutils" "$WORK/bin/$U"
     done
 
     # Set test script path and user
