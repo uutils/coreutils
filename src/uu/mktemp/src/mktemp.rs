@@ -613,7 +613,7 @@ mod tests {
         assert_eq!(findxs("XXX"), Some((0, 3)));
         assert_eq!(findxs("XXX_XXX"), Some((4, 7)));
         assert_eq!(findxs("XXX_XXX_XXX"), Some((8, 11)));
-        assert_eq!(findxs("aaXXXbb"), Some((2, 5)));
+        assert_eq!(findxs("aaXXXbb"), None);
         assert_eq!(findxs(""), None);
         assert_eq!(findxs("X"), None);
         assert_eq!(findxs("XX"), None);
