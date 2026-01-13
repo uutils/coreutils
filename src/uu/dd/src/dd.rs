@@ -272,14 +272,40 @@ impl Source {
                         return Ok(len);
                     }
                 }
-                let m = read_and_discard(f, n, ibs)?;
-                if m < n {
-                    show_error!(
-                        "{}",
-                        translate!("dd-error-cannot-skip-offset", "file" => "standard input")
-                    );
+                // Get file length before seeking to avoid race condition
+                let file_len = f.metadata().map(|m| m.len()).unwrap_or(u64::MAX);
+                // Try seek first; fall back to read if not seekable
+                match n.try_into().ok().map(|n| f.seek(SeekFrom::Current(n))) {
+                    Some(Ok(pos)) => {
+                        if pos > file_len {
+                            show_error!(
+                                "{}",
+                                translate!("dd-error-cannot-skip-offset", "file" => "standard input")
+                            );
+                        }
+                        Ok(n)
+                    }
+                    // ESPIPE means the file descriptor is not seekable (e.g., a pipe),
+                    // so fall back to reading and discarding bytes using ibs-sized buffer
+                    Some(Err(e)) if e.raw_os_error() == Some(libc::ESPIPE) => {
+                        let m = read_and_discard(f, n, ibs)?;
+                        if m < n {
+                            show_error!(
+                                "{}",
+                                translate!("dd-error-cannot-skip-offset", "file" => "standard input")
+                            );
+                        }
+                        Ok(m)
+                    }
+                    _ => {
+                        show_error!(
+                            "{}",
+                            translate!("dd-error-cannot-skip-invalid", "file" => "standard input")
+                        );
+                        set_exit_code(1);
+                        Ok(0)
+                    }
                 }
-                Ok(m)
             }
             Self::File(f) => f.seek(SeekFrom::Current(n.try_into().unwrap())),
             #[cfg(unix)]
