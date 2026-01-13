@@ -476,6 +476,7 @@ pub(crate) fn copy_directory(
                             &entry.source_absolute,
                             &entry.local_to_target,
                             &options.attributes,
+                            created_dir,
                         )?;
                         continue;
                     }
