@@ -461,6 +461,8 @@ impl ChownExecutor {
     #[cfg(target_os = "linux")]
     fn safe_traverse_dir(&self, dir_fd: DirFd, dir_path: &Path, ret: &mut i32) {
         // Iterative depth-first traversal to avoid stacking directory FDs.
+        let follow_all = self.traverse_symlinks == TraverseSymlinks::All;
+        let follow_symlinks = self.dereference || follow_all;
         let mut stack: Vec<(DirFd, PathBuf)> = vec![(dir_fd, dir_path.to_path_buf())];
 
         while let Some((dir_fd, dir_path)) = stack.pop() {
@@ -484,9 +486,7 @@ impl ChownExecutor {
                 let entry_path = dir_path.join(&entry_name);
 
                 // Get metadata for the entry
-                let follow = self.traverse_symlinks == TraverseSymlinks::All;
-
-                let meta = match dir_fd.metadata_at(&entry_name, follow) {
+                let meta = match dir_fd.metadata_at(&entry_name, follow_all) {
                     Ok(m) => m,
                     Err(e) => {
                         *ret = 1;
@@ -501,25 +501,15 @@ impl ChownExecutor {
                     }
                 };
 
-                if self.preserve_root
-                    && is_root(&entry_path, self.traverse_symlinks == TraverseSymlinks::All)
-                {
+                if self.preserve_root && is_root(&entry_path, follow_all) {
                     *ret = 1;
                     return;
                 }
 
                 // Check if we should chown this entry
                 if self.matched(meta.uid(), meta.gid()) {
-                    // Use fchownat for the actual ownership change
-                    let follow_symlinks =
-                        self.dereference || self.traverse_symlinks == TraverseSymlinks::All;
-
-                    // Only pass the IDs that should actually be changed
-                    let chown_uid = self.dest_uid;
-                    let chown_gid = self.dest_gid;
-
                     if let Err(e) =
-                        dir_fd.chown_at(&entry_name, chown_uid, chown_gid, follow_symlinks)
+                        dir_fd.chown_at(&entry_name, self.dest_uid, self.dest_gid, follow_symlinks)
                     {
                         *ret = 1;
                         if self.verbosity.level != VerbosityLevel::Silent {
@@ -548,7 +538,7 @@ impl ChownExecutor {
                 }
 
                 // Recurse into subdirectories iteratively
-                if meta.is_dir() && (follow || !meta.file_type().is_symlink()) {
+                if meta.is_dir() && (follow_all || !meta.file_type().is_symlink()) {
                     match dir_fd.open_subdir(&entry_name) {
                         Ok(subdir_fd) => {
                             stack.push((subdir_fd, entry_path.clone()));
