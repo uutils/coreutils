@@ -902,6 +902,18 @@ jobs:
           ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_NAME }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Publish latest commit
+      uses: softprops/action-gh-release@v2
+      if: steps.vars.outputs.DEPLOY && matrix.job.skip-publish != true
+      with:
+        tag_name: latest-commit
+        force_update: true
+        draft: false
+        prerelease: true
+        files: |
+          ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_NAME }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   test_busybox:
     name: Tests/BusyBox test suite
