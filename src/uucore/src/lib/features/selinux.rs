@@ -219,6 +219,7 @@ pub fn set_selinux_security_context(
 ///     Err(SeLinuxError::ContextRetrievalFailure(e)) => println!("Failed to retrieve the security context: {e}"),
 ///     Err(SeLinuxError::ContextConversionFailure(ctx, e)) => println!("Failed to convert context '{ctx}': {e}"),
 ///     Err(SeLinuxError::ContextSetFailure(ctx, e)) => println!("Failed to set context '{ctx}': {e}"),
+///     Err(SeLinuxError::OperationNotSupported) => println!("Operation not supported"),
 /// }
 /// ```
 pub fn get_selinux_security_context(
