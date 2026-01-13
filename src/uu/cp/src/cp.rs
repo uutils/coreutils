@@ -1776,10 +1776,9 @@ pub(crate) fn copy_attributes(
         // do nothing, since every symbolic link has the same
         // permissions.
         if !dest.is_symlink() {
-            let perms = source_metadata.permissions();
+            let mut perms = source_metadata.permissions();
             #[cfg(unix)]
             {
-                let mut perms = source_metadata.permissions();
                 if is_dest_created && !is_explicit {
                     use uucore::mode::get_umask;
                     let mode = perms.mode() & !get_umask();
