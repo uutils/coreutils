@@ -7583,7 +7583,6 @@ fn test_cp_xattr_enotsup_handling() {
 
 #[test]
 #[cfg(not(target_os = "windows"))]
-#[test]
 fn test_cp_preserve_directory_permissions_by_default() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
