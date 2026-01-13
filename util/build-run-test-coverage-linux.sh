@@ -28,6 +28,8 @@
 set -e
 # Treat unset variables as errors
 set -u
+# Ensure pipeline failures are caught (not just the last command's exit code)
+set -o pipefail
 # Print expanded commands to stdout before running them
 set -x
 
