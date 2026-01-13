@@ -121,9 +121,16 @@ where
 impl Filesystem {
     // TODO: resolve uuid in `mount_info.dev_name` if exists
     pub(crate) fn new(mount_info: MountInfo, file: Option<OsString>) -> Option<Self> {
-        #[cfg(unix)]
-        let _stat_path = if mount_info.mount_dir.is_empty() {
-            mount_info.dev_name.clone().into()
+        let stat_path = if mount_info.mount_dir.is_empty() {
+            #[cfg(unix)]
+            {
+                mount_info.dev_name.clone().into()
+            }
+            #[cfg(windows)]
+            {
+                // On windows, we expect the volume id
+                mount_info.dev_id.clone().into()
+            }
         } else {
             mount_info.mount_dir.clone()
         };
@@ -131,9 +138,9 @@ impl Filesystem {
         let _stat_path = mount_info.dev_id.clone(); // On windows, we expect the volume id
 
         #[cfg(unix)]
-        let usage = FsUsage::new(statfs(&_stat_path).ok()?);
+        let usage = FsUsage::new(statfs(&stat_path).ok()?);
         #[cfg(windows)]
-        let usage = FsUsage::new(Path::new(&_stat_path)).ok()?;
+        let usage = FsUsage::new(Path::new(&stat_path)).ok()?;
         Some(Self {
             file,
             mount_info,
@@ -287,9 +294,7 @@ mod tests {
         }
 
         #[test]
-        // clippy::assigning_clones added with Rust 1.78
-        // Rust version = 1.76 on OpenBSD stable/7.5
-        #[cfg_attr(not(target_os = "openbsd"), allow(clippy::assigning_clones))]
+        #[allow(clippy::assigning_clones)]
         fn test_dev_name_match() {
             let tmp = tempfile::TempDir::new().expect("Failed to create temp dir");
             let dev_name = std::fs::canonicalize(tmp.path())

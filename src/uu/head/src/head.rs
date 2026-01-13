@@ -12,7 +12,7 @@ use std::fs::File;
 use std::io::{self, BufWriter, Read, Seek, SeekFrom, Write};
 use std::num::TryFromIntError;
 #[cfg(unix)]
-use std::os::fd::{AsRawFd, FromRawFd};
+use std::os::fd::AsFd;
 use std::path::PathBuf;
 use thiserror::Error;
 use uucore::display::{Quotable, print_verbatim};
@@ -479,8 +479,8 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
 
             #[cfg(unix)]
             {
-                let stdin_raw_fd = stdin.as_raw_fd();
-                let mut stdin_file = unsafe { File::from_raw_fd(stdin_raw_fd) };
+                let stdin_owned_fd = stdin.as_fd().try_clone_to_owned()?;
+                let mut stdin_file = File::from(stdin_owned_fd);
                 let current_pos = stdin_file.stream_position();
                 if let Ok(current_pos) = current_pos {
                     // We have a seekable file. Ensure we set the input stream to the

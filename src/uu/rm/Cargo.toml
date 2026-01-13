@@ -29,6 +29,9 @@ uucore = { workspace = true, features = [
   "safe-traversal",
 ] }
 
+[target.'cfg(all(unix, not(target_os = "redox")))'.dependencies]
+uucore = { workspace = true, features = ["safe-traversal"] }
+
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
 

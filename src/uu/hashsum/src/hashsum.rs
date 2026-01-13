@@ -171,12 +171,11 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     let strict = check_flag("strict")?;
     let status = check_flag("status")?;
 
-    let files = matches.get_many::<OsString>(options::FILE).map_or_else(
-        // No files given, read from stdin.
-        || Box::new(iter::once(OsStr::new("-"))) as Box<dyn Iterator<Item = &OsStr>>,
-        // At least one file given, read from them.
-        |files| Box::new(files.map(OsStr::new)) as Box<dyn Iterator<Item = &OsStr>>,
-    );
+    // clap provides the default value -. So we unwrap() safety.
+    let files = matches
+        .get_many::<OsString>(options::FILE)
+        .unwrap()
+        .map(|s| s.as_os_str());
 
     if check {
         // on Windows, allow --binary/--text to be used with --check
@@ -343,6 +342,8 @@ pub fn uu_app_common() -> Command {
                 .index(1)
                 .action(ArgAction::Append)
                 .value_name(options::FILE)
+                .default_value("-")
+                .hide_default_value(true)
                 .value_hint(clap::ValueHint::FilePath)
                 .value_parser(ValueParser::os_string()),
         )
