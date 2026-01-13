@@ -1744,6 +1744,7 @@ pub(crate) fn copy_attributes(
         // do nothing, since every symbolic link has the same
         // permissions.
         if !dest.is_symlink() {
+            #[cfg_attr(not(unix), allow(unused_mut))]
             let mut perms = source_metadata.permissions();
             #[cfg(unix)]
             {
