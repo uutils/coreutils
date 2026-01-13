@@ -193,9 +193,11 @@ struct Params {
 /// assert_eq!(find_last_contiguous_block_of_xs("aXbXcX"), None);
 /// ```
 fn find_last_contiguous_block_of_xs(s: &str) -> Option<(usize, usize)> {
-    let j = s.rfind("XXX")? + 3;
-    let i = s[..j].rfind(|c| c != 'X').map_or(0, |i| i + 1);
-    Some((i, j))
+    let bytes = s.as_bytes();
+    let len = bytes.len();
+
+    let n = bytes.iter().rev().take_while(|&&b| b == b'X').count();
+    (n >= 3).then_some((len - n, len))
 }
 
 impl Params {
