@@ -30,7 +30,7 @@ use std::cmp;
 use std::env;
 use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
-use std::io::{self, Read, Seek, SeekFrom, Stdout, Write};
+use std::io::{self, Read, Seek, SeekFrom, Write};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::fd::AsFd;
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -601,7 +601,7 @@ enum Density {
 /// Data destinations.
 enum Dest {
     /// Output to stdout.
-    Stdout(Stdout),
+    Stdout(File),
 
     /// Output to a file.
     ///
@@ -829,7 +829,17 @@ struct Output<'a> {
 impl<'a> Output<'a> {
     /// Instantiate this struct with stdout as a destination.
     fn new_stdout(settings: &'a Settings) -> UResult<Self> {
-        let mut dst = Dest::Stdout(io::stdout());
+        #[cfg(not(unix))]
+        let f = {
+            let raw_handle = io::stdout().as_raw_handle();
+            unsafe { File::from_raw_handle(raw_handle) }
+        };
+        #[cfg(unix)]
+        let f = {
+            let raw_fd = io::stdout().as_raw_fd();
+            unsafe { File::from_raw_fd(raw_fd) }
+        };
+        let mut dst = Dest::Stdout(f);
         dst.seek(settings.seek, settings.obs)
             .map_err_context(|| translate!("dd-error-write-error"))?;
         Ok(Self { dst, settings })
