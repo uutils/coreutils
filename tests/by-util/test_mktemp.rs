@@ -30,6 +30,7 @@ static TEST_TEMPLATE7: &str = "XXXtemplate";
 static TEST_TEMPLATE8: &str = "tempXXXl/ate";
 #[cfg(windows)]
 static TEST_TEMPLATE8: &str = "tempXXXl\\ate";
+static TEST_TEMPLATE9: &str = "XXX_XX";
 
 #[cfg(not(windows))]
 const TMPDIR: &str = "TMPDIR";
@@ -98,16 +99,21 @@ fn test_mktemp_mktemp() {
         .ucmd()
         .env(TMPDIR, &pathname)
         .arg(TEST_TEMPLATE6)
-        .fails();
+        .succeeds();
     scene
         .ucmd()
         .env(TMPDIR, &pathname)
         .arg(TEST_TEMPLATE7)
-        .fails();
+        .succeeds();
     scene
         .ucmd()
         .env(TMPDIR, &pathname)
         .arg(TEST_TEMPLATE8)
+        .fails();
+    scene
+        .ucmd()
+        .env(TMPDIR, &pathname)
+        .arg(TEST_TEMPLATE9)
         .fails();
 }
 
@@ -152,13 +158,13 @@ fn test_mktemp_mktemp_t() {
         .env(TMPDIR, &pathname)
         .arg("-t")
         .arg(TEST_TEMPLATE6)
-        .fails();
+        .succeeds();
     scene
         .ucmd()
         .env(TMPDIR, &pathname)
         .arg("-t")
         .arg(TEST_TEMPLATE7)
-        .fails();
+        .succeeds();
     scene
         .ucmd()
         .env(TMPDIR, &pathname)
@@ -166,10 +172,14 @@ fn test_mktemp_mktemp_t() {
         .arg(TEST_TEMPLATE8)
         .fails()
         .no_stdout()
-        .stderr_only(format!(
-            "mktemp: too few X's in template '{}'\n",
-            TEST_TEMPLATE8
-        ));
+        .stderr_contains("invalid suffix")
+        .stderr_contains("contains directory separator");
+    scene
+        .ucmd()
+        .env(TMPDIR, &pathname)
+        .arg("-t")
+        .arg(TEST_TEMPLATE9)
+        .fails();
 }
 
 #[test]
@@ -213,18 +223,24 @@ fn test_mktemp_make_temp_dir() {
         .env(TMPDIR, &pathname)
         .arg("-d")
         .arg(TEST_TEMPLATE6)
-        .fails();
+        .succeeds();
     scene
         .ucmd()
         .env(TMPDIR, &pathname)
         .arg("-d")
         .arg(TEST_TEMPLATE7)
-        .fails();
+        .succeeds();
     scene
         .ucmd()
         .env(TMPDIR, &pathname)
         .arg("-d")
         .arg(TEST_TEMPLATE8)
+        .fails();
+    scene
+        .ucmd()
+        .env(TMPDIR, &pathname)
+        .arg("-d")
+        .arg(TEST_TEMPLATE9)
         .fails();
 }
 
@@ -269,18 +285,24 @@ fn test_mktemp_dry_run() {
         .env(TMPDIR, &pathname)
         .arg("-u")
         .arg(TEST_TEMPLATE6)
-        .fails();
+        .succeeds();
     scene
         .ucmd()
         .env(TMPDIR, &pathname)
         .arg("-u")
         .arg(TEST_TEMPLATE7)
-        .fails();
+        .succeeds();
     scene
         .ucmd()
         .env(TMPDIR, &pathname)
         .arg("-u")
         .arg(TEST_TEMPLATE8)
+        .fails();
+    scene
+        .ucmd()
+        .env(TMPDIR, &pathname)
+        .arg("-u")
+        .arg(TEST_TEMPLATE9)
         .fails();
 }
 
@@ -369,6 +391,13 @@ fn test_mktemp_suffix() {
         .arg("suf")
         .arg(TEST_TEMPLATE8)
         .fails();
+    scene
+        .ucmd()
+        .env(TMPDIR, &pathname)
+        .arg("--suffix")
+        .arg("suf")
+        .arg(TEST_TEMPLATE9)
+        .fails();
 }
 
 #[test]
@@ -413,18 +442,24 @@ fn test_mktemp_tmpdir() {
         .arg("-p")
         .arg(pathname)
         .arg(TEST_TEMPLATE6)
-        .fails();
+        .succeeds();
     scene
         .ucmd()
         .arg("-p")
         .arg(pathname)
         .arg(TEST_TEMPLATE7)
-        .fails();
+        .succeeds();
     scene
         .ucmd()
         .arg("-p")
         .arg(pathname)
         .arg(TEST_TEMPLATE8)
+        .fails();
+    scene
+        .ucmd()
+        .arg("-p")
+        .arg(pathname)
+        .arg(TEST_TEMPLATE9)
         .fails();
 }
 
@@ -630,22 +665,22 @@ fn test_suffix_path_separator() {
     new_ucmd!()
         .arg("aXXX/b")
         .fails()
-        .stderr_only("mktemp: too few X's in template 'aXXX/b'\n");
+        .stderr_only("mktemp: invalid suffix '/b', contains directory separator\n");
     #[cfg(windows)]
     new_ucmd!()
         .arg(r"aXXX\b")
         .fails()
-        .stderr_only("mktemp: too few X's in template 'aXXX\\b'\n");
+        .stderr_only("mktemp: invalid suffix '\\b', contains directory separator\n");
     #[cfg(not(windows))]
     new_ucmd!()
         .arg("XXX/..")
         .fails()
-        .stderr_only("mktemp: too few X's in template 'XXX/..'\n");
+        .stderr_only("mktemp: invalid suffix '/..', contains directory separator\n");
     #[cfg(windows)]
     new_ucmd!()
         .arg(r"XXX\..")
         .fails()
-        .stderr_only("mktemp: too few X's in template 'XXX\\..'\n");
+        .stderr_only("mktemp: invalid suffix '\\..', contains directory separator\n");
 }
 
 #[test]

@@ -194,20 +194,27 @@ struct Params {
 /// ```
 fn find_last_contiguous_block_of_xs(s: &str) -> Option<(usize, usize)> {
     let bytes = s.as_bytes();
-    let len = bytes.len();
 
-    // We only accept a template where the *final* (rightmost) characters are Xs,
-    // because mktemp replaces a trailing run of Xs with random characters.
-    //
-    // Implementation detail:
-    // - iterate from the end (`rev()`)
-    // - count how many consecutive trailing bytes are ASCII 'X' (`take_while(...)`)
-    // - if there are at least 3, return the byte index range of that suffix run
-    //
-    // These indices are byte offsets (not char indices), which is OK here because
-    // we only look for ASCII 'X' and later slice using the same UTF-8 string.
-    let n = bytes.iter().rev().take_while(|&&b| b == b'X').count();
-    (n >= 3).then_some((len - n, len))
+    // Find the index just after the last 'X'.
+    let mut end = None;
+    for (idx, &b) in bytes.iter().enumerate() {
+        if b == b'X' {
+            end = Some(idx + 1);
+        }
+    }
+    let end = end?;
+
+    // Walk left to find the start of the run of Xs that ends at `end`.
+    let mut start = end - 1;
+    while start > 0 && bytes[start - 1] == b'X' {
+        start -= 1;
+    }
+
+    if end - start >= 3 {
+        Some((start, end))
+    } else {
+        None
+    }
 }
 
 impl Params {
@@ -623,7 +630,7 @@ mod tests {
         assert_eq!(findxs("XXX"), Some((0, 3)));
         assert_eq!(findxs("XXX_XXX"), Some((4, 7)));
         assert_eq!(findxs("XXX_XXX_XXX"), Some((8, 11)));
-        assert_eq!(findxs("aaXXXbb"), None);
+        assert_eq!(findxs("aaXXXbb"), Some((2, 5)));
         assert_eq!(findxs(""), None);
         assert_eq!(findxs("X"), None);
         assert_eq!(findxs("XX"), None);
