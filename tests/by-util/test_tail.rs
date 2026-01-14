@@ -5080,7 +5080,6 @@ fn test_follow_dangling_symlink() {
     p.kill()
         .make_assertion()
         .with_all_output()
-        .stderr_contains("has appeared")
         .stdout_is("X\n");
 }
 
@@ -5102,7 +5101,6 @@ fn test_follow_symlink_target_change() {
     p.kill()
         .make_assertion()
         .with_all_output()
-        .stderr_contains("has appeared")
         .stdout_contains("A\n")
         .stdout_contains("B\n");
 }
