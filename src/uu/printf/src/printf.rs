@@ -99,7 +99,10 @@ mod stdout_state {
             }
             #[cfg(not(unix))]
             {
-                return Err(io::Error::new(io::ErrorKind::BrokenPipe, "stdout was closed"));
+                return Err(io::Error::new(
+                    io::ErrorKind::BrokenPipe,
+                    "stdout was closed",
+                ));
             }
         }
         Ok(())
