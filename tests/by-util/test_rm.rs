@@ -1217,3 +1217,20 @@ fn test_progress_no_output_on_error() {
         .stderr_contains("cannot remove")
         .stderr_contains("No such file or directory");
 }
+
+#[cfg(unix)]
+#[test]
+fn test_symlink_to_readonly_no_prompt() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("foo");
+    at.set_mode("foo", 0o444);
+    at.symlink_file("foo", "bar");
+
+    ucmd.arg("---presume-input-tty")
+        .arg("bar")
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.symlink_exists("bar"));
+}
