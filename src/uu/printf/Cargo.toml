@@ -19,6 +19,7 @@ path = "src/printf.rs"
 
 [dependencies]
 clap = { workspace = true }
+libc = { workspace = true }
 uucore = { workspace = true, features = ["format", "quoting-style"] }
 fluent = { workspace = true }
 
