@@ -6332,7 +6332,9 @@ fn test_unknown_format_specifier() {
 fn test_acl_display_symlink() {
     use std::process::Command;
 
-    let (at, mut ucmd) = at_and_ucmd!();
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
     let dir_name = "dir";
     let link_name = "link";
     at.mkdir(dir_name);
@@ -6357,11 +6359,26 @@ fn test_acl_display_symlink() {
 
     at.symlink_dir(dir_name, link_name);
 
-    let re_with_acl = Regex::new(r"[a-z-]*\+ .*link").unwrap();
-    ucmd.arg("-lLd")
+    let re_with_acl = Regex::new(r"[a-z-]*\+\s\d+\s.*link").unwrap();
+
+    scene
+        .ucmd()
+        .arg("-lLd")
         .arg(link_name)
         .succeeds()
         .stdout_matches(&re_with_acl);
+
+    let test2: uutests::util::CmdResult = scene.ucmd().arg("-l").succeeds();
+
+    let mut iter = test2
+        .stdout()
+        .split(|b| b == &b'\n')
+        .skip(1)
+        .filter_map(|line: &[u8]| line.iter().position(|b: &u8| b.is_ascii_digit()));
+
+    let first = iter.next().unwrap();
+
+    assert!(iter.all(|i| i == first));
 }
 
 #[test]
