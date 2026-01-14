@@ -1236,7 +1236,6 @@ fn no_preserve_root_may_not_be_abbreviated() {
 
     assert!(at.file_exists(file));
 }
-
 #[cfg(unix)]
 #[test]
 fn test_symlink_to_readonly_no_prompt() {
