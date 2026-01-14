@@ -1989,6 +1989,23 @@ fn test_split_separator_same_multiple() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_number_n_chunks_streaming() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // 50MB file, 40MB memory limit, split into 2x25MB chunks
+    let mut f = std::fs::File::create(at.plus("fifty_mb.bin")).unwrap();
+    f.write_all(&vec![0u8; 50 * 1024 * 1024]).unwrap();
+
+    ucmd.args(&["--number=2", "fifty_mb.bin"])
+        .limit(Resource::AS, 40 * 1024 * 1024, 40 * 1024 * 1024)
+        .succeeds();
+
+    assert_eq!(at.metadata("xaa").len(), 25 * 1024 * 1024);
+    assert_eq!(at.metadata("xab").len(), 25 * 1024 * 1024);
+}
+
+#[test]
 fn test_long_lines() {
     let (at, mut ucmd) = at_and_ucmd!();
     let line1 = [" ".repeat(131_070), String::from("\n")].concat();
