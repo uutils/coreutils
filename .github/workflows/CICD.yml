@@ -1326,15 +1326,9 @@ jobs:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
-    - name: Build SELinux utilities as stubs
-      run: cargo build -p uu_chcon -p uu_runcon
-    - name: Verify stub binaries exist
-      shell: bash
-      run: |
-        test -f target/debug/chcon || test -f target/debug/chcon.exe
-        test -f target/debug/runcon || test -f target/debug/runcon.exe
+    # We are interested in workspace build, but not interested in building SELinux stubs.
     - name: Verify workspace builds with stubs
-      run: cargo build --features ${{ matrix.job.features }}
+      run: env RUSTFLAGS="-C strip=symbols" cargo build --features ${{ matrix.job.features }}
 
   test_safe_traversal:
     name: Safe Traversal Security Check
