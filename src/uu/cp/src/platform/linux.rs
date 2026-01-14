@@ -95,7 +95,9 @@ where
     {
         Ok(file) => file,
         Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-            // Dest permissions is None if and only if dest is a dangling symlink
+            // Dest permissions is None if and only if dest is a dangling symlink (the other major
+            // point where std::fs:metadata(&dest) would fail is if the file didn't exist, but then
+            // we would have made it above).
             let dest_permissions = match std::fs::metadata(&dest) {
                 Ok(metadata) => Some(metadata.permissions()),
                 Err(_) => None,
@@ -112,12 +114,12 @@ where
             } else {
                 // If a symlink exists in the position we want to write the file to, and it symlinks to
                 // a nonexistent file, we should just overwrite the symlink
-                std::fs::remove_file(&dest)?;
+                let nonexistent_file = std::fs::read_link(&dest)?;
                 OpenOptions::new()
                     .create_new(true)
                     .write(true)
                     .mode(0o600)
-                    .open(&dest)?
+                    .open(&nonexistent_file)?
             }
         }
         Err(e) => return Err(e),
