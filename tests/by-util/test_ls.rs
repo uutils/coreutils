@@ -6232,11 +6232,11 @@ fn test_ls_capabilities() {
     }
     at.mkdir("test");
     at.mkdir("test/dir");
-    at.touch("test/cap_pos");
-    at.touch("test/dir/cap_neg");
-    at.touch("test/dir/cap_pos");
+    at.touch("test/cap_pos.txt");
+    at.touch("test/dir/cap_neg.txt");
+    at.touch("test/dir/cap_pos.txt");
 
-    let files = ["test/cap_pos", "test/dir/cap_pos"];
+    let files = ["test/cap_pos.txt", "test/dir/cap_pos.txt"];
     for file in &files {
         scene
             .cmd("sudo")
@@ -6256,12 +6256,23 @@ fn test_ls_capabilities() {
         .ucmd()
         .env("LS_COLORS", ls_colors)
         .arg("--color=always")
-        .arg("test/cap_pos")
+        .arg("test/cap_pos.txt")
         .arg("test/dir")
         .succeeds()
-        .stdout_contains("\x1b[30;41mtest/cap_pos") // spell-checker:disable-line
-        .stdout_contains("\x1b[30;41mcap_pos") // spell-checker:disable-line
-        .stdout_does_not_contain("0;41mtest/dir/cap_neg"); // spell-checker:disable-line
+        .stdout_contains("\x1b[30;41mtest/cap_pos.txt") // spell-checker:disable-line
+        .stdout_contains("\x1b[30;41mcap_pos.txt") // spell-checker:disable-line
+        .stdout_does_not_contain("0;41mcap_neg.txt"); // spell-checker:disable-line
+
+    // If ca= is not defined, ensure the specific style (.txt) for the file is used
+    let ls_colors = "di=:no=30;41:*.txt=31;41";
+
+    scene
+        .ucmd()
+        .env("LS_COLORS", ls_colors)
+        .arg("--color=always")
+        .arg("test/cap_pos.txt")
+        .succeeds()
+        .stdout_contains("\x1b[31;41mtest/cap_pos.txt"); // spell-checker:disable-line
 }
 
 #[cfg(feature = "test_risky_names")]
