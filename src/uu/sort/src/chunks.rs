@@ -43,6 +43,15 @@ pub struct LineData<'a> {
     pub num_infos: Vec<NumInfo>,
     pub parsed_floats: Vec<GeneralBigDecimalParseResult>,
     pub line_num_floats: Vec<Option<f64>>,
+    pub filtered_lines_data: Vec<u8>,
+    pub filtered_line_ranges: Vec<(usize, usize)>,
+}
+
+impl LineData<'_> {
+    pub fn filtered_line(&self, index: usize) -> &[u8] {
+        let (start, len) = self.filtered_line_ranges[index];
+        &self.filtered_lines_data[start..start + len]
+    }
 }
 
 impl Chunk {
@@ -54,6 +63,8 @@ impl Chunk {
             contents.line_data.num_infos.clear();
             contents.line_data.parsed_floats.clear();
             contents.line_data.line_num_floats.clear();
+            contents.line_data.filtered_lines_data.clear();
+            contents.line_data.filtered_line_ranges.clear();
             let lines = unsafe {
                 // SAFETY: It is safe to (temporarily) transmute to a vector of lines with a longer lifetime,
                 // because the vector is empty.
@@ -192,6 +203,8 @@ pub fn read<T: Read>(
                 num_infos,
                 parsed_floats,
                 line_num_floats,
+                filtered_lines_data: Vec::new(),
+                filtered_line_ranges: Vec::new(),
             };
             parse_lines(read, &mut lines, &mut line_data, separator, settings);
             Ok(ChunkContents { lines, line_data })
