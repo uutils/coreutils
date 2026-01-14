@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars/api) fcntl setrlimit setitimer rubout pollable sysconf pgrp GETFD
+// spell-checker:ignore (vars/api) fcntl setrlimit setitimer rubout pollable sysconf pgrp GETFD pfds revents POLLRDBAND POLLERR
 // spell-checker:ignore (vars/signals) ABRT ALRM CHLD SEGV SIGABRT SIGALRM SIGBUS SIGCHLD SIGCONT SIGDANGER SIGEMT SIGFPE SIGHUP SIGILL SIGINFO SIGINT SIGIO SIGIOT SIGKILL SIGMIGRATE SIGMSG SIGPIPE SIGPRE SIGPROF SIGPWR SIGQUIT SIGSEGV SIGSTOP SIGSYS SIGTALRM SIGTERM SIGTRAP SIGTSTP SIGTHR SIGTTIN SIGTTOU SIGURG SIGUSR SIGVIRT SIGVTALRM SIGWINCH SIGXCPU SIGXFSZ STKFLT PWR THR TSTP TTIN TTOU VIRT VTALRM XCPU XFSZ SIGCLD SIGPOLL SIGWAITING SIGAIOCANCEL SIGLWP SIGFREEZE SIGTHAW SIGCANCEL SIGLOST SIGXRES SIGJVM SIGRTMIN SIGRT SIGRTMAX TALRM AIOCANCEL XRES RTMIN RTMAX LTOSTOP
 
 //! This module provides a way to handle signals in a platform-independent way.
@@ -437,10 +437,22 @@ static STDOUT_WAS_CLOSED: AtomicBool = AtomicBool::new(false);
 #[cfg(unix)]
 static STDERR_WAS_CLOSED: AtomicBool = AtomicBool::new(false);
 
+// SIGPIPE state capture - captures whether SIGPIPE was ignored at process startup
+#[cfg(unix)]
+static SIGPIPE_WAS_IGNORED: AtomicBool = AtomicBool::new(false);
+
+/// Captures stdio and SIGPIPE state at process initialization, before main() runs.
+///
+/// # Safety
+/// Called from `.init_array` before main(). Only reads current state.
 #[cfg(unix)]
 #[allow(clippy::missing_safety_doc)]
-pub unsafe extern "C" fn capture_stdio_state() {
+pub unsafe extern "C" fn capture_startup_state() {
     use nix::libc;
+    use std::mem::MaybeUninit;
+    use std::ptr;
+
+    // Capture stdio state
     unsafe {
         STDIN_WAS_CLOSED.store(
             libc::fcntl(libc::STDIN_FILENO, libc::F_GETFD) == -1,
@@ -455,27 +467,39 @@ pub unsafe extern "C" fn capture_stdio_state() {
             Ordering::Relaxed,
         );
     }
+
+    // Capture SIGPIPE state
+    let mut current = MaybeUninit::<libc::sigaction>::uninit();
+    // SAFETY: sigaction with null new-action just queries current state
+    if unsafe { libc::sigaction(libc::SIGPIPE, ptr::null(), current.as_mut_ptr()) } == 0 {
+        // SAFETY: sigaction succeeded, so current is initialized
+        let ignored = unsafe { current.assume_init() }.sa_sigaction == libc::SIG_IGN;
+        SIGPIPE_WAS_IGNORED.store(ignored, Ordering::Release);
+    }
 }
 
+/// Initializes startup state capture. Call once at crate root level.
 #[macro_export]
 #[cfg(unix)]
-macro_rules! init_stdio_state_capture {
+macro_rules! init_startup_state_capture {
     () => {
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(all(unix, not(target_os = "macos")))]
         #[used]
         #[unsafe(link_section = ".init_array")]
-        static CAPTURE_STDIO_STATE: unsafe extern "C" fn() = $crate::signals::capture_stdio_state;
+        static CAPTURE_STARTUP_STATE: unsafe extern "C" fn() =
+            $crate::signals::capture_startup_state;
 
-        #[cfg(target_os = "macos")]
+        #[cfg(all(unix, target_os = "macos"))]
         #[used]
         #[unsafe(link_section = "__DATA,__mod_init_func")]
-        static CAPTURE_STDIO_STATE: unsafe extern "C" fn() = $crate::signals::capture_stdio_state;
+        static CAPTURE_STARTUP_STATE: unsafe extern "C" fn() =
+            $crate::signals::capture_startup_state;
     };
 }
 
 #[macro_export]
 #[cfg(not(unix))]
-macro_rules! init_stdio_state_capture {
+macro_rules! init_startup_state_capture {
     () => {};
 }
 
@@ -507,6 +531,59 @@ pub fn stderr_was_closed() -> bool {
 #[cfg(not(unix))]
 pub const fn stderr_was_closed() -> bool {
     false
+}
+
+/// Returns whether SIGPIPE was ignored at process startup.
+#[cfg(unix)]
+pub fn sigpipe_was_ignored() -> bool {
+    SIGPIPE_WAS_IGNORED.load(Ordering::Acquire)
+}
+
+#[cfg(not(unix))]
+pub const fn sigpipe_was_ignored() -> bool {
+    false
+}
+
+#[cfg(target_os = "linux")]
+pub fn ensure_stdout_not_broken() -> std::io::Result<bool> {
+    use nix::{
+        poll::{PollFd, PollFlags, PollTimeout, poll},
+        sys::stat::{SFlag, fstat},
+    };
+    use std::io::stdout;
+    use std::os::fd::AsFd;
+
+    let out = stdout();
+
+    // First, check that stdout is a fifo and return true if it's not the case
+    let stat = fstat(out.as_fd())?;
+    if !SFlag::from_bits_truncate(stat.st_mode).contains(SFlag::S_IFIFO) {
+        return Ok(true);
+    }
+
+    // POLLRDBAND is the flag used by GNU tee.
+    let mut pfds = [PollFd::new(out.as_fd(), PollFlags::POLLRDBAND)];
+
+    // Then, ensure that the pipe is not broken.
+    // Use ZERO timeout to return immediately - we just want to check the current state.
+    let res = poll(&mut pfds, PollTimeout::ZERO)?;
+
+    if res > 0 {
+        // poll returned with events ready - check if POLLERR is set (pipe broken)
+        let error = pfds.iter().any(|pfd| {
+            if let Some(revents) = pfd.revents() {
+                revents.contains(PollFlags::POLLERR)
+            } else {
+                true
+            }
+        });
+        return Ok(!error);
+    }
+
+    // res == 0 means no events ready (timeout reached immediately with ZERO timeout).
+    // This means the pipe is healthy (not broken).
+    // res < 0 would be an error, but nix returns Err in that case.
+    Ok(true)
 }
 
 #[test]

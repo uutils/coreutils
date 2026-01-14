@@ -39,7 +39,7 @@ use uucore::translate;
 use uucore::{show, show_error};
 
 #[cfg(unix)]
-uucore::init_stdio_state_capture!();
+uucore::init_startup_state_capture!();
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -48,9 +48,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // (see https://github.com/rust-lang/rust/issues/62569), so we restore it's
     // default action here.
     #[cfg(not(target_os = "windows"))]
-    unsafe {
-        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
-    }
+    let _ = uucore::signals::enable_pipe_errors();
 
     let settings = parse_args(args)?;
 
@@ -153,7 +151,12 @@ fn tail_file(
         }
         observer.add_bad_path(path, input.display_name.as_str(), false)?;
     } else {
-        match File::open(path) {
+        #[cfg(unix)]
+        let open_result = open_file(path, settings.pid != 0);
+        #[cfg(not(unix))]
+        let open_result = File::open(path);
+
+        match open_result {
             Ok(mut file) => {
                 let st = file.metadata()?;
                 let blksize_limit = uucore::fs::sane_blksize::sane_blksize_from_metadata(&st);
@@ -196,6 +199,43 @@ fn tail_file(
     }
 
     Ok(())
+}
+
+/// Opens a file, using non-blocking mode for FIFOs when `use_nonblock_for_fifo` is true.
+///
+/// When opening a FIFO with `--pid`, we need to use O_NONBLOCK so that:
+/// 1. The open() call doesn't block waiting for a writer
+/// 2. We can periodically check if the monitored process is still alive
+///
+/// After opening, we clear O_NONBLOCK so subsequent reads block normally.
+/// Without `--pid`, FIFOs block on open() until a writer connects (GNU behavior).
+#[cfg(unix)]
+fn open_file(path: &Path, use_nonblock_for_fifo: bool) -> std::io::Result<File> {
+    use nix::fcntl::{FcntlArg, OFlag, fcntl};
+    use std::fs::OpenOptions;
+    use std::os::fd::AsFd;
+    use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
+
+    let is_fifo = path
+        .metadata()
+        .ok()
+        .is_some_and(|m| m.file_type().is_fifo());
+
+    if is_fifo && use_nonblock_for_fifo {
+        let file = OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NONBLOCK)
+            .open(path)?;
+
+        // Clear O_NONBLOCK so reads block normally
+        let flags = fcntl(file.as_fd(), FcntlArg::F_GETFL)?;
+        let new_flags = OFlag::from_bits_truncate(flags) & !OFlag::O_NONBLOCK;
+        fcntl(file.as_fd(), FcntlArg::F_SETFL(new_flags))?;
+
+        Ok(file)
+    } else {
+        File::open(path)
+    }
 }
 
 fn tail_stdin(
@@ -277,7 +317,6 @@ fn tail_stdin(
             } else {
                 let mut reader = BufReader::new(stdin());
                 unbounded_tail(&mut reader, settings)?;
-                observer.add_stdin(input.display_name.as_str(), Some(Box::new(reader)), true)?;
             }
         }
     }

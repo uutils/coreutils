@@ -289,6 +289,46 @@ pub mod text_data {
     }
 }
 
+/// Binary data generation utilities for benchmarking
+pub mod binary_data {
+    use std::fs::File;
+    use std::io::Write;
+    use std::path::Path;
+
+    /// Create a binary file filled with a repeated pattern
+    ///
+    /// Creates a file of the specified size (in MB) filled with the given byte pattern.
+    /// This is useful for benchmarking utilities that work with large binary files like dd, cp, etc.
+    pub fn create_file(path: &Path, size_mb: usize, pattern: u8) {
+        let buffer = vec![pattern; size_mb * 1024 * 1024];
+        let mut file = File::create(path).unwrap();
+        file.write_all(&buffer).unwrap();
+        file.sync_all().unwrap();
+    }
+}
+
+/// Filesystem utilities for benchmarking
+pub mod fs_utils {
+    use std::fs;
+    use std::path::Path;
+
+    /// Remove a file or directory if it exists
+    ///
+    /// This is a convenience function for cleaning up between benchmark iterations.
+    /// It handles both files and directories, and is a no-op if the path doesn't exist.
+    pub fn remove_path(path: &Path) {
+        if !path.exists() {
+            return;
+        }
+
+        if path.is_dir() {
+            fs::remove_dir_all(path).unwrap();
+        } else {
+            fs::remove_file(path).unwrap();
+        }
+    }
+}
+
 /// Filesystem tree generation utilities for benchmarking
 pub mod fs_tree {
     use std::fs::{self, File};

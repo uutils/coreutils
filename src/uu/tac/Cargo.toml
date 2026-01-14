@@ -28,6 +28,7 @@ libc = { workspace = true }
 uucore = { workspace = true, features = ["signals"] }
 thiserror = { workspace = true }
 fluent = { workspace = true }
+tempfile = { workspace = true }
 
 [[bin]]
 name = "tac"
