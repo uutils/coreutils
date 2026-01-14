@@ -66,9 +66,8 @@ fn main() {
             // prefixed util => replace 0th (aka, executable name) argument
             Some(OsString::from(util))
         } else {
-            // unmatched binary name => regard as multi-binary container and advance argument list
-            uucore::set_utility_is_second_arg();
-            args.next()
+            println!("coreutils: I was probably called as symlink to false");
+            process::exit(1);
         };
 
     // 0th argument equals util name?
