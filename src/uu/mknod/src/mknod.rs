@@ -13,6 +13,7 @@ use std::ffi::CString;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::format_usage;
+use uucore::fs::makedev;
 use uucore::translate;
 
 const MODE_RW_UGO: mode_t = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
@@ -22,14 +23,8 @@ mod options {
     pub const TYPE: &str = "type";
     pub const MAJOR: &str = "major";
     pub const MINOR: &str = "minor";
-    pub const SELINUX: &str = "z";
+    pub const SECURITY_CONTEXT: &str = "z";
     pub const CONTEXT: &str = "context";
-}
-
-#[inline(always)]
-fn makedev(maj: u64, min: u64) -> dev_t {
-    // pick up from <sys/sysmacros.h>
-    ((min & 0xff) | ((maj & 0xfff) << 8) | ((min & !0xff) << 12) | ((maj & !0xfff) << 32)) as dev_t
 }
 
 #[derive(Clone, PartialEq)]
@@ -59,10 +54,10 @@ pub struct Config<'a> {
 
     pub dev: dev_t,
 
-    /// Set `SELinux` security context.
-    pub set_selinux_context: bool,
+    /// Set security context (SELinux/SMACK).
+    pub set_security_context: bool,
 
-    /// Specific `SELinux` context.
+    /// Specific security context (SELinux/SMACK).
     pub context: Option<&'a String>,
 }
 
@@ -93,13 +88,26 @@ fn mknod(file_name: &str, config: Config) -> i32 {
 
         // Apply SELinux context if requested
         #[cfg(feature = "selinux")]
-        if config.set_selinux_context {
+        if config.set_security_context {
             if let Err(e) = uucore::selinux::set_selinux_security_context(
                 std::path::Path::new(file_name),
                 config.context,
             ) {
                 // if it fails, delete the file
                 let _ = std::fs::remove_dir(file_name);
+                eprintln!("{}: {}", uucore::util_name(), e);
+                return 1;
+            }
+        }
+
+        // Apply SMACK context if requested
+        #[cfg(feature = "smack")]
+        if config.set_security_context {
+            if let Err(e) =
+                uucore::smack::set_smack_label_and_cleanup(file_name, config.context, |p| {
+                    std::fs::remove_file(p)
+                })
+            {
                 eprintln!("{}: {}", uucore::util_name(), e);
                 return 1;
             }
@@ -129,14 +137,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .get_one::<String>("name")
         .expect("Missing argument 'NAME'");
 
-    // Extract the SELinux related flags and options
-    let set_selinux_context = matches.get_flag(options::SELINUX);
+    // Extract the security context related flags and options
+    let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
     let context = matches.get_one::<String>(options::CONTEXT);
 
     let dev = match (
         file_type,
-        matches.get_one::<u64>(options::MAJOR),
-        matches.get_one::<u64>(options::MINOR),
+        matches.get_one::<u32>(options::MAJOR),
+        matches.get_one::<u32>(options::MINOR),
     ) {
         (FileType::Fifo, None, None) => 0,
         (FileType::Fifo, _, _) => {
@@ -145,7 +153,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 translate!("mknod-error-fifo-no-major-minor"),
             ));
         }
-        (_, Some(&major), Some(&minor)) => makedev(major, minor),
+        (_, Some(&major), Some(&minor)) => makedev(major as _, minor as _),
         _ => {
             return Err(UUsageError::new(
                 1,
@@ -158,7 +166,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         mode,
         use_umask,
         dev,
-        set_selinux_context: set_selinux_context || context.is_some(),
+        set_security_context: set_security_context || context.is_some(),
         context,
     };
 
@@ -200,16 +208,16 @@ pub fn uu_app() -> Command {
             Arg::new(options::MAJOR)
                 .value_name(options::MAJOR)
                 .help(translate!("mknod-help-major"))
-                .value_parser(value_parser!(u64)),
+                .value_parser(value_parser!(u32)),
         )
         .arg(
             Arg::new(options::MINOR)
                 .value_name(options::MINOR)
                 .help(translate!("mknod-help-minor"))
-                .value_parser(value_parser!(u64)),
+                .value_parser(value_parser!(u32)),
         )
         .arg(
-            Arg::new(options::SELINUX)
+            Arg::new(options::SECURITY_CONTEXT)
                 .short('Z')
                 .help(translate!("mknod-help-selinux"))
                 .action(ArgAction::SetTrue),

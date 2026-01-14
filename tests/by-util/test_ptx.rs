@@ -338,3 +338,12 @@ fn test_unicode_truncation_alignment() {
         .succeeds()
         .stdout_only("     /   bar\n        föö/\n");
 }
+
+#[test]
+fn test_narrow_width_with_long_reference_no_panic() {
+    new_ucmd!()
+        .args(&["-w", "1", "-A"])
+        .pipe_in("content")
+        .succeeds()
+        .stdout_only(":1       content\n");
+}

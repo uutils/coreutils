@@ -100,7 +100,7 @@ fn test_invalid_input() {
         .ucmd()
         .arg("a")
         .fails()
-        .stderr_contains("a: read error: Invalid argument");
+        .stderr_contains("a: read error: Is a directory");
 }
 
 #[test]
@@ -334,4 +334,16 @@ fn test_failed_write_is_reported() {
         .set_stdout(std::fs::File::create("/dev/full").unwrap())
         .fails()
         .stderr_is("tac: failed to write to stdout: No space left on device (os error 28)\n");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_stdin_bad_tmpdir_fallback() {
+    // When TMPDIR is invalid, tac falls back to reading stdin directly into memory
+    new_ucmd!()
+        .env("TMPDIR", "/nonexistent/dir")
+        .arg("-")
+        .pipe_in("a\nb\nc\n")
+        .succeeds()
+        .stdout_is("c\nb\na\n");
 }

@@ -8,7 +8,6 @@
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
 use std::ffi::{OsStr, OsString};
-use std::iter;
 use uucore::checksum::compute::{
     ChecksumComputeOptions, figure_out_output_format, perform_checksum_computation,
 };
@@ -165,12 +164,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let length = maybe_sanitize_length(algo_cli, input_length)?;
 
-    let files = matches.get_many::<OsString>(options::FILE).map_or_else(
-        // No files given, read from stdin.
-        || Box::new(iter::once(OsStr::new("-"))) as Box<dyn Iterator<Item = &OsStr>>,
-        // At least one file given, read from them.
-        |files| Box::new(files.map(OsStr::new)) as Box<dyn Iterator<Item = &OsStr>>,
-    );
+    // clap provides the default value -. So we unwrap() safety.
+    let files = matches
+        .get_many::<OsString>(options::FILE)
+        .unwrap()
+        .map(|s| s.as_os_str());
 
     if check {
         // cksum does not support '--check'ing legacy algorithms
@@ -243,6 +241,8 @@ pub fn uu_app() -> Command {
                 .hide(true)
                 .action(ArgAction::Append)
                 .value_parser(ValueParser::os_string())
+                .default_value("-")
+                .hide_default_value(true)
                 .value_hint(clap::ValueHint::FilePath),
         )
         .arg(

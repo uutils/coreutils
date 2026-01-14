@@ -183,6 +183,32 @@ impl Num {
     }
 }
 
+/// Read and discard `n` bytes from `reader` using a buffer of size `buf_size`.
+///
+/// This is more efficient than `io::copy` with `BufReader` because it reads
+/// directly in `buf_size`-sized chunks, matching GNU dd's behavior.
+/// Returns the total number of bytes actually read.
+fn read_and_discard<R: Read>(reader: &mut R, n: u64, buf_size: usize) -> io::Result<u64> {
+    let mut buf = vec![0u8; buf_size];
+    let mut total = 0u64;
+    let mut remaining = n;
+
+    while remaining > 0 {
+        let to_read = cmp::min(remaining, buf_size as u64) as usize;
+        match reader.read(&mut buf[..to_read]) {
+            Ok(0) => break, // EOF
+            Ok(bytes_read) => {
+                total += bytes_read as u64;
+                remaining -= bytes_read as u64;
+            }
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+            Err(e) => return Err(e),
+        }
+    }
+
+    Ok(total)
+}
+
 /// Data sources.
 ///
 /// Use [`Source::stdin_as_file`] if available to enable more
@@ -219,31 +245,19 @@ impl Source {
         Self::StdinFile(f)
     }
 
-    /// The length of the data source in number of bytes.
-    ///
-    /// If it cannot be determined, then this function returns 0.
-    fn len(&self) -> io::Result<i64> {
-        #[allow(clippy::match_wildcard_for_single_variants)]
-        match self {
-            Self::File(f) => Ok(f.metadata()?.len().try_into().unwrap_or(i64::MAX)),
-            _ => Ok(0),
-        }
-    }
-
-    fn skip(&mut self, n: u64) -> io::Result<u64> {
+    fn skip(&mut self, n: u64, ibs: usize) -> io::Result<u64> {
         match self {
             #[cfg(not(unix))]
-            Self::Stdin(stdin) => match io::copy(&mut stdin.take(n), &mut io::sink()) {
-                Ok(m) if m < n => {
+            Self::Stdin(stdin) => {
+                let m = read_and_discard(stdin, n, ibs)?;
+                if m < n {
                     show_error!(
                         "{}",
                         translate!("dd-error-cannot-skip-offset", "file" => "standard input")
                     );
-                    Ok(m)
                 }
-                Ok(m) => Ok(m),
-                Err(e) => Err(e),
-            },
+                Ok(m)
+            }
             #[cfg(unix)]
             Self::StdinFile(f) => {
                 if let Ok(Some(len)) = try_get_len_of_block_device(f) {
@@ -258,21 +272,44 @@ impl Source {
                         return Ok(len);
                     }
                 }
-                match io::copy(&mut f.take(n), &mut io::sink()) {
-                    Ok(m) if m < n => {
-                        show_error!(
-                            "{}",
-                            translate!("dd-error-cannot-skip-offset", "file" => "standard input")
-                        );
+                // Get file length before seeking to avoid race condition
+                let file_len = f.metadata().map(|m| m.len()).unwrap_or(u64::MAX);
+                // Try seek first; fall back to read if not seekable
+                match n.try_into().ok().map(|n| f.seek(SeekFrom::Current(n))) {
+                    Some(Ok(pos)) => {
+                        if pos > file_len {
+                            show_error!(
+                                "{}",
+                                translate!("dd-error-cannot-skip-offset", "file" => "standard input")
+                            );
+                        }
+                        Ok(n)
+                    }
+                    // ESPIPE means the file descriptor is not seekable (e.g., a pipe),
+                    // so fall back to reading and discarding bytes using ibs-sized buffer
+                    Some(Err(e)) if e.raw_os_error() == Some(libc::ESPIPE) => {
+                        let m = read_and_discard(f, n, ibs)?;
+                        if m < n {
+                            show_error!(
+                                "{}",
+                                translate!("dd-error-cannot-skip-offset", "file" => "standard input")
+                            );
+                        }
                         Ok(m)
                     }
-                    Ok(m) => Ok(m),
-                    Err(e) => Err(e),
+                    _ => {
+                        show_error!(
+                            "{}",
+                            translate!("dd-error-cannot-skip-invalid", "file" => "standard input")
+                        );
+                        set_exit_code(1);
+                        Ok(0)
+                    }
                 }
             }
             Self::File(f) => f.seek(SeekFrom::Current(n.try_into().unwrap())),
             #[cfg(unix)]
-            Self::Fifo(f) => io::copy(&mut f.take(n), &mut io::sink()),
+            Self::Fifo(f) => read_and_discard(f, n, ibs),
         }
     }
 
@@ -357,7 +394,7 @@ impl<'a> Input<'a> {
             }
         }
         if settings.skip > 0 {
-            src.skip(settings.skip)?;
+            src.skip(settings.skip, settings.ibs)?;
         }
         Ok(Self { src, settings })
     }
@@ -380,7 +417,7 @@ impl<'a> Input<'a> {
 
         let mut src = Source::File(src);
         if settings.skip > 0 {
-            src.skip(settings.skip)?;
+            src.skip(settings.skip, settings.ibs)?;
         }
         Ok(Self { src, settings })
     }
@@ -394,7 +431,7 @@ impl<'a> Input<'a> {
         opts.custom_flags(make_linux_iflags(&settings.iflags).unwrap_or(0));
         let mut src = Source::Fifo(opts.open(filename)?);
         if settings.skip > 0 {
-            src.skip(settings.skip)?;
+            src.skip(settings.skip, settings.ibs)?;
         }
         Ok(Self { src, settings })
     }
@@ -616,7 +653,8 @@ impl Dest {
         }
     }
 
-    fn seek(&mut self, n: u64) -> io::Result<u64> {
+    #[cfg_attr(not(unix), allow(unused_variables))]
+    fn seek(&mut self, n: u64, obs: usize) -> io::Result<u64> {
         match self {
             Self::Stdout(stdout) => io::copy(&mut io::repeat(0).take(n), stdout),
             Self::File(f, _) => {
@@ -638,7 +676,7 @@ impl Dest {
             #[cfg(unix)]
             Self::Fifo(f) => {
                 // Seeking in a named pipe means *reading* from the pipe.
-                io::copy(&mut f.take(n), &mut io::sink())
+                read_and_discard(f, n, obs)
             }
             #[cfg(unix)]
             Self::Sink => Ok(0),
@@ -671,17 +709,6 @@ impl Dest {
                 posix_fadvise(f.as_fd(), offset, len, advice)
             }
             _ => Err(Errno::ESPIPE), // "Illegal seek"
-        }
-    }
-
-    /// The length of the data destination in number of bytes.
-    ///
-    /// If it cannot be determined, then this function returns 0.
-    fn len(&self) -> io::Result<i64> {
-        #[allow(clippy::match_wildcard_for_single_variants)]
-        match self {
-            Self::File(f, _) => Ok(f.metadata()?.len().try_into().unwrap_or(i64::MAX)),
-            _ => Ok(0),
         }
     }
 }
@@ -803,7 +830,7 @@ impl<'a> Output<'a> {
     /// Instantiate this struct with stdout as a destination.
     fn new_stdout(settings: &'a Settings) -> UResult<Self> {
         let mut dst = Dest::Stdout(io::stdout());
-        dst.seek(settings.seek)
+        dst.seek(settings.seek, settings.obs)
             .map_err_context(|| translate!("dd-error-write-error"))?;
         Ok(Self { dst, settings })
     }
@@ -851,7 +878,7 @@ impl<'a> Output<'a> {
             Density::Dense
         };
         let mut dst = Dest::File(dst, density);
-        dst.seek(settings.seek)
+        dst.seek(settings.seek, settings.obs)
             .map_err_context(|| translate!("dd-error-failed-to-seek"))?;
         Ok(Self { dst, settings })
     }
@@ -881,7 +908,7 @@ impl<'a> Output<'a> {
         // file for reading. But then we need to close the file and
         // re-open it for writing.
         if settings.seek > 0 {
-            Dest::Fifo(File::open(filename)?).seek(settings.seek)?;
+            Dest::Fifo(File::open(filename)?).seek(settings.seek, settings.obs)?;
         }
         // If `count=0`, then we don't bother opening the file for
         // writing because that would cause this process to block
@@ -1063,21 +1090,12 @@ impl BlockWriter<'_> {
 /// depending on the command line arguments, this function
 /// informs the OS to flush/discard the caches for input and/or output file.
 fn flush_caches_full_length(i: &Input, o: &Output) -> io::Result<()> {
-    // TODO Better error handling for overflowing `len`.
+    // Using len=0 in posix_fadvise means "to end of file"
     if i.settings.iflags.nocache {
-        let offset = 0;
-        #[allow(clippy::useless_conversion)]
-        let len = i.src.len()?.try_into().unwrap();
-        i.discard_cache(offset, len);
+        i.discard_cache(0, 0);
     }
-    // Similarly, discard the system cache for the output file.
-    //
-    // TODO Better error handling for overflowing `len`.
     if i.settings.oflags.nocache {
-        let offset = 0;
-        #[allow(clippy::useless_conversion)]
-        let len = o.dst.len()?.try_into().unwrap();
-        o.discard_cache(offset, len);
+        o.discard_cache(0, 0);
     }
 
     Ok(())
@@ -1185,6 +1203,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
 
     let input_nocache = i.settings.iflags.nocache;
     let output_nocache = o.settings.oflags.nocache;
+    let output_direct = o.settings.oflags.direct;
 
     // Add partial block buffering, if needed.
     let mut o = if o.settings.buffered {
@@ -1208,6 +1227,12 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         let loop_bsize = calc_loop_bsize(i.settings.count, &rstat, &wstat, i.settings.ibs, bsize);
         let rstat_update = read_helper(&mut i, &mut buf, loop_bsize)?;
         if rstat_update.is_empty() {
+            if input_nocache {
+                i.discard_cache(read_offset.try_into().unwrap(), 0);
+            }
+            if output_nocache || output_direct {
+                o.discard_cache(write_offset.try_into().unwrap(), 0);
+            }
             break;
         }
         let wstat_update = o.write_blocks(&buf)?;

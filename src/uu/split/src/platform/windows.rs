@@ -3,8 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 use std::ffi::OsStr;
-use std::io::Write;
 use std::io::{BufWriter, Error, Result};
+use std::io::{ErrorKind, Write};
 use std::path::Path;
 use uucore::fs;
 use uucore::translate;
@@ -25,8 +25,13 @@ pub fn instantiate_current_writer(
             .create(true)
             .truncate(true)
             .open(Path::new(&filename))
-            .map_err(|_| {
-                Error::other(translate!("split-error-unable-to-open-file", "file" => filename))
+            .map_err(|e| match e.kind() {
+                ErrorKind::IsADirectory => {
+                    Error::other(translate!("split-error-is-a-directory", "dir" => filename))
+                }
+                _ => {
+                    Error::other(translate!("split-error-unable-to-open-file", "file" => filename))
+                }
             })?
     } else {
         // re-open file that we previously created to append to it

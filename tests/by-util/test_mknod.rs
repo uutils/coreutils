@@ -14,6 +14,19 @@ use uutests::util::TestScenario;
 use uutests::util::run_ucmd_as_root;
 use uutests::util_name;
 
+//Reject 2^32+1 major/minor device number
+#[test]
+fn test_mknod_overflow_major_minor() {
+    new_ucmd!()
+        .arg("lg32")
+        .arg("c")
+        .arg("4294967296")
+        .arg("1")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("invalid value '4294967296'"); //clap generated message, thats fine.
+}
+
 #[test]
 fn test_mknod_invalid_arg() {
     new_ucmd!()

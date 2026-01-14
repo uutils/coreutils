@@ -166,7 +166,7 @@ jobs:
         disk-size: ${{ env.EMULATOR_DISK_SIZE }}
         cores: ${{ env.EMULATOR_CORES }}
         force-avd-creation: false
-        emulator-options: ${{ env.COMMON_EMULATOR_OPTIONS }} -no-snapshot-save -snapshot ${{ env.AVD_CACHE_KEY }}
+        emulator-options: ${{ env.COMMON_EMULATOR_OPTIONS }} -no-metrics -no-snapshot-save -snapshot ${{ env.AVD_CACHE_KEY }}
         emulator-boot-timeout: ${{ env.EMULATOR_BOOT_TIMEOUT }}
         # This is not a usual script. Every line is executed in a separate shell with `sh -c`. If
         # one of the lines returns with error the whole script is failed (like running a script with

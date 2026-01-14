@@ -3,32 +3,16 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore lmnop xlmnop
+use rstest::rstest;
 use uutests::new_ucmd;
+#[cfg(unix)]
+use uutests::util::TestScenario;
+#[cfg(unix)]
+use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
-}
-
-#[test]
-#[cfg(unix)]
-fn test_broken_pipe_still_exits_success() {
-    use std::process::Stdio;
-
-    let mut child = new_ucmd!()
-        // Use an infinite sequence so a burst of output happens immediately after spawn.
-        // With small output the process can finish before stdout is closed and the Broken pipe never occurs.
-        .args(&["inf"])
-        .set_stdout(Stdio::piped())
-        .run_no_wait();
-
-    // Trigger a Broken pipe by writing to a pipe whose reader closed first.
-    child.close_stdout();
-    let result = child.wait().unwrap();
-
-    result
-        .code_is(0)
-        .stderr_contains("write error: Broken pipe");
 }
 
 #[test]
@@ -201,6 +185,24 @@ fn test_width_invalid_float() {
         .fails()
         .no_stdout()
         .usage_error("invalid floating point argument: '1e2.3'");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_sigpipe_ignored_reports_write_error() {
+    let scene = TestScenario::new(util_name!());
+    let seq_bin = scene.bin_path.clone().into_os_string();
+    let script = "trap '' PIPE; { \"$SEQ_BIN\" seq inf 2>err; echo $? >code; } | head -n1";
+    let result = scene.cmd_shell(script).env("SEQ_BIN", &seq_bin).succeeds();
+
+    assert_eq!(result.stdout_str(), "1\n");
+
+    let err_contents = scene.fixtures.read("err");
+    assert!(
+        err_contents.contains("seq: write error: Broken pipe"),
+        "stderr missing write error message: {err_contents:?}"
+    );
+    assert_eq!(scene.fixtures.read("code"), "1\n");
 }
 
 // ---- Tests for the big integer based path ----
@@ -648,52 +650,49 @@ fn test_width_floats() {
         .stdout_only("09.0\n10.0\n");
 }
 
-#[test]
-fn test_neg_inf() {
-    new_ucmd!()
-        .args(&["--", "-inf", "0"])
-        .run_stdout_starts_with(b"-inf\n-inf\n-inf\n")
-        .success();
-}
-
-#[test]
-fn test_neg_infinity() {
-    new_ucmd!()
-        .args(&["--", "-infinity", "0"])
-        .run_stdout_starts_with(b"-inf\n-inf\n-inf\n")
-        .success();
-}
-
-#[test]
-fn test_inf() {
-    new_ucmd!()
-        .args(&["inf"])
-        .run_stdout_starts_with(b"1\n2\n3\n")
-        .success();
-}
-
-#[test]
-fn test_infinity() {
-    new_ucmd!()
-        .args(&["infinity"])
-        .run_stdout_starts_with(b"1\n2\n3\n")
-        .success();
-}
-
-#[test]
-fn test_inf_width() {
-    new_ucmd!()
-        .args(&["-w", "1.000", "inf", "inf"])
-        .run_stdout_starts_with(b"1.000\n  inf\n  inf\n  inf\n")
-        .success();
-}
-
-#[test]
-fn test_neg_inf_width() {
-    new_ucmd!()
-        .args(&["-w", "1.000", "-inf", "-inf"])
-        .run_stdout_starts_with(b"1.000\n -inf\n -inf\n -inf\n")
-        .success();
+/// Test infinite sequences - these produce endless output, so we check they start correctly
+/// and terminate with SIGPIPE on Unix (or succeed on non-Unix where pipe behavior differs).
+#[rstest]
+#[case::neg_inf(
+    &["--", "-inf", "0"],
+    b"-inf\n-inf\n-inf\n"
+)]
+#[case::neg_infinity(
+    &["--", "-infinity", "0"],
+    b"-inf\n-inf\n-inf\n"
+)]
+#[case::inf(
+    &["inf"],
+    b"1\n2\n3\n"
+)]
+#[case::infinity(
+    &["infinity"],
+    b"1\n2\n3\n"
+)]
+#[case::inf_width(
+    &["-w", "1.000", "inf", "inf"],
+    b"1.000\n  inf\n  inf\n  inf\n"
+)]
+#[case::neg_inf_width(
+    &["-w", "1.000", "-inf", "-inf"],
+    b"1.000\n -inf\n -inf\n -inf\n"
+)]
+#[case::precision_inf(
+    &["1", "1.2", "inf"],
+    b"1.0\n2.2\n3.4\n"
+)]
+#[case::equalize_width_inf(
+    &["-w", "1", "1.2", "inf"],
+    b"1.0\n2.2\n3.4\n"
+)]
+fn test_infinite_sequence(#[case] args: &[&str], #[case] expected_start: &[u8]) {
+    let result = new_ucmd!()
+        .args(args)
+        .run_stdout_starts_with(expected_start);
+    #[cfg(unix)]
+    result.signal_name_is("PIPE");
+    #[cfg(not(unix))]
+    result.success();
 }
 
 #[test]
@@ -1073,12 +1072,6 @@ fn test_precision_corner_cases() {
         .args(&["1", "1.20", "3.000000"])
         .succeeds()
         .stdout_is("1.00\n2.20\n");
-
-    // Infinity is ignored
-    new_ucmd!()
-        .args(&["1", "1.2", "inf"])
-        .run_stdout_starts_with(b"1.0\n2.2\n3.4\n")
-        .success();
 }
 
 // GNU `seq` manual only makes guarantees about `-w` working if the
@@ -1135,11 +1128,4 @@ fn test_equalize_widths_corner_cases() {
         .args(&["-w", "0x1.1", "1.00002", "3"])
         .succeeds()
         .stdout_is("1.0625\n2.06252\n");
-
-    // We can't really pad with infinite number of zeros, so `-w` is ignored.
-    // (there is another test with infinity as an increment above)
-    new_ucmd!()
-        .args(&["-w", "1", "1.2", "inf"])
-        .run_stdout_starts_with(b"1.0\n2.2\n3.4\n")
-        .success();
 }
