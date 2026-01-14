@@ -41,6 +41,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::Utf8Error;
+use std::thread;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, strip_errno};
@@ -280,6 +281,8 @@ pub struct GlobalSettings {
     compress_prog: Option<String>,
     merge_batch_size: usize,
     precomputed: Precomputed,
+    pipeline_depth: usize,
+    pipeline_depth_is_explicit: bool,
 }
 
 /// Data needed for sorting. Should be computed once before starting to sort
@@ -409,6 +412,8 @@ impl Default for GlobalSettings {
             compress_prog: None,
             merge_batch_size: default_merge_batch_size(),
             precomputed: Precomputed::default(),
+            pipeline_depth: default_pipeline_depth(),
+            pipeline_depth_is_explicit: false,
         }
     }
 }
@@ -1552,6 +1557,26 @@ fn default_merge_batch_size() -> usize {
     }
 }
 
+const MIN_PIPELINE_DEPTH: usize = 2;
+const MAX_PIPELINE_DEPTH: usize = 8;
+
+fn default_pipeline_depth() -> usize {
+    thread::available_parallelism()
+        .map(|n| n.get().clamp(MIN_PIPELINE_DEPTH, MAX_PIPELINE_DEPTH))
+        .unwrap_or(MIN_PIPELINE_DEPTH)
+}
+
+fn pipeline_depth_from_parallel_arg(arg: Option<&String>) -> usize {
+    if let Some(raw) = arg {
+        if let Ok(parsed) = raw.parse::<usize>() {
+            if parsed > 0 {
+                return parsed.clamp(MIN_PIPELINE_DEPTH, MAX_PIPELINE_DEPTH);
+            }
+        }
+    }
+    default_pipeline_depth()
+}
+
 fn locale_failed_to_set() -> bool {
     matches!(env::var("LC_ALL").ok().as_deref(), Some("missing"))
 }
@@ -1892,7 +1917,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     settings.dictionary_order = dictionary_order;
     settings.ignore_non_printing = ignore_non_printing;
     settings.ignore_case = ignore_case;
-    if matches.contains_id(options::PARALLEL) {
+    let parallel_override = matches.contains_id(options::PARALLEL);
+    if parallel_override {
         // "0" is default - threads = num of cores
         settings.threads = matches
             .get_one::<String>(options::PARALLEL)
@@ -1907,6 +1933,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .num_threads(num_threads)
             .build_global();
     }
+
+    settings.pipeline_depth =
+        pipeline_depth_from_parallel_arg(matches.get_one::<String>(options::PARALLEL));
+    settings.pipeline_depth_is_explicit = parallel_override;
 
     if let Some(size_str) = matches.get_one::<String>(options::BUF_SIZE) {
         settings.buffer_size = GlobalSettings::parse_byte_count(size_str).map_err(|e| {
