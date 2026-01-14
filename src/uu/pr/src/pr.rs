@@ -894,27 +894,10 @@ fn split_lines_if_form_feed(
                         chunk.clear();
                     }
 
+                    // The -e flag determines that an encountered input char (TAB) shall be expanded.
+                    // If the -e flag was not set we pass the byte through unchanged.
                     match expand_options {
-                        Some(expand_options) => {
-                            if *byte == expand_options.input_char as u8 {
-                                // If the byte encountered is the input char we use width to calculate
-                                // the amount of spaces needed (if no input char given we stored '\t'
-                                // in our struct)
-                                let spaces_needed = expand_options.width as usize
-                                    - (chunk.len() % expand_options.width as usize);
-                                chunk.resize(chunk.len() + spaces_needed, b' ');
-                            } else if *byte == TAB as u8 {
-                                // If a byte got passed to the -e flag (eg -ea1)  which is not '\t' GNU
-                                // still expands it but does not use an optionally given width parameter
-                                // but does the '\t' expansion with the default value (8)
-                                let spaces_needed = 8 - (chunk.len() % 8);
-                                chunk.resize(chunk.len() + spaces_needed, b' ');
-                            } else {
-                                // This arm means the byte is neither '\t' nor the bytes to be
-                                // expanded
-                                chunk.push(*byte);
-                            }
-                        }
+                        Some(expand_options) => apply_expand_tab(&mut chunk, *byte, expand_options),
                         None => chunk.push(*byte),
                     }
 
@@ -931,6 +914,27 @@ fn split_lines_if_form_feed(
             lines
         },
     )
+}
+
+fn apply_expand_tab(chunk: &mut Vec<u8>, byte: u8, expand_options: &ExpandTabsOptions) {
+    if byte == expand_options.input_char as u8 {
+        // If the byte encountered is the input char we use width to calculate
+        // the amount of spaces needed (if no input char given we stored '\t'
+        // in our struct)
+        let spaces_needed =
+            expand_options.width as usize - (chunk.len() % expand_options.width as usize);
+        chunk.resize(chunk.len() + spaces_needed, b' ');
+    } else if byte == TAB as u8 {
+        // If a byte got passed to the -e flag (eg -ea1)  which is not '\t' GNU
+        // still expands it but does not use an optionally given width parameter
+        // but does the '\t' expansion with the default value (8)
+        let spaces_needed = 8 - (chunk.len() % 8);
+        chunk.resize(chunk.len() + spaces_needed, b' ');
+    } else {
+        // This arm means the byte is neither '\t' nor the bytes to be
+        // expanded
+        chunk.push(byte);
+    }
 }
 
 fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
