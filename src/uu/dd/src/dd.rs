@@ -41,7 +41,7 @@ use std::os::unix::{
     io::{AsRawFd, FromRawFd},
 };
 #[cfg(windows)]
-use std::os::windows::{fs::MetadataExt, io::AsHandle};
+use std::os::windows::{fs::MetadataExt, io::AsHandle, io::AsRawHandle, io::FromRawHandle};
 use std::path::Path;
 use std::sync::atomic::AtomicU8;
 use std::sync::{Arc, atomic::Ordering::Relaxed, mpsc};
