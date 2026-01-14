@@ -34,7 +34,12 @@ self_cell = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 unicode-width = { workspace = true }
-uucore = { workspace = true, features = ["fs", "parser-size", "version-cmp"] }
+uucore = { workspace = true, features = [
+  "fs",
+  "parser-size",
+  "version-cmp",
+  "i18n-decimal",
+] }
 fluent = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
