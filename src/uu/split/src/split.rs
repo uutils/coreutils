@@ -1156,49 +1156,34 @@ where
         out_files = OutFiles::init(num_chunks, settings, false)?;
     }
 
-    let buf = &mut Vec::new();
     for i in 1_u64..=num_chunks {
         let chunk_size = chunk_size_base + (chunk_size_reminder > i - 1) as u64;
-        buf.clear();
         if num_bytes > 0 {
-            // Read `chunk_size` bytes from the reader into `buf`
+            // Read `chunk_size` bytes from the reader
             // except the last.
             //
             // The last chunk gets all remaining bytes so that if the number
             // of bytes in the input file was not evenly divisible by
             // `num_chunks`, we don't leave any bytes behind.
-            let limit = {
-                if i == num_chunks {
-                    num_bytes
-                } else {
-                    chunk_size
-                }
+            let limit = if i == num_chunks {
+                num_bytes
+            } else {
+                chunk_size
             };
 
-            let n_bytes_read = reader.by_ref().take(limit).read_to_end(buf);
-
-            match n_bytes_read {
-                Ok(n_bytes) => {
-                    num_bytes -= n_bytes as u64;
-                }
-                Err(error) => {
-                    return Err(USimpleError::new(
-                        1,
-                        translate!("split-error-cannot-read-from-input", "input" => settings.input.maybe_quote(), "error" => error),
-                    ));
-                }
-            }
-
-            if let Some(chunk_number) = kth_chunk {
-                if i == chunk_number {
-                    stdout_writer.write_all(buf)?;
+            let n_bytes = match kth_chunk {
+                Some(chunk_number) if i == chunk_number => {
+                    io::copy(&mut reader.by_ref().take(limit), &mut stdout_writer)?;
                     break;
                 }
-            } else {
-                let idx = (i - 1) as usize;
-                let writer = out_files.get_writer(idx, settings)?;
-                writer.write_all(buf)?;
-            }
+                Some(_) => io::copy(&mut reader.by_ref().take(limit), &mut io::sink())?,
+                None => {
+                    let idx = (i - 1) as usize;
+                    let writer = out_files.get_writer(idx, settings)?;
+                    io::copy(&mut reader.by_ref().take(limit), writer)?
+                }
+            };
+            num_bytes -= n_bytes;
         } else {
             break;
         }
