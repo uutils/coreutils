@@ -47,6 +47,7 @@ use uucore::error::{FromIo, strip_errno};
 use uucore::error::{UError, UResult, USimpleError, UUsageError};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
 use uucore::format_usage;
+use uucore::i18n::decimal::locale_decimal_separator;
 use uucore::line_ending::LineEnding;
 use uucore::parser::num_parser::{ExtendedParser, ExtendedParserError};
 use uucore::parser::parse_size::{ParseSizeError, Parser};
@@ -105,6 +106,14 @@ mod options {
 }
 
 const DECIMAL_PT: u8 = b'.';
+
+fn locale_decimal_pt() -> u8 {
+    match locale_decimal_separator().as_bytes().first().copied() {
+        Some(b'.') => b'.',
+        Some(b',') => b',',
+        _ => DECIMAL_PT,
+    }
+}
 
 const NEGATIVE: &u8 = &b'-';
 const POSITIVE: &u8 = &b'+';
@@ -683,8 +692,8 @@ impl<'a> Line<'a> {
                 }
                 SortMode::GeneralNumeric => {
                     let initial_selection = &self.line[selection.clone()];
-
-                    let leading = get_leading_gen(initial_selection);
+                    let decimal_pt = locale_decimal_pt();
+                    let leading = get_leading_gen(initial_selection, decimal_pt);
 
                     // Shorten selection to leading.
                     selection.start += leading.start;
@@ -1072,7 +1081,11 @@ impl FieldSelector {
             Selection::WithNumInfo(range_str, info)
         } else if self.settings.mode == SortMode::GeneralNumeric {
             // Parse this number as BigDecimal, as this is the requirement for general numeric sorting.
-            Selection::AsBigDecimal(general_bd_parse(&range_str[get_leading_gen(range_str)]))
+            let decimal_pt = locale_decimal_pt();
+            Selection::AsBigDecimal(general_bd_parse(
+                &range_str[get_leading_gen(range_str, decimal_pt)],
+                decimal_pt,
+            ))
         } else {
             // This is not a numeric sort, so we don't need a NumCache.
             Selection::Str(range_str)
@@ -2491,7 +2504,7 @@ fn ascii_case_insensitive_cmp(a: &[u8], b: &[u8]) -> Ordering {
 // scientific notation, so we strip those lines only after the end of the following numeric string.
 // For example, 5e10KFD would be 5e10 or 5x10^10 and +10000HFKJFK would become 10000.
 #[allow(clippy::cognitive_complexity)]
-fn get_leading_gen(inp: &[u8]) -> Range<usize> {
+fn get_leading_gen(inp: &[u8], decimal_pt: u8) -> Range<usize> {
     let trimmed = inp.trim_ascii_start();
     let leading_whitespace_len = inp.len() - trimmed.len();
 
@@ -2529,7 +2542,7 @@ fn get_leading_gen(inp: &[u8]) -> Range<usize> {
             continue;
         }
 
-        if c == DECIMAL_PT && !had_decimal_pt && !had_e_notation {
+        if c == decimal_pt && !had_decimal_pt && !had_e_notation {
             had_decimal_pt = true;
             continue;
         }
@@ -2572,9 +2585,16 @@ pub enum GeneralBigDecimalParseResult {
 /// Parse the beginning string into a [`GeneralBigDecimalParseResult`].
 /// Using a [`GeneralBigDecimalParseResult`] instead of [`ExtendedBigDecimal`] is necessary to correctly order floats.
 #[inline(always)]
-fn general_bd_parse(a: &[u8]) -> GeneralBigDecimalParseResult {
+fn general_bd_parse(a: &[u8], decimal_pt: u8) -> GeneralBigDecimalParseResult {
+    let parsed_bytes = (decimal_pt != DECIMAL_PT).then(|| {
+        a.iter()
+            .map(|&b| if b == decimal_pt { DECIMAL_PT } else { b })
+            .collect::<Vec<_>>()
+    });
+    let input = parsed_bytes.as_deref().unwrap_or(a);
+
     // The string should be valid ASCII to be parsed.
-    let Ok(a) = std::str::from_utf8(a) else {
+    let Ok(a) = std::str::from_utf8(input) else {
         return GeneralBigDecimalParseResult::Invalid;
     };
 
