@@ -10,25 +10,22 @@ use uu_timeout::uumain;
 #[cfg(unix)]
 use uucore::benchmark::run_util_function;
 
-#[cfg(unix)]
-fn bench_timeout(bencher: Bencher, args: &[&str]) {
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, args));
-    });
-}
-
 /// Benchmark the fast path where the command exits immediately.
 #[cfg(unix)]
 #[divan::bench]
 fn timeout_quick_exit(bencher: Bencher) {
-    bench_timeout(bencher, &["0.02", "true"]);
+    bencher.bench(|| {
+        black_box(run_util_function(uumain, &["0.02", "true"]));
+    });
 }
 
 /// Benchmark a command that runs longer than the threshold and receives the default signal.
 #[cfg(unix)]
 #[divan::bench]
 fn timeout_enforced(bencher: Bencher) {
-    bench_timeout(bencher, &["0.02", "sleep", "0.2"]);
+    bencher.bench(|| {
+        black_box(run_util_function(uumain, &["0.02", "sleep", "0.2"]));
+    });
 }
 
 fn main() {
