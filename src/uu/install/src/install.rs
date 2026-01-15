@@ -613,10 +613,8 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
         };
 
         // If -t is used, check if target exists as a file before trying to create directories
-        if b.target_dir.is_some() {
-            if target.exists() && !target.is_dir() {
-                return Err(InstallError::NotADirectory(target.to_path_buf()).into());
-            }
+        if b.target_dir.is_some() && target.exists() && !target.is_dir() {
+            return Err(InstallError::NotADirectory(target.clone()).into());
         }
 
         if let Some(to_create) = to_create {
