@@ -134,6 +134,9 @@ impl Filesystem {
         } else {
             mount_info.mount_dir.clone()
         };
+        #[cfg(windows)]
+        let _stat_path = mount_info.dev_id.clone(); // On windows, we expect the volume id
+
         #[cfg(unix)]
         let usage = FsUsage::new(statfs(&stat_path).ok()?);
         #[cfg(windows)]
