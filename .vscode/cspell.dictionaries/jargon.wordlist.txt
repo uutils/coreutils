@@ -136,6 +136,7 @@ semiprimes
 setcap
 setfacl
 setfattr
+SETFL
 setlocale
 shortcode
 shortcodes
