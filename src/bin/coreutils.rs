@@ -65,10 +65,12 @@ fn main() {
         if let Some(util) = validation::find_prefixed_util(binary_as_util, utils.keys().copied()) {
             // prefixed util => replace 0th (aka, executable name) argument
             Some(OsString::from(util))
-        } else {
-            // unmatched binary name => regard as multi-binary container and advance argument list
+        } else if binary_as_util.ends_with("utils") {
             uucore::set_utility_is_second_arg();
             args.next()
+        } else {
+            eprintln!("coreutils: I was probably called as symlink to false");
+            process::exit(1);
         };
 
     // 0th argument equals util name?
