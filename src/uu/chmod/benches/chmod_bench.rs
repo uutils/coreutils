@@ -22,7 +22,7 @@ static DEALLOCS: AtomicUsize = AtomicUsize::new(0);
 
 unsafe impl GlobalAlloc for CountingAlloc {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let ptr = System.alloc(layout);
+        let ptr = unsafe { System.alloc(layout) };
         if !ptr.is_null() {
             ALLOCS.fetch_add(1, Ordering::Relaxed);
             let size = layout.size();
@@ -33,7 +33,7 @@ unsafe impl GlobalAlloc for CountingAlloc {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        System.dealloc(ptr, layout);
+        unsafe { System.dealloc(ptr, layout) };
         if !ptr.is_null() {
             DEALLOCS.fetch_add(1, Ordering::Relaxed);
             CURRENT.fetch_sub(layout.size(), Ordering::Relaxed);
@@ -41,7 +41,7 @@ unsafe impl GlobalAlloc for CountingAlloc {
     }
 
     unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
-        let new_ptr = System.realloc(ptr, layout, new_size);
+        let new_ptr = unsafe { System.realloc(ptr, layout, new_size) };
         if !new_ptr.is_null() {
             let old_size = layout.size();
             if new_size > old_size {
@@ -125,7 +125,8 @@ fn cap_dirs_by_rlimit(total_dirs: usize) -> usize {
         rlim_cur: 0,
         rlim_max: 0,
     };
-    let rc = unsafe { getrlimit(RLIMIT_NOFILE, &mut lim) };
+    let lim_ptr: *mut rlimit = &mut lim as *mut _;
+    let rc = unsafe { getrlimit(RLIMIT_NOFILE, lim_ptr) };
     if rc != 0 || lim.rlim_cur == RLIM_INFINITY {
         return total_dirs;
     }
