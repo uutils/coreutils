@@ -2968,8 +2968,10 @@ fn display_item_long(
             output_display.extend(b".");
         } else if is_acl_set {
             output_display.extend(b"+");
+        } else {
+            output_display.extend(b" ");
         }
-        output_display.extend(b" ");
+
         output_display.extend_pad_left(&display_symlink_count(md), padding.link_count);
 
         if config.long.owner {
@@ -3626,6 +3628,19 @@ fn calculate_padding_collection(
             if config.context {
                 padding_collections.context = context_len.max(padding_collections.context);
             }
+
+            // correctly align columns when some files have capabilities/ACLs and others do not
+            {
+                #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
+                // TODO: See how Mac should work here
+                let is_acl_set = false;
+                #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+                let is_acl_set = has_acl(item.display_name());
+                if context_len > 1 || is_acl_set {
+                    padding_collections.link_count += 1;
+                }
+            }
+
             if items.len() == 1usize {
                 padding_collections.size = 0usize;
                 padding_collections.major = 0usize;
