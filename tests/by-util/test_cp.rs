@@ -89,6 +89,16 @@ macro_rules! assert_metadata_eq {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_cp_stream_to_full() {
+    let (_, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("/dev/zero")
+        .arg("/dev/full")
+        .fails()
+        .stderr_contains("No space");
+}
+
+#[test]
 fn test_cp_cp() {
     let (at, mut ucmd) = at_and_ucmd!();
     // Invoke our binary to make the copy.
