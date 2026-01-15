@@ -612,6 +612,13 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
             None
         };
 
+        // If -t is used, check if target exists as a file before trying to create directories
+        if b.target_dir.is_some() {
+            if target.exists() && !target.is_dir() {
+                return Err(InstallError::NotADirectory(target.to_path_buf()).into());
+            }
+        }
+
         if let Some(to_create) = to_create {
             let to_create_original = to_create;
             let to_create_owned;
@@ -723,13 +730,6 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                         set_selinux_context_for_directories_install(to_create, context);
                     }
                 }
-            }
-        }
-        if b.target_dir.is_some() {
-            let p = to_create.unwrap();
-
-            if !p.exists() || !p.is_dir() {
-                return Err(InstallError::NotADirectory(p.to_path_buf()).into());
             }
         }
     }
