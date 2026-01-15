@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use divan::{black_box, Bencher};
+use divan::{Bencher, black_box};
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tempfile::TempDir;
@@ -119,7 +119,7 @@ fn maybe_report_allocs(label: &str, args: &[&str]) {
 
 #[cfg(unix)]
 fn cap_dirs_by_rlimit(total_dirs: usize) -> usize {
-    use uucore::libc::{getrlimit, rlimit, RLIMIT_NOFILE, RLIM_INFINITY};
+    use uucore::libc::{RLIM_INFINITY, RLIMIT_NOFILE, getrlimit, rlimit};
 
     let mut lim = rlimit {
         rlim_cur: 0,
