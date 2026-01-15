@@ -15,7 +15,21 @@ use uucore::format_usage;
 use uucore::fs::makedev;
 use uucore::translate;
 
+#[cfg(not(any(
+    target_os = "android",
+    target_os = "macos",
+    target_os = "freebsd",
+    target_os = "redox",
+)))]
 const MODE_RW_UGO: u32 = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
+
+#[cfg(any(
+    target_os = "android",
+    target_os = "macos",
+    target_os = "freebsd",
+    target_os = "redox",
+))]
+const MODE_RW_UGO: u32 = (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
 
 mod options {
     pub const MODE: &str = "mode";
