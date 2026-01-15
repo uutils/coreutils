@@ -575,8 +575,28 @@ where
 #[cfg(test)]
 mod tests {
 
-    use crate::forwards_thru_file;
-    use std::io::Cursor;
+    use crate::{backwards_thru_file, forwards_thru_file};
+    use std::{
+        env,
+        fs::{self, File},
+        io::{Cursor, Seek, SeekFrom, Write},
+        process,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    fn create_temp_file(contents: &[u8]) -> (std::path::PathBuf, File) {
+        let mut path = env::temp_dir();
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        path.push(format!("uutils-tail-test-{}-{unique}", process::id()));
+        let mut file = File::create(&path).unwrap();
+        file.write_all(contents).unwrap();
+        file.flush().unwrap();
+        file.seek(SeekFrom::Start(0)).unwrap();
+        (path, file)
+    }
 
     #[test]
     fn test_forwards_thru_file_zero() {
@@ -598,5 +618,16 @@ mod tests {
         let mut reader = Cursor::new("x\n");
         let i = forwards_thru_file(&mut reader, 2, b'\n').unwrap();
         assert_eq!(i, 2);
+    }
+
+    #[test]
+    fn test_backwards_thru_file_zero() {
+        let (path, mut file) = create_temp_file(b"a\nb\nc\n");
+        let len = file.metadata().unwrap().len();
+        backwards_thru_file(&mut file, 0, b'\n');
+        let pos = file.seek(SeekFrom::Current(0)).unwrap();
+        assert_eq!(pos, len);
+        drop(file);
+        fs::remove_file(path).unwrap();
     }
 }
