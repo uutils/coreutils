@@ -480,9 +480,8 @@ fn test_date_set_valid_4() {
 
 #[test]
 fn test_invalid_format_string() {
-    let result = new_ucmd!().arg("+%!").fails();
-    result.no_stdout();
-    assert!(result.stderr_str().starts_with("date: invalid format "));
+    // With lenient mode, invalid format sequences are output literally (like GNU date)
+    new_ucmd!().arg("+%!").succeeds().stdout_is("%!\n");
 }
 
 #[test]
@@ -1445,4 +1444,28 @@ fn test_date_locale_fr_french() {
         stdout.contains("UTC") || stdout.contains("+00") || stdout.contains('Z'),
         "Output should include timezone information, got: {stdout}"
     );
+}
+
+#[test]
+fn test_date_posix_format_specifiers() {
+    let cases = [
+        // %r: 12-hour time with zero-padded hour (08:17:48 AM, not 8:17:48 AM)
+        ("%r", "08:17:48 AM"),
+        // %x: locale date in MM/DD/YY format
+        ("%x", "01/19/97"),
+        // %X: locale time in HH:MM:SS format
+        ("%X", "08:17:48"),
+        // %:8z: invalid format (width between : and z) should output literally (lenient mode)
+        ("%:8z", "%:8z"),
+    ];
+
+    for (format, expected) in cases {
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg("1997-01-19 08:17:48")
+            .arg(format!("+{format}"))
+            .succeeds()
+            .stdout_is(format!("{expected}\n"));
+    }
 }
