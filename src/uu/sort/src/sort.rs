@@ -418,8 +418,6 @@ struct KeySettings {
     reverse: bool,
 }
 
-impl KeySettings {}
-
 impl From<&GlobalSettings> for KeySettings {
     fn from(settings: &GlobalSettings) -> Self {
         Self {
@@ -525,23 +523,22 @@ fn ordering_incompatible(
     dictionary_order: bool,
     ignore_non_printing: bool,
 ) -> bool {
-    let mut count = 0;
-    if flags.numeric {
-        count += 1;
+    let mode_count = u8::from(flags.numeric)
+        + u8::from(flags.general_numeric)
+        + u8::from(flags.human_numeric)
+        + u8::from(flags.month);
+
+    // Multiple numeric/month modes are incompatible
+    if mode_count > 1 {
+        return true;
     }
-    if flags.general_numeric {
-        count += 1;
+
+    // A numeric/month mode combined with version/random/dictionary/ignore_non_printing is incompatible
+    if mode_count == 1 {
+        return flags.version || flags.random || dictionary_order || ignore_non_printing;
     }
-    if flags.human_numeric {
-        count += 1;
-    }
-    if flags.month {
-        count += 1;
-    }
-    if flags.version || flags.random || dictionary_order || ignore_non_printing {
-        count += 1;
-    }
-    count > 1
+
+    false
 }
 
 fn incompatible_options_error(opts: &str) -> Box<dyn UError> {
