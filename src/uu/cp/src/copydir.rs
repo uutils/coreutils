@@ -26,6 +26,8 @@ use uucore::translate;
 use uucore::uio_error;
 use walkdir::{DirEntry, WalkDir};
 
+#[cfg(all(feature = "selinux", target_os = "linux"))]
+use crate::set_selinux_context;
 use crate::{
     CopyMode, CopyResult, CpError, Options, aligned_ancestors, context_for, copy_attributes,
     copy_file,
@@ -475,6 +477,7 @@ pub(crate) fn copy_directory(
                             &entry.source_absolute,
                             &entry.local_to_target,
                             &options.attributes,
+                            options.set_selinux_context,
                         )?;
                         continue;
                     }
@@ -513,6 +516,7 @@ pub(crate) fn copy_directory(
                                 &entry.source_absolute,
                                 &entry.local_to_target,
                                 &options.attributes,
+                                options.set_selinux_context,
                             )?;
                         }
                     }
@@ -529,7 +533,17 @@ pub(crate) fn copy_directory(
     // Fix permissions for all directories we created
     // This ensures that even sibling directories get their permissions fixed
     for (source_path, dest_path) in dirs_needing_permissions {
-        copy_attributes(&source_path, &dest_path, &options.attributes)?;
+        copy_attributes(
+            &source_path,
+            &dest_path,
+            &options.attributes,
+            options.set_selinux_context,
+        )?;
+
+        #[cfg(all(feature = "selinux", target_os = "linux"))]
+        if options.set_selinux_context {
+            set_selinux_context(&dest_path, options.context.as_ref())?;
+        }
     }
 
     // Also fix permissions for parent directories,
@@ -538,7 +552,12 @@ pub(crate) fn copy_directory(
         let dest = target.join(root.file_name().unwrap());
         for (x, y) in aligned_ancestors(root, dest.as_path()) {
             if let Ok(src) = canonicalize(x, MissingHandling::Normal, ResolveMode::Physical) {
-                copy_attributes(&src, y, &options.attributes)?;
+                copy_attributes(&src, y, &options.attributes, options.set_selinux_context)?;
+
+                #[cfg(all(feature = "selinux", target_os = "linux"))]
+                if options.set_selinux_context {
+                    set_selinux_context(y, options.context.as_ref())?;
+                }
             }
         }
     }
