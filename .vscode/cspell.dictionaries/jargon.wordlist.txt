@@ -219,3 +219,5 @@ VMULL
 vmull
 SETFL
 tmpfs
+pdeathsig
+prctl
