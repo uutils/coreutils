@@ -41,7 +41,7 @@ use std::os::unix::{
     io::{AsRawFd, FromRawFd},
 };
 #[cfg(windows)]
-use std::os::windows::{fs::MetadataExt, io::AsHandle, io::AsRawHandle, io::FromRawHandle};
+use std::os::windows::{fs::MetadataExt, io::AsHandle};
 use std::path::Path;
 use std::sync::atomic::AtomicU8;
 use std::sync::{Arc, atomic::Ordering::Relaxed, mpsc};
@@ -829,17 +829,8 @@ struct Output<'a> {
 impl<'a> Output<'a> {
     /// Instantiate this struct with stdout as a destination.
     fn new_stdout(settings: &'a Settings) -> UResult<Self> {
-        #[cfg(not(unix))]
-        let f = {
-            let raw_handle = io::stdout().as_raw_handle();
-            unsafe { File::from_raw_handle(raw_handle) }
-        };
-        #[cfg(unix)]
-        let f = {
-            let raw_fd = io::stdout().as_raw_fd();
-            unsafe { File::from_raw_fd(raw_fd) }
-        };
-        let mut dst = Dest::Stdout(f);
+        let fx = OwnedFileDescriptorOrHandle::from(io::stdout())?;
+        let mut dst = Dest::Stdout(fx.into_file());
         dst.seek(settings.seek, settings.obs)
             .map_err_context(|| translate!("dd-error-write-error"))?;
         Ok(Self { dst, settings })
