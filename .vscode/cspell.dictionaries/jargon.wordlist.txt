@@ -95,8 +95,10 @@ microbenchmarks
 microbenchmarking
 multibyte
 multicall
+newfs
 nmerge
 noatime
+nomount
 nocache
 nocreat
 noctty
@@ -184,6 +186,7 @@ inacc
 maint
 proc
 procs
+ramdisk
 
 # * constants
 xffff
