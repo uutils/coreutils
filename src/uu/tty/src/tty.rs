@@ -33,13 +33,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let mut stdout = std::io::stdout();
-
     let name = nix::unistd::ttyname(std::io::stdin());
 
     let write_result = match name {
         Ok(name) => {
-            stdout.write_all_os(name.as_os_str())?;
-            writeln!(stdout)
+            if let Err(e) = stdout.write_all_os(name.as_os_str()) {
+                Err(e)
+            } else if let Err(e) = writeln!(stdout) {
+                Err(e)
+            } else {
+                stdout.flush()
+            }
         }
         Err(_) => {
             set_exit_code(1);
