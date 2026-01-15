@@ -20,8 +20,6 @@ use std::os::unix::fs::FileTypeExt;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{UIoError, UResult};
-#[cfg(not(target_os = "windows"))]
-use uucore::libc;
 use uucore::translate;
 use uucore::{fast_inc::fast_inc_one, format_usage};
 
