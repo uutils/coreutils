@@ -1815,7 +1815,10 @@ fn test_wrong_number_err_msg() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_no_dropped_writes() {
+    use std::process::Stdio;
+
     const BLK_SIZE: usize = 0x4000;
     const COUNT: usize = 1000;
     const NUM_BYTES: usize = BLK_SIZE * COUNT;
