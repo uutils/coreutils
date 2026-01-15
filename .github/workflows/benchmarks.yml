@@ -34,6 +34,7 @@ jobs:
           - { package: uu_fold }
           - { package: uu_join }
           - { package: uu_ls }
+          - { package: uu_chmod }
           - { package: uu_mv }
           - { package: uu_nl }
           - { package: uu_numfmt }
