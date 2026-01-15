@@ -2,9 +2,10 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-use super::{CatResult, FdReadable, InputHandle};
+use super::{CatError, CatResult, FdReadable, InputHandle};
 
 use nix::unistd;
+use std::io;
 use std::os::{fd::AsFd, unix::io::AsRawFd};
 
 use uucore::pipes::{pipe, splice, splice_exact};
@@ -38,7 +39,11 @@ pub(super) fn write_fast_using_splice<R: FdReadable, S: AsRawFd + AsFd>(
                     // we can recover by copying the data that we have from the
                     // intermediate pipe to stdout using normal read/write. Then
                     // we tell the caller to fall back.
-                    copy_exact(&pipe_rd, write_fd, n)?;
+                    if let Err(err) = copy_exact(&pipe_rd, write_fd, n) {
+                        return Err(CatError::WriteError(io::Error::from_raw_os_error(
+                            err as i32,
+                        )));
+                    }
                     return Ok(true);
                 }
             }
