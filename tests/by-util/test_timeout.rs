@@ -8,7 +8,8 @@ use std::time::Duration;
 use rstest::rstest;
 
 use uucore::display::Quotable;
-use uutests::new_ucmd;
+use uutests::{new_ucmd, util_name};
+use uutests::util::TestScenario;
 
 #[test]
 fn test_invalid_arg() {
@@ -239,8 +240,15 @@ fn test_command_cannot_invoke() {
 #[test]
 #[cfg(unix)]
 fn test_sigchld_ignored_by_parent() {
-    new_ucmd!()
-        .args(&["10", "sh", "-c", "trap '' CHLD; exec timeout 1 true"])
+    let ts = TestScenario::new(util_name!());
+    let bin_path = ts.bin_path.to_string_lossy();
+    ts.ucmd()
+        .args(&[
+            "10",
+            "sh",
+            "-c",
+            &format!("trap '' CHLD; exec {} timeout 1 true", bin_path),
+        ])
         .succeeds();
 }
 
