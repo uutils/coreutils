@@ -26,11 +26,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let _ = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     match get_userlogin() {
-        Some(userlogin) => println!("{userlogin}"),
-        None => show_error!("{}", translate!("logname-error-no-login-name")),
+        Some(userlogin) => {
+            println!("{userlogin}");
+            Ok(())
+        }
+        None => {
+            show_error!("{}", translate!("logname-error-no-login-name"));
+            Err(1.into())
+        }
     }
-
-    Ok(())
 }
 
 pub fn uu_app() -> Command {
