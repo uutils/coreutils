@@ -8,8 +8,8 @@ use std::time::Duration;
 use rstest::rstest;
 
 use uucore::display::Quotable;
-use uutests::{new_ucmd, util_name};
 use uutests::util::TestScenario;
+use uutests::{new_ucmd, util_name};
 
 #[test]
 fn test_invalid_arg() {
@@ -247,7 +247,7 @@ fn test_sigchld_ignored_by_parent() {
             "10",
             "sh",
             "-c",
-            &format!("trap '' CHLD; exec {} timeout 1 true", bin_path),
+            &format!("trap '' CHLD; exec {bin_path} timeout 1 true"),
         ])
         .succeeds();
 }
