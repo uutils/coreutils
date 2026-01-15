@@ -33,7 +33,7 @@ use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{File, OpenOptions};
 use std::hash::{Hash, Hasher};
-use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::ops::Range;
 #[cfg(unix)]
@@ -2692,17 +2692,34 @@ fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(
     settings: &GlobalSettings,
     output: Output,
 ) -> UResult<()> {
+    let is_stdout = output.as_output_name().is_none();
     let output_name = output
         .as_output_name()
-        .unwrap_or(OsStr::new("standard output"))
+        .unwrap_or_else(|| OsStr::new("standard output"))
         .to_owned();
     let ctx = || translate!("sort-error-write-failed", "output" => output_name.maybe_quote());
 
     let mut writer = output.into_write();
+
+    // Print each sorted line
     for line in iter {
-        line.print(&mut writer, settings).map_err_context(ctx)?;
+        // Try to print the line, handle BrokenPipe gracefully if writing to stdout
+        if let Err(e) = line.print(&mut writer, settings) {
+            if is_stdout && e.kind() == ErrorKind::BrokenPipe {
+                return Ok(());
+            }
+            return Err(e).map_err_context(ctx);
+        }
     }
-    writer.flush().map_err_context(ctx)?;
+
+    // Flush the writer, handle BrokenPipe gracefully if writing to stdout
+    if let Err(e) = writer.flush() {
+        if is_stdout && e.kind() == ErrorKind::BrokenPipe {
+            return Ok(());
+        }
+        return Err(e).map_err_context(ctx);
+    }
+
     Ok(())
 }
 

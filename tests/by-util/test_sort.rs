@@ -1219,6 +1219,25 @@ fn test_sigpipe_panic() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_broken_pipe_to_stdout_is_silent_and_success() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // Ensure sort will attempt to write at least one line.
+    at.write("in.txt", "1\n");
+
+    ucmd.arg("in.txt");
+
+    let mut child = ucmd.run_no_wait();
+
+    // Simulate `... | head -n 0` by closing the reader end immediately.
+    child.close_stdout();
+
+    // Expected GNU-like behavior: no diagnostic (and it should not error out).
+    child.wait().unwrap().no_stderr();
+}
+
+#[test]
 fn test_conflict_check_out() {
     let cases = [
         ("-c=silent", "sort: options '-Co' are incompatible\n"),
