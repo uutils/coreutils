@@ -208,8 +208,14 @@ fn install_signal_handlers(term_signal: usize) {
     let sigpipe_ignored = uucore::signals::sigpipe_was_ignored();
 
     for sig in [
-        Signal::SIGALRM, Signal::SIGINT, Signal::SIGQUIT, Signal::SIGHUP,
-        Signal::SIGTERM, Signal::SIGPIPE, Signal::SIGUSR1, Signal::SIGUSR2,
+        Signal::SIGALRM,
+        Signal::SIGINT,
+        Signal::SIGQUIT,
+        Signal::SIGHUP,
+        Signal::SIGTERM,
+        Signal::SIGPIPE,
+        Signal::SIGUSR1,
+        Signal::SIGUSR2,
     ] {
         if sig != Signal::SIGPIPE || !sigpipe_ignored {
             let _ = unsafe { nix::sys::signal::signal(sig, handler) };
@@ -224,8 +230,18 @@ fn install_signal_handlers(term_signal: usize) {
 /// Report that a signal is being sent if the verbose flag is set.
 fn report_if_verbose(signal: usize, cmd: &str, verbose: bool) {
     if verbose {
-        let s = if signal == 0 { "0".to_string() } else { signal_name_by_value(signal).unwrap().to_string() };
-        let _ = writeln!(std::io::stderr(), "timeout: sending signal {} to command {}", s, cmd.quote());
+        let s = if signal == 0 {
+            "0".to_string()
+        } else {
+            signal_name_by_value(signal).unwrap().to_string()
+        };
+        let mut stderr = std::io::stderr();
+        let _ = writeln!(
+            stderr,
+            "timeout: {}",
+            translate!("timeout-verbose-sending-signal", "signal" => s, "command" => cmd.quote())
+        );
+        let _ = stderr.flush();
     }
 }
 
@@ -361,6 +377,9 @@ fn timeout(
         }
     }
 
+    install_sigchld();
+    install_signal_handlers(signal);
+
     let process = &mut cmd_builder.spawn().map_err(|err| {
         let status_code = match err.kind() {
             ErrorKind::NotFound => ExitStatus::CommandNotFound.into(),
@@ -372,8 +391,6 @@ fn timeout(
             translate!("timeout-error-failed-to-execute-process", "error" => err),
         )
     })?;
-    install_sigchld();
-    install_signal_handlers(signal);
 
     match process.wait_or_timeout(duration, Some(&SIGNALED)) {
         Ok(Some(status)) => Err(status
@@ -383,15 +400,29 @@ fn timeout(
         Ok(None) => {
             let received_sig = RECEIVED_SIGNAL.load(atomic::Ordering::Relaxed);
             let is_external_signal = received_sig > 0 && received_sig != libc::SIGALRM;
-            let signal_to_send = if is_external_signal { received_sig as usize } else { signal };
+            let signal_to_send = if is_external_signal {
+                received_sig as usize
+            } else {
+                signal
+            };
 
             report_if_verbose(signal_to_send, &cmd[0], verbose);
             send_signal(process, signal_to_send, foreground);
 
             if let Some(kill_after) = kill_after {
-                return match wait_or_kill_process(process, &cmd[0], kill_after, preserve_status, foreground, verbose) {
+                return match wait_or_kill_process(
+                    process,
+                    &cmd[0],
+                    kill_after,
+                    preserve_status,
+                    foreground,
+                    verbose,
+                ) {
                     Ok(status) => Err(status.into()),
-                    Err(e) => Err(USimpleError::new(ExitStatus::TimeoutFailed.into(), e.to_string())),
+                    Err(e) => Err(USimpleError::new(
+                        ExitStatus::TimeoutFailed.into(),
+                        e.to_string(),
+                    )),
                 };
             }
 
@@ -401,8 +432,13 @@ fn timeout(
             } else if SIGNALED.load(atomic::Ordering::Relaxed) {
                 Err(ExitStatus::CommandTimedOut.into())
             } else if preserve_status {
-                Err(status.code()
-                    .or_else(|| status.signal().map(|s| ExitStatus::SignalSent(s as usize).into()))
+                Err(status
+                    .code()
+                    .or_else(|| {
+                        status
+                            .signal()
+                            .map(|s| ExitStatus::SignalSent(s as usize).into())
+                    })
                     .unwrap_or(ExitStatus::CommandTimedOut.into())
                     .into())
             } else {
