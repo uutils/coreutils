@@ -193,9 +193,22 @@ struct Params {
 /// assert_eq!(find_last_contiguous_block_of_xs("aXbXcX"), None);
 /// ```
 fn find_last_contiguous_block_of_xs(s: &str) -> Option<(usize, usize)> {
-    let j = s.rfind("XXX")? + 3;
-    let i = s[..j].rfind(|c| c != 'X').map_or(0, |i| i + 1);
-    Some((i, j))
+    let bytes = s.as_bytes();
+
+    // Find the index of the last 'X'.
+    let end = bytes.iter().rposition(|&b| b == b'X')?;
+
+    // Walk left to find the start of the run of Xs that ends at `end`.
+    let mut start = end;
+    while start > 0 && bytes[start - 1] == b'X' {
+        start -= 1;
+    }
+
+    if end + 1 - start >= 3 {
+        Some((start, end + 1))
+    } else {
+        None
+    }
 }
 
 impl Params {

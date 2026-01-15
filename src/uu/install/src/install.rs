@@ -15,7 +15,7 @@ use crate::platform::{
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use filetime::{FileTime, set_file_times};
-#[cfg(feature = "selinux")]
+#[cfg(all(feature = "selinux", target_os = "linux"))]
 use selinux::SecurityContext;
 use std::borrow::Cow;
 use std::ffi::OsString;
@@ -29,7 +29,9 @@ use uucore::backup_control::{self, BackupMode};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, UUsageError};
 use uucore::fs::dir_strip_dot_for_creation;
-#[cfg(feature = "selinux")]
+use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
+use uucore::process::{getegid, geteuid};
+#[cfg(all(feature = "selinux", target_os = "linux"))]
 use uucore::selinux::{
     SeLinuxError, get_selinux_security_context, is_selinux_enabled, selinux_error_description,
     set_selinux_security_context,
@@ -128,7 +130,7 @@ enum InstallError {
     #[error("{}", translate!("install-error-extra-operand", "operand" => .0.quote(), "usage" => .1.clone()))]
     ExtraOperand(OsString, String),
 
-    #[cfg(feature = "selinux")]
+    #[cfg(all(feature = "selinux", target_os = "linux"))]
     #[error("{}", .0)]
     SelinuxContextFailed(String),
 }
@@ -1041,7 +1043,7 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
     Ok(())
 }
 
-#[cfg(feature = "selinux")]
+#[cfg(all(feature = "selinux", target_os = "linux"))]
 fn get_context_for_selinux(b: &Behavior) -> Option<&String> {
     if b.default_context {
         None
@@ -1054,7 +1056,129 @@ fn get_context_for_selinux(b: &Behavior) -> Option<&String> {
 fn should_set_selinux_context(b: &Behavior) -> bool {
     !b.unprivileged && (b.context.is_some() || b.default_context)
 }
-#[cfg(feature = "selinux")]
+
+/// Check if a file needs to be copied due to ownership differences when no explicit group is specified.
+/// Returns true if the destination file's ownership would differ from what it should be after installation.
+fn needs_copy_for_ownership(to: &Path, to_meta: &fs::Metadata) -> bool {
+    use std::os::unix::fs::MetadataExt;
+
+    // Check if the destination file's owner differs from the effective user ID
+    if to_meta.uid() != geteuid() {
+        return true;
+    }
+
+    // For group, we need to determine what the group would be after installation
+    // If no group is specified, the behavior depends on the directory:
+    // - If the directory has setgid bit, the file inherits the directory's group
+    // - Otherwise, the file gets the user's effective group
+    let expected_gid = to
+        .parent()
+        .and_then(|parent| metadata(parent).ok())
+        .filter(|parent_meta| parent_meta.mode() & 0o2000 != 0)
+        .map_or(getegid(), |parent_meta| parent_meta.gid());
+
+    to_meta.gid() != expected_gid
+}
+
+/// Return true if a file is necessary to copy. This is the case when:
+///
+/// - _from_ or _to_ is nonexistent;
+/// - either file has a sticky bit or set\[ug\]id bit, or the user specified one;
+/// - either file isn't a regular file;
+/// - the sizes of _from_ and _to_ differ;
+/// - _to_'s owner differs from intended; or
+/// - the contents of _from_ and _to_ differ.
+///
+/// # Parameters
+///
+/// _from_ and _to_, if existent, must be non-directories.
+///
+/// # Errors
+///
+/// Crashes the program if a nonexistent owner or group is specified in _b_.
+///
+fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
+    // Attempt to retrieve metadata for the source file.
+    // If this fails, assume the file needs to be copied.
+    let Ok(from_meta) = metadata(from) else {
+        return true;
+    };
+
+    // Attempt to retrieve metadata for the destination file.
+    // If this fails, assume the file needs to be copied.
+    let Ok(to_meta) = metadata(to) else {
+        return true;
+    };
+
+    // Check if the destination is a symlink (should always be replaced)
+    if let Ok(to_symlink_meta) = fs::symlink_metadata(to) {
+        if to_symlink_meta.file_type().is_symlink() {
+            return true;
+        }
+    }
+
+    // Define special file mode bits (setuid, setgid, sticky).
+    let extra_mode: u32 = 0o7000;
+    // Define all file mode bits (including permissions).
+    // setuid || setgid || sticky || permissions
+    let all_modes: u32 = 0o7777;
+
+    // Check if any special mode bits are set in the specified mode,
+    // source file mode, or destination file mode.
+    if b.mode() & extra_mode != 0
+        || from_meta.mode() & extra_mode != 0
+        || to_meta.mode() & extra_mode != 0
+    {
+        return true;
+    }
+
+    // Check if the mode of the destination file differs from the specified mode.
+    if b.mode() != to_meta.mode() & all_modes {
+        return true;
+    }
+
+    // Check if either the source or destination is not a file.
+    if !from_meta.is_file() || !to_meta.is_file() {
+        return true;
+    }
+
+    // Check if the file sizes differ.
+    if from_meta.len() != to_meta.len() {
+        return true;
+    }
+
+    #[cfg(feature = "selinux")]
+    if !b.unprivileged && b.preserve_context && contexts_differ(from, to) {
+        return true;
+    }
+
+    // TODO: if -P (#1809) and from/to contexts mismatch, return true.
+
+    // Check if the owner ID is specified and differs from the destination file's owner.
+    if let Some(owner_id) = b.owner_id {
+        if !b.unprivileged && owner_id != to_meta.uid() {
+            return true;
+        }
+    }
+
+    // Check if the group ID is specified and differs from the destination file's group.
+    if let Some(group_id) = b.group_id {
+        if !b.unprivileged && group_id != to_meta.gid() {
+            return true;
+        }
+    } else if !b.unprivileged && needs_copy_for_ownership(to, &to_meta) {
+        return true;
+    }
+
+    // Check if the contents of the source and destination files differ.
+    if !diff(&from.to_string_lossy(), &to.to_string_lossy()) {
+        return true;
+    }
+
+    false
+}
+
+#[cfg(all(feature = "selinux", target_os = "linux"))]
 /// Sets the `SELinux` security context for install's -Z flag behavior.
 ///
 /// This function implements the specific behavior needed for install's -Z flag,
@@ -1088,7 +1212,7 @@ pub fn set_selinux_default_context(path: &Path) -> Result<(), SeLinuxError> {
     }
 }
 
-#[cfg(feature = "selinux")]
+#[cfg(all(feature = "selinux", target_os = "linux"))]
 /// Gets the default `SELinux` context for a path based on the system's security policy.
 ///
 /// This function attempts to determine what the "correct" `SELinux` context should be
@@ -1144,7 +1268,7 @@ fn get_default_context_for_path(path: &Path) -> Result<Option<String>, SeLinuxEr
     Ok(None)
 }
 
-#[cfg(feature = "selinux")]
+#[cfg(all(feature = "selinux", target_os = "linux"))]
 /// Derives an appropriate `SELinux` context based on a parent directory context.
 ///
 /// This is a heuristic function that attempts to generate an appropriate
@@ -1182,7 +1306,7 @@ fn derive_context_from_parent(parent_context: &str) -> String {
     }
 }
 
-#[cfg(feature = "selinux")]
+#[cfg(all(feature = "selinux", target_os = "linux"))]
 /// Helper function to collect paths that need `SELinux` context setting.
 ///
 /// Traverses from the given starting path up to existing parent directories.
@@ -1196,7 +1320,7 @@ fn collect_paths_for_context_setting(starting_path: &Path) -> Vec<&Path> {
     paths
 }
 
-#[cfg(feature = "selinux")]
+#[cfg(all(feature = "selinux", target_os = "linux"))]
 /// Sets the `SELinux` security context for a directory hierarchy.
 ///
 /// This function traverses from the given starting path up to existing parent directories
@@ -1236,7 +1360,7 @@ fn set_selinux_context_for_directories(target_path: &Path, context: Option<&Stri
     }
 }
 
-#[cfg(feature = "selinux")]
+#[cfg(all(feature = "selinux", target_os = "linux"))]
 /// Sets `SELinux` context for created directories using install's -Z default behavior.
 ///
 /// Similar to `set_selinux_context_for_directories` but uses install's
@@ -1260,10 +1384,10 @@ pub fn set_selinux_context_for_directories_install(target_path: &Path, context: 
 
 #[cfg(test)]
 mod tests {
-    #[cfg(feature = "selinux")]
+    #[cfg(all(feature = "selinux", target_os = "linux"))]
     use super::derive_context_from_parent;
 
-    #[cfg(feature = "selinux")]
+    #[cfg(all(feature = "selinux", target_os = "linux"))]
     #[test]
     fn test_derive_context_from_parent() {
         // Test cases: (input_context, file_type, expected_output, description)

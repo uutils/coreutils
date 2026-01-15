@@ -25,7 +25,7 @@ use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::fsext::{MetadataTimeField, metadata_get_time};
 use uucore::line_ending::LineEnding;
-#[cfg(target_os = "linux")]
+#[cfg(all(unix, not(target_os = "redox")))]
 use uucore::safe_traversal::DirFd;
 use uucore::translate;
 
@@ -164,7 +164,7 @@ impl Stat {
     }
 
     /// Create a Stat using safe traversal methods with `DirFd` for the root directory
-    #[cfg(target_os = "linux")]
+    #[cfg(all(unix, not(target_os = "redox")))]
     fn new_from_dirfd(dir_fd: &DirFd, full_path: &Path) -> std::io::Result<Self> {
         // Get metadata for the directory itself using fstat
         let safe_metadata = dir_fd.metadata()?;
@@ -293,9 +293,9 @@ fn read_block_size(s: Option<&str>) -> UResult<u64> {
     }
 }
 
-#[cfg(target_os = "linux")]
-// For now, implement safe_du only on Linux
-// This is done for Ubuntu but should be extended to other platforms that support openat
+#[cfg(all(unix, not(target_os = "redox")))]
+// Implement safe_du on Unix (except Redox which lacks full stat support)
+// This is done for TOCTOU safety
 fn safe_du(
     path: &Path,
     options: &TraversalOptions,
@@ -439,7 +439,8 @@ fn safe_du(
         const S_IFMT: u32 = 0o170_000;
         const S_IFDIR: u32 = 0o040_000;
         const S_IFLNK: u32 = 0o120_000;
-        let is_symlink = (lstat.st_mode & S_IFMT) == S_IFLNK;
+        #[allow(clippy::unnecessary_cast)]
+        let is_symlink = (lstat.st_mode as u32 & S_IFMT) == S_IFLNK;
 
         // Handle symlinks with -L option
         // For safe traversal with -L, we skip symlinks to directories entirely
@@ -450,12 +451,14 @@ fn safe_du(
             continue;
         }
 
-        let is_dir = (lstat.st_mode & S_IFMT) == S_IFDIR;
+        #[allow(clippy::unnecessary_cast)]
+        let is_dir = (lstat.st_mode as u32 & S_IFMT) == S_IFDIR;
         let entry_stat = lstat;
 
+        #[allow(clippy::unnecessary_cast)]
         let file_info = (entry_stat.st_ino != 0).then_some(FileInfo {
             file_id: entry_stat.st_ino as u128,
-            dev_id: entry_stat.st_dev,
+            dev_id: entry_stat.st_dev as u64,
         });
 
         // For safe traversal, we need to handle stats differently
@@ -465,6 +468,7 @@ fn safe_du(
             Stat {
                 path: entry_path.clone(),
                 size: 0,
+                #[allow(clippy::unnecessary_cast)]
                 blocks: entry_stat.st_blocks as u64,
                 inodes: 1,
                 inode: file_info,
@@ -476,7 +480,9 @@ fn safe_du(
             // For files
             Stat {
                 path: entry_path.clone(),
+                #[allow(clippy::unnecessary_cast)]
                 size: entry_stat.st_size as u64,
+                #[allow(clippy::unnecessary_cast)]
                 blocks: entry_stat.st_blocks as u64,
                 inodes: 1,
                 inode: file_info,
@@ -1096,14 +1102,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let mut seen_inodes: HashSet<FileInfo> = HashSet::new();
 
         // Determine which traversal method to use
-        #[cfg(target_os = "linux")]
+        #[cfg(all(unix, not(target_os = "redox")))]
         let use_safe_traversal = traversal_options.dereference != Deref::All;
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(not(all(unix, not(target_os = "redox"))))]
         let use_safe_traversal = false;
 
         if use_safe_traversal {
-            // Use safe traversal (Linux only, when not using -L)
-            #[cfg(target_os = "linux")]
+            // Use safe traversal (Unix except Redox, when not using -L)
+            #[cfg(all(unix, not(target_os = "redox")))]
             {
                 // Pre-populate seen_inodes with the starting directory to detect cycles
                 if let Ok(stat) = Stat::new(&path, None, &traversal_options) {
@@ -1158,9 +1164,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     .send(Ok(StatPrintInfo { stat, depth: 0 }))
                     .map_err(|e| USimpleError::new(1, e.to_string()))?;
             } else {
-                #[cfg(target_os = "linux")]
+                #[cfg(unix)]
                 let error_msg = translate!("du-error-cannot-access", "path" => path.quote());
-                #[cfg(not(target_os = "linux"))]
+                #[cfg(not(unix))]
                 let error_msg =
                     translate!("du-error-cannot-access-no-such-file", "path" => path.quote());
 

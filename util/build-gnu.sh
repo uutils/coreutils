@@ -88,17 +88,16 @@ fi
 cd -
 
 export CARGOFLAGS # tell to make
-# bug: seq with MULTICALL=y breaks env-signal-handler.sh
- "${MAKE}" UTILS="install seq"
-ln -vf "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests use renamed install to ginstall
+ "${MAKE}" UTILS=install
+[ -e "${UU_BUILD_DIR}/ginstall" ] || ln -vf "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests use renamed install to ginstall
 if [ "${SELINUX_ENABLED}" = 1 ];then
     # Build few utils for SELinux for faster build. MULTICALL=y fails...
-    "${MAKE}" UTILS="cat chcon cp cut echo env groups id ln ls mkdir mkfifo mknod mktemp mv printf rm rmdir runcon stat test touch tr true uname wc whoami"
+    "${MAKE}" UTILS="cat chcon chmod cp cut dd echo env groups id ln ls mkdir mkfifo mknod mktemp mv printf rm rmdir runcon seq stat test touch tr true uname wc whoami"
 else
     # Use MULTICALL=y for faster build
-    "${MAKE}" MULTICALL=y SKIP_UTILS="install more seq"
+    "${MAKE}" MULTICALL=y SKIP_UTILS="install more"
     for binary in $("${UU_BUILD_DIR}"/coreutils --list)
-        do ln -vf "${UU_BUILD_DIR}/coreutils" "${UU_BUILD_DIR}/${binary}"
+        do [ -e "${UU_BUILD_DIR}/${binary}" ] || ln -vf "${UU_BUILD_DIR}/coreutils" "${UU_BUILD_DIR}/${binary}"
     done
 fi
 
@@ -322,8 +321,6 @@ test \$n_stat1 -ge \$n_stat2 \\' tests/ls/stat-free-color.sh
 
 # no need to replicate this output with hashsum
 "${SED}" -i -e  "s|Try 'md5sum --help' for more information.\\\n||" tests/cksum/md5sum.pl
-# clap changes the error message
- "${SED}" -i '/check-ignore-missing-4/,/EXIT=> 1/ { /ERR=>/,/try_help/d }' tests/cksum/md5sum.pl
 
 # Our ls command always outputs ANSI color codes prepended with a zero. However,
 # in the case of GNU, it seems inconsistent. Nevertheless, it looks like it

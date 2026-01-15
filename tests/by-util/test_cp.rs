@@ -89,6 +89,16 @@ macro_rules! assert_metadata_eq {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_cp_stream_to_full() {
+    let (_, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("/dev/zero")
+        .arg("/dev/full")
+        .fails()
+        .stderr_contains("No space");
+}
+
+#[test]
 fn test_cp_cp() {
     let (at, mut ucmd) = at_and_ucmd!();
     // Invoke our binary to make the copy.
@@ -7443,4 +7453,58 @@ fn test_cp_archive_deref_flag_ordering() {
         ucmd.args(&[flags, "symlink", &dest]).succeeds();
         assert_eq!(at.is_symlink(&dest), expect_symlink, "failed for {flags}");
     }
+}
+
+#[test]
+fn test_cp_circular_symbolic_links_in_directory() {
+    let source_dir = "source_dir";
+    let target_dir = "target_dir";
+    let (at, mut ucmd) = at_and_ucmd!();
+    let separator = std::path::MAIN_SEPARATOR_STR;
+
+    at.mkdir(source_dir);
+    at.symlink_file(
+        format!("{source_dir}/a").as_str(),
+        format!("{source_dir}/b").as_str(),
+    );
+    at.symlink_file(
+        format!("{source_dir}/b").as_str(),
+        format!("{source_dir}/a").as_str(),
+    );
+
+    ucmd.arg(source_dir)
+        .arg(target_dir)
+        .arg("-rL")
+        .fails_with_code(1)
+        .stderr_contains(format!(
+            "IO error for operation on {source_dir}{separator}a"
+        ))
+        .stderr_contains(format!(
+            "IO error for operation on {source_dir}{separator}b"
+        ));
+}
+
+/// Test that copying to an existing file maintains its permissions, unix only because .mode() only
+/// works on Unix
+#[test]
+#[cfg(unix)]
+fn test_cp_to_existing_file_permissions() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("src");
+    at.touch("dst");
+
+    let src_path = at.plus("src");
+    let dst_path = at.plus("dst");
+
+    let mut src_permissions = std::fs::metadata(&src_path).unwrap().permissions();
+    src_permissions.set_readonly(true);
+    std::fs::set_permissions(&src_path, src_permissions).unwrap();
+
+    let dst_mode = std::fs::metadata(&dst_path).unwrap().permissions().mode();
+
+    ucmd.args(&["src", "dst"]).succeeds();
+
+    let new_dst_mode = std::fs::metadata(&dst_path).unwrap().permissions().mode();
+    assert_eq!(dst_mode, new_dst_mode);
 }

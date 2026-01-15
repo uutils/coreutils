@@ -121,7 +121,7 @@ where
 impl Filesystem {
     // TODO: resolve uuid in `mount_info.dev_name` if exists
     pub(crate) fn new(mount_info: MountInfo, file: Option<OsString>) -> Option<Self> {
-        let _stat_path = if mount_info.mount_dir.is_empty() {
+        let stat_path = if mount_info.mount_dir.is_empty() {
             #[cfg(unix)]
             {
                 mount_info.dev_name.clone().into()
@@ -135,9 +135,9 @@ impl Filesystem {
             mount_info.mount_dir.clone()
         };
         #[cfg(unix)]
-        let usage = FsUsage::new(statfs(&_stat_path).ok()?);
+        let usage = FsUsage::new(statfs(&stat_path).ok()?);
         #[cfg(windows)]
-        let usage = FsUsage::new(Path::new(&_stat_path)).ok()?;
+        let usage = FsUsage::new(Path::new(&stat_path)).ok()?;
         Some(Self {
             file,
             mount_info,
