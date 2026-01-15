@@ -267,6 +267,15 @@ fn test_uptime_since() {
     new_ucmd!().arg("--since").succeeds().stdout_matches(&re);
 }
 
+#[test]
+fn test_uptime_pretty_print() {
+    new_ucmd!()
+        .arg("-p")
+        .succeeds()
+        .stdout_contains("up")
+        .stdout_contains("minute");
+}
+
 /// Test uptime reliability on macOS with sysctl kern.boottime fallback.
 /// This addresses intermittent failures from issue #3621 by ensuring
 /// the command consistently succeeds when utmpx data is unavailable.

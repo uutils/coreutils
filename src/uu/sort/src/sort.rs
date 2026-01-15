@@ -21,7 +21,7 @@ mod tmp_dir;
 use bigdecimal::BigDecimal;
 use chunks::LineData;
 use clap::builder::ValueParser;
-use clap::{Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command};
 use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
@@ -36,6 +36,8 @@ use std::hash::{Hash, Hasher};
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::ops::Range;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::Utf8Error;
@@ -45,6 +47,7 @@ use uucore::error::{FromIo, strip_errno};
 use uucore::error::{UError, UResult, USimpleError, UUsageError};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
 use uucore::format_usage;
+use uucore::i18n::decimal::locale_decimal_separator;
 use uucore::line_ending::LineEnding;
 use uucore::parser::num_parser::{ExtendedParser, ExtendedParserError};
 use uucore::parser::parse_size::{ParseSizeError, Parser};
@@ -67,15 +70,6 @@ mod options {
         pub const GENERAL_NUMERIC: &str = "general-numeric-sort";
         pub const VERSION: &str = "version-sort";
         pub const RANDOM: &str = "random-sort";
-
-        pub const ALL_SORT_MODES: [&str; 6] = [
-            GENERAL_NUMERIC,
-            HUMAN_NUMERIC,
-            MONTH,
-            NUMERIC,
-            VERSION,
-            RANDOM,
-        ];
     }
 
     pub mod check {
@@ -113,6 +107,14 @@ mod options {
 
 const DECIMAL_PT: u8 = b'.';
 
+fn locale_decimal_pt() -> u8 {
+    match locale_decimal_separator().as_bytes().first().copied() {
+        Some(b'.') => b'.',
+        Some(b',') => b',',
+        _ => DECIMAL_PT,
+    }
+}
+
 const NEGATIVE: &u8 = &b'-';
 const POSITIVE: &u8 = &b'+';
 
@@ -138,9 +140,6 @@ pub enum SortError {
         path: PathBuf,
         error: std::io::Error,
     },
-
-    #[error("{}", translate!("sort-parse-key-error", "key" => .key.quote(), "msg" => .msg.clone()))]
-    ParseKeyError { key: String, msg: String },
 
     #[error("{}", translate!("sort-cannot-read", "path" => format!("{}", .path.maybe_quote()), "error" => strip_errno(.error)))]
     ReadFailed {
@@ -205,20 +204,6 @@ enum SortMode {
     Version,
     Random,
     Default,
-}
-
-impl SortMode {
-    fn get_short_name(&self) -> Option<char> {
-        match self {
-            Self::Numeric => Some('n'),
-            Self::HumanNumeric => Some('h'),
-            Self::GeneralNumeric => Some('g'),
-            Self::Month => Some('M'),
-            Self::Version => Some('V'),
-            Self::Random => Some('R'),
-            Self::Default => None,
-        }
-    }
 }
 
 /// Return the length of the byte slice while ignoring embedded NULs (used for debug underline alignment).
@@ -430,54 +415,6 @@ struct KeySettings {
     reverse: bool,
 }
 
-impl KeySettings {
-    /// Checks if the supplied combination of `mode`, `ignore_non_printing` and `dictionary_order` is allowed.
-    fn check_compatibility(
-        mode: SortMode,
-        ignore_non_printing: bool,
-        dictionary_order: bool,
-    ) -> Result<(), String> {
-        if matches!(
-            mode,
-            SortMode::Numeric | SortMode::HumanNumeric | SortMode::GeneralNumeric | SortMode::Month
-        ) {
-            if dictionary_order {
-                return Err(
-                    translate!("sort-options-incompatible", "opt1" => "d", "opt2" => mode.get_short_name().unwrap()),
-                );
-            } else if ignore_non_printing {
-                return Err(
-                    translate!("sort-options-incompatible", "opt1" => "i", "opt2" => mode.get_short_name().unwrap()),
-                );
-            }
-        }
-        Ok(())
-    }
-
-    fn set_sort_mode(&mut self, mode: SortMode) -> Result<(), String> {
-        if self.mode != SortMode::Default && self.mode != mode {
-            return Err(
-                translate!("sort-options-incompatible", "opt1" => self.mode.get_short_name().unwrap(), "opt2" => mode.get_short_name().unwrap()),
-            );
-        }
-        Self::check_compatibility(mode, self.ignore_non_printing, self.dictionary_order)?;
-        self.mode = mode;
-        Ok(())
-    }
-
-    fn set_dictionary_order(&mut self) -> Result<(), String> {
-        Self::check_compatibility(self.mode, self.ignore_non_printing, true)?;
-        self.dictionary_order = true;
-        Ok(())
-    }
-
-    fn set_ignore_non_printing(&mut self) -> Result<(), String> {
-        Self::check_compatibility(self.mode, true, self.dictionary_order)?;
-        self.ignore_non_printing = true;
-        Ok(())
-    }
-}
-
 impl From<&GlobalSettings> for KeySettings {
     fn from(settings: &GlobalSettings) -> Self {
         Self {
@@ -495,6 +432,121 @@ impl Default for KeySettings {
     fn default() -> Self {
         Self::from(&GlobalSettings::default())
     }
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct ModeFlags {
+    numeric: bool,
+    general_numeric: bool,
+    human_numeric: bool,
+    month: bool,
+    version: bool,
+    random: bool,
+}
+
+impl ModeFlags {
+    fn from_mode(mode: SortMode) -> Self {
+        let mut flags = Self::default();
+        match mode {
+            SortMode::Numeric => flags.numeric = true,
+            SortMode::GeneralNumeric => flags.general_numeric = true,
+            SortMode::HumanNumeric => flags.human_numeric = true,
+            SortMode::Month => flags.month = true,
+            SortMode::Version => flags.version = true,
+            SortMode::Random => flags.random = true,
+            SortMode::Default => {}
+        }
+        flags
+    }
+
+    fn to_mode(self) -> SortMode {
+        if self.numeric {
+            SortMode::Numeric
+        } else if self.general_numeric {
+            SortMode::GeneralNumeric
+        } else if self.human_numeric {
+            SortMode::HumanNumeric
+        } else if self.month {
+            SortMode::Month
+        } else if self.random {
+            SortMode::Random
+        } else if self.version {
+            SortMode::Version
+        } else {
+            SortMode::Default
+        }
+    }
+}
+
+fn ordering_opts_string(
+    flags: ModeFlags,
+    dictionary_order: bool,
+    ignore_non_printing: bool,
+    ignore_case: bool,
+) -> String {
+    let mut opts = String::new();
+    if dictionary_order {
+        opts.push('d');
+    }
+    if ignore_case {
+        opts.push('f');
+    }
+    if flags.general_numeric {
+        opts.push('g');
+    }
+    if flags.human_numeric {
+        opts.push('h');
+    }
+    if !dictionary_order && ignore_non_printing {
+        opts.push('i');
+    }
+    if flags.month {
+        opts.push('M');
+    }
+    if flags.numeric {
+        opts.push('n');
+    }
+    if flags.random {
+        opts.push('R');
+    }
+    if flags.version {
+        opts.push('V');
+    }
+    opts
+}
+
+fn ordering_incompatible(
+    flags: ModeFlags,
+    dictionary_order: bool,
+    ignore_non_printing: bool,
+) -> bool {
+    let mode_count = u8::from(flags.numeric)
+        + u8::from(flags.general_numeric)
+        + u8::from(flags.human_numeric)
+        + u8::from(flags.month);
+
+    // Multiple numeric/month modes are incompatible
+    if mode_count > 1 {
+        return true;
+    }
+
+    // A numeric/month mode combined with version/random/dictionary/ignore_non_printing is incompatible
+    if mode_count == 1 {
+        return flags.version || flags.random || dictionary_order || ignore_non_printing;
+    }
+
+    false
+}
+
+fn incompatible_options_error(opts: &str) -> Box<dyn UError> {
+    USimpleError::new(
+        2,
+        translate!(
+            "sort-options-incompatible",
+            "opt1" => opts,
+            "opt2" => ""
+        ),
+    )
 }
 enum Selection<'a> {
     AsBigDecimal(GeneralBigDecimalParseResult),
@@ -637,8 +689,8 @@ impl<'a> Line<'a> {
                 }
                 SortMode::GeneralNumeric => {
                     let initial_selection = &self.line[selection.clone()];
-
-                    let leading = get_leading_gen(initial_selection);
+                    let decimal_pt = locale_decimal_pt();
+                    let leading = get_leading_gen(initial_selection, decimal_pt);
 
                     // Shorten selection to leading.
                     selection.start += leading.start;
@@ -772,42 +824,6 @@ struct KeyPosition {
     ignore_blanks: bool,
 }
 
-impl KeyPosition {
-    fn new(key: &str, default_char_index: usize, ignore_blanks: bool) -> Result<Self, String> {
-        let mut field_and_char = key.split('.');
-
-        let field = field_and_char
-            .next()
-            .ok_or_else(|| translate!("sort-invalid-key", "key" => key.quote()))?;
-        let char = field_and_char.next();
-
-        let field = match field.parse::<usize>() {
-            Ok(f) => f,
-            Err(e) if *e.kind() == IntErrorKind::PosOverflow => usize::MAX,
-            Err(e) => {
-                return Err(
-                    translate!("sort-failed-parse-field-index", "field" => field.quote(), "error" => e),
-                );
-            }
-        };
-        if field == 0 {
-            return Err(translate!("sort-field-index-cannot-be-zero"));
-        }
-
-        let char = char.map_or(Ok(default_char_index), |char| {
-            char.parse().map_err(|e: std::num::ParseIntError| {
-                translate!("sort-failed-parse-char-index", "char" => char.quote(), "error" => e)
-            })
-        })?;
-
-        Ok(Self {
-            field,
-            char,
-            ignore_blanks,
-        })
-    }
-}
-
 impl Default for KeyPosition {
     fn default() -> Self {
         Self {
@@ -816,6 +832,88 @@ impl Default for KeyPosition {
             ignore_blanks: false,
         }
     }
+}
+
+fn bad_field_spec(spec: &str, msg_key: &str) -> Box<dyn UError> {
+    USimpleError::new(
+        2,
+        translate!(
+            "sort-invalid-field-spec",
+            "msg" => translate!(msg_key),
+            "spec" => spec.quote()
+        ),
+    )
+}
+
+fn invalid_count_error(msg_key: &str, input: &str) -> Box<dyn UError> {
+    USimpleError::new(
+        2,
+        format!(
+            "{}: {}",
+            translate!(msg_key),
+            translate!("sort-invalid-count-at-start-of", "string" => input.quote())
+        ),
+    )
+}
+
+fn parse_field_count<'a>(input: &'a str, msg_key: &str) -> UResult<(usize, &'a str)> {
+    let bytes = input.as_bytes();
+    let mut idx = 0;
+    while idx < bytes.len() && bytes[idx].is_ascii_digit() {
+        idx += 1;
+    }
+    if idx == 0 {
+        return Err(invalid_count_error(msg_key, input));
+    }
+    let (num_str, rest) = input.split_at(idx);
+    let value = match num_str.parse::<usize>() {
+        Ok(v) => v,
+        Err(e) if *e.kind() == IntErrorKind::PosOverflow => usize::MAX,
+        Err(_) => return Err(invalid_count_error(msg_key, input)),
+    };
+    Ok((value, rest))
+}
+
+fn is_ordering_option_char(byte: u8) -> bool {
+    matches!(
+        byte,
+        b'b' | b'd' | b'f' | b'g' | b'h' | b'i' | b'M' | b'n' | b'R' | b'r' | b'V'
+    )
+}
+
+fn parse_ordering_options<'a>(
+    input: &'a str,
+    settings: &mut KeySettings,
+    flags: &mut ModeFlags,
+) -> (&'a str, bool) {
+    let mut ignore_blanks = false;
+    let bytes = input.as_bytes();
+    let mut idx = 0;
+    while idx < bytes.len() {
+        match bytes[idx] {
+            b'b' => ignore_blanks = true,
+            b'd' => {
+                settings.dictionary_order = true;
+                settings.ignore_non_printing = false;
+            }
+            b'f' => settings.ignore_case = true,
+            b'g' => flags.general_numeric = true,
+            b'h' => flags.human_numeric = true,
+            b'i' => {
+                if !settings.dictionary_order {
+                    settings.ignore_non_printing = true;
+                }
+            }
+            b'M' => flags.month = true,
+            b'n' => flags.numeric = true,
+            b'R' => flags.random = true,
+            b'r' => settings.reverse = true,
+            b'V' => flags.version = true,
+            _ => break,
+        }
+        idx += 1;
+    }
+    (&input[idx..], ignore_blanks)
 }
 
 #[derive(Clone, PartialEq, Debug, Default)]
@@ -831,91 +929,106 @@ struct FieldSelector {
 }
 
 impl FieldSelector {
-    /// Splits this position into the actual position and the attached options.
-    fn split_key_options(position: &str) -> (&str, &str) {
-        if let Some((options_start, _)) = position.char_indices().find(|(_, c)| c.is_alphabetic()) {
-            position.split_at(options_start)
-        } else {
-            (position, "")
-        }
-    }
-
     fn parse(key: &str, global_settings: &GlobalSettings) -> UResult<Self> {
-        let mut from_to = key.split(',');
-        let (from, from_options) = Self::split_key_options(from_to.next().unwrap());
-        let to = from_to.next().map(Self::split_key_options);
-        let options_are_empty = from_options.is_empty() && matches!(to, None | Some((_, "")));
-
-        if options_are_empty {
-            // Inherit the global settings if there are no options attached to this key.
-            (|| {
-                // This would be ideal for a try block, I think. In the meantime this closure allows
-                // to use the `?` operator here.
-                Self::new(
-                    KeyPosition::new(from, 1, global_settings.ignore_leading_blanks)?,
-                    to.map(|(to, _)| {
-                        KeyPosition::new(to, 0, global_settings.ignore_leading_blanks)
-                    })
-                    .transpose()?,
-                    KeySettings::from(global_settings),
-                )
-            })()
+        let has_options = key.as_bytes().iter().copied().any(is_ordering_option_char);
+        let mut settings = if has_options {
+            KeySettings::default()
         } else {
-            // Do not inherit from `global_settings`, as there are options attached to this key.
-            Self::parse_with_options((from, from_options), to)
-        }
-        .map_err(|msg| {
-            SortError::ParseKeyError {
-                key: key.to_owned(),
-                msg,
-            }
-            .into()
-        })
-    }
-
-    fn parse_with_options(
-        (from, from_options): (&str, &str),
-        to: Option<(&str, &str)>,
-    ) -> Result<Self, String> {
-        /// Applies `options` to `key_settings`, returning if the 'b'-flag (ignore blanks) was present.
-        fn parse_key_settings(
-            options: &str,
-            key_settings: &mut KeySettings,
-        ) -> Result<bool, String> {
-            let mut ignore_blanks = false;
-            for option in options.chars() {
-                match option {
-                    'M' => key_settings.set_sort_mode(SortMode::Month)?,
-                    'b' => ignore_blanks = true,
-                    'd' => key_settings.set_dictionary_order()?,
-                    'f' => key_settings.ignore_case = true,
-                    'g' => key_settings.set_sort_mode(SortMode::GeneralNumeric)?,
-                    'h' => key_settings.set_sort_mode(SortMode::HumanNumeric)?,
-                    'i' => key_settings.set_ignore_non_printing()?,
-                    'n' => key_settings.set_sort_mode(SortMode::Numeric)?,
-                    'R' => key_settings.set_sort_mode(SortMode::Random)?,
-                    'r' => key_settings.reverse = true,
-                    'V' => key_settings.set_sort_mode(SortMode::Version)?,
-                    c => {
-                        return Err(translate!("sort-invalid-option", "option" => c));
-                    }
-                }
-            }
-            Ok(ignore_blanks)
-        }
-
-        let mut key_settings = KeySettings::default();
-        let from = parse_key_settings(from_options, &mut key_settings)
-            .map(|ignore_blanks| KeyPosition::new(from, 1, ignore_blanks))??;
-        let to = if let Some((to, to_options)) = to {
-            Some(
-                parse_key_settings(to_options, &mut key_settings)
-                    .map(|ignore_blanks| KeyPosition::new(to, 0, ignore_blanks))??,
-            )
-        } else {
-            None
+            KeySettings::from(global_settings)
         };
-        Self::new(from, to, key_settings)
+        let mut flags = if has_options {
+            ModeFlags::default()
+        } else {
+            ModeFlags::from_mode(settings.mode)
+        };
+
+        let mut from_ignore_blanks = if has_options {
+            false
+        } else {
+            settings.ignore_blanks
+        };
+        let mut to_ignore_blanks = if has_options {
+            false
+        } else {
+            settings.ignore_blanks
+        };
+
+        let (from_field, mut rest) = parse_field_count(key, "sort-invalid-number-at-field-start")?;
+        if from_field == 0 {
+            return Err(bad_field_spec(key, "sort-field-number-is-zero"));
+        }
+
+        let mut from_char = 1;
+        if let Some(stripped) = rest.strip_prefix('.') {
+            let (char_idx, rest_after) =
+                parse_field_count(stripped, "sort-invalid-number-after-dot")?;
+            if char_idx == 0 {
+                return Err(bad_field_spec(key, "sort-character-offset-is-zero"));
+            }
+            from_char = char_idx;
+            rest = rest_after;
+        }
+
+        let (rest_after_opts, ignore_blanks) =
+            parse_ordering_options(rest, &mut settings, &mut flags);
+        if ignore_blanks {
+            from_ignore_blanks = true;
+        }
+
+        let mut to = None;
+        if let Some(rest_after_comma) = rest_after_opts.strip_prefix(',') {
+            let (to_field, mut rest) =
+                parse_field_count(rest_after_comma, "sort-invalid-number-after-comma")?;
+            if to_field == 0 {
+                return Err(bad_field_spec(key, "sort-field-number-is-zero"));
+            }
+
+            let mut to_char = 0;
+            if let Some(stripped) = rest.strip_prefix('.') {
+                let (char_idx, rest_after) =
+                    parse_field_count(stripped, "sort-invalid-number-after-dot")?;
+                to_char = char_idx;
+                rest = rest_after;
+            }
+
+            let (rest, ignore_blanks_end) = parse_ordering_options(rest, &mut settings, &mut flags);
+            if ignore_blanks_end {
+                to_ignore_blanks = true;
+            }
+            if !rest.is_empty() {
+                return Err(bad_field_spec(key, "sort-stray-character-field-spec"));
+            }
+            to = Some(KeyPosition {
+                field: to_field,
+                char: to_char,
+                ignore_blanks: to_ignore_blanks,
+            });
+        } else if !rest_after_opts.is_empty() {
+            return Err(bad_field_spec(key, "sort-stray-character-field-spec"));
+        }
+
+        if ordering_incompatible(
+            flags,
+            settings.dictionary_order,
+            settings.ignore_non_printing,
+        ) {
+            let opts = ordering_opts_string(
+                flags,
+                settings.dictionary_order,
+                settings.ignore_non_printing,
+                settings.ignore_case,
+            );
+            return Err(incompatible_options_error(&opts));
+        }
+
+        settings.mode = flags.to_mode();
+
+        let from = KeyPosition {
+            field: from_field,
+            char: from_char,
+            ignore_blanks: from_ignore_blanks,
+        };
+        Self::new(from, to, settings).map_err(|msg| USimpleError::new(2, msg))
     }
 
     fn new(
@@ -965,7 +1078,11 @@ impl FieldSelector {
             Selection::WithNumInfo(range_str, info)
         } else if self.settings.mode == SortMode::GeneralNumeric {
             // Parse this number as BigDecimal, as this is the requirement for general numeric sorting.
-            Selection::AsBigDecimal(general_bd_parse(&range_str[get_leading_gen(range_str)]))
+            let decimal_pt = locale_decimal_pt();
+            Selection::AsBigDecimal(general_bd_parse(
+                &range_str[get_leading_gen(range_str, decimal_pt)],
+                decimal_pt,
+            ))
         } else {
             // This is not a numeric sort, so we don't need a NumCache.
             Selection::Str(range_str)
@@ -1067,18 +1184,13 @@ impl FieldSelector {
     }
 }
 
-/// Creates an `Arg` that conflicts with all other sort modes.
+/// Creates an `Arg` for a sort mode flag.
 fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
     Arg::new(mode)
         .short(short)
         .long(mode)
         .help(help)
         .action(ArgAction::SetTrue)
-        .conflicts_with_all(
-            options::modes::ALL_SORT_MODES
-                .iter()
-                .filter(|&&m| m != mode),
-        )
 }
 
 #[cfg(target_os = "linux")]
@@ -1117,6 +1229,80 @@ struct LegacyKeyPart {
     field: usize,
     char_pos: usize,
     opts: String,
+}
+
+#[derive(Debug, Clone)]
+struct LegacyKeyWarning {
+    arg_index: usize,
+    key_index: Option<usize>,
+    from_field: usize,
+    to_field: Option<usize>,
+    to_char: Option<usize>,
+}
+
+impl LegacyKeyWarning {
+    fn legacy_key_display(&self) -> String {
+        match self.to_field {
+            Some(to) => format!("+{} -{}", self.from_field, to),
+            None => format!("+{}", self.from_field),
+        }
+    }
+
+    fn replacement_key_display(&self) -> String {
+        let start_field = self.from_field.saturating_add(1);
+        match self.to_field {
+            Some(to_field) => {
+                let end_field = match self.to_char {
+                    Some(0) | None => to_field.max(1),
+                    Some(_) => to_field.saturating_add(1),
+                };
+                format!("{start_field},{end_field}")
+            }
+            None => start_field.to_string(),
+        }
+    }
+}
+
+#[derive(Default)]
+struct GlobalOptionFlags {
+    keys_specified: bool,
+    ignore_leading_blanks: bool,
+    dictionary_order: bool,
+    ignore_case: bool,
+    ignore_non_printing: bool,
+    reverse: bool,
+    mode_numeric: bool,
+    mode_general: bool,
+    mode_human: bool,
+    mode_month: bool,
+    mode_random: bool,
+    mode_version: bool,
+}
+
+impl GlobalOptionFlags {
+    fn from_matches(matches: &ArgMatches) -> Self {
+        let sort_value = matches
+            .get_one::<String>(options::modes::SORT)
+            .map(|s| s.as_str());
+        Self {
+            keys_specified: matches.contains_id(options::KEY),
+            ignore_leading_blanks: matches.get_flag(options::IGNORE_LEADING_BLANKS),
+            dictionary_order: matches.get_flag(options::DICTIONARY_ORDER),
+            ignore_case: matches.get_flag(options::IGNORE_CASE),
+            ignore_non_printing: matches.get_flag(options::IGNORE_NONPRINTING),
+            reverse: matches.get_flag(options::REVERSE),
+            mode_human: matches.get_flag(options::modes::HUMAN_NUMERIC)
+                || sort_value == Some("human-numeric"),
+            mode_month: matches.get_flag(options::modes::MONTH) || sort_value == Some("month"),
+            mode_general: matches.get_flag(options::modes::GENERAL_NUMERIC)
+                || sort_value == Some("general-numeric"),
+            mode_numeric: matches.get_flag(options::modes::NUMERIC)
+                || sort_value == Some("numeric"),
+            mode_version: matches.get_flag(options::modes::VERSION)
+                || sort_value == Some("version"),
+            mode_random: matches.get_flag(options::modes::RANDOM) || sort_value == Some("random"),
+        }
+    }
 }
 
 fn parse_usize_or_max(num: &str) -> Option<usize> {
@@ -1192,16 +1378,17 @@ fn legacy_key_to_k(from: &LegacyKeyPart, to: Option<&LegacyKeyPart>) -> String {
 
 /// Preprocess argv to handle legacy +POS1 [-POS2] syntax by converting it into -k forms
 /// before clap sees the arguments.
-fn preprocess_legacy_args<I>(args: I) -> Vec<OsString>
+fn preprocess_legacy_args<I>(args: I) -> (Vec<OsString>, Vec<LegacyKeyWarning>)
 where
     I: IntoIterator,
     I::Item: Into<OsString>,
 {
     if !allows_traditional_usage() {
-        return args.into_iter().map(Into::into).collect();
+        return (args.into_iter().map(Into::into).collect(), Vec::new());
     }
 
     let mut processed = Vec::new();
+    let mut legacy_warnings = Vec::new();
     let mut iter = args.into_iter().map(Into::into).peekable();
 
     while let Some(arg) = iter.next() {
@@ -1211,38 +1398,110 @@ where
             break;
         }
 
-        let as_str = arg.to_string_lossy();
-        if let Some(from_spec) = as_str.strip_prefix('+') {
-            if let Some(from) = parse_legacy_part(from_spec) {
-                let mut to_part = None;
+        if starts_with_plus(&arg) {
+            let as_str = arg.to_string_lossy();
+            if let Some(from_spec) = as_str.strip_prefix('+') {
+                if let Some(from) = parse_legacy_part(from_spec) {
+                    let mut to_part = None;
 
-                let next_candidate = iter.peek().map(|next| next.to_string_lossy().to_string());
+                    let next_candidate = iter.peek().map(|next| next.to_string_lossy().to_string());
 
-                if let Some(next_str) = next_candidate {
-                    if let Some(stripped) = next_str.strip_prefix('-') {
-                        if stripped.starts_with(|c: char| c.is_ascii_digit()) {
-                            let next_arg = iter.next().unwrap();
-                            if let Some(parsed) = parse_legacy_part(stripped) {
-                                to_part = Some(parsed);
-                            } else {
-                                processed.push(arg);
-                                processed.push(next_arg);
-                                continue;
+                    if let Some(next_str) = next_candidate {
+                        if let Some(stripped) = next_str.strip_prefix('-') {
+                            if stripped.starts_with(|c: char| c.is_ascii_digit()) {
+                                let next_arg = iter.next().unwrap();
+                                if let Some(parsed) = parse_legacy_part(stripped) {
+                                    to_part = Some(parsed);
+                                } else {
+                                    processed.push(arg);
+                                    processed.push(next_arg);
+                                    continue;
+                                }
                             }
                         }
                     }
-                }
 
-                let keydef = legacy_key_to_k(&from, to_part.as_ref());
-                processed.push(OsString::from(format!("-k{keydef}")));
-                continue;
+                    let keydef = legacy_key_to_k(&from, to_part.as_ref());
+                    let arg_index = processed.len();
+                    legacy_warnings.push(LegacyKeyWarning {
+                        arg_index,
+                        key_index: None,
+                        from_field: from.field,
+                        to_field: to_part.as_ref().map(|p| p.field),
+                        to_char: to_part.as_ref().map(|p| p.char_pos),
+                    });
+                    processed.push(OsString::from(format!("-k{keydef}")));
+                    continue;
+                }
             }
         }
 
         processed.push(arg);
     }
 
-    processed
+    (processed, legacy_warnings)
+}
+
+fn starts_with_plus(arg: &OsStr) -> bool {
+    #[cfg(unix)]
+    {
+        arg.as_bytes().first() == Some(&b'+')
+    }
+    #[cfg(not(unix))]
+    {
+        arg.to_string_lossy().starts_with('+')
+    }
+}
+
+fn index_legacy_warnings(processed_args: &[OsString], legacy_warnings: &mut [LegacyKeyWarning]) {
+    if legacy_warnings.is_empty() {
+        return;
+    }
+
+    let mut index_by_arg = std::collections::HashMap::new();
+    for (warning_idx, warning) in legacy_warnings.iter().enumerate() {
+        index_by_arg.insert(warning.arg_index, warning_idx);
+    }
+
+    let mut key_index = 0usize;
+    let mut i = 0usize;
+    while i < processed_args.len() {
+        let arg = &processed_args[i];
+        if arg == OsStr::new("--") {
+            break;
+        }
+
+        let mut matched_key = false;
+        if arg == OsStr::new("-k") || arg == OsStr::new("--key") {
+            if i + 1 < processed_args.len() {
+                key_index = key_index.saturating_add(1);
+                matched_key = true;
+                i += 2;
+            } else {
+                i += 1;
+            }
+        } else {
+            let as_str = arg.to_string_lossy();
+            if let Some(spec) = as_str.strip_prefix("-k") {
+                if !spec.is_empty() {
+                    key_index = key_index.saturating_add(1);
+                    matched_key = true;
+                }
+            } else if let Some(spec) = as_str.strip_prefix("--key=") {
+                if !spec.is_empty() {
+                    key_index = key_index.saturating_add(1);
+                    matched_key = true;
+                }
+            }
+            i += 1;
+        }
+
+        if matched_key {
+            if let Some(&warning_idx) = index_by_arg.get(&i.saturating_sub(1)) {
+                legacy_warnings[warning_idx].key_index = Some(key_index);
+            }
+        }
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -1271,16 +1530,232 @@ fn default_merge_batch_size() -> usize {
     }
 }
 
+fn locale_failed_to_set() -> bool {
+    matches!(env::var("LC_ALL").ok().as_deref(), Some("missing"))
+}
+
+fn key_zero_width(selector: &FieldSelector) -> bool {
+    let Some(to) = &selector.to else {
+        return false;
+    };
+    if to.field < selector.from.field {
+        return true;
+    }
+    if to.field == selector.from.field {
+        return to.char != 0 && to.char < selector.from.char;
+    }
+    false
+}
+
+fn key_spans_multiple_fields(selector: &FieldSelector) -> bool {
+    if !matches!(
+        selector.settings.mode,
+        SortMode::Numeric | SortMode::HumanNumeric | SortMode::GeneralNumeric
+    ) {
+        return false;
+    }
+    match &selector.to {
+        None => true,
+        Some(to) => to.field > selector.from.field,
+    }
+}
+
+fn key_leading_blanks_significant(selector: &FieldSelector) -> bool {
+    selector.settings.mode == SortMode::Default
+        && !selector.from.ignore_blanks
+        && !selector.settings.ignore_blanks
+}
+
+fn emit_debug_warnings(
+    settings: &GlobalSettings,
+    flags: &GlobalOptionFlags,
+    legacy_warnings: &[LegacyKeyWarning],
+) {
+    if locale_failed_to_set() {
+        show_error!("{}", translate!("sort-warning-failed-to-set-locale"));
+    }
+
+    show_error!("{}", translate!("sort-warning-simple-byte-comparison"));
+
+    for (idx, selector) in settings.selectors.iter().enumerate() {
+        let key_index = idx + 1;
+        if let Some(legacy) = legacy_warnings
+            .iter()
+            .find(|warning| warning.key_index == Some(key_index))
+        {
+            show_error!(
+                "{}",
+                translate!(
+                    "sort-warning-obsolescent-key",
+                    "key" => legacy.legacy_key_display(),
+                    "replacement" => legacy.replacement_key_display()
+                )
+            );
+        }
+
+        if key_zero_width(selector) {
+            show_error!(
+                "{}",
+                translate!("sort-warning-key-zero-width", "key" => key_index)
+            );
+            continue;
+        }
+
+        if flags.keys_specified && key_spans_multiple_fields(selector) {
+            show_error!(
+                "{}",
+                translate!(
+                    "sort-warning-key-numeric-spans-fields",
+                    "key" => key_index
+                )
+            );
+        } else if flags.keys_specified && key_leading_blanks_significant(selector) {
+            show_error!(
+                "{}",
+                translate!(
+                    "sort-warning-leading-blanks-significant",
+                    "key" => key_index
+                )
+            );
+        }
+    }
+
+    let numeric_used = settings.selectors.iter().any(|selector| {
+        matches!(
+            selector.settings.mode,
+            SortMode::Numeric | SortMode::HumanNumeric | SortMode::GeneralNumeric
+        )
+    });
+
+    let mut suppress_decimal_warning = false;
+    if numeric_used {
+        if let Some(sep) = settings.separator {
+            match sep {
+                b'.' => {
+                    show_error!(
+                        "{}",
+                        translate!("sort-warning-separator-decimal", "sep" => ".")
+                    );
+                    suppress_decimal_warning = true;
+                }
+                b'-' => {
+                    show_error!(
+                        "{}",
+                        translate!("sort-warning-separator-minus", "sep" => "-")
+                    );
+                }
+                b'+' => {
+                    show_error!(
+                        "{}",
+                        translate!("sort-warning-separator-plus", "sep" => "+")
+                    );
+                }
+                _ => {}
+            }
+        }
+
+        if !suppress_decimal_warning {
+            show_error!("{}", translate!("sort-warning-numbers-use-decimal-point"));
+        }
+    }
+
+    let uses_reverse = settings
+        .selectors
+        .iter()
+        .any(|selector| selector.settings.reverse);
+    let uses_blanks = settings
+        .selectors
+        .iter()
+        .any(|selector| selector.settings.ignore_blanks || selector.from.ignore_blanks);
+    let uses_dictionary = settings
+        .selectors
+        .iter()
+        .any(|selector| selector.settings.dictionary_order);
+    let uses_case = settings
+        .selectors
+        .iter()
+        .any(|selector| selector.settings.ignore_case);
+    let uses_non_printing = settings
+        .selectors
+        .iter()
+        .any(|selector| selector.settings.ignore_non_printing);
+
+    let uses_mode = |mode| {
+        settings
+            .selectors
+            .iter()
+            .any(|selector| selector.settings.mode == mode)
+    };
+
+    let reverse_unused = flags.reverse && !uses_reverse;
+    let last_resort_active =
+        settings.mode != SortMode::Random && !settings.stable && !settings.unique;
+    let reverse_ignored = reverse_unused && !last_resort_active;
+    let reverse_last_resort_warning = reverse_unused && last_resort_active;
+
+    let mut ignored_opts = String::new();
+    if flags.ignore_leading_blanks && !uses_blanks {
+        ignored_opts.push('b');
+    }
+    if flags.dictionary_order && !uses_dictionary {
+        ignored_opts.push('d');
+    }
+    if flags.ignore_case && !uses_case {
+        ignored_opts.push('f');
+    }
+    if flags.ignore_non_printing && !uses_non_printing {
+        ignored_opts.push('i');
+    }
+    if flags.mode_general && !uses_mode(SortMode::GeneralNumeric) {
+        ignored_opts.push('g');
+    }
+    if flags.mode_human && !uses_mode(SortMode::HumanNumeric) {
+        ignored_opts.push('h');
+    }
+    if flags.mode_month && !uses_mode(SortMode::Month) {
+        ignored_opts.push('M');
+    }
+    if flags.mode_numeric && !uses_mode(SortMode::Numeric) {
+        ignored_opts.push('n');
+    }
+    if flags.mode_random && !uses_mode(SortMode::Random) {
+        ignored_opts.push('R');
+    }
+    if reverse_ignored {
+        ignored_opts.push('r');
+    }
+    if flags.mode_version && !uses_mode(SortMode::Version) {
+        ignored_opts.push('V');
+    }
+
+    if ignored_opts.len() == 1 {
+        show_error!(
+            "{}",
+            translate!("sort-warning-option-ignored", "option" => ignored_opts)
+        );
+    } else if ignored_opts.len() > 1 {
+        show_error!(
+            "{}",
+            translate!("sort-warning-options-ignored", "options" => ignored_opts)
+        );
+    }
+
+    if reverse_last_resort_warning {
+        show_error!("{}", translate!("sort-warning-option-reverse-last-resort"));
+    }
+}
+
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut settings = GlobalSettings::default();
 
-    let matches = uucore::clap_localization::handle_clap_result_with_exit_code(
-        uu_app(),
-        preprocess_legacy_args(args),
-        2,
-    )?;
+    let (processed_args, mut legacy_warnings) = preprocess_legacy_args(args);
+    if !legacy_warnings.is_empty() {
+        index_legacy_warnings(&processed_args, &mut legacy_warnings);
+    }
+    let matches =
+        uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), processed_args, 2)?;
 
     // Prevent -o/--output to be specified multiple times
     if matches
@@ -1342,49 +1817,59 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .unwrap_or_default()
     };
 
-    settings.mode = if matches.get_flag(options::modes::HUMAN_NUMERIC)
-        || matches
-            .get_one::<String>(options::modes::SORT)
-            .is_some_and(|s| s == "human-numeric")
-    {
-        SortMode::HumanNumeric
-    } else if matches.get_flag(options::modes::MONTH)
-        || matches
-            .get_one::<String>(options::modes::SORT)
-            .is_some_and(|s| s == "month")
-    {
-        SortMode::Month
-    } else if matches.get_flag(options::modes::GENERAL_NUMERIC)
-        || matches
-            .get_one::<String>(options::modes::SORT)
-            .is_some_and(|s| s == "general-numeric")
-    {
-        SortMode::GeneralNumeric
-    } else if matches.get_flag(options::modes::NUMERIC)
-        || matches
-            .get_one::<String>(options::modes::SORT)
-            .is_some_and(|s| s == "numeric")
-    {
-        SortMode::Numeric
-    } else if matches.get_flag(options::modes::VERSION)
-        || matches
-            .get_one::<String>(options::modes::SORT)
-            .is_some_and(|s| s == "version")
-    {
-        SortMode::Version
-    } else if matches.get_flag(options::modes::RANDOM)
-        || matches
-            .get_one::<String>(options::modes::SORT)
-            .is_some_and(|s| s == "random")
-    {
-        settings.salt = Some(get_rand_string());
-        SortMode::Random
-    } else {
-        SortMode::Default
-    };
+    let mut mode_flags = ModeFlags::default();
+    if matches.get_flag(options::modes::HUMAN_NUMERIC) {
+        mode_flags.human_numeric = true;
+    }
+    if matches.get_flag(options::modes::MONTH) {
+        mode_flags.month = true;
+    }
+    if matches.get_flag(options::modes::GENERAL_NUMERIC) {
+        mode_flags.general_numeric = true;
+    }
+    if matches.get_flag(options::modes::NUMERIC) {
+        mode_flags.numeric = true;
+    }
+    if matches.get_flag(options::modes::VERSION) {
+        mode_flags.version = true;
+    }
+    if matches.get_flag(options::modes::RANDOM) {
+        mode_flags.random = true;
+    }
+    if let Some(sort_arg) = matches.get_one::<String>(options::modes::SORT) {
+        match sort_arg.as_str() {
+            "human-numeric" => mode_flags.human_numeric = true,
+            "month" => mode_flags.month = true,
+            "general-numeric" => mode_flags.general_numeric = true,
+            "numeric" => mode_flags.numeric = true,
+            "version" => mode_flags.version = true,
+            "random" => mode_flags.random = true,
+            _ => {}
+        }
+    }
 
-    settings.dictionary_order = matches.get_flag(options::DICTIONARY_ORDER);
-    settings.ignore_non_printing = matches.get_flag(options::IGNORE_NONPRINTING);
+    let dictionary_order = matches.get_flag(options::DICTIONARY_ORDER);
+    let ignore_non_printing = matches.get_flag(options::IGNORE_NONPRINTING);
+    let ignore_case = matches.get_flag(options::IGNORE_CASE);
+
+    if ordering_incompatible(mode_flags, dictionary_order, ignore_non_printing) {
+        let opts = ordering_opts_string(
+            mode_flags,
+            dictionary_order,
+            ignore_non_printing,
+            ignore_case,
+        );
+        return Err(incompatible_options_error(&opts));
+    }
+
+    settings.mode = mode_flags.to_mode();
+    if mode_flags.random {
+        settings.salt = Some(get_rand_string());
+    }
+
+    settings.dictionary_order = dictionary_order;
+    settings.ignore_non_printing = ignore_non_printing;
+    settings.ignore_case = ignore_case;
     if matches.contains_id(options::PARALLEL) {
         // "0" is default - threads = num of cores
         settings.threads = matches
@@ -1480,6 +1965,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     settings.merge = matches.get_flag(options::MERGE);
 
     settings.check = matches.contains_id(options::check::CHECK);
+    if settings.check && matches.get_flag(options::check::CHECK_SILENT) {
+        return Err(incompatible_options_error("cC"));
+    }
     if matches.get_flag(options::check::CHECK_SILENT)
         || matches!(
             matches
@@ -1492,7 +1980,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         settings.check = true;
     }
 
-    settings.ignore_case = matches.get_flag(options::IGNORE_CASE);
+    if matches.contains_id(options::OUTPUT) && settings.check {
+        let opts = if settings.check_silent { "Co" } else { "co" };
+        return Err(incompatible_options_error(opts));
+    }
 
     settings.ignore_leading_blanks = matches.get_flag(options::IGNORE_LEADING_BLANKS);
 
@@ -1569,6 +2060,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let output = Output::new(matches.get_one::<OsString>(options::OUTPUT))?;
 
+    if settings.debug {
+        let global_flags = GlobalOptionFlags::from_matches(&matches);
+        emit_debug_warnings(&settings, &global_flags, &legacy_warnings);
+    }
+
     settings.init_precomputed();
 
     let result = exec(&mut files, &settings, output, &mut tmp_dir);
@@ -1612,8 +2108,7 @@ pub fn uu_app() -> Command {
                 "numeric",
                 "version",
                 "random",
-            ]))
-            .conflicts_with_all(options::modes::ALL_SORT_MODES),
+            ])),
     )
     .arg(make_sort_mode_arg(
         options::modes::HUMAN_NUMERIC,
@@ -1650,12 +2145,6 @@ pub fn uu_app() -> Command {
             .short('d')
             .long(options::DICTIONARY_ORDER)
             .help(translate!("sort-help-dictionary-order"))
-            .conflicts_with_all([
-                options::modes::NUMERIC,
-                options::modes::GENERAL_NUMERIC,
-                options::modes::HUMAN_NUMERIC,
-                options::modes::MONTH,
-            ])
             .action(ArgAction::SetTrue),
     )
     .arg(
@@ -1676,14 +2165,12 @@ pub fn uu_app() -> Command {
                 options::check::QUIET,
                 options::check::DIAGNOSE_FIRST,
             ]))
-            .conflicts_with_all([options::OUTPUT, options::check::CHECK_SILENT])
             .help(translate!("sort-help-check")),
     )
     .arg(
         Arg::new(options::check::CHECK_SILENT)
             .short('C')
             .long(options::check::CHECK_SILENT)
-            .conflicts_with_all([options::OUTPUT, options::check::CHECK])
             .help(translate!("sort-help-check-silent"))
             .action(ArgAction::SetTrue),
     )
@@ -1699,12 +2186,6 @@ pub fn uu_app() -> Command {
             .short('i')
             .long(options::IGNORE_NONPRINTING)
             .help(translate!("sort-help-ignore-nonprinting"))
-            .conflicts_with_all([
-                options::modes::NUMERIC,
-                options::modes::GENERAL_NUMERIC,
-                options::modes::HUMAN_NUMERIC,
-                options::modes::MONTH,
-            ])
             .action(ArgAction::SetTrue),
     )
     .arg(
@@ -2020,7 +2501,7 @@ fn ascii_case_insensitive_cmp(a: &[u8], b: &[u8]) -> Ordering {
 // scientific notation, so we strip those lines only after the end of the following numeric string.
 // For example, 5e10KFD would be 5e10 or 5x10^10 and +10000HFKJFK would become 10000.
 #[allow(clippy::cognitive_complexity)]
-fn get_leading_gen(inp: &[u8]) -> Range<usize> {
+fn get_leading_gen(inp: &[u8], decimal_pt: u8) -> Range<usize> {
     let trimmed = inp.trim_ascii_start();
     let leading_whitespace_len = inp.len() - trimmed.len();
 
@@ -2058,7 +2539,7 @@ fn get_leading_gen(inp: &[u8]) -> Range<usize> {
             continue;
         }
 
-        if c == DECIMAL_PT && !had_decimal_pt && !had_e_notation {
+        if c == decimal_pt && !had_decimal_pt && !had_e_notation {
             had_decimal_pt = true;
             continue;
         }
@@ -2101,9 +2582,16 @@ pub enum GeneralBigDecimalParseResult {
 /// Parse the beginning string into a [`GeneralBigDecimalParseResult`].
 /// Using a [`GeneralBigDecimalParseResult`] instead of [`ExtendedBigDecimal`] is necessary to correctly order floats.
 #[inline(always)]
-fn general_bd_parse(a: &[u8]) -> GeneralBigDecimalParseResult {
+fn general_bd_parse(a: &[u8], decimal_pt: u8) -> GeneralBigDecimalParseResult {
+    let parsed_bytes = (decimal_pt != DECIMAL_PT).then(|| {
+        a.iter()
+            .map(|&b| if b == decimal_pt { DECIMAL_PT } else { b })
+            .collect::<Vec<_>>()
+    });
+    let input = parsed_bytes.as_deref().unwrap_or(a);
+
     // The string should be valid ASCII to be parsed.
-    let Ok(a) = std::str::from_utf8(a) else {
+    let Ok(a) = std::str::from_utf8(input) else {
         return GeneralBigDecimalParseResult::Invalid;
     };
 

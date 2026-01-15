@@ -21,11 +21,10 @@ fn sort_ascii_utf8_locale(bencher: Bencher) {
     let output_file = NamedTempFile::new().unwrap();
     let output_path = output_file.path().to_str().unwrap().to_string();
 
+    let args = ["-o", &output_path, file_path.to_str().unwrap()];
+    black_box(run_util_function(uumain, &args));
     bencher.bench(|| {
-        black_box(run_util_function(
-            uumain,
-            &["-o", &output_path, file_path.to_str().unwrap()],
-        ));
+        black_box(run_util_function(uumain, &args));
     });
 }
 
@@ -37,11 +36,10 @@ fn sort_mixed_utf8_locale(bencher: Bencher) {
     let output_file = NamedTempFile::new().unwrap();
     let output_path = output_file.path().to_str().unwrap().to_string();
 
+    let args = ["-o", &output_path, file_path.to_str().unwrap()];
+    black_box(run_util_function(uumain, &args));
     bencher.bench(|| {
-        black_box(run_util_function(
-            uumain,
-            &["-o", &output_path, file_path.to_str().unwrap()],
-        ));
+        black_box(run_util_function(uumain, &args));
     });
 }
 
@@ -54,12 +52,13 @@ fn sort_numeric_utf8_locale(bencher: Bencher) {
         data.extend_from_slice(line.as_bytes());
     }
     let file_path = setup_test_file(&data);
+    let output_file = NamedTempFile::new().unwrap();
+    let output_path = output_file.path().to_str().unwrap().to_string();
 
+    let args = ["-n", "-o", &output_path, file_path.to_str().unwrap()];
+    black_box(run_util_function(uumain, &args));
     bencher.bench(|| {
-        black_box(run_util_function(
-            uumain,
-            &["-n", file_path.to_str().unwrap()],
-        ));
+        black_box(run_util_function(uumain, &args));
     });
 }
 
@@ -68,12 +67,13 @@ fn sort_numeric_utf8_locale(bencher: Bencher) {
 fn sort_reverse_utf8_locale(bencher: Bencher) {
     let data = text_data::generate_mixed_locale_data(50_000);
     let file_path = setup_test_file(&data);
+    let output_file = NamedTempFile::new().unwrap();
+    let output_path = output_file.path().to_str().unwrap().to_string();
 
+    let args = ["-r", "-o", &output_path, file_path.to_str().unwrap()];
+    black_box(run_util_function(uumain, &args));
     bencher.bench(|| {
-        black_box(run_util_function(
-            uumain,
-            &["-r", file_path.to_str().unwrap()],
-        ));
+        black_box(run_util_function(uumain, &args));
     });
 }
 
@@ -82,12 +82,13 @@ fn sort_reverse_utf8_locale(bencher: Bencher) {
 fn sort_unique_utf8_locale(bencher: Bencher) {
     let data = text_data::generate_mixed_locale_data(50_000);
     let file_path = setup_test_file(&data);
+    let output_file = NamedTempFile::new().unwrap();
+    let output_path = output_file.path().to_str().unwrap().to_string();
 
+    let args = ["-u", "-o", &output_path, file_path.to_str().unwrap()];
+    black_box(run_util_function(uumain, &args));
     bencher.bench(|| {
-        black_box(run_util_function(
-            uumain,
-            &["-u", file_path.to_str().unwrap()],
-        ));
+        black_box(run_util_function(uumain, &args));
     });
 }
 

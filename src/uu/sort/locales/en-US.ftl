@@ -32,6 +32,15 @@ sort-field-index-cannot-be-zero = field index can not be 0
 sort-failed-parse-char-index = failed to parse character index {$char}: {$error}
 sort-invalid-option = invalid option: '{$option}'
 sort-invalid-char-index-zero-start = invalid character index 0 for the start position of a field
+sort-invalid-field-spec = {$msg}: invalid field specification {$spec}
+sort-invalid-count-at-start-of = invalid count at start of {$string}
+sort-invalid-number-at-field-start = invalid number at field start
+sort-invalid-number-after-dash = invalid number after '-'
+sort-invalid-number-after-dot = invalid number after '.'
+sort-invalid-number-after-comma = invalid number after ','
+sort-field-number-is-zero = field number is zero
+sort-character-offset-is-zero = character offset is zero
+sort-stray-character-field-spec = stray character in field spec
 sort-invalid-batch-size-arg = invalid --batch-size argument '{$arg}'
 sort-minimum-batch-size-two = minimum --batch-size argument is '2'
 sort-batch-size-too-large = --batch-size argument {$arg} too large
@@ -50,6 +59,22 @@ sort-error-no-match-for-key = ^ no match for key
 sort-error-write-failed = write failed: {$output}
 sort-failed-to-delete-temporary-directory = failed to delete temporary directory: {$error}
 sort-failed-to-set-up-signal-handler = failed to set up signal handler: {$error}
+
+# Warning messages
+sort-warning-failed-to-set-locale = failed to set locale
+sort-warning-simple-byte-comparison = text ordering performed using simple byte comparison
+sort-warning-key-zero-width = key {$key} has zero width and will be ignored
+sort-warning-key-numeric-spans-fields = key {$key} is numeric and spans multiple fields
+sort-warning-leading-blanks-significant = leading blanks are significant in key {$key}; consider also specifying 'b'
+sort-warning-numbers-use-decimal-point = numbers use '.' as a decimal point in this locale
+sort-warning-options-ignored = options '-{$options}' are ignored
+sort-warning-option-ignored = option '-{$option}' is ignored
+sort-warning-option-reverse-last-resort = option '-r' only applies to last-resort comparison
+sort-warning-obsolescent-key = obsolescent key '{$key}' used; consider '-k {$replacement}' instead
+sort-warning-separator-grouping = field separator '{$sep}' is treated as a group separator in numbers
+sort-warning-separator-decimal = field separator '{$sep}' is treated as a decimal point in numbers
+sort-warning-separator-minus = field separator '{$sep}' is treated as a minus sign in numbers
+sort-warning-separator-plus = field separator '{$sep}' is treated as a plus sign in numbers
 
 # Help messages
 sort-help-help = Print help information.

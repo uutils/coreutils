@@ -268,7 +268,7 @@ fn test_check_md5_ignore_missing() {
         .arg("--ignore-missing")
         .arg(at.subdir.join("testf.sha1"))
         .fails()
-        .stderr_contains("the following required arguments were not provided"); //clap generated error
+        .stderr_contains("the --ignore-missing option is meaningful only when verifying checksums");
 }
 
 #[test]
@@ -1021,13 +1021,13 @@ fn test_check_quiet() {
         .arg("--quiet")
         .arg(at.subdir.join("in.md5"))
         .fails()
-        .stderr_contains("the following required arguments were not provided"); //clap generated error
+        .stderr_contains("md5sum: the --quiet option is meaningful only when verifying checksums");
     scene
         .ccmd("md5sum")
         .arg("--strict")
         .arg(at.subdir.join("in.md5"))
         .fails()
-        .stderr_contains("the following required arguments were not provided"); //clap generated error
+        .stderr_contains("md5sum: the --strict option is meaningful only when verifying checksums");
 }
 
 #[test]

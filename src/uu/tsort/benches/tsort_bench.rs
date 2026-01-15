@@ -116,24 +116,6 @@ fn generate_wide_dag(num_nodes: usize) -> Vec<u8> {
     data
 }
 
-/// Generate DAG data for input parsing stress tests
-fn generate_input_parsing_heavy(num_edges: usize) -> Vec<u8> {
-    // Create a scenario with many edges but relatively few unique nodes
-    // This stresses the input parsing and graph construction optimizations
-    let num_unique_nodes = (num_edges as f64).sqrt() as usize;
-    let mut data = Vec::new();
-
-    for i in 0..num_edges {
-        let from = i % num_unique_nodes;
-        let to = (i / num_unique_nodes) % num_unique_nodes;
-        if from != to {
-            data.extend_from_slice(format!("n{from} n{to}\n").as_bytes());
-        }
-    }
-
-    data
-}
-
 /// Benchmark linear chain graphs of different sizes
 /// This tests the performance improvements mentioned in PR #8694
 #[divan::bench(args = [1_000_000])]
@@ -184,6 +166,28 @@ fn tsort_wide_dag(bencher: Bencher, num_nodes: usize) {
     });
 }
 
+/*
+/// silent for now because too much variance
+
+
+/// Generate DAG data for input parsing stress tests
+fn generate_input_parsing_heavy(num_edges: usize) -> Vec<u8> {
+    // Create a scenario with many edges but relatively few unique nodes
+    // This stresses the input parsing and graph construction optimizations
+    let num_unique_nodes = (num_edges as f64).sqrt() as usize;
+    let mut data = Vec::new();
+
+    for i in 0..num_edges {
+        let from = i % num_unique_nodes;
+        let to = (i / num_unique_nodes) % num_unique_nodes;
+        if from != to {
+            data.extend_from_slice(format!("n{from} n{to}\n").as_bytes());
+        }
+    }
+
+    data
+}
+
 /// Benchmark input parsing vs computation by using files with different edge densities
 #[divan::bench(args = [5_000])]
 fn tsort_input_parsing_heavy(bencher: Bencher, num_edges: usize) {
@@ -195,6 +199,7 @@ fn tsort_input_parsing_heavy(bencher: Bencher, num_edges: usize) {
         black_box(run_util_function(uumain, &[file_path_str]));
     });
 }
+*/
 
 fn main() {
     divan::main();

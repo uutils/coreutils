@@ -133,6 +133,8 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
+    - name: Avoid no space left on device (Ubuntu runner)
+      run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
@@ -192,6 +194,7 @@ jobs:
           set +e
           cd "${WORKSPACE}"
           unset FAULT
+          export RUSTFLAGS="-C strip=symbols" # for disk space
           cargo build || FAULT=1
           export PATH=~/.cargo/bin:${PATH}
           export RUST_BACKTRACE=1
