@@ -18,36 +18,38 @@ concurrency:
 
 jobs:
   benchmarks:
-    name: Run benchmarks (CodSpeed)
+    name: Run ${{ matrix.type }} benchmarks for ${{ matrix.package }} (CodSpeed)
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        benchmark-target:
-          - { package: uu_base64 }
-          - { package: uu_cksum }
-          - { package: uu_cp }
-          - { package: uu_cut }
-          - { package: uu_dd }
-          - { package: uu_df }
-          - { package: uu_du }
-          - { package: uu_expand }
-          - { package: uu_fold }
-          - { package: uu_join }
-          - { package: uu_ls }
-          - { package: uu_mv }
-          - { package: uu_nl }
-          - { package: uu_numfmt }
-          - { package: uu_rm }
-          - { package: uu_seq }
-          - { package: uu_shuf }
-          - { package: uu_sort }
-          - { package: uu_split }
-          - { package: uu_tsort }
-          - { package: uu_unexpand }
-          - { package: uu_uniq }
-          - { package: uu_wc }
-          - { package: uu_factor }
-          - { package: uu_date }
+        type: [performance, memory]
+        package: [
+          uu_base64,
+          uu_cksum,
+          uu_cp,
+          uu_cut,
+          uu_dd,
+          uu_df,
+          uu_du,
+          uu_expand,
+          uu_fold,
+          uu_join,
+          uu_ls,
+          uu_mv,
+          uu_nl,
+          uu_numfmt,
+          uu_rm,
+          uu_seq,
+          uu_shuf,
+          uu_sort,
+          uu_split,
+          uu_tsort,
+          uu_unexpand,
+          uu_uniq,
+          uu_wc,
+          uu_factor,
+          uu_date
+        ]
     steps:
       - uses: actions/checkout@v6
         with:
@@ -64,19 +66,23 @@ jobs:
         shell: bash
         run: cargo install cargo-codspeed --locked
 
-      - name: Build benchmarks for ${{ matrix.benchmark-target.package }}
+      - name: Build benchmarks for ${{ matrix.package }} (${{ matrix.type }})
         shell: bash
         run: |
-          echo "Building benchmarks for ${{ matrix.benchmark-target.package }}"
-          cargo codspeed build -p ${{ matrix.benchmark-target.package }}
+          echo "Building ${{ matrix.type }} benchmarks for ${{ matrix.package }}"
+          if [ "${{ matrix.type }}" = "memory" ]; then
+            cargo codspeed build -m analysis -p ${{ matrix.package }}
+          else
+            cargo codspeed build -p ${{ matrix.package }}
+          fi
 
-      - name: Run benchmarks for ${{ matrix.benchmark-target.package }}
+      - name: Run ${{ matrix.type }} benchmarks for ${{ matrix.package }}
         uses: CodSpeedHQ/action@v4
         env:
           CODSPEED_LOG: debug
         with:
-          mode: simulation
+          mode: ${{ matrix.type == 'memory' && 'memory' || 'simulation' }}
           run: |
-            echo "Running benchmarks for ${{ matrix.benchmark-target.package }}"
-            cargo codspeed run -p ${{ matrix.benchmark-target.package }} > /dev/null
+            echo "Running ${{ matrix.type }} benchmarks for ${{ matrix.package }}"
+            cargo codspeed run -p ${{ matrix.package }} > /dev/null
           token: ${{ secrets.CODSPEED_TOKEN }}
