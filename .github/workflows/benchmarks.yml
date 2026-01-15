@@ -43,6 +43,7 @@ jobs:
           - { package: uu_sort }
           - { package: uu_split }
           - { package: uu_tsort }
+          - { package: uu_timeout }
           - { package: uu_unexpand }
           - { package: uu_uniq }
           - { package: uu_wc }

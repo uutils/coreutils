@@ -11,7 +11,10 @@ use clap::{Arg, ArgAction, Command};
 use std::io::ErrorKind;
 use std::os::unix::process::ExitStatusExt;
 use std::process::{self, Child, Stdio};
-use std::sync::atomic::{self, AtomicBool};
+use std::sync::{
+    OnceLock,
+    atomic::{self, AtomicBool},
+};
 use std::time::Duration;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
@@ -192,6 +195,22 @@ fn unblock_sigchld() {
 
 /// We should terminate child process when receiving TERM signal.
 static SIGNALED: AtomicBool = AtomicBool::new(false);
+static SIGNAL_KILL: OnceLock<usize> = OnceLock::new();
+static SIGNAL_CONT: OnceLock<usize> = OnceLock::new();
+
+#[inline]
+fn signal_kill() -> usize {
+    *SIGNAL_KILL.get_or_init(|| {
+        signal_by_name_or_value("KILL").expect("KILL signal must be available on this platform")
+    })
+}
+
+#[inline]
+fn signal_cont() -> usize {
+    *SIGNAL_CONT.get_or_init(|| {
+        signal_by_name_or_value("CONT").expect("CONT signal must be available on this platform")
+    })
+}
 
 fn catch_sigterm() {
     use nix::sys::signal;
@@ -218,6 +237,16 @@ fn report_if_verbose(signal: usize, cmd: &str, verbose: bool) {
     }
 }
 
+fn preserved_child_exit(status: std::process::ExitStatus) -> i32 {
+    if let Some(code) = status.code() {
+        code
+    } else if let Some(signal) = status.signal() {
+        ExitStatus::SignalSent(signal.try_into().unwrap()).into()
+    } else {
+        ExitStatus::CommandTimedOut.into()
+    }
+}
+
 fn send_signal(process: &mut Child, signal: usize, foreground: bool) {
     // NOTE: GNU timeout doesn't check for errors of signal.
     // The subprocess might have exited just after the timeout.
@@ -226,10 +255,10 @@ fn send_signal(process: &mut Child, signal: usize, foreground: bool) {
         let _ = process.send_signal(signal);
     } else {
         let _ = process.send_signal_group(signal);
-        let kill_signal = signal_by_name_or_value("KILL").unwrap();
-        let continued_signal = signal_by_name_or_value("CONT").unwrap();
+        let kill_signal = signal_kill();
+        let continued_signal = signal_cont();
         if signal != kill_signal && signal != continued_signal {
-            _ = process.send_signal_group(continued_signal);
+            let _ = process.send_signal_group(continued_signal);
         }
     }
 }
@@ -245,10 +274,11 @@ fn send_signal(process: &mut Child, signal: usize, foreground: bool) {
 /// If the child process terminates within the given time period and
 /// `preserve_status` is `true`, then the status code of the child
 /// process is returned. If the child process terminates within the
-/// given time period and `preserve_status` is `false`, then 124 is
+/// given time period and `preserve_status` is `false`, then 125 is
 /// returned. If the child does not terminate within the time period,
-/// then 137 is returned. Finally, if there is an error while waiting
-/// for the child process to terminate, then 124 is returned.
+/// then 137 is returned (or 143 if `timeout` itself receives
+/// `SIGTERM`). Finally, if there is an error while waiting for the
+/// child process to terminate, then 124 is returned.
 ///
 /// # Errors
 ///
@@ -261,22 +291,27 @@ fn wait_or_kill_process(
     preserve_status: bool,
     foreground: bool,
     verbose: bool,
+    signaled: &AtomicBool,
 ) -> std::io::Result<i32> {
     // ignore `SIGTERM` here
-    match process.wait_or_timeout(duration, None) {
+    match process.wait_or_timeout(duration, Some(signaled)) {
         Ok(Some(status)) => {
             if preserve_status {
-                Ok(status.code().unwrap_or_else(|| status.signal().unwrap()))
+                Ok(preserved_child_exit(status))
             } else {
                 Ok(ExitStatus::TimeoutFailed.into())
             }
         }
         Ok(None) => {
-            let signal = signal_by_name_or_value("KILL").unwrap();
+            let signal = signal_kill();
             report_if_verbose(signal, cmd, verbose);
             send_signal(process, signal, foreground);
             process.wait()?;
-            Ok(ExitStatus::SignalSent(signal).into())
+            if signaled.load(atomic::Ordering::Relaxed) {
+                Ok(ExitStatus::Terminated.into())
+            } else {
+                Ok(ExitStatus::SignalSent(signal).into())
+            }
         }
         Err(_) => Ok(ExitStatus::CommandTimedOut.into()),
     }
@@ -364,19 +399,14 @@ fn timeout(
             match kill_after {
                 None => {
                     let status = process.wait()?;
-                    if SIGNALED.load(atomic::Ordering::Relaxed) {
-                        Err(ExitStatus::Terminated.into())
+                    let exit_code = if SIGNALED.load(atomic::Ordering::Relaxed) {
+                        ExitStatus::Terminated.into()
                     } else if preserve_status {
-                        if let Some(ec) = status.code() {
-                            Err(ec.into())
-                        } else if let Some(sc) = status.signal() {
-                            Err(ExitStatus::SignalSent(sc.try_into().unwrap()).into())
-                        } else {
-                            Err(ExitStatus::CommandTimedOut.into())
-                        }
+                        preserved_child_exit(status)
                     } else {
-                        Err(ExitStatus::CommandTimedOut.into())
-                    }
+                        ExitStatus::CommandTimedOut.into()
+                    };
+                    Err(exit_code.into())
                 }
                 Some(kill_after) => {
                     match wait_or_kill_process(
@@ -386,6 +416,7 @@ fn timeout(
                         preserve_status,
                         foreground,
                         verbose,
+                        &SIGNALED,
                     ) {
                         Ok(status) => Err(status.into()),
                         Err(e) => Err(USimpleError::new(
