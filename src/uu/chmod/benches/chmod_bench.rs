@@ -125,7 +125,7 @@ fn cap_dirs_by_rlimit(total_dirs: usize) -> usize {
         rlim_cur: 0,
         rlim_max: 0,
     };
-    let lim_ptr: *mut rlimit = &mut lim as *mut _;
+    let lim_ptr: *mut rlimit = &raw mut lim;
     let rc = unsafe { getrlimit(RLIMIT_NOFILE, lim_ptr) };
     if rc != 0 || lim.rlim_cur == RLIM_INFINITY {
         return total_dirs;
