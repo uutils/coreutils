@@ -20,6 +20,7 @@ install-help-preserve-context = preserve security context
 install-help-context = set security context of files and directories
 install-help-default-context = set SELinux security context of destination file and each created directory to default type
 install-help-unprivileged = do not require elevated privileges to change the owner, the group, or the file flags of the destination
+install-help-debug = display detailed debug messages about the installation process
 
 # Error messages
 install-error-dir-needs-arg = { $util_name } with -d requires at least one argument.
@@ -59,3 +60,37 @@ install-verbose-creating-directory-step = install: creating directory { $path }
 install-verbose-removed = removed { $path }
 install-verbose-copy = { $from } -> { $to }
 install-verbose-backup = (backup: { $backup })
+
+# Debug messages
+install-debug-will-copy = will copy { $from } to { $to }
+install-debug-backing-up = backing up { $to } to { $backup }
+install-debug-copying = copying { $from } to { $to }
+install-debug-stripping = stripping { $to }
+install-debug-changing-mode = changing mode of { $to } to { $mode }
+install-debug-preserving-timestamps = preserving timestamps of { $from } to { $to }
+install-debug-preserving-context = preserving security context of { $to }
+install-debug-setting-context = setting security context of { $to }
+install-debug-checking-copy = checking if { $from } needs to be copied to { $to }
+install-debug-reason-source-missing = source file does not exist
+install-debug-reason-dest-missing = destination file does not exist
+install-debug-reason-different-content = contents differ
+install-debug-reason-different-owner = owner differs
+install-debug-reason-different-group = group differs
+install-debug-reason-different-mode = mode differs
+
+
+# Additional debug messages for compatibility with tests
+install-debug-cannot-stat-source = cannot stat source file '{ $path }'; will copy
+install-debug-cannot-stat-dest = cannot stat destination file '{ $path }'; will copy
+install-debug-dest-is-symlink = destination '{ $path }' is a symbolic link; will copy
+install-debug-special-mode-bits = special mode bits present; will copy
+install-debug-mode-differs = destination mode differs; will copy
+install-debug-not-regular-file = source or destination is not a regular file; will copy
+install-debug-sizes-differ = sizes differ between { $from } and { $to }; will copy
+install-debug-selinux-contexts-differ = SELinux contexts differ between { $from } and { $to }; will copy
+install-debug-owner-differs = destination owner differs; will copy
+install-debug-group-differs = destination group differs; will copy
+install-debug-ownership-needs-update = destination ownership needs update; will copy
+install-debug-contents-differ = contents differ between { $from } and { $to }; will copy
+install-debug-preserving-selinux-context = preserving security context of { $to }
+install-debug-setting-selinux-context = setting security context of { $to }

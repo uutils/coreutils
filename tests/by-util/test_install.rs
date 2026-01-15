@@ -1850,6 +1850,34 @@ fn test_install_compare_basic() {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
+fn test_install_debug_output() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let source = "source_file";
+    let dest = "dest_file";
+
+    at.write(source, "test content");
+
+    // First install should copy and show debug info
+    scene
+        .ucmd()
+        .args(&["--debug", "-C", source, dest])
+        .succeeds()
+        .stdout_contains("checking if source_file needs to be copied to dest_file")
+        .stdout_contains("cannot stat destination file 'dest_file'; will copy");
+
+    // Second install should be a no-op, with debug info explaining why
+    scene
+        .ucmd()
+        .args(&["--debug", "-C", source, dest])
+        .succeeds()
+        .stdout_contains("checking if source_file needs to be copied to dest_file")
+        .stdout_contains("'source_file' and 'dest_file' are the same");
+}
+
+#[test]
 #[cfg(not(any(target_os = "openbsd", target_os = "freebsd")))]
 fn test_install_compare_special_mode_bits() {
     let scene = TestScenario::new(util_name!());
