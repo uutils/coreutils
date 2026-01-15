@@ -195,23 +195,17 @@ struct Params {
 fn find_last_contiguous_block_of_xs(s: &str) -> Option<(usize, usize)> {
     let bytes = s.as_bytes();
 
-    // Find the index just after the last 'X'.
-    let mut end = None;
-    for (idx, &b) in bytes.iter().enumerate() {
-        if b == b'X' {
-            end = Some(idx + 1);
-        }
-    }
-    let end = end?;
+    // Find the index of the last 'X'.
+    let end = bytes.iter().rposition(|&b| b == b'X')?;
 
     // Walk left to find the start of the run of Xs that ends at `end`.
-    let mut start = end - 1;
+    let mut start = end;
     while start > 0 && bytes[start - 1] == b'X' {
         start -= 1;
     }
 
-    if end - start >= 3 {
-        Some((start, end))
+    if end + 1 - start >= 3 {
+        Some((start, end + 1))
     } else {
         None
     }
