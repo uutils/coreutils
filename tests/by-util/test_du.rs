@@ -532,7 +532,7 @@ fn du_hard_link(s: &str) {
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "android")))]
 #[test]
 fn test_du_hard_link_multiple_args() {
     let (at, mut ucmd) = at_and_ucmd!();
