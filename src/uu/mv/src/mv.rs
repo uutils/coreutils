@@ -907,8 +907,19 @@ fn rename_fifo_fallback(_from: &Path, _to: &Path) -> io::Result<()> {
 /// symlinks return an error.
 #[cfg(unix)]
 fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
-    let path_symlink_points_to = fs::read_link(from)?;
-    unix::fs::symlink(path_symlink_points_to, to).and_then(|_| fs::remove_file(from))
+    use std::fs;
+    use std::path::PathBuf;
+
+    let target = fs::read_link(from)?;
+
+    let mut tmp = PathBuf::from(to);
+    tmp.set_extension("tmp_mv_symlink");
+    let _ = fs::remove_file(&tmp);
+
+    unix::fs::symlink(&target, &tmp)?;
+
+    fs::rename(&tmp, to)?;
+    fs::remove_file(from)
 }
 
 #[cfg(windows)]

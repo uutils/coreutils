@@ -2821,3 +2821,50 @@ fn test_mv_no_prompt_unwriteable_file_with_no_tty() {
     assert!(!at.file_exists("source_notty"));
     assert!(at.file_exists("target_notty"));
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_symlink_overwrite() {
+    use std::fs;
+    use std::os::unix::fs::symlink;
+    use tempfile::TempDir;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let target_file = "file_in_src";
+    at.touch(target_file);
+    at.write(target_file, "contents");
+
+    let other_fs_tempdir = TempDir::new_in("/dev/shm/")
+        .expect("Unable to create temp directory in /dev/shm - test requires tmpfs");
+
+    let src_symlink = other_fs_tempdir.path().join("uutils_mv_src_link");
+    symlink(at.plus_as_string(target_file), &src_symlink).expect("Unable to create symlink");
+
+    at.touch("uutils_mv_dst_exists");
+
+    scene
+        .ucmd()
+        .arg(&src_symlink)
+        .arg("uutils_mv_dst_exists")
+        .succeeds()
+        .no_stderr();
+
+    assert!(
+        !src_symlink.exists(),
+        "Source symlink should not exist after move"
+    );
+    assert!(
+        at.is_symlink("uutils_mv_dst_exists"),
+        "Destination should be a symlink"
+    );
+
+    let link_target =
+        fs::read_link(at.plus("uutils_mv_dst_exists")).expect("Failed to read symlink");
+    assert_eq!(
+        link_target,
+        at.plus(target_file),
+        "Symlink should point to original target"
+    );
+}
