@@ -532,6 +532,22 @@ fn du_hard_link(s: &str) {
     }
 }
 
+#[cfg(unix)]
+#[test]
+fn test_du_hard_link_multiple_args() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir1");
+    at.mkdir("dir2");
+    at.write("dir1/file", &"x".repeat(10000));
+    at.hard_link("dir1/file", "dir2/file");
+
+    let result = ucmd.args(&["-b", "dir1", "dir2"]).succeeds();
+    let lines: Vec<&str> = result.stdout_str().lines().collect();
+    let size = |i: usize| lines[i].split('\t').next().unwrap().parse::<u64>().unwrap();
+    assert!(size(0) >= 10000);
+    assert!(size(1) < 1000);
+}
+
 #[test]
 #[cfg(not(target_os = "openbsd"))]
 fn test_du_d_flag() {
