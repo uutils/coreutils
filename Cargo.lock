@@ -3269,6 +3269,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "glob",
+ "rayon",
  "tempfile",
  "thiserror 2.0.17",
  "uucore",
