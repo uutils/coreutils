@@ -572,41 +572,57 @@ fn fold_file<T: Read, W: Write>(
     mode: WidthMode,
     writer: &mut W,
 ) -> UResult<()> {
-    let mut line = Vec::new();
     let mut output = Vec::new();
     let mut col_count = 0;
     let mut last_space = None;
 
     loop {
-        if file
-            .read_until(NL, &mut line)
-            .map_err_context(|| translate!("fold-error-readline"))?
-            == 0
-        {
+        let buffer = file
+            .fill_buf()
+            .map_err_context(|| translate!("fold-error-read"))?;
+
+        if buffer.is_empty() {
             break;
         }
 
-        let mut ctx = FoldContext {
-            spaces,
-            width,
-            mode,
-            writer,
-            output: &mut output,
-            col_count: &mut col_count,
-            last_space: &mut last_space,
-        };
+        let len = buffer.len();
+        let mut consume_len = len;
 
-        match std::str::from_utf8(&line) {
-            Ok(s) => process_utf8_line(s, &mut ctx)?,
-            Err(_) => process_non_utf8_line(&line, &mut ctx)?,
+        if let Some(pos) = buffer.iter().position(|&b| b == b'\n') {
+            consume_len = pos + 1;
+        } else if let Err(e) = std::str::from_utf8(buffer) {
+            if e.error_len().is_none() {
+                let valid = e.valid_up_to();
+                if valid > 0 {
+                    consume_len = valid;
+                }
+            }
         }
 
-        line.clear();
-    }
+        {
+            let chunk = &buffer[..consume_len];
 
-    if !output.is_empty() {
-        writer.write_all(&output)?;
-        output.clear();
+            let mut ctx = FoldContext {
+                spaces,
+                width,
+                mode,
+                writer,
+                output: &mut output,
+                col_count: &mut col_count,
+                last_space: &mut last_space,
+            };
+
+            match std::str::from_utf8(chunk) {
+                Ok(s) => process_utf8_line(s, &mut ctx)?,
+                Err(_) => process_non_utf8_line(chunk, &mut ctx)?,
+            }
+        }
+        file.consume(consume_len);
+
+        if !output.is_empty() {
+            writer.write_all(&output)?;
+            output.clear(); // Keeps capacity, avoiding re-allocation
+        }
     }
 
     Ok(())
