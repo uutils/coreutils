@@ -119,7 +119,7 @@ fn test_mv_move_file_into_file_with_target_arg() {
         .arg(file1)
         .arg(file2)
         .fails()
-        .stderr_is(format!("mv: target directory '{file1}': Not a directory\n"));
+        .stderr_only(format!("mv: target directory '{file1}': Not a directory\n"));
 
     assert!(at.file_exists(file1));
 }
@@ -139,7 +139,7 @@ fn test_mv_move_multiple_files_into_file() {
         .arg(file2)
         .arg(file3)
         .fails()
-        .stderr_is(format!("mv: target '{file3}': Not a directory\n"));
+        .stderr_only(format!("mv: target '{file3}': Not a directory\n"));
 
     assert!(at.file_exists(file1));
     assert!(at.file_exists(file2));
@@ -332,7 +332,7 @@ fn test_mv_interactive_no_clobber_force_last_arg_wins() {
         .ucmd()
         .args(&[file_a, file_b, "-n", "-f", "-i"])
         .fails()
-        .stderr_is(format!("mv: overwrite '{file_b}'? "));
+        .stderr_only(format!("mv: overwrite '{file_b}'? "));
 
     at.write(file_a, "aa");
 
@@ -518,7 +518,7 @@ fn test_mv_same_file() {
     ucmd.arg(file_a)
         .arg(file_a)
         .fails()
-        .stderr_is(format!("mv: '{file_a}' and '{file_a}' are the same file\n"));
+        .stderr_only(format!("mv: '{file_a}' and '{file_a}' are the same file\n"));
 }
 
 #[test]
@@ -535,7 +535,7 @@ fn test_mv_same_hardlink() {
     ucmd.arg(file_a)
         .arg(file_b)
         .fails()
-        .stderr_is(format!("mv: '{file_a}' and '{file_b}' are the same file\n"));
+        .stderr_only(format!("mv: '{file_a}' and '{file_b}' are the same file\n"));
 }
 
 #[test]
@@ -566,7 +566,7 @@ fn test_mv_same_symlink() {
     ucmd.arg(file_b)
         .arg(file_a)
         .fails()
-        .stderr_is(format!("mv: '{file_b}' and '{file_a}' are the same file\n"));
+        .stderr_only(format!("mv: '{file_b}' and '{file_a}' are the same file\n"));
 
     let (at2, mut ucmd2) = at_and_ucmd!();
     at2.touch(file_a);
@@ -596,7 +596,7 @@ fn test_mv_same_symlink() {
         .arg(file_c)
         .arg(file_a)
         .fails()
-        .stderr_is(format!("mv: '{file_c}' and '{file_a}' are the same file\n"));
+        .stderr_only(format!("mv: '{file_c}' and '{file_a}' are the same file\n"));
 }
 
 #[test]
@@ -609,7 +609,7 @@ fn test_mv_same_broken_symlink() {
     ucmd.arg("broken")
         .arg("broken")
         .fails()
-        .stderr_is("mv: 'broken' and 'broken' are the same file\n");
+        .stderr_only("mv: 'broken' and 'broken' are the same file\n");
 }
 
 #[test]
@@ -707,7 +707,7 @@ fn test_mv_same_file_not_dot_dir() {
     let dir = "test_mv_errors_dir";
 
     at.mkdir(dir);
-    ucmd.arg(dir).arg(dir).fails().stderr_is(format!(
+    ucmd.arg(dir).arg(dir).fails().stderr_only(format!(
         "mv: cannot move '{dir}' to a subdirectory of itself, '{dir}/{dir}'\n",
     ));
 }
@@ -719,7 +719,7 @@ fn test_mv_same_file_dot_dir() {
     ucmd.arg(".")
         .arg(".")
         .fails()
-        .stderr_is("mv: '.' and '.' are the same file\n");
+        .stderr_only("mv: '.' and '.' are the same file\n");
 }
 
 #[test]
@@ -1452,15 +1452,34 @@ fn test_mv_overwrite_nonempty_dir() {
     at.mkdir(dir_a);
     at.mkdir(dir_b);
     at.touch(dummy);
-    // Not same error as GNU; the error message is a rust builtin
-    // TODO: test (and implement) correct error message (or at least decide whether to do so)
-    // Current: "mv: couldn't rename path (Directory not empty; from=a; to=b)"
-    // GNU:     "mv: cannot move 'a' to 'b': Directory not empty"
-
     // Verbose output for the move should not be shown on failure
-    let result = ucmd.arg("-vT").arg(dir_a).arg(dir_b).fails();
-    result.no_stdout();
-    assert!(!result.stderr_str().is_empty());
+    ucmd.arg("-vT")
+        .arg(dir_a)
+        .arg(dir_b)
+        .fails()
+        .stderr_contains("cannot overwrite");
+
+    assert!(at.dir_exists(dir_a));
+    assert!(at.dir_exists(dir_b));
+}
+
+#[test]
+fn test_mv_overwrite_nonempty_dir_into_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir_a = "test_mv_overwrite_nonempty_dir_into_dir_a";
+    let dir_b = "test_mv_overwrite_nonempty_dir_into_dir_b";
+    let target_dir = format!("{dir_b}/{dir_a}");
+    let dummy = format!("{target_dir}/file");
+
+    at.mkdir(dir_a);
+    at.mkdir(dir_b);
+    at.mkdir(&target_dir);
+    at.touch(&dummy);
+
+    ucmd.arg(dir_a)
+        .arg(dir_b)
+        .fails()
+        .stderr_contains("cannot overwrite");
 
     assert!(at.dir_exists(dir_a));
     assert!(at.dir_exists(dir_b));
@@ -1499,7 +1518,6 @@ fn test_mv_errors() {
     at.touch(file_b);
 
     // $ mv -T -t a b
-    // mv: cannot combine --target-directory (-t) and --no-target-directory (-T)
     scene
         .ucmd()
         .arg("-T")
@@ -1512,29 +1530,26 @@ fn test_mv_errors() {
 
     // $ at.touch file && at.mkdir dir
     // $ mv -T file dir
-    // err == mv: cannot overwrite directory 'dir' with non-directory
     scene
         .ucmd()
         .arg("-T")
         .arg(file_a)
         .arg(dir)
         .fails()
-        .stderr_is(format!(
+        .stderr_only(format!(
             "mv: cannot overwrite directory '{dir}' with non-directory\n"
         ));
 
     // $ at.mkdir dir && at.touch file
     // $ mv dir file
-    // err == mv: cannot overwrite non-directory 'file' with directory 'dir'
-    assert!(
-        !scene
-            .ucmd()
-            .arg(dir)
-            .arg(file_a)
-            .fails()
-            .stderr_str()
-            .is_empty()
-    );
+    scene
+        .ucmd()
+        .arg(dir)
+        .arg(file_a)
+        .fails()
+        .stderr_only(format!(
+            "mv: cannot overwrite non-directory '{file_a}' with directory '{dir}'\n"
+        ));
 }
 
 #[test]
@@ -1621,8 +1636,7 @@ fn test_mv_arg_interactive_skipped() {
         .pipe_in("N\n")
         .ignore_stdin_write_error()
         .fails()
-        .stderr_is("mv: overwrite 'b'? ")
-        .no_stdout();
+        .stderr_only("mv: overwrite 'b'? ");
 }
 
 #[test]

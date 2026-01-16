@@ -32,6 +32,7 @@ mv-error-backup-might-destroy-source = sauvegarder {$target} pourrait détruire 
 mv-error-will-not-overwrite-just-created = ne va pas écraser le fichier qui vient d'être créé {$target} avec {$source}
 mv-error-not-replacing = ne remplace pas {$target}
 mv-error-cannot-move = impossible de déplacer {$source} vers {$target}
+mv-error-cannot-overwrite-non-empty-directory = impossible d'écraser {$target}
 mv-error-directory-not-empty = Répertoire non vide
 mv-error-dangling-symlink = impossible de déterminer le type de lien symbolique, car il est suspendu
 mv-error-no-symlink-support = votre système d'exploitation ne prend pas en charge les liens symboliques
