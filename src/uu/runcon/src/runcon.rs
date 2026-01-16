@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (vars) RFILE
+// spell-checker:ignore (vars) RFILE execv execvp
 #![cfg(target_os = "linux")]
 
 use clap::builder::ValueParser;
@@ -48,7 +48,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 .map_err(RunconError::new)?;
             // On successful execution, the following call never returns,
             // and this process image is replaced.
-            execute_command(command, &options.arguments)
+            // PlainContext mode uses PATH search (like execvp).
+            execute_command(command, &options.arguments, false)
         }
         CommandLineMode::CustomContext {
             compute_transition_context,
@@ -72,7 +73,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     .map_err(RunconError::new)?;
                     // On successful execution, the following call never returns,
                     // and this process image is replaced.
-                    execute_command(command, &options.arguments)
+                    // With -c flag, skip PATH search (like execv vs execvp).
+                    execute_command(command, &options.arguments, *compute_transition_context)
                 }
                 None => print_current_context().map_err(|e| RunconError::new(e).into()),
             }
@@ -367,8 +369,21 @@ fn get_custom_context(
 /// However, until the *never* type is stabilized, one way to indicate to the
 /// compiler the only valid return type is to say "if this returns, it will
 /// always return an error".
-fn execute_command(command: &OsStr, arguments: &[OsString]) -> UResult<()> {
-    let err = process::Command::new(command).args(arguments).exec();
+///
+/// When `skip_path_search` is true (used with `-c` flag), the command is executed
+/// without PATH lookup, matching GNU's use of execv() vs execvp().
+fn execute_command(command: &OsStr, arguments: &[OsString], skip_path_search: bool) -> UResult<()> {
+    // When skip_path_search is true and command has no path separator,
+    // prepend "./" to prevent PATH lookup (like execv vs execvp).
+    let command_path = if skip_path_search && !command.as_bytes().contains(&b'/') {
+        let mut path = OsString::from("./");
+        path.push(command);
+        path
+    } else {
+        command.to_os_string()
+    };
+
+    let err = process::Command::new(&command_path).args(arguments).exec();
 
     let exit_status = if err.kind() == io::ErrorKind::NotFound {
         error_exit_status::NOT_FOUND
