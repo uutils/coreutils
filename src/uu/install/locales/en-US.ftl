@@ -36,6 +36,7 @@ install-error-strip-abnormal = strip process terminated abnormally - exit code: 
 install-error-metadata-failed = metadata error
 install-error-invalid-user = invalid user: { $user }
 install-error-invalid-group = invalid group: { $group }
+install-error-option-unsupported = the option { $option } is not supported on this platform
 install-error-omitting-directory = omitting directory { $path }
 install-error-not-a-directory = failed to access { $path }: Not a directory
 install-error-override-directory-failed = cannot overwrite directory { $dir } with non-directory { $file }
