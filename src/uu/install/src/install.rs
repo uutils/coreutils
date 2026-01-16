@@ -170,14 +170,14 @@ static OPT_UNPRIVILEGED: &str = "unprivileged";
 
 static ARG_FILES: &str = "files";
 
-/// Main install utility function, called from main.rs.
-///
-/// Returns a program return code.
-///
 // Initialize SIGPIPE state capture at process startup (Unix only)
 #[cfg(unix)]
 uucore::init_sigpipe_capture!();
 
+/// Main install utility function, called from main.rs.
+///
+/// Returns a program return code.
+///
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Restore SIGPIPE to default if it wasn't explicitly ignored by parent.
