@@ -65,7 +65,8 @@ fn main() {
         if let Some(util) = validation::find_prefixed_util(binary_as_util, utils.keys().copied()) {
             // prefixed util => replace 0th (aka, executable name) argument
             Some(OsString::from(util))
-        } else if binary_as_util.ends_with("utils") {
+        } else if binary_as_util.ends_with("utils") || binary_as_util.ends_with("box") {
+            // todo: Remove support of "*box" from binary
             uucore::set_utility_is_second_arg();
             args.next()
         } else {

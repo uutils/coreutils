@@ -362,8 +362,7 @@ $(BUILDDIR)/.config: $(BASEDIR)/.busybox-config
 
 # Test under the busybox test suite
 $(BUILDDIR)/busybox: busybox-src build-coreutils $(BUILDDIR)/.config
-	@echo -e '#!/bin/sh\nexec env -a coreutils `dirname "$0"`/coreutils "$@"' > "$(BUILDDIR)/busybox.sh"
-	$(INSTALL) -m 755 "$(BUILDDIR)/busybox.sh" "$(BUILDDIR)/busybox"
+	$(INSTALL) -m 755 "$(BUILDDIR)/coreutils" "$(BUILDDIR)/busybox"
 
 prepare-busytest: $(BUILDDIR)/busybox
 	# disable inapplicable tests
