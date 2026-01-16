@@ -10,7 +10,7 @@ use clap::{Arg, ArgAction, Command};
 use memchr::memmem;
 use memmap2::Mmap;
 use std::ffi::OsString;
-use std::io::{BufWriter, Read, Seek, Write, stdin, stdout};
+use std::io::{BufWriter, Read, Seek, Write, copy, stdin, stdout};
 use std::{fs::File, path::Path};
 use uucore::error::UError;
 use uucore::error::UResult;
@@ -238,19 +238,28 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &str) -> UR
                 mmap = mmap1;
                 &mmap
             } else {
-                let mut buf1 = Vec::new();
-                if let Err(e) = stdin().read_to_end(&mut buf1) {
-                    let e: Box<dyn UError> = TacError::ReadError(OsString::from("stdin"), e).into();
-                    show!(e);
-                    continue;
+                // Copy stdin to a temp file (respects TMPDIR), then mmap it.
+                // Falls back to Vec buffer if temp file creation fails (e.g., bad TMPDIR).
+                match buffer_stdin() {
+                    Ok(StdinData::Mmap(mmap1)) => {
+                        mmap = mmap1;
+                        &mmap
+                    }
+                    Ok(StdinData::Vec(buf1)) => {
+                        buf = buf1;
+                        &buf
+                    }
+                    Err(e) => {
+                        show!(TacError::ReadError(OsString::from("stdin"), e));
+                        continue;
+                    }
                 }
-                buf = buf1;
-                &buf
             }
         } else {
             let path = Path::new(filename);
             if path.is_dir() {
-                let e: Box<dyn UError> = TacError::InvalidArgument(filename.clone()).into();
+                let e: Box<dyn UError> =
+                    TacError::InvalidDirectoryArgument(filename.clone()).into();
                 show!(e);
                 continue;
             }
@@ -304,6 +313,30 @@ fn try_mmap_stdin() -> Option<Mmap> {
     // SAFETY: If the file is truncated while we map it, SIGBUS will be raised
     // and our process will be terminated, thus preventing access of invalid memory.
     unsafe { Mmap::map(&stdin()).ok() }
+}
+
+enum StdinData {
+    Mmap(Mmap),
+    Vec(Vec<u8>),
+}
+
+/// Copy stdin to a temp file, then memory-map it.
+/// Falls back to reading directly into memory if temp file creation fails.
+fn buffer_stdin() -> std::io::Result<StdinData> {
+    // Try to create a temp file (respects TMPDIR)
+    if let Ok(mut tmp) = tempfile::tempfile() {
+        // Temp file created - copy stdin to it, then read back
+        copy(&mut stdin(), &mut tmp)?;
+        // SAFETY: If the file is truncated while we map it, SIGBUS will be raised
+        // and our process will be terminated, thus preventing access of invalid memory.
+        let mmap = unsafe { Mmap::map(&tmp)? };
+        Ok(StdinData::Mmap(mmap))
+    } else {
+        // Fall back to reading directly into memory (e.g., bad TMPDIR)
+        let mut buf = Vec::new();
+        stdin().read_to_end(&mut buf)?;
+        Ok(StdinData::Vec(buf))
+    }
 }
 
 fn try_mmap_path(path: &Path) -> Option<Mmap> {

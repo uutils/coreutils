@@ -234,7 +234,7 @@ fn process_file(
         match para_result {
             Err(s) => {
                 ostream
-                    .write_all(s.as_bytes())
+                    .write_all(&s)
                     .map_err_context(|| translate!("fmt-error-failed-to-write-output"))?;
                 ostream
                     .write_all(b"\n")

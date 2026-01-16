@@ -98,33 +98,31 @@ fn is_flag(arg: &OsStr, options: &mut Options) -> bool {
 /// # Returns
 ///
 /// - Vector of non-flag arguments.
-/// - [`Options`], describing how teh arguments should be interpreted.
-fn filter_flags(mut args: impl Iterator<Item = OsString>) -> (Vec<OsString>, Options) {
-    let mut arguments = Vec::with_capacity(args.size_hint().0);
+/// - [`Options`], describing how the arguments should be interpreted.
+fn filter_flags(args: impl Iterator<Item = OsString>) -> (impl Iterator<Item = OsString>, Options) {
     let mut options = Options::default();
+    let mut args = args.peekable();
 
     // Process arguments until first non-flag is found.
-    for arg in &mut args {
+    while let Some(arg) = args.peek() {
         // We parse flags and aggregate the options in `options`.
-        // First call to `is_echo_flag` to return false will break the loop.
-        if !is_flag(&arg, &mut options) {
+        // First call to `is_flag` to return false will break the loop.
+        if is_flag(arg, &mut options) {
+            args.next();
+        } else {
             // Not a flag. Can break out of flag-processing loop.
-            // Don't forget to push it to the arguments too.
-            arguments.push(arg);
             break;
         }
     }
 
-    // Collect remaining non-flag arguments.
-    arguments.extend(args);
-
-    (arguments, options)
+    // Return remaining non-flag arguments.
+    (args, options)
 }
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // args[0] is the name of the binary.
-    let args: Vec<OsString> = args.skip(1).collect();
+    let mut args = args.skip(1).peekable();
 
     // Check POSIX compatibility mode
     //
@@ -139,13 +137,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // > representation. For example, echo -e '\x2dn'.
     let is_posixly_correct = env::var_os("POSIXLY_CORRECT").is_some();
 
-    let (args, options) = if is_posixly_correct {
-        if args.first().is_some_and(|arg| arg == "-n") {
+    let (args, options): (Box<dyn Iterator<Item = OsString>>, Options) = if is_posixly_correct {
+        if args.peek().is_some_and(|arg| arg == "-n") {
             // if POSIXLY_CORRECT is set and the first argument is the "-n" flag
             // we filter flags normally but 'escaped' is activated nonetheless.
-            let (args, _) = filter_flags(args.into_iter());
+            let (args, _) = filter_flags(args);
             (
-                args,
+                Box::new(args),
                 Options {
                     trailing_newline: false,
                     ..Options::posixly_correct_default()
@@ -154,24 +152,29 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         } else {
             // if POSIXLY_CORRECT is set and the first argument is not the "-n" flag
             // we just collect all arguments as no arguments are interpreted as flags.
-            (args, Options::posixly_correct_default())
+            (Box::new(args), Options::posixly_correct_default())
         }
-    } else if args.len() == 1 && args[0] == "--help" {
-        // If POSIXLY_CORRECT is not set and the first argument
-        // is `--help`, GNU coreutils prints the help message.
-        //
-        // Verify this using:
-        //
-        //   POSIXLY_CORRECT=1 echo --help
-        //                     echo --help
-        uu_app().print_help()?;
-        return Ok(());
-    } else if args.len() == 1 && args[0] == "--version" {
-        print!("{}", uu_app().render_version());
-        return Ok(());
-    } else {
+    } else if let Some(first_arg) = args.next() {
+        if first_arg == "--help" && args.peek().is_none() {
+            // If POSIXLY_CORRECT is not set and the first argument
+            // is `--help`, GNU coreutils prints the help message.
+            //
+            // Verify this using:
+            //
+            //   POSIXLY_CORRECT=1 echo --help
+            //                     echo --help
+            uu_app().print_help()?;
+            return Ok(());
+        } else if first_arg == "--version" && args.peek().is_none() {
+            print!("{}", uu_app().render_version());
+            return Ok(());
+        }
+
         // if POSIXLY_CORRECT is not set we filter the flags normally
-        filter_flags(args.into_iter())
+        let (args, options) = filter_flags(std::iter::once(first_arg).chain(args));
+        (Box::new(args), options)
+    } else {
+        (Box::new(args), Options::default())
     };
 
     execute(&mut io::stdout().lock(), args, options)?;
@@ -221,7 +224,11 @@ pub fn uu_app() -> Command {
         )
 }
 
-fn execute(stdout: &mut StdoutLock, args: Vec<OsString>, options: Options) -> UResult<()> {
+fn execute(
+    stdout: &mut StdoutLock,
+    args: impl Iterator<Item = OsString>,
+    options: Options,
+) -> UResult<()> {
     for (i, arg) in args.into_iter().enumerate() {
         let bytes = os_str_as_bytes(&arg)?;
 

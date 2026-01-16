@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo timefile
-// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps
+// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry
 #![allow(
     clippy::similar_names,
     clippy::too_many_lines,
@@ -1446,31 +1446,213 @@ fn test_ls_long_dangling_symlink_color() {
 
     at.mkdir("dir1");
     at.symlink_dir("foo", "dir1/dangling_symlink");
+    let ls_colors = "ln=target:or=40:mi=34";
     let result = ts
         .ucmd()
+        .env("LS_COLORS", ls_colors)
         .arg("-l")
         .arg("--color=always")
         .arg("dir1/dangling_symlink")
         .succeeds();
 
     let stdout = result.stdout_str();
-    // stdout contains output like in the below sequence. We match for the color i.e. 01;36
-    // \x1b[0m\x1b[01;36mdir1/dangling_symlink\x1b[0m -> \x1b[01;36mfoo\x1b[0m
-    let color_regex = Regex::new(r"(\d\d;)\d\dm").unwrap();
-    // colors_vec[0] contains the symlink color and style and colors_vec[1] contains the color and style of the file the
-    // symlink points to.
-    let colors_vec: Vec<_> = color_regex
-        .find_iter(stdout)
-        .map(|color| color.as_str())
-        .collect();
+    // Ensure dangling link name uses `or=` and target uses `mi=`.
+    let name_regex =
+        Regex::new(r"(?:\x1b\[[0-9;]*m)*\x1b\[([0-9;]*)mdir1/dangling_symlink\x1b\[0m").unwrap();
+    let target_path = regex::escape(&at.plus_as_string("foo"));
+    let target_pattern = format!(r"(?:\x1b\[[0-9;]*m)*\x1b\[([0-9;]*)m{target_path}\x1b\[0m");
+    let target_regex = Regex::new(&target_pattern).unwrap();
 
-    assert_eq!(colors_vec[0], colors_vec[1]);
-    // constructs the string of file path with the color code
-    let symlink_color_name = colors_vec[0].to_owned() + "dir1/dangling_symlink\x1b";
-    let target_color_name = colors_vec[1].to_owned() + at.plus_as_string("foo\x1b").as_str();
+    let name_caps = name_regex
+        .captures(stdout)
+        .expect("failed to capture dangling symlink name color");
+    let target_caps = target_regex
+        .captures(stdout)
+        .expect("failed to capture dangling target color");
 
-    assert!(stdout.contains(&symlink_color_name));
-    assert!(stdout.contains(&target_color_name));
+    let name_color = name_caps.get(1).unwrap().as_str();
+    let target_color = target_caps.get(1).unwrap().as_str();
+
+    assert_eq!(name_color, "40");
+    assert_eq!(target_color, "34");
+}
+
+#[test]
+/// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle3`.
+fn test_ls_dangling_symlink_or_and_missing_colors() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.symlink_file("nowhere", "dangling");
+
+    let stdout = ts
+        .ucmd()
+        .env("LS_COLORS", "ln=target:or=40:mi=34")
+        .arg("-o")
+        .arg("--time-style=+:TIME:")
+        .arg("--color=always")
+        .arg("dangling")
+        .succeeds()
+        .stdout_str()
+        .to_string();
+
+    let color_regex = Regex::new(
+        r"\x1b\[0m\x1b\[(?P<link>[0-9;]*)mdangling\x1b\[0m -> \x1b\[(?P<target>[0-9;]*)m",
+    )
+    .unwrap();
+    let captures = color_regex
+        .captures(&stdout)
+        .expect("failed to capture dangling colors");
+
+    assert_eq!(captures.name("link").unwrap().as_str(), "40");
+    assert_eq!(captures.name("target").unwrap().as_str(), "34");
+}
+
+#[test]
+/// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle4`.
+fn test_ls_dangling_symlink_ln_or_priority() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.symlink_file("nowhere", "dangling");
+
+    let stdout = ts
+        .ucmd()
+        .env("LS_COLORS", "ln=34:mi=35:or=36")
+        .arg("-o")
+        .arg("--time-style=+:TIME:")
+        .arg("--color=always")
+        .arg("dangling")
+        .succeeds()
+        .stdout_str()
+        .to_string();
+
+    let color_regex = Regex::new(
+        r"\x1b\[0m\x1b\[(?P<link>[0-9;]*)mdangling\x1b\[0m -> \x1b\[(?P<target>[0-9;]*)m",
+    )
+    .unwrap();
+    let captures = color_regex
+        .captures(&stdout)
+        .expect("failed to capture dangling colors");
+    assert_eq!(captures.name("link").unwrap().as_str(), "36");
+    assert_eq!(captures.name("target").unwrap().as_str(), "35");
+}
+
+#[test]
+/// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle5`.
+fn test_ls_dangling_symlink_ln_and_missing_colors() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.symlink_file("nowhere", "dangling");
+
+    let stdout = ts
+        .ucmd()
+        .env("LS_COLORS", "ln=34:mi=35")
+        .arg("-o")
+        .arg("--time-style=+:TIME:")
+        .arg("--color=always")
+        .arg("dangling")
+        .succeeds()
+        .stdout_str()
+        .to_string();
+
+    let color_regex = Regex::new(
+        r"\x1b\[0m\x1b\[(?P<link>[0-9;]*)mdangling\x1b\[0m -> \x1b\[(?P<target>[0-9;]*)m",
+    )
+    .unwrap();
+    let captures = color_regex
+        .captures(&stdout)
+        .expect("failed to capture dangling colors");
+    assert_eq!(captures.name("link").unwrap().as_str(), "34");
+    assert_eq!(captures.name("target").unwrap().as_str(), "35");
+}
+
+#[test]
+/// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle7`.
+fn test_ls_dangling_symlink_blank_or_still_emits_reset() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.symlink_file("nowhere", "dangling");
+
+    let stdout = ts
+        .ucmd()
+        .env("LS_COLORS", "ln=target:or=:ex=:")
+        .arg("--color=always")
+        .arg("dangling")
+        .succeeds()
+        .stdout_str()
+        .to_string();
+
+    assert!(
+        stdout.contains("\u{1b}[0m\u{1b}[mdangling\u{1b}[0m"),
+        "unexpected output: {stdout:?}"
+    );
+}
+
+#[test]
+/// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle9`.
+fn test_ls_dangling_symlink_blank_or_in_directory_listing() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir("dir");
+    at.symlink_file("nowhere", "dir/entry");
+
+    let stdout = ts
+        .ucmd()
+        .env("LS_COLORS", "ln=target:or=:ex=:")
+        .arg("--color=always")
+        .arg("dir")
+        .succeeds()
+        .stdout_str()
+        .to_string();
+
+    assert!(
+        stdout.contains("\u{1b}[0m\u{1b}[mentry\u{1b}[0m"),
+        "unexpected output: {stdout:?}"
+    );
+}
+
+#[test]
+/// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle8`.
+fn test_ls_dangling_symlink_uses_ln_when_or_blank() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.symlink_file("nowhere", "dangling");
+
+    let stdout = ts
+        .ucmd()
+        .env("LS_COLORS", "ln=1;36:or=:")
+        .arg("--color=always")
+        .arg("dangling")
+        .succeeds()
+        .stdout_str()
+        .to_string();
+
+    assert!(
+        stdout.contains("\u{1b}[0m\u{1b}[1;36mdangling\u{1b}[0m"),
+        "unexpected output: {stdout:?}"
+    );
+}
+
+#[test]
+/// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle6`.
+fn test_ls_directory_dangling_symlink_uses_ln_when_or_blank() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir("dir");
+    at.symlink_file("nowhere", "dir/entry");
+
+    let stdout = ts
+        .ucmd()
+        .env("LS_COLORS", "ln=1;36:or=:")
+        .arg("--color=always")
+        .arg("dir")
+        .succeeds()
+        .stdout_str()
+        .to_string();
+
+    assert!(
+        stdout.contains("\u{1b}[0m\u{1b}[1;36mentry\u{1b}[0m"),
+        "unexpected output: {stdout:?}"
+    );
 }
 
 #[test]
@@ -6050,11 +6232,11 @@ fn test_ls_capabilities() {
     }
     at.mkdir("test");
     at.mkdir("test/dir");
-    at.touch("test/cap_pos");
-    at.touch("test/dir/cap_neg");
-    at.touch("test/dir/cap_pos");
+    at.touch("test/cap_pos.txt");
+    at.touch("test/dir/cap_neg.txt");
+    at.touch("test/dir/cap_pos.txt");
 
-    let files = ["test/cap_pos", "test/dir/cap_pos"];
+    let files = ["test/cap_pos.txt", "test/dir/cap_pos.txt"];
     for file in &files {
         scene
             .cmd("sudo")
@@ -6074,12 +6256,23 @@ fn test_ls_capabilities() {
         .ucmd()
         .env("LS_COLORS", ls_colors)
         .arg("--color=always")
-        .arg("test/cap_pos")
+        .arg("test/cap_pos.txt")
         .arg("test/dir")
         .succeeds()
-        .stdout_contains("\x1b[30;41mtest/cap_pos") // spell-checker:disable-line
-        .stdout_contains("\x1b[30;41mcap_pos") // spell-checker:disable-line
-        .stdout_does_not_contain("0;41mtest/dir/cap_neg"); // spell-checker:disable-line
+        .stdout_contains("\x1b[30;41mtest/cap_pos.txt") // spell-checker:disable-line
+        .stdout_contains("\x1b[30;41mcap_pos.txt") // spell-checker:disable-line
+        .stdout_does_not_contain("0;41mcap_neg.txt"); // spell-checker:disable-line
+
+    // If ca= is not defined, ensure the specific style (.txt) for the file is used
+    let ls_colors = "di=:no=30;41:*.txt=31;41";
+
+    scene
+        .ucmd()
+        .env("LS_COLORS", ls_colors)
+        .arg("--color=always")
+        .arg("test/cap_pos.txt")
+        .succeeds()
+        .stdout_contains("\x1b[31;41mtest/cap_pos.txt"); // spell-checker:disable-line
 }
 
 #[cfg(feature = "test_risky_names")]
@@ -6139,7 +6332,9 @@ fn test_unknown_format_specifier() {
 fn test_acl_display_symlink() {
     use std::process::Command;
 
-    let (at, mut ucmd) = at_and_ucmd!();
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
     let dir_name = "dir";
     let link_name = "link";
     at.mkdir(dir_name);
@@ -6164,11 +6359,26 @@ fn test_acl_display_symlink() {
 
     at.symlink_dir(dir_name, link_name);
 
-    let re_with_acl = Regex::new(r"[a-z-]*\+ .*link").unwrap();
-    ucmd.arg("-lLd")
+    let re_with_acl = Regex::new(r"[a-z-]*\+\s\d+\s.*link").unwrap();
+
+    scene
+        .ucmd()
+        .arg("-lLd")
         .arg(link_name)
         .succeeds()
         .stdout_matches(&re_with_acl);
+
+    let test2: uutests::util::CmdResult = scene.ucmd().arg("-l").succeeds();
+
+    let mut iter = test2
+        .stdout()
+        .split(|b| b == &b'\n')
+        .skip(1)
+        .filter_map(|line: &[u8]| line.iter().position(|b: &u8| b.is_ascii_digit()));
+
+    let first = iter.next().unwrap();
+
+    assert!(iter.all(|i| i == first));
 }
 
 #[test]
@@ -6498,7 +6708,7 @@ fn test_f_overrides_sort_flags() {
 
     // Create files with different sizes for predictable sort order
     at.write("small.txt", "a"); // 1 byte
-    at.write("medium.txt", "bb"); // 2 bytes  
+    at.write("medium.txt", "bb"); // 2 bytes
     at.write("large.txt", "ccc"); // 3 bytes
 
     // Get baseline outputs (include -a to match -f behavior which shows all files)
