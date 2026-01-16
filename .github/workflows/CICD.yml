@@ -297,7 +297,6 @@ jobs:
           mv -T target target.cache
         fi
         # Check that we don't cross-build uudoc
-        # also do not try to generate manpages for part of hashsum
         env CARGO_BUILD_TARGET=aarch64-unknown-linux-gnu make install-manpages PREFIX=/tmp/usr UTILS=true
         # build (host)
         make build
@@ -371,25 +370,19 @@ jobs:
       run: |
         set -x
         DESTDIR=/tmp/ make PROFILE=release MULTICALL=n install
-        # Check that the utils are present
-        test -f /tmp/usr/local/bin/hashsum
-        # Check that hashsum symlinks are present
-        test -h /tmp/usr/local/bin/b2sum
-        test -h /tmp/usr/local/bin/md5sum
-        test -h /tmp/usr/local/bin/sha1sum
-        test -h /tmp/usr/local/bin/sha224sum
-        test -h /tmp/usr/local/bin/sha256sum
-        test -h /tmp/usr/local/bin/sha384sum
-        test -h /tmp/usr/local/bin/sha512sum
+        # Check that *sum are present
+        for s in {md5,b2,sha1,sha224,sha256,sha384,sha512}sum
+          do test -e /tmp/usr/local/bin/${s}
+        done
     - name: "`make install MULTICALL=y LN=ln -svf`"
       shell: bash
       run: |
         set -x
         DESTDIR=/tmp/ make PROFILE=release MULTICALL=y LN="ln -svf" install
-        # Check that relative symlinks of hashsum are present
-        [ $(readlink /tmp/usr/local/bin/b2sum) = coreutils ]
-        [ $(readlink /tmp/usr/local/bin/md5sum) = coreutils ]
-        [ $(readlink /tmp/usr/local/bin/sha512sum) = coreutils ]
+        # Check that symlinks of *sum are present
+        for s in {md5,b2,sha1,sha224,sha256,sha384,sha512}sum
+          do test $(readlink /tmp/usr/local/bin/${s}) = coreutils
+        done
     - name: "`make UTILS=XXX`"
       shell: bash
       run: |
