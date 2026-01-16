@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (ToDO) copydir ficlone fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO
+// spell-checker:ignore (ToDO) copydir ficlone fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO devnull
 
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
@@ -47,6 +47,126 @@ use crate::copydir::copy_directory;
 
 mod copydir;
 mod platform;
+
+mod stdout_state {
+    use std::io;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    static STDOUT_WRITTEN: AtomicBool = AtomicBool::new(false);
+    static STDOUT_WAS_CLOSED: AtomicBool = AtomicBool::new(false);
+    static STDOUT_WAS_CLOSED_SET: AtomicBool = AtomicBool::new(false);
+
+    pub fn reset_stdout_written() {
+        STDOUT_WRITTEN.store(false, Ordering::Relaxed);
+    }
+
+    fn mark_stdout_written() {
+        STDOUT_WRITTEN.store(true, Ordering::Relaxed);
+    }
+
+    fn stdout_was_written() -> bool {
+        STDOUT_WRITTEN.load(Ordering::Relaxed)
+    }
+
+    fn set_stdout_was_closed(value: bool) {
+        STDOUT_WAS_CLOSED.store(value, Ordering::Relaxed);
+        STDOUT_WAS_CLOSED_SET.store(true, Ordering::Relaxed);
+    }
+
+    fn stdout_was_closed() -> bool {
+        STDOUT_WAS_CLOSED.load(Ordering::Relaxed)
+    }
+
+    pub fn init_stdout_state() {
+        if !STDOUT_WAS_CLOSED_SET.load(Ordering::Relaxed) {
+            set_stdout_was_closed(stdout_is_closed());
+        }
+    }
+
+    #[cfg(unix)]
+    fn stdout_is_closed() -> bool {
+        let res = unsafe { libc::fcntl(libc::STDOUT_FILENO, libc::F_GETFL) };
+        if res != -1 {
+            return false;
+        }
+        matches!(io::Error::last_os_error().raw_os_error(), Some(libc::EBADF))
+    }
+
+    #[cfg(not(unix))]
+    fn stdout_is_closed() -> bool {
+        false
+    }
+
+    #[cfg(unix)]
+    mod early_stdout_state {
+        use super::{set_stdout_was_closed, stdout_is_closed};
+
+        extern "C" fn init() {
+            set_stdout_was_closed(stdout_is_closed());
+        }
+
+        #[used]
+        #[cfg_attr(target_os = "macos", unsafe(link_section = "__DATA,__mod_init_func"))]
+        #[cfg_attr(not(target_os = "macos"), unsafe(link_section = ".init_array"))]
+        static INIT: extern "C" fn() = init;
+    }
+
+    pub fn check_stdout_write(len: usize) -> io::Result<()> {
+        if len == 0 {
+            return Ok(());
+        }
+        mark_stdout_written();
+        if stdout_was_closed() {
+            #[cfg(unix)]
+            {
+                return Err(io::Error::from_raw_os_error(libc::EBADF));
+            }
+            #[cfg(not(unix))]
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::BrokenPipe,
+                    "stdout was closed",
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    fn redirect_stdout_to_devnull() {
+        use std::fs::OpenOptions;
+        use std::os::unix::io::AsRawFd;
+
+        if let Ok(devnull) = OpenOptions::new().write(true).open("/dev/null") {
+            unsafe {
+                libc::dup2(devnull.as_raw_fd(), libc::STDOUT_FILENO);
+            }
+        }
+    }
+
+    #[cfg(not(unix))]
+    fn redirect_stdout_to_devnull() {}
+
+    fn suppress_closed_stdout_flush() {
+        if stdout_was_closed() && !stdout_was_written() {
+            redirect_stdout_to_devnull();
+        }
+    }
+
+    pub struct StdoutFlushGuard;
+
+    impl StdoutFlushGuard {
+        pub fn new() -> Self {
+            Self
+        }
+    }
+
+    impl Drop for StdoutFlushGuard {
+        fn drop(&mut self) {
+            suppress_closed_stdout_flush();
+        }
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum CpError {
@@ -135,6 +255,16 @@ impl UError for CpError {
 }
 
 pub type CopyResult<T> = Result<T, CpError>;
+
+fn write_stdout_line(args: fmt::Arguments) -> CopyResult<()> {
+    use std::io::Write;
+
+    stdout_state::check_stdout_write(1)?;
+    let mut stdout = io::stdout().lock();
+    stdout.write_fmt(args)?;
+    stdout.write_all(b"\n")?;
+    Ok(())
+}
 
 /// Specifies how to overwrite files.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Default)]
@@ -446,11 +576,16 @@ impl Display for SparseDebug {
 /// This function prints the debug information of a file copy operation if
 /// no hard link or symbolic link is required, and data copy is required.
 /// It prints the debug information of the offload, reflink, and sparse detection actions.
-fn show_debug(copy_debug: &CopyDebug) {
-    println!(
+fn show_debug(copy_debug: &CopyDebug) -> CopyResult<()> {
+    write_stdout_line(format_args!(
         "{}",
-        translate!("cp-debug-copy-offload", "offload" => copy_debug.offload, "reflink" => copy_debug.reflink, "sparse" => copy_debug.sparse_detection)
-    );
+        translate!(
+            "cp-debug-copy-offload",
+            "offload" => copy_debug.offload,
+            "reflink" => copy_debug.reflink,
+            "sparse" => copy_debug.sparse_detection
+        )
+    ))
 }
 
 static EXIT_ERR: i32 = 1;
@@ -809,6 +944,9 @@ pub fn uu_app() -> Command {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    stdout_state::init_stdout_state();
+    stdout_state::reset_stdout_written();
+    let _stdout_guard = stdout_state::StdoutFlushGuard::new();
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let options = Options::from_matches(&matches)?;
@@ -1600,7 +1738,10 @@ impl OverwriteMode {
         match *self {
             Self::NoClobber => {
                 if debug {
-                    println!("{}", translate!("cp-debug-skipped", "path" => path.quote()));
+                    write_stdout_line(format_args!(
+                        "{}",
+                        translate!("cp-debug-skipped", "path" => path.quote())
+                    ))?;
                 }
                 Err(CpError::Skipped(false))
             }
@@ -1924,7 +2065,7 @@ fn handle_existing_dest(
 
     if options.update == UpdateMode::None {
         if options.debug {
-            println!("skipped {}", dest.quote());
+            write_stdout_line(format_args!("skipped {}", dest.quote()))?;
         }
         return Err(CpError::Skipped(false));
     }
@@ -2029,10 +2170,10 @@ fn delete_path(path: &Path, options: &Options) -> CopyResult<()> {
     match fs::remove_file(path) {
         Ok(()) => {
             if options.verbose {
-                println!(
+                write_stdout_line(format_args!(
                     "{}",
                     translate!("cp-verbose-removed", "path" => path.quote())
-                );
+                ))?;
             }
         }
         Err(err) if err.kind() == io::ErrorKind::NotFound => {
@@ -2090,18 +2231,16 @@ fn print_verbose_output(
     progress_bar: Option<&ProgressBar>,
     source: &Path,
     dest: &Path,
-) {
+) -> CopyResult<()> {
     if let Some(pb) = progress_bar {
         // Suspend (hide) the progress bar so the println won't overlap with the progress bar.
-        pb.suspend(|| {
-            print_paths(parents, source, dest);
-        });
+        pb.suspend(|| print_paths(parents, source, dest))
     } else {
-        print_paths(parents, source, dest);
+        print_paths(parents, source, dest)
     }
 }
 
-fn print_paths(parents: bool, source: &Path, dest: &Path) {
+fn print_paths(parents: bool, source: &Path, dest: &Path) -> CopyResult<()> {
     if parents {
         // For example, if copying file `a/b/c` and its parents
         // to directory `d/`, then print
@@ -2110,14 +2249,18 @@ fn print_paths(parents: bool, source: &Path, dest: &Path) {
         //     a/b -> d/a/b
         //
         for (x, y) in aligned_ancestors(source, dest) {
-            println!(
+            write_stdout_line(format_args!(
                 "{}",
-                translate!("cp-verbose-created-directory", "source" => x.display(), "dest" => y.display())
-            );
+                translate!(
+                    "cp-verbose-created-directory",
+                    "source" => x.display(),
+                    "dest" => y.display()
+                )
+            ))?;
         }
     }
 
-    println!("{}", context_for(source, dest));
+    write_stdout_line(format_args!("{}", context_for(source, dest)))
 }
 
 /// Handles the copy mode for a file copy operation.
@@ -2214,7 +2357,7 @@ fn handle_copy_mode(
                     }
                     UpdateMode::None => {
                         if options.debug {
-                            println!("skipped {}", dest.quote());
+                            write_stdout_line(format_args!("skipped {}", dest.quote()))?;
                         }
 
                         return Ok(PerformedAction::Skipped);
@@ -2461,7 +2604,7 @@ fn copy_file(
             fs::hard_link(new_source, dest)?;
 
             if options.verbose {
-                print_verbose_output(options.parents, progress_bar, source, dest);
+                print_verbose_output(options.parents, progress_bar, source, dest)?;
             }
 
             return Ok(());
@@ -2524,7 +2667,7 @@ fn copy_file(
     )?;
 
     if options.verbose && performed_action != PerformedAction::Skipped {
-        print_verbose_output(options.parents, progress_bar, source, dest);
+        print_verbose_output(options.parents, progress_bar, source, dest)?;
     }
 
     // TODO: implement something similar to gnu's lchown
@@ -2689,7 +2832,7 @@ fn copy_helper(
         )?;
 
         if !options.attributes_only && options.debug {
-            show_debug(&copy_debug);
+            show_debug(&copy_debug)?;
         }
     }
 
