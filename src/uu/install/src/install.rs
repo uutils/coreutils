@@ -37,7 +37,7 @@ use uucore::selinux::{
     set_selinux_security_context,
 };
 #[cfg(unix)]
-use uucore::signals::enable_pipe_errors;
+use uucore::signals;
 use uucore::translate;
 use uucore::{format_usage, os_str_from_bytes, show, show_error, show_if_err};
 
@@ -50,6 +50,10 @@ use uucore::buf_copy::copy_stream;
 use std::os::unix::fs::FileTypeExt;
 const DEFAULT_MODE: u32 = 0o755;
 const DEFAULT_STRIP_PROGRAM: &str = "strip";
+
+// Initialize SIGPIPE state capture at process startup (Unix only)
+#[cfg(unix)]
+uucore::init_sigpipe_capture!();
 
 #[allow(dead_code)]
 pub struct Behavior {
@@ -197,8 +201,15 @@ fn is_path_separator_byte(byte: u8) -> bool {
 ///
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    // Restore SIGPIPE to default if it wasn't explicitly ignored by parent.
+    // The Rust runtime ignores SIGPIPE, but we need to respect the parent's
+    // signal disposition for proper pipeline behavior (GNU compatibility).
     #[cfg(unix)]
-    enable_pipe_errors()?;
+    if !signals::sigpipe_was_ignored() {
+        // Ignore the return value: if setting signal handler fails, we continue anyway.
+        // The worst case is we don't get proper SIGPIPE behavior, but install will still work.
+        let _ = signals::enable_pipe_errors();
+    }
 
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
