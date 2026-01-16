@@ -5045,14 +5045,15 @@ fn test_tail_bytes_exceeds_file_size() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
-    at.write("test_file.txt", "small content");
+    // Should be > 4096 bytes (block size can vary):
+    at.write("test_file.txt", &"x".repeat(5000));
 
     ts.ucmd()
         .arg("-c")
         .arg("1048576")
         .arg("test_file.txt")
         .succeeds()
-        .stdout_only("small content");
+        .stdout_only("x".repeat(5000));
 }
 
 #[test]
