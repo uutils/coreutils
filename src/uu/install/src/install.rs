@@ -32,6 +32,8 @@ use uucore::selinux::{
     SeLinuxError, contexts_differ, get_selinux_security_context, is_selinux_enabled,
     selinux_error_description, set_selinux_security_context,
 };
+#[cfg(unix)]
+use uucore::signals;
 use uucore::translate;
 use uucore::{format_usage, show, show_error, show_if_err};
 
@@ -172,8 +174,22 @@ static ARG_FILES: &str = "files";
 ///
 /// Returns a program return code.
 ///
+// Initialize SIGPIPE state capture at process startup (Unix only)
+#[cfg(unix)]
+uucore::init_sigpipe_capture!();
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    // Restore SIGPIPE to default if it wasn't explicitly ignored by parent.
+    // The Rust runtime ignores SIGPIPE, but we need to respect the parent's
+    // signal disposition for proper pipeline behavior (GNU compatibility).
+    #[cfg(unix)]
+    if !signals::sigpipe_was_ignored() {
+        // Ignore the return value: if setting signal handler fails, we continue anyway.
+        // The worst case is we don't get proper SIGPIPE behavior, but install will still work.
+        let _ = signals::enable_pipe_errors();
+    }
+
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let paths: Vec<OsString> = matches
