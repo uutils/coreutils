@@ -54,11 +54,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 if let Err(e) = write_result {
         eprintln!("tty: write error: {}", e);
-        // Don't return to prevent a panic later when another flush is attempted
-        // because the `uucore_procs::main` macro inserts a flush after execution for every utility.
         std::process::exit(3);
     }
-
+    
+    if let Err(e) = stdout.flush() {
+        eprintln!("tty: write error: {}", e);
+        std::process::exit(3);
+    }
+    
     Ok(())
 }
 
