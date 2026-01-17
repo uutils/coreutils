@@ -168,7 +168,7 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
 
     #[cfg(target_os = "openbsd")]
     {
-        let upsecs = get_uptime(None);
+        let upsecs = get_uptime(None)?;
         if upsecs >= 0 {
             print_uptime(Some(upsecs))?;
         } else {

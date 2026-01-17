@@ -31,15 +31,21 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Try to detect if we're building for a specific utility by checking build configuration
     // This attempts to identify individual utility builds vs multicall binary builds
     let target_utility = detect_target_utility();
+    let locales_to_embed = get_locales_to_embed();
 
     match target_utility {
         Some(util_name) => {
             // Embed only the specific utility's locale (cat.ftl for cat for example)
-            embed_single_utility_locale(&mut embedded_file, &project_root()?, &util_name)?;
+            embed_single_utility_locale(
+                &mut embedded_file,
+                &project_root()?,
+                &util_name,
+                &locales_to_embed,
+            )?;
         }
         None => {
             // Embed all utility locales (multicall binary or fallback)
-            embed_all_utility_locales(&mut embedded_file, &project_root()?)?;
+            embed_all_utility_locales(&mut embedded_file, &project_root()?, &locales_to_embed)?;
         }
     }
 
@@ -118,38 +124,20 @@ fn embed_single_utility_locale(
     embedded_file: &mut std::fs::File,
     project_root: &Path,
     util_name: &str,
+    locales_to_embed: &(String, Option<String>),
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use std::fs;
-
-    // Embed the specific utility's locale
-    let locale_path = project_root
-        .join("src/uu")
-        .join(util_name)
-        .join("locales/en-US.ftl");
-
-    if locale_path.exists() {
-        let content = fs::read_to_string(&locale_path)?;
-        writeln!(embedded_file, "        // Locale for {util_name}")?;
-        writeln!(
-            embedded_file,
-            "        \"{util_name}/en-US.ftl\" => Some(r###\"{content}\"###),"
-        )?;
-
-        // Tell Cargo to rerun if this file changes
-        println!("cargo:rerun-if-changed={}", locale_path.display());
-    }
+    // Embed utility-specific locales
+    embed_component_locales(embedded_file, locales_to_embed, util_name, |locale| {
+        project_root
+            .join("src/uu")
+            .join(util_name)
+            .join(format!("locales/{locale}.ftl"))
+    })?;
 
     // Always embed uucore locale file if it exists
-    let uucore_locale_path = project_root.join("src/uucore/locales/en-US.ftl");
-    if uucore_locale_path.exists() {
-        let content = fs::read_to_string(&uucore_locale_path)?;
-        writeln!(embedded_file, "        // Common uucore locale")?;
-        writeln!(
-            embedded_file,
-            "        \"uucore/en-US.ftl\" => Some(r###\"{content}\"###),"
-        )?;
-        println!("cargo:rerun-if-changed={}", uucore_locale_path.display());
-    }
+    embed_component_locales(embedded_file, locales_to_embed, "uucore", |locale| {
+        project_root.join(format!("src/uucore/locales/{locale}.ftl"))
+    })?;
 
     Ok(())
 }
@@ -158,6 +146,7 @@ fn embed_single_utility_locale(
 fn embed_all_utility_locales(
     embedded_file: &mut std::fs::File,
     project_root: &Path,
+    locales_to_embed: &(String, Option<String>),
 ) -> Result<(), Box<dyn std::error::Error>> {
     use std::fs;
 
@@ -166,7 +155,7 @@ fn embed_all_utility_locales(
     if !src_uu_dir.exists() {
         // When src/uu doesn't exist (e.g., standalone uucore from crates.io),
         // embed a static list of utility locales that are commonly used
-        embed_static_utility_locales(embedded_file)?;
+        embed_static_utility_locales(embedded_file, locales_to_embed)?;
         return Ok(());
     }
 
@@ -183,31 +172,17 @@ fn embed_all_utility_locales(
 
     // Embed locale files for each utility
     for util_name in &util_dirs {
-        let locale_path = src_uu_dir.join(util_name).join("locales/en-US.ftl");
-        if locale_path.exists() {
-            let content = fs::read_to_string(&locale_path)?;
-            writeln!(embedded_file, "        // Locale for {util_name}")?;
-            writeln!(
-                embedded_file,
-                "        \"{util_name}/en-US.ftl\" => Some(r###\"{content}\"###),"
-            )?;
-
-            // Tell Cargo to rerun if this file changes
-            println!("cargo:rerun-if-changed={}", locale_path.display());
-        }
+        embed_component_locales(embedded_file, locales_to_embed, util_name, |locale| {
+            src_uu_dir
+                .join(util_name)
+                .join(format!("locales/{locale}.ftl"))
+        })?;
     }
 
     // Also embed uucore locale file if it exists
-    let uucore_locale_path = project_root.join("src/uucore/locales/en-US.ftl");
-    if uucore_locale_path.exists() {
-        let content = fs::read_to_string(&uucore_locale_path)?;
-        writeln!(embedded_file, "        // Common uucore locale")?;
-        writeln!(
-            embedded_file,
-            "        \"uucore/en-US.ftl\" => Some(r###\"{content}\"###),"
-        )?;
-        println!("cargo:rerun-if-changed={}", uucore_locale_path.display());
-    }
+    embed_component_locales(embedded_file, locales_to_embed, "uucore", |locale| {
+        project_root.join(format!("src/uucore/locales/{locale}.ftl"))
+    })?;
 
     embedded_file.flush()?;
     Ok(())
@@ -215,6 +190,7 @@ fn embed_all_utility_locales(
 
 fn embed_static_utility_locales(
     embedded_file: &mut std::fs::File,
+    locales_to_embed: &(String, Option<String>),
 ) -> Result<(), Box<dyn std::error::Error>> {
     use std::env;
 
@@ -229,15 +205,9 @@ fn embed_static_utility_locales(
     };
 
     // First, try to embed uucore locales - critical for common translations like "Usage:"
-    let uucore_locale_file = Path::new(&manifest_dir).join("locales/en-US.ftl");
-    if uucore_locale_file.is_file() {
-        let content = std::fs::read_to_string(&uucore_locale_file)?;
-        writeln!(embedded_file, "        // Common uucore locale")?;
-        writeln!(
-            embedded_file,
-            "        \"uucore/en-US.ftl\" => Some(r###\"{content}\"###),"
-        )?;
-    }
+    embed_component_locales(embedded_file, locales_to_embed, "uucore", |locale| {
+        Path::new(&manifest_dir).join(format!("locales/{locale}.ftl"))
+    })?;
 
     // Collect and sort for deterministic builds
     let mut entries: Vec<_> = std::fs::read_dir(registry_dir)?
@@ -251,19 +221,264 @@ fn embed_static_utility_locales(
             // Match uu_<util>-<version>
             if let Some((util_part, _)) = dir_name.split_once('-') {
                 if let Some(util_name) = util_part.strip_prefix("uu_") {
-                    let locale_file = entry.path().join("locales/en-US.ftl");
-                    if locale_file.is_file() {
-                        let content = std::fs::read_to_string(&locale_file)?;
-                        writeln!(embedded_file, "        // Locale for {util_name}")?;
-                        writeln!(
-                            embedded_file,
-                            "        \"{util_name}/en-US.ftl\" => Some(r###\"{content}\"###),"
-                        )?;
-                    }
+                    embed_component_locales(
+                        embedded_file,
+                        locales_to_embed,
+                        util_name,
+                        |locale| entry.path().join(format!("locales/{locale}.ftl")),
+                    )?;
                 }
             }
         }
     }
 
     Ok(())
+}
+
+/// Determines which locales to embed into the binary.
+///
+/// To support localized messages in installed binaries (e.g., via `cargo install`),
+/// this function identifies the user's current locale from the `LANG` environment
+/// variable.
+///
+/// It always includes "en-US" to ensure that a fallback is available if the
+/// system locale's translation file is missing or if `LANG` is not set.
+fn get_locales_to_embed() -> (String, Option<String>) {
+    let system_locale = env::var("LANG").ok().and_then(|lang| {
+        let locale = lang.split('.').next()?.replace('_', "-");
+        if locale != "en-US" && !locale.is_empty() {
+            Some(locale)
+        } else {
+            None
+        }
+    });
+    ("en-US".to_string(), system_locale)
+}
+
+/// Helper function to iterate over the locales to embed.
+fn for_each_locale<F>(
+    locales: &(String, Option<String>),
+    mut f: F,
+) -> Result<(), Box<dyn std::error::Error>>
+where
+    F: FnMut(&str) -> Result<(), Box<dyn std::error::Error>>,
+{
+    f(&locales.0)?;
+    if let Some(ref system_locale) = locales.1 {
+        f(system_locale)?;
+    }
+    Ok(())
+}
+
+/// Helper function to embed a single locale file.
+fn embed_locale_file(
+    embedded_file: &mut std::fs::File,
+    locale_path: &Path,
+    locale_key: &str,
+    locale: &str,
+    component: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use std::fs;
+
+    if locale_path.exists() || locale_path.is_file() {
+        let content = fs::read_to_string(locale_path)?;
+        writeln!(
+            embedded_file,
+            "        // Locale for {component} ({locale})"
+        )?;
+        writeln!(
+            embedded_file,
+            "        \"{locale_key}\" => Some(r###\"{content}\"###),"
+        )?;
+
+        // Tell Cargo to rerun if this file changes
+        println!("cargo:rerun-if-changed={}", locale_path.display());
+    }
+    Ok(())
+}
+
+/// Higher-level helper to embed locale files for a component with a path pattern.
+/// This eliminates the repetitive for_each_locale + embed_locale_file pattern.
+fn embed_component_locales<F>(
+    embedded_file: &mut std::fs::File,
+    locales: &(String, Option<String>),
+    component_name: &str,
+    path_builder: F,
+) -> Result<(), Box<dyn std::error::Error>>
+where
+    F: Fn(&str) -> std::path::PathBuf,
+{
+    for_each_locale(locales, |locale| {
+        let locale_path = path_builder(locale);
+        embed_locale_file(
+            embedded_file,
+            &locale_path,
+            &format!("{component_name}/{locale}.ftl"),
+            locale,
+            component_name,
+        )
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn get_locales_to_embed_no_lang() {
+        unsafe {
+            env::remove_var("LANG");
+        }
+        let (en_locale, system_locale) = get_locales_to_embed();
+        assert_eq!(en_locale, "en-US");
+        assert_eq!(system_locale, None);
+
+        unsafe {
+            env::set_var("LANG", "");
+        }
+        let (en_locale, system_locale) = get_locales_to_embed();
+        assert_eq!(en_locale, "en-US");
+        assert_eq!(system_locale, None);
+        unsafe {
+            env::remove_var("LANG");
+        }
+
+        unsafe {
+            env::set_var("LANG", "en_US.UTF-8");
+        }
+        let (en_locale, system_locale) = get_locales_to_embed();
+        assert_eq!(en_locale, "en-US");
+        assert_eq!(system_locale, None);
+        unsafe {
+            env::remove_var("LANG");
+        }
+    }
+
+    #[test]
+    fn get_locales_to_embed_with_lang() {
+        unsafe {
+            env::set_var("LANG", "fr_FR.UTF-8");
+        }
+        let (en_locale, system_locale) = get_locales_to_embed();
+        assert_eq!(en_locale, "en-US");
+        assert_eq!(system_locale, Some("fr-FR".to_string()));
+        unsafe {
+            env::remove_var("LANG");
+        }
+
+        unsafe {
+            env::set_var("LANG", "zh_CN.UTF-8");
+        }
+        let (en_locale, system_locale) = get_locales_to_embed();
+        assert_eq!(en_locale, "en-US");
+        assert_eq!(system_locale, Some("zh-CN".to_string()));
+        unsafe {
+            env::remove_var("LANG");
+        }
+
+        unsafe {
+            env::set_var("LANG", "de");
+        }
+        let (en_locale, system_locale) = get_locales_to_embed();
+        assert_eq!(en_locale, "en-US");
+        assert_eq!(system_locale, Some("de".to_string()));
+        unsafe {
+            env::remove_var("LANG");
+        }
+    }
+
+    #[test]
+    fn get_locales_to_embed_invalid_lang() {
+        // invalid locale format
+        unsafe {
+            env::set_var("LANG", "invalid");
+        }
+        let (en_locale, system_locale) = get_locales_to_embed();
+        assert_eq!(en_locale, "en-US");
+        assert_eq!(system_locale, Some("invalid".to_string()));
+        unsafe {
+            env::remove_var("LANG");
+        }
+
+        // numeric values
+        unsafe {
+            env::set_var("LANG", "123");
+        }
+        let (en_locale, system_locale) = get_locales_to_embed();
+        assert_eq!(en_locale, "en-US");
+        assert_eq!(system_locale, Some("123".to_string()));
+        unsafe {
+            env::remove_var("LANG");
+        }
+
+        // special characters
+        unsafe {
+            env::set_var("LANG", "@@@@");
+        }
+        let (en_locale, system_locale) = get_locales_to_embed();
+        assert_eq!(en_locale, "en-US");
+        assert_eq!(system_locale, Some("@@@@".to_string()));
+        unsafe {
+            env::remove_var("LANG");
+        }
+
+        // malformed locale (no country code but with encoding)
+        unsafe {
+            env::set_var("LANG", "en.UTF-8");
+        }
+        let (en_locale, system_locale) = get_locales_to_embed();
+        assert_eq!(en_locale, "en-US");
+        assert_eq!(system_locale, Some("en".to_string()));
+        unsafe {
+            env::remove_var("LANG");
+        }
+
+        // valid format but unusual locale
+        unsafe {
+            env::set_var("LANG", "XX_YY.UTF-8");
+        }
+        let (en_locale, system_locale) = get_locales_to_embed();
+        assert_eq!(en_locale, "en-US");
+        assert_eq!(system_locale, Some("XX-YY".to_string()));
+        unsafe {
+            env::remove_var("LANG");
+        }
+    }
+
+    #[test]
+    fn for_each_locale_basic() {
+        let locales = ("en-US".to_string(), Some("fr-FR".to_string()));
+        let mut collected = Vec::new();
+
+        for_each_locale(&locales, |locale| {
+            collected.push(locale.to_string());
+            Ok(())
+        })
+        .unwrap();
+
+        assert_eq!(collected, vec!["en-US", "fr-FR"]);
+    }
+
+    #[test]
+    fn for_each_locale_no_system_locale() {
+        let locales = ("en-US".to_string(), None);
+        let mut collected = Vec::new();
+
+        for_each_locale(&locales, |locale| {
+            collected.push(locale.to_string());
+            Ok(())
+        })
+        .unwrap();
+
+        assert_eq!(collected, vec!["en-US"]);
+    }
+
+    #[test]
+    fn for_each_locale_error_handling() {
+        let locales = ("en-US".to_string(), Some("fr-FR".to_string()));
+
+        let result = for_each_locale(&locales, |_locale| Err("test error".into()));
+
+        assert!(result.is_err());
+    }
 }

@@ -1,2 +1,2 @@
-cksum: invalid length: ‘1024’
-cksum: maximum digest length for ‘BLAKE2b’ is 512 bits
+cksum: invalid length: '1024'
+cksum: maximum digest length for 'BLAKE2b' is 512 bits

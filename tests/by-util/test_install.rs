@@ -1013,7 +1013,7 @@ fn test_install_creating_leading_dir_fails_on_long_name() {
         .arg(source)
         .arg(at.plus(target.as_str()))
         .fails()
-        .stderr_contains("failed to create");
+        .stderr_contains("cannot create directory");
 }
 
 #[test]

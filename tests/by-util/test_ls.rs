@@ -5762,6 +5762,15 @@ fn test_acl_display() {
         .succeeds()
         .stdout_matches(&re_with_acl)
         .stdout_matches(&re_without_acl);
+
+    // Verify that it also works if the current dir is different from the ucmd temporary dir
+    scene
+        .ucmd()
+        .current_dir("/")
+        .args(&["-la", &at.as_string()])
+        .succeeds()
+        .stdout_matches(&re_with_acl)
+        .stdout_matches(&re_without_acl);
 }
 
 // Make sure that "ls --color" correctly applies color "normal" to text and

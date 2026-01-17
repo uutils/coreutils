@@ -472,7 +472,7 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
                 // the default mode. Hence it is safe to use fs::create_dir_all
                 // and then only modify the target's dir mode.
                 if let Err(e) = fs::create_dir_all(path_to_create.as_path())
-                    .map_err_context(|| path_to_create.as_path().maybe_quote().to_string())
+                    .map_err_context(|| translate!("install-error-create-dir-failed", "path" => path_to_create.as_path().quote()))
                 {
                     show!(e);
                     continue;

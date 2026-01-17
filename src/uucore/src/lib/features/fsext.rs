@@ -243,7 +243,7 @@ impl MountInfo {
                 mount_option = String::from_utf8_lossy(raw[3]).to_string();
             }
             _ => return None,
-        };
+        }
 
         let dev_id = mount_dev_id(&mount_dir);
         let dummy = is_dummy_filesystem(&fs_type, &mount_option);

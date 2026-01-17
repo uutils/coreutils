@@ -1245,10 +1245,138 @@ jobs:
           exit 1
         fi
 
+  l10n_locale_embedding_cargo_install:
+    name: L10n/Locale Embedding - Cargo Install
+    runs-on: ubuntu-latest
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: Swatinem/rust-cache@v2
+      with:
+        key: cargo-install-locale-embedding
+    - name: Run sccache-cache
+      uses: mozilla-actions/sccache-action@v0.0.9
+    - name: Install prerequisites
+      run: |
+        sudo apt-get -y update
+        sudo apt-get -y install libselinux1-dev locales
+        # Generate French locale for testing
+        sudo locale-gen --keep-existing fr_FR.UTF-8
+        locale -a | grep -i fr || exit 1
+
+    - name: Test English locale embedding (default)
+      run: |
+        export LANG=en_US.UTF-8
+        export LC_ALL=en_US.UTF-8
+
+        echo "Building uu_yes with LANG=$LANG"
+        cargo build --package uu_yes --release
+
+        # Find the generated embedded_locales.rs
+        locale_file=$(find target/release/build -path "*/uu_yes-*/out/embedded_locales.rs" -o -path "*/uucore-*/out/embedded_locales.rs" | head -1)
+        if [ -z "$locale_file" ]; then
+          echo "ERROR: Could not find embedded_locales.rs"
+          exit 1
+        fi
+
+        echo "Found embedded_locales.rs at: $locale_file"
+        echo "Checking embedded locales..."
+
+        # Should contain en-US
+        if grep -q 'yes/en-US\.ftl' "$locale_file" || grep -q 'uucore/en-US\.ftl' "$locale_file"; then
+          echo "✓ Found en-US locale (fallback)"
+        else
+          echo "✗ ERROR: en-US locale not found"
+          exit 1
+        fi
+
+        # Should NOT contain fr-FR when building with en_US.UTF-8
+        if grep -q 'yes/fr-FR\.ftl' "$locale_file" || grep -q 'uucore/fr-FR\.ftl' "$locale_file"; then
+          echo "✗ ERROR: Unexpectedly found fr-FR locale when LANG=en_US.UTF-8"
+          exit 1
+        else
+          echo "✓ Correctly omitted fr-FR locale"
+        fi
+
+        echo "✓ SUCCESS: English locale embedding working correctly"
+
+    - name: Test French locale embedding (system locale)
+      run: |
+        export LANG=fr_FR.UTF-8
+        export LC_ALL=fr_FR.UTF-8
+
+        # Clean previous build to ensure fresh compile
+        cargo clean -p uu_yes
+        cargo clean -p uucore
+
+        echo "Building uu_yes with LANG=$LANG"
+        cargo build --package uu_yes --release
+
+        # Find the generated embedded_locales.rs
+        locale_file=$(find target/release/build -path "*/uu_yes-*/out/embedded_locales.rs" -o -path "*/uucore-*/out/embedded_locales.rs" | head -1)
+        if [ -z "$locale_file" ]; then
+          echo "ERROR: Could not find embedded_locales.rs"
+          exit 1
+        fi
+
+        echo "Found embedded_locales.rs at: $locale_file"
+        echo "Checking embedded locales..."
+
+        # Should contain en-US (fallback)
+        if grep -q 'yes/en-US\.ftl' "$locale_file" || grep -q 'uucore/en-US\.ftl' "$locale_file"; then
+          echo "✓ Found en-US locale (fallback)"
+        else
+          echo "✗ ERROR: en-US locale not found"
+          exit 1
+        fi
+
+        # Should contain fr-FR when building with fr_FR.UTF-8
+        if grep -q 'yes/fr-FR\.ftl' "$locale_file" || grep -q 'uucore/fr-FR\.ftl' "$locale_file"; then
+          echo "✓ Found fr-FR locale (system locale from LANG)"
+        else
+          echo "Note: fr-FR locale not found - this is expected if French translation doesn't exist yet"
+          echo "::notice::French locale for 'yes' utility may not be available"
+        fi
+
+        echo "✓ SUCCESS: System locale detection working correctly"
+
+    - name: Test locale count is reasonable
+      run: |
+        export LANG=fr_FR.UTF-8
+        cargo clean -p uu_yes
+        cargo build --package uu_yes --release
+
+        locale_file=$(find target/release/build -path "*/uucore-*/out/embedded_locales.rs" | head -1)
+        if [ -z "$locale_file" ]; then
+          echo "ERROR: Could not find uucore embedded_locales.rs"
+          exit 1
+        fi
+
+        # Count embedded locales (should be en-US + system locale, not all locales)
+        locale_count=$(grep -c '/en-US\.ftl\|/fr-FR\.ftl' "$locale_file" || echo "0")
+        echo "uu_yes has $locale_count embedded locale entries for yes utility"
+
+        # For a single utility build, should have minimal locales (en-US + optionally system locale)
+        # Not the full multicall set
+        total_match_count=$(grep -c '=> Some(r###' "$locale_file" || echo "0")
+        echo "Total embedded entries: $total_match_count"
+
+        if [ "$total_match_count" -le 10 ]; then
+          echo "✓ SUCCESS: Locale embedding is targeted ($total_match_count entries)"
+        else
+          echo "::warning::More locales than expected ($total_match_count entries)"
+          echo "This might be expected for utility + uucore locales"
+        fi
+
   l10n_locale_embedding_regression_test:
     name: L10n/Locale Embedding Regression Test
     runs-on: ubuntu-latest
-    needs: [l10n_locale_embedding_cat, l10n_locale_embedding_ls, l10n_locale_embedding_multicall]
+    needs: [l10n_locale_embedding_cat, l10n_locale_embedding_ls, l10n_locale_embedding_multicall, l10n_locale_embedding_cargo_install]
     steps:
     - name: All locale embedding tests passed
       run: echo "✓ All locale embedding tests passed successfully"

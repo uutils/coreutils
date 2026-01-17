@@ -35,6 +35,7 @@ mod options {
         target_os = "android",
         target_os = "freebsd",
         target_os = "netbsd",
+        target_os = "openbsd",
         target_os = "dragonfly"
     )
 ))]
@@ -82,6 +83,7 @@ enum ProgramOptionsError {
     target_os = "android",
     target_os = "freebsd",
     target_os = "netbsd",
+    target_os = "openbsd",
     target_os = "dragonfly"
 ))]
 fn preload_strings() -> UResult<(&'static str, &'static str)> {
@@ -98,6 +100,7 @@ fn preload_strings() -> UResult<(&'static str, &'static str)> {
     target_os = "android",
     target_os = "freebsd",
     target_os = "netbsd",
+    target_os = "openbsd",
     target_os = "dragonfly",
     target_vendor = "apple"
 )))]

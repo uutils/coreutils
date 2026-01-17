@@ -23,6 +23,15 @@ uucore = { workspace = true, features = ["checksum", "encoding", "sum"] }
 hex = { workspace = true }
 fluent = { workspace = true }
 
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
 [[bin]]
 name = "cksum"
 path = "src/main.rs"
+
+[[bench]]
+name = "cksum_bench"
+harness = false

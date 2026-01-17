@@ -122,7 +122,7 @@ jobs:
     - name: Install/setup prerequisites
       shell: bash
       run: |
-        sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
+        sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu libselinux1-dev
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -269,6 +269,8 @@ jobs:
       with:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@stable
+      with:
+        target: aarch64-unknown-linux-gnu
     - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
     - name: Install/setup prerequisites
@@ -287,7 +289,10 @@ jobs:
         if [[ -d target ]]; then
           mv -T target target.cache
         fi
-        # Actually do the build
+        # Check that we don't cross-build uudoc
+        # also do not try to generate manpages for part of hashsum
+        make install-manpages PREFIX=/tmp/usr UTILS=true RUSTC_ARCH="--target aarch64-unknown-linux-gnu"
+        # build (host)
         make build
         echo "Check that target directory will be ignored by backup tools"
         test -f target/CACHEDIR.TAG
@@ -295,21 +300,21 @@ jobs:
         mv -t target/ target.cache/release 2>/dev/null || true
     - name: "`make nextest`"
       shell: bash
-      run: make nextest CARGOFLAGS="--profile ci --hide-progress-bar"
+      run: make nextest PROFILE=ci CARGOFLAGS="--hide-progress-bar"
       env:
         RUST_BACKTRACE: "1"
-    - name: "`make install COMPLETIONS=n MANPAGES=n`"
+    - name: "`make install COMPLETIONS=n MANPAGES=n LOCALES=n`"
       shell: bash
       run: |
         set -x
-        DESTDIR=/tmp/ make PROFILE=release COMPLETIONS=n MANPAGES=n install
+        DESTDIR=/tmp/ make PROFILE=release COMPLETIONS=n MANPAGES=n LOCALES=n install
         # Check that the utils are present
         test -f /tmp/usr/local/bin/tty
         # Check that the manpage is not present
         ! test -f /tmp/usr/local/share/man/man1/whoami.1
         # Check that the completion is not present
         ! test -f /tmp/usr/local/share/zsh/site-functions/_install
-        ! test -f /tmp/usr/local/share/bash-completion/completions/head
+        ! test -f /tmp/usr/local/share/bash-completion/completions/head.bash
         ! test -f /tmp/usr/local/share/fish/vendor_completions.d/cat.fish
       env:
         RUST_BACKTRACE: "1"
@@ -324,7 +329,7 @@ jobs:
         test -f /tmp/usr/local/share/man/man1/md5sum.1
         # Check that the completion is present
         test -f /tmp/usr/local/share/zsh/site-functions/_b2sum
-        test -f /tmp/usr/local/share/bash-completion/completions/head
+        test -f /tmp/usr/local/share/bash-completion/completions/head.bash
         test -f /tmp/usr/local/share/fish/vendor_completions.d/cat.fish
       env:
         RUST_BACKTRACE: "1"
@@ -339,7 +344,7 @@ jobs:
         ! test -f /tmp/usr/local/share/man/man1/whoami.1
         # Check that the completion is not present
         ! test -f /tmp/usr/local/share/zsh/site-functions/_install
-        ! test -f /tmp/usr/local/share/bash-completion/completions/head
+        ! test -f /tmp/usr/local/share/bash-completion/completions/head.bash
         ! test -f /tmp/usr/local/share/fish/vendor_completions.d/cat.fish
     - name: "`make install MULTICALL=n`"
       shell: bash
@@ -350,20 +355,12 @@ jobs:
         test -f /tmp/usr/local/bin/hashsum
         # Check that hashsum symlinks are present
         test -h /tmp/usr/local/bin/b2sum
-        test -h /tmp/usr/local/bin/b3sum
         test -h /tmp/usr/local/bin/md5sum
         test -h /tmp/usr/local/bin/sha1sum
         test -h /tmp/usr/local/bin/sha224sum
         test -h /tmp/usr/local/bin/sha256sum
-        test -h /tmp/usr/local/bin/sha3-224sum
-        test -h /tmp/usr/local/bin/sha3-256sum
-        test -h /tmp/usr/local/bin/sha3-384sum
-        test -h /tmp/usr/local/bin/sha3-512sum
         test -h /tmp/usr/local/bin/sha384sum
-        test -h /tmp/usr/local/bin/sha3sum
         test -h /tmp/usr/local/bin/sha512sum
-        test -h /tmp/usr/local/bin/shake128sum
-        test -h /tmp/usr/local/bin/shake256sum
     - name: "`make install MULTICALL=y LN=ln -svf`"
       shell: bash
       run: |
@@ -785,7 +782,7 @@ jobs:
     - uses: taiki-e/install-action@v2
       if: steps.vars.outputs.CARGO_CMD == 'redoxer'
       with:
-        tool: redoxer@0.2.37
+        tool: redoxer@0.2.56
     - name: Initialize toolchain-dependent workflow variables
       id: dep_vars
       shell: bash
@@ -1263,9 +1260,7 @@ jobs:
         path: ~/.cache/lima
         key: lima-${{ steps.lima-actions-setup.outputs.version }}
     - name: Start Fedora VM with SELinux
-      run: limactl start --plain --name=default --cpus=4 --disk=30 --memory=4 --network=lima:user-v2 template://fedora
-    - name: Setup SSH
-      uses: lima-vm/lima-actions/ssh@v1
+      run: limactl start --plain --name=default --cpus=4 --disk=30 --memory=4 --network=lima:user-v2 template:fedora
     - run: rsync -v -a -e ssh . lima-default:~/work/
     - name: Setup Rust and other build deps in VM
       run: |

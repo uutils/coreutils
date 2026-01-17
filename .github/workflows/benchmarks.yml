@@ -24,6 +24,7 @@ jobs:
       matrix:
         benchmark-target:
           - { package: uu_base64 }
+          - { package: uu_cksum }
           - { package: uu_cp }
           - { package: uu_cut }
           - { package: uu_du }
@@ -42,6 +43,7 @@ jobs:
           - { package: uu_unexpand }
           - { package: uu_uniq }
           - { package: uu_wc }
+          - { package: uu_factor }
     steps:
       - uses: actions/checkout@v5
         with:

@@ -69,7 +69,7 @@ static TEST_NONEXISTENT_FILE: &str = "nonexistent_file.txt";
 use uutests::util::compare_xattrs;
 
 /// Assert that mode, ownership, and permissions of two metadata objects match.
-#[cfg(all(not(windows), not(target_os = "freebsd")))]
+#[cfg(all(not(windows), not(target_os = "freebsd"), not(target_os = "openbsd")))]
 macro_rules! assert_metadata_eq {
     ($m1:expr, $m2:expr) => {{
         assert_eq!($m1.mode(), $m2.mode(), "mode is different");
@@ -1553,7 +1553,7 @@ fn test_cp_parents_with_permissions_copy_file() {
         .arg(dir)
         .succeeds();
 
-    #[cfg(all(unix, not(target_os = "freebsd")))]
+    #[cfg(all(unix, not(target_os = "freebsd"), not(target_os = "openbsd")))]
     {
         let p1_metadata = at.metadata("p1");
         let p2_metadata = at.metadata("p1/p2");
@@ -1596,7 +1596,7 @@ fn test_cp_parents_with_permissions_copy_dir() {
         .arg(dir1)
         .succeeds();
 
-    #[cfg(all(unix, not(target_os = "freebsd")))]
+    #[cfg(all(unix, not(target_os = "freebsd"), not(target_os = "openbsd")))]
     {
         let p1_metadata = at.metadata("p1");
         let p2_metadata = at.metadata("p1/p2");
@@ -1641,7 +1641,7 @@ fn test_cp_preserve_no_args() {
         .arg("--preserve")
         .succeeds();
 
-    #[cfg(all(unix, not(target_os = "freebsd")))]
+    #[cfg(all(unix, not(target_os = "freebsd"), not(target_os = "openbsd")))]
     {
         // Assert that the mode, ownership, and timestamps are preserved
         // NOTICE: the ownership is not modified on the src file, because that requires root permissions
@@ -1669,7 +1669,7 @@ fn test_cp_preserve_no_args_before_opts() {
         .arg(dst_file)
         .succeeds();
 
-    #[cfg(all(unix, not(target_os = "freebsd")))]
+    #[cfg(all(unix, not(target_os = "freebsd"), not(target_os = "openbsd")))]
     {
         // Assert that the mode, ownership, and timestamps are preserved
         // NOTICE: the ownership is not modified on the src file, because that requires root permissions
@@ -1695,7 +1695,7 @@ fn test_cp_preserve_all() {
         // Copy
         ucmd.arg(src_file).arg(dst_file).arg(argument).succeeds();
 
-        #[cfg(all(unix, not(target_os = "freebsd")))]
+        #[cfg(all(unix, not(target_os = "freebsd"), not(target_os = "openbsd")))]
         {
             // Assert that the mode, ownership, and timestamps are preserved
             // NOTICE: the ownership is not modified on the src file, because that requires root permissions
@@ -3028,7 +3028,7 @@ fn test_copy_through_dangling_symlink_no_dereference_permissions() {
     assert!(at.symlink_exists("d2"), "symlink wasn't created");
 
     // `-p` means `--preserve=mode,ownership,timestamps`
-    #[cfg(all(unix, not(target_os = "freebsd")))]
+    #[cfg(all(unix, not(target_os = "freebsd"), not(target_os = "openbsd")))]
     {
         let metadata1 = at.symlink_metadata("dangle");
         let metadata2 = at.symlink_metadata("d2");
@@ -3749,7 +3749,7 @@ fn test_preserve_hardlink_attributes_in_directory() {
     //
     // A hard link should have the same inode as the target file.
     at.file_exists("dest/src/link");
-    #[cfg(all(unix, not(target_os = "freebsd")))]
+    #[cfg(all(unix, not(target_os = "freebsd"), not(target_os = "openbsd")))]
     assert_eq!(
         at.metadata("dest/src/f").ino(),
         at.metadata("dest/src/link").ino()
@@ -3765,7 +3765,7 @@ fn test_hard_link_file() {
     ucmd.args(&["-f", "--link", "src", "dest"])
         .succeeds()
         .no_output();
-    #[cfg(all(unix, not(target_os = "freebsd")))]
+    #[cfg(all(unix, not(target_os = "freebsd"), not(target_os = "openbsd")))]
     assert_eq!(at.metadata("src").ino(), at.metadata("dest").ino());
 }
 
@@ -4069,7 +4069,7 @@ fn test_cp_dest_no_permissions() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "freebsd")))]
+#[cfg(all(unix, not(target_os = "freebsd"), not(target_os = "openbsd")))]
 fn test_cp_attributes_only() {
     let (at, mut ucmd) = at_and_ucmd!();
     let a = "file_a";
@@ -6537,7 +6537,7 @@ fn test_cp_preserve_selinux() {
             selinux_perm_dest
         );
 
-        #[cfg(all(unix, not(target_os = "freebsd")))]
+        #[cfg(all(unix, not(target_os = "freebsd"), not(target_os = "openbsd")))]
         {
             // Assert that the mode, ownership, and timestamps are preserved
             // NOTICE: the ownership is not modified on the src file, because that requires root permissions
@@ -6949,7 +6949,7 @@ fn test_cp_current_directory_verbose() {
 // Test copying current directory (.) with preserve attributes.
 // This ensures attributes are preserved when copying the current directory.
 #[test]
-#[cfg(all(not(windows), not(target_os = "freebsd")))]
+#[cfg(all(not(windows), not(target_os = "freebsd"), not(target_os = "openbsd")))]
 fn test_cp_current_directory_preserve_attributes() {
     use filetime::FileTime;
     use std::os::unix::prelude::MetadataExt;
