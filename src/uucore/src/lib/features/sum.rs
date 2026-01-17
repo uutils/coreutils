@@ -284,8 +284,8 @@ impl Digest for Bsd {
     }
 
     fn result(&mut self) -> DigestOutput {
-        let mut _out = [0; 2];
-        self.hash_finalize(&mut _out);
+        let mut out = [0; 2];
+        self.hash_finalize(&mut out);
         DigestOutput::U16(self.state)
     }
 
@@ -319,8 +319,8 @@ impl Digest for SysV {
     }
 
     fn result(&mut self) -> DigestOutput {
-        let mut _out = [0; 2];
-        self.hash_finalize(&mut _out);
+        let mut out = [0; 2];
+        self.hash_finalize(&mut out);
         DigestOutput::U16((self.state & (u16::MAX as u32)) as u16)
     }
 

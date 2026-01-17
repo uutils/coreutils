@@ -21,8 +21,7 @@ path = "src/touch.rs"
 [dependencies]
 filetime = { workspace = true }
 clap = { workspace = true }
-chrono = { workspace = true }
-jiff = "0.2.15"
+jiff = { workspace = true }
 parse_datetime = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = ["libc", "parser"] }

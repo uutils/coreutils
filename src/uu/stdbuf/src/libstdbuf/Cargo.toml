@@ -10,6 +10,9 @@ keywords.workspace = true
 categories.workspace = true
 edition.workspace = true
 
+[lints]
+workspace = true
+
 [lib]
 name = "stdbuf"
 path = "src/libstdbuf.rs"

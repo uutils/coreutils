@@ -4,7 +4,7 @@ name: CICD
 # spell-checker:ignore (env/flags) Awarnings Ccodegen Coverflow Cpanic Dwarnings RUSTDOCFLAGS RUSTFLAGS Zpanic CARGOFLAGS
 # spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain fuzzers dedupe devel profdata
 # spell-checker:ignore (people) Peltoche rivy dtolnay Anson dawidd
-# spell-checker:ignore (shell/tools) binutils choco clippy dmake esac fakeroot fdesc fdescfs gmake grcov halium lcov libclang libfuse libssl limactl mkdir nextest nocross pacman popd printf pushd redoxer rsync rustc rustfmt rustup shopt sccache utmpdump xargs
+# spell-checker:ignore (shell/tools) binutils choco clippy dmake esac fakeroot fdesc fdescfs gmake grcov halium lcov libclang libfuse libssl limactl mkdir nextest nocross pacman popd printf pushd redoxer rsync rustc rustfmt rustup shopt sccache utmpdump xargs zstd
 # spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos getenforce gnueabihf issuecomment maint manpages msys multisize noconfirm nofeatures nullglob onexitbegin onexitend pell runtest Swatinem tempfile testsuite toybox uutils libsystemd codspeed
 
 env:
@@ -228,6 +228,16 @@ jobs:
       env:
         RUSTFLAGS: "-Awarnings"
         RUST_BACKTRACE: "1"
+    - name: Upload test results to Codecov
+      if: ${{ !cancelled() }}
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        report_type: test_results
+        files: target/nextest/ci/junit.xml
+        disable_search: true
+        flags: msrv,${{ matrix.job.os }}
+        fail_ci_if_error: false
 
   deps:
     name: Dependencies
@@ -287,8 +297,7 @@ jobs:
           mv -T target target.cache
         fi
         # Check that we don't cross-build uudoc
-        # also do not try to generate manpages for part of hashsum
-        make install-manpages PREFIX=/tmp/usr UTILS=true RUSTC_ARCH="--target aarch64-unknown-linux-gnu"
+        env CARGO_BUILD_TARGET=aarch64-unknown-linux-gnu make install-manpages PREFIX=/tmp/usr UTILS=true
         # build (host)
         make build
         echo "Check that target directory will be ignored by backup tools"
@@ -300,6 +309,16 @@ jobs:
       run: make nextest PROFILE=ci CARGOFLAGS="--hide-progress-bar"
       env:
         RUST_BACKTRACE: "1"
+    - name: Upload test results to Codecov
+      if: ${{ !cancelled() }}
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        report_type: test_results
+        files: target/nextest/ci/junit.xml
+        disable_search: true
+        flags: makefile,${{ matrix.job.os }}
+        fail_ci_if_error: false
     - name: "`make install PROG_PREFIX=uu- PROFILE=release-fast COMPLETIONS=n MANPAGES=n LOCALES=n`"
       shell: bash
       run: |
@@ -309,7 +328,7 @@ jobs:
         ./target/release-fast/true
         # Check that the progs have prefix
         test -f /tmp/usr/local/bin/uu-tty
-        test -f /tmp/usr/local/libexec/uu-coreutils/libstdbuf.*   
+        test -f /tmp/usr/local/libexec/uu-coreutils/libstdbuf.*
         # Check that the manpage is not present
         ! test -f /tmp/usr/local/share/man/man1/uu-whoami.1
         # Check that the completion is not present
@@ -351,25 +370,19 @@ jobs:
       run: |
         set -x
         DESTDIR=/tmp/ make PROFILE=release MULTICALL=n install
-        # Check that the utils are present
-        test -f /tmp/usr/local/bin/hashsum
-        # Check that hashsum symlinks are present
-        test -h /tmp/usr/local/bin/b2sum
-        test -h /tmp/usr/local/bin/md5sum
-        test -h /tmp/usr/local/bin/sha1sum
-        test -h /tmp/usr/local/bin/sha224sum
-        test -h /tmp/usr/local/bin/sha256sum
-        test -h /tmp/usr/local/bin/sha384sum
-        test -h /tmp/usr/local/bin/sha512sum
+        # Check that *sum are present
+        for s in {md5,b2,sha1,sha224,sha256,sha384,sha512}sum
+          do test -e /tmp/usr/local/bin/${s}
+        done
     - name: "`make install MULTICALL=y LN=ln -svf`"
       shell: bash
       run: |
         set -x
         DESTDIR=/tmp/ make PROFILE=release MULTICALL=y LN="ln -svf" install
-        # Check that relative symlinks of hashsum are present
-        [ $(readlink /tmp/usr/local/bin/b2sum) = coreutils ]
-        [ $(readlink /tmp/usr/local/bin/md5sum) = coreutils ]
-        [ $(readlink /tmp/usr/local/bin/sha512sum) = coreutils ]
+        # Check that symlinks of *sum are present
+        for s in {md5,b2,sha1,sha224,sha256,sha384,sha512}sum
+          do test $(readlink /tmp/usr/local/bin/${s}) = coreutils
+        done
     - name: "`make UTILS=XXX`"
       shell: bash
       run: |
@@ -410,6 +423,16 @@ jobs:
       run: cargo nextest run --hide-progress-bar --profile ci --features ${{ matrix.job.features }}
       env:
         RUST_BACKTRACE: "1"
+    - name: Upload test results to Codecov
+      if: ${{ !cancelled() }}
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        report_type: test_results
+        files: target/nextest/ci/junit.xml
+        disable_search: true
+        flags: stable,${{ matrix.job.os }}
+        fail_ci_if_error: false
 
   build_rust_nightly:
     name: Build/nightly
@@ -439,6 +462,16 @@ jobs:
       run: cargo nextest run --hide-progress-bar --profile ci --features ${{ matrix.job.features }}
       env:
         RUST_BACKTRACE: "1"
+    - name: Upload test results to Codecov
+      if: ${{ !cancelled() }}
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        report_type: test_results
+        files: target/nextest/ci/junit.xml
+        disable_search: true
+        flags: nightly,${{ matrix.job.os }}
+        fail_ci_if_error: false
 
   compute_size:
     name: Binary sizes
@@ -576,6 +609,7 @@ jobs:
           - { os: ubuntu-latest  , target: arm-unknown-linux-gnueabihf , features: feat_os_unix_gnueabihf , use-cross: use-cross , skip-tests: true }
           - { os: ubuntu-24.04-arm  , target: aarch64-unknown-linux-gnu   , features: feat_os_unix_gnueabihf }
           - { os: ubuntu-latest  , target: aarch64-unknown-linux-musl  , features: feat_os_unix_musl , use-cross: use-cross , skip-tests: true }
+          - { os: ubuntu-latest  , target: riscv64gc-unknown-linux-musl  , features: feat_os_unix_musl , use-cross: use-cross , skip-tests: true }
           # - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: feat_selinux           , use-cross: use-cross }
           - { os: ubuntu-latest  , target: i686-unknown-linux-gnu      , features: "feat_os_unix,test_risky_names", use-cross: use-cross }
           - { os: ubuntu-latest  , target: i686-unknown-linux-musl     , features: feat_os_unix_musl , use-cross: use-cross }
@@ -596,6 +630,8 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
+    - name: Avoid no space left on device
+      run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android &
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ env.RUST_MIN_SRV }}
@@ -636,6 +672,7 @@ jobs:
         unset TARGET_ARCH
         case '${{ matrix.job.target }}' in
           aarch64-*) TARGET_ARCH=arm64 ;;
+          riscv64gc-*) TARGET_ARCH=riscv64 ;;
           arm-*-*hf) TARGET_ARCH=armhf ;;
           i686-*) TARGET_ARCH=i686 ;;
           x86_64-*) TARGET_ARCH=x86_64 ;;
@@ -650,7 +687,7 @@ jobs:
         outputs TARGET_ARCH TARGET_OS
         # package name
         PKG_suffix=".tar.gz" ; case '${{ matrix.job.target }}' in *-pc-windows-*) PKG_suffix=".zip" ;; esac;
-        PKG_BASENAME=${PROJECT_NAME}-${REF_TAG:-$REF_SHAS}-${{ matrix.job.target }}
+        PKG_BASENAME=${PROJECT_NAME}-${{ matrix.job.target }}
         PKG_NAME=${PKG_BASENAME}${PKG_suffix}
         outputs PKG_suffix PKG_BASENAME PKG_NAME
         # deployable tag? (ie, leading "vM" or "M"; M == version number)
@@ -700,6 +737,7 @@ jobs:
         STRIP="strip"
         case ${{ matrix.job.target }} in
           aarch64-*-linux-*) STRIP="aarch64-linux-gnu-strip" ;;
+          riscv64gc-*-linux-*) STRIP="riscv64-linux-gnu-strip" ;;
           arm-*-linux-gnueabihf) STRIP="arm-linux-gnueabihf-strip" ;;
           *-pc-windows-msvc) STRIP="" ;;
         esac;
@@ -725,6 +763,10 @@ jobs:
           aarch64-unknown-linux-*)
             sudo apt-get -y update
             sudo apt-get -y install gcc-aarch64-linux-gnu
+          ;;
+          riscv64gc-unknown-linux-*)
+            sudo apt-get -y update
+            sudo apt-get -y install gcc-riscv64-linux-gnu
           ;;
           *-redox*)
             sudo apt-get -y update
@@ -829,10 +871,14 @@ jobs:
       shell: bash
       run: |
         ## Package artifact(s)
-        # binary
+        # binaries
         cp 'target/${{ matrix.job.target }}/release/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}' '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/'
+        cp 'target/${{ matrix.job.target }}/release/uudoc${{ steps.vars.outputs.EXE_suffix }}' '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/' || :
         # `strip` binary (if needed)
-        if [ -n "${{ steps.vars.outputs.STRIP }}" ]; then "${{ steps.vars.outputs.STRIP }}" '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}' ; fi
+        if [ -n "${{ steps.vars.outputs.STRIP }}" ]; then
+          "${{ steps.vars.outputs.STRIP }}" '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}'
+          "${{ steps.vars.outputs.STRIP }}" '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/uudoc' || :
+        fi
         # README and LICENSE
         # * spell-checker:ignore EADME ICENSE
         (shopt -s nullglob; for f in [R]"EADME"{,.*}; do cp $f '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/' ; done)
@@ -844,6 +890,19 @@ jobs:
           *) tar czf '${{ steps.vars.outputs.PKG_NAME }}' '${{ steps.vars.outputs.PKG_BASENAME }}'/* ;;
         esac
         popd >/dev/null
+    - name: Package manpages and completions
+      if: matrix.job.target == 'x86_64-unknown-linux-gnu' && matrix.job.features == 'feat_os_unix,uudoc'
+      run: |
+        mkdir -p share/{man/man1,bash-completion/completions,fish/vendor_completions.d,zsh/site-functions,elvish/lib}
+        _uudoc=target/${{ matrix.job.target }}/release/uudoc
+        for bin in $('target/${{ matrix.job.target }}/release/coreutils' --list);do
+          ${_uudoc} manpage ${bin} > share/man/man1/${bin}.1
+          ${_uudoc} completion ${bin} bash > share/bash-completion/completions/${bin}.bash
+          ${_uudoc} completion ${bin} fish > share/fish/vendor_completions.d/${bin}.fish
+          ${_uudoc} completion ${bin} zsh > share/zsh/site-functions/_${bin}
+          ${_uudoc} completion ${bin} elvish > share/elvish/lib/${bin}.elv
+        done
+        tar --zstd -cf docs.tar.zst share
     - name: Publish
       uses: softprops/action-gh-release@v2
       if: steps.vars.outputs.DEPLOY && matrix.job.skip-publish != true
@@ -851,6 +910,19 @@ jobs:
         draft: true
         files: |
           ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_NAME }}
+          docs.tar.zst
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Publish latest commit
+      uses: softprops/action-gh-release@v2
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.job.skip-publish != true
+      with:
+        tag_name: latest-commit
+        draft: false
+        prerelease: true
+        files: |
+          ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_NAME }}
+          docs.tar.zst
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -1147,6 +1219,16 @@ jobs:
         flags: ${{ steps.vars.outputs.CODECOV_FLAGS }}
         name: codecov-umbrella
         fail_ci_if_error: false
+    - name: Upload test results to Codecov
+      if: ${{ !cancelled() }}
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        report_type: test_results
+        files: target/nextest/coverage/junit.xml
+        disable_search: true
+        flags: coverage,${{ matrix.job.os }}
+        fail_ci_if_error: false
 
   test_separately:
     name: Separate Builds
@@ -1189,12 +1271,13 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
+    - name: Avoid no space left on device
+      run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android &
     - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
     - name: build and test all features individually
       shell: bash
       run: |
-        command -v sudo && sudo rm -rf /usr/share/dotnet # avoid no space left
         CARGO_FEATURES_OPTION='--features=${{ matrix.job.features }}' ;
         for f in $(util/show-utils.sh ${CARGO_FEATURES_OPTION})
         do
