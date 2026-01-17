@@ -63,19 +63,22 @@ fn numfmt_from_si(bencher: Bencher, count: usize) {
 /// Benchmark large numbers with SI formatting
 #[divan::bench(args = [10_000])]
 fn numfmt_large_numbers_si(bencher: Bencher, count: usize) {
-    // Generate numbers that all produce uniform SI output lengths (all in 1-9M range)
-    // This avoids variance from variable output string lengths
-    let numbers: Vec<String> = (1..=count)
-        .map(|n| ((n % 9) + 1) * 1_000_000)
-        .map(|n| n.to_string())
-        .collect();
-    let mut args = vec!["--to=si"];
-    let number_refs: Vec<&str> = numbers.iter().map(|s| s.as_str()).collect();
-    args.extend(number_refs);
-
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &args));
-    });
+    bencher
+        .with_inputs(|| {
+            // Generate numbers that all produce uniform SI output lengths (all in 1-9M range)
+            // This avoids variance from variable output string lengths
+            let numbers: Vec<String> = (1..=count)
+                .map(|n| ((n % 9) + 1) * 1_000_000)
+                .map(|n| n.to_string())
+                .collect();
+            let mut args: Vec<String> = vec!["--to=si".to_string()];
+            args.extend(numbers);
+            args
+        })
+        .bench_values(|args| {
+            let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+            black_box(run_util_function(uumain, &arg_refs));
+        });
 }
 
 /// Benchmark different padding widths
