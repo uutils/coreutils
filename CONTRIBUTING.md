@@ -250,8 +250,8 @@ gitignore: add temporary files
   - It's up to you whether you want to use `git merge main` or
     `git rebase main`.
   - Feel free to ask for help with merge conflicts.
-- You do not need to ping maintainers to request a review, but it's fine to do
-  so if you don't get a response within a few days.
+- You do not need to ping maintainers to request a review immediately after submission. If you do not get a response to your patch within a few days, it is fine to request a review.
+  - If after a week your patch has still not been reviewed, we recommend that you ping the maintainers on our Discord channel in `#coreutils-chat`.
 
 ## Platforms
 

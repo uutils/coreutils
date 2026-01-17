@@ -4,7 +4,7 @@ name: CICD
 # spell-checker:ignore (env/flags) Awarnings Ccodegen Coverflow Cpanic Dwarnings RUSTDOCFLAGS RUSTFLAGS Zpanic CARGOFLAGS
 # spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain fuzzers dedupe devel profdata
 # spell-checker:ignore (people) Peltoche rivy dtolnay Anson dawidd
-# spell-checker:ignore (shell/tools) binutils choco clippy dmake esac fakeroot fdesc fdescfs gmake grcov halium lcov libclang libfuse libssl limactl mkdir nextest nocross pacman popd printf pushd redoxer rsync rustc rustfmt rustup shopt sccache utmpdump xargs
+# spell-checker:ignore (shell/tools) binutils choco clippy dmake esac fakeroot fdesc fdescfs gmake grcov halium lcov libclang libfuse libssl limactl mkdir nextest nocross pacman popd printf pushd redoxer rsync rustc rustfmt rustup shopt sccache utmpdump xargs zstd
 # spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos getenforce gnueabihf issuecomment maint manpages msys multisize noconfirm nofeatures nullglob onexitbegin onexitend pell runtest Swatinem tempfile testsuite toybox uutils libsystemd codspeed
 
 env:
@@ -297,7 +297,6 @@ jobs:
           mv -T target target.cache
         fi
         # Check that we don't cross-build uudoc
-        # also do not try to generate manpages for part of hashsum
         env CARGO_BUILD_TARGET=aarch64-unknown-linux-gnu make install-manpages PREFIX=/tmp/usr UTILS=true
         # build (host)
         make build
@@ -371,25 +370,19 @@ jobs:
       run: |
         set -x
         DESTDIR=/tmp/ make PROFILE=release MULTICALL=n install
-        # Check that the utils are present
-        test -f /tmp/usr/local/bin/hashsum
-        # Check that hashsum symlinks are present
-        test -h /tmp/usr/local/bin/b2sum
-        test -h /tmp/usr/local/bin/md5sum
-        test -h /tmp/usr/local/bin/sha1sum
-        test -h /tmp/usr/local/bin/sha224sum
-        test -h /tmp/usr/local/bin/sha256sum
-        test -h /tmp/usr/local/bin/sha384sum
-        test -h /tmp/usr/local/bin/sha512sum
+        # Check that *sum are present
+        for s in {md5,b2,sha1,sha224,sha256,sha384,sha512}sum
+          do test -e /tmp/usr/local/bin/${s}
+        done
     - name: "`make install MULTICALL=y LN=ln -svf`"
       shell: bash
       run: |
         set -x
         DESTDIR=/tmp/ make PROFILE=release MULTICALL=y LN="ln -svf" install
-        # Check that relative symlinks of hashsum are present
-        [ $(readlink /tmp/usr/local/bin/b2sum) = coreutils ]
-        [ $(readlink /tmp/usr/local/bin/md5sum) = coreutils ]
-        [ $(readlink /tmp/usr/local/bin/sha512sum) = coreutils ]
+        # Check that symlinks of *sum are present
+        for s in {md5,b2,sha1,sha224,sha256,sha384,sha512}sum
+          do test $(readlink /tmp/usr/local/bin/${s}) = coreutils
+        done
     - name: "`make UTILS=XXX`"
       shell: bash
       run: |
@@ -637,6 +630,8 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
+    - name: Avoid no space left on device
+      run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android &
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ env.RUST_MIN_SRV }}
@@ -692,7 +687,7 @@ jobs:
         outputs TARGET_ARCH TARGET_OS
         # package name
         PKG_suffix=".tar.gz" ; case '${{ matrix.job.target }}' in *-pc-windows-*) PKG_suffix=".zip" ;; esac;
-        PKG_BASENAME=${PROJECT_NAME}-${REF_TAG:-$REF_SHAS}-${{ matrix.job.target }}
+        PKG_BASENAME=${PROJECT_NAME}-${{ matrix.job.target }}
         PKG_NAME=${PKG_BASENAME}${PKG_suffix}
         outputs PKG_suffix PKG_BASENAME PKG_NAME
         # deployable tag? (ie, leading "vM" or "M"; M == version number)
@@ -861,8 +856,6 @@ jobs:
       if: matrix.job.skip-tests != true
       shell: bash
       run: |
-        command -v sudo && sudo rm -rf /usr/local/lib/android /usr/share/dotnet # avoid no space left
-        df -h ||:
         ## Test individual utilities
         ${{ steps.vars.outputs.CARGO_CMD }} ${{ steps.vars.outputs.CARGO_CMD_OPTIONS }} test --target=${{ matrix.job.target }} \
         ${{ matrix.job.cargo-options }} ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
@@ -897,6 +890,19 @@ jobs:
           *) tar czf '${{ steps.vars.outputs.PKG_NAME }}' '${{ steps.vars.outputs.PKG_BASENAME }}'/* ;;
         esac
         popd >/dev/null
+    - name: Package manpages and completions
+      if: matrix.job.target == 'x86_64-unknown-linux-gnu' && matrix.job.features == 'feat_os_unix,uudoc'
+      run: |
+        mkdir -p share/{man/man1,bash-completion/completions,fish/vendor_completions.d,zsh/site-functions,elvish/lib}
+        _uudoc=target/${{ matrix.job.target }}/release/uudoc
+        for bin in $('target/${{ matrix.job.target }}/release/coreutils' --list);do
+          ${_uudoc} manpage ${bin} > share/man/man1/${bin}.1
+          ${_uudoc} completion ${bin} bash > share/bash-completion/completions/${bin}.bash
+          ${_uudoc} completion ${bin} fish > share/fish/vendor_completions.d/${bin}.fish
+          ${_uudoc} completion ${bin} zsh > share/zsh/site-functions/_${bin}
+          ${_uudoc} completion ${bin} elvish > share/elvish/lib/${bin}.elv
+        done
+        tar --zstd -cf docs.tar.zst share
     - name: Publish
       uses: softprops/action-gh-release@v2
       if: steps.vars.outputs.DEPLOY && matrix.job.skip-publish != true
@@ -904,18 +910,19 @@ jobs:
         draft: true
         files: |
           ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_NAME }}
+          docs.tar.zst
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     - name: Publish latest commit
       uses: softprops/action-gh-release@v2
-      if: steps.vars.outputs.DEPLOY && matrix.job.skip-publish != true
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.job.skip-publish != true
       with:
         tag_name: latest-commit
-        force_update: true
         draft: false
         prerelease: true
         files: |
           ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_NAME }}
+          docs.tar.zst
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -1264,13 +1271,13 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
+    - name: Avoid no space left on device
+      run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android &
     - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
     - name: build and test all features individually
       shell: bash
       run: |
-        command -v sudo && sudo rm -rf /usr/local/lib/android /usr/share/dotnet # avoid no space left
-        df -h ||:
         CARGO_FEATURES_OPTION='--features=${{ matrix.job.features }}' ;
         for f in $(util/show-utils.sh ${CARGO_FEATURES_OPTION})
         do
