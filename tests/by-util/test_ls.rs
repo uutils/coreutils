@@ -4951,6 +4951,36 @@ fn test_dereference_symlink_file_color() {
         .stdout_is(out_exp);
 }
 
+/// Symlink chain target should be colored by final target type, not as symlink (#8934).
+#[test]
+fn test_symlink_chain_target_color() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    at.relative_symlink_file("file", "link1");
+    at.relative_symlink_file("link1", "link2");
+    let out = ucmd
+        .args(&["-l", "--color=always", "link2"])
+        .succeeds()
+        .stdout_move_str();
+    let target = out.split("->").nth(1).unwrap();
+    assert!(!target.contains("36m")); // 36m = cyan (symlink color)
+}
+
+/// Symlink target should be colored by extension (e.g., .tar.gz shows as archive color).
+#[test]
+fn test_symlink_target_extension_color() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("archive.tar.gz");
+    at.relative_symlink_file("archive.tar.gz", "link");
+    let out = ucmd
+        .env("LS_COLORS", "*.tar.gz=31")
+        .args(&["-l", "--color=always", "link"])
+        .succeeds()
+        .stdout_move_str();
+    let target = out.split("->").nth(1).unwrap();
+    assert!(target.contains("31m")); // 31 = red (our configured archive color)
+}
+
 #[test]
 fn test_tabsize_option() {
     let scene = TestScenario::new(util_name!());
@@ -6232,11 +6262,11 @@ fn test_ls_capabilities() {
     }
     at.mkdir("test");
     at.mkdir("test/dir");
-    at.touch("test/cap_pos");
-    at.touch("test/dir/cap_neg");
-    at.touch("test/dir/cap_pos");
+    at.touch("test/cap_pos.txt");
+    at.touch("test/dir/cap_neg.txt");
+    at.touch("test/dir/cap_pos.txt");
 
-    let files = ["test/cap_pos", "test/dir/cap_pos"];
+    let files = ["test/cap_pos.txt", "test/dir/cap_pos.txt"];
     for file in &files {
         scene
             .cmd("sudo")
@@ -6256,12 +6286,23 @@ fn test_ls_capabilities() {
         .ucmd()
         .env("LS_COLORS", ls_colors)
         .arg("--color=always")
-        .arg("test/cap_pos")
+        .arg("test/cap_pos.txt")
         .arg("test/dir")
         .succeeds()
-        .stdout_contains("\x1b[30;41mtest/cap_pos") // spell-checker:disable-line
-        .stdout_contains("\x1b[30;41mcap_pos") // spell-checker:disable-line
-        .stdout_does_not_contain("0;41mtest/dir/cap_neg"); // spell-checker:disable-line
+        .stdout_contains("\x1b[30;41mtest/cap_pos.txt") // spell-checker:disable-line
+        .stdout_contains("\x1b[30;41mcap_pos.txt") // spell-checker:disable-line
+        .stdout_does_not_contain("0;41mcap_neg.txt"); // spell-checker:disable-line
+
+    // If ca= is not defined, ensure the specific style (.txt) for the file is used
+    let ls_colors = "di=:no=30;41:*.txt=31;41";
+
+    scene
+        .ucmd()
+        .env("LS_COLORS", ls_colors)
+        .arg("--color=always")
+        .arg("test/cap_pos.txt")
+        .succeeds()
+        .stdout_contains("\x1b[31;41mtest/cap_pos.txt"); // spell-checker:disable-line
 }
 
 #[cfg(feature = "test_risky_names")]
@@ -6321,7 +6362,9 @@ fn test_unknown_format_specifier() {
 fn test_acl_display_symlink() {
     use std::process::Command;
 
-    let (at, mut ucmd) = at_and_ucmd!();
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
     let dir_name = "dir";
     let link_name = "link";
     at.mkdir(dir_name);
@@ -6346,11 +6389,26 @@ fn test_acl_display_symlink() {
 
     at.symlink_dir(dir_name, link_name);
 
-    let re_with_acl = Regex::new(r"[a-z-]*\+ .*link").unwrap();
-    ucmd.arg("-lLd")
+    let re_with_acl = Regex::new(r"[a-z-]*\+\s\d+\s.*link").unwrap();
+
+    scene
+        .ucmd()
+        .arg("-lLd")
         .arg(link_name)
         .succeeds()
         .stdout_matches(&re_with_acl);
+
+    let test2: uutests::util::CmdResult = scene.ucmd().arg("-l").succeeds();
+
+    let mut iter = test2
+        .stdout()
+        .split(|b| b == &b'\n')
+        .skip(1)
+        .filter_map(|line: &[u8]| line.iter().position(|b: &u8| b.is_ascii_digit()));
+
+    let first = iter.next().unwrap();
+
+    assert!(iter.all(|i| i == first));
 }
 
 #[test]
