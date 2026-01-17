@@ -7,13 +7,19 @@
 #[cfg(not(target_os = "openbsd"))]
 use filetime::FileTime;
 use std::fs;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
+#[cfg(unix)]
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
+use std::path::Path;
 #[cfg(not(windows))]
 use std::process::Command;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::thread::sleep;
+#[cfg(unix)]
+use uucore::libc;
 use uucore::process::{getegid, geteuid};
 #[cfg(feature = "feat_selinux")]
 use uucore::selinux::get_getfattr_output;
@@ -1083,6 +1089,55 @@ fn test_install_creating_leading_dir_fails_on_long_name() {
         .arg(at.plus(target.as_str()))
         .fails()
         .stderr_contains("cannot create directory");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_install_directory_deep_path_succeeds() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let unit_len = "a/".len();
+    let prefix_len = "./".len();
+    let min_len: usize = 3000; // request a path of at least 3000 characters
+    let path_max = libc::PATH_MAX as usize;
+    let safety_margin = if path_max <= 1024 { 32 } else { 0 };
+    let base_len = scene.fixtures.subdir.as_os_str().as_bytes().len();
+    let sep_len = usize::from(base_len > 0);
+    let available_for_rel = path_max
+        .saturating_sub(safety_margin)
+        .saturating_sub(base_len + sep_len);
+    let max_repeat = available_for_rel
+        .saturating_sub(prefix_len)
+        .checked_div(unit_len)
+        .unwrap_or(0);
+    let min_repeat = min_len.saturating_sub(prefix_len).div_ceil(unit_len).max(1);
+    assert!(
+        max_repeat > 0,
+        "temporary directory path `{}` leaves no room under PATH_MAX",
+        scene.fixtures.subdir.display()
+    );
+    let repeat_count = std::cmp::max(1, std::cmp::min(max_repeat, min_repeat));
+    let deep_rel_path = format!("./{}", "a/".repeat(repeat_count));
+    let deep_abs_path = at.plus(deep_rel_path.as_str());
+    debug_assert!(
+        deep_abs_path.as_os_str().as_bytes().len() <= path_max,
+        "absolute path {} exceeds PATH_MAX",
+        deep_abs_path.display()
+    );
+
+    scene
+        .ucmd()
+        .arg("-d")
+        .arg(&deep_abs_path)
+        .succeeds()
+        .no_stderr();
+
+    assert!(
+        Path::new(&deep_abs_path).exists(),
+        "expected directory `{}` to exist",
+        deep_abs_path.display()
+    );
 }
 
 #[test]
