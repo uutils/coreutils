@@ -3398,10 +3398,15 @@ fn display_item_name(
                         }
                     }
 
-                    match fs::metadata(&absolute_target) {
-                        Ok(_) => {
-                            let target_data =
-                                PathData::new(absolute_target, None, None, config, false);
+                    match fs::canonicalize(&absolute_target) {
+                        Ok(resolved_target) => {
+                            let target_data = PathData::new(
+                                resolved_target,
+                                None,
+                                target_path.file_name().map(|s| s.to_os_string()),
+                                config,
+                                false,
+                            );
                             name.push(color_name(
                                 escaped_target,
                                 &target_data,
