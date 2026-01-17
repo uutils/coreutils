@@ -6,7 +6,7 @@
 // spell-checker:ignore (ToDO) parsemode makedev sysmacros perror IFBLK IFCHR IFIFO sflag
 
 use clap::{Arg, ArgAction, Command, value_parser};
-use nix::libc::{mode_t, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
+use nix::libc::{S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR, mode_t};
 use nix::sys::stat::{Mode, SFlag, mknod as nix_mknod, umask as nix_umask};
 
 use uucore::display::Quotable;
@@ -15,8 +15,7 @@ use uucore::format_usage;
 use uucore::fs::makedev;
 use uucore::translate;
 
-const MODE_RW_UGO: mode_t =
-    (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as mode_t;
+const MODE_RW_UGO: mode_t = (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as mode_t;
 
 mod options {
     pub const MODE: &str = "mode";
