@@ -1708,8 +1708,8 @@ fn test_human_numeric_blank_thousands_sep_locale() {
             return None;
         }
         let sep = String::from_utf8_lossy(&output.stdout);
-        let sep = sep.trim_end_matches(|ch| ch == '\n' || ch == '\r');
-        if sep.is_empty() || sep.as_bytes().len() != 1 || !sep.chars().all(|c| c.is_whitespace()) {
+        let sep = sep.trim_end_matches(&['\n', '\r'][..]);
+        if sep.is_empty() || sep.len() != 1 || !sep.chars().all(|c| c.is_whitespace()) {
             return None;
         }
         Some(sep.to_string())
