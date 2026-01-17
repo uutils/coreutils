@@ -1655,6 +1655,8 @@ fn test_reading_partial_blocks_from_fifo() {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .env("LANGUAGE", "C")
         .spawn()
         .unwrap();
 
@@ -1700,6 +1702,8 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .env("LANGUAGE", "C")
         .spawn()
         .unwrap();
 
