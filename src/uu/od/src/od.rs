@@ -80,14 +80,19 @@ struct OdOptions {
 }
 
 /// Helper function to parse bytes with error handling
-fn parse_bytes_option(matches: &ArgMatches, option_name: &str) -> UResult<Option<u64>> {
+fn parse_bytes_option(
+    matches: &ArgMatches,
+    args: &[String],
+    option_name: &str,
+    short: Option<char>,
+) -> UResult<Option<u64>> {
     match matches.get_one::<String>(option_name) {
         None => Ok(None),
         Some(s) => match parse_number_of_bytes(s) {
             Ok(n) => Ok(Some(n)),
             Err(e) => Err(USimpleError::new(
                 1,
-                format_error_message(&e, s, option_name),
+                format_error_message(&e, s, &option_display_name(args, option_name, short)),
             )),
         },
     }
@@ -110,12 +115,12 @@ impl OdOptions {
             ByteOrder::Native
         };
 
-        let mut skip_bytes = parse_bytes_option(matches, options::SKIP_BYTES)?.unwrap_or(0);
+        let mut skip_bytes =
+            parse_bytes_option(matches, args, options::SKIP_BYTES, Some('j'))?.unwrap_or(0);
 
         let mut label: Option<u64> = None;
 
-        let parsed_input = parse_inputs(matches)
-            .map_err(|e| USimpleError::new(1, translate!("od-error-invalid-inputs", "msg" => e)))?;
+        let parsed_input = parse_inputs(matches).map_err(|e| USimpleError::new(1, e))?;
         let input_strings = match parsed_input {
             CommandLineInputs::FileNames(v) => v,
             CommandLineInputs::FileAndOffset((f, s, l)) => {
@@ -131,16 +136,30 @@ impl OdOptions {
             None => 16,
             Some(s) => {
                 if matches.value_source(options::WIDTH) == Some(ValueSource::CommandLine) {
-                    match parse_number_of_bytes(s) {
-                        Ok(n) => usize::try_from(n)
-                            .map_err(|_| USimpleError::new(1, format!("‘{s}‘ is too large")))?,
-                        Err(e) => {
-                            return Err(USimpleError::new(
-                                1,
-                                format_error_message(&e, s, options::WIDTH),
-                            ));
-                        }
+                    let width_display = option_display_name(args, options::WIDTH, Some('w'));
+                    let parsed = parse_number_of_bytes(s).map_err(|e| {
+                        USimpleError::new(1, format_error_message(&e, s, &width_display))
+                    })?;
+                    if parsed == 0 {
+                        return Err(USimpleError::new(
+                            1,
+                            translate!(
+                                "od-error-invalid-argument",
+                                "option" => width_display.clone(),
+                                "value" => s.quote()
+                            ),
+                        ));
                     }
+                    usize::try_from(parsed).map_err(|_| {
+                        USimpleError::new(
+                            1,
+                            translate!(
+                                "od-error-argument-too-large",
+                                "option" => width_display.clone(),
+                                "value" => s.quote()
+                            ),
+                        )
+                    })?
                 } else {
                     16
                 }
@@ -160,9 +179,9 @@ impl OdOptions {
 
         let output_duplicates = matches.get_flag(options::OUTPUT_DUPLICATES);
 
-        let read_bytes = parse_bytes_option(matches, options::READ_BYTES)?;
+        let read_bytes = parse_bytes_option(matches, args, options::READ_BYTES, Some('N'))?;
 
-        let string_min_length = match parse_bytes_option(matches, options::STRINGS)? {
+        let string_min_length = match parse_bytes_option(matches, args, options::STRINGS, Some('S'))? {
             None => None,
             Some(n) => Some(usize::try_from(n).map_err(|_| {
                 USimpleError::new(
@@ -491,7 +510,9 @@ where
                 let length = memory_decoder.length();
 
                 if length == 0 {
-                    input_offset.print_final_offset();
+                    if !input_decoder.has_error() {
+                        input_offset.print_final_offset();
+                    }
                     break;
                 }
 
@@ -669,6 +690,10 @@ fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder, output_info: &Output
                     let p = input_decoder.read_float(b, f.formatter_item_info.byte_size);
                     output_text.push_str(&func(p));
                 }
+                FormatWriter::LongDoubleWriter(func) => {
+                    let p = input_decoder.read_long_double(b);
+                    output_text.push_str(&func(p));
+                }
                 FormatWriter::BFloatWriter(func) => {
                     let p = input_decoder.read_bfloat(b);
                     output_text.push_str(&func(p));
@@ -742,6 +767,27 @@ fn open_input_peek_reader(
 impl<R: HasError> HasError for BufReader<R> {
     fn has_error(&self) -> bool {
         self.get_ref().has_error()
+    }
+}
+
+fn option_display_name(args: &[String], option_name: &str, short: Option<char>) -> String {
+    let long_form = format!("--{option_name}");
+    let long_form_with_eq = format!("{long_form}=");
+    if let Some(short_char) = short {
+        let short_form = format!("-{short_char}");
+        for arg in args.iter().skip(1) {
+            if !arg.starts_with("--") && arg.starts_with(&short_form) {
+                return short_form;
+            }
+        }
+        for arg in args.iter().skip(1) {
+            if arg == &long_form || arg.starts_with(&long_form_with_eq) {
+                return long_form;
+            }
+        }
+        short_form
+    } else {
+        long_form
     }
 }
 

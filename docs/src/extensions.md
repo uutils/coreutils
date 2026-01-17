@@ -184,15 +184,13 @@ also provides a `-v`/`--verbose` flag.
 
 ## `uptime`
 
-Similar to the proc-ps implementation and unlike GNU/Coreutils, `uptime` provides `-s`/`--since` to show since when the system is up.
+Similar to the proc-ps implementation and unlike GNU/Coreutils, `uptime` provides:
+ * `-s`/`--since` to show since when the system is up
+ * `-p`/`--pretty` to display uptime in a pretty-printed format
 
 ## `base32/base64/basenc`
 
 Just like on macOS, `base32/base64/basenc` provides `-D` to decode data.
-
-## `shred`
-
-The number of random passes is deterministic in both GNU and uutils. However, uutils `shred` computes the number of random passes in a simplified way, specifically `max(3, x / 10)`, which is very close but not identical to the number of random passes that GNU would do. This also satisfies an expectation that reasonable users might have, namely that the number of random passes increases monotonically with the number of passes overall; GNU `shred` violates this assumption.
 
 ## `unexpand`
 
@@ -204,3 +202,7 @@ With `-U`/`--no-utf8`, you can interpret input files as 8-bit ASCII rather than 
 ## `expand`
 
 `expand` also offers the `-U`/`--no-utf8` option to interpret input files as 8-bit ASCII instead of UTF-8.
+
+## `install`
+
+`install` offers FreeBSD's `-U` unprivileged option to not change the owner, the group, or the file flags of the destination.

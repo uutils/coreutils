@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (vars) RFILE
+// spell-checker:ignore (vars) RFILE execv execvp
 #![cfg(target_os = "linux")]
 
 use clap::builder::ValueParser;
@@ -15,9 +15,10 @@ use uucore::format_usage;
 
 use std::borrow::Cow;
 use std::ffi::{CStr, CString, OsStr, OsString};
-use std::os::raw::c_char;
+use std::io;
 use std::os::unix::ffi::OsStrExt;
-use std::{io, ptr};
+use std::os::unix::process::CommandExt;
+use std::process;
 
 mod errors;
 
@@ -47,7 +48,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 .map_err(RunconError::new)?;
             // On successful execution, the following call never returns,
             // and this process image is replaced.
-            execute_command(command, &options.arguments)
+            // PlainContext mode uses PATH search (like execvp).
+            execute_command(command, &options.arguments, false)
         }
         CommandLineMode::CustomContext {
             compute_transition_context,
@@ -71,7 +73,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     .map_err(RunconError::new)?;
                     // On successful execution, the following call never returns,
                     // and this process image is replaced.
-                    execute_command(command, &options.arguments)
+                    // With -c flag, skip PATH search (like execv vs execvp).
+                    execute_command(command, &options.arguments, *compute_transition_context)
                 }
                 None => print_current_context().map_err(|e| RunconError::new(e).into()),
             }
@@ -366,24 +369,22 @@ fn get_custom_context(
 /// However, until the *never* type is stabilized, one way to indicate to the
 /// compiler the only valid return type is to say "if this returns, it will
 /// always return an error".
-fn execute_command(command: &OsStr, arguments: &[OsString]) -> UResult<()> {
-    let c_command = os_str_to_c_string(command).map_err(RunconError::new)?;
+///
+/// When `skip_path_search` is true (used with `-c` flag), the command is executed
+/// without PATH lookup, matching GNU's use of execv() vs execvp().
+fn execute_command(command: &OsStr, arguments: &[OsString], skip_path_search: bool) -> UResult<()> {
+    // When skip_path_search is true and command has no path separator,
+    // prepend "./" to prevent PATH lookup (like execv vs execvp).
+    let command_path = if skip_path_search && !command.as_bytes().contains(&b'/') {
+        let mut path = OsString::from("./");
+        path.push(command);
+        path
+    } else {
+        command.to_os_string()
+    };
 
-    let argv_storage: Vec<CString> = arguments
-        .iter()
-        .map(AsRef::as_ref)
-        .map(os_str_to_c_string)
-        .collect::<Result<_>>()
-        .map_err(RunconError::new)?;
+    let err = process::Command::new(&command_path).args(arguments).exec();
 
-    let mut argv: Vec<*const c_char> = Vec::with_capacity(arguments.len().saturating_add(2));
-    argv.push(c_command.as_ptr());
-    argv.extend(argv_storage.iter().map(AsRef::as_ref).map(CStr::as_ptr));
-    argv.push(ptr::null());
-
-    unsafe { libc::execvp(c_command.as_ptr(), argv.as_ptr()) };
-
-    let err = io::Error::last_os_error();
     let exit_status = if err.kind() == io::ErrorKind::NotFound {
         error_exit_status::NOT_FOUND
     } else {

@@ -15,6 +15,8 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, channel};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, set_exit_code};
+#[cfg(target_os = "linux")]
+use uucore::signals::ensure_stdout_not_broken;
 use uucore::translate;
 
 use uucore::show_error;
@@ -47,9 +49,7 @@ impl WatcherRx {
             Tested for notify::InotifyWatcher and for notify::PollWatcher.
             */
             if let Some(parent) = path.parent() {
-                // clippy::assigning_clones added with Rust 1.78
-                // Rust version = 1.76 on OpenBSD stable/7.5
-                #[cfg_attr(not(target_os = "openbsd"), allow(clippy::assigning_clones))]
+                #[allow(clippy::assigning_clones)]
                 if parent.is_dir() {
                     path = parent.to_owned();
                 } else {
@@ -58,7 +58,7 @@ impl WatcherRx {
             } else {
                 return Err(USimpleError::new(
                     1,
-                    translate!("tail-error-cannot-watch-parent-directory", "path" => path.display()),
+                    translate!("tail-error-cannot-watch-parent-directory", "path" => path.quote()),
                 ));
             }
         }
@@ -155,24 +155,6 @@ impl Observer {
             self.files.insert(
                 &path,
                 PathData::new(reader, metadata, display_name),
-                update_last,
-            );
-        }
-
-        Ok(())
-    }
-
-    pub fn add_stdin(
-        &mut self,
-        display_name: &str,
-        reader: Option<Box<dyn BufRead>>,
-        update_last: bool,
-    ) -> UResult<()> {
-        if self.follow == Some(FollowMode::Descriptor) {
-            return self.add_path(
-                &PathBuf::from(text::DEV_STDIN),
-                display_name,
-                reader,
                 update_last,
             );
         }
@@ -548,13 +530,45 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
         }
 
         let mut paths = vec![]; // Paths worth checking for new content to print
+
+        // Helper closure to process a single event
+        let process_event = |observer: &mut Observer,
+                             event: notify::Event,
+                             settings: &Settings,
+                             paths: &mut Vec<PathBuf>|
+         -> UResult<()> {
+            if let Some(event_path) = event.paths.first() {
+                if observer.files.contains_key(event_path) {
+                    // Handle Event if it is about a path that we are monitoring
+                    let new_paths = observer.handle_event(&event, settings)?;
+                    for p in new_paths {
+                        if !paths.contains(&p) {
+                            paths.push(p);
+                        }
+                    }
+                }
+            }
+            Ok(())
+        };
+
         match rx_result {
             Ok(Ok(event)) => {
-                if let Some(event_path) = event.paths.first() {
-                    if observer.files.contains_key(event_path) {
-                        // Handle Event if it is about a path that we are monitoring
-                        paths = observer.handle_event(&event, settings)?;
+                process_event(&mut observer, event, settings, &mut paths)?;
+
+                // Drain any additional pending events to batch them together.
+                // This prevents redundant headers when multiple inotify events
+                // are queued (e.g., after resuming from SIGSTOP).
+                // Multiple iterations with spin_loop hints give the notify
+                // background thread chances to deliver pending events.
+                for _ in 0..100 {
+                    while let Ok(Ok(event)) =
+                        observer.watcher_rx.as_mut().unwrap().receiver.try_recv()
+                    {
+                        process_event(&mut observer, event, settings, &mut paths)?;
                     }
+                    // Use both yield and spin hint for broader CPU support
+                    std::thread::yield_now();
+                    std::hint::spin_loop();
                 }
             }
             Ok(Err(notify::Error {
@@ -589,6 +603,11 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 timeout_counter += 1;
+                // Check if stdout pipe is still open
+                #[cfg(target_os = "linux")]
+                if let Ok(false) = ensure_stdout_not_broken() {
+                    return Ok(());
+                }
             }
             Err(e) => {
                 return Err(USimpleError::new(

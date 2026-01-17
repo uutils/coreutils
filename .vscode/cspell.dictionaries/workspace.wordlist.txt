@@ -182,6 +182,7 @@ LINESIZE
 NAMESIZE
 RTLD_NEXT
     RTLD
+SIGABRT
 SIGINT
 SIGKILL
 SIGSTOP
@@ -363,6 +364,23 @@ getcwd
 # * other
 weblate
 algs
+
+# * stty terminal flags
+brkint
+cstopb
+decctlq
+echoctl
+echoe
+echoke
+ignbrk
+ignpar
+icrnl
+isig
+istrip
+litout
+opost
+parodd
+ENOTTY
 
 # translation tests
 CLICOLOR

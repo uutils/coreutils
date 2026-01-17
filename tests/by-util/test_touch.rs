@@ -2,11 +2,12 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (formats) cymdhm cymdhms mdhm mdhms ymdhm ymdhms datetime mktime
+// spell-checker:ignore (formats) cymdhm cymdhms datetime mdhm mdhms mktime strtime ymdhm ymdhms
 
 use filetime::FileTime;
 #[cfg(not(target_os = "freebsd"))]
 use filetime::set_symlink_file_times;
+use jiff::{fmt::strtime, tz::TimeZone};
 use std::fs::remove_file;
 use std::path::PathBuf;
 use uutests::at_and_ucmd;
@@ -36,11 +37,10 @@ fn set_file_times(at: &AtPath, path: &str, atime: FileTime, mtime: FileTime) {
 }
 
 fn str_to_filetime(format: &str, s: &str) -> FileTime {
-    let tm = chrono::NaiveDateTime::parse_from_str(s, format).unwrap();
-    FileTime::from_unix_time(
-        tm.and_utc().timestamp(),
-        tm.and_utc().timestamp_subsec_nanos(),
-    )
+    let tm = strtime::parse(format, s).unwrap();
+    let dt = tm.to_datetime().unwrap();
+    let ts = dt.to_zoned(TimeZone::UTC).unwrap().timestamp();
+    FileTime::from_unix_time(ts.as_second(), ts.subsec_nanosecond() as u32)
 }
 
 #[test]
@@ -461,6 +461,31 @@ fn test_touch_reference() {
         assert_eq!(mtime, start_of_year);
         let _ = remove_file(file_b);
     }
+}
+
+#[test]
+fn test_touch_reference_dangling() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let nonexistent_target = temp_dir.path().join("nonexistent_target");
+    let dangling_symlink = temp_dir.path().join("test_touch_reference_dangling");
+
+    #[cfg(not(windows))]
+    {
+        std::os::unix::fs::symlink(&nonexistent_target, &dangling_symlink).unwrap();
+    }
+    #[cfg(windows)]
+    {
+        std::os::windows::fs::symlink_file(&nonexistent_target, &dangling_symlink).unwrap();
+    }
+
+    new_ucmd!()
+        .args(&[
+            "--reference",
+            dangling_symlink.to_str().unwrap(),
+            "some_file",
+        ])
+        .fails()
+        .stderr_contains("touch: failed to get attributes of");
 }
 
 #[test]
@@ -1026,4 +1051,13 @@ fn test_touch_non_utf8_paths() {
 
     scene.ucmd().arg(non_utf8_name).succeeds().no_output();
     assert!(std::fs::metadata(at.plus(non_utf8_name)).is_ok());
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_touch_device_files() {
+    let (_, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["/dev/null", "/dev/zero", "/dev/full", "/dev/random"])
+        .succeeds()
+        .no_output();
 }

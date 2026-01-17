@@ -42,12 +42,14 @@ mod options {
     pub const FIRST_LINE_NUMBER: &str = "first-line-number";
     pub const PAGES: &str = "pages";
     pub const OMIT_HEADER: &str = "omit-header";
+    pub const OMIT_PAGINATION: &str = "omit-pagination";
     pub const PAGE_LENGTH: &str = "length";
     pub const NO_FILE_WARNINGS: &str = "no-file-warnings";
     pub const FORM_FEED: &str = "form-feed";
     pub const COLUMN_WIDTH: &str = "width";
     pub const PAGE_WIDTH: &str = "page-width";
     pub const ACROSS: &str = "across";
+    pub const COLUMN_DOWN: &str = "column-down";
     pub const COLUMN: &str = "column";
     pub const COLUMN_CHAR_SEPARATOR: &str = "separator";
     pub const COLUMN_STRING_SEPARATOR: &str = "sep-string";
@@ -215,6 +217,13 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
+            Arg::new(options::OMIT_PAGINATION)
+                .short('T')
+                .long(options::OMIT_PAGINATION)
+                .help(translate!("pr-help-omit-pagination"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
             Arg::new(options::PAGE_LENGTH)
                 .short('l')
                 .long(options::PAGE_LENGTH)
@@ -258,6 +267,13 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
+            // -b is a no-op for backwards compatibility (column-down is now the default)
+            Arg::new(options::COLUMN_DOWN)
+                .short('b')
+                .hide(true)
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
             Arg::new(options::COLUMN)
                 .long(options::COLUMN)
                 .help(translate!("pr-help-column"))
@@ -268,14 +284,18 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .long(options::COLUMN_CHAR_SEPARATOR)
                 .help(translate!("pr-help-column-char-separator"))
-                .value_name("char"),
+                .value_name("char")
+                .num_args(0..=1)
+                .default_missing_value("\t"),
         )
         .arg(
             Arg::new(options::COLUMN_STRING_SEPARATOR)
                 .short('S')
                 .long(options::COLUMN_STRING_SEPARATOR)
                 .help(translate!("pr-help-column-string-separator"))
-                .value_name("string"),
+                .value_name("string")
+                .num_args(0..=1)
+                .default_missing_value(" "),
         )
         .arg(
             Arg::new(options::MERGE)
@@ -621,7 +641,9 @@ fn build_options(
 
     let page_length_le_ht = page_length < (HEADER_LINES_PER_PAGE + TRAILER_LINES_PER_PAGE);
 
-    let display_header_and_trailer = !page_length_le_ht && !matches.get_flag(options::OMIT_HEADER);
+    let display_header_and_trailer = !page_length_le_ht
+        && !matches.get_flag(options::OMIT_HEADER)
+        && !matches.get_flag(options::OMIT_PAGINATION);
 
     let content_lines_per_page = if page_length_le_ht {
         page_length
@@ -758,21 +780,28 @@ fn open(path: &str) -> Result<Box<dyn Read>, PrError> {
             let path_string = path.to_string();
             match i.file_type() {
                 #[cfg(unix)]
-                ft if ft.is_block_device() => Err(PrError::UnknownFiletype { file: path_string }),
-                #[cfg(unix)]
-                ft if ft.is_char_device() => Err(PrError::UnknownFiletype { file: path_string }),
-                #[cfg(unix)]
-                ft if ft.is_fifo() => Err(PrError::UnknownFiletype { file: path_string }),
-                #[cfg(unix)]
                 ft if ft.is_socket() => Err(PrError::IsSocket { file: path_string }),
                 ft if ft.is_dir() => Err(PrError::IsDirectory { file: path_string }),
-                ft if ft.is_file() || ft.is_symlink() => {
-                    Ok(Box::new(File::open(path).map_err(|e| PrError::Input {
-                        source: e,
-                        file: path.to_string(),
-                    })?) as Box<dyn Read>)
+
+                ft => {
+                    #[allow(unused_mut)]
+                    let mut is_valid = ft.is_file() || ft.is_symlink();
+
+                    #[cfg(unix)]
+                    {
+                        is_valid =
+                            is_valid || ft.is_char_device() || ft.is_block_device() || ft.is_fifo();
+                    }
+
+                    if is_valid {
+                        Ok(Box::new(File::open(path).map_err(|e| PrError::Input {
+                            source: e,
+                            file: path.to_string(),
+                        })?) as Box<dyn Read>)
+                    } else {
+                        Err(PrError::UnknownFiletype { file: path_string })
+                    }
                 }
-                _ => Err(PrError::UnknownFiletype { file: path_string }),
             }
         },
     )
@@ -1150,23 +1179,50 @@ fn get_formatted_line_number(opts: &OutputOptions, line_number: usize, index: us
 /// Returns a five line header content if displaying header is not disabled by
 /// using `NO_HEADER_TRAILER_OPTION` option.
 fn header_content(options: &OutputOptions, page: usize) -> Vec<String> {
-    if options.display_header_and_trailer {
-        let first_line = format!(
-            "{} {} {} {page}",
-            options.last_modified_time,
-            options.header,
-            translate!("pr-page")
-        );
-        vec![
-            String::new(),
-            String::new(),
-            first_line,
-            String::new(),
-            String::new(),
-        ]
-    } else {
-        Vec::new()
+    if !options.display_header_and_trailer {
+        return Vec::new();
     }
+
+    // The header should be formatted with proper spacing:
+    // - Date/time on the left
+    // - Filename centered
+    // - "Page X" on the right
+    let date_part = &options.last_modified_time;
+    let filename = &options.header;
+    let page_part = format!("{} {page}", translate!("pr-page"));
+
+    // Use the line width if available, otherwise use default of 72
+    let total_width = options.line_width.unwrap_or(DEFAULT_COLUMN_WIDTH);
+
+    let date_len = date_part.chars().count();
+    let filename_len = filename.chars().count();
+    let page_len = page_part.chars().count();
+
+    let header_line = if date_len + filename_len + page_len + 2 < total_width {
+        // The filename should be centered between the date and page parts
+        let space_for_filename = total_width - date_len - page_len;
+        let padding_before_filename = (space_for_filename - filename_len) / 2;
+        let padding_after_filename = space_for_filename - filename_len - padding_before_filename;
+
+        format!(
+            "{date_part}{:width1$}{filename}{:width2$}{page_part}",
+            "",
+            "",
+            width1 = padding_before_filename,
+            width2 = padding_after_filename
+        )
+    } else {
+        // If content is too long, just use single spaces
+        format!("{date_part} {filename} {page_part}")
+    };
+
+    vec![
+        String::new(),
+        String::new(),
+        header_line,
+        String::new(),
+        String::new(),
+    ]
 }
 
 /// Returns five empty lines as trailer content if displaying trailer

@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# spell-checker:ignore (utils) gitsome jq ; (gh) repos
+# spell-checker:ignore (utils) gitsome jq jaq ; (gh) repos
 
 # ME="${0}"
 # ME_dir="$(dirname -- "${ME}")"
@@ -14,24 +14,11 @@
 ## tools available?
 
 # * `gh` available?
-unset GH
-if gh --version 1>/dev/null 2>&1; then
-    export GH="gh"
-else
-    echo "ERR!: missing \`gh\` (see install instructions at <https://github.com/cli/cli>)" 1>&2
-fi
-
-# * `jq` available?
-unset JQ
-if jq --version 1>/dev/null 2>&1; then
-    export JQ="jq"
-else
-    echo "ERR!: missing \`jq\` (install with \`sudo apt install jq\`)" 1>&2
-fi
-
-if [ -z "${GH}" ] || [ -z "${JQ}" ]; then
-    exit 1
-fi
+GH=$(command -v gh)
+"${GH}" --version || (echo "ERR!: missing \`gh\` (see install instructions at <https://github.com/cli/cli>)"; exit 1)
+# * `jq` or fallback available?
+: ${JQ:=$(command -v jq || command -v jaq)}
+"${JQ}" --version || (echo "ERR!: missing \`jq\` (install with \`sudo apt install jq\`)"; exit 1)
 
 case "${dry_run}" in
     '0' | 'f' | 'false' | 'no' | 'never' | 'none') unset dry_run ;;
@@ -44,6 +31,6 @@ WORK_NAME="${WORK_NAME:-GNU}"
 
 # * `--paginate` retrieves all pages
 # gh api --paginate "repos/${USER_NAME}/${REPO_NAME}/actions/runs" | jq -r ".workflow_runs[] | select(.name == \"${WORK_NAME}\") | (.id)" | xargs -n1 sh -c "for arg do { echo gh api repos/${USER_NAME}/${REPO_NAME}/actions/runs/\${arg} -X DELETE ; if [ -z "$dry_run" ]; then gh api repos/${USER_NAME}/${REPO_NAME}/actions/runs/\${arg} -X DELETE ; fi ; } ; done ;" _
-gh api "repos/${USER_NAME}/${REPO_NAME}/actions/runs" |
-    jq -r ".workflow_runs[] | select(.name == \"${WORK_NAME}\") | (.id)" |
-    xargs -n1 sh -c "for arg do { echo gh api repos/${USER_NAME}/${REPO_NAME}/actions/runs/\${arg} -X DELETE ; if [ -z \"${dry_run}\" ]; then gh api repos/${USER_NAME}/${REPO_NAME}/actions/runs/\${arg} -X DELETE ; fi ; } ; done ;" _
+"${GH}" api "repos/${USER_NAME}/${REPO_NAME}/actions/runs" |
+    "${JQ}" -r ".workflow_runs[] | select(.name == \"${WORK_NAME}\") | (.id)" |
+    xargs -n1 sh -c "for arg do { echo ${GH} api repos/${USER_NAME}/${REPO_NAME}/actions/runs/\${arg} -X DELETE ; if [ -z \"${dry_run}\" ]; then ${GH} api repos/${USER_NAME}/${REPO_NAME}/actions/runs/\${arg} -X DELETE ; fi ; } ; done ;" _

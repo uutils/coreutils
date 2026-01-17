@@ -62,13 +62,13 @@ enum MkTempError {
     SuffixContainsDirSeparator(String),
 
     #[error("{}", translate!("mktemp-error-invalid-template", "template" => .0.quote()))]
-    InvalidTemplate(String),
+    InvalidTemplate(OsString),
 
     #[error("{}", translate!("mktemp-error-too-many-templates"))]
     TooManyTemplates,
 
     #[error("{}", translate!("mktemp-error-not-found", "template_type" => .0.clone(), "template" => .1.quote()))]
-    NotFound(String, String),
+    NotFound(String, PathBuf),
 }
 
 impl UError for MkTempError {
@@ -193,9 +193,22 @@ struct Params {
 /// assert_eq!(find_last_contiguous_block_of_xs("aXbXcX"), None);
 /// ```
 fn find_last_contiguous_block_of_xs(s: &str) -> Option<(usize, usize)> {
-    let j = s.rfind("XXX")? + 3;
-    let i = s[..j].rfind(|c| c != 'X').map_or(0, |i| i + 1);
-    Some((i, j))
+    let bytes = s.as_bytes();
+
+    // Find the index of the last 'X'.
+    let end = bytes.iter().rposition(|&b| b == b'X')?;
+
+    // Walk left to find the start of the run of Xs that ends at `end`.
+    let mut start = end;
+    while start > 0 && bytes[start - 1] == b'X' {
+        start -= 1;
+    }
+
+    if end + 1 - start >= 3 {
+        Some((start, end + 1))
+    } else {
+        None
+    }
 }
 
 impl Params {
@@ -203,9 +216,7 @@ impl Params {
         // Convert OsString template to string for processing
         let Some(template_str) = options.template.to_str() else {
             // For non-UTF-8 templates, return an error
-            return Err(MkTempError::InvalidTemplate(
-                options.template.to_string_lossy().into_owned(),
-            ));
+            return Err(MkTempError::InvalidTemplate(options.template));
         };
 
         // The template argument must end in 'X' if a suffix option is given.
@@ -242,7 +253,7 @@ impl Params {
             ));
         }
         if tmpdir.is_some() && Path::new(prefix_from_template).is_absolute() {
-            return Err(MkTempError::InvalidTemplate(template_str.to_string()));
+            return Err(MkTempError::InvalidTemplate(template_str.into()));
         }
 
         // Split the parent directory from the file part of the prefix.
@@ -527,8 +538,7 @@ fn make_temp_dir(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult
         Err(e) if e.kind() == ErrorKind::NotFound => {
             let filename = format!("{prefix}{}{suffix}", "X".repeat(rand));
             let path = Path::new(dir).join(filename);
-            let s = path.display().to_string();
-            Err(MkTempError::NotFound(translate!("mktemp-template-type-directory"), s).into())
+            Err(MkTempError::NotFound(translate!("mktemp-template-type-directory"), path).into())
         }
         Err(e) => Err(e.into()),
     }
@@ -557,8 +567,7 @@ fn make_temp_file(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResul
         Err(e) if e.kind() == ErrorKind::NotFound => {
             let filename = format!("{prefix}{}{suffix}", "X".repeat(rand));
             let path = Path::new(dir).join(filename);
-            let s = path.display().to_string();
-            Err(MkTempError::NotFound(translate!("mktemp-template-type-file"), s).into())
+            Err(MkTempError::NotFound(translate!("mktemp-template-type-file"), path).into())
         }
         Err(e) => Err(e.into()),
     }

@@ -13,7 +13,8 @@ use std::ffi::OsString;
 use std::io::IsTerminal;
 use std::time::Duration;
 use uucore::error::{UResult, USimpleError, UUsageError};
-use uucore::parser::parse_size::{ParseSizeError, parse_size_u64};
+use uucore::parser::parse_signed_num::{SignPrefix, parse_signed_num_max};
+use uucore::parser::parse_size::ParseSizeError;
 use uucore::parser::parse_time;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::translate;
@@ -37,6 +38,7 @@ pub mod options {
     pub const MAX_UNCHANGED_STATS: &str = "max-unchanged-stats";
     pub const ARG_FILES: &str = "files";
     pub const PRESUME_INPUT_PIPE: &str = "-presume-input-pipe"; // NOTE: three hyphens is correct
+    pub const DEBUG: &str = "debug";
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -77,7 +79,7 @@ impl FilterMode {
                 Err(e) => {
                     return Err(USimpleError::new(
                         1,
-                        translate!("tail-error-invalid-number-of-bytes", "arg" => format!("'{e}'")),
+                        translate!("tail-error-invalid-number-of-bytes", "arg" => e.to_string()),
                     ));
                 }
             }
@@ -138,6 +140,7 @@ pub struct Settings {
     pub use_polling: bool,
     pub verbose: bool,
     pub presume_input_pipe: bool,
+    pub debug: bool,
     /// `FILE(s)` positional arguments
     pub inputs: Vec<Input>,
 }
@@ -154,6 +157,7 @@ impl Default for Settings {
             use_polling: Default::default(),
             verbose: Default::default(),
             presume_input_pipe: Default::default(),
+            debug: Default::default(),
             inputs: Vec::default(),
         }
     }
@@ -222,6 +226,7 @@ impl Settings {
             mode: FilterMode::from(matches)?,
             verbose: matches.get_flag(options::verbosity::VERBOSE),
             presume_input_pipe: matches.get_flag(options::PRESUME_INPUT_PIPE),
+            debug: matches.get_flag(options::DEBUG),
             ..Default::default()
         };
 
@@ -362,22 +367,18 @@ pub fn parse_obsolete(arg: &OsString, input: Option<&OsString>) -> UResult<Optio
         Some(Ok(args)) => Ok(Some(Settings::from_obsolete_args(&args, input))),
         None => Ok(None),
         Some(Err(e)) => {
-            let arg_str = arg.to_string_lossy();
             Err(USimpleError::new(
                 1,
                 match e {
-                    parse::ParseError::OutOfRange => {
-                        translate!("tail-error-invalid-number-out-of-range", "arg" => arg_str.quote())
-                    }
-                    parse::ParseError::Overflow => {
-                        translate!("tail-error-invalid-number-overflow", "arg" => arg_str.quote())
-                    }
                     // this ensures compatibility to GNU's error message (as tested in misc/tail)
                     parse::ParseError::Context => {
-                        translate!("tail-error-option-used-in-invalid-context", "option" => arg_str.chars().nth(1).unwrap_or_default())
+                        translate!(
+                            "tail-error-option-used-in-invalid-context",
+                            "option" => arg.to_string_lossy().chars().nth(1).unwrap_or_default(),
+                        )
                     }
                     parse::ParseError::InvalidEncoding => {
-                        translate!("tail-error-bad-argument-encoding", "arg" => arg_str)
+                        translate!("tail-error-bad-argument-encoding", "arg" => arg.quote())
                     }
                 },
             ))
@@ -386,27 +387,15 @@ pub fn parse_obsolete(arg: &OsString, input: Option<&OsString>) -> UResult<Optio
 }
 
 fn parse_num(src: &str) -> Result<Signum, ParseSizeError> {
-    let mut size_string = src.trim();
-    let mut starting_with = false;
+    let result = parse_signed_num_max(src)?;
+    // tail: '+' means "starting from line/byte N", default/'-' means "last N"
+    let is_plus = result.sign == Some(SignPrefix::Plus);
 
-    if let Some(c) = size_string.chars().next() {
-        if c == '+' || c == '-' {
-            // tail: '-' is not documented (8.32 man pages)
-            size_string = &size_string[1..];
-            if c == '+' {
-                starting_with = true;
-            }
-        }
-    }
-
-    match parse_size_u64(size_string) {
-        Ok(n) => match (n, starting_with) {
-            (0, true) => Ok(Signum::PlusZero),
-            (0, false) => Ok(Signum::MinusZero),
-            (n, true) => Ok(Signum::Positive(n)),
-            (n, false) => Ok(Signum::Negative(n)),
-        },
-        Err(_) => Err(ParseSizeError::ParseFailure(size_string.to_string())),
+    match (result.value, is_plus) {
+        (0, true) => Ok(Signum::PlusZero),
+        (0, false) => Ok(Signum::MinusZero),
+        (n, true) => Ok(Signum::Positive(n)),
+        (n, false) => Ok(Signum::Negative(n)),
     }
 }
 
@@ -556,6 +545,12 @@ pub fn uu_app() -> Command {
                 .short('F')
                 .help(translate!("tail-help-follow-retry"))
                 .overrides_with(options::FOLLOW_RETRY)
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::DEBUG)
+                .long(options::DEBUG)
+                .help(translate!("tail-help-debug"))
                 .action(ArgAction::SetTrue),
         )
         .arg(

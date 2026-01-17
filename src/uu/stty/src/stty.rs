@@ -10,7 +10,8 @@
 // spell-checker:ignore isig icanon iexten echoe crterase echok echonl noflsh xcase tostop echoprt prterase echoctl ctlecho echoke crtkill flusho extproc
 // spell-checker:ignore lnext rprnt susp swtch vdiscard veof veol verase vintr vkill vlnext vquit vreprint vstart vstop vsusp vswtc vwerase werase
 // spell-checker:ignore sigquit sigtstp
-// spell-checker:ignore cbreak decctlq evenp litout oddp tcsadrain
+// spell-checker:ignore cbreak decctlq evenp litout oddp tcsadrain exta extb NCCS cfsetispeed
+// spell-checker:ignore notaflag notacombo notabaud
 
 mod flags;
 
@@ -20,17 +21,19 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use nix::libc::{O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ, c_ushort};
 use nix::sys::termios::{
     ControlFlags, InputFlags, LocalFlags, OutputFlags, SetArg, SpecialCharacterIndices as S,
-    Termios, cfgetospeed, cfsetospeed, tcgetattr, tcsetattr,
+    Termios, cfgetospeed, cfsetispeed, cfsetospeed, tcgetattr, tcsetattr,
 };
 use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
+use std::cmp::Ordering;
 use std::fs::File;
-use std::io::{self, Stdout, stdout};
+use std::io::{self, Stdin, stdin, stdout};
 use std::num::IntErrorKind;
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::{AsRawFd, RawFd};
-use uucore::error::{UError, UResult, USimpleError};
+use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
+use uucore::parser::num_parser::ExtendedParser;
 use uucore::translate;
 
 #[cfg(not(any(
@@ -63,6 +66,7 @@ const SANE_CONTROL_CHARS: [(S, u8); 12] = [
 ];
 
 #[derive(Clone, Copy, Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct Flag<T> {
     name: &'static str,
     #[expect(clippy::struct_field_names)]
@@ -120,12 +124,13 @@ struct Options<'a> {
     all: bool,
     save: bool,
     file: Device,
+    device_name: String,
     settings: Option<Vec<&'a str>>,
 }
 
 enum Device {
     File(File),
-    Stdout(Stdout),
+    Stdin(Stdin),
 }
 
 #[derive(Debug)]
@@ -149,6 +154,7 @@ enum ArgOptions<'a> {
     Mapping((S, u8)),
     Special(SpecialSetting),
     Print(PrintSetting),
+    SavedState(Vec<u32>),
 }
 
 impl<'a> From<AllFlags<'a>> for ArgOptions<'a> {
@@ -161,7 +167,7 @@ impl AsFd for Device {
     fn as_fd(&self) -> BorrowedFd<'_> {
         match self {
             Self::File(f) => f.as_fd(),
-            Self::Stdout(stdout) => stdout.as_fd(),
+            Self::Stdin(stdin) => stdin.as_fd(),
         }
     }
 }
@@ -170,45 +176,42 @@ impl AsRawFd for Device {
     fn as_raw_fd(&self) -> RawFd {
         match self {
             Self::File(f) => f.as_raw_fd(),
-            Self::Stdout(stdout) => stdout.as_raw_fd(),
+            Self::Stdin(stdin) => stdin.as_raw_fd(),
         }
     }
 }
 
 impl<'a> Options<'a> {
     fn from(matches: &'a ArgMatches) -> io::Result<Self> {
-        Ok(Self {
-            all: matches.get_flag(options::ALL),
-            save: matches.get_flag(options::SAVE),
-            file: match matches.get_one::<String>(options::FILE) {
-                // Two notes here:
-                // 1. O_NONBLOCK is needed because according to GNU docs, a
-                //    POSIX tty can block waiting for carrier-detect if the
-                //    "clocal" flag is not set. If your TTY is not connected
-                //    to a modem, it is probably not relevant though.
-                // 2. We never close the FD that we open here, but the OS
-                //    will clean up the FD for us on exit, so it doesn't
-                //    matter. The alternative would be to have an enum of
-                //    BorrowedFd/OwnedFd to handle both cases.
-                Some(f) => Device::File(
+        let (file, device_name) = match matches.get_one::<String>(options::FILE) {
+            // Two notes here:
+            // 1. O_NONBLOCK is needed because according to GNU docs, a
+            //    POSIX tty can block waiting for carrier-detect if the
+            //    "clocal" flag is not set. If your TTY is not connected
+            //    to a modem, it is probably not relevant though.
+            // 2. We never close the FD that we open here, but the OS
+            //    will clean up the FD for us on exit, so it doesn't
+            //    matter. The alternative would be to have an enum of
+            //    BorrowedFd/OwnedFd to handle both cases.
+            Some(f) => (
+                Device::File(
                     std::fs::OpenOptions::new()
                         .read(true)
                         .custom_flags(O_NONBLOCK)
                         .open(f)?,
                 ),
-                // default to /dev/tty, if that does not exist then default to stdout
-                None => {
-                    if let Ok(f) = std::fs::OpenOptions::new()
-                        .read(true)
-                        .custom_flags(O_NONBLOCK)
-                        .open("/dev/tty")
-                    {
-                        Device::File(f)
-                    } else {
-                        Device::Stdout(stdout())
-                    }
-                }
-            },
+                f.clone(),
+            ),
+            // Per POSIX, stdin is used for TTY operations when no device is specified.
+            // This matches GNU coreutils behavior: if stdin is not a TTY,
+            // tcgetattr will fail with "Inappropriate ioctl for device".
+            None => (Device::Stdin(stdin()), "standard input".to_string()),
+        };
+        Ok(Self {
+            all: matches.get_flag(options::ALL),
+            save: matches.get_flag(options::SAVE),
+            file,
+            device_name,
             settings: matches
                 .get_many::<String>(options::SETTINGS)
                 .map(|v| v.map(|s| s.as_ref()).collect()),
@@ -271,19 +274,24 @@ fn stty(opts: &Options) -> UResult<()> {
         let mut args_iter = args.iter();
         while let Some(&arg) = args_iter.next() {
             match arg {
-                "ispeed" | "ospeed" => match args_iter.next() {
+                "ispeed" => match args_iter.next() {
                     Some(speed) => {
-                        if let Some(baud_flag) = string_to_baud(speed) {
+                        if let Some(baud_flag) = string_to_baud(speed, flags::BaudType::Input) {
                             valid_args.push(ArgOptions::Flags(baud_flag));
                         } else {
-                            return Err(USimpleError::new(
-                                1,
-                                translate!(
-                                    "stty-error-invalid-speed",
-                                    "arg" => *arg,
-                                    "speed" => *speed,
-                                ),
-                            ));
+                            return invalid_speed(arg, speed);
+                        }
+                    }
+                    None => {
+                        return missing_arg(arg);
+                    }
+                },
+                "ospeed" => match args_iter.next() {
+                    Some(speed) => {
+                        if let Some(baud_flag) = string_to_baud(speed, flags::BaudType::Output) {
+                            valid_args.push(ArgOptions::Flags(baud_flag));
+                        } else {
+                            return invalid_speed(arg, speed);
                         }
                     }
                     None => {
@@ -351,8 +359,12 @@ fn stty(opts: &Options) -> UResult<()> {
                     valid_args.push(ArgOptions::Print(PrintSetting::Size));
                 }
                 _ => {
+                    // Try to parse saved format (hex string like "6d02:5:4bf:8a3b:...")
+                    if let Some(state) = parse_saved_state(arg) {
+                        valid_args.push(ArgOptions::SavedState(state));
+                    }
                     // control char
-                    if let Some(char_index) = cc_to_index(arg) {
+                    else if let Some(char_index) = cc_to_index(arg) {
                         if let Some(mapping) = args_iter.next() {
                             let cc_mapping = string_to_control_char(mapping).map_err(|e| {
                                 let message = match e {
@@ -369,19 +381,19 @@ fn stty(opts: &Options) -> UResult<()> {
                                         )
                                     }
                                 };
-                                USimpleError::new(1, message)
+                                UUsageError::new(1, message)
                             })?;
                             valid_args.push(ArgOptions::Mapping((char_index, cc_mapping)));
                         } else {
                             return missing_arg(arg);
                         }
                     // baud rate
-                    } else if let Some(baud_flag) = string_to_baud(arg) {
+                    } else if let Some(baud_flag) = string_to_baud(arg, flags::BaudType::Both) {
                         valid_args.push(ArgOptions::Flags(baud_flag));
                     // non control char flag
                     } else if let Some(flag) = string_to_flag(arg) {
                         let remove_group = match flag {
-                            AllFlags::Baud(_) => false,
+                            AllFlags::Baud(_, _) => false,
                             AllFlags::ControlFlags((flag, remove)) => {
                                 check_flag_group(flag, remove)
                             }
@@ -403,33 +415,36 @@ fn stty(opts: &Options) -> UResult<()> {
             }
         }
 
-        // TODO: Figure out the right error message for when tcgetattr fails
-        let mut termios = tcgetattr(opts.file.as_fd())?;
+        let mut termios =
+            tcgetattr(opts.file.as_fd()).map_err_context(|| opts.device_name.clone())?;
 
         // iterate over valid_args, match on the arg type, do the matching apply function
         for arg in &valid_args {
             match arg {
                 ArgOptions::Mapping(mapping) => apply_char_mapping(&mut termios, mapping),
-                ArgOptions::Flags(flag) => apply_setting(&mut termios, flag),
+                ArgOptions::Flags(flag) => apply_setting(&mut termios, flag)?,
                 ArgOptions::Special(setting) => {
                     apply_special_setting(&mut termios, setting, opts.file.as_raw_fd())?;
                 }
                 ArgOptions::Print(setting) => {
                     print_special_setting(setting, opts.file.as_raw_fd())?;
                 }
+                ArgOptions::SavedState(state) => {
+                    apply_saved_state(&mut termios, state)?;
+                }
             }
         }
         tcsetattr(opts.file.as_fd(), set_arg, &termios)?;
     } else {
-        // TODO: Figure out the right error message for when tcgetattr fails
-        let termios = tcgetattr(opts.file.as_fd())?;
+        let termios = tcgetattr(opts.file.as_fd()).map_err_context(|| opts.device_name.clone())?;
         print_settings(&termios, opts)?;
     }
     Ok(())
 }
 
+// The GNU implementation adds the --help message when the args are incorrectly formatted
 fn missing_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
-    Err::<T, Box<dyn UError>>(USimpleError::new(
+    Err(UUsageError::new(
         1,
         translate!(
             "stty-error-missing-argument",
@@ -439,7 +454,7 @@ fn missing_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
 }
 
 fn invalid_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
-    Err::<T, Box<dyn UError>>(USimpleError::new(
+    Err(UUsageError::new(
         1,
         translate!(
             "stty-error-invalid-argument",
@@ -449,11 +464,22 @@ fn invalid_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
 }
 
 fn invalid_integer_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
-    Err::<T, Box<dyn UError>>(USimpleError::new(
+    Err(UUsageError::new(
         1,
         translate!(
             "stty-error-invalid-integer-argument",
             "value" => format!("'{arg}'")
+        ),
+    ))
+}
+
+fn invalid_speed<T>(arg: &str, speed: &str) -> Result<T, Box<dyn UError>> {
+    Err(UUsageError::new(
+        1,
+        translate!(
+            "stty-error-invalid-speed",
+            "arg" => arg,
+            "speed" => speed,
         ),
     ))
 }
@@ -468,13 +494,52 @@ fn parse_u8_or_err(arg: &str) -> Result<u8, String> {
     })
 }
 
-/// GNU uses an unsigned 32-bit integer for row/col sizes, but then wraps around 16 bits
-/// this function returns Some(n), where n is a u16 row/col size, or None if the string arg cannot be parsed as a u32
+/// Parse an integer with hex (0x/0X) and octal (0) prefix support, wrapping to u16.
+///
+/// GNU stty uses an unsigned 32-bit integer for row/col sizes, then wraps to 16 bits.
+/// Returns `None` if parsing fails or value exceeds u32::MAX.
 fn parse_rows_cols(arg: &str) -> Option<u16> {
-    if let Ok(n) = arg.parse::<u32>() {
-        return Some((n % (u16::MAX as u32 + 1)) as u16);
+    u64::extended_parse(arg)
+        .ok()
+        .filter(|&n| u32::try_from(n).is_ok())
+        .map(|n| (n % (u16::MAX as u64 + 1)) as u16)
+}
+
+/// Parse a saved terminal state string in stty format.
+///
+/// The format is colon-separated hexadecimal values:
+/// `input_flags:output_flags:control_flags:local_flags:cc0:cc1:cc2:...`
+///
+/// - Must have exactly 4 + NCCS parts (4 flags + platform-specific control characters)
+/// - All parts must be non-empty valid hex values
+/// - Control characters must fit in u8 (0-255)
+/// - Returns `None` if format is invalid
+fn parse_saved_state(arg: &str) -> Option<Vec<u32>> {
+    let parts: Vec<&str> = arg.split(':').collect();
+    let expected_parts = 4 + nix::libc::NCCS;
+
+    // GNU requires exactly the right number of parts for this platform
+    if parts.len() != expected_parts {
+        return None;
     }
-    None
+
+    // Validate all parts are non-empty valid hex
+    let mut values = Vec::with_capacity(expected_parts);
+    for (i, part) in parts.iter().enumerate() {
+        if part.is_empty() {
+            return None; // GNU rejects empty hex values
+        }
+        let val = u32::from_str_radix(part, 16).ok()?;
+
+        // Control characters (indices 4+) must fit in u8
+        if i >= 4 && val > 255 {
+            return None;
+        }
+
+        values.push(val);
+    }
+
+    Some(values)
 }
 
 fn check_flag_group<T>(flag: &Flag<T>, remove: bool) -> bool {
@@ -492,8 +557,71 @@ fn print_special_setting(setting: &PrintSetting, fd: i32) -> nix::Result<()> {
     Ok(())
 }
 
-fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
+/// Handles line wrapping for stty output to fit within terminal width
+struct WrappedPrinter {
+    width: usize,
+    current: usize,
+    first_in_line: bool,
+}
+
+impl WrappedPrinter {
+    /// Creates a new printer with the specified terminal width.
+    /// If term_size is None (typically when output is piped), falls back to
+    /// the COLUMNS environment variable or a default width of 80 columns.
+    fn new(term_size: Option<&TermSize>) -> Self {
+        let columns = match term_size {
+            Some(term_size) => term_size.columns,
+            None => {
+                const DEFAULT_TERM_WIDTH: u16 = 80;
+
+                std::env::var_os("COLUMNS")
+                    .and_then(|s| s.to_str()?.parse().ok())
+                    .filter(|&c| c > 0)
+                    .unwrap_or(DEFAULT_TERM_WIDTH)
+            }
+        };
+
+        Self {
+            width: columns.max(1) as usize,
+            current: 0,
+            first_in_line: true,
+        }
+    }
+
+    fn print(&mut self, token: &str) {
+        let token_len = self.prefix().chars().count() + token.chars().count();
+        if self.current > 0 && self.current + token_len > self.width {
+            println!();
+            self.current = 0;
+            self.first_in_line = true;
+        }
+
+        print!("{}{}", self.prefix(), token);
+        self.current += token_len;
+        self.first_in_line = false;
+    }
+
+    fn prefix(&self) -> &str {
+        if self.first_in_line { "" } else { " " }
+    }
+
+    fn flush(&mut self) {
+        if self.current > 0 {
+            println!();
+            self.current = 0;
+            self.first_in_line = false;
+        }
+    }
+}
+
+fn print_terminal_size(
+    termios: &Termios,
+    opts: &Options,
+    window_size: Option<&TermSize>,
+    term_size: Option<&TermSize>,
+) -> nix::Result<()> {
     let speed = cfgetospeed(termios);
+    let mut printer = WrappedPrinter::new(window_size);
 
     // BSDs use a u32 for the baud rate, so we can simply print it.
     #[cfg(any(
@@ -504,7 +632,7 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
         target_os = "netbsd",
         target_os = "openbsd"
     ))]
-    print!("{} ", translate!("stty-output-speed", "speed" => speed));
+    printer.print(&translate!("stty-output-speed", "speed" => speed));
 
     // Other platforms need to use the baud rate enum, so printing the right value
     // becomes slightly more complicated.
@@ -518,17 +646,15 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
     )))]
     for (text, baud_rate) in BAUD_RATES {
         if *baud_rate == speed {
-            print!("{} ", translate!("stty-output-speed", "speed" => (*text)));
+            printer.print(&translate!("stty-output-speed", "speed" => (*text)));
             break;
         }
     }
 
     if opts.all {
-        let mut size = TermSize::default();
-        unsafe { tiocgwinsz(opts.file.as_raw_fd(), &raw mut size)? };
-        print!(
-            "{} ",
-            translate!("stty-output-rows-columns", "rows" => size.rows, "columns" => size.columns)
+        let term_size = term_size.as_ref().expect("terminal size should be set");
+        printer.print(
+            &translate!("stty-output-rows-columns", "rows" => term_size.rows, "columns" => term_size.columns),
         );
     }
 
@@ -538,10 +664,9 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
         // so we get the underlying libc::termios struct to get that information.
         let libc_termios: nix::libc::termios = termios.clone().into();
         let line = libc_termios.c_line;
-        print!("{}", translate!("stty-output-line", "line" => line));
+        printer.print(&translate!("stty-output-line", "line" => line));
     }
-
-    println!();
+    printer.flush();
     Ok(())
 }
 
@@ -563,7 +688,69 @@ fn string_to_combo(arg: &str) -> Option<&str> {
         .map(|_| arg)
 }
 
-fn string_to_baud(arg: &str) -> Option<AllFlags<'_>> {
+/// Parse and round a baud rate value using GNU stty's custom rounding algorithm.
+///
+/// Accepts decimal values with the following rounding rules:
+/// - If first digit after decimal > 5: round up
+/// - If first digit after decimal < 5: round down
+/// - If first digit after decimal == 5:
+///   - If followed by any non-zero digit: round up
+///   - If followed only by zeros (or nothing): banker's rounding (round to nearest even)
+///
+/// Examples: "9600.49" -> 9600, "9600.51" -> 9600, "9600.5" -> 9600 (even), "9601.5" -> 9602 (even)
+/// TODO: there are two special cases "exta" → B19200 and "extb" → B38400
+fn parse_baud_with_rounding(normalized: &str) -> Option<u32> {
+    let (int_part, frac_part) = match normalized.split_once('.') {
+        Some((i, f)) => (i, Some(f)),
+        None => (normalized, None),
+    };
+
+    let mut value = int_part.parse::<u32>().ok()?;
+
+    if let Some(frac) = frac_part {
+        let mut chars = frac.chars();
+        let first_digit = chars.next()?.to_digit(10)?;
+
+        // Validate all remaining chars are digits
+        let rest: Vec<_> = chars.collect();
+        if !rest.iter().all(|c| c.is_ascii_digit()) {
+            return None;
+        }
+
+        match first_digit.cmp(&5) {
+            Ordering::Greater => value += 1,
+            Ordering::Equal => {
+                // Check if any non-zero digit follows
+                if rest.iter().any(|&c| c != '0') {
+                    value += 1;
+                } else {
+                    // Banker's rounding: round to nearest even
+                    value += value & 1;
+                }
+            }
+            Ordering::Less => {} // Round down, already validated
+        }
+    }
+
+    Some(value)
+}
+
+fn string_to_baud(arg: &str, baud_type: flags::BaudType) -> Option<AllFlags<'_>> {
+    // Reject invalid formats
+    if arg != arg.trim_end()
+        || arg.trim().starts_with('-')
+        || arg.trim().starts_with("++")
+        || arg.contains('E')
+        || arg.contains('e')
+        || arg.matches('.').count() > 1
+    {
+        return None;
+    }
+
+    let normalized = arg.trim().trim_start_matches('+');
+    let normalized = normalized.strip_suffix('.').unwrap_or(normalized);
+    let value = parse_baud_with_rounding(normalized)?;
+
     // BSDs use a u32 for the baud rate, so any decimal number applies.
     #[cfg(any(
         target_os = "freebsd",
@@ -573,9 +760,7 @@ fn string_to_baud(arg: &str) -> Option<AllFlags<'_>> {
         target_os = "netbsd",
         target_os = "openbsd"
     ))]
-    if let Ok(n) = arg.parse::<u32>() {
-        return Some(AllFlags::Baud(n));
-    }
+    return Some(AllFlags::Baud(value, baud_type));
 
     #[cfg(not(any(
         target_os = "freebsd",
@@ -585,12 +770,14 @@ fn string_to_baud(arg: &str) -> Option<AllFlags<'_>> {
         target_os = "netbsd",
         target_os = "openbsd"
     )))]
-    for (text, baud_rate) in BAUD_RATES {
-        if *text == arg {
-            return Some(AllFlags::Baud(*baud_rate));
+    {
+        for (text, baud_rate) in BAUD_RATES {
+            if text.parse::<u32>().ok() == Some(value) {
+                return Some(AllFlags::Baud(*baud_rate, baud_type));
+            }
         }
+        None
     }
-    None
 }
 
 /// return `Some(flag)` if the input is a valid flag, `None` if not
@@ -647,39 +834,41 @@ fn control_char_to_string(cc: nix::libc::cc_t) -> nix::Result<String> {
     Ok(format!("{meta_prefix}{ctrl_prefix}{character}"))
 }
 
-fn print_control_chars(termios: &Termios, opts: &Options) -> nix::Result<()> {
+fn print_control_chars(
+    termios: &Termios,
+    opts: &Options,
+    term_size: Option<&TermSize>,
+) -> nix::Result<()> {
     if !opts.all {
         // Print only control chars that differ from sane defaults
-        let mut printed = false;
+        let mut printer = WrappedPrinter::new(term_size);
         for (text, cc_index) in CONTROL_CHARS {
             let current_val = termios.control_chars[*cc_index as usize];
             let sane_val = get_sane_control_char(*cc_index);
 
             if current_val != sane_val {
-                print!("{text} = {}; ", control_char_to_string(current_val)?);
-                printed = true;
+                printer.print(&format!(
+                    "{text} = {};",
+                    control_char_to_string(current_val)?
+                ));
             }
         }
-
-        if printed {
-            println!();
-        }
+        printer.flush();
         return Ok(());
     }
 
+    let mut printer = WrappedPrinter::new(term_size);
     for (text, cc_index) in CONTROL_CHARS {
-        print!(
-            "{text} = {}; ",
+        printer.print(&format!(
+            "{text} = {};",
             control_char_to_string(termios.control_chars[*cc_index as usize])?
-        );
+        ));
     }
-    println!(
-        "{}",
-        translate!("stty-output-min-time",
+    printer.print(&translate!("stty-output-min-time",
         "min" => termios.control_chars[S::VMIN as usize],
         "time" => termios.control_chars[S::VTIME as usize]
-        )
-    );
+    ));
+    printer.flush();
     Ok(())
 }
 
@@ -697,22 +886,48 @@ fn print_in_save_format(termios: &Termios) {
     println!();
 }
 
+/// Gets terminal size using the tiocgwinsz ioctl system call.
+/// This queries the kernel for the current terminal window dimensions.
+fn get_terminal_size(fd: RawFd) -> nix::Result<TermSize> {
+    let mut term_size = TermSize::default();
+    unsafe { tiocgwinsz(fd, &raw mut term_size) }.map(|_| term_size)
+}
+
 fn print_settings(termios: &Termios, opts: &Options) -> nix::Result<()> {
     if opts.save {
         print_in_save_format(termios);
     } else {
-        print_terminal_size(termios, opts)?;
-        print_control_chars(termios, opts)?;
-        print_flags(termios, opts, CONTROL_FLAGS);
-        print_flags(termios, opts, INPUT_FLAGS);
-        print_flags(termios, opts, OUTPUT_FLAGS);
-        print_flags(termios, opts, LOCAL_FLAGS);
+        let device_fd = opts.file.as_raw_fd();
+        let term_size = if opts.all {
+            Some(get_terminal_size(device_fd)?)
+        } else {
+            get_terminal_size(device_fd).ok()
+        };
+
+        let stdout_fd = stdout().as_raw_fd();
+        let window_size = if device_fd == stdout_fd {
+            &term_size
+        } else {
+            &get_terminal_size(stdout_fd).ok()
+        };
+
+        print_terminal_size(termios, opts, window_size.as_ref(), term_size.as_ref())?;
+        print_control_chars(termios, opts, window_size.as_ref())?;
+        print_flags(termios, opts, CONTROL_FLAGS, window_size.as_ref());
+        print_flags(termios, opts, INPUT_FLAGS, window_size.as_ref());
+        print_flags(termios, opts, OUTPUT_FLAGS, window_size.as_ref());
+        print_flags(termios, opts, LOCAL_FLAGS, window_size.as_ref());
     }
     Ok(())
 }
 
-fn print_flags<T: TermiosFlag>(termios: &Termios, opts: &Options, flags: &[Flag<T>]) {
-    let mut printed = false;
+fn print_flags<T: TermiosFlag>(
+    termios: &Termios,
+    opts: &Options,
+    flags: &[Flag<T>],
+    term_size: Option<&TermSize>,
+) {
+    let mut printer = WrappedPrinter::new(term_size);
     for &Flag {
         name,
         flag,
@@ -727,26 +942,23 @@ fn print_flags<T: TermiosFlag>(termios: &Termios, opts: &Options, flags: &[Flag<
         let val = flag.is_in(termios, group);
         if group.is_some() {
             if val && (!sane || opts.all) {
-                print!("{name} ");
-                printed = true;
+                printer.print(name);
             }
         } else if opts.all || val != sane {
             if !val {
-                print!("-");
+                printer.print(&format!("-{name}"));
+                continue;
             }
-            print!("{name} ");
-            printed = true;
+            printer.print(name);
         }
     }
-    if printed {
-        println!();
-    }
+    printer.flush();
 }
 
 /// Apply a single setting
-fn apply_setting(termios: &mut Termios, setting: &AllFlags) {
+fn apply_setting(termios: &mut Termios, setting: &AllFlags) -> nix::Result<()> {
     match setting {
-        AllFlags::Baud(_) => apply_baud_rate_flag(termios, setting),
+        AllFlags::Baud(_, _) => apply_baud_rate_flag(termios, setting)?,
         AllFlags::ControlFlags((setting, disable)) => {
             setting.flag.apply(termios, !disable);
         }
@@ -760,38 +972,58 @@ fn apply_setting(termios: &mut Termios, setting: &AllFlags) {
             setting.flag.apply(termios, !disable);
         }
     }
+    Ok(())
 }
 
-fn apply_baud_rate_flag(termios: &mut Termios, input: &AllFlags) {
-    // BSDs use a u32 for the baud rate, so any decimal number applies.
-    #[cfg(any(
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    ))]
-    if let AllFlags::Baud(n) = input {
-        cfsetospeed(termios, *n).expect("Failed to set baud rate");
+fn apply_baud_rate_flag(termios: &mut Termios, input: &AllFlags) -> nix::Result<()> {
+    if let AllFlags::Baud(rate, baud_type) = input {
+        match baud_type {
+            flags::BaudType::Input => cfsetispeed(termios, *rate)?,
+            flags::BaudType::Output => cfsetospeed(termios, *rate)?,
+            flags::BaudType::Both => {
+                cfsetispeed(termios, *rate)?;
+                cfsetospeed(termios, *rate)?;
+            }
+        }
     }
-
-    // Other platforms use an enum.
-    #[cfg(not(any(
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    )))]
-    if let AllFlags::Baud(br) = input {
-        cfsetospeed(termios, *br).expect("Failed to set baud rate");
-    }
+    Ok(())
 }
 
 fn apply_char_mapping(termios: &mut Termios, mapping: &(S, u8)) {
     termios.control_chars[mapping.0 as usize] = mapping.1;
+}
+
+/// Apply a saved terminal state to the current termios.
+///
+/// The state array contains:
+/// - `state[0]`: input flags
+/// - `state[1]`: output flags
+/// - `state[2]`: control flags
+/// - `state[3]`: local flags
+/// - `state[4..]`: control characters (optional)
+///
+/// If state has fewer than 4 elements, no changes are applied. This is a defensive
+/// check that should never trigger since `parse_saved_state` rejects such states.
+fn apply_saved_state(termios: &mut Termios, state: &[u32]) -> nix::Result<()> {
+    // Require at least 4 elements for the flags (defensive check)
+    if state.len() < 4 {
+        return Ok(()); // No-op for invalid state (already validated by parser)
+    }
+
+    // Apply the four flag groups, done (as _) for MacOS size compatibility
+    termios.input_flags = InputFlags::from_bits_truncate(state[0] as _);
+    termios.output_flags = OutputFlags::from_bits_truncate(state[1] as _);
+    termios.control_flags = ControlFlags::from_bits_truncate(state[2] as _);
+    termios.local_flags = LocalFlags::from_bits_truncate(state[3] as _);
+
+    // Apply control characters if present (stored as u32 but used as u8)
+    for (i, &cc_val) in state.iter().skip(4).enumerate() {
+        if i < termios.control_chars.len() {
+            termios.control_chars[i] = cc_val as u8;
+        }
+    }
+
+    Ok(())
 }
 
 fn apply_special_setting(
@@ -804,11 +1036,15 @@ fn apply_special_setting(
     match setting {
         SpecialSetting::Rows(n) => size.rows = *n,
         SpecialSetting::Cols(n) => size.columns = *n,
-        SpecialSetting::Line(_n) => {
+        #[cfg_attr(
+            not(any(target_os = "linux", target_os = "android")),
+            expect(unused_variables)
+        )]
+        SpecialSetting::Line(n) => {
             // nix only defines Termios's `line_discipline` field on these platforms
             #[cfg(any(target_os = "linux", target_os = "android"))]
             {
-                _termios.line_discipline = *_n;
+                _termios.line_discipline = *n;
             }
         }
     }
@@ -1080,5 +1316,311 @@ impl TermiosFlag for LocalFlags {
 
     fn apply(&self, termios: &mut Termios, val: bool) {
         termios.local_flags.set(*self, val);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Essential unit tests for complex internal parsing and logic functions.
+
+    // Control character parsing tests
+    #[test]
+    fn test_string_to_control_char_undef() {
+        assert_eq!(string_to_control_char("undef").unwrap(), 0);
+        assert_eq!(string_to_control_char("^-").unwrap(), 0);
+        assert_eq!(string_to_control_char("").unwrap(), 0);
+    }
+
+    #[test]
+    fn test_string_to_control_char_hat_notation() {
+        assert_eq!(string_to_control_char("^C").unwrap(), 3);
+        assert_eq!(string_to_control_char("^A").unwrap(), 1);
+        assert_eq!(string_to_control_char("^?").unwrap(), 127);
+    }
+
+    #[test]
+    fn test_string_to_control_char_formats() {
+        assert_eq!(string_to_control_char("A").unwrap(), b'A');
+        assert_eq!(string_to_control_char("65").unwrap(), 65);
+        assert_eq!(string_to_control_char("0x41").unwrap(), 0x41);
+        assert_eq!(string_to_control_char("0101").unwrap(), 0o101);
+    }
+
+    #[test]
+    fn test_string_to_control_char_overflow() {
+        assert!(string_to_control_char("256").is_err());
+        assert!(string_to_control_char("0x100").is_err());
+        assert!(string_to_control_char("0400").is_err());
+    }
+
+    // Control character formatting tests
+    #[test]
+    fn test_control_char_to_string_formats() {
+        assert_eq!(
+            control_char_to_string(0).unwrap(),
+            translate!("stty-output-undef")
+        );
+        assert_eq!(control_char_to_string(3).unwrap(), "^C");
+        assert_eq!(control_char_to_string(b'A').unwrap(), "A");
+        assert_eq!(control_char_to_string(0x7f).unwrap(), "^?");
+        assert_eq!(control_char_to_string(0x80).unwrap(), "M-^@");
+    }
+
+    // Combination settings tests
+    #[test]
+    fn test_combo_to_flags_sane() {
+        let flags = combo_to_flags("sane");
+        assert!(flags.len() > 5); // sane sets multiple flags
+    }
+
+    #[test]
+    fn test_combo_to_flags_raw_cooked() {
+        assert!(!combo_to_flags("raw").is_empty());
+        assert!(!combo_to_flags("cooked").is_empty());
+        assert!(!combo_to_flags("-raw").is_empty());
+    }
+
+    #[test]
+    fn test_combo_to_flags_parity() {
+        assert!(!combo_to_flags("evenp").is_empty());
+        assert!(!combo_to_flags("oddp").is_empty());
+        assert!(!combo_to_flags("-evenp").is_empty());
+    }
+
+    // Parse rows/cols with overflow handling
+    #[test]
+    fn test_parse_rows_cols_normal() {
+        let result = parse_rows_cols("24");
+        assert_eq!(result, Some(24));
+    }
+
+    #[test]
+    fn test_parse_rows_cols_overflow() {
+        assert_eq!(parse_rows_cols("65536"), Some(0)); // wraps to 0
+        assert_eq!(parse_rows_cols("65537"), Some(1)); // wraps to 1
+    }
+
+    // Sane control character defaults
+    #[test]
+    fn test_get_sane_control_char_values() {
+        assert_eq!(get_sane_control_char(S::VINTR), 3); // ^C
+        assert_eq!(get_sane_control_char(S::VQUIT), 28); // ^\
+        assert_eq!(get_sane_control_char(S::VERASE), 127); // DEL
+        assert_eq!(get_sane_control_char(S::VKILL), 21); // ^U
+        assert_eq!(get_sane_control_char(S::VEOF), 4); // ^D
+    }
+
+    // Additional tests for parse_rows_cols
+    #[test]
+    fn test_parse_rows_cols_valid() {
+        assert_eq!(parse_rows_cols("80"), Some(80));
+        assert_eq!(parse_rows_cols("65535"), Some(65535));
+        assert_eq!(parse_rows_cols("0"), Some(0));
+        assert_eq!(parse_rows_cols("1"), Some(1));
+    }
+
+    #[test]
+    fn test_parse_rows_cols_wraparound() {
+        // Test u16 wraparound: (u16::MAX + 1) % (u16::MAX + 1) = 0
+        assert_eq!(parse_rows_cols("131071"), Some(65535)); // (2*65536 - 1) % 65536 = 65535
+        assert_eq!(parse_rows_cols("131072"), Some(0)); // (2*65536) % 65536 = 0
+    }
+
+    #[test]
+    fn test_parse_rows_cols_invalid() {
+        assert_eq!(parse_rows_cols(""), None);
+        assert_eq!(parse_rows_cols("abc"), None);
+        assert_eq!(parse_rows_cols("-1"), None);
+        assert_eq!(parse_rows_cols("12.5"), None);
+        assert_eq!(parse_rows_cols("not_a_number"), None);
+    }
+
+    // Tests for string_to_baud
+    #[test]
+    fn test_string_to_baud_valid() {
+        #[cfg(not(any(
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "netbsd",
+            target_os = "openbsd"
+        )))]
+        {
+            assert!(string_to_baud("9600", flags::BaudType::Both).is_some());
+            assert!(string_to_baud("115200", flags::BaudType::Both).is_some());
+            assert!(string_to_baud("38400", flags::BaudType::Both).is_some());
+            assert!(string_to_baud("19200", flags::BaudType::Both).is_some());
+        }
+
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "netbsd",
+            target_os = "openbsd"
+        ))]
+        {
+            assert!(string_to_baud("9600", flags::BaudType::Both).is_some());
+            assert!(string_to_baud("115200", flags::BaudType::Both).is_some());
+            assert!(string_to_baud("1000000", flags::BaudType::Both).is_some());
+            assert!(string_to_baud("0", flags::BaudType::Both).is_some());
+        }
+    }
+
+    #[test]
+    fn test_string_to_baud_invalid() {
+        #[cfg(not(any(
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "netbsd",
+            target_os = "openbsd"
+        )))]
+        {
+            assert_eq!(string_to_baud("995", flags::BaudType::Both), None);
+            assert_eq!(string_to_baud("invalid", flags::BaudType::Both), None);
+            assert_eq!(string_to_baud("", flags::BaudType::Both), None);
+            assert_eq!(string_to_baud("abc", flags::BaudType::Both), None);
+        }
+    }
+
+    // Tests for string_to_combo
+    #[test]
+    fn test_string_to_combo_valid() {
+        assert_eq!(string_to_combo("sane"), Some("sane"));
+        assert_eq!(string_to_combo("raw"), Some("raw"));
+        assert_eq!(string_to_combo("cooked"), Some("cooked"));
+        assert_eq!(string_to_combo("-raw"), Some("-raw"));
+        assert_eq!(string_to_combo("-cooked"), Some("-cooked"));
+        assert_eq!(string_to_combo("cbreak"), Some("cbreak"));
+        assert_eq!(string_to_combo("-cbreak"), Some("-cbreak"));
+        assert_eq!(string_to_combo("nl"), Some("nl"));
+        assert_eq!(string_to_combo("-nl"), Some("-nl"));
+        assert_eq!(string_to_combo("ek"), Some("ek"));
+        assert_eq!(string_to_combo("evenp"), Some("evenp"));
+        assert_eq!(string_to_combo("-evenp"), Some("-evenp"));
+        assert_eq!(string_to_combo("parity"), Some("parity"));
+        assert_eq!(string_to_combo("-parity"), Some("-parity"));
+        assert_eq!(string_to_combo("oddp"), Some("oddp"));
+        assert_eq!(string_to_combo("-oddp"), Some("-oddp"));
+        assert_eq!(string_to_combo("pass8"), Some("pass8"));
+        assert_eq!(string_to_combo("-pass8"), Some("-pass8"));
+        assert_eq!(string_to_combo("litout"), Some("litout"));
+        assert_eq!(string_to_combo("-litout"), Some("-litout"));
+        assert_eq!(string_to_combo("crt"), Some("crt"));
+        assert_eq!(string_to_combo("dec"), Some("dec"));
+        assert_eq!(string_to_combo("decctlq"), Some("decctlq"));
+        assert_eq!(string_to_combo("-decctlq"), Some("-decctlq"));
+    }
+
+    #[test]
+    fn test_string_to_combo_invalid() {
+        assert_eq!(string_to_combo("notacombo"), None);
+        assert_eq!(string_to_combo(""), None);
+        assert_eq!(string_to_combo("invalid"), None);
+        // Test non-negatable combos with negation
+        assert_eq!(string_to_combo("-sane"), None);
+        assert_eq!(string_to_combo("-ek"), None);
+        assert_eq!(string_to_combo("-crt"), None);
+        assert_eq!(string_to_combo("-dec"), None);
+    }
+
+    // Tests for cc_to_index
+    #[test]
+    fn test_cc_to_index_valid() {
+        assert_eq!(cc_to_index("intr"), Some(S::VINTR));
+        assert_eq!(cc_to_index("quit"), Some(S::VQUIT));
+        assert_eq!(cc_to_index("erase"), Some(S::VERASE));
+        assert_eq!(cc_to_index("kill"), Some(S::VKILL));
+        assert_eq!(cc_to_index("eof"), Some(S::VEOF));
+        assert_eq!(cc_to_index("start"), Some(S::VSTART));
+        assert_eq!(cc_to_index("stop"), Some(S::VSTOP));
+        assert_eq!(cc_to_index("susp"), Some(S::VSUSP));
+        assert_eq!(cc_to_index("rprnt"), Some(S::VREPRINT));
+        assert_eq!(cc_to_index("werase"), Some(S::VWERASE));
+        assert_eq!(cc_to_index("lnext"), Some(S::VLNEXT));
+        assert_eq!(cc_to_index("discard"), Some(S::VDISCARD));
+    }
+
+    #[test]
+    fn test_cc_to_index_invalid() {
+        // spell-checker:ignore notachar
+        assert_eq!(cc_to_index("notachar"), None);
+        assert_eq!(cc_to_index(""), None);
+        assert_eq!(cc_to_index("INTR"), None); // case sensitive
+        assert_eq!(cc_to_index("invalid"), None);
+    }
+
+    // Tests for check_flag_group
+    #[test]
+    fn test_check_flag_group() {
+        let flag_with_group = Flag::new_grouped("cs5", ControlFlags::CS5, ControlFlags::CSIZE);
+        let flag_without_group = Flag::new("parenb", ControlFlags::PARENB);
+
+        assert!(check_flag_group(&flag_with_group, true));
+        assert!(!check_flag_group(&flag_with_group, false));
+        assert!(!check_flag_group(&flag_without_group, true));
+        assert!(!check_flag_group(&flag_without_group, false));
+    }
+
+    // Additional tests for get_sane_control_char
+    #[test]
+    fn test_get_sane_control_char_all_defined() {
+        assert_eq!(get_sane_control_char(S::VSTART), 17); // ^Q
+        assert_eq!(get_sane_control_char(S::VSTOP), 19); // ^S
+        assert_eq!(get_sane_control_char(S::VSUSP), 26); // ^Z
+        assert_eq!(get_sane_control_char(S::VREPRINT), 18); // ^R
+        assert_eq!(get_sane_control_char(S::VWERASE), 23); // ^W
+        assert_eq!(get_sane_control_char(S::VLNEXT), 22); // ^V
+        assert_eq!(get_sane_control_char(S::VDISCARD), 15); // ^O
+    }
+
+    // Tests for parse_u8_or_err
+    #[test]
+    fn test_parse_u8_or_err_valid() {
+        assert_eq!(parse_u8_or_err("0").unwrap(), 0);
+        assert_eq!(parse_u8_or_err("255").unwrap(), 255);
+        assert_eq!(parse_u8_or_err("128").unwrap(), 128);
+        assert_eq!(parse_u8_or_err("1").unwrap(), 1);
+    }
+
+    #[test]
+    fn test_parse_u8_or_err_overflow() {
+        // Test that overflow values return an error
+        // Note: In test environment, translate!() returns the key, not the translated string
+        // spell-checker:ignore Valeur
+        let err = parse_u8_or_err("256").unwrap_err();
+        assert!(
+            err.contains("value-too-large")
+                || err.contains("Value too large")
+                || err.contains("Valeur trop grande"),
+            "Expected overflow error, got: {err}"
+        );
+
+        assert!(parse_u8_or_err("1000").is_err());
+        assert!(parse_u8_or_err("65536").is_err());
+    }
+
+    #[test]
+    fn test_parse_u8_or_err_invalid() {
+        // Test that invalid values return an error
+        // Note: In test environment, translate!() returns the key, not the translated string
+        // spell-checker:ignore entier invalide
+        let err = parse_u8_or_err("-1").unwrap_err();
+        assert!(
+            err.contains("invalid-integer-argument")
+                || err.contains("invalid integer argument")
+                || err.contains("argument entier invalide"),
+            "Expected invalid argument error, got: {err}"
+        );
+
+        assert!(parse_u8_or_err("abc").is_err());
+        assert!(parse_u8_or_err("").is_err());
+        assert!(parse_u8_or_err("12.5").is_err());
     }
 }

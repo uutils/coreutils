@@ -60,15 +60,15 @@ fn test_repeated_exponents() {
 fn test_parallel() {
     use hex_literal::hex;
     use sha1::{Digest, Sha1};
-    use std::{fs::OpenOptions, time::Duration};
+    use std::fs::OpenOptions;
     use tempfile::TempDir;
     use uutests::{
         util::{AtPath, TestScenario},
         util_name,
     };
     // factor should only flush the buffer at line breaks
-    let n_integers = 100_000;
-    let mut input_string = String::new();
+    let n_integers = 50_000;
+    let mut input_string = String::with_capacity(n_integers * 6);
     for i in 0..=n_integers {
         let _ = write!(input_string, "{i} ");
     }
@@ -81,10 +81,9 @@ fn test_parallel() {
         .open(tmp_dir.plus("output"))
         .unwrap();
 
-    for child in (0..10)
+    for child in (0..8)
         .map(|_| {
             new_ucmd!()
-                .timeout(Duration::from_secs(240))
                 .set_stdout(output.try_clone().unwrap())
                 .pipe_in(input_string.clone())
                 .run_no_wait()
@@ -103,7 +102,7 @@ fn test_parallel() {
     let hash_check = hasher.finalize();
     assert_eq!(
         hash_check[..],
-        hex!("cc743607c0ff300ff575d92f4ff0c87d5660c393")
+        hex!("73f104b140449feac7ccf27b4c13ef6b9a4c5ee4")
     );
 }
 

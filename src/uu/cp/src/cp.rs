@@ -689,7 +689,12 @@ pub fn uu_app() -> Command {
             Arg::new(options::NO_DEREFERENCE)
                 .short('P')
                 .long(options::NO_DEREFERENCE)
-                .overrides_with(options::DEREFERENCE)
+                .overrides_with_all([
+                    options::DEREFERENCE,
+                    options::CLI_SYMBOLIC_LINKS,
+                    options::ARCHIVE,
+                    options::NO_DEREFERENCE_PRESERVE_LINKS,
+                ])
                 // -d sets this option
                 .help(translate!("cp-help-no-dereference"))
                 .action(ArgAction::SetTrue),
@@ -698,13 +703,24 @@ pub fn uu_app() -> Command {
             Arg::new(options::DEREFERENCE)
                 .short('L')
                 .long(options::DEREFERENCE)
-                .overrides_with(options::NO_DEREFERENCE)
+                .overrides_with_all([
+                    options::NO_DEREFERENCE,
+                    options::CLI_SYMBOLIC_LINKS,
+                    options::ARCHIVE,
+                    options::NO_DEREFERENCE_PRESERVE_LINKS,
+                ])
                 .help(translate!("cp-help-dereference"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::CLI_SYMBOLIC_LINKS)
                 .short('H')
+                .overrides_with_all([
+                    options::DEREFERENCE,
+                    options::NO_DEREFERENCE,
+                    options::ARCHIVE,
+                    options::NO_DEREFERENCE_PRESERVE_LINKS,
+                ])
                 .help(translate!("cp-help-cli-symbolic-links"))
                 .action(ArgAction::SetTrue),
         )
@@ -712,12 +728,24 @@ pub fn uu_app() -> Command {
             Arg::new(options::ARCHIVE)
                 .short('a')
                 .long(options::ARCHIVE)
+                .overrides_with_all([
+                    options::DEREFERENCE,
+                    options::NO_DEREFERENCE,
+                    options::CLI_SYMBOLIC_LINKS,
+                    options::NO_DEREFERENCE_PRESERVE_LINKS,
+                ])
                 .help(translate!("cp-help-archive"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NO_DEREFERENCE_PRESERVE_LINKS)
                 .short('d')
+                .overrides_with_all([
+                    options::DEREFERENCE,
+                    options::NO_DEREFERENCE,
+                    options::CLI_SYMBOLIC_LINKS,
+                    options::ARCHIVE,
+                ])
                 .help(translate!("cp-help-no-dereference-preserve-links"))
                 .action(ArgAction::SetTrue),
         )
@@ -987,8 +1015,6 @@ impl Options {
         let not_implemented_opts = vec![
             #[cfg(not(any(windows, unix)))]
             options::ONE_FILE_SYSTEM,
-            #[cfg(windows)]
-            options::FORCE,
         ];
 
         for not_implemented_opt in not_implemented_opts {
@@ -1281,9 +1307,7 @@ fn parse_path_args(
     };
 
     if options.strip_trailing_slashes {
-        // clippy::assigning_clones added with Rust 1.78
-        // Rust version = 1.76 on OpenBSD stable/7.5
-        #[cfg_attr(not(target_os = "openbsd"), allow(clippy::assigning_clones))]
+        #[allow(clippy::assigning_clones)]
         for source in &mut paths {
             *source = source.components().as_path().to_owned();
         }
@@ -1366,8 +1390,8 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
             let dest = construct_dest_path(source, target, target_type, options)
                 .unwrap_or_else(|_| target.to_path_buf());
 
-            if fs::metadata(&dest).is_ok()
-                && !fs::symlink_metadata(&dest)?.file_type().is_symlink()
+            if FileInformation::from_path(&dest, true).is_ok()
+                && !fs::symlink_metadata(&dest).is_ok_and(|m| m.file_type().is_symlink())
                 // if both `source` and `dest` are symlinks, it should be considered as an overwrite.
                 || fs::metadata(source).is_ok()
                     && fs::symlink_metadata(source)?.file_type().is_symlink()
@@ -1375,10 +1399,19 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
             {
                 // There is already a file and it isn't a symlink (managed in a different place)
                 if copied_destinations.contains(&dest) && options.backup != BackupMode::Numbered {
-                    // If the target file was already created in this cp call, do not overwrite
-                    return Err(CpError::Error(
-                        translate!("cp-error-will-not-overwrite-just-created", "dest" => dest.quote(), "source" => source.quote()),
-                    ));
+                    // If the target was already created in this cp call, check if it's a directory.
+                    // Directories should be merged (GNU cp behavior), but files should not be overwritten.
+                    let dest_is_dir = fs::metadata(&dest).is_ok_and(|m| m.is_dir());
+                    let source_is_dir = fs::metadata(source).is_ok_and(|m| m.is_dir());
+
+                    // Only prevent overwriting if both source and dest are files (not directories)
+                    // Directories should be merged, which is handled by copy_directory
+                    if !dest_is_dir || !source_is_dir {
+                        // If the target file was already created in this cp call, do not overwrite
+                        return Err(CpError::Error(
+                            translate!("cp-error-will-not-overwrite-just-created", "dest" => dest.quote(), "source" => source.quote()),
+                        ));
+                    }
                 }
             }
 
@@ -1533,6 +1566,7 @@ fn file_mode_for_interactive_overwrite(
             match path.metadata() {
                 Ok(me) => {
                     // Cast is necessary on some platforms
+                    #[allow(clippy::unnecessary_cast)]
                     let mode: mode_t = me.mode() as mode_t;
 
                     // It looks like this extra information is added to the prompt iff the file's user write bit is 0
@@ -1725,20 +1759,20 @@ pub(crate) fn copy_attributes(
         Ok(())
     })?;
 
-    #[cfg(feature = "selinux")]
+    #[cfg(all(feature = "selinux", target_os = "linux"))]
     handle_preserve(&attributes.context, || -> CopyResult<()> {
         // Get the source context and apply it to the destination
         if let Ok(context) = selinux::SecurityContext::of_path(source, false, false) {
             if let Some(context) = context {
                 if let Err(e) = context.set_for_path(dest, false, false) {
                     return Err(CpError::Error(
-                        translate!("cp-error-selinux-set-context", "path" => dest.display(), "error" => e),
+                        translate!("cp-error-selinux-set-context", "path" => dest.quote(), "error" => e),
                     ));
                 }
             }
         } else {
             return Err(CpError::Error(
-                translate!("cp-error-selinux-get-context", "path" => source.display()),
+                translate!("cp-error-selinux-get-context", "path" => source.quote()),
             ));
         }
         Ok(())
@@ -1982,6 +2016,16 @@ fn delete_dest_if_needed_and_allowed(
 }
 
 fn delete_path(path: &Path, options: &Options) -> CopyResult<()> {
+    // Windows requires clearing readonly attribute before deletion when using --force
+    #[cfg(windows)]
+    if options.force() {
+        if let Ok(mut perms) = fs::metadata(path).map(|m| m.permissions()) {
+            #[allow(clippy::permissions_set_readonly_false)]
+            perms.set_readonly(false);
+            let _ = fs::set_permissions(path, perms);
+        }
+    }
+
     match fs::remove_file(path) {
         Ok(()) => {
             if options.verbose {
@@ -2302,8 +2346,7 @@ fn copy_file(
     let initial_dest_metadata = dest.symlink_metadata().ok();
     let dest_is_symlink = initial_dest_metadata
         .as_ref()
-        .map(|md| md.file_type().is_symlink())
-        .unwrap_or(false);
+        .is_some_and(|md| md.file_type().is_symlink());
     let dest_target_exists = dest.try_exists().unwrap_or(false);
     // Fail if dest is a dangling symlink or a symlink this program created previously
     if dest_is_symlink {
@@ -2405,7 +2448,9 @@ fn copy_file(
         return Err(translate!("cp-error-cannot-change-attribute", "dest" => dest.quote()).into());
     }
 
-    if options.preserve_hard_links() {
+    // When using --link mode, hard link structure is automatically preserved
+    // because we link to source files (which share inodes).
+    if options.preserve_hard_links() && options.copy_mode != CopyMode::Link {
         // if we encounter a matching device/inode pair in the source tree
         // we can arrange to create a hard link between the corresponding names
         // in the destination tree.
@@ -2494,11 +2539,13 @@ fn copy_file(
     }
 
     if options.dereference(source_in_command_line) {
-        if let Ok(src) = canonicalize(source, MissingHandling::Normal, ResolveMode::Physical) {
-            if src.exists() {
-                copy_attributes(&src, dest, &options.attributes)?;
-            }
-        }
+        // Try to canonicalize, but if it fails (e.g., due to inaccessible parent directories),
+        // fall back to the original source path
+        let src_for_attrs = canonicalize(source, MissingHandling::Normal, ResolveMode::Physical)
+            .ok()
+            .filter(|p| p.exists())
+            .unwrap_or_else(|| source.to_path_buf());
+        copy_attributes(&src_for_attrs, dest, &options.attributes)?;
     } else if source_is_stream && !source.exists() {
         // Some stream files may not exist after we have copied it,
         // like anonymous pipes. Thus, we can't really copy its
@@ -2508,7 +2555,7 @@ fn copy_file(
         copy_attributes(source, dest, &options.attributes)?;
     }
 
-    #[cfg(feature = "selinux")]
+    #[cfg(all(feature = "selinux", target_os = "linux"))]
     if options.set_selinux_context && uucore::selinux::is_selinux_enabled() {
         // Set the given selinux permissions on the copied file.
         if let Err(e) =
@@ -2520,10 +2567,14 @@ fn copy_file(
         }
     }
 
-    copied_files.insert(
-        FileInformation::from_path(source, options.dereference(source_in_command_line))?,
-        dest.to_path_buf(),
-    );
+    // Skip tracking copied files when using --link mode since hard link
+    // structure is automatically preserved
+    if options.copy_mode != CopyMode::Link {
+        copied_files.insert(
+            FileInformation::from_path(source, options.dereference(source_in_command_line))?,
+            dest.to_path_buf(),
+        );
+    }
 
     if let Some(progress_bar) = progress_bar {
         progress_bar.inc(source_metadata.len());
@@ -2576,8 +2627,10 @@ fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
             target_os = "redox",
         ))]
         {
+            #[allow(clippy::unnecessary_cast)]
             const MODE_RW_UGO: u32 =
                 (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
+            #[allow(clippy::unnecessary_cast)]
             const S_IRWXUGO: u32 = (S_IRWXU | S_IRWXG | S_IRWXO) as u32;
             return if is_explicit_no_preserve_mode {
                 MODE_RW_UGO

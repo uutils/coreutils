@@ -1482,3 +1482,13 @@ fn test_large_width_format() {
             .stdout_is("");
     }
 }
+
+#[test]
+fn test_extreme_field_width_overflow() {
+    // Test the specific case that was causing panic due to integer overflow
+    // in the field width parsing.
+    new_ucmd!()
+        .args(&["%999999999999999999999999d", "1"])
+        .fails_with_code(1)
+        .stderr_contains("printf: write error"); //could contains additional message like "formatting width too large" not in GNU, thats fine.
+}

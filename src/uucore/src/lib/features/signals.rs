@@ -3,8 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars/api) fcntl setrlimit setitimer rubout pollable sysconf
-// spell-checker:ignore (vars/signals) ABRT ALRM CHLD SEGV SIGABRT SIGALRM SIGBUS SIGCHLD SIGCONT SIGDANGER SIGEMT SIGFPE SIGHUP SIGILL SIGINFO SIGINT SIGIO SIGIOT SIGKILL SIGMIGRATE SIGMSG SIGPIPE SIGPRE SIGPROF SIGPWR SIGQUIT SIGSEGV SIGSTOP SIGSYS SIGTALRM SIGTERM SIGTRAP SIGTSTP SIGTHR SIGTTIN SIGTTOU SIGURG SIGUSR SIGVIRT SIGVTALRM SIGWINCH SIGXCPU SIGXFSZ STKFLT PWR THR TSTP TTIN TTOU VIRT VTALRM XCPU XFSZ SIGCLD SIGPOLL SIGWAITING SIGAIOCANCEL SIGLWP SIGFREEZE SIGTHAW SIGCANCEL SIGLOST SIGXRES SIGJVM SIGRTMIN SIGRT SIGRTMAX TALRM AIOCANCEL XRES RTMIN RTMAX
+// spell-checker:ignore (vars/api) fcntl setrlimit setitimer rubout pollable sysconf pgrp pfds revents POLLRDBAND POLLERR
+// spell-checker:ignore (vars/signals) ABRT ALRM CHLD SEGV SIGABRT SIGALRM SIGBUS SIGCHLD SIGCONT SIGDANGER SIGEMT SIGFPE SIGHUP SIGILL SIGINFO SIGINT SIGIO SIGIOT SIGKILL SIGMIGRATE SIGMSG SIGPIPE SIGPRE SIGPROF SIGPWR SIGQUIT SIGSEGV SIGSTOP SIGSYS SIGTALRM SIGTERM SIGTRAP SIGTSTP SIGTHR SIGTTIN SIGTTOU SIGURG SIGUSR SIGVIRT SIGVTALRM SIGWINCH SIGXCPU SIGXFSZ STKFLT PWR THR TSTP TTIN TTOU VIRT VTALRM XCPU XFSZ SIGCLD SIGPOLL SIGWAITING SIGAIOCANCEL SIGLWP SIGFREEZE SIGTHAW SIGCANCEL SIGLOST SIGXRES SIGJVM SIGRTMIN SIGRT SIGRTMAX TALRM AIOCANCEL XRES RTMIN RTMAX LTOSTOP
 
 //! This module provides a way to handle signals in a platform-independent way.
 //! It provides a way to convert signal names to their corresponding values and vice versa.
@@ -346,6 +346,49 @@ pub static ALL_SIGNALS: [&str; 37] = [
     "VIRT", "TALRM",
 ];
 
+/*
+   The following signals are defined in Cygwin
+   https://cygwin.com/cgit/newlib-cygwin/tree/winsup/cygwin/include/cygwin/signal.h
+
+   SIGHUP     1   hangup
+   SIGINT     2   interrupt
+   SIGQUIT    3   quit
+   SIGILL     4   illegal instruction (not reset when caught)
+   SIGTRAP    5   trace trap (not reset when caught)
+   SIGABRT    6   used by abort
+   SIGEMT     7   EMT instruction
+   SIGFPE     8   floating point exception
+   SIGKILL    9   kill (cannot be caught or ignored)
+   SIGBUS     10  bus error
+   SIGSEGV    11  segmentation violation
+   SIGSYS     12  bad argument to system call
+   SIGPIPE    13  write on a pipe with no one to read it
+   SIGALRM    14  alarm clock
+   SIGTERM    15  software termination signal from kill
+   SIGURG     16  urgent condition on IO channel
+   SIGSTOP    17  sendable stop signal not from tty
+   SIGTSTP    18  stop signal from tty
+   SIGCONT    19  continue a stopped process
+   SIGCHLD    20  to parent on child stop or exit
+   SIGTTIN    21  to readers pgrp upon background tty read
+   SIGTTOU    22  like TTIN for output if (tp->t_local&LTOSTOP)
+   SIGIO      23  input/output possible signal
+   SIGXCPU    24  exceeded CPU time limit
+   SIGXFSZ    25  exceeded file size limit
+   SIGVTALRM  26  virtual time alarm
+   SIGPROF    27  profiling time alarm
+   SIGWINCH   28  window changed
+   SIGLOST    29  resource lost (eg, record-lock lost)
+   SIGUSR1    30  user defined signal 1
+   SIGUSR2    31  user defined signal 2
+*/
+#[cfg(target_os = "cygwin")]
+pub static ALL_SIGNALS: [&str; 32] = [
+    "EXIT", "HUP", "INT", "QUIT", "ILL", "TRAP", "ABRT", "EMT", "FPE", "KILL", "BUS", "SEGV",
+    "SYS", "PIPE", "ALRM", "TERM", "URG", "STOP", "TSTP", "CONT", "CHLD", "TTIN", "TTOU", "IO",
+    "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH", "PWR", "USR1", "USR2",
+];
+
 /// Returns the signal number for a given signal name or value.
 pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
     let signal_name_upcase = signal_name_or_value.to_uppercase();
@@ -381,6 +424,110 @@ pub fn ignore_interrupts() -> Result<(), Errno> {
     // We pass the error as is, the return value would just be Ok(SigIgn), so we can safely ignore it.
     // SAFETY: this function is safe as long as we do not use a custom SigHandler -- we use the default one.
     unsafe { signal(SIGINT, SigIgn) }.map(|_| ())
+}
+
+// SIGPIPE state capture - captures whether SIGPIPE was ignored at process startup
+#[cfg(unix)]
+use std::sync::atomic::{AtomicBool, Ordering};
+
+#[cfg(unix)]
+static SIGPIPE_WAS_IGNORED: AtomicBool = AtomicBool::new(false);
+
+/// Captures SIGPIPE state at process initialization, before main() runs.
+///
+/// # Safety
+/// Called from `.init_array` before main(). Only reads current SIGPIPE handler state.
+#[cfg(unix)]
+pub unsafe extern "C" fn capture_sigpipe_state() {
+    use nix::libc;
+    use std::mem::MaybeUninit;
+    use std::ptr;
+
+    let mut current = MaybeUninit::<libc::sigaction>::uninit();
+    // SAFETY: sigaction with null new-action just queries current state
+    if unsafe { libc::sigaction(libc::SIGPIPE, ptr::null(), current.as_mut_ptr()) } == 0 {
+        // SAFETY: sigaction succeeded, so current is initialized
+        let ignored = unsafe { current.assume_init() }.sa_sigaction == libc::SIG_IGN;
+        SIGPIPE_WAS_IGNORED.store(ignored, Ordering::Release);
+    }
+}
+
+/// Initializes SIGPIPE state capture. Call once at crate root level.
+#[macro_export]
+#[cfg(unix)]
+macro_rules! init_sigpipe_capture {
+    () => {
+        #[cfg(all(unix, not(target_os = "macos")))]
+        #[used]
+        #[unsafe(link_section = ".init_array")]
+        static CAPTURE_SIGPIPE_STATE: unsafe extern "C" fn() =
+            $crate::signals::capture_sigpipe_state;
+
+        #[cfg(all(unix, target_os = "macos"))]
+        #[used]
+        #[unsafe(link_section = "__DATA,__mod_init_func")]
+        static CAPTURE_SIGPIPE_STATE: unsafe extern "C" fn() =
+            $crate::signals::capture_sigpipe_state;
+    };
+}
+
+#[macro_export]
+#[cfg(not(unix))]
+macro_rules! init_sigpipe_capture {
+    () => {};
+}
+
+/// Returns whether SIGPIPE was ignored at process startup.
+#[cfg(unix)]
+pub fn sigpipe_was_ignored() -> bool {
+    SIGPIPE_WAS_IGNORED.load(Ordering::Acquire)
+}
+
+#[cfg(not(unix))]
+pub const fn sigpipe_was_ignored() -> bool {
+    false
+}
+
+#[cfg(target_os = "linux")]
+pub fn ensure_stdout_not_broken() -> std::io::Result<bool> {
+    use nix::{
+        poll::{PollFd, PollFlags, PollTimeout, poll},
+        sys::stat::{SFlag, fstat},
+    };
+    use std::io::stdout;
+    use std::os::fd::AsFd;
+
+    let out = stdout();
+
+    // First, check that stdout is a fifo and return true if it's not the case
+    let stat = fstat(out.as_fd())?;
+    if !SFlag::from_bits_truncate(stat.st_mode).contains(SFlag::S_IFIFO) {
+        return Ok(true);
+    }
+
+    // POLLRDBAND is the flag used by GNU tee.
+    let mut pfds = [PollFd::new(out.as_fd(), PollFlags::POLLRDBAND)];
+
+    // Then, ensure that the pipe is not broken.
+    // Use ZERO timeout to return immediately - we just want to check the current state.
+    let res = poll(&mut pfds, PollTimeout::ZERO)?;
+
+    if res > 0 {
+        // poll returned with events ready - check if POLLERR is set (pipe broken)
+        let error = pfds.iter().any(|pfd| {
+            if let Some(revents) = pfd.revents() {
+                revents.contains(PollFlags::POLLERR)
+            } else {
+                true
+            }
+        });
+        return Ok(!error);
+    }
+
+    // res == 0 means no events ready (timeout reached immediately with ZERO timeout).
+    // This means the pipe is healthy (not broken).
+    // res < 0 would be an error, but nix returns Err in that case.
+    Ok(true)
 }
 
 #[test]

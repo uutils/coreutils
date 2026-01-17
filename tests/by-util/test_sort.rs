@@ -3,13 +3,16 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) ints (linux) NOFILE
+// spell-checker:ignore (words) ints (linux) NOFILE dfgi
 #![allow(clippy::cast_possible_wrap)]
 
+use std::env;
+use std::fmt::Write as FmtWrite;
 use std::time::Duration;
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
+use uutests::util::TestScenario;
 
 fn test_helper(file_name: &str, possible_args: &[&str]) {
     for args in possible_args {
@@ -105,6 +108,33 @@ fn test_invalid_buffer_size() {
                 ));
         }
     }
+}
+
+#[test]
+fn test_legacy_plus_minus_accepts_when_modern_posix2() {
+    let size_max = usize::MAX;
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input.txt", "aa\nbb\n");
+
+    ucmd.env("_POSIX2_VERSION", "200809")
+        .arg(format!("+0.{size_max}R"))
+        .arg("input.txt")
+        .succeeds()
+        .stdout_is("aa\nbb\n");
+}
+
+#[test]
+fn test_legacy_plus_minus_accepts_with_size_max() {
+    let size_max = usize::MAX;
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input.txt", "aa\nbb\n");
+
+    ucmd.env("_POSIX2_VERSION", "200809")
+        .arg("+1")
+        .arg(format!("-1.{size_max}R"))
+        .arg("input.txt")
+        .succeeds()
+        .stdout_is("aa\nbb\n");
 }
 
 #[test]
@@ -590,7 +620,7 @@ fn test_keys_invalid_field() {
     new_ucmd!()
         .args(&["-k", "1."])
         .fails()
-        .stderr_only("sort: failed to parse key '1.': failed to parse character index '': cannot parse integer from empty string\n");
+        .stderr_only("sort: invalid number after '.': invalid count at start of ''\n");
 }
 
 #[test]
@@ -598,7 +628,7 @@ fn test_keys_invalid_field_option() {
     new_ucmd!()
         .args(&["-k", "1.1x"])
         .fails()
-        .stderr_only("sort: failed to parse key '1.1x': invalid option: 'x'\n");
+        .stderr_only("sort: stray character in field spec: invalid field specification '1.1x'\n");
 }
 
 #[test]
@@ -606,7 +636,7 @@ fn test_keys_invalid_field_zero() {
     new_ucmd!()
         .args(&["-k", "0.1"])
         .fails()
-        .stderr_only("sort: failed to parse key '0.1': field index can not be 0\n");
+        .stderr_only("sort: field number is zero: invalid field specification '0.1'\n");
 }
 
 #[test]
@@ -614,7 +644,73 @@ fn test_keys_invalid_char_zero() {
     new_ucmd!()
         .args(&["-k", "1.0"])
         .fails()
-        .stderr_only("sort: failed to parse key '1.0': invalid character index 0 for the start position of a field\n");
+        .stderr_only("sort: character offset is zero: invalid field specification '1.0'\n");
+}
+
+#[test]
+fn test_keys_invalid_number_formats() {
+    new_ucmd!()
+        .args(&["-k", "0"])
+        .fails_with_code(2)
+        .stderr_only("sort: field number is zero: invalid field specification '0'\n");
+
+    new_ucmd!()
+        .args(&["-k", "2.,3"])
+        .fails_with_code(2)
+        .stderr_only("sort: invalid number after '.': invalid count at start of ',3'\n");
+
+    new_ucmd!()
+        .args(&["-k", "2,"])
+        .fails_with_code(2)
+        .stderr_only("sort: invalid number after ',': invalid count at start of ''\n");
+
+    new_ucmd!()
+        .args(&["-k", "1.1,-k0"])
+        .fails_with_code(2)
+        .stderr_only("sort: invalid number after ',': invalid count at start of '-k0'\n");
+}
+
+#[test]
+fn test_incompatible_options() {
+    new_ucmd!()
+        .arg("-hn")
+        .fails_with_code(2)
+        .stderr_only("sort: options '-hn' are incompatible\n");
+
+    new_ucmd!()
+        .arg("-in")
+        .fails_with_code(2)
+        .stderr_only("sort: options '-in' are incompatible\n");
+
+    new_ucmd!()
+        .arg("-nR")
+        .fails_with_code(2)
+        .stderr_only("sort: options '-nR' are incompatible\n");
+
+    new_ucmd!()
+        .arg("-dfgiMnR")
+        .fails_with_code(2)
+        .stderr_only("sort: options '-dfgMnR' are incompatible\n");
+
+    new_ucmd!()
+        .args(&["--sort=random", "-n"])
+        .fails_with_code(2)
+        .stderr_only("sort: options '-nR' are incompatible\n");
+
+    new_ucmd!()
+        .args(&["-c", "-o", "out"])
+        .fails_with_code(2)
+        .stderr_only("sort: options '-co' are incompatible\n");
+
+    new_ucmd!()
+        .args(&["-C", "-o", "out"])
+        .fails_with_code(2)
+        .stderr_only("sort: options '-Co' are incompatible\n");
+
+    new_ucmd!()
+        .args(&["-c", "-C"])
+        .fails_with_code(2)
+        .stderr_only("sort: options '-cC' are incompatible\n");
 }
 
 #[test]
@@ -1002,32 +1098,31 @@ fn test_compress_merge() {
 #[test]
 #[cfg(not(target_os = "android"))]
 fn test_compress_fail() {
+    let result = new_ucmd!()
+        .args(&[
+            "ext_sort.txt",
+            "-n",
+            "--compress-program",
+            "nonexistent-program",
+            "-S",
+            "10",
+        ])
+        .succeeds();
+
     #[cfg(not(windows))]
-    new_ucmd!()
-        .args(&[
-            "ext_sort.txt",
-            "-n",
-            "--compress-program",
-            "nonexistent-program",
-            "-S",
-            "10",
-        ])
-        .fails()
-        .stderr_only("sort: couldn't execute compress program: errno 2\n");
-    // With coverage, it fails with a different error:
-    // "thread 'main' panicked at 'called `Option::unwrap()` on ...
-    // So, don't check the output
+    result.stderr_contains(
+        "sort: could not run compress program 'nonexistent-program': No such file or directory",
+    );
+
     #[cfg(windows)]
-    new_ucmd!()
-        .args(&[
-            "ext_sort.txt",
-            "-n",
-            "--compress-program",
-            "nonexistent-program",
-            "-S",
-            "10",
-        ])
-        .fails();
+    result.stderr_contains("could not run compress program");
+
+    // Check that it still produces correct sorted output to stdout
+    let expected = new_ucmd!()
+        .args(&["ext_sort.txt", "-n"])
+        .succeeds()
+        .stdout_move_str();
+    assert_eq!(result.stdout_str(), expected);
 }
 
 #[test]
@@ -1125,16 +1220,22 @@ fn test_sigpipe_panic() {
 
 #[test]
 fn test_conflict_check_out() {
-    let check_flags = ["-c=silent", "-c=quiet", "-c=diagnose-first", "-c", "-C"];
-    for check_flag in &check_flags {
+    let cases = [
+        ("-c=silent", "sort: options '-Co' are incompatible\n"),
+        ("-c=quiet", "sort: options '-Co' are incompatible\n"),
+        (
+            "-c=diagnose-first",
+            "sort: options '-co' are incompatible\n",
+        ),
+        ("-c", "sort: options '-co' are incompatible\n"),
+        ("-C", "sort: options '-Co' are incompatible\n"),
+    ];
+    for (check_flag, expected) in &cases {
         new_ucmd!()
             .arg(check_flag)
             .arg("-o=/dev/null")
             .fails()
-            .stderr_contains(
-                // the rest of the message might be subject to change
-                "error: the argument",
-            );
+            .stderr_contains(expected);
     }
 }
 
@@ -1175,7 +1276,7 @@ fn test_verifies_files_after_keys() {
             "nonexistent_dir/input_file",
         ])
         .fails_with_code(2)
-        .stderr_contains("failed to parse key");
+        .stderr_contains("invalid field specification '0'");
 }
 
 #[test]
@@ -1531,6 +1632,32 @@ fn test_g_float() {
 }
 
 #[test]
+fn test_g_float_locale_decimal_separator() {
+    let Ok(locale_fr_utf8) = env::var("LOCALE_FR_UTF8") else {
+        return;
+    };
+    if locale_fr_utf8 == "none" {
+        return;
+    }
+
+    let ts = TestScenario::new("sort");
+
+    ts.ucmd()
+        .env("LC_ALL", &locale_fr_utf8)
+        .args(&["-g", "--stable"])
+        .pipe_in("1,9\n1,10\n")
+        .succeeds()
+        .stdout_is("1,10\n1,9\n");
+
+    ts.ucmd()
+        .env("LC_ALL", &locale_fr_utf8)
+        .args(&["-g", "--stable"])
+        .pipe_in("1.9\n1.10\n")
+        .succeeds()
+        .stdout_is("1.10\n1.9\n");
+}
+
+#[test]
 // Test misc numbers ("'a" is not interpreted as literal, trailing text is ignored...)
 fn test_g_misc() {
     let input = "1\n100\n90\n'a\n85hello\n";
@@ -1706,8 +1833,14 @@ fn test_clap_localization_missing_required_argument() {
 #[test]
 fn test_clap_localization_invalid_value() {
     let test_cases = vec![
-        ("en_US.UTF-8", "sort: failed to parse key 'invalid'"),
-        ("fr_FR.UTF-8", "sort: échec d'analyse de la clé 'invalid'"),
+        (
+            "en_US.UTF-8",
+            "sort: invalid number at field start: invalid count at start of 'invalid'",
+        ),
+        (
+            "fr_FR.UTF-8",
+            "sort: nombre invalide au début du champ: nombre invalide au début de 'invalid'",
+        ),
     ];
 
     for (locale, expected_message) in test_cases {
@@ -1871,6 +2004,409 @@ fn test_argument_suggestion_colors_enabled() {
         );
     }
 }
+
+#[test]
+fn test_debug_key_annotations() {
+    let ts = TestScenario::new("sort");
+    let output = debug_key_annotation_output(&ts);
+
+    assert_eq!(output, EXPECTED_DEBUG_KEY_ANNOTATION);
+}
+
+#[test]
+fn test_debug_key_annotations_locale() {
+    let ts = TestScenario::new("sort");
+
+    if let Ok(locale_fr_utf8) = env::var("LOCALE_FR_UTF8") {
+        if locale_fr_utf8 != "none" {
+            let probe = ts
+                .ucmd()
+                .args(&["-g", "--debug", "/dev/null"])
+                .env("LC_NUMERIC", &locale_fr_utf8)
+                .env("LC_MESSAGES", "C")
+                .run();
+            if probe
+                .stderr_str()
+                .contains("numbers use .*,.* as a decimal point")
+            {
+                let mut locale_output = String::new();
+                locale_output.push_str(
+                    &ts.ucmd()
+                        .env("LC_ALL", "C")
+                        .args(&["--debug", "-k2g", "-k1b,1"])
+                        .pipe_in("   1²---++3   1,234  Mi\n")
+                        .succeeds()
+                        .stdout_move_str(),
+                );
+                locale_output.push_str(
+                    &ts.ucmd()
+                        .env("LC_ALL", &locale_fr_utf8)
+                        .args(&["--debug", "-k2g", "-k1b,1"])
+                        .pipe_in("   1²---++3   1,234  Mi\n")
+                        .succeeds()
+                        .stdout_move_str(),
+                );
+                locale_output.push_str(
+                    &ts.ucmd()
+                        .env("LC_ALL", &locale_fr_utf8)
+                        .args(&[
+                            "--debug", "-k1,1n", "-k1,1g", "-k1,1h", "-k2,2n", "-k2,2g", "-k2,2h",
+                            "-k3,3n", "-k3,3g", "-k3,3h",
+                        ])
+                        .pipe_in("+1234 1234Gi 1,234M\n")
+                        .succeeds()
+                        .stdout_move_str(),
+                );
+
+                let normalized = locale_output
+                    .lines()
+                    .map(|line| {
+                        if line.starts_with("^^ ") {
+                            "^ no match for key".to_string()
+                        } else {
+                            line.to_string()
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+                    + "\n";
+
+                assert_eq!(normalized, EXPECTED_DEBUG_KEY_ANNOTATION_LOCALE);
+            }
+        }
+    }
+}
+
+fn debug_key_annotation_output(ts: &TestScenario) -> String {
+    let number = |input: &str| -> String {
+        let mut out = String::new();
+        for (idx, line) in input.split_terminator('\n').enumerate() {
+            // build efficiently without collecting intermediary Strings
+            writeln!(&mut out, "{}\t{line}", idx + 1).unwrap();
+        }
+        out
+    };
+
+    let run_sort = |args: &[&str], input: &str| -> String {
+        ts.ucmd()
+            .args(args)
+            .pipe_in(input)
+            .succeeds()
+            .stdout_move_str()
+    };
+
+    let mut output = String::new();
+    for mode in ["n", "h", "g"] {
+        output.push_str(&run_sort(
+            &["-s", &format!("-k2{mode}"), "--debug"],
+            "1\n\n44\n33\n2\n",
+        ));
+        output.push_str(&run_sort(
+            &["-s", &format!("-k1.3{mode}"), "--debug"],
+            "1\n\n44\n33\n2\n",
+        ));
+        output.push_str(&run_sort(
+            &["-s", &format!("-k1{mode}"), "--debug"],
+            "1\n\n44\n33\n2\n",
+        ));
+        output.push_str(&run_sort(&["-s", "-k2g", "--debug"], &number("2\n\n1\n")));
+    }
+
+    output.push_str(&run_sort(&["-s", "-k1M", "--debug"], "FEB\n\nJAN\n"));
+    output.push_str(&run_sort(&["-s", "-k2,2M", "--debug"], "FEB\n\nJAN\n"));
+    output.push_str(&run_sort(&["-s", "-k1M", "--debug"], "FEB\nJAZZ\n\nJAN\n"));
+    output.push_str(&run_sort(
+        &["-s", "-k2,2M", "--debug"],
+        &number("FEB\nJAZZ\n\nJAN\n"),
+    ));
+    output.push_str(&run_sort(&["-s", "-k1M", "--debug"], "FEB\nJANZ\n\nJAN\n"));
+    output.push_str(&run_sort(
+        &["-s", "-k2,2M", "--debug"],
+        &number("FEB\nJANZ\n\nJAN\n"),
+    ));
+
+    output.push_str(&run_sort(
+        &["-s", "-g", "--debug"],
+        " 1.2ignore\n 1.1e4ignore\n",
+    ));
+    output.push_str(&run_sort(&["-s", "-d", "--debug"], "\tb\n\t\ta\n"));
+    output.push_str(&run_sort(&["-s", "-k2,2", "--debug"], "a\n\n"));
+    output.push_str(&run_sort(&["-s", "-k1", "--debug"], "b\na\n"));
+    output.push_str(&run_sort(
+        &["-s", "--debug", "-k1,1h"],
+        "-0\n1\n-2\n--Mi-1\n-3\n-0\n",
+    ));
+    output.push_str(&run_sort(&["-b", "--debug"], " 1\n1\n"));
+    output.push_str(&run_sort(&["-s", "-b", "--debug"], " 1\n1\n"));
+    output.push_str(&run_sort(&["--debug"], " 1\n1\n"));
+    output.push_str(&run_sort(&["-s", "-k1n", "--debug"], "2,5\n2.4\n"));
+    output.push_str(&run_sort(&["-s", "-k1n", "--debug"], "2.,,3\n2.4\n"));
+    output.push_str(&run_sort(&["-s", "-k1n", "--debug"], "2,,3\n2.4\n"));
+    output.push_str(&run_sort(
+        &["-s", "-n", "-z", "--debug"],
+        concat!("1a\0", "2b\0"),
+    ));
+
+    let mut zero_mix = ts
+        .ucmd()
+        .args(&["-s", "-k2b,2", "--debug"])
+        .pipe_in("\0\ta\n")
+        .succeeds()
+        .stdout_move_bytes();
+    zero_mix.retain(|b| *b != 0);
+    output.push_str(&String::from_utf8(zero_mix).unwrap());
+
+    output.push_str(&run_sort(
+        &["-s", "-k2.4b,2.3n", "--debug"],
+        "A\tchr10\nB\tchr1\n",
+    ));
+    output.push_str(&run_sort(&["-s", "-k1.2b", "--debug"], "1 2\n1 3\n"));
+
+    output
+}
+
+const EXPECTED_DEBUG_KEY_ANNOTATION: &str = r"1
+ ^ no match for key
+
+^ no match for key
+44
+  ^ no match for key
+33
+  ^ no match for key
+2
+ ^ no match for key
+1
+ ^ no match for key
+
+^ no match for key
+44
+  ^ no match for key
+33
+  ^ no match for key
+2
+ ^ no match for key
+
+^ no match for key
+1
+_
+2
+_
+33
+__
+44
+__
+2>
+  ^ no match for key
+3>1
+  _
+1>2
+  _
+1
+ ^ no match for key
+
+^ no match for key
+44
+  ^ no match for key
+33
+  ^ no match for key
+2
+ ^ no match for key
+1
+ ^ no match for key
+
+^ no match for key
+44
+  ^ no match for key
+33
+  ^ no match for key
+2
+ ^ no match for key
+
+^ no match for key
+1
+_
+2
+_
+33
+__
+44
+__
+2>
+  ^ no match for key
+3>1
+  _
+1>2
+  _
+1
+ ^ no match for key
+
+^ no match for key
+44
+  ^ no match for key
+33
+  ^ no match for key
+2
+ ^ no match for key
+1
+ ^ no match for key
+
+^ no match for key
+44
+  ^ no match for key
+33
+  ^ no match for key
+2
+ ^ no match for key
+
+^ no match for key
+1
+_
+2
+_
+33
+__
+44
+__
+2>
+  ^ no match for key
+3>1
+  _
+1>2
+  _
+
+^ no match for key
+JAN
+___
+FEB
+___
+FEB
+   ^ no match for key
+
+^ no match for key
+JAN
+   ^ no match for key
+JAZZ
+^ no match for key
+
+^ no match for key
+JAN
+___
+FEB
+___
+2>JAZZ
+  ^ no match for key
+3>
+  ^ no match for key
+4>JAN
+  ___
+1>FEB
+  ___
+
+^ no match for key
+JANZ
+___
+JAN
+___
+FEB
+___
+3>
+  ^ no match for key
+2>JANZ
+  ___
+4>JAN
+  ___
+1>FEB
+  ___
+ 1.2ignore
+ ___
+ 1.1e4ignore
+ _____
+>>a
+___
+>b
+__
+a
+ ^ no match for key
+
+^ no match for key
+a
+_
+b
+_
+-3
+__
+-2
+__
+-0
+__
+--Mi-1
+^ no match for key
+-0
+__
+1
+_
+ 1
+ _
+__
+1
+_
+_
+ 1
+ _
+1
+_
+ 1
+__
+1
+_
+2,5
+_
+2.4
+___
+2.,,3
+__
+2.4
+___
+2,,3
+_
+2.4
+___
+1a
+_
+2b
+_
+>a
+ _
+A>chr10
+     ^ no match for key
+B>chr1
+     ^ no match for key
+1 2
+ __
+1 3
+ __
+";
+
+const EXPECTED_DEBUG_KEY_ANNOTATION_LOCALE: &str = r"   1²---++3   1,234  Mi
+               _
+   _________
+________________________
+   1²---++3   1,234  Mi
+              _____
+   ________
+_______________________
++1234 1234Gi 1,234M
+^ no match for key
+_____
+^ no match for key
+      ____
+      ____
+      _____
+             _____
+             _____
+             ______
+___________________
+";
 
 #[test]
 fn test_color_environment_variables() {

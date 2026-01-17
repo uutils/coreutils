@@ -19,14 +19,20 @@ path = "src/df.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["libc", "fsext", "parser", "fs"] }
+uucore = { workspace = true, features = ["libc", "fsext", "parser-size", "fs"] }
 unicode-width = { workspace = true }
 thiserror = { workspace = true }
 fluent = { workspace = true }
 
 [dev-dependencies]
+divan = { workspace = true }
 tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
 
 [[bin]]
 name = "df"
 path = "src/main.rs"
+
+[[bench]]
+name = "df_bench"
+harness = false

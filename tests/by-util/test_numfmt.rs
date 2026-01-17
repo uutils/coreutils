@@ -241,8 +241,7 @@ fn test_should_report_invalid_empty_number_on_blank_stdin() {
 
 #[test]
 fn test_suffixes() {
-    // TODO add support for ronna (R) and quetta (Q)
-    let valid_suffixes = ['K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y' /*'R' , 'Q'*/];
+    let valid_suffixes = ['K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y', 'R', 'Q', 'k'];
 
     for c in ('A'..='Z').chain('a'..='z') {
         let args = ["--from=si", "--to=si", &format!("1{c}")];
@@ -264,12 +263,12 @@ fn test_suffixes() {
 
 #[test]
 fn test_should_report_invalid_suffix_on_nan() {
-    // GNU numfmt reports this one as “invalid number”
+    // GNU numfmt reports this one as "invalid number"
     new_ucmd!()
         .args(&["--from=auto"])
         .pipe_in("NaN")
         .fails()
-        .stderr_is("numfmt: invalid suffix in input: 'NaN'\n");
+        .stderr_is("numfmt: invalid number: 'NaN'\n");
 }
 
 #[test]
@@ -700,7 +699,7 @@ fn test_invalid_stdin_number_with_warn_returns_status_0() {
         .pipe_in("4Q")
         .succeeds()
         .stdout_is("4Q\n")
-        .stderr_is("numfmt: invalid suffix in input: '4Q'\n");
+        .stderr_is("numfmt: rejecting suffix in input: '4Q' (consider using --from)\n");
 }
 
 #[test]
@@ -718,7 +717,7 @@ fn test_invalid_stdin_number_with_abort_returns_status_2() {
         .args(&["--invalid=abort"])
         .pipe_in("4Q")
         .fails_with_code(2)
-        .stderr_only("numfmt: invalid suffix in input: '4Q'\n");
+        .stderr_only("numfmt: rejecting suffix in input: '4Q' (consider using --from)\n");
 }
 
 #[test]
@@ -728,7 +727,7 @@ fn test_invalid_stdin_number_with_fail_returns_status_2() {
         .pipe_in("4Q")
         .fails_with_code(2)
         .stdout_is("4Q\n")
-        .stderr_is("numfmt: invalid suffix in input: '4Q'\n");
+        .stderr_is("numfmt: rejecting suffix in input: '4Q' (consider using --from)\n");
 }
 
 #[test]
@@ -737,7 +736,7 @@ fn test_invalid_arg_number_with_warn_returns_status_0() {
         .args(&["--invalid=warn", "4Q"])
         .succeeds()
         .stdout_is("4Q\n")
-        .stderr_is("numfmt: invalid suffix in input: '4Q'\n");
+        .stderr_is("numfmt: rejecting suffix in input: '4Q' (consider using --from)\n");
 }
 
 #[test]
@@ -753,7 +752,7 @@ fn test_invalid_arg_number_with_abort_returns_status_2() {
     new_ucmd!()
         .args(&["--invalid=abort", "4Q"])
         .fails_with_code(2)
-        .stderr_only("numfmt: invalid suffix in input: '4Q'\n");
+        .stderr_only("numfmt: rejecting suffix in input: '4Q' (consider using --from)\n");
 }
 
 #[test]
@@ -762,7 +761,7 @@ fn test_invalid_arg_number_with_fail_returns_status_2() {
         .args(&["--invalid=fail", "4Q"])
         .fails_with_code(2)
         .stdout_is("4Q\n")
-        .stderr_is("numfmt: invalid suffix in input: '4Q'\n");
+        .stderr_is("numfmt: rejecting suffix in input: '4Q' (consider using --from)\n");
 }
 
 #[test]
@@ -1115,4 +1114,36 @@ fn test_zero_terminated_embedded_newline() {
         .succeeds()
         // Newlines get replaced by a single space
         .stdout_is("1000 2000\x003000 4000\x00");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_non_utf8_delimiter() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    // Single-byte non-UTF8 (0xFF) and multi-byte (0xA2E3, e.g. GB18030)
+    for delim in [&[0xFFu8][..], &[0xA2, 0xE3]] {
+        let input: Vec<u8> = [b"1", delim, b"2K"].concat();
+        let expected: Vec<u8> = [b"1", delim, b"2000\n"].concat();
+        new_ucmd!()
+            .args(&["--from=si", "--field=2", "-d"])
+            .arg(OsStr::from_bytes(delim))
+            .arg(OsStr::from_bytes(&input))
+            .succeeds()
+            .stdout_is_bytes(expected);
+    }
+}
+
+#[test]
+fn test_unit_separator() {
+    for (args, expected) in [
+        (&["--to=si", "--unit-separator= ", "1000"][..], "1.0 k\n"),
+        (&["--to=iec", "--unit-separator= ", "1024"], "1.0 K\n"),
+        (&["--to=iec-i", "--unit-separator= ", "2048"], "2.0 Ki\n"),
+        (&["--to=si", "--unit-separator=__", "1000"], "1.0__k\n"),
+        (&["--to=si", "--unit-separator= ", "500"], "500\n"), // no unit = no separator
+    ] {
+        new_ucmd!().args(args).succeeds().stdout_only(expected);
+    }
 }

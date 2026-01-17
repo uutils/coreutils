@@ -27,6 +27,16 @@ use nix::sys::termios::{
     SpecialCharacterIndices as S,
 };
 
+#[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq))]
+pub enum BaudType {
+    Input,
+    Output,
+    Both,
+}
+
+#[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub enum AllFlags<'a> {
     #[cfg(any(
         target_os = "freebsd",
@@ -36,7 +46,7 @@ pub enum AllFlags<'a> {
         target_os = "netbsd",
         target_os = "openbsd"
     ))]
-    Baud(u32),
+    Baud(u32, BaudType),
     #[cfg(not(any(
         target_os = "freebsd",
         target_os = "dragonfly",
@@ -45,7 +55,7 @@ pub enum AllFlags<'a> {
         target_os = "netbsd",
         target_os = "openbsd"
     )))]
-    Baud(BaudRate),
+    Baud(BaudRate, BaudType),
     ControlFlags((&'a Flag<C>, bool)),
     InputFlags((&'a Flag<I>, bool)),
     LocalFlags((&'a Flag<L>, bool)),
@@ -256,13 +266,16 @@ pub const LOCAL_FLAGS: &[Flag<L>] = &[
     // Not supported by nix
     // Flag::new("xcase", L::XCASE),
     Flag::new("tostop", L::TOSTOP),
+    #[cfg(not(target_os = "cygwin"))]
     Flag::new("echoprt", L::ECHOPRT),
+    #[cfg(not(target_os = "cygwin"))]
     Flag::new("prterase", L::ECHOPRT).hidden(),
     Flag::new("echoctl", L::ECHOCTL).sane(),
     Flag::new("ctlecho", L::ECHOCTL).sane().hidden(),
     Flag::new("echoke", L::ECHOKE).sane(),
     Flag::new("crtkill", L::ECHOKE).sane().hidden(),
     Flag::new("flusho", L::FLUSHO),
+    #[cfg(not(target_os = "cygwin"))]
     Flag::new("extproc", L::EXTPROC),
 ];
 

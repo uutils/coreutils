@@ -11,7 +11,7 @@ use crate::formatter_item_info::FormatterItemInfo;
 use crate::parse_formats::ParsedFormatterItemInfo;
 
 /// Size in bytes of the max datatype. ie set to 16 for 128-bit numbers.
-const MAX_BYTES_PER_UNIT: usize = 8;
+const MAX_BYTES_PER_UNIT: usize = 16;
 
 /// Contains information to output single output line in human readable form
 pub struct SpacedFormatterItemInfo {
@@ -204,6 +204,36 @@ impl TypeSizeInfo for TypeInfo {
     }
 }
 
+#[cfg(test)]
+fn assert_alignment(
+    expected: &[usize],
+    type_info: TypeInfo,
+    byte_size_block: usize,
+    print_width_block: usize,
+) {
+    assert_eq!(
+        expected.len(),
+        byte_size_block,
+        "expected spacing must describe every byte in the block"
+    );
+
+    let spacing = OutputInfo::calculate_alignment(&type_info, byte_size_block, print_width_block);
+
+    assert_eq!(
+        expected,
+        &spacing[..byte_size_block],
+        "unexpected spacing for byte_size={} print_width={} block_width={}",
+        type_info.byte_size,
+        type_info.print_width,
+        print_width_block
+    );
+    assert!(
+        spacing[byte_size_block..].iter().all(|&s| s == 0),
+        "spacing beyond the active block should remain zero: {:?}",
+        &spacing[byte_size_block..]
+    );
+}
+
 #[test]
 #[allow(clippy::cognitive_complexity)]
 fn test_calculate_alignment() {
@@ -213,40 +243,34 @@ fn test_calculate_alignment() {
     //   ffff ffff  ffff ffff   ffff ffff  ffff ffff
 
     // the first line has no additional spacing:
-    assert_eq!(
-        [0, 0, 0, 0, 0, 0, 0, 0],
-        OutputInfo::calculate_alignment(
-            &TypeInfo {
-                byte_size: 8,
-                print_width: 23,
-            },
-            8,
-            23
-        )
+    assert_alignment(
+        &[0, 0, 0, 0, 0, 0, 0, 0],
+        TypeInfo {
+            byte_size: 8,
+            print_width: 23,
+        },
+        8,
+        23,
     );
     // the second line a single space at the start of the block:
-    assert_eq!(
-        [1, 0, 0, 0, 0, 0, 0, 0],
-        OutputInfo::calculate_alignment(
-            &TypeInfo {
-                byte_size: 4,
-                print_width: 11,
-            },
-            8,
-            23
-        )
+    assert_alignment(
+        &[1, 0, 0, 0, 0, 0, 0, 0],
+        TypeInfo {
+            byte_size: 4,
+            print_width: 11,
+        },
+        8,
+        23,
     );
     // the third line two spaces at pos 0, and 1 space at pos 4:
-    assert_eq!(
-        [2, 0, 0, 0, 1, 0, 0, 0],
-        OutputInfo::calculate_alignment(
-            &TypeInfo {
-                byte_size: 2,
-                print_width: 5,
-            },
-            8,
-            23
-        )
+    assert_alignment(
+        &[2, 0, 0, 0, 1, 0, 0, 0],
+        TypeInfo {
+            byte_size: 2,
+            print_width: 5,
+        },
+        8,
+        23,
     );
 
     // For this example `byte_size_block` is 8 and 'print_width_block' is 28:
@@ -255,195 +279,161 @@ fn test_calculate_alignment() {
     // 177777 177777 177777 177777 177777 177777 177777 177777
     //  ff ff  ff ff  ff ff  ff ff  ff ff  ff ff  ff ff  ff ff
 
-    assert_eq!(
-        [7, 0, 0, 0, 0, 0, 0, 0],
-        OutputInfo::calculate_alignment(
-            &TypeInfo {
-                byte_size: 8,
-                print_width: 21,
-            },
-            8,
-            28
-        )
+    assert_alignment(
+        &[7, 0, 0, 0, 0, 0, 0, 0],
+        TypeInfo {
+            byte_size: 8,
+            print_width: 21,
+        },
+        8,
+        28,
     );
-    assert_eq!(
-        [5, 0, 0, 0, 5, 0, 0, 0],
-        OutputInfo::calculate_alignment(
-            &TypeInfo {
-                byte_size: 4,
-                print_width: 9,
-            },
-            8,
-            28
-        )
+    assert_alignment(
+        &[5, 0, 0, 0, 5, 0, 0, 0],
+        TypeInfo {
+            byte_size: 4,
+            print_width: 9,
+        },
+        8,
+        28,
     );
-    assert_eq!(
-        [0, 0, 0, 0, 0, 0, 0, 0],
-        OutputInfo::calculate_alignment(
-            &TypeInfo {
-                byte_size: 2,
-                print_width: 7,
-            },
-            8,
-            28
-        )
+    assert_alignment(
+        &[0, 0, 0, 0, 0, 0, 0, 0],
+        TypeInfo {
+            byte_size: 2,
+            print_width: 7,
+        },
+        8,
+        28,
     );
-    assert_eq!(
-        [1, 0, 1, 0, 1, 0, 1, 0],
-        OutputInfo::calculate_alignment(
-            &TypeInfo {
-                byte_size: 1,
-                print_width: 3,
-            },
-            8,
-            28
-        )
+    assert_alignment(
+        &[1, 0, 1, 0, 1, 0, 1, 0],
+        TypeInfo {
+            byte_size: 1,
+            print_width: 3,
+        },
+        8,
+        28,
     );
 
     // 9 tests where 8 .. 16 spaces are spread across 8 positions
-    assert_eq!(
-        [1, 1, 1, 1, 1, 1, 1, 1],
-        OutputInfo::calculate_alignment(
-            &TypeInfo {
-                byte_size: 1,
-                print_width: 2,
-            },
-            8,
-            16 + 8
-        )
+    assert_alignment(
+        &[1, 1, 1, 1, 1, 1, 1, 1],
+        TypeInfo {
+            byte_size: 1,
+            print_width: 2,
+        },
+        8,
+        16 + 8,
     );
-    assert_eq!(
-        [2, 1, 1, 1, 1, 1, 1, 1],
-        OutputInfo::calculate_alignment(
-            &TypeInfo {
-                byte_size: 1,
-                print_width: 2,
-            },
-            8,
-            16 + 9
-        )
+    assert_alignment(
+        &[2, 1, 1, 1, 1, 1, 1, 1],
+        TypeInfo {
+            byte_size: 1,
+            print_width: 2,
+        },
+        8,
+        16 + 9,
     );
-    assert_eq!(
-        [2, 1, 1, 1, 2, 1, 1, 1],
-        OutputInfo::calculate_alignment(
-            &TypeInfo {
-                byte_size: 1,
-                print_width: 2,
-            },
-            8,
-            16 + 10
-        )
+    assert_alignment(
+        &[2, 1, 1, 1, 2, 1, 1, 1],
+        TypeInfo {
+            byte_size: 1,
+            print_width: 2,
+        },
+        8,
+        16 + 10,
     );
-    assert_eq!(
-        [3, 1, 1, 1, 2, 1, 1, 1],
-        OutputInfo::calculate_alignment(
-            &TypeInfo {
-                byte_size: 1,
-                print_width: 2,
-            },
-            8,
-            16 + 11
-        )
+    assert_alignment(
+        &[3, 1, 1, 1, 2, 1, 1, 1],
+        TypeInfo {
+            byte_size: 1,
+            print_width: 2,
+        },
+        8,
+        16 + 11,
     );
-    assert_eq!(
-        [2, 1, 2, 1, 2, 1, 2, 1],
-        OutputInfo::calculate_alignment(
-            &TypeInfo {
-                byte_size: 1,
-                print_width: 2,
-            },
-            8,
-            16 + 12
-        )
+    assert_alignment(
+        &[2, 1, 2, 1, 2, 1, 2, 1],
+        TypeInfo {
+            byte_size: 1,
+            print_width: 2,
+        },
+        8,
+        16 + 12,
     );
-    assert_eq!(
-        [3, 1, 2, 1, 2, 1, 2, 1],
-        OutputInfo::calculate_alignment(
-            &TypeInfo {
-                byte_size: 1,
-                print_width: 2,
-            },
-            8,
-            16 + 13
-        )
+    assert_alignment(
+        &[3, 1, 2, 1, 2, 1, 2, 1],
+        TypeInfo {
+            byte_size: 1,
+            print_width: 2,
+        },
+        8,
+        16 + 13,
     );
-    assert_eq!(
-        [3, 1, 2, 1, 3, 1, 2, 1],
-        OutputInfo::calculate_alignment(
-            &TypeInfo {
-                byte_size: 1,
-                print_width: 2,
-            },
-            8,
-            16 + 14
-        )
+    assert_alignment(
+        &[3, 1, 2, 1, 3, 1, 2, 1],
+        TypeInfo {
+            byte_size: 1,
+            print_width: 2,
+        },
+        8,
+        16 + 14,
     );
-    assert_eq!(
-        [4, 1, 2, 1, 3, 1, 2, 1],
-        OutputInfo::calculate_alignment(
-            &TypeInfo {
-                byte_size: 1,
-                print_width: 2,
-            },
-            8,
-            16 + 15
-        )
+    assert_alignment(
+        &[4, 1, 2, 1, 3, 1, 2, 1],
+        TypeInfo {
+            byte_size: 1,
+            print_width: 2,
+        },
+        8,
+        16 + 15,
     );
-    assert_eq!(
-        [2, 2, 2, 2, 2, 2, 2, 2],
-        OutputInfo::calculate_alignment(
-            &TypeInfo {
-                byte_size: 1,
-                print_width: 2,
-            },
-            8,
-            16 + 16
-        )
+    assert_alignment(
+        &[2, 2, 2, 2, 2, 2, 2, 2],
+        TypeInfo {
+            byte_size: 1,
+            print_width: 2,
+        },
+        8,
+        16 + 16,
     );
 
     // 4 tests where 15 spaces are spread across 8, 4, 2 or 1 position(s)
-    assert_eq!(
-        [4, 1, 2, 1, 3, 1, 2, 1],
-        OutputInfo::calculate_alignment(
-            &TypeInfo {
-                byte_size: 1,
-                print_width: 2,
-            },
-            8,
-            16 + 15
-        )
+    assert_alignment(
+        &[4, 1, 2, 1, 3, 1, 2, 1],
+        TypeInfo {
+            byte_size: 1,
+            print_width: 2,
+        },
+        8,
+        16 + 15,
     );
-    assert_eq!(
-        [5, 0, 3, 0, 4, 0, 3, 0],
-        OutputInfo::calculate_alignment(
-            &TypeInfo {
-                byte_size: 2,
-                print_width: 4,
-            },
-            8,
-            16 + 15
-        )
+    assert_alignment(
+        &[5, 0, 3, 0, 4, 0, 3, 0],
+        TypeInfo {
+            byte_size: 2,
+            print_width: 4,
+        },
+        8,
+        16 + 15,
     );
-    assert_eq!(
-        [8, 0, 0, 0, 7, 0, 0, 0],
-        OutputInfo::calculate_alignment(
-            &TypeInfo {
-                byte_size: 4,
-                print_width: 8,
-            },
-            8,
-            16 + 15
-        )
+    assert_alignment(
+        &[8, 0, 0, 0, 7, 0, 0, 0],
+        TypeInfo {
+            byte_size: 4,
+            print_width: 8,
+        },
+        8,
+        16 + 15,
     );
-    assert_eq!(
-        [15, 0, 0, 0, 0, 0, 0, 0],
-        OutputInfo::calculate_alignment(
-            &TypeInfo {
-                byte_size: 8,
-                print_width: 16,
-            },
-            8,
-            16 + 15
-        )
+    assert_alignment(
+        &[15, 0, 0, 0, 0, 0, 0, 0],
+        TypeInfo {
+            byte_size: 8,
+            print_width: 16,
+        },
+        8,
+        16 + 15,
     );
 }
