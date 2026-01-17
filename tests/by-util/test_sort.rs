@@ -12,8 +12,8 @@ use std::time::Duration;
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
-use uutests::util_name;
 use uutests::util::TestScenario;
+use uutests::util_name;
 
 fn test_helper(file_name: &str, possible_args: &[&str]) {
     for args in possible_args {
@@ -1227,9 +1227,9 @@ fn test_broken_pipe_exits_141_no_stderr() {
     let scene = TestScenario::new(util_name!());
     let bin = scene.bin_path.clone().into_os_string();
     scene
-        .cmd_shell(
-            r#"{ seq 1 10000 | "$BIN" sort -n 2>err | head -n1; }; echo ${PIPESTATUS[1]} >code"#,
-        )
+        .cmd("bash")
+        .arg("-c")
+        .arg(r#"{ seq 1 10000 | "$BIN" sort -n 2>err | head -n1; }; echo ${PIPESTATUS[1]} >code"#)
         .env("BIN", &bin)
         .succeeds();
     assert!(scene.fixtures.read("err").is_empty());
