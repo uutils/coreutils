@@ -96,6 +96,7 @@ jobs:
           - { name: fuzz_parse_time, should_pass: true }
           - { name: fuzz_seq_parse_number, should_pass: false }
           - { name: fuzz_non_utf8_paths, should_pass: true }
+          - { name: fuzz_dirname, should_pass: true }
 
     steps:
     - uses: actions/checkout@v6

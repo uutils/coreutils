@@ -1618,6 +1618,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "uu_dirname"
+version = "0.6.0"
+dependencies = [
+ "clap",
+ "fluent",
+ "uucore",
+]
+
+[[package]]
 name = "uu_echo"
 version = "0.6.0"
 dependencies = [
@@ -1798,6 +1807,7 @@ dependencies = [
  "uu_cksum",
  "uu_cut",
  "uu_date",
+ "uu_dirname",
  "uu_echo",
  "uu_env",
  "uu_expr",
