@@ -902,6 +902,7 @@ jobs:
           ${_uudoc} completion ${bin} zsh > share/zsh/site-functions/_${bin}
           ${_uudoc} completion ${bin} elvish > share/elvish/lib/${bin}.elv
         done
+        rm share/zsh/site-functions/_[ # not supported
         tar --zstd -cf docs.tar.zst share
     - name: Publish
       uses: softprops/action-gh-release@v2
