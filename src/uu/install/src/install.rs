@@ -14,8 +14,8 @@ use filetime::{FileTime, set_file_times};
 use selinux::SecurityContext;
 use std::ffi::OsString;
 use std::fmt::Debug;
-use std::fs::File;
 use std::fs::{self, metadata};
+use std::fs::{File, OpenOptions};
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 use std::process;
 use thiserror::Error;
@@ -36,7 +36,7 @@ use uucore::translate;
 use uucore::{format_usage, show, show_error, show_if_err};
 
 #[cfg(unix)]
-use std::os::unix::fs::{FileTypeExt, MetadataExt};
+use std::os::unix::fs::MetadataExt;
 #[cfg(unix)]
 use std::os::unix::prelude::OsStrExt;
 
@@ -88,8 +88,8 @@ enum InstallError {
     #[error("{}", translate!("install-error-backup-failed", "from" => .0.quote(), "to" => .1.quote()))]
     BackupFailed(PathBuf, PathBuf, #[source] std::io::Error),
 
-    #[error("{}", translate!("install-error-install-failed", "from" => .0.quote(), "to" => .1.quote()))]
-    InstallFailed(PathBuf, PathBuf, #[source] std::io::Error),
+    #[error("{}", translate!("install-error-install-failed", "from" => .0.quote(), "to" => .1.quote(), "error" => .2.clone()))]
+    InstallFailed(PathBuf, PathBuf, String),
 
     #[error("{}", translate!("install-error-strip-failed", "error" => .0.clone()))]
     StripProgramFailed(String),
@@ -796,22 +796,6 @@ fn perform_backup(to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
     }
 }
 
-/// Copy a non-special file using [`fs::copy`].
-///
-/// # Parameters
-/// * `from` - The source file path.
-/// * `to` - The destination file path.
-///
-/// # Returns
-///
-/// Returns an empty Result or an error in case of failure.
-fn copy_normal_file(from: &Path, to: &Path) -> UResult<()> {
-    if let Err(err) = fs::copy(from, to) {
-        return Err(InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err).into());
-    }
-    Ok(())
-}
-
 /// Copy a file from one path to another. Handles the certain cases of special
 /// files (e.g character specials).
 ///
@@ -838,8 +822,10 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
         )
         .into());
     }
-    // fs::copy fails if destination is a invalid symlink.
-    // so lets just remove all existing files at destination before copy.
+
+    // Remove existing file at destination to allow overwriting
+    // Note: create_new() below provides TOCTOU protection; if something
+    // appears at this path between the remove and create, it will fail safely
     if let Err(e) = fs::remove_file(to) {
         if e.kind() != std::io::ErrorKind::NotFound {
             show_error!(
@@ -849,25 +835,13 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
         }
     }
 
-    let ft = match metadata(from) {
-        Ok(ft) => ft.file_type(),
-        Err(err) => {
-            return Err(
-                InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err).into(),
-            );
-        }
-    };
+    let mut handle = File::open(from)?;
+    // create_new provides TOCTOU protection
+    let mut dest = OpenOptions::new().write(true).create_new(true).open(to)?;
 
-    // Stream-based copying to get around the limitations of std::fs::copy
-    #[cfg(unix)]
-    if ft.is_char_device() || ft.is_block_device() || ft.is_fifo() {
-        let mut handle = File::open(from)?;
-        let mut dest = File::create(to)?;
-        copy_stream(&mut handle, &mut dest)?;
-        return Ok(());
-    }
-
-    copy_normal_file(from, to)?;
+    copy_stream(&mut handle, &mut dest).map_err(|err| {
+        InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err.to_string())
+    })?;
 
     Ok(())
 }
