@@ -12,6 +12,7 @@ use std::time::Duration;
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
+use uutests::util_name;
 use uutests::util::TestScenario;
 
 fn test_helper(file_name: &str, possible_args: &[&str]) {
@@ -1218,23 +1219,21 @@ fn test_sigpipe_panic() {
     child.wait().unwrap().no_stderr();
 }
 
+// TODO: When SIGPIPE is trapped/ignored, GNU returns exit code 2 for IO failures,
+// but uutils currently returns 1 in that mode.
 #[test]
 #[cfg(unix)]
-fn test_broken_pipe_to_stdout_is_silent_and_success() {
-    let (at, mut ucmd) = at_and_ucmd!();
-
-    // Ensure sort will attempt to write at least one line.
-    at.write("in.txt", "1\n");
-
-    ucmd.arg("in.txt");
-
-    let mut child = ucmd.run_no_wait();
-
-    // Simulate `... | head -n 0` by closing the reader end immediately.
-    child.close_stdout();
-
-    // Expected GNU-like behavior: no diagnostic (and it should not error out).
-    child.wait().unwrap().no_stderr();
+fn test_broken_pipe_exits_141_no_stderr() {
+    let scene = TestScenario::new(util_name!());
+    let bin = scene.bin_path.clone().into_os_string();
+    scene
+        .cmd_shell(
+            r#"{ seq 1 10000 | "$BIN" sort -n 2>err | head -n1; }; echo ${PIPESTATUS[1]} >code"#,
+        )
+        .env("BIN", &bin)
+        .succeeds();
+    assert!(scene.fixtures.read("err").is_empty());
+    assert_eq!(scene.fixtures.read("code").trim(), "141");
 }
 
 #[test]

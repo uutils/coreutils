@@ -39,6 +39,7 @@ uucore = { workspace = true, features = [
   "parser-size",
   "version-cmp",
   "i18n-decimal",
+  "signals"
 ] }
 fluent = { workspace = true }
 

@@ -33,7 +33,7 @@ use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{File, OpenOptions};
 use std::hash::{Hash, Hasher};
-use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Read, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::ops::Range;
 #[cfg(unix)]
@@ -1745,9 +1745,17 @@ fn emit_debug_warnings(
     }
 }
 
+#[cfg(unix)]
+uucore::init_sigpipe_capture!();
+
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    #[cfg(unix)]
+    if !uucore::signals::sigpipe_was_ignored() {
+        let _ = uucore::signals::enable_pipe_errors();
+    }
+
     let mut settings = GlobalSettings::default();
 
     let (processed_args, mut legacy_warnings) = preprocess_legacy_args(args);
@@ -1771,7 +1779,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut files: Vec<OsString> = if matches.contains_id(options::FILES0_FROM) {
         let files0_from: PathBuf = matches
             .get_one::<OsString>(options::FILES0_FROM)
-            .map(|v| v.into())
+            .map(std::convert::Into::into)
             .unwrap_or_default();
 
         // Cannot combine FILES with FILES0_FROM
@@ -1972,7 +1980,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         || matches!(
             matches
                 .get_one::<String>(options::check::CHECK)
-                .map(|s| s.as_str()),
+                .map(String::as_str),
             Some(options::check::SILENT | options::check::QUIET)
         )
     {
@@ -2663,7 +2671,7 @@ enum Month {
 fn month_parse(line: &[u8]) -> Month {
     let line = line.trim_ascii_start();
 
-    match line.get(..3).map(|x| x.to_ascii_uppercase()).as_deref() {
+    match line.get(..3).map(<[u8]>::to_ascii_uppercase).as_deref() {
         Some(b"JAN") => Month::January,
         Some(b"FEB") => Month::February,
         Some(b"MAR") => Month::March,
@@ -2692,7 +2700,6 @@ fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(
     settings: &GlobalSettings,
     output: Output,
 ) -> UResult<()> {
-    let is_stdout = output.as_output_name().is_none();
     let output_name = output
         .as_output_name()
         .unwrap_or_else(|| OsStr::new("standard output"))
@@ -2700,26 +2707,10 @@ fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(
     let ctx = || translate!("sort-error-write-failed", "output" => output_name.maybe_quote());
 
     let mut writer = output.into_write();
-
-    // Print each sorted line
     for line in iter {
-        // Try to print the line, handle BrokenPipe gracefully if writing to stdout
-        if let Err(e) = line.print(&mut writer, settings) {
-            if is_stdout && e.kind() == ErrorKind::BrokenPipe {
-                return Ok(());
-            }
-            return Err(e).map_err_context(ctx);
-        }
+        line.print(&mut writer, settings).map_err_context(ctx)?;
     }
-
-    // Flush the writer, handle BrokenPipe gracefully if writing to stdout
-    if let Err(e) = writer.flush() {
-        if is_stdout && e.kind() == ErrorKind::BrokenPipe {
-            return Ok(());
-        }
-        return Err(e).map_err_context(ctx);
-    }
-
+    writer.flush().map_err_context(ctx)?;
     Ok(())
 }
 
