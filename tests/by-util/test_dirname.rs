@@ -106,8 +106,6 @@ fn test_emoji_handling() {
 
 #[test]
 fn test_trailing_dot() {
-    // Basic case: path ending with /. should return parent without stripping last component
-    // This matches GNU coreutils behavior and fixes issue #8910
     new_ucmd!()
         .arg("/home/dos/.")
         .succeeds()
@@ -183,26 +181,19 @@ fn test_trailing_dot_non_utf8() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
 
-    // Create a path with non-UTF-8 bytes ending in /.
     let non_utf8_bytes = b"/test_\xFF\xFE/.";
     let non_utf8_path = OsStr::from_bytes(non_utf8_bytes);
 
-    // Test that dirname handles non-UTF-8 paths with /. suffix
     let result = new_ucmd!().arg(non_utf8_path).succeeds();
 
-    // The output should be the path without the /. suffix
     let output = result.stdout_str_lossy();
     assert!(!output.is_empty());
     assert!(output.contains("test_"));
-    // Should not contain the . at the end
     assert!(!output.trim().ends_with('.'));
 }
 
 #[test]
 fn test_existing_behavior_preserved() {
-    // Ensure we didn't break existing test cases
-    // These tests verify backward compatibility
-
     // Normal paths without /. should work as before
     new_ucmd!().arg("/home/dos").succeeds().stdout_is("/home\n");
 
@@ -237,9 +228,6 @@ fn test_multiple_paths_comprehensive() {
 
 #[test]
 fn test_all_dot_slash_variations() {
-    // Tests for all the cases mentioned in issue #8910 comment
-    // https://github.com/uutils/coreutils/issues/8910#issuecomment-3408735720
-
     new_ucmd!().arg("foo//.").succeeds().stdout_is("foo\n");
 
     new_ucmd!().arg("foo///.").succeeds().stdout_is("foo\n");
@@ -256,9 +244,6 @@ fn test_all_dot_slash_variations() {
 
 #[test]
 fn test_dot_slash_component_preservation() {
-    // Ensure that /. components in the middle are preserved
-    // These should NOT be normalized away
-
     new_ucmd!().arg("a/./b").succeeds().stdout_is("a/.\n");
 
     new_ucmd!()
