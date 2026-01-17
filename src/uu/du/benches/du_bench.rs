@@ -61,17 +61,33 @@ fn du_human_balanced_tree(
 /// Benchmark du on wide directory structures (many files/dirs, shallow)
 #[divan::bench(args = [(5000, 500)])]
 fn du_wide_tree(bencher: Bencher, (total_files, total_dirs): (usize, usize)) {
-    let temp_dir = TempDir::new().unwrap();
-    fs_tree::create_wide_tree(temp_dir.path(), total_files, total_dirs);
-    bench_du_with_args(bencher, &temp_dir, &[]);
+    bencher
+        .with_inputs(|| {
+            let temp_dir = TempDir::new().unwrap();
+            fs_tree::create_wide_tree(temp_dir.path(), total_files, total_dirs);
+            temp_dir
+        })
+        .bench_values(|temp_dir| {
+            let temp_path_str = temp_dir.path().to_str().unwrap();
+            let args = vec![temp_path_str];
+            black_box(run_util_function(uumain, &args));
+        });
 }
 
 /// Benchmark du -a on wide directory structures
 #[divan::bench(args = [(5000, 500)])]
 fn du_all_wide_tree(bencher: Bencher, (total_files, total_dirs): (usize, usize)) {
-    let temp_dir = TempDir::new().unwrap();
-    fs_tree::create_wide_tree(temp_dir.path(), total_files, total_dirs);
-    bench_du_with_args(bencher, &temp_dir, &["-a"]);
+    bencher
+        .with_inputs(|| {
+            let temp_dir = TempDir::new().unwrap();
+            fs_tree::create_wide_tree(temp_dir.path(), total_files, total_dirs);
+            temp_dir
+        })
+        .bench_values(|temp_dir| {
+            let temp_path_str = temp_dir.path().to_str().unwrap();
+            let args = vec![temp_path_str, "-a"];
+            black_box(run_util_function(uumain, &args));
+        });
 }
 
 /// Benchmark du on deep directory structures
