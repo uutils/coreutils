@@ -74,7 +74,7 @@ fn dirname_string_manipulation(path_bytes: &[u8]) -> Cow<'_, [u8]> {
                     Cow::Borrowed(b".")
                 };
             }
-            return Cow::Owned(bytes[..slash_start].to_vec());
+            return Cow::Borrowed(&bytes[..slash_start]);
         }
     }
 
@@ -92,7 +92,7 @@ fn dirname_string_manipulation(path_bytes: &[u8]) -> Cow<'_, [u8]> {
             return Cow::Borrowed(b"/");
         }
 
-        return Cow::Owned(result.to_vec());
+        return Cow::Borrowed(result);
     }
 
     // No slash found, return "."
