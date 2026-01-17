@@ -25,6 +25,7 @@ jobs:
         type: [performance, memory]
         package: [
           uu_base64,
+          uu_chmod,
           uu_cksum,
           uu_cp,
           uu_cut,
