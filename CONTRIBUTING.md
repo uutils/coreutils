@@ -78,11 +78,11 @@ issues and writing documentation are just as important as writing code.
 We can't fix bugs we don't know about, so good issues are super helpful! Here
 are some tips for writing good issues:
 
-- If you find a bug, make sure it's still a problem on the `main` branch.
+- If you find a bug, make sure it's still a problem on the [`main` branch](https://github.com/uutils/coreutils/releases/tag/latest-commit).
 - Search through the existing issues to see whether it has already been
   reported.
 - Make sure to include all relevant information, such as:
-  - Which version of uutils did you check?
+  - Which version or commit hash of uutils did you check?
   - Which version of GNU coreutils are you comparing with?
   - What platform are you on?
 - Provide a way to reliably reproduce the issue.
