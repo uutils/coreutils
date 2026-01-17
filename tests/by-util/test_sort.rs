@@ -2512,10 +2512,7 @@ fn test_locale_collation_utf8() {
         let e_accent_pos = lines.iter().position(|&x| x == "é").unwrap();
         assert!(
             e_pos < z_pos && e_accent_pos < z_pos,
-            "Locale mode: 'e' ({}) and 'é' ({}) should sort before 'z' ({})",
-            e_pos,
-            e_accent_pos,
-            z_pos
+            "Locale mode: 'e' ({e_pos}) and 'é' ({e_accent_pos}) should sort before 'z' ({z_pos})"
         );
     }
 }
