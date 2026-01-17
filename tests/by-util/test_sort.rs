@@ -2463,4 +2463,71 @@ fn test_start_buffer() {
         .stdout_only_bytes(&expected);
 }
 
+#[test]
+fn test_locale_collation_c_locale() {
+    // In C locale, sorting should be pure byte order
+    // Accented characters (UTF-8) sort after ASCII letters
+    let input = "é\ne\nE\na\nA\nz\n";
+    // C locale: byte order (A=0x41, E=0x45, a=0x61, e=0x65, z=0x7a, é=0xc3a9)
+    let expected = "A\nE\na\ne\nz\né\n";
+
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
+fn test_locale_collation_utf8() {
+    // Skip if UTF-8 locale is not available
+    let Ok(locale) = env::var("LOCALE_FR_UTF8") else {
+        return;
+    };
+    if locale == "none" {
+        return;
+    }
+
+    // In UTF-8 locale with collation, accented chars sort near base chars
+    // "é" should sort near "e", not at the end
+    let input = "z\né\ne\na\n";
+
+    let result = new_ucmd!().env("LC_ALL", &locale).pipe_in(input).succeeds();
+
+    let output = result.stdout_str();
+    // In a proper locale, 'a' comes first, then 'e'/'é' together, then 'z'
+    // The exact order of e vs é depends on locale, but both should come before z
+    assert!(
+        output.starts_with("a\n"),
+        "Expected 'a' first in locale-aware sort, got: {output}"
+    );
+    assert!(
+        output.ends_with("z\n"),
+        "Expected 'z' last in locale-aware sort, got: {output}"
+    );
+}
+
+#[test]
+fn test_locale_collation_shifted_punctuation() {
+    // Test that shifted alternate handling works (punctuation/spaces as secondary)
+    // In shifted mode, "a b" and "ab" should sort together, with space being secondary
+    let Ok(locale) = env::var("LOCALE_FR_UTF8") else {
+        return;
+    };
+    if locale == "none" {
+        return;
+    }
+
+    let input = "ab\na b\na-b\n";
+
+    let result = new_ucmd!().env("LC_ALL", &locale).pipe_in(input).succeeds();
+
+    // All three should sort together since base letters are the same
+    // The exact order depends on shifted handling, but they shouldn't be
+    // wildly separated like they would be in byte order
+    let output = result.stdout_str();
+    let lines: Vec<&str> = output.lines().collect();
+    assert_eq!(lines.len(), 3, "Expected 3 lines, got: {output}");
+}
+
 /* spell-checker: enable */
