@@ -895,7 +895,7 @@ jobs:
       run: |
         mkdir -p share/{man/man1,bash-completion/completions,fish/vendor_completions.d,zsh/site-functions,elvish/lib}
         _uudoc=target/${{ matrix.job.target }}/release/uudoc
-        for bin in $('target/${{ matrix.job.target }}/release/coreutils' --list);do
+        for bin in $('target/${{ matrix.job.target }}/release/coreutils' --list) coreutils;do
           ${_uudoc} manpage ${bin} > share/man/man1/${bin}.1
           ${_uudoc} completion ${bin} bash > share/bash-completion/completions/${bin}.bash
           ${_uudoc} completion ${bin} fish > share/fish/vendor_completions.d/${bin}.fish
