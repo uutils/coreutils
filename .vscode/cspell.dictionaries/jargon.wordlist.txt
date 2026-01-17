@@ -139,8 +139,17 @@ setfattr
 setlocale
 shortcode
 shortcodes
+setpgid
 sigaction
+CHLD
+chld
+SIGCHLD
+sigchld
 siginfo
+SIGTTIN
+sigttin
+SIGTTOU
+sigttou
 sigusr
 strcasecmp
 subcommand
@@ -221,3 +230,5 @@ VMULL
 vmull
 SETFL
 tmpfs
+pdeathsig
+prctl
