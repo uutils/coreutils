@@ -611,6 +611,71 @@ fn comm_emoji_sorted_inputs() {
         .stdout_only("💐\n\t\t🦀\n\t🪽\n");
 }
 
+/// Regression test for https://bugs.launchpad.net/ubuntu/+source/rust-coreutils/+bug/2138315
+/// When reading from FIFOs (like process substitution `<(cat file)`), comm would falsely report
+/// "file is not in sorted order" even when input was properly sorted.
+#[test]
+#[cfg(unix)]
+fn test_large_sorted_input_from_fifo_no_false_sorting_warning() {
+    use std::fmt::Write as _;
+    use std::fs::OpenOptions;
+    use std::io::Write as _;
+    use std::thread;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create two FIFOs to simulate process substitution
+    at.mkfifo("fifo_a");
+    at.mkfifo("fifo_b");
+
+    // Content for the FIFOs
+    let content_a = "00000\n".to_string();
+    // Create a large sorted file (2000 lines of zero-padded numbers)
+    // This is well above the ~1365 line threshold where the bug manifests
+    let content_b: String = (1..=2000).fold(String::new(), |mut acc, n| {
+        writeln!(acc, "{n:05}").unwrap();
+        acc
+    });
+
+    // Start comm reading from both FIFOs (non-blocking)
+    let proc = scene
+        .ucmd()
+        .args(&["-23", "fifo_a", "fifo_b"])
+        .run_no_wait();
+
+    // Spawn threads to write to the FIFOs
+    let fifo_a_path = at.plus("fifo_a");
+    let fifo_b_path = at.plus("fifo_b");
+
+    let thread_a = thread::spawn(move || {
+        let mut pipe = OpenOptions::new()
+            .write(true)
+            .create(false)
+            .open(fifo_a_path)
+            .unwrap();
+        pipe.write_all(content_a.as_bytes()).unwrap();
+    });
+
+    let thread_b = thread::spawn(move || {
+        let mut pipe = OpenOptions::new()
+            .write(true)
+            .create(false)
+            .open(fifo_b_path)
+            .unwrap();
+        pipe.write_all(content_b.as_bytes()).unwrap();
+    });
+
+    // Wait for everything to complete
+    let result = proc.wait().unwrap();
+    thread_a.join().unwrap();
+    thread_b.join().unwrap();
+
+    // Should succeed with exit code 0 and output "00000\n"
+    // Before the fix, this would fail with "file 2 is not in sorted order"
+    result.success().stdout_only("00000\n");
+}
+
 #[test]
 fn test_comm_eintr_handling() {
     // Test that comm properly handles EINTR (ErrorKind::Interrupted) during file comparison

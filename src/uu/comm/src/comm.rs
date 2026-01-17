@@ -132,6 +132,14 @@ pub fn are_files_identical(path1: &Path, path2: &Path) -> io::Result<bool> {
     let metadata1 = metadata(path1)?;
     let metadata2 = metadata(path2)?;
 
+    // Only compare contents for regular files.
+    // For FIFOs, pipes, and other special files, reading would consume data
+    // that we need for the actual comparison. Return false to enable order checking.
+    // See: https://bugs.launchpad.net/ubuntu/+source/rust-coreutils/+bug/2138315
+    if !metadata1.file_type().is_file() || !metadata2.file_type().is_file() {
+        return Ok(false);
+    }
+
     if metadata1.len() != metadata2.len() {
         return Ok(false);
     }
