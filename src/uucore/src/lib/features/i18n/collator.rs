@@ -30,6 +30,11 @@ pub fn init_collator(opts: CollatorOptions) {
         .expect("Collator already initialized");
 }
 
+/// Check if locale collation should be used.
+pub fn should_use_locale_collation() -> bool {
+    get_collating_locale().0 != DEFAULT_LOCALE
+}
+
 /// Compare both strings with regard to the current locale.
 pub fn locale_cmp(left: &[u8], right: &[u8]) -> Ordering {
     // If the detected locale is 'C', just do byte-wise comparison

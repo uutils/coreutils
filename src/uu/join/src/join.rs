@@ -19,6 +19,9 @@ use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::format_usage;
+use uucore::i18n::collator::{
+    AlternateHandling, CollatorOptions, locale_cmp, should_use_locale_collation, try_init_collator,
+};
 use uucore::line_ending::LineEnding;
 use uucore::translate;
 
@@ -311,14 +314,16 @@ struct Input<Sep: Separator> {
     separator: Sep,
     ignore_case: bool,
     check_order: CheckOrder,
+    use_locale: bool,
 }
 
 impl<Sep: Separator> Input<Sep> {
-    fn new(separator: Sep, ignore_case: bool, check_order: CheckOrder) -> Self {
+    fn new(separator: Sep, ignore_case: bool, check_order: CheckOrder, use_locale: bool) -> Self {
         Self {
             separator,
             ignore_case,
             check_order,
+            use_locale,
         }
     }
 
@@ -328,6 +333,8 @@ impl<Sep: Separator> Input<Sep> {
                 let field1 = CaseInsensitiveSlice { v: field1 };
                 let field2 = CaseInsensitiveSlice { v: field2 };
                 field1.cmp(&field2)
+            } else if self.use_locale {
+                locale_cmp(field1, field2)
             } else {
                 field1.cmp(field2)
             }
@@ -823,6 +830,10 @@ fn parse_settings(matches: &clap::ArgMatches) -> UResult<Settings> {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
+    let mut opts = CollatorOptions::default();
+    opts.alternate_handling = Some(AlternateHandling::Shifted);
+    let _ = try_init_collator(opts);
+
     let settings = parse_settings(&matches)?;
 
     let file1 = matches.get_one::<OsString>("file1").unwrap();
@@ -989,7 +1000,12 @@ fn exec<Sep: Separator>(
         settings.print_unpaired2,
     )?;
 
-    let input = Input::new(sep.clone(), settings.ignore_case, settings.check_order);
+    let input = Input::new(
+        sep.clone(),
+        settings.ignore_case,
+        settings.check_order,
+        should_use_locale_collation(),
+    );
 
     let format = if settings.autoformat {
         let mut format = vec![Spec::Key];
