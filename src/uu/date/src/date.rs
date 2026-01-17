@@ -66,6 +66,7 @@ enum Format {
     Iso8601(Iso8601Format),
     Rfc5322,
     Rfc3339(Rfc3339Format),
+    // Used by --resolution to emit the clock resolution as "seconds.nanoseconds".
     Resolution,
     Custom(String),
     Default,
@@ -78,14 +79,21 @@ enum DateSource {
     FileMtime(PathBuf),
     Stdin,
     Human(String),
+    // Used by --resolution to source a Timestamp that represents clock resolution.
     Resolution,
 }
 
+#[cfg(unix)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum OutputEncoding {
     Utf8,
-    #[cfg_attr(not(unix), allow(dead_code))]
     BytePreserving,
+}
+
+#[cfg(not(unix))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum OutputEncoding {
+    Utf8,
 }
 
 struct CustomFormat {
@@ -95,7 +103,7 @@ struct CustomFormat {
 
 enum CustomFormatError {
     MissingPlus(String),
-    #[cfg_attr(not(unix), allow(dead_code))]
+    #[cfg(unix)]
     InvalidUtf8,
 }
 
@@ -239,6 +247,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     translate!("date-error-invalid-date", "date" => raw),
                 ));
             }
+            #[cfg(unix)]
             Err(CustomFormatError::InvalidUtf8) => {
                 return Err(UUsageError::new(
                     1,
@@ -473,9 +482,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         match date {
             Ok(date) => {
                 match BrokenDownTime::from(&date).to_string_with_config(&config, format_string) {
-                    Ok(s) => writeln!(stdout, "{s}").map_err(|e| {
-                        USimpleError::new(1, translate!("date-error-write", "error" => e))
-                    })?,
+                    Ok(s) => write_formatted_output(settings.output_encoding, &s, &mut stdout)
+                        .map_err(|e| USimpleError::new(1, translate!("date-error-write", "error" => e)))?,
                     Err(e) => {
                         let _ = stdout.flush();
                         return Err(USimpleError::new(
@@ -614,6 +622,12 @@ pub fn uu_app() -> Command {
         )
 }
 
+/// Parse a user-supplied `+FORMAT` argument into a `CustomFormat`.
+///
+/// - Requires the leading '+' and returns `MissingPlus` otherwise.
+/// - On Unix, treats the payload as raw bytes: if UTF-8, use as-is; if not,
+///   then either error under UTF-8 locales or decode in a byte-preserving way.
+/// - On non-Unix, falls back to a lossy string conversion and strips the '+'.
 fn parse_custom_format(raw: &OsStr) -> Result<CustomFormat, CustomFormatError> {
     #[cfg(unix)]
     {
@@ -652,7 +666,8 @@ fn parse_custom_format(raw: &OsStr) -> Result<CustomFormat, CustomFormatError> {
     }
 }
 
-#[cfg_attr(not(unix), allow(dead_code))]
+#[cfg(unix)]
+/// Determine whether the active locale expects UTF-8 output.
 fn locale_output_encoding() -> OutputEncoding {
     let locale_var = ["LC_ALL", "LC_TIME", "LANG"]
         .iter()
@@ -672,11 +687,14 @@ fn locale_output_encoding() -> OutputEncoding {
     OutputEncoding::BytePreserving
 }
 
-#[cfg_attr(not(unix), allow(dead_code))]
+#[cfg(unix)]
+/// Losslessly map each byte to the same Unicode code point (0x00..=0xFF).
 fn decode_byte_preserving(bytes: &[u8]) -> String {
     bytes.iter().map(|&b| char::from(b)).collect()
 }
 
+#[cfg(unix)]
+/// Convert a string back to bytes if all chars fit in a single byte.
 fn encode_byte_preserving(s: &str) -> Option<Vec<u8>> {
     let mut out = Vec::with_capacity(s.len());
     for ch in s.chars() {
@@ -689,6 +707,7 @@ fn encode_byte_preserving(s: &str) -> Option<Vec<u8>> {
     Some(out)
 }
 
+/// Write the formatted string using the requested output encoding.
 fn write_formatted_output(
     output_encoding: OutputEncoding,
     s: &str,
@@ -696,6 +715,7 @@ fn write_formatted_output(
 ) -> std::io::Result<()> {
     match output_encoding {
         OutputEncoding::Utf8 => writeln!(stdout, "{s}"),
+        #[cfg(unix)]
         OutputEncoding::BytePreserving => {
             if let Some(mut bytes) = encode_byte_preserving(s) {
                 bytes.push(b'\n');
