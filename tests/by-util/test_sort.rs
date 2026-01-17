@@ -1223,17 +1223,59 @@ fn test_sigpipe_panic() {
 // but uutils currently returns 1 in that mode.
 #[test]
 #[cfg(unix)]
-fn test_broken_pipe_exits_141_no_stderr() {
+fn test_broken_pipe_exits_sigpipe_no_stderr() {
+    use std::io::{BufRead, BufReader, Write};
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::{Command, Stdio};
+
     let scene = TestScenario::new(util_name!());
-    let bin = scene.bin_path.clone().into_os_string();
-    scene
-        .cmd("bash")
-        .arg("-c")
-        .arg(r#"{ seq 1 10000 | "$BIN" sort -n 2>err | head -n1; }; echo ${PIPESTATUS[1]} >code"#)
-        .env("BIN", &bin)
-        .succeeds();
-    assert!(scene.fixtures.read("err").is_empty());
-    assert_eq!(scene.fixtures.read("code").trim(), "141");
+    let bin = scene.bin_path.clone();
+
+    // Run multicall: coreutils sort -n
+    let mut child = Command::new(bin)
+        .arg("sort")
+        .arg("-n")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn sort");
+
+    // Feed enough input that sort will try to write output.
+    {
+        let mut stdin = child.stdin.take().expect("take stdin");
+        for i in 1..=10000 {
+            writeln!(stdin, "{i}").expect("write stdin");
+        }
+        // drop(stdin) closes stdin
+    }
+
+    // Read a single output line, then close stdout to trigger SIGPIPE on the child
+    // the next time it writes (like `| head -n1`).
+    {
+        let stdout = child.stdout.take().expect("take stdout");
+        let mut r = BufReader::new(stdout);
+        let mut line = String::new();
+        let _ = r.read_line(&mut line).expect("read first line");
+        // drop(r) closes the read end
+    }
+
+    let output = child.wait_with_output().expect("wait");
+
+    // No "Broken pipe" diagnostic.
+    assert!(
+        output.stderr.is_empty(),
+        "expected empty stderr, got: {:?}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Shells report SIGPIPE as 128+13=141, but Rust exposes it as a signal.
+    assert_eq!(
+        output.status.signal(),
+        Some(libc::SIGPIPE),
+        "expected SIGPIPE; status={:?}",
+        output.status
+    );
 }
 
 #[test]
