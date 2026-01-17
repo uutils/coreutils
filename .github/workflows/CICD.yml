@@ -4,7 +4,7 @@ name: CICD
 # spell-checker:ignore (env/flags) Awarnings Ccodegen Coverflow Cpanic Dwarnings RUSTDOCFLAGS RUSTFLAGS Zpanic CARGOFLAGS
 # spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain fuzzers dedupe devel profdata
 # spell-checker:ignore (people) Peltoche rivy dtolnay Anson dawidd
-# spell-checker:ignore (shell/tools) binutils choco clippy dmake esac fakeroot fdesc fdescfs gmake grcov halium lcov libclang libfuse libssl limactl mkdir nextest nocross pacman popd printf pushd redoxer rsync rustc rustfmt rustup shopt sccache utmpdump xargs
+# spell-checker:ignore (shell/tools) binutils choco clippy dmake esac fakeroot fdesc fdescfs gmake grcov halium lcov libclang libfuse libssl limactl mkdir nextest nocross pacman popd printf pushd redoxer rsync rustc rustfmt rustup shopt sccache utmpdump xargs zstd
 # spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos getenforce gnueabihf issuecomment maint manpages msys multisize noconfirm nofeatures nullglob onexitbegin onexitend pell runtest Swatinem tempfile testsuite toybox uutils libsystemd codspeed
 
 env:
@@ -890,6 +890,19 @@ jobs:
           *) tar czf '${{ steps.vars.outputs.PKG_NAME }}' '${{ steps.vars.outputs.PKG_BASENAME }}'/* ;;
         esac
         popd >/dev/null
+    - name: Package manpages and completions
+      if: matrix.job.target == 'x86_64-unknown-linux-gnu' && matrix.job.features == 'feat_os_unix,uudoc'
+      run: |
+        mkdir -p share/{man/man1,bash-completion/completions,fish/vendor_completions.d,zsh/site-functions,elvish/lib}
+        _uudoc=target/${{ matrix.job.target }}/release/uudoc
+        for bin in $('target/${{ matrix.job.target }}/release/coreutils' --list);do
+          ${_uudoc} manpage ${bin} > share/man/man1/${bin}.1
+          ${_uudoc} completion ${bin} bash > share/bash-completion/completions/${bin}.bash
+          ${_uudoc} completion ${bin} fish > share/fish/vendor_completions.d/${bin}.fish
+          ${_uudoc} completion ${bin} zsh > share/zsh/site-functions/_${bin}
+          ${_uudoc} completion ${bin} elvish > share/elvish/lib/${bin}.elv
+        done
+        tar --zstd -cf docs.tar.zst share
     - name: Publish
       uses: softprops/action-gh-release@v2
       if: steps.vars.outputs.DEPLOY && matrix.job.skip-publish != true
@@ -897,6 +910,7 @@ jobs:
         draft: true
         files: |
           ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_NAME }}
+          docs.tar.zst
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     - name: Publish latest commit
@@ -909,6 +923,7 @@ jobs:
         prerelease: true
         files: |
           ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_NAME }}
+          docs.tar.zst
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
