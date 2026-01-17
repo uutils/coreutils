@@ -29,7 +29,7 @@ options might be missing or different behavior might be experienced.
 
 <div class="oranda-hide">
 
-We provide prebuilt binaries, manpages, and shell completions at https://github.com/uutils/coreutils/releases/tag/latest-commit .
+We provide prebuilt binaries, manpages, and shell completions from main branch at https://github.com/uutils/coreutils/releases/tag/latest-commit .
 The latest stable tag https://github.com/uutils/coreutils/releases/latest exists only for reproducible products and packagers.
 You should use binary from latest commit generally.
 
