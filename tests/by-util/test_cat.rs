@@ -865,6 +865,22 @@ fn test_write_error_handling() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_version_help_dev_full() {
+    use std::fs::OpenOptions;
+
+    for option in ["--version", "--help"] {
+        let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+
+        new_ucmd!()
+            .arg(option)
+            .set_stdout(dev_full)
+            .fails()
+            .stderr_contains("No space left on device");
+    }
+}
+
+#[test]
 fn test_cat_eintr_handling() {
     // Test that cat properly handles EINTR (ErrorKind::Interrupted) during I/O operations
     // This verifies the signal interruption retry logic added in the EINTR handling fix
