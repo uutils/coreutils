@@ -483,7 +483,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             Ok(date) => {
                 match BrokenDownTime::from(&date).to_string_with_config(&config, format_string) {
                     Ok(s) => write_formatted_output(settings.output_encoding, &s, &mut stdout)
-                        .map_err(|e| USimpleError::new(1, translate!("date-error-write", "error" => e)))?,
+                        .map_err(|e| {
+                            USimpleError::new(1, translate!("date-error-write", "error" => e))
+                        })?,
                     Err(e) => {
                         let _ = stdout.flush();
                         return Err(USimpleError::new(
