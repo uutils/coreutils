@@ -20,7 +20,9 @@ use std::path::PathBuf;
 use std::sync::OnceLock;
 use uucore::display::Quotable;
 use uucore::error::FromIo;
-use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::error::{UResult, USimpleError};
+#[cfg(unix)]
+use uucore::error::UUsageError;
 use uucore::translate;
 use uucore::{format_usage, show};
 #[cfg(windows)]
