@@ -4951,6 +4951,36 @@ fn test_dereference_symlink_file_color() {
         .stdout_is(out_exp);
 }
 
+/// Symlink chain target should be colored by final target type, not as symlink (#8934).
+#[test]
+fn test_symlink_chain_target_color() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    at.relative_symlink_file("file", "link1");
+    at.relative_symlink_file("link1", "link2");
+    let out = ucmd
+        .args(&["-l", "--color=always", "link2"])
+        .succeeds()
+        .stdout_move_str();
+    let target = out.split("->").nth(1).unwrap();
+    assert!(!target.contains("36m")); // 36m = cyan (symlink color)
+}
+
+/// Symlink target should be colored by extension (e.g., .tar.gz shows as archive color).
+#[test]
+fn test_symlink_target_extension_color() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("archive.tar.gz");
+    at.relative_symlink_file("archive.tar.gz", "link");
+    let out = ucmd
+        .env("LS_COLORS", "*.tar.gz=31")
+        .args(&["-l", "--color=always", "link"])
+        .succeeds()
+        .stdout_move_str();
+    let target = out.split("->").nth(1).unwrap();
+    assert!(target.contains("31m")); // 31 = red (our configured archive color)
+}
+
 #[test]
 fn test_tabsize_option() {
     let scene = TestScenario::new(util_name!());

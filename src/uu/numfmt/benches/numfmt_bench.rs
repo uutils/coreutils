@@ -63,8 +63,12 @@ fn numfmt_from_si(bencher: Bencher, count: usize) {
 /// Benchmark large numbers with SI formatting
 #[divan::bench(args = [10_000])]
 fn numfmt_large_numbers_si(bencher: Bencher, count: usize) {
-    // Generate larger numbers (millions to billions range)
-    let numbers: Vec<String> = (1..=count).map(|n| (n * 1_000_000).to_string()).collect();
+    // Generate numbers that all produce uniform SI output lengths (all in 1-9M range)
+    // This avoids variance from variable output string lengths
+    let numbers: Vec<String> = (1..=count)
+        .map(|n| ((n % 9) + 1) * 1_000_000)
+        .map(|n| n.to_string())
+        .collect();
     let mut args = vec!["--to=si"];
     let number_refs: Vec<&str> = numbers.iter().map(|s| s.as_str()).collect();
     args.extend(number_refs);
