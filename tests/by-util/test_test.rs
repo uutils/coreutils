@@ -1037,10 +1037,7 @@ fn test_unary_op_as_literal_in_three_arg_form() {
 
 // Only test platforms supporting setfacl.
 #[test]
-#[cfg(any(
-    target_os = "linux",
-    target_os = "cygwin"
-))]
+#[cfg(any(target_os = "linux", target_os = "cygwin"))]
 fn test_permission_with_acl() {
     // Test that permission checks (-r, -w, -x) correctly handle ACL (Access Control List)
     // permissions, not just traditional Unix permissions. This requires using euidaccess()
@@ -1054,13 +1051,25 @@ fn test_permission_with_acl() {
 
     let scene = TestScenario::new(util_name!());
 
-    // Must be run as non-root user (otherwise owner permissions would apply)
-    if scene.cmd("whoami").run().stdout_str().trim() == "root" {
-        return;
-    }
+    let is_root = scene.cmd("whoami").run().stdout_str().trim() == "root";
 
     // Check if setfacl is available
     if Command::new("which").arg("setfacl").output().is_err() {
+        return;
+    }
+
+    // Skip if we cannot run non-interactive sudo and we're not already root.
+    let sudo_ok = if is_root {
+        true
+    } else {
+        Command::new("sudo")
+            .env("LC_ALL", "C")
+            .args(["-E", "--non-interactive", "whoami"])
+            .output()
+            .ok()
+            .is_some_and(|output| output.status.success() && output.stdout == b"root\n")
+    };
+    if !sudo_ok {
         return;
     }
 
@@ -1076,46 +1085,64 @@ fn test_permission_with_acl() {
     let test_path_str = test_path.to_str().unwrap();
 
     // Create directory with root:root ownership and 750 permissions (no access for others)
-    let install_result = scene
-        .cmd("sudo")
-        .args(&[
-            "-E",
-            "--non-interactive",
-            "install",
-            "-d",
-            "-m",
-            "750",
-            "-o",
-            "root",
-            "-g",
-            "root",
-            test_path_str,
-        ])
-        .run();
+    let install_result = if is_root {
+        scene
+            .cmd("install")
+            .args(&["-d", "-m", "750", "-o", "root", "-g", "root", test_path_str])
+            .run()
+    } else {
+        scene
+            .cmd("sudo")
+            .args(&[
+                "-E",
+                "--non-interactive",
+                "install",
+                "-d",
+                "-m",
+                "750",
+                "-o",
+                "root",
+                "-g",
+                "root",
+                test_path_str,
+            ])
+            .run()
+    };
 
     if !install_result.succeeded() {
         return;
     }
 
     // Grant ACL permissions to current user (read + execute)
-    let setfacl_result = scene
-        .cmd("sudo")
-        .args(&[
-            "-E",
-            "--non-interactive",
-            "setfacl",
-            "-m",
-            &format!("u:{username}:rx"),
-            test_path_str,
-        ])
-        .run();
+    let setfacl_result = if is_root {
+        scene
+            .cmd("setfacl")
+            .args(&["-m", &format!("u:{username}:rx"), test_path_str])
+            .run()
+    } else {
+        scene
+            .cmd("sudo")
+            .args(&[
+                "-E",
+                "--non-interactive",
+                "setfacl",
+                "-m",
+                &format!("u:{username}:rx"),
+                test_path_str,
+            ])
+            .run()
+    };
 
     if !setfacl_result.succeeded() {
         // Clean up and skip test
-        let _ = scene
-            .cmd("sudo")
-            .args(&["-E", "--non-interactive", "rm", "-rf", test_path_str])
-            .run();
+        let _ = if is_root {
+            scene.cmd("rm").args(&["-rf", test_path_str]).run()
+        } else {
+            scene
+                .cmd("sudo")
+                .args(&["-E", "--non-interactive", "rm", "-rf", test_path_str])
+                .run()
+        };
         return;
     }
 
@@ -1129,10 +1156,14 @@ fn test_permission_with_acl() {
     scene.ucmd().args(&["!", "-w", test_path_str]).succeeds();
 
     // Clean up
-    let _ = scene
-        .cmd("sudo")
-        .args(&["-E", "--non-interactive", "rm", "-rf", test_path_str])
-        .run();
+    let _ = if is_root {
+        scene.cmd("rm").args(&["-rf", test_path_str]).run()
+    } else {
+        scene
+            .cmd("sudo")
+            .args(&["-E", "--non-interactive", "rm", "-rf", test_path_str])
+            .run()
+    };
 }
 
 #[test]
