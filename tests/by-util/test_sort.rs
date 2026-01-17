@@ -2480,13 +2480,13 @@ fn test_locale_collation_c_locale() {
 
 #[test]
 fn test_locale_collation_utf8() {
-    // Test UTF-8 locale handling - behavior depends on i18n-collator feature
+    // Test French UTF-8 locale handling - behavior depends on i18n-collator feature
     // With feature: locale-aware collation (é sorts near e)
     // Without feature: byte order (é after z, since 0xC3A9 > 0x7A)
     let input = "z\né\ne\na\n";
 
     let result = new_ucmd!()
-        .env("LC_ALL", "en_US.UTF-8")
+        .env("LC_ALL", "fr_FR.UTF-8")
         .pipe_in(input)
         .succeeds();
 
