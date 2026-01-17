@@ -134,7 +134,7 @@ jobs:
       with:
         persist-credentials: false
     - name: Avoid no space left on device (Ubuntu runner)
-      run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android
+      run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android &
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
