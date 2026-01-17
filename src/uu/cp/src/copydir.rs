@@ -318,6 +318,16 @@ fn copy_direntry(
                             ),
                         ));
                     }
+                    CpError::IoErrContext(e, _) if e.kind() == io::ErrorKind::NotFound => {
+                        show!(uio_error!(
+                            e,
+                            "{}",
+                            translate!(
+                                "cp-error-cannot-stat-no-such-file",
+                                "source" => entry.source_relative.quote()
+                            ),
+                        ));
+                    }
                     e => return Err(e),
                 }
             }
