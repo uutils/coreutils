@@ -123,6 +123,11 @@ const POSITIVE: &u8 = &b'+';
 // reasonably large chunks for typical workloads.
 const MIN_AUTOMATIC_BUF_SIZE: usize = 512 * 1024; // 512 KiB
 const FALLBACK_AUTOMATIC_BUF_SIZE: usize = 32 * 1024 * 1024; // 32 MiB
+// On 32-bit systems, use a smaller max buffer (256 MiB) to avoid allocation
+// failures due to limited virtual address space.
+#[cfg(target_pointer_width = "32")]
+const MAX_AUTOMATIC_BUF_SIZE: usize = 256 * 1024 * 1024; // 256 MiB
+#[cfg(not(target_pointer_width = "32"))]
 const MAX_AUTOMATIC_BUF_SIZE: usize = 1024 * 1024 * 1024; // 1 GiB
 
 #[derive(Debug, Error)]
