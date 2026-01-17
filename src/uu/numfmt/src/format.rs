@@ -62,12 +62,97 @@ impl<'a> Iterator for WhitespaceSplitter<'a> {
     }
 }
 
-fn parse_suffix(s: &str) -> Result<(f64, Option<Suffix>)> {
+fn find_numeric_beginning(s: &str) -> Option<&str> {
+    let mut decimal_point_seen = false;
+    if s.is_empty() {
+        return None;
+    }
+
+    for (idx, c) in s.char_indices() {
+        if c == '-' && idx == 0 {
+            continue;
+        }
+        if c.is_ascii_digit() {
+            continue;
+        }
+        if c == '.' && !decimal_point_seen {
+            decimal_point_seen = true;
+            continue;
+        }
+        if s[..idx].parse::<f64>().is_err() {
+            return None;
+        }
+        return Some(&s[..idx]);
+    }
+
+    Some(s)
+}
+
+// finds the valid beginning part of an input string, or None.
+fn find_valid_number_with_suffix<'a>(s: &'a str, unit: &Unit) -> Option<&'a str> {
+    let numeric_part = find_numeric_beginning(s)?;
+
+    let accepts_suffix = unit != &Unit::None;
+    let accepts_i = [Unit::Auto, Unit::Iec(true)].contains(unit);
+
+    let mut characters = s.chars().skip(numeric_part.len());
+    let potential_suffix = characters.next();
+    let potential_i = characters.next();
+
+    if !accepts_suffix {
+        return Some(numeric_part);
+    }
+
+    match (potential_suffix, potential_i) {
+        (Some(suffix), None) if RawSuffix::try_from(&suffix).is_ok() => {
+            Some(&s[..=numeric_part.len()])
+        }
+        (Some(suffix), Some('i')) if accepts_i && RawSuffix::try_from(&suffix).is_ok() => {
+            Some(&s[..numeric_part.len() + 2])
+        }
+        (Some(suffix), Some(_)) if RawSuffix::try_from(&suffix).is_ok() => {
+            Some(&s[..=numeric_part.len()])
+        }
+        _ => Some(numeric_part),
+    }
+}
+
+fn detailed_error_message(s: &str, unit: &Unit) -> Option<String> {
+    if s.is_empty() {
+        return Some(translate!("numfmt-error-invalid-number-empty"));
+    }
+
+    let valid_part = find_valid_number_with_suffix(s, unit)
+        .ok_or(translate!("numfmt-error-invalid-number", "input" => s.quote()))
+        .ok()?;
+
+    if valid_part != s && valid_part.parse::<f64>().is_ok() {
+        return match s.chars().nth(valid_part.len()) {
+            Some(v) if RawSuffix::try_from(&v).is_ok() => Some(
+                translate!("numfmt-error-rejecting-suffix", "number" => valid_part, "suffix" => s[valid_part.len()..]),
+            ),
+
+            _ => Some(translate!("numfmt-error-invalid-suffix", "input" => s.quote())),
+        };
+    }
+
+    if valid_part != s && valid_part.parse::<f64>().is_err() {
+        return Some(
+            translate!("numfmt-error-invalid-specific-suffix", "input" => s.quote(), "suffix" => s[valid_part.len()..].quote()),
+        );
+    }
+    None
+}
+
+fn parse_suffix(s: &str, unit: &Unit) -> Result<(f64, Option<Suffix>)> {
     if s.is_empty() {
         return Err(translate!("numfmt-error-invalid-number-empty"));
     }
 
     let with_i = s.ends_with('i');
+    if with_i && ![Unit::Auto, Unit::Iec(true)].contains(unit) {
+        return Err(translate!("numfmt-error-invalid-suffix", "input" => s.quote()));
+    }
     let mut iter = s.chars();
     if with_i {
         iter.next_back();
@@ -86,17 +171,7 @@ fn parse_suffix(s: &str) -> Result<(f64, Option<Suffix>)> {
         Some('Q') => Some((RawSuffix::Q, with_i)),
         Some('0'..='9') if !with_i => None,
         _ => {
-            // If with_i is true, the string ends with 'i' but there's no valid suffix letter
-            // This is always an invalid suffix (e.g., "1i", "2Ai")
-            if with_i {
-                return Err(translate!("numfmt-error-invalid-suffix", "input" => s.quote()));
-            }
-            // For other cases, check if the number part (without the last character) is valid
-            let number_part = &s[..s.len() - 1];
-            if number_part.is_empty() || number_part.parse::<f64>().is_err() {
-                return Err(translate!("numfmt-error-invalid-number", "input" => s.quote()));
-            }
-            return Err(translate!("numfmt-error-invalid-suffix", "input" => s.quote()));
+            return Err(translate!("numfmt-error-invalid-number", "input" => s.quote()));
         }
     };
 
@@ -164,7 +239,8 @@ fn remove_suffix(i: f64, s: Option<Suffix>, u: &Unit) -> Result<f64> {
 }
 
 fn transform_from(s: &str, opts: &TransformOptions) -> Result<f64> {
-    let (i, suffix) = parse_suffix(s)?;
+    let (i, suffix) = parse_suffix(s, &opts.from)
+        .map_err(|original| detailed_error_message(s, &opts.from).unwrap_or(original))?;
     let i = i * (opts.from_unit as f64);
 
     remove_suffix(i, suffix, &opts.from).map(|n| {
@@ -491,7 +567,7 @@ mod tests {
 
     #[test]
     fn test_parse_suffix_q_r_k() {
-        let result = parse_suffix("1Q");
+        let result = parse_suffix("1Q", &Unit::Auto);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
         assert_eq!(number, 1.0);
@@ -500,7 +576,7 @@ mod tests {
         assert_eq!(raw_suffix as i32, RawSuffix::Q as i32);
         assert!(!with_i);
 
-        let result = parse_suffix("2R");
+        let result = parse_suffix("2R", &Unit::Auto);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
         assert_eq!(number, 2.0);
@@ -509,7 +585,7 @@ mod tests {
         assert_eq!(raw_suffix as i32, RawSuffix::R as i32);
         assert!(!with_i);
 
-        let result = parse_suffix("3k");
+        let result = parse_suffix("3k", &Unit::Auto);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
         assert_eq!(number, 3.0);
@@ -518,7 +594,7 @@ mod tests {
         assert_eq!(raw_suffix as i32, RawSuffix::K as i32);
         assert!(!with_i);
 
-        let result = parse_suffix("4Qi");
+        let result = parse_suffix("4Qi", &Unit::Auto);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
         assert_eq!(number, 4.0);
@@ -527,7 +603,7 @@ mod tests {
         assert_eq!(raw_suffix as i32, RawSuffix::Q as i32);
         assert!(with_i);
 
-        let result = parse_suffix("5Ri");
+        let result = parse_suffix("5Ri", &Unit::Auto);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
         assert_eq!(number, 5.0);
@@ -539,22 +615,41 @@ mod tests {
 
     #[test]
     fn test_parse_suffix_error_messages() {
-        let result = parse_suffix("foo");
+        let result = parse_suffix("foo", &Unit::Auto);
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert!(error.contains("numfmt-error-invalid-number") || error.contains("invalid number"));
         assert!(!error.contains("invalid suffix"));
 
-        let result = parse_suffix("World");
+        let result = parse_suffix("World", &Unit::Auto);
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert!(error.contains("numfmt-error-invalid-number") || error.contains("invalid number"));
         assert!(!error.contains("invalid suffix"));
+    }
 
-        let result = parse_suffix("123i");
-        assert!(result.is_err());
-        let error = result.unwrap_err();
+    #[test]
+    fn test_detailed_error_message() {
+        let result = detailed_error_message("123i", &Unit::Auto);
+        assert!(result.is_some());
+        let error = result.unwrap();
         assert!(error.contains("numfmt-error-invalid-suffix") || error.contains("invalid suffix"));
+
+        let result = detailed_error_message("5MF", &Unit::Auto);
+        assert!(result.is_some());
+        let error = result.unwrap();
+        assert!(
+            error.contains("numfmt-error-invalid-specific-suffix")
+                || error.contains("invalid suffix")
+        );
+
+        let result = detailed_error_message("5KM", &Unit::Auto);
+        assert!(result.is_some());
+        let error = result.unwrap();
+        assert!(
+            error.contains("numfmt-error-invalid-specific-suffix")
+                || error.contains("invalid suffix")
+        );
     }
 
     #[test]
@@ -576,6 +671,72 @@ mod tests {
         let result = remove_suffix(1.0, Some((RawSuffix::R, true)), &Unit::Iec(true));
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), IEC_BASES[9]);
+    }
+
+    #[test]
+    fn test_find_valid_part() {
+        assert_eq!(
+            find_valid_number_with_suffix("12345KL", &Unit::Auto),
+            Some("12345K")
+        );
+        assert_eq!(
+            find_valid_number_with_suffix("12345K", &Unit::Auto),
+            Some("12345K")
+        );
+        assert_eq!(
+            find_valid_number_with_suffix("12345", &Unit::Auto),
+            Some("12345")
+        );
+        assert_eq!(
+            find_valid_number_with_suffix("asd12345KL", &Unit::Auto),
+            None
+        );
+        assert_eq!(
+            find_valid_number_with_suffix("8asdf", &Unit::Auto),
+            Some("8")
+        );
+        assert_eq!(find_valid_number_with_suffix("5i", &Unit::Si), Some("5"));
+        assert_eq!(
+            find_valid_number_with_suffix("5i", &Unit::Iec(true)),
+            Some("5")
+        );
+        assert_eq!(
+            find_valid_number_with_suffix("0.1KL", &Unit::Auto),
+            Some("0.1K")
+        );
+        assert_eq!(
+            find_valid_number_with_suffix("0.1", &Unit::Auto),
+            Some("0.1")
+        );
+        assert_eq!(
+            find_valid_number_with_suffix("-0.1MT", &Unit::Auto),
+            Some("-0.1M")
+        );
+        assert_eq!(
+            find_valid_number_with_suffix("-0.1PT", &Unit::Auto),
+            Some("-0.1P")
+        );
+        assert_eq!(
+            find_valid_number_with_suffix("-0.1PT", &Unit::Auto),
+            Some("-0.1P")
+        );
+        assert_eq!(
+            find_valid_number_with_suffix("123.4.5", &Unit::Auto),
+            Some("123.4")
+        );
+        assert_eq!(
+            find_valid_number_with_suffix("0.55KiJ", &Unit::Iec(true)),
+            Some("0.55Ki")
+        );
+        assert_eq!(
+            find_valid_number_with_suffix("0.55KiJ", &Unit::Iec(false)),
+            Some("0.55K")
+        );
+        assert_eq!(
+            find_valid_number_with_suffix("123KICK", &Unit::Auto),
+            Some("123K")
+        );
+        assert_eq!(find_valid_number_with_suffix("", &Unit::Auto), None);
     }
 
     #[test]
