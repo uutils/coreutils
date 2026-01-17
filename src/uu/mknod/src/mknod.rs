@@ -6,7 +6,7 @@
 // spell-checker:ignore (ToDO) parsemode makedev sysmacros perror IFBLK IFCHR IFIFO sflag
 
 use clap::{Arg, ArgAction, Command, value_parser};
-use nix::libc::{S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
+use nix::libc::{mode_t, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
 use nix::sys::stat::{Mode, SFlag, mknod as nix_mknod, umask as nix_umask};
 
 use uucore::display::Quotable;
@@ -15,21 +15,8 @@ use uucore::format_usage;
 use uucore::fs::makedev;
 use uucore::translate;
 
-#[cfg(not(any(
-    target_os = "android",
-    target_os = "macos",
-    target_os = "freebsd",
-    target_os = "redox",
-)))]
-const MODE_RW_UGO: u32 = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
-
-#[cfg(any(
-    target_os = "android",
-    target_os = "macos",
-    target_os = "freebsd",
-    target_os = "redox",
-))]
-const MODE_RW_UGO: u32 = (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
+const MODE_RW_UGO: mode_t =
+    (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as mode_t;
 
 mod options {
     pub const MODE: &str = "mode";
@@ -146,7 +133,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut use_umask = true;
     let mode_permissions = match matches.get_one::<String>("mode") {
-        None => MODE_RW_UGO,
+        None => MODE_RW_UGO as u32,
         Some(str_mode) => {
             use_umask = false;
             parse_mode(str_mode).map_err(|e| USimpleError::new(1, e))?
@@ -261,7 +248,7 @@ pub fn uu_app() -> Command {
 
 #[allow(clippy::unnecessary_cast)]
 fn parse_mode(str_mode: &str) -> Result<u32, String> {
-    let default_mode = MODE_RW_UGO;
+    let default_mode = MODE_RW_UGO as u32;
     uucore::mode::parse_chmod(default_mode, str_mode, true, uucore::mode::get_umask())
         .map_err(|e| {
             translate!(
