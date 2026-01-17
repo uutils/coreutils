@@ -1815,6 +1815,29 @@ fn test_wrong_number_err_msg() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_no_dropped_writes() {
+    use std::process::Stdio;
+
+    const BLK_SIZE: usize = 0x4000;
+    const COUNT: usize = 1000;
+    const NUM_BYTES: usize = BLK_SIZE * COUNT;
+
+    let result = new_ucmd!()
+        .args(&[
+            "if=/dev/urandom",
+            &format!("bs={BLK_SIZE}"),
+            &format!("count={COUNT}"),
+        ])
+        .set_stdout(Stdio::piped())
+        .set_stderr(Stdio::piped())
+        .succeeds();
+
+    assert_eq!(result.stdout().len(), NUM_BYTES);
+    assert!(result.stderr_str().contains(&format!("{NUM_BYTES} bytes")));
+}
+
+#[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_oflag_direct_partial_block() {
     // Test for issue #9003: dd should handle partial blocks with oflag=direct
