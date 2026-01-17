@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore dyld dylib setvbuf
+// spell-checker:ignore cmdline dyld dylib PDEATHSIG setvbuf
 #[cfg(target_os = "linux")]
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -275,4 +275,73 @@ fn test_stdbuf_non_utf8_paths() {
         .arg(&filename)
         .succeeds()
         .stdout_is("test content for stdbuf\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_stdbuf_no_fork_regression() {
+    // Regression test for issue #9066: https://github.com/uutils/coreutils/issues/9066
+    // The original stdbuf implementation used fork+spawn which broke signal handling
+    // and PR_SET_PDEATHSIG. This test verifies that stdbuf uses exec() instead.
+    // With fork: stdbuf process would remain visible in process list
+    // With exec: stdbuf process is replaced by target command (GNU compatible)
+
+    use std::process::{Command, Stdio};
+    use std::thread;
+    use std::time::Duration;
+
+    let scene = TestScenario::new(util_name!());
+
+    // Start stdbuf with a long-running command
+    let mut child = Command::new(&scene.bin_path)
+        .args(["stdbuf", "-o0", "sleep", "3"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("Failed to start stdbuf");
+
+    let child_pid = child.id();
+
+    // Poll until exec happens or timeout
+    let cmdline_path = format!("/proc/{child_pid}/cmdline");
+    let timeout = Duration::from_secs(2);
+    let poll_interval = Duration::from_millis(10);
+    let start_time = std::time::Instant::now();
+
+    let command_name = loop {
+        if start_time.elapsed() > timeout {
+            child.kill().ok();
+            panic!("TIMEOUT: Process {child_pid} did not respond within {timeout:?}");
+        }
+
+        if let Ok(cmdline) = std::fs::read_to_string(&cmdline_path) {
+            let cmd_parts: Vec<&str> = cmdline.split('\0').collect();
+            let name = cmd_parts.first().map_or("", |v| v);
+
+            // Wait for exec to complete (process name changes from original binary to target)
+            // Handle both multicall binary (coreutils) and individual utilities (stdbuf)
+            if !name.contains("coreutils") && !name.contains("stdbuf") && !name.is_empty() {
+                break name.to_string();
+            }
+        }
+
+        thread::sleep(poll_interval);
+    };
+
+    // The loop already waited for exec (no longer original binary), so this should always pass
+    // But keep the assertion as a safety check and clear documentation
+    assert!(
+        !command_name.contains("coreutils") && !command_name.contains("stdbuf"),
+        "REGRESSION: Process {child_pid} is still original binary (coreutils or stdbuf) - fork() used instead of exec()"
+    );
+
+    // Ensure we're running the expected target command
+    assert!(
+        command_name.contains("sleep"),
+        "Expected 'sleep' command at PID {child_pid}, got: {command_name}"
+    );
+
+    // Cleanup
+    child.kill().ok();
+    child.wait().ok();
 }

@@ -77,9 +77,17 @@ fn du_all_wide_tree(bencher: Bencher, (total_files, total_dirs): (usize, usize))
 /// Benchmark du on deep directory structures
 #[divan::bench(args = [(100, 3)])]
 fn du_deep_tree(bencher: Bencher, (depth, files_per_level): (usize, usize)) {
-    let temp_dir = TempDir::new().unwrap();
-    fs_tree::create_deep_tree(temp_dir.path(), depth, files_per_level);
-    bench_du_with_args(bencher, &temp_dir, &[]);
+    bencher
+        .with_inputs(|| {
+            let temp_dir = TempDir::new().unwrap();
+            fs_tree::create_deep_tree(temp_dir.path(), depth, files_per_level);
+            temp_dir
+        })
+        .bench_values(|temp_dir| {
+            let temp_path_str = temp_dir.path().to_str().unwrap();
+            let args = vec![temp_path_str];
+            black_box(run_util_function(uumain, &args));
+        });
 }
 
 /// Benchmark du -s (summarize) on balanced tree
