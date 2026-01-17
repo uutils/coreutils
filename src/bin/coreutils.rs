@@ -70,8 +70,7 @@ fn main() {
             uucore::set_utility_is_second_arg();
             args.next()
         } else {
-            eprintln!("coreutils: I was probably called as symlink to false");
-            process::exit(1);
+            validation::not_found(&OsString::from(binary_as_util));
         };
 
     // 0th argument equals util name?
