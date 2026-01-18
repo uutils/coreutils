@@ -56,16 +56,15 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Run sccache-cache
-        uses: mozilla-actions/sccache-action@v0.0.9
-
-      - name: Install cargo-codspeed
-        shell: bash
-        run: cargo install cargo-codspeed --locked
+      # Prefer CodSpeed's recommended setup to keep toolchain/binary versions aligned
+      # with the CodSpeed action (helps avoid memtrack/cargo-codspeed incompatibilities).
+      - name: Setup Rust (with cargo-codspeed)
+        uses: moonrepo/setup-rust@v1
+        with:
+          rust-version:　1.85.0
+          cache: true
+          cache-target: true
+          bins: cargo-codspeed  
 
       - name: Build benchmarks for ${{ matrix.package }} (${{ matrix.type }})
         shell: bash
