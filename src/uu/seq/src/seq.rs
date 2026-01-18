@@ -94,7 +94,7 @@ fn select_precision(
 
 // Initialize SIGPIPE state capture at process startup (Unix only)
 #[cfg(unix)]
-uucore::init_sigpipe_capture!();
+uucore::init_startup_state_capture!();
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
