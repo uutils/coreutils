@@ -2017,14 +2017,7 @@ fn test_du_hard_links_multiple_dirs_in_args() {
 
     let result = ts.ucmd().args(&["dir1", "dir2"]).succeeds();
     let lines: Vec<&str> = result.stdout_str().lines().collect();
-    let size = |i: usize| {
-        lines[i]
-            .split_once('\t')
-            .unwrap()
-            .0
-            .parse::<u64>()
-            .unwrap()
-    };
+    let size = |i: usize| lines[i].split_once('\t').unwrap().0.parse::<u64>().unwrap();
     assert!(size(0) >= 8);
     assert!(size(1) <= 4);
 }
