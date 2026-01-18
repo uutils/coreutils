@@ -606,3 +606,28 @@ fn test_omit_pagination_option() {
         .pipe_in("a\nb\n")
         .succeeds();
 }
+
+#[test]
+fn test_form_feed_newlines() {
+    // Here we define the expected output.
+    //
+    // Each page should have the same number of blank lines before the
+    // form-feed character.
+    let whitespace = " ".repeat(50);
+    let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
+    let page1 = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\n\n\x0c");
+    let page2 = format!("\n\n{datetime_pattern}{whitespace}Page 2\n\n\n\n\x0c");
+    let pattern = format!("{page1}{page2}");
+    let regex = Regex::new(&pattern).unwrap();
+
+    // Command line: `printf "\f\f" | pr -f`.
+    //
+    // Escape code `\x0c` in a Rust string literal is the ASCII escape
+    // code `\f` for the "form feed" character (which appears like
+    // `^L` in the terminal).
+    new_ucmd!()
+        .arg("-f")
+        .pipe_in("\x0c\x0c")
+        .succeeds()
+        .stdout_matches(&regex);
+}
