@@ -1080,6 +1080,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (print_tx, rx) = mpsc::channel::<UResult<StatPrintInfo>>();
     let printing_thread = thread::spawn(move || stat_printer.print_stats(&rx));
 
+    // Track seen inodes across all arguments to avoid double-counting hard links
+    let mut seen_inodes: HashSet<FileInfo> = HashSet::new();
+
     'loop_file: for path in files {
         // Skip if we don't want to ignore anything
         if !&traversal_options.excludes.is_empty() {
@@ -1097,9 +1100,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 }
             }
         }
-
-        // Check existence of path provided in argument
-        let mut seen_inodes: HashSet<FileInfo> = HashSet::new();
 
         // Determine which traversal method to use
         #[cfg(all(unix, not(target_os = "redox")))]
