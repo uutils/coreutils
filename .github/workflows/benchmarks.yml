@@ -1,6 +1,6 @@
 name: Benchmarks
 
-# spell-checker:ignore codspeed dtolnay Swatinem sccache
+# spell-checker:ignore codspeed dtolnay Swatinem sccache memtrack moonrepo
 
 on:
   pull_request:
