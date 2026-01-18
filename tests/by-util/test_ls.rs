@@ -2980,6 +2980,32 @@ mod quoting {
     }
 }
 
+#[cfg(not(any(target_vendor = "apple", target_os = "windows", target_os = "openbsd")))]
+#[test]
+fn test_ls_uses_lc_ctype() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let filename = "café";
+    at.touch(filename);
+
+    scene
+        .ucmd()
+        .env("LC_CTYPE", "en_US.UTF-8")
+        .env("LC_COLLATE", "C")
+        .arg("--quoting-style=literal")
+        .succeeds()
+        .stdout_contains(filename);
+
+    scene
+        .ucmd()
+        .env("LC_CTYPE", "C")
+        .env("LC_COLLATE", "en_US.UTF-8")
+        .arg("--quoting-style=shell-escape")
+        .succeeds()
+        .stdout_does_not_contain(filename);
+}
+
 #[test]
 fn test_ls_color() {
     let scene = TestScenario::new(util_name!());
