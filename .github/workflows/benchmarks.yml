@@ -81,6 +81,7 @@ jobs:
         uses: CodSpeedHQ/action@v4
         env:
           CODSPEED_LOG: debug
+          RUST_BACKTRACE: "1"
         with:
           mode: ${{ matrix.type == 'memory' && 'memory' || 'simulation' }}
           run: |
