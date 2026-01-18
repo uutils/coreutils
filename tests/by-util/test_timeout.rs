@@ -58,7 +58,7 @@ fn test_verbose() {
         new_ucmd!()
             .args(&[verbose_flag, "-s0", "-k.1", ".1", "sleep", "1"])
             .fails()
-            .stderr_only("timeout: sending signal EXIT to command 'sleep'\ntimeout: sending signal KILL to command 'sleep'\n");
+            .stderr_only("timeout: sending signal 0 to command 'sleep'\ntimeout: sending signal KILL to command 'sleep'\n");
     }
 }
 
