@@ -762,18 +762,25 @@ fn build_options(
     })
 }
 
+/// Read the entire contents of the given path into memory.
+///
+/// If `path` is `"-"`, then read from stdin.
+fn read_to_end(path: &str) -> Result<Vec<u8>, std::io::Error> {
+    if path == "-" {
+        let mut f = stdin();
+        let mut buf = vec![];
+        f.read_to_end(&mut buf)?;
+        Ok(buf)
+    } else {
+        std::fs::read(path)
+    }
+}
+
 fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
     // Read the entire contents of the file into a buffer.
     //
     // TODO Read incrementally.
-    let buf = if path == "-" {
-        let mut f = stdin();
-        let mut buf = vec![];
-        f.read_to_end(&mut buf)?;
-        buf
-    } else {
-        std::fs::read(path)?
-    };
+    let buf = read_to_end(path)?;
 
     let pages = get_pages(options, 0, &buf)?;
 
@@ -930,14 +937,7 @@ fn get_file_line_groups(
         // Read the entire contents of the file into a buffer.
         //
         // TODO Read incrementally.
-        let buf = if *path == "-" {
-            let mut f = stdin();
-            let mut buf = vec![];
-            f.read_to_end(&mut buf)?;
-            buf
-        } else {
-            std::fs::read(path)?
-        };
+        let buf = read_to_end(path)?;
 
         // Split the text into pages and collect each line for
         // subsequent grouping.
