@@ -7,7 +7,7 @@
 // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/sort.html
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 
-// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef
+// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef GETFD
 
 mod buffer_hint;
 mod check;
@@ -104,6 +104,7 @@ mod options {
     pub const TMP_DIR: &str = "temporary-directory";
     pub const COMPRESS_PROG: &str = "compress-program";
     pub const BATCH_SIZE: &str = "batch-size";
+    pub const RANDOM_SOURCE: &str = "random-source";
 
     pub const FILES: &str = "files";
 }
@@ -274,6 +275,7 @@ pub struct GlobalSettings {
     check: bool,
     check_silent: bool,
     salt: Option<[u8; 16]>,
+    random_source: Option<PathBuf>,
     selectors: Vec<FieldSelector>,
     separator: Option<u8>,
     threads: String,
@@ -402,6 +404,7 @@ impl Default for GlobalSettings {
             check: false,
             check_silent: false,
             salt: None,
+            random_source: None,
             selectors: vec![],
             separator: None,
             threads: String::new(),
@@ -584,6 +587,14 @@ impl<'a> Line<'a> {
         token_buffer: &mut Vec<Field>,
         settings: &GlobalSettings,
     ) -> Self {
+        let needs_line_data = settings.precomputed.needs_tokens
+            || settings.precomputed.selections_per_line > 0
+            || settings.precomputed.num_infos_per_line > 0
+            || settings.precomputed.floats_per_line > 0
+            || settings.mode == SortMode::Numeric;
+        if !needs_line_data {
+            return Self { line, index };
+        }
         token_buffer.clear();
         if settings.precomputed.needs_tokens {
             tokenize(line, settings.separator, token_buffer);
@@ -1203,7 +1214,16 @@ fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
         .action(ArgAction::SetTrue)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(
+    unix,
+    not(any(
+        target_os = "redox",
+        target_os = "fuchsia",
+        target_os = "haiku",
+        target_os = "solaris",
+        target_os = "illumos"
+    ))
+))]
 fn get_rlimit() -> UResult<usize> {
     use nix::sys::resource::{RLIM_INFINITY, Resource, getrlimit};
 
@@ -1216,13 +1236,71 @@ fn get_rlimit() -> UResult<usize> {
         .map_err(|_| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(
+    unix,
+    not(any(
+        target_os = "redox",
+        target_os = "fuchsia",
+        target_os = "haiku",
+        target_os = "solaris",
+        target_os = "illumos"
+    ))
+))]
 pub(crate) fn fd_soft_limit() -> Option<usize> {
     get_rlimit().ok()
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(any(
+    not(unix),
+    target_os = "redox",
+    target_os = "fuchsia",
+    target_os = "haiku",
+    target_os = "solaris",
+    target_os = "illumos"
+))]
 pub(crate) fn fd_soft_limit() -> Option<usize> {
+    None
+}
+
+#[cfg(unix)]
+pub(crate) fn current_open_fd_count() -> Option<usize> {
+    use nix::libc;
+
+    fn count_dir(path: &str) -> Option<usize> {
+        let entries = std::fs::read_dir(path).ok()?;
+        let mut count = 0usize;
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if name.parse::<usize>().is_ok() {
+                count = count.saturating_add(1);
+            }
+        }
+        Some(count)
+    }
+
+    if let Some(count) = count_dir("/proc/self/fd").or_else(|| count_dir("/dev/fd")) {
+        return Some(count);
+    }
+
+    let limit = fd_soft_limit()?;
+    if limit > 16_384 {
+        return None;
+    }
+
+    let mut count = 0usize;
+    for fd in 0..limit {
+        let fd = fd as libc::c_int;
+        // Probe with libc::fcntl because the fd may be invalid.
+        if unsafe { libc::fcntl(fd, libc::F_GETFD) } != -1 {
+            count = count.saturating_add(1);
+        }
+    }
+    Some(count)
+}
+
+#[cfg(not(unix))]
+pub(crate) fn current_open_fd_count() -> Option<usize> {
     None
 }
 
@@ -1776,6 +1854,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     settings.debug = matches.get_flag(options::DEBUG);
+    if let Some(path) = matches.get_one::<OsString>(options::RANDOM_SOURCE) {
+        settings.random_source = Some(PathBuf::from(path));
+    }
 
     // check whether user specified a zero terminated list of files for input, otherwise read files from args
     let mut files: Vec<OsString> = if matches.contains_id(options::FILES0_FROM) {
@@ -2036,9 +2117,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if let Some(values) = matches.get_many::<String>(options::KEY) {
         for value in values {
             let selector = FieldSelector::parse(value, &settings)?;
-            if selector.settings.mode == SortMode::Random && settings.salt.is_none() {
-                settings.salt = Some(get_rand_string());
-            }
             settings.selectors.push(selector);
         }
     }
@@ -2058,6 +2136,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             )
             .unwrap(),
         );
+    }
+
+    let needs_random = settings.mode == SortMode::Random
+        || settings
+            .selectors
+            .iter()
+            .any(|selector| selector.settings.mode == SortMode::Random);
+    if needs_random {
+        settings.salt = Some(match settings.random_source.as_deref() {
+            Some(path) => salt_from_random_source(path)?,
+            None => get_rand_string(),
+        });
     }
 
     // Verify that we can open all input files.
@@ -2158,6 +2248,14 @@ pub fn uu_app() -> Command {
         'R',
         translate!("sort-help-random"),
     ))
+    .arg(
+        Arg::new(options::RANDOM_SOURCE)
+            .long(options::RANDOM_SOURCE)
+            .help(translate!("sort-help-random-source"))
+            .value_name("FILE")
+            .value_parser(ValueParser::os_string())
+            .value_hint(clap::ValueHint::FilePath),
+    )
     .arg(
         Arg::new(options::DICTIONARY_ORDER)
             .short('d')
@@ -2667,8 +2765,56 @@ fn general_numeric_compare(
     a.partial_cmp(b).unwrap()
 }
 
-fn get_rand_string() -> [u8; 16] {
+/// Generate a 128-bit salt from a uniform RNG distribution.
+fn get_rand_string() -> [u8; SALT_LEN] {
     rng().sample(rand::distr::StandardUniform)
+}
+
+const SALT_LEN: usize = 16; // 128-bit salt
+const MAX_BYTES: usize = 1024 * 1024; // Read cap: 1 MiB
+const BUF_LEN: usize = 8192; // 8 KiB read buffer
+const U64_LEN: usize = 8;
+const RANDOM_SOURCE_TAG: &[u8] = b"uutils-sort-random-source"; // Domain separation tag
+
+/// Create a 128-bit salt by hashing up to 1 MiB from the given file.
+fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
+    let mut reader = open_with_open_failed_error(path)?;
+    let mut buf = [0u8; BUF_LEN];
+    let mut total = 0usize;
+    let mut hasher = FnvHasher::default();
+
+    loop {
+        let n = reader
+            .read(&mut buf)
+            .map_err(|error| SortError::ReadFailed {
+                path: path.to_owned(),
+                error,
+            })?;
+        if n == 0 {
+            break;
+        }
+        let remaining = MAX_BYTES.saturating_sub(total);
+        if remaining == 0 {
+            break;
+        }
+        let take = n.min(remaining);
+        hasher.write(&buf[..take]);
+        total = total.saturating_add(take);
+        if take < n {
+            break;
+        }
+    }
+
+    let first = hasher.finish();
+    let mut second_hasher = FnvHasher::default();
+    second_hasher.write(RANDOM_SOURCE_TAG);
+    second_hasher.write_u64(first);
+    let second = second_hasher.finish();
+
+    let mut out = [0u8; SALT_LEN];
+    out[..U64_LEN].copy_from_slice(&first.to_le_bytes());
+    out[U64_LEN..].copy_from_slice(&second.to_le_bytes());
+    Ok(out)
 }
 
 fn get_hash<T: Hash>(t: &T) -> u64 {
