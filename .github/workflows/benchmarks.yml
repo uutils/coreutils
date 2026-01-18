@@ -1,6 +1,6 @@
 name: Benchmarks
 
-# spell-checker:ignore codspeed dtolnay Swatinem sccache
+# spell-checker:ignore codspeed dtolnay Swatinem sccache memtrack moonrepo
 
 on:
   pull_request:
@@ -43,6 +43,7 @@ jobs:
           uu_shuf,
           uu_sort,
           uu_split,
+          uu_timeout,
           uu_tsort,
           uu_unexpand,
           uu_uniq,
@@ -55,16 +56,15 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Run sccache-cache
-        uses: mozilla-actions/sccache-action@v0.0.9
-
-      - name: Install cargo-codspeed
-        shell: bash
-        run: cargo install cargo-codspeed --locked
+      # Prefer CodSpeed's recommended setup to keep toolchain/binary versions aligned
+      # with the CodSpeed action (helps avoid memtrack/cargo-codspeed incompatibilities).
+      - name: Setup Rust (with cargo-codspeed)
+        uses: moonrepo/setup-rust@v1
+        with:
+          channel: 1.85.0
+          cache: true
+          cache-target: true
+          bins: cargo-codspeed  
 
       - name: Build benchmarks for ${{ matrix.package }} (${{ matrix.type }})
         shell: bash
@@ -80,6 +80,7 @@ jobs:
         uses: CodSpeedHQ/action@v4
         env:
           CODSPEED_LOG: debug
+          RUST_BACKTRACE: full
         with:
           mode: ${{ matrix.type == 'memory' && 'memory' || 'simulation' }}
           run: |
