@@ -473,7 +473,9 @@ fn bounded_tail(file: &mut File, settings: &Settings) {
             return;
         }
         FilterMode::Bytes(Signum::Negative(count)) => {
-            file.seek(SeekFrom::End(-(*count as i64))).unwrap();
+            if file.seek(SeekFrom::End(-(*count as i64))).is_err() {
+                file.seek(SeekFrom::Start(0)).unwrap();
+            }
             limit = Some(*count);
         }
         FilterMode::Bytes(Signum::Positive(count)) if count > &1 => {
