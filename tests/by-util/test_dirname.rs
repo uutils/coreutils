@@ -10,6 +10,11 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_missing_operand() {
+    new_ucmd!().fails_with_code(1);
+}
+
+#[test]
 fn test_path_with_trailing_slashes() {
     new_ucmd!()
         .arg("/root/alpha/beta/gamma/delta/epsilon/omega//")
@@ -71,15 +76,11 @@ fn test_dirname_non_utf8_paths() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
 
-    // Create a test file with non-UTF-8 bytes in the name
     let non_utf8_bytes = b"test_\xFF\xFE/file.txt";
     let non_utf8_name = OsStr::from_bytes(non_utf8_bytes);
 
-    // Test that dirname handles non-UTF-8 paths without crashing
     let result = new_ucmd!().arg(non_utf8_name).succeeds();
 
-    // Just verify it didn't crash and produced some output
-    // The exact output format may vary due to lossy conversion
     let output = result.stdout_str_lossy();
     assert!(!output.is_empty());
     assert!(output.contains("test_"));
@@ -105,8 +106,6 @@ fn test_emoji_handling() {
 
 #[test]
 fn test_trailing_dot() {
-    // Basic case: path ending with /. should return parent without stripping last component
-    // This matches GNU coreutils behavior and fixes issue #8910
     new_ucmd!()
         .arg("/home/dos/.")
         .succeeds()
@@ -156,7 +155,7 @@ fn test_trailing_dot_edge_cases() {
     new_ucmd!()
         .arg("/home/dos//.")
         .succeeds()
-        .stdout_is("/home/dos/\n");
+        .stdout_is("/home/dos\n");
 
     // Path with . in middle (should use normal logic)
     new_ucmd!()
@@ -182,26 +181,19 @@ fn test_trailing_dot_non_utf8() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
 
-    // Create a path with non-UTF-8 bytes ending in /.
     let non_utf8_bytes = b"/test_\xFF\xFE/.";
     let non_utf8_path = OsStr::from_bytes(non_utf8_bytes);
 
-    // Test that dirname handles non-UTF-8 paths with /. suffix
     let result = new_ucmd!().arg(non_utf8_path).succeeds();
 
-    // The output should be the path without the /. suffix
     let output = result.stdout_str_lossy();
     assert!(!output.is_empty());
     assert!(output.contains("test_"));
-    // Should not contain the . at the end
     assert!(!output.trim().ends_with('.'));
 }
 
 #[test]
 fn test_existing_behavior_preserved() {
-    // Ensure we didn't break existing test cases
-    // These tests verify backward compatibility
-
     // Normal paths without /. should work as before
     new_ucmd!().arg("/home/dos").succeeds().stdout_is("/home\n");
 
@@ -215,4 +207,57 @@ fn test_existing_behavior_preserved() {
         .arg("/home/dos/..")
         .succeeds()
         .stdout_is("/home/dos\n");
+}
+
+#[test]
+fn test_multiple_paths_comprehensive() {
+    // Comprehensive test for multiple paths in single invocation
+    new_ucmd!()
+        .args(&[
+            "/home/dos/.",
+            "/var/log",
+            ".",
+            "/tmp/.",
+            "",
+            "/",
+            "relative/path",
+        ])
+        .succeeds()
+        .stdout_is("/home/dos\n/var\n.\n/tmp\n.\n/\nrelative\n");
+}
+
+#[test]
+fn test_all_dot_slash_variations() {
+    new_ucmd!().arg("foo//.").succeeds().stdout_is("foo\n");
+
+    new_ucmd!().arg("foo///.").succeeds().stdout_is("foo\n");
+
+    new_ucmd!().arg("foo/./").succeeds().stdout_is("foo\n");
+
+    new_ucmd!()
+        .arg("foo/bar/./")
+        .succeeds()
+        .stdout_is("foo/bar\n");
+
+    new_ucmd!().arg("foo/./bar").succeeds().stdout_is("foo/.\n");
+}
+
+#[test]
+fn test_dot_slash_component_preservation() {
+    new_ucmd!().arg("a/./b").succeeds().stdout_is("a/.\n");
+
+    new_ucmd!()
+        .arg("a/./b/./c")
+        .succeeds()
+        .stdout_is("a/./b/.\n");
+
+    new_ucmd!()
+        .arg("foo/./bar/baz")
+        .succeeds()
+        .stdout_is("foo/./bar\n");
+
+    new_ucmd!()
+        .arg("/path/./to/file")
+        .succeeds()
+        .stdout_is("/path/./to\n");
 }

@@ -133,19 +133,6 @@ fn gen_completions<T: Args>(args: impl Iterator<Item = OsString>, util_map: &Uti
     process::exit(0);
 }
 
-/// print tldr error
-fn print_tldr_error() {
-    eprintln!("Warning: No tldr archive found, so the documentation will not include examples.");
-    eprintln!(
-        "To include examples in the documentation, download the tldr archive and put it in the docs/ folder."
-    );
-    eprintln!();
-    eprintln!(
-        "  curl -L https://github.com/tldr-pages/tldr/releases/latest/download/tldr.zip -o docs/tldr.zip"
-    );
-    eprintln!();
-}
-
 /// # Errors
 /// Returns an error if the writer fails.
 #[allow(clippy::too_many_lines)]
@@ -162,9 +149,6 @@ fn main() -> io::Result<()> {
         match command {
             "manpage" => {
                 let args_iter = args.into_iter().skip(2);
-                if tldr_zip.is_none() {
-                    print_tldr_error();
-                }
                 gen_manpage(
                     &mut tldr_zip,
                     args_iter,
@@ -185,9 +169,6 @@ fn main() -> io::Result<()> {
                 process::exit(1);
             }
         }
-    }
-    if tldr_zip.is_none() {
-        print_tldr_error();
     }
     let utils = util_map::<Box<dyn Iterator<Item = OsString>>>();
     match std::fs::create_dir("docs/src/utils/") {
@@ -465,7 +446,9 @@ impl MDWriter<'_, '_> {
     /// # Errors
     /// Returns an error if the writer fails.
     fn options(&mut self) -> io::Result<()> {
-        writeln!(self.w, "<h2>Options</h2>")?;
+        writeln!(self.w)?;
+        writeln!(self.w, "## Options")?;
+        writeln!(self.w)?;
         write!(self.w, "<dl>")?;
         for arg in self.command.get_arguments() {
             write!(self.w, "<dt>")?;
@@ -576,7 +559,7 @@ fn format_examples(content: String, output_markdown: bool) -> Result<String, std
     use std::fmt::Write;
     let mut s = String::new();
     writeln!(s)?;
-    writeln!(s, "Examples")?;
+    writeln!(s, "## Examples")?;
     writeln!(s)?;
     for line in content.lines().skip_while(|l| !l.starts_with('-')) {
         if let Some(l) = line.strip_prefix("- ") {

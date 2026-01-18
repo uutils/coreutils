@@ -390,10 +390,12 @@ fn test_chmod_recursive_correct_exit_code() {
     perms.set_mode(0o000);
     set_permissions(at.plus_as_string("a"), perms).unwrap();
 
-    #[cfg(not(target_os = "linux"))]
-    let err_msg = "chmod: Permission denied\n";
-    #[cfg(target_os = "linux")]
+    // With safe_traversal enabled on all Unix platforms (except Redox),
+    // we get detailed error messages that include the file path
+    #[cfg(all(unix, not(target_os = "redox")))]
     let err_msg = "chmod: cannot access 'a': Permission denied\n";
+    #[cfg(not(all(unix, not(target_os = "redox"))))]
+    let err_msg = "chmod: Permission denied\n";
 
     // order of command is a, a/b then c
     // command is expected to fail and not just take the last exit code
@@ -405,6 +407,16 @@ fn test_chmod_recursive_correct_exit_code() {
         .umask(0)
         .fails()
         .stderr_is(err_msg);
+}
+
+#[test]
+fn test_chmod_hyper_recursive_directory_tree_does_not_fail() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mkdir = "a/".repeat(400);
+
+    at.mkdir_all(&mkdir);
+
+    ucmd.arg("-R").arg("777").arg("a").succeeds();
 }
 
 #[test]
@@ -424,9 +436,8 @@ fn test_chmod_recursive() {
     make_file(&at.plus_as_string("a/b/b"), 0o100444);
     make_file(&at.plus_as_string("a/b/c/c"), 0o100444);
     make_file(&at.plus_as_string("z/y"), 0o100444);
-    #[cfg(not(target_os = "linux"))]
-    let err_msg = "chmod: Permission denied\n";
-    #[cfg(target_os = "linux")]
+    // With safe_traversal enabled on all Unix platforms, the error message
+    // now includes the file path consistently across platforms
     let err_msg = "chmod: cannot access 'z': Permission denied\n";
 
     // only the permissions of folder `a` and `z` are changed
@@ -494,6 +505,17 @@ fn test_chmod_preserve_root() {
         .arg("--preserve-root")
         .arg("755")
         .arg("/")
+        .fails_with_code(1)
+        .stderr_contains("chmod: it is dangerous to operate recursively on '/'");
+}
+
+#[test]
+fn test_chmod_preserve_root_with_paths_that_resolve_to_root() {
+    new_ucmd!()
+        .arg("-R")
+        .arg("--preserve-root")
+        .arg("755")
+        .arg("/../")
         .fails_with_code(1)
         .stderr_contains("chmod: it is dangerous to operate recursively on '/'");
 }

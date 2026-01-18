@@ -25,8 +25,14 @@ thiserror = { workspace = true }
 fluent = { workspace = true }
 
 [dev-dependencies]
+divan = { workspace = true }
 tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
 
 [[bin]]
 name = "df"
 path = "src/main.rs"
+
+[[bench]]
+name = "df_bench"
+harness = false

@@ -18,7 +18,7 @@ use uucore::libc::mode_t;
 use uucore::mode;
 use uucore::perms::{TraverseSymlinks, configure_symlink_and_recursion};
 
-#[cfg(target_os = "linux")]
+#[cfg(all(unix, not(target_os = "redox")))]
 use uucore::safe_traversal::DirFd;
 use uucore::{format_usage, show, show_error};
 
@@ -338,7 +338,7 @@ impl Chmoder {
     }
 
     /// Handle symlinks during directory traversal based on traversal mode
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(unix))]
     fn handle_symlink_during_traversal(
         &self,
         path: &Path,
@@ -407,7 +407,7 @@ impl Chmoder {
                 // should not change the permissions in this case
                 continue;
             }
-            if self.recursive && self.preserve_root && file == Path::new("/") {
+            if self.recursive && self.preserve_root && Self::is_root(file) {
                 return Err(ChmodError::PreserveRoot("/".into()).into());
             }
             if self.recursive {
@@ -419,7 +419,12 @@ impl Chmoder {
         r
     }
 
-    #[cfg(not(target_os = "linux"))]
+    fn is_root(file: impl AsRef<Path>) -> bool {
+        matches!(fs::canonicalize(&file), Ok(p) if p == Path::new("/"))
+    }
+
+    // Non-safe traversal implementation for platforms without safe_traversal support
+    #[cfg(any(not(unix), target_os = "redox"))]
     fn walk_dir_with_context(&self, file_path: &Path, is_command_line_arg: bool) -> UResult<()> {
         let mut r = self.chmod_file(file_path);
 
@@ -432,17 +437,29 @@ impl Chmoder {
 
         // If the path is a directory (or we should follow symlinks), recurse into it
         if (!file_path.is_symlink() || should_follow_symlink) && file_path.is_dir() {
+            // We buffer all paths in this dir to not keep too many fd's open during recursion
+            let mut paths_in_this_dir = Vec::new();
+
             for dir_entry in file_path.read_dir()? {
-                let path = match dir_entry {
-                    Ok(entry) => entry.path(),
+                match dir_entry {
+                    Ok(entry) => paths_in_this_dir.push(entry.path()),
                     Err(err) => {
                         r = r.and(Err(err.into()));
                         continue;
                     }
-                };
-                if path.is_symlink() {
-                    r = self.handle_symlink_during_recursion(&path).and(r);
-                } else {
+                }
+            }
+            for path in paths_in_this_dir {
+                #[cfg(not(unix))]
+                {
+                    if path.is_symlink() {
+                        r = self.handle_symlink_during_recursion(&path).and(r);
+                    } else {
+                        r = self.walk_dir_with_context(path.as_path(), false).and(r);
+                    }
+                }
+                #[cfg(target_os = "redox")]
+                {
                     r = self.walk_dir_with_context(path.as_path(), false).and(r);
                 }
             }
@@ -450,7 +467,7 @@ impl Chmoder {
         r
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(unix, not(target_os = "redox")))]
     fn walk_dir_with_context(&self, file_path: &Path, is_command_line_arg: bool) -> UResult<()> {
         let mut r = self.chmod_file(file_path);
 
@@ -480,7 +497,7 @@ impl Chmoder {
         r
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(unix, not(target_os = "redox")))]
     fn safe_traverse_dir(&self, dir_fd: &DirFd, dir_path: &Path) -> UResult<()> {
         let mut r = Ok(());
 
@@ -536,7 +553,7 @@ impl Chmoder {
         r
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(unix, not(target_os = "redox")))]
     fn handle_symlink_during_safe_recursion(
         &self,
         path: &Path,
@@ -568,7 +585,7 @@ impl Chmoder {
         }
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(unix, not(target_os = "redox")))]
     fn safe_chmod_file(
         &self,
         file_path: &Path,
@@ -598,7 +615,7 @@ impl Chmoder {
         Ok(())
     }
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(unix))]
     fn handle_symlink_during_recursion(&self, path: &Path) -> UResult<()> {
         // Use the common symlink handling logic
         self.handle_symlink_during_traversal(path, false)
