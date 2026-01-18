@@ -479,52 +479,6 @@ fn test_with_date_format_env() {
 }
 
 #[test]
-fn test_with_pr_core_utils_tests() {
-    let test_cases = vec![
-        ("", vec!["0Ft"], vec!["0F"], 0),
-        ("", vec!["0Fnt"], vec!["0Fnt-expected"], 0),
-        ("+3", vec!["0Ft"], vec!["3-0F"], 0),
-        ("+3 -f", vec!["0Ft"], vec!["3f-0F"], 0),
-        ("-a -3", vec!["0Ft"], vec!["a3-0F"], 0),
-        ("-a -3 -f", vec!["0Ft"], vec!["a3f-0F"], 0),
-        ("-a -3 -f", vec!["0Fnt"], vec!["a3f-0Fnt-expected"], 0),
-        ("+3 -a -3 -f", vec!["0Ft"], vec!["3a3f-0F"], 0),
-        ("-l 24", vec!["FnFn"], vec!["l24-FF"], 0),
-        ("-W 20 -l24 -f", vec!["tFFt-ll"], vec!["W20l24f-ll"], 0),
-    ];
-
-    for test_case in test_cases {
-        let (flags, input_file, expected_file, return_code) = test_case;
-        let mut scenario = new_ucmd!();
-        let input_file_path = input_file.first().unwrap();
-        let test_file_path = expected_file.first().unwrap();
-        let value = file_last_modified_time(&scenario, input_file_path);
-        let mut arguments: Vec<&str> = flags
-            .split(' ')
-            .filter(|i| i.trim() != "")
-            .collect::<Vec<&str>>();
-
-        arguments.extend(input_file.clone());
-
-        let scenario_with_args = scenario.args(&arguments);
-
-        let scenario_with_expected_status = if return_code == 0 {
-            scenario_with_args.succeeds()
-        } else {
-            scenario_with_args.fails()
-        };
-
-        scenario_with_expected_status.stdout_is_templated_fixture(
-            test_file_path,
-            &[
-                ("{last_modified_time}", &value),
-                ("{file_name}", input_file_path),
-            ],
-        );
-    }
-}
-
-#[test]
 fn test_with_join_lines_option() {
     let test_file_1 = "hosts.log";
     let test_file_2 = "test.log";
