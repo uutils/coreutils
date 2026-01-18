@@ -273,6 +273,20 @@ fn get_config(matches: &mut clap::ArgMatches) -> UResult<Config> {
     Ok(config)
 }
 
+/// Try to compile a regex, printing a warning and returning None on failure.
+fn try_compile_regex(pattern: &str) -> Option<Regex> {
+    match Regex::new(pattern) {
+        Ok(re) => Some(re),
+        Err(e) => {
+            uucore::show_error!(
+                "{}",
+                translate!("ptx-error-invalid-regexp", "error" => format!("{}", e))
+            );
+            None
+        }
+    }
+}
+
 struct FileContent {
     lines: Vec<String>,
     chars_lines: Vec<Vec<char>>,
@@ -285,16 +299,10 @@ fn read_input(input_files: &[OsString], config: &Config) -> std::io::Result<File
     let mut file_map: FileMap = HashMap::new();
     let mut offset: usize = 0;
 
-    let sentence_splitter = if let Some(re_str) = &config.sentence_regex {
-        Some(Regex::new(re_str).map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                translate!("ptx-error-invalid-regexp", "error" => e),
-            )
-        })?)
-    } else {
-        None
-    };
+    let sentence_splitter = config
+        .sentence_regex
+        .as_ref()
+        .and_then(|re_str| try_compile_regex(re_str));
 
     for filename in input_files {
         let mut reader: BufReader<Box<dyn Read>> = BufReader::new(if filename == "-" {
@@ -342,15 +350,14 @@ fn read_lines(
 }
 
 /// Go through every lines in the input files and record each match occurrence as a `WordRef`.
-fn create_word_set(
-    config: &Config,
-    filter: &WordFilter,
-    file_map: &FileMap,
-) -> UResult<BTreeSet<WordRef>> {
-    let reg = Regex::new(&filter.word_regex)
-        .map_err(|e| USimpleError::new(1, translate!("ptx-error-invalid-regexp", "error" => e)))?;
-    let ref_reg = Regex::new(&config.context_regex)
-        .map_err(|e| USimpleError::new(1, translate!("ptx-error-invalid-regexp", "error" => e)))?;
+fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> BTreeSet<WordRef> {
+    let Some(reg) = try_compile_regex(&filter.word_regex) else {
+        return BTreeSet::new();
+    };
+    let Some(ref_reg) = try_compile_regex(&config.context_regex) else {
+        return BTreeSet::new();
+    };
+
     let mut word_set: BTreeSet<WordRef> = BTreeSet::new();
     for (file, lines) in file_map {
         let mut count: usize = 0;
@@ -389,7 +396,7 @@ fn create_word_set(
             count += 1;
         }
     }
-    Ok(word_set)
+    word_set
 }
 
 fn get_reference(config: &Config, word_ref: &WordRef, line: &str, context_reg: &Regex) -> String {
@@ -933,7 +940,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let word_filter = WordFilter::new(&matches, &config)?;
     let file_map = read_input(&input_files, &config).map_err_context(String::new)?;
-    let word_set = create_word_set(&config, &word_filter, &file_map)?;
+    let word_set = create_word_set(&config, &word_filter, &file_map);
     write_traditional_output(&mut config, &file_map, &word_set, &output_file)
 }
 
