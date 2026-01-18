@@ -829,8 +829,13 @@ fn get_pages(
         if buf[i] == FF {
             // Treat everything up to (but not including) the form feed
             // character as the last line of the page.
-            let file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i])?;
-            page.push(file_line);
+            if i > 0 && i == prev && buf[i - 1] == NL {
+                // If the file has the pattern `\n\f`, don't treat the
+                // `\f` as its own line; instead ignore the empty line.
+            } else {
+                let file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i])?;
+                page.push(file_line);
+            }
 
             // Remember where the last line ended.
             prev = i + 1;
