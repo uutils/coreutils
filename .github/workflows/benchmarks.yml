@@ -61,7 +61,7 @@ jobs:
       - name: Setup Rust (with cargo-codspeed)
         uses: moonrepo/setup-rust@v1
         with:
-          channel:　1.85.0
+          channel: 1.85.0
           cache: true
           cache-target: true
           bins: cargo-codspeed  
