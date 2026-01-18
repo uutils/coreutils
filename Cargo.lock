@@ -1104,7 +1104,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "54f0d287c53ffd184d04d8677f590f4ac5379785529e5e08b1c8083acdd5c198"
 dependencies = [
  "memchr",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -2489,7 +2489,7 @@ dependencies = [
  "once_cell",
  "parking_lot",
  "selinux-sys",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -2794,11 +2794,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.17"
+version = "2.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f63587ca0f12b72a0600bcba1d40081f830876000bb46dd2337a3051618f4fc8"
+checksum = "4288b5bcbc7920c07a1149a35cf9590a2aa808e0bc1eafaade0b80947865fbc4"
 dependencies = [
- "thiserror-impl 2.0.17",
+ "thiserror-impl 2.0.18",
 ]
 
 [[package]]
@@ -2814,9 +2814,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.17"
+version = "2.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ff15c8ecd7de3849db632e14d18d2571fa09dfc5ed93479bc4485c7a517c913"
+checksum = "ebc4ee7f67670e9b64d05fa4253e753e016c6c95ff35b89b7941d6b856dec1d5"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3069,7 +3069,7 @@ dependencies = [
  "memchr",
  "nix",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
  "winapi-util",
  "windows-sys 0.61.2",
@@ -3084,7 +3084,7 @@ dependencies = [
  "fts-sys",
  "libc",
  "selinux",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
@@ -3103,7 +3103,7 @@ version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
@@ -3122,7 +3122,7 @@ version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
@@ -3160,7 +3160,7 @@ dependencies = [
  "linux-raw-sys 0.12.1",
  "selinux",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
  "walkdir",
  "xattr",
@@ -3173,7 +3173,7 @@ dependencies = [
  "clap",
  "fluent",
  "regex",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
@@ -3217,7 +3217,7 @@ dependencies = [
  "nix",
  "signal-hook 0.4.1",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
@@ -3229,7 +3229,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "unicode-width 0.2.2",
  "uucore",
 ]
@@ -3270,7 +3270,7 @@ dependencies = [
  "fluent",
  "glob",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
  "windows-sys 0.61.2",
 ]
@@ -3292,7 +3292,7 @@ dependencies = [
  "fluent",
  "nix",
  "rust-ini",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
@@ -3304,7 +3304,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "unicode-width 0.2.2",
  "uucore",
 ]
@@ -3318,7 +3318,7 @@ dependencies = [
  "num-bigint",
  "num-traits",
  "onig",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
@@ -3351,7 +3351,7 @@ version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "unicode-width 0.2.2",
  "uucore",
 ]
@@ -3374,7 +3374,7 @@ version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
@@ -3396,7 +3396,7 @@ dependencies = [
  "clap",
  "fluent",
  "memchr",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
@@ -3441,7 +3441,7 @@ dependencies = [
  "filetime",
  "fluent",
  "selinux",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
@@ -3454,7 +3454,7 @@ dependencies = [
  "fluent",
  "memchr",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
@@ -3483,7 +3483,7 @@ version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
@@ -3512,7 +3512,7 @@ dependencies = [
  "selinux",
  "tempfile",
  "terminal_size",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
  "uutils_term_grid",
 ]
@@ -3555,7 +3555,7 @@ dependencies = [
  "fluent",
  "rand 0.9.2",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
@@ -3582,7 +3582,7 @@ dependencies = [
  "indicatif",
  "libc",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
  "windows-sys 0.61.2",
 ]
@@ -3617,7 +3617,7 @@ dependencies = [
  "clap",
  "fluent",
  "libc",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
@@ -3639,7 +3639,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
@@ -3691,7 +3691,7 @@ dependencies = [
  "fluent",
  "itertools 0.14.0",
  "regex",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
@@ -3720,7 +3720,7 @@ dependencies = [
  "clap",
  "fluent",
  "regex",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
@@ -3761,7 +3761,7 @@ dependencies = [
  "indicatif",
  "libc",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
  "windows-sys 0.61.2",
 ]
@@ -3784,7 +3784,7 @@ dependencies = [
  "fluent",
  "libc",
  "selinux",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
@@ -3799,7 +3799,7 @@ dependencies = [
  "num-bigint",
  "num-traits",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
@@ -3855,7 +3855,7 @@ dependencies = [
  "rayon",
  "self_cell",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "unicode-width 0.2.2",
  "uucore",
 ]
@@ -3869,7 +3869,7 @@ dependencies = [
  "fluent",
  "memchr",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
@@ -3879,7 +3879,7 @@ version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
@@ -3890,7 +3890,7 @@ dependencies = [
  "clap",
  "fluent",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uu_stdbuf_libstdbuf",
  "uucore",
 ]
@@ -3943,7 +3943,7 @@ dependencies = [
  "memmap2",
  "regex",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
@@ -3981,7 +3981,7 @@ dependencies = [
  "fluent",
  "libc",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
@@ -4005,7 +4005,7 @@ dependencies = [
  "fluent",
  "jiff",
  "parse_datetime",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
  "windows-sys 0.61.2",
 ]
@@ -4049,7 +4049,7 @@ dependencies = [
  "nix",
  "string-interner",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
@@ -4081,7 +4081,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "unicode-width 0.2.2",
  "uucore",
 ]
@@ -4113,7 +4113,7 @@ dependencies = [
  "clap",
  "fluent",
  "jiff",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "utmp-classic",
  "uucore",
 ]
@@ -4148,7 +4148,7 @@ dependencies = [
  "libc",
  "nix",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "unicode-width 0.2.2",
  "uucore",
 ]
@@ -4225,7 +4225,7 @@ dependencies = [
  "sha3",
  "sm3",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "time",
  "unic-langid",
  "unit-prefix",
@@ -4435,7 +4435,7 @@ checksum = "d5cec722a3274e47d1524cbe2cea762f2c19d615bd9d73ada21db9066349d57e"
 dependencies = [
  "proc-macro2",
  "quote",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
