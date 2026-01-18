@@ -47,7 +47,6 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, strip_errno};
 use uucore::error::{UError, UResult, USimpleError, UUsageError};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
-use uucore::format_usage;
 #[cfg(feature = "i18n-collator")]
 use uucore::i18n::collator::locale_cmp;
 use uucore::i18n::decimal::locale_decimal_separator;
@@ -59,6 +58,7 @@ use uucore::posix::{MODERN, TRADITIONAL};
 use uucore::show_error;
 use uucore::translate;
 use uucore::version_cmp::version_cmp;
+use uucore::{format_usage, i18n};
 
 use crate::buffer_hint::automatic_buffer_size;
 use crate::tmp_dir::TmpDirWrapper;
@@ -1086,11 +1086,17 @@ impl FieldSelector {
         };
         let mut range_str = &line[self.get_range(line, tokens)];
         if self.settings.mode == SortMode::Numeric || self.settings.mode == SortMode::HumanNumeric {
+            // Get the thousands separator from the locale, handling cases where the separator is empty or multi-character
+            let thousands_separator = i18n::decimal::locale_grouping_separator()
+                .parse::<char>()
+                .ok();
+
             // Parse NumInfo for this number.
             let (info, num_range) = NumInfo::parse(
                 range_str,
                 &NumInfoParseSettings {
                     accept_si_units: self.settings.mode == SortMode::HumanNumeric,
+                    thousands_separator,
                     ..Default::default()
                 },
             );

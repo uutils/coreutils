@@ -28,7 +28,7 @@ pub struct NumInfo {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct NumInfoParseSettings {
     pub accept_si_units: bool,
-    pub thousands_separator: Option<u8>,
+    pub thousands_separator: Option<char>,
     pub decimal_pt: Option<u8>,
 }
 
@@ -74,7 +74,7 @@ impl NumInfo {
 
             if matches!(
                 parse_settings.thousands_separator,
-                Some(c) if c == char
+                Some(c) if c == char as char
             ) {
                 continue;
             }
@@ -306,7 +306,7 @@ mod tests {
             NumInfo::parse(
                 n,
                 &NumInfoParseSettings {
-                    thousands_separator: Some(b','),
+                    thousands_separator: Some(','),
                     ..Default::default()
                 }
             ),
