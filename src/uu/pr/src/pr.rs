@@ -9,10 +9,9 @@
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use itertools::Itertools;
 use regex::Regex;
-use std::fs::{File, metadata};
-use std::io::{BufRead, BufReader, Lines, Read, Write, stdin, stdout};
-#[cfg(unix)]
-use std::os::unix::fs::FileTypeExt;
+use std::fs::metadata;
+use std::io::{Read, Write, stdin, stdout};
+use std::string::FromUtf8Error;
 use std::time::SystemTime;
 use thiserror::Error;
 
@@ -28,11 +27,11 @@ const LINES_PER_PAGE_FOR_FORM_FEED: usize = 63;
 const HEADER_LINES_PER_PAGE: usize = 5;
 const TRAILER_LINES_PER_PAGE: usize = 5;
 const FILE_STDIN: &str = "-";
-const READ_BUFFER_SIZE: usize = 1024 * 64;
 const DEFAULT_COLUMN_WIDTH: usize = 72;
 const DEFAULT_COLUMN_WIDTH_WITH_S_OPTION: usize = 512;
 const DEFAULT_COLUMN_SEPARATOR: &char = &TAB;
 const FF: u8 = 0x0C_u8;
+const NL: u8 = b'\n';
 
 mod options {
     pub const HEADER: &str = "header";
@@ -82,13 +81,32 @@ struct OutputOptions {
     line_width: Option<usize>,
 }
 
+/// One line of an input file, annotated with file, page, and line number.
+#[derive(Default, Clone)]
 struct FileLine {
     file_id: usize,
-    line_number: usize,
     page_number: usize,
-    group_key: usize,
-    line_content: Result<String, std::io::Error>,
-    form_feeds_after: usize,
+    line_number: usize,
+    line_content: String,
+}
+
+impl FileLine {
+    fn from_buf(
+        file_id: usize,
+        page_number: usize,
+        line_number: usize,
+        buf: &[u8],
+    ) -> Result<Self, FromUtf8Error> {
+        // TODO Don't read bytes to String just to directly write them
+        // out again anyway.
+        let line_content = String::from_utf8(buf.to_vec())?;
+        Ok(Self {
+            file_id,
+            page_number,
+            line_number,
+            line_content,
+        })
+    }
 }
 
 struct ColumnModeOptions {
@@ -115,19 +133,6 @@ impl Default for NumberingMode {
     }
 }
 
-impl Default for FileLine {
-    fn default() -> Self {
-        Self {
-            file_id: 0,
-            line_number: 0,
-            page_number: 0,
-            group_key: 0,
-            line_content: Ok(String::new()),
-            form_feeds_after: 0,
-        }
-    }
-}
-
 impl From<std::io::Error> for PrError {
     fn from(err: std::io::Error) -> Self {
         Self::EncounteredErrors {
@@ -136,25 +141,18 @@ impl From<std::io::Error> for PrError {
     }
 }
 
+impl From<FromUtf8Error> for PrError {
+    fn from(err: FromUtf8Error) -> Self {
+        Self::EncounteredErrors {
+            msg: err.to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Error)]
 enum PrError {
-    #[error("{}", translate!("pr-error-reading-input", "file" => file.clone()))]
-    Input {
-        #[source]
-        source: std::io::Error,
-        file: String,
-    },
-    #[error("{}", translate!("pr-error-unknown-filetype", "file" => file.clone()))]
-    UnknownFiletype { file: String },
     #[error("pr: {msg}")]
     EncounteredErrors { msg: String },
-    #[error("{}", translate!("pr-error-is-directory", "file" => file.clone()))]
-    IsDirectory { file: String },
-    #[cfg(not(windows))]
-    #[error("{}", translate!("pr-error-socket-not-supported", "file" => file.clone()))]
-    IsSocket { file: String },
-    #[error("{}", translate!("pr-error-no-such-file", "file" => file.clone()))]
-    NotExists { file: String },
 }
 
 pub fn uu_app() -> Command {
@@ -764,95 +762,22 @@ fn build_options(
     })
 }
 
-fn open(path: &str) -> Result<Box<dyn Read>, PrError> {
-    if path == FILE_STDIN {
-        let stdin = stdin();
-        return Ok(Box::new(stdin) as Box<dyn Read>);
-    }
-
-    metadata(path).map_or_else(
-        |_| {
-            Err(PrError::NotExists {
-                file: path.to_string(),
-            })
-        },
-        |i| {
-            let path_string = path.to_string();
-            match i.file_type() {
-                #[cfg(unix)]
-                ft if ft.is_socket() => Err(PrError::IsSocket { file: path_string }),
-                ft if ft.is_dir() => Err(PrError::IsDirectory { file: path_string }),
-
-                ft => {
-                    #[allow(unused_mut)]
-                    let mut is_valid = ft.is_file() || ft.is_symlink();
-
-                    #[cfg(unix)]
-                    {
-                        is_valid =
-                            is_valid || ft.is_char_device() || ft.is_block_device() || ft.is_fifo();
-                    }
-
-                    if is_valid {
-                        Ok(Box::new(File::open(path).map_err(|e| PrError::Input {
-                            source: e,
-                            file: path.to_string(),
-                        })?) as Box<dyn Read>)
-                    } else {
-                        Err(PrError::UnknownFiletype { file: path_string })
-                    }
-                }
-            }
-        },
-    )
-}
-
-fn split_lines_if_form_feed(file_content: Result<String, std::io::Error>) -> Vec<FileLine> {
-    file_content.map_or_else(
-        |e| {
-            vec![FileLine {
-                line_content: Err(e),
-                ..FileLine::default()
-            }]
-        },
-        |content| {
-            let mut lines = Vec::new();
-            let mut f_occurred = 0;
-            let mut chunk = Vec::new();
-            for byte in content.as_bytes() {
-                if byte == &FF {
-                    f_occurred += 1;
-                } else {
-                    if f_occurred != 0 {
-                        // First time byte occurred in the scan
-                        lines.push(FileLine {
-                            line_content: Ok(String::from_utf8(chunk.clone()).unwrap()),
-                            form_feeds_after: f_occurred,
-                            ..FileLine::default()
-                        });
-                        chunk.clear();
-                    }
-                    chunk.push(*byte);
-                    f_occurred = 0;
-                }
-            }
-
-            lines.push(FileLine {
-                line_content: Ok(String::from_utf8(chunk).unwrap()),
-                form_feeds_after: f_occurred,
-                ..FileLine::default()
-            });
-
-            lines
-        },
-    )
-}
-
 fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
-    let lines = BufReader::with_capacity(READ_BUFFER_SIZE, open(path)?).lines();
+    // Read the entire contents of the file into a buffer.
+    //
+    // TODO Read incrementally.
+    let buf = if path == "-" {
+        let mut f = stdin();
+        let mut buf = vec![];
+        f.read_to_end(&mut buf)?;
+        buf
+    } else {
+        std::fs::read(path)?
+    };
 
-    let pages = read_stream_and_create_pages(options, lines, 0);
+    let pages = get_pages(options, 0, &buf)?;
 
+    // Split the text into pages, and then print each line in each page.
     for page_with_page_number in pages {
         let page_number = page_with_page_number.0 + 1;
         let page = page_with_page_number.1;
@@ -862,115 +787,180 @@ fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
     Ok(0)
 }
 
-fn read_stream_and_create_pages(
+/// Group lines of a file into pages.
+///
+/// Returns a list of the form `(page_num, lines)`.
+///
+/// # Errors
+///
+/// Returns an error if the bytes are not a valid UTF-8 string.
+fn get_pages(
     options: &OutputOptions,
-    lines: Lines<BufReader<Box<dyn Read>>>,
     file_id: usize,
-) -> Box<dyn Iterator<Item = (usize, Vec<FileLine>)>> {
+    buf: &[u8],
+) -> Result<Vec<(usize, Vec<FileLine>)>, FromUtf8Error> {
     let start_page = options.start_page;
-    let start_line_number = get_start_line_number(options);
-    let last_page = options.end_page;
+    let end_page = options.end_page;
     let lines_needed_per_page = lines_to_read_for_page(options);
 
-    Box::new(
-        lines
-            .flat_map(split_lines_if_form_feed)
-            .enumerate()
-            .map(move |(i, line)| FileLine {
-                line_number: i + start_line_number,
-                file_id,
-                ..line
-            }) // Add line number and file_id
-            .batching(move |it| {
-                let mut first_page = Vec::new();
-                let mut page_with_lines = Vec::new();
-                for line in it {
-                    let form_feeds_after = line.form_feeds_after;
-                    first_page.push(line);
+    // Keep a running total of the number of lines read, starting with
+    // 0 or another specified number.
+    let mut line_num = get_start_line_number(options);
 
-                    if form_feeds_after > 1 {
-                        // insert empty pages
-                        page_with_lines.push(first_page);
-                        for _i in 1..form_feeds_after {
-                            page_with_lines.push(vec![]);
-                        }
-                        return Some(page_with_lines);
-                    }
+    // We will collect each page into a list of pages, along with
+    // its page number.
+    let mut pages: Vec<(usize, Vec<FileLine>)> = vec![];
 
-                    if first_page.len() == lines_needed_per_page || form_feeds_after == 1 {
-                        break;
-                    }
+    // We will build each page iteratively, since one page may
+    // contain multiple lines and may be interrupted by either a
+    // form feed or by reaching a line limit.
+    let mut page = vec![];
+    let mut page_num = 0;
+
+    // Remember the index of the end of the last line to use as the
+    // beginning of the next line.
+    let mut prev = 0;
+
+    // Search for either the form feed character `\f` or the newline
+    // character `\n`. The newline character marks the end of a line,
+    // and a page comprises several lines. A form feed character marks
+    // the end of a page regardless of how many lines have been read.
+    for i in memchr::memchr2_iter(FF, NL, buf) {
+        if buf[i] == FF {
+            // Treat everything up to (but not including) the form feed
+            // character as the last line of the page.
+            let file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i])?;
+            page.push(file_line);
+
+            // Remember where the last line ended.
+            prev = i + 1;
+
+            // The page is finished, so we add it to the list of
+            // pages and clear the `page` buffer for the next
+            // iteration.
+            //
+            // TODO Optimization opportunity: don't bother pushing
+            // lines and pages if we aren't going to display it.
+            if start_page <= page_num + 1 && end_page.is_none_or(|e| page_num < e) {
+                pages.push((page_num, page.clone()));
+            }
+            page_num += 1;
+            page.clear();
+        } else {
+            // Add everything up to (but not including) the newline
+            // character as one line of the page.
+            let file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i])?;
+            page.push(file_line);
+            line_num += 1;
+
+            // Remember where the last line ended.
+            prev = i + 1;
+
+            // If the page is finished, add it to the list of pages
+            // and clear the `page` buffer for the next iteration.
+            if page.len() >= lines_needed_per_page {
+                if start_page <= page_num + 1 && end_page.is_none_or(|e| page_num < e) {
+                    pages.push((page_num, page.clone()));
                 }
+                page_num += 1;
+                page.clear();
+            }
+        }
+    }
 
-                if first_page.is_empty() {
-                    return None;
-                }
-                page_with_lines.push(first_page);
-                Some(page_with_lines)
-            }) // Create set of pages as form feeds could lead to empty pages
-            .flatten() // Flatten to pages from page sets
-            .enumerate() // Assign page number
-            .skip_while(move |(x, _)| {
-                // Skip the not needed pages
-                let current_page = x + 1;
-                current_page < start_page
-            })
-            .take_while(move |(x, _)| {
-                // Take only the required pages
-                let current_page = x + 1;
+    // Consider all trailing bytes as the last line.
+    if prev < buf.len() {
+        let file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..])?;
+        page.push(file_line);
+    }
 
-                current_page >= start_page
-                    && last_page.is_none_or(|last_page| current_page <= last_page)
-            }),
-    )
+    // Consider all trailing lines as the last page.
+    if !page.is_empty() && start_page <= page_num + 1 && end_page.is_none_or(|e| page_num < e) {
+        pages.push((page_num, page.clone()));
+    }
+
+    Ok(pages)
+}
+
+/// Key used to group lines together according to their file and page number.
+fn group_key(num_files: usize, line: &FileLine) -> usize {
+    (line.page_number + 1) * num_files + line.file_id
+}
+
+/// Group each line by its file and page number.
+///
+/// The input list of `lines` must be already sorted according to the
+/// `group_key`.
+fn group_lines(num_files: usize, lines: Vec<FileLine>) -> Vec<(usize, Vec<FileLine>)> {
+    let mut result: Vec<(usize, Vec<FileLine>)> = vec![];
+    let mut current_key: Option<usize> = None;
+    let mut current_group: Vec<FileLine> = vec![];
+    for file_line in lines {
+        match current_key {
+            None => {
+                current_key = Some(group_key(num_files, &file_line));
+                current_group.push(file_line);
+            }
+            Some(key) if group_key(num_files, &file_line) == key => {
+                current_group.push(file_line);
+            }
+            Some(key) => {
+                result.push((key, current_group.clone()));
+                current_group.clear();
+                current_key = Some(group_key(num_files, &file_line));
+                current_group.push(file_line);
+            }
+        }
+    }
+    // TODO Handle empty file.
+    result.push((current_key.unwrap(), current_group));
+    result
+}
+
+/// Group each line by its file and page number.
+///
+/// Each group can then be merged into columns of a single page.
+fn get_file_line_groups(
+    options: &OutputOptions,
+    paths: &[&str],
+) -> Result<Vec<(usize, Vec<FileLine>)>, PrError> {
+    let num_files = paths.len();
+    let mut all_lines = vec![];
+    for (file_id, path) in paths.iter().enumerate() {
+        // Read the entire contents of the file into a buffer.
+        //
+        // TODO Read incrementally.
+        let buf = if *path == "-" {
+            let mut f = stdin();
+            let mut buf = vec![];
+            f.read_to_end(&mut buf)?;
+            buf
+        } else {
+            std::fs::read(path)?
+        };
+
+        // Split the text into pages and collect each line for
+        // subsequent grouping.
+        for (_, mut page) in get_pages(options, file_id, &buf)? {
+            all_lines.append(&mut page);
+        }
+    }
+    // Sort each line by group number and then by line number.
+    all_lines.sort_by_key(|l| (group_key(num_files, l), l.line_number));
+
+    Ok(group_lines(num_files, all_lines))
 }
 
 fn mpr(paths: &[&str], options: &OutputOptions) -> Result<i32, PrError> {
-    let n_files = paths.len();
-
-    // Check if files exists
-    for path in paths {
-        open(path)?;
-    }
-
-    let file_line_groups = paths
-        .iter()
-        .enumerate()
-        .map(|(i, path)| {
-            let lines = BufReader::with_capacity(READ_BUFFER_SIZE, open(path).unwrap()).lines();
-
-            read_stream_and_create_pages(options, lines, i).flat_map(move |(x, line)| {
-                let file_line = line;
-                let page_number = x + 1;
-                file_line
-                    .into_iter()
-                    .map(|fl| FileLine {
-                        page_number,
-                        group_key: page_number * n_files + fl.file_id,
-                        ..fl
-                    })
-                    .collect::<Vec<_>>()
-            })
-        })
-        .kmerge_by(|a, b| {
-            if a.group_key == b.group_key {
-                a.line_number < b.line_number
-            } else {
-                a.group_key < b.group_key
-            }
-        })
-        .chunk_by(|file_line| file_line.group_key);
+    let file_line_groups = get_file_line_groups(options, paths)?;
 
     let start_page = options.start_page;
     let mut lines = Vec::new();
     let mut page_counter = start_page;
 
-    for (_key, file_line_group) in &file_line_groups {
+    for (_key, file_line_group) in file_line_groups {
         for file_line in file_line_group {
-            if let Err(e) = file_line.line_content {
-                return Err(e.into());
-            }
-            let new_page_number = file_line.page_number;
+            let new_page_number = file_line.page_number + 1;
             if page_counter != new_page_number {
                 print_page(&lines, options, page_counter)?;
                 lines = Vec::new();
@@ -1124,10 +1114,7 @@ fn get_line_for_printing(
     let blank_line = String::new();
     let formatted_line_number = get_formatted_line_number(options, file_line.line_number, index);
 
-    let mut complete_line = format!(
-        "{formatted_line_number}{}",
-        file_line.line_content.as_ref().unwrap()
-    );
+    let mut complete_line = format!("{formatted_line_number}{}", file_line.line_content);
 
     let offset_spaces = &options.offset_spaces;
 
