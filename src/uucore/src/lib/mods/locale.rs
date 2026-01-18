@@ -9,11 +9,15 @@ use crate::error::UError;
 use fluent::{FluentArgs, FluentBundle, FluentResource};
 use fluent_syntax::parser::ParserError;
 
+// Silence warning about unused import for std::fs
+#[cfg(debug_assertions)]
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::OnceLock;
 
+// Silence warning about unused import for os_display::Quotable
+#[cfg(debug_assertions)]
 use os_display::Quotable;
 use thiserror::Error;
 use unic_langid::LanguageIdentifier;
@@ -112,6 +116,7 @@ thread_local! {
 }
 
 /// Helper function to find the uucore locales directory from a utility's locales directory
+#[cfg(debug_assertions)]
 fn find_uucore_locales_dir(utility_locales_dir: &Path) -> Option<PathBuf> {
     // Normalize the path to get absolute path
     let normalized_dir = utility_locales_dir
@@ -130,7 +135,8 @@ fn find_uucore_locales_dir(utility_locales_dir: &Path) -> Option<PathBuf> {
     uucore_locales.exists().then_some(uucore_locales)
 }
 
-/// Create a bundle that combines common and utility-specific strings
+/// Create a bundle that combines common and utility-specific strings for debug mode using .flt files
+#[cfg(debug_assertions)]
 fn create_bundle(
     locale: &LanguageIdentifier,
     locales_dir: &Path,
@@ -166,42 +172,6 @@ fn create_bundle(
     }
 }
 
-/// Initialize localization with common strings in addition to utility-specific strings
-fn init_localization(
-    locale: &LanguageIdentifier,
-    locales_dir: &Path,
-    util_name: &str,
-) -> Result<(), LocalizationError> {
-    let default_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
-        .expect("Default locale should always be valid");
-
-    // Try to create a bundle that combines common and utility-specific strings
-    let english_bundle = create_bundle(&default_locale, locales_dir, util_name).or_else(|_| {
-        // Fallback to embedded utility-specific and common strings
-        create_english_bundle_from_embedded(&default_locale, util_name)
-    })?;
-
-    let loc = if locale == &default_locale {
-        // If requesting English, just use English as primary (no fallback needed)
-        Localizer::new(english_bundle)
-    } else {
-        // Try to load the requested locale with common strings
-        if let Ok(primary_bundle) = create_bundle(locale, locales_dir, util_name) {
-            // Successfully loaded requested locale, load English as fallback
-            Localizer::new(primary_bundle).with_fallback(english_bundle)
-        } else {
-            // Failed to load requested locale, just use English as primary
-            Localizer::new(english_bundle)
-        }
-    };
-
-    LOCALIZER.with(|lock| {
-        lock.set(loc)
-            .map_err(|_| LocalizationError::Bundle("Localizer already initialized".into()))
-    })?;
-    Ok(())
-}
-
 /// Helper function to parse FluentResource from content string
 fn parse_fluent_resource(content: &str) -> Result<FluentResource, LocalizationError> {
     FluentResource::try_new(content.to_string()).map_err(
@@ -224,29 +194,22 @@ fn parse_fluent_resource(content: &str) -> Result<FluentResource, LocalizationEr
     )
 }
 
-/// Create a bundle from embedded English locale files with common uucore strings
-fn create_english_bundle_from_embedded(
+/// Create a bundle from embedded locale files with common uucore strings
+fn create_bundle_from_embedded(
     locale: &LanguageIdentifier,
     util_name: &str,
 ) -> Result<FluentBundle<FluentResource>, LocalizationError> {
-    // Only support English from embedded files
-    if *locale != "en-US" {
-        return Err(LocalizationError::LocalesDirNotFound(
-            "Embedded locales only support en-US".to_string(),
-        ));
-    }
-
     let mut bundle = FluentBundle::new(vec![locale.clone()]);
     bundle.set_use_isolating(false);
 
     // First, try to load common uucore strings
-    if let Some(uucore_content) = get_embedded_locale("uucore/en-US.ftl") {
+    if let Some(uucore_content) = get_embedded_locale(&format!("uucore/{locale}.ftl")) {
         let uucore_resource = parse_fluent_resource(uucore_content)?;
         bundle.add_resource_overriding(uucore_resource);
     }
 
     // Then, try to load utility-specific strings
-    let locale_key = format!("{util_name}/en-US.ftl");
+    let locale_key = format!("{util_name}/{locale}.ftl");
     if let Some(ftl_content) = get_embedded_locale(&locale_key) {
         let resource = parse_fluent_resource(ftl_content)?;
         bundle.add_resource_overriding(resource);
@@ -262,11 +225,95 @@ fn create_english_bundle_from_embedded(
     }
 }
 
-fn get_message_internal(id: &str, args: Option<FluentArgs>) -> String {
-    LOCALIZER.with(|lock| {
-        lock.get()
-            .map_or_else(|| id.to_string(), |loc| loc.format(id, args.as_ref())) // Return the key ID if localizer not initialized
+/// Create the fallback bundle from .ftl files
+#[cfg(debug_assertions)]
+fn create_fallback_bundle(
+    locales_dir: &Path,
+    util_name: &str,
+) -> Result<FluentBundle<FluentResource>, LocalizationError> {
+    let default_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
+        .expect("Default locale should always be valid");
+
+    create_bundle(&default_locale, locales_dir, util_name).or_else(|_| {
+        // Fallback to embedded utility-specific and common strings
+        create_embedded_fallback_bundle(util_name)
     })
+}
+
+/// Create fallback bundle from embedded locale files
+fn create_embedded_fallback_bundle(
+    util_name: &str,
+) -> Result<FluentBundle<FluentResource>, LocalizationError> {
+    let default_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
+        .expect("Default locale should always be valid");
+
+    create_bundle_from_embedded(&default_locale, util_name)
+}
+
+/// Wrapper for debug mode
+#[cfg(debug_assertions)]
+fn init_localization(
+    locale: &LanguageIdentifier,
+    locales_dir: &Path,
+    util_name: &str,
+) -> Result<(), LocalizationError> {
+    init_localization_impl(locale, Some(locales_dir), util_name)
+}
+/// Wrapper for release mode
+#[cfg(not(debug_assertions))]
+fn init_localization(
+    locale: &LanguageIdentifier,
+    util_name: &str,
+) -> Result<(), LocalizationError> {
+    init_localization_impl(locale, None, util_name)
+}
+
+/// Initialize localization with common strings in addition to utility-specific strings
+fn init_localization_impl(
+    locale: &LanguageIdentifier,
+    locales_dir: Option<&Path>,
+    util_name: &str,
+) -> Result<(), LocalizationError> {
+    // Set locales_dir variable accordingly to the compilation profile
+    #[cfg(debug_assertions)]
+    let locales_dir = locales_dir.expect("In debug mode, 'locales_dir' should never be None.");
+    #[cfg(not(debug_assertions))]
+    let _ = locales_dir;
+
+    let default_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
+        .expect("Default locale should always be valid");
+
+    // Try to create a bundle that combines common and utility-specific strings
+    // On release mode, use the embedded mode for better performance
+    #[cfg(debug_assertions)]
+    let english_bundle = create_fallback_bundle(locales_dir, util_name)?;
+    #[cfg(not(debug_assertions))]
+    let english_bundle = create_embedded_fallback_bundle(util_name)?;
+
+    let loc = if locale == &default_locale {
+        // If requesting English, just use English as primary (no fallback needed)
+        Localizer::new(english_bundle)
+    } else {
+        #[cfg(debug_assertions)]
+        let bundle = create_bundle(locale, locales_dir, util_name);
+        #[cfg(not(debug_assertions))]
+        let bundle = create_bundle_from_embedded(locale, util_name);
+
+        // Try to load the requested locale with common strings
+        if let Ok(primary_bundle) = bundle {
+            // Successfully loaded requested locale, load English as fallback
+            Localizer::new(primary_bundle).with_fallback(english_bundle)
+        } else {
+            // Failed to load requested locale, just use English as primary
+            Localizer::new(english_bundle)
+        }
+    };
+
+    LOCALIZER.with(|lock| {
+        lock.set(loc)
+            .map_err(|_| LocalizationError::Bundle("Localizer already initialized".into()))
+    })?;
+    Ok(())
 }
 
 /// Retrieves a localized message by its identifier.
@@ -295,6 +342,13 @@ fn get_message_internal(id: &str, args: Option<FluentArgs>) -> String {
 /// ```
 pub fn get_message(id: &str) -> String {
     get_message_internal(id, None)
+}
+
+fn get_message_internal(id: &str, args: Option<FluentArgs>) -> String {
+    LOCALIZER.with(|lock| {
+        lock.get()
+            .map_or_else(|| id.to_string(), |loc| loc.format(id, args.as_ref())) // Return the key ID if localizer not initialized
+    })
 }
 
 /// Retrieves a localized message with variable substitution.
@@ -350,7 +404,7 @@ fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
 ///
 /// This function initializes the localization system based on the system's locale
 /// preferences (via the LANG environment variable) or falls back to English
-/// if the system locale cannot be determined or the locale file doesn't exist.
+/// if the system locale cannot be determined or the locale file/embedding doesn't exist.
 /// English is always loaded as a fallback.
 ///
 /// # Arguments
@@ -387,103 +441,61 @@ pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
         LanguageIdentifier::from_str(DEFAULT_LOCALE).expect("Default locale should always be valid")
     });
 
-    // Load common strings along with utility-specific strings
-    match get_locales_dir(p) {
-        Ok(locales_dir) => {
-            // Load both utility-specific and common strings
-            init_localization(&locale, &locales_dir, p)
-        }
-        Err(_) => {
-            // No locales directory found, use embedded English with common strings directly
-            let default_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
-                .expect("Default locale should always be valid");
-            let english_bundle = create_english_bundle_from_embedded(&default_locale, p)?;
-            let localizer = Localizer::new(english_bundle);
-
-            LOCALIZER.with(|lock| {
-                lock.set(localizer)
-                    .map_err(|_| LocalizationError::Bundle("Localizer already initialized".into()))
-            })?;
-            Ok(())
-        }
-    }
-}
-
-#[cfg(not(debug_assertions))]
-fn resolve_locales_dir_from_exe_dir(exe_dir: &Path, p: &str) -> Option<PathBuf> {
-    // 1. <bindir>/locales/<prog>
-    let coreutils = exe_dir.join("locales").join(p);
-    if coreutils.exists() {
-        return Some(coreutils);
-    }
-
-    // 2. <prefix>/share/locales/<prog>
-    if let Some(prefix) = exe_dir.parent() {
-        let fhs = prefix.join("share").join("locales").join(p);
-        if fhs.exists() {
-            return Some(fhs);
-        }
-    }
-
-    // 3. <bindir>/<prog>   (legacy fall-back)
-    let fallback = exe_dir.join(p);
-    if fallback.exists() {
-        return Some(fallback);
-    }
-
-    None
-}
-
-/// Helper function to get the locales directory based on the build configuration
-fn get_locales_dir(p: &str) -> Result<PathBuf, LocalizationError> {
+    // Load common strings along with utility-specific
+    // We only need the locale directory for debug mode. In release mode, all locale text is embedded into the file.
     #[cfg(debug_assertions)]
     {
-        // During development, use the project's locales directory
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        // from uucore path, load the locales directory from the program directory
-        let dev_path = PathBuf::from(manifest_dir)
-            .join("../uu")
-            .join(p)
-            .join("locales");
+        match get_locales_dir(p) {
+            Ok(locales_dir) => {
+                // Load both utility-specific and common strings
+                init_localization(&locale, &locales_dir, p)
+            }
+            Err(_) => {
+                // No locales directory found, use embedded English with common strings directly
+                let english_bundle = create_embedded_fallback_bundle(p)?;
+                let localizer = Localizer::new(english_bundle);
 
-        if dev_path.exists() {
-            return Ok(dev_path);
+                LOCALIZER.with(|lock| {
+                    lock.set(localizer).map_err(|_| {
+                        LocalizationError::Bundle("Localizer already initialized".into())
+                    })
+                })?;
+                Ok(())
+            }
         }
-
-        // Fallback for development if the expected path doesn't exist
-        let fallback_dev_path = PathBuf::from(manifest_dir).join(p);
-        if fallback_dev_path.exists() {
-            return Ok(fallback_dev_path);
-        }
-
-        Err(LocalizationError::LocalesDirNotFound(format!(
-            "Development locales directory not found at {} or {}",
-            dev_path.quote(),
-            fallback_dev_path.quote()
-        )))
     }
-
     #[cfg(not(debug_assertions))]
     {
-        use std::env;
-        // In release builds, look relative to executable
-        let exe_path = env::current_exe().map_err(|e| {
-            LocalizationError::PathResolution(format!("Failed to get executable path: {e}"))
-        })?;
-
-        let exe_dir = exe_path.parent().ok_or_else(|| {
-            LocalizationError::PathResolution("Failed to get executable directory".to_string())
-        })?;
-
-        if let Some(dir) = resolve_locales_dir_from_exe_dir(exe_dir, p) {
-            return Ok(dir);
-        }
-
-        Err(LocalizationError::LocalesDirNotFound(format!(
-            "Release locales directory not found starting from {}",
-            exe_dir.quote()
-        )))
+        init_localization(&locale, p)
     }
+}
+
+/// Helper function to get the locales directory for .ftl files
+#[cfg(debug_assertions)]
+fn get_locales_dir(p: &str) -> Result<PathBuf, LocalizationError> {
+    // During development, use the project's locales directory
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    // from uucore path, load the locales directory from the program directory
+    let dev_path = PathBuf::from(manifest_dir)
+        .join("../uu")
+        .join(p)
+        .join("locales");
+
+    if dev_path.exists() {
+        return Ok(dev_path);
+    }
+
+    // Fallback for development if the expected path doesn't exist
+    let fallback_dev_path = PathBuf::from(manifest_dir).join(p);
+    if fallback_dev_path.exists() {
+        return Ok(fallback_dev_path);
+    }
+
+    Err(LocalizationError::LocalesDirNotFound(format!(
+        "Development locales directory not found at {} or {}",
+        dev_path.quote(),
+        fallback_dev_path.quote()
+    )))
 }
 
 /// Macro for retrieving localized messages with optional arguments.
