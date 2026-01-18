@@ -159,9 +159,7 @@ else
 
     # Remove tests checking for --version & --help
     # Not really interesting for us and logs are too big
-    sed -i -e '/tests\/help\/help-version.sh/ D' \
-        -e '/tests\/help\/help-version-getopt.sh/ D' \
-        Makefile
+    sed -i '/tests\/help\/help-version.sh/ D' Makefile
     touch gnu-built
 fi
 
