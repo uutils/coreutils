@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) ints (linux) NOFILE dfgi
+// spell-checker:ignore (words) ints (linux) NOFILE dfgi PIPESTATUS
 #![allow(clippy::cast_possible_wrap)]
 
 use std::env;
@@ -13,6 +13,7 @@ use std::time::Duration;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
+use uutests::util_name;
 
 fn test_helper(file_name: &str, possible_args: &[&str]) {
     for args in possible_args {
@@ -1216,6 +1217,48 @@ fn test_sigpipe_panic() {
     // The "Broken pipe" error should be silently ignored.
     child.close_stdout();
     child.wait().unwrap().no_stderr();
+}
+
+// TODO: When SIGPIPE is trapped/ignored, GNU returns exit code 2 for IO failures,
+// but uutils currently returns 1 in that mode.
+#[test]
+#[cfg(unix)]
+fn test_broken_pipe_no_stderr_and_expected_status() {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
+    #[cfg(not(target_os = "macos"))]
+    use std::os::unix::process::ExitStatusExt;
+
+    let scene = TestScenario::new(util_name!());
+    let bin = scene.bin_path.clone();
+
+    let mut child = Command::new(bin)
+        .arg("sort")
+        .arg("-n")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn sort");
+
+    drop(child.stdout.take().expect("take stdout"));
+
+    {
+        let mut stdin = child.stdin.take().expect("take stdin");
+        for i in 1..=10000 {
+            writeln!(stdin, "{i}").expect("write stdin");
+        }
+    }
+
+    let output = child.wait_with_output().expect("wait");
+
+    assert!(output.stderr.is_empty());
+
+    // NOTE: On macOS CI this is flaky to assert because `sort` can complete
+    // and exit 0 before the closed-pipe condition is observed (timing/buffering).
+    #[cfg(not(target_os = "macos"))]
+    assert_eq!(output.status.signal(), Some(libc::SIGPIPE));
 }
 
 #[test]
