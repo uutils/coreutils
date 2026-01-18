@@ -457,13 +457,13 @@ pub unsafe extern "C" fn capture_sigpipe_state() {
 #[cfg(unix)]
 macro_rules! init_sigpipe_capture {
     () => {
-        #[cfg(all(unix, not(target_os = "macos")))]
+        #[cfg(not(target_os = "macos"))]
         #[used]
         #[unsafe(link_section = ".init_array")]
         static CAPTURE_SIGPIPE_STATE: unsafe extern "C" fn() =
             $crate::signals::capture_sigpipe_state;
 
-        #[cfg(all(unix, target_os = "macos"))]
+        #[cfg(target_os = "macos")]
         #[used]
         #[unsafe(link_section = "__DATA,__mod_init_func")]
         static CAPTURE_SIGPIPE_STATE: unsafe extern "C" fn() =

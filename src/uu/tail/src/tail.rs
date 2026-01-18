@@ -72,6 +72,16 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
     let mut observer = Observer::from(settings);
 
     observer.start(settings)?;
+
+    // Print debug info about the follow implementation being used
+    if settings.debug && settings.follow.is_some() {
+        if observer.use_polling {
+            show_error!("{}", translate!("tail-debug-using-polling-mode"));
+        } else {
+            show_error!("{}", translate!("tail-debug-using-notification-mode"));
+        }
+    }
+
     // Do an initial tail print of each path's content.
     // Add `path` and `reader` to `files` map if `--follow` is selected.
     for input in &settings.inputs.clone() {
@@ -463,7 +473,9 @@ fn bounded_tail(file: &mut File, settings: &Settings) {
             return;
         }
         FilterMode::Bytes(Signum::Negative(count)) => {
-            file.seek(SeekFrom::End(-(*count as i64))).unwrap();
+            if file.seek(SeekFrom::End(-(*count as i64))).is_err() {
+                file.seek(SeekFrom::Start(0)).unwrap();
+            }
             limit = Some(*count);
         }
         FilterMode::Bytes(Signum::Positive(count)) if count > &1 => {

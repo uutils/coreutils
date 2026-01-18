@@ -559,19 +559,8 @@ fn is_writable_metadata(metadata: &Metadata) -> bool {
     (mode & 0o200) > 0
 }
 
-/// Whether the given file or directory is writable.
-#[cfg(unix)]
-fn is_writable(path: &Path) -> bool {
-    match fs::metadata(path) {
-        Err(_) => false,
-        Ok(metadata) => is_writable_metadata(&metadata),
-    }
-}
-
-/// Whether the given file or directory is writable.
 #[cfg(not(unix))]
-fn is_writable(_path: &Path) -> bool {
-    // TODO Not yet implemented.
+fn is_writable_metadata(_metadata: &Metadata) -> bool {
     true
 }
 
@@ -809,35 +798,33 @@ fn prompt_file(path: &Path, options: &Options) -> bool {
     if options.interactive == InteractiveMode::Never {
         return true;
     }
-    // If interactive is Always we want to check if the file is symlink to prompt the right message
-    if options.interactive == InteractiveMode::Always {
-        if let Ok(metadata) = fs::symlink_metadata(path) {
-            if metadata.is_symlink() {
-                return prompt_yes!("remove symbolic link {}?", path.quote());
-            }
-        }
-    }
 
-    let Ok(metadata) = fs::metadata(path) else {
+    let Ok(metadata) = fs::symlink_metadata(path) else {
         return true;
     };
 
-    if options.interactive == InteractiveMode::Always && is_writable(path) {
+    if metadata.is_symlink() {
+        return options.interactive != InteractiveMode::Always
+            || prompt_yes!("remove symbolic link {}?", path.quote());
+    }
+
+    if options.interactive == InteractiveMode::Always && is_writable_metadata(&metadata) {
         return if metadata.len() == 0 {
             prompt_yes!("remove regular empty file {}?", path.quote())
         } else {
             prompt_yes!("remove file {}?", path.quote())
         };
     }
-    prompt_file_permission_readonly(path, options)
+
+    prompt_file_permission_readonly(path, options, &metadata)
 }
 
-fn prompt_file_permission_readonly(path: &Path, options: &Options) -> bool {
+fn prompt_file_permission_readonly(path: &Path, options: &Options, metadata: &Metadata) -> bool {
     let stdin_ok = options.__presume_input_tty.unwrap_or(false) || stdin().is_terminal();
-    match (stdin_ok, fs::metadata(path), options.interactive) {
-        (false, _, InteractiveMode::PromptProtected) => true,
-        (_, Ok(_), _) if is_writable(path) => true,
-        (_, Ok(metadata), _) if metadata.len() == 0 => prompt_yes!(
+    match (stdin_ok, options.interactive) {
+        (false, InteractiveMode::PromptProtected) => true,
+        _ if is_writable_metadata(metadata) => true,
+        _ if metadata.len() == 0 => prompt_yes!(
             "remove write-protected regular empty file {}?",
             path.quote()
         ),

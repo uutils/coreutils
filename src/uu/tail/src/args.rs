@@ -38,6 +38,7 @@ pub mod options {
     pub const MAX_UNCHANGED_STATS: &str = "max-unchanged-stats";
     pub const ARG_FILES: &str = "files";
     pub const PRESUME_INPUT_PIPE: &str = "-presume-input-pipe"; // NOTE: three hyphens is correct
+    pub const DEBUG: &str = "debug";
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -139,6 +140,7 @@ pub struct Settings {
     pub use_polling: bool,
     pub verbose: bool,
     pub presume_input_pipe: bool,
+    pub debug: bool,
     /// `FILE(s)` positional arguments
     pub inputs: Vec<Input>,
 }
@@ -155,6 +157,7 @@ impl Default for Settings {
             use_polling: Default::default(),
             verbose: Default::default(),
             presume_input_pipe: Default::default(),
+            debug: Default::default(),
             inputs: Vec::default(),
         }
     }
@@ -223,6 +226,7 @@ impl Settings {
             mode: FilterMode::from(matches)?,
             verbose: matches.get_flag(options::verbosity::VERBOSE),
             presume_input_pipe: matches.get_flag(options::PRESUME_INPUT_PIPE),
+            debug: matches.get_flag(options::DEBUG),
             ..Default::default()
         };
 
@@ -541,6 +545,12 @@ pub fn uu_app() -> Command {
                 .short('F')
                 .help(translate!("tail-help-follow-retry"))
                 .overrides_with(options::FOLLOW_RETRY)
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::DEBUG)
+                .long(options::DEBUG)
+                .help(translate!("tail-help-debug"))
                 .action(ArgAction::SetTrue),
         )
         .arg(

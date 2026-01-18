@@ -1245,3 +1245,20 @@ fn no_preserve_root_may_not_be_abbreviated() {
 
     assert!(at.file_exists(file));
 }
+
+#[cfg(unix)]
+#[test]
+fn test_symlink_to_readonly_no_prompt() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("foo");
+    at.set_mode("foo", 0o444);
+    at.symlink_file("foo", "bar");
+
+    ucmd.arg("---presume-input-tty")
+        .arg("bar")
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.symlink_exists("bar"));
+}
