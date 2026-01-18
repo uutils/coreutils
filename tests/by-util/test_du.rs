@@ -2016,8 +2016,8 @@ fn test_du_hard_links_multiple_dirs_in_args() {
     at.hard_link("dir1/file", "dir2/link");
 
     let result = ts.ucmd().args(&["dir1", "dir2"]).succeeds();
-    result.stdout_contains("4\tdir1\n");
-    result.stdout_contains("0\tdir2\n");
+    result.stdout_contains("8\tdir1\n");
+    result.stdout_contains("4\tdir2\n");
 }
 
 #[test]

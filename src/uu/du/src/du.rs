@@ -1115,7 +1115,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 // Pre-populate seen_inodes with the starting directory to detect cycles
                 if let Ok(stat) = Stat::new(&path, None, &traversal_options) {
                     if let Some(inode) = stat.inode {
-                        if seen_inodes.contains(&inode) {
+                        if !traversal_options.count_links && seen_inodes.contains(&inode) {
                             continue 'loop_file;
                         }
                         seen_inodes.insert(inode);
@@ -1151,7 +1151,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             // Use regular traversal (non-Linux or when -L is used)
             if let Ok(stat) = Stat::new(&path, None, &traversal_options) {
                 if let Some(inode) = stat.inode {
-                    if seen_inodes.contains(&inode) {
+                    if !traversal_options.count_links && seen_inodes.contains(&inode) {
                         continue 'loop_file;
                     }
                     seen_inodes.insert(inode);
