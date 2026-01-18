@@ -20,7 +20,7 @@ path = "src/timeout.rs"
 [dependencies]
 clap = { workspace = true }
 libc = { workspace = true }
-nix = { workspace = true, features = ["signal"] }
+nix = { workspace = true, features = ["signal", "event"] }
 uucore = { workspace = true, features = ["parser", "process", "signals"] }
 fluent = { workspace = true }
 
