@@ -51,17 +51,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
-
-if let Err(e) = write_result {
+    if let Err(e) = write_result {
         eprintln!("tty: write error: {}", e);
         std::process::exit(3);
     }
-    
+
     if let Err(e) = stdout.flush() {
         eprintln!("tty: write error: {}", e);
         std::process::exit(3);
     }
-    
+
     Ok(())
 }
 

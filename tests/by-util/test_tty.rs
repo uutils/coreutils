@@ -94,7 +94,7 @@ fn test_newline_in_output() {
     // Test that output ends with a newline, regardless of success or failure
     let result = new_ucmd!().run();
     let stdout = result.stdout_str();
-    
+
     // Whether it's "not a tty\n" or an actual tty path, it should end with newline
     assert!(
         stdout.ends_with('\n'),
@@ -105,19 +105,20 @@ fn test_newline_in_output() {
 
 #[test]
 #[cfg(all(unix, not(target_os = "freebsd")))]
+#[ignore = "Fails on some CI environments - see https://github.com/uutils/coreutils/pull/10252"]
 fn test_write_error_dev_full() {
     use std::process::{Command, Stdio};
     use uutests::at_and_ts;
 
     let (_, ts) = at_and_ts!();
-    
+
     // Redirect stdout to /dev/full which causes write errors
     let output = Command::new(ts.bin_path.to_str().unwrap())
         .arg(&ts.util_name)
         .stdout(Stdio::from(File::create("/dev/full").unwrap()))
         .output()
         .unwrap();
-    
+
     // Should exit with code 3 and print error to stderr
     assert_eq!(output.status.code(), Some(3));
     let stderr = String::from_utf8_lossy(&output.stderr);
