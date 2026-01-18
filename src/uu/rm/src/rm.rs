@@ -202,7 +202,7 @@ static ARG_FILES: &str = "files";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_ignore();
+    let args: Vec<OsString> = args.collect();
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args.iter())?;
 
     let files: Vec<_> = matches
