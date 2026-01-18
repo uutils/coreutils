@@ -11,9 +11,15 @@ curl -L ${repo}/raw/refs/heads/master/tests/mkdir/writable-under-readonly.sh > t
 curl -L ${repo}/raw/refs/heads/master/tests/cp/cp-mv-enotsup-xattr.sh > tests/cp/cp-mv-enotsup-xattr.sh #spell-checker:disable-line
 curl -L ${repo}/raw/refs/heads/master/tests/cp/nfs-removal-race.sh > tests/cp/nfs-removal-race.sh
 curl -L ${repo}/raw/refs/heads/master/tests/csplit/csplit-io-err.sh > tests/csplit/csplit-io-err.sh
+# Replace tests not compatible with our binaries
+sed -i -e 's/no-mtab-status.sh/no-mtab-status-masked-proc.sh/' -e 's/nproc-quota.sh/nproc-quota-systemd.sh/'  tests/local.mk
+curl -L ${repo}/raw/refs/heads/master/tests/df/no-mtab-status-masked-proc.sh > tests/df/no-mtab-status-masked-proc.sh
+curl -L ${repo}/raw/refs/heads/master/tests/nproc/nproc-quota-systemd.sh > tests/nproc/nproc-quota-systemd.sh
 curl -L ${repo}/raw/refs/heads/master/tests/stty/bad-speed.sh > tests/stty/bad-speed.sh
 # symlink to /bin/false should fail with --help. Freeze commit to avoid regression.
 curl -L https://raw.githubusercontent.com/coreutils/coreutils/d5164f3d216917005003877faeb1abe7cae5d765/tests/misc/coreutils.sh > tests/misc/coreutils.sh
+# Better support for single binary
+curl -L ${repo}/raw/refs/heads/master/tests/env/env.sh > tests/env/env.sh
 # Avoid incorrect PASS
 curl -L ${repo}/raw/refs/heads/master/tests/runcon/runcon-compute.sh > tests/runcon/runcon-compute.sh
 curl -L ${repo}/raw/refs/heads/master/tests/tac/tac-continue.sh > tests/tac/tac-continue.sh

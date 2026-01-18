@@ -220,5 +220,7 @@ TUNABLES
 tunables
 VMULL
 vmull
+ENOTSUP
+enotsup
 SETFL
 tmpfs

@@ -105,7 +105,6 @@ fi
 cd "${path_GNU}" && echo "[ pwd:'${PWD}' ]"
 
 # Any binaries that aren't built become `false` to make tests failure
-# Note that some test (e.g. runcon/runcon-compute.sh) incorrectly passes by this
 for binary in $(./build-aux/gen-lists-of-programs.sh --list-progs); do
     bin_path="${UU_BUILD_DIR}/${binary}"
     test -f "${bin_path}" || cp -v /usr/bin/false "${bin_path}"
@@ -170,8 +169,6 @@ sed -i 's/^print_ver_.*/require_selinux_/' tests/runcon/runcon-compute.sh
 sed -i 's/^print_ver_.*/require_selinux_/' tests/runcon/runcon-no-reorder.sh
 sed -i 's/^print_ver_.*/require_selinux_/' tests/chcon/chcon-fail.sh
 
-# Mask mtab by unshare instead of LD_PRELOAD (able to merge this to GNU?)
-sed -i -e 's|^export LD_PRELOAD=.*||' -e "s|.*maybe LD_PRELOAD.*|df() { unshare -rm bash -c \"mount -t tmpfs tmpfs /proc \&\& command df \\\\\"\\\\\$@\\\\\"\" -- \"\$@\"; }|" tests/df/no-mtab-status.sh
 # We use coreutils yes
 sed -i "s|--coreutils-prog=||g" tests/misc/coreutils.sh
 # Different message
