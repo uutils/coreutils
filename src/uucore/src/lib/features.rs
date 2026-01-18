@@ -72,7 +72,7 @@ pub mod pipes;
 pub mod proc_info;
 #[cfg(all(unix, feature = "process"))]
 pub mod process;
-#[cfg(target_os = "linux")]
+#[cfg(all(unix, not(target_os = "redox")))]
 pub mod safe_traversal;
 #[cfg(all(target_os = "linux", feature = "tty"))]
 pub mod tty;
@@ -85,6 +85,8 @@ pub mod hardware;
 pub mod selinux;
 #[cfg(all(unix, not(target_os = "fuchsia"), feature = "signals"))]
 pub mod signals;
+#[cfg(all(target_os = "linux", feature = "smack"))]
+pub mod smack;
 #[cfg(feature = "feat_systemd_logind")]
 pub mod systemd_logind;
 #[cfg(all(

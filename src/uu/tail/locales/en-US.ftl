@@ -6,6 +6,7 @@ tail-usage = tail [FLAG]... [FILE]...
 
 # Help messages
 tail-help-bytes = Number of bytes to print
+tail-help-debug = indicate which --follow implementation is used
 tail-help-follow = Print the file as it grows
 tail-help-lines = Number of lines to print
 tail-help-pid = With -f, terminate after process ID, PID dies
@@ -36,7 +37,7 @@ tail-error-invalid-pid-with-error = invalid PID: { $pid }: { $error }
 tail-error-invalid-number-out-of-range = invalid number: { $arg }: Numerical result out of range
 tail-error-invalid-number-overflow = invalid number: { $arg }
 tail-error-option-used-in-invalid-context = option used in invalid context -- { $option }
-tail-error-bad-argument-encoding = bad argument encoding: '{ $arg }'
+tail-error-bad-argument-encoding = bad argument encoding: { $arg }
 tail-error-cannot-watch-parent-directory = cannot watch parent directory of { $path }
 tail-error-backend-cannot-be-used-too-many-files = { $backend } cannot be used, reverting to polling: Too many open files
 tail-error-backend-resources-exhausted = { $backend } resources exhausted
@@ -70,3 +71,7 @@ tail-giving-up-on-this-name = ; giving up on this name
 tail-stdin-header = standard input
 tail-no-files-remaining = no files remaining
 tail-become-inaccessible = has become inaccessible
+
+# Debug messages
+tail-debug-using-notification-mode = using notification mode
+tail-debug-using-polling-mode = using polling mode

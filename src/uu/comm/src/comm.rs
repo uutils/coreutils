@@ -10,6 +10,7 @@ use std::ffi::OsString;
 use std::fs::{File, metadata};
 use std::io::{self, BufRead, BufReader, Read, StdinLock, stdin};
 use std::path::{Path, PathBuf};
+use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
 use uucore::fs::paths_refer_to_same_file;
@@ -148,6 +149,11 @@ pub fn are_files_identical(path1: &Path, path2: &Path) -> io::Result<bool> {
     let metadata2 = metadata(path2)?;
 
     if metadata1.len() != metadata2.len() {
+        return Ok(false);
+    }
+
+    // only proceed if both are regular files
+    if !metadata1.is_file() || !metadata2.is_file() {
         return Ok(false);
     }
 
@@ -319,9 +325,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let filename1 = matches.get_one::<OsString>(options::FILE_1).unwrap();
     let filename2 = matches.get_one::<OsString>(options::FILE_2).unwrap();
     let mut f1 = open_file(filename1, line_ending)
-        .map_err_context(|| filename1.to_string_lossy().to_string())?;
+        .map_err_context(|| filename1.maybe_quote().to_string())?;
     let mut f2 = open_file(filename2, line_ending)
-        .map_err_context(|| filename2.to_string_lossy().to_string())?;
+        .map_err_context(|| filename2.maybe_quote().to_string())?;
 
     // Due to default_value(), there must be at least one value here, thus unwrap() must not panic.
     let all_delimiters = matches

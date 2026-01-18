@@ -3,8 +3,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// cSpell:ignore POLLERR POLLRDBAND pfds revents
-
 use clap::{Arg, ArgAction, Command, builder::PossibleValue};
 use std::ffi::OsString;
 use std::fs::OpenOptions;
@@ -18,6 +16,8 @@ use uucore::{format_usage, show_error};
 
 // spell-checker:ignore nopipe
 
+#[cfg(target_os = "linux")]
+use uucore::signals::ensure_stdout_not_broken;
 #[cfg(unix)]
 use uucore::signals::{enable_pipe_errors, ignore_interrupts};
 
@@ -115,7 +115,8 @@ pub fn uu_app() -> Command {
                 .long(options::APPEND)
                 .short('a')
                 .help(translate!("tee-help-append"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::APPEND),
         )
         .arg(
             Arg::new(options::IGNORE_INTERRUPTS)
@@ -176,7 +177,7 @@ fn tee(options: &Options) -> Result<()> {
     writers.insert(
         0,
         NamedWriter {
-            name: translate!("tee-standard-output"),
+            name: translate!("tee-standard-output").into(),
             inner: Box::new(stdout()),
         },
     );
@@ -267,10 +268,10 @@ fn open(
     match mode.write(true).create(true).open(path.as_path()) {
         Ok(file) => Some(Ok(NamedWriter {
             inner: Box::new(file),
-            name: name.to_string_lossy().to_string(),
+            name: name.clone(),
         })),
         Err(f) => {
-            show_error!("{}: {f}", name.to_string_lossy().maybe_quote());
+            show_error!("{}: {f}", name.maybe_quote());
             match output_error {
                 Some(OutputErrorMode::Exit | OutputErrorMode::ExitNoPipe) => Some(Err(f)),
                 _ => None,
@@ -394,7 +395,7 @@ impl Write for MultiWriter {
 
 struct NamedWriter {
     inner: Box<dyn Write>,
-    pub name: String,
+    pub name: OsString,
 }
 
 impl Write for NamedWriter {
@@ -421,46 +422,4 @@ impl Read for NamedReader {
             okay => okay,
         }
     }
-}
-
-/// Check that if stdout is a pipe, it is not broken.
-#[cfg(target_os = "linux")]
-pub fn ensure_stdout_not_broken() -> Result<bool> {
-    use nix::{
-        poll::{PollFd, PollFlags, PollTimeout},
-        sys::stat::{SFlag, fstat},
-    };
-    use std::os::fd::AsFd;
-
-    let out = stdout();
-
-    // First, check that stdout is a fifo and return true if it's not the case
-    let stat = fstat(out.as_fd())?;
-    if !SFlag::from_bits_truncate(stat.st_mode).contains(SFlag::S_IFIFO) {
-        return Ok(true);
-    }
-
-    // POLLRDBAND is the flag used by GNU tee.
-    let mut pfds = [PollFd::new(out.as_fd(), PollFlags::POLLRDBAND)];
-
-    // Then, ensure that the pipe is not broken.
-    // Use ZERO timeout to return immediately - we just want to check the current state.
-    let res = nix::poll::poll(&mut pfds, PollTimeout::ZERO)?;
-
-    if res > 0 {
-        // poll returned with events ready - check if POLLERR is set (pipe broken)
-        let error = pfds.iter().any(|pfd| {
-            if let Some(revents) = pfd.revents() {
-                revents.contains(PollFlags::POLLERR)
-            } else {
-                true
-            }
-        });
-        return Ok(!error);
-    }
-
-    // res == 0 means no events ready (timeout reached immediately with ZERO timeout).
-    // This means the pipe is healthy (not broken).
-    // res < 0 would be an error, but nix returns Err in that case.
-    Ok(true)
 }

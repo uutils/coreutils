@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker:ignore bincode serde utmp runlevel testusr testx
+// spell-checker:ignore wincode serde utmp runlevel testusr testx boottime
 #![allow(clippy::cast_possible_wrap, clippy::unreadable_literal)]
 
 use uutests::at_and_ucmd;
@@ -95,11 +95,10 @@ fn test_uptime_with_non_existent_file() {
 )]
 #[allow(clippy::too_many_lines, clippy::items_after_statements)]
 fn test_uptime_with_file_containing_valid_boot_time_utmpx_record() {
-    use bincode::{config, serde::encode_to_vec};
-    use serde::Serialize;
-    use serde_big_array::BigArray;
     use std::fs::File;
     use std::{io::Write, path::PathBuf};
+    use wincode::serialize;
+    use wincode_derive::SchemaWrite;
 
     // This test will pass for freebsd but we currently don't support changing the utmpx file for
     // freebsd.
@@ -133,21 +132,21 @@ fn test_uptime_with_file_containing_valid_boot_time_utmpx_record() {
         const RUN_LVL: i32 = 1;
         const USER_PROCESS: i32 = 7;
 
-        #[derive(Serialize)]
+        #[derive(SchemaWrite)]
         #[repr(C)]
         pub struct TimeVal {
             pub tv_sec: i32,
             pub tv_usec: i32,
         }
 
-        #[derive(Serialize)]
+        #[derive(SchemaWrite)]
         #[repr(C)]
         pub struct ExitStatus {
             e_termination: i16,
             e_exit: i16,
         }
 
-        #[derive(Serialize)]
+        #[derive(SchemaWrite)]
         #[repr(C, align(4))]
         pub struct Utmp {
             pub ut_type: i32,
@@ -156,7 +155,6 @@ fn test_uptime_with_file_containing_valid_boot_time_utmpx_record() {
             pub ut_id: [i8; 4],
 
             pub ut_user: [i8; 32],
-            #[serde(with = "BigArray")]
             pub ut_host: [i8; 256],
             pub ut_exit: ExitStatus,
             pub ut_session: i32,
@@ -224,10 +222,9 @@ fn test_uptime_with_file_containing_valid_boot_time_utmpx_record() {
             glibc_reserved: [0; 20],
         };
 
-        let config = config::legacy();
-        let mut buf = encode_to_vec(utmp, config).unwrap();
-        buf.append(&mut encode_to_vec(utmp1, config).unwrap());
-        buf.append(&mut encode_to_vec(utmp2, config).unwrap());
+        let mut buf = serialize(&utmp).unwrap();
+        buf.append(&mut serialize(&utmp1).unwrap());
+        buf.append(&mut serialize(&utmp2).unwrap());
         let mut f = File::create(path).unwrap();
         f.write_all(&buf).unwrap();
     }
@@ -268,4 +265,89 @@ fn test_uptime_since() {
     let re = Regex::new(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}").unwrap();
 
     new_ucmd!().arg("--since").succeeds().stdout_matches(&re);
+}
+
+#[test]
+fn test_uptime_pretty_print() {
+    new_ucmd!()
+        .arg("-p")
+        .succeeds()
+        .stdout_contains("up")
+        .stdout_contains("minute");
+}
+
+/// Test uptime reliability on macOS with sysctl kern.boottime fallback.
+/// This addresses intermittent failures from issue #3621 by ensuring
+/// the command consistently succeeds when utmpx data is unavailable.
+#[test]
+#[cfg(target_os = "macos")]
+fn test_uptime_macos_reliability() {
+    // Run uptime multiple times to ensure consistent success
+    // (Previously would fail intermittently when utmpx had no BOOT_TIME)
+    for i in 0..5 {
+        let result = new_ucmd!().succeeds();
+
+        // Verify standard output patterns
+        result
+            .stdout_contains("up")
+            .stdout_contains("load average:");
+
+        // Ensure no error about retrieving system uptime
+        let stderr = result.stderr_str();
+        assert!(
+            !stderr.contains("could not retrieve system uptime"),
+            "Iteration {i}: uptime should not fail on macOS (stderr: {stderr})"
+        );
+    }
+}
+
+/// Test uptime --since reliability on macOS.
+/// Verifies the sysctl fallback works for the --since flag.
+#[test]
+#[cfg(target_os = "macos")]
+fn test_uptime_since_macos() {
+    let re = Regex::new(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}").unwrap();
+
+    // Run multiple times to ensure consistency
+    for i in 0..3 {
+        let result = new_ucmd!().arg("--since").succeeds();
+
+        result.stdout_matches(&re);
+
+        // Ensure no error messages
+        let stderr = result.stderr_str();
+        assert!(
+            stderr.is_empty(),
+            "Iteration {i}: uptime --since should not produce stderr on macOS (stderr: {stderr})"
+        );
+    }
+}
+
+/// Test that uptime output format is consistent on macOS.
+/// Ensures the sysctl fallback produces properly formatted output.
+#[test]
+#[cfg(target_os = "macos")]
+fn test_uptime_macos_output_format() {
+    let result = new_ucmd!().succeeds();
+    let stdout = result.stdout_str();
+
+    // Verify time is present (format: HH:MM:SS)
+    let time_re = Regex::new(r"\d{2}:\d{2}:\d{2}").unwrap();
+    assert!(
+        time_re.is_match(stdout),
+        "Output should contain time in HH:MM:SS format: {stdout}"
+    );
+
+    // Verify uptime format (either "HH:MM" or "X days HH:MM")
+    assert!(
+        stdout.contains(" up "),
+        "Output should contain 'up': {stdout}"
+    );
+
+    // Verify load average is present
+    let load_re = Regex::new(r"load average: \d+\.\d+, \d+\.\d+, \d+\.\d+").unwrap();
+    assert!(
+        load_re.is_match(stdout),
+        "Output should contain load average: {stdout}"
+    );
 }

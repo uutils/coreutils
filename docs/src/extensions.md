@@ -25,6 +25,12 @@ $ ls -w=80
 With GNU coreutils, `--help` usually prints the help message and `--version` prints the version.
 We also commonly provide short options: `-h` for help and `-V` for version.
 
+## `coreutils`
+
+Our `coreutils` calls utility by `coreutils utility-name` and has `--list` to run against busybox test suite.
+Our `coreutils` is called as `utility-name` if its binary name ends with `utility-name` to support prefixed names.
+Longer name is prioritized e.g. `sum` with the prefix `ck` is called as `cksum`.
+
 ## `env`
 
 GNU `env` allows the empty string to be used as an environment variable name.
@@ -184,7 +190,9 @@ also provides a `-v`/`--verbose` flag.
 
 ## `uptime`
 
-Similar to the proc-ps implementation and unlike GNU/Coreutils, `uptime` provides `-s`/`--since` to show since when the system is up.
+Similar to the proc-ps implementation and unlike GNU/Coreutils, `uptime` provides:
+ * `-s`/`--since` to show since when the system is up
+ * `-p`/`--pretty` to display uptime in a pretty-printed format
 
 ## `base32/base64/basenc`
 
@@ -200,3 +208,7 @@ With `-U`/`--no-utf8`, you can interpret input files as 8-bit ASCII rather than 
 ## `expand`
 
 `expand` also offers the `-U`/`--no-utf8` option to interpret input files as 8-bit ASCII instead of UTF-8.
+
+## `install`
+
+`install` offers FreeBSD's `-U` unprivileged option to not change the owner, the group, or the file flags of the destination.

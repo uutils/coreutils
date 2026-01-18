@@ -683,3 +683,42 @@ fn test_comm_eintr_handling() {
         .stdout_contains("line2")
         .stdout_contains("line3");
 }
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_comm_anonymous_pipes() {
+    use std::{io::Write, os::fd::AsRawFd, process};
+    use uucore::pipes::pipe;
+
+    let scene = TestScenario::new(util_name!());
+
+    // Open two anonymous pipes
+    let (comm1_reader, mut comm1_writer) = pipe().unwrap();
+    let (comm2_reader, mut comm2_writer) = pipe().unwrap();
+
+    // comm reads the data in chunks
+    // make content large enough, so that at least two chunks are read
+    // default buffer size is 8192, so with 6 characters (5 digits + \n) per line we need to write at least 1366 lines
+
+    // write 1500 lines into comm1: 00000\n00001\n...01500\n
+    let mut content = String::new();
+    for i in 0..1500 {
+        content.push_str(&format!("{i:05}\n"));
+    }
+    assert!(comm1_writer.write_all(content.as_bytes()).is_ok());
+    drop(comm1_writer);
+
+    // write into comm2: 00000\n00001\n...01500\n99999\n
+    content.push_str("99999\n");
+    assert!(comm2_writer.write_all(content.as_bytes()).is_ok());
+    drop(comm2_writer);
+
+    // run comm, showing unique lines in second input
+    let comm1_fd = format!("/proc/{}/fd/{}", process::id(), comm1_reader.as_raw_fd());
+    let comm2_fd = format!("/proc/{}/fd/{}", process::id(), comm2_reader.as_raw_fd());
+    scene
+        .ucmd()
+        .args(&["-13", &comm1_fd, &comm2_fd])
+        .succeeds()
+        .stdout_is("99999\n");
+}

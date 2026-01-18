@@ -29,16 +29,9 @@ options might be missing or different behavior might be experienced.
 
 <div class="oranda-hide">
 
-We provide prebuilt binaries at https://github.com/uutils/coreutils/releases/latest .
-It is recommended to install from main branch if you install from source.
-
-To install it:
-
-```shell
-cargo install --git https://github.com/uutils/coreutils coreutils
-# cargo install --git https://github.com/uutils/coreutils uu_true # for one util only
-~/.cargo/bin/coreutils
-```
+We provide prebuilt binaries, manpages, and shell completions from main branch at https://github.com/uutils/coreutils/releases/tag/latest-commit .
+The latest stable tag https://github.com/uutils/coreutils/releases/latest exists only for reproducible products and packagers.
+You should use binary from latest commit generally.
 
 </div>
 
@@ -234,8 +227,6 @@ To install every program with a prefix (e.g. uu-echo uu-cat):
 ```shell
 make PROG_PREFIX=uu- install
 ```
-
-`PROG_PREFIX` requires separator `-`, `_`, or `=`.
 
 To install the multicall binary:
 
