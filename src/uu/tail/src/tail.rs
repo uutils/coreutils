@@ -413,6 +413,10 @@ fn forwards_thru_file(
 /// `num_delimiters` instance of `delimiter`. The `file` is left seek'd to the
 /// position just after that delimiter.
 fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
+    if num_delimiters == 0 {
+        file.seek(SeekFrom::End(0)).unwrap();
+        return;
+    }
     // This variable counts the number of delimiters found in the file
     // so far (reading from the end of the file toward the beginning).
     let mut counter = 0;
