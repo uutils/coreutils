@@ -29,3 +29,4 @@ path = "src/main.rs"
 
 [features]
 feat_selinux = ["selinux"]
+smack = ["uucore/smack"]

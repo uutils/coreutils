@@ -91,7 +91,38 @@ fn test_lookup() {
     let expect = unwrap_or_return!(expected_result(&ts, &[])).stdout_move_str();
     let v_actual: Vec<&str> = actual.split_whitespace().collect();
     let v_expect: Vec<&str> = expect.split_whitespace().collect();
-    assert_eq!(v_actual, v_expect);
+    // The "Idle" field (index 3 in header) contains a dynamic time value that can change
+    // between when the two commands run (e.g., "00:09" vs "00:10"), causing flaky tests.
+    // We filter out values matching the idle time pattern (HH:MM format) to avoid race conditions.
+    // Header: ["Login", "Name", "TTY", "Idle", "When", "Where"]
+    fn filter_idle_times(v: &[&str]) -> Vec<String> {
+        v.iter()
+            .enumerate()
+            .filter(|(i, s)| {
+                // Skip the "Idle" header at index 3
+                if *i == 3 {
+                    return false;
+                }
+                // Skip any value that looks like an idle time (HH:MM format like "00:09")
+                // These appear after the header in user data rows
+                if *i >= 6 && s.len() == 5 && s.chars().nth(2) == Some(':') {
+                    let chars: Vec<char> = s.chars().collect();
+                    if chars[0].is_ascii_digit()
+                        && chars[1].is_ascii_digit()
+                        && chars[3].is_ascii_digit()
+                        && chars[4].is_ascii_digit()
+                    {
+                        return false;
+                    }
+                }
+                true
+            })
+            .map(|(_, s)| (*s).to_string())
+            .collect()
+    }
+    let v_actual_filtered = filter_idle_times(&v_actual);
+    let v_expect_filtered = filter_idle_times(&v_expect);
+    assert_eq!(v_actual_filtered, v_expect_filtered);
 }
 
 #[cfg(unix)]

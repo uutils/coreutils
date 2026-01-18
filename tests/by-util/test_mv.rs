@@ -623,56 +623,21 @@ fn test_mv_symlink_into_target() {
     ucmd.arg("dir-link").arg("dir").succeeds();
 }
 
-#[cfg(all(unix, not(target_os = "android")))]
-#[ignore = "requires sudo"]
+#[cfg(target_os = "linux")]
 #[test]
 fn test_mv_broken_symlink_to_another_fs() {
     let scene = TestScenario::new(util_name!());
 
     scene.fixtures.mkdir("foo");
-
-    let output = scene
-        .cmd("sudo")
-        .env("PATH", env!("PATH"))
-        .args(&["-E", "--non-interactive", "ls"])
-        .run();
-    println!("test output: {output:?}");
-
-    let mount = scene
-        .cmd("sudo")
-        .env("PATH", env!("PATH"))
-        .args(&[
-            "-E",
-            "--non-interactive",
-            "mount",
-            "none",
-            "-t",
-            "tmpfs",
-            "foo",
-        ])
-        .run();
-
-    if !mount.succeeded() {
-        print!("Test skipped; requires root user");
-        return;
-    }
-
-    scene.fixtures.mkdir("bar");
-    scene.fixtures.symlink_file("nonexistent", "bar/baz");
-
+    scene.fixtures.symlink_file("missing", "foo/dangling");
+    let dest = "/dev/shm/foo";
     scene
         .ucmd()
-        .arg("bar")
         .arg("foo")
+        .arg(dest)
         .succeeds()
         .no_stderr()
         .no_stdout();
-
-    scene
-        .cmd("sudo")
-        .env("PATH", env!("PATH"))
-        .args(&["-E", "--non-interactive", "umount", "foo"])
-        .succeeds();
 }
 
 #[test]
