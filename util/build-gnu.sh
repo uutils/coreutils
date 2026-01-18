@@ -139,9 +139,6 @@ else
     test "${SELINUX_ENABLED}" = 1 && touch src/getlimits # SELinux tests does not use it
     test -f src/getlimits || make -j "$("${NPROC}")"
     cp -f src/getlimits "${UU_BUILD_DIR}"
-    
-    # Hardcoded in tests/env/env.sh . Can GNU support it?
-    ln -v "${UU_BUILD_DIR}"/echo src/echo
 
     # Handle generated factor tests
     t_first=00

@@ -285,16 +285,10 @@ fn read_input(input_files: &[OsString], config: &Config) -> std::io::Result<File
     let mut file_map: FileMap = HashMap::new();
     let mut offset: usize = 0;
 
-    let sentence_splitter = if let Some(re_str) = &config.sentence_regex {
-        Some(Regex::new(re_str).map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                translate!("ptx-error-invalid-regexp", "error" => e),
-            )
-        })?)
-    } else {
-        None
-    };
+    let sentence_splitter = config
+        .sentence_regex
+        .as_ref()
+        .and_then(|re_str| Regex::new(re_str).ok());
 
     for filename in input_files {
         let mut reader: BufReader<Box<dyn Read>> = BufReader::new(if filename == "-" {
@@ -343,8 +337,13 @@ fn read_lines(
 
 /// Go through every lines in the input files and record each match occurrence as a `WordRef`.
 fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> BTreeSet<WordRef> {
-    let reg = Regex::new(&filter.word_regex).unwrap();
-    let ref_reg = Regex::new(&config.context_regex).unwrap();
+    let Some(reg) = Regex::new(&filter.word_regex).ok() else {
+        return BTreeSet::new();
+    };
+    let Some(ref_reg) = Regex::new(&config.context_regex).ok() else {
+        return BTreeSet::new();
+    };
+
     let mut word_set: BTreeSet<WordRef> = BTreeSet::new();
     for (file, lines) in file_map {
         let mut count: usize = 0;

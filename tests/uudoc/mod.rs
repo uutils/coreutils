@@ -28,9 +28,11 @@ fn test_manpage_generation() {
         "Command failed with status: {}",
         output.status
     );
+    // Note: tldr warning is now printed at build time (in build.rs), not at runtime
     assert!(
-        String::from_utf8_lossy(&output.stderr).contains("Warning: No tldr archive found"),
-        "stderr should contains tldr alert",
+        output.stderr.is_empty(),
+        "stderr should be empty but got: {}",
+        String::from_utf8_lossy(&output.stderr)
     );
 
     let output_str = String::from_utf8_lossy(&output.stdout);
@@ -52,9 +54,11 @@ fn test_manpage_coreutils() {
         "Command failed with status: {}",
         output.status
     );
+    // Note: tldr warning is now printed at build time (in build.rs), not at runtime
     assert!(
-        String::from_utf8_lossy(&output.stderr).contains("Warning: No tldr archive found"),
-        "stderr should contains tldr alert",
+        output.stderr.is_empty(),
+        "stderr should be empty but got: {}",
+        String::from_utf8_lossy(&output.stderr)
     );
 
     let output_str = String::from_utf8_lossy(&output.stdout);
@@ -123,9 +127,11 @@ fn test_manpage_base64() {
         "Command failed with status: {}",
         output.status
     );
+    // Note: tldr warning is now printed at build time (in build.rs), not at runtime
     assert!(
-        String::from_utf8_lossy(&output.stderr).contains("Warning: No tldr archive found"),
-        "stderr should contains tldr alert",
+        output.stderr.is_empty(),
+        "stderr should be empty but got: {}",
+        String::from_utf8_lossy(&output.stderr)
     );
 
     let output_str = String::from_utf8_lossy(&output.stdout);
