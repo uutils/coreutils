@@ -549,6 +549,7 @@ uutests.workspace = true
 uucore = { workspace = true, features = [
   "mode",
   "entries",
+  "pipes",
   "process",
   "signals",
   "utmpx",

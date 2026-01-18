@@ -465,11 +465,16 @@ mod tests {
             .flat_map(Teletype::try_from)
             .collect::<HashSet<_>>();
 
-        assert_eq!(result.len(), 1);
-        assert_eq!(
-            pid_entry.tty(),
-            Vec::from_iter(result.into_iter()).first().unwrap().clone()
-        );
+        // In CI environments or when running without a terminal, there may be no TTY
+        if result.is_empty() {
+            assert_eq!(pid_entry.tty(), Teletype::Unknown);
+        } else {
+            assert_eq!(result.len(), 1);
+            assert_eq!(
+                pid_entry.tty(),
+                Vec::from_iter(result.into_iter()).first().unwrap().clone()
+            );
+        }
     }
 
     #[test]

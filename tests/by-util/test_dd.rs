@@ -1655,6 +1655,8 @@ fn test_reading_partial_blocks_from_fifo() {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .env("LANGUAGE", "C")
         .spawn()
         .unwrap();
 
@@ -1700,6 +1702,8 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .env("LANGUAGE", "C")
         .spawn()
         .unwrap();
 
@@ -1812,6 +1816,29 @@ fn test_wrong_number_err_msg() {
         .args(&["count=1kBb555"])
         .fails()
         .stderr_contains("dd: invalid number: '1kBb555'\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_no_dropped_writes() {
+    use std::process::Stdio;
+
+    const BLK_SIZE: usize = 0x4000;
+    const COUNT: usize = 1000;
+    const NUM_BYTES: usize = BLK_SIZE * COUNT;
+
+    let result = new_ucmd!()
+        .args(&[
+            "if=/dev/urandom",
+            &format!("bs={BLK_SIZE}"),
+            &format!("count={COUNT}"),
+        ])
+        .set_stdout(Stdio::piped())
+        .set_stderr(Stdio::piped())
+        .succeeds();
+
+    assert_eq!(result.stdout().len(), NUM_BYTES);
+    assert!(result.stderr_str().contains(&format!("{NUM_BYTES} bytes")));
 }
 
 #[test]

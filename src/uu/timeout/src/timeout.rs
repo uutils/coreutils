@@ -210,7 +210,11 @@ fn catch_sigterm() {
 /// Report that a signal is being sent if the verbose flag is set.
 fn report_if_verbose(signal: usize, cmd: &str, verbose: bool) {
     if verbose {
-        let s = signal_name_by_value(signal).unwrap();
+        let s = if signal == 0 {
+            "0".to_string()
+        } else {
+            signal_name_by_value(signal).unwrap().to_string()
+        };
         show_error!(
             "{}",
             translate!("timeout-verbose-sending-signal", "signal" => s, "command" => cmd.quote())
