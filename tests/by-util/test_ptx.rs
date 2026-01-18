@@ -355,3 +355,13 @@ fn test_narrow_width_with_long_reference_no_panic() {
         .succeeds()
         .stdout_only(":1       content\n");
 }
+
+#[test]
+fn test_invalid_regex_word_trailing_backslash() {
+    new_ucmd!().args(&["-W", "bar\\"]).succeeds().no_stderr();
+}
+
+#[test]
+fn test_invalid_regex_word_unclosed_group() {
+    new_ucmd!().args(&["-W", "(wrong"]).succeeds().no_stderr();
+}
