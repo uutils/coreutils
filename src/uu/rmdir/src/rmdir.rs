@@ -66,10 +66,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     Ok(path.metadata()?.file_type().is_dir())
                 }
 
-                let bytes = path.as_os_str().as_bytes();
+                let mut bytes = path.as_os_str().as_bytes();
                 if error.raw_os_error() == Some(libc::ENOTDIR) && bytes.ends_with(b"/") {
                     // Strip the trailing slash or .symlink_metadata() will follow the symlink
-                    let no_slash: &Path = OsStr::from_bytes(&bytes[..bytes.len() - 1]).as_ref();
+                    bytes = strip_trailing_slashes_from_path(bytes);
+                    let no_slash: &Path = OsStr::from_bytes(bytes).as_ref();
                     if no_slash.is_symlink() && points_to_directory(no_slash).unwrap_or(true) {
                         show_error!(
                             "{}",
@@ -117,6 +118,15 @@ fn remove_single(path: &Path, opts: Opts) -> Result<(), Error<'_>> {
         );
     }
     remove_dir(path).map_err(|error| Error { error, path })
+}
+
+#[cfg(unix)]
+fn strip_trailing_slashes_from_path(path: &[u8]) -> &[u8] {
+    let mut end = path.len();
+    while end > 0 && path[end - 1] == b'/' {
+        end -= 1;
+    }
+    &path[..end]
 }
 
 // POSIX: https://pubs.opengroup.org/onlinepubs/009696799/functions/rmdir.html

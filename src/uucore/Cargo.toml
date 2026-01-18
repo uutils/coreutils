@@ -23,7 +23,6 @@ path = "src/lib/lib.rs"
 
 [dependencies]
 bstr = { workspace = true, optional = true }
-chrono = { workspace = true, optional = true }
 clap = { workspace = true }
 uucore_procs = { workspace = true }
 unit-prefix = { workspace = true, optional = true }
@@ -94,6 +93,7 @@ nix = { workspace = true, features = [
   "signal",
   "dir",
   "user",
+  "poll",
 ] }
 xattr = { workspace = true, optional = true }
 
@@ -130,7 +130,7 @@ extendedbigdecimal = ["bigdecimal", "num-traits"]
 fast-inc = []
 fs = ["dunce", "libc", "winapi-util", "windows-sys"]
 fsext = ["libc", "windows-sys", "bstr"]
-fsxattr = ["xattr"]
+fsxattr = ["xattr", "itertools"]
 hardware = []
 lines = []
 feat_systemd_logind = ["utmpx", "libc"]
@@ -185,5 +185,5 @@ version-cmp = []
 wide = []
 tty = []
 time = ["jiff"]
-uptime = ["chrono", "libc", "windows-sys", "utmpx", "utmp-classic"]
+uptime = ["jiff", "libc", "windows-sys", "utmpx", "utmp-classic"]
 benchmark = ["divan", "tempfile"]
