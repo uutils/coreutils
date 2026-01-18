@@ -11,7 +11,6 @@ use uu_timeout::uumain;
 use uucore::benchmark::run_util_function;
 
 /// Benchmark the fast path where the command exits immediately.
-/*
 #[cfg(unix)]
 #[divan::bench]
 fn timeout_quick_exit(bencher: Bencher) {
@@ -19,7 +18,6 @@ fn timeout_quick_exit(bencher: Bencher) {
         black_box(run_util_function(uumain, &["0.02", "true"]));
     });
 }
-*/
 
 /// Benchmark a command that runs longer than the threshold and receives the default signal.
 #[cfg(unix)]
