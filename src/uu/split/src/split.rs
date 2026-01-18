@@ -20,6 +20,7 @@ use std::io;
 use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write, stdin};
 use std::path::Path;
 use thiserror::Error;
+use uucore::clap_localization::{ArgHelpLocalization, CommandHelpLocalization};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError};
 use uucore::translate;
@@ -227,7 +228,6 @@ fn handle_preceding_options(
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("split-about"))
         .after_help(translate!("split-after-help"))
         .override_usage(format_usage(&translate!("split-usage")))
@@ -256,7 +256,7 @@ pub fn uu_app() -> Command {
                 .allow_hyphen_values(true)
                 .value_name("NUMBER")
                 .default_value("1000")
-                .help(translate!("split-help-lines")),
+                .help_with_localized_default(translate!("split-help-lines")),
         )
         .arg(
             Arg::new(OPT_NUMBER)
@@ -274,7 +274,7 @@ pub fn uu_app() -> Command {
                 .value_name("SUFFIX")
                 .default_value("")
                 .value_parser(clap::value_parser!(OsString))
-                .help(translate!("split-help-additional-suffix")),
+                .help_with_localized_default(translate!("split-help-additional-suffix")),
         )
         .arg(
             Arg::new(OPT_FILTER)
@@ -376,13 +376,17 @@ pub fn uu_app() -> Command {
             Arg::new(ARG_INPUT)
                 .default_value("-")
                 .value_hint(ValueHint::FilePath)
-                .value_parser(clap::value_parser!(OsString)),
+                .value_parser(clap::value_parser!(OsString))
+                .help_with_localized_default(""),
         )
         .arg(
             Arg::new(ARG_PREFIX)
                 .default_value("x")
-                .value_parser(clap::value_parser!(OsString)),
+                .value_parser(clap::value_parser!(OsString))
+                .help_with_localized_default(""),
         )
+        .localized_help_and_version()
+        .localized_help_template(uucore::util_name())
 }
 
 /// Parameters that control how a file gets split.
