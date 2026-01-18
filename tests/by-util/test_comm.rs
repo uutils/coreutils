@@ -417,6 +417,7 @@ fn test_no_such_file() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_is_dir() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -447,6 +448,40 @@ fn test_is_dir() {
         .args(&["file", "."])
         .fails()
         .stderr_only("comm: .: Is a directory\n");
+}
+
+#[test]
+#[cfg(windows)]
+fn test_is_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene
+        .ucmd()
+        .args(&[".", "."])
+        .fails()
+        .stderr_only("comm: .: Permission denied\n");
+
+    at.mkdir("dir");
+    scene
+        .ucmd()
+        .args(&["dir", "."])
+        .fails()
+        .stderr_only("comm: dir: Permission denied\n");
+
+    at.touch("file");
+    scene
+        .ucmd()
+        .args(&[".", "file"])
+        .fails()
+        .stderr_only("comm: .: Permission denied\n");
+
+    at.touch("file");
+    scene
+        .ucmd()
+        .args(&["file", "."])
+        .fails()
+        .stderr_only("comm: .: Permission denied\n");
 }
 
 #[test]

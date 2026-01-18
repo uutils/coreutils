@@ -9,7 +9,7 @@ use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::fs::{File, metadata};
 use std::io::{self, BufRead, BufReader, Read, StdinLock, stdin};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
@@ -57,7 +57,10 @@ struct OrderChecker {
 
 enum Input {
     Stdin(StdinLock<'static>),
-    FileIn(BufReader<File>),
+    FileIn {
+        path: PathBuf,
+        file: BufReader<File>,
+    },
 }
 
 impl Input {
@@ -65,8 +68,18 @@ impl Input {
         Self::Stdin(stdin().lock())
     }
 
-    fn from_file(f: File) -> Self {
-        Self::FileIn(BufReader::new(f))
+    fn from_file(path: PathBuf, file: File) -> Self {
+        Self::FileIn {
+            path,
+            file: BufReader::new(file),
+        }
+    }
+
+    fn path(&self) -> &Path {
+        match self {
+            Self::Stdin(_) => Path::new("-"),
+            Self::FileIn { path, .. } => path,
+        }
     }
 }
 
@@ -80,19 +93,22 @@ impl LineReader {
         Self { line_ending, input }
     }
 
-    fn read_line(&mut self, buf: &mut Vec<u8>) -> io::Result<usize> {
+    fn read_line(&mut self, buf: &mut Vec<u8>) -> UResult<usize> {
+        buf.clear();
+
         let line_ending = self.line_ending.into();
 
-        let result = match &mut self.input {
+        let n = match &mut self.input {
             Input::Stdin(r) => r.read_until(line_ending, buf),
-            Input::FileIn(r) => r.read_until(line_ending, buf),
-        };
+            Input::FileIn { file: r, .. } => r.read_until(line_ending, buf),
+        }
+        .map_err_context(|| self.input.path().display().to_string())?;
 
-        if !buf.ends_with(&[line_ending]) {
+        if n > 0 && !buf.ends_with(&[line_ending]) {
             buf.push(line_ending);
         }
 
-        result
+        Ok(n)
     }
 }
 
@@ -191,10 +207,10 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
     let delim_col_2 = delim.repeat(width_col_1);
     let delim_col_3 = delim.repeat(width_col_1 + width_col_2);
 
-    let ra = &mut Vec::new();
-    let mut na = a.read_line(ra);
-    let rb = &mut Vec::new();
-    let mut nb = b.read_line(rb);
+    let line_a = &mut Vec::new();
+    let line_b = &mut Vec::new();
+    a.read_line(line_a)?;
+    b.read_line(line_b)?;
 
     let mut total_col_1 = 0;
     let mut total_col_2 = 0;
@@ -220,54 +236,46 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
     let mut checker2 = OrderChecker::new(FileNumber::Two, check_order);
     let mut input_error = false;
 
-    while na.is_ok() || nb.is_ok() {
-        let ord = match (na.is_ok(), nb.is_ok()) {
-            (false, true) => Ordering::Greater,
-            (true, false) => Ordering::Less,
-            (true, true) => match (&na, &nb) {
-                (&Ok(0), &Ok(0)) => break,
-                (&Ok(0), _) => Ordering::Greater,
-                (_, &Ok(0)) => Ordering::Less,
-                _ => ra.cmp(&rb),
-            },
-            _ => unreachable!(),
+    loop {
+        let ord = match (line_a.is_empty(), line_b.is_empty()) {
+            (true, true) => break,
+            (true, false) => Ordering::Greater,
+            (false, true) => Ordering::Less,
+            (false, false) => line_a.cmp(&line_b),
         };
 
         match ord {
             Ordering::Less => {
-                if should_check_order && !checker1.verify_order(ra) {
+                if should_check_order && !checker1.verify_order(line_a) {
                     break;
                 }
                 if !opts.get_flag(options::COLUMN_1) {
-                    print!("{}", String::from_utf8_lossy(ra));
+                    print!("{}", String::from_utf8_lossy(line_a));
                 }
-                ra.clear();
-                na = a.read_line(ra);
+                a.read_line(line_a)?;
                 total_col_1 += 1;
             }
             Ordering::Greater => {
-                if should_check_order && !checker2.verify_order(rb) {
+                if should_check_order && !checker2.verify_order(line_b) {
                     break;
                 }
                 if !opts.get_flag(options::COLUMN_2) {
-                    print!("{delim_col_2}{}", String::from_utf8_lossy(rb));
+                    print!("{delim_col_2}{}", String::from_utf8_lossy(line_b));
                 }
-                rb.clear();
-                nb = b.read_line(rb);
+                b.read_line(line_b)?;
                 total_col_2 += 1;
             }
             Ordering::Equal => {
-                if should_check_order && (!checker1.verify_order(ra) || !checker2.verify_order(rb))
+                if should_check_order
+                    && (!checker1.verify_order(line_a) || !checker2.verify_order(line_b))
                 {
                     break;
                 }
                 if !opts.get_flag(options::COLUMN_3) {
-                    print!("{delim_col_3}{}", String::from_utf8_lossy(ra));
+                    print!("{delim_col_3}{}", String::from_utf8_lossy(line_a));
                 }
-                ra.clear();
-                rb.clear();
-                na = a.read_line(ra);
-                nb = b.read_line(rb);
+                a.read_line(line_a)?;
+                b.read_line(line_b)?;
                 total_col_3 += 1;
             }
         }
@@ -297,15 +305,16 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
     }
 }
 
-fn open_file(name: &OsString, line_ending: LineEnding) -> io::Result<LineReader> {
-    if name == "-" {
+fn open_file<P: AsRef<Path>>(name: P, line_ending: LineEnding) -> io::Result<LineReader> {
+    let name = name.as_ref();
+    if name.as_os_str() == "-" {
         Ok(LineReader::new(Input::stdin(), line_ending))
     } else {
-        if metadata(name)?.is_dir() {
-            return Err(io::Error::other(translate!("comm-error-is-directory")));
-        }
         let f = File::open(name)?;
-        Ok(LineReader::new(Input::from_file(f), line_ending))
+        Ok(LineReader::new(
+            Input::from_file(name.to_path_buf(), f),
+            line_ending,
+        ))
     }
 }
 
