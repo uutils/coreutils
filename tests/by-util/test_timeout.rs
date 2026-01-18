@@ -9,6 +9,10 @@ use rstest::rstest;
 
 use uucore::display::Quotable;
 use uutests::new_ucmd;
+#[cfg(all(unix, feature = "yes"))]
+use uutests::util::TestScenario;
+#[cfg(all(unix, feature = "yes"))]
+use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
@@ -234,4 +238,18 @@ fn test_command_cannot_invoke() {
     // Test exit code 126 when command exists but cannot be invoked
     // Try to execute a directory (should give permission denied or similar)
     new_ucmd!().args(&["1", "/"]).fails_with_code(126);
+}
+
+/// Test for https://github.com/uutils/coreutils/issues/7252
+#[test]
+#[cfg(unix)]
+#[cfg(feature = "yes")]
+fn test_sigpipe_ignored_preserves_for_child() {
+    let ts = TestScenario::new(util_name!());
+    let bin = ts.bin_path.clone().into_os_string();
+    let result = ts
+        .cmd_shell("trap '' PIPE; \"$BIN\" timeout 10 \"$BIN\" yes 2>err |:; cat err")
+        .env("BIN", &bin)
+        .succeeds();
+    assert!(result.stdout_str().contains("Broken pipe"));
 }
