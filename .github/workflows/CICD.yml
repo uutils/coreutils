@@ -196,7 +196,7 @@ jobs:
         ## Confirm MinSRV compatible '*/Cargo.lock'
         # * '*/Cargo.lock' is required to be in a format that `cargo` of MinSRV can interpret (eg, v1-format for MinSRV < v1.38)
         for dir in "." "fuzz"; do
-          ( cd "$dir" && cargo fetch --locked --quiet ) || { echo "::error file=$dir/Cargo.lock::Incompatible (or out-of-date) '$dir/Cargo.lock' file; update using \`cd '$dir' && cargo +${{ env.RUST_MIN_SRV }} update\`" ; exit 1 ; }
+          ( cd "$dir" && cargo fetch --locked --quiet --target $(rustc --print host-tuple)) || { echo "::error file=$dir/Cargo.lock::Incompatible (or out-of-date) '$dir/Cargo.lock' file; update using \`cd '$dir' && cargo +${{ env.RUST_MIN_SRV }} update\`" ; exit 1 ; }
         done
     - name: Install/setup prerequisites
       shell: bash
@@ -221,7 +221,7 @@ jobs:
         # dependencies
         echo "## dependency list"
         ## * using the 'stable' toolchain is necessary to avoid "unexpected '--filter-platform'" errors
-        RUSTUP_TOOLCHAIN=stable cargo fetch --locked --quiet
+        RUSTUP_TOOLCHAIN=stable cargo fetch --locked --quiet --target $(rustc --print host-tuple)
         RUSTUP_TOOLCHAIN=stable cargo tree --no-dedupe --locked -e=no-dev --prefix=none ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} | grep -vE "$PWD" | sort --unique
     - name: Test
       run: cargo nextest run --hide-progress-bar --profile ci ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -p uucore -p coreutils
@@ -259,7 +259,7 @@ jobs:
         ## `cargo update` testing
         # * convert any errors/warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
         for dir in "." "fuzz"; do
-          ( cd "$dir" && cargo fetch --locked --quiet ) || { echo "::error file=$dir/Cargo.lock::'$dir/Cargo.lock' file requires update (use \`cd '$dir' && cargo +${{ env.RUST_MIN_SRV }} update\`)" ; exit 1 ; }
+          ( cd "$dir" && cargo fetch --locked --quiet --target $(rustc --print host-tuple)) || { echo "::error file=$dir/Cargo.lock::'$dir/Cargo.lock' file requires update (use \`cd '$dir' && cargo +${{ env.RUST_MIN_SRV }} update\`)" ; exit 1 ; }
         done
 
   build_makefile:
@@ -835,7 +835,7 @@ jobs:
         cargo tree -V
         # dependencies
         echo "## dependency list"
-        cargo fetch --locked --quiet
+        cargo fetch --locked --quiet --target $(rustc --print host-tuple)
         cargo tree --locked --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.vars.outputs.CARGO_DEFAULT_FEATURES_OPTION }} --no-dedupe -e=no-dev --prefix=none | grep -vE "$PWD" | sort --unique
     - name: Build
       shell: bash
