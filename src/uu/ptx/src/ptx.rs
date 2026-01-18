@@ -273,20 +273,6 @@ fn get_config(matches: &mut clap::ArgMatches) -> UResult<Config> {
     Ok(config)
 }
 
-/// Try to compile a regex, printing a warning and returning None on failure.
-fn try_compile_regex(pattern: &str) -> Option<Regex> {
-    match Regex::new(pattern) {
-        Ok(re) => Some(re),
-        Err(e) => {
-            uucore::show_error!(
-                "{}",
-                translate!("ptx-error-invalid-regexp", "error" => format!("{}", e))
-            );
-            None
-        }
-    }
-}
-
 struct FileContent {
     lines: Vec<String>,
     chars_lines: Vec<Vec<char>>,
@@ -302,7 +288,7 @@ fn read_input(input_files: &[OsString], config: &Config) -> std::io::Result<File
     let sentence_splitter = config
         .sentence_regex
         .as_ref()
-        .and_then(|re_str| try_compile_regex(re_str));
+        .and_then(|re_str| Regex::new(re_str).ok());
 
     for filename in input_files {
         let mut reader: BufReader<Box<dyn Read>> = BufReader::new(if filename == "-" {
@@ -351,10 +337,10 @@ fn read_lines(
 
 /// Go through every lines in the input files and record each match occurrence as a `WordRef`.
 fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> BTreeSet<WordRef> {
-    let Some(reg) = try_compile_regex(&filter.word_regex) else {
+    let Some(reg) = Regex::new(&filter.word_regex).ok() else {
         return BTreeSet::new();
     };
-    let Some(ref_reg) = try_compile_regex(&config.context_regex) else {
+    let Some(ref_reg) = Regex::new(&config.context_regex).ok() else {
         return BTreeSet::new();
     };
 

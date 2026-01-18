@@ -350,16 +350,10 @@ fn test_narrow_width_with_long_reference_no_panic() {
 
 #[test]
 fn test_invalid_regex_word_trailing_backslash() {
-    new_ucmd!()
-        .args(&["-W", "bar\\"])
-        .succeeds()
-        .stderr_contains("ptx: Invalid regexp");
+    new_ucmd!().args(&["-W", "bar\\"]).succeeds().no_stderr();
 }
 
 #[test]
 fn test_invalid_regex_word_unclosed_group() {
-    new_ucmd!()
-        .args(&["-W", "(wrong"])
-        .succeeds()
-        .stderr_contains("ptx: Invalid regexp");
+    new_ucmd!().args(&["-W", "(wrong"]).succeeds().no_stderr();
 }
