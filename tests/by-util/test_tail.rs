@@ -6,7 +6,7 @@
 // spell-checker:ignore (ToDO) abcdefghijklmnopqrstuvwxyz efghijklmnopqrstuvwxyz vwxyz emptyfile file siette ocho nueve diez MULT
 // spell-checker:ignore (libs) kqueue
 // spell-checker:ignore (jargon) tailable untailable datasame runneradmin tmpi
-// spell-checker:ignore (cmd) taskkill
+// spell-checker:ignore (cmd) taskkill noaccess topsecret
 #![allow(
     clippy::unicode_not_nfc,
     clippy::cast_lossless,
@@ -295,7 +295,6 @@ fn test_permission_denied_multiple() {
         .stderr_is("tail: cannot open 'unreadable' for reading: Permission denied\n")
         .stdout_is("==> file1 <==\n\n==> file2 <==\n");
 }
-
 
 // TODO: Add similar test for windows
 #[test]
