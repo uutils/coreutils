@@ -58,6 +58,7 @@ mod options {
     pub const JOIN_LINES: &str = "join-lines";
     pub const HELP: &str = "help";
     pub const FILES: &str = "files";
+    pub const EXPAND_TABS: &str = "expand-tabs";
 }
 
 struct OutputOptions {
@@ -80,6 +81,7 @@ struct OutputOptions {
     join_lines: bool,
     col_sep_for_printing: String,
     line_width: Option<usize>,
+    expand_tabs: Option<ExpandTabsOptions>,
 }
 
 struct FileLine {
@@ -103,6 +105,21 @@ struct NumberingMode {
     width: usize,
     separator: String,
     first_number: usize,
+}
+
+#[derive(Debug)]
+struct ExpandTabsOptions {
+    input_char: char,
+    width: i32,
+}
+
+impl Default for ExpandTabsOptions {
+    fn default() -> Self {
+        Self {
+            width: 8,
+            input_char: TAB,
+        }
+    }
 }
 
 impl Default for NumberingMode {
@@ -328,6 +345,14 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath),
         )
+        .arg(
+            Arg::new(options::EXPAND_TABS)
+                .long(options::EXPAND_TABS)
+                .short('e')
+                .num_args(1)
+                .value_name("[CHAR][WIDTH]")
+                .help(translate!("pr-help-expand-tabs")),
+        )
 }
 
 #[uucore::main]
@@ -392,6 +417,7 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
     let column_page_option = Regex::new(r"^[-+]\d+.*").unwrap();
     let num_regex = Regex::new(r"^[^-]\d*$").unwrap();
     let n_regex = Regex::new(r"^-n\s*$").unwrap();
+    let e_regex = Regex::new(r"^-e").unwrap();
     let mut arguments = args.to_owned();
     let num_option = args.iter().find_position(|x| n_regex.is_match(x.trim()));
     if let Some((pos, _value)) = num_option {
@@ -401,6 +427,17 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
                 arguments.insert(pos + 1, format!("{}", NumberingMode::default().width));
                 arguments.insert(pos + 2, could_be_file);
             }
+        }
+    }
+
+    // To ensure not to accidentally delete the next argument after a short flag for -e we insert
+    // the default values for the -e flag is '-e' is present without direct arguments.
+    let expand_tabs_option = arguments
+        .iter()
+        .find_position(|x| e_regex.is_match(x.trim()));
+    if let Some((pos, value)) = expand_tabs_option {
+        if value.trim().len() <= 2 {
+            arguments[pos] = "-e\t8".to_string();
         }
     }
 
@@ -524,6 +561,26 @@ fn build_options(
                 None
             }
         });
+
+    let expand_tabs = matches
+        .get_one::<String>(options::EXPAND_TABS)
+        .map(|s| {
+            s.chars().next().map_or(Ok(ExpandTabsOptions::default()), |c| {
+                if c.is_ascii_digit() {
+                    s
+                        .parse()
+                        .map_err(|_e| PrError::EncounteredErrors { msg: format!("{}\n{}", translate!("pr-error-invalid-expand-tab-argument", "arg" => s), translate!("pr-try-help-message")) })
+                        .map(|width| ExpandTabsOptions{input_char: TAB, width})
+                } else if s.len() > 1 {
+                    s[1..]
+                        .parse()
+                        .map_err(|_e| PrError::EncounteredErrors { msg: format!("{}\n{}", translate!("pr-error-invalid-expand-tab-argument", "arg" => &s[1..]), translate!("pr-try-help-message")) })
+                        .map(|width| ExpandTabsOptions{input_char: c, width})
+                } else {
+                    Ok(ExpandTabsOptions{input_char: c, width: 8})
+                }
+            })
+        }).transpose()?;
 
     let double_space = matches.get_flag(options::DOUBLE_SPACE);
 
@@ -761,6 +818,7 @@ fn build_options(
         join_lines,
         col_sep_for_printing,
         line_width,
+        expand_tabs,
     })
 }
 
@@ -807,7 +865,10 @@ fn open(path: &str) -> Result<Box<dyn Read>, PrError> {
     )
 }
 
-fn split_lines_if_form_feed(file_content: Result<String, std::io::Error>) -> Vec<FileLine> {
+fn split_lines_if_form_feed(
+    file_content: Result<String, std::io::Error>,
+    expand_options: Option<&ExpandTabsOptions>,
+) -> Vec<FileLine> {
     file_content.map_or_else(
         |e| {
             vec![FileLine {
@@ -832,7 +893,14 @@ fn split_lines_if_form_feed(file_content: Result<String, std::io::Error>) -> Vec
                         });
                         chunk.clear();
                     }
-                    chunk.push(*byte);
+
+                    // The -e flag determines that an encountered input char (TAB) shall be expanded.
+                    // If the -e flag was not set we pass the byte through unchanged.
+                    match expand_options {
+                        Some(expand_options) => apply_expand_tab(&mut chunk, *byte, expand_options),
+                        None => chunk.push(*byte),
+                    }
+
                     f_occurred = 0;
                 }
             }
@@ -846,6 +914,27 @@ fn split_lines_if_form_feed(file_content: Result<String, std::io::Error>) -> Vec
             lines
         },
     )
+}
+
+fn apply_expand_tab(chunk: &mut Vec<u8>, byte: u8, expand_options: &ExpandTabsOptions) {
+    if byte == expand_options.input_char as u8 {
+        // If the byte encountered is the input char we use width to calculate
+        // the amount of spaces needed (if no input char given we stored '\t'
+        // in our struct)
+        let spaces_needed =
+            expand_options.width as usize - (chunk.len() % expand_options.width as usize);
+        chunk.resize(chunk.len() + spaces_needed, b' ');
+    } else if byte == TAB as u8 {
+        // If a byte got passed to the -e flag (eg -ea1)  which is not '\t' GNU
+        // still expands it but does not use an optionally given width parameter
+        // but does the '\t' expansion with the default value (8)
+        let spaces_needed = 8 - (chunk.len() % 8);
+        chunk.resize(chunk.len() + spaces_needed, b' ');
+    } else {
+        // This arm means the byte is neither '\t' nor the bytes to be
+        // expanded
+        chunk.push(byte);
+    }
 }
 
 fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
@@ -866,7 +955,7 @@ fn read_stream_and_create_pages(
     options: &OutputOptions,
     lines: Lines<BufReader<Box<dyn Read>>>,
     file_id: usize,
-) -> Box<dyn Iterator<Item = (usize, Vec<FileLine>)>> {
+) -> Box<dyn Iterator<Item = (usize, Vec<FileLine>)> + '_> {
     let start_page = options.start_page;
     let start_line_number = get_start_line_number(options);
     let last_page = options.end_page;
@@ -874,7 +963,7 @@ fn read_stream_and_create_pages(
 
     Box::new(
         lines
-            .flat_map(split_lines_if_form_feed)
+            .flat_map(|s| split_lines_if_form_feed(s, options.expand_tabs.as_ref()))
             .enumerate()
             .map(move |(i, line)| FileLine {
                 line_number: i + start_line_number,
