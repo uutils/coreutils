@@ -233,6 +233,28 @@ fn test_nc_0_wo_follow2() {
         .no_output();
 }
 
+#[test]
+#[cfg(not(target_os = "windows"))]
+fn test_n0_with_follow() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let test_file = "test.txt";
+    // Create file with multiple lines
+    at.write(test_file, "line1\nline2\nline3\n");
+
+    let mut child = ucmd.arg("-n0").arg("-f").arg(test_file).run_no_wait();
+    child.make_assertion_with_delay(500).is_alive();
+
+    // Append a new line
+    at.append(test_file, "new\n");
+
+    // Should only print the newly appended line
+    child
+        .make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
+        .with_current_output()
+        .stdout_only("new\n");
+    child.kill();
+}
+
 // TODO: Add similar test for windows
 #[test]
 #[cfg(unix)]
@@ -1155,21 +1177,61 @@ fn test_invalid_num() {
         .fails()
         .stderr_str()
         .starts_with("tail: invalid number of lines: '1024R'");
+    // 1Y overflows to u64::MAX (like GNU tail 9.9.x), so it succeeds
     new_ucmd!()
-        .args(&["-c", "1Y", "emptyfile.txt"])
-        .fails()
-        .stderr_str()
-        .starts_with("tail: invalid number of bytes: '1Y': Value too large for defined data type");
+        .args(&["-c", "1Y"])
+        .pipe_in("x")
+        .succeeds()
+        .stdout_is("x");
     new_ucmd!()
-        .args(&["-n", "1Y", "emptyfile.txt"])
-        .fails()
-        .stderr_str()
-        .starts_with("tail: invalid number of lines: '1Y': Value too large for defined data type");
+        .args(&["-n", "1Y"])
+        .pipe_in("x\n")
+        .succeeds()
+        .stdout_is("x\n");
     new_ucmd!()
         .args(&["-c", "-³"])
         .fails()
         .stderr_str()
         .starts_with("tail: invalid number of bytes: '³'");
+}
+
+#[test]
+fn test_oversized_num() {
+    const BIG: &str = "99999999999999999999999999999";
+    const DATA: &str = "abcd";
+    // -c <big> and -n <big>: output all (request more than available)
+    new_ucmd!()
+        .args(&["-c", BIG])
+        .pipe_in(DATA)
+        .succeeds()
+        .stdout_is(DATA);
+    new_ucmd!()
+        .args(&["-n", BIG])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_is("a\nb\n");
+    // +<big>: skip beyond input (empty output)
+    new_ucmd!()
+        .args(&["-c", &format!("+{BIG}")])
+        .pipe_in(DATA)
+        .succeeds()
+        .no_stdout();
+    new_ucmd!()
+        .args(&["-n", &format!("+{BIG}")])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .no_stdout();
+    // Obsolete syntax
+    new_ucmd!()
+        .arg(format!("+{BIG}c"))
+        .pipe_in(DATA)
+        .succeeds()
+        .no_stdout();
+    new_ucmd!()
+        .arg(format!("-{BIG}c"))
+        .pipe_in(DATA)
+        .succeeds()
+        .stdout_is(DATA);
 }
 
 #[test]
@@ -2657,6 +2719,45 @@ fn test_fifo() {
             .no_stderr()
             .no_stdout();
     }
+}
+
+/// Test that tail with --pid exits when the monitored process dies, even with a FIFO.
+/// Without non-blocking FIFO open, tail would block forever waiting for a writer.
+#[test]
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "android"),
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
+))]
+fn test_fifo_with_pid() {
+    use std::process::Command;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("FIFO");
+
+    let mut dummy = Command::new("sh").spawn().unwrap();
+    let pid = dummy.id();
+
+    let mut child = ucmd
+        .arg("-f")
+        .arg(format!("--pid={pid}"))
+        .arg("FIFO")
+        .run_no_wait();
+
+    child.make_assertion_with_delay(500).is_alive();
+
+    kill(Pid::from_raw(i32::try_from(pid).unwrap()), Signal::SIGUSR1).unwrap();
+    let _ = dummy.wait();
+
+    child
+        .make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
+        .is_not_alive()
+        .with_all_output()
+        .no_stderr()
+        .no_stdout()
+        .success();
 }
 
 #[test]
@@ -4728,13 +4829,13 @@ fn test_gnu_args_err() {
         .fails_with_code(1)
         .no_stdout()
         .stderr_is("tail: option used in invalid context -- 2\n");
-    // err-5
+    // err-5: large numbers now clamp to u64::MAX
     scene
         .ucmd()
         .arg("-c99999999999999999999")
-        .fails_with_code(1)
-        .no_stdout()
-        .stderr_is("tail: invalid number of bytes: '99999999999999999999'\n");
+        .pipe_in("x")
+        .succeeds()
+        .stdout_is("x");
     // err-6
     scene
         .ucmd()
@@ -4748,20 +4849,19 @@ fn test_gnu_args_err() {
         .fails_with_code(1)
         .no_stdout()
         .stderr_is("tail: option used in invalid context -- 5\n");
+    // Large obsolete-syntax numbers clamp to u64::MAX
     scene
         .ucmd()
         .arg("-9999999999999999999b")
-        .fails_with_code(1)
-        .no_stdout()
-        .stderr_is("tail: invalid number: '-9999999999999999999b'\n");
+        .pipe_in("x")
+        .succeeds()
+        .stdout_is("x");
     scene
         .ucmd()
         .arg("-999999999999999999999b")
-        .fails_with_code(1)
-        .no_stdout()
-        .stderr_is(
-            "tail: invalid number: '-999999999999999999999b': Numerical result out of range\n",
-        );
+        .pipe_in("x")
+        .succeeds()
+        .stdout_is("x");
 }
 
 #[test]
@@ -4960,4 +5060,82 @@ fn tail_n_lines_with_emoji() {
         .pipe_in("a\n💐\n")
         .succeeds()
         .stdout_only("💐\n");
+}
+
+#[test]
+fn test_tail_bytes_exceeds_file_size() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    // Should be > 4096 bytes (block size can vary):
+    at.write("test_file.txt", &"x".repeat(5000));
+
+    ts.ucmd()
+        .arg("-c")
+        .arg("1048576")
+        .arg("test_file.txt")
+        .succeeds()
+        .stdout_only("x".repeat(5000));
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_follow_pipe_f() {
+    new_ucmd!()
+        .args(&["-f", "-c3", "-s.1", "--max-unchanged-stats=1"])
+        .pipe_in("foo\n")
+        .succeeds()
+        .stdout_only("oo\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_follow_stdout_pipe_close() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "line1\nline2\n");
+
+    let mut child = ucmd
+        .args(&["-f", "-s.1", "--max-unchanged-stats=1", "f"])
+        .set_stdout(Stdio::piped())
+        .run_no_wait();
+
+    child.stdout_exact_bytes(6); // read "line1\n"
+    child.close_stdout();
+    child.delay(2000).make_assertion().is_not_alive();
+}
+
+#[test]
+fn test_debug_flag_with_polling() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("f");
+
+    let mut child = ts
+        .ucmd()
+        .args(&["--debug", "-f", "--use-polling", "f"])
+        .run_no_wait();
+
+    child.make_assertion_with_delay(500).is_alive();
+    child
+        .kill()
+        .make_assertion()
+        .with_all_output()
+        .stderr_contains("tail: using polling mode");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_debug_flag_with_inotify() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("f");
+
+    let mut child = ts.ucmd().args(&["--debug", "-f", "f"]).run_no_wait();
+
+    child.make_assertion_with_delay(500).is_alive();
+    child
+        .kill()
+        .make_assertion()
+        .with_all_output()
+        .stderr_contains("tail: using notification mode");
 }

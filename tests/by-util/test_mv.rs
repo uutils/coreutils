@@ -623,6 +623,23 @@ fn test_mv_symlink_into_target() {
     ucmd.arg("dir-link").arg("dir").succeeds();
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn test_mv_broken_symlink_to_another_fs() {
+    let scene = TestScenario::new(util_name!());
+
+    scene.fixtures.mkdir("foo");
+    scene.fixtures.symlink_file("missing", "foo/dangling");
+    let dest = "/dev/shm/foo";
+    scene
+        .ucmd()
+        .arg("foo")
+        .arg(dest)
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+}
+
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
 fn test_mv_hardlink_to_symlink() {

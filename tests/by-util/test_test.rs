@@ -1027,3 +1027,10 @@ fn test_string_lt_gt_operator() {
         .fails_with_code(1)
         .no_output();
 }
+
+#[test]
+fn test_unary_op_as_literal_in_three_arg_form() {
+    // `-f = a` is string comparison "-f" = "a", not file test
+    new_ucmd!().args(&["-f", "=", "a"]).fails_with_code(1);
+    new_ucmd!().args(&["-f", "=", "a", "-o", "b"]).succeeds();
+}

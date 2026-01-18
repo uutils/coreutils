@@ -182,6 +182,11 @@ LINESIZE
 NAMESIZE
 RTLD_NEXT
     RTLD
+SIGABRT
+SIGINT
+SIGKILL
+SIGSTOP
+SIGTERM
 SYS_fdatasync
 SYS_syncfs
 USERSIZE
@@ -392,6 +397,7 @@ istrip
 litout
 opost
 parodd
+ENOTTY
 
 # translation tests
 CLICOLOR
