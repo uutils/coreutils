@@ -28,6 +28,8 @@
 set -e
 # Treat unset variables as errors
 set -u
+# Ensure pipeline failures are caught (not just the last command's exit code)
+set -o pipefail
 # Print expanded commands to stdout before running them
 set -x
 
@@ -39,7 +41,12 @@ REPO_main_dir="$(dirname -- "${ME_dir}")"
 FEATURES_OPTION=${FEATURES_OPTION:-"--features=feat_os_unix"}
 COVERAGE_DIR=${COVERAGE_DIR:-"${REPO_main_dir}/coverage"}
 
-LLVM_PROFDATA="$(find "$(rustc --print sysroot)" -name llvm-profdata)"
+# Find llvm-profdata in the nightly toolchain (which is used for coverage builds)
+LLVM_PROFDATA="$(find "$(RUSTUP_TOOLCHAIN=nightly-gnu rustc --print sysroot)" -name llvm-profdata)"
+if [ -z "${LLVM_PROFDATA}" ]; then
+    echo "Error: llvm-profdata not found. Install it with: rustup +nightly-gnu component add llvm-tools"
+    exit 1
+fi
 
 PROFRAW_DIR="${COVERAGE_DIR}/traces"
 PROFDATA_DIR="${COVERAGE_DIR}/data"
