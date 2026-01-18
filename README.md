@@ -228,8 +228,6 @@ To install every program with a prefix (e.g. uu-echo uu-cat):
 make PROG_PREFIX=uu- install
 ```
 
-`PROG_PREFIX` requires separator `-`, `_`, or `=`.
-
 To install the multicall binary:
 
 ```shell
