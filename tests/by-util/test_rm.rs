@@ -1225,23 +1225,13 @@ fn no_preserve_root_may_not_be_abbreviated() {
 
     at.touch(file);
 
-    new_ucmd!()
-        .arg("--n")
-        .arg(file)
-        .fails()
-        .stderr_contains("you may not abbreviate the --no-preserve-root option");
-
-    new_ucmd!()
-        .arg("--no-pre")
-        .arg(file)
-        .fails()
-        .stderr_contains("you may not abbreviate the --no-preserve-root option");
-
-    new_ucmd!()
-        .arg("--no-preserve-ro")
-        .arg(file)
-        .fails()
-        .stderr_contains("you may not abbreviate the --no-preserve-root option");
+    for arg in ["--n", "--no-pre", "--no-preserve-ro"] {
+        new_ucmd!()
+            .arg(arg)
+            .arg(file)
+            .fails()
+            .stderr_contains("you may not abbreviate the --no-preserve-root option");
+    }
 
     assert!(at.file_exists(file));
 }
