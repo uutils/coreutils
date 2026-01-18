@@ -63,6 +63,14 @@ fn test_from_iec_i_requires_suffix() {
 }
 
 #[test]
+fn test_from_iec_fails_if_i_suffix() {
+    new_ucmd!()
+        .args(&["--from=iec", "10Mi"])
+        .fails_with_code(2)
+        .stderr_is("numfmt: invalid suffix in input '10Mi': 'i'\n");
+}
+
+#[test]
 fn test_from_iec_i_without_suffix_are_bytes() {
     new_ucmd!()
         .args(&["--from=iec-i", "1024"])
@@ -262,6 +270,34 @@ fn test_suffixes() {
 }
 
 #[test]
+fn test_invalid_following_valid_suffix() {
+    let valid_suffixes = ['K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y', 'R', 'Q', 'k'];
+
+    for valid_suffix in valid_suffixes {
+        for c in ('A'..='Z').chain('a'..='z') {
+            let args = ["--from=si", "--to=si", &format!("1{valid_suffix}{c}")];
+
+            new_ucmd!()
+                .args(&args)
+                .fails_with_code(2)
+                .stderr_only(format!(
+                    "numfmt: invalid suffix in input '1{valid_suffix}{c}': '{c}'\n"
+                ));
+        }
+    }
+}
+
+#[test]
+fn test_long_invalid_suffix() {
+    let args = ["--from=si", "--to=si", "1500VVVVVVVV"];
+
+    new_ucmd!()
+        .args(&args)
+        .fails_with_code(2)
+        .stderr_only("numfmt: invalid suffix in input: '1500VVVVVVVV'\n");
+}
+
+#[test]
 fn test_should_report_invalid_suffix_on_nan() {
     // GNU numfmt reports this one as "invalid number"
     new_ucmd!()
@@ -273,12 +309,11 @@ fn test_should_report_invalid_suffix_on_nan() {
 
 #[test]
 fn test_should_report_invalid_number_with_interior_junk() {
-    // GNU numfmt reports this as “invalid suffix”
     new_ucmd!()
         .args(&["--from=auto"])
         .pipe_in("1x0K")
         .fails()
-        .stderr_is("numfmt: invalid number: '1x0K'\n");
+        .stderr_is("numfmt: invalid suffix in input: '1x0K'\n");
 }
 
 #[test]
@@ -535,12 +570,11 @@ fn test_delimiter_from_si() {
 
 #[test]
 fn test_delimiter_overrides_whitespace_separator() {
-    // GNU numfmt reports this as “invalid suffix”
     new_ucmd!()
         .args(&["-d,"])
         .pipe_in("1 234,56")
         .fails()
-        .stderr_is("numfmt: invalid number: '1 234'\n");
+        .stderr_is("numfmt: invalid suffix in input: '1 234'\n");
 }
 
 #[test]

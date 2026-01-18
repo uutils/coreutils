@@ -6,8 +6,11 @@
 // spell-checker:ignore getxattr posix_acl_default
 
 //! Set of functions to manage xattr on files and dirs
+use itertools::Itertools;
 use std::collections::HashMap;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 
 /// Copies extended attributes (xattrs) from one file or directory to another.
@@ -82,6 +85,26 @@ pub fn has_acl<P: AsRef<Path>>(file: P) -> bool {
     xattr::list_deref(file).is_ok_and(|acl| {
         // if we have extra attributes, we have an acl
         acl.count() > 0
+    })
+}
+
+/// Checks if a file has an Access Control List (ACL) named "security.capability" based on its extended attributes.
+///
+/// # Arguments
+///
+/// * `file` - A reference to the path of the file.
+///
+/// # Returns
+///
+/// `true` if the file has an extended attribute named "security.capability", `false` otherwise.
+pub fn has_security_cap_acl<P: AsRef<Path>>(file: P) -> bool {
+    // don't use exacl here, it is doing more getxattr call then needed
+    xattr::list_deref(file).is_ok_and(|mut acl| {
+        #[cfg(unix)]
+        return acl.contains(OsStr::from_bytes(b"security.capability"));
+
+        #[cfg(not(unix))]
+        return false;
     })
 }
 
@@ -240,6 +263,7 @@ mod tests {
 
         File::create(&file_path).unwrap();
 
+        // FIXME: this fails on a system that uses SELinux
         assert!(!has_acl(&file_path));
 
         let test_attr = "user.test_acl";
@@ -247,5 +271,19 @@ mod tests {
         xattr::set(&file_path, test_attr, test_value).unwrap();
 
         assert!(has_acl(&file_path));
+        assert!(!has_security_cap_acl(&file_path));
+
+        // FreeBSD/NetBSD's xattr library does not support the "security" namespace
+        // (https://github.com/Stebalien/xattr/blob/master/src/sys/bsd.rs#L148).
+        // However, individual file systems might still implement additional namespaces according to
+        // https://man.freebsd.org/cgi/man.cgi?query=extattr&sektion=9&manpath=FreeBSD+14.3-RELEASE+and+Ports
+        #[cfg(not(any(target_os = "freebsd", target_os = "netbsd")))]
+        {
+            let test_attr = "security.capability";
+            let test_value = b"";
+            xattr::set(&file_path, test_attr, test_value).unwrap();
+
+            assert!(has_security_cap_acl(&file_path));
+        }
     }
 }

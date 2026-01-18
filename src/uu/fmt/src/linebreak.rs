@@ -14,7 +14,7 @@ use crate::parasplit::{ParaWords, Paragraph, WordInfo};
 struct BreakArgs<'a> {
     opts: &'a FmtOptions,
     init_len: usize,
-    indent_str: &'a str,
+    indent: &'a [u8],
     indent_len: usize,
     uniform: bool,
     ostream: &'a mut BufWriter<Stdout>,
@@ -59,11 +59,11 @@ pub fn break_lines(
     let p_init_len = winfo.word_nchars
         + if opts.crown || opts.tagged {
             // handle "init" portion
-            ostream.write_all(para.init_str.as_bytes())?;
+            ostream.write_all(&para.init_str)?;
             para.init_len
         } else if !para.mail_header {
             // for non-(crown, tagged) that's the same as a normal indent
-            ostream.write_all(p_indent.as_bytes())?;
+            ostream.write_all(p_indent)?;
             p_indent_len
         } else {
             // except that mail headers get no indent at all
@@ -71,7 +71,7 @@ pub fn break_lines(
         };
 
     // write first word after writing init
-    ostream.write_all(winfo.word.as_bytes())?;
+    ostream.write_all(winfo.word)?;
 
     // does this paragraph require uniform spacing?
     let uniform = para.mail_header || opts.uniform;
@@ -79,7 +79,7 @@ pub fn break_lines(
     let mut break_args = BreakArgs {
         opts,
         init_len: p_init_len,
-        indent_str: p_indent,
+        indent: p_indent,
         indent_len: p_indent_len,
         uniform,
         ostream,
@@ -121,7 +121,7 @@ fn accum_words_simple<'a>(
     );
 
     if l + wlen + slen > args.opts.width {
-        write_newline(args.indent_str, args.ostream)?;
+        write_newline(args.indent, args.ostream)?;
         write_with_spaces(&winfo.word[winfo.word_start..], 0, args.ostream)?;
         Ok((args.indent_len + winfo.word_nchars, winfo.ends_punct))
     } else {
@@ -146,7 +146,7 @@ fn break_knuth_plass<'a, T: Clone + Iterator<Item = &'a WordInfo<'a>>>(
         (false, false),
         |(mut prev_punct, mut fresh), &(next_break, break_before)| {
             if fresh {
-                write_newline(args.indent_str, args.ostream)?;
+                write_newline(args.indent, args.ostream)?;
             }
             // at each breakpoint, keep emitting words until we find the word matching this breakpoint
             for winfo in &mut iter {
@@ -167,7 +167,7 @@ fn break_knuth_plass<'a, T: Clone + Iterator<Item = &'a WordInfo<'a>>>(
                 if std::ptr::eq(winfo, next_break) {
                     // OK, we found the matching word
                     if break_before {
-                        write_newline(args.indent_str, args.ostream)?;
+                        write_newline(args.indent, args.ostream)?;
                         write_with_spaces(&winfo.word[winfo.word_start..], 0, args.ostream)?;
                     } else {
                         // breaking after this word, so that means "fresh" is true for the next iteration
@@ -186,7 +186,7 @@ fn break_knuth_plass<'a, T: Clone + Iterator<Item = &'a WordInfo<'a>>>(
     // after the last linebreak, write out the rest of the final line.
     for winfo in iter {
         if fresh {
-            write_newline(args.indent_str, args.ostream)?;
+            write_newline(args.indent, args.ostream)?;
         }
         let (slen, word) = slice_if_fresh(
             fresh,
@@ -474,13 +474,13 @@ fn compute_slen(uniform: bool, newline: bool, start: bool, punct: bool) -> usize
 /// Otherwise, compute `slen` and leave whitespace alone.
 fn slice_if_fresh(
     fresh: bool,
-    word: &str,
+    word: &[u8],
     start: usize,
     uniform: bool,
     newline: bool,
     sstart: bool,
     punct: bool,
-) -> (usize, &str) {
+) -> (usize, &[u8]) {
     if fresh {
         (0, &word[start..])
     } else {
@@ -489,14 +489,14 @@ fn slice_if_fresh(
 }
 
 /// Write a newline and add the indent.
-fn write_newline(indent: &str, ostream: &mut BufWriter<Stdout>) -> std::io::Result<()> {
+fn write_newline(indent: &[u8], ostream: &mut BufWriter<Stdout>) -> std::io::Result<()> {
     ostream.write_all(b"\n")?;
-    ostream.write_all(indent.as_bytes())
+    ostream.write_all(indent)
 }
 
 /// Write the word, along with slen spaces.
 fn write_with_spaces(
-    word: &str,
+    word: &[u8],
     slen: usize,
     ostream: &mut BufWriter<Stdout>,
 ) -> std::io::Result<()> {
@@ -505,5 +505,5 @@ fn write_with_spaces(
     } else if slen == 1 {
         ostream.write_all(b" ")?;
     }
-    ostream.write_all(word.as_bytes())
+    ostream.write_all(word)
 }
