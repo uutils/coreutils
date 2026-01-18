@@ -137,19 +137,16 @@ fn test_create_fifo_permission_denied() {
     at.mkdir(no_exec_dir);
     at.set_mode(no_exec_dir, 0o644);
 
-    let err_msg = format!(
-        "mkfifo: cannot create fifo '{named_pipe}': File exists
-mkfifo: cannot set permissions on '{named_pipe}': Permission denied (os error 13)
-"
-    );
-
+    // With atomic permission setting, mkfifo fails with a single error.
+    // The exact error depends on whether the FIFO already exists or the
+    // directory lacks execute permission.
     scene
         .ucmd()
         .arg(named_pipe)
         .arg("-m")
         .arg("666")
         .fails()
-        .stderr_is(err_msg.as_str());
+        .stderr_contains("mkfifo: cannot create fifo");
 }
 
 #[test]
