@@ -16,6 +16,8 @@ sed -i -e 's/no-mtab-status.sh/no-mtab-status-masked-proc.sh/' -e 's/nproc-quota
 curl -L ${repo}/raw/refs/heads/master/tests/df/no-mtab-status-masked-proc.sh > tests/df/no-mtab-status-masked-proc.sh
 curl -L ${repo}/raw/refs/heads/master/tests/nproc/nproc-quota-systemd.sh > tests/nproc/nproc-quota-systemd.sh
 curl -L ${repo}/raw/refs/heads/master/tests/stty/bad-speed.sh > tests/stty/bad-speed.sh
+# Better support for single binary
+curl -L ${repo}/raw/refs/heads/master/tests/env/env.sh > tests/env/env.sh
 # Avoid incorrect PASS
 curl -L ${repo}/raw/refs/heads/master/tests/runcon/runcon-compute.sh > tests/runcon/runcon-compute.sh
 curl -L ${repo}/raw/refs/heads/master/tests/tac/tac-continue.sh > tests/tac/tac-continue.sh
