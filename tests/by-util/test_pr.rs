@@ -631,3 +631,22 @@ fn test_form_feed_newlines() {
         .succeeds()
         .stdout_matches(&regex);
 }
+
+#[test]
+fn test_form_feed_followed_by_new_line() {
+    // Here we define the expected output.
+    let whitespace = " ".repeat(50);
+    let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
+    let blank_lines_61 = "\n".repeat(61);
+    let blank_lines_60 = "\n".repeat(60);
+    let page1 = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\n{blank_lines_61}");
+    let page2 = format!("\n\n{datetime_pattern}{whitespace}Page 2\n\n\nabc\n{blank_lines_60}");
+    let pattern = format!("{page1}{page2}");
+    let regex = Regex::new(&pattern).unwrap();
+
+    // Command line: `printf "\f\nabc" | pr`.
+    new_ucmd!()
+        .pipe_in("\x0c\nabc")
+        .succeeds()
+        .stdout_matches(&regex);
+}

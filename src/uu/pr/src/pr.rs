@@ -849,9 +849,14 @@ fn get_pages(
         } else {
             // Add everything up to (but not including) the newline
             // character as one line of the page.
-            let file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i])?;
-            page.push(file_line);
-            line_num += 1;
+            if i > 0 && i == prev && buf[i - 1] == FF {
+                // If the file has the pattern `\f\n`, don't treat the
+                // `\n` as its own line; instead ignore the empty line.
+            } else {
+                let file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i])?;
+                page.push(file_line);
+                line_num += 1;
+            }
 
             // Remember where the last line ended.
             prev = i + 1;
