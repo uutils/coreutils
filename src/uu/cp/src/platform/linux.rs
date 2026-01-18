@@ -58,8 +58,13 @@ fn clone<P>(source: P, dest: P, fallback: CloneFallback) -> std::io::Result<()>
 where
     P: AsRef<Path>,
 {
-    let src_file = File::open(&source)?;
-    let dst_file = File::create(&dest)?;
+    let (src_file, dst_file) = match open_files(&source, &dest) {
+        Ok(files) => files,
+        Err(e) => {
+            return Err(e);
+        }
+    };
+
     let src_fd = src_file.as_raw_fd();
     let dst_fd = dst_file.as_raw_fd();
     let result = unsafe { libc::ioctl(dst_fd, libc::FICLONE, src_fd) };
@@ -72,6 +77,55 @@ where
         CloneFallback::SparseCopy => sparse_copy(source, dest),
         CloneFallback::SparseCopyWithoutHole => sparse_copy_without_hole(source, dest),
     }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn open_files<P>(source: P, dest: P) -> std::io::Result<(File, File)>
+where
+    P: AsRef<Path>,
+{
+    use std::os::unix::fs::PermissionsExt;
+
+    let src_file = File::open(&source)?;
+    let dst_file = match OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .mode(0o600)
+        .open(&dest)
+    {
+        Ok(file) => file,
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+            // Dest permissions is None if and only if dest is a dangling symlink (the other major
+            // point where std::fs:metadata(&dest) would fail is if the file didn't exist, but then
+            // we would have made it above).
+            let dest_permissions = match std::fs::metadata(&dest) {
+                Ok(metadata) => Some(metadata.permissions()),
+                Err(_) => None,
+            };
+
+            // The file actually already exists
+            if let Some(mut desired_permissions) = dest_permissions {
+                let dst = OpenOptions::new().write(true).truncate(true).open(&dest)?;
+                // This will be reset to the correct permissions later, this is defensive as it is
+                // the most restrictive
+                desired_permissions.set_mode(0o600);
+                dst.set_permissions(desired_permissions)?;
+                dst
+            } else {
+                // If a symlink exists in the position we want to write the file to, and it symlinks to
+                // a nonexistent file, we should just overwrite the symlink
+                let nonexistent_file = std::fs::read_link(&dest)?;
+                OpenOptions::new()
+                    .create_new(true)
+                    .write(true)
+                    .mode(0o600)
+                    .open(&nonexistent_file)?
+            }
+        }
+        Err(e) => return Err(e),
+    };
+
+    Ok((src_file, dst_file))
 }
 
 /// Checks whether a file contains any non null bytes i.e. any byte != 0x0
@@ -124,8 +178,13 @@ fn sparse_copy_without_hole<P>(source: P, dest: P) -> std::io::Result<()>
 where
     P: AsRef<Path>,
 {
-    let src_file = File::open(source)?;
-    let dst_file = File::create(dest)?;
+    let (src_file, dst_file) = match open_files(&source, &dest) {
+        Ok(files) => files,
+        Err(e) => {
+            return Err(e);
+        }
+    };
+
     let dst_fd = dst_file.as_raw_fd();
 
     let size = src_file.metadata()?.size();
@@ -174,8 +233,13 @@ fn sparse_copy<P>(source: P, dest: P) -> std::io::Result<()>
 where
     P: AsRef<Path>,
 {
-    let mut src_file = File::open(source)?;
-    let dst_file = File::create(dest)?;
+    let (mut src_file, dst_file) = match open_files(&source, &dest) {
+        Ok(files) => files,
+        Err(e) => {
+            return Err(e);
+        }
+    };
+
     let dst_fd = dst_file.as_raw_fd();
 
     let size: usize = src_file.metadata()?.size().try_into().unwrap();
