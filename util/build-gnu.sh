@@ -141,7 +141,7 @@ else
     cp -f src/getlimits "${UU_BUILD_DIR}"
     
     # Hardcoded in tests/env/env.sh . Can GNU support it?
-    ln -v target/${PROFILE}/echo src/echo
+    ln -v "${UU_BUILD_DIR}"/echo src/echo
 
     # Handle generated factor tests
     t_first=00
