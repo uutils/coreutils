@@ -85,6 +85,7 @@ sort-help-numeric = compare according to string numerical value
 sort-help-general-numeric = compare according to string general numerical value
 sort-help-version-sort = Sort by SemVer version number, eg 1.12.2 > 1.1.2
 sort-help-random = shuffle in random order
+sort-help-random-source = use FILE as a source of random data
 sort-help-dictionary-order = consider only blanks and alphanumeric characters
 sort-help-merge = merge already sorted files; do not sort
 sort-help-check = check for sorted input; do not sort
