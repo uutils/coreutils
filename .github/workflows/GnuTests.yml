@@ -233,15 +233,6 @@ jobs:
         lima ls -laZ /etc/selinux
         lima sudo sestatus
 
-        # Ensure we're running in enforcing mode
-        lima sudo setenforce 1
-        lima getenforce
-
-        # Create test files with SELinux contexts for testing
-        lima sudo mkdir -p /var/test_selinux
-        lima sudo touch /var/test_selinux/test_file
-        lima sudo chcon -t etc_t /var/test_selinux/test_file
-        lima ls -Z /var/test_selinux/test_file  # Verify context
     - name: Install dependencies in VM
       run: |
         lima sudo dnf -y update
@@ -267,8 +258,16 @@ jobs:
         lima bash -c "cd ~/work/uutils/ && echo 'Found SELinux tests:'; wc -l selinux-tests.txt"
     - name: Run GNU SELinux tests
       run: |
+        # Ensure we're running in enforcing mode
         lima sudo setenforce 1
         lima getenforce
+
+        # Create test files with SELinux contexts for testing
+        lima sudo mkdir -p /var/test_selinux
+        lima sudo touch /var/test_selinux/test_file
+        lima sudo chcon -t etc_t /var/test_selinux/test_file
+        lima ls -Z /var/test_selinux/test_file  # Verify context
+
         lima cat /proc/filesystems
         lima bash -c "cd ~/work/uutils/ && bash util/run-gnu-test.sh \$(cat selinux-tests.txt)"
     - name: Extract testing info from individual logs into JSON
