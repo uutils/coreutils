@@ -482,6 +482,7 @@ jobs:
     env:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
+      CARGO_TARGET_DIR: cargo-target
     strategy:
       fail-fast: false
       matrix:
@@ -495,14 +496,15 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
-    - name: "`make install PROFILE=release-fast`"
+    - name: "`cargo build --profile=release-fast --bins --workspace --features feat_os_unix,feat_external_libstdbuf`"
       shell: bash
       run: |
-        export CARGO_TARGET_DIR=cargo-target RUSTFLAGS="${RUSTFLAGS} -C strip=symbols" PROFILE=release-fast MANPAGES=n COMPLETIONS=n LOCALES=n
-        mkdir -p "${CARGO_TARGET_DIR}" && sudo mount -t tmpfs -o noatime,size=16G tmpfs "${CARGO_TARGET_DIR}"
-        make install DESTDIR=target/size-release/
-        make install COMPLETIONS=n MULTICALL=y LN="ln -vf" DESTDIR=target/size-multi-release/
-        ZSTD_CLEVEL=19 tar --zstd -caf individual-x86_64-unknown-linux-gnu.tar.zst -C target/size-release/usr/local bin
+        export RUSTFLAGS="${RUSTFLAGS} -C strip=symbols" LIBSTDBUF_DIR=/tmp
+        mkdir "${CARGO_TARGET_DIR}" && sudo mount -t tmpfs -o noatime,size=16G tmpfs "${CARGO_TARGET_DIR}" && mkdir "${CARGO_TARGET_DIR}"/individual
+        # libstdbuf should be stripped
+        cargo build --profile=release-fast --bins --workspace --features feat_os_unix,feat_external_libstdbuf --exclude uu_runcon --exclude uu_chcon
+        (cd ${CARGO_TARGET_DIR}/release-fast && mv -v $(./coreutils --list) deps/libstdbuf.so ../individual ||:)
+        ZSTD_CLEVEL=19 tar --zstd -caf individual-x86_64-unknown-linux-gnu.tar.zst -C "${CARGO_TARGET_DIR}" individual
     - name: Publish
       uses: softprops/action-gh-release@v2
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -514,18 +516,15 @@ jobs:
           individual-x86_64-unknown-linux-gnu.tar.zst
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    - name: Test for hardlinks
-      shell: bash
-      run: |
-        [ $(stat -c %i target/size-multi-release/usr/local/bin/cp) = $(stat -c %i target/size-multi-release/usr/local/bin/coreutils) ]
+        CARGO_TARGET_DIR: cargo-target
     - name: Compute uutil release sizes
       shell: bash
       run: |
         ## Compute uutil release sizes
         DATE=$(date --rfc-email)
-        find target/size-release/usr/local/bin -type f -printf '%f\0' | sort -z |
+        find "${CARGO_TARGET_DIR}"/individual -type f -printf '%f\0' | sort -z |
           while IFS= read -r -d '' name; do
-            size=$(du -s target/size-release/usr/local/bin/$name | awk '{print $1}')
+            size=$(du -s "${CARGO_TARGET_DIR}"/individual/$name | awk '{print $1}')
             echo "\"$name\""
             echo "$size"
           done | \
@@ -534,7 +533,7 @@ jobs:
                 --arg sha "$GITHUB_SHA" \
                 'reduce inputs as $name ({}; . + { ($name): input }) | { ($date): {sha: $sha, sizes: map_values(.)} }' > individual-size-result.json
         SIZE=$(cat individual-size-result.json | jq '[.[] | .sizes | .[]] | reduce .[] as $num (0; . + $num)')
-        SIZE_MULTI=$(du -s target/size-multi-release/usr/local/bin/coreutils | awk '{print $1}')
+        SIZE_MULTI=$(du -s ${CARGO_TARGET_DIR}/release-fast/coreutils | awk '{print $1}')
         jq -n \
               --arg date "$DATE" \
               --arg sha "$GITHUB_SHA" \
