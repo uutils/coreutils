@@ -4,19 +4,28 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (vars) cvar exitstatus cmdline kworker getsid getpid
-// spell-checker:ignore (sys/unix) WIFSIGNALED ESRCH
+// spell-checker:ignore (sys/unix) WIFSIGNALED ESRCH sigtimedwait timespec kqueue kevent EVFILT
+// spell-checker:ignore (signals) setpgid PGID sigset EAGAIN ETIMEDOUT ONESHOT eventlist
 // spell-checker:ignore pgrep pwait snice getpgrp
 
 use libc::{gid_t, pid_t, uid_t};
 #[cfg(not(target_os = "redox"))]
 use nix::errno::Errno;
+#[cfg(not(any(target_os = "macos", target_os = "freebsd")))]
+use nix::sys::signal::SigSet;
+use nix::sys::signal::Signal;
 use std::io;
 use std::process::Child;
 use std::process::ExitStatus;
 use std::sync::atomic;
 use std::sync::atomic::AtomicBool;
-use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+
+#[cfg(any(target_os = "macos", target_os = "freebsd"))]
+use std::time::Instant;
+
+#[cfg(any(target_os = "macos", target_os = "freebsd"))]
+use nix::sys::event::{EvFlags, EventFilter, FilterFlag, KEvent, Kqueue};
 
 // SAFETY: These functions always succeed and return simple integers.
 
@@ -109,13 +118,16 @@ impl ChildExt for Child {
         if unsafe { libc::signal(signal as i32, libc::SIG_IGN) } == usize::MAX {
             return Err(io::Error::last_os_error());
         }
-        if unsafe { libc::kill(0, signal as i32) } == 0 {
+        // Send to our own process group (which the child inherits)
+        // After calling setpgid(0, 0), our PGID equals our PID
+        if unsafe { libc::kill(-libc::getpid(), signal as i32) } == 0 {
             Ok(())
         } else {
             Err(io::Error::last_os_error())
         }
     }
 
+    #[cfg(not(any(target_os = "macos", target_os = "freebsd")))]
     fn wait_or_timeout(
         &mut self,
         timeout: Duration,
@@ -124,28 +136,192 @@ impl ChildExt for Child {
         if timeout == Duration::from_micros(0) {
             return self.wait().map(Some);
         }
+
         // .try_wait() doesn't drop stdin, so we do it manually
         drop(self.stdin.take());
 
-        let start = Instant::now();
-        loop {
-            if let Some(status) = self.try_wait()? {
-                return Ok(Some(status));
-            }
+        // Use sigtimedwait for efficient, precise waiting
+        // This suspends the process until either:
+        // - SIGCHLD is received (child exited/stopped/continued)
+        // - The timeout expires
+        // - SIGTERM is received (if signaled parameter is provided)
+        //
+        // NOTE: Signals must be blocked by the caller BEFORE spawning the child
+        // to avoid race conditions. We assume SIGCHLD/SIGTERM are already blocked.
 
-            if start.elapsed() >= timeout
-                || signaled.is_some_and(|signaled| signaled.load(atomic::Ordering::Relaxed))
-            {
-                break;
-            }
-
-            // XXX: this is kinda gross, but it's cleaner than starting a thread just to wait
-            //      (which was the previous solution).  We might want to use a different duration
-            //      here as well
-            thread::sleep(Duration::from_millis(100));
+        // Create signal set for signals we want to wait for
+        let mut sigset = SigSet::empty();
+        sigset.add(Signal::SIGCHLD);
+        if signaled.is_some() {
+            sigset.add(Signal::SIGTERM);
         }
 
-        Ok(None)
+        // Convert Duration to timespec for sigtimedwait
+        // Cap at safe value to avoid platform-specific time_t limits
+        const MAX_SAFE_TIMEOUT_SECS: u64 = (i32::MAX / 2) as u64;
+        let timeout_spec = libc::timespec {
+            tv_sec: timeout.as_secs().min(MAX_SAFE_TIMEOUT_SECS) as libc::time_t,
+            tv_nsec: if timeout.as_secs() >= MAX_SAFE_TIMEOUT_SECS {
+                0
+            } else {
+                timeout.subsec_nanos() as libc::c_long
+            },
+        };
+
+        // Wait for signals with timeout
+        // We don't need the siginfo details, so pass NULL for the second parameter
+        let ret = unsafe {
+            libc::sigtimedwait(
+                std::ptr::from_ref(sigset.as_ref()),
+                std::ptr::null_mut(),
+                std::ptr::from_ref(&timeout_spec),
+            )
+        };
+
+        match ret {
+            // Signal received
+            sig if sig > 0 => {
+                let signal = Signal::try_from(sig).ok();
+
+                // Check if SIGTERM was received (external termination request)
+                if signal == Some(Signal::SIGTERM) {
+                    if let Some(flag) = signaled {
+                        flag.store(true, atomic::Ordering::Relaxed);
+                    }
+                    return Ok(None); // Indicate timeout/termination
+                }
+
+                // SIGCHLD received - child has changed state (exited, stopped, or continued)
+                // Use blocking wait() since we know the child has changed state
+                // This ensures we properly reap the child after receiving SIGCHLD
+                self.wait().map(Some)
+            }
+            // Timeout expired (EAGAIN or ETIMEDOUT)
+            -1 => {
+                let err = Errno::last();
+                if err == Errno::EAGAIN || err == Errno::ETIMEDOUT {
+                    // Timeout reached, child still running
+                    Ok(None)
+                } else {
+                    // Some other error
+                    Err(io::Error::last_os_error())
+                }
+            }
+            // Shouldn't happen
+            _ => Err(io::Error::other("unexpected sigtimedwait return value")),
+        }
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "freebsd"))]
+    fn wait_or_timeout(
+        &mut self,
+        timeout: Duration,
+        signaled: Option<&AtomicBool>,
+    ) -> io::Result<Option<ExitStatus>> {
+        // macOS implementation using kqueue for efficient signal monitoring
+        if timeout == Duration::from_micros(0) {
+            return self.wait().map(Some);
+        }
+
+        // .try_wait() doesn't drop stdin, so we do it manually
+        drop(self.stdin.take());
+
+        // Check if child has already exited before setting up kqueue
+        // This avoids missing SIGCHLD if child exits very quickly
+        if let Some(status) = self.try_wait()? {
+            return Ok(Some(status));
+        }
+
+        // Create kqueue for signal monitoring
+        let kq = Kqueue::new().map_err(|e| io::Error::other(e.to_string()))?;
+
+        // Create events for signals we want to monitor
+        let mut changelist = Vec::with_capacity(2);
+
+        // Always monitor SIGCHLD
+        changelist.push(KEvent::new(
+            Signal::SIGCHLD as usize,
+            EventFilter::EVFILT_SIGNAL,
+            EvFlags::EV_ADD | EvFlags::EV_ONESHOT,
+            FilterFlag::empty(),
+            0,
+            0,
+        ));
+
+        // Optionally monitor SIGTERM
+        if signaled.is_some() {
+            changelist.push(KEvent::new(
+                Signal::SIGTERM as usize,
+                EventFilter::EVFILT_SIGNAL,
+                EvFlags::EV_ADD | EvFlags::EV_ONESHOT,
+                FilterFlag::empty(),
+                0,
+                0,
+            ));
+        }
+
+        // Calculate deadline for retry logic
+        let deadline = Instant::now().checked_add(timeout);
+        // Use None (wait indefinitely) for very large timeouts to avoid platform limits
+        // ~34 years is effectively infinite and safe on all platforms
+        const MAX_SAFE_TIMEOUT_SECS: u64 = (i32::MAX / 2) as u64;
+        let timeout_spec = if timeout.as_secs() >= MAX_SAFE_TIMEOUT_SECS {
+            None
+        } else {
+            Some(libc::timespec {
+                tv_sec: timeout.as_secs() as libc::time_t,
+                tv_nsec: timeout.subsec_nanos() as libc::c_long,
+            })
+        };
+
+        // Wait for signal events
+        let mut eventlist = vec![KEvent::new(
+            0,
+            EventFilter::EVFILT_SIGNAL,
+            EvFlags::empty(),
+            FilterFlag::empty(),
+            0,
+            0,
+        )];
+
+        match kq.kevent(&changelist, &mut eventlist, timeout_spec) {
+            Ok(n) if n > 0 => {
+                // Signal received - check which one
+                let sig_num = eventlist[0].ident() as i32;
+                let signal = Signal::try_from(sig_num).ok();
+
+                // Check if SIGTERM was received
+                if signal == Some(Signal::SIGTERM) {
+                    if let Some(flag) = signaled {
+                        flag.store(true, atomic::Ordering::Relaxed);
+                    }
+                    return Ok(None);
+                }
+
+                // SIGCHLD received - reap the child
+                self.wait().map(Some)
+            }
+            Ok(_) => {
+                // Timeout expired
+                Ok(None)
+            }
+            Err(Errno::EINTR) => {
+                // Interrupted - check if we still have time and retry
+                if let Some(deadline) = deadline {
+                    let remaining = deadline.saturating_duration_since(Instant::now());
+                    if remaining > Duration::ZERO {
+                        // Recursively retry with remaining time
+                        self.wait_or_timeout(remaining, signaled)
+                    } else {
+                        Ok(None)
+                    }
+                } else {
+                    // No deadline (timeout overflowed), just retry with original timeout
+                    self.wait_or_timeout(timeout, signaled)
+                }
+            }
+            Err(e) => Err(io::Error::other(e.to_string())),
+        }
     }
 }
 
