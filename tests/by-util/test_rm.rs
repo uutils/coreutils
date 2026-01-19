@@ -1218,6 +1218,24 @@ fn test_progress_no_output_on_error() {
         .stderr_contains("No such file or directory");
 }
 
+#[test]
+fn no_preserve_root_may_not_be_abbreviated() {
+    let (at, _ucmd) = at_and_ucmd!();
+    let file = "test_file_123";
+
+    at.touch(file);
+
+    for arg in ["--n", "--no-pre", "--no-preserve-ro"] {
+        new_ucmd!()
+            .arg(arg)
+            .arg(file)
+            .fails()
+            .stderr_contains("you may not abbreviate the --no-preserve-root option");
+    }
+
+    assert!(at.file_exists(file));
+}
+
 #[cfg(unix)]
 #[test]
 fn test_symlink_to_readonly_no_prompt() {
