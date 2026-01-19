@@ -44,6 +44,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 1,
                 translate!("mkfifo-error-cannot-create-fifo", "path" => f.quote()),
             ));
+            continue;
         }
 
         // Explicitly set the permissions to ignore umask

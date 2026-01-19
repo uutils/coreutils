@@ -199,3 +199,29 @@ fn test_mkfifo_selinux_invalid() {
         }
     }
 }
+
+#[test]
+fn test_mkfifo_permision_unchanged_when_failed() {
+    use uucore::fs::display_permissions;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file_name = "testfifo";
+    at.write(file_name, "content");
+    at.set_mode(file_name, 0o600);
+
+    let err_msg = format!("mkfifo: cannot create fifo '{file_name}': File exists");
+
+    scene
+        .ucmd()
+        .arg(file_name)
+        .arg("-m")
+        .arg("666")
+        .fails()
+        .stderr_is(err_msg.as_str());
+    let metadata = std::fs::metadata(at.subdir.join(file_name)).unwrap();
+    let permissions = display_permissions(&metadata, true);
+    let expected = "prw-------";
+    assert_eq!(permissions, expected.to_string());
+}
