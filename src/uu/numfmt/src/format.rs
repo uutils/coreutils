@@ -586,7 +586,7 @@ mod tests {
 
     #[test]
     fn test_parse_suffix_q_r_k() {
-        let result = parse_suffix("1Q", Unit::Auto);
+        let result = parse_suffix("1Q", Unit::Auto, 1);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
         assert_eq!(number, 1.0);
@@ -595,7 +595,7 @@ mod tests {
         assert_eq!(raw_suffix as i32, RawSuffix::Q as i32);
         assert!(!with_i);
 
-        let result = parse_suffix("2R", Unit::Auto);
+        let result = parse_suffix("2R", Unit::Auto, 1);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
         assert_eq!(number, 2.0);
@@ -604,7 +604,7 @@ mod tests {
         assert_eq!(raw_suffix as i32, RawSuffix::R as i32);
         assert!(!with_i);
 
-        let result = parse_suffix("3k", Unit::Auto);
+        let result = parse_suffix("3k", Unit::Auto, 1);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
         assert_eq!(number, 3.0);
@@ -613,7 +613,7 @@ mod tests {
         assert_eq!(raw_suffix as i32, RawSuffix::K as i32);
         assert!(!with_i);
 
-        let result = parse_suffix("4Qi", Unit::Auto);
+        let result = parse_suffix("4Qi", Unit::Auto, 1);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
         assert_eq!(number, 4.0);
@@ -622,7 +622,7 @@ mod tests {
         assert_eq!(raw_suffix as i32, RawSuffix::Q as i32);
         assert!(with_i);
 
-        let result = parse_suffix("5Ri", Unit::Auto);
+        let result = parse_suffix("5Ri", Unit::Auto, 1);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
         assert_eq!(number, 5.0);
@@ -634,13 +634,13 @@ mod tests {
 
     #[test]
     fn test_parse_suffix_error_messages() {
-        let result = parse_suffix("foo", Unit::Auto);
+        let result = parse_suffix("foo", Unit::Auto, 1);
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert!(error.contains("numfmt-error-invalid-number") || error.contains("invalid number"));
         assert!(!error.contains("invalid suffix"));
 
-        let result = parse_suffix("World", Unit::Auto);
+        let result = parse_suffix("World", Unit::Auto, 1);
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert!(error.contains("numfmt-error-invalid-number") || error.contains("invalid number"));
