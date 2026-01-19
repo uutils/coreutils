@@ -413,6 +413,10 @@ fn forwards_thru_file(
 /// `num_delimiters` instance of `delimiter`. The `file` is left seek'd to the
 /// position just after that delimiter.
 fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
+    if num_delimiters == 0 {
+        file.seek(SeekFrom::End(0)).unwrap();
+        return;
+    }
     // This variable counts the number of delimiters found in the file
     // so far (reading from the end of the file toward the beginning).
     let mut counter = 0;
@@ -470,10 +474,12 @@ fn bounded_tail(file: &mut File, settings: &Settings) {
             file.seek(SeekFrom::Start(i as u64)).unwrap();
         }
         FilterMode::Lines(Signum::MinusZero, _) => {
-            return;
+            file.seek(SeekFrom::End(0)).unwrap();
         }
         FilterMode::Bytes(Signum::Negative(count)) => {
-            file.seek(SeekFrom::End(-(*count as i64))).unwrap();
+            if file.seek(SeekFrom::End(-(*count as i64))).is_err() {
+                file.seek(SeekFrom::Start(0)).unwrap();
+            }
             limit = Some(*count);
         }
         FilterMode::Bytes(Signum::Positive(count)) if count > &1 => {
@@ -482,7 +488,7 @@ fn bounded_tail(file: &mut File, settings: &Settings) {
             file.seek(SeekFrom::Start(*count - 1)).unwrap();
         }
         FilterMode::Bytes(Signum::MinusZero) => {
-            return;
+            file.seek(SeekFrom::End(0)).unwrap();
         }
         _ => {}
     }
@@ -519,6 +525,11 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
         }
         FilterMode::Bytes(Signum::Negative(count)) => {
             let mut chunks = chunks::BytesChunkBuffer::new(*count);
+            chunks.fill(reader)?;
+            chunks.print(&mut writer)?;
+        }
+        FilterMode::Lines(Signum::MinusZero, sep) => {
+            let mut chunks = chunks::LinesChunkBuffer::new(*sep, 0);
             chunks.fill(reader)?;
             chunks.print(&mut writer)?;
         }

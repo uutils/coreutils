@@ -192,7 +192,6 @@ impl HardlinkGroupScanner {
                 // For non-verbose mode, silently continue for missing files
                 // This provides graceful degradation - we'll lose hardlink info for this file
                 // but can still preserve hardlinks for other files
-                continue;
             }
         }
 

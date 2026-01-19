@@ -55,8 +55,10 @@
 // spell-checker:ignore uioerror rustdoc
 
 use std::{
+    cell::Cell,
     error::Error,
     fmt::{Display, Formatter},
+    io::Write,
     sync::atomic::{AtomicI32, Ordering},
 };
 
@@ -700,6 +702,7 @@ impl From<i32> for Box<dyn UError> {
 pub struct ClapErrorWrapper {
     code: i32,
     error: clap::Error,
+    print_failed: Cell<bool>,
 }
 
 /// Extension trait for `clap::Error` to adjust the exit code.
@@ -710,13 +713,21 @@ pub trait UClapError<T> {
 
 impl From<clap::Error> for Box<dyn UError> {
     fn from(e: clap::Error) -> Self {
-        Box::new(ClapErrorWrapper { code: 1, error: e })
+        Box::new(ClapErrorWrapper {
+            code: 1,
+            error: e,
+            print_failed: Cell::new(false),
+        })
     }
 }
 
 impl UClapError<ClapErrorWrapper> for clap::Error {
     fn with_exit_code(self, code: i32) -> ClapErrorWrapper {
-        ClapErrorWrapper { code, error: self }
+        ClapErrorWrapper {
+            code,
+            error: self,
+            print_failed: Cell::new(false),
+        }
     }
 }
 
@@ -731,12 +742,11 @@ impl UClapError<Result<clap::ArgMatches, ClapErrorWrapper>>
 impl UError for ClapErrorWrapper {
     fn code(&self) -> i32 {
         // If the error is a DisplayHelp or DisplayVersion variant,
-        // we don't want to apply the custom error code, but leave
-        // it 0.
+        // check if printing failed. If it did, return 1, otherwise 0.
         if let clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion =
             self.error.kind()
         {
-            0
+            i32::from(self.print_failed.get())
         } else {
             self.code
         }
@@ -748,9 +758,20 @@ impl Error for ClapErrorWrapper {}
 // This is abuse of the Display trait
 impl Display for ClapErrorWrapper {
     fn fmt(&self, _f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        // Intentionally ignore the result - error.print() writes directly to stderr
-        // and we always return Ok(()) to satisfy Display's contract
-        let _ = self.error.print();
+        // Check if printing succeeds. For DisplayHelp and DisplayVersion,
+        // error.print() writes to stdout, so we need to detect write failures
+        // (e.g., when stdout is /dev/full).
+        if let Err(print_fail) = self.error.print() {
+            // Mark that printing failed so code() can return the appropriate exit code
+            self.print_failed.set(true);
+            // Try to display this error to stderr, but ignore if that fails too
+            // since we're already in an error state.
+            let _ = writeln!(std::io::stderr(), "{}: {print_fail}", crate::util_name());
+            // Mirror GNU behavior: when failing to print help or version, exit with error code.
+            // This avoids silent failures when stdout is full or closed.
+            set_exit_code(1);
+        }
+        // Always return Ok(()) to satisfy Display's contract and prevent panic
         Ok(())
     }
 }

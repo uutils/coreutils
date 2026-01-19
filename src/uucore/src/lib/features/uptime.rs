@@ -155,19 +155,11 @@ pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
 
     // Try provided boot_time or derive from utmpx
     let derived_boot_time = boot_time.or_else(|| {
-        let records = Utmpx::iter_all_records();
-        for line in records {
-            match line.record_type() {
-                BOOT_TIME => {
-                    let dt = line.login_time();
-                    if dt.unix_timestamp() > 0 {
-                        return Some(dt.unix_timestamp() as time_t);
-                    }
-                }
-                _ => continue,
-            }
-        }
-        None
+        Utmpx::iter_all_records()
+            .filter(|r| r.record_type() == BOOT_TIME)
+            .map(|r| r.login_time().unix_timestamp())
+            .find(|&ts| ts > 0)
+            .map(|ts| ts as time_t)
     });
 
     // macOS-specific fallback: use sysctl kern.boottime when utmpx did not provide BOOT_TIME

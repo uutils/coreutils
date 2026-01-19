@@ -52,24 +52,18 @@ fn main() {
         process::exit(0);
     });
 
-    // binary name equals util name?
-    if let Some(&(uumain, _)) = utils.get(binary_as_util) {
-        validation::setup_localization_or_exit(binary_as_util);
-        process::exit(uumain(vec![binary.into()].into_iter().chain(args)));
-    }
+    // binary name ends with util name?
+    let matched_util = utils
+        .keys()
+        .filter(|&&u| binary_as_util.ends_with(u) && !binary_as_util.ends_with("coreutils"))
+        .max_by_key(|u| u.len()); //Prefer stty more than tty. coreutils is not ls
 
-    // binary name equals prefixed util name?
-    // * prefix/stem may be any string ending in a non-alphanumeric character
-    // For example, if the binary is named `uu_test`, it will match `test` as a utility.
-    let util_name =
-        if let Some(util) = validation::find_prefixed_util(binary_as_util, utils.keys().copied()) {
-            // prefixed util => replace 0th (aka, executable name) argument
-            Some(OsString::from(util))
-        } else {
-            // unmatched binary name => regard as multi-binary container and advance argument list
-            uucore::set_utility_is_second_arg();
-            args.next()
-        };
+    let util_name = if let Some(&util) = matched_util {
+        Some(OsString::from(util))
+    } else {
+        uucore::set_utility_is_second_arg();
+        args.next()
+    };
 
     // 0th argument equals util name?
     if let Some(util_os) = util_name {

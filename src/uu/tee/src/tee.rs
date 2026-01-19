@@ -115,7 +115,8 @@ pub fn uu_app() -> Command {
                 .long(options::APPEND)
                 .short('a')
                 .help(translate!("tee-help-append"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::APPEND),
         )
         .arg(
             Arg::new(options::IGNORE_INTERRUPTS)

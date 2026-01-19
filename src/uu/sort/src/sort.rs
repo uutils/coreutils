@@ -7,7 +7,7 @@
 // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/sort.html
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 
-// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef
+// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef GETFD
 
 mod buffer_hint;
 mod check;
@@ -23,6 +23,7 @@ use chunks::LineData;
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use custom_str_cmp::custom_str_cmp;
+
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
 use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
@@ -47,6 +48,8 @@ use uucore::error::{FromIo, strip_errno};
 use uucore::error::{UError, UResult, USimpleError, UUsageError};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
 use uucore::format_usage;
+#[cfg(feature = "i18n-collator")]
+use uucore::i18n::collator::locale_cmp;
 use uucore::i18n::decimal::locale_decimal_separator;
 use uucore::line_ending::LineEnding;
 use uucore::parser::num_parser::{ExtendedParser, ExtendedParserError};
@@ -101,6 +104,7 @@ mod options {
     pub const TMP_DIR: &str = "temporary-directory";
     pub const COMPRESS_PROG: &str = "compress-program";
     pub const BATCH_SIZE: &str = "batch-size";
+    pub const RANDOM_SOURCE: &str = "random-source";
 
     pub const FILES: &str = "files";
 }
@@ -271,6 +275,7 @@ pub struct GlobalSettings {
     check: bool,
     check_silent: bool,
     salt: Option<[u8; 16]>,
+    random_source: Option<PathBuf>,
     selectors: Vec<FieldSelector>,
     separator: Option<u8>,
     threads: String,
@@ -318,7 +323,10 @@ impl GlobalSettings {
     /// Precompute some data needed for sorting.
     /// This function **must** be called before starting to sort, and `GlobalSettings` may not be altered
     /// afterwards.
-    fn init_precomputed(&mut self) {
+    ///
+    /// When i18n-collator is enabled, `disable_fast_lexicographic` should be set to true if we're
+    /// in a UTF-8 locale (to force locale-aware collation instead of byte comparison).
+    fn init_precomputed(&mut self, disable_fast_lexicographic: bool) {
         self.precomputed.needs_tokens = self.selectors.iter().any(|s| s.needs_tokens);
         self.precomputed.selections_per_line =
             self.selectors.iter().filter(|s| s.needs_selection).count();
@@ -333,11 +341,15 @@ impl GlobalSettings {
             .filter(|s| matches!(s.settings.mode, SortMode::GeneralNumeric))
             .count();
 
-        self.precomputed.fast_lexicographic = self.can_use_fast_lexicographic();
+        self.precomputed.fast_lexicographic =
+            !disable_fast_lexicographic && self.can_use_fast_lexicographic();
         self.precomputed.fast_ascii_insensitive = self.can_use_fast_ascii_insensitive();
     }
 
     /// Returns true when the fast lexicographic path can be used safely.
+    /// Note: When i18n-collator is enabled, the caller must have already determined
+    /// whether locale-aware collation is needed (via checking if we're in a UTF-8 locale).
+    /// This check is performed in uumain() before init_precomputed() is called.
     fn can_use_fast_lexicographic(&self) -> bool {
         self.mode == SortMode::Default
             && !self.ignore_case
@@ -392,6 +404,7 @@ impl Default for GlobalSettings {
             check: false,
             check_silent: false,
             salt: None,
+            random_source: None,
             selectors: vec![],
             separator: None,
             threads: String::new(),
@@ -574,6 +587,14 @@ impl<'a> Line<'a> {
         token_buffer: &mut Vec<Field>,
         settings: &GlobalSettings,
     ) -> Self {
+        let needs_line_data = settings.precomputed.needs_tokens
+            || settings.precomputed.selections_per_line > 0
+            || settings.precomputed.num_infos_per_line > 0
+            || settings.precomputed.floats_per_line > 0
+            || settings.mode == SortMode::Numeric;
+        if !needs_line_data {
+            return Self { line, index };
+        }
         token_buffer.clear();
         if settings.precomputed.needs_tokens {
             tokenize(line, settings.separator, token_buffer);
@@ -1193,7 +1214,16 @@ fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
         .action(ArgAction::SetTrue)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(
+    unix,
+    not(any(
+        target_os = "redox",
+        target_os = "fuchsia",
+        target_os = "haiku",
+        target_os = "solaris",
+        target_os = "illumos"
+    ))
+))]
 fn get_rlimit() -> UResult<usize> {
     use nix::sys::resource::{RLIM_INFINITY, Resource, getrlimit};
 
@@ -1206,13 +1236,71 @@ fn get_rlimit() -> UResult<usize> {
         .map_err(|_| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(
+    unix,
+    not(any(
+        target_os = "redox",
+        target_os = "fuchsia",
+        target_os = "haiku",
+        target_os = "solaris",
+        target_os = "illumos"
+    ))
+))]
 pub(crate) fn fd_soft_limit() -> Option<usize> {
     get_rlimit().ok()
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(any(
+    not(unix),
+    target_os = "redox",
+    target_os = "fuchsia",
+    target_os = "haiku",
+    target_os = "solaris",
+    target_os = "illumos"
+))]
 pub(crate) fn fd_soft_limit() -> Option<usize> {
+    None
+}
+
+#[cfg(unix)]
+pub(crate) fn current_open_fd_count() -> Option<usize> {
+    use nix::libc;
+
+    fn count_dir(path: &str) -> Option<usize> {
+        let entries = std::fs::read_dir(path).ok()?;
+        let mut count = 0usize;
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if name.parse::<usize>().is_ok() {
+                count = count.saturating_add(1);
+            }
+        }
+        Some(count)
+    }
+
+    if let Some(count) = count_dir("/proc/self/fd").or_else(|| count_dir("/dev/fd")) {
+        return Some(count);
+    }
+
+    let limit = fd_soft_limit()?;
+    if limit > 16_384 {
+        return None;
+    }
+
+    let mut count = 0usize;
+    for fd in 0..limit {
+        let fd = fd as libc::c_int;
+        // Probe with libc::fcntl because the fd may be invalid.
+        if unsafe { libc::fcntl(fd, libc::F_GETFD) } != -1 {
+            count = count.saturating_add(1);
+        }
+    }
+    Some(count)
+}
+
+#[cfg(not(unix))]
+pub(crate) fn current_open_fd_count() -> Option<usize> {
     None
 }
 
@@ -1766,6 +1854,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     settings.debug = matches.get_flag(options::DEBUG);
+    if let Some(path) = matches.get_one::<OsString>(options::RANDOM_SOURCE) {
+        settings.random_source = Some(PathBuf::from(path));
+    }
 
     // check whether user specified a zero terminated list of files for input, otherwise read files from args
     let mut files: Vec<OsString> = if matches.contains_id(options::FILES0_FROM) {
@@ -2026,9 +2117,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if let Some(values) = matches.get_many::<String>(options::KEY) {
         for value in values {
             let selector = FieldSelector::parse(value, &settings)?;
-            if selector.settings.mode == SortMode::Random && settings.salt.is_none() {
-                settings.salt = Some(get_rand_string());
-            }
             settings.selectors.push(selector);
         }
     }
@@ -2050,6 +2138,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         );
     }
 
+    let needs_random = settings.mode == SortMode::Random
+        || settings
+            .selectors
+            .iter()
+            .any(|selector| selector.settings.mode == SortMode::Random);
+    if needs_random {
+        settings.salt = Some(match settings.random_source.as_deref() {
+            Some(path) => salt_from_random_source(path)?,
+            None => get_rand_string(),
+        });
+    }
+
     // Verify that we can open all input files.
     // It is the correct behavior to close all files afterwards,
     // and to reopen them at a later point. This is different from how the output file is handled,
@@ -2065,7 +2165,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         emit_debug_warnings(&settings, &global_flags, &legacy_warnings);
     }
 
-    settings.init_precomputed();
+    // Initialize locale collation if needed (UTF-8 locales)
+    // This MUST happen before init_precomputed() to avoid the performance regression
+    #[cfg(feature = "i18n-collator")]
+    let needs_locale_collation = uucore::i18n::collator::init_locale_collation();
+
+    #[cfg(not(feature = "i18n-collator"))]
+    let needs_locale_collation = false;
+
+    settings.init_precomputed(needs_locale_collation);
 
     let result = exec(&mut files, &settings, output, &mut tmp_dir);
     // Wait here if `SIGINT` was received,
@@ -2140,6 +2248,14 @@ pub fn uu_app() -> Command {
         'R',
         translate!("sort-help-random"),
     ))
+    .arg(
+        Arg::new(options::RANDOM_SOURCE)
+            .long(options::RANDOM_SOURCE)
+            .help(translate!("sort-help-random-source"))
+            .value_name("FILE")
+            .value_parser(ValueParser::os_string())
+            .value_hint(clap::ValueHint::FilePath),
+    )
     .arg(
         Arg::new(options::DICTIONARY_ORDER)
             .short('d')
@@ -2446,13 +2562,36 @@ fn compare_by<'a>(
             }
             SortMode::Month => month_compare(a_str, b_str),
             SortMode::Version => version_cmp(a_str, b_str),
-            SortMode::Default => custom_str_cmp(
-                a_str,
-                b_str,
-                settings.ignore_non_printing,
-                settings.dictionary_order,
-                settings.ignore_case,
-            ),
+            SortMode::Default => {
+                // Use locale-aware comparison if feature is enabled and no custom flags are set
+                #[cfg(feature = "i18n-collator")]
+                {
+                    if settings.ignore_case
+                        || settings.dictionary_order
+                        || settings.ignore_non_printing
+                    {
+                        custom_str_cmp(
+                            a_str,
+                            b_str,
+                            settings.ignore_non_printing,
+                            settings.dictionary_order,
+                            settings.ignore_case,
+                        )
+                    } else {
+                        locale_cmp(a_str, b_str)
+                    }
+                }
+                #[cfg(not(feature = "i18n-collator"))]
+                {
+                    custom_str_cmp(
+                        a_str,
+                        b_str,
+                        settings.ignore_non_printing,
+                        settings.dictionary_order,
+                        settings.ignore_case,
+                    )
+                }
+            }
         };
         if cmp != Ordering::Equal {
             return if settings.reverse { cmp.reverse() } else { cmp };
@@ -2626,8 +2765,56 @@ fn general_numeric_compare(
     a.partial_cmp(b).unwrap()
 }
 
-fn get_rand_string() -> [u8; 16] {
+/// Generate a 128-bit salt from a uniform RNG distribution.
+fn get_rand_string() -> [u8; SALT_LEN] {
     rng().sample(rand::distr::StandardUniform)
+}
+
+const SALT_LEN: usize = 16; // 128-bit salt
+const MAX_BYTES: usize = 1024 * 1024; // Read cap: 1 MiB
+const BUF_LEN: usize = 8192; // 8 KiB read buffer
+const U64_LEN: usize = 8;
+const RANDOM_SOURCE_TAG: &[u8] = b"uutils-sort-random-source"; // Domain separation tag
+
+/// Create a 128-bit salt by hashing up to 1 MiB from the given file.
+fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
+    let mut reader = open_with_open_failed_error(path)?;
+    let mut buf = [0u8; BUF_LEN];
+    let mut total = 0usize;
+    let mut hasher = FnvHasher::default();
+
+    loop {
+        let n = reader
+            .read(&mut buf)
+            .map_err(|error| SortError::ReadFailed {
+                path: path.to_owned(),
+                error,
+            })?;
+        if n == 0 {
+            break;
+        }
+        let remaining = MAX_BYTES.saturating_sub(total);
+        if remaining == 0 {
+            break;
+        }
+        let take = n.min(remaining);
+        hasher.write(&buf[..take]);
+        total = total.saturating_add(take);
+        if take < n {
+            break;
+        }
+    }
+
+    let first = hasher.finish();
+    let mut second_hasher = FnvHasher::default();
+    second_hasher.write(RANDOM_SOURCE_TAG);
+    second_hasher.write_u64(first);
+    let second = second_hasher.finish();
+
+    let mut out = [0u8; SALT_LEN];
+    out[..U64_LEN].copy_from_slice(&first.to_le_bytes());
+    out[U64_LEN..].copy_from_slice(&second.to_le_bytes());
+    Ok(out)
 }
 
 fn get_hash<T: Hash>(t: &T) -> u64 {
