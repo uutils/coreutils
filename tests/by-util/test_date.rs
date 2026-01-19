@@ -1469,3 +1469,31 @@ fn test_date_posix_format_specifiers() {
             .stdout_is(format!("{expected}\n"));
     }
 }
+
+/// Test that %x format specifier respects locale settings
+/// This is a regression test for locale-aware date formatting
+#[test]
+#[ignore = "https://bugs.launchpad.net/ubuntu/+source/rust-coreutils/+bug/2137410"]
+#[cfg(any(target_os = "linux", target_vendor = "apple"))]
+fn test_date_format_x_locale_aware() {
+    // With C locale, %x should output MM/DD/YY (US format)
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .env("LC_ALL", "C")
+        .arg("-d")
+        .arg("1997-01-19 08:17:48")
+        .arg("+%x")
+        .succeeds()
+        .stdout_is("01/19/97\n");
+
+    // With French locale, %x should output DD/MM/YYYY (European format)
+    // GNU date outputs: 19/01/1997
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .arg("-d")
+        .arg("1997-01-19 08:17:48")
+        .arg("+%x")
+        .succeeds()
+        .stdout_is("19/01/1997\n");
+}

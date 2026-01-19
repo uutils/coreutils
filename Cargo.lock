@@ -516,7 +516,7 @@ checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 
 [[package]]
 name = "coreutils"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "bytecount",
  "clap",
@@ -1056,14 +1056,13 @@ dependencies = [
 
 [[package]]
 name = "filetime"
-version = "0.2.26"
+version = "0.2.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc0505cd1b6fa6580283f6bdf70a73fcf4aba1184038c90902b92b3dd0df63ed"
+checksum = "f98844151eee8917efc50bd9e8318cb963ae8b297431495d3f758616ea5c57db"
 dependencies = [
  "cfg-if",
  "libc",
  "libredox",
- "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -1136,7 +1135,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "54f0d287c53ffd184d04d8677f590f4ac5379785529e5e08b1c8083acdd5c198"
 dependencies = [
  "memchr",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -2536,7 +2535,7 @@ dependencies = [
  "once_cell",
  "parking_lot",
  "selinux-sys",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -2840,11 +2839,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.17"
+version = "2.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f63587ca0f12b72a0600bcba1d40081f830876000bb46dd2337a3051618f4fc8"
+checksum = "4288b5bcbc7920c07a1149a35cf9590a2aa808e0bc1eafaade0b80947865fbc4"
 dependencies = [
- "thiserror-impl 2.0.17",
+ "thiserror-impl 2.0.18",
 ]
 
 [[package]]
@@ -2860,9 +2859,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.17"
+version = "2.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ff15c8ecd7de3849db632e14d18d2571fa09dfc5ed93479bc4485c7a517c913"
+checksum = "ebc4ee7f67670e9b64d05fa4253e753e016c6c95ff35b89b7941d6b856dec1d5"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3071,7 +3070,7 @@ dependencies = [
 
 [[package]]
 name = "uu_arch"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3081,7 +3080,7 @@ dependencies = [
 
 [[package]]
 name = "uu_base32"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "base64-simd",
  "clap",
@@ -3091,7 +3090,7 @@ dependencies = [
 
 [[package]]
 name = "uu_base64"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
@@ -3103,7 +3102,7 @@ dependencies = [
 
 [[package]]
 name = "uu_basename"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3112,7 +3111,7 @@ dependencies = [
 
 [[package]]
 name = "uu_basenc"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3122,14 +3121,14 @@ dependencies = [
 
 [[package]]
 name = "uu_cat"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
  "memchr",
  "nix",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
  "winapi-util",
  "windows-sys 0.61.2",
@@ -3137,20 +3136,20 @@ dependencies = [
 
 [[package]]
 name = "uu_chcon"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
  "fts-sys",
  "libc",
  "selinux",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
 [[package]]
 name = "uu_chgrp"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3159,17 +3158,17 @@ dependencies = [
 
 [[package]]
 name = "uu_chmod"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
 [[package]]
 name = "uu_chown"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3178,17 +3177,17 @@ dependencies = [
 
 [[package]]
 name = "uu_chroot"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
 [[package]]
 name = "uu_cksum"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
@@ -3199,7 +3198,7 @@ dependencies = [
 
 [[package]]
 name = "uu_comm"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3208,7 +3207,7 @@ dependencies = [
 
 [[package]]
 name = "uu_cp"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
@@ -3220,7 +3219,7 @@ dependencies = [
  "linux-raw-sys 0.12.1",
  "selinux",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
  "walkdir",
  "xattr",
@@ -3228,18 +3227,18 @@ dependencies = [
 
 [[package]]
 name = "uu_csplit"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
  "regex",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
 [[package]]
 name = "uu_cut"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "bstr",
  "clap",
@@ -3252,7 +3251,7 @@ dependencies = [
 
 [[package]]
 name = "uu_date"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
@@ -3267,7 +3266,7 @@ dependencies = [
 
 [[package]]
 name = "uu_dd"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
@@ -3277,26 +3276,26 @@ dependencies = [
  "nix",
  "signal-hook 0.4.1",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
 [[package]]
 name = "uu_df"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "unicode-width 0.2.2",
  "uucore",
 ]
 
 [[package]]
 name = "uu_dir"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "uu_ls",
@@ -3305,7 +3304,7 @@ dependencies = [
 
 [[package]]
 name = "uu_dircolors"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3314,7 +3313,7 @@ dependencies = [
 
 [[package]]
 name = "uu_dirname"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3323,21 +3322,21 @@ dependencies = [
 
 [[package]]
 name = "uu_du"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
  "glob",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
  "windows-sys 0.61.2",
 ]
 
 [[package]]
 name = "uu_echo"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3346,45 +3345,45 @@ dependencies = [
 
 [[package]]
 name = "uu_env"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
  "nix",
  "rust-ini",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
 [[package]]
 name = "uu_expand"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "unicode-width 0.2.2",
  "uucore",
 ]
 
 [[package]]
 name = "uu_expr"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
  "num-bigint",
  "num-traits",
  "onig",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
 [[package]]
 name = "uu_factor"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
@@ -3398,7 +3397,7 @@ dependencies = [
 
 [[package]]
 name = "uu_false"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3407,18 +3406,18 @@ dependencies = [
 
 [[package]]
 name = "uu_fmt"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "unicode-width 0.2.2",
  "uucore",
 ]
 
 [[package]]
 name = "uu_fold"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
@@ -3430,17 +3429,17 @@ dependencies = [
 
 [[package]]
 name = "uu_groups"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
 [[package]]
 name = "uu_hashsum"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
@@ -3451,18 +3450,18 @@ dependencies = [
 
 [[package]]
 name = "uu_head"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
  "memchr",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
 [[package]]
 name = "uu_hostid"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3472,7 +3471,7 @@ dependencies = [
 
 [[package]]
 name = "uu_hostname"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "dns-lookup",
@@ -3484,7 +3483,7 @@ dependencies = [
 
 [[package]]
 name = "uu_id"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3494,33 +3493,33 @@ dependencies = [
 
 [[package]]
 name = "uu_install"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "file_diff",
  "filetime",
  "fluent",
  "selinux",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
 [[package]]
 name = "uu_join"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
  "memchr",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
 [[package]]
 name = "uu_kill"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3530,7 +3529,7 @@ dependencies = [
 
 [[package]]
 name = "uu_link"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3539,17 +3538,17 @@ dependencies = [
 
 [[package]]
 name = "uu_ln"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
 [[package]]
 name = "uu_logname"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3559,7 +3558,7 @@ dependencies = [
 
 [[package]]
 name = "uu_ls"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "ansi-width",
  "clap",
@@ -3572,14 +3571,14 @@ dependencies = [
  "selinux",
  "tempfile",
  "terminal_size",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
  "uutils_term_grid",
 ]
 
 [[package]]
 name = "uu_mkdir"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3588,7 +3587,7 @@ dependencies = [
 
 [[package]]
 name = "uu_mkfifo"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3599,7 +3598,7 @@ dependencies = [
 
 [[package]]
 name = "uu_mknod"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3609,19 +3608,19 @@ dependencies = [
 
 [[package]]
 name = "uu_mktemp"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
  "rand 0.9.2",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
 [[package]]
 name = "uu_more"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "crossterm",
@@ -3633,7 +3632,7 @@ dependencies = [
 
 [[package]]
 name = "uu_mv"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
@@ -3642,14 +3641,14 @@ dependencies = [
  "indicatif",
  "libc",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
  "windows-sys 0.61.2",
 ]
 
 [[package]]
 name = "uu_nice"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3660,7 +3659,7 @@ dependencies = [
 
 [[package]]
 name = "uu_nl"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
@@ -3672,18 +3671,18 @@ dependencies = [
 
 [[package]]
 name = "uu_nohup"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
  "libc",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
 [[package]]
 name = "uu_nproc"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3693,19 +3692,19 @@ dependencies = [
 
 [[package]]
 name = "uu_numfmt"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
 [[package]]
 name = "uu_od"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "byteorder",
  "clap",
@@ -3717,7 +3716,7 @@ dependencies = [
 
 [[package]]
 name = "uu_paste"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3726,7 +3725,7 @@ dependencies = [
 
 [[package]]
 name = "uu_pathchk"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3736,7 +3735,7 @@ dependencies = [
 
 [[package]]
 name = "uu_pinky"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3745,19 +3744,20 @@ dependencies = [
 
 [[package]]
 name = "uu_pr"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
  "itertools 0.14.0",
+ "memchr",
  "regex",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
 [[package]]
 name = "uu_printenv"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3766,7 +3766,7 @@ dependencies = [
 
 [[package]]
 name = "uu_printf"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3775,18 +3775,18 @@ dependencies = [
 
 [[package]]
 name = "uu_ptx"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
  "regex",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
 [[package]]
 name = "uu_pwd"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3795,7 +3795,7 @@ dependencies = [
 
 [[package]]
 name = "uu_readlink"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3804,7 +3804,7 @@ dependencies = [
 
 [[package]]
 name = "uu_realpath"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3813,7 +3813,7 @@ dependencies = [
 
 [[package]]
 name = "uu_rm"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
@@ -3821,14 +3821,14 @@ dependencies = [
  "indicatif",
  "libc",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
  "windows-sys 0.61.2",
 ]
 
 [[package]]
 name = "uu_rmdir"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3838,19 +3838,19 @@ dependencies = [
 
 [[package]]
 name = "uu_runcon"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
  "libc",
  "selinux",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
 [[package]]
 name = "uu_seq"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "bigdecimal",
  "clap",
@@ -3859,13 +3859,13 @@ dependencies = [
  "num-bigint",
  "num-traits",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
 [[package]]
 name = "uu_shred"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3876,7 +3876,7 @@ dependencies = [
 
 [[package]]
 name = "uu_shuf"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
@@ -3889,7 +3889,7 @@ dependencies = [
 
 [[package]]
 name = "uu_sleep"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3898,7 +3898,7 @@ dependencies = [
 
 [[package]]
 name = "uu_sort"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "bigdecimal",
  "binary-heap-plus",
@@ -3915,49 +3915,49 @@ dependencies = [
  "rayon",
  "self_cell",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "unicode-width 0.2.2",
  "uucore",
 ]
 
 [[package]]
 name = "uu_split"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
  "memchr",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
 [[package]]
 name = "uu_stat"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
 [[package]]
 name = "uu_stdbuf"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uu_stdbuf_libstdbuf",
  "uucore",
 ]
 
 [[package]]
 name = "uu_stdbuf_libstdbuf"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "ctor",
  "libc",
@@ -3965,7 +3965,7 @@ dependencies = [
 
 [[package]]
 name = "uu_stty"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3975,7 +3975,7 @@ dependencies = [
 
 [[package]]
 name = "uu_sum"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3984,7 +3984,7 @@ dependencies = [
 
 [[package]]
 name = "uu_sync"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -3995,7 +3995,7 @@ dependencies = [
 
 [[package]]
 name = "uu_tac"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -4003,13 +4003,13 @@ dependencies = [
  "memmap2",
  "regex",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
 [[package]]
 name = "uu_tail"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -4026,7 +4026,7 @@ dependencies = [
 
 [[package]]
 name = "uu_tee"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -4035,19 +4035,19 @@ dependencies = [
 
 [[package]]
 name = "uu_test"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
  "libc",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
 [[package]]
 name = "uu_timeout"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -4058,21 +4058,21 @@ dependencies = [
 
 [[package]]
 name = "uu_touch"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "filetime",
  "fluent",
  "jiff",
  "parse_datetime",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
  "windows-sys 0.61.2",
 ]
 
 [[package]]
 name = "uu_tr"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "bytecount",
  "clap",
@@ -4083,7 +4083,7 @@ dependencies = [
 
 [[package]]
 name = "uu_true"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -4092,7 +4092,7 @@ dependencies = [
 
 [[package]]
 name = "uu_truncate"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -4101,7 +4101,7 @@ dependencies = [
 
 [[package]]
 name = "uu_tsort"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
@@ -4109,13 +4109,13 @@ dependencies = [
  "nix",
  "string-interner",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
 [[package]]
 name = "uu_tty"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -4125,7 +4125,7 @@ dependencies = [
 
 [[package]]
 name = "uu_uname"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -4135,20 +4135,20 @@ dependencies = [
 
 [[package]]
 name = "uu_unexpand"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "unicode-width 0.2.2",
  "uucore",
 ]
 
 [[package]]
 name = "uu_uniq"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
@@ -4159,7 +4159,7 @@ dependencies = [
 
 [[package]]
 name = "uu_unlink"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -4168,19 +4168,19 @@ dependencies = [
 
 [[package]]
 name = "uu_uptime"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
  "jiff",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "utmp-classic",
  "uucore",
 ]
 
 [[package]]
 name = "uu_users"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -4190,7 +4190,7 @@ dependencies = [
 
 [[package]]
 name = "uu_vdir"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "uu_ls",
@@ -4199,7 +4199,7 @@ dependencies = [
 
 [[package]]
 name = "uu_wc"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "bytecount",
  "clap",
@@ -4208,14 +4208,14 @@ dependencies = [
  "libc",
  "nix",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "unicode-width 0.2.2",
  "uucore",
 ]
 
 [[package]]
 name = "uu_who"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -4224,7 +4224,7 @@ dependencies = [
 
 [[package]]
 name = "uu_whoami"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -4234,7 +4234,7 @@ dependencies = [
 
 [[package]]
 name = "uu_yes"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -4245,7 +4245,7 @@ dependencies = [
 
 [[package]]
 name = "uucore"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "base64-simd",
  "bigdecimal",
@@ -4285,7 +4285,7 @@ dependencies = [
  "sha3",
  "sm3",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "time",
  "unic-langid",
  "unit-prefix",
@@ -4301,7 +4301,7 @@ dependencies = [
 
 [[package]]
 name = "uucore_procs"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4319,7 +4319,7 @@ dependencies = [
 
 [[package]]
 name = "uutests"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "ctor",
  "libc",
@@ -4482,7 +4482,7 @@ checksum = "d5cec722a3274e47d1524cbe2cea762f2c19d615bd9d73ada21db9066349d57e"
 dependencies = [
  "proc-macro2",
  "quote",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
