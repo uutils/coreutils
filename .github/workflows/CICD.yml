@@ -633,8 +633,6 @@ jobs:
           - { os: ubuntu-latest  , target: x86_64-unknown-redox        , features: feat_os_unix_redox     , use-cross: redoxer , skip-tests: true }
           - { os: ubuntu-latest  , target: wasm32-unknown-unknown      , default-features: false, features: uucore/format, skip-tests: true, skip-package: true, skip-publish: true }
           - { os: macos-latest   , target: aarch64-apple-darwin        , features: feat_os_macos, workspace-tests: true } # M1 CPU
-          # PR #7964: Mac should still build even if the feature is not enabled. Do not publish this.
-          - { os: macos-latest   , target: aarch64-apple-darwin        , workspace-tests: true, skip-publish: true } # M1 CPU
           - { os: macos-latest   , target: x86_64-apple-darwin         , features: feat_os_macos, workspace-tests: true }
           - { os: windows-latest , target: i686-pc-windows-msvc        , features: feat_os_windows }
           - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows }
@@ -1310,7 +1308,7 @@ jobs:
       run: |
         test -f target/debug/chcon || test -f target/debug/chcon.exe
         test -f target/debug/runcon || test -f target/debug/runcon.exe
-    - name: Verify workspace builds with stubs
+    - name: Verify workspace builds with stubs # issue/7965
       run: cargo build --features ${{ matrix.job.features }}
 
   test_safe_traversal:
