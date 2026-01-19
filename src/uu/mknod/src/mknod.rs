@@ -15,7 +15,22 @@ use uucore::format_usage;
 use uucore::fs::makedev;
 use uucore::translate;
 
-const MODE_RW_UGO: mode_t = (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as mode_t;
+#[cfg(not(any(
+    target_os = "android",
+    target_os = "macos",
+    target_os = "freebsd",
+    target_os = "redox",
+)))]
+const MODE_RW_UGO: u32 = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
+
+#[cfg(any(
+    target_os = "android",
+    target_os = "macos",
+    target_os = "freebsd",
+    target_os = "redox",
+))]
+const MODE_RW_UGO: u32 =
+    (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
 
 mod options {
     pub const MODE: &str = "mode";
@@ -138,7 +153,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             parse_mode(str_mode).map_err(|e| USimpleError::new(1, e))?
         }
     };
-    let mode = Mode::from_bits_truncate(mode_permissions as nix::libc::mode_t);
+    let mode = Mode::from_bits_truncate(mode_permissions as mode_t);
 
     let file_name = matches
         .get_one::<String>("name")
