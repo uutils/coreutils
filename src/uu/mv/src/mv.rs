@@ -817,6 +817,13 @@ fn is_fifo(_filetype: fs::FileType) -> bool {
 }
 
 #[cfg(unix)]
+/// Best-effort ownership preservation for `to` using `from_meta`.
+///
+/// On Unix, this tries to set `uid`/`gid` on `to`. If `follow_symlinks` is
+/// true it uses `chown`, otherwise it uses `lchown` so the link itself (not its
+/// target) is updated. `chown`/`lchown` failures are non-fatal; permission
+/// errors are ignored, and other failures emit a warning because ownership
+/// preservation is optional.
 fn try_preserve_ownership(from_meta: &fs::Metadata, to: &Path, follow_symlinks: bool) {
     use std::ffi::CString;
     use std::os::unix::ffi::OsStrExt as _;
@@ -829,22 +836,43 @@ fn try_preserve_ownership(from_meta: &fs::Metadata, to: &Path, follow_symlinks: 
         return;
     };
 
-    unsafe {
+    let result = unsafe {
         if follow_symlinks {
-            let _ = libc::chown(to_cstr.as_ptr(), uid, gid);
+            libc::chown(to_cstr.as_ptr(), uid, gid)
         } else {
-            let _ = libc::lchown(to_cstr.as_ptr(), uid, gid);
+            libc::lchown(to_cstr.as_ptr(), uid, gid)
+        }
+    };
+    if result != 0 {
+        let err = io::Error::last_os_error();
+        if err.kind() != io::ErrorKind::PermissionDenied {
+            eprintln!(
+                "mv: warning: failed to preserve ownership for {}: {err}",
+                to.quote()
+            );
         }
     }
 }
 
 #[cfg(unix)]
+/// Best-effort permission preservation for `to` using `from_meta`.
+///
+/// Only the mode bits are applied (`chmod` does not accept file type bits).
+/// Failures are non-fatal; permission errors are ignored, and other failures
+/// emit a warning because this is optional.
 fn try_preserve_permissions(from_meta: &fs::Metadata, to: &Path) {
     use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _};
 
     // Keep mode bits only (file type bits are not allowed in chmod).
     let mode = from_meta.mode() & 0o7777;
-    let _ = fs::set_permissions(to, fs::Permissions::from_mode(mode));
+    if let Err(err) = fs::set_permissions(to, fs::Permissions::from_mode(mode)) {
+        if err.kind() != io::ErrorKind::PermissionDenied {
+            eprintln!(
+                "mv: warning: failed to preserve permissions for {}: {err}",
+                to.quote()
+            );
+        }
+    }
 }
 
 #[cfg(unix)]
