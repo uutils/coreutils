@@ -4,8 +4,6 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) tstr sigstr cmdname setpgid sigchld getpid
-#[cfg(unix)]
-uucore::init_startup_state_capture!();
 
 mod status;
 
@@ -21,9 +19,6 @@ use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::parser::parse_time;
 use uucore::process::ChildExt;
 use uucore::translate;
-
-#[cfg(unix)]
-use uucore::signals::enable_pipe_errors;
 
 use uucore::{
     format_usage, show_error,
@@ -334,8 +329,6 @@ fn timeout(
     if !foreground {
         let _ = setpgid(Pid::from_raw(0), Pid::from_raw(0));
     }
-    #[cfg(unix)]
-    enable_pipe_errors()?;
 
     let mut command = process::Command::new(&cmd[0]);
     command
