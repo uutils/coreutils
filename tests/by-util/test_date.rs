@@ -480,9 +480,8 @@ fn test_date_set_valid_4() {
 
 #[test]
 fn test_invalid_format_string() {
-    let result = new_ucmd!().arg("+%!").fails();
-    result.no_stdout();
-    assert!(result.stderr_str().starts_with("date: invalid format "));
+    // With lenient mode, invalid format sequences are output literally (like GNU date)
+    new_ucmd!().arg("+%!").succeeds().stdout_is("%!\n");
 }
 
 #[test]
@@ -1445,4 +1444,56 @@ fn test_date_locale_fr_french() {
         stdout.contains("UTC") || stdout.contains("+00") || stdout.contains('Z'),
         "Output should include timezone information, got: {stdout}"
     );
+}
+
+#[test]
+fn test_date_posix_format_specifiers() {
+    let cases = [
+        // %r: 12-hour time with zero-padded hour (08:17:48 AM, not 8:17:48 AM)
+        ("%r", "08:17:48 AM"),
+        // %x: locale date in MM/DD/YY format
+        ("%x", "01/19/97"),
+        // %X: locale time in HH:MM:SS format
+        ("%X", "08:17:48"),
+        // %:8z: invalid format (width between : and z) should output literally (lenient mode)
+        ("%:8z", "%:8z"),
+    ];
+
+    for (format, expected) in cases {
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg("1997-01-19 08:17:48")
+            .arg(format!("+{format}"))
+            .succeeds()
+            .stdout_is(format!("{expected}\n"));
+    }
+}
+
+/// Test that %x format specifier respects locale settings
+/// This is a regression test for locale-aware date formatting
+#[test]
+#[ignore = "https://bugs.launchpad.net/ubuntu/+source/rust-coreutils/+bug/2137410"]
+#[cfg(any(target_os = "linux", target_vendor = "apple"))]
+fn test_date_format_x_locale_aware() {
+    // With C locale, %x should output MM/DD/YY (US format)
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .env("LC_ALL", "C")
+        .arg("-d")
+        .arg("1997-01-19 08:17:48")
+        .arg("+%x")
+        .succeeds()
+        .stdout_is("01/19/97\n");
+
+    // With French locale, %x should output DD/MM/YYYY (European format)
+    // GNU date outputs: 19/01/1997
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .arg("-d")
+        .arg("1997-01-19 08:17:48")
+        .arg("+%x")
+        .succeeds()
+        .stdout_is("19/01/1997\n");
 }
