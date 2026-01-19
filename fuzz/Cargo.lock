@@ -503,6 +503,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "645cbb3a84e60b7531617d5ae4e57f7e27308f6445f5abf653209ea76dec8dff"
 
 [[package]]
+name = "fixed_decimal"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "35eabf480f94d69182677e37571d3be065822acfafd12f2f085db44fbbcc8e57"
+dependencies = [
+ "displaydoc",
+ "smallvec",
+ "writeable",
+]
+
+[[package]]
 name = "flate2"
 version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -675,6 +686,27 @@ dependencies = [
  "zerofrom",
  "zerovec",
 ]
+
+[[package]]
+name = "icu_decimal"
+version = "2.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a38c52231bc348f9b982c1868a2af3195199623007ba2c7650f432038f5b3e8e"
+dependencies = [
+ "fixed_decimal",
+ "icu_decimal_data",
+ "icu_locale",
+ "icu_locale_core",
+ "icu_provider",
+ "writeable",
+ "zerovec",
+]
+
+[[package]]
+name = "icu_decimal_data"
+version = "2.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2905b4044eab2dd848fe84199f9195567b63ab3a93094711501363f63546fef7"
 
 [[package]]
 name = "icu_locale"
@@ -1554,7 +1586,7 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "uu_cksum"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1563,7 +1595,7 @@ dependencies = [
 
 [[package]]
 name = "uu_cut"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "bstr",
  "clap",
@@ -1574,7 +1606,7 @@ dependencies = [
 
 [[package]]
 name = "uu_date"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1587,7 +1619,7 @@ dependencies = [
 
 [[package]]
 name = "uu_echo"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1596,7 +1628,7 @@ dependencies = [
 
 [[package]]
 name = "uu_env"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1608,7 +1640,7 @@ dependencies = [
 
 [[package]]
 name = "uu_expr"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1621,7 +1653,7 @@ dependencies = [
 
 [[package]]
 name = "uu_printf"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1630,7 +1662,7 @@ dependencies = [
 
 [[package]]
 name = "uu_seq"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "bigdecimal",
  "clap",
@@ -1643,7 +1675,7 @@ dependencies = [
 
 [[package]]
 name = "uu_sort"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "bigdecimal",
  "binary-heap-plus",
@@ -1666,7 +1698,7 @@ dependencies = [
 
 [[package]]
 name = "uu_split"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1677,7 +1709,7 @@ dependencies = [
 
 [[package]]
 name = "uu_test"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1688,7 +1720,7 @@ dependencies = [
 
 [[package]]
 name = "uu_tr"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "bytecount",
  "clap",
@@ -1699,7 +1731,7 @@ dependencies = [
 
 [[package]]
 name = "uu_wc"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "bytecount",
  "clap",
@@ -1713,7 +1745,7 @@ dependencies = [
 
 [[package]]
 name = "uucore"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "base64-simd",
  "bigdecimal",
@@ -1731,7 +1763,9 @@ dependencies = [
  "glob",
  "hex",
  "icu_collator",
+ "icu_decimal",
  "icu_locale",
+ "icu_provider",
  "itertools",
  "libc",
  "md-5",
@@ -1780,7 +1814,7 @@ dependencies = [
 
 [[package]]
 name = "uucore_procs"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1788,7 +1822,7 @@ dependencies = [
 
 [[package]]
 name = "uufuzz"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "console",
  "libc",

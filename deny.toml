@@ -89,6 +89,8 @@ skip = [
   { name = "itertools", version = "0.13.0" },
   # ordered-multimap
   { name = "hashbrown", version = "0.14.5" },
+  # lru (via num-prime)
+  { name = "hashbrown", version = "0.15.5" },
   # cexpr (via bindgen)
   { name = "nom", version = "7.1.3" },
   # const-random-macro, rand_core
@@ -109,8 +111,6 @@ skip = [
   { name = "linux-raw-sys", version = "0.11.0" },
   # crossterm
   { name = "signal-hook", version = "0.3.18" },
-  # blake2b_simd
-  { name = "constant_time_eq", version = "0.3.1" },
 ]
 # spell-checker: enable
 

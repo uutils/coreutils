@@ -1490,5 +1490,5 @@ fn test_extreme_field_width_overflow() {
     new_ucmd!()
         .args(&["%999999999999999999999999d", "1"])
         .fails_with_code(1)
-        .stderr_only("printf: write error\n");
+        .stderr_contains("printf: write error"); //could contains additional message like "formatting width too large" not in GNU, thats fine.
 }

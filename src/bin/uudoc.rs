@@ -133,19 +133,6 @@ fn gen_completions<T: Args>(args: impl Iterator<Item = OsString>, util_map: &Uti
     process::exit(0);
 }
 
-/// print tldr error
-fn print_tldr_error() {
-    eprintln!("Warning: No tldr archive found, so the documentation will not include examples.");
-    eprintln!(
-        "To include examples in the documentation, download the tldr archive and put it in the docs/ folder."
-    );
-    eprintln!();
-    eprintln!(
-        "  curl -L https://github.com/tldr-pages/tldr/releases/latest/download/tldr.zip -o docs/tldr.zip"
-    );
-    eprintln!();
-}
-
 /// # Errors
 /// Returns an error if the writer fails.
 #[allow(clippy::too_many_lines)]
@@ -162,9 +149,6 @@ fn main() -> io::Result<()> {
         match command {
             "manpage" => {
                 let args_iter = args.into_iter().skip(2);
-                if tldr_zip.is_none() {
-                    print_tldr_error();
-                }
                 gen_manpage(
                     &mut tldr_zip,
                     args_iter,
@@ -185,9 +169,6 @@ fn main() -> io::Result<()> {
                 process::exit(1);
             }
         }
-    }
-    if tldr_zip.is_none() {
-        print_tldr_error();
     }
     let utils = util_map::<Box<dyn Iterator<Item = OsString>>>();
     match std::fs::create_dir("docs/src/utils/") {

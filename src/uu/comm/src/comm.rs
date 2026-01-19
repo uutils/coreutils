@@ -136,6 +136,11 @@ pub fn are_files_identical(path1: &Path, path2: &Path) -> io::Result<bool> {
         return Ok(false);
     }
 
+    // only proceed if both are regular files
+    if !metadata1.is_file() || !metadata2.is_file() {
+        return Ok(false);
+    }
+
     let file1 = File::open(path1)?;
     let file2 = File::open(path2)?;
 
@@ -151,7 +156,7 @@ pub fn are_files_identical(path1: &Path, path2: &Path) -> io::Result<bool> {
         // instead of failing, which is the POSIX-compliant way to handle interrupted I/O
         let bytes1 = loop {
             match reader1.read(&mut buffer1) {
-                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
                 result => break result?,
             }
         };
@@ -160,7 +165,7 @@ pub fn are_files_identical(path1: &Path, path2: &Path) -> io::Result<bool> {
         // Same retry logic as above for the second file to ensure consistent behavior
         let bytes2 = loop {
             match reader2.read(&mut buffer2) {
-                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
                 result => break result?,
             }
         };
