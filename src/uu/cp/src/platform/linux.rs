@@ -58,13 +58,7 @@ fn clone<P>(source: P, dest: P, fallback: CloneFallback) -> std::io::Result<()>
 where
     P: AsRef<Path>,
 {
-    let (src_file, dst_file) = match open_files(&source, &dest) {
-        Ok(files) => files,
-        Err(e) => {
-            return Err(e);
-        }
-    };
-
+    let (src_file, dst_file) = open_files(&source, &dest)?;
     let src_fd = src_file.as_raw_fd();
     let dst_fd = dst_file.as_raw_fd();
     let result = unsafe { libc::ioctl(dst_fd, libc::FICLONE, src_fd) };
@@ -178,13 +172,7 @@ fn sparse_copy_without_hole<P>(source: P, dest: P) -> std::io::Result<()>
 where
     P: AsRef<Path>,
 {
-    let (src_file, dst_file) = match open_files(&source, &dest) {
-        Ok(files) => files,
-        Err(e) => {
-            return Err(e);
-        }
-    };
-
+    let (src_file, dst_file) = open_files(&source, &dest)?;
     let dst_fd = dst_file.as_raw_fd();
 
     let size = src_file.metadata()?.size();
@@ -233,13 +221,7 @@ fn sparse_copy<P>(source: P, dest: P) -> std::io::Result<()>
 where
     P: AsRef<Path>,
 {
-    let (mut src_file, dst_file) = match open_files(&source, &dest) {
-        Ok(files) => files,
-        Err(e) => {
-            return Err(e);
-        }
-    };
-
+    let (mut src_file, dst_file) = open_files(&source, &dest)?;
     let dst_fd = dst_file.as_raw_fd();
 
     let size: usize = src_file.metadata()?.size().try_into().unwrap();
