@@ -184,6 +184,16 @@ pub fn are_files_identical(path1: &Path, path2: &Path) -> io::Result<bool> {
     }
 }
 
+fn write_line_with_delimiter<W: Write>(writer: &mut W, delim: &[u8], line: &[u8]) -> UResult<()> {
+    writer
+        .write_all(delim)
+        .map_err_context(|| "write error".to_string())?;
+    writer
+        .write_all(line)
+        .map_err_context(|| "write error".to_string())?;
+    Ok(())
+}
+
 fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) -> UResult<()> {
     let width_col_1 = usize::from(!opts.get_flag(options::COLUMN_1));
     let width_col_2 = usize::from(!opts.get_flag(options::COLUMN_2));
@@ -254,12 +264,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
                     break;
                 }
                 if !opts.get_flag(options::COLUMN_2) {
-                    writer
-                        .write_all(delim_col_2.as_bytes())
-                        .map_err_context(|| "write error".to_string())?;
-                    writer
-                        .write_all(rb)
-                        .map_err_context(|| "write error".to_string())?;
+                    write_line_with_delimiter(&mut writer, delim_col_2.as_bytes(), rb)?;
                 }
                 rb.clear();
                 nb = b.read_line(rb);
@@ -271,12 +276,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
                     break;
                 }
                 if !opts.get_flag(options::COLUMN_3) {
-                    writer
-                        .write_all(delim_col_3.as_bytes())
-                        .map_err_context(|| "write error".to_string())?;
-                    writer
-                        .write_all(ra)
-                        .map_err_context(|| "write error".to_string())?;
+                    write_line_with_delimiter(&mut writer, delim_col_3.as_bytes(), ra)?;
                 }
                 ra.clear();
                 rb.clear();
