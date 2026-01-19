@@ -94,7 +94,8 @@ where
             // we would have made it above).
             let dest_permissions = match std::fs::metadata(&dest) {
                 Ok(metadata) => Some(metadata.permissions()),
-                Err(_) => None,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+                Err(e) => Err(e)?,
             };
 
             // The file actually already exists
@@ -116,7 +117,7 @@ where
                     .open(&nonexistent_file)?
             }
         }
-        Err(e) => return Err(e),
+        Err(e) => Err(e)?,
     };
 
     Ok((src_file, dst_file))
