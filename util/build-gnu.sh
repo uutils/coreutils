@@ -91,15 +91,18 @@ cd -
 export CARGOFLAGS # tell to make
 if [ "${SELINUX_ENABLED}" = 1 ];then
     # Build few utils for SELinux for faster build. MULTICALL=y fails...
-    make UTILS="cat chcon chmod cp cut dd echo env groups id install ln ls mkdir mkfifo mknod mktemp mv printf rm rmdir runcon seq stat test touch tr true uname wc whoami"
+    UTILS="cat chcon chmod cp cut dd echo env groups id install ln ls mkdir mkfifo mknod mktemp mv printf rm rmdir runcon seq stat test touch tr true uname wc whoami"
+    export UTILS
+    make
 else
     # Use MULTICALL=y for faster build
     make MULTICALL=y SKIP_UTILS=more
-    for binary in $("${UU_BUILD_DIR}"/coreutils --list)
-        do [ -e "${UU_BUILD_DIR}/${binary}" ] || ln -vf "${UU_BUILD_DIR}/coreutils" "${UU_BUILD_DIR}/${binary}"
+    UTILS=$("${UU_BUILD_DIR}"/coreutils --list)
+    for binary in ${UTILS}
+        do ln -sf "${UU_BUILD_DIR}/coreutils" "${UU_BUILD_DIR}/${binary}"
     done
 fi
-[ -e "${UU_BUILD_DIR}/ginstall" ] || ln -vf "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests use ginstall
+ln -sf "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests use ginstall
 ##
 
 cd "${path_GNU}" && echo "[ pwd:'${PWD}' ]"
@@ -107,12 +110,8 @@ cd "${path_GNU}" && echo "[ pwd:'${PWD}' ]"
 # Any binaries that aren't built become `false` to make tests failure
 for binary in $(./build-aux/gen-lists-of-programs.sh --list-progs); do
     bin_path="${UU_BUILD_DIR}/${binary}"
-    test -f "${bin_path}" || cp -v /usr/bin/false "${bin_path}"
+    test -f "${bin_path}" || ln -sv /usr/bin/false "${bin_path}"
 done
-
-# Always update the PATH to test the uutils coreutils instead of the GNU coreutils
-# This ensures the correct path is used even if the repository was moved or rebuilt in a different location
-sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" tests/local.mk
 
 if test -f gnu-built; then
     echo "GNU build already found. Skip"
@@ -159,6 +158,11 @@ else
     sed -i '/tests\/help\/help-version.sh/ D' Makefile
     touch gnu-built
 fi
+
+# Hijack coreutils
+for binary in ${UTILS}
+    do ln -sf "${UU_BUILD_DIR}/${binary}" src/"${binary}"
+done
 
 grep -rl 'path_prepend_' tests/* | xargs -r "${SED}" -i 's| path_prepend_ ./src||'
 # path_prepend_ sets $abs_path_dir_: set it manually instead.
