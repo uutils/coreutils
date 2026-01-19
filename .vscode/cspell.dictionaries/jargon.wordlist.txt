@@ -146,6 +146,7 @@ semiprimes
 setcap
 setfacl
 setfattr
+SETFL
 setlocale
 shortcode
 shortcodes
@@ -194,6 +195,7 @@ inacc
 maint
 proc
 procs
+TOCTOU
 
 # * constants
 xffff
@@ -212,6 +214,7 @@ nofield
 # * clippy
 uninlined
 nonminimal
+rposition
 
 # * CPU/hardware features
 ASIMD
@@ -227,5 +230,7 @@ TUNABLES
 tunables
 VMULL
 vmull
+ENOTSUP
+enotsup
 SETFL
 tmpfs

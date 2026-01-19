@@ -8,7 +8,7 @@
 mod locale;
 
 use clap::{Arg, ArgAction, Command};
-use jiff::fmt::strtime;
+use jiff::fmt::strtime::{self, BrokenDownTime, Config, PosixCustom};
 use jiff::tz::{TimeZone, TimeZoneDatabase};
 use jiff::{Timestamp, Zoned};
 use std::collections::HashMap;
@@ -431,21 +431,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut stdout = BufWriter::new(std::io::stdout().lock());
 
     // Format all the dates
+    let config = Config::new().custom(PosixCustom::new()).lenient(true);
     for date in dates {
         match date {
-            // TODO: Switch to lenient formatting.
-            Ok(date) => match strtime::format(format_string, &date) {
-                Ok(s) => writeln!(stdout, "{s}").map_err(|e| {
-                    USimpleError::new(1, translate!("date-error-write", "error" => e))
-                })?,
-                Err(e) => {
-                    let _ = stdout.flush();
-                    return Err(USimpleError::new(
-                        1,
-                        translate!("date-error-invalid-format", "format" => format_string, "error" => e),
-                    ));
+            Ok(date) => {
+                match BrokenDownTime::from(&date).to_string_with_config(&config, format_string) {
+                    Ok(s) => writeln!(stdout, "{s}").map_err(|e| {
+                        USimpleError::new(1, translate!("date-error-write", "error" => e))
+                    })?,
+                    Err(e) => {
+                        let _ = stdout.flush();
+                        return Err(USimpleError::new(
+                            1,
+                            translate!("date-error-invalid-format", "format" => format_string, "error" => e),
+                        ));
+                    }
                 }
-            },
+            }
             Err((input, _err)) => {
                 let _ = stdout.flush();
                 show!(USimpleError::new(

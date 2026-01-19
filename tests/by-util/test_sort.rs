@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) ints (linux) NOFILE
+// spell-checker:ignore (words) ints (linux) NOFILE dfgi
 #![allow(clippy::cast_possible_wrap)]
 
 use std::env;
@@ -620,7 +620,7 @@ fn test_keys_invalid_field() {
     new_ucmd!()
         .args(&["-k", "1."])
         .fails()
-        .stderr_only("sort: failed to parse key '1.': failed to parse character index '': cannot parse integer from empty string\n");
+        .stderr_only("sort: invalid number after '.': invalid count at start of ''\n");
 }
 
 #[test]
@@ -628,7 +628,7 @@ fn test_keys_invalid_field_option() {
     new_ucmd!()
         .args(&["-k", "1.1x"])
         .fails()
-        .stderr_only("sort: failed to parse key '1.1x': invalid option: 'x'\n");
+        .stderr_only("sort: stray character in field spec: invalid field specification '1.1x'\n");
 }
 
 #[test]
@@ -636,7 +636,7 @@ fn test_keys_invalid_field_zero() {
     new_ucmd!()
         .args(&["-k", "0.1"])
         .fails()
-        .stderr_only("sort: failed to parse key '0.1': field index can not be 0\n");
+        .stderr_only("sort: field number is zero: invalid field specification '0.1'\n");
 }
 
 #[test]
@@ -644,7 +644,73 @@ fn test_keys_invalid_char_zero() {
     new_ucmd!()
         .args(&["-k", "1.0"])
         .fails()
-        .stderr_only("sort: failed to parse key '1.0': invalid character index 0 for the start position of a field\n");
+        .stderr_only("sort: character offset is zero: invalid field specification '1.0'\n");
+}
+
+#[test]
+fn test_keys_invalid_number_formats() {
+    new_ucmd!()
+        .args(&["-k", "0"])
+        .fails_with_code(2)
+        .stderr_only("sort: field number is zero: invalid field specification '0'\n");
+
+    new_ucmd!()
+        .args(&["-k", "2.,3"])
+        .fails_with_code(2)
+        .stderr_only("sort: invalid number after '.': invalid count at start of ',3'\n");
+
+    new_ucmd!()
+        .args(&["-k", "2,"])
+        .fails_with_code(2)
+        .stderr_only("sort: invalid number after ',': invalid count at start of ''\n");
+
+    new_ucmd!()
+        .args(&["-k", "1.1,-k0"])
+        .fails_with_code(2)
+        .stderr_only("sort: invalid number after ',': invalid count at start of '-k0'\n");
+}
+
+#[test]
+fn test_incompatible_options() {
+    new_ucmd!()
+        .arg("-hn")
+        .fails_with_code(2)
+        .stderr_only("sort: options '-hn' are incompatible\n");
+
+    new_ucmd!()
+        .arg("-in")
+        .fails_with_code(2)
+        .stderr_only("sort: options '-in' are incompatible\n");
+
+    new_ucmd!()
+        .arg("-nR")
+        .fails_with_code(2)
+        .stderr_only("sort: options '-nR' are incompatible\n");
+
+    new_ucmd!()
+        .arg("-dfgiMnR")
+        .fails_with_code(2)
+        .stderr_only("sort: options '-dfgMnR' are incompatible\n");
+
+    new_ucmd!()
+        .args(&["--sort=random", "-n"])
+        .fails_with_code(2)
+        .stderr_only("sort: options '-nR' are incompatible\n");
+
+    new_ucmd!()
+        .args(&["-c", "-o", "out"])
+        .fails_with_code(2)
+        .stderr_only("sort: options '-co' are incompatible\n");
+
+    new_ucmd!()
+        .args(&["-C", "-o", "out"])
+        .fails_with_code(2)
+        .stderr_only("sort: options '-Co' are incompatible\n");
+
+    new_ucmd!()
+        .args(&["-c", "-C"])
+        .fails_with_code(2)
+        .stderr_only("sort: options '-cC' are incompatible\n");
 }
 
 #[test]
@@ -1154,16 +1220,22 @@ fn test_sigpipe_panic() {
 
 #[test]
 fn test_conflict_check_out() {
-    let check_flags = ["-c=silent", "-c=quiet", "-c=diagnose-first", "-c", "-C"];
-    for check_flag in &check_flags {
+    let cases = [
+        ("-c=silent", "sort: options '-Co' are incompatible\n"),
+        ("-c=quiet", "sort: options '-Co' are incompatible\n"),
+        (
+            "-c=diagnose-first",
+            "sort: options '-co' are incompatible\n",
+        ),
+        ("-c", "sort: options '-co' are incompatible\n"),
+        ("-C", "sort: options '-Co' are incompatible\n"),
+    ];
+    for (check_flag, expected) in &cases {
         new_ucmd!()
             .arg(check_flag)
             .arg("-o=/dev/null")
             .fails()
-            .stderr_contains(
-                // the rest of the message might be subject to change
-                "error: the argument",
-            );
+            .stderr_contains(expected);
     }
 }
 
@@ -1204,7 +1276,7 @@ fn test_verifies_files_after_keys() {
             "nonexistent_dir/input_file",
         ])
         .fails_with_code(2)
-        .stderr_contains("failed to parse key");
+        .stderr_contains("invalid field specification '0'");
 }
 
 #[test]
@@ -1560,6 +1632,32 @@ fn test_g_float() {
 }
 
 #[test]
+fn test_g_float_locale_decimal_separator() {
+    let Ok(locale_fr_utf8) = env::var("LOCALE_FR_UTF8") else {
+        return;
+    };
+    if locale_fr_utf8 == "none" {
+        return;
+    }
+
+    let ts = TestScenario::new("sort");
+
+    ts.ucmd()
+        .env("LC_ALL", &locale_fr_utf8)
+        .args(&["-g", "--stable"])
+        .pipe_in("1,9\n1,10\n")
+        .succeeds()
+        .stdout_is("1,10\n1,9\n");
+
+    ts.ucmd()
+        .env("LC_ALL", &locale_fr_utf8)
+        .args(&["-g", "--stable"])
+        .pipe_in("1.9\n1.10\n")
+        .succeeds()
+        .stdout_is("1.10\n1.9\n");
+}
+
+#[test]
 // Test misc numbers ("'a" is not interpreted as literal, trailing text is ignored...)
 fn test_g_misc() {
     let input = "1\n100\n90\n'a\n85hello\n";
@@ -1735,8 +1833,14 @@ fn test_clap_localization_missing_required_argument() {
 #[test]
 fn test_clap_localization_invalid_value() {
     let test_cases = vec![
-        ("en_US.UTF-8", "sort: failed to parse key 'invalid'"),
-        ("fr_FR.UTF-8", "sort: échec d'analyse de la clé 'invalid'"),
+        (
+            "en_US.UTF-8",
+            "sort: invalid number at field start: invalid count at start of 'invalid'",
+        ),
+        (
+            "fr_FR.UTF-8",
+            "sort: nombre invalide au début du champ: nombre invalide au début de 'invalid'",
+        ),
     ];
 
     for (locale, expected_message) in test_cases {
@@ -2357,6 +2461,60 @@ fn test_start_buffer() {
     ucmd.args(&["b", "a"])
         .succeeds()
         .stdout_only_bytes(&expected);
+}
+
+#[test]
+fn test_locale_collation_c_locale() {
+    // C locale uses byte order - this is deterministic and tests the fix for #9148
+    // Accented characters (UTF-8 multibyte) sort after ASCII letters
+    let input = "é\ne\nE\na\nA\nz\n";
+    // C locale byte order: A=0x41, E=0x45, a=0x61, e=0x65, z=0x7A, é=0xC3 0xA9
+    let expected = "A\nE\na\ne\nz\né\n";
+
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
+fn test_locale_collation_utf8() {
+    // Test French UTF-8 locale handling - behavior depends on i18n-collator feature
+    // With feature: locale-aware collation (é sorts near e)
+    // Without feature: byte order (é after z, since 0xC3A9 > 0x7A)
+    let input = "z\né\ne\na\n";
+
+    let result = new_ucmd!()
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .pipe_in(input)
+        .succeeds();
+
+    let output = result.stdout_str();
+    let lines: Vec<&str> = output.lines().collect();
+
+    assert_eq!(lines.len(), 4, "Expected 4 sorted lines");
+    assert_eq!(lines[0], "a", "'a' (0x61) should always sort first");
+
+    // Validate based on which collation mode is active
+    if lines[3] == "é" {
+        // Byte order mode: é (0xC3A9) > z (0x7A)
+        assert_eq!(
+            lines,
+            vec!["a", "e", "z", "é"],
+            "Byte order mode: expected a < e < z < é"
+        );
+    } else {
+        // Locale collation mode: é sorts with base letter e
+        assert_eq!(lines[3], "z", "Locale mode: 'z' should sort last");
+        let z_pos = lines.iter().position(|&x| x == "z").unwrap();
+        let e_pos = lines.iter().position(|&x| x == "e").unwrap();
+        let e_accent_pos = lines.iter().position(|&x| x == "é").unwrap();
+        assert!(
+            e_pos < z_pos && e_accent_pos < z_pos,
+            "Locale mode: 'e' ({e_pos}) and 'é' ({e_accent_pos}) should sort before 'z' ({z_pos})"
+        );
+    }
 }
 
 /* spell-checker: enable */

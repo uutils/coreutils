@@ -2600,3 +2600,25 @@ fn test_install_unprivileged_option_u_skips_chown() {
     assert!(at.file_exists(dst_ok));
     assert_eq!(at.metadata(dst_ok).uid(), geteuid());
 }
+
+#[test]
+fn test_install_normal_file_replaces_symlink() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("source", "new content");
+    at.write("sensitive", "important data");
+
+    // Create symlink at destination
+    at.symlink_file("sensitive", "dest");
+
+    // Install should replace symlink with normal file (not follow it)
+    scene.ucmd().arg("source").arg("dest").succeeds();
+
+    // Verify dest is now a normal file, not a symlink
+    assert!(at.file_exists("dest"));
+    assert_eq!(at.read("dest"), "new content");
+
+    // Verify sensitive file was NOT modified
+    assert_eq!(at.read("sensitive"), "important data");
+}
