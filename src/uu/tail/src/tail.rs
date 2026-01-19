@@ -194,6 +194,33 @@ fn tail_file(
                     translate!("tail-error-cannot-open-no-such-file", "file" => input.display_name.clone(), "error" => translate!("tail-no-such-file-or-directory"))
                 );
             } else if e.kind() == ErrorKind::PermissionDenied {
+                #[cfg(windows)]
+                if path.is_dir() {
+                    set_exit_code(1);
+                    header_printer.print_input(input);
+                    show_error!(
+                        "{}",
+                        translate!("tail-error-reading-file", "file" => input.display_name.clone(), "error" => translate!("tail-is-a-directory"))
+                    );
+                    if settings.follow.is_some() {
+                        let msg = if settings.retry {
+                            ""
+                        } else {
+                            &translate!("tail-giving-up-on-this-name")
+                        };
+                        show_error!(
+                            "{}",
+                            translate!("tail-error-cannot-follow-file-type", "file" => input.display_name.clone(), "msg" => msg)
+                        );
+                    }
+                    if !observer.follow_name_retry() {
+                        if settings.retry && settings.follow.is_some() {
+                            observer.files.remove(path);
+                        }
+                        return Ok(());
+                    }
+                    return Ok(());
+                }
                 set_exit_code(1);
                 show!(e.map_err_context(|| {
                     translate!("tail-error-cannot-open-for-reading", "file" => input.display_name.clone())
