@@ -2012,14 +2012,13 @@ fn test_du_hard_links_multiple_dirs_in_args() {
 
     at.mkdir("dir1");
     at.mkdir("dir2");
-    at.write("dir1/file", &"x".repeat(8192));
+    at.write("dir1/file", "hello world");
     at.hard_link("dir1/file", "dir2/link");
 
     let result = ts.ucmd().args(&["dir1", "dir2"]).succeeds();
     let lines: Vec<&str> = result.stdout_str().lines().collect();
     let size = |i: usize| lines[i].split_once('\t').unwrap().0.parse::<u64>().unwrap();
-    assert!(size(0) >= 8);
-    assert!(size(1) <= 4);
+    assert!(size(0) > size(1));
 }
 
 #[test]
