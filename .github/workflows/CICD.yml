@@ -298,6 +298,8 @@ jobs:
         fi
         # Check that we don't cross-build uudoc
         env CARGO_BUILD_TARGET=aarch64-unknown-linux-gnu make install-manpages PREFIX=/tmp/usr UTILS=true
+        # We don't build coreutils without MULTICALL=y
+        ! test -e target/debug/coreutils
         # build (host)
         make build
         echo "Check that target directory will be ignored by backup tools"
