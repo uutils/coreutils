@@ -5149,3 +5149,33 @@ fn test_debug_flag_with_inotify() {
         .with_all_output()
         .stderr_contains("tail: using notification mode");
 }
+
+#[test]
+#[cfg(unix)]
+fn test_permission_denied_parent() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("noexec");
+    at.write("noexec/file", "secret");
+
+    // Remove execute permission from directory to prevent traversal
+    let metadata = std::fs::metadata(at.plus("noexec")).unwrap();
+    let mut permissions = metadata.permissions();
+    permissions.set_mode(0o000);
+    std::fs::set_permissions(at.plus("noexec"), permissions).unwrap();
+
+    ts.ucmd()
+        .arg("noexec/file")
+        .fails_with_code(1)
+        .stderr_is("tail: cannot open 'noexec/file' for reading: Permission denied\n")
+        .no_stdout();
+
+    // Cleanup permissions
+    let metadata = std::fs::metadata(at.plus("noexec")).unwrap();
+    let mut permissions = metadata.permissions();
+    permissions.set_mode(0o700);
+    std::fs::set_permissions(at.plus("noexec"), permissions).unwrap();
+}
