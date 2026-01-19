@@ -100,11 +100,12 @@ where
 
             // The file actually already exists
             if let Some(mut desired_permissions) = dest_permissions {
-                let dst = OpenOptions::new().write(true).truncate(true).open(&dest)?;
                 // This will be reset to the correct permissions later, this is defensive as it is
                 // the most restrictive
+                let dst = OpenOptions::new().write(true).open(&dest)?;
                 desired_permissions.set_mode(0o600);
                 dst.set_permissions(desired_permissions)?;
+                dst.set_len(0)?; // Equivalent to truncate
                 dst
             } else {
                 // If a symlink exists in the position we want to write the file to, and it symlinks to
