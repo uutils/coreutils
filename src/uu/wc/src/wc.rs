@@ -616,10 +616,18 @@ fn process_chunk<
     total.max_line_length = max(*current_len, total.max_line_length);
 }
 
-fn handle_error(error: BufReadDecoderError<'_>, total: &mut WordCount) -> Option<io::Error> {
+fn handle_error(
+    error: BufReadDecoderError<'_>,
+    total: &mut WordCount,
+    in_word: &mut bool,
+) -> Option<io::Error> {
     match error {
         BufReadDecoderError::InvalidByteSequence(bytes) => {
             total.bytes += bytes.len();
+            if !(*in_word) {
+                *in_word = true;
+                total.words += 1;
+            }
         }
         BufReadDecoderError::Io(e) => return Some(e),
     }
@@ -650,7 +658,7 @@ fn word_count_from_reader_specialized<
                 );
             }
             Err(e) => {
-                if let Some(e) = handle_error(e, &mut total) {
+                if let Some(e) = handle_error(e, &mut total, &mut in_word) {
                     return (total, Some(e));
                 }
             }

@@ -826,6 +826,16 @@ fn wc_w_words_with_emoji_separator() {
         .stdout_contains("3");
 }
 
+#[test]
+fn test_invalid_byte_sequence_word_count() {
+    // wc should count invalid byte sequences as words
+    // Input: "a \xff b\n" should produce: 1 line, 3 words, 6 bytes
+    new_ucmd!()
+        .pipe_in(&[b'a', b' ', 0xff, b' ', b'b', b'\n'])
+        .succeeds()
+        .stdout_is("      1       3       6\n");
+}
+
 #[cfg(unix)]
 #[test]
 fn test_simd_respects_glibc_tunables() {
