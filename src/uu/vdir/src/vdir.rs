@@ -7,12 +7,8 @@ use clap::Command;
 use std::ffi::OsString;
 use std::path::Path;
 use uu_ls::{Config, Format, options};
-use uucore::{
-    error::UResult,
-    format_usage,
-    quoting_style::QuotingStyle,
-    translate
-};
+use uucore::error::UResult;
+use uucore::quoting_style::QuotingStyle;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
