@@ -493,12 +493,6 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
-    - name: Install dependencies
-      shell: bash
-      run: |
-        ## Install dependencies
-        sudo apt-get update
-        sudo apt-get install libselinux1-dev libsystemd-dev
     - name: "`make install`"
       shell: bash
       run: |

@@ -201,7 +201,7 @@ fn read_and_discard<R: Read>(reader: &mut R, n: u64, buf_size: usize) -> io::Res
                 total += bytes_read as u64;
                 remaining -= bytes_read as u64;
             }
-            Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
             Err(e) => return Err(e),
         }
     }
