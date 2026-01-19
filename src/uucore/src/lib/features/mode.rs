@@ -5,7 +5,7 @@
 
 //! Set of functions to parse modes
 
-// spell-checker:ignore (vars) fperm srwx
+// spell-checker:ignore (vars) fperm srwx RAII
 
 use libc::umask;
 
