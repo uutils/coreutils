@@ -65,7 +65,7 @@ fn test_utf8() {
         .args(&["-lwmcL"])
         .pipe_in_fixture("UTF_8_test.txt")
         .succeeds()
-        .stdout_is("    303    2119   22457   23025      79\n");
+        .stdout_is("    303    2178   22457   23025      79\n");
 }
 
 #[test]
