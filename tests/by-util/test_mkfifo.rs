@@ -48,9 +48,15 @@ fn test_create_one_fifo_with_non_file_permission_mode() {
     new_ucmd!()
         .arg("abcd")
         .arg("-m")
-        .arg("1999")
+        .arg("1777")
         .fails()
         .stderr_is("mode must specify only file permission bits");
+    new_ucmd!()
+        .arg("abcd")
+        .arg("-m")
+        .arg("1999")
+        .fails()
+        .stderr_contains("invalid mode");
 }
 
 #[test]
