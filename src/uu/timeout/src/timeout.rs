@@ -27,6 +27,9 @@ use uucore::{
     signals::{signal_by_name_or_value, signal_name_by_value},
 };
 
+use nix::sys::signal::{Signal, kill};
+use nix::unistd::{Pid, getpid, setpgid};
+
 pub mod options {
     pub static FOREGROUND: &str = "foreground";
     pub static KILL_AFTER: &str = "kill-after";
@@ -207,7 +210,11 @@ fn catch_sigterm() {
 /// Report that a signal is being sent if the verbose flag is set.
 fn report_if_verbose(signal: usize, cmd: &str, verbose: bool) {
     if verbose {
-        let s = signal_name_by_value(signal).unwrap();
+        let s = if signal == 0 {
+            "0".to_string()
+        } else {
+            signal_name_by_value(signal).unwrap().to_string()
+        };
         show_error!(
             "{}",
             translate!("timeout-verbose-sending-signal", "signal" => s, "command" => cmd.quote())
@@ -263,7 +270,14 @@ fn wait_or_kill_process(
     match process.wait_or_timeout(duration, None) {
         Ok(Some(status)) => {
             if preserve_status {
-                Ok(status.code().unwrap_or_else(|| status.signal().unwrap()))
+                let exit_code = status.code().unwrap_or_else(|| {
+                    status.signal().unwrap_or_else(|| {
+                        // Extremely rare: process exited but we have neither exit code nor signal.
+                        // This can happen on some platforms or in unusual termination scenarios.
+                        ExitStatus::TimeoutFailed.into()
+                    })
+                });
+                Ok(exit_code)
             } else {
                 Ok(ExitStatus::TimeoutFailed.into())
             }
@@ -293,8 +307,8 @@ fn preserve_signal_info(signal: libc::c_int) -> libc::c_int {
     // The easiest way to preserve the latter seems to be to kill
     // ourselves with whatever signal our child exited with, which is
     // what the following is intended to accomplish.
-    unsafe {
-        libc::kill(libc::getpid(), signal);
+    if let Ok(sig) = Signal::try_from(signal) {
+        let _ = kill(getpid(), Some(sig));
     }
     signal
 }
@@ -315,7 +329,7 @@ fn timeout(
     verbose: bool,
 ) -> UResult<()> {
     if !foreground {
-        unsafe { libc::setpgid(0, 0) };
+        let _ = setpgid(Pid::from_raw(0), Pid::from_raw(0));
     }
     #[cfg(unix)]
     enable_pipe_errors()?;
@@ -351,10 +365,14 @@ fn timeout(
     // structure of `wait_or_kill_process()`. They can probably be
     // refactored into some common function.
     match process.wait_or_timeout(duration, Some(&SIGNALED)) {
-        Ok(Some(status)) => Err(status
-            .code()
-            .unwrap_or_else(|| preserve_signal_info(status.signal().unwrap()))
-            .into()),
+        Ok(Some(status)) => {
+            let exit_code = status.code().unwrap_or_else(|| {
+                status
+                    .signal()
+                    .map_or_else(|| ExitStatus::TimeoutFailed.into(), preserve_signal_info)
+            });
+            Err(exit_code.into())
+        }
         Ok(None) => {
             report_if_verbose(signal, &cmd[0], verbose);
             send_signal(process, signal, foreground);

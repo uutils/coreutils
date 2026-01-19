@@ -157,18 +157,25 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     };
     let check = matches.get_flag("check");
 
-    let ignore_missing = matches.get_flag("ignore-missing");
-    let warn = matches.get_flag("warn");
-    let quiet = matches.get_flag("quiet");
-    let strict = matches.get_flag("strict");
-    let status = matches.get_flag("status");
+    let check_flag = |flag| match (check, matches.get_flag(flag)) {
+        (_, false) => Ok(false),
+        (true, true) => Ok(true),
+        (false, true) => Err(ChecksumError::CheckOnlyFlag(flag.into())),
+    };
 
-    let files = matches.get_many::<OsString>(options::FILE).map_or_else(
-        // No files given, read from stdin.
-        || Box::new(iter::once(OsStr::new("-"))) as Box<dyn Iterator<Item = &OsStr>>,
-        // At least one file given, read from them.
-        |files| Box::new(files.map(OsStr::new)) as Box<dyn Iterator<Item = &OsStr>>,
-    );
+    // Each of the following flags are only expected in --check mode.
+    // If we encounter them otherwise, end with an error.
+    let ignore_missing = check_flag("ignore-missing")?;
+    let warn = check_flag("warn")?;
+    let quiet = check_flag("quiet")?;
+    let strict = check_flag("strict")?;
+    let status = check_flag("status")?;
+
+    // clap provides the default value -. So we unwrap() safety.
+    let files = matches
+        .get_many::<OsString>(options::FILE)
+        .unwrap()
+        .map(|s| s.as_os_str());
 
     if check {
         // on Windows, allow --binary/--text to be used with --check
@@ -293,8 +300,7 @@ pub fn uu_app_common() -> Command {
                 .long(options::QUIET)
                 .help(translate!("hashsum-help-quiet"))
                 .action(ArgAction::SetTrue)
-                .overrides_with_all([options::STATUS, options::WARN])
-                .requires(options::CHECK),
+                .overrides_with_all([options::STATUS, options::WARN]),
         )
         .arg(
             Arg::new(options::STATUS)
@@ -302,22 +308,19 @@ pub fn uu_app_common() -> Command {
                 .long("status")
                 .help(translate!("hashsum-help-status"))
                 .action(ArgAction::SetTrue)
-                .overrides_with_all([options::QUIET, options::WARN])
-                .requires(options::CHECK),
+                .overrides_with_all([options::QUIET, options::WARN]),
         )
         .arg(
             Arg::new(options::STRICT)
                 .long("strict")
                 .help(translate!("hashsum-help-strict"))
-                .action(ArgAction::SetTrue)
-                .requires(options::CHECK),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("ignore-missing")
                 .long("ignore-missing")
                 .help(translate!("hashsum-help-ignore-missing"))
-                .action(ArgAction::SetTrue)
-                .requires(options::CHECK),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::WARN)
@@ -325,8 +328,7 @@ pub fn uu_app_common() -> Command {
                 .long("warn")
                 .help(translate!("hashsum-help-warn"))
                 .action(ArgAction::SetTrue)
-                .overrides_with_all([options::QUIET, options::STATUS])
-                .requires(options::CHECK),
+                .overrides_with_all([options::QUIET, options::STATUS]),
         )
         .arg(
             Arg::new("zero")
@@ -340,6 +342,8 @@ pub fn uu_app_common() -> Command {
                 .index(1)
                 .action(ArgAction::Append)
                 .value_name(options::FILE)
+                .default_value("-")
+                .hide_default_value(true)
                 .value_hint(clap::ValueHint::FilePath)
                 .value_parser(ValueParser::os_string()),
         )

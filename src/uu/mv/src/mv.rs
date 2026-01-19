@@ -908,7 +908,12 @@ fn rename_fifo_fallback(_from: &Path, _to: &Path) -> io::Result<()> {
 #[cfg(unix)]
 fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     let path_symlink_points_to = fs::read_link(from)?;
-    unix::fs::symlink(path_symlink_points_to, to).and_then(|_| fs::remove_file(from))
+    unix::fs::symlink(path_symlink_points_to, to)?;
+    #[cfg(not(any(target_os = "macos", target_os = "redox")))]
+    {
+        let _ = copy_xattrs_if_supported(from, to);
+    }
+    fs::remove_file(from)
 }
 
 #[cfg(windows)]
@@ -1027,7 +1032,7 @@ fn copy_dir_contents(
     }
     #[cfg(not(unix))]
     {
-        copy_dir_contents_recursive(from, to, None, None, verbose, progress_bar, display_manager)?;
+        copy_dir_contents_recursive(from, to, verbose, progress_bar, display_manager)?;
     }
 
     Ok(())
@@ -1038,8 +1043,6 @@ fn copy_dir_contents_recursive(
     to_dir: &Path,
     #[cfg(unix)] hardlink_tracker: &mut HardlinkTracker,
     #[cfg(unix)] hardlink_scanner: &HardlinkGroupScanner,
-    #[cfg(not(unix))] _hardlink_tracker: Option<()>,
-    #[cfg(not(unix))] _hardlink_scanner: Option<()>,
     verbose: bool,
     progress_bar: Option<&ProgressBar>,
     display_manager: Option<&MultiProgress>,
@@ -1078,10 +1081,6 @@ fn copy_dir_contents_recursive(
                 hardlink_tracker,
                 #[cfg(unix)]
                 hardlink_scanner,
-                #[cfg(not(unix))]
-                _hardlink_tracker,
-                #[cfg(not(unix))]
-                _hardlink_scanner,
                 verbose,
                 progress_bar,
                 display_manager,
@@ -1153,13 +1152,11 @@ fn copy_file_with_hardlinks_helper(
         rename_symlink_fallback(from, to)?;
     } else {
         // Copy a regular file.
+        fs::copy(from, to)?;
+        // Copy xattrs, ignoring ENOTSUP errors (filesystem doesn't support xattrs)
         #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
         {
-            fs::copy(from, to).and_then(|_| fsxattr::copy_xattrs(&from, &to))?;
-        }
-        #[cfg(any(target_os = "macos", target_os = "redox"))]
-        {
-            fs::copy(from, to)?;
+            let _ = copy_xattrs_if_supported(from, to);
         }
     }
 
@@ -1201,16 +1198,30 @@ fn rename_file_fallback(
     }
 
     // Regular file copy
-    #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
     fs::copy(from, to)
-        .and_then(|_| fsxattr::copy_xattrs(&from, &to))
-        .and_then(|_| fs::remove_file(from))
         .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
-    #[cfg(any(target_os = "macos", target_os = "redox", not(unix)))]
-    fs::copy(from, to)
-        .and_then(|_| fs::remove_file(from))
+
+    // Copy xattrs, ignoring ENOTSUP errors (filesystem doesn't support xattrs)
+    #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
+    {
+        let _ = copy_xattrs_if_supported(from, to);
+    }
+
+    fs::remove_file(from)
         .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
     Ok(())
+}
+
+/// Copy xattrs from source to destination, ignoring ENOTSUP/EOPNOTSUPP errors.
+/// These errors indicate the filesystem doesn't support extended attributes,
+/// which is acceptable when moving files across filesystems.
+#[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
+fn copy_xattrs_if_supported(from: &Path, to: &Path) -> io::Result<()> {
+    match fsxattr::copy_xattrs(from, to) {
+        Ok(()) => Ok(()),
+        Err(e) if e.raw_os_error() == Some(libc::EOPNOTSUPP) => Ok(()),
+        Err(e) => Err(e),
+    }
 }
 
 fn is_empty_dir(path: &Path) -> bool {

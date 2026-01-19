@@ -67,13 +67,11 @@ pub fn getpid() -> pid_t {
 /// so some system such as redox doesn't supported.
 #[cfg(not(target_os = "redox"))]
 pub fn getsid(pid: i32) -> Result<pid_t, Errno> {
-    unsafe {
-        let result = libc::getsid(pid);
-        if Errno::last() == Errno::UnknownErrno {
-            Ok(result)
-        } else {
-            Err(Errno::last())
-        }
+    let result = unsafe { libc::getsid(pid) };
+    if result == -1 {
+        Err(Errno::last())
+    } else {
+        Ok(result)
     }
 }
 

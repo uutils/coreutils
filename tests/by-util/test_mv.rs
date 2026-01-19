@@ -623,56 +623,21 @@ fn test_mv_symlink_into_target() {
     ucmd.arg("dir-link").arg("dir").succeeds();
 }
 
-#[cfg(all(unix, not(target_os = "android")))]
-#[ignore = "requires sudo"]
+#[cfg(target_os = "linux")]
 #[test]
 fn test_mv_broken_symlink_to_another_fs() {
     let scene = TestScenario::new(util_name!());
 
     scene.fixtures.mkdir("foo");
-
-    let output = scene
-        .cmd("sudo")
-        .env("PATH", env!("PATH"))
-        .args(&["-E", "--non-interactive", "ls"])
-        .run();
-    println!("test output: {output:?}");
-
-    let mount = scene
-        .cmd("sudo")
-        .env("PATH", env!("PATH"))
-        .args(&[
-            "-E",
-            "--non-interactive",
-            "mount",
-            "none",
-            "-t",
-            "tmpfs",
-            "foo",
-        ])
-        .run();
-
-    if !mount.succeeded() {
-        print!("Test skipped; requires root user");
-        return;
-    }
-
-    scene.fixtures.mkdir("bar");
-    scene.fixtures.symlink_file("nonexistent", "bar/baz");
-
+    scene.fixtures.symlink_file("missing", "foo/dangling");
+    let dest = "/dev/shm/foo";
     scene
         .ucmd()
-        .arg("bar")
         .arg("foo")
+        .arg(dest)
         .succeeds()
         .no_stderr()
         .no_stdout();
-
-    scene
-        .cmd("sudo")
-        .env("PATH", env!("PATH"))
-        .args(&["-E", "--non-interactive", "umount", "foo"])
-        .succeeds();
 }
 
 #[test]
@@ -2855,4 +2820,28 @@ fn test_mv_no_prompt_unwriteable_file_with_no_tty() {
 
     assert!(!at.file_exists("source_notty"));
     assert!(at.file_exists("target_notty"));
+}
+
+/// Test mv silently succeeds when dest filesystem doesn't support xattrs (ENOTSUP)
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_xattr_enotsup_silent() {
+    use std::process::Command;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("src", "x");
+
+    if Command::new("setfattr")
+        .args(["-n", "user.t", "-v", "v", &at.plus_as_string("src")])
+        .status()
+        .is_ok_and(|s| s.success())
+    {
+        scene
+            .ucmd()
+            .arg(at.plus_as_string("src"))
+            .arg("/dev/shm/mv_test")
+            .succeeds()
+            .no_stderr();
+        std::fs::remove_file("/dev/shm/mv_test").ok();
+    }
 }

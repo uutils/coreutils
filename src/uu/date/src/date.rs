@@ -8,12 +8,12 @@
 mod locale;
 
 use clap::{Arg, ArgAction, Command};
-use jiff::fmt::strtime;
+use jiff::fmt::strtime::{self, BrokenDownTime, Config, PosixCustom};
 use jiff::tz::{TimeZone, TimeZoneDatabase};
 use jiff::{Timestamp, Zoned};
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use uucore::display::Quotable;
@@ -428,24 +428,33 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let format_string = make_format_string(&settings);
+    let mut stdout = BufWriter::new(std::io::stdout().lock());
 
     // Format all the dates
+    let config = Config::new().custom(PosixCustom::new()).lenient(true);
     for date in dates {
         match date {
-            // TODO: Switch to lenient formatting.
-            Ok(date) => match strtime::format(format_string, &date) {
-                Ok(s) => println!("{s}"),
-                Err(e) => {
-                    return Err(USimpleError::new(
-                        1,
-                        translate!("date-error-invalid-format", "format" => format_string, "error" => e),
-                    ));
+            Ok(date) => {
+                match BrokenDownTime::from(&date).to_string_with_config(&config, format_string) {
+                    Ok(s) => writeln!(stdout, "{s}").map_err(|e| {
+                        USimpleError::new(1, translate!("date-error-write", "error" => e))
+                    })?,
+                    Err(e) => {
+                        let _ = stdout.flush();
+                        return Err(USimpleError::new(
+                            1,
+                            translate!("date-error-invalid-format", "format" => format_string, "error" => e),
+                        ));
+                    }
                 }
-            },
-            Err((input, _err)) => show!(USimpleError::new(
-                1,
-                translate!("date-error-invalid-date", "date" => input)
-            )),
+            }
+            Err((input, _err)) => {
+                let _ = stdout.flush();
+                show!(USimpleError::new(
+                    1,
+                    translate!("date-error-invalid-date", "date" => input)
+                ));
+            }
         }
     }
 

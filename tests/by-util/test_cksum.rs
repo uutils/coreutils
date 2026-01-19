@@ -1066,7 +1066,7 @@ mod output_format {
             .args(&["-a", "md5"])
             .arg(at.subdir.join("f"))
             .fails_with_code(1)
-            .stderr_contains("the following required arguments were not provided"); //clap does not change the meaning
+            .stderr_contains("--text mode is only supported with --untagged");
     }
 
     #[test]
