@@ -139,11 +139,9 @@ fn tail_file(
             if st.is_dir() {
                 set_exit_code(1);
                 header_printer.print_input(input);
-                let err_msg = translate!("tail-is-a-directory");
-
                 show_error!(
                     "{}",
-                    translate!("tail-error-reading-file", "file" => input.display_name.clone(), "error" => err_msg)
+                    translate!("tail-error-reading-file", "file" => input.display_name.clone(), "error" => translate!("tail-is-a-directory"))
                 );
                 if settings.follow.is_some() {
                     let msg = if settings.retry {
