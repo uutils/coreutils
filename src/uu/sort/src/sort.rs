@@ -600,11 +600,12 @@ impl<'a> Line<'a> {
             tokenize(line, settings.separator, token_buffer);
         }
         if settings.mode == SortMode::Numeric {
-            // exclude inf, nan, scientific notation
-            let line_num_float = (!line.iter().any(u8::is_ascii_alphabetic))
-                .then(|| std::str::from_utf8(line).ok())
-                .flatten()
-                .and_then(|s| s.parse::<f64>().ok());
+            // exclude inf, nan, scientific notation, '+' sign
+            let line_num_float = (!line.starts_with(&[*POSITIVE])
+                && !line.iter().any(u8::is_ascii_alphabetic))
+            .then(|| std::str::from_utf8(line).ok())
+            .flatten()
+            .and_then(|s| s.parse::<f64>().ok());
             line_data.line_num_floats.push(line_num_float);
         }
         for (selector, selection) in settings
