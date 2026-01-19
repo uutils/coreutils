@@ -144,6 +144,7 @@ sigaction
 siginfo
 sigusr
 strcasecmp
+strtime
 subcommand
 subexpression
 submodule
