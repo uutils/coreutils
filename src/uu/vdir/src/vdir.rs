@@ -61,4 +61,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 // an uu_app function, so we need this dummy one.
 pub fn uu_app() -> Command {
     uu_ls::uu_app()
+        .override_usage(format_usage(&translate!("vdir-usage")))
+        .about(translate!("vdir-about"))
 }

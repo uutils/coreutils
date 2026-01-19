@@ -1,6 +1,12 @@
 ls-about = Lister le contenu des répertoires.
   Ignorer les fichiers et répertoires commençant par un '.' par défaut
+dir-about = Lister le contenu des répertoires.
+  Ignorer les fichiers et répertoires commençant par un '.' par défaut
+vdir-about = Lister le contenu des répertoires.
+  Ignorer les fichiers et répertoires commençant par un '.' par défaut
 ls-usage = ls [OPTION]... [FICHIER]...
+dir-usage = dir [OPTION]... [FICHIER]...
+vdir-usage = vdir [OPTION]... [FICHIER]...
 ls-after-help = L'argument TIME_STYLE peut être full-iso, long-iso, iso, locale ou +FORMAT. FORMAT est interprété comme dans date. De plus, la variable d'environnement TIME_STYLE définit le style par défaut à utiliser.
 
 # Messages d'erreur

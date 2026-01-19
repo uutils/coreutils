@@ -7,8 +7,12 @@ use clap::Command;
 use std::ffi::OsString;
 use std::path::Path;
 use uu_ls::{Config, Format, options};
-use uucore::error::UResult;
-use uucore::quoting_style::QuotingStyle;
+use uucore::{
+    error::UResult,
+    format_usage,
+    quoting_style::QuotingStyle,
+    translate,
+};
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -63,4 +67,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 // an uu_app function, so we return the `ls` app.
 pub fn uu_app() -> Command {
     uu_ls::uu_app()
+        .override_usage(format_usage(&translate!("dir-usage")))
+        .about(translate!("dir-about"))
 }
