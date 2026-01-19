@@ -242,7 +242,6 @@ impl FileLines<'_> {
             let info = decode_char_info(bytes, idx);
             indent_len += info.width;
             idx += info.consumed;
-            continue;
         }
         if indent_end == bytes.len() {
             indent_end = idx;
