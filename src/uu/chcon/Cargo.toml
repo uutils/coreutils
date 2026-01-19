@@ -17,7 +17,7 @@ workspace = true
 [lib]
 path = "src/chcon.rs"
 
-[dependencies]
+[target.'cfg(target_os = "linux")'.dependencies] # todo: block fetching crates without feat_selinux
 clap = { workspace = true }
 uucore = { workspace = true, features = ["entries", "fs", "perms"] }
 selinux = { workspace = true }
