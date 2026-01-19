@@ -132,7 +132,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut use_umask = true;
     let mode_permissions = match matches.get_one::<String>("mode") {
-        None => u32::from(MODE_RW_UGO),
+        None => MODE_RW_UGO,
         Some(str_mode) => {
             use_umask = false;
             parse_mode(str_mode).map_err(|e| USimpleError::new(1, e))?
@@ -247,7 +247,7 @@ pub fn uu_app() -> Command {
 
 #[allow(clippy::unnecessary_cast)]
 fn parse_mode(str_mode: &str) -> Result<u32, String> {
-    let default_mode = u32::from(MODE_RW_UGO);
+    let default_mode = MODE_RW_UGO;
     uucore::mode::parse_chmod(default_mode, str_mode, true, uucore::mode::get_umask())
         .map_err(|e| {
             translate!(
