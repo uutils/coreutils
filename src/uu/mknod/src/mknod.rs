@@ -29,8 +29,7 @@ const MODE_RW_UGO: u32 = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWO
     target_os = "freebsd",
     target_os = "redox",
 ))]
-const MODE_RW_UGO: u32 =
-    (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
+const MODE_RW_UGO: u32 = (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
 
 mod options {
     pub const MODE: &str = "mode";
