@@ -171,13 +171,34 @@ fn get_preload_env(_tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
     // Use the directory provided at compile time via LIBSTDBUF_DIR environment variable
     // This will fail to compile if LIBSTDBUF_DIR is not set, which is the desired behavior
     const LIBSTDBUF_DIR: &str = env!("LIBSTDBUF_DIR");
+
+    // Search paths in order:
+    // 1. Directory where stdbuf is located (program_path)
+    // 2. Compile-time directory from LIBSTDBUF_DIR
+    let mut search_paths: Vec<PathBuf> = Vec::new();
+
+    // First, try to get the directory where stdbuf is running from
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            search_paths.push(exe_dir.to_path_buf());
+        }
+    }
+
+    // Add the compile-time directory as fallback
+    search_paths.push(PathBuf::from(LIBSTDBUF_DIR));
+
+    // Search for libstdbuf in each path
+    for base_path in search_paths {
+        let path_buf = base_path.join("libstdbuf").with_extension(extension);
+        if path_buf.exists() {
+            return Ok((preload.to_owned(), path_buf));
+        }
+    }
+
+    // If not found in any path, report error
     let path_buf = PathBuf::from(LIBSTDBUF_DIR)
         .join("libstdbuf")
         .with_extension(extension);
-    if path_buf.exists() {
-        return Ok((preload.to_owned(), path_buf));
-    }
-
     Err(USimpleError::new(
         1,
         translate!("stdbuf-error-external-libstdbuf-not-found", "path" => path_buf.display()),
