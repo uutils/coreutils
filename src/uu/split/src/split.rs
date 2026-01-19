@@ -48,6 +48,9 @@ static OPT_IO_BLKSIZE: &str = "-io-blksize";
 static ARG_INPUT: &str = "input";
 static ARG_PREFIX: &str = "prefix";
 
+// 128 KiB
+const COPY_BUFFER_SIZE: usize = 128 * 1024;
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (args, obs_lines) = handle_obsolete(args);
@@ -1065,6 +1068,15 @@ impl ManageOutFiles for OutFiles {
     }
 }
 
+fn copy_exact<R: Read, W: Write>(
+    reader: &mut R,
+    writer: &mut W,
+    num_bytes: u64,
+) -> io::Result<u64> {
+    let mut buf_reader = BufReader::with_capacity(COPY_BUFFER_SIZE, reader.take(num_bytes));
+    io::copy(&mut buf_reader, writer)
+}
+
 /// Split a file or STDIN into a specific number of chunks by byte.
 ///
 /// When file size cannot be evenly divided into the number of chunks of the same size,
@@ -1173,14 +1185,14 @@ where
 
             let n_bytes = match kth_chunk {
                 Some(chunk_number) if i == chunk_number => {
-                    io::copy(&mut reader.by_ref().take(limit), &mut stdout_writer)?;
+                    copy_exact(&mut reader, &mut stdout_writer, limit)?;
                     break;
                 }
-                Some(_) => io::copy(&mut reader.by_ref().take(limit), &mut io::sink())?,
+                Some(_) => copy_exact(&mut reader, &mut io::sink(), limit)?,
                 None => {
                     let idx = (i - 1) as usize;
                     let writer = out_files.get_writer(idx, settings)?;
-                    io::copy(&mut reader.by_ref().take(limit), writer)?
+                    copy_exact(&mut reader, writer, limit)?
                 }
             };
             num_bytes -= n_bytes;
