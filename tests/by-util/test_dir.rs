@@ -63,8 +63,14 @@ fn test_help_shows_dir_not_ls() {
     let output = result.stdout_str();
 
     // Verify help text contains "dir" in the usage line
-    assert!(output.contains("dir [OPTION]"), "Help should show 'dir [OPTION]'");
+    assert!(
+        output.contains("dir [OPTION]"),
+        "Help should show 'dir [OPTION]'"
+    );
 
     // Verify help text does not incorrectly show "ls"
-    assert!(!output.contains("ls [OPTION]"), "Help should not show 'ls [OPTION]'");
+    assert!(
+        !output.contains("ls [OPTION]"),
+        "Help should not show 'ls [OPTION]'"
+    );
 }
