@@ -239,7 +239,24 @@ iovec
 unistd
 
 # * vars/signals
+pthread
+sigaction
+sigaddset
+sigemptyset
+sigmask
+sigset
+SETMASK
+ALRM
+SIGALRM
+SIGHUP
+SIGINT
+SIGKILL
 SIGPIPE
+SIGQUIT
+SIGSTOP
+SIGTERM
+SIGTTIN
+SIGTTOU
 
 # * vars/std
 CString
