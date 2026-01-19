@@ -186,8 +186,8 @@ fn tail_file(
             }
         }
         Err(e) => {
-            observer.add_bad_path(path, input.display_name.as_str(), false)?;
             if e.kind() == ErrorKind::NotFound {
+                observer.add_bad_path(path, input.display_name.as_str(), false)?;
                 set_exit_code(1);
                 show_error!(
                     "{}",
@@ -214,18 +214,18 @@ fn tail_file(
                         );
                     }
                     if !observer.follow_name_retry() {
-                        if settings.retry && settings.follow.is_some() {
-                            observer.files.remove(path);
-                        }
                         return Ok(());
                     }
+                    observer.add_bad_path(path, input.display_name.as_str(), false)?;
                     return Ok(());
                 }
+                observer.add_bad_path(path, input.display_name.as_str(), false)?;
                 set_exit_code(1);
                 show!(e.map_err_context(|| {
                     translate!("tail-error-cannot-open-for-reading", "file" => input.display_name.clone())
                 }));
             } else {
+                observer.add_bad_path(path, input.display_name.as_str(), false)?;
                 return Err(e.map_err_context(|| {
                     translate!("tail-error-cannot-open-for-reading", "file" => input.display_name.clone())
                 }));
