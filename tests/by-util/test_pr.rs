@@ -633,6 +633,22 @@ fn test_form_feed_newlines() {
 }
 
 #[test]
+fn test_new_line_followed_by_form_feed() {
+    // Here we define the expected output.
+    let whitespace = " ".repeat(50);
+    let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
+    let pattern = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\nabc\n\x0c");
+    let regex = Regex::new(&pattern).unwrap();
+
+    // Command line: `printf "abc\n\f" | pr -f`.
+    new_ucmd!()
+        .arg("-f")
+        .pipe_in("abc\n\x0c")
+        .succeeds()
+        .stdout_matches(&regex);
+}
+
+#[test]
 fn test_form_feed_followed_by_new_line() {
     // Here we define the expected output.
     let whitespace = " ".repeat(50);
