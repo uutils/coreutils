@@ -1286,7 +1286,6 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - name: Setup Lima
       uses: lima-vm/lima-actions/setup@v1
       id: lima-actions-setup
@@ -1301,7 +1300,7 @@ jobs:
     - name: Setup Rust and other build deps in VM
       run: |
         lima sudo dnf install gcc g++ git rustup libselinux-devel clang-devel attr -y
-        lima rustup-init -y --default-toolchain stable
+        lima rustup-init -y --default-toolchain stable --profile minimal -c clippy
     - name: Verify SELinux Status
       run: |
         lima getenforce
