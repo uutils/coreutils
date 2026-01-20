@@ -6,7 +6,7 @@
 use divan::{Bencher, black_box};
 use tempfile::NamedTempFile;
 use uu_sort::uumain;
-use uucore::benchmark::{run_util_function, setup_test_file, text_data};
+use uucore::benchmark::{get_bench_args, setup_test_file, text_data};
 
 /// Benchmark sorting ASCII-only data
 #[divan::bench(args = [500_000])]
@@ -14,14 +14,11 @@ fn sort_ascii_only(bencher: Bencher, num_lines: usize) {
     let data = text_data::generate_ascii_data(num_lines);
     let file_path = setup_test_file(&data);
     let output_file = NamedTempFile::new().unwrap();
-    let output_path = output_file.path().to_str().unwrap();
+    let output_path = output_file.path();
 
-    bencher.bench(|| {
-        black_box(run_util_function(
-            uumain,
-            &["-o", output_path, file_path.to_str().unwrap()],
-        ));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&"-o", &output_path, &file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark sorting accented/non-ASCII data
@@ -30,14 +27,11 @@ fn sort_accented_data(bencher: Bencher, num_lines: usize) {
     let data = text_data::generate_accented_data(num_lines);
     let file_path = setup_test_file(&data);
     let output_file = NamedTempFile::new().unwrap();
-    let output_path = output_file.path().to_str().unwrap();
+    let output_path = output_file.path();
 
-    bencher.bench(|| {
-        black_box(run_util_function(
-            uumain,
-            &["-o", output_path, file_path.to_str().unwrap()],
-        ));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&"-o", &output_path, &file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark sorting mixed ASCII/non-ASCII data
@@ -46,14 +40,11 @@ fn sort_mixed_data(bencher: Bencher, num_lines: usize) {
     let data = text_data::generate_mixed_data(num_lines);
     let file_path = setup_test_file(&data);
     let output_file = NamedTempFile::new().unwrap();
-    let output_path = output_file.path().to_str().unwrap();
+    let output_path = output_file.path();
 
-    bencher.bench(|| {
-        black_box(run_util_function(
-            uumain,
-            &["-o", output_path, file_path.to_str().unwrap()],
-        ));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&"-o", &output_path, &file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark case-sensitive sorting with mixed case data
@@ -62,14 +53,11 @@ fn sort_case_sensitive(bencher: Bencher, num_lines: usize) {
     let data = text_data::generate_case_sensitive_data(num_lines);
     let file_path = setup_test_file(&data);
     let output_file = NamedTempFile::new().unwrap();
-    let output_path = output_file.path().to_str().unwrap();
+    let output_path = output_file.path();
 
-    bencher.bench(|| {
-        black_box(run_util_function(
-            uumain,
-            &["-o", output_path, file_path.to_str().unwrap()],
-        ));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&"-o", &output_path, &file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark case-insensitive sorting (fold case)
@@ -78,14 +66,11 @@ fn sort_case_insensitive(bencher: Bencher, num_lines: usize) {
     let data = text_data::generate_case_sensitive_data(num_lines);
     let file_path = setup_test_file(&data);
     let output_file = NamedTempFile::new().unwrap();
-    let output_path = output_file.path().to_str().unwrap();
+    let output_path = output_file.path();
 
-    bencher.bench(|| {
-        black_box(run_util_function(
-            uumain,
-            &["-f", "-o", output_path, file_path.to_str().unwrap()],
-        ));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&"-f", &"-o", &output_path, &file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark dictionary order sorting (only blanks and alphanumeric)
@@ -94,14 +79,11 @@ fn sort_dictionary_order(bencher: Bencher, num_lines: usize) {
     let data = text_data::generate_mixed_data(num_lines);
     let file_path = setup_test_file(&data);
     let output_file = NamedTempFile::new().unwrap();
-    let output_path = output_file.path().to_str().unwrap();
+    let output_path = output_file.path();
 
-    bencher.bench(|| {
-        black_box(run_util_function(
-            uumain,
-            &["-d", "-o", output_path, file_path.to_str().unwrap()],
-        ));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&"-d", &"-o", &output_path, &file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark numeric sorting with mixed data
@@ -118,14 +100,11 @@ fn sort_numeric(bencher: Bencher, num_lines: usize) {
     let file_path = setup_test_file(&data);
 
     let output_file = NamedTempFile::new().unwrap();
-    let output_path = output_file.path().to_str().unwrap();
+    let output_path = output_file.path();
 
-    bencher.bench(|| {
-        black_box(run_util_function(
-            uumain,
-            &["-n", "-o", output_path, file_path.to_str().unwrap()],
-        ));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&"-n", &"-o", &output_path, &file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark general numeric sorting (-g) with decimal and exponent notation
@@ -146,12 +125,9 @@ fn sort_general_numeric(bencher: Bencher, num_lines: usize) {
     let output_file = NamedTempFile::new().unwrap();
     let output_path = output_file.path().to_str().unwrap();
 
-    bencher.bench(|| {
-        black_box(run_util_function(
-            uumain,
-            &["-g", "-o", output_path, file_path.to_str().unwrap()],
-        ));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&"-g", &"-o", &output_path, &file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark reverse sorting with locale-aware data
@@ -160,14 +136,11 @@ fn sort_reverse_locale(bencher: Bencher, num_lines: usize) {
     let data = text_data::generate_accented_data(num_lines);
     let file_path = setup_test_file(&data);
     let output_file = NamedTempFile::new().unwrap();
-    let output_path = output_file.path().to_str().unwrap();
+    let output_path = output_file.path();
 
-    bencher.bench(|| {
-        black_box(run_util_function(
-            uumain,
-            &["-r", "-o", output_path, file_path.to_str().unwrap()],
-        ));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&"-r", &"-o", &output_path, &file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark sorting with specific key field
@@ -187,15 +160,12 @@ fn sort_key_field(bencher: Bencher, num_lines: usize) {
     let file_path = setup_test_file(&data);
 
     let output_file = NamedTempFile::new().unwrap();
-    let output_path = output_file.path().to_str().unwrap();
+    let output_path = output_file.path();
 
-    bencher.bench(|| {
+    bencher
         // Sort by second field
-        black_box(run_util_function(
-            uumain,
-            &["-k", "2", "-o", output_path, file_path.to_str().unwrap()],
-        ));
-    });
+        .with_inputs(|| get_bench_args(&[&"-k", &"2", &"-o", &output_path, &file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark unique sorting with locale-aware data
@@ -204,14 +174,11 @@ fn sort_unique_locale(bencher: Bencher, num_lines: usize) {
     let data = text_data::generate_accented_data(num_lines);
     let file_path = setup_test_file(&data);
     let output_file = NamedTempFile::new().unwrap();
-    let output_path = output_file.path().to_str().unwrap();
+    let output_path = output_file.path();
 
-    bencher.bench(|| {
-        black_box(run_util_function(
-            uumain,
-            &["-u", "-o", output_path, file_path.to_str().unwrap()],
-        ));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&"-u", &"-o", &output_path, &file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark sorting with very long lines exceeding START_BUFFER_SIZE (8000 bytes)
@@ -227,19 +194,11 @@ fn sort_long_line(bencher: Bencher, line_size: usize) {
     let file_a = setup_test_file(&data_a);
     let file_b = setup_test_file(&data_b);
     let output_file = NamedTempFile::new().unwrap();
-    let output_path = output_file.path().to_str().unwrap();
+    let output_path = output_file.path();
 
-    bencher.bench(|| {
-        black_box(run_util_function(
-            uumain,
-            &[
-                file_a.to_str().unwrap(),
-                file_b.to_str().unwrap(),
-                "-o",
-                output_path,
-            ],
-        ));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&file_a, &file_b, &"-o", &output_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 fn main() {
