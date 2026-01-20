@@ -1261,7 +1261,7 @@ jobs:
         job:
           - { os: ubuntu-latest  , features: feat_os_unix }
           - { os: macos-latest   , features: feat_os_macos }
-          # - { os: windows-latest , features: feat_os_windows } https://github.com/uutils/coreutils/issues/7044
+          - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v6
       with:
