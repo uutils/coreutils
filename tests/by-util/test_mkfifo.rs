@@ -201,13 +201,13 @@ fn test_mkfifo_selinux_invalid() {
 }
 
 #[test]
-fn test_mkfifo_permision_unchanged_when_failed() {
+fn test_mkfifo_permission_unchanged_when_failed() {
     use uucore::fs::display_permissions;
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    let file_name = "testfifo";
+    let file_name = "test_file";
     at.write(file_name, "content");
     at.set_mode(file_name, 0o600);
 
