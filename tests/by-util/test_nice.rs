@@ -90,3 +90,33 @@ fn test_trailing_empty_adjustment() {
         "error: The argument '--adjustment <adjustment>' requires a value but none was supplied",
     );
 }
+
+#[test]
+fn test_nice_huge() {
+    new_ucmd!()
+        .args(&[
+            "-n",
+            "99999999999999999999999999999999999999999999999999999999999999999999999999999999999999999",
+            "true",
+        ])
+        .succeeds()
+        .no_stdout();
+}
+
+#[test]
+fn test_nice_huge_negative() {
+    new_ucmd!().args(&["-n", "-9999999999", "true"]).succeeds();
+    //.stderr_contains("Permission denied"); Depending on platform?
+}
+
+#[test]
+fn test_sign_middle() {
+    new_ucmd!()
+        .args(&["-n", "-2+4", "true"])
+        .fails_with_code(125)
+        .no_stdout()
+        .stderr_contains("invalid");
+}
+//uu: "-2+4" is not a valid number: invalid digit found in string
+//gnu: invalid adjustment `-2+4'
+//Both message is fine

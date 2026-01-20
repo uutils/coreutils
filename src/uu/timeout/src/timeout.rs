@@ -4,12 +4,15 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) tstr sigstr cmdname setpgid sigchld getpid
+#[cfg(unix)]
+uucore::init_startup_state_capture!();
+
 mod status;
 
 use crate::status::ExitStatus;
 use clap::{Arg, ArgAction, Command};
 use std::io::ErrorKind;
-use std::os::unix::process::ExitStatusExt;
+use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::process::{self, Child, Stdio};
 use std::sync::atomic::{self, AtomicBool};
 use std::time::Duration;
@@ -270,7 +273,14 @@ fn wait_or_kill_process(
     match process.wait_or_timeout(duration, None) {
         Ok(Some(status)) => {
             if preserve_status {
-                Ok(status.code().unwrap_or_else(|| status.signal().unwrap()))
+                let exit_code = status.code().unwrap_or_else(|| {
+                    status.signal().unwrap_or_else(|| {
+                        // Extremely rare: process exited but we have neither exit code nor signal.
+                        // This can happen on some platforms or in unusual termination scenarios.
+                        ExitStatus::TimeoutFailed.into()
+                    })
+                });
+                Ok(exit_code)
             } else {
                 Ok(ExitStatus::TimeoutFailed.into())
             }
@@ -327,23 +337,34 @@ fn timeout(
     #[cfg(unix)]
     enable_pipe_errors()?;
 
-    let process = &mut process::Command::new(&cmd[0])
+    let mut command = process::Command::new(&cmd[0]);
+    command
         .args(&cmd[1..])
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .map_err(|err| {
-            let status_code = match err.kind() {
-                ErrorKind::NotFound => ExitStatus::CommandNotFound.into(),
-                ErrorKind::PermissionDenied => ExitStatus::CannotInvoke.into(),
-                _ => ExitStatus::CannotInvoke.into(),
-            };
-            USimpleError::new(
-                status_code,
-                translate!("timeout-error-failed-to-execute-process", "error" => err),
-            )
-        })?;
+        .stderr(Stdio::inherit());
+
+    // If stdin was closed before Rust reopened it as /dev/null, close it in child
+    if uucore::signals::stdin_was_closed() {
+        unsafe {
+            command.pre_exec(|| {
+                libc::close(libc::STDIN_FILENO);
+                Ok(())
+            });
+        }
+    }
+
+    let process = &mut command.spawn().map_err(|err| {
+        let status_code = match err.kind() {
+            ErrorKind::NotFound => ExitStatus::CommandNotFound.into(),
+            ErrorKind::PermissionDenied => ExitStatus::CannotInvoke.into(),
+            _ => ExitStatus::CannotInvoke.into(),
+        };
+        USimpleError::new(
+            status_code,
+            translate!("timeout-error-failed-to-execute-process", "error" => err),
+        )
+    })?;
     unblock_sigchld();
     catch_sigterm();
     // Wait for the child process for the specified time period.
@@ -358,10 +379,14 @@ fn timeout(
     // structure of `wait_or_kill_process()`. They can probably be
     // refactored into some common function.
     match process.wait_or_timeout(duration, Some(&SIGNALED)) {
-        Ok(Some(status)) => Err(status
-            .code()
-            .unwrap_or_else(|| preserve_signal_info(status.signal().unwrap()))
-            .into()),
+        Ok(Some(status)) => {
+            let exit_code = status.code().unwrap_or_else(|| {
+                status
+                    .signal()
+                    .map_or_else(|| ExitStatus::TimeoutFailed.into(), preserve_signal_info)
+            });
+            Err(exit_code.into())
+        }
         Ok(None) => {
             report_if_verbose(signal, &cmd[0], verbose);
             send_signal(process, signal, foreground);

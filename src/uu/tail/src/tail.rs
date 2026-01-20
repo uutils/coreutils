@@ -33,10 +33,13 @@ use std::fs::File;
 use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write, stdin, stdout};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError, get_exit_code, set_exit_code};
+use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
 use uucore::translate;
 
 use uucore::{show, show_error};
+
+#[cfg(unix)]
+uucore::init_startup_state_capture!();
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -111,10 +114,6 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
         if !settings.has_only_stdin() || settings.pid != 0 {
             follow::follow(observer, settings)?;
         }
-    }
-
-    if get_exit_code() > 0 && paths::stdin_is_bad_fd() {
-        show_error!("{}: {}", text::DASH, translate!("tail-bad-fd"));
     }
 
     Ok(())
@@ -277,6 +276,17 @@ fn tail_stdin(
         }
     }
 
+    // Check if stdin was closed before Rust reopened it as /dev/null
+    if paths::stdin_is_bad_fd() {
+        set_exit_code(1);
+        show_error!(
+            "{}",
+            translate!("tail-error-cannot-fstat", "file" => translate!("tail-stdin-header").quote(), "error" => translate!("tail-bad-fd"))
+        );
+        show_error!("{}", translate!("tail-no-files-remaining"));
+        return Ok(());
+    }
+
     match input.resolve() {
         // fifo
         Some(path) => {
@@ -413,6 +423,10 @@ fn forwards_thru_file(
 /// `num_delimiters` instance of `delimiter`. The `file` is left seek'd to the
 /// position just after that delimiter.
 fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
+    if num_delimiters == 0 {
+        file.seek(SeekFrom::End(0)).unwrap();
+        return;
+    }
     // This variable counts the number of delimiters found in the file
     // so far (reading from the end of the file toward the beginning).
     let mut counter = 0;
@@ -470,7 +484,7 @@ fn bounded_tail(file: &mut File, settings: &Settings) {
             file.seek(SeekFrom::Start(i as u64)).unwrap();
         }
         FilterMode::Lines(Signum::MinusZero, _) => {
-            return;
+            file.seek(SeekFrom::End(0)).unwrap();
         }
         FilterMode::Bytes(Signum::Negative(count)) => {
             if file.seek(SeekFrom::End(-(*count as i64))).is_err() {
@@ -484,7 +498,7 @@ fn bounded_tail(file: &mut File, settings: &Settings) {
             file.seek(SeekFrom::Start(*count - 1)).unwrap();
         }
         FilterMode::Bytes(Signum::MinusZero) => {
-            return;
+            file.seek(SeekFrom::End(0)).unwrap();
         }
         _ => {}
     }
@@ -521,6 +535,11 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
         }
         FilterMode::Bytes(Signum::Negative(count)) => {
             let mut chunks = chunks::BytesChunkBuffer::new(*count);
+            chunks.fill(reader)?;
+            chunks.print(&mut writer)?;
+        }
+        FilterMode::Lines(Signum::MinusZero, sep) => {
+            let mut chunks = chunks::LinesChunkBuffer::new(*sep, 0);
             chunks.fill(reader)?;
             chunks.print(&mut writer)?;
         }

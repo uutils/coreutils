@@ -21,7 +21,6 @@ path = "src/cp.rs"
 clap = { workspace = true }
 filetime = { workspace = true }
 libc = { workspace = true }
-linux-raw-sys = { workspace = true, features = ["ioctl"] }
 selinux = { workspace = true, optional = true }
 uucore = { workspace = true, features = [
   "backup-control",

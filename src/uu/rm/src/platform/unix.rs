@@ -371,7 +371,7 @@ pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Opt
         let entry_stat = match dir_fd.stat_at(&entry_name, false) {
             Ok(stat) => stat,
             Err(e) => {
-                error = handle_error_with_force(e, &entry_path, options);
+                error |= handle_error_with_force(e, &entry_path, options);
                 continue;
             }
         };
@@ -395,21 +395,21 @@ pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Opt
                     // If we can't open the subdirectory for safe traversal,
                     // try to handle it as best we can with safe operations
                     if e.kind() == std::io::ErrorKind::PermissionDenied {
-                        error = handle_permission_denied(
+                        error |= handle_permission_denied(
                             dir_fd,
                             entry_name.as_ref(),
                             &entry_path,
                             options,
                         );
                     } else {
-                        error = handle_error_with_force(e, &entry_path, options);
+                        error |= handle_error_with_force(e, &entry_path, options);
                     }
                     continue;
                 }
             };
 
             let child_error = safe_remove_dir_recursive_impl(&entry_path, &child_dir_fd, options);
-            error = error || child_error;
+            error |= child_error;
 
             // Ask user permission if needed for this subdirectory
             if !child_error
@@ -421,12 +421,12 @@ pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Opt
 
             // Remove the now-empty subdirectory using safe unlinkat
             if !child_error {
-                error = handle_unlink(dir_fd, entry_name.as_ref(), &entry_path, true, options);
+                error |= handle_unlink(dir_fd, entry_name.as_ref(), &entry_path, true, options);
             }
         } else {
             // Remove file - check if user wants to remove it first
             if prompt_file_with_stat(&entry_path, &entry_stat, options) {
-                error = handle_unlink(dir_fd, entry_name.as_ref(), &entry_path, false, options);
+                error |= handle_unlink(dir_fd, entry_name.as_ref(), &entry_path, false, options);
             }
         }
     }

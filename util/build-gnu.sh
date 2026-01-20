@@ -89,25 +89,22 @@ fi
 cd -
 
 export CARGOFLAGS # tell to make
- make UTILS=install
-[ -e "${UU_BUILD_DIR}/ginstall" ] || ln -vf "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests use renamed install to ginstall
 if [ "${SELINUX_ENABLED}" = 1 ];then
     # Build few utils for SELinux for faster build. MULTICALL=y fails...
-    make UTILS="cat chcon chmod cp cut dd echo env groups id ln ls mkdir mkfifo mknod mktemp mv printf rm rmdir runcon seq stat test touch tr true uname wc whoami"
+    make UTILS="cat chcon chmod cp cut dd echo env groups id install ln ls mkdir mkfifo mknod mktemp mv printf rm rmdir runcon seq stat test touch tr true uname wc whoami"
 else
     # Use MULTICALL=y for faster build
-    make MULTICALL=y SKIP_UTILS="install more"
+    make MULTICALL=y SKIP_UTILS=more
     for binary in $("${UU_BUILD_DIR}"/coreutils --list)
         do [ -e "${UU_BUILD_DIR}/${binary}" ] || ln -vf "${UU_BUILD_DIR}/coreutils" "${UU_BUILD_DIR}/${binary}"
     done
 fi
-
+[ -e "${UU_BUILD_DIR}/ginstall" ] || ln -vf "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests use ginstall
 ##
 
 cd "${path_GNU}" && echo "[ pwd:'${PWD}' ]"
 
 # Any binaries that aren't built become `false` to make tests failure
-# Note that some test (e.g. runcon/runcon-compute.sh) incorrectly passes by this
 for binary in $(./build-aux/gen-lists-of-programs.sh --list-progs); do
     bin_path="${UU_BUILD_DIR}/${binary}"
     test -f "${bin_path}" || cp -v /usr/bin/false "${bin_path}"
@@ -159,9 +156,7 @@ else
 
     # Remove tests checking for --version & --help
     # Not really interesting for us and logs are too big
-    sed -i -e '/tests\/help\/help-version.sh/ D' \
-        -e '/tests\/help\/help-version-getopt.sh/ D' \
-        Makefile
+    sed -i '/tests\/help\/help-version.sh/ D' Makefile
     touch gnu-built
 fi
 
@@ -174,8 +169,6 @@ sed -i 's/^print_ver_.*/require_selinux_/' tests/runcon/runcon-compute.sh
 sed -i 's/^print_ver_.*/require_selinux_/' tests/runcon/runcon-no-reorder.sh
 sed -i 's/^print_ver_.*/require_selinux_/' tests/chcon/chcon-fail.sh
 
-# Mask mtab by unshare instead of LD_PRELOAD (able to merge this to GNU?)
-sed -i -e 's|^export LD_PRELOAD=.*||' -e "s|.*maybe LD_PRELOAD.*|df() { unshare -rm bash -c \"mount -t tmpfs tmpfs /proc \&\& command df \\\\\"\\\\\$@\\\\\"\" -- \"\$@\"; }|" tests/df/no-mtab-status.sh
 # We use coreutils yes
 sed -i "s|--coreutils-prog=||g" tests/misc/coreutils.sh
 # Different message

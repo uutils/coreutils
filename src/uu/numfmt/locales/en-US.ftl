@@ -59,6 +59,7 @@ numfmt-error-invalid-header = invalid header value { $value }
 numfmt-error-grouping-cannot-be-combined-with-to = grouping cannot be combined with --to
 numfmt-error-delimiter-must-be-single-character = the delimiter must be a single character
 numfmt-error-invalid-number-empty = invalid number: ''
+numfmt-error-invalid-specific-suffix = invalid suffix in input { $input }: { $suffix }
 numfmt-error-invalid-suffix = invalid suffix in input: { $input }
 numfmt-error-invalid-number = invalid number: { $input }
 numfmt-error-missing-i-suffix = missing 'i' suffix in input: '{ $number }{ $suffix }' (e.g Ki/Mi/Gi)
