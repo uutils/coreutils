@@ -1307,7 +1307,6 @@ fn parse_path_args(
     };
 
     if options.strip_trailing_slashes {
-        #[allow(clippy::assigning_clones)]
         for source in &mut paths {
             *source = source.components().as_path().to_owned();
         }
