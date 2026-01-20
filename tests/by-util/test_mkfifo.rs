@@ -50,7 +50,7 @@ fn test_create_one_fifo_with_non_file_permission_mode() {
         .arg("-m")
         .arg("1777")
         .fails()
-        .stderr_is("mode must specify only file permission bits");
+        .stderr_is("mkfifo: mode must specify only file permission bits");
     new_ucmd!()
         .arg("abcd")
         .arg("-m")
