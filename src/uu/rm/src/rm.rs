@@ -258,10 +258,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         } else {
             match matches
                 .get_one::<String>(OPT_PRESERVE_ROOT)
-                .unwrap()
-                .as_str()
+                .map(|s| s.as_str())
             {
-                "all" => PreserveRoot::YesAll,
+                Some("all") => PreserveRoot::YesAll,
                 _ => PreserveRoot::Default,
             }
         },
@@ -278,7 +277,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // manually parse all args to verify --no-preserve-root did not get abbreviated (clap does
     // allow this)
-    if !options.preserve_root && !args.iter().any(|arg| arg == "--no-preserve-root") {
+    if options.preserve_root == PreserveRoot::No
+        && !args.iter().any(|arg| arg == "--no-preserve-root")
+    {
         return Err(RmError::MayNotAbbreviateNoPreserveRoot.into());
     }
 
