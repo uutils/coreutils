@@ -6,11 +6,14 @@
 // cSpell:ignore strs
 
 use clap::{Arg, ArgAction, Command, builder::ValueParser};
+use nix::libc;
 use std::error::Error;
 use std::ffi::OsString;
 use std::io::{self, Write};
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
+#[cfg(unix)]
+use uucore::signals::enable_pipe_errors;
 use uucore::translate;
 
 // it's possible that using a smaller or larger buffer might provide better performance on some
@@ -21,18 +24,22 @@ const BUF_SIZE: usize = 16 * 1024;
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
+    // When we receive a SIGPIPE signal, we want to terminate the process so
+    // that we don't print any error messages to stderr. Rust ignores SIGPIPE
+    // (see https://github.com/rust-lang/rust/issues/62569), so we restore its
+    // default action here.
+    #[cfg(not(target_os = "windows"))]
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
+
     let mut buffer = Vec::with_capacity(BUF_SIZE);
     args_into_buffer(&mut buffer, matches.get_many::<OsString>("STRING")).unwrap();
     prepare_buffer(&mut buffer);
 
     match exec(&buffer) {
         Ok(()) => Ok(()),
-        Err(err) if err.kind() == io::ErrorKind::BrokenPipe => {
-            // When SIGPIPE is trapped (SIG_IGN), write operations return EPIPE.
-            // GNU coreutils prints an error message in this case.
-            eprintln!("{}", translate!("yes-error-stdout-broken-pipe"));
-            Ok(())
-        }
+        Err(err) if err.kind() == io::ErrorKind::BrokenPipe => Ok(()),
         Err(err) => Err(USimpleError::new(
             1,
             translate!("yes-error-standard-output", "error" => err),
@@ -116,16 +123,8 @@ fn prepare_buffer(buf: &mut Vec<u8>) {
 pub fn exec(bytes: &[u8]) -> io::Result<()> {
     let stdout = io::stdout();
     let mut stdout = stdout.lock();
-
-    // SIGPIPE handling:
-    // Rust ignores SIGPIPE by default (rust-lang/rust#62569). When write() fails
-    // because the pipe is closed, it returns EPIPE error instead of being killed by
-    // the signal. We catch this error in uumain() and print a diagnostic message,
-    // matching GNU coreutils behavior.
-    //
-    // Key point: We do NOT restore SIGPIPE to SIG_DFL. This preserves POSIX signal
-    // inheritance semantics - if the parent set SIGPIPE to SIG_IGN (e.g., `trap '' PIPE`),
-    // we respect that setting and rely on EPIPE error handling.
+    #[cfg(unix)]
+    enable_pipe_errors()?;
 
     loop {
         stdout.write_all(bytes)?;
