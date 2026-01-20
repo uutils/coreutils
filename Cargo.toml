@@ -318,7 +318,7 @@ compare = "0.1.0"
 crossterm = "0.29.0"
 ctor = "0.6.0"
 ctrlc = { version = "3.4.7", features = ["termination"] }
-divan = { package = "codspeed-divan-compat", version = "4.0.5" }
+divan = { package = "codspeed-divan-compat", version = "4.2.1" }
 dns-lookup = { version = "3.0.0" }
 exacl = "0.12.0"
 file_diff = "1.0.0"
