@@ -860,11 +860,6 @@ jobs:
         ${{ matrix.job.cargo-options }} ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
       env:
         RUST_BACKTRACE: "1"
-    - name: Archive executable artifacts
-      uses: actions/upload-artifact@v6
-      with:
-        name: ${{ env.PROJECT_NAME }}-${{ matrix.job.target }}${{ steps.vars.outputs.ARTIFACTS_SUFFIX }}
-        path: target/${{ matrix.job.target }}/release/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}
     - name: Package
       if: matrix.job.skip-package != true
       shell: bash
