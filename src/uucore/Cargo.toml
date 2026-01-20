@@ -96,6 +96,7 @@ nix = { workspace = true, features = [
   "poll",
 ] }
 xattr = { workspace = true, optional = true }
+itertools = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
@@ -186,4 +187,4 @@ wide = []
 tty = []
 time = ["jiff"]
 uptime = ["jiff", "libc", "windows-sys", "utmpx", "utmp-classic"]
-benchmark = ["divan", "tempfile"]
+benchmark = ["divan", "itertools", "tempfile"]
