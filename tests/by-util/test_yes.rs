@@ -126,7 +126,7 @@ fn test_normal_pipe_sigpipe() {
 
     // Run `yes | head -n 1` via shell with pipefail to capture yes's exit code
     // In this scenario, SIGPIPE is not trapped, so yes should be killed by the signal
-    let output = Command::new("sh")
+    let output = Command::new("bash")
         .arg("-c")
         .arg(format!(
             "set -o pipefail; {} yes | head -n 1 > /dev/null",
@@ -142,9 +142,6 @@ fn test_normal_pipe_sigpipe() {
     // Exit code should be 141 (128 + 13) on most Unix systems
     // OR the process was terminated by signal (status.code() returns None)
     if let Some(code) = exit_code {
-        println!("Exit code: {code}");
-        println!("Stderr: {}", String::from_utf8_lossy(&output.stderr));
-
         assert_eq!(
             code, 141,
             "yes should exit with code 141 (killed by SIGPIPE), but got {code}"
@@ -153,7 +150,6 @@ fn test_normal_pipe_sigpipe() {
         // Process was terminated by signal (which is also acceptable)
         use std::os::unix::process::ExitStatusExt;
         let signal = output.status.signal().unwrap();
-        println!("Terminated by signal: {signal}");
         // Signal 13 is SIGPIPE
         assert_eq!(signal, 13, "yes should be killed by SIGPIPE (13)");
     }
