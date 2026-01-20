@@ -7,7 +7,7 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::path::Path;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
@@ -19,6 +19,7 @@ const TAB_WIDTH: usize = 8;
 const NL: u8 = b'\n';
 const CR: u8 = b'\r';
 const TAB: u8 = b'\t';
+const READ_CHUNK_SIZE: usize = 8192; // 8KB chunks
 
 mod options {
     pub const BYTES: &str = "bytes";
@@ -186,65 +187,105 @@ fn fold_file_bytewise<T: Read, W: Write>(
     width: usize,
     output: &mut W,
 ) -> UResult<()> {
-    let mut line = Vec::new();
+    let mut buffer = Vec::new();
+    let mut chunk_buf = vec![0u8; READ_CHUNK_SIZE];
 
     loop {
-        if file
-            .read_until(NL, &mut line)
-            .map_err_context(|| translate!("fold-error-readline"))?
-            == 0
-        {
+        let bytes_read = file
+            .read(&mut chunk_buf)
+            .map_err_context(|| translate!("fold-error-readline"))?;
+
+        if bytes_read == 0 {
+            // EOF: process any remaining data as a line without newline
+            if !buffer.is_empty() {
+                process_bytewise_line(&buffer, spaces, width, output)?;
+            }
             break;
         }
 
-        if line == [NL] {
-            output.write_all(&[NL])?;
-            line.truncate(0);
-            continue;
+        // Append chunk to buffer
+        buffer.extend_from_slice(&chunk_buf[..bytes_read]);
+
+        // Process complete lines one at a time
+        let mut start = 0;
+        for i in 0..buffer.len() {
+            if buffer[i] == NL {
+                // Process line including the newline
+                process_bytewise_line(&buffer[start..=i], spaces, width, output)?;
+                start = i + 1;
+            }
         }
 
-        let len = line.len();
-        let mut i = 0;
+        // Remove processed data from buffer
+        if start > 0 {
+            buffer.drain(..start);
+        }
 
-        while i < len {
-            let width = if len - i >= width { width } else { len - i };
-            let slice = {
-                let slice = &line[i..i + width];
-                if spaces && i + width < len {
-                    match slice
-                        .iter()
-                        .enumerate()
-                        .rev()
-                        .find(|(_, c)| c.is_ascii_whitespace() && **c != CR)
-                    {
-                        Some((m, _)) => &slice[..=m],
-                        None => slice,
-                    }
-                } else {
-                    slice
+        // If buffer is getting too large without a newline, process what we can
+        // and keep any remainder to maintain proper line handling
+        if buffer.len() >= READ_CHUNK_SIZE * 2 {
+            // Process the data but keep any partial line state
+            let process_len = buffer.len();
+            process_bytewise_line(&buffer[..process_len], spaces, width, output)?;
+            buffer.clear();
+        }
+    }
+
+    Ok(())
+}
+
+fn process_bytewise_line<W: Write>(
+    line: &[u8],
+    spaces: bool,
+    width: usize,
+    output: &mut W,
+) -> UResult<()> {
+    if line.is_empty() {
+        return Ok(());
+    }
+
+    if line == [NL] {
+        output.write_all(&[NL])?;
+        return Ok(());
+    }
+
+    let len = line.len();
+    let mut i = 0;
+
+    while i < len {
+        let segment_width = if len - i >= width { width } else { len - i };
+        let slice = {
+            let slice = &line[i..i + segment_width];
+            if spaces && i + segment_width < len {
+                match slice
+                    .iter()
+                    .enumerate()
+                    .rev()
+                    .find(|(_, c)| c.is_ascii_whitespace() && **c != CR)
+                {
+                    Some((m, _)) => &slice[..=m],
+                    None => slice,
                 }
-            };
-
-            // Don't duplicate trailing newlines: if the slice is "\n", the
-            // previous iteration folded just before the end of the line and
-            // has already printed this newline.
-            if slice == [NL] {
-                break;
-            }
-
-            i += slice.len();
-
-            let at_eol = i >= len;
-
-            if at_eol {
-                output.write_all(slice)?;
             } else {
-                output.write_all(slice)?;
-                output.write_all(&[NL])?;
+                slice
             }
+        };
+
+        // Don't duplicate trailing newlines: if the slice is "\n", the
+        // previous iteration folded just before the end of the line and
+        // has already printed this newline.
+        if slice == [NL] {
+            break;
         }
 
-        line.truncate(0);
+        i += slice.len();
+
+        let at_eol = i >= len;
+
+        output.write_all(slice)?;
+        if !at_eol {
+            output.write_all(&[NL])?;
+        }
     }
 
     Ok(())
@@ -572,36 +613,90 @@ fn fold_file<T: Read, W: Write>(
     mode: WidthMode,
     writer: &mut W,
 ) -> UResult<()> {
-    let mut line = Vec::new();
+    let mut buffer = Vec::new();
     let mut output = Vec::new();
     let mut col_count = 0;
     let mut last_space = None;
+    let mut chunk_buf = vec![0u8; READ_CHUNK_SIZE];
 
     loop {
-        if file
-            .read_until(NL, &mut line)
-            .map_err_context(|| translate!("fold-error-readline"))?
-            == 0
-        {
+        let bytes_read = file
+            .read(&mut chunk_buf)
+            .map_err_context(|| translate!("fold-error-readline"))?;
+
+        if bytes_read == 0 {
+            // EOF: process any remaining data as a line without newline
+            if !buffer.is_empty() {
+                let mut ctx = FoldContext {
+                    spaces,
+                    width,
+                    mode,
+                    writer,
+                    output: &mut output,
+                    col_count: &mut col_count,
+                    last_space: &mut last_space,
+                };
+
+                match std::str::from_utf8(&buffer) {
+                    Ok(s) => process_utf8_line(s, &mut ctx)?,
+                    Err(_) => process_non_utf8_line(&buffer, &mut ctx)?,
+                }
+            }
             break;
         }
 
-        let mut ctx = FoldContext {
-            spaces,
-            width,
-            mode,
-            writer,
-            output: &mut output,
-            col_count: &mut col_count,
-            last_space: &mut last_space,
-        };
+        buffer.extend_from_slice(&chunk_buf[..bytes_read]);
 
-        match std::str::from_utf8(&line) {
-            Ok(s) => process_utf8_line(s, &mut ctx)?,
-            Err(_) => process_non_utf8_line(&line, &mut ctx)?,
+        // Process complete lines one at a time
+        let mut start = 0;
+        for i in 0..buffer.len() {
+            if buffer[i] == NL {
+                // Process line including the newline
+                let line_data = &buffer[start..=i];
+
+                let mut ctx = FoldContext {
+                    spaces,
+                    width,
+                    mode,
+                    writer,
+                    output: &mut output,
+                    col_count: &mut col_count,
+                    last_space: &mut last_space,
+                };
+
+                match std::str::from_utf8(line_data) {
+                    Ok(s) => process_utf8_line(s, &mut ctx)?,
+                    Err(_) => process_non_utf8_line(line_data, &mut ctx)?,
+                }
+
+                start = i + 1;
+            }
         }
 
-        line.clear();
+        // Remove processed data from buffer
+        if start > 0 {
+            buffer.drain(..start);
+        }
+
+        // If buffer is getting too large without a newline, process it anyway
+        if buffer.len() >= READ_CHUNK_SIZE * 2 {
+            let mut ctx = FoldContext {
+                spaces,
+                width,
+                mode,
+                writer,
+                output: &mut output,
+                col_count: &mut col_count,
+                last_space: &mut last_space,
+            };
+
+            match std::str::from_utf8(&buffer) {
+                Ok(s) => process_utf8_line(s, &mut ctx)?,
+                Err(_) => process_non_utf8_line(&buffer, &mut ctx)?,
+            }
+
+            buffer.clear();
+        }
     }
 
     if !output.is_empty() {
