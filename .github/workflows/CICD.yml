@@ -1355,6 +1355,6 @@ jobs:
     - name: Install strace
       run: sudo apt-get update && sudo apt-get install -y strace
     - name: Build utilities with safe traversal
-      run: cargo build --release -p uu_rm -p uu_chmod -p uu_chown -p uu_chgrp -p uu_mv -p uu_du
+      run: cargo build --profile=release-small -p uu_rm -p uu_chmod -p uu_chown -p uu_chgrp -p uu_mv -p uu_du
     - name: Run safe traversal verification
       run: ./util/check-safe-traversal.sh
