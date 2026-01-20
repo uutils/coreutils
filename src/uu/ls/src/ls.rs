@@ -1244,6 +1244,19 @@ impl Config {
             tab_size,
         })
     }
+
+    /// Check if leading info (inode and/or block size) should be displayed
+    #[inline]
+    fn should_display_leading_info(&self) -> bool {
+        #[cfg(unix)]
+        {
+            self.inode || self.alloc_size
+        }
+        #[cfg(not(unix))]
+        {
+            self.alloc_size
+        }
+    }
 }
 
 #[uucore::main]
@@ -2633,6 +2646,28 @@ fn return_total(
     ))
 }
 
+/// Checks if any item names will be displayed with quotes.
+fn has_quoted_names(items: &[PathData], config: &Config) -> bool {
+    items.iter().any(|item| {
+        let name = escape_name_with_locale(item.display_name(), config);
+        os_str_starts_with(&name, b"'")
+    })
+}
+
+/// Calculates padding for security context display if context is enabled.
+fn calculate_context_padding(items: &[PathData], config: &Config) -> Option<usize> {
+    if config.context {
+        Some(
+            items
+                .iter()
+                .map(|item| item.security_context(config).len())
+                .fold(1, |acc, len| acc.max(len)),
+        )
+    } else {
+        None
+    }
+}
+
 fn display_additional_leading_info(
     item: &PathData,
     padding: &PaddingCollection,
@@ -2667,144 +2702,113 @@ fn display_additional_leading_info(
     Ok(result)
 }
 
-#[allow(clippy::cognitive_complexity)]
+/// Displays items in long format (-l).
+fn display_items_long(
+    items: &[PathData],
+    config: &Config,
+    state: &mut ListState,
+    dired: &mut DiredOutput,
+    quoted: bool,
+) -> UResult<()> {
+    let padding_collection = calculate_padding_collection(items, config, state);
+    let display_leading = config.should_display_leading_info();
+
+    for item in items {
+        if display_leading {
+            let more_info = display_additional_leading_info(item, &padding_collection, config)?;
+            write!(state.out, "{more_info}")?;
+        }
+        display_item_long(item, &padding_collection, config, state, dired, quoted)?;
+    }
+    Ok(())
+}
+
+/// Displays items in non-long formats (columns, across, commas, oneline).
+fn display_items_non_long(
+    items: &[PathData],
+    config: &Config,
+    state: &mut ListState,
+    quoted: bool,
+) -> UResult<()> {
+    let prefix_context = calculate_context_padding(items, config);
+    let padding = calculate_padding_collection(items, config, state);
+
+    // Apply normal color to non-filename output
+    if let Some(style_manager) = &mut state.style_manager {
+        write!(state.out, "{}", style_manager.apply_normal())?;
+    }
+
+    let display_leading = config.should_display_leading_info();
+    let mut names = Vec::new();
+
+    for item in items {
+        let more_info = if display_leading {
+            Some(display_additional_leading_info(item, &padding, config)?)
+        } else {
+            None
+        };
+        // Column zero is used to decide whether text will wrap;
+        // grid/column formats place items on new lines if they wrap.
+        let cell = display_item_name(
+            item,
+            config,
+            prefix_context,
+            more_info,
+            state,
+            LazyCell::new(Box::new(|| 0)),
+        );
+        names.push(cell);
+    }
+
+    match config.format {
+        Format::Columns => {
+            display_grid(
+                names.into_iter(),
+                config.width,
+                Direction::TopToBottom,
+                &mut state.out,
+                quoted,
+                config.tab_size,
+            )?;
+        }
+        Format::Across => {
+            display_grid(
+                names.into_iter(),
+                config.width,
+                Direction::LeftToRight,
+                &mut state.out,
+                quoted,
+                config.tab_size,
+            )?;
+        }
+        Format::Commas => {
+            display_commas_format(
+                names.into_iter(),
+                config.width,
+                config.line_ending,
+                &mut state.out,
+            )?;
+        }
+        _ => {
+            display_oneline_format(names.into_iter(), config.line_ending, &mut state.out)?;
+        }
+    }
+    Ok(())
+}
+
 fn display_items(
     items: &[PathData],
     config: &Config,
     state: &mut ListState,
     dired: &mut DiredOutput,
 ) -> UResult<()> {
-    // `-Z`, `--context`:
-    // Display the SELinux security context or '?' if none is found. When used with the `-l`
-    // option, print the security context to the left of the size column.
-
-    let quoted = items.iter().any(|item| {
-        let name = escape_name_with_locale(item.display_name(), config);
-        os_str_starts_with(&name, b"'")
-    });
+    let quoted = has_quoted_names(items, config);
 
     if config.format == Format::Long {
-        let padding_collection = calculate_padding_collection(items, config, state);
-
-        for item in items {
-            #[cfg(unix)]
-            let should_display_leading_info = config.inode || config.alloc_size;
-            #[cfg(not(unix))]
-            let should_display_leading_info = config.alloc_size;
-
-            if should_display_leading_info {
-                let more_info = display_additional_leading_info(item, &padding_collection, config)?;
-
-                write!(state.out, "{more_info}")?;
-            }
-
-            display_item_long(item, &padding_collection, config, state, dired, quoted)?;
-        }
+        display_items_long(items, config, state, dired, quoted)
     } else {
-        let mut longest_context_len = 1;
-        let prefix_context = if config.context {
-            for item in items {
-                let context_len = item.security_context(config).len();
-                longest_context_len = context_len.max(longest_context_len);
-            }
-            Some(longest_context_len)
-        } else {
-            None
-        };
-
-        let padding = calculate_padding_collection(items, config, state);
-
-        // we need to apply normal color to non filename output
-        if let Some(style_manager) = &mut state.style_manager {
-            write!(state.out, "{}", style_manager.apply_normal())?;
-        }
-
-        let mut names_vec = Vec::new();
-
-        #[cfg(unix)]
-        let should_display_leading_info = config.inode || config.alloc_size;
-        #[cfg(not(unix))]
-        let should_display_leading_info = config.alloc_size;
-
-        for i in items {
-            let more_info = if should_display_leading_info {
-                Some(display_additional_leading_info(i, &padding, config)?)
-            } else {
-                None
-            };
-            // it's okay to set current column to zero which is used to decide
-            // whether text will wrap or not, because when format is grid or
-            // column ls will try to place the item name in a new line if it
-            // wraps.
-            let cell = display_item_name(
-                i,
-                config,
-                prefix_context,
-                more_info,
-                state,
-                LazyCell::new(Box::new(|| 0)),
-            );
-
-            names_vec.push(cell);
-        }
-
-        let mut names = names_vec.into_iter();
-
-        match config.format {
-            Format::Columns => {
-                display_grid(
-                    names,
-                    config.width,
-                    Direction::TopToBottom,
-                    &mut state.out,
-                    quoted,
-                    config.tab_size,
-                )?;
-            }
-            Format::Across => {
-                display_grid(
-                    names,
-                    config.width,
-                    Direction::LeftToRight,
-                    &mut state.out,
-                    quoted,
-                    config.tab_size,
-                )?;
-            }
-            Format::Commas => {
-                let mut current_col = 0;
-                if let Some(name) = names.next() {
-                    write_os_str(&mut state.out, &name)?;
-                    current_col = ansi_width(&name.to_string_lossy()) as u16 + 2;
-                }
-                for name in names {
-                    let name_width = ansi_width(&name.to_string_lossy()) as u16;
-                    // If the width is 0 we print one single line
-                    if config.width != 0 && current_col + name_width + 1 > config.width {
-                        current_col = name_width + 2;
-                        writeln!(state.out, ",")?;
-                    } else {
-                        current_col += name_width + 2;
-                        write!(state.out, ", ")?;
-                    }
-                    write_os_str(&mut state.out, &name)?;
-                }
-                // Current col is never zero again if names have been printed.
-                // So we print a newline.
-                if current_col > 0 {
-                    write!(state.out, "{}", config.line_ending)?;
-                }
-            }
-            _ => {
-                for name in names {
-                    write_os_str(&mut state.out, &name)?;
-                    write!(state.out, "{}", config.line_ending)?;
-                }
-            }
-        }
+        display_items_non_long(items, config, state, quoted)
     }
-
-    Ok(())
 }
 
 #[allow(unused_variables)]
@@ -2829,6 +2833,56 @@ fn get_block_size(md: &Metadata, config: &Config) -> u64 {
         // no way to get block size for windows, fall-back to file size
         md.len()
     }
+}
+
+/// Displays items in comma-separated format, wrapping at terminal width.
+fn display_commas_format(
+    names: impl Iterator<Item = OsString>,
+    width: u16,
+    line_ending: LineEnding,
+    out: &mut BufWriter<Stdout>,
+) -> UResult<()> {
+    let mut current_col = 0;
+    let mut first = true;
+
+    for name in names {
+        let name_width = ansi_width(&name.to_string_lossy()) as u16;
+
+        if first {
+            write_os_str(out, &name)?;
+            current_col = name_width + 2;
+            first = false;
+        } else {
+            // If the width is 0 we print one single line
+            if width != 0 && current_col + name_width + 1 > width {
+                current_col = name_width + 2;
+                writeln!(out, ",")?;
+            } else {
+                current_col += name_width + 2;
+                write!(out, ", ")?;
+            }
+            write_os_str(out, &name)?;
+        }
+    }
+
+    // Print trailing newline if any names were printed
+    if current_col > 0 {
+        write!(out, "{line_ending}")?;
+    }
+    Ok(())
+}
+
+/// Displays items one per line.
+fn display_oneline_format(
+    names: impl Iterator<Item = OsString>,
+    line_ending: LineEnding,
+    out: &mut BufWriter<Stdout>,
+) -> UResult<()> {
+    for name in names {
+        write_os_str(out, &name)?;
+        write!(out, "{line_ending}")?;
+    }
+    Ok(())
 }
 
 fn display_grid(
@@ -3587,20 +3641,22 @@ fn get_security_context<'a>(
     Cow::Borrowed(SUBSTITUTE_STRING)
 }
 
-#[cfg(unix)]
 fn calculate_padding_collection(
     items: &[PathData],
     config: &Config,
     state: &mut ListState,
 ) -> PaddingCollection {
     let mut padding_collections = PaddingCollection {
+        #[cfg(unix)]
         inode: 1,
         link_count: 1,
         uname: 1,
         group: 1,
         context: 1,
         size: 1,
+        #[cfg(unix)]
         major: 1,
+        #[cfg(unix)]
         minor: 1,
         block_size: 1,
     };
@@ -3623,7 +3679,14 @@ fn calculate_padding_collection(
             }
         }
 
-        if config.format == Format::Long {
+        // On unix, only compute these for Long format
+        // On non-unix, compute unconditionally to trigger errors for dangling symlinks
+        #[cfg(unix)]
+        let compute_extra_padding = config.format == Format::Long;
+        #[cfg(not(unix))]
+        let compute_extra_padding = true;
+
+        if compute_extra_padding {
             let context_len = item.security_context(config).len();
             let (link_count_len, uname_len, group_len, size_len, major_len, minor_len) =
                 display_dir_entry_size(item, config, state);
@@ -3633,69 +3696,40 @@ fn calculate_padding_collection(
             if config.context {
                 padding_collections.context = context_len.max(padding_collections.context);
             }
+            padding_collections.size = size_len.max(padding_collections.size);
 
-            // correctly align columns when some files have capabilities/ACLs and others do not
-            {
-                #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
-                // TODO: See how Mac should work here
-                let is_acl_set = false;
-                #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-                let is_acl_set = has_acl(item.display_name());
-                if context_len > 1 || is_acl_set {
-                    padding_collections.link_count += 1;
+            // The following is only relevant for Long format
+            if config.format == Format::Long {
+                // correctly align columns when some files have capabilities/ACLs and others do not
+                {
+                    #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
+                    // TODO: See how Mac should work here
+                    let is_acl_set = false;
+                    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+                    let is_acl_set = has_acl(item.display_name());
+                    if context_len > 1 || is_acl_set {
+                        padding_collections.link_count += 1;
+                    }
+                }
+
+                #[cfg(unix)]
+                {
+                    if items.len() == 1usize {
+                        padding_collections.size = 0usize;
+                        padding_collections.major = 0usize;
+                        padding_collections.minor = 0usize;
+                    } else {
+                        padding_collections.major = major_len.max(padding_collections.major);
+                        padding_collections.minor = minor_len.max(padding_collections.minor);
+                        padding_collections.size = size_len
+                            .max(padding_collections.size)
+                            .max(padding_collections.major);
+                    }
                 }
             }
-
-            if items.len() == 1usize {
-                padding_collections.size = 0usize;
-                padding_collections.major = 0usize;
-                padding_collections.minor = 0usize;
-            } else {
-                padding_collections.major = major_len.max(padding_collections.major);
-                padding_collections.minor = minor_len.max(padding_collections.minor);
-                padding_collections.size = size_len
-                    .max(padding_collections.size)
-                    .max(padding_collections.major);
-            }
+            #[cfg(not(unix))]
+            let _ = (major_len, minor_len);
         }
-    }
-
-    padding_collections
-}
-
-#[cfg(not(unix))]
-fn calculate_padding_collection(
-    items: &[PathData],
-    config: &Config,
-    state: &mut ListState,
-) -> PaddingCollection {
-    let mut padding_collections = PaddingCollection {
-        link_count: 1,
-        uname: 1,
-        group: 1,
-        context: 1,
-        size: 1,
-        block_size: 1,
-    };
-
-    for item in items {
-        if config.alloc_size {
-            if let Some(md) = item.metadata() {
-                let block_size_len = display_size(get_block_size(md, config), config).len();
-                padding_collections.block_size = block_size_len.max(padding_collections.block_size);
-            }
-        }
-
-        let context_len = item.security_context(config).len();
-        let (link_count_len, uname_len, group_len, size_len, _major_len, _minor_len) =
-            display_dir_entry_size(item, config, state);
-        padding_collections.link_count = link_count_len.max(padding_collections.link_count);
-        padding_collections.uname = uname_len.max(padding_collections.uname);
-        padding_collections.group = group_len.max(padding_collections.group);
-        if config.context {
-            padding_collections.context = context_len.max(padding_collections.context);
-        }
-        padding_collections.size = size_len.max(padding_collections.size);
     }
 
     padding_collections
