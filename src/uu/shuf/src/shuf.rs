@@ -405,23 +405,23 @@ fn number_set_should_list_remaining(listed_count: usize, range_size: usize) -> b
 }
 
 trait Writable {
-    fn write_all_to(&self, output: &mut impl OsWrite) -> Result<(), Error>;
+    fn write_all_to(&self, output: &mut (impl OsWrite + ?Sized)) -> Result<(), Error>;
 }
 
 impl Writable for &[u8] {
-    fn write_all_to(&self, output: &mut impl OsWrite) -> Result<(), Error> {
+    fn write_all_to(&self, output: &mut (impl OsWrite + ?Sized)) -> Result<(), Error> {
         output.write_all(self)
     }
 }
 
 impl Writable for &OsStr {
-    fn write_all_to(&self, output: &mut impl OsWrite) -> Result<(), Error> {
+    fn write_all_to(&self, output: &mut (impl OsWrite + ?Sized)) -> Result<(), Error> {
         output.write_all_os(self)
     }
 }
 
 impl Writable for usize {
-    fn write_all_to(&self, output: &mut impl OsWrite) -> Result<(), Error> {
+    fn write_all_to(&self, output: &mut (impl OsWrite + ?Sized)) -> Result<(), Error> {
         let mut n = *self;
 
         // Handle the zero case explicitly
@@ -445,12 +445,16 @@ impl Writable for usize {
     }
 }
 
-fn shuf_exec(
-    input: &mut impl Shufable,
+fn shuf_exec<S, W>(
+    input: &mut S,
     opts: &Options,
     rng: &mut WrappedRng,
-    output: &mut BufWriter<Box<dyn OsWrite>>,
-) -> UResult<()> {
+    output: &mut BufWriter<W>,
+) -> UResult<()>
+where
+    S: Shufable,
+    W: OsWrite,
+{
     let ctx = || translate!("shuf-error-write-failed");
 
     if opts.repeat {
