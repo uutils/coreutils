@@ -137,11 +137,9 @@ fn test_create_fifo_permission_denied() {
     at.mkdir(no_exec_dir);
     at.set_mode(no_exec_dir, 0o644);
 
-    let err_msg = format!(
-        "mkfifo: cannot create fifo '{named_pipe}': File exists
-mkfifo: cannot set permissions on '{named_pipe}': Permission denied (os error 13)
-"
-    );
+    // We no longer attempt to modify file permision if the file was failed to be created.
+    // Therefore the error message should only contain "cannot create".
+    let err_msg = format!("mkfifo: cannot create fifo '{named_pipe}': File exists\n");
 
     scene
         .ucmd()
@@ -211,7 +209,7 @@ fn test_mkfifo_permission_unchanged_when_failed() {
     at.write(file_name, "content");
     at.set_mode(file_name, 0o600);
 
-    let err_msg = format!("mkfifo: cannot create fifo '{file_name}': File exists");
+    let err_msg = format!("mkfifo: cannot create fifo '{file_name}': File exists\n");
 
     scene
         .ucmd()
@@ -222,6 +220,6 @@ fn test_mkfifo_permission_unchanged_when_failed() {
         .stderr_is(err_msg.as_str());
     let metadata = std::fs::metadata(at.subdir.join(file_name)).unwrap();
     let permissions = display_permissions(&metadata, true);
-    let expected = "prw-------";
+    let expected = "-rw-------";
     assert_eq!(permissions, expected.to_string());
 }
