@@ -103,7 +103,7 @@ jobs:
       run: |
         ## Build binaries
         cd 'uutils'
-        env PROFILE=release-small bash util/build-gnu.sh
+        env PROFILE=release bash util/build-gnu.sh # gdb test needs unstripped binaries
 
     - name: Save files for faster configure and skipping make
       uses: actions/cache/save@v5
