@@ -750,11 +750,16 @@ fn check_one_fs(path: &Path, options: &Options) -> Result<(), String> {
         .map_err(|err| format!("cannot canonicalize {}: {err}", path.quote()))?;
 
     // Get parent path, handling root case
-    let parent_canon = child_canon.parent().ok_or("")?.to_path_buf();
+    let parent_canon = child_canon
+        .parent()
+        .ok_or_else(|| format!("cannot get parent of {}", child_canon.quote()))?
+        .to_path_buf();
 
     // Find mount points for child and parent
-    let child_mount = mount_for_path(&child_canon, &fs_list).ok_or("")?;
-    let parent_mount = mount_for_path(&parent_canon, &fs_list).ok_or("")?;
+    let child_mount = mount_for_path(&child_canon, &fs_list)
+        .ok_or_else(|| format!("cannot find mount point for {}", child_canon.quote()))?;
+    let parent_mount = mount_for_path(&parent_canon, &fs_list)
+        .ok_or_else(|| format!("cannot find mount point for {}", parent_canon.quote()))?;
 
     // Check if child and parent are on the same device
     if child_mount.dev_id != parent_mount.dev_id {
