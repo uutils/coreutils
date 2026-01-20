@@ -3,11 +3,14 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use clap::{Arg, ArgAction, Command, value_parser};
-use nix::sys::stat::Mode;
-use nix::unistd::mkfifo;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
+
+use clap::{Arg, ArgAction, Command, value_parser};
+use libc::mode_t;
+use nix::sys::stat::Mode;
+use nix::unistd::mkfifo;
+
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::translate;
@@ -47,7 +50,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
 
         // Explicitly set the permissions to ignore umask
-        if let Err(e) = fs::set_permissions(&f, fs::Permissions::from_mode(mode)) {
+        if let Err(e) = fs::set_permissions(&f, fs::Permissions::from_mode(mode as u32)) {
             return Err(USimpleError::new(
                 1,
                 translate!("mkfifo-error-cannot-set-permissions", "path" => f.quote(), "error" => e),
@@ -125,9 +128,9 @@ pub fn uu_app() -> Command {
         )
 }
 
-fn calculate_mode(mode_option: Option<&String>) -> Result<u32, String> {
+fn calculate_mode(mode_option: Option<&String>) -> Result<mode_t, String> {
     let umask = uucore::mode::get_umask();
-    let mode = 0o666; // Default mode for FIFOs
+    let mode: mode_t = 0o666; // Default mode for FIFOs
 
     if let Some(m) = mode_option {
         uucore::mode::parse_chmod(mode, m, false, umask)

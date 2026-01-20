@@ -19,8 +19,9 @@ path = "src/mkdir.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["fs", "mode", "fsxattr"] }
 fluent = { workspace = true }
+libc = { workspace = true }
+uucore = { workspace = true, features = ["fs", "mode", "fsxattr"] }
 
 [features]
 selinux = ["uucore/selinux"]

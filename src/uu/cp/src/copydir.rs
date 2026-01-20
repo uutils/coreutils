@@ -6,6 +6,7 @@
 //! Recursively copy the contents of a directory.
 //!
 //! See the [`copy_directory`] function for more information.
+
 #[cfg(windows)]
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
@@ -16,6 +17,9 @@ use std::io;
 use std::path::{Path, PathBuf, StripPrefixError};
 
 use indicatif::ProgressBar;
+use libc::mode_t;
+use walkdir::{DirEntry, WalkDir};
+
 use uucore::display::Quotable;
 use uucore::error::UIoError;
 use uucore::fs::{
@@ -24,7 +28,6 @@ use uucore::fs::{
 use uucore::show;
 use uucore::translate;
 use uucore::uio_error;
-use walkdir::{DirEntry, WalkDir};
 
 use crate::{
     CopyMode, CopyResult, CpError, Options, aligned_ancestors, context_for, copy_attributes,
@@ -608,19 +611,19 @@ fn build_dir(
             libc::S_IWGRP | libc::S_IWOTH //exclude w for group and other
         } else {
             0
-        } as u32;
+        };
 
         let umask = if let (Some(from), Preserve::Yes { .. }) =
             (copy_attributes_from, options.attributes.mode)
         {
-            !fs::symlink_metadata(from)?.permissions().mode()
+            !fs::symlink_metadata(from)?.permissions().mode() as mode_t
         } else {
             uucore::mode::get_umask()
         };
 
         excluded_perms |= umask;
         let mode = !excluded_perms & 0o777; //use only the last three octet bits
-        std::os::unix::fs::DirBuilderExt::mode(&mut builder, mode);
+        std::os::unix::fs::DirBuilderExt::mode(&mut builder, mode as u32);
     }
 
     builder.create(path)?;

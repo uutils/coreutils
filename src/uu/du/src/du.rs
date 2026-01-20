@@ -3,10 +3,11 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker:ignore fstatat openat dirfd
+// spell-checker:ignore dirfd fstatat openat
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::PossibleValue};
 use glob::Pattern;
+use libc::{dev_t, ino_t, mode_t};
 use std::collections::HashSet;
 use std::env;
 use std::ffi::{OsStr, OsString};
@@ -21,26 +22,27 @@ use std::str::FromStr;
 use std::sync::mpsc;
 use std::thread;
 use thiserror::Error;
+#[cfg(windows)]
+use windows_sys::Win32::{
+    Foundation::HANDLE,
+    Storage::FileSystem::{
+        FILE_ID_128, FILE_ID_INFO, FILE_STANDARD_INFO, FileIdInfo, FileStandardInfo,
+        GetFileInformationByHandleEx,
+    },
+};
+
 use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::fsext::{MetadataTimeField, metadata_get_time};
 use uucore::line_ending::LineEnding;
-#[cfg(all(unix, not(target_os = "redox")))]
-use uucore::safe_traversal::DirFd;
-use uucore::translate;
-
 use uucore::parser::parse_glob;
 use uucore::parser::parse_size::{ParseSizeError, parse_size_non_zero_u64, parse_size_u64};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
+#[cfg(all(unix, not(target_os = "redox")))]
+use uucore::safe_traversal::DirFd;
 use uucore::time::{FormatSystemTimeFallback, format, format_system_time};
+use uucore::translate;
 use uucore::{format_usage, show, show_error, show_warning};
-#[cfg(windows)]
-use windows_sys::Win32::Foundation::HANDLE;
-#[cfg(windows)]
-use windows_sys::Win32::Storage::FileSystem::{
-    FILE_ID_128, FILE_ID_INFO, FILE_STANDARD_INFO, FileIdInfo, FileStandardInfo,
-    GetFileInformationByHandleEx,
-};
 
 mod options {
     pub const HELP: &str = "help";
@@ -72,6 +74,8 @@ mod options {
     pub const VERBOSE: &str = "verbose";
     pub const FILE: &str = "FILE";
 }
+
+const POSIX_BLOCK_SIZE: u64 = 512;
 
 struct TraversalOptions {
     all: bool,
@@ -113,8 +117,8 @@ enum SizeFormat {
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
 struct FileInfo {
-    file_id: u128,
-    dev_id: u64,
+    file_id: ino_t,
+    dev_id: dev_t,
 }
 
 struct Stat {
@@ -172,7 +176,7 @@ impl Stat {
         // Create file info from the safe metadata
         let file_info = safe_metadata.file_info();
         let file_info_option = Some(FileInfo {
-            file_id: file_info.inode() as u128,
+            file_id: file_info.inode(),
             dev_id: file_info.device(),
         });
 
@@ -235,8 +239,8 @@ fn get_blocks(path: &Path, _metadata: &Metadata) -> u64 {
 #[cfg(not(windows))]
 fn get_file_info(_path: &Path, metadata: &Metadata) -> Option<FileInfo> {
     Some(FileInfo {
-        file_id: metadata.ino() as u128,
-        dev_id: metadata.dev(),
+        file_id: metadata.ino(),
+        dev_id: metadata.dev() as dev_t,
     })
 }
 
@@ -261,8 +265,8 @@ fn get_file_info(path: &Path, _metadata: &Metadata) -> Option<FileInfo> {
 
         if success != 0 {
             result = Some(FileInfo {
-                file_id: std::mem::transmute::<FILE_ID_128, u128>(file_info.FileId),
-                dev_id: file_info.VolumeSerialNumber,
+                file_id: std::mem::transmute::<FILE_ID_128, ino_t>(file_info.FileId),
+                dev_id: file_info.VolumeSerialNumber as dev_t,
             });
         }
     }
@@ -287,7 +291,7 @@ fn read_block_size(s: Option<&str>) -> UResult<u64> {
     } else if let Some(bytes) = block_size_from_env() {
         Ok(bytes)
     } else if env::var("POSIXLY_CORRECT").is_ok() {
-        Ok(512)
+        Ok(POSIX_BLOCK_SIZE)
     } else {
         Ok(1024)
     }
@@ -313,7 +317,7 @@ fn safe_du(
                 // Create Stat from safe metadata
                 let file_info = safe_metadata.file_info();
                 let file_info_option = Some(FileInfo {
-                    file_id: file_info.inode() as u128,
+                    file_id: file_info.inode(),
                     dev_id: file_info.device(),
                 });
                 let blocks = safe_metadata.blocks();
@@ -436,11 +440,11 @@ fn safe_du(
         };
 
         // Check if it's a symlink
-        const S_IFMT: u32 = 0o170_000;
-        const S_IFDIR: u32 = 0o040_000;
-        const S_IFLNK: u32 = 0o120_000;
-        #[allow(clippy::unnecessary_cast)]
-        let is_symlink = (lstat.st_mode as u32 & S_IFMT) == S_IFLNK;
+        const S_IFMT: mode_t = 0o170_000;
+        const S_IFDIR: mode_t = 0o040_000;
+        const S_IFLNK: mode_t = 0o120_000;
+
+        let is_symlink = (lstat.st_mode & S_IFMT) == S_IFLNK;
 
         // Handle symlinks with -L option
         // For safe traversal with -L, we skip symlinks to directories entirely
@@ -451,14 +455,12 @@ fn safe_du(
             continue;
         }
 
-        #[allow(clippy::unnecessary_cast)]
-        let is_dir = (lstat.st_mode as u32 & S_IFMT) == S_IFDIR;
+        let is_dir = (lstat.st_mode & S_IFMT) == S_IFDIR;
         let entry_stat = lstat;
 
-        #[allow(clippy::unnecessary_cast)]
         let file_info = (entry_stat.st_ino != 0).then_some(FileInfo {
-            file_id: entry_stat.st_ino as u128,
-            dev_id: entry_stat.st_dev as u64,
+            file_id: entry_stat.st_ino,
+            dev_id: entry_stat.st_dev,
         });
 
         // For safe traversal, we need to handle stats differently
@@ -705,6 +707,7 @@ fn du_regular(
                                 my_stat.size += this_stat.size;
                                 my_stat.blocks += this_stat.blocks;
                                 my_stat.inodes += 1;
+
                                 if options.all {
                                     print_tx.send(Ok(StatPrintInfo {
                                         stat: this_stat,
@@ -810,9 +813,10 @@ impl StatPrinter {
         } else if self.apparent_size {
             stat.size
         } else {
-            // The st_blocks field indicates the number of blocks allocated to the file, 512-byte units.
+            // The st_blocks field indicates the number of blocks allocated to the file,
+            // in POSIX_BLOCK_SIZE-byte units.
             // See: http://linux.die.net/man/2/stat
-            stat.blocks * 512
+            stat.blocks * POSIX_BLOCK_SIZE
         }
     }
 
@@ -1023,6 +1027,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         SizeFormat::BlockSize(block_size)
     };
 
+    let inodes = matches.get_flag(options::INODES);
+    let apparent_size =
+        matches.get_flag(options::APPARENT_SIZE) || matches.get_flag(options::BYTES);
+
     let traversal_options = TraversalOptions {
         all: matches.get_flag(options::ALL),
         separate_dirs: matches.get_flag(options::SEPARATE_DIRS),
@@ -1036,6 +1044,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             Deref::None
         },
         count_links,
+
         verbose: matches.get_flag(options::VERBOSE),
         excludes: build_exclude_patterns(&matches)?,
     };
@@ -1051,7 +1060,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         size_format,
         summarize,
         total: matches.get_flag(options::TOTAL),
-        inodes: matches.get_flag(options::INODES),
+        inodes,
         threshold: matches
             .get_one::<String>(options::THRESHOLD)
             .map(|s| {
@@ -1060,16 +1069,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 })
             })
             .transpose()?,
-        apparent_size: matches.get_flag(options::APPARENT_SIZE) || matches.get_flag(options::BYTES),
+        apparent_size,
         time,
         time_format,
         line_ending: LineEnding::from_zero_flag(matches.get_flag(options::NULL)),
         total_text: translate!("du-total"),
     };
 
-    if stat_printer.inodes
-        && (matches.get_flag(options::APPARENT_SIZE) || matches.get_flag(options::BYTES))
-    {
+    if inodes && apparent_size {
         show_warning!(
             "{}",
             translate!("du-warning-apparent-size-ineffective-with-inodes")

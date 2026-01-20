@@ -7,18 +7,21 @@
 
 mod mode;
 
-use clap::{Arg, ArgAction, ArgMatches, Command};
-use file_diff::diff;
-use filetime::{FileTime, set_file_times};
-#[cfg(all(feature = "selinux", target_os = "linux"))]
-use selinux::SecurityContext;
 use std::ffi::OsString;
 use std::fmt::Debug;
 use std::fs::{self, metadata};
 use std::fs::{File, OpenOptions};
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 use std::process;
+
+use clap::{Arg, ArgAction, ArgMatches, Command};
+use file_diff::diff;
+use filetime::{FileTime, set_file_times};
+use libc::mode_t;
+#[cfg(all(feature = "selinux", target_os = "linux"))]
+use selinux::SecurityContext;
 use thiserror::Error;
+
 use uucore::backup_control::{self, BackupMode};
 use uucore::buf_copy::copy_stream;
 use uucore::display::Quotable;
@@ -40,13 +43,13 @@ use std::os::unix::fs::MetadataExt;
 #[cfg(unix)]
 use std::os::unix::prelude::OsStrExt;
 
-const DEFAULT_MODE: u32 = 0o755;
+const DEFAULT_MODE: mode_t = 0o755;
 const DEFAULT_STRIP_PROGRAM: &str = "strip";
 
 #[allow(dead_code)]
 pub struct Behavior {
     main_function: MainFunction,
-    specified_mode: Option<u32>,
+    specified_mode: Option<mode_t>,
     backup_mode: BackupMode,
     suffix: String,
     owner_id: Option<u32>,
@@ -143,7 +146,7 @@ pub enum MainFunction {
 
 impl Behavior {
     /// Determine the mode for chmod after copy.
-    pub fn mode(&self) -> u32 {
+    pub fn mode(&self) -> mode_t {
         self.specified_mode.unwrap_or(DEFAULT_MODE)
     }
 }
@@ -345,7 +348,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
 
     let considering_dir: bool = MainFunction::Directory == main_function;
 
-    let specified_mode: Option<u32> = if matches.contains_id(OPT_MODE) {
+    let specified_mode: Option<mode_t> = if matches.contains_id(OPT_MODE) {
         let x = matches.get_one::<String>(OPT_MODE).ok_or(1)?;
         Some(uucore::mode::parse(x, considering_dir, 0).map_err(|err| {
             show_error!(
@@ -1083,10 +1086,11 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
     // Define all file mode bits (including permissions).
     // setuid || setgid || sticky || permissions
     let all_modes: u32 = 0o7777;
+    let b_mode = b.mode() as u32;
 
     // Check if any special mode bits are set in the specified mode,
     // source file mode, or destination file mode.
-    if b.mode() & extra_mode != 0
+    if b_mode & extra_mode != 0
         || from_meta.mode() & extra_mode != 0
         || to_meta.mode() & extra_mode != 0
     {
@@ -1094,7 +1098,7 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
     }
 
     // Check if the mode of the destination file differs from the specified mode.
-    if b.mode() != to_meta.mode() & all_modes {
+    if b_mode != to_meta.mode() & all_modes {
         return true;
     }
 

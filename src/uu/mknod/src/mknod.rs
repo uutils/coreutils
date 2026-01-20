@@ -5,10 +5,11 @@
 
 // spell-checker:ignore (ToDO) parsemode makedev sysmacros perror IFBLK IFCHR IFIFO
 
+use std::ffi::CString;
+
 use clap::{Arg, ArgAction, Command, value_parser};
 use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
 use libc::{dev_t, mode_t};
-use std::ffi::CString;
 
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError, set_exit_code};
@@ -235,7 +236,7 @@ pub fn uu_app() -> Command {
 
 #[allow(clippy::unnecessary_cast)]
 fn parse_mode(str_mode: &str) -> Result<mode_t, String> {
-    let default_mode = (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
+    let default_mode: mode_t = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
     uucore::mode::parse_chmod(default_mode, str_mode, true, uucore::mode::get_umask())
         .map_err(|e| {
             translate!(
@@ -247,7 +248,7 @@ fn parse_mode(str_mode: &str) -> Result<mode_t, String> {
             if mode > 0o777 {
                 Err(translate!("mknod-error-mode-permission-bits-only"))
             } else {
-                Ok(mode as mode_t)
+                Ok(mode)
             }
         })
 }

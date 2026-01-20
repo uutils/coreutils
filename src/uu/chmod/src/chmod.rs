@@ -5,24 +5,24 @@
 
 // spell-checker:ignore (ToDO) Chmoder cmode fmode fperm fref ugoa RFILE RFILE's
 
-use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
+
+use clap::{Arg, ArgAction, Command};
 use thiserror::Error;
+
 use uucore::display::Quotable;
 use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::fs::display_permissions_unix;
 use uucore::libc::mode_t;
 use uucore::mode;
 use uucore::perms::{TraverseSymlinks, configure_symlink_and_recursion};
-
 #[cfg(all(unix, not(target_os = "redox")))]
 use uucore::safe_traversal::DirFd;
-use uucore::{format_usage, show, show_error};
-
 use uucore::translate;
+use uucore::{format_usage, show, show_error};
 
 #[derive(Debug, Error)]
 enum ChmodError {
@@ -121,7 +121,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let preserve_root = matches.get_flag(options::PRESERVE_ROOT);
     let fmode = match matches.get_one::<OsString>(options::REFERENCE) {
         Some(fref) => match fs::metadata(fref) {
-            Ok(meta) => Some(meta.mode() & 0o7777),
+            Ok(meta) => Some((meta.mode() & 0o7777) as mode_t),
             Err(_) => {
                 return Err(ChmodError::CannotStat(fref.into()).into());
             }
@@ -262,7 +262,7 @@ struct Chmoder {
     verbose: bool,
     preserve_root: bool,
     recursive: bool,
-    fmode: Option<u32>,
+    fmode: Option<mode_t>,
     cmode: Option<String>,
     traverse_symlinks: TraverseSymlinks,
     dereference: bool,
@@ -271,7 +271,7 @@ struct Chmoder {
 impl Chmoder {
     /// Calculate the new mode based on the current mode and the chmod specification.
     /// Returns (`new_mode`, `naively_expected_new_mode`) for symbolic modes, or (`new_mode`, `new_mode`) for numeric/reference modes.
-    fn calculate_new_mode(&self, current_mode: u32, is_dir: bool) -> UResult<(u32, u32)> {
+    fn calculate_new_mode(&self, current_mode: mode_t, is_dir: bool) -> UResult<(mode_t, mode_t)> {
         match self.fmode {
             Some(mode) => Ok((mode, mode)),
             None => {
@@ -312,7 +312,7 @@ impl Chmoder {
     }
 
     /// Report permission changes based on verbose and changes flags
-    fn report_permission_change(&self, file_path: &Path, old_mode: u32, new_mode: u32) {
+    fn report_permission_change(&self, file_path: &Path, old_mode: mode_t, new_mode: mode_t) {
         if self.verbose || self.changes {
             let current_permissions = display_permissions_unix(old_mode as mode_t, false);
             let new_permissions = display_permissions_unix(new_mode as mode_t, false);
@@ -569,7 +569,12 @@ impl Chmoder {
                     Ok(meta) if meta.is_dir() => self.walk_dir_with_context(path, false),
                     Ok(meta) => {
                         // It's a file symlink, chmod it using safe traversal
-                        self.safe_chmod_file(path, dir_fd, entry_name, meta.mode() & 0o7777)
+                        self.safe_chmod_file(
+                            path,
+                            dir_fd,
+                            entry_name,
+                            (meta.mode() & 0o7777) as mode_t,
+                        )
                     }
                     Err(_) => {
                         // Dangling symlink, chmod it without dereferencing
@@ -591,7 +596,7 @@ impl Chmoder {
         file_path: &Path,
         dir_fd: &DirFd,
         entry_name: &std::ffi::OsStr,
-        current_mode: u32,
+        current_mode: mode_t,
     ) -> UResult<()> {
         // Calculate the new mode using the helper method
         let (new_mode, _) = self.calculate_new_mode(current_mode, file_path.is_dir())?;
@@ -631,7 +636,7 @@ impl Chmoder {
         let metadata = get_metadata(file, dereference);
 
         let fperm = match metadata {
-            Ok(meta) => meta.mode() & 0o7777,
+            Ok(meta) => (meta.mode() & 0o7777) as mode_t,
             Err(err) => {
                 // Handle dangling symlinks or other errors
                 return if file.is_symlink() && !dereference {
@@ -687,12 +692,13 @@ impl Chmoder {
         Ok(())
     }
 
-    fn change_file(&self, fperm: u32, mode: u32, file: &Path) -> Result<(), i32> {
+    fn change_file(&self, fperm: mode_t, mode: mode_t, file: &Path) -> Result<(), i32> {
         if fperm == mode {
             // Use the helper method for consistent reporting
             self.report_permission_change(file, fperm, mode);
             Ok(())
-        } else if let Err(err) = fs::set_permissions(file, fs::Permissions::from_mode(mode)) {
+        } else if let Err(err) = fs::set_permissions(file, fs::Permissions::from_mode(mode as u32))
+        {
             if !self.quiet {
                 show_error!("{err}");
             }

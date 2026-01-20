@@ -15,6 +15,9 @@ use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::{fmt, io};
+
+use libc::mode_t;
+
 #[cfg(all(unix, not(target_os = "android")))]
 use uucore::fsxattr::copy_xattrs;
 use uucore::translate;
@@ -2335,12 +2338,12 @@ fn calculate_dest_permissions(
         #[cfg(unix)]
         {
             let mut permissions = source_metadata.permissions();
-            let mode = handle_no_preserve_mode(options, permissions.mode());
+            let mode = handle_no_preserve_mode(options, permissions.mode() as mode_t);
 
             // Apply umask
             use uucore::mode::get_umask;
             let mode = mode & !get_umask();
-            permissions.set_mode(mode);
+            permissions.set_mode(mode as u32);
             Ok(permissions)
         }
         #[cfg(not(unix))]
@@ -2628,7 +2631,7 @@ fn is_stream(metadata: &Metadata) -> bool {
 }
 
 #[cfg(unix)]
-fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
+fn handle_no_preserve_mode(options: &Options, org_mode: mode_t) -> mode_t {
     let (is_preserve_mode, is_explicit_no_preserve_mode) = options.preserve_mode();
     if !is_preserve_mode {
         use libc::{
@@ -2659,10 +2662,9 @@ fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
         ))]
         {
             #[allow(clippy::unnecessary_cast)]
-            const MODE_RW_UGO: u32 =
-                (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
+            const MODE_RW_UGO: mode_t = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
             #[allow(clippy::unnecessary_cast)]
-            const S_IRWXUGO: u32 = (S_IRWXU | S_IRWXG | S_IRWXO) as u32;
+            const S_IRWXUGO: mode_t = S_IRWXU | S_IRWXG | S_IRWXO;
             return if is_explicit_no_preserve_mode {
                 MODE_RW_UGO
             } else {

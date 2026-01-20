@@ -7,15 +7,19 @@
 
 // spell-checker:ignore (vars) fperm srwx
 
-use libc::umask;
+use libc::{mode_t, umask};
 
-pub fn parse_numeric(fperm: u32, mut mode: &str, considering_dir: bool) -> Result<u32, String> {
+pub fn parse_numeric(
+    fperm: mode_t,
+    mut mode: &str,
+    considering_dir: bool,
+) -> Result<mode_t, String> {
     let (op, pos) = parse_op(mode).map_or_else(|_| (None, 0), |(op, pos)| (Some(op), pos));
     mode = mode[pos..].trim();
     let change = if mode.is_empty() {
         0
     } else {
-        u32::from_str_radix(mode, 8).map_err(|e| e.to_string())?
+        mode_t::from_str_radix(mode, 8).map_err(|e| e.to_string())?
     };
     if change > 0o7777 {
         Err(format!("mode is too large ({change} > 7777"))
@@ -33,11 +37,11 @@ pub fn parse_numeric(fperm: u32, mut mode: &str, considering_dir: bool) -> Resul
 }
 
 pub fn parse_symbolic(
-    mut fperm: u32,
+    mut fperm: mode_t,
     mut mode: &str,
-    umask: u32,
+    umask: mode_t,
     considering_dir: bool,
-) -> Result<u32, String> {
+) -> Result<mode_t, String> {
     let (mask, pos) = parse_levels(mode);
     if pos == mode.len() {
         return Err(format!("invalid mode ({mode})"));
@@ -68,7 +72,7 @@ pub fn parse_symbolic(
     Ok(fperm)
 }
 
-fn parse_levels(mode: &str) -> (u32, usize) {
+fn parse_levels(mode: &str) -> (mode_t, usize) {
     let mut mask = 0;
     let mut pos = 0;
     for ch in mode.chars() {
@@ -100,7 +104,7 @@ fn parse_op(mode: &str) -> Result<(char, usize), String> {
     }
 }
 
-fn parse_change(mode: &str, fperm: u32, considering_dir: bool) -> (u32, usize) {
+fn parse_change(mode: &str, fperm: mode_t, considering_dir: bool) -> (mode_t, usize) {
     let mut srwx = 0;
     let mut pos = 0;
     for ch in mode.chars() {
@@ -140,12 +144,12 @@ fn parse_change(mode: &str, fperm: u32, considering_dir: bool) -> (u32, usize) {
 /// Modify a file mode based on a user-supplied string.
 /// Supports comma-separated mode strings like "ug+rwX,o+rX" (same as chmod).
 pub fn parse_chmod(
-    current_mode: u32,
+    current_mode: mode_t,
     mode_string: &str,
     considering_dir: bool,
-    umask: u32,
-) -> Result<u32, String> {
-    let mut new_mode: u32 = current_mode;
+    umask: mode_t,
+) -> Result<mode_t, String> {
+    let mut new_mode = current_mode;
 
     // Split by commas and process each mode part sequentially
     for mode_part in mode_string.split(',') {
@@ -165,11 +169,11 @@ pub fn parse_chmod(
 }
 
 /// Takes a user-supplied string and tries to parse to u32 mode bitmask.
-pub fn parse(mode_string: &str, considering_dir: bool, umask: u32) -> Result<u32, String> {
+pub fn parse(mode_string: &str, considering_dir: bool, umask: mode_t) -> Result<mode_t, String> {
     parse_chmod(0, mode_string, considering_dir, umask)
 }
 
-pub fn get_umask() -> u32 {
+pub fn get_umask() -> mode_t {
     // There's no portable way to read the umask without changing it.
     // We have to replace it and then quickly set it back, hopefully before
     // some other thread is affected.
@@ -192,7 +196,7 @@ pub fn get_umask() -> u32 {
         target_os = "android",
         target_os = "redox"
     ))]
-    return mask as u32;
+    return mask;
 }
 
 #[cfg(test)]

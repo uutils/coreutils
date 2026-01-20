@@ -5,22 +5,23 @@
 
 // spell-checker:ignore (ToDO) ugoa cmode RAII
 
+use std::ffi::OsString;
+use std::path::{Path, PathBuf};
+
 use clap::builder::ValueParser;
 use clap::parser::ValuesRef;
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use std::ffi::OsString;
-use std::path::{Path, PathBuf};
+use libc::mode_t;
 #[cfg(all(unix, target_os = "linux"))]
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
-use uucore::translate;
-
 #[cfg(not(windows))]
 use uucore::mode;
+use uucore::translate;
 use uucore::{display::Quotable, fs::dir_strip_dot_for_creation};
 use uucore::{format_usage, show_if_err};
 
-static DEFAULT_PERM: u32 = 0o777;
+static DEFAULT_PERM: mode_t = 0o777;
 
 mod options {
     pub const MODE: &str = "mode";
@@ -37,7 +38,7 @@ pub struct Config<'a> {
     pub recursive: bool,
 
     /// File permissions (octal).
-    pub mode: u32,
+    pub mode: mode_t,
 
     /// Print message for each created directory.
     pub verbose: bool,
@@ -50,12 +51,12 @@ pub struct Config<'a> {
 }
 
 #[cfg(windows)]
-fn get_mode(_matches: &ArgMatches) -> Result<u32, String> {
+fn get_mode(_matches: &ArgMatches) -> Result<mode_t, String> {
     Ok(DEFAULT_PERM)
 }
 
 #[cfg(not(windows))]
-fn get_mode(matches: &ArgMatches) -> Result<u32, String> {
+fn get_mode(matches: &ArgMatches) -> Result<mode_t, String> {
     // Not tested on Windows
     if let Some(m) = matches.get_one::<String>(options::MODE) {
         mode::parse_chmod(DEFAULT_PERM, m, true, mode::get_umask())
@@ -273,14 +274,14 @@ impl Drop for UmaskGuard {
 /// directory is created atomically with the correct permissions. This avoids a
 /// race condition where the directory briefly exists with umask-based permissions.
 #[cfg(unix)]
-fn create_dir_with_mode(path: &Path, mode: u32) -> std::io::Result<()> {
+fn create_dir_with_mode(path: &Path, mode: mode_t) -> std::io::Result<()> {
     use std::os::unix::fs::DirBuilderExt;
 
     // Temporarily set umask to 0 so the directory is created with the exact mode.
     // The guard restores the original umask on drop, even if we panic.
     let _guard = UmaskGuard::set(0);
 
-    std::fs::DirBuilder::new().mode(mode).create(path)
+    std::fs::DirBuilder::new().mode(mode as u32).create(path)
 }
 
 #[cfg(not(unix))]

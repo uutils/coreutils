@@ -3,6 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore reflink
+
 use std::ffi::CString;
 use std::fs::{self, File, OpenOptions};
 use std::os::unix::ffi::OsStrExt;
@@ -98,7 +99,7 @@ pub(crate) fn copy_on_write(
                     let mut dst_file = OpenOptions::new()
                         .create(true)
                         .write(true)
-                        .mode(mode)
+                        .mode(mode as u32)
                         .open(dest)?;
 
                     let dest_is_stream = is_stream(&dst_file.metadata()?);
