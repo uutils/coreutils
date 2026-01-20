@@ -1017,6 +1017,51 @@ fn print_page(
     Ok(())
 }
 
+/// Group the lines of the input file in columns read left-to-right.
+fn to_table_across(
+    content_lines_per_page: usize,
+    columns: usize,
+    lines: &[FileLine],
+) -> Vec<Vec<Option<&FileLine>>> {
+    (0..content_lines_per_page)
+        .map(|i| (0..columns).map(|j| lines.get(i * columns + j)).collect())
+        .collect()
+}
+
+/// Group the lines of the input files in columns, one column per file.
+fn to_table_merged(
+    content_lines_per_page: usize,
+    columns: usize,
+    filled_lines: Vec<Option<&FileLine>>,
+) -> Vec<Vec<Option<&FileLine>>> {
+    (0..content_lines_per_page)
+        .map(|i| {
+            (0..columns)
+                .map(|j| {
+                    *filled_lines
+                        .get(content_lines_per_page * j + i)
+                        .unwrap_or(&None)
+                })
+                .collect()
+        })
+        .collect()
+}
+
+/// Group lines of the file in columns, going top-to-bottom then left-to-right.
+fn to_table(
+    content_lines_per_page: usize,
+    columns: usize,
+    lines: &[FileLine],
+) -> Vec<Vec<Option<&FileLine>>> {
+    (0..content_lines_per_page)
+        .map(|i| {
+            (0..columns)
+                .map(|j| lines.get(content_lines_per_page * j + i))
+                .collect()
+        })
+        .collect()
+}
+
 #[allow(clippy::cognitive_complexity)]
 fn write_columns(
     lines: &[FileLine],
@@ -1043,7 +1088,7 @@ fn write_columns(
         .as_ref()
         .is_some_and(|i| i.across_mode);
 
-    let mut filled_lines = Vec::new();
+    let mut filled_lines: Vec<Option<&FileLine>> = Vec::new();
     if options.merge_files_print.is_some() {
         let mut offset = 0;
         for col in 0..columns {
@@ -1063,23 +1108,17 @@ fn write_columns(
         }
     }
 
-    let table: Vec<Vec<_>> = (0..content_lines_per_page)
-        .map(move |a| {
-            (0..columns)
-                .map(|i| {
-                    if across_mode {
-                        lines.get(a * columns + i)
-                    } else if options.merge_files_print.is_some() {
-                        *filled_lines
-                            .get(content_lines_per_page * i + a)
-                            .unwrap_or(&None)
-                    } else {
-                        lines.get(content_lines_per_page * i + a)
-                    }
-                })
-                .collect()
-        })
-        .collect();
+    // Group the flat list of lines into a 2-dimensional table of
+    // cells, where each row will be printed as a single line in the
+    // output.
+    let merge = options.merge_files_print.is_some();
+    let table = if across_mode {
+        to_table_across(content_lines_per_page, columns, lines)
+    } else if merge {
+        to_table_merged(content_lines_per_page, columns, filled_lines)
+    } else {
+        to_table(content_lines_per_page, columns, lines)
+    };
 
     let blank_line = FileLine::default();
     for row in table {
