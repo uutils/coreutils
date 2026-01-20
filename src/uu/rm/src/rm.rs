@@ -586,6 +586,27 @@ fn is_writable_metadata(_metadata: &Metadata) -> bool {
     true
 }
 
+/// Helper function to check fs and report errors if necessary.
+/// Returns true if the operation should be skipped/returned (i.e., on error).
+fn check_and_report_one_fs(path: &Path, options: &Options) -> bool {
+    if let Err(additional_reason) = check_one_fs(path, options) {
+        if !additional_reason.is_empty() {
+            show_error!("{}", additional_reason);
+        }
+        show_error!(
+            "skipping {}, since it's on a different device",
+            path.quote()
+        );
+
+        if options.preserve_root == PreserveRoot::YesAll {
+            show_error!("and --preserve-root=all is in effect");
+        }
+
+        return true;
+    }
+    false
+}
+
 /// Recursively remove the directory tree rooted at the given path.
 ///
 /// If `path` is a file or a symbolic link, just remove it. If it is a
@@ -608,14 +629,7 @@ fn remove_dir_recursive(
     }
 
     // Base case 2: check if a path is on the same file system
-    if let Err(additional_reason) = check_one_fs(path, options) {
-        if !additional_reason.is_empty() {
-            show_error!("{}", additional_reason);
-        }
-        show_error!(
-            "skipping {}, since it's on a different device",
-            path.quote()
-        );
+    if check_and_report_one_fs(path, options) {
         return true;
     }
 
@@ -772,19 +786,7 @@ fn check_one_fs(path: &Path, options: &Options) -> Result<(), String> {
 fn handle_dir(path: &Path, options: &Options, progress_bar: Option<&ProgressBar>) -> bool {
     let mut had_err = false;
 
-    if let Err(additional_reason) = check_one_fs(path, options) {
-        if !additional_reason.is_empty() {
-            show_error!("{}", additional_reason);
-        }
-        show_error!(
-            "skipping {}, since it's on a different device",
-            path.quote()
-        );
-
-        if options.preserve_root == PreserveRoot::YesAll {
-            show_error!("and --preserve-root=all is in effect");
-        }
-
+    if check_and_report_one_fs(path, options) {
         return true;
     }
 
