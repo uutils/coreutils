@@ -327,7 +327,11 @@ endif
 build-coreutils:
 	${CARGO} build ${CARGOFLAGS} --features "${EXES} $(BUILD_SPEC_FEATURE)" ${PROFILE_CMD} --no-default-features
 
-build: build-coreutils build-pkgs locales
+ifeq (${MULTICALL}, y)
+build: build-coreutils locales
+else
+build: build-pkgs locales
+endif
 
 $(foreach test,$(UTILS),$(eval $(call TEST_BUSYBOX,$(test))))
 
