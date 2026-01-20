@@ -1308,9 +1308,9 @@ jobs:
     - name: Build and Test with SELinux
       run: |
         lima ls
-        lima bash -c "cd work && cargo test --features 'feat_selinux'"
+        lima bash -c "cd work && cargo test --features 'feat_selinux' --no-default-features"
     - name: Lint with SELinux
-      run: lima bash -c "cd work && cargo clippy --all-targets --features 'feat_selinux' -- -D warnings"
+      run: lima bash -c "cd work && cargo clippy --all-targets --features 'feat_selinux' --no-default-features -- -D warnings"
 
   test_selinux_stubs:
     name: Build/SELinux-Stubs (Non-Linux)
