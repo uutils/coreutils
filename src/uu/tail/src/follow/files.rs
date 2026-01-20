@@ -7,7 +7,7 @@
 
 use crate::args::Settings;
 use crate::chunks::BytesChunkBuffer;
-use crate::paths::{HeaderPrinter, PathExtTail};
+use crate::paths::{HeaderPrinter, PathExtTail, path_is_symlink};
 use crate::text;
 use std::collections::HashMap;
 use std::collections::hash_map::Keys;
@@ -212,9 +212,7 @@ impl PathData {
             // Probably file was renamed/moved or removed again
             None
         };
-        let is_symlink = path
-            .symlink_metadata()
-            .is_ok_and(|meta| meta.file_type().is_symlink());
+        let is_symlink = path_is_symlink(path);
 
         Self::new(
             reader,

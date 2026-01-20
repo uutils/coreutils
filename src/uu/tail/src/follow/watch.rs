@@ -7,7 +7,7 @@
 
 use crate::args::{FollowMode, Settings};
 use crate::follow::files::{FileHandling, PathData};
-use crate::paths::{Input, InputKind, MetadataExtTail, PathExtTail};
+use crate::paths::{Input, InputKind, MetadataExtTail, PathExtTail, path_is_symlink};
 use crate::{platform, text};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
 use std::io::BufRead;
@@ -151,9 +151,7 @@ impl Observer {
                 path.to_owned()
             };
             let metadata = path.metadata().ok();
-            let is_symlink = path
-                .symlink_metadata()
-                .is_ok_and(|meta| meta.file_type().is_symlink());
+            let is_symlink = path_is_symlink(&path);
             self.files.insert(
                 &path,
                 PathData::new(reader, metadata, display_name, is_symlink),
@@ -307,13 +305,13 @@ impl Observer {
             EventKind::Modify(ModifyKind::Metadata(MetadataKind::Any | MetadataKind::WriteTime) | ModifyKind::Data(DataChange::Any) | ModifyKind::Name(RenameMode::To)) |
             EventKind::Create(CreateKind::File | CreateKind::Folder | CreateKind::Any) => {
                 if let Ok(new_md) = event_path.metadata() {
-                    let new_is_symlink = event_path
-                        .symlink_metadata()
-                        .is_ok_and(|meta| meta.file_type().is_symlink());
+                    let new_is_symlink = path_is_symlink(event_path);
                     let is_tailable = new_md.is_tailable();
                     let pd = self.files.get(event_path);
 
                     if self.follow_name() && !pd.is_symlink && new_is_symlink {
+                        // GNU tail treats a path that turns into a symlink as untailable when
+                        // following by name, to avoid following the symlink target.
                         if pd.reader.is_some() {
                             self.files.reset_reader(event_path);
                         }
@@ -522,9 +520,7 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
                 if new_path.exists() {
                     let pd = observer.files.get(new_path);
                     let md = new_path.metadata().unwrap();
-                    let new_is_symlink = new_path
-                        .symlink_metadata()
-                        .is_ok_and(|meta| meta.file_type().is_symlink());
+                    let new_is_symlink = path_is_symlink(new_path);
                     if !pd.is_symlink && new_is_symlink {
                         show_error!(
                             "{}",
