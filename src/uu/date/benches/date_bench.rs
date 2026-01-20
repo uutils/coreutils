@@ -7,7 +7,7 @@ use divan::{Bencher, black_box};
 use std::io::Write;
 use tempfile::NamedTempFile;
 use uu_date::uumain;
-use uucore::benchmark::run_util_function;
+use uucore::benchmark::get_bench_args;
 
 /// Helper to create a temporary file containing N lines of date strings.
 fn setup_date_file(lines: usize, date_format: &str) -> NamedTempFile {
@@ -23,11 +23,11 @@ fn setup_date_file(lines: usize, date_format: &str) -> NamedTempFile {
 fn file_iso_dates(bencher: Bencher) {
     let count = 1_000;
     let file = setup_date_file(count, "2023-05-10 12:00:00");
-    let path = file.path().to_str().unwrap();
+    let path = file.path();
 
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &["-f", path]));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&"-f", &path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmarks processing a file containing dates with Timezone abbreviations.
@@ -36,11 +36,11 @@ fn file_tz_abbreviations(bencher: Bencher) {
     let count = 1_000;
     // "EST" triggers the abbreviation lookup and double-parsing logic
     let file = setup_date_file(count, "2023-05-10 12:00:00 EST");
-    let path = file.path().to_str().unwrap();
+    let path = file.path();
 
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &["-f", path]));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&"-f", &path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmarks formatting speed using a custom output format.
@@ -48,30 +48,27 @@ fn file_tz_abbreviations(bencher: Bencher) {
 fn file_custom_format(bencher: Bencher) {
     let count = 1_000;
     let file = setup_date_file(count, "2023-05-10 12:00:00");
-    let path = file.path().to_str().unwrap();
+    let path = file.path();
 
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &["-f", path, "+%A %d %B %Y"]));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&"-f", &path, &"+%A %d %B %Y"]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmarks the overhead of starting the utility for a single date (no file).
 #[divan::bench]
 fn single_date_now(bencher: Bencher) {
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &[]));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmarks parsing a complex relative date string passed as an argument.
 #[divan::bench]
 fn complex_relative_date(bencher: Bencher) {
-    bencher.bench(|| {
-        black_box(run_util_function(
-            uumain,
-            &["--date=last friday 12:00 + 2 days"],
-        ));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&"--date=last friday 12:00 + 2 days"]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 fn main() {

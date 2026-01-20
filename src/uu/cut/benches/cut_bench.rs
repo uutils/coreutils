@@ -5,7 +5,7 @@
 
 use divan::{Bencher, black_box};
 use uu_cut::uumain;
-use uucore::benchmark::{run_util_function, setup_test_file, text_data};
+use uucore::benchmark::{get_bench_args, setup_test_file, text_data};
 
 /// Benchmark cutting specific byte ranges
 #[divan::bench]
@@ -13,12 +13,9 @@ fn cut_bytes(bencher: Bencher) {
     let data = text_data::generate_by_lines(100_000, 80);
     let file_path = setup_test_file(&data);
 
-    bencher.bench(|| {
-        black_box(run_util_function(
-            uumain,
-            &["-b", "1-20", file_path.to_str().unwrap()],
-        ));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&"-b", &"1-20", &file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark cutting specific character ranges
@@ -27,12 +24,9 @@ fn cut_characters(bencher: Bencher) {
     let data = text_data::generate_mixed_data(100_000);
     let file_path = setup_test_file(&data);
 
-    bencher.bench(|| {
-        black_box(run_util_function(
-            uumain,
-            &["-c", "5-30", file_path.to_str().unwrap()],
-        ));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&"-c", &"5-30", &file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark cutting fields with tab delimiter
@@ -45,12 +39,9 @@ fn cut_fields_tab(bencher: Bencher) {
     }
     let file_path = setup_test_file(&data);
 
-    bencher.bench(|| {
-        black_box(run_util_function(
-            uumain,
-            &["-f", "2,4", file_path.to_str().unwrap()],
-        ));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&"-f", &"2,4", &file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark cutting fields with custom delimiter
@@ -63,12 +54,9 @@ fn cut_fields_custom_delim(bencher: Bencher) {
     }
     let file_path = setup_test_file(&data);
 
-    bencher.bench(|| {
-        black_box(run_util_function(
-            uumain,
-            &["-d", ",", "-f", "1,3,5", file_path.to_str().unwrap()],
-        ));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&"-d", &",", &"-f", &"1,3,5", &file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 fn main() {

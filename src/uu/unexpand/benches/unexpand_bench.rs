@@ -5,7 +5,7 @@
 
 use divan::{Bencher, black_box};
 use uu_unexpand::uumain;
-use uucore::benchmark::{create_test_file, run_util_function};
+use uucore::benchmark::{create_test_file, get_bench_args};
 
 /// Generate text data with leading spaces (typical unexpand use case)
 fn generate_indented_text(num_lines: usize) -> Vec<u8> {
@@ -25,11 +25,10 @@ fn unexpand_many_lines(bencher: Bencher, num_lines: usize) {
     let temp_dir = tempfile::tempdir().unwrap();
     let data = generate_indented_text(num_lines);
     let file_path = create_test_file(&data, temp_dir.path());
-    let file_path_str = file_path.to_str().unwrap();
 
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &[file_path_str]));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark large file with spaces (tests performance on large files)
@@ -42,11 +41,10 @@ fn unexpand_large_file(bencher: Bencher, size_mb: usize) {
     let num_lines = (size_mb * 1024 * 1024) / line_size;
     let data = generate_indented_text(num_lines);
     let file_path = create_test_file(&data, temp_dir.path());
-    let file_path_str = file_path.to_str().unwrap();
 
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &[file_path_str]));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 fn main() {

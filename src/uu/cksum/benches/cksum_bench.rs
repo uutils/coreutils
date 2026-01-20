@@ -5,7 +5,7 @@
 
 use divan::{Bencher, black_box};
 use uu_cksum::uumain;
-use uucore::benchmark::{run_util_function, setup_test_file, text_data};
+use uucore::benchmark::{get_bench_args, setup_test_file, text_data};
 
 // Macro to generate benchmarks for each algorithm
 macro_rules! bench_algorithm {
@@ -15,12 +15,9 @@ macro_rules! bench_algorithm {
             let data = text_data::generate_by_size(100, 80);
             let file_path = setup_test_file(&data);
 
-            bencher.bench(|| {
-                black_box(run_util_function(
-                    uumain,
-                    &["--algorithm", $algo_str, file_path.to_str().unwrap()],
-                ));
-            });
+            bencher
+                .with_inputs(|| get_bench_args(&[&"--algorithm", &$algo_str, &file_path]))
+                .bench_values(|args| black_box(uumain(args)));
         }
     };
     ($algo_name:ident, $algo_str:expr, $length:expr) => {
@@ -29,18 +26,17 @@ macro_rules! bench_algorithm {
             let data = text_data::generate_by_size(100, 80);
             let file_path = setup_test_file(&data);
 
-            bencher.bench(|| {
-                black_box(run_util_function(
-                    uumain,
-                    &[
-                        "--algorithm",
-                        $algo_str,
-                        "--length",
-                        $length,
-                        file_path.to_str().unwrap(),
-                    ],
-                ));
-            });
+            bencher
+                .with_inputs(|| {
+                    get_bench_args(&[
+                        &"--algorithm",
+                        &$algo_str,
+                        &"--length",
+                        &$length,
+                        &file_path,
+                    ])
+                })
+                .bench_values(|args| black_box(uumain(args)));
         }
     };
 }
@@ -114,9 +110,9 @@ fn cksum_default(bencher: Bencher) {
     let data = text_data::generate_by_size(100, 80);
     let file_path = setup_test_file(&data);
 
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &[file_path.to_str().unwrap()]));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark cksum with raw output format
@@ -125,12 +121,9 @@ fn cksum_raw_output(bencher: Bencher) {
     let data = text_data::generate_by_size(100, 80);
     let file_path = setup_test_file(&data);
 
-    bencher.bench(|| {
-        black_box(run_util_function(
-            uumain,
-            &["--raw", file_path.to_str().unwrap()],
-        ));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&"--raw", &file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark cksum processing multiple files
@@ -146,18 +139,9 @@ fn cksum_multiple_files(bencher: Bencher) {
             let file2 = setup_test_file(&data2);
             let file3 = setup_test_file(&data3);
 
-            (file1, file2, file3)
+            get_bench_args(&[&file1, &file2, &file3])
         })
-        .bench_values(|(file1, file2, file3)| {
-            black_box(run_util_function(
-                uumain,
-                &[
-                    file1.to_str().unwrap(),
-                    file2.to_str().unwrap(),
-                    file3.to_str().unwrap(),
-                ],
-            ));
-        });
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 fn main() {

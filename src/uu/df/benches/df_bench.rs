@@ -9,7 +9,7 @@ use std::fs;
 use std::path::PathBuf;
 use tempfile::TempDir;
 use uu_df::uumain;
-use uucore::benchmark::run_util_function;
+use uucore::benchmark::get_bench_args;
 
 fn create_deep_directory(base_dir: &std::path::Path, depth: usize) -> PathBuf {
     let mut current = base_dir.to_path_buf();
@@ -30,9 +30,10 @@ fn df_deep_directory(bencher: Bencher) {
     let original_dir = env::current_dir().unwrap();
     let temp_dir = TempDir::new().unwrap();
     let _deep_path = create_deep_directory(temp_dir.path(), DEPTH);
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &[] as &[&str]));
-    });
+
+    bencher
+        .with_inputs(|| get_bench_args(&[]))
+        .bench_values(|args| black_box(uumain(args)));
 
     env::set_current_dir(original_dir).unwrap();
 }
@@ -40,11 +41,11 @@ fn df_deep_directory(bencher: Bencher) {
 #[divan::bench]
 fn df_with_path(bencher: Bencher) {
     let temp_dir = TempDir::new().unwrap();
-    let temp_path_str = temp_dir.path().to_str().unwrap();
+    let temp_path = temp_dir.path();
 
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &[temp_path_str]));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&temp_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 fn main() {

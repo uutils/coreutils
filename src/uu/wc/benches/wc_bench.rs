@@ -5,7 +5,7 @@
 
 use divan::{Bencher, black_box};
 use uu_wc::uumain;
-use uucore::benchmark::{create_test_file, run_util_function, text_data};
+use uucore::benchmark::{create_test_file, get_bench_args, text_data};
 
 /// Benchmark different file sizes for byte counting
 #[divan::bench(args = [500])]
@@ -13,11 +13,10 @@ fn wc_bytes_synthetic(bencher: Bencher, size_mb: usize) {
     let temp_dir = tempfile::tempdir().unwrap();
     let data = text_data::generate_by_size(size_mb, 80);
     let file_path = create_test_file(&data, temp_dir.path());
-    let file_path_str = file_path.to_str().unwrap();
 
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &["-c", file_path_str]));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&"-c", &file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 #[divan::bench(args = [2_000])]
@@ -25,11 +24,10 @@ fn wc_words_synthetic(bencher: Bencher, size_mb: usize) {
     let temp_dir = tempfile::tempdir().unwrap();
     let data = text_data::generate_by_size(size_mb, 80);
     let file_path = create_test_file(&data, temp_dir.path());
-    let file_path_str = file_path.to_str().unwrap();
 
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &["-w", file_path_str]));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&"-w", &file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark combined byte+line counting
@@ -38,11 +36,10 @@ fn wc_bytes_lines_synthetic(bencher: Bencher, size_mb: usize) {
     let temp_dir = tempfile::tempdir().unwrap();
     let data = text_data::generate_by_size(size_mb, 80);
     let file_path = create_test_file(&data, temp_dir.path());
-    let file_path_str = file_path.to_str().unwrap();
 
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &["-cl", file_path_str]));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&"-cl", &file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Test different line lengths impact on performance
@@ -51,11 +48,10 @@ fn wc_lines_variable_length(bencher: Bencher, (size_mb, avg_line_len): (usize, u
     let temp_dir = tempfile::tempdir().unwrap();
     let data = text_data::generate_by_size(size_mb, avg_line_len);
     let file_path = create_test_file(&data, temp_dir.path());
-    let file_path_str = file_path.to_str().unwrap();
 
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &["-l", file_path_str]));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&"-l", &file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark large files by line count - up to 500K lines!
@@ -64,11 +60,10 @@ fn wc_lines_large_line_count(bencher: Bencher, num_lines: usize) {
     let temp_dir = tempfile::tempdir().unwrap();
     let data = text_data::generate_by_lines(num_lines, 80);
     let file_path = create_test_file(&data, temp_dir.path());
-    let file_path_str = file_path.to_str().unwrap();
 
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &["-l", file_path_str]));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&"-l", &file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark character counting on large line counts
@@ -77,11 +72,10 @@ fn wc_chars_large_line_count(bencher: Bencher, num_lines: usize) {
     let temp_dir = tempfile::tempdir().unwrap();
     let data = text_data::generate_by_lines(num_lines, 80);
     let file_path = create_test_file(&data, temp_dir.path());
-    let file_path_str = file_path.to_str().unwrap();
 
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &["-m", file_path_str]));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&"-m", &file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark word counting on large line counts
@@ -90,11 +84,10 @@ fn wc_words_large_line_count(bencher: Bencher, num_lines: usize) {
     let temp_dir = tempfile::tempdir().unwrap();
     let data = text_data::generate_by_lines(num_lines, 80);
     let file_path = create_test_file(&data, temp_dir.path());
-    let file_path_str = file_path.to_str().unwrap();
 
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &["-w", file_path_str]));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&"-w", &file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark default wc (lines, words, bytes) on large line counts
@@ -103,11 +96,10 @@ fn wc_default_large_line_count(bencher: Bencher, num_lines: usize) {
     let temp_dir = tempfile::tempdir().unwrap();
     let data = text_data::generate_by_lines(num_lines, 80);
     let file_path = create_test_file(&data, temp_dir.path());
-    let file_path_str = file_path.to_str().unwrap();
 
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &["-lwc", file_path_str]));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&"-lwc", &file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark very short vs very long lines with 100K lines
@@ -116,11 +108,10 @@ fn wc_lines_extreme_line_lengths(bencher: Bencher, (num_lines, line_len): (usize
     let temp_dir = tempfile::tempdir().unwrap();
     let data = text_data::generate_by_lines(num_lines, line_len);
     let file_path = create_test_file(&data, temp_dir.path());
-    let file_path_str = file_path.to_str().unwrap();
 
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &["-l", file_path_str]));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&"-l", &file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 fn main() {
