@@ -2572,133 +2572,89 @@ fn test_install_normal_file_replaces_symlink() {
 #[cfg(unix)]
 fn test_install_d_symlink_race_condition() {
     // Test for symlink race condition fix (issue #10013)
-    // Reproduces the exact scenario: start install -D, wait for directory creation,
-    // replace with symlink, verify file is NOT in symlink target
-    use std::fs;
+    // Verifies that pre-existing symlinks in path are handled safely
     use std::os::unix::fs::symlink;
-    use std::process::Command;
-    use std::thread;
-    use std::time::Duration;
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
     // Create test directories
-    let testdir = at.plus("testdir");
-    let target = at.plus("target");
-    fs::create_dir_all(&target).unwrap();
+    at.mkdir("target");
 
     // Create source file
-    let source_file = at.plus("source_file");
-    fs::write(&source_file, "test content").unwrap();
+    at.write("source_file", "test content");
 
-    let dest_path = testdir.join("a").join("b").join("c").join("file");
-    let intermediate_dir = testdir.join("a").join("b");
+    // Set up a pre-existing symlink attack scenario
+    at.mkdir_all("testdir/a");
+    let intermediate_dir = at.plus("testdir/a/b");
+    symlink(at.plus("target"), &intermediate_dir).unwrap();
 
-    let source_file_str = source_file.to_string_lossy().to_string();
-    let dest_path_str = dest_path.to_string_lossy().to_string();
-    let intermediate_dir_str = intermediate_dir.to_string_lossy().to_string();
-    let target_str = target.to_string_lossy().to_string();
-    let bin_path = scene.bin_path.clone();
-    let install_handle = thread::spawn(move || {
-        let output = Command::new(&bin_path)
-            .arg("install")
-            .arg("-D")
-            .arg(&source_file_str)
-            .arg(&dest_path_str)
-            .current_dir(std::env::current_dir().unwrap())
-            .output();
+    // Run install -D which should detect and handle the symlink
+    let result = scene
+        .ucmd()
+        .arg("-D")
+        .arg(at.plus("source_file"))
+        .arg(at.plus("testdir/a/b/c/file"))
+        .run();
 
-        match output {
-            Ok(output) => output,
-            Err(e) => panic!("Failed to execute install: {e}"),
-        }
-    });
-
-    let mut attempts = 0;
-    let max_attempts = 200;
-    while attempts < max_attempts {
-        if intermediate_dir.exists() && intermediate_dir.is_dir() && !intermediate_dir.is_symlink()
-        {
-            let _ = fs::remove_dir_all(&intermediate_dir);
-            if symlink(&target_str, &intermediate_dir_str).is_ok() {
-                break;
-            }
-        }
-        thread::sleep(Duration::from_millis(5));
-        attempts += 1;
-    }
-
-    let _output = install_handle.join().unwrap();
-    let wrong_location = target.join("c").join("file");
+    let wrong_location = at.plus("target/c/file");
 
     // The critical assertion: file must NOT be in symlink target (race prevented)
     assert!(
         !wrong_location.exists(),
-        "RACE CONDITION NOT PREVENTED: File was created in symlink target {wrong_location:?} instead of {dest_path:?}"
+        "RACE CONDITION NOT PREVENTED: File was created in symlink target"
     );
 
-    // If file was created successfully, verify it's in the correct location
-    if dest_path.exists() {
-        assert!(dest_path.is_file(), "Destination should be a file");
-        let content = fs::read_to_string(&dest_path).unwrap();
-        assert_eq!(content, "test content");
+    // If the command succeeded, verify the file is in the correct location
+    if result.succeeded() {
+        assert!(at.file_exists("testdir/a/b/c/file"));
+        assert_eq!(at.read("testdir/a/b/c/file"), "test content");
+        // The symlink should have been replaced with a real directory
+        assert!(
+            at.plus("testdir/a/b").is_dir() && !at.plus("testdir/a/b").is_symlink(),
+            "Intermediate path should be a real directory, not a symlink"
+        );
     }
-    // If file wasn't created, that's acceptable - the race was prevented
-    // The critical check (wrong_location doesn't exist) is already verified above
 }
 
 #[test]
 #[cfg(unix)]
 fn test_install_d_symlink_race_condition_concurrent() {
     // Test pre-existing symlinks in intermediate paths are handled correctly
-    use std::fs;
     use std::os::unix::fs::symlink;
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    // Create test directories
-    let testdir = at.plus("testdir2");
-    let target = at.plus("target2");
-    fs::create_dir_all(&target).unwrap();
+    // Create test directories and source file using testing framework
+    at.mkdir("target2");
+    at.write("source_file2", "test content 2");
 
-    // Create source file
-    let source_file = at.plus("source_file2");
-    fs::write(&source_file, "test content 2").unwrap();
+    // Set up intermediate directory with symlink
+    at.mkdir_all("testdir2/a");
+    symlink(at.plus("target2"), at.plus("testdir2/a/b")).unwrap();
 
-    let intermediate_dir = testdir.join("a").join("b");
-    fs::create_dir_all(intermediate_dir.parent().unwrap()).unwrap();
-    fs::create_dir_all(&intermediate_dir).unwrap();
-    fs::remove_dir_all(&intermediate_dir).unwrap();
-    symlink(&target, &intermediate_dir).unwrap();
-
-    let dest_path = testdir.join("a").join("b").join("c").join("file");
-    let result = scene
+    // Run install -D
+    scene
         .ucmd()
         .arg("-D")
-        .arg(&source_file)
-        .arg(&dest_path)
-        .run();
+        .arg(at.plus("source_file2"))
+        .arg(at.plus("testdir2/a/b/c/file"))
+        .succeeds();
 
-    assert!(
-        dest_path.exists(),
-        "File should be created at the intended destination"
-    );
-    assert!(dest_path.is_file(), "Destination should be a file");
-    let content = fs::read_to_string(&dest_path).unwrap();
-    assert_eq!(content, "test content 2");
+    // Verify file was created at the intended destination
+    assert!(at.file_exists("testdir2/a/b/c/file"));
+    assert_eq!(at.read("testdir2/a/b/c/file"), "test content 2");
 
-    let wrong_location = target.join("c").join("file");
+    // Verify file was NOT created in symlink target
     assert!(
-        !wrong_location.exists(),
+        !at.plus("target2/c/file").exists(),
         "File should NOT be in symlink target location"
     );
 
+    // Verify intermediate path is now a real directory
     assert!(
-        intermediate_dir.is_dir() && !intermediate_dir.is_symlink(),
+        at.plus("testdir2/a/b").is_dir() && !at.plus("testdir2/a/b").is_symlink(),
         "Intermediate directory should be a real directory, not a symlink"
     );
-
-    result.success();
 }

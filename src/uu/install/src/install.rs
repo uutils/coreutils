@@ -675,7 +675,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
 
                 #[cfg(unix)]
                 {
-                    match create_dir_all_safe(to_create) {
+                    match create_dir_all_safe(to_create, DEFAULT_MODE) {
                         Ok(dir_fd) => {
                             if b.target_dir.is_none()
                                 && sources.len() == 1
@@ -943,22 +943,21 @@ fn perform_backup(to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
 /// This prevents symlink race conditions when creating target files.
 #[cfg(unix)]
 fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsStr) -> UResult<()> {
-    use std::io::Read;
-    use std::io::Write;
     use std::os::unix::fs::FileTypeExt;
 
     let from_meta = metadata(from)?;
     let ft = from_meta.file_type();
 
+    // Check if source and destination are the same file
     if let Ok(to_stat) = to_parent_fd.stat_at(to_filename, true) {
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::MetadataExt;
-            // st_dev and st_ino types vary by platform (i32/u32 on macOS, u64 on Linux)
-            #[allow(clippy::unnecessary_cast)]
-            if from_meta.dev() == to_stat.st_dev as u64 && from_meta.ino() == to_stat.st_ino as u64
-            {
-            }
+        // st_dev and st_ino types vary by platform (i32/u32 on macOS, u64 on Linux)
+        #[allow(clippy::unnecessary_cast)]
+        if from_meta.dev() == to_stat.st_dev as u64 && from_meta.ino() == to_stat.st_ino as u64 {
+            return Err(InstallError::SameFile(
+                from.to_path_buf(),
+                PathBuf::from(to_filename),
+            )
+            .into());
         }
     }
 
@@ -971,14 +970,7 @@ fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsS
 
     let mut src = File::open(from)?;
     let mut dst = to_parent_fd.open_file_at(to_filename)?;
-    let mut buffer = vec![0u8; 8192];
-    loop {
-        let bytes_read = src.read(&mut buffer)?;
-        if bytes_read == 0 {
-            break;
-        }
-        dst.write_all(&buffer[..bytes_read])?;
-    }
+    std::io::copy(&mut src, &mut dst)?;
     dst.sync_all()?;
 
     Ok(())

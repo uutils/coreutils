@@ -119,7 +119,15 @@ impl DirFd {
 
     /// Open a directory without following symlinks
     pub fn open_no_follow(path: &Path) -> io::Result<Self> {
-        let flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC | OFlag::O_NOFOLLOW;
+        Self::open_with_options(path, false)
+    }
+
+    /// Open a directory with configurable symlink following behavior
+    fn open_with_options(path: &Path, follow_symlinks: bool) -> io::Result<Self> {
+        let mut flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC;
+        if !follow_symlinks {
+            flags |= OFlag::O_NOFOLLOW;
+        }
         let fd = nix::fcntl::open(path, flags, Mode::empty()).map_err(|e| {
             SafeTraversalError::OpenFailed {
                 path: path.into(),
@@ -130,10 +138,22 @@ impl DirFd {
     }
 
     /// Open a subdirectory relative to this directory
+    ///
+    /// # Arguments
+    /// * `name` - The name of the subdirectory to open
+    /// * `follow_symlinks` - Whether to follow symlinks when opening
     pub fn open_subdir(&self, name: &OsStr) -> io::Result<Self> {
+        self.open_subdir_with_options(name, true)
+    }
+
+    /// Open a subdirectory relative to this directory with configurable symlink behavior
+    pub fn open_subdir_with_options(&self, name: &OsStr, follow_symlinks: bool) -> io::Result<Self> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
-        let flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC;
+        let mut flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC;
+        if !follow_symlinks {
+            flags |= OFlag::O_NOFOLLOW;
+        }
         let fd = openat(&self.fd, name_cstr.as_c_str(), flags, Mode::empty()).map_err(|e| {
             SafeTraversalError::OpenFailed {
                 path: name.into(),
@@ -332,10 +352,14 @@ impl DirFd {
 /// Safely create all parent directories for a path using directory file descriptors.
 /// This prevents symlink race conditions by anchoring all operations to directory fds.
 ///
+/// # Arguments
+/// * `path` - The path to create directories for
+/// * `mode` - The mode to use when creating new directories (e.g., 0o755)
+///
 /// Returns a DirFd for the final created directory, or the first existing parent if
 /// all directories already exist.
 #[cfg(unix)]
-pub fn create_dir_all_safe(path: &Path) -> io::Result<DirFd> {
+pub fn create_dir_all_safe(path: &Path, mode: u32) -> io::Result<DirFd> {
     // Find the first existing parent directory
     let mut current_path = path;
     let mut components_to_create: Vec<OsString> = Vec::new();
@@ -363,7 +387,7 @@ pub fn create_dir_all_safe(path: &Path) -> io::Result<DirFd> {
                             dir_fd = dir_fd.open_subdir(component.as_os_str())?;
                         }
                         Err(_) => {
-                            dir_fd.mkdir_at(component.as_os_str(), 0o755)?;
+                            dir_fd.mkdir_at(component.as_os_str(), mode)?;
                             dir_fd = dir_fd.open_subdir(component.as_os_str())?;
                         }
                     }
@@ -373,7 +397,7 @@ pub fn create_dir_all_safe(path: &Path) -> io::Result<DirFd> {
             }
             if let Ok(meta) = fs::symlink_metadata(current_path) {
                 if meta.file_type().is_symlink() {
-                    fs::remove_file(current_path).ok();
+                    fs::remove_file(current_path)?;
                 } else {
                     return Err(io::Error::new(
                         io::ErrorKind::AlreadyExists,
@@ -416,7 +440,7 @@ pub fn create_dir_all_safe(path: &Path) -> io::Result<DirFd> {
                 dir_fd = dir_fd.open_subdir(component.as_os_str())?;
             }
             Err(_) => {
-                dir_fd.mkdir_at(component.as_os_str(), 0o755)?;
+                dir_fd.mkdir_at(component.as_os_str(), mode)?;
                 dir_fd = dir_fd.open_subdir(component.as_os_str())?;
             }
         }
