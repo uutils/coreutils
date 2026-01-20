@@ -121,21 +121,15 @@ where
 impl Filesystem {
     // TODO: resolve uuid in `mount_info.dev_name` if exists
     pub(crate) fn new(mount_info: MountInfo, file: Option<OsString>) -> Option<Self> {
+        #[cfg(unix)]
         let stat_path = if mount_info.mount_dir.is_empty() {
-            #[cfg(unix)]
-            {
-                mount_info.dev_name.clone().into()
-            }
-            #[cfg(windows)]
-            {
-                // On windows, we expect the volume id
-                mount_info.dev_id.clone().into()
-            }
+            mount_info.dev_name.clone().into()
         } else {
             mount_info.mount_dir.clone()
         };
+
         #[cfg(windows)]
-        let _stat_path = mount_info.dev_id.clone(); // On windows, we expect the volume id
+        let stat_path = mount_info.dev_id.clone(); // On windows, we expect the volume id
 
         #[cfg(unix)]
         let usage = FsUsage::new(statfs(&stat_path).ok()?);
