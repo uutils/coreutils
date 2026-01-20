@@ -77,110 +77,23 @@ ifneq (,$(findstring _NT,$(OS)))
 endif
 LN ?= ln -sf
 
-# Possible programs
-PROGS       := \
+PROGS :=  \
 	arch \
-	base32 \
-	base64 \
-	basenc \
-	basename \
-	cat \
-	cksum \
-	comm \
-	cp \
-	csplit \
-	cut \
-	date \
-	dd \
-	df \
-	dir \
-	dircolors \
-	dirname \
-	du \
-	echo \
-	env \
-	expand \
-	expr \
-	factor \
-	false \
-	fmt \
-	fold \
-	hashsum \
-	head \
 	hostname \
-	join \
-	link \
-	ln \
-	ls \
-	mkdir \
-	mktemp \
-	more \
-	mv \
-	nl \
-	numfmt \
 	nproc \
-	od \
-	paste \
-	pr \
-	printenv \
-	printf \
-	ptx \
-	pwd \
-	readlink \
-	realpath \
-	rm \
-	rmdir \
-	seq \
-	shred \
-	shuf \
-	sleep \
-	sort \
-	split \
-	sum \
 	sync \
-	tac \
-	tail \
-	tee \
-	test \
-	touch \
-	tr \
-	true \
-	truncate \
-	tsort \
 	uname \
-	unexpand \
-	uniq \
-	unlink \
-	vdir \
-	wc \
 	whoami \
-	yes
+	$(shell rustc examples/feat_common_core.rs && ./feat_common_core)
 
 UNIX_PROGS := \
-	chgrp \
-	chmod \
-	chown \
-	chroot \
-	groups \
 	hostid \
-	id \
-	install \
-	kill \
-	logname \
-	mkfifo \
-	mknod \
-	nice \
-	nohup \
-	pathchk \
 	pinky \
-	stat \
 	stdbuf \
-	stty \
-	timeout \
-	tty \
 	uptime \
 	users \
-	who
+	who \
+	$(shell rustc examples/feat_require_unix_core.rs && ./feat_require_unix_core)
 
 SELINUX_PROGS := \
 	chcon \
