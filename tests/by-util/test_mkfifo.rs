@@ -137,7 +137,7 @@ fn test_create_fifo_permission_denied() {
     at.mkdir(no_exec_dir);
     at.set_mode(no_exec_dir, 0o644);
 
-    // We no longer attempt to modify file permision if the file was failed to be created.
+    // We no longer attempt to modify file permission if the file was failed to be created.
     // Therefore the error message should only contain "cannot create".
     let err_msg = format!("mkfifo: cannot create fifo '{named_pipe}': File exists\n");
 
