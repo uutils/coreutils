@@ -151,9 +151,12 @@ impl Observer {
                 path.to_owned()
             };
             let metadata = path.metadata().ok();
+            let is_symlink = path
+                .symlink_metadata()
+                .is_ok_and(|meta| meta.file_type().is_symlink());
             self.files.insert(
                 &path,
-                PathData::new(reader, metadata, display_name),
+                PathData::new(reader, metadata, display_name, is_symlink),
                 update_last,
             );
         }
@@ -304,8 +307,29 @@ impl Observer {
             EventKind::Modify(ModifyKind::Metadata(MetadataKind::Any | MetadataKind::WriteTime) | ModifyKind::Data(DataChange::Any) | ModifyKind::Name(RenameMode::To)) |
             EventKind::Create(CreateKind::File | CreateKind::Folder | CreateKind::Any) => {
                 if let Ok(new_md) = event_path.metadata() {
+                    let new_is_symlink = event_path
+                        .symlink_metadata()
+                        .is_ok_and(|meta| meta.file_type().is_symlink());
                     let is_tailable = new_md.is_tailable();
                     let pd = self.files.get(event_path);
+
+                    if self.follow_name() && !pd.is_symlink && new_is_symlink {
+                        if pd.reader.is_some() {
+                            self.files.reset_reader(event_path);
+                        }
+                        show_error!(
+                            "{}",
+                            translate!(
+                                "tail-status-replaced-with-untailable-symlink",
+                                "file" => display_name.quote()
+                            )
+                        );
+                        self.files
+                            .update_metadata(event_path, event_path.symlink_metadata().ok());
+                        self.files.update_symlink(event_path, true);
+                        return Ok(paths);
+                    }
+
                     if let Some(old_md) = &pd.metadata {
                         if is_tailable {
                             // We resume tracking from the start of the file,
@@ -374,6 +398,7 @@ impl Observer {
                         }
                     }
                     self.files.update_metadata(event_path, Some(new_md));
+                    self.files.update_symlink(event_path, new_is_symlink);
                 }
             }
             EventKind::Remove(RemoveKind::File | RemoveKind::Any)
@@ -497,12 +522,30 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
                 if new_path.exists() {
                     let pd = observer.files.get(new_path);
                     let md = new_path.metadata().unwrap();
+                    let new_is_symlink = new_path
+                        .symlink_metadata()
+                        .is_ok_and(|meta| meta.file_type().is_symlink());
+                    if !pd.is_symlink && new_is_symlink {
+                        show_error!(
+                            "{}",
+                            translate!(
+                                "tail-status-replaced-with-untailable-symlink",
+                                "file" => pd.display_name.quote()
+                            )
+                        );
+                        observer
+                            .files
+                            .update_metadata(new_path, new_path.symlink_metadata().ok());
+                        observer.files.update_symlink(new_path, true);
+                        continue;
+                    }
                     if md.is_tailable() && pd.reader.is_none() {
                         show_error!(
                             "{}",
                             translate!("tail-status-has-appeared-following-new-file", "file" => pd.display_name.quote())
                         );
                         observer.files.update_metadata(new_path, Some(md));
+                        observer.files.update_symlink(new_path, new_is_symlink);
                         observer.files.update_reader(new_path)?;
                         _read_some = observer.files.tail_file(new_path, settings.verbose)?;
                         observer
