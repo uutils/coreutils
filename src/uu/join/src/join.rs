@@ -20,7 +20,8 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::format_usage;
 use uucore::i18n::collator::{
-    AlternateHandling, CollatorOptions, locale_cmp, should_use_locale_collation, try_init_collator,
+    AlternateHandling, CollatorOptions, locale_cmp_unchecked, should_use_locale_collation,
+    try_init_collator,
 };
 use uucore::line_ending::LineEnding;
 use uucore::translate;
@@ -327,25 +328,27 @@ impl<Sep: Separator> Input<Sep> {
         }
     }
 
+    #[inline]
     fn compare(&self, field1: Option<&[u8]>, field2: Option<&[u8]>) -> Ordering {
-        if let (Some(field1), Some(field2)) = (field1, field2) {
-            if self.ignore_case {
-                let field1 = CaseInsensitiveSlice { v: field1 };
-                let field2 = CaseInsensitiveSlice { v: field2 };
-                field1.cmp(&field2)
-            } else if self.use_locale {
-                locale_cmp(field1, field2)
-            } else {
-                field1.cmp(field2)
+        match (field1, field2) {
+            (Some(f1), Some(f2)) => {
+                if self.ignore_case {
+                    // Case-insensitive ASCII comparison
+                    let field1 = CaseInsensitiveSlice { v: f1 };
+                    let field2 = CaseInsensitiveSlice { v: f2 };
+                    field1.cmp(&field2)
+                } else if self.use_locale {
+                    // Locale-aware comparison with UTF-8 support and caching
+                    locale_cmp_unchecked(f1, f2)
+                } else {
+                    // Fast byte-wise comparison
+                    f1.cmp(f2)
+                }
             }
-        } else {
-            match field1 {
-                Some(_) => Ordering::Greater,
-                None => match field2 {
-                    Some(_) => Ordering::Less,
-                    None => Ordering::Equal,
-                },
-            }
+            // Fields with content come after missing fields
+            (Some(_), None) => Ordering::Greater,
+            (None, Some(_)) => Ordering::Less,
+            (None, None) => Ordering::Equal,
         }
     }
 }
@@ -1000,11 +1003,18 @@ fn exec<Sep: Separator>(
         settings.print_unpaired2,
     )?;
 
+    let use_locale = should_use_locale_collation();
+    if use_locale {
+        let mut opts = CollatorOptions::default();
+        opts.alternate_handling = Some(AlternateHandling::Shifted);
+        let _ = try_init_collator(opts);
+    }
+
     let input = Input::new(
         sep.clone(),
         settings.ignore_case,
         settings.check_order,
-        should_use_locale_collation(),
+        use_locale,
     );
 
     let format = if settings.autoformat {
