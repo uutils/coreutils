@@ -147,7 +147,11 @@ impl DirFd {
     }
 
     /// Open a subdirectory relative to this directory with configurable symlink behavior
-    pub fn open_subdir_with_options(&self, name: &OsStr, follow_symlinks: bool) -> io::Result<Self> {
+    pub fn open_subdir_with_options(
+        &self,
+        name: &OsStr,
+        follow_symlinks: bool,
+    ) -> io::Result<Self> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
         let mut flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC;

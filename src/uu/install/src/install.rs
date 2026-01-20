@@ -953,11 +953,9 @@ fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsS
         // st_dev and st_ino types vary by platform (i32/u32 on macOS, u64 on Linux)
         #[allow(clippy::unnecessary_cast)]
         if from_meta.dev() == to_stat.st_dev as u64 && from_meta.ino() == to_stat.st_ino as u64 {
-            return Err(InstallError::SameFile(
-                from.to_path_buf(),
-                PathBuf::from(to_filename),
-            )
-            .into());
+            return Err(
+                InstallError::SameFile(from.to_path_buf(), PathBuf::from(to_filename)).into(),
+            );
         }
     }
 
