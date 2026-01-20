@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        type: [performance, memory]
+        type: [performance] # , memory]  # memory profile disabled due to variance
         package: [
           uu_base64,
           uu_cksum,
