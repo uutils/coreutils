@@ -187,10 +187,10 @@ pub fn are_files_identical(path1: &Path, path2: &Path) -> io::Result<bool> {
 fn write_line_with_delimiter<W: Write>(writer: &mut W, delim: &[u8], line: &[u8]) -> UResult<()> {
     writer
         .write_all(delim)
-        .map_err_context(|| "write error".to_string())?;
+        .map_err_context(|| translate!("comm-error-write"))?;
     writer
         .write_all(line)
-        .map_err_context(|| "write error".to_string())?;
+        .map_err_context(|| translate!("comm-error-write"))?;
     Ok(())
 }
 
@@ -253,7 +253,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
                 if !opts.get_flag(options::COLUMN_1) {
                     writer
                         .write_all(ra)
-                        .map_err_context(|| "write error".to_string())?;
+                        .map_err_context(|| translate!("comm-error-write"))?;
                 }
                 ra.clear();
                 na = a.read_line(ra);
@@ -299,7 +299,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
             "{total_col_1}{delim}{total_col_2}{delim}{total_col_3}{delim}{}{line_ending}",
             translate!("comm-total")
         )
-        .map_err_context(|| "write error".to_string())?;
+        .map_err_context(|| translate!("comm-error-write"))?;
     }
 
     writer.flush().ok();
