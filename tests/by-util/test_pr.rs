@@ -668,6 +668,29 @@ fn test_form_feed_followed_by_new_line() {
 }
 
 #[test]
+fn test_columns() {
+    let whitespace = " ".repeat(50);
+    let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
+    let header = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\n");
+    // TODO Our output still does not match the behavior of GNU
+    // pr. The correct output should be:
+    //
+    //     "a\t\t\t\t    b\n";
+    //
+    let data = "a                                  \tb                                  \n";
+    let blank_lines_60 = "\n".repeat(60);
+    let pattern = format!("{header}{data}{blank_lines_60}");
+    let regex = Regex::new(&pattern).unwrap();
+
+    // Command line: `printf "a\nb\n" | pr -2`.
+    new_ucmd!()
+        .arg("-2")
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_matches(&regex);
+}
+
+#[test]
 fn test_merge() {
     // Create the two files to merge.
     let (at, mut ucmd) = at_and_ucmd!();

@@ -1048,6 +1048,9 @@ fn to_table_merged(
 }
 
 /// Group lines of the file in columns, going top-to-bottom then left-to-right.
+///
+/// This function should be applied when there are more lines than the
+/// total number of cells in the table.
 fn to_table(
     content_lines_per_page: usize,
     columns: usize,
@@ -1060,6 +1063,26 @@ fn to_table(
                 .collect()
         })
         .collect()
+}
+
+/// Group lines of the file in columns, going top-to-bottom then left-to-right.
+///
+/// This function should be applied when there are fewer lines than the
+/// total number of cells in the table.
+fn to_table_short_file(
+    content_lines_per_page: usize,
+    columns: usize,
+    lines: &[FileLine],
+) -> Vec<Vec<Option<&FileLine>>> {
+    let num_rows = lines.len() / columns;
+    let mut table: Vec<Vec<_>> = (0..num_rows)
+        .map(|i| (0..columns).map(|j| lines.get(num_rows * j + i)).collect())
+        .collect();
+    // Fill the rest with Nones.
+    for _ in num_rows..content_lines_per_page {
+        table.push(vec![None; columns]);
+    }
+    table
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -1112,7 +1135,9 @@ fn write_columns(
     // cells, where each row will be printed as a single line in the
     // output.
     let merge = options.merge_files_print.is_some();
-    let table = if across_mode {
+    let table = if !merge && (lines.len() < (content_lines_per_page * columns)) {
+        to_table_short_file(content_lines_per_page, columns, lines)
+    } else if across_mode {
         to_table_across(content_lines_per_page, columns, lines)
     } else if merge {
         to_table_merged(content_lines_per_page, columns, filled_lines)
