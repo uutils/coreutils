@@ -589,11 +589,13 @@ required-features = ["uudoc"]
 
 # The default release profile with some optimizations.
 [profile.release]
-lto = true
+lto = "thin"
 panic = "abort"
+codegen-units = 1
 
 [profile.release-fast]
 inherits = "release"
+lto = "fat"
 codegen-units = 1
 
 # A release-like profile that is as small as possible.
