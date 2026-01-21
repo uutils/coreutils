@@ -307,3 +307,25 @@ fn unexpand_multibyte_utf8_gnu_compat() {
         .succeeds()
         .stdout_is("1ΔΔΔ5   99999\n");
 }
+
+#[test]
+fn test_blanks_ext1() {
+    // Test case from GNU test suite: blanks-ext1
+    // ['blanks-ext1', '-t', '3,+6', {IN=> "\t      "}, {OUT=> "\t\t"}],
+    new_ucmd!()
+        .args(&["-t", "3,+6"])
+        .pipe_in("\t      ")
+        .succeeds()
+        .stdout_is("\t\t");
+}
+
+#[test]
+fn test_blanks_ext2() {
+    // Test case from GNU test suite: blanks-ext2
+    // ['blanks-ext2', '-t', '3,/9', {IN=> "\t      "}, {OUT=> "\t\t"}],
+    new_ucmd!()
+        .args(&["-t", "3,/9"])
+        .pipe_in("\t      ")
+        .succeeds()
+        .stdout_is("\t\t");
+}
