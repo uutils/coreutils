@@ -303,8 +303,8 @@ fn next_tabstop(tab_config: &TabConfig, col: usize) -> Option<usize> {
     }
 
     if tabstops.len() == 1
-        && tab_config.increment_size.is_none()
-        && tab_config.extend_size.is_none()
+        && !matches!(tab_config.increment_size, Some(n) if n > 0)
+        && !matches!(tab_config.extend_size, Some(n) if n > 0)
     {
         // Simple case: single tab stop, repeat at that interval
         Some(tabstops[0] - col % tabstops[0])
