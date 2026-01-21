@@ -13,6 +13,7 @@ mod word_count;
 use std::{
     borrow::{Borrow, Cow},
     cmp::max,
+    env,
     ffi::{OsStr, OsString},
     fs::{self, File},
     io::{self, Write},
@@ -578,10 +579,17 @@ fn process_chunk<
     text: &str,
     current_len: &mut usize,
     in_word: &mut bool,
+    posixly_correct: bool,
 ) {
     for ch in text.chars() {
         if SHOW_WORDS {
-            if ch.is_whitespace() {
+            let is_space = if posixly_correct {
+                matches!(ch, '\t'..='\r' | ' ')
+            } else {
+                ch.is_whitespace()
+            };
+
+            if is_space {
                 *in_word = false;
             } else if !(*in_word) {
                 // This also counts control characters! (As of GNU coreutils 9.5)
@@ -639,6 +647,7 @@ fn word_count_from_reader_specialized<
     let mut reader = BufReadDecoder::new(reader.buffered());
     let mut in_word = false;
     let mut current_len = 0;
+    let posixly_correct = env::var_os("POSIXLY_CORRECT").is_some();
     while let Some(chunk) = reader.next_strict() {
         match chunk {
             Ok(text) => {
@@ -647,6 +656,7 @@ fn word_count_from_reader_specialized<
                     text,
                     &mut current_len,
                     &mut in_word,
+                    posixly_correct,
                 );
             }
             Err(e) => {

@@ -26,6 +26,7 @@ uucore = { workspace = true, features = [
   "parser-size",
   "quoting-style",
   "fs",
+  "signals",
 ] }
 thiserror = { workspace = true }
 fluent = { workspace = true }

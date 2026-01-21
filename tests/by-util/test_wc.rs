@@ -891,3 +891,23 @@ fn test_simd_respects_glibc_tunables() {
         );
     }
 }
+
+#[test]
+fn test_posixly_correct_whitespace() {
+    let input = "word\u{00A0}word"; // Non-breaking space
+
+    // Default: Unicode whitespace is respected
+    new_ucmd!()
+        .arg("-w")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("2\n");
+
+    // POSIXLY_CORRECT: Only ASCII whitespace
+    new_ucmd!()
+        .arg("-w")
+        .env("POSIXLY_CORRECT", "1")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("1\n");
+}

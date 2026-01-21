@@ -21,6 +21,7 @@ curl -L ${repo}/raw/refs/heads/master/tests/env/env.sh > tests/env/env.sh
 # Avoid incorrect PASS
 curl -L ${repo}/raw/refs/heads/master/tests/runcon/runcon-compute.sh > tests/runcon/runcon-compute.sh
 curl -L ${repo}/raw/refs/heads/master/tests/tac/tac-continue.sh > tests/tac/tac-continue.sh
+curl -L ${repo}/raw/refs/heads/master/tests/tail/inotify-dir-recreate.sh > tests/tail/inotify-dir-recreate.sh
 # Add tac-continue.sh to root tests (it requires root to mount tmpfs)
 # Use sed -i.bak for macOS
 sed -i.bak 's|tests/split/l-chunk-root.sh.*|tests/split/l-chunk-root.sh\t\t\t\\\n  tests/tac/tac-continue.sh\t\t\t\\|' tests/local.mk
