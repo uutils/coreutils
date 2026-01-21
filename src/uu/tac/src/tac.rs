@@ -225,11 +225,19 @@ fn buffer_tac(data: &[u8], before: bool, separator: &str) -> std::io::Result<()>
     Ok(())
 }
 
+// Make the regex flavor compatible with `regex` crate
+fn translate_regex_flavor(regex: &str) -> String {
+    let result: String = regex.replace("\\|", "|");
+    // TODO: are more translations needed?
+
+    result
+}
+
 #[allow(clippy::cognitive_complexity)]
 fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &str) -> UResult<()> {
     // Compile the regular expression pattern if it is provided.
     let maybe_pattern = if regex {
-        match regex::bytes::Regex::new(separator) {
+        match regex::bytes::Regex::new(&translate_regex_flavor(separator)) {
             Ok(p) => Some(p),
             Err(e) => return Err(TacError::InvalidRegex(e).into()),
         }

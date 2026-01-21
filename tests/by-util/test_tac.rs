@@ -347,3 +347,12 @@ fn test_stdin_bad_tmpdir_fallback() {
         .succeeds()
         .stdout_is("c\nb\na\n");
 }
+
+#[test]
+fn test_regex_or_operator() {
+    new_ucmd!()
+        .args(&["-r", "-s", r"[^x]\|x"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_contains("cba");
+}
