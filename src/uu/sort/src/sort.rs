@@ -1087,9 +1087,14 @@ impl FieldSelector {
         let mut range_str = &line[self.get_range(line, tokens)];
         if self.settings.mode == SortMode::Numeric || self.settings.mode == SortMode::HumanNumeric {
             // Get the thousands separator from the locale, handling cases where the separator is empty or multi-character
-            let thousands_separator = i18n::decimal::locale_grouping_separator()
-                .parse::<char>()
-                .ok();
+            let locale_thousands_separator = i18n::decimal::locale_grouping_separator().as_bytes();
+
+            // Upstream GNU coreutils ignore multibyte thousands separators
+            // (FIXME in C source). We keep the same single-byte behavior.
+            let thousands_separator = match locale_thousands_separator {
+                [b] => Some(*b),
+                _ => None,
+            };
 
             // Parse NumInfo for this number.
             let (info, num_range) = NumInfo::parse(
