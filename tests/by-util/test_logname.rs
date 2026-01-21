@@ -29,3 +29,19 @@ fn test_normal() {
     result.success();
     assert!(!result.stdout_str().trim().is_empty());
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_no_login_name() {
+    use uutests::util::TestScenario;
+    use uutests::util_name;
+    let ts = TestScenario::new(util_name!());
+
+    ts.cmd("unshare")
+        .arg("-U")
+        .arg(ts.bin_path.display().to_string())
+        .arg(ts.util_name.clone())
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("no login name");
+}
