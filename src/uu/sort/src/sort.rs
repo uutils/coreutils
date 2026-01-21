@@ -1322,13 +1322,13 @@ impl FieldSelector {
 }
 
 fn detect_numeric_locale() -> NumericLocaleSettings {
-    let mut settings = NumericLocaleSettings::default();
-    settings.decimal_pt = Some(locale_decimal_pt());
-    settings.thousands_sep = match i18n::decimal::locale_grouping_separator().as_bytes() {
-        [b] => Some(*b),
-        _ => None,
-    };
-    settings
+    NumericLocaleSettings {
+        decimal_pt: Some(locale_decimal_pt()),
+        thousands_sep: match i18n::decimal::locale_grouping_separator().as_bytes() {
+            [b] => Some(*b),
+            _ => None,
+        },
+    }
 }
 /// Creates an `Arg` for a sort mode flag.
 fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
