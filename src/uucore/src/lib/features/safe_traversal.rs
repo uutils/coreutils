@@ -963,4 +963,171 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn test_mkdir_at_creates_directory() {
+        let temp_dir = TempDir::new().unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), true).unwrap();
+
+        dir_fd.mkdir_at(OsStr::new("new_subdir"), 0o755).unwrap();
+
+        assert!(temp_dir.path().join("new_subdir").is_dir());
+    }
+
+    #[test]
+    fn test_mkdir_at_fails_if_exists() {
+        let temp_dir = TempDir::new().unwrap();
+        let subdir = temp_dir.path().join("existing");
+        fs::create_dir(&subdir).unwrap();
+
+        let dir_fd = DirFd::open(temp_dir.path(), true).unwrap();
+        let result = dir_fd.mkdir_at(OsStr::new("existing"), 0o755);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_open_file_at_creates_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), true).unwrap();
+
+        let mut file = dir_fd.open_file_at(OsStr::new("new_file.txt")).unwrap();
+        use std::io::Write;
+        file.write_all(b"test content").unwrap();
+
+        let content = fs::read_to_string(temp_dir.path().join("new_file.txt")).unwrap();
+        assert_eq!(content, "test content");
+    }
+
+    #[test]
+    fn test_open_file_at_truncates_existing() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("existing.txt");
+        fs::write(&file_path, "old content that is longer").unwrap();
+
+        let dir_fd = DirFd::open(temp_dir.path(), true).unwrap();
+        let mut file = dir_fd.open_file_at(OsStr::new("existing.txt")).unwrap();
+        use std::io::Write;
+        file.write_all(b"new").unwrap();
+        drop(file);
+
+        let content = fs::read_to_string(&file_path).unwrap();
+        assert_eq!(content, "new");
+    }
+
+    #[test]
+    fn test_create_dir_all_safe_creates_nested_dirs() {
+        let temp_dir = TempDir::new().unwrap();
+        let nested_path = temp_dir.path().join("a/b/c");
+
+        let dir_fd = create_dir_all_safe(&nested_path, 0o755).unwrap();
+        assert!(dir_fd.as_raw_fd() >= 0);
+        assert!(nested_path.is_dir());
+    }
+
+    #[test]
+    fn test_create_dir_all_safe_existing_path() {
+        let temp_dir = TempDir::new().unwrap();
+        let existing_path = temp_dir.path().join("existing");
+        fs::create_dir(&existing_path).unwrap();
+
+        let dir_fd = create_dir_all_safe(&existing_path, 0o755).unwrap();
+        assert!(dir_fd.as_raw_fd() >= 0);
+    }
+
+    #[test]
+    fn test_create_dir_all_safe_replaces_symlink() {
+        let temp_dir = TempDir::new().unwrap();
+        let target_dir = temp_dir.path().join("target");
+        fs::create_dir(&target_dir).unwrap();
+
+        // Create a symlink where we want to create a directory
+        let symlink_path = temp_dir.path().join("link_to_replace");
+        symlink(&target_dir, &symlink_path).unwrap();
+        assert!(symlink_path.is_symlink());
+
+        // create_dir_all_safe should replace the symlink with a real directory
+        let dir_fd = create_dir_all_safe(&symlink_path, 0o755).unwrap();
+        assert!(dir_fd.as_raw_fd() >= 0);
+
+        // Verify the symlink was replaced with a real directory
+        assert!(symlink_path.is_dir());
+        assert!(!symlink_path.is_symlink());
+    }
+
+    #[test]
+    fn test_create_dir_all_safe_fails_on_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("file");
+        fs::write(&file_path, "content").unwrap();
+
+        let result = create_dir_all_safe(&file_path, 0o755);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_create_dir_all_safe_nested_symlink_in_path() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create: parent/symlink -> target
+        // Then try to create: parent/symlink/subdir
+        let parent = temp_dir.path().join("parent");
+        let target = temp_dir.path().join("target");
+        fs::create_dir(&parent).unwrap();
+        fs::create_dir(&target).unwrap();
+
+        let symlink_in_path = parent.join("link");
+        symlink(&target, &symlink_in_path).unwrap();
+
+        // Try to create parent/link/subdir - the symlink should be replaced
+        let nested_path = symlink_in_path.join("subdir");
+        let dir_fd = create_dir_all_safe(&nested_path, 0o755).unwrap();
+        assert!(dir_fd.as_raw_fd() >= 0);
+
+        // The symlink should have been replaced with a real directory
+        assert!(!symlink_in_path.is_symlink());
+        assert!(symlink_in_path.is_dir());
+        assert!(nested_path.is_dir());
+
+        // Target directory should not contain subdir (race attack prevented)
+        assert!(!target.join("subdir").exists());
+    }
+
+    #[test]
+    fn test_open_subdir_nofollow_fails_on_symlink() {
+        let temp_dir = TempDir::new().unwrap();
+        let target = temp_dir.path().join("target");
+        fs::create_dir(&target).unwrap();
+
+        let link = temp_dir.path().join("link");
+        symlink(&target, &link).unwrap();
+
+        let dir_fd = DirFd::open(temp_dir.path(), true).unwrap();
+
+        // With follow_symlinks=true, should succeed
+        let result_follow = dir_fd.open_subdir(OsStr::new("link"), true);
+        assert!(result_follow.is_ok());
+
+        // With follow_symlinks=false, should fail (ELOOP or ENOTDIR)
+        let result_nofollow = dir_fd.open_subdir(OsStr::new("link"), false);
+        assert!(result_nofollow.is_err());
+    }
+
+    #[test]
+    fn test_open_nofollow_fails_on_symlink() {
+        let temp_dir = TempDir::new().unwrap();
+        let target = temp_dir.path().join("target");
+        fs::create_dir(&target).unwrap();
+
+        let link = temp_dir.path().join("link");
+        symlink(&target, &link).unwrap();
+
+        // With follow_symlinks=true, should succeed
+        let result_follow = DirFd::open(&link, true);
+        assert!(result_follow.is_ok());
+
+        // With follow_symlinks=false, should fail
+        let result_nofollow = DirFd::open(&link, false);
+        assert!(result_nofollow.is_err());
+    }
 }
