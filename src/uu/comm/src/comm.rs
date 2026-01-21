@@ -8,7 +8,7 @@
 use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::fs::{File, metadata};
-use std::io::{self, BufRead, BufReader, Read, StdinLock, stdin};
+use std::io::{self, BufRead, BufReader, BufWriter, Read, StdinLock, Write, stdin};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
@@ -156,7 +156,7 @@ pub fn are_files_identical(path1: &Path, path2: &Path) -> io::Result<bool> {
         // instead of failing, which is the POSIX-compliant way to handle interrupted I/O
         let bytes1 = loop {
             match reader1.read(&mut buffer1) {
-                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
                 result => break result?,
             }
         };
@@ -165,7 +165,7 @@ pub fn are_files_identical(path1: &Path, path2: &Path) -> io::Result<bool> {
         // Same retry logic as above for the second file to ensure consistent behavior
         let bytes2 = loop {
             match reader2.read(&mut buffer2) {
-                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
                 result => break result?,
             }
         };
@@ -184,12 +184,24 @@ pub fn are_files_identical(path1: &Path, path2: &Path) -> io::Result<bool> {
     }
 }
 
+fn write_line_with_delimiter<W: Write>(writer: &mut W, delim: &[u8], line: &[u8]) -> UResult<()> {
+    writer
+        .write_all(delim)
+        .map_err_context(|| translate!("comm-error-write"))?;
+    writer
+        .write_all(line)
+        .map_err_context(|| translate!("comm-error-write"))?;
+    Ok(())
+}
+
 fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) -> UResult<()> {
     let width_col_1 = usize::from(!opts.get_flag(options::COLUMN_1));
     let width_col_2 = usize::from(!opts.get_flag(options::COLUMN_2));
 
     let delim_col_2 = delim.repeat(width_col_1);
     let delim_col_3 = delim.repeat(width_col_1 + width_col_2);
+
+    let mut writer = BufWriter::new(io::stdout().lock());
 
     let ra = &mut Vec::new();
     let mut na = a.read_line(ra);
@@ -239,7 +251,9 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
                     break;
                 }
                 if !opts.get_flag(options::COLUMN_1) {
-                    print!("{}", String::from_utf8_lossy(ra));
+                    writer
+                        .write_all(ra)
+                        .map_err_context(|| translate!("comm-error-write"))?;
                 }
                 ra.clear();
                 na = a.read_line(ra);
@@ -250,7 +264,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
                     break;
                 }
                 if !opts.get_flag(options::COLUMN_2) {
-                    print!("{delim_col_2}{}", String::from_utf8_lossy(rb));
+                    write_line_with_delimiter(&mut writer, delim_col_2.as_bytes(), rb)?;
                 }
                 rb.clear();
                 nb = b.read_line(rb);
@@ -262,7 +276,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
                     break;
                 }
                 if !opts.get_flag(options::COLUMN_3) {
-                    print!("{delim_col_3}{}", String::from_utf8_lossy(ra));
+                    write_line_with_delimiter(&mut writer, delim_col_3.as_bytes(), ra)?;
                 }
                 ra.clear();
                 rb.clear();
@@ -280,11 +294,15 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
 
     if opts.get_flag(options::TOTAL) {
         let line_ending = LineEnding::from_zero_flag(opts.get_flag(options::ZERO_TERMINATED));
-        print!(
+        write!(
+            writer,
             "{total_col_1}{delim}{total_col_2}{delim}{total_col_3}{delim}{}{line_ending}",
             translate!("comm-total")
-        );
+        )
+        .map_err_context(|| translate!("comm-error-write"))?;
     }
+
+    writer.flush().ok();
 
     if should_check_order && (checker1.has_error || checker2.has_error) {
         // Print the input error message once at the end

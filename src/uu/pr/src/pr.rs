@@ -762,18 +762,25 @@ fn build_options(
     })
 }
 
+/// Read the entire contents of the given path into memory.
+///
+/// If `path` is `"-"`, then read from stdin.
+fn read_to_end(path: &str) -> Result<Vec<u8>, std::io::Error> {
+    if path == "-" {
+        let mut f = stdin();
+        let mut buf = vec![];
+        f.read_to_end(&mut buf)?;
+        Ok(buf)
+    } else {
+        std::fs::read(path)
+    }
+}
+
 fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
     // Read the entire contents of the file into a buffer.
     //
     // TODO Read incrementally.
-    let buf = if path == "-" {
-        let mut f = stdin();
-        let mut buf = vec![];
-        f.read_to_end(&mut buf)?;
-        buf
-    } else {
-        std::fs::read(path)?
-    };
+    let buf = read_to_end(path)?;
 
     let pages = get_pages(options, 0, &buf)?;
 
@@ -829,8 +836,13 @@ fn get_pages(
         if buf[i] == FF {
             // Treat everything up to (but not including) the form feed
             // character as the last line of the page.
-            let file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i])?;
-            page.push(file_line);
+            if i > 0 && i == prev && buf[i - 1] == NL {
+                // If the file has the pattern `\n\f`, don't treat the
+                // `\f` as its own line; instead ignore the empty line.
+            } else {
+                let file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i])?;
+                page.push(file_line);
+            }
 
             // Remember where the last line ended.
             prev = i + 1;
@@ -849,9 +861,14 @@ fn get_pages(
         } else {
             // Add everything up to (but not including) the newline
             // character as one line of the page.
-            let file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i])?;
-            page.push(file_line);
-            line_num += 1;
+            if i > 0 && i == prev && buf[i - 1] == FF {
+                // If the file has the pattern `\f\n`, don't treat the
+                // `\n` as its own line; instead ignore the empty line.
+            } else {
+                let file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i])?;
+                page.push(file_line);
+                line_num += 1;
+            }
 
             // Remember where the last line ended.
             prev = i + 1;
@@ -930,14 +947,7 @@ fn get_file_line_groups(
         // Read the entire contents of the file into a buffer.
         //
         // TODO Read incrementally.
-        let buf = if *path == "-" {
-            let mut f = stdin();
-            let mut buf = vec![];
-            f.read_to_end(&mut buf)?;
-            buf
-        } else {
-            std::fs::read(path)?
-        };
+        let buf = read_to_end(path)?;
 
         // Split the text into pages and collect each line for
         // subsequent grouping.

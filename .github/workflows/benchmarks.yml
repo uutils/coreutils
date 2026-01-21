@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        type: [performance, memory]
+        type: [performance] # , memory]  # memory profile disabled due to variance
         package: [
           uu_base64,
           uu_cksum,
@@ -61,6 +61,14 @@ jobs:
 
       - name: Run sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Install locales
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y locales
+          sudo locale-gen fr_FR.UTF-8
+          sudo update-locale
 
       - name: Install cargo-codspeed
         shell: bash

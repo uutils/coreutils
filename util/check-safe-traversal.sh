@@ -6,6 +6,9 @@
 
 set -e
 
+: ${PROFILE:=release-small}
+export PROFILE
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TEMP_DIR=$(mktemp -d)
@@ -27,15 +30,15 @@ echo "=== Safe Traversal Verification ==="
 
 # Assume binaries are already built (for CI usage)
 # Prefer individual binaries for more accurate testing
-if [ -f "$PROJECT_ROOT/target/release/rm" ]; then
+if [ -f "$PROJECT_ROOT/target/${PROFILE}/rm" ]; then
     echo "Using individual binaries"
     USE_MULTICALL=0
-elif [ -f "$PROJECT_ROOT/target/release/coreutils" ]; then
+elif [ -f "$PROJECT_ROOT/target/${PROFILE}/coreutils" ]; then
     echo "Using multicall binary"
     USE_MULTICALL=1
-    COREUTILS_BIN="$PROJECT_ROOT/target/release/coreutils"
+    COREUTILS_BIN="$PROJECT_ROOT/target/${PROFILE}/coreutils"
 else
-    echo "Error: No binaries found. Please build first with 'cargo build --release'"
+    echo "Error: No binaries found. Please build first with 'cargo build --profile=${PROFILE}'"
     exit 1
 fi
 
@@ -64,7 +67,7 @@ check_utility() {
     if [ "$USE_MULTICALL" -eq 1 ]; then
         local util_cmd="$COREUTILS_BIN $util"
     else
-        local util_path="$PROJECT_ROOT/target/release/$util"
+        local util_path="$PROJECT_ROOT/target/${PROFILE}/$util"
         if [ ! -f "$util_path" ]; then
             fail_immediately "$util binary not found at $util_path"
         fi
@@ -157,7 +160,7 @@ if [ "$USE_MULTICALL" -eq 1 ]; then
 else
     AVAILABLE_UTILS=""
     for util in rm chmod chown chgrp du mv; do
-        if [ -f "$PROJECT_ROOT/target/release/$util" ]; then
+        if [ -f "$PROJECT_ROOT/target/${PROFILE}/$util" ]; then
             AVAILABLE_UTILS="$AVAILABLE_UTILS $util"
         fi
     done

@@ -338,7 +338,6 @@ indicatif = "0.18.0"
 itertools = "0.14.0"
 jiff = "0.2.18"
 libc = "0.2.172"
-linux-raw-sys = "0.12"
 lscolors = { version = "0.21.0", default-features = false, features = [
   "gnu_legacy",
 ] }
@@ -662,7 +661,6 @@ needless_pass_by_value = "allow"             # 16
 float_cmp = "allow"                          # 12
 items_after_statements = "allow"             # 11
 return_self_not_must_use = "allow"           # 8
-needless_continue = "allow"                  # 6
 inline_always = "allow"                      # 6
 fn_params_excessive_bools = "allow"          # 6
 used_underscore_items = "allow"              # 2

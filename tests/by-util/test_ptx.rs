@@ -340,6 +340,14 @@ fn test_unicode_truncation_alignment() {
 }
 
 #[test]
+fn test_duplicate_input_files() {
+    new_ucmd!()
+        .args(&["one_word", "one_word"])
+        .succeeds()
+        .stdout_is("                                       rust\n                                       rust\n");
+}
+
+#[test]
 fn test_narrow_width_with_long_reference_no_panic() {
     new_ucmd!()
         .args(&["-w", "1", "-A"])
