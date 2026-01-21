@@ -329,3 +329,31 @@ fn test_blanks_ext2() {
         .succeeds()
         .stdout_is("\t\t");
 }
+
+#[test]
+fn test_extended_tabstop_syntax() {
+    let test_cases = [
+        // Standalone /N: tabs at multiples of N
+        ("-t /9", "         ", "\t"),            // 9 spaces -> 1 tab
+        ("-t /9", "                  ", "\t\t"), // 18 spaces -> 2 tabs
+        // Standalone +N: tabs at multiples of N
+        ("-t +6", "      ", "\t"),         // 6 spaces -> 1 tab
+        ("-t +6", "            ", "\t\t"), // 12 spaces -> 2 tabs
+        // 3,/0 and 3,+0 should behave like just 3
+        ("-t 3,/0", "          ", "\t\t\t "), // 10 spaces -> 3 tabs + 1 space
+        ("-t 3,+0", "          ", "\t\t\t "), // 10 spaces -> 3 tabs + 1 space
+        ("-t 3", "          ", "\t\t\t "),    // 10 spaces -> 3 tabs + 1 space
+        // 3,/0 with text
+        ("-t 3,/0", "   test", "\ttest"), // 3 spaces + text -> 1 tab + text
+        // 3,+6 means tab stops at 3, 9, 15, 21, ...
+        ("-t 3,+6", "                    ", "\t\t\t     "), // 20 spaces -> 3 tabs + 5 spaces
+    ];
+
+    for (args, input, expected) in test_cases {
+        new_ucmd!()
+            .args(&args.split_whitespace().collect::<Vec<_>>())
+            .pipe_in(input)
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
