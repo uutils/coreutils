@@ -298,6 +298,8 @@ jobs:
         fi
         # Check that we don't cross-build uudoc
         env CARGO_BUILD_TARGET=aarch64-unknown-linux-gnu make install-manpages PREFIX=/tmp/usr UTILS=true
+        # We don't build coreutils without MULTICALL=y
+        ! test -e target/debug/coreutils
         # build (host)
         make build
         echo "Check that target directory will be ignored by backup tools"
@@ -1286,7 +1288,6 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - name: Setup Lima
       uses: lima-vm/lima-actions/setup@v1
       id: lima-actions-setup
@@ -1301,7 +1302,7 @@ jobs:
     - name: Setup Rust and other build deps in VM
       run: |
         lima sudo dnf install gcc g++ git rustup libselinux-devel clang-devel attr -y
-        lima rustup-init -y --default-toolchain stable
+        lima rustup-init -y --default-toolchain stable --profile minimal -c clippy
     - name: Verify SELinux Status
       run: |
         lima getenforce
@@ -1309,9 +1310,9 @@ jobs:
     - name: Build and Test with SELinux
       run: |
         lima ls
-        lima bash -c "cd work && cargo test --features 'feat_selinux'"
+        lima bash -c "cd work && cargo test --features 'feat_selinux' --no-default-features"
     - name: Lint with SELinux
-      run: lima bash -c "cd work && cargo clippy --all-targets --features 'feat_selinux' -- -D warnings"
+      run: lima bash -c "cd work && cargo clippy --all-targets --features 'feat_selinux' --no-default-features -- -D warnings"
 
   test_selinux_stubs:
     name: Build/SELinux-Stubs (Non-Linux)
@@ -1354,6 +1355,6 @@ jobs:
     - name: Install strace
       run: sudo apt-get update && sudo apt-get install -y strace
     - name: Build utilities with safe traversal
-      run: cargo build --release -p uu_rm -p uu_chmod -p uu_chown -p uu_chgrp -p uu_mv -p uu_du
+      run: cargo build --profile=release-small -p uu_rm -p uu_chmod -p uu_chown -p uu_chgrp -p uu_mv -p uu_du
     - name: Run safe traversal verification
       run: ./util/check-safe-traversal.sh

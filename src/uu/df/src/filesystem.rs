@@ -288,7 +288,6 @@ mod tests {
         }
 
         #[test]
-        #[allow(clippy::assigning_clones)]
         fn test_dev_name_match() {
             let tmp = tempfile::TempDir::new().expect("Failed to create temp dir");
             let dev_name = std::fs::canonicalize(tmp.path())

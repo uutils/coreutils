@@ -338,7 +338,6 @@ indicatif = "0.18.0"
 itertools = "0.14.0"
 jiff = "0.2.18"
 libc = "0.2.172"
-linux-raw-sys = "0.12"
 lscolors = { version = "0.21.0", default-features = false, features = [
   "gnu_legacy",
 ] }
