@@ -295,6 +295,48 @@ fn next_tab_stop(col_count: usize) -> usize {
     col_count + TAB_WIDTH - col_count % TAB_WIDTH
 }
 
+/// Find the start of an incomplete UTF-8 sequence at the end of a buffer.
+/// Returns the index where the incomplete sequence starts, or buffer.len() if complete.
+fn find_incomplete_utf8_start(buffer: &[u8]) -> usize {
+    let len = buffer.len();
+
+    // Check last 3 bytes looking for an incomplete UTF-8 sequence
+    // UTF-8 continuation bytes start with 0b10xxxxxx
+    // UTF-8 start bytes: 0b0xxxxxxx (1-byte), 0b110xxxxx (2-byte), 0b1110xxxx (3-byte), 0b11110xxx (4-byte)
+
+    for i in (len.saturating_sub(3)..len).rev() {
+        let byte = buffer[i];
+
+        // Check if this is a UTF-8 start byte
+        if byte & 0b10000000 == 0 {
+            // Single-byte character (ASCII), complete
+            return len;
+        } else if byte & 0b11000000 == 0b11000000 {
+            // This is a UTF-8 start byte
+            let expected_len = if byte & 0b11100000 == 0b11000000 {
+                2
+            } else if byte & 0b11110000 == 0b11100000 {
+                3
+            } else if byte & 0b11111000 == 0b11110000 {
+                4
+            } else {
+                // Invalid UTF-8 start byte
+                return len;
+            };
+
+            let actual_len = len - i;
+            if actual_len < expected_len {
+                // Incomplete sequence found
+                return i;
+            }
+
+            return len;
+        }
+    }
+
+    len
+}
+
 fn compute_col_count(buffer: &[u8], mode: WidthMode) -> usize {
     match mode {
         WidthMode::Characters => std::str::from_utf8(buffer)
@@ -680,22 +722,26 @@ fn fold_file<T: Read, W: Write>(
 
         // If buffer is getting too large without a newline, process it anyway
         if buffer.len() >= READ_CHUNK_SIZE * 2 {
-            let mut ctx = FoldContext {
-                spaces,
-                width,
-                mode,
-                writer,
-                output: &mut output,
-                col_count: &mut col_count,
-                last_space: &mut last_space,
-            };
+            let process_up_to = find_incomplete_utf8_start(&buffer);
 
-            match std::str::from_utf8(&buffer) {
-                Ok(s) => process_utf8_line(s, &mut ctx)?,
-                Err(_) => process_non_utf8_line(&buffer, &mut ctx)?,
+            if process_up_to > 0 {
+                let mut ctx = FoldContext {
+                    spaces,
+                    width,
+                    mode,
+                    writer,
+                    output: &mut output,
+                    col_count: &mut col_count,
+                    last_space: &mut last_space,
+                };
+
+                match std::str::from_utf8(&buffer[..process_up_to]) {
+                    Ok(s) => process_utf8_line(s, &mut ctx)?,
+                    Err(_) => process_non_utf8_line(&buffer[..process_up_to], &mut ctx)?,
+                }
+
+                buffer.drain(..process_up_to);
             }
-
-            buffer.clear();
         }
     }
 
