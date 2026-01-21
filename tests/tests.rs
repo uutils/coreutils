@@ -3,16 +3,22 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use std::env;
+use std::{env, path::PathBuf};
 
 pub const TESTS_BINARY: &str = env!("CARGO_BIN_EXE_coreutils");
 
 // Use the ctor attribute to run this function before any tests
 #[ctor::ctor]
 fn init() {
+    // Try to read the environment variable at run time first. If this fails, use
+    // env! macro which uses the value defined by cargo at compile time. This allows
+    // for greater flexibility of the test system, especially when cross-compiling.
+    let cargo_bin_exe_location =
+        PathBuf::from(env::var("CARGO_BIN_EXE_coreutils").unwrap_or(TESTS_BINARY.to_string()));
+
     unsafe {
         // Necessary for uutests to be able to find the binary
-        std::env::set_var("UUTESTS_BINARY_PATH", TESTS_BINARY);
+        std::env::set_var("UUTESTS_BINARY_PATH", cargo_bin_exe_location);
     }
 }
 
