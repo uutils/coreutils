@@ -120,7 +120,7 @@ windows-sys = { workspace = true, optional = true, default-features = false, fea
 utmp-classic = { workspace = true, optional = true }
 
 [features]
-default = []
+default = ["signals"]
 # * non-default features
 backup-control = []
 colors = []
