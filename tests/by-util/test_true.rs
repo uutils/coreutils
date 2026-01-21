@@ -24,10 +24,9 @@ fn test_version() {
 
 #[test]
 fn test_help() {
-    new_ucmd!()
-        .args(&["--help"])
-        .succeeds()
-        .stdout_contains("true");
+    let cmd = new_ucmd!().args(&["--help"]).succeeds();
+    let result = cmd.stdout_contains("true").stdout();
+    assert!(result.starts_with(b"Usage:"));
 }
 
 #[test]
