@@ -33,10 +33,21 @@ fn test_helper(file_name: &str, possible_args: &[&str]) {
 
 #[test]
 fn test_buffer_sizes() {
-    #[cfg(target_os = "linux")]
-    let buffer_sizes = ["0", "50K", "50k", "1M", "100M", "0%", "10%"];
-    // TODO Percentage sizes are not yet supported beyond Linux.
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "netbsd"
+    ))]
+    let buffer_sizes = ["0", "50K", "50k", "1M", "100M", "10%", "50%"];
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "netbsd"
+    )))]
     let buffer_sizes = ["0", "50K", "50k", "1M", "100M"];
     for buffer_size in &buffer_sizes {
         new_ucmd!()
