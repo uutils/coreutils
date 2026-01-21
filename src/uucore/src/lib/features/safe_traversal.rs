@@ -106,24 +106,11 @@ pub struct DirFd {
 
 impl DirFd {
     /// Open a directory and return a file descriptor
-    pub fn open(path: &Path) -> io::Result<Self> {
-        let flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC;
-        let fd = nix::fcntl::open(path, flags, Mode::empty()).map_err(|e| {
-            SafeTraversalError::OpenFailed {
-                path: path.into(),
-                source: io::Error::from_raw_os_error(e as i32),
-            }
-        })?;
-        Ok(Self { fd })
-    }
-
-    /// Open a directory without following symlinks
-    pub fn open_no_follow(path: &Path) -> io::Result<Self> {
-        Self::open_with_options(path, false)
-    }
-
-    /// Open a directory with configurable symlink following behavior
-    fn open_with_options(path: &Path, follow_symlinks: bool) -> io::Result<Self> {
+    ///
+    /// # Arguments
+    /// * `path` - The path to the directory to open
+    /// * `follow_symlinks` - Whether to follow symlinks when opening
+    pub fn open(path: &Path, follow_symlinks: bool) -> io::Result<Self> {
         let mut flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC;
         if !follow_symlinks {
             flags |= OFlag::O_NOFOLLOW;
@@ -142,16 +129,7 @@ impl DirFd {
     /// # Arguments
     /// * `name` - The name of the subdirectory to open
     /// * `follow_symlinks` - Whether to follow symlinks when opening
-    pub fn open_subdir(&self, name: &OsStr) -> io::Result<Self> {
-        self.open_subdir_with_options(name, true)
-    }
-
-    /// Open a subdirectory relative to this directory with configurable symlink behavior
-    pub fn open_subdir_with_options(
-        &self,
-        name: &OsStr,
-        follow_symlinks: bool,
-    ) -> io::Result<Self> {
+    pub fn open_subdir(&self, name: &OsStr, follow_symlinks: bool) -> io::Result<Self> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
         let mut flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC;
@@ -356,11 +334,18 @@ impl DirFd {
 /// Safely create all parent directories for a path using directory file descriptors.
 /// This prevents symlink race conditions by anchoring all operations to directory fds.
 ///
+/// # Security
+/// If a symlink exists where a directory needs to be created, it will be removed
+/// and replaced with a real directory. This is necessary to prevent symlink attacks
+/// where an attacker could redirect file operations to arbitrary locations.
+///
 /// # Arguments
 /// * `path` - The path to create directories for
-/// * `mode` - The mode to use when creating new directories (e.g., 0o755)
+/// * `mode` - The mode to use when creating new directories (e.g., 0o755). The actual
+///   mode will be modified by the process umask.
 ///
-/// Returns a DirFd for the final created directory, or the first existing parent if
+/// # Returns
+/// A DirFd for the final created directory, or the first existing parent if
 /// all directories already exist.
 #[cfg(unix)]
 pub fn create_dir_all_safe(path: &Path, mode: u32) -> io::Result<DirFd> {
@@ -375,7 +360,7 @@ pub fn create_dir_all_safe(path: &Path, mode: u32) -> io::Result<DirFd> {
                 .unwrap_or(false);
 
             if is_real_dir {
-                let mut dir_fd = DirFd::open_no_follow(current_path)?;
+                let mut dir_fd = DirFd::open(current_path, false)?;
 
                 for component in components_to_create.iter().rev() {
                     match dir_fd.stat_at(component.as_os_str(), false) {
@@ -388,11 +373,11 @@ pub fn create_dir_all_safe(path: &Path, mode: u32) -> io::Result<DirFd> {
                                     ),
                                 ));
                             }
-                            dir_fd = dir_fd.open_subdir(component.as_os_str())?;
+                            dir_fd = dir_fd.open_subdir(component.as_os_str(), false)?;
                         }
                         Err(_) => {
                             dir_fd.mkdir_at(component.as_os_str(), mode)?;
-                            dir_fd = dir_fd.open_subdir(component.as_os_str())?;
+                            dir_fd = dir_fd.open_subdir(component.as_os_str(), false)?;
                         }
                     }
                 }
@@ -430,7 +415,7 @@ pub fn create_dir_all_safe(path: &Path, mode: u32) -> io::Result<DirFd> {
         Path::new(".")
     };
 
-    let mut dir_fd = DirFd::open(root_path)?;
+    let mut dir_fd = DirFd::open(root_path, true)?;
 
     for component in components_to_create.iter().rev() {
         match dir_fd.stat_at(component.as_os_str(), false) {
@@ -441,11 +426,11 @@ pub fn create_dir_all_safe(path: &Path, mode: u32) -> io::Result<DirFd> {
                         format!("path component exists but is not a directory: {component:?}"),
                     ));
                 }
-                dir_fd = dir_fd.open_subdir(component.as_os_str())?;
+                dir_fd = dir_fd.open_subdir(component.as_os_str(), false)?;
             }
             Err(_) => {
                 dir_fd.mkdir_at(component.as_os_str(), mode)?;
-                dir_fd = dir_fd.open_subdir(component.as_os_str())?;
+                dir_fd = dir_fd.open_subdir(component.as_os_str(), false)?;
             }
         }
     }
@@ -723,13 +708,13 @@ mod tests {
     #[test]
     fn test_dirfd_open_valid_directory() {
         let temp_dir = TempDir::new().unwrap();
-        let dir_fd = DirFd::open(temp_dir.path()).unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), true).unwrap();
         assert!(dir_fd.as_raw_fd() >= 0);
     }
 
     #[test]
     fn test_dirfd_open_nonexistent_directory() {
-        let result = DirFd::open("/nonexistent/path".as_ref());
+        let result = DirFd::open("/nonexistent/path".as_ref(), true);
         assert!(result.is_err());
         if let Err(e) = result {
             // The error should be the underlying io::Error
@@ -745,7 +730,7 @@ mod tests {
         let file_path = temp_dir.path().join("test_file");
         fs::write(&file_path, "test content").unwrap();
 
-        let result = DirFd::open(&file_path);
+        let result = DirFd::open(&file_path, true);
         assert!(result.is_err());
     }
 
@@ -755,17 +740,17 @@ mod tests {
         let subdir = temp_dir.path().join("subdir");
         fs::create_dir(&subdir).unwrap();
 
-        let parent_fd = DirFd::open(temp_dir.path()).unwrap();
-        let subdir_fd = parent_fd.open_subdir(OsStr::new("subdir")).unwrap();
+        let parent_fd = DirFd::open(temp_dir.path(), true).unwrap();
+        let subdir_fd = parent_fd.open_subdir(OsStr::new("subdir"), true).unwrap();
         assert!(subdir_fd.as_raw_fd() >= 0);
     }
 
     #[test]
     fn test_dirfd_open_nonexistent_subdir() {
         let temp_dir = TempDir::new().unwrap();
-        let parent_fd = DirFd::open(temp_dir.path()).unwrap();
+        let parent_fd = DirFd::open(temp_dir.path(), true).unwrap();
 
-        let result = parent_fd.open_subdir(OsStr::new("nonexistent"));
+        let result = parent_fd.open_subdir(OsStr::new("nonexistent"), true);
         assert!(result.is_err());
     }
 
@@ -775,7 +760,7 @@ mod tests {
         let file_path = temp_dir.path().join("test_file");
         fs::write(&file_path, "test content").unwrap();
 
-        let dir_fd = DirFd::open(temp_dir.path()).unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), true).unwrap();
         let stat = dir_fd.stat_at(OsStr::new("test_file"), true).unwrap();
 
         assert!(stat.st_size > 0);
@@ -791,7 +776,7 @@ mod tests {
         fs::write(&target_file, "target content").unwrap();
         symlink(&target_file, &symlink_file).unwrap();
 
-        let dir_fd = DirFd::open(temp_dir.path()).unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), true).unwrap();
 
         // Follow symlinks
         let stat_follow = dir_fd.stat_at(OsStr::new("link"), true).unwrap();
@@ -805,7 +790,7 @@ mod tests {
     #[test]
     fn test_dirfd_fstat() {
         let temp_dir = TempDir::new().unwrap();
-        let dir_fd = DirFd::open(temp_dir.path()).unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), true).unwrap();
         let stat = dir_fd.fstat().unwrap();
 
         assert_eq!(stat.st_mode & libc::S_IFMT, libc::S_IFDIR);
@@ -820,7 +805,7 @@ mod tests {
         fs::write(&file1, "content1").unwrap();
         fs::write(&file2, "content2").unwrap();
 
-        let dir_fd = DirFd::open(temp_dir.path()).unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), true).unwrap();
         let entries = dir_fd.read_dir().unwrap();
 
         assert_eq!(entries.len(), 2);
@@ -834,7 +819,7 @@ mod tests {
         let file_path = temp_dir.path().join("test_file");
         fs::write(&file_path, "test content").unwrap();
 
-        let dir_fd = DirFd::open(temp_dir.path()).unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), true).unwrap();
         dir_fd.unlink_at(OsStr::new("test_file"), false).unwrap();
 
         assert!(!file_path.exists());
@@ -846,7 +831,7 @@ mod tests {
         let subdir = temp_dir.path().join("empty_dir");
         fs::create_dir(&subdir).unwrap();
 
-        let dir_fd = DirFd::open(temp_dir.path()).unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), true).unwrap();
         dir_fd.unlink_at(OsStr::new("empty_dir"), true).unwrap();
 
         assert!(!subdir.exists());
@@ -855,7 +840,7 @@ mod tests {
     #[test]
     fn test_from_raw_fd() {
         let temp_dir = TempDir::new().unwrap();
-        let dir_fd = DirFd::open(temp_dir.path()).unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), true).unwrap();
 
         // Duplicate the fd first so we don't have ownership conflicts
         let dup_fd = nix::unistd::dup(&dir_fd).unwrap();
@@ -881,7 +866,7 @@ mod tests {
         let file_path = temp_dir.path().join("test_file");
         fs::write(&file_path, "test content").unwrap();
 
-        let dir_fd = DirFd::open(temp_dir.path()).unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), true).unwrap();
         let stat = dir_fd.stat_at(OsStr::new("test_file"), true).unwrap();
         let file_info = FileInfo::from_stat(&stat);
         assert_eq!(file_info.device(), stat.st_dev as u64);
@@ -929,7 +914,7 @@ mod tests {
         let file_path = temp_dir.path().join("test_file");
         fs::write(&file_path, "test content with some length").unwrap();
 
-        let dir_fd = DirFd::open(temp_dir.path()).unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), true).unwrap();
         let metadata = dir_fd.metadata_at(OsStr::new("test_file"), true).unwrap();
 
         assert_eq!(metadata.file_type(), FileType::RegularFile);
@@ -943,7 +928,7 @@ mod tests {
     #[test]
     fn test_metadata_directory() {
         let temp_dir = TempDir::new().unwrap();
-        let dir_fd = DirFd::open(temp_dir.path()).unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), true).unwrap();
         let metadata = dir_fd.metadata().unwrap();
 
         assert_eq!(metadata.file_type(), FileType::Directory);
@@ -954,9 +939,9 @@ mod tests {
     fn test_path_with_null_byte() {
         let path_with_null = OsString::from_vec(b"test\0file".to_vec());
         let temp_dir = TempDir::new().unwrap();
-        let dir_fd = DirFd::open(temp_dir.path()).unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), true).unwrap();
 
-        let result = dir_fd.open_subdir(&path_with_null);
+        let result = dir_fd.open_subdir(&path_with_null, true);
         assert!(result.is_err());
         if let Err(e) = result {
             // Should be InvalidInput for null byte error
@@ -966,7 +951,7 @@ mod tests {
 
     #[test]
     fn test_error_chain() {
-        let result = DirFd::open("/nonexistent/deeply/nested/path".as_ref());
+        let result = DirFd::open("/nonexistent/deeply/nested/path".as_ref(), true);
         assert!(result.is_err());
 
         if let Err(e) = result {

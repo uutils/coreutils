@@ -473,7 +473,7 @@ impl Chmoder {
 
         // If the path is a directory (or we should follow symlinks), recurse into it using safe traversal
         if (!file_path.is_symlink() || should_follow_symlink) && file_path.is_dir() {
-            match DirFd::open(file_path) {
+            match DirFd::open(file_path, true) {
                 Ok(dir_fd) => {
                     r = self.safe_traverse_dir(&dir_fd, file_path).and(r);
                 }
@@ -527,7 +527,7 @@ impl Chmoder {
 
                 // Recurse into subdirectories using the existing directory fd
                 if meta.is_dir() {
-                    match dir_fd.open_subdir(&entry_name) {
+                    match dir_fd.open_subdir(&entry_name, true) {
                         Ok(child_dir_fd) => {
                             r = self.safe_traverse_dir(&child_dir_fd, &entry_path).and(r);
                         }

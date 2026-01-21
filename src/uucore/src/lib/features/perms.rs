@@ -311,7 +311,7 @@ impl ChownExecutor {
             #[cfg(target_os = "linux")]
             let chown_result = if path.is_dir() {
                 // For directories on Linux, use safe traversal from the start
-                match DirFd::open(path) {
+                match DirFd::open(path, true) {
                     Ok(dir_fd) => self
                         .safe_chown_dir(&dir_fd, path, &meta)
                         .map(|_| String::new()),
@@ -536,7 +536,7 @@ impl ChownExecutor {
 
             // Recurse into subdirectories
             if meta.is_dir() && (follow || !meta.file_type().is_symlink()) {
-                match dir_fd.open_subdir(&entry_name) {
+                match dir_fd.open_subdir(&entry_name, true) {
                     Ok(subdir_fd) => {
                         self.safe_traverse_dir(&subdir_fd, &entry_path, ret);
                     }
@@ -694,7 +694,7 @@ impl ChownExecutor {
     /// Try to open directory with error reporting
     #[cfg(target_os = "linux")]
     fn try_open_dir(&self, path: &Path) -> Option<DirFd> {
-        DirFd::open(path)
+        DirFd::open(path, true)
             .map_err(|e| {
                 if self.verbosity.level != VerbosityLevel::Silent {
                     show_error!("cannot access {}: {}", path.quote(), strip_errno(&e));

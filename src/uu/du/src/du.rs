@@ -368,7 +368,7 @@ fn safe_du(
             Ok(s) => s,
             Err(_e) => {
                 // Try using our new DirFd method for the root directory
-                match DirFd::open(path) {
+                match DirFd::open(path, true) {
                     Ok(dir_fd) => match Stat::new_from_dirfd(&dir_fd, path) {
                         Ok(s) => s,
                         Err(e) => {
@@ -406,8 +406,8 @@ fn safe_du(
 
     // Open the directory using DirFd
     let open_result = match parent_fd {
-        Some(parent) => parent.open_subdir(path.file_name().unwrap_or(path.as_os_str())),
-        None => DirFd::open(path),
+        Some(parent) => parent.open_subdir(path.file_name().unwrap_or(path.as_os_str()), true),
+        None => DirFd::open(path, true),
     };
 
     let dir_fd = match open_result {

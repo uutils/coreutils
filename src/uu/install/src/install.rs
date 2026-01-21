@@ -648,7 +648,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                         && sources.len() == 1
                         && !is_potential_directory_path(&target)
                     {
-                        if let Ok(dir_fd) = DirFd::open_no_follow(to_create) {
+                        if let Ok(dir_fd) = DirFd::open(to_create, false) {
                             if let Some(filename) = target.file_name() {
                                 target_parent_fd = Some(dir_fd);
                                 target_filename = Some(filename.to_os_string());
@@ -675,6 +675,8 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
 
                 #[cfg(unix)]
                 {
+                    // Use DEFAULT_MODE (0o755) for created directories - this matches GNU install
+                    // behavior. The actual mode will be modified by umask at the kernel level.
                     match create_dir_all_safe(to_create, DEFAULT_MODE) {
                         Ok(dir_fd) => {
                             if b.target_dir.is_none()
@@ -771,47 +773,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
 
                 copy_file_safe(source, parent_fd, filename.as_os_str())?;
 
-                #[cfg(not(windows))]
-                if b.strip {
-                    strip_file(&target, b)?;
-                }
-
-                set_ownership_and_permissions(&target, b)?;
-
-                if b.preserve_timestamps {
-                    preserve_timestamps(source, &target)?;
-                }
-
-                #[cfg(all(feature = "selinux", target_os = "linux"))]
-                if !b.unprivileged {
-                    if b.preserve_context {
-                        uucore::selinux::preserve_security_context(source, &target)
-                            .map_err(|e| InstallError::SelinuxContextFailed(e.to_string()))?;
-                    } else if b.default_context {
-                        set_selinux_default_context(&target)
-                            .map_err(|e| InstallError::SelinuxContextFailed(e.to_string()))?;
-                    } else if b.context.is_some() {
-                        let context = get_context_for_selinux(b);
-                        set_selinux_security_context(&target, context)
-                            .map_err(|e| InstallError::SelinuxContextFailed(e.to_string()))?;
-                    }
-                }
-
-                if b.verbose {
-                    print!(
-                        "{}",
-                        translate!("install-verbose-copy", "from" => source.quote(), "to" => target.quote())
-                    );
-                    match backup_path {
-                        Some(path) => println!(
-                            " {}",
-                            translate!("install-verbose-backup", "backup" => path.quote())
-                        ),
-                        None => println!(),
-                    }
-                }
-
-                Ok(())
+                finalize_installed_file(source, &target, b, backup_path)
             } else {
                 copy(source, &target, b)
             }
@@ -968,8 +930,7 @@ fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsS
 
     let mut src = File::open(from)?;
     let mut dst = to_parent_fd.open_file_at(to_filename)?;
-    std::io::copy(&mut src, &mut dst)?;
-    dst.sync_all()?;
+    copy_stream(&mut src, &mut dst)?;
 
     Ok(())
 }
@@ -1002,9 +963,7 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
         .into());
     }
 
-    // Remove existing file at destination to allow overwriting
-    // Note: create_new() below provides TOCTOU protection; if something
-    // appears at this path between the remove and create, it will fail safely
+    // Remove existing file (create_new below provides TOCTOU protection)
     if let Err(e) = fs::remove_file(to) {
         if e.kind() != std::io::ErrorKind::NotFound {
             show_error!(
@@ -1122,28 +1081,13 @@ fn preserve_timestamps(from: &Path, to: &Path) -> UResult<()> {
     Ok(())
 }
 
-/// Copy one file to a new location, changing metadata.
-///
-/// Returns a Result type with the Err variant containing the error message.
-///
-/// # Parameters
-///
-/// _from_ must exist as a non-directory.
-/// _to_ must be a non-existent file, whose parent directory exists.
-///
-/// # Errors
-///
-/// If the copy system call fails, we print a verbose error and return an empty error value.
-///
-fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
-    if b.compare && !need_copy(from, to, b) {
-        return Ok(());
-    }
-    // Declare the path here as we may need it for the verbose output below.
-    let backup_path = perform_backup(to, b)?;
-
-    copy_file(from, to)?;
-
+/// Apply post-copy operations: strip, ownership, permissions, timestamps, SELinux, and verbose output.
+fn finalize_installed_file(
+    from: &Path,
+    to: &Path,
+    b: &Behavior,
+    backup_path: Option<PathBuf>,
+) -> UResult<()> {
     #[cfg(not(windows))]
     if b.strip {
         strip_file(to, b)?;
@@ -1187,6 +1131,31 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
     }
 
     Ok(())
+}
+
+/// Copy one file to a new location, changing metadata.
+///
+/// Returns a Result type with the Err variant containing the error message.
+///
+/// # Parameters
+///
+/// _from_ must exist as a non-directory.
+/// _to_ must be a non-existent file, whose parent directory exists.
+///
+/// # Errors
+///
+/// If the copy system call fails, we print a verbose error and return an empty error value.
+///
+fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
+    if b.compare && !need_copy(from, to, b) {
+        return Ok(());
+    }
+    // Declare the path here as we may need it for the verbose output below.
+    let backup_path = perform_backup(to, b)?;
+
+    copy_file(from, to)?;
+
+    finalize_installed_file(from, to, b, backup_path)
 }
 
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]

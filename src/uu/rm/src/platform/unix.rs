@@ -120,7 +120,7 @@ pub fn safe_remove_file(
     let parent = path.parent().unwrap_or(Path::new("."));
     let file_name = path.file_name()?;
 
-    let dir_fd = DirFd::open(parent).ok()?;
+    let dir_fd = DirFd::open(parent, true).ok()?;
 
     match dir_fd.unlink_at(file_name, false) {
         Ok(_) => {
@@ -151,7 +151,7 @@ pub fn safe_remove_empty_dir(
     let parent = path.parent().unwrap_or(Path::new("."));
     let dir_name = path.file_name()?;
 
-    let dir_fd = DirFd::open(parent).ok()?;
+    let dir_fd = DirFd::open(parent, true).ok()?;
 
     match dir_fd.unlink_at(dir_name, true) {
         Ok(_) => {
@@ -290,7 +290,7 @@ pub fn safe_remove_dir_recursive(
     };
 
     // Try to open the directory using DirFd for secure traversal
-    let dir_fd = match DirFd::open(path) {
+    let dir_fd = match DirFd::open(path, true) {
         Ok(fd) => fd,
         Err(e) => {
             // If we can't open the directory for safe traversal,
@@ -389,7 +389,7 @@ pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Opt
             }
 
             // Recursively remove subdirectory using safe traversal
-            let child_dir_fd = match dir_fd.open_subdir(&entry_name) {
+            let child_dir_fd = match dir_fd.open_subdir(&entry_name, true) {
                 Ok(fd) => fd,
                 Err(e) => {
                     // If we can't open the subdirectory for safe traversal,
