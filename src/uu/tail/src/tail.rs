@@ -117,14 +117,7 @@ fn tail_file(
     observer: &mut Observer,
     offset: u64,
 ) -> UResult<()> {
-    if !path.exists() {
-        set_exit_code(1);
-        show_error!(
-            "{}",
-            translate!("tail-error-cannot-open-no-such-file", "file" => input.display_name.clone(), "error" => translate!("tail-no-such-file-or-directory"))
-        );
-        observer.add_bad_path(path, input.display_name.as_str(), false)?;
-    } else if path.is_dir() {
+    if path.is_dir() {
         set_exit_code(1);
 
         header_printer.print_input(input);
