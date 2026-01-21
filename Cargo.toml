@@ -571,7 +571,6 @@ xattr.workspace = true
 # Used in test_uptime::test_uptime_with_file_containing_valid_boot_time_utmpx_record
 # to deserialize an utmpx struct into a binary file
 [target.'cfg(all(target_family= "unix",not(target_os = "macos")))'.dev-dependencies]
-serde = { version = "1.0.202", features = ["derive"] }
 wincode = "0.2.5"
 wincode-derive = "0.2.3"
 
@@ -678,3 +677,6 @@ format_push_string = "allow"
 flat_map_option = "allow"
 from_iter_instead_of_collect = "allow"
 large_types_passed_by_value = "allow"
+
+[workspace.metadata.cargo-shear]
+ignored = ["fluent", "libstdbuf"]

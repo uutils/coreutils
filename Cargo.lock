@@ -538,7 +538,6 @@ dependencies = [
  "rlimit",
  "rstest",
  "selinux",
- "serde",
  "sha1",
  "tempfile",
  "textwrap",
@@ -3074,7 +3073,6 @@ dependencies = [
 name = "uu_base32"
 version = "0.6.0"
 dependencies = [
- "base64-simd",
  "clap",
  "fluent",
  "uucore",
@@ -3184,7 +3182,6 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
- "tempfile",
  "uucore",
 ]
 
@@ -3213,7 +3210,6 @@ dependencies = [
  "thiserror 2.0.18",
  "uucore",
  "walkdir",
- "xattr",
 ]
 
 [[package]]
@@ -3236,7 +3232,6 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "memchr",
- "tempfile",
  "uucore",
 ]
 
@@ -3382,7 +3377,6 @@ dependencies = [
  "num-bigint",
  "num-prime",
  "num-traits",
- "rand 0.9.2",
  "uucore",
 ]
 
@@ -3433,9 +3427,7 @@ name = "uu_hashsum"
 version = "0.6.0"
 dependencies = [
  "clap",
- "codspeed-divan-compat",
  "fluent",
- "tempfile",
  "uucore",
 ]
 
@@ -3582,7 +3574,6 @@ version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
- "libc",
  "nix",
  "uucore",
 ]
@@ -3616,7 +3607,6 @@ dependencies = [
  "clap",
  "crossterm",
  "fluent",
- "nix",
  "tempfile",
  "uucore",
 ]
@@ -3688,7 +3678,6 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
- "tempfile",
  "thiserror 2.0.18",
  "uucore",
 ]
@@ -3849,7 +3838,6 @@ dependencies = [
  "fluent",
  "num-bigint",
  "num-traits",
- "tempfile",
  "thiserror 2.0.18",
  "uucore",
 ]
@@ -3874,7 +3862,6 @@ dependencies = [
  "fluent",
  "rand 0.9.2",
  "rand_core 0.9.5",
- "tempfile",
  "uucore",
 ]
 
@@ -3907,7 +3894,6 @@ dependencies = [
  "self_cell",
  "tempfile",
  "thiserror 2.0.18",
- "unicode-width 0.2.2",
  "uucore",
 ]
 
@@ -4012,7 +3998,6 @@ dependencies = [
  "rstest",
  "same-file",
  "uucore",
- "winapi-util",
  "windows-sys 0.61.2",
 ]
 
@@ -4100,7 +4085,6 @@ dependencies = [
  "fluent",
  "nix",
  "string-interner",
- "tempfile",
  "thiserror 2.0.18",
  "uucore",
 ]
@@ -4134,7 +4118,6 @@ dependencies = [
  "fluent",
  "tempfile",
  "thiserror 2.0.18",
- "unicode-width 0.2.2",
  "uucore",
 ]
 
@@ -4145,7 +4128,6 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
- "tempfile",
  "uucore",
 ]
 
@@ -4166,7 +4148,6 @@ dependencies = [
  "fluent",
  "jiff",
  "thiserror 2.0.18",
- "utmp-classic",
  "uucore",
 ]
 
@@ -4231,7 +4212,6 @@ dependencies = [
  "clap",
  "fluent",
  "itertools 0.14.0",
- "nix",
  "uucore",
 ]
 
@@ -4269,7 +4249,6 @@ dependencies = [
  "nix",
  "num-traits",
  "os_display",
- "phf",
  "procfs",
  "selinux",
  "sha1",
