@@ -35,6 +35,11 @@ pub enum QuotingStyle {
 
         /// Whether to show control and non-unicode characters, or replace them with `?`.
         show_control: bool,
+
+        /// Whether to commit to dollar quoting for the entire string (printf %q style).
+        /// true: committed mode - wrap entire string in $'...' when control chars present
+        /// false: selective mode (ls style) - only wrap individual control chars in $'...'
+        commit_dollar_mode: bool,
     },
 
     /// Escape the name as a C string.
@@ -58,24 +63,28 @@ impl QuotingStyle {
         escape: false,
         always_quote: false,
         show_control: false,
+        commit_dollar_mode: false, // ls style - selective dollar mode
     };
 
     pub const SHELL_ESCAPE: Self = Self::Shell {
         escape: true,
         always_quote: false,
         show_control: false,
+        commit_dollar_mode: false, // ls style - selective dollar mode
     };
 
     pub const SHELL_QUOTE: Self = Self::Shell {
         escape: false,
         always_quote: true,
         show_control: false,
+        commit_dollar_mode: false, // ls style - selective dollar mode
     };
 
     pub const SHELL_ESCAPE_QUOTE: Self = Self::Shell {
         escape: true,
         always_quote: true,
         show_control: false,
+        commit_dollar_mode: false, // ls style - selective dollar mode
     };
 
     pub const C_NO_QUOTES: Self = Self::C {
@@ -94,11 +103,13 @@ impl QuotingStyle {
             Shell {
                 escape,
                 always_quote,
+                commit_dollar_mode,
                 ..
             } => Shell {
                 escape,
                 always_quote,
                 show_control,
+                commit_dollar_mode,
             },
             Literal { .. } => Literal { show_control },
             C { .. } => self,
@@ -161,17 +172,20 @@ fn escape_name_inner(
         QuotingStyle::Shell {
             escape: true,
             always_quote,
+            commit_dollar_mode,
             ..
         } => Box::new(EscapedShellQuoter::new(
             name,
             always_quote,
             dirname,
+            commit_dollar_mode,
             name.len(),
         )),
         QuotingStyle::Shell {
             escape: false,
             always_quote,
             show_control,
+            ..
         } => Box::new(NonEscapedShellQuoter::new(
             name,
             show_control,
@@ -235,6 +249,7 @@ impl fmt::Display for QuotingStyle {
                 escape,
                 always_quote,
                 show_control,
+                ..
             } => {
                 let mut style = "shell".to_string();
                 if escape {
@@ -761,7 +776,9 @@ mod tests {
             ],
         );
 
-        // mixed with valid characters
+        // mixed with valid characters (invalid byte 0xA7 followed by underscore)
+        // The correct output for shell-escape should be: ''$'\247''_'
+        // (empty string, ANSI-C quote the invalid byte, then quote the underscore)
         check_names_raw_both(
             &[continuation, ascii],
             &[
