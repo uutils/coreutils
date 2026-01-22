@@ -725,7 +725,8 @@ impl<'a> Line<'a> {
                         .num_info_settings(selector.settings.mode == SortMode::HumanNumeric);
                     // Debug annotations should ignore thousands separators to match GNU output.
                     parse_settings.thousands_separator = None;
-                    let (_, num_range) = NumInfo::parse(&self.line[selection.clone()], &parse_settings);
+                    let (_, num_range) =
+                        NumInfo::parse(&self.line[selection.clone()], &parse_settings);
                     let initial_selection = selection.clone();
 
                     // Shorten selection to num_range.
