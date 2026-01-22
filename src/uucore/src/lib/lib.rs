@@ -177,7 +177,8 @@ pub fn get_canonical_util_name(util_name: &str) -> &str {
             "hashsum"
         }
 
-        "dir" => "ls", // dir is an alias for ls
+        "dir" => "ls",  // dir is an alias for ls
+        "vdir" => "ls", // vdir is an alias for ls
 
         // Default case - return the util name as is
         _ => util_name,
