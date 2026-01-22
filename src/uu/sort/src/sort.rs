@@ -1312,7 +1312,18 @@ impl FieldSelector {
 }
 
 fn detect_numeric_locale() -> NumericLocaleSettings {
-    let encoding = i18n::get_numeric_locale().1;
+    let numeric_locale = i18n::get_numeric_locale();
+    let locale = &numeric_locale.0;
+    let encoding = numeric_locale.1;
+    let is_c_locale = encoding == i18n::UEncoding::Ascii && locale.to_string() == "und";
+
+    if is_c_locale {
+        return NumericLocaleSettings {
+            decimal_pt: Some(DECIMAL_PT),
+            thousands_sep: None,
+        };
+    }
+
     let grouping = i18n::decimal::locale_grouping_separator();
     NumericLocaleSettings {
         decimal_pt: Some(locale_decimal_pt()),
