@@ -535,6 +535,7 @@ filetime.workspace = true
 glob.workspace = true
 jiff.workspace = true
 libc.workspace = true
+bytecount.workspace = true
 num-prime.workspace = true
 pretty_assertions = "1.4.0"
 rand.workspace = true
@@ -542,6 +543,7 @@ regex.workspace = true
 sha1 = { workspace = true, features = ["std"] }
 tempfile.workspace = true
 time = { workspace = true, features = ["local-offset"] }
+unicode-width.workspace = true
 unindent = "0.2.3"
 uutests.workspace = true
 uucore = { workspace = true, features = [
