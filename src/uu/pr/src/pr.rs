@@ -1034,7 +1034,6 @@ fn write_columns(
     let columns = options
         .merge_files_print
         .unwrap_or_else(|| get_columns(options));
-    let line_width = options.line_width;
     let feed_line_present = options.form_feed_used;
     let mut not_found_break = false;
 
@@ -1086,20 +1085,14 @@ fn write_columns(
         let indexes = row.len();
         for (i, cell) in row.iter().enumerate() {
             if cell.is_none() && options.merge_files_print.is_some() {
-                out.write_all(
-                    get_line_for_printing(options, &blank_line, columns, i, line_width, indexes)
-                        .as_bytes(),
-                )?;
+                out.write_all(get_line_for_printing(options, &blank_line, i, indexes).as_bytes())?;
             } else if cell.is_none() {
                 not_found_break = true;
                 break;
             } else if cell.is_some() {
                 let file_line = cell.unwrap();
 
-                out.write_all(
-                    get_line_for_printing(options, file_line, columns, i, line_width, indexes)
-                        .as_bytes(),
-                )?;
+                out.write_all(get_line_for_printing(options, file_line, i, indexes).as_bytes())?;
             }
         }
         if not_found_break && feed_line_present {
@@ -1114,11 +1107,13 @@ fn write_columns(
 fn get_line_for_printing(
     options: &OutputOptions,
     file_line: &FileLine,
-    columns: usize,
     index: usize,
-    line_width: Option<usize>,
     indexes: usize,
 ) -> String {
+    let line_width = options.line_width;
+    let columns = options
+        .merge_files_print
+        .unwrap_or_else(|| get_columns(options));
     let blank_line = String::new();
     let formatted_line_number = get_formatted_line_number(options, file_line.line_number, index);
 
