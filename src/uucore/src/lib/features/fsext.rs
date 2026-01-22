@@ -5,7 +5,7 @@
 
 //! Set of functions to manage file systems
 
-// spell-checker:ignore DATETIME getmntinfo subsecond (fs) cifs smbfs
+// spell-checker:ignore DATETIME getmntinfo subsecond (fs) cifs smbfs autofs binfmt
 
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
 const LINUX_MTAB: &str = "/etc/mtab";
