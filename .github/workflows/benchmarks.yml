@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        type: [performance] # , memory]  # memory profile disabled due to variance
+        type: [simulation] # , memory]  # memory profile disabled due to variance
         package: [
           uu_base64,
           uu_cksum,
@@ -78,18 +78,14 @@ jobs:
         shell: bash
         run: |
           echo "Building ${{ matrix.type }} benchmarks for ${{ matrix.package }}"
-          if [ "${{ matrix.type }}" = "memory" ]; then
-            cargo codspeed build -m analysis -p ${{ matrix.package }}
-          else
-            cargo codspeed build -p ${{ matrix.package }}
-          fi
+          cargo codspeed build -m ${{ matrix.type }} -p ${{ matrix.package }}
 
       - name: Run ${{ matrix.type }} benchmarks for ${{ matrix.package }}
         uses: CodSpeedHQ/action@v4
         env:
           CODSPEED_LOG: debug
         with:
-          mode: ${{ matrix.type == 'memory' && 'memory' || 'simulation' }}
+          mode: ${{ matrix.type }}
           run: |
             echo "Running ${{ matrix.type }} benchmarks for ${{ matrix.package }}"
             cargo codspeed run -p ${{ matrix.package }} > /dev/null

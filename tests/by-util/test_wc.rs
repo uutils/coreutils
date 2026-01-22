@@ -65,7 +65,7 @@ fn test_utf8() {
         .args(&["-lwmcL"])
         .pipe_in_fixture("UTF_8_test.txt")
         .succeeds()
-        .stdout_is("    303    2119   22457   23025      79\n");
+        .stdout_is("    303    2178   22457   23025      79\n");
 }
 
 #[test]
@@ -824,6 +824,16 @@ fn wc_w_words_with_emoji_separator() {
         .pipe_in("foo 💐 bar\n")
         .succeeds()
         .stdout_contains("3");
+}
+
+#[test]
+fn test_invalid_byte_sequence_word_count() {
+    // wc should count invalid byte sequences as words
+    // Input: "a \xff b\n" should produce: 1 line, 3 words, 6 bytes
+    new_ucmd!()
+        .pipe_in([b'a', b' ', 0xff, b' ', b'b', b'\n'])
+        .succeeds()
+        .stdout_is("      1       3       6\n");
 }
 
 #[cfg(unix)]

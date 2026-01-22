@@ -410,12 +410,21 @@ pub fn signal_name_by_value(signal_value: usize) -> Option<&'static str> {
     ALL_SIGNALS.get(signal_value).copied()
 }
 
-/// Returns the default signal value.
+/// Restores SIGPIPE to default behavior (process terminates on broken pipe).
 #[cfg(unix)]
 pub fn enable_pipe_errors() -> Result<(), Errno> {
     // We pass the error as is, the return value would just be Ok(SigDfl), so we can safely ignore it.
     // SAFETY: this function is safe as long as we do not use a custom SigHandler -- we use the default one.
     unsafe { signal(SIGPIPE, SigDfl) }.map(|_| ())
+}
+
+/// Ignores SIGPIPE signal (broken pipe errors are returned instead of terminating).
+/// Use this to override the default SIGPIPE handling when you need to handle
+/// broken pipe errors gracefully (e.g., tee with --output-error).
+#[cfg(unix)]
+pub fn disable_pipe_errors() -> Result<(), Errno> {
+    // SAFETY: this function is safe as long as we do not use a custom SigHandler -- we use the default one.
+    unsafe { signal(SIGPIPE, SigIgn) }.map(|_| ())
 }
 
 /// Ignores the SIGINT signal.

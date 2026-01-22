@@ -19,7 +19,7 @@ use uucore::{format_usage, show_error};
 #[cfg(target_os = "linux")]
 use uucore::signals::ensure_stdout_not_broken;
 #[cfg(unix)]
-use uucore::signals::{enable_pipe_errors, ignore_interrupts};
+use uucore::signals::{disable_pipe_errors, ignore_interrupts};
 
 mod options {
     pub const APPEND: &str = "append";
@@ -163,8 +163,8 @@ fn tee(options: &Options) -> Result<()> {
         if options.ignore_interrupts {
             ignore_interrupts().map_err(|_| Error::from(ErrorKind::Other))?;
         }
-        if options.output_error.is_none() {
-            enable_pipe_errors().map_err(|_| Error::from(ErrorKind::Other))?;
+        if options.output_error.is_some() {
+            disable_pipe_errors().map_err(|_| Error::from(ErrorKind::Other))?;
         }
     }
     let mut writers: Vec<NamedWriter> = options

@@ -44,6 +44,22 @@ fn test_create_one_fifo_with_invalid_mode() {
 }
 
 #[test]
+fn test_create_one_fifo_with_non_file_permission_mode() {
+    new_ucmd!()
+        .arg("abcd")
+        .arg("-m")
+        .arg("1777")
+        .fails()
+        .stderr_is("mkfifo: mode must specify only file permission bits\n");
+    new_ucmd!()
+        .arg("abcd")
+        .arg("-m")
+        .arg("1999")
+        .fails()
+        .stderr_contains("invalid mode");
+}
+
+#[test]
 fn test_create_multiple_fifos() {
     new_ucmd!()
         .arg("abcde")

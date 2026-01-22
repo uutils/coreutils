@@ -11,8 +11,6 @@ use std::ffi::OsString;
 use std::io::{self, Write};
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
-#[cfg(unix)]
-use uucore::signals::enable_pipe_errors;
 use uucore::translate;
 
 // it's possible that using a smaller or larger buffer might provide better performance on some
@@ -113,8 +111,6 @@ fn prepare_buffer(buf: &mut Vec<u8>) {
 pub fn exec(bytes: &[u8]) -> io::Result<()> {
     let stdout = io::stdout();
     let mut stdout = stdout.lock();
-    #[cfg(unix)]
-    enable_pipe_errors()?;
 
     loop {
         stdout.write_all(bytes)?;

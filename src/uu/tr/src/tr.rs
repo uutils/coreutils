@@ -31,13 +31,6 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    // When we receive a SIGPIPE signal, we want to terminate the process so
-    // that we don't print any error messages to stderr. Rust ignores SIGPIPE
-    // (see https://github.com/rust-lang/rust/issues/62569), so we restore it's
-    // default action here.
-    #[cfg(not(target_os = "windows"))]
-    let _ = uucore::signals::enable_pipe_errors();
-
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let delete_flag = matches.get_flag(options::DELETE);

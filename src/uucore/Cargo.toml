@@ -26,7 +26,6 @@ bstr = { workspace = true, optional = true }
 clap = { workspace = true }
 uucore_procs = { workspace = true }
 unit-prefix = { workspace = true, optional = true }
-phf = { workspace = true }
 dns-lookup = { workspace = true, optional = true }
 dunce = { version = "1.0.4", optional = true }
 glob = { workspace = true, optional = true }
@@ -120,7 +119,7 @@ windows-sys = { workspace = true, optional = true, default-features = false, fea
 utmp-classic = { workspace = true, optional = true }
 
 [features]
-default = []
+default = ["signals"]
 # * non-default features
 backup-control = []
 colors = []

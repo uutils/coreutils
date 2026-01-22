@@ -4,8 +4,6 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) sbytes slen dlen memmem memmap Mmap mmap SIGBUS
-#[cfg(unix)]
-uucore::init_startup_state_capture!();
 
 mod error;
 

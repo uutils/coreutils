@@ -259,6 +259,14 @@ fn test_multiple_decimals_numeric() {
 }
 
 #[test]
+fn test_multiple_groupings_numeric() {
+    test_helper(
+        "multiple_groupings_numeric",
+        &["-n", "--numeric-sort", "--sort=numeric", "--sort=n"],
+    );
+}
+
+#[test]
 fn test_numeric_with_trailing_invalid_chars() {
     test_helper(
         "numeric_trailing_chars",
@@ -2359,18 +2367,18 @@ _
 __
 1
 _
-2,5
-_
 2.4
 ___
+2,5
+_
 2.,,3
 __
 2.4
 ___
-2,,3
-_
 2.4
 ___
+2,,3
+_
 1a
 _
 2b

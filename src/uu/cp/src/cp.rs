@@ -1845,7 +1845,7 @@ pub(crate) fn copy_attributes(
         Ok(())
     })?;
 
-    #[cfg(all(feature = "selinux", target_os = "linux"))]
+    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
     handle_preserve(&attributes.context, || -> CopyResult<()> {
         // Get the source context and apply it to the destination
         if let Ok(context) = selinux::SecurityContext::of_path(source, false, false) {
@@ -2658,7 +2658,7 @@ fn copy_file(
         fs::File::create(dest).map(|f| f.set_len(0)).ok();
     })?;
 
-    #[cfg(all(feature = "selinux", target_os = "linux"))]
+    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
     if options.set_selinux_context {
         set_selinux_context(dest, options.context.as_ref())?;
     }
