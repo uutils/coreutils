@@ -632,3 +632,13 @@ fn test_fullwidth_characters() {
         .succeeds()
         .stdout_is(format!("{e_fullwidth}\n{e_fullwidth}"));
 }
+
+#[cfg(unix)]
+#[test]
+fn test_fold_dev_null() {
+    new_ucmd!()
+        .arg("/dev/null")
+        .succeeds()
+        .no_stderr()
+        .stdout_only("");
+}
