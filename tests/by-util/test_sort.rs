@@ -458,8 +458,13 @@ fn test_non_printing_chars() {
 }
 
 #[test]
-fn test_exponents_positive_general_fixed() {
+fn test_exponents_general() {
     test_helper("exponents_general", &["-g"]);
+}
+
+#[test]
+fn test_exponents_positive_general() {
+    test_helper("exponents-positive-general", &["-g"]);
 }
 
 #[test]
