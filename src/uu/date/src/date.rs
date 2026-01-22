@@ -147,30 +147,20 @@ fn strip_parenthesized_comments(input: &str) -> Cow<'_, str> {
     }
 
     let mut result = String::with_capacity(input.len());
-    let mut chars = input.chars();
+    let mut depth = 0;
 
-    while let Some(c) = chars.next() {
-        if c == '(' {
-            // Look for matching closing parenthesis
-            let mut depth = 1;
-            for inner_c in chars.by_ref() {
-                if inner_c == '(' {
-                    depth += 1;
-                } else if inner_c == ')' {
-                    depth -= 1;
-                    if depth == 0 {
-                        break;
-                    }
-                }
+    for c in input.chars() {
+        match c {
+            '(' => {
+                depth += 1;
             }
-
-            // If unmatched opening paren (depth > 0), stop processing entirely
-            if depth > 0 {
-                break;
+            ')' if depth > 0 => {
+                depth -= 1;
             }
-            // If balanced, the parentheses and their content are skipped (comment)
-        } else {
-            result.push(c);
+            _ if depth == 0 => {
+                result.push(c);
+            }
+            _ => {}
         }
     }
 
