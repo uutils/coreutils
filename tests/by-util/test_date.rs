@@ -1497,3 +1497,40 @@ fn test_date_format_x_locale_aware() {
         .succeeds()
         .stdout_is("19/01/1997\n");
 }
+
+#[test]
+fn test_date_parenthesis_comment() {
+    // GNU compatibility: Text in parentheses is treated as a comment and removed.
+    let cases = [
+        // (input, format, expected_output)
+        ("(", "+%H:%M:%S", "00:00:00\n"),
+        ("1(ignore comment to eol", "+%H:%M:%S", "01:00:00\n"),
+        ("2026-01-05(this is a comment", "+%Y-%m-%d", "2026-01-05\n"),
+        ("2026(this is a comment)-01-05", "+%Y-%m-%d", "2026-01-05\n"),
+        ("((foo)2026-01-05)", "+%H:%M:%S", "00:00:00\n"), // Nested/unbalanced case
+        ("(2026-01-05(foo))", "+%H:%M:%S", "00:00:00\n"), // Balanced parentheses removed (empty result)
+    ];
+
+    for (input, format, expected) in cases {
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg(input)
+            .arg("-u")
+            .arg(format)
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
+#[test]
+fn test_date_parenthesis_vs_other_special_chars() {
+    // Ensure parentheses are special but other chars like [, ., ^ are still rejected
+    for special_char in ["[", ".", "^"] {
+        new_ucmd!()
+            .arg("-d")
+            .arg(special_char)
+            .fails()
+            .stderr_contains("invalid date");
+    }
+}
