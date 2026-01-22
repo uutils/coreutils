@@ -493,7 +493,9 @@ impl Table {
                 let row = Row::from_filesystem(filesystem, &options.block_size);
                 let fmt = RowFormatter::new(&row, options, false);
                 let values = fmt.get_cells();
-                total += row;
+                if options.show_total {
+                    total += row;
+                }
 
                 rows.push(values);
             }
