@@ -85,16 +85,16 @@ fluent-bundle = { workspace = true }
 thiserror = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
-walkdir = { workspace = true, optional = true }
 nix = { workspace = true, features = [
-  "fs",
-  "uio",
-  "zerocopy",
-  "signal",
   "dir",
-  "user",
+  "fs",
   "poll",
+  "signal",
+  "uio",
+  "user",
+  "zerocopy",
 ] }
+walkdir = { workspace = true, optional = true }
 xattr = { workspace = true, optional = true }
 
 [dev-dependencies]

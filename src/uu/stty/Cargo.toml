@@ -20,8 +20,10 @@ path = "src/stty.rs"
 [dependencies]
 clap = { workspace = true }
 uucore = { workspace = true, features = ["parser"] }
-nix = { workspace = true, features = ["term", "ioctl"] }
 fluent = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true, features = ["ioctl", "term"] }
 
 [[bin]]
 name = "stty"

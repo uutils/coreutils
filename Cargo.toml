@@ -563,8 +563,8 @@ nix = { workspace = true, features = [
   "process",
   "signal",
   "socket",
-  "user",
   "term",
+  "user",
 ] }
 rlimit = "0.10.1"
 xattr.workspace = true
