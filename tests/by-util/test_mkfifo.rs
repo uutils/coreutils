@@ -5,7 +5,7 @@
 
 // spell-checker:ignore nconfined
 
-#[cfg(feature = "feat_selinux")]
+#[cfg(selinux)]
 use uucore::selinux::get_getfattr_output;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
@@ -167,7 +167,7 @@ fn test_create_fifo_permission_denied() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(selinux)]
 fn test_mkfifo_selinux() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -191,7 +191,7 @@ fn test_mkfifo_selinux() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(selinux)]
 fn test_mkfifo_selinux_invalid() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

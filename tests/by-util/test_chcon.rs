@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (jargon) xattributes
 #![allow(clippy::missing_errors_doc, clippy::similar_names)]
-#![cfg(feature = "feat_selinux")]
+#![cfg(selinux)]
 
 use std::ffi::CString;
 use std::path::Path;
