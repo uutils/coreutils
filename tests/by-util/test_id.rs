@@ -34,7 +34,7 @@ fn test_id_no_specified_user() {
     let exp_result = unwrap_or_return!(expected_result(&ts, &[]));
     let mut exp_stdout = exp_result.stdout_str().to_string();
 
-    #[cfg(not(feature = "feat_selinux"))]
+    #[cfg(not(selinux))]
     {
         // NOTE: strip 'context' part from exp_stdout if selinux not enabled:
         // example:
@@ -383,7 +383,7 @@ fn test_id_zero() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(selinux)]
 fn test_id_context() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -453,10 +453,7 @@ fn test_id_no_specified_user_posixly() {
         result.success();
     }
 
-    #[cfg(all(
-        any(target_os = "linux", target_os = "android"),
-        feature = "feat_selinux"
-    ))]
+    #[cfg(selinux)]
     {
         if uucore::selinux::is_selinux_enabled() {
             let result = ts.ucmd().succeeds();

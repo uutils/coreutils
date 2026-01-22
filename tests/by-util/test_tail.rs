@@ -2113,7 +2113,7 @@ fn test_follow_name_truncate3() {
 #[cfg(all(
     not(target_vendor = "apple"),
     not(target_os = "windows"),
-    not(feature = "feat_selinux") // flaky
+    not(selinux) // flaky
 ))] // FIXME: for currently not working platforms
 fn test_follow_name_truncate4() {
     // Truncating a file with the same content it already has should not trigger a truncate event
@@ -4567,7 +4567,7 @@ fn test_args_when_directory_given_shorthand_big_f_together_with_retry() {
     not(target_os = "windows"),
     not(target_os = "freebsd"),
     not(target_os = "openbsd"),
-    not(feature = "feat_selinux") // flaky
+    not(selinux) // flaky
 ))]
 fn test_follow_when_files_are_pointing_to_same_relative_file_and_file_stays_same_size() {
     let scene = TestScenario::new(util_name!());

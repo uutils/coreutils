@@ -502,7 +502,7 @@ fn test_printf_invalid_directive() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(selinux)]
 fn test_stat_selinux() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;

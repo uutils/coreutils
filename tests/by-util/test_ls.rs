@@ -28,7 +28,7 @@ use uutests::new_ucmd;
 #[cfg(unix)]
 use uutests::unwrap_or_return;
 use uutests::util::TestScenario;
-#[cfg(any(unix, feature = "feat_selinux"))]
+#[cfg(unix)]
 use uutests::util::expected_result;
 use uutests::{at_and_ucmd, util_name};
 
@@ -1143,9 +1143,8 @@ fn test_ls_long() {
     }
 }
 
-#[cfg(not(windows))]
 #[test]
-#[cfg(not(feature = "feat_selinux"))]
+#[cfg(all(unix, not(selinux)))]
 // Disabled on the SELinux runner for now
 fn test_ls_long_format() {
     let scene = TestScenario::new(util_name!());
@@ -1701,7 +1700,7 @@ fn test_ls_long_total_size() {
 }
 
 #[test]
-#[cfg(not(feature = "feat_selinux"))]
+#[cfg(not(selinux))]
 // Disabled on the SELinux runner for now
 fn test_ls_long_formats() {
     let scene = TestScenario::new(util_name!());
@@ -3229,9 +3228,8 @@ fn test_ls_color() {
     assert_eq!(result.stdout_str(), expected);
 }
 
-#[cfg(unix)]
 #[test]
-#[cfg(not(feature = "feat_selinux"))]
+#[cfg(all(unix, not(selinux)))]
 // Disabled on the SELinux runner for now
 fn test_ls_inode() {
     let scene = TestScenario::new(util_name!());
@@ -4624,7 +4622,7 @@ fn test_ls_dangling_symlinks() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(selinux)]
 fn test_ls_context1() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -4639,7 +4637,7 @@ fn test_ls_context1() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(selinux)]
 fn test_ls_context2() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -4655,7 +4653,7 @@ fn test_ls_context2() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(selinux)]
 fn test_ls_context_long() {
     if !uucore::selinux::is_selinux_enabled() {
         return;
@@ -4674,7 +4672,7 @@ fn test_ls_context_long() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(selinux)]
 fn test_ls_context_format() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -4704,7 +4702,7 @@ fn test_ls_context_format() {
 }
 
 /// Helper function to validate `SELinux` context format
-#[cfg(feature = "feat_selinux")]
+#[cfg(selinux)]
 fn validate_selinux_context(context: &str) {
     assert!(
         context.contains(':'),
@@ -4719,7 +4717,7 @@ fn validate_selinux_context(context: &str) {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(selinux)]
 fn test_ls_selinux_context_format() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -4752,7 +4750,7 @@ fn test_ls_selinux_context_format() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(selinux)]
 fn test_ls_selinux_context_indicator() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -5989,9 +5987,8 @@ fn test_acl_display() {
 // files. Specifically, it should use the NORMAL setting to format non-file name
 // output and file names that don't have a designated color (unless the FILE
 // setting is also configured).
-#[cfg(unix)]
 #[test]
-#[cfg(not(feature = "feat_selinux"))]
+#[cfg(all(unix, not(selinux)))]
 // Disabled on the SELinux runner for now
 fn test_ls_color_norm() {
     let scene = TestScenario::new(util_name!());
