@@ -55,6 +55,12 @@ jobs:
           - { os: macos-latest   , features: "feat_Tier1,feat_require_unix,feat_require_unix_utmpx" }
           - { os: windows-latest , features: feat_os_windows }
     steps:
+    - name: Disable Windows Defender
+      if: matrix.job.os == 'windows-latest'
+      run: |
+        Add-MpPreference -ExclusionPath "$env:USERPROFILE\.cargo", "${{ github.workspace }}"
+        Add-MpPreference -ExclusionExtension ".exe"
+        Set-MpPreference -PerformanceModeStatus Enabled
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
@@ -413,6 +419,12 @@ jobs:
           - { os: macos-latest   , features: feat_os_macos }
           - { os: windows-latest , features: feat_os_windows }
     steps:
+    - name: Disable Windows Defender
+      if: matrix.job.os == 'windows-latest'
+      run: |
+        Add-MpPreference -ExclusionPath "$env:USERPROFILE\.cargo", "${{ github.workspace }}"
+        Add-MpPreference -ExclusionExtension ".exe"
+        Set-MpPreference -PerformanceModeStatus Enabled
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
@@ -452,6 +464,12 @@ jobs:
           - { os: macos-latest   , features: feat_os_macos }
           - { os: windows-latest , features: feat_os_windows }
     steps:
+    - name: Disable Windows Defender
+      if: matrix.job.os == 'windows-latest'
+      run: |
+        Add-MpPreference -ExclusionPath "$env:USERPROFILE\.cargo", "${{ github.workspace }}"
+        Add-MpPreference -ExclusionExtension ".exe"
+        Set-MpPreference -PerformanceModeStatus Enabled
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
@@ -639,6 +657,14 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
+    - name: Disable Windows Defender
+      if: matrix.job.os == 'windows-latest'
+      run: |
+        Add-MpPreference -ExclusionPath "$env:USERPROFILE\.cargo", "${{ github.workspace }}"
+        Add-MpPreference -ExclusionExtension ".exe"
+        Set-MpPreference -PerformanceModeStatus Enabled
+      shell: powershell
+      # Enable for tagged release
     - name: Avoid no space left on device
       run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android &
     - uses: dtolnay/rust-toolchain@master
@@ -1228,6 +1254,12 @@ jobs:
           - { os: macos-latest   , features: feat_os_macos }
           - { os: windows-latest , features: feat_os_windows }
     steps:
+    - name: Disable Windows Defender
+      if: matrix.job.os == 'windows-latest'
+      run: |
+        Add-MpPreference -ExclusionPath "$env:USERPROFILE\.cargo", "${{ github.workspace }}"
+        Add-MpPreference -ExclusionExtension ".exe"
+        Set-MpPreference -PerformanceModeStatus Enabled
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
@@ -1318,6 +1350,12 @@ jobs:
           - { os: windows-latest , features: feat_os_windows }
 
     steps:
+    - name: Disable Windows Defender
+      if: matrix.job.os == 'windows-latest'
+      run: |
+        Add-MpPreference -ExclusionPath "$env:USERPROFILE\.cargo", "${{ github.workspace }}"
+        Add-MpPreference -ExclusionExtension ".exe"
+        Set-MpPreference -PerformanceModeStatus Enabled
     - uses: actions/checkout@v6
       with:
         persist-credentials: false

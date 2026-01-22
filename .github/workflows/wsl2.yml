@@ -27,6 +27,12 @@ jobs:
         job:
           - { os: windows-latest, distribution: Ubuntu-24.04, features: feat_os_unix}
     steps:
+    - name: Disable Windows Defender
+      if: matrix.job.os == 'windows-latest'
+      run: |
+        Add-MpPreference -ExclusionPath "$env:USERPROFILE\.cargo", "${{ github.workspace }}"
+        Add-MpPreference -ExclusionExtension ".exe"
+        Set-MpPreference -PerformanceModeStatus Enabled
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
