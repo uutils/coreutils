@@ -26,3 +26,6 @@ fluent = { workspace = true }
 [[bin]]
 name = "stty"
 path = "src/main.rs"
+
+[build-dependencies]
+cfg_aliases = "0.2.1"
