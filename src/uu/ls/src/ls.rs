@@ -1260,11 +1260,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
+    let util_name = uucore::util_name();
     uucore::clap_localization::configure_localized_command(
-        Command::new(uucore::util_name())
+        Command::new(util_name)
             .version(uucore::crate_version!())
-            .override_usage(format_usage(&translate!("ls-usage")))
-            .about(translate!("ls-about")),
+            .override_usage(format_usage(&translate!(&format!("{}-usage", util_name))))
+            .about(translate!(&format!("{}-about", util_name))),
     )
     .infer_long_args(true)
     .disable_help_flag(true)
