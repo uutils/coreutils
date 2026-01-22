@@ -31,7 +31,6 @@ path = "src/main.rs"
 
 [dev-dependencies]
 divan = { workspace = true }
-rand = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }
 
 [lib]

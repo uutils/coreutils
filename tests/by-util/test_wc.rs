@@ -65,7 +65,7 @@ fn test_utf8() {
         .args(&["-lwmcL"])
         .pipe_in_fixture("UTF_8_test.txt")
         .succeeds()
-        .stdout_is("    303    2119   22457   23025      79\n");
+        .stdout_is("    303    2178   22457   23025      79\n");
 }
 
 #[test]
@@ -826,6 +826,16 @@ fn wc_w_words_with_emoji_separator() {
         .stdout_contains("3");
 }
 
+#[test]
+fn test_invalid_byte_sequence_word_count() {
+    // wc should count invalid byte sequences as words
+    // Input: "a \xff b\n" should produce: 1 line, 3 words, 6 bytes
+    new_ucmd!()
+        .pipe_in([b'a', b' ', 0xff, b' ', b'b', b'\n'])
+        .succeeds()
+        .stdout_is("      1       3       6\n");
+}
+
 #[cfg(unix)]
 #[test]
 fn test_simd_respects_glibc_tunables() {
@@ -890,4 +900,24 @@ fn test_simd_respects_glibc_tunables() {
             "Line counts should not change when AVX2/AVX512 are disabled (lines={lines})"
         );
     }
+}
+
+#[test]
+fn test_posixly_correct_whitespace() {
+    let input = "word\u{00A0}word"; // Non-breaking space
+
+    // Default: Unicode whitespace is respected
+    new_ucmd!()
+        .arg("-w")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("2\n");
+
+    // POSIXLY_CORRECT: Only ASCII whitespace
+    new_ucmd!()
+        .arg("-w")
+        .env("POSIXLY_CORRECT", "1")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("1\n");
 }

@@ -1521,6 +1521,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .unwrap_or_default(),
     )?;
 
+    #[cfg(unix)]
+    if uucore::signals::stderr_was_closed() && settings.status != Some(StatusLevel::None) {
+        return Err(USimpleError::new(1, "write error"));
+    }
+
     let i = match settings.infile {
         #[cfg(unix)]
         Some(ref infile) if is_fifo(infile) => Input::new_fifo(Path::new(&infile), &settings)?,

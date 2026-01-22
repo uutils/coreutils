@@ -4,12 +4,13 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) tstr sigstr cmdname setpgid sigchld getpid
+
 mod status;
 
 use crate::status::ExitStatus;
 use clap::{Arg, ArgAction, Command};
 use std::io::ErrorKind;
-use std::os::unix::process::ExitStatusExt;
+use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::process::{self, Child, Stdio};
 use std::sync::atomic::{self, AtomicBool};
 use std::time::Duration;
@@ -18,9 +19,6 @@ use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::parser::parse_time;
 use uucore::process::ChildExt;
 use uucore::translate;
-
-#[cfg(unix)]
-use uucore::signals::enable_pipe_errors;
 
 use uucore::{
     format_usage, show_error,
@@ -331,26 +329,35 @@ fn timeout(
     if !foreground {
         let _ = setpgid(Pid::from_raw(0), Pid::from_raw(0));
     }
-    #[cfg(unix)]
-    enable_pipe_errors()?;
 
-    let process = &mut process::Command::new(&cmd[0])
+    let mut command = process::Command::new(&cmd[0]);
+    command
         .args(&cmd[1..])
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .map_err(|err| {
-            let status_code = match err.kind() {
-                ErrorKind::NotFound => ExitStatus::CommandNotFound.into(),
-                ErrorKind::PermissionDenied => ExitStatus::CannotInvoke.into(),
-                _ => ExitStatus::CannotInvoke.into(),
-            };
-            USimpleError::new(
-                status_code,
-                translate!("timeout-error-failed-to-execute-process", "error" => err),
-            )
-        })?;
+        .stderr(Stdio::inherit());
+
+    // If stdin was closed before Rust reopened it as /dev/null, close it in child
+    if uucore::signals::stdin_was_closed() {
+        unsafe {
+            command.pre_exec(|| {
+                libc::close(libc::STDIN_FILENO);
+                Ok(())
+            });
+        }
+    }
+
+    let process = &mut command.spawn().map_err(|err| {
+        let status_code = match err.kind() {
+            ErrorKind::NotFound => ExitStatus::CommandNotFound.into(),
+            ErrorKind::PermissionDenied => ExitStatus::CannotInvoke.into(),
+            _ => ExitStatus::CannotInvoke.into(),
+        };
+        USimpleError::new(
+            status_code,
+            translate!("timeout-error-failed-to-execute-process", "error" => err),
+        )
+    })?;
     unblock_sigchld();
     catch_sigterm();
     // Wait for the child process for the specified time period.
