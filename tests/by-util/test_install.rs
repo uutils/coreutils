@@ -12,7 +12,7 @@ use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 #[cfg(not(windows))]
 use std::process::Command;
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 use std::thread::sleep;
 use uucore::process::{getegid, geteuid};
 #[cfg(feature = "feat_selinux")]
@@ -490,7 +490,7 @@ fn test_install_copy_file() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn test_install_target_file_dev_null() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -687,7 +687,7 @@ fn test_install_copy_then_compare_file() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn test_install_copy_then_compare_file_with_extra_mode() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

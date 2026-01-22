@@ -476,7 +476,7 @@ fn test_read_from_nonexistent_file() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn test_files_from_pseudo_filesystem() {
     use pretty_assertions::assert_ne;
     let result = new_ucmd!().arg("-c").arg("/proc/cpuinfo").succeeds();

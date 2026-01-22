@@ -9,6 +9,11 @@ use std::io::Write;
 use std::path::Path;
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Define cfg alias for Linux and Android platforms
+    // This avoids repetitive `any(target_os = "linux", target_os = "android")` patterns
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    println!("cargo:rustc-cfg=linux_android");
+
     let out_dir = env::var("OUT_DIR")?;
 
     let mut embedded_file = File::create(Path::new(&out_dir).join("embedded_locales.rs"))?;

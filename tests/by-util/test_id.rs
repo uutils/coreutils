@@ -152,7 +152,7 @@ fn test_id_real() {
 }
 
 #[test]
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
+#[cfg(not(linux_android))]
 fn test_id_pretty_print() {
     // `-p` is BSD only and not supported on GNU's `id`
     let username = whoami();
@@ -161,7 +161,7 @@ fn test_id_pretty_print() {
 }
 
 #[test]
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
+#[cfg(not(linux_android))]
 fn test_id_password_style() {
     // `-P` is BSD only and not supported on GNU's `id`
     let username = whoami();
@@ -453,10 +453,7 @@ fn test_id_no_specified_user_posixly() {
         result.success();
     }
 
-    #[cfg(all(
-        any(target_os = "linux", target_os = "android"),
-        feature = "feat_selinux"
-    ))]
+    #[cfg(all(linux_android, feature = "feat_selinux"))]
     {
         if uucore::selinux::is_selinux_enabled() {
             let result = ts.ucmd().succeeds();

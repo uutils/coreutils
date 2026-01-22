@@ -1065,7 +1065,7 @@ fn sort_empty_chunk() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn test_compress() {
     new_ucmd!()
         .args(&[
@@ -1081,7 +1081,7 @@ fn test_compress() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn test_compress_merge() {
     new_ucmd!()
         .args(&[
@@ -1192,7 +1192,7 @@ fn test_merge_batch_size() {
 
 #[test]
 // TODO(#7542): Re-enable on Android once we figure out why setting limit is broken.
-// #[cfg(any(target_os = "linux", target_os = "android"))]
+// #[cfg(linux_android)]
 #[cfg(target_os = "linux")]
 fn test_merge_batch_size_with_limit() {
     use rlimit::Resource;

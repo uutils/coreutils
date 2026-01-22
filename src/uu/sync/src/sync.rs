@@ -6,15 +6,15 @@
 /* Last synced with: sync (GNU coreutils) 8.13 */
 
 use clap::{Arg, ArgAction, Command};
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 use nix::errno::Errno;
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 use nix::fcntl::{OFlag, open};
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 use nix::sys::stat::Mode;
 use std::path::Path;
 use uucore::display::Quotable;
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
@@ -29,14 +29,14 @@ static ARG_FILES: &str = "files";
 
 #[cfg(unix)]
 mod platform {
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(linux_android)]
     use nix::fcntl::{FcntlArg, OFlag, fcntl};
     use nix::unistd::sync;
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(linux_android)]
     use nix::unistd::{fdatasync, syncfs};
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(linux_android)]
     use std::fs::File;
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(linux_android)]
     use uucore::error::FromIo;
 
     use uucore::error::UResult;
@@ -46,7 +46,7 @@ mod platform {
         Ok(())
     }
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(linux_android)]
     pub fn do_syncfs(files: Vec<String>) -> UResult<()> {
         for path in files {
             let f = File::open(&path).map_err_context(|| path.clone())?;
@@ -57,7 +57,7 @@ mod platform {
         Ok(())
     }
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(linux_android)]
     pub fn do_fdatasync(files: Vec<String>) -> UResult<()> {
         for path in files {
             let f = File::open(&path).map_err_context(|| path.clone())?;
@@ -199,7 +199,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     for f in &files {
         // Use the Nix open to be able to set the NONBLOCK flags for fifo files
-        #[cfg(any(target_os = "linux", target_os = "android"))]
+        #[cfg(linux_android)]
         {
             let path = Path::new(&f);
             if let Err(e) = open(path, OFlag::O_NONBLOCK, Mode::empty()) {
@@ -210,7 +210,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 }
             }
         }
-        #[cfg(not(any(target_os = "linux", target_os = "android")))]
+        #[cfg(not(linux_android))]
         {
             if !Path::new(&f).exists() {
                 return Err(USimpleError::new(
@@ -226,7 +226,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         #[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
         syncfs(files)?;
     } else if matches.get_flag(options::DATA) {
-        #[cfg(any(target_os = "linux", target_os = "android"))]
+        #[cfg(linux_android)]
         fdatasync(files)?;
     } else {
         sync()?;
@@ -273,7 +273,7 @@ fn syncfs(files: Vec<String>) -> UResult<()> {
     platform::do_syncfs(files)
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn fdatasync(files: Vec<String>) -> UResult<()> {
     platform::do_fdatasync(files)
 }

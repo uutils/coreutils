@@ -53,7 +53,7 @@ enum CopyMethod {
 /// Use the Linux `ioctl_ficlone` API to do a copy-on-write clone.
 ///
 /// `fallback` controls what to do if the system call fails.
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn clone<P>(source: P, dest: P, fallback: CloneFallback) -> std::io::Result<()>
 where
     P: AsRef<Path>,
@@ -77,7 +77,7 @@ where
 /// Checks whether a file contains any non null bytes i.e. any byte != 0x0
 /// This function returns a tuple of (bool, u64, u64) signifying a tuple of (whether a file has
 /// data, its size, no of blocks it has allocated in disk)
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn check_for_data(source: &Path) -> Result<(bool, u64, u64), std::io::Error> {
     let mut src_file = File::open(source)?;
     let metadata = src_file.metadata()?;
@@ -102,7 +102,7 @@ fn check_for_data(source: &Path) -> Result<(bool, u64, u64), std::io::Error> {
     }
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 /// Checks whether a file is sparse i.e. it contains holes, uses the crude heuristic blocks < size / 512
 /// Reference:`<https://doc.rust-lang.org/std/os/unix/fs/trait.MetadataExt.html#tymethod.blocks>`
 fn check_sparse_detection(source: &Path) -> Result<bool, std::io::Error> {
@@ -119,7 +119,7 @@ fn check_sparse_detection(source: &Path) -> Result<bool, std::io::Error> {
 
 /// Optimized [`sparse_copy`] doesn't create holes for large sequences of zeros in non `sparse_files`
 /// Used when `--sparse=auto`
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn sparse_copy_without_hole<P>(source: P, dest: P) -> std::io::Result<()>
 where
     P: AsRef<Path>,
@@ -169,7 +169,7 @@ where
 }
 /// Perform a sparse copy from one file to another.
 /// Creates a holes for large sequences of zeros in `non_sparse_files`, used for `--sparse=always`
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn sparse_copy<P>(source: P, dest: P) -> std::io::Result<()>
 where
     P: AsRef<Path>,
@@ -201,7 +201,7 @@ where
     Ok(())
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 /// Checks whether an existing destination is a fifo
 fn check_dest_is_fifo(dest: &Path) -> bool {
     // If our destination file exists and its a fifo , we do a standard copy .

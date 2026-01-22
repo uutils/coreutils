@@ -88,31 +88,19 @@ fn desired_file_buffer_bytes(total_bytes: u128) -> u128 {
 }
 
 fn physical_memory_bytes() -> Option<u128> {
-    #[cfg(all(
-        target_family = "unix",
-        not(target_os = "redox"),
-        any(target_os = "linux", target_os = "android")
-    ))]
+    #[cfg(all(target_family = "unix", not(target_os = "redox"), linux_android))]
     {
         physical_memory_bytes_unix()
     }
 
-    #[cfg(any(
-        not(target_family = "unix"),
-        target_os = "redox",
-        not(any(target_os = "linux", target_os = "android"))
-    ))]
+    #[cfg(any(not(target_family = "unix"), target_os = "redox", not(linux_android)))]
     {
         // No portable or safe API is available here to detect total physical memory.
         None
     }
 }
 
-#[cfg(all(
-    target_family = "unix",
-    not(target_os = "redox"),
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(target_family = "unix", not(target_os = "redox"), linux_android))]
 fn physical_memory_bytes_unix() -> Option<u128> {
     use nix::unistd::{SysconfVar, sysconf};
 

@@ -373,7 +373,7 @@ pub struct Config {
     time_format_recent: String,        // Time format for recent dates
     time_format_older: Option<String>, // Time format for older dates (optional, if not present, time_format_recent is used)
     context: bool,
-    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+    #[cfg(all(feature = "selinux", linux_android))]
     selinux_supported: bool,
     #[cfg(all(feature = "smack", target_os = "linux"))]
     smack_supported: bool,
@@ -1233,7 +1233,7 @@ impl Config {
             time_format_recent,
             time_format_older,
             context,
-            #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+            #[cfg(all(feature = "selinux", linux_android))]
             selinux_supported: uucore::selinux::is_selinux_enabled(),
             #[cfg(all(feature = "smack", target_os = "linux"))]
             smack_supported: uucore::smack::is_smack_enabled(),
@@ -3531,7 +3531,7 @@ fn get_security_context<'a>(
         }
     }
 
-    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+    #[cfg(all(feature = "selinux", linux_android))]
     if config.selinux_supported {
         match selinux::SecurityContext::of_path(path, must_dereference, false) {
             Err(_r) => {

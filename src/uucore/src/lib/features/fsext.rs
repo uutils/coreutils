@@ -812,7 +812,7 @@ impl FsMeta for StatFs {
         unimplemented!()
     }
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(linux_android)]
     fn io_size(&self) -> u64 {
         self.f_frsize as u64
     }
@@ -865,7 +865,7 @@ impl FsMeta for StatFs {
         self.f_fsid as u64
     }
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(linux_android)]
     fn namelen(&self) -> u64 {
         self.f_namelen as u64
     }
@@ -1095,7 +1095,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(linux_android)]
     fn test_mountinfo() {
         // spell-checker:ignore (word) relatime
         let info = MountInfo::new(
@@ -1137,7 +1137,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(linux_android)]
     fn test_mountinfo_dir_special_chars() {
         let info = MountInfo::new(
             LINUX_MOUNTINFO,
@@ -1161,7 +1161,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(linux_android)]
     fn test_mountinfo_dir_non_unicode() {
         let info = MountInfo::new(
             LINUX_MOUNTINFO,

@@ -6,7 +6,7 @@
 
 use rand::{Rng, SeedableRng, rng};
 use regex::Regex;
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 use rlimit::Resource;
 #[cfg(not(windows))]
 use std::env;
@@ -1666,7 +1666,7 @@ fn test_round_robin() {
 
 #[test]
 // TODO(#7542): Re-enable on Android once we figure out why rlimit is broken.
-// #[cfg(any(target_os = "linux", target_os = "android"))]
+// #[cfg(linux_android)]
 #[cfg(target_os = "linux")]
 fn test_round_robin_limited_file_descriptors() {
     new_ucmd!()

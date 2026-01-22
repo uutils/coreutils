@@ -472,7 +472,7 @@ fn test_ls_devices() {
             .stdout_matches(&Regex::new("[^ ] 3, 2 [^ ]").unwrap());
     }
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(linux_android)]
     {
         scene
             .ucmd()
