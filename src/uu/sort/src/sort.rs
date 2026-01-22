@@ -2081,7 +2081,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let ignore_non_printing = matches.get_flag(options::IGNORE_NONPRINTING);
     let ignore_case = matches.get_flag(options::IGNORE_CASE);
 
-    if ordering_incompatible(mode_flags, dictionary_order, ignore_non_printing) {
+    if !matches.contains_id(options::KEY)
+        && ordering_incompatible(mode_flags, dictionary_order, ignore_non_printing)
+    {
         let opts = ordering_opts_string(
             mode_flags,
             dictionary_order,
