@@ -720,12 +720,12 @@ impl<'a> Line<'a> {
             match selector.settings.mode {
                 SortMode::Numeric | SortMode::HumanNumeric => {
                     // find out which range is used for numeric comparisons
-                    let (_, num_range) = NumInfo::parse(
-                        &self.line[selection.clone()],
-                        &settings
-                            .numeric_locale
-                            .num_info_settings(selector.settings.mode == SortMode::HumanNumeric),
-                    );
+                    let mut parse_settings = settings
+                        .numeric_locale
+                        .num_info_settings(selector.settings.mode == SortMode::HumanNumeric);
+                    // Debug annotations should ignore thousands separators to match GNU output.
+                    parse_settings.thousands_separator = None;
+                    let (_, num_range) = NumInfo::parse(&self.line[selection.clone()], &parse_settings);
                     let initial_selection = selection.clone();
 
                     // Shorten selection to num_range.
@@ -1195,21 +1195,11 @@ impl FieldSelector {
         };
         let mut range_str = &line[self.get_range(line, tokens)];
         if self.settings.mode == SortMode::Numeric || self.settings.mode == SortMode::HumanNumeric {
-            // Get the thousands separator from the locale, handling cases where the separator is empty or multi-character
-            let locale_thousands_separator = i18n::decimal::locale_grouping_separator().as_bytes();
-
-            // Upstream GNU coreutils ignore multibyte thousands separators
-            // (FIXME in C source). We keep the same single-byte behavior.
-            let thousands_separator = match locale_thousands_separator {
-                [b] => Some(*b),
-                _ => None,
-            };
-
             // Parse NumInfo for this number.
-            let mut parse_settings =
-                numeric_locale.num_info_settings(self.settings.mode == SortMode::HumanNumeric);
-            parse_settings.thousands_separator = thousands_separator;
-            let (info, num_range) = NumInfo::parse(range_str, &parse_settings);
+            let (info, num_range) = NumInfo::parse(
+                range_str,
+                &numeric_locale.num_info_settings(self.settings.mode == SortMode::HumanNumeric),
+            );
             // Shorten the range to what we need to pass to numeric_str_cmp later.
             range_str = &range_str[num_range];
             Selection::WithNumInfo(range_str, info)
@@ -1322,10 +1312,17 @@ impl FieldSelector {
 }
 
 fn detect_numeric_locale() -> NumericLocaleSettings {
+    let encoding = i18n::get_numeric_locale().1;
+    let grouping = i18n::decimal::locale_grouping_separator();
     NumericLocaleSettings {
         decimal_pt: Some(locale_decimal_pt()),
-        thousands_sep: match i18n::decimal::locale_grouping_separator().as_bytes() {
+        // Upstream GNU coreutils ignore multibyte thousands separators
+        // (FIXME in C source). We keep the same single-byte behavior.
+        thousands_sep: match grouping.as_bytes() {
             [b] => Some(*b),
+            // ICU returns NBSP as UTF-8 (0xC2 0xA0). In non-UTF8 locales like ISO-8859-1,
+            // the input byte is 0xA0, so map it to a single-byte separator.
+            [0xC2, 0xA0] if encoding != i18n::UEncoding::Utf8 => Some(0xA0),
             _ => None,
         },
     }
