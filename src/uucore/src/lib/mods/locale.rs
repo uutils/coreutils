@@ -332,54 +332,166 @@ pub fn get_message_with_args(id: &str, ftl_args: FluentArgs) -> String {
     get_message_internal(id, Some(ftl_args))
 }
 
-/// Helper function to safely set a FluentArgs value, preserving precision for large integers.
+/// Maximum safe integer value for f64 (2^53 - 1)
+const F64_SAFE_MAX: i64 = 9007199254740991; // 2^53 - 1
+
+/// Trait for safely setting Fluent arguments with proper precision handling.
 ///
-/// This function handles the limitation of fluent-rs where numeric values are stored as f64,
-/// which can only safely represent integers in the range [-2^53+1, 2^53-1]. For values
-/// outside this range, they are passed as strings to preserve exact precision.
-///
-/// # Arguments
-///
-/// * `args` - The FluentArgs to add the value to
-/// * `key` - The argument key name
-/// * `value_str` - The string representation of the value
+/// This trait ensures that large integers outside the safe f64 range are
+/// passed as strings to avoid precision loss in localized messages.
 ///
 /// # Implementation Notes
 ///
 /// This is a workaround for <https://github.com/projectfluent/fluent-rs/issues/337>
 /// Once fluent-rs supports full i64/u64 precision, this can be simplified.
-#[inline]
-pub fn safe_set_fluent_arg<'a>(args: &mut FluentArgs<'a>, key: &'a str, value_str: &'a str) {
-    const F64_SAFE_MAX: u64 = (1_u64 << 53) - 1;
+pub trait SafeFluentValue {
+    fn set_fluent_arg<'a>(self, args: &mut FluentArgs<'a>, key: &'a str);
+}
 
-    // Fast path: try i64 parsing first (most common case)
-    if let Ok(val) = value_str.parse::<i64>() {
-        if val.unsigned_abs() <= F64_SAFE_MAX {
-            args.set(key, val);
-        } else {
-            args.set(key, value_str); // Preserve as string to avoid allocation
-        }
-        return;
+/// Helper for autoref-based specialization.
+///
+/// This allows us to provide a specialized implementation for types that
+/// implement `SafeFluentValue` (like integers that need precision protection)
+/// while falling back to `Display::to_string()` for everything else.
+pub struct SafeWrap<'a, T: ?Sized>(pub &'a T);
+
+pub trait SafeFluentSpecialization {
+    fn set_arg<'b>(self, args: &mut FluentArgs<'b>, key: &'b str);
+}
+
+impl<T: SafeFluentValue + Clone> SafeFluentSpecialization for &&SafeWrap<'_, T> {
+    #[inline]
+    fn set_arg<'b>(self, args: &mut FluentArgs<'b>, key: &'b str) {
+        self.0.clone().set_fluent_arg(args, key);
     }
+}
 
-    // Second path: u64 for large positive numbers
-    if let Ok(val) = value_str.parse::<u64>() {
-        if val <= F64_SAFE_MAX {
-            args.set(key, val as i64);
-        } else {
-            args.set(key, value_str);
-        }
-        return;
+pub trait DisplayFallback {
+    fn set_arg<'b>(self, args: &mut FluentArgs<'b>, key: &'b str);
+}
+
+impl<T: std::fmt::Display + ?Sized> DisplayFallback for &SafeWrap<'_, T> {
+    #[inline]
+    fn set_arg<'b>(self, args: &mut FluentArgs<'b>, key: &'b str) {
+        args.set(key, self.0.to_string());
     }
+}
 
-    // Third path: actual floating point numbers
-    if let Ok(val) = value_str.parse::<f64>() {
-        args.set(key, val);
-        return;
+// Signed integer implementations
+macro_rules! impl_safe_fluent_signed {
+    ($($t:ty),*) => {
+        $(
+            impl SafeFluentValue for $t {
+                #[inline]
+                fn set_fluent_arg<'a>(self, args: &mut FluentArgs<'a>, key: &'a str) {
+                    // Check if value is within safe f64 range: -(2^53-1) to +(2^53-1)
+                    // We must check the range on the original type to avoid truncation
+                    if (self as i128) >= -(F64_SAFE_MAX as i128)
+                        && (self as i128) <= (F64_SAFE_MAX as i128)
+                    {
+                        args.set(key, self as i64);
+                    } else {
+                        args.set(key, self.to_string());
+                    }
+                }
+            }
+        )*
+    };
+}
+
+// Unsigned integer implementations
+macro_rules! impl_safe_fluent_unsigned {
+    ($($t:ty),*) => {
+        $(
+            impl SafeFluentValue for $t {
+                #[inline]
+                fn set_fluent_arg<'a>(self, args: &mut FluentArgs<'a>, key: &'a str) {
+                    // Check if value is within safe f64 range: 0 to 2^53-1
+                    // We must check the range on the original type to avoid truncation
+                    if (self as u128) <= (F64_SAFE_MAX as u128) {
+                        args.set(key, self as u64);
+                    } else {
+                        args.set(key, self.to_string());
+                    }
+                }
+            }
+        )*
+    };
+}
+
+impl_safe_fluent_signed!(i8, i16, i32, i64, i128, isize);
+impl_safe_fluent_unsigned!(u8, u16, u32, u64, u128, usize);
+
+// f64 passes through directly (no precision issues)
+impl SafeFluentValue for f64 {
+    #[inline]
+    fn set_fluent_arg<'a>(self, args: &mut FluentArgs<'a>, key: &'a str) {
+        args.set(key, self);
     }
+}
 
-    // Default: pass as string (no allocation needed)
-    args.set(key, value_str);
+// String types - convert borrowed strings to owned to satisfy lifetime requirements
+impl SafeFluentValue for &str {
+    #[inline]
+    fn set_fluent_arg<'a>(self, args: &mut FluentArgs<'a>, key: &'a str) {
+        args.set(key, self.to_string());
+    }
+}
+
+impl SafeFluentValue for &String {
+    #[inline]
+    fn set_fluent_arg<'a>(self, args: &mut FluentArgs<'a>, key: &'a str) {
+        args.set(key, self.clone());
+    }
+}
+
+impl SafeFluentValue for &Path {
+    #[inline]
+    fn set_fluent_arg<'a>(self, args: &mut FluentArgs<'a>, key: &'a str) {
+        args.set(key, self.to_string_lossy().to_string());
+    }
+}
+
+impl SafeFluentValue for &std::ffi::OsStr {
+    #[inline]
+    fn set_fluent_arg<'a>(self, args: &mut FluentArgs<'a>, key: &'a str) {
+        args.set(key, self.to_string_lossy().to_string());
+    }
+}
+
+impl SafeFluentValue for &std::io::Error {
+    #[inline]
+    fn set_fluent_arg<'a>(self, args: &mut FluentArgs<'a>, key: &'a str) {
+        args.set(key, self.to_string());
+    }
+}
+
+impl SafeFluentValue for crate::error::UIoError {
+    #[inline]
+    fn set_fluent_arg<'a>(self, args: &mut FluentArgs<'a>, key: &'a str) {
+        args.set(key, self.to_string());
+    }
+}
+
+impl SafeFluentValue for &crate::error::UIoError {
+    #[inline]
+    fn set_fluent_arg<'a>(self, args: &mut FluentArgs<'a>, key: &'a str) {
+        args.set(key, self.to_string());
+    }
+}
+
+impl SafeFluentValue for os_display::Quoted<'_> {
+    #[inline]
+    fn set_fluent_arg<'a>(self, args: &mut FluentArgs<'a>, key: &'a str) {
+        args.set(key, self.to_string());
+    }
+}
+
+impl SafeFluentValue for String {
+    #[inline]
+    fn set_fluent_arg<'a>(self, args: &mut FluentArgs<'a>, key: &'a str) {
+        args.set(key, self);
+    }
 }
 
 /// Function to detect system locale from environment variables
@@ -579,12 +691,13 @@ macro_rules! translate {
     // Case 2: Message ID with key-value arguments
     ($id:expr, $($key:expr => $value:expr),+ $(,)?) => {
         {
-            // Use helper function to handle large integer precision safely.
-            // This reduces macro expansion bloat while preserving precision.
             let mut args = fluent::FluentArgs::new();
             $(
-                let value_string = $value.to_string();
-                $crate::locale::safe_set_fluent_arg(&mut args, $key, &value_string);
+                {
+                    #[allow(unused_imports)]
+                    use $crate::locale::{DisplayFallback, SafeFluentSpecialization};
+                    (&&$crate::locale::SafeWrap(&$value)).set_arg(&mut args, $key);
+                }
             )+
             $crate::locale::get_message_with_args($id, args)
         }
