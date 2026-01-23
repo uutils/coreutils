@@ -1825,7 +1825,7 @@ pub(crate) fn copy_attributes(
             fs::set_permissions(dest, source_metadata.permissions())
                 .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
             // FIXME: Implement this for windows as well
-            #[cfg(feature = "feat_acl")]
+            #[cfg(acl)]
             exacl::getfacl(source, None)
                 .and_then(|acl| exacl::setfacl(&[dest], &acl, None))
                 .map_err(|err| CpError::Error(err.to_string()))?;
