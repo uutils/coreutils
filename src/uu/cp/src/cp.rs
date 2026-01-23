@@ -896,11 +896,11 @@ impl Attributes {
         mode: Preserve::Yes { required: true },
         timestamps: Preserve::Yes { required: true },
         context: {
-            #[cfg(feature = "feat_selinux")]
+            #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
             {
                 Preserve::Yes { required: false }
             }
-            #[cfg(not(feature = "feat_selinux"))]
+            #[cfg(not(all(feature = "selinux", any(target_os = "linux", target_os = "android"))))]
             {
                 Preserve::No { explicit: false }
             }
