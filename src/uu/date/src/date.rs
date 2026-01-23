@@ -13,18 +13,24 @@ use jiff::tz::{TimeZone, TimeZoneDatabase};
 use jiff::{Timestamp, Zoned};
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::env;
+use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use uucore::display::Quotable;
 use uucore::error::FromIo;
+#[cfg(unix)]
+use uucore::error::UUsageError;
 use uucore::error::{UResult, USimpleError};
 use uucore::translate;
 use uucore::{format_usage, show};
 #[cfg(windows)]
 use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
 
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 
 // Options
@@ -55,6 +61,7 @@ struct Settings {
     format: Format,
     date_source: DateSource,
     set_to: Option<Zoned>,
+    output_encoding: OutputEncoding,
 }
 
 /// Various ways of displaying the date
@@ -62,6 +69,7 @@ enum Format {
     Iso8601(Iso8601Format),
     Rfc5322,
     Rfc3339(Rfc3339Format),
+    // Used by --resolution to emit the clock resolution as "seconds.nanoseconds".
     Resolution,
     Custom(String),
     Default,
@@ -74,7 +82,32 @@ enum DateSource {
     FileMtime(PathBuf),
     Stdin,
     Human(String),
+    // Used by --resolution to source a Timestamp that represents clock resolution.
     Resolution,
+}
+
+#[cfg(unix)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum OutputEncoding {
+    Utf8,
+    BytePreserving,
+}
+
+#[cfg(not(unix))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum OutputEncoding {
+    Utf8,
+}
+
+struct CustomFormat {
+    format: String,
+    output_encoding: OutputEncoding,
+}
+
+enum CustomFormatError {
+    MissingPlus(String),
+    #[cfg(unix)]
+    InvalidUtf8,
 }
 
 enum Iso8601Format {
@@ -230,25 +263,39 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     // Check for extra operands (multiple positional arguments)
-    if let Some(formats) = matches.get_many::<String>(OPT_FORMAT) {
-        let format_args: Vec<&String> = formats.collect();
+    if let Some(formats) = matches.get_many::<OsString>(OPT_FORMAT) {
+        let format_args: Vec<&OsString> = formats.collect();
         if format_args.len() > 1 {
             return Err(USimpleError::new(
                 1,
-                translate!("date-error-extra-operand", "operand" => format_args[1]),
+                translate!(
+                    "date-error-extra-operand",
+                    "operand" => format_args[1].to_string_lossy()
+                ),
             ));
         }
     }
 
-    let format = if let Some(form) = matches.get_one::<String>(OPT_FORMAT) {
-        if !form.starts_with('+') {
-            return Err(USimpleError::new(
-                1,
-                translate!("date-error-invalid-date", "date" => form),
-            ));
-        }
-        let form = form[1..].to_string();
-        Format::Custom(form)
+    let mut output_encoding = OutputEncoding::Utf8;
+    let format = if let Some(form) = matches.get_one::<OsString>(OPT_FORMAT) {
+        let custom = match parse_custom_format(form) {
+            Ok(custom) => custom,
+            Err(CustomFormatError::MissingPlus(raw)) => {
+                return Err(USimpleError::new(
+                    1,
+                    translate!("date-error-invalid-date", "date" => raw),
+                ));
+            }
+            #[cfg(unix)]
+            Err(CustomFormatError::InvalidUtf8) => {
+                return Err(UUsageError::new(
+                    1,
+                    "invalid UTF-8 was detected in one or more arguments",
+                ));
+            }
+        };
+        output_encoding = custom.output_encoding;
+        Format::Custom(custom.format)
     } else if let Some(fmt) = matches
         .get_many::<String>(OPT_ISO_8601)
         .map(|mut iter| iter.next().unwrap_or(&DATE.to_string()).as_str().into())
@@ -298,6 +345,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         format,
         date_source,
         set_to,
+        output_encoding,
     };
 
     if let Some(date) = settings.set_to {
@@ -476,9 +524,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         match date {
             Ok(date) => {
                 match BrokenDownTime::from(&date).to_string_with_config(&config, format_string) {
-                    Ok(s) => writeln!(stdout, "{s}").map_err(|e| {
-                        USimpleError::new(1, translate!("date-error-write", "error" => e))
-                    })?,
+                    Ok(s) => write_formatted_output(settings.output_encoding, &s, &mut stdout)
+                        .map_err(|e| {
+                            USimpleError::new(1, translate!("date-error-write", "error" => e))
+                        })?,
                     Err(e) => {
                         let _ = stdout.flush();
                         return Err(USimpleError::new(
@@ -609,7 +658,117 @@ pub fn uu_app() -> Command {
                 .help(translate!("date-help-universal"))
                 .action(ArgAction::SetTrue),
         )
-        .arg(Arg::new(OPT_FORMAT).num_args(0..).trailing_var_arg(true))
+        .arg(
+            Arg::new(OPT_FORMAT)
+                .num_args(0..)
+                .trailing_var_arg(true)
+                .value_parser(clap::builder::ValueParser::os_string()),
+        )
+}
+
+/// Parse a user-supplied `+FORMAT` argument into a `CustomFormat`.
+///
+/// - Requires the leading '+' and returns `MissingPlus` otherwise.
+/// - On Unix, treats the payload as raw bytes: if UTF-8, use as-is; if not,
+///   then either error under UTF-8 locales or decode in a byte-preserving way.
+/// - On non-Unix, falls back to a lossy string conversion and strips the '+'.
+fn parse_custom_format(raw: &OsStr) -> Result<CustomFormat, CustomFormatError> {
+    #[cfg(unix)]
+    {
+        let bytes = raw.as_bytes();
+        if bytes.first() != Some(&b'+') {
+            return Err(CustomFormatError::MissingPlus(
+                raw.to_string_lossy().into_owned(),
+            ));
+        }
+        let payload = &bytes[1..];
+        if let Ok(utf8) = std::str::from_utf8(payload) {
+            return Ok(CustomFormat {
+                format: utf8.to_string(),
+                output_encoding: OutputEncoding::Utf8,
+            });
+        }
+        if locale_output_encoding() == OutputEncoding::Utf8 {
+            return Err(CustomFormatError::InvalidUtf8);
+        }
+        Ok(CustomFormat {
+            format: decode_byte_preserving(payload),
+            output_encoding: OutputEncoding::BytePreserving,
+        })
+    }
+
+    #[cfg(not(unix))]
+    {
+        let s = raw.to_string_lossy();
+        if !s.starts_with('+') {
+            return Err(CustomFormatError::MissingPlus(s.into_owned()));
+        }
+        Ok(CustomFormat {
+            format: s[1..].to_string(),
+            output_encoding: OutputEncoding::Utf8,
+        })
+    }
+}
+
+#[cfg(unix)]
+/// Determine whether the active locale expects UTF-8 output.
+fn locale_output_encoding() -> OutputEncoding {
+    let locale_var = ["LC_ALL", "LC_TIME", "LANG"]
+        .iter()
+        .find_map(|key| env::var(key).ok());
+
+    if let Some(locale) = locale_var {
+        let mut split = locale.split(&['.', '@']);
+        let _ = split.next();
+        if let Some(encoding) = split.next() {
+            let encoding = encoding.to_ascii_lowercase();
+            if encoding == "utf-8" || encoding == "utf8" {
+                return OutputEncoding::Utf8;
+            }
+        }
+    }
+
+    OutputEncoding::BytePreserving
+}
+
+#[cfg(unix)]
+/// Losslessly map each byte to the same Unicode code point (0x00..=0xFF).
+fn decode_byte_preserving(bytes: &[u8]) -> String {
+    bytes.iter().map(|&b| char::from(b)).collect()
+}
+
+#[cfg(unix)]
+/// Convert a string back to bytes if all chars fit in a single byte.
+fn encode_byte_preserving(s: &str) -> Option<Vec<u8>> {
+    let mut out = Vec::with_capacity(s.len());
+    for ch in s.chars() {
+        if (ch as u32) <= 0xFF {
+            out.push(ch as u8);
+        } else {
+            return None;
+        }
+    }
+    Some(out)
+}
+
+/// Write the formatted string using the requested output encoding.
+fn write_formatted_output(
+    output_encoding: OutputEncoding,
+    s: &str,
+    stdout: &mut impl Write,
+) -> std::io::Result<()> {
+    match output_encoding {
+        OutputEncoding::Utf8 => writeln!(stdout, "{s}"),
+        #[cfg(unix)]
+        OutputEncoding::BytePreserving => {
+            if let Some(mut bytes) = encode_byte_preserving(s) {
+                bytes.push(b'\n');
+                stdout.write_all(&bytes)
+            } else {
+                writeln!(stdout, "{s}")
+            }
+        }
+    }
 }
 
 /// Return the appropriate format string for the given settings.
