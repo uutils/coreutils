@@ -3,12 +3,20 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore logind
+
 use std::env;
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use cfg_aliases::cfg_aliases;
+
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
+    cfg_aliases! {
+        systemd_logind: { all(feature = "feat_systemd_logind", target_os = "linux") },
+    }
+
     let out_dir = env::var("OUT_DIR")?;
 
     let mut embedded_file = File::create(Path::new(&out_dir).join("embedded_locales.rs"))?;
