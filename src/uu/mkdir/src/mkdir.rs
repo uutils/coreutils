@@ -296,14 +296,15 @@ fn create_dir_with_mode(path: &Path, _mode: u32) -> std::io::Result<()> {
 #[cfg(all(unix, not(target_os = "linux")))]
 fn inherit_setgid_bit(path: &Path) -> UResult<()> {
     if let Some(parent) = path.parent() {
-        if let Ok(parent_metadata) = parent.metadata()
-            && let Ok(paths_metadata) = path.metadata()
-            && (parent_metadata.mode() & 0o2000) != (paths_metadata.mode() & 0o2000)
-        {
-            chmod(
-                path,
-                paths_metadata.mode() | parent_metadata.mode() & 0o2000,
-            )?;
+        if let Ok(parent_metadata) = parent.metadata() {
+            if let Ok(paths_metadata) = path.metadata() {
+                if (parent_metadata.mode() & 0o2000) != (paths_metadata.mode() & 0o2000) {
+                    chmod(
+                        path,
+                        paths_metadata.mode() | parent_metadata.mode() & 0o2000,
+                    )?;
+                }
+            }
         }
     }
     Ok(())
