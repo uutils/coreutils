@@ -2,6 +2,7 @@ name: Code Quality
 
 # spell-checker:ignore (people) reactivecircus Swatinem dtolnay juliangruber pell taplo
 # spell-checker:ignore (misc) TERMUX noaudio pkill swiftshader esac sccache pcoreutils shopt subshell dequote libsystemd
+# spell-checker:ignore (I/O) disablelastaccess deletejournal fsutil mdutil
 
 on:
   pull_request:
@@ -83,6 +84,16 @@ jobs:
           - { os: macos-latest   , features: feat_os_macos }
           - { os: windows-latest , features: feat_os_windows }
     steps:
+    - name: Improve I/O
+      if: runner.os == 'macOS'
+      run : sudo mdutil -a -i off &
+    - name: Improve I/O
+      if: runner.os == 'Windows'
+      shell: bash
+      run: |
+        fsutil behavior set disablelastaccess 1 &
+        fsutil 8dot3name set 1 &
+        fsutil usn deletejournal /d C: &
     - uses: actions/checkout@v6
       with:
         persist-credentials: false

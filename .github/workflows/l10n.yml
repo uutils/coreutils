@@ -37,6 +37,16 @@ jobs:
           - { os: macos-latest   , features: "feat_os_macos" }
           - { os: windows-latest , features: "feat_os_windows" }
     steps:
+    - name: Improve I/O
+      if: runner.os == 'macOS'
+      run : sudo mdutil -a -i off &
+    - name: Improve I/O
+      if: runner.os == 'Windows'
+      shell: bash
+      run: |
+        fsutil behavior set disablelastaccess 1 &
+        fsutil 8dot3name set 1 &
+        fsutil usn deletejournal /d C: &
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
@@ -420,6 +430,16 @@ jobs:
           - { os: ubuntu-latest  , features: "feat_os_unix" }
           - { os: macos-latest   , features: "feat_os_macos" }
     steps:
+    - name: Improve I/O
+      if: runner.os == 'macOS'
+      run : sudo mdutil -a -i off &
+    - name: Improve I/O
+      if: runner.os == 'Windows'
+      shell: bash
+      run: |
+        fsutil behavior set disablelastaccess 1 &
+        fsutil 8dot3name set 1 &
+        fsutil usn deletejournal /d C: &
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
@@ -572,6 +592,16 @@ jobs:
           - { os: ubuntu-latest  , features: "feat_os_unix" }
           - { os: macos-latest   , features: "feat_os_macos" }
     steps:
+    - name: Improve I/O
+      if: runner.os == 'macOS'
+      run : sudo mdutil -a -i off &
+    - name: Improve I/O
+      if: runner.os == 'Windows'
+      shell: bash
+      run: |
+        fsutil behavior set disablelastaccess 1 &
+        fsutil 8dot3name set 1 &
+        fsutil usn deletejournal /d C: &
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
