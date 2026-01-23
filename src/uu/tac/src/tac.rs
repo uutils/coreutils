@@ -234,6 +234,7 @@ fn translate_regex_flavor(regex: &str) -> String {
     let mut chars = regex.chars().peekable();
     let mut inside_brackets = false;
     let mut prev_was_backslash = false;
+    let mut last_char: Option<char> = None;
 
     while let Some(c) = chars.next() {
         let is_escaped = prev_was_backslash;
@@ -245,40 +246,61 @@ fn translate_regex_flavor(regex: &str) -> String {
                 if let Some(&next) = chars.peek() {
                     if matches!(next, '(' | ')' | '|' | '{' | '}') {
                         result.push(next);
+                        last_char = Some(next);
                         chars.next();
                         continue;
                     }
                 }
 
                 result.push('\\');
+                last_char = Some('\\');
                 prev_was_backslash = true;
             }
             // Bracket tracking
             '[' => {
                 inside_brackets = true;
                 result.push(c);
+                last_char = Some(c);
             }
             ']' => {
                 inside_brackets = false;
                 result.push(c);
+                last_char = Some(c);
             }
             // Escape (), |, {} when not escaped and outside brackets
             '(' | ')' | '|' | '{' | '}' if !inside_brackets && !is_escaped => {
                 result.push('\\');
                 result.push(c);
+                last_char = Some(c);
             }
-            // Escape ^ when not at start and not already escaped
-            '^' if !inside_brackets && !is_escaped && !result.is_empty() => {
-                result.push('\\');
+            '^' if !inside_brackets && !is_escaped => {
+                let is_anchor_position = result.is_empty() || matches!(last_char, Some('(' | '|'));
+                if !is_anchor_position {
+                    result.push('\\');
+                }
                 result.push(c);
+                last_char = Some(c);
             }
-            // Escape $ when not at end and not already escaped
-            '$' if !inside_brackets && !is_escaped && chars.peek().is_some() => {
-                result.push('\\');
+            '$' if !inside_brackets && !is_escaped => {
+                let next_is_anchor_position = match chars.peek() {
+                    None => true,
+                    Some(&')' | &'|') => true,
+                    Some(&'\\') => {
+                        // Peek two ahead to see if it's \) or \|
+                        let chars_vec: Vec<char> = chars.clone().take(2).collect();
+                        matches!(chars_vec.get(1), Some(&')' | &'|'))
+                    }
+                    _ => false,
+                };
+                if !next_is_anchor_position {
+                    result.push('\\');
+                }
                 result.push(c);
+                last_char = Some(c);
             }
             _ => {
                 result.push(c);
+                last_char = Some(c);
             }
         }
     }
@@ -470,11 +492,16 @@ mod tests_hybrid_flavor {
         assert_eq!(translate_regex_flavor(r"a^b"), r"a\^b");
         assert_eq!(translate_regex_flavor(r"a$b"), r"a\$b");
 
-        // Anchors inside groups (Should be reset by \(...\))
+        // Anchors inside groups (reset by \(...\) regardless of position)
         assert_eq!(translate_regex_flavor(r"\(^abc\)"), r"(^abc)");
+        assert_eq!(translate_regex_flavor(r"z\(^abc\)"), r"z(^abc)");
+        assert_eq!(translate_regex_flavor(r"\(abc$\)"), r"(abc$)");
+        assert_eq!(translate_regex_flavor(r"\(abc$\)z"), r"(abc$)z");
 
-        // Anchors inside alternation (Should be reset by \|)
+        // Anchors inside alternation (reset by \| regardless of position)
         assert_eq!(translate_regex_flavor(r"^a\|^b"), r"^a|^b");
+        assert_eq!(translate_regex_flavor(r"x\|^b"), r"x|^b");
+        assert_eq!(translate_regex_flavor(r"a$\|b$"), r"a$|b$");
     }
 
     #[test]
