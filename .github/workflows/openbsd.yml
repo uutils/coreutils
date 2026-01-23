@@ -1,6 +1,6 @@
 name: OpenBSD
 
-# spell-checker:ignore sshfs usesh vmactions taiki Swatinem esac fdescfs fdesc sccache nextest copyback logind bindgen libclang
+# spell-checker:ignore debuginfo sshfs usesh vmactions softdep taiki Swatinem esac fdescfs fdesc sccache nextest copyback logind bindgen libclang
 
 env:
   # * style job configuration
@@ -48,6 +48,8 @@ jobs:
           # Clean up disk space before installing packages
           df -h
           pkg_add curl sudo-- jq coreutils bash rust rust-clippy rust-rustfmt llvm--
+          sudo mount_mfs -s 4194304 -o softdep,noatime,async /tmp && sudo chmod 1777 /tmp
+          sudo mount -u -o softdep,noatime,async /
           rm -rf /usr/share/relink/* /usr/X11R6/* /usr/share/doc/* /usr/share/man/* &
           # Clean up package cache after installation
           pkg_delete -a &
@@ -57,8 +59,10 @@ jobs:
           # implementation modelled after ref: <https://github.com/rust-lang/rustup/pull/2783>
           # * NOTE: All steps need to be run in this block, otherwise, we are operating back on the mac host
           set -e
-          #
+          export CARGO_TARGET_DIR=/tmp/cargo-target
           export CARGO_INCREMENTAL=0
+          # Avoid filling disk space
+          export RUSTFLAGS="-C debuginfo=1 -C strip=symbols"
           TEST_USER=tester
           REPO_NAME=${GITHUB_WORKSPACE##*/}
           WORKSPACE_PARENT="/home/runner/work/${REPO_NAME}"
@@ -145,6 +149,8 @@ jobs:
           df -h
           rm -rf /usr/share/relink/* /usr/X11R6/* /usr/share/doc/* /usr/share/man/* &
           pkg_add curl gmake sudo-- jq rust llvm--
+          sudo mount_mfs -s 4194304 -o softdep,noatime,async /tmp && sudo chmod 1777 /tmp
+          sudo mount -u -o softdep,noatime,async /
           # Clean up package cache after installation
           pkg_delete -a &
           df -h
@@ -153,7 +159,7 @@ jobs:
           # implementation modelled after ref: <https://github.com/rust-lang/rustup/pull/2783>
           # * NOTE: All steps need to be run in this block, otherwise, we are operating back on the mac host
           set -e
-          #
+          export CARGO_TARGET_DIR=/tmp/cargo-target
           export CARGO_INCREMENTAL=0
           TEST_USER=tester
           REPO_NAME=${GITHUB_WORKSPACE##*/}
@@ -201,7 +207,7 @@ jobs:
           export RUST_BACKTRACE=1
           export CARGO_TERM_COLOR=always
           # Avoid filling disk space
-          export RUSTFLAGS="-C strip=symbols"
+          export RUSTFLAGS="-C debuginfo=1 -C strip=symbols"
           # Use cargo test since nextest might not support OpenBSD
           if (test -z "\$FAULT"); then cargo test --features '${{ matrix.job.features }}' || FAULT=1 ; fi
           # There is no systemd-logind on OpenBSD, so test all features except feat_systemd_logind

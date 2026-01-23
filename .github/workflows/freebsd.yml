@@ -44,6 +44,7 @@ jobs:
         prepare: pkg install -y curl sudo jq coreutils bash
         run: |
           ## Prepare, build, and test
+          sudo mount -u -o noatime,async /
           # implementation modelled after ref: <https://github.com/rust-lang/rustup/pull/2783>
           # * NOTE: All steps need to be run in this block, otherwise, we are operating back on the mac host
           set -e
@@ -135,6 +136,7 @@ jobs:
         prepare: pkg install -y curl gmake sudo jq
         run: |
           ## Prepare, build, and test
+          sudo mount -u -o noatime,async /
           # implementation modelled after ref: <https://github.com/rust-lang/rustup/pull/2783>
           # * NOTE: All steps need to be run in this block, otherwise, we are operating back on the mac host
           set -e
