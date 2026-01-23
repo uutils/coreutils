@@ -318,6 +318,7 @@ binary-heap-plus = "0.5.0"
 bstr = "1.9.1"
 bytecount = "0.6.8"
 byteorder = "1.5.0"
+cfg_aliases = "0.2.1"
 clap = { version = "4.5", features = ["wrap_help", "cargo", "color"] }
 clap_complete = "4.4"
 clap_mangen = "0.2"
@@ -415,6 +416,10 @@ uu_ls = { version = "0.6.0", path = "src/uu/ls" }
 uu_base32 = { version = "0.6.0", path = "src/uu/base32" }
 uu_checksum_common = { version = "0.6.0", path = "src/uu/checksum_common" }
 uutests = { version = "0.6.0", package = "uutests", path = "tests/uutests" }
+
+[build-dependencies]
+cfg_aliases.workspace = true
+phf_codegen.workspace = true
 
 [dependencies]
 clap_complete = { workspace = true, optional = true }
@@ -587,9 +592,6 @@ nix = { workspace = true, features = [
 ] }
 rlimit = { workspace = true }
 
-
-[build-dependencies]
-phf_codegen.workspace = true
 
 [[bin]]
 name = "coreutils"

@@ -542,6 +542,7 @@ name = "coreutils"
 version = "0.6.0"
 dependencies = [
  "bytecount",
+ "cfg_aliases",
  "clap",
  "clap_complete",
  "clap_mangen",
