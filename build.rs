@@ -14,6 +14,7 @@ use cfg_aliases::cfg_aliases;
 
 pub fn main() {
     cfg_aliases! {
+        external_libstdbuf: { feature = "feat_external_libstdbuf" },
         selinux: { all(feature = "feat_selinux", any(target_os = "android", target_os = "linux")) },
     }
 

@@ -15,7 +15,7 @@ fn invalid_input() {
     new_ucmd!().arg("-/").fails_with_code(125);
 }
 
-#[cfg(not(feature = "feat_external_libstdbuf"))]
+#[cfg(not(external_libstdbuf))]
 #[test]
 fn test_permission() {
     new_ucmd!()
@@ -27,7 +27,7 @@ fn test_permission() {
 
 // LD_DEBUG is not available on macOS, OpenBSD, Android, or musl
 #[cfg(all(
-    feature = "feat_external_libstdbuf",
+    external_libstdbuf,
     not(target_os = "windows"),
     not(target_os = "openbsd"),
     not(target_os = "macos"),
@@ -121,7 +121,7 @@ fn test_stdbuf_search_order_exe_dir_first() {
     );
 }
 
-#[cfg(not(feature = "feat_external_libstdbuf"))]
+#[cfg(not(external_libstdbuf))]
 #[test]
 fn test_no_such() {
     new_ucmd!()
