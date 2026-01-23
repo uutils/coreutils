@@ -19,6 +19,9 @@ workspace = true
 [lib]
 path = "src/stdbuf.rs"
 
+[build-dependencies]
+cfg_aliases.workspace = true
+
 [dependencies]
 clap = { workspace = true }
 libstdbuf = { package = "uu_stdbuf_libstdbuf", version = "0.6.0", path = "src/libstdbuf" }

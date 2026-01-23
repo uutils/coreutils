@@ -9,6 +9,8 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
+use cfg_aliases::cfg_aliases;
+
 #[cfg(any(
     target_os = "linux",
     target_os = "android",
@@ -32,6 +34,10 @@ mod platform {
 }
 
 fn main() {
+    cfg_aliases! {
+        external_libstdbuf: { feature = "feat_external_libstdbuf" },
+    }
+
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=src/libstdbuf/src/libstdbuf.rs");
 

@@ -4084,6 +4084,7 @@ dependencies = [
 name = "uu_stdbuf"
 version = "0.6.0"
 dependencies = [
+ "cfg_aliases",
  "clap",
  "fluent",
  "tempfile",

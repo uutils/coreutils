@@ -30,7 +30,7 @@ mod options {
 }
 
 #[cfg(all(
-    not(feature = "feat_external_libstdbuf"),
+    not(external_libstdbuf),
     any(
         target_os = "linux",
         target_os = "android",
@@ -42,10 +42,10 @@ mod options {
 ))]
 const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.so"));
 
-#[cfg(all(not(feature = "feat_external_libstdbuf"), target_vendor = "apple"))]
+#[cfg(all(not(external_libstdbuf), target_vendor = "apple"))]
 const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.dylib"));
 
-#[cfg(all(not(feature = "feat_external_libstdbuf"), target_os = "cygwin"))]
+#[cfg(all(not(external_libstdbuf), target_os = "cygwin"))]
 const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.dll"));
 
 enum BufferType {
@@ -158,7 +158,7 @@ fn set_command_env(command: &mut process::Command, buffer_name: &str, buffer_typ
     }
 }
 
-#[cfg(not(feature = "feat_external_libstdbuf"))]
+#[cfg(not(external_libstdbuf))]
 fn get_preload_env(tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
     use std::fs::File;
     use std::io::Write;
@@ -172,7 +172,7 @@ fn get_preload_env(tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
     Ok((preload.to_owned(), inject_path))
 }
 
-#[cfg(feature = "feat_external_libstdbuf")]
+#[cfg(external_libstdbuf)]
 fn get_preload_env(_tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
     let (preload, extension) = preload_strings()?;
 
