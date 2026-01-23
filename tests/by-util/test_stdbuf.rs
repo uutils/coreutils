@@ -15,7 +15,7 @@ fn invalid_input() {
     new_ucmd!().arg("-/").fails_with_code(125);
 }
 
-#[cfg(not(feature = "feat_external_libstdbuf"))]
+#[cfg(not(external_libstdbuf))]
 #[test]
 fn test_permission() {
     new_ucmd!()
@@ -30,7 +30,7 @@ fn test_permission() {
 // 1) search for libstdbuf next to the stdbuf binary, 2) then in LIBSTDBUF_DIR, 3) then system locations.
 // After implementing this, rework tests to provide a temporary symlink rather than depending on system state.
 
-#[cfg(feature = "feat_external_libstdbuf")]
+#[cfg(external_libstdbuf)]
 #[test]
 fn test_permission_external_missing_lib() {
     // When built with external libstdbuf, running stdbuf fails early if lib is not installed
@@ -41,7 +41,7 @@ fn test_permission_external_missing_lib() {
         .stderr_contains("External libstdbuf not found");
 }
 
-#[cfg(not(feature = "feat_external_libstdbuf"))]
+#[cfg(not(external_libstdbuf))]
 #[test]
 fn test_no_such() {
     new_ucmd!()
@@ -51,7 +51,7 @@ fn test_no_such() {
         .stderr_contains("No such file or directory");
 }
 
-#[cfg(feature = "feat_external_libstdbuf")]
+#[cfg(external_libstdbuf)]
 #[test]
 fn test_no_such_external_missing_lib() {
     // With external lib mode and missing installation, stdbuf fails before spawning the command
