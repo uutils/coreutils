@@ -223,10 +223,65 @@ fn buffer_tac(data: &[u8], before: bool, separator: &str) -> std::io::Result<()>
     Ok(())
 }
 
-// Make the regex flavor compatible with `regex` crate
+/// Make the regex flavor compatible with `regex` crate
+///
+/// Concretely:
+/// - Toggle escaping of (), |, {}
+/// - Escape ^ and $ when not at edges
+/// - Leave expressions inside [] unchanged
 fn translate_regex_flavor(regex: &str) -> String {
-    let result: String = regex.replace("\\|", "|");
-    // TODO: are more translations needed?
+    let mut result = String::new();
+    let mut chars = regex.chars().peekable();
+    let mut inside_brackets = false;
+    let mut prev_was_backslash = false;
+
+    while let Some(c) = chars.next() {
+        let is_escaped = prev_was_backslash;
+        prev_was_backslash = false;
+
+        match c {
+            // Unescape escaped (), |, {} when not inside brackets
+            '\\' if !inside_brackets && !is_escaped => {
+                if let Some(&next) = chars.peek() {
+                    if matches!(next, '(' | ')' | '|' | '{' | '}') {
+                        result.push(next);
+                        chars.next();
+                        continue;
+                    }
+                }
+
+                result.push('\\');
+                prev_was_backslash = true;
+            }
+            // Bracket tracking
+            '[' => {
+                inside_brackets = true;
+                result.push(c);
+            }
+            ']' => {
+                inside_brackets = false;
+                result.push(c);
+            }
+            // Escape (), |, {} when not escaped and outside brackets
+            '(' | ')' | '|' | '{' | '}' if !inside_brackets && !is_escaped => {
+                result.push('\\');
+                result.push(c);
+            }
+            // Escape ^ when not at start and not already escaped
+            '^' if !inside_brackets && !is_escaped && !result.is_empty() => {
+                result.push('\\');
+                result.push(c);
+            }
+            // Escape $ when not at end and not already escaped
+            '$' if !inside_brackets && !is_escaped && chars.peek().is_some() => {
+                result.push('\\');
+                result.push(c);
+            }
+            _ => {
+                result.push(c);
+            }
+        }
+    }
 
     result
 }
@@ -235,7 +290,10 @@ fn translate_regex_flavor(regex: &str) -> String {
 fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &str) -> UResult<()> {
     // Compile the regular expression pattern if it is provided.
     let maybe_pattern = if regex {
-        match regex::bytes::Regex::new(&translate_regex_flavor(separator)) {
+        match regex::bytes::RegexBuilder::new(&translate_regex_flavor(separator))
+            .multi_line(true)
+            .build()
+        {
             Ok(p) => Some(p),
             Err(e) => return Err(TacError::InvalidRegex(e).into()),
         }
@@ -366,4 +424,84 @@ fn try_mmap_path(path: &Path) -> Option<Mmap> {
     let mmap = unsafe { Mmap::map(&file).ok()? };
 
     Some(mmap)
+}
+
+#[cfg(test)]
+mod tests_hybrid_flavor {
+    use super::translate_regex_flavor;
+
+    #[test]
+    fn test_grouping_and_alternation() {
+        assert_eq!(translate_regex_flavor(r"\(abc\)"), r"(abc)");
+
+        assert_eq!(translate_regex_flavor(r"(abc)"), r"\(abc\)");
+
+        assert_eq!(translate_regex_flavor(r"a\|b"), r"a|b");
+
+        assert_eq!(translate_regex_flavor(r"a|b"), r"a\|b");
+    }
+
+    #[test]
+    fn test_quantifiers() {
+        assert_eq!(translate_regex_flavor("a+"), "a+");
+
+        assert_eq!(translate_regex_flavor("a*"), "a*");
+
+        assert_eq!(translate_regex_flavor("a?"), "a?");
+
+        assert_eq!(translate_regex_flavor(r"a\+"), r"a\+");
+
+        assert_eq!(translate_regex_flavor(r"a\*"), r"a\*");
+
+        assert_eq!(translate_regex_flavor(r"a\?"), r"a\?");
+    }
+
+    #[test]
+    fn test_intervals() {
+        assert_eq!(translate_regex_flavor(r"a\{1,3\}"), r"a{1,3}");
+
+        assert_eq!(translate_regex_flavor(r"a{1,3}"), r"a\{1,3\}");
+    }
+
+    #[test]
+    fn test_anchors_context() {
+        assert_eq!(translate_regex_flavor(r"^abc$"), r"^abc$");
+
+        assert_eq!(translate_regex_flavor(r"a^b"), r"a\^b");
+        assert_eq!(translate_regex_flavor(r"a$b"), r"a\$b");
+
+        // Anchors inside groups (Should be reset by \(...\))
+        assert_eq!(translate_regex_flavor(r"\(^abc\)"), r"(^abc)");
+
+        // Anchors inside alternation (Should be reset by \|)
+        assert_eq!(translate_regex_flavor(r"^a\|^b"), r"^a|^b");
+    }
+
+    #[test]
+    fn test_character_classes() {
+        assert_eq!(translate_regex_flavor(r"[a-z]"), r"[a-z]");
+
+        assert_eq!(translate_regex_flavor(r"[.]"), r"[.]");
+        assert_eq!(translate_regex_flavor(r"[+]"), r"[+]");
+
+        assert_eq!(translate_regex_flavor(r"[]abc]"), r"[]abc]");
+
+        assert_eq!(translate_regex_flavor(r"[^]abc]"), r"[^]abc]");
+    }
+
+    #[test]
+    fn test_complex_strings() {
+        assert_eq!(translate_regex_flavor(r"(\d+)[+*]"), r"\(\d+\)[+*]");
+
+        assert_eq!(translate_regex_flavor(r"\(\d+\)\{2\}"), r"(\d+){2}");
+    }
+
+    #[test]
+    fn test_edge_cases() {
+        assert_eq!(translate_regex_flavor(r"abc\"), r"abc\");
+
+        assert_eq!(translate_regex_flavor(r"\\"), r"\\");
+
+        assert_eq!(translate_regex_flavor(r"\^"), r"\^");
+    }
 }
