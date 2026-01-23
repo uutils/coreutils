@@ -336,13 +336,13 @@ icu_provider = "2.0.0"
 indicatif = "0.18.0"
 itertools = "0.14.0"
 jiff = "0.2.18"
-libc = "0.2.172"
+libc = "0.2.180"
 lscolors = { version = "0.21.0", default-features = false, features = [
   "gnu_legacy",
 ] }
 memchr = "2.7.2"
 memmap2 = "0.9.4"
-nix = { version = "0.30", default-features = false }
+nix = { version = "0.31.1", default-features = false }
 nom = "8.0.0"
 notify = { version = "=8.2.0", features = ["macos_kqueue"] }
 num-bigint = "0.4.4"
