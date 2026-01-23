@@ -567,7 +567,6 @@ nix = { workspace = true, features = [
   "user",
 ] }
 rlimit = "0.10.1"
-xattr.workspace = true
 
 # Used in test_uptime::test_uptime_with_file_containing_valid_boot_time_utmpx_record
 # to deserialize an utmpx struct into a binary file
