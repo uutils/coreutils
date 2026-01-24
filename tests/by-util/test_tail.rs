@@ -2742,12 +2742,12 @@ fn test_fifo() {
     not(target_os = "openbsd")
 ))]
 fn test_fifo_with_pid() {
-    use std::process::Command;
+    use std::process::{Command, Stdio};
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkfifo("FIFO");
 
-    let mut dummy = Command::new("sh").spawn().unwrap();
+    let mut dummy = Command::new("sh").stdin(Stdio::null()).spawn().unwrap();
     let pid = dummy.id();
 
     let mut child = ucmd

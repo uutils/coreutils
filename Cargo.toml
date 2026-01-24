@@ -154,7 +154,6 @@ feat_common_core = [
 # "feat_Tier1" == expanded set of utilities which can be built/run on the usual rust "Tier 1" target platforms (ref: <https://forge.rust-lang.org/release/platform-support.html>)
 feat_Tier1 = [
   "feat_common_core",
-  #
   "arch",
   "hostname",
   "nproc",
@@ -536,6 +535,7 @@ filetime.workspace = true
 glob.workspace = true
 jiff.workspace = true
 libc.workspace = true
+bytecount.workspace = true
 num-prime.workspace = true
 pretty_assertions = "1.4.0"
 rand.workspace = true
@@ -543,6 +543,7 @@ regex.workspace = true
 sha1 = { workspace = true, features = ["std"] }
 tempfile.workspace = true
 time = { workspace = true, features = ["local-offset"] }
+unicode-width.workspace = true
 unindent = "0.2.3"
 uutests.workspace = true
 uucore = { workspace = true, features = [
@@ -562,8 +563,8 @@ nix = { workspace = true, features = [
   "process",
   "signal",
   "socket",
-  "user",
   "term",
+  "user",
 ] }
 rlimit = "0.10.1"
 xattr.workspace = true

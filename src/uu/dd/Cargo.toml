@@ -32,8 +32,8 @@ thiserror = { workspace = true }
 fluent = { workspace = true }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
-signal-hook = { workspace = true }
 nix = { workspace = true, features = ["fs"] }
+signal-hook = { workspace = true }
 
 [[bin]]
 name = "dd"

@@ -47,10 +47,10 @@ jobs:
         prepare: |
           # Clean up disk space before installing packages
           df -h
-          rm -rf /usr/share/relink/* /usr/X11R6/* /usr/share/doc/* /usr/share/man/* || :
           pkg_add curl sudo-- jq coreutils bash rust rust-clippy rust-rustfmt llvm--
+          rm -rf /usr/share/relink/* /usr/X11R6/* /usr/share/doc/* /usr/share/man/* &
           # Clean up package cache after installation
-          pkg_delete -a || true
+          pkg_delete -a &
           df -h
         run: |
           ## Prepare, build, and test
@@ -137,15 +137,15 @@ jobs:
         usesh: true
         sync: rsync
         copyback: false
-        mem: 4096
+        mem: 6144
         # Install rust and build dependencies from OpenBSD packages (llvm provides libclang for bindgen)
         prepare: |
           # Clean up disk space before installing packages
           df -h
-          rm -rf /usr/share/relink/* /usr/X11R6/* /usr/share/doc/* /usr/share/man/* || :
+          rm -rf /usr/share/relink/* /usr/X11R6/* /usr/share/doc/* /usr/share/man/* &
           pkg_add curl gmake sudo-- jq rust llvm--
           # Clean up package cache after installation
-          pkg_delete -a || :
+          pkg_delete -a &
           df -h
         run: |
           ## Prepare, build, and test
@@ -194,7 +194,7 @@ jobs:
           set +e
           cd "${WORKSPACE}"
           unset FAULT
-          cargo build || FAULT=1
+          # openbsd is very slow. Omit duplicated cargo build and do test only
           export PATH=~/.cargo/bin:${PATH}
           export RUST_BACKTRACE=1
           export CARGO_TERM_COLOR=always
@@ -208,7 +208,7 @@ jobs:
             cargo test --features "\$UUCORE_FEATURES" -p uucore || FAULT=1
           fi
           # Test building with make
-          if (test -z "\$FAULT"); then make || FAULT=1 ; fi
+          if (test -z "\$FAULT"); then make MULTICALL=Y || FAULT=1 ; fi
           # Clean to avoid to rsync back the files and free up disk space
           cargo clean
           # Additional cleanup to free disk space

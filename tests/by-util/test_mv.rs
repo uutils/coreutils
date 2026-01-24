@@ -626,11 +626,17 @@ fn test_mv_symlink_into_target() {
 #[cfg(target_os = "linux")]
 #[test]
 fn test_mv_broken_symlink_to_another_fs() {
+    use tempfile::TempDir;
+
     let scene = TestScenario::new(util_name!());
 
     scene.fixtures.mkdir("foo");
     scene.fixtures.symlink_file("missing", "foo/dangling");
-    let dest = "/dev/shm/foo";
+
+    let other_fs_tempdir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let dest = other_fs_tempdir.path().join("foo");
+
     scene
         .ucmd()
         .arg("foo")
