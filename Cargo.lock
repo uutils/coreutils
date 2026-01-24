@@ -652,7 +652,6 @@ dependencies = [
  "walkdir",
  "wincode",
  "wincode-derive",
- "xattr",
  "zip",
 ]
 
