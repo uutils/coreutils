@@ -358,6 +358,7 @@ rand = { version = "0.9.0", features = ["small_rng"] }
 rand_core = "0.9.0"
 rayon = "1.10"
 regex = "1.10.4"
+rlimit = "0.10.1"
 rstest = "0.26.0"
 rust-ini = "0.21.0"
 same-file = "1.0.6"
@@ -566,7 +567,7 @@ nix = { workspace = true, features = [
   "term",
   "user",
 ] }
-rlimit = "0.10.1"
+rlimit = { workspace = true }
 
 # Used in test_uptime::test_uptime_with_file_containing_valid_boot_time_utmpx_record
 # to deserialize an utmpx struct into a binary file
