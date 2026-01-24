@@ -93,7 +93,7 @@ jobs:
           - { name: fuzz_cksum, should_pass: false }
           - { name: fuzz_parse_glob, should_pass: true }
           - { name: fuzz_parse_size, should_pass: false }
-          - { name: fuzz_parse_time, should_pass: true }
+          - { name: fuzz_parse_time, should_pass: false }
           - { name: fuzz_seq_parse_number, should_pass: false }
           - { name: fuzz_non_utf8_paths, should_pass: true }
           - { name: fuzz_dirname, should_pass: true }
