@@ -3,22 +3,15 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) sbytes slen dlen memmem memmap Mmap mmap SIGBUS
+// spell-checker:ignore (ToDO) sbytes slen dlen memmem MMAP SIGBUS
 
 mod error;
 
 use clap::{Arg, ArgAction, Command};
 use memchr::memmem;
-use memmap2::Mmap;
 use std::ffi::OsString;
 use std::io::{BufWriter, Read, Write, stdin, stdout};
-use std::{
-    fs::{File, read},
-    io::copy,
-    path::Path,
-};
-#[cfg(unix)]
-use uucore::error::set_exit_code;
+use std::{fs::read, path::Path};
 use uucore::error::{UError, UResult};
 use uucore::{format_usage, show};
 
@@ -236,42 +229,18 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &str) -> UR
     };
 
     for filename in filenames {
-        let mmap;
         let buf;
 
         let data: &[u8] = if filename == "-" {
-            #[cfg(unix)]
-            if uucore::signals::stdin_was_closed() {
-                let e: Box<dyn UError> = TacError::ReadError(
-                    OsString::from("-"),
-                    std::io::Error::from_raw_os_error(libc::EBADF),
-                )
-                .into();
+            let mut buf1 = Vec::new();
+            // Cannot use MMAP as SIGBUS will be thrown if the file gets truncated while read
+            if let Err(e) = stdin().read_to_end(&mut buf1) {
+                let e: Box<dyn UError> = TacError::ReadError(OsString::from("stdin"), e).into();
                 show!(e);
-                set_exit_code(1);
                 continue;
             }
-            if let Some(mmap1) = try_mmap_stdin() {
-                mmap = mmap1;
-                &mmap
-            } else {
-                // Copy stdin to a temp file (respects TMPDIR), then mmap it.
-                // Falls back to Vec buffer if temp file creation fails (e.g., bad TMPDIR).
-                match buffer_stdin() {
-                    Ok(StdinData::Mmap(mmap1)) => {
-                        mmap = mmap1;
-                        &mmap
-                    }
-                    Ok(StdinData::Vec(buf1)) => {
-                        buf = buf1;
-                        &buf
-                    }
-                    Err(e) => {
-                        show!(TacError::ReadError(OsString::from("stdin"), e));
-                        continue;
-                    }
-                }
-            }
+            buf = buf1;
+            &buf
         } else {
             let path = Path::new(filename);
             if path.is_dir() {
@@ -287,20 +256,15 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &str) -> UR
                 continue;
             }
 
-            if let Some(mmap1) = try_mmap_path(path) {
-                mmap = mmap1;
-                &mmap
-            } else {
-                match read(path) {
-                    Ok(buf1) => {
-                        buf = buf1;
-                        &buf
-                    }
-                    Err(e) => {
-                        let e: Box<dyn UError> = TacError::ReadError(filename.clone(), e).into();
-                        show!(e);
-                        continue;
-                    }
+            match read(path) {
+                Ok(buf1) => {
+                    buf = buf1;
+                    &buf
+                }
+                Err(e) => {
+                    let e: Box<dyn UError> = TacError::ReadError(filename.clone(), e).into();
+                    show!(e);
+                    continue;
                 }
             }
         };
@@ -318,44 +282,4 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &str) -> UR
         }
     }
     Ok(())
-}
-
-fn try_mmap_stdin() -> Option<Mmap> {
-    // SAFETY: If the file is truncated while we map it, SIGBUS will be raised
-    // and our process will be terminated, thus preventing access of invalid memory.
-    unsafe { Mmap::map(&stdin()).ok() }
-}
-
-enum StdinData {
-    Mmap(Mmap),
-    Vec(Vec<u8>),
-}
-
-/// Copy stdin to a temp file, then memory-map it.
-/// Falls back to reading directly into memory if temp file creation fails.
-fn buffer_stdin() -> std::io::Result<StdinData> {
-    // Try to create a temp file (respects TMPDIR)
-    if let Ok(mut tmp) = tempfile::tempfile() {
-        // Temp file created - copy stdin to it, then read back
-        copy(&mut stdin(), &mut tmp)?;
-        // SAFETY: If the file is truncated while we map it, SIGBUS will be raised
-        // and our process will be terminated, thus preventing access of invalid memory.
-        let mmap = unsafe { Mmap::map(&tmp)? };
-        Ok(StdinData::Mmap(mmap))
-    } else {
-        // Fall back to reading directly into memory (e.g., bad TMPDIR)
-        let mut buf = Vec::new();
-        stdin().read_to_end(&mut buf)?;
-        Ok(StdinData::Vec(buf))
-    }
-}
-
-fn try_mmap_path(path: &Path) -> Option<Mmap> {
-    let file = File::open(path).ok()?;
-
-    // SAFETY: If the file is truncated while we map it, SIGBUS will be raised
-    // and our process will be terminated, thus preventing access of invalid memory.
-    let mmap = unsafe { Mmap::map(&file).ok()? };
-
-    Some(mmap)
 }
