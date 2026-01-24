@@ -37,7 +37,7 @@ uucore = { workspace = true, features = [
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true, features = ["process", "signal", "term", "user"] }
-rlimit = "0.10.1"
+rlimit = { workspace = true }
 
 [target.'cfg(all(unix, not(any(target_os = "macos", target_os = "openbsd"))))'.dependencies]
 xattr = { workspace = true }
