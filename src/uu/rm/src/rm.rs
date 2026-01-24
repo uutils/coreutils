@@ -551,24 +551,8 @@ fn is_writable_metadata(metadata: &Metadata) -> bool {
     (mode & 0o200) > 0
 }
 
-/// Whether the given file or directory is writable.
-#[cfg(unix)]
-fn is_writable(path: &Path) -> bool {
-    match fs::metadata(path) {
-        Err(_) => false,
-        Ok(metadata) => is_writable_metadata(&metadata),
-    }
-}
-
 #[cfg(not(unix))]
 fn is_writable_metadata(_metadata: &Metadata) -> bool {
-    true
-}
-
-/// Whether the given file or directory is writable.
-#[cfg(not(unix))]
-fn is_writable(_path: &Path) -> bool {
-    // TODO Not yet implemented.
     true
 }
 
