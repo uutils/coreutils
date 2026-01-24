@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly
-// spell-checker:ignore nohash strtime clocale
+// spell-checker:ignore nohash strtime clocale oneline
 
 #[cfg(unix)]
 use fnv::FnvHashMap as HashMap;
