@@ -1307,7 +1307,6 @@ fn parse_path_args(
     };
 
     if options.strip_trailing_slashes {
-        #[allow(clippy::assigning_clones)]
         for source in &mut paths {
             *source = source.components().as_path().to_owned();
         }
@@ -1791,7 +1790,7 @@ pub(crate) fn copy_attributes(
         Ok(())
     })?;
 
-    #[cfg(all(feature = "selinux", target_os = "linux"))]
+    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
     handle_preserve(&attributes.context, || -> CopyResult<()> {
         // Get the source context and apply it to the destination
         if let Ok(context) = selinux::SecurityContext::of_path(source, false, false) {
@@ -2587,7 +2586,7 @@ fn copy_file(
         copy_attributes(source, dest, &options.attributes)?;
     }
 
-    #[cfg(all(feature = "selinux", target_os = "linux"))]
+    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
     if options.set_selinux_context && uucore::selinux::is_selinux_enabled() {
         // Set the given selinux permissions on the copied file.
         if let Err(e) =

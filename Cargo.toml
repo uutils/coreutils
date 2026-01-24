@@ -154,7 +154,6 @@ feat_common_core = [
 # "feat_Tier1" == expanded set of utilities which can be built/run on the usual rust "Tier 1" target platforms (ref: <https://forge.rust-lang.org/release/platform-support.html>)
 feat_Tier1 = [
   "feat_common_core",
-  #
   "arch",
   "hostname",
   "nproc",
@@ -338,7 +337,6 @@ indicatif = "0.18.0"
 itertools = "0.14.0"
 jiff = "0.2.18"
 libc = "0.2.172"
-linux-raw-sys = "0.12"
 lscolors = { version = "0.21.0", default-features = false, features = [
   "gnu_legacy",
 ] }
@@ -360,6 +358,7 @@ rand = { version = "0.9.0", features = ["small_rng"] }
 rand_core = "0.9.0"
 rayon = "1.10"
 regex = "1.10.4"
+rlimit = "0.10.1"
 rstest = "0.26.0"
 rust-ini = "0.21.0"
 same-file = "1.0.6"
@@ -537,6 +536,7 @@ filetime.workspace = true
 glob.workspace = true
 jiff.workspace = true
 libc.workspace = true
+bytecount.workspace = true
 num-prime.workspace = true
 pretty_assertions = "1.4.0"
 rand.workspace = true
@@ -544,6 +544,7 @@ regex.workspace = true
 sha1 = { workspace = true, features = ["std"] }
 tempfile.workspace = true
 time = { workspace = true, features = ["local-offset"] }
+unicode-width.workspace = true
 unindent = "0.2.3"
 uutests.workspace = true
 uucore = { workspace = true, features = [
@@ -563,16 +564,14 @@ nix = { workspace = true, features = [
   "process",
   "signal",
   "socket",
-  "user",
   "term",
+  "user",
 ] }
-rlimit = "0.10.1"
-xattr.workspace = true
+rlimit = { workspace = true }
 
 # Used in test_uptime::test_uptime_with_file_containing_valid_boot_time_utmpx_record
 # to deserialize an utmpx struct into a binary file
 [target.'cfg(all(target_family= "unix",not(target_os = "macos")))'.dev-dependencies]
-serde = { version = "1.0.202", features = ["derive"] }
 wincode = "0.2.5"
 wincode-derive = "0.2.3"
 
@@ -662,7 +661,6 @@ needless_pass_by_value = "allow"             # 16
 float_cmp = "allow"                          # 12
 items_after_statements = "allow"             # 11
 return_self_not_must_use = "allow"           # 8
-needless_continue = "allow"                  # 6
 inline_always = "allow"                      # 6
 fn_params_excessive_bools = "allow"          # 6
 used_underscore_items = "allow"              # 2
@@ -680,3 +678,6 @@ format_push_string = "allow"
 flat_map_option = "allow"
 from_iter_instead_of_collect = "allow"
 large_types_passed_by_value = "allow"
+
+[workspace.metadata.cargo-shear]
+ignored = ["fluent", "libstdbuf"]

@@ -201,7 +201,7 @@ fn read_and_discard<R: Read>(reader: &mut R, n: u64, buf_size: usize) -> io::Res
                 total += bytes_read as u64;
                 remaining -= bytes_read as u64;
             }
-            Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
             Err(e) => return Err(e),
         }
     }
@@ -1520,6 +1520,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .get_many::<String>(options::OPERANDS)
             .unwrap_or_default(),
     )?;
+
+    #[cfg(unix)]
+    if uucore::signals::stderr_was_closed() && settings.status != Some(StatusLevel::None) {
+        return Err(USimpleError::new(1, "write error"));
+    }
 
     let i = match settings.infile {
         #[cfg(unix)]

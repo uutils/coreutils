@@ -1,6 +1,6 @@
 name: FreeBSD
 
-# spell-checker:ignore sshfs usesh vmactions taiki Swatinem esac fdescfs fdesc sccache nextest copyback logind
+# spell-checker:ignore sshfs usesh vmactions taiki Swatinem esac fdescfs fdesc nextest copyback logind
 
 env:
   # * style job configuration
@@ -30,18 +30,10 @@ jobs:
       matrix:
         job:
           - { os: ubuntu-24.04 , features: unix }
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
     steps:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.9
-      with:
-        disable_annotations: true
     - name: Prepare, build and test
       uses: vmactions/freebsd-vm@v1.2.9
       with:
@@ -127,19 +119,12 @@ jobs:
           - { os: ubuntu-24.04 , features: unix }
     env:
       mem: 4096
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
     steps:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - name: Avoid no space left on device (Ubuntu runner)
       run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android &
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.9
-      with:
-        disable_annotations: true
     - name: Prepare, build and test
       uses: vmactions/freebsd-vm@v1.2.9
       with:

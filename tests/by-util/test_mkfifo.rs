@@ -44,6 +44,22 @@ fn test_create_one_fifo_with_invalid_mode() {
 }
 
 #[test]
+fn test_create_one_fifo_with_non_file_permission_mode() {
+    new_ucmd!()
+        .arg("abcd")
+        .arg("-m")
+        .arg("1777")
+        .fails()
+        .stderr_is("mkfifo: mode must specify only file permission bits\n");
+    new_ucmd!()
+        .arg("abcd")
+        .arg("-m")
+        .arg("1999")
+        .fails()
+        .stderr_contains("invalid mode");
+}
+
+#[test]
 fn test_create_multiple_fifos() {
     new_ucmd!()
         .arg("abcde")
@@ -146,7 +162,7 @@ fn test_create_fifo_permission_denied() {
         .arg("-m")
         .arg("666")
         .fails()
-        .stderr_contains("mkfifo: cannot create fifo");
+        .stderr_contains("mkfifo: cannot create fifo '{named_pipe}': File exists\n");
 }
 
 #[test]
@@ -195,4 +211,30 @@ fn test_mkfifo_selinux_invalid() {
             at.remove(dest);
         }
     }
+}
+
+#[test]
+fn test_mkfifo_permission_unchanged_when_failed() {
+    use uucore::fs::display_permissions;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file_name = "test_file";
+    at.write(file_name, "content");
+    at.set_mode(file_name, 0o600);
+
+    let err_msg = format!("mkfifo: cannot create fifo '{file_name}': File exists\n");
+
+    scene
+        .ucmd()
+        .arg(file_name)
+        .arg("-m")
+        .arg("666")
+        .fails()
+        .stderr_is(err_msg.as_str());
+    let metadata = std::fs::metadata(at.subdir.join(file_name)).unwrap();
+    let permissions = display_permissions(&metadata, true);
+    let expected = "-rw-------";
+    assert_eq!(permissions, expected.to_string());
 }

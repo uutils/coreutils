@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars/api) fcntl setrlimit setitimer rubout pollable sysconf pgrp pfds revents POLLRDBAND POLLERR
+// spell-checker:ignore (vars/api) fcntl setrlimit setitimer rubout pollable sysconf pgrp GETFD pfds revents POLLRDBAND POLLERR
 // spell-checker:ignore (vars/signals) ABRT ALRM CHLD SEGV SIGABRT SIGALRM SIGBUS SIGCHLD SIGCONT SIGDANGER SIGEMT SIGFPE SIGHUP SIGILL SIGINFO SIGINT SIGIO SIGIOT SIGKILL SIGMIGRATE SIGMSG SIGPIPE SIGPRE SIGPROF SIGPWR SIGQUIT SIGSEGV SIGSTOP SIGSYS SIGTALRM SIGTERM SIGTRAP SIGTSTP SIGTHR SIGTTIN SIGTTOU SIGURG SIGUSR SIGVIRT SIGVTALRM SIGWINCH SIGXCPU SIGXFSZ STKFLT PWR THR TSTP TTIN TTOU VIRT VTALRM XCPU XFSZ SIGCLD SIGPOLL SIGWAITING SIGAIOCANCEL SIGLWP SIGFREEZE SIGTHAW SIGCANCEL SIGLOST SIGXRES SIGJVM SIGRTMIN SIGRT SIGRTMAX TALRM AIOCANCEL XRES RTMIN RTMAX LTOSTOP
 
 //! This module provides a way to handle signals in a platform-independent way.
@@ -410,12 +410,21 @@ pub fn signal_name_by_value(signal_value: usize) -> Option<&'static str> {
     ALL_SIGNALS.get(signal_value).copied()
 }
 
-/// Returns the default signal value.
+/// Restores SIGPIPE to default behavior (process terminates on broken pipe).
 #[cfg(unix)]
 pub fn enable_pipe_errors() -> Result<(), Errno> {
     // We pass the error as is, the return value would just be Ok(SigDfl), so we can safely ignore it.
     // SAFETY: this function is safe as long as we do not use a custom SigHandler -- we use the default one.
     unsafe { signal(SIGPIPE, SigDfl) }.map(|_| ())
+}
+
+/// Ignores SIGPIPE signal (broken pipe errors are returned instead of terminating).
+/// Use this to override the default SIGPIPE handling when you need to handle
+/// broken pipe errors gracefully (e.g., tee with --output-error).
+#[cfg(unix)]
+pub fn disable_pipe_errors() -> Result<(), Errno> {
+    // SAFETY: this function is safe as long as we do not use a custom SigHandler -- we use the default one.
+    unsafe { signal(SIGPIPE, SigIgn) }.map(|_| ())
 }
 
 /// Ignores the SIGINT signal.
@@ -426,23 +435,49 @@ pub fn ignore_interrupts() -> Result<(), Errno> {
     unsafe { signal(SIGINT, SigIgn) }.map(|_| ())
 }
 
-// SIGPIPE state capture - captures whether SIGPIPE was ignored at process startup
+// Detect closed stdin/stdout before Rust reopens them as /dev/null (see issue #2873)
 #[cfg(unix)]
 use std::sync::atomic::{AtomicBool, Ordering};
 
 #[cfg(unix)]
+static STDIN_WAS_CLOSED: AtomicBool = AtomicBool::new(false);
+#[cfg(unix)]
+static STDOUT_WAS_CLOSED: AtomicBool = AtomicBool::new(false);
+#[cfg(unix)]
+static STDERR_WAS_CLOSED: AtomicBool = AtomicBool::new(false);
+
+// SIGPIPE state capture - captures whether SIGPIPE was ignored at process startup
+#[cfg(unix)]
 static SIGPIPE_WAS_IGNORED: AtomicBool = AtomicBool::new(false);
 
-/// Captures SIGPIPE state at process initialization, before main() runs.
+/// Captures stdio and SIGPIPE state at process initialization, before main() runs.
 ///
 /// # Safety
-/// Called from `.init_array` before main(). Only reads current SIGPIPE handler state.
+/// Called from `.init_array` before main(). Only reads current state.
 #[cfg(unix)]
-pub unsafe extern "C" fn capture_sigpipe_state() {
+#[allow(clippy::missing_safety_doc)]
+pub unsafe extern "C" fn capture_startup_state() {
     use nix::libc;
     use std::mem::MaybeUninit;
     use std::ptr;
 
+    // Capture stdio state
+    unsafe {
+        STDIN_WAS_CLOSED.store(
+            libc::fcntl(libc::STDIN_FILENO, libc::F_GETFD) == -1,
+            Ordering::Relaxed,
+        );
+        STDOUT_WAS_CLOSED.store(
+            libc::fcntl(libc::STDOUT_FILENO, libc::F_GETFD) == -1,
+            Ordering::Relaxed,
+        );
+        STDERR_WAS_CLOSED.store(
+            libc::fcntl(libc::STDERR_FILENO, libc::F_GETFD) == -1,
+            Ordering::Relaxed,
+        );
+    }
+
+    // Capture SIGPIPE state
     let mut current = MaybeUninit::<libc::sigaction>::uninit();
     // SAFETY: sigaction with null new-action just queries current state
     if unsafe { libc::sigaction(libc::SIGPIPE, ptr::null(), current.as_mut_ptr()) } == 0 {
@@ -452,29 +487,59 @@ pub unsafe extern "C" fn capture_sigpipe_state() {
     }
 }
 
-/// Initializes SIGPIPE state capture. Call once at crate root level.
+/// Initializes startup state capture. Call once at crate root level.
 #[macro_export]
 #[cfg(unix)]
-macro_rules! init_sigpipe_capture {
+macro_rules! init_startup_state_capture {
     () => {
         #[cfg(not(target_os = "macos"))]
         #[used]
         #[unsafe(link_section = ".init_array")]
-        static CAPTURE_SIGPIPE_STATE: unsafe extern "C" fn() =
-            $crate::signals::capture_sigpipe_state;
+        static CAPTURE_STARTUP_STATE: unsafe extern "C" fn() =
+            $crate::signals::capture_startup_state;
 
         #[cfg(target_os = "macos")]
         #[used]
         #[unsafe(link_section = "__DATA,__mod_init_func")]
-        static CAPTURE_SIGPIPE_STATE: unsafe extern "C" fn() =
-            $crate::signals::capture_sigpipe_state;
+        static CAPTURE_STARTUP_STATE: unsafe extern "C" fn() =
+            $crate::signals::capture_startup_state;
     };
 }
 
 #[macro_export]
 #[cfg(not(unix))]
-macro_rules! init_sigpipe_capture {
+macro_rules! init_startup_state_capture {
     () => {};
+}
+
+#[cfg(unix)]
+pub fn stdin_was_closed() -> bool {
+    STDIN_WAS_CLOSED.load(Ordering::Relaxed)
+}
+
+#[cfg(not(unix))]
+pub const fn stdin_was_closed() -> bool {
+    false
+}
+
+#[cfg(unix)]
+pub fn stdout_was_closed() -> bool {
+    STDOUT_WAS_CLOSED.load(Ordering::Relaxed)
+}
+
+#[cfg(not(unix))]
+pub const fn stdout_was_closed() -> bool {
+    false
+}
+
+#[cfg(unix)]
+pub fn stderr_was_closed() -> bool {
+    STDERR_WAS_CLOSED.load(Ordering::Relaxed)
+}
+
+#[cfg(not(unix))]
+pub const fn stderr_was_closed() -> bool {
+    false
 }
 
 /// Returns whether SIGPIPE was ignored at process startup.

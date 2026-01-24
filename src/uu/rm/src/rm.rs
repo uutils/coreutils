@@ -45,6 +45,8 @@ enum RmError {
     UseNoPreserveRoot,
     #[error("{}", translate!("rm-error-refusing-to-remove-directory", "path" => _0.quote()))]
     RefusingToRemoveDirectory(OsString),
+    #[error("{}", translate!("rm-error-may-not-abbreviate-no-preserve-root"))]
+    MayNotAbbreviateNoPreserveRoot,
 }
 
 impl UError for RmError {}
@@ -200,7 +202,8 @@ static ARG_FILES: &str = "files";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    let args: Vec<OsString> = args.collect();
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args.iter())?;
 
     let files: Vec<_> = matches
         .get_many::<OsString>(ARG_FILES)
@@ -253,6 +256,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             None
         },
     };
+
+    // manually parse all args to verify --no-preserve-root did not get abbreviated (clap does
+    // allow this)
+    if !options.preserve_root && !args.iter().any(|arg| arg == "--no-preserve-root") {
+        return Err(RmError::MayNotAbbreviateNoPreserveRoot.into());
+    }
+
     if options.interactive == InteractiveMode::Once && (options.recursive || files.len() > 3) {
         let msg: String = format!(
             "remove {} {}{}",
@@ -828,7 +838,9 @@ fn path_is_current_or_parent_directory(path: &Path) -> bool {
     let dir_separator = MAIN_SEPARATOR as u8;
     if let Ok(path_bytes) = path_str {
         return path_bytes == ([b'.'])
+            || path_bytes == ([b'.', dir_separator])
             || path_bytes == ([b'.', b'.'])
+            || path_bytes == ([b'.', b'.', dir_separator])
             || path_bytes.ends_with(&[dir_separator, b'.'])
             || path_bytes.ends_with(&[dir_separator, b'.', b'.'])
             || path_bytes.ends_with(&[dir_separator, b'.', dir_separator])

@@ -26,6 +26,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mode = calculate_mode(matches.get_one::<String>(options::MODE))
         .map_err(|e| USimpleError::new(1, translate!("mkfifo-error-invalid-mode", "error" => e)))?;
 
+    // Check if mode contains special bits
+    let non_file_permission_bits = 0o7000; // setuid, setgid, sticky bits
+    if mode & non_file_permission_bits != 0 {
+        return Err(USimpleError::new(
+            1,
+            translate!("mkfifo-error-non-file-permission"),
+        ));
+    }
+
     let fifos: Vec<String> = match matches.get_many::<String>(options::FIFO) {
         Some(v) => v.cloned().collect(),
         None => {
@@ -50,10 +59,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 1,
                 translate!("mkfifo-error-cannot-create-fifo", "path" => f.quote()),
             ));
+            continue;
         }
 
         // Apply SELinux context if requested
-        #[cfg(all(feature = "selinux", target_os = "linux"))]
+        #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
         {
             // Extract the SELinux related flags and options
             let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);

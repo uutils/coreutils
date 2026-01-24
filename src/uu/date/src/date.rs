@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres AWST ACST AEST
+// spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres AWST ACST AEST foobarbaz
 
 mod locale;
 
@@ -11,6 +11,7 @@ use clap::{Arg, ArgAction, Command};
 use jiff::fmt::strtime::{self, BrokenDownTime, Config, PosixCustom};
 use jiff::tz::{TimeZone, TimeZoneDatabase};
 use jiff::{Timestamp, Zoned};
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
@@ -128,6 +129,42 @@ enum DayDelta {
     Previous,
     /// The date advances to the next day.
     Next,
+}
+
+/// Strip parenthesized comments from a date string.
+///
+/// GNU date removes balanced parentheses and their content, treating them as comments.
+/// If parentheses are unbalanced, everything from the unmatched '(' onwards is ignored.
+///
+/// Examples:
+/// - "2026(comment)-01-05" -> "2026-01-05"
+/// - "1(ignore comment to eol" -> "1"
+/// - "(" -> ""
+/// - "((foo)2026-01-05)" -> ""
+fn strip_parenthesized_comments(input: &str) -> Cow<'_, str> {
+    if !input.contains('(') {
+        return Cow::Borrowed(input);
+    }
+
+    let mut result = String::with_capacity(input.len());
+    let mut depth = 0;
+
+    for c in input.chars() {
+        match c {
+            '(' => {
+                depth += 1;
+            }
+            ')' if depth > 0 => {
+                depth -= 1;
+            }
+            _ if depth == 0 => {
+                result.push(c);
+            }
+            _ => {}
+        }
+    }
+
+    Cow::Owned(result)
 }
 
 /// Parse military timezone with optional hour offset.
@@ -286,7 +323,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Iterate over all dates - whether it's a single date or a file.
     let dates: Box<dyn Iterator<Item = _>> = match settings.date_source {
         DateSource::Human(ref input) => {
+            // GNU compatibility (Comments in parentheses)
+            let input = strip_parenthesized_comments(input);
             let input = input.trim();
+
             // GNU compatibility (Empty string):
             // An empty string (or whitespace-only) should be treated as midnight today.
             let is_empty_or_whitespace = input.is_empty();
@@ -886,5 +926,39 @@ mod tests {
         assert_eq!(parse_military_timezone_with_offset(""), None); // Empty
         assert_eq!(parse_military_timezone_with_offset("m999"), None); // Too long
         assert_eq!(parse_military_timezone_with_offset("9m"), None); // Starts with digit
+    }
+
+    #[test]
+    fn test_strip_parenthesized_comments() {
+        assert_eq!(strip_parenthesized_comments("hello"), "hello");
+        assert_eq!(strip_parenthesized_comments("2026-01-05"), "2026-01-05");
+        assert_eq!(strip_parenthesized_comments("("), "");
+        assert_eq!(strip_parenthesized_comments("1(comment"), "1");
+        assert_eq!(
+            strip_parenthesized_comments("2026-01-05(this is a comment"),
+            "2026-01-05"
+        );
+        assert_eq!(
+            strip_parenthesized_comments("2026(comment)-01-05"),
+            "2026-01-05"
+        );
+        assert_eq!(strip_parenthesized_comments("()"), "");
+        assert_eq!(strip_parenthesized_comments("((foo)2026-01-05)"), "");
+
+        // These cases test the balanced parentheses removal feature
+        // which extends beyond what GNU date strictly supports
+        assert_eq!(strip_parenthesized_comments("a(b)c"), "ac");
+        assert_eq!(strip_parenthesized_comments("a(b)c(d)e"), "ace");
+        assert_eq!(strip_parenthesized_comments("(a)(b)"), "");
+
+        // When parentheses are unmatched, processing stops at the unmatched opening paren
+        // In this case "a(b)c(d", the (b) is balanced but (d is unmatched
+        // We process "a(b)c" and stop at the unmatched "(d"
+        assert_eq!(strip_parenthesized_comments("a(b)c(d"), "ac");
+
+        // Additional edge cases for nested and complex parentheses
+        assert_eq!(strip_parenthesized_comments("a(b(c)d)e"), "ae"); // Nested balanced
+        assert_eq!(strip_parenthesized_comments("a(b(c)d"), "a"); // Nested unbalanced
+        assert_eq!(strip_parenthesized_comments("a(b)c(d)e(f"), "ace"); // Multiple groups, last unmatched
     }
 }

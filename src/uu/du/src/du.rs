@@ -1080,6 +1080,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (print_tx, rx) = mpsc::channel::<UResult<StatPrintInfo>>();
     let printing_thread = thread::spawn(move || stat_printer.print_stats(&rx));
 
+    // Check existence of path provided in argument
+    let mut seen_inodes: HashSet<FileInfo> = HashSet::new();
+
     'loop_file: for path in files {
         // Skip if we don't want to ignore anything
         if !&traversal_options.excludes.is_empty() {
@@ -1098,9 +1101,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
         }
 
-        // Check existence of path provided in argument
-        let mut seen_inodes: HashSet<FileInfo> = HashSet::new();
-
         // Determine which traversal method to use
         #[cfg(all(unix, not(target_os = "redox")))]
         let use_safe_traversal = traversal_options.dereference != Deref::All;
@@ -1114,6 +1114,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 // Pre-populate seen_inodes with the starting directory to detect cycles
                 if let Ok(stat) = Stat::new(&path, None, &traversal_options) {
                     if let Some(inode) = stat.inode {
+                        if !traversal_options.count_links && seen_inodes.contains(&inode) {
+                            continue 'loop_file;
+                        }
                         seen_inodes.insert(inode);
                     }
                 }
@@ -1147,6 +1150,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             // Use regular traversal (non-Linux or when -L is used)
             if let Ok(stat) = Stat::new(&path, None, &traversal_options) {
                 if let Some(inode) = stat.inode {
+                    if !traversal_options.count_links && seen_inodes.contains(&inode) {
+                        continue 'loop_file;
+                    }
                     seen_inodes.insert(inode);
                 }
                 let stat = du_regular(

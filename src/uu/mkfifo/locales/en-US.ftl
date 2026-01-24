@@ -11,3 +11,4 @@ mkfifo-error-invalid-mode = invalid mode: { $error }
 mkfifo-error-missing-operand = missing operand
 mkfifo-error-cannot-create-fifo = cannot create fifo { $path }: File exists
 mkfifo-error-cannot-set-permissions = cannot set permissions on { $path }: { $error }
+mkfifo-error-non-file-permission = mode must specify only file permission bits

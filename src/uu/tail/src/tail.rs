@@ -33,20 +33,13 @@ use std::fs::File;
 use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write, stdin, stdout};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError, get_exit_code, set_exit_code};
+use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
 use uucore::translate;
 
 use uucore::{show, show_error};
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    // When we receive a SIGPIPE signal, we want to terminate the process so
-    // that we don't print any error messages to stderr. Rust ignores SIGPIPE
-    // (see https://github.com/rust-lang/rust/issues/62569), so we restore it's
-    // default action here.
-    #[cfg(not(target_os = "windows"))]
-    let _ = uucore::signals::enable_pipe_errors();
-
     let settings = parse_args(args)?;
 
     settings.check_warnings();
@@ -111,10 +104,6 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
         if !settings.has_only_stdin() || settings.pid != 0 {
             follow::follow(observer, settings)?;
         }
-    }
-
-    if get_exit_code() > 0 && paths::stdin_is_bad_fd() {
-        show_error!("{}: {}", text::DASH, translate!("tail-bad-fd"));
     }
 
     Ok(())
@@ -275,6 +264,17 @@ fn tail_stdin(
                 }
             }
         }
+    }
+
+    // Check if stdin was closed before Rust reopened it as /dev/null
+    if paths::stdin_is_bad_fd() {
+        set_exit_code(1);
+        show_error!(
+            "{}",
+            translate!("tail-error-cannot-fstat", "file" => translate!("tail-stdin-header").quote(), "error" => translate!("tail-bad-fd"))
+        );
+        show_error!("{}", translate!("tail-no-files-remaining"));
+        return Ok(());
     }
 
     match input.resolve() {

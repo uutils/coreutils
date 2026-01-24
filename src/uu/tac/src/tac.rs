@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) sbytes slen dlen memmem memmap Mmap mmap SIGBUS
+
 mod error;
 
 use clap::{Arg, ArgAction, Command};
@@ -16,8 +17,9 @@ use std::{
     io::copy,
     path::Path,
 };
-use uucore::error::UError;
-use uucore::error::UResult;
+#[cfg(unix)]
+use uucore::error::set_exit_code;
+use uucore::error::{UError, UResult};
 use uucore::{format_usage, show};
 
 use crate::error::TacError;
@@ -238,6 +240,17 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &str) -> UR
         let buf;
 
         let data: &[u8] = if filename == "-" {
+            #[cfg(unix)]
+            if uucore::signals::stdin_was_closed() {
+                let e: Box<dyn UError> = TacError::ReadError(
+                    OsString::from("-"),
+                    std::io::Error::from_raw_os_error(libc::EBADF),
+                )
+                .into();
+                show!(e);
+                set_exit_code(1);
+                continue;
+            }
             if let Some(mmap1) = try_mmap_stdin() {
                 mmap = mmap1;
                 &mmap
