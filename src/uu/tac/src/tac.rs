@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) sbytes slen dlen memmem
+// spell-checker:ignore (ToDO) sbytes slen dlen memmem MMAP SIGBUS
 
 mod error;
 
@@ -12,7 +12,6 @@ use memchr::memmem;
 use std::ffi::OsString;
 use std::io::{BufWriter, Read, Write, stdin, stdout};
 use std::{fs::read, path::Path};
-#[cfg(unix)]
 use uucore::error::{UError, UResult};
 use uucore::{format_usage, show};
 
