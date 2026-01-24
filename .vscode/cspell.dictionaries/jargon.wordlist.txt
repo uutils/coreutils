@@ -227,3 +227,8 @@ ENOTSUP
 enotsup
 SETFL
 tmpfs
+
+Hijri
+Nowruz
+charmap
+hijri

@@ -1627,3 +1627,242 @@ fn test_date_parenthesis_vs_other_special_chars() {
             .stderr_contains("invalid date");
     }
 }
+
+#[test]
+#[cfg(unix)]
+fn test_date_iranian_locale_solar_hijri_calendar() {
+    // Test Iranian locale uses Solar Hijri calendar
+    // Verify the Solar Hijri calendar is used in the Iranian locale
+    use std::process::Command;
+
+    // Check if Iranian locale is available
+    let locale_check = Command::new("locale")
+        .env("LC_ALL", "fa_IR.UTF-8")
+        .arg("charmap")
+        .output();
+
+    let locale_available = match locale_check {
+        Ok(output) => String::from_utf8_lossy(&output.stdout).trim() == "UTF-8",
+        Err(_) => false,
+    };
+
+    if !locale_available {
+        println!("Skipping Iranian locale test - fa_IR.UTF-8 locale not available");
+        return;
+    }
+
+    // Get current year in Gregorian calendar
+    let current_year: i32 = new_ucmd!()
+        .env("LC_ALL", "C")
+        .arg("+%Y")
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .parse()
+        .unwrap();
+
+    // 03-19 and 03-22 of the same Gregorian year are in different years in the
+    // Solar Hijri calendar
+    let year_march_19: i32 = new_ucmd!()
+        .env("LC_ALL", "fa_IR.UTF-8")
+        .arg("-d")
+        .arg(format!("{current_year}-03-19"))
+        .arg("+%Y")
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .parse()
+        .unwrap();
+
+    let year_march_22: i32 = new_ucmd!()
+        .env("LC_ALL", "fa_IR.UTF-8")
+        .arg("-d")
+        .arg(format!("{current_year}-03-22"))
+        .arg("+%Y")
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .parse()
+        .unwrap();
+
+    // Years should differ by 1
+    assert_eq!(year_march_19, year_march_22 - 1);
+
+    // The difference between the Gregorian year is 621 or 622 years
+    assert_eq!(year_march_19, current_year - 622);
+    assert_eq!(year_march_22, current_year - 621);
+
+    // Check that --iso-8601 and --rfc-3339 use the Gregorian calendar
+    let iso_result = new_ucmd!()
+        .env("LC_ALL", "fa_IR.UTF-8")
+        .arg("--iso-8601=hours")
+        .succeeds();
+    let iso_output = iso_result.stdout_str();
+    assert!(iso_output.starts_with(&current_year.to_string()));
+
+    let rfc_result = new_ucmd!()
+        .env("LC_ALL", "fa_IR.UTF-8")
+        .arg("--rfc-3339=date")
+        .succeeds();
+    let rfc_output = rfc_result.stdout_str();
+    assert!(rfc_output.starts_with(&current_year.to_string()));
+}
+
+#[test]
+#[cfg(unix)]
+fn test_date_ethiopian_locale_calendar() {
+    // Test Ethiopian locale uses Ethiopian calendar
+    // Verify the Ethiopian calendar is used in the Ethiopian locale
+    use std::process::Command;
+
+    // Check if Ethiopian locale is available
+    let locale_check = Command::new("locale")
+        .env("LC_ALL", "am_ET.UTF-8")
+        .arg("charmap")
+        .output();
+
+    let locale_available = match locale_check {
+        Ok(output) => String::from_utf8_lossy(&output.stdout).trim() == "UTF-8",
+        Err(_) => false,
+    };
+
+    if !locale_available {
+        println!("Skipping Ethiopian locale test - am_ET.UTF-8 locale not available");
+        return;
+    }
+
+    // Get current year in Gregorian calendar
+    let current_year: i32 = new_ucmd!()
+        .env("LC_ALL", "C")
+        .arg("+%Y")
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .parse()
+        .unwrap();
+
+    // 09-10 and 09-12 of the same Gregorian year are in different years in the
+    // Ethiopian calendar
+    let year_september_10: i32 = new_ucmd!()
+        .env("LC_ALL", "am_ET.UTF-8")
+        .arg("-d")
+        .arg(format!("{current_year}-09-10"))
+        .arg("+%Y")
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .parse()
+        .unwrap();
+
+    let year_september_12: i32 = new_ucmd!()
+        .env("LC_ALL", "am_ET.UTF-8")
+        .arg("-d")
+        .arg(format!("{current_year}-09-12"))
+        .arg("+%Y")
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .parse()
+        .unwrap();
+
+    // Years should differ by 1
+    assert_eq!(year_september_10, year_september_12 - 1);
+
+    // The difference between the Gregorian year is 7 or 8 years
+    assert_eq!(year_september_10, current_year - 8);
+    assert_eq!(year_september_12, current_year - 7);
+
+    // Check that --iso-8601 and --rfc-3339 use the Gregorian calendar
+    let iso_result = new_ucmd!()
+        .env("LC_ALL", "am_ET.UTF-8")
+        .arg("--iso-8601=hours")
+        .succeeds();
+    let iso_output = iso_result.stdout_str();
+    assert!(iso_output.starts_with(&current_year.to_string()));
+
+    let rfc_result = new_ucmd!()
+        .env("LC_ALL", "am_ET.UTF-8")
+        .arg("--rfc-3339=date")
+        .succeeds();
+    let rfc_output = rfc_result.stdout_str();
+    assert!(rfc_output.starts_with(&current_year.to_string()));
+}
+
+#[test]
+#[cfg(unix)]
+fn test_date_thai_locale_solar_calendar() {
+    // Test Thai locale uses Thai solar calendar
+    // Verify the Thai solar calendar is used with the Thai locale
+    use std::process::Command;
+
+    // Check if Thai locale is available
+    let locale_check = Command::new("locale")
+        .env("LC_ALL", "th_TH.UTF-8")
+        .arg("charmap")
+        .output();
+
+    let locale_available = match locale_check {
+        Ok(output) => String::from_utf8_lossy(&output.stdout).trim() == "UTF-8",
+        Err(_) => false,
+    };
+
+    if !locale_available {
+        println!("Skipping Thai locale test - th_TH.UTF-8 locale not available");
+        return;
+    }
+
+    // Get current year in Gregorian calendar
+    let current_year: i32 = new_ucmd!()
+        .env("LC_ALL", "C")
+        .arg("+%Y")
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .parse()
+        .unwrap();
+
+    // Since 1941, the year in the Thai solar calendar is the Gregorian year plus 543
+    let thai_year: i32 = new_ucmd!()
+        .env("LC_ALL", "th_TH.UTF-8")
+        .arg("+%Y")
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .parse()
+        .unwrap();
+
+    assert_eq!(thai_year, current_year + 543);
+
+    // All months that have 31 days have names that end with "คม" (Thai characters)
+    let days_31_suffix = "\u{0E04}\u{0E21}"; // "คม" in Unicode
+
+    for month in ["01", "03", "05", "07", "08", "10", "12"] {
+        let month_result = new_ucmd!()
+            .env("LC_ALL", "th_TH.UTF-8")
+            .arg("--date")
+            .arg(format!("{current_year}-{month}-01"))
+            .arg("+%B")
+            .succeeds();
+        let month_name = month_result.stdout_str();
+
+        assert!(
+            month_name.trim().ends_with(days_31_suffix),
+            "Month {month} should end with 'คม', got: {month_name}"
+        );
+    }
+
+    // Check that --iso-8601 and --rfc-3339 use the Gregorian calendar
+    let iso_result = new_ucmd!()
+        .env("LC_ALL", "th_TH.UTF-8")
+        .arg("--iso-8601=hours")
+        .succeeds();
+    let iso_output = iso_result.stdout_str();
+    assert!(iso_output.starts_with(&current_year.to_string()));
+
+    let rfc_result = new_ucmd!()
+        .env("LC_ALL", "th_TH.UTF-8")
+        .arg("--rfc-3339=date")
+        .succeeds();
+    let rfc_output = rfc_result.stdout_str();
+    assert!(rfc_output.starts_with(&current_year.to_string()));
+}

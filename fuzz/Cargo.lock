@@ -1718,6 +1718,8 @@ version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
+ "icu_calendar",
+ "icu_locale",
  "jiff",
  "nix",
  "parse_datetime",
