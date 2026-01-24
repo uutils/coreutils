@@ -59,8 +59,8 @@ jobs:
           # implementation modelled after ref: <https://github.com/rust-lang/rustup/pull/2783>
           # * NOTE: All steps need to be run in this block, otherwise, we are operating back on the mac host
           set -e
-          export CARGO_INCREMENTAL=0
           export CARGO_TARGET_DIR=/tmp/cargo-target
+          export CARGO_INCREMENTAL=0
           # Avoid filling disk space
           export RUSTFLAGS="-C debuginfo=1 -C strip=symbols"
           TEST_USER=tester
@@ -159,8 +159,8 @@ jobs:
           # implementation modelled after ref: <https://github.com/rust-lang/rustup/pull/2783>
           # * NOTE: All steps need to be run in this block, otherwise, we are operating back on the mac host
           set -e
-          export CARGO_INCREMENTAL=0
           export CARGO_TARGET_DIR=/tmp/cargo-target
+          export CARGO_INCREMENTAL=0
           TEST_USER=tester
           REPO_NAME=${GITHUB_WORKSPACE##*/}
           WORKSPACE_PARENT="/home/runner/work/${REPO_NAME}"
