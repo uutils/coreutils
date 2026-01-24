@@ -324,22 +324,19 @@ jobs:
         disable_search: true
         flags: makefile,${{ matrix.job.os }}
         fail_ci_if_error: false
-    - name: "`make install PROG_PREFIX=uu- PROFILE=release-fast COMPLETIONS=n MANPAGES=n LOCALES=n`"
+    - name: "`make install MULTICALL=y PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n`"
       shell: bash
       run: |
         set -x
-        DESTDIR=/tmp/ make install PROG_PREFIX=uu- PROFILE=release-fast COMPLETIONS=n MANPAGES=n LOCALES=n
+        rm -rf /tmp/usr/local/share
+        DESTDIR=/tmp/ make install MULTICALL=y PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n
         # Check that utils are built with given profile
-        ./target/release-fast/true
+        ./target/release-small/coreutils --list | grep true
         # Check that the progs have prefix
-        test -f /tmp/usr/local/bin/uu-tty
+        /tmp/usr/local/bin/uu-true
         test -f /tmp/usr/local/libexec/uu-coreutils/libstdbuf.*
-        # Check that the manpage is not present
-        ! test -f /tmp/usr/local/share/man/man1/uu-whoami.1
-        # Check that the completion is not present
-        ! test -f /tmp/usr/local/share/zsh/site-functions/_uu-install
-        ! test -f /tmp/usr/local/share/bash-completion/completions/uu-head.bash
-        ! test -f /tmp/usr/local/share/fish/vendor_completions.d/uu-cat.fish
+        # Check that documents are not present
+        ! test -d /tmp/usr/local/share # Thus, share/{man,completions} are missing
       env:
         RUST_BACKTRACE: "1"
     - name: "`make install`"
