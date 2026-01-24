@@ -6,7 +6,7 @@
 // Safe directory traversal using openat() and related syscalls
 // This module provides TOCTOU-safe filesystem operations for recursive traversal
 //
-// Only available on Linux
+// Available on Unix
 //
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
 // spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod
@@ -85,15 +85,11 @@ fn read_dir_entries(fd: &OwnedFd) -> io::Result<Vec<OsString>> {
 
     // Duplicate the fd for Dir (it takes ownership)
     let dup_fd = nix::unistd::dup(fd).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
-
     let mut dir = Dir::from_fd(dup_fd).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
-
     for entry_result in dir.iter() {
         let entry = entry_result.map_err(|e| io::Error::from_raw_os_error(e as i32))?;
-
         let name = entry.file_name();
         let name_os = OsStr::from_bytes(name.to_bytes());
-
         if name_os != "." && name_os != ".." {
             entries.push(name_os.to_os_string());
         }
@@ -117,7 +113,6 @@ impl DirFd {
                 source: io::Error::from_raw_os_error(e as i32),
             }
         })?;
-
         Ok(Self { fd })
     }
 
@@ -125,7 +120,6 @@ impl DirFd {
     pub fn open_subdir(&self, name: &OsStr) -> io::Result<Self> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
-
         let flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC;
         let fd = openat(&self.fd, name_cstr.as_c_str(), flags, Mode::empty()).map_err(|e| {
             SafeTraversalError::OpenFailed {
@@ -133,7 +127,6 @@ impl DirFd {
                 source: io::Error::from_raw_os_error(e as i32),
             }
         })?;
-
         Ok(Self { fd })
     }
 
@@ -174,7 +167,6 @@ impl DirFd {
             path: translate!("safe-traversal-current-directory").into(),
             source: io::Error::from_raw_os_error(e as i32),
         })?;
-
         Ok(stat)
     }
 
@@ -254,7 +246,7 @@ impl DirFd {
             FchmodatFlags::NoFollowSymlink
         };
 
-        let mode = Mode::from_bits_truncate(mode);
+        let mode = Mode::from_bits_truncate(mode as libc::mode_t);
 
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
@@ -267,7 +259,7 @@ impl DirFd {
 
     /// Change mode of this directory
     pub fn fchmod(&self, mode: u32) -> io::Result<()> {
-        let mode = Mode::from_bits_truncate(mode);
+        let mode = Mode::from_bits_truncate(mode as libc::mode_t);
 
         nix::sys::stat::fchmod(&self.fd, mode)
             .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
@@ -378,30 +370,30 @@ impl Metadata {
     }
 
     pub fn file_type(&self) -> FileType {
-        FileType::from_mode(self.stat.st_mode)
+        FileType::from_mode(self.stat.st_mode as libc::mode_t)
     }
 
     pub fn file_info(&self) -> FileInfo {
         FileInfo::from_stat(&self.stat)
     }
 
+    // st_size type varies by platform (i64 vs u64)
+    #[allow(clippy::unnecessary_cast)]
     pub fn size(&self) -> u64 {
         self.stat.st_size as u64
     }
 
+    // st_mode type varies by platform (u16 on macOS, u32 on Linux)
+    #[allow(clippy::unnecessary_cast)]
     pub fn mode(&self) -> u32 {
-        self.stat.st_mode
+        self.stat.st_mode as u32
     }
 
     pub fn nlink(&self) -> u64 {
-        // st_nlink is u32 on most platforms except x86_64
-        #[cfg(target_arch = "x86_64")]
+        // st_nlink type varies by platform (u16 on FreeBSD, u32/u64 on others)
+        #[allow(clippy::unnecessary_cast)]
         {
-            self.stat.st_nlink
-        }
-        #[cfg(not(target_arch = "x86_64"))]
-        {
-            self.stat.st_nlink.into()
+            self.stat.st_nlink as u64
         }
     }
 
@@ -421,34 +413,31 @@ impl Metadata {
 
 // Add MetadataExt trait implementation for compatibility
 impl std::os::unix::fs::MetadataExt for Metadata {
+    // st_dev type varies by platform (i32 on macOS, u64 on Linux)
+    #[allow(clippy::unnecessary_cast)]
     fn dev(&self) -> u64 {
-        self.stat.st_dev
+        self.stat.st_dev as u64
     }
 
     fn ino(&self) -> u64 {
-        #[cfg(target_pointer_width = "32")]
+        // st_ino type varies by platform (u32 on FreeBSD, u64 on Linux)
+        #[allow(clippy::unnecessary_cast)]
         {
-            self.stat.st_ino.into()
-        }
-        #[cfg(not(target_pointer_width = "32"))]
-        {
-            self.stat.st_ino
+            self.stat.st_ino as u64
         }
     }
 
+    // st_mode type varies by platform (u16 on macOS, u32 on Linux)
+    #[allow(clippy::unnecessary_cast)]
     fn mode(&self) -> u32 {
-        self.stat.st_mode
+        self.stat.st_mode as u32
     }
 
     fn nlink(&self) -> u64 {
-        // st_nlink is u32 on most platforms except x86_64
-        #[cfg(target_arch = "x86_64")]
+        // st_nlink type varies by platform (u16 on FreeBSD, u32/u64 on others)
+        #[allow(clippy::unnecessary_cast)]
         {
-            self.stat.st_nlink
-        }
-        #[cfg(not(target_arch = "x86_64"))]
-        {
-            self.stat.st_nlink.into()
+            self.stat.st_nlink as u64
         }
     }
 
@@ -460,10 +449,14 @@ impl std::os::unix::fs::MetadataExt for Metadata {
         self.stat.st_gid
     }
 
+    // st_rdev type varies by platform (i32 on macOS, u64 on Linux)
+    #[allow(clippy::unnecessary_cast)]
     fn rdev(&self) -> u64 {
-        self.stat.st_rdev
+        self.stat.st_rdev as u64
     }
 
+    // st_size type varies by platform (i64 on some platforms, u64 on others)
+    #[allow(clippy::unnecessary_cast)]
     fn size(&self) -> u64 {
         self.stat.st_size as u64
     }
@@ -534,10 +527,14 @@ impl std::os::unix::fs::MetadataExt for Metadata {
         }
     }
 
+    // st_blksize type varies by platform (i32/i64/u32/u64 depending on platform)
+    #[allow(clippy::unnecessary_cast)]
     fn blksize(&self) -> u64 {
         self.stat.st_blksize as u64
     }
 
+    // st_blocks type varies by platform (i64 on some platforms, u64 on others)
+    #[allow(clippy::unnecessary_cast)]
     fn blocks(&self) -> u64 {
         self.stat.st_blocks as u64
     }

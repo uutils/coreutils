@@ -295,3 +295,65 @@ fn test_non_utf8_filename() {
 
     ucmd.arg(&filename).succeeds().stdout_is("\ta\n");
 }
+
+#[test]
+fn unexpand_multibyte_utf8_gnu_compat() {
+    // Verifies GNU-compatible behavior: column position uses byte count, not display width
+    // "1ΔΔΔ5" is 8 bytes (1 + 2*3 + 1), already at tab stop 8
+    // So 3 spaces should NOT convert to tab (would need 8 more to reach tab stop 16)
+    new_ucmd!()
+        .args(&["-a"])
+        .pipe_in("1ΔΔΔ5   99999\n")
+        .succeeds()
+        .stdout_is("1ΔΔΔ5   99999\n");
+}
+
+#[test]
+fn test_blanks_ext1() {
+    // Test case from GNU test suite: blanks-ext1
+    // ['blanks-ext1', '-t', '3,+6', {IN=> "\t      "}, {OUT=> "\t\t"}],
+    new_ucmd!()
+        .args(&["-t", "3,+6"])
+        .pipe_in("\t      ")
+        .succeeds()
+        .stdout_is("\t\t");
+}
+
+#[test]
+fn test_blanks_ext2() {
+    // Test case from GNU test suite: blanks-ext2
+    // ['blanks-ext2', '-t', '3,/9', {IN=> "\t      "}, {OUT=> "\t\t"}],
+    new_ucmd!()
+        .args(&["-t", "3,/9"])
+        .pipe_in("\t      ")
+        .succeeds()
+        .stdout_is("\t\t");
+}
+
+#[test]
+fn test_extended_tabstop_syntax() {
+    let test_cases = [
+        // Standalone /N: tabs at multiples of N
+        ("-t /9", "         ", "\t"),            // 9 spaces -> 1 tab
+        ("-t /9", "                  ", "\t\t"), // 18 spaces -> 2 tabs
+        // Standalone +N: tabs at multiples of N
+        ("-t +6", "      ", "\t"),         // 6 spaces -> 1 tab
+        ("-t +6", "            ", "\t\t"), // 12 spaces -> 2 tabs
+        // 3,/0 and 3,+0 should behave like just 3
+        ("-t 3,/0", "          ", "\t\t\t "), // 10 spaces -> 3 tabs + 1 space
+        ("-t 3,+0", "          ", "\t\t\t "), // 10 spaces -> 3 tabs + 1 space
+        ("-t 3", "          ", "\t\t\t "),    // 10 spaces -> 3 tabs + 1 space
+        // 3,/0 with text
+        ("-t 3,/0", "   test", "\ttest"), // 3 spaces + text -> 1 tab + text
+        // 3,+6 means tab stops at 3, 9, 15, 21, ...
+        ("-t 3,+6", "                    ", "\t\t\t     "), // 20 spaces -> 3 tabs + 5 spaces
+    ];
+
+    for (args, input, expected) in test_cases {
+        new_ucmd!()
+            .args(&args.split_whitespace().collect::<Vec<_>>())
+            .pipe_in(input)
+            .succeeds()
+            .stdout_is(expected);
+    }
+}

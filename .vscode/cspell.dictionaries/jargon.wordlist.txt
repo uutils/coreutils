@@ -86,6 +86,7 @@ listxattr
 llistxattr
 lossily
 lstat
+makedev
 mebi
 mebibytes
 mergeable
@@ -125,6 +126,7 @@ pseudoprime
 pseudoprimes
 quantiles
 readonly
+ROOTFS
 reparse
 rposition
 seedable
@@ -134,9 +136,11 @@ semiprimes
 setcap
 setfacl
 setfattr
+SETFL
 setlocale
 shortcode
 shortcodes
+sigaction
 siginfo
 sigusr
 strcasecmp
@@ -181,6 +185,7 @@ inacc
 maint
 proc
 procs
+TOCTOU
 
 # * constants
 xffff
@@ -199,6 +204,7 @@ nofield
 # * clippy
 uninlined
 nonminimal
+rposition
 
 # * CPU/hardware features
 ASIMD
@@ -214,3 +220,7 @@ TUNABLES
 tunables
 VMULL
 vmull
+ENOTSUP
+enotsup
+SETFL
+tmpfs

@@ -20,6 +20,8 @@ use libc::mode_t;
 use nix::pty::OpenptyResult;
 #[cfg(unix)]
 use nix::sys;
+#[cfg(not(windows))]
+use nix::sys::stat::{self, SFlag};
 use pretty_assertions::assert_eq;
 #[cfg(unix)]
 use rlimit::setrlimit;
@@ -1144,28 +1146,14 @@ impl AtPath {
 
     #[cfg(not(windows))]
     pub fn is_fifo(&self, fifo: &str) -> bool {
-        unsafe {
-            let name = CString::new(self.plus_as_string(fifo)).unwrap();
-            let mut stat: libc::stat = std::mem::zeroed();
-            if libc::stat(name.as_ptr(), &raw mut stat) >= 0 {
-                libc::S_IFIFO & stat.st_mode as libc::mode_t != 0
-            } else {
-                false
-            }
-        }
+        stat::stat(&self.plus(fifo))
+            .is_ok_and(|s| SFlag::from_bits_truncate(s.st_mode).contains(SFlag::S_IFIFO))
     }
 
     #[cfg(not(windows))]
     pub fn is_char_device(&self, char_dev: &str) -> bool {
-        unsafe {
-            let name = CString::new(self.plus_as_string(char_dev)).unwrap();
-            let mut stat: libc::stat = std::mem::zeroed();
-            if libc::stat(name.as_ptr(), &raw mut stat) >= 0 {
-                libc::S_IFCHR & stat.st_mode as libc::mode_t != 0
-            } else {
-                false
-            }
-        }
+        stat::stat(&self.plus(char_dev))
+            .is_ok_and(|s| SFlag::from_bits_truncate(s.st_mode).contains(SFlag::S_IFCHR))
     }
 
     pub fn hard_link(&self, original: &str, link: &str) {

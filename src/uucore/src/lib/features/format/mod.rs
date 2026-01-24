@@ -113,7 +113,7 @@ impl Display for FormatError {
             Self::InvalidPrecision(precision) => write!(f, "invalid precision: '{precision}'"),
             // TODO: Error message below needs some work
             Self::WrongSpecType => write!(f, "wrong % directive type was given"),
-            Self::IoError(_) => write!(f, "write error"),
+            Self::IoError(e) => write!(f, "write error: {e}"),
             Self::NoMoreArguments => write!(f, "no more arguments"),
             Self::InvalidArgument(_) => write!(f, "invalid argument"),
             Self::MissingHex => write!(f, "missing hexadecimal number in escape"),

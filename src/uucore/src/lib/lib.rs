@@ -99,7 +99,7 @@ pub use crate::features::perms;
 pub use crate::features::pipes;
 #[cfg(all(unix, feature = "process"))]
 pub use crate::features::process;
-#[cfg(target_os = "linux")]
+#[cfg(all(unix, not(target_os = "redox")))]
 pub use crate::features::safe_traversal;
 #[cfg(all(unix, not(target_os = "fuchsia"), feature = "signals"))]
 pub use crate::features::signals;
@@ -122,7 +122,7 @@ pub use crate::features::fsext;
 #[cfg(all(unix, feature = "fsxattr"))]
 pub use crate::features::fsxattr;
 
-#[cfg(all(target_os = "linux", feature = "selinux"))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 pub use crate::features::selinux;
 
 #[cfg(all(target_os = "linux", feature = "smack"))]
