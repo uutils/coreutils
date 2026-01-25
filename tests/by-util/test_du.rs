@@ -2003,3 +2003,58 @@ fn test_du_long_path_from_unreadable() {
     perms.set_mode(0o755);
     fs::set_permissions(&inaccessible_path, perms).unwrap();
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_du_hard_links_multiple_dirs_in_args() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("dir1");
+    at.mkdir("dir2");
+    at.write("dir1/file", "hello world");
+    at.hard_link("dir1/file", "dir2/link");
+
+    let result = ts.ucmd().args(&["dir1", "dir2"]).succeeds();
+    let lines: Vec<&str> = result.stdout_str().lines().collect();
+    let size = |i: usize| lines[i].split_once('\t').unwrap().0.parse::<u64>().unwrap();
+    assert!(size(0) > size(1));
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_du_hard_links_multiple_links_in_args() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("dir1");
+    at.write("dir1/file", "hello world");
+    at.hard_link("dir1/file", "dir1/link");
+
+    let result = ts.ucmd().args(&["dir1/file", "dir1/link"]).succeeds();
+    result.stdout_contains("dir1/file");
+    result.stdout_does_not_contain("dir1/link");
+
+    let result = ts.ucmd().args(&["-L", "dir1/file", "dir1/link"]).succeeds();
+    result.stdout_contains("dir1/file");
+    result.stdout_does_not_contain("dir1/link");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_du_symlinks_multiple_links_in_args() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("dir1");
+    at.write("dir1/file", "hello world");
+    at.symlink_file("dir1/file", "dir1/link");
+
+    let result = ts.ucmd().args(&["dir1/file", "dir1/link"]).succeeds();
+    result.stdout_contains("dir1/file");
+    result.stdout_contains("dir1/link");
+
+    let result = ts.ucmd().args(&["-L", "dir1/file", "dir1/link"]).succeeds();
+    result.stdout_contains("dir1/file");
+    result.stdout_does_not_contain("dir1/link");
+}

@@ -735,7 +735,7 @@ jobs:
       run: |
         ## Download additional locale files from coreutils-l10n repository
         echo "Downloading additional locale files from coreutils-l10n..."
-        git clone https://github.com/uutils/coreutils-l10n.git coreutils-l10n-repo
+        git clone --depth=1 https://github.com/uutils/coreutils-l10n.git coreutils-l10n-repo
 
         # Create installation directory
         CARGO_INSTALL_DIR="$PWD/cargo-install-dir"

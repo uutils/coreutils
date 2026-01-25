@@ -259,6 +259,14 @@ fn test_multiple_decimals_numeric() {
 }
 
 #[test]
+fn test_multiple_groupings_numeric() {
+    test_helper(
+        "multiple_groupings_numeric",
+        &["-n", "--numeric-sort", "--sort=numeric", "--sort=n"],
+    );
+}
+
+#[test]
 fn test_numeric_with_trailing_invalid_chars() {
     test_helper(
         "numeric_trailing_chars",
@@ -2359,18 +2367,18 @@ _
 __
 1
 _
-2,5
-_
 2.4
 ___
+2,5
+_
 2.,,3
 __
 2.4
 ___
-2,,3
-_
 2.4
 ___
+2,,3
+_
 1a
 _
 2b
@@ -2461,6 +2469,60 @@ fn test_start_buffer() {
     ucmd.args(&["b", "a"])
         .succeeds()
         .stdout_only_bytes(&expected);
+}
+
+#[test]
+fn test_locale_collation_c_locale() {
+    // C locale uses byte order - this is deterministic and tests the fix for #9148
+    // Accented characters (UTF-8 multibyte) sort after ASCII letters
+    let input = "é\ne\nE\na\nA\nz\n";
+    // C locale byte order: A=0x41, E=0x45, a=0x61, e=0x65, z=0x7A, é=0xC3 0xA9
+    let expected = "A\nE\na\ne\nz\né\n";
+
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
+fn test_locale_collation_utf8() {
+    // Test French UTF-8 locale handling - behavior depends on i18n-collator feature
+    // With feature: locale-aware collation (é sorts near e)
+    // Without feature: byte order (é after z, since 0xC3A9 > 0x7A)
+    let input = "z\né\ne\na\n";
+
+    let result = new_ucmd!()
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .pipe_in(input)
+        .succeeds();
+
+    let output = result.stdout_str();
+    let lines: Vec<&str> = output.lines().collect();
+
+    assert_eq!(lines.len(), 4, "Expected 4 sorted lines");
+    assert_eq!(lines[0], "a", "'a' (0x61) should always sort first");
+
+    // Validate based on which collation mode is active
+    if lines[3] == "é" {
+        // Byte order mode: é (0xC3A9) > z (0x7A)
+        assert_eq!(
+            lines,
+            vec!["a", "e", "z", "é"],
+            "Byte order mode: expected a < e < z < é"
+        );
+    } else {
+        // Locale collation mode: é sorts with base letter e
+        assert_eq!(lines[3], "z", "Locale mode: 'z' should sort last");
+        let z_pos = lines.iter().position(|&x| x == "z").unwrap();
+        let e_pos = lines.iter().position(|&x| x == "e").unwrap();
+        let e_accent_pos = lines.iter().position(|&x| x == "é").unwrap();
+        assert!(
+            e_pos < z_pos && e_accent_pos < z_pos,
+            "Locale mode: 'e' ({e_pos}) and 'é' ({e_accent_pos}) should sort before 'z' ({z_pos})"
+        );
+    }
 }
 
 /* spell-checker: enable */

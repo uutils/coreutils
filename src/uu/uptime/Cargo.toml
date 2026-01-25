@@ -30,7 +30,6 @@ fluent = { workspace = true }
 jiff = { workspace = true }
 
 [target.'cfg(target_os = "openbsd")'.dependencies]
-utmp-classic = { workspace = true }
 
 [[bin]]
 name = "uptime"

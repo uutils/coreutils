@@ -49,7 +49,6 @@ impl WatcherRx {
             Tested for notify::InotifyWatcher and for notify::PollWatcher.
             */
             if let Some(parent) = path.parent() {
-                #[allow(clippy::assigning_clones)]
                 if parent.is_dir() {
                     path = parent.to_owned();
                 } else {

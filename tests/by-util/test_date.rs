@@ -1469,3 +1469,68 @@ fn test_date_posix_format_specifiers() {
             .stdout_is(format!("{expected}\n"));
     }
 }
+
+/// Test that %x format specifier respects locale settings
+/// This is a regression test for locale-aware date formatting
+#[test]
+#[ignore = "https://bugs.launchpad.net/ubuntu/+source/rust-coreutils/+bug/2137410"]
+#[cfg(any(target_os = "linux", target_vendor = "apple"))]
+fn test_date_format_x_locale_aware() {
+    // With C locale, %x should output MM/DD/YY (US format)
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .env("LC_ALL", "C")
+        .arg("-d")
+        .arg("1997-01-19 08:17:48")
+        .arg("+%x")
+        .succeeds()
+        .stdout_is("01/19/97\n");
+
+    // With French locale, %x should output DD/MM/YYYY (European format)
+    // GNU date outputs: 19/01/1997
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .arg("-d")
+        .arg("1997-01-19 08:17:48")
+        .arg("+%x")
+        .succeeds()
+        .stdout_is("19/01/1997\n");
+}
+
+#[test]
+fn test_date_parenthesis_comment() {
+    // GNU compatibility: Text in parentheses is treated as a comment and removed.
+    let cases = [
+        // (input, format, expected_output)
+        ("(", "+%H:%M:%S", "00:00:00\n"),
+        ("1(ignore comment to eol", "+%H:%M:%S", "01:00:00\n"),
+        ("2026-01-05(this is a comment", "+%Y-%m-%d", "2026-01-05\n"),
+        ("2026(this is a comment)-01-05", "+%Y-%m-%d", "2026-01-05\n"),
+        ("((foo)2026-01-05)", "+%H:%M:%S", "00:00:00\n"), // Nested/unbalanced case
+        ("(2026-01-05(foo))", "+%H:%M:%S", "00:00:00\n"), // Balanced parentheses removed (empty result)
+    ];
+
+    for (input, format, expected) in cases {
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg(input)
+            .arg("-u")
+            .arg(format)
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
+#[test]
+fn test_date_parenthesis_vs_other_special_chars() {
+    // Ensure parentheses are special but other chars like [, ., ^ are still rejected
+    for special_char in ["[", ".", "^"] {
+        new_ucmd!()
+            .arg("-d")
+            .arg(special_char)
+            .fails()
+            .stderr_contains("invalid date");
+    }
+}

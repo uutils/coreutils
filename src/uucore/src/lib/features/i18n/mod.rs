@@ -20,7 +20,9 @@ pub enum UEncoding {
     Utf8,
 }
 
-const DEFAULT_LOCALE: Locale = locale!("en-US-posix");
+// Use "und" (undefined) as the marker for C/POSIX locale
+// This ensures real locales like "en-US" won't match
+const DEFAULT_LOCALE: Locale = locale!("und");
 
 /// Look at 3 environment variables in the following order
 ///
@@ -38,6 +40,11 @@ fn get_locale_from_env(locale_name: &str) -> (Locale, UEncoding) {
         let mut split = locale_var_str.split(&['.', '@']);
 
         if let Some(simple) = split.next() {
+            // Handle explicit C and POSIX locales - these should always use byte comparison
+            if simple == "C" || simple == "POSIX" {
+                return (DEFAULT_LOCALE, UEncoding::Ascii);
+            }
+
             // Naively convert the locale name to BCP47 tag format.
             //
             // See https://en.wikipedia.org/wiki/IETF_language_tag

@@ -78,11 +78,11 @@ issues and writing documentation are just as important as writing code.
 We can't fix bugs we don't know about, so good issues are super helpful! Here
 are some tips for writing good issues:
 
-- If you find a bug, make sure it's still a problem on the `main` branch.
+- If you find a bug, make sure it's still a problem on the [`main` branch](https://github.com/uutils/coreutils/releases/tag/latest-commit).
 - Search through the existing issues to see whether it has already been
   reported.
 - Make sure to include all relevant information, such as:
-  - Which version of uutils did you check?
+  - Which version or commit hash of uutils did you check?
   - Which version of GNU coreutils are you comparing with?
   - What platform are you on?
 - Provide a way to reliably reproduce the issue.
@@ -250,8 +250,8 @@ gitignore: add temporary files
   - It's up to you whether you want to use `git merge main` or
     `git rebase main`.
   - Feel free to ask for help with merge conflicts.
-- You do not need to ping maintainers to request a review, but it's fine to do
-  so if you don't get a response within a few days.
+- You do not need to ping maintainers to request a review immediately after submission. If you do not get a response to your patch within a few days, it is fine to request a review.
+  - If after a week your patch has still not been reviewed, we recommend that you ping the maintainers on our Discord channel in `#coreutils-chat`.
 
 ## Platforms
 

@@ -78,106 +78,15 @@ endif
 LN ?= ln -sf
 
 # Possible programs
-PROGS       := \
-	arch \
-	base32 \
-	base64 \
-	basenc \
-	basename \
-	cat \
-	cksum \
-	comm \
-	cp \
-	csplit \
-	cut \
-	date \
-	dd \
-	df \
-	dir \
-	dircolors \
-	dirname \
-	du \
-	echo \
-	env \
-	expand \
-	expr \
-	factor \
-	false \
-	fmt \
-	fold \
-	hashsum \
-	head \
-	hostname \
-	join \
-	link \
-	ln \
-	ls \
-	mkdir \
-	mktemp \
-	more \
-	mv \
-	nl \
-	numfmt \
-	nproc \
-	od \
-	paste \
-	pr \
-	printenv \
-	printf \
-	ptx \
-	pwd \
-	readlink \
-	realpath \
-	rm \
-	rmdir \
-	seq \
-	shred \
-	shuf \
-	sleep \
-	sort \
-	split \
-	sum \
-	sync \
-	tac \
-	tail \
-	tee \
-	test \
-	touch \
-	tr \
-	true \
-	truncate \
-	tsort \
-	uname \
-	unexpand \
-	uniq \
-	unlink \
-	vdir \
-	wc \
-	whoami \
-	yes
+PROGS := \
+	$(shell sed -n '/feat_Tier1 = \[/,/\]/p' Cargo.toml | sed '1d;2d' |tr -d '],"\n')\
+	$(shell sed -n '/feat_common_core = \[/,/\]/p' Cargo.toml | sed '1d' |tr -d '],"\n')
 
 UNIX_PROGS := \
-	chgrp \
-	chmod \
-	chown \
-	chroot \
-	groups \
+	$(shell sed -n '/feat_require_unix_core = \[/,/\]/p' Cargo.toml | sed '1d' |tr -d '],"\n') \
 	hostid \
-	id \
-	install \
-	kill \
-	logname \
-	mkfifo \
-	mknod \
-	nice \
-	nohup \
-	pathchk \
 	pinky \
-	stat \
 	stdbuf \
-	stty \
-	timeout \
-	tty \
 	uptime \
 	users \
 	who
@@ -327,7 +236,11 @@ endif
 build-coreutils:
 	${CARGO} build ${CARGOFLAGS} --features "${EXES} $(BUILD_SPEC_FEATURE)" ${PROFILE_CMD} --no-default-features
 
-build: build-coreutils build-pkgs locales
+ifeq (${MULTICALL}, y)
+build: build-coreutils locales
+else
+build: build-pkgs locales
+endif
 
 $(foreach test,$(UTILS),$(eval $(call TEST_BUSYBOX,$(test))))
 
