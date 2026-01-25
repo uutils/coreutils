@@ -2577,7 +2577,7 @@ fn test_locale_complex_utf8_sorting() {
     // In en_US.UTF-8, should respect locale collation rules
     // Locale collation is case-insensitive by default, with lowercase < uppercase for same base letter
     let input = "zebra\nApple\napple\nBanana\nbanana\nZebra\n";
-    
+
     new_ucmd!()
         .env("LC_ALL", "en_US.UTF-8")
         .pipe_in(input)
