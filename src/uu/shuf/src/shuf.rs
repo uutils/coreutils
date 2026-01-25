@@ -378,6 +378,7 @@ impl Writable for &OsStr {
 }
 
 impl Writable for u64 {
+    #[inline]
     fn write_all_to(&self, output: &mut impl OsWrite) -> Result<(), Error> {
         // The itoa crate is surprisingly much more efficient than a formatted write.
         // It speeds up `shuf -r -n1000000 -i1-1024` by 1.8×.
@@ -386,13 +387,22 @@ impl Writable for u64 {
     }
 }
 
+#[cold]
+#[inline(never)]
+fn handle_write_error(e: std::io::Error) -> Box<dyn uucore::error::UError> {
+    use uucore::error::FromIo;
+    let ctx = translate!("shuf-error-write-failed");
+    e.map_err_context(move || ctx)
+}
+
+#[inline(never)]
 fn shuf_exec(
     input: &mut impl Shufable,
     opts: &Options,
     rng: &mut WrappedRng,
     output: &mut BufWriter<Box<dyn OsWrite>>,
 ) -> UResult<()> {
-    let ctx = || translate!("shuf-error-write-failed");
+    let sep = [opts.sep];
     if opts.repeat {
         if input.is_empty() {
             return Err(USimpleError::new(
@@ -402,20 +412,19 @@ fn shuf_exec(
         }
         for _ in 0..opts.head_count {
             let r = input.choose(rng)?;
-
-            r.write_all_to(output).map_err_context(ctx)?;
-            output.write_all(&[opts.sep]).map_err_context(ctx)?;
+            r.write_all_to(output).map_err(handle_write_error)?;
+            output.write_all(&sep).map_err(handle_write_error)?;
         }
     } else {
         let shuffled = input.partial_shuffle(rng, opts.head_count)?;
 
         for r in shuffled {
             let r = r?;
-            r.write_all_to(output).map_err_context(ctx)?;
-            output.write_all(&[opts.sep]).map_err_context(ctx)?;
+            r.write_all_to(output).map_err(handle_write_error)?;
+            output.write_all(&sep).map_err(handle_write_error)?;
         }
     }
-    output.flush().map_err_context(ctx)?;
+    output.flush().map_err(handle_write_error)?;
 
     Ok(())
 }

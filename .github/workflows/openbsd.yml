@@ -58,6 +58,7 @@ jobs:
           # * NOTE: All steps need to be run in this block, otherwise, we are operating back on the mac host
           set -e
           #
+          export CARGO_INCREMENTAL=0
           TEST_USER=tester
           REPO_NAME=${GITHUB_WORKSPACE##*/}
           WORKSPACE_PARENT="/home/runner/work/${REPO_NAME}"
@@ -153,6 +154,7 @@ jobs:
           # * NOTE: All steps need to be run in this block, otherwise, we are operating back on the mac host
           set -e
           #
+          export CARGO_INCREMENTAL=0
           TEST_USER=tester
           REPO_NAME=${GITHUB_WORKSPACE##*/}
           WORKSPACE_PARENT="/home/runner/work/${REPO_NAME}"

@@ -74,6 +74,7 @@ jobs:
     env:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
+      CARGO_INCREMENTAL: 0
     strategy:
       fail-fast: false
       matrix:
