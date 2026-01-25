@@ -335,6 +335,7 @@ icu_locale = "2.0.0"
 icu_provider = "2.0.0"
 indicatif = "0.18.0"
 itertools = "0.14.0"
+itoa = "1.0.15"
 jiff = "0.2.18"
 libc = "0.2.172"
 lscolors = { version = "0.21.0", default-features = false, features = [
@@ -355,6 +356,7 @@ phf_codegen = "0.13.1"
 platform-info = "2.0.3"
 procfs = "0.18"
 rand = { version = "0.9.0", features = ["small_rng"] }
+rand_chacha = { version = "0.9.0" }
 rand_core = "0.9.0"
 rayon = "1.10"
 regex = "1.10.4"
