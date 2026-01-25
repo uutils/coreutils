@@ -606,18 +606,14 @@ name = "uudoc"
 path = "src/bin/uudoc.rs"
 required-features = ["uudoc"]
 
-# The default release profile with some optimizations.
 [profile.release]
 lto = true
 panic = "abort"
-
-[profile.release-fast]
-inherits = "release"
 codegen-units = 1
 
 # A release-like profile that is as small as possible.
 [profile.release-small]
-inherits = "release-fast"
+inherits = "release"
 opt-level = "z"
 strip = true
 
