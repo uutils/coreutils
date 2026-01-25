@@ -1034,32 +1034,81 @@ fn print_row<W>(
 where
     W: Write,
 {
-    // Parameters from command-line options.
-    let merge = options.merge_files_print.is_some();
-    let line_separator = &options.content_line_separator;
+    // Whether we are merging multiple files by columns (`-m`), and
+    // the number of columns to output.
+    let (merge, columns) = match options.merge_files_print {
+        None => (false, get_columns(options)),
+        Some(n) => (true, n),
+    };
+
+    // The content of the row will be written to this String. When the
+    // row is fully processed, this String will be written to `out`.
+    let mut result = String::new();
 
     // Loop over each cell in the row, printing it according to the options.
     let indexes = row.len();
     for (i, cell) in row.iter().enumerate() {
-        match cell {
-            None if merge => {
-                let file_line = &FileLine::default();
-                let s = get_line_for_printing(options, file_line, i, indexes);
-                out.write_all(s.as_bytes())?;
+        // If the cell is None, terminate the line early.
+        if cell.is_none() && !merge {
+            out.write_all(result.as_bytes())?;
+            out.write_all(options.content_line_separator.as_bytes())?;
+            return Ok(false);
+        }
+
+        // Add spaces for the left margin.
+        result.push_str(&options.offset_spaces);
+
+        // Mark the start of this column.
+        let col_start = result.len();
+
+        // If there is some input line to render, add it.
+        if let Some(file_line) = cell {
+            // Add a line number, if specified on the command-line.
+            if let Some(num_opts) = &options.number {
+                // If merging two or more files (`-m`), then only
+                // number the first column. Otherwise, number each
+                // column.
+                if !merge || i == 0 {
+                    let line_str = file_line.line_number.to_string();
+                    let width = num_opts.width;
+                    if line_str.len() >= width {
+                        result.push_str(&line_str[line_str.len() - width..]);
+                    } else {
+                        result.push_str(&format!("{line_str:>width$}"));
+                    }
+                    result.push_str(&num_opts.separator);
+                }
             }
-            None => {
-                out.write_all(line_separator.as_bytes())?;
-                return Ok(false);
+
+            // Add the text from the input file.
+            result.push_str(&file_line.line_content);
+        }
+
+        // Pad or trim the line to the specified column width.
+        if let Some(i) = options.line_width {
+            let cell_slice = &result[col_start..];
+            let tab_count = cell_slice.chars().filter(|i| i == &TAB).count();
+            let min_width = (i - (columns - 1)) / columns;
+            let display_length = cell_slice.len() + (tab_count * 7);
+            if display_length < min_width {
+                for _i in 0..(min_width - display_length) {
+                    result.push(' ');
+                }
             }
-            Some(file_line) => {
-                let s = get_line_for_printing(options, file_line, i, indexes);
-                out.write_all(s.as_bytes())?;
-            }
+            result.truncate(col_start + min_width);
+        }
+
+        // Add a column separator if there are more columns to the right.
+        if (i + 1) != indexes && !options.join_lines {
+            result.push_str(&options.col_sep_for_printing);
         }
     }
 
+    // Write the string.
+    out.write_all(result.as_bytes())?;
+
     // Finally, terminate the line with the specified separator.
-    out.write_all(line_separator.as_bytes())?;
+    out.write_all(options.content_line_separator.as_bytes())?;
     Ok(true)
 }
 
@@ -1131,68 +1180,6 @@ fn write_columns(
     }
 
     Ok(())
-}
-
-fn get_line_for_printing(
-    options: &OutputOptions,
-    file_line: &FileLine,
-    index: usize,
-    indexes: usize,
-) -> String {
-    let line_width = options.line_width;
-    let columns = options
-        .merge_files_print
-        .unwrap_or_else(|| get_columns(options));
-    let blank_line = String::new();
-    let formatted_line_number = get_formatted_line_number(options, file_line.line_number, index);
-
-    let mut complete_line = format!("{formatted_line_number}{}", file_line.line_content);
-
-    let offset_spaces = &options.offset_spaces;
-
-    let tab_count = complete_line.chars().filter(|i| i == &TAB).count();
-
-    let display_length = complete_line.len() + (tab_count * 7);
-
-    let sep = if (index + 1) != indexes && !options.join_lines {
-        &options.col_sep_for_printing
-    } else {
-        &blank_line
-    };
-
-    format!(
-        "{offset_spaces}{}{sep}",
-        line_width
-            .map(|i| {
-                let min_width = (i - (columns - 1)) / columns;
-                if display_length < min_width {
-                    for _i in 0..(min_width - display_length) {
-                        complete_line.push(' ');
-                    }
-                }
-
-                complete_line.chars().take(min_width).collect()
-            })
-            .unwrap_or(complete_line),
-    )
-}
-
-fn get_formatted_line_number(opts: &OutputOptions, line_number: usize, index: usize) -> String {
-    let should_show_line_number =
-        opts.number.is_some() && (opts.merge_files_print.is_none() || index == 0);
-    if should_show_line_number && line_number != 0 {
-        let line_str = line_number.to_string();
-        let num_opt = opts.number.as_ref().unwrap();
-        let width = num_opt.width;
-        let separator = &num_opt.separator;
-        if line_str.len() >= width {
-            format!("{:>width$}{separator}", &line_str[line_str.len() - width..],)
-        } else {
-            format!("{line_str:>width$}{separator}")
-        }
-    } else {
-        String::new()
-    }
 }
 
 /// Returns a five line header content if displaying header is not disabled by
