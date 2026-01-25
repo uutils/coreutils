@@ -33,10 +33,6 @@ path = "src/main.rs"
 divan = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }
 
-[target.'cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))'.dev-dependencies]
-jemalloc-ctl = { workspace = true }
-jemallocator = { workspace = true }
-
 [lib]
 path = "src/factor.rs"
 

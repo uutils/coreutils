@@ -9,27 +9,6 @@ use divan::{Bencher, black_box};
 use uu_factor::uumain;
 use uucore::benchmark::run_util_function;
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
-use jemallocator::Jemalloc;
-
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
-#[global_allocator]
-static ALLOC: Jemalloc = Jemalloc;
-
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
-fn log_jemalloc_stats(label: &str) {
-    use jemalloc_ctl::{epoch, stats};
-
-    epoch::advance().unwrap();
-    let allocated = stats::allocated::read().unwrap();
-    let resident = stats::resident::read().unwrap();
-
-    println!("jemalloc {label}: allocated={allocated} bytes, resident={resident} bytes");
-}
-
-#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "freebsd")))]
-fn log_jemalloc_stats(_label: &str) {}
-
 /// Benchmark multiple u64 digits
 #[divan::bench(args = [(2)])]
 fn factor_multiple_u64s(bencher: Bencher, start_num: u64) {
@@ -37,11 +16,9 @@ fn factor_multiple_u64s(bencher: Bencher, start_num: u64) {
         // this is a range of 5000 different u128 integers
         .with_inputs(|| (start_num, start_num + 2500))
         .bench_values(|(start_u64, end_u64)| {
-            log_jemalloc_stats("before factor_multiple_u64s");
             for u64_digit in start_u64..=end_u64 {
                 black_box(run_util_function(uumain, &[&u64_digit.to_string()]));
             }
-            log_jemalloc_stats("after factor_multiple_u64s");
         });
 }
 
