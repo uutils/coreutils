@@ -1017,14 +1017,58 @@ fn print_page(
     Ok(())
 }
 
+/// Write the text for a single row in the output table.
+///
+/// The `row` is the sequence of lines from the input file(s) to print
+/// from left-to-right.
+///
+/// # Returns
+///
+/// A bool indicating whether printing terminated early due to a
+/// `None` entry in one of the entries in the `row`.
+fn print_row<W>(
+    out: &mut W,
+    options: &OutputOptions,
+    row: Vec<Option<&FileLine>>,
+) -> Result<bool, std::io::Error>
+where
+    W: Write,
+{
+    // Parameters from command-line options.
+    let merge = options.merge_files_print.is_some();
+    let line_separator = &options.content_line_separator;
+
+    // Loop over each cell in the row, printing it according to the options.
+    let indexes = row.len();
+    for (i, cell) in row.iter().enumerate() {
+        match cell {
+            None if merge => {
+                let file_line = &FileLine::default();
+                let s = get_line_for_printing(options, file_line, i, indexes);
+                out.write_all(s.as_bytes())?;
+            }
+            None => {
+                out.write_all(line_separator.as_bytes())?;
+                return Ok(false);
+            }
+            Some(file_line) => {
+                let s = get_line_for_printing(options, file_line, i, indexes);
+                out.write_all(s.as_bytes())?;
+            }
+        }
+    }
+
+    // Finally, terminate the line with the specified separator.
+    out.write_all(line_separator.as_bytes())?;
+    Ok(true)
+}
+
 #[allow(clippy::cognitive_complexity)]
 fn write_columns(
     lines: &[FileLine],
     options: &OutputOptions,
     out: &mut impl Write,
 ) -> Result<(), std::io::Error> {
-    let line_separator = options.content_line_separator.as_bytes();
-
     let content_lines_per_page = if options.double_space {
         options.content_lines_per_page / 2
     } else {
@@ -1035,7 +1079,6 @@ fn write_columns(
         .merge_files_print
         .unwrap_or_else(|| get_columns(options));
     let feed_line_present = options.form_feed_used;
-    let mut not_found_break = false;
 
     let across_mode = options
         .column_mode_options
@@ -1080,25 +1123,11 @@ fn write_columns(
         })
         .collect();
 
-    let blank_line = FileLine::default();
     for row in table {
-        let indexes = row.len();
-        for (i, cell) in row.iter().enumerate() {
-            if cell.is_none() && options.merge_files_print.is_some() {
-                out.write_all(get_line_for_printing(options, &blank_line, i, indexes).as_bytes())?;
-            } else if cell.is_none() {
-                not_found_break = true;
-                break;
-            } else if cell.is_some() {
-                let file_line = cell.unwrap();
-
-                out.write_all(get_line_for_printing(options, file_line, i, indexes).as_bytes())?;
-            }
-        }
-        if not_found_break && feed_line_present {
+        let terminated_early = print_row(out, options, row)?;
+        if feed_line_present && terminated_early {
             break;
         }
-        out.write_all(line_separator)?;
     }
 
     Ok(())
