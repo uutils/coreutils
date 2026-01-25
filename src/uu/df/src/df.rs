@@ -367,7 +367,7 @@ where
     // The list of all mounted filesystems.
     let mounts_result = read_fs_list();
 
-    let (mounts, use_fallback) = match mounts_result {
+    let (mounts, _use_fallback) = match mounts_result {
         Ok(m) => (m, false),
         Err(e) => {
             if opt.requires_mount_table() {
@@ -387,7 +387,7 @@ where
     // both the mount information and usage information.
     for path in paths {
         #[cfg(unix)]
-        let fs_result = if use_fallback {
+        let fs_result = if _use_fallback {
             Filesystem::from_path_direct(path)
         } else {
             Filesystem::from_path(&mounts, path)

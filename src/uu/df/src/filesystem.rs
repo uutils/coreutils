@@ -8,7 +8,9 @@
 //! filesystem mounted at a particular directory. It also includes
 //! information on amount of space available and amount of space used.
 // spell-checker:ignore canonicalized
+#[cfg(unix)]
 use std::io;
+#[cfg(unix)]
 use std::path::PathBuf;
 use std::{ffi::OsString, path::Path};
 
