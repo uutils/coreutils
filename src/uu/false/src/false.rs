@@ -44,9 +44,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-//While cold improves true, cold does not improve false
-//#[inline(never)]
-//#[cold]
+// While cold improves true, cold or inline do not improve false
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
