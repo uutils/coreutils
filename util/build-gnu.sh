@@ -116,7 +116,7 @@ sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)
 
 if test -f gnu-built; then
     echo "GNU build already found. Skip"
-    echo "'rm -f $(pwd)/{gnu-built,src/getlimits}' to force the build"
+    echo "'rm -f $(pwd)/gnu-built' to force the build"
     echo "Note: the customization of the tests will still happen"
 else
     # Disable useless checks
@@ -135,9 +135,8 @@ else
     # Skip make if possible
     # Use GNU nproc for *BSD and macOS
     NPROC="$(command -v nproc||command -v gnproc)"
-    test "${SELINUX_ENABLED}" = 1 && touch src/getlimits # SELinux tests does not use it
-    test -f src/getlimits || make -j "$("${NPROC}")"
-    cp -f src/getlimits "${UU_BUILD_DIR}"
+    test "${SELINUX_ENABLED}" = 1 || make -j "$("${NPROC}")" # SELinux tests does not use it
+    test "${SELINUX_ENABLED}" = 1 || cp -f src/getlimits "${UU_BUILD_DIR}"
 
     # Handle generated factor tests
     t_first=00
