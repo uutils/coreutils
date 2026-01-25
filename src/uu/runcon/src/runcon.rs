@@ -2,8 +2,10 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (vars) RFILE execv execvp
-#![cfg(target_os = "linux")]
+
+#![cfg(any(target_os = "linux", target_os = "android"))]
 
 use clap::builder::ValueParser;
 use uucore::error::{UError, UResult};

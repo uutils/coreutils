@@ -20,6 +20,7 @@ workspace = true
 path = "src/sort.rs"
 
 [features]
+default = ["i18n-collator"]
 i18n-collator = ["uucore/i18n-collator"]
 
 [dependencies]
@@ -35,7 +36,6 @@ rayon = { workspace = true }
 self_cell = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
-unicode-width = { workspace = true }
 uucore = { workspace = true, features = [
   "fs",
   "parser-size",
