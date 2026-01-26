@@ -18,16 +18,22 @@ workspace = true
 [lib]
 path = "src/date.rs"
 
+[features]
+default = ["i18n-datetime"]
+i18n-datetime = ["uucore/i18n-datetime", "dep:icu_calendar", "dep:icu_locale"]
+
 [dependencies]
 clap = { workspace = true }
 fluent = { workspace = true }
+icu_calendar = { workspace = true, optional = true }
+icu_locale = { workspace = true, optional = true }
 jiff = { workspace = true, features = [
   "tzdb-bundle-platform",
   "tzdb-zoneinfo",
   "tzdb-concatenated",
 ] }
 parse_datetime = { workspace = true }
-uucore = { workspace = true, features = ["parser"] }
+uucore = { workspace = true, features = ["parser", "i18n-datetime"] }
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true, features = ["time"] }

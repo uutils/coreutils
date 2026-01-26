@@ -19,11 +19,14 @@ path = "src/more.rs"
 
 [dependencies]
 clap = { workspace = true }
+crossterm = { workspace = true, features = ["events"] }
 uucore = { workspace = true }
-crossterm = { workspace = true }
 fluent = { workspace = true }
 
 [target.'cfg(all(unix, not(target_os = "fuchsia")))'.dependencies]
+
+[target.'cfg(windows)'.dependencies]
+crossterm = { workspace = true, features = ["windows"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 crossterm = { workspace = true, features = ["use-dev-tty"] }

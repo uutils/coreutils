@@ -19,9 +19,11 @@ path = "src/tty.rs"
 
 [dependencies]
 clap = { workspace = true }
-nix = { workspace = true, features = ["term"] }
 uucore = { workspace = true, features = ["fs"] }
 fluent = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true, features = ["term"] }
 
 [[bin]]
 name = "tty"
