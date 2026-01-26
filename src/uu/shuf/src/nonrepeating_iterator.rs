@@ -61,9 +61,6 @@ impl<'a> NonrepeatingIterator<'a> {
                 items.swap(this_idx, other_idx);
 
                 let val = items.pop().unwrap();
-                if items.len().is_power_of_two() && items.len() >= 512 {
-                    items.shrink_to_fit();
-                }
                 Ok(val)
             }
             Values::Sparse(range, items) => {
