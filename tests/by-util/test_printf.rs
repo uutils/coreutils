@@ -5,6 +5,10 @@
 
 // spell-checker:ignore fffffffffffffffc
 use uutests::new_ucmd;
+#[cfg(unix)]
+use uutests::util::TestScenario;
+#[cfg(unix)]
+use uutests::util_name;
 
 #[test]
 fn basic_literal() {
@@ -12,6 +16,34 @@ fn basic_literal() {
         .args(&["hello world"])
         .succeeds()
         .stdout_only("hello world");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_printf_fails_with_closed_stdout() {
+    let scene = TestScenario::new(util_name!());
+    let printf_bin = scene.bin_path.clone().into_os_string();
+    let script = "exec 1>&-; \"$PRINTF_BIN\" printf 'foo'";
+
+    scene
+        .cmd_shell(script)
+        .env("PRINTF_BIN", &printf_bin)
+        .fails();
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_printf_fails_with_dev_full_stdout() {
+    let dev_full = match std::fs::OpenOptions::new().write(true).open("/dev/full") {
+        Ok(f) => f,
+        Err(_) => return,
+    };
+
+    new_ucmd!()
+        .args(&["foo"])
+        .set_stdout(dev_full)
+        .fails()
+        .stderr_contains("No space left on device");
 }
 
 #[test]
