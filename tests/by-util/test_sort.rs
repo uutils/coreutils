@@ -464,7 +464,11 @@ fn test_exponents_general() {
 
 #[test]
 fn test_exponents_positive_general() {
-    test_helper("exponents-positive-general", &["-g"]);
+    new_ucmd!()
+        .pipe_in("1\n2e3\n1e-5")
+        .arg("-g")
+        .succeeds()
+        .stdout_only("1e-5\n1\n2e3\n");
 }
 
 #[test]
