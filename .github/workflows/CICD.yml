@@ -58,15 +58,13 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@nightly
-    ## note: requires 'nightly' toolchain b/c `cargo-udeps` uses the `rustc` '-Z save-analysis' option
-    ## * ... ref: <https://github.com/est31/cargo-udeps/issues/73>
     - uses: taiki-e/install-action@cargo-udeps
     - uses: Swatinem/rust-cache@v2
     - name: Initialize workflow variables
       id: vars
       shell: bash
       run: |
+        echo "RUSTC_BOOTSTRAP=1" >> "${GITHUB_ENV}" # Use -Z
         ## VARs setup
         outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         # failure mode
@@ -88,7 +86,7 @@ jobs:
         fault_type="${{ steps.vars.outputs.FAULT_TYPE }}"
         fault_prefix=$(echo "$fault_type" | tr '[:lower:]' '[:upper:]')
         #
-        cargo +nightly udeps ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --all-targets &> udeps.log || cat udeps.log
+        cargo udeps ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --all-targets &> udeps.log || cat udeps.log
         grep --ignore-case "all deps seem to have been used" udeps.log || { printf "%s\n" "::${fault_type} ::${fault_prefix}: \`cargo udeps\`: style violation (unused dependency found)" ; fault=true ; }
         if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
 
