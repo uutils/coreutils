@@ -44,7 +44,14 @@ fn get_month_names() -> &'static Vec<(String, u8)> {
     static MONTH_NAMES: OnceLock<Vec<(String, u8)>> = OnceLock::new();
     MONTH_NAMES.get_or_init(|| {
         let loc = get_time_locale().0.clone();
-        load_month_names(&loc)
+        // For undefined locale (C/POSIX), ICU returns generic month names like "M01", "M02"
+        // which aren't useful for matching. Skip directly to English fallback.
+        let result = if loc == locale!("und") {
+            None
+        } else {
+            load_month_names(&loc)
+        };
+        result
             .or_else(|| load_month_names(&locale!("en")))
             .expect("ICU should always have English month data")
     })
