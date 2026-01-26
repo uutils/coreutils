@@ -1,4 +1,4 @@
-# spell-checker:ignore (misc) testsuite runtest findstring (targets) busytest toybox distclean pkgs nextest ; (vars/env) BINDIR BUILDDIR CARGOFLAGS DESTDIR DOCSDIR INSTALLDIR INSTALLEES MULTICALL DATAROOTDIR TESTDIR manpages
+# spell-checker:ignore (misc) debuginfo testsuite runtest findstring (targets) busytest toybox distclean pkgs nextest ; (vars/env) BINDIR BUILDDIR CARGOFLAGS DESTDIR DOCSDIR INSTALLDIR INSTALLEES MULTICALL DATAROOTDIR TESTDIR manpages
 
 # Config options
 ifneq (,$(filter install, $(MAKECMDGOALS)))
@@ -45,11 +45,13 @@ INSTALLDIR_BIN=$(DESTDIR)$(BINDIR)
 BASEDIR       ?= $(shell pwd)
 ifdef CARGO_TARGET_DIR
 BUILDDIR 	  := $(CARGO_TARGET_DIR)/${PROFILE}
-BUILDDIR_UUDOC := $(CARGO_TARGET_DIR)/${PROFILE}
+# todo: share crates with coreutils
+BUILDDIR_UUDOC := $(CARGO_TARGET_DIR)/debug
 else
 BUILDDIR      := $(BASEDIR)/target/$(CARGO_BUILD_TARGET)/${PROFILE}
 # uudoc should not be cross build
-BUILDDIR_UUDOC := $(BASEDIR)/target/$(PROFILE)
+# todo: share crates with coreutils
+BUILDDIR_UUDOC := $(BASEDIR)/target/debug
 endif
 PKG_BUILDDIR  := $(BUILDDIR)/deps
 DOCSDIR       := $(BASEDIR)/docs
@@ -296,8 +298,9 @@ distclean: clean
 
 ifeq ($(MANPAGES),y)
 # Do not cross-build uudoc
+# Use debug profile. todo: share crates with coreutils
 build-uudoc:
-	@unset CARGO_BUILD_TARGET && ${CARGO} build ${CARGOFLAGS} --bin uudoc --features "uudoc ${EXES}" ${PROFILE_CMD} --no-default-features
+	@unset CARGO_BUILD_TARGET && env RUSTFLAGS="-C strip=symbols -C debuginfo=0" ${CARGO} build ${CARGOFLAGS} --bin uudoc --features "uudoc ${EXES}" --no-default-features
 
 install-manpages: build-uudoc
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/man/man1
