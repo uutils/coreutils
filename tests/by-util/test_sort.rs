@@ -2525,4 +2525,90 @@ fn test_locale_collation_utf8() {
     }
 }
 
+#[test]
+fn test_locale_interleaved_en_us_utf8() {
+    // Test case for issue: locale-based collation support
+    // In en_US.UTF-8, lowercase and uppercase letters should interleave
+    // Expected: a, A, b, B (locale-aware)
+    // Not: A, B, a, b (ASCII byte order)
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .pipe_in("a\nA\nb\nB\n")
+        .succeeds()
+        .stdout_is("a\nA\nb\nB\n");
+}
+
+#[test]
+fn test_locale_c_byte_order() {
+    // Test case for issue: C locale should use ASCII byte order
+    // In C locale: A < B < a < b (uppercase before lowercase)
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .pipe_in("a\nA\nb\nB\n")
+        .succeeds()
+        .stdout_is("A\nB\na\nb\n");
+}
+
+#[test]
+fn test_locale_posix_byte_order() {
+    // POSIX locale should behave like C locale
+    new_ucmd!()
+        .env("LC_ALL", "POSIX")
+        .pipe_in("a\nA\nb\nB\n")
+        .succeeds()
+        .stdout_is("A\nB\na\nb\n");
+}
+
+#[test]
+fn test_locale_with_ignore_case_flag() {
+    // When -f (ignore case) is used, the comparison uses custom_str_cmp
+    // which converts to uppercase for comparison. With -f flag, all letters
+    // are treated as equivalent regardless of case, so original order is preserved
+    // for equal keys (stable sort behavior within equal elements).
+    // Note: This may differ slightly from GNU in tie-breaking behavior.
+    let result = new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("-f")
+        .pipe_in("a\nA\nb\nB\n")
+        .succeeds();
+
+    // Verify that a/A come before b/B (case-insensitive grouping works)
+    let output = result.stdout_str();
+    let lines: Vec<&str> = output.lines().collect();
+    assert_eq!(lines.len(), 4);
+    // a and A should come before b and B
+    let a_positions: Vec<usize> = lines
+        .iter()
+        .enumerate()
+        .filter(|(_, l)| **l == "a" || **l == "A")
+        .map(|(i, _)| i)
+        .collect();
+    let b_positions: Vec<usize> = lines
+        .iter()
+        .enumerate()
+        .filter(|(_, l)| **l == "b" || **l == "B")
+        .map(|(i, _)| i)
+        .collect();
+    assert!(
+        a_positions
+            .iter()
+            .all(|&a| b_positions.iter().all(|&b| a < b)),
+        "All 'a'/'A' should come before 'b'/'B' with -f flag"
+    );
+}
+
+#[test]
+fn test_locale_complex_utf8_sorting() {
+    // More complex test with mixed case and special characters
+    // In en_US.UTF-8, should respect locale collation rules
+    // Locale collation is case-insensitive by default, with lowercase < uppercase for same base letter
+    let input = "zebra\nApple\napple\nBanana\nbanana\nZebra\n";
+
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("apple\nApple\nbanana\nBanana\nzebra\nZebra\n");
+}
+
 /* spell-checker: enable */

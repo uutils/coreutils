@@ -36,14 +36,7 @@ use uucore::format_usage;
 use uucore::parser::num_parser::ExtendedParser;
 use uucore::translate;
 
-#[cfg(not(any(
-    target_os = "freebsd",
-    target_os = "dragonfly",
-    target_os = "ios",
-    target_os = "macos",
-    target_os = "netbsd",
-    target_os = "openbsd"
-)))]
+#[cfg(not(bsd))]
 use flags::BAUD_RATES;
 use flags::{CONTROL_CHARS, CONTROL_FLAGS, INPUT_FLAGS, LOCAL_FLAGS, OUTPUT_FLAGS};
 
@@ -624,26 +617,12 @@ fn print_terminal_size(
     let mut printer = WrappedPrinter::new(window_size);
 
     // BSDs use a u32 for the baud rate, so we can simply print it.
-    #[cfg(any(
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    ))]
+    #[cfg(bsd)]
     printer.print(&translate!("stty-output-speed", "speed" => speed));
 
     // Other platforms need to use the baud rate enum, so printing the right value
     // becomes slightly more complicated.
-    #[cfg(not(any(
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    )))]
+    #[cfg(not(bsd))]
     for (text, baud_rate) in BAUD_RATES {
         if *baud_rate == speed {
             printer.print(&translate!("stty-output-speed", "speed" => (*text)));
@@ -752,24 +731,10 @@ fn string_to_baud(arg: &str, baud_type: flags::BaudType) -> Option<AllFlags<'_>>
     let value = parse_baud_with_rounding(normalized)?;
 
     // BSDs use a u32 for the baud rate, so any decimal number applies.
-    #[cfg(any(
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    ))]
+    #[cfg(bsd)]
     return Some(AllFlags::Baud(value, baud_type));
 
-    #[cfg(not(any(
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    )))]
+    #[cfg(not(bsd))]
     {
         for (text, baud_rate) in BAUD_RATES {
             if text.parse::<u32>().ok() == Some(value) {
@@ -1440,14 +1405,7 @@ mod tests {
     // Tests for string_to_baud
     #[test]
     fn test_string_to_baud_valid() {
-        #[cfg(not(any(
-            target_os = "freebsd",
-            target_os = "dragonfly",
-            target_os = "ios",
-            target_os = "macos",
-            target_os = "netbsd",
-            target_os = "openbsd"
-        )))]
+        #[cfg(not(bsd))]
         {
             assert!(string_to_baud("9600", flags::BaudType::Both).is_some());
             assert!(string_to_baud("115200", flags::BaudType::Both).is_some());
@@ -1455,14 +1413,7 @@ mod tests {
             assert!(string_to_baud("19200", flags::BaudType::Both).is_some());
         }
 
-        #[cfg(any(
-            target_os = "freebsd",
-            target_os = "dragonfly",
-            target_os = "ios",
-            target_os = "macos",
-            target_os = "netbsd",
-            target_os = "openbsd"
-        ))]
+        #[cfg(bsd)]
         {
             assert!(string_to_baud("9600", flags::BaudType::Both).is_some());
             assert!(string_to_baud("115200", flags::BaudType::Both).is_some());
@@ -1473,14 +1424,7 @@ mod tests {
 
     #[test]
     fn test_string_to_baud_invalid() {
-        #[cfg(not(any(
-            target_os = "freebsd",
-            target_os = "dragonfly",
-            target_os = "ios",
-            target_os = "macos",
-            target_os = "netbsd",
-            target_os = "openbsd"
-        )))]
+        #[cfg(not(bsd))]
         {
             assert_eq!(string_to_baud("995", flags::BaudType::Both), None);
             assert_eq!(string_to_baud("invalid", flags::BaudType::Both), None);
