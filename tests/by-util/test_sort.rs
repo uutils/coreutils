@@ -259,6 +259,14 @@ fn test_multiple_decimals_numeric() {
 }
 
 #[test]
+fn test_multiple_groupings_numeric() {
+    test_helper(
+        "multiple_groupings_numeric",
+        &["-n", "--numeric-sort", "--sort=numeric", "--sort=n"],
+    );
+}
+
+#[test]
 fn test_numeric_with_trailing_invalid_chars() {
     test_helper(
         "numeric_trailing_chars",
@@ -2359,18 +2367,18 @@ _
 __
 1
 _
-2,5
-_
 2.4
 ___
+2,5
+_
 2.,,3
 __
 2.4
 ___
-2,,3
-_
 2.4
 ___
+2,,3
+_
 1a
 _
 2b
@@ -2461,6 +2469,146 @@ fn test_start_buffer() {
     ucmd.args(&["b", "a"])
         .succeeds()
         .stdout_only_bytes(&expected);
+}
+
+#[test]
+fn test_locale_collation_c_locale() {
+    // C locale uses byte order - this is deterministic and tests the fix for #9148
+    // Accented characters (UTF-8 multibyte) sort after ASCII letters
+    let input = "é\ne\nE\na\nA\nz\n";
+    // C locale byte order: A=0x41, E=0x45, a=0x61, e=0x65, z=0x7A, é=0xC3 0xA9
+    let expected = "A\nE\na\ne\nz\né\n";
+
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
+fn test_locale_collation_utf8() {
+    // Test French UTF-8 locale handling - behavior depends on i18n-collator feature
+    // With feature: locale-aware collation (é sorts near e)
+    // Without feature: byte order (é after z, since 0xC3A9 > 0x7A)
+    let input = "z\né\ne\na\n";
+
+    let result = new_ucmd!()
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .pipe_in(input)
+        .succeeds();
+
+    let output = result.stdout_str();
+    let lines: Vec<&str> = output.lines().collect();
+
+    assert_eq!(lines.len(), 4, "Expected 4 sorted lines");
+    assert_eq!(lines[0], "a", "'a' (0x61) should always sort first");
+
+    // Validate based on which collation mode is active
+    if lines[3] == "é" {
+        // Byte order mode: é (0xC3A9) > z (0x7A)
+        assert_eq!(
+            lines,
+            vec!["a", "e", "z", "é"],
+            "Byte order mode: expected a < e < z < é"
+        );
+    } else {
+        // Locale collation mode: é sorts with base letter e
+        assert_eq!(lines[3], "z", "Locale mode: 'z' should sort last");
+        let z_pos = lines.iter().position(|&x| x == "z").unwrap();
+        let e_pos = lines.iter().position(|&x| x == "e").unwrap();
+        let e_accent_pos = lines.iter().position(|&x| x == "é").unwrap();
+        assert!(
+            e_pos < z_pos && e_accent_pos < z_pos,
+            "Locale mode: 'e' ({e_pos}) and 'é' ({e_accent_pos}) should sort before 'z' ({z_pos})"
+        );
+    }
+}
+
+#[test]
+fn test_locale_interleaved_en_us_utf8() {
+    // Test case for issue: locale-based collation support
+    // In en_US.UTF-8, lowercase and uppercase letters should interleave
+    // Expected: a, A, b, B (locale-aware)
+    // Not: A, B, a, b (ASCII byte order)
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .pipe_in("a\nA\nb\nB\n")
+        .succeeds()
+        .stdout_is("a\nA\nb\nB\n");
+}
+
+#[test]
+fn test_locale_c_byte_order() {
+    // Test case for issue: C locale should use ASCII byte order
+    // In C locale: A < B < a < b (uppercase before lowercase)
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .pipe_in("a\nA\nb\nB\n")
+        .succeeds()
+        .stdout_is("A\nB\na\nb\n");
+}
+
+#[test]
+fn test_locale_posix_byte_order() {
+    // POSIX locale should behave like C locale
+    new_ucmd!()
+        .env("LC_ALL", "POSIX")
+        .pipe_in("a\nA\nb\nB\n")
+        .succeeds()
+        .stdout_is("A\nB\na\nb\n");
+}
+
+#[test]
+fn test_locale_with_ignore_case_flag() {
+    // When -f (ignore case) is used, the comparison uses custom_str_cmp
+    // which converts to uppercase for comparison. With -f flag, all letters
+    // are treated as equivalent regardless of case, so original order is preserved
+    // for equal keys (stable sort behavior within equal elements).
+    // Note: This may differ slightly from GNU in tie-breaking behavior.
+    let result = new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("-f")
+        .pipe_in("a\nA\nb\nB\n")
+        .succeeds();
+
+    // Verify that a/A come before b/B (case-insensitive grouping works)
+    let output = result.stdout_str();
+    let lines: Vec<&str> = output.lines().collect();
+    assert_eq!(lines.len(), 4);
+    // a and A should come before b and B
+    let a_positions: Vec<usize> = lines
+        .iter()
+        .enumerate()
+        .filter(|(_, l)| **l == "a" || **l == "A")
+        .map(|(i, _)| i)
+        .collect();
+    let b_positions: Vec<usize> = lines
+        .iter()
+        .enumerate()
+        .filter(|(_, l)| **l == "b" || **l == "B")
+        .map(|(i, _)| i)
+        .collect();
+    assert!(
+        a_positions
+            .iter()
+            .all(|&a| b_positions.iter().all(|&b| a < b)),
+        "All 'a'/'A' should come before 'b'/'B' with -f flag"
+    );
+}
+
+#[test]
+fn test_locale_complex_utf8_sorting() {
+    // More complex test with mixed case and special characters
+    // In en_US.UTF-8, should respect locale collation rules
+    // Locale collation is case-insensitive by default, with lowercase < uppercase for same base letter
+    let input = "zebra\nApple\napple\nBanana\nbanana\nZebra\n";
+
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("apple\nApple\nbanana\nBanana\nzebra\nZebra\n");
 }
 
 /* spell-checker: enable */

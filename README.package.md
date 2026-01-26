@@ -14,7 +14,7 @@
 [![dependency status](https://deps.rs/repo/github/uutils/coreutils/status.svg)](https://deps.rs/repo/github/uutils/coreutils)
 
 [![CodeCov](https://codecov.io/gh/uutils/coreutils/branch/master/graph/badge.svg)](https://codecov.io/gh/uutils/coreutils)
-![MSRV](https://img.shields.io/badge/MSRV-1.70.0-brightgreen)
+![MSRV](https://img.shields.io/badge/MSRV-1.85.0-brightgreen)
 
 </div>
 

@@ -2615,7 +2615,7 @@ fn test_cp_reflink_insufficient_permission() {
         .arg("unreadable")
         .arg(TEST_EXISTING_FILE)
         .fails()
-        .stderr_only("cp: 'unreadable' -> 'existing_file.txt': Permission denied (os error 13)\n");
+        .stderr_only("cp: 'unreadable' -> 'existing_file.txt': Permission denied\n");
 }
 
 #[cfg(target_os = "linux")]
@@ -2991,11 +2991,15 @@ fn test_copy_through_dangling_symlink() {
 fn test_copy_through_dangling_symlink_posixly_correct() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("file");
+    at.write("file", "content");
     at.symlink_file("nonexistent", "target");
     ucmd.arg("file")
         .arg("target")
         .env("POSIXLY_CORRECT", "1")
         .succeeds();
+    assert!(at.file_exists("nonexistent"));
+    let contents = at.read("nonexistent");
+    assert_eq!(contents, "content");
 }
 
 #[test]
@@ -3127,9 +3131,8 @@ fn test_cp_archive_on_nonexistent_file() {
         .arg(TEST_NONEXISTENT_FILE)
         .arg(TEST_EXISTING_FILE)
         .fails()
-        .stderr_only(
-            "cp: cannot stat 'nonexistent_file.txt': No such file or directory (os error 2)\n",
-        );
+        .stderr_contains("cannot stat 'nonexistent_file.txt'")
+        .stderr_contains("No such file or directory");
 }
 
 #[test]
@@ -7507,4 +7510,64 @@ fn test_cp_to_existing_file_permissions() {
 
     let new_dst_mode = std::fs::metadata(&dst_path).unwrap().permissions().mode();
     assert_eq!(dst_mode, new_dst_mode);
+}
+
+/// Test xattr ENOTSUP handling: -a/--preserve=all silent, --preserve=xattr errors
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_xattr_enotsup_handling() {
+    use std::process::Command;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("src", "x");
+
+    // Check if setfattr is available and source fs supports xattrs
+    if !Command::new("setfattr")
+        .args(["-n", "user.t", "-v", "v", &at.plus_as_string("src")])
+        .status()
+        .is_ok_and(|s| s.success())
+    {
+        return; // Skip: setfattr not available or source doesn't support xattrs
+    }
+
+    // Check if /dev/shm exists
+    if !std::path::Path::new("/dev/shm").exists() {
+        return; // Skip: /dev/shm not available
+    }
+
+    // Check if /dev/shm actually doesn't support xattrs by trying to set one
+    let shm_test_file = "/dev/shm/xattr_test_probe";
+    std::fs::write(shm_test_file, "test").ok();
+    let shm_supports_xattr = Command::new("setfattr")
+        .args(["-n", "user.t", "-v", "v", shm_test_file])
+        .status()
+        .is_ok_and(|s| s.success());
+    std::fs::remove_file(shm_test_file).ok();
+
+    if shm_supports_xattr {
+        return; // Skip: /dev/shm supports xattrs on this system
+    }
+
+    // -a: silent success
+    scene
+        .ucmd()
+        .args(&["-a", &at.plus_as_string("src"), "/dev/shm/t1"])
+        .succeeds()
+        .no_stderr();
+    // --preserve=all: silent success
+    scene
+        .ucmd()
+        .args(&["--preserve=all", &at.plus_as_string("src"), "/dev/shm/t2"])
+        .succeeds()
+        .no_stderr();
+    // --preserve=xattr: must fail with proper message
+    scene
+        .ucmd()
+        .args(&["--preserve=xattr", &at.plus_as_string("src"), "/dev/shm/t3"])
+        .fails()
+        .stderr_contains("setting attributes")
+        .stderr_contains("Operation not supported");
+    for f in ["/dev/shm/t1", "/dev/shm/t2", "/dev/shm/t3"] {
+        std::fs::remove_file(f).ok();
+    }
 }

@@ -55,7 +55,7 @@ impl<R: Read> Read for PartialReader<R> {
                             self.skip -= n as u64;
                             break;
                         }
-                        Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                        Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
                         Err(e) => return Err(e),
                     }
                 }
@@ -65,7 +65,7 @@ impl<R: Read> Read for PartialReader<R> {
         match self.limit {
             None => loop {
                 match self.inner.read(out) {
-                    Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                    Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
                     result => return result,
                 }
             },
@@ -82,7 +82,7 @@ impl<R: Read> Read for PartialReader<R> {
                             *limit -= r as u64;
                             return Ok(r);
                         }
-                        Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                        Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
                         Err(e) => return Err(e),
                     }
                 }

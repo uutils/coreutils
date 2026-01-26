@@ -20,9 +20,11 @@ path = "src/timeout.rs"
 [dependencies]
 clap = { workspace = true }
 libc = { workspace = true }
-nix = { workspace = true, features = ["signal"] }
 uucore = { workspace = true, features = ["parser", "process", "signals"] }
 fluent = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true, features = ["signal"] }
 
 [[bin]]
 name = "timeout"

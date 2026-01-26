@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres AWST ACST AEST
+// spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres AWST ACST AEST foobarbaz
 
 mod locale;
 
@@ -11,6 +11,7 @@ use clap::{Arg, ArgAction, Command};
 use jiff::fmt::strtime::{self, BrokenDownTime, Config, PosixCustom};
 use jiff::tz::{TimeZone, TimeZoneDatabase};
 use jiff::{Timestamp, Zoned};
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
@@ -19,6 +20,9 @@ use std::sync::OnceLock;
 use uucore::display::Quotable;
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
+use uucore::i18n::datetime::{
+    get_localized_day_name, get_localized_month_name, should_use_icu_locale,
+};
 use uucore::translate;
 use uucore::{format_usage, show};
 #[cfg(windows)]
@@ -128,6 +132,42 @@ enum DayDelta {
     Previous,
     /// The date advances to the next day.
     Next,
+}
+
+/// Strip parenthesized comments from a date string.
+///
+/// GNU date removes balanced parentheses and their content, treating them as comments.
+/// If parentheses are unbalanced, everything from the unmatched '(' onwards is ignored.
+///
+/// Examples:
+/// - "2026(comment)-01-05" -> "2026-01-05"
+/// - "1(ignore comment to eol" -> "1"
+/// - "(" -> ""
+/// - "((foo)2026-01-05)" -> ""
+fn strip_parenthesized_comments(input: &str) -> Cow<'_, str> {
+    if !input.contains('(') {
+        return Cow::Borrowed(input);
+    }
+
+    let mut result = String::with_capacity(input.len());
+    let mut depth = 0;
+
+    for c in input.chars() {
+        match c {
+            '(' => {
+                depth += 1;
+            }
+            ')' if depth > 0 => {
+                depth -= 1;
+            }
+            _ if depth == 0 => {
+                result.push(c);
+            }
+            _ => {}
+        }
+    }
+
+    Cow::Owned(result)
 }
 
 /// Parse military timezone with optional hour offset.
@@ -286,7 +326,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Iterate over all dates - whether it's a single date or a file.
     let dates: Box<dyn Iterator<Item = _>> = match settings.date_source {
         DateSource::Human(ref input) => {
+            // GNU compatibility (Comments in parentheses)
+            let input = strip_parenthesized_comments(input);
             let input = input.trim();
+
             // GNU compatibility (Empty string):
             // An empty string (or whitespace-only) should be treated as midnight today.
             let is_empty_or_whitespace = input.is_empty();
@@ -434,20 +477,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let config = Config::new().custom(PosixCustom::new()).lenient(true);
     for date in dates {
         match date {
-            Ok(date) => {
-                match BrokenDownTime::from(&date).to_string_with_config(&config, format_string) {
-                    Ok(s) => writeln!(stdout, "{s}").map_err(|e| {
-                        USimpleError::new(1, translate!("date-error-write", "error" => e))
-                    })?,
-                    Err(e) => {
-                        let _ = stdout.flush();
-                        return Err(USimpleError::new(
-                            1,
-                            translate!("date-error-invalid-format", "format" => format_string, "error" => e),
-                        ));
-                    }
+            Ok(date) => match format_date_with_locale_aware_months(&date, format_string, &config) {
+                Ok(s) => writeln!(stdout, "{s}").map_err(|e| {
+                    USimpleError::new(1, translate!("date-error-write", "error" => e))
+                })?,
+                Err(e) => {
+                    let _ = stdout.flush();
+                    return Err(USimpleError::new(
+                        1,
+                        translate!("date-error-invalid-format", "format" => format_string, "error" => e),
+                    ));
                 }
-            }
+            },
             Err((input, _err)) => {
                 let _ = stdout.flush();
                 show!(USimpleError::new(
@@ -570,6 +611,98 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(Arg::new(OPT_FORMAT).num_args(0..).trailing_var_arg(true))
+}
+
+fn format_date_with_locale_aware_months(
+    date: &Zoned,
+    format_string: &str,
+    config: &Config<PosixCustom>,
+) -> Result<String, jiff::Error> {
+    // Only use ICU for non-default locales and when format string contains month or day specifiers
+    let use_icu = should_use_icu_locale();
+
+    if (format_string.contains("%B")
+        || format_string.contains("%b")
+        || format_string.contains("%A")
+        || format_string.contains("%a"))
+        && use_icu
+    {
+        let broken_down = BrokenDownTime::from(date);
+        // Get localized month names if needed
+        let (full_month, abbrev_month) =
+            if format_string.contains("%B") || format_string.contains("%b") {
+                if let Some(month_val) = broken_down.month() {
+                    let month_u8 = if (1..=12).contains(&month_val) {
+                        month_val as u8
+                    } else {
+                        1 // fallback to January for invalid values
+                    };
+                    (
+                        get_localized_month_name(month_u8, true),
+                        get_localized_month_name(month_u8, false),
+                    )
+                } else {
+                    (String::new(), String::new())
+                }
+            } else {
+                (String::new(), String::new())
+            };
+
+        // Get localized day names if needed
+        let (full_day, abbrev_day) = if format_string.contains("%A") || format_string.contains("%a")
+        {
+            if let (Some(year), Some(month), Some(day)) =
+                (broken_down.year(), broken_down.month(), broken_down.day())
+            {
+                (
+                    get_localized_day_name(year.into(), month as u8, day as u8, true),
+                    get_localized_day_name(year.into(), month as u8, day as u8, false),
+                )
+            } else {
+                (String::new(), String::new())
+            }
+        } else {
+            (String::new(), String::new())
+        };
+
+        // Replace format specifiers with placeholders for successful ICU translations only
+        let mut temp_format = format_string.to_string();
+        if !full_month.is_empty() {
+            temp_format = temp_format.replace("%B", "<<<FULL_MONTH>>>");
+        }
+        if !abbrev_month.is_empty() {
+            temp_format = temp_format.replace("%b", "<<<ABBREV_MONTH>>>");
+        }
+        if !full_day.is_empty() {
+            temp_format = temp_format.replace("%A", "<<<FULL_DAY>>>");
+        }
+        if !abbrev_day.is_empty() {
+            temp_format = temp_format.replace("%a", "<<<ABBREV_DAY>>>");
+        }
+
+        // Format with the temporary string
+        let temp_result = broken_down.to_string_with_config(config, &temp_format)?;
+
+        // Replace placeholders with localized names
+        let mut final_result = temp_result;
+        if !full_month.is_empty() {
+            final_result = final_result.replace("<<<FULL_MONTH>>>", &full_month);
+        }
+        if !abbrev_month.is_empty() {
+            final_result = final_result.replace("<<<ABBREV_MONTH>>>", &abbrev_month);
+        }
+        if !full_day.is_empty() {
+            final_result = final_result.replace("<<<FULL_DAY>>>", &full_day);
+        }
+        if !abbrev_day.is_empty() {
+            final_result = final_result.replace("<<<ABBREV_DAY>>>", &abbrev_day);
+        }
+
+        return Ok(final_result);
+    }
+
+    // Fallback to regular formatting
+    BrokenDownTime::from(date).to_string_with_config(config, format_string)
 }
 
 /// Return the appropriate format string for the given settings.
@@ -886,5 +1019,39 @@ mod tests {
         assert_eq!(parse_military_timezone_with_offset(""), None); // Empty
         assert_eq!(parse_military_timezone_with_offset("m999"), None); // Too long
         assert_eq!(parse_military_timezone_with_offset("9m"), None); // Starts with digit
+    }
+
+    #[test]
+    fn test_strip_parenthesized_comments() {
+        assert_eq!(strip_parenthesized_comments("hello"), "hello");
+        assert_eq!(strip_parenthesized_comments("2026-01-05"), "2026-01-05");
+        assert_eq!(strip_parenthesized_comments("("), "");
+        assert_eq!(strip_parenthesized_comments("1(comment"), "1");
+        assert_eq!(
+            strip_parenthesized_comments("2026-01-05(this is a comment"),
+            "2026-01-05"
+        );
+        assert_eq!(
+            strip_parenthesized_comments("2026(comment)-01-05"),
+            "2026-01-05"
+        );
+        assert_eq!(strip_parenthesized_comments("()"), "");
+        assert_eq!(strip_parenthesized_comments("((foo)2026-01-05)"), "");
+
+        // These cases test the balanced parentheses removal feature
+        // which extends beyond what GNU date strictly supports
+        assert_eq!(strip_parenthesized_comments("a(b)c"), "ac");
+        assert_eq!(strip_parenthesized_comments("a(b)c(d)e"), "ace");
+        assert_eq!(strip_parenthesized_comments("(a)(b)"), "");
+
+        // When parentheses are unmatched, processing stops at the unmatched opening paren
+        // In this case "a(b)c(d", the (b) is balanced but (d is unmatched
+        // We process "a(b)c" and stop at the unmatched "(d"
+        assert_eq!(strip_parenthesized_comments("a(b)c(d"), "ac");
+
+        // Additional edge cases for nested and complex parentheses
+        assert_eq!(strip_parenthesized_comments("a(b(c)d)e"), "ae"); // Nested balanced
+        assert_eq!(strip_parenthesized_comments("a(b(c)d"), "a"); // Nested unbalanced
+        assert_eq!(strip_parenthesized_comments("a(b)c(d)e(f"), "ace"); // Multiple groups, last unmatched
     }
 }
