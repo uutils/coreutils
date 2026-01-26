@@ -32,6 +32,19 @@ pub fn copy_xattrs<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
     Ok(())
 }
 
+/// Like `copy_xattrs`, but skips the security.selinux attribute.
+#[cfg(unix)]
+pub fn copy_xattrs_skip_selinux<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
+    for attr_name in xattr::list(&source)? {
+        if attr_name.to_string_lossy() != "security.selinux" {
+            if let Some(value) = xattr::get(&source, &attr_name)? {
+                xattr::set(&dest, &attr_name, &value)?;
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Retrieves the extended attributes (xattrs) of a given file or directory.
 ///
 /// # Arguments
