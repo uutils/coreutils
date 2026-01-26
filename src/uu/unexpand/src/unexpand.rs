@@ -14,7 +14,7 @@ use std::path::Path;
 use std::str::from_utf8;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult, USimpleError};
+use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::translate;
 use uucore::{format_usage, show};
 
@@ -566,10 +566,28 @@ fn unexpand_line(
     Ok(())
 }
 
+fn unexpand_file(
+    file: &OsString,
+    output: &mut BufWriter<Stdout>,
+    options: &Options,
+    lastcol: usize,
+    tab_config: &TabConfig,
+) -> UResult<()> {
+    let mut buf = Vec::new();
+    let mut input = open(file)?;
+    loop {
+        match input.read_until(b'\n', &mut buf) {
+            Ok(0) => break,
+            Ok(_) => unexpand_line(&mut buf, output, options, lastcol, tab_config)?,
+            Err(e) => return Err(e.map_err_context(|| file.maybe_quote().to_string())),
+        }
+    }
+    Ok(())
+}
+
 fn unexpand(options: &Options) -> UResult<()> {
     let mut output = BufWriter::new(stdout());
     let tab_config = &options.tab_config;
-    let mut buf = Vec::new();
     let lastcol = if tab_config.tabstops.len() > 1
         && tab_config.increment_size.is_none()
         && tab_config.extend_size.is_none()
@@ -580,19 +598,9 @@ fn unexpand(options: &Options) -> UResult<()> {
     };
 
     for file in &options.files {
-        let mut fh = match open(file) {
-            Ok(reader) => reader,
-            Err(err) => {
-                show!(err);
-                continue;
-            }
-        };
-
-        while match fh.read_until(b'\n', &mut buf) {
-            Ok(s) => s > 0,
-            Err(_) => !buf.is_empty(),
-        } {
-            unexpand_line(&mut buf, &mut output, options, lastcol, tab_config)?;
+        if let Err(e) = unexpand_file(file, &mut output, options, lastcol, tab_config) {
+            show!(e);
+            set_exit_code(1);
         }
     }
     output.flush()?;
