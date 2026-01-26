@@ -82,6 +82,7 @@ icu_decimal = { workspace = true, optional = true, features = [
 ] }
 icu_locale = { workspace = true, optional = true, features = ["compiled_data"] }
 icu_provider = { workspace = true, optional = true }
+jiff-icu = { workspace = true, optional = true }
 
 # Fluent dependencies (always available for localization)
 fluent = { workspace = true }
@@ -153,7 +154,7 @@ i18n-all = ["i18n-collator", "i18n-decimal", "i18n-datetime"]
 i18n-common = ["icu_locale"]
 i18n-collator = ["i18n-common", "icu_collator"]
 i18n-decimal = ["i18n-common", "icu_decimal", "icu_provider"]
-i18n-datetime = ["i18n-common", "icu_calendar", "icu_datetime"]
+i18n-datetime = ["i18n-common", "icu_calendar", "icu_datetime", "jiff-icu", "jiff"]
 mode = ["libc"]
 perms = ["entries", "libc", "walkdir"]
 buf-copy = []
