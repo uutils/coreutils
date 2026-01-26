@@ -154,7 +154,6 @@ feat_common_core = [
 # "feat_Tier1" == expanded set of utilities which can be built/run on the usual rust "Tier 1" target platforms (ref: <https://forge.rust-lang.org/release/platform-support.html>)
 feat_Tier1 = [
   "feat_common_core",
-  #
   "arch",
   "hostname",
   "nproc",
@@ -315,7 +314,7 @@ clap = { version = "4.5", features = ["wrap_help", "cargo", "color"] }
 clap_complete = "4.4"
 clap_mangen = "0.2"
 compare = "0.1.0"
-crossterm = "0.29.0"
+crossterm = { version = "0.29.0", default-features = false }
 ctor = "0.6.0"
 ctrlc = { version = "3.4.7", features = ["termination"] }
 divan = { package = "codspeed-divan-compat", version = "4.0.5" }
@@ -330,12 +329,15 @@ gcd = "2.3"
 glob = "0.3.1"
 half = "2.4.1"
 hostname = "0.4"
+icu_calendar = "2.0.0"
 icu_collator = "2.0.0"
+icu_datetime = "2.0.0"
 icu_decimal = "2.0.0"
 icu_locale = "2.0.0"
 icu_provider = "2.0.0"
 indicatif = "0.18.0"
 itertools = "0.14.0"
+itoa = "1.0.15"
 jiff = "0.2.18"
 libc = "0.2.172"
 lscolors = { version = "0.21.0", default-features = false, features = [
@@ -356,9 +358,11 @@ phf_codegen = "0.13.1"
 platform-info = "2.0.3"
 procfs = "0.18"
 rand = { version = "0.9.0", features = ["small_rng"] }
+rand_chacha = { version = "0.9.0" }
 rand_core = "0.9.0"
 rayon = "1.10"
 regex = "1.10.4"
+rlimit = "0.10.1"
 rstest = "0.26.0"
 rust-ini = "0.21.0"
 same-file = "1.0.6"
@@ -536,6 +540,7 @@ filetime.workspace = true
 glob.workspace = true
 jiff.workspace = true
 libc.workspace = true
+bytecount.workspace = true
 num-prime.workspace = true
 pretty_assertions = "1.4.0"
 rand.workspace = true
@@ -543,6 +548,7 @@ regex.workspace = true
 sha1 = { workspace = true, features = ["std"] }
 tempfile.workspace = true
 time = { workspace = true, features = ["local-offset"] }
+unicode-width.workspace = true
 unindent = "0.2.3"
 uutests.workspace = true
 uucore = { workspace = true, features = [
@@ -562,16 +568,14 @@ nix = { workspace = true, features = [
   "process",
   "signal",
   "socket",
-  "user",
   "term",
+  "user",
 ] }
-rlimit = "0.10.1"
-xattr.workspace = true
+rlimit = { workspace = true }
 
 # Used in test_uptime::test_uptime_with_file_containing_valid_boot_time_utmpx_record
 # to deserialize an utmpx struct into a binary file
 [target.'cfg(all(target_family= "unix",not(target_os = "macos")))'.dev-dependencies]
-serde = { version = "1.0.202", features = ["derive"] }
 wincode = "0.2.5"
 wincode-derive = "0.2.3"
 
@@ -678,3 +682,6 @@ format_push_string = "allow"
 flat_map_option = "allow"
 from_iter_instead_of_collect = "allow"
 large_types_passed_by_value = "allow"
+
+[workspace.metadata.cargo-shear]
+ignored = ["fluent", "libstdbuf"]

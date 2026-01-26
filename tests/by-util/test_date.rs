@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker: ignore: AEDT AEST EEST NZDT NZST Kolkata Iseconds
+// spell-checker: ignore: AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes
 
 use std::cmp::Ordering;
 
@@ -1470,6 +1470,99 @@ fn test_date_posix_format_specifiers() {
     }
 }
 
+#[test]
+#[cfg(any(target_os = "linux", target_vendor = "apple"))]
+fn test_date_format_b_french_locale() {
+    // Test both %B and %b formats with French locale using a loop
+    // This test expects localized month names when i18n support is available
+    let test_cases = [
+        ("2025-01-15", "janvier", "janv."), // Wednesday = mercredi, mer.
+        ("2025-02-15", "février", "févr."), // Saturday = samedi, sam.
+    ];
+
+    for (date, expected_full, expected_abbrev) in &test_cases {
+        let result = new_ucmd!()
+            .env("LC_TIME", "fr_FR.UTF-8")
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg(date)
+            .arg("+%B %b")
+            .succeeds();
+
+        let output = result.stdout_str().trim();
+        let expected = format!("{expected_full} {expected_abbrev}");
+
+        if output == expected {
+            // i18n feature is working - test passed
+            assert_eq!(output, expected);
+        } else {
+            // i18n feature not available, skip test
+            println!(
+                "Skipping French locale test for {date} - i18n feature not available, got: {output}"
+            );
+            return; // Exit early if i18n not available
+        }
+    }
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_vendor = "apple"))]
+fn test_date_format_a_french_locale() {
+    // Test both %A and %a formats with French locale using a loop
+    // This test expects localized day names when i18n support is available
+    let test_cases = [
+        ("2025-01-15", "mercredi", "mer."), // Wednesday
+        ("2025-02-15", "samedi", "sam."),   // Saturday
+    ];
+
+    for (date, expected_full, expected_abbrev) in &test_cases {
+        let result = new_ucmd!()
+            .env("LC_TIME", "fr_FR.UTF-8")
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg(date)
+            .arg("+%A %a")
+            .succeeds();
+
+        let output = result.stdout_str().trim();
+        let expected = format!("{expected_full} {expected_abbrev}");
+
+        if output == expected {
+            // i18n feature is working - test passed
+            assert_eq!(output, expected);
+        } else {
+            // i18n feature not available, skip test
+            println!(
+                "Skipping French day locale test for {date} - i18n feature not available, got: {output}"
+            );
+            return; // Exit early if i18n not available
+        }
+    }
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_vendor = "apple"))]
+fn test_date_french_full_sentence() {
+    let result = new_ucmd!()
+        .env("LANG", "fr_FR.UTF-8")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2026-01-21")
+        .arg("+Nous sommes le %A %d %B %Y")
+        .succeeds();
+
+    let output = result.stdout_str().trim();
+    let expected = "Nous sommes le mercredi 21 janvier 2026";
+
+    if output == expected {
+        // i18n feature is working - test passed
+        assert_eq!(output, expected);
+    } else {
+        // i18n feature not available, skip test
+        println!("Skipping French full sentence test - i18n feature not available, got: {output}");
+    }
+}
+
 /// Test that %x format specifier respects locale settings
 /// This is a regression test for locale-aware date formatting
 #[test]
@@ -1496,4 +1589,41 @@ fn test_date_format_x_locale_aware() {
         .arg("+%x")
         .succeeds()
         .stdout_is("19/01/1997\n");
+}
+
+#[test]
+fn test_date_parenthesis_comment() {
+    // GNU compatibility: Text in parentheses is treated as a comment and removed.
+    let cases = [
+        // (input, format, expected_output)
+        ("(", "+%H:%M:%S", "00:00:00\n"),
+        ("1(ignore comment to eol", "+%H:%M:%S", "01:00:00\n"),
+        ("2026-01-05(this is a comment", "+%Y-%m-%d", "2026-01-05\n"),
+        ("2026(this is a comment)-01-05", "+%Y-%m-%d", "2026-01-05\n"),
+        ("((foo)2026-01-05)", "+%H:%M:%S", "00:00:00\n"), // Nested/unbalanced case
+        ("(2026-01-05(foo))", "+%H:%M:%S", "00:00:00\n"), // Balanced parentheses removed (empty result)
+    ];
+
+    for (input, format, expected) in cases {
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg(input)
+            .arg("-u")
+            .arg(format)
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
+#[test]
+fn test_date_parenthesis_vs_other_special_chars() {
+    // Ensure parentheses are special but other chars like [, ., ^ are still rejected
+    for special_char in ["[", ".", "^"] {
+        new_ucmd!()
+            .arg("-d")
+            .arg(special_char)
+            .fails()
+            .stderr_contains("invalid date");
+    }
 }

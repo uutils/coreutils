@@ -74,6 +74,7 @@ jobs:
     env:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
+      CARGO_INCREMENTAL: 0
     strategy:
       fail-fast: false
       matrix:
@@ -147,6 +148,12 @@ jobs:
           CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo -n "-puu_${u} "; done;)"
           S=$(cargo clippy --all-targets $extra --tests --benches -pcoreutils ${CARGO_UTILITY_LIST_OPTIONS} -- -D warnings 2>&1) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+(.*):([0-9]+):([0-9]+).*$/::${fault_type} file=\2,line=\3,col=\4::${fault_prefix}: \`cargo clippy\`: \1 (file:'\2', line:\3)/p;" -e '}' ; fault=true ; }
           if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
+    - name: "cargo clippy on fuzz dir"
+      if: runner.os != 'Windows'
+      shell: bash
+      run: |
+        cd fuzz
+        cargo clippy --workspace --all-targets --all-features -- -D warnings
 
   style_spellcheck:
     name: Style/spelling
