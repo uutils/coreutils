@@ -216,10 +216,8 @@ macro_rules! bin {
             let code = $util::uumain(uucore::args_os());
             // (defensively) flush stdout for utility prior to exit; see <https://github.com/rust-lang/rust/issues/23818>
             // If flush fails, exit with code 1 to match GNU behavior
-            // But not for BrokenPipe - that's handled by utilities themselves
             let code = match std::io::stdout().flush() {
                 Ok(()) => code,
-                Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => code,
                 Err(_) if code == 0 => 1,
                 Err(_) => code,
             };

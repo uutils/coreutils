@@ -98,10 +98,8 @@ fn main() {
                 validation::setup_localization_or_exit(util);
                 let code = uumain(vec![util_os].into_iter().chain(args));
                 // Flush stdout and exit with code 1 if flush fails (GNU compatibility)
-                // But not for BrokenPipe - that's handled by utilities themselves
                 let code = match io::stdout().flush() {
                     Ok(()) => code,
-                    Err(e) if e.kind() == io::ErrorKind::BrokenPipe => code,
                     Err(_) if code == 0 => 1,
                     Err(_) => code,
                 };
@@ -123,10 +121,8 @@ fn main() {
                                         .chain(args),
                                 );
                                 // Flush stdout and exit with code 1 if flush fails (GNU compatibility)
-                                // But not for BrokenPipe - that's handled by utilities themselves
                                 let code = match io::stdout().flush() {
                                     Ok(()) => code,
-                                    Err(e) if e.kind() == io::ErrorKind::BrokenPipe => code,
                                     Err(_) if code == 0 => 1,
                                     Err(_) => code,
                                 };
