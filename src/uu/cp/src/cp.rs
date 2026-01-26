@@ -16,7 +16,7 @@ use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::{fmt, io};
 #[cfg(all(unix, not(target_os = "android")))]
-use uucore::fsxattr::copy_xattrs;
+use uucore::fsxattr::{copy_xattrs, copy_xattrs_skip_selinux};
 use uucore::translate;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, value_parser};
@@ -1745,21 +1745,6 @@ fn copy_extended_attrs(source: &Path, dest: &Path, skip_selinux: bool) -> CopyRe
         )
     })?;
 
-    Ok(())
-}
-
-/// Copy extended attributes but skip security.selinux
-#[cfg(all(unix, not(target_os = "android")))]
-fn copy_xattrs_skip_selinux(source: &Path, dest: &Path) -> std::io::Result<()> {
-    for attr_name in xattr::list(source)? {
-        // Skip security.selinux when -Z is used to set default context
-        if attr_name.to_string_lossy() == "security.selinux" {
-            continue;
-        }
-        if let Some(value) = xattr::get(source, &attr_name)? {
-            xattr::set(dest, &attr_name, &value)?;
-        }
-    }
     Ok(())
 }
 
