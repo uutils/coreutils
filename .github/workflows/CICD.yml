@@ -647,6 +647,7 @@ jobs:
       with:
         persist-credentials: false
     - name: Avoid no space left on device
+      shell: bash
       run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android &
     - uses: dtolnay/rust-toolchain@master
       with:
@@ -1228,7 +1229,7 @@ jobs:
         fail_ci_if_error: false
 
   test_separately:
-    name: Separate Builds (individual and coreutils)# duplicated with other CI, but has better appearance 
+    name: Separate Builds (individual and coreutils)# duplicated with other CI, but has better appearance
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
@@ -1242,6 +1243,7 @@ jobs:
       with:
         persist-credentials: false
     - name: Avoid no space left on device
+      shell: bash
       run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android &
     - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
