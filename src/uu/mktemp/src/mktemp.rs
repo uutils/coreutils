@@ -69,6 +69,9 @@ enum MkTempError {
 
     #[error("{}", translate!("mktemp-error-not-found", "template_type" => .0.clone(), "template" => .1.quote()))]
     NotFound(String, PathBuf),
+
+    #[error("{}", translate!("mktemp-error-stdout-closed"))]
+    StdoutClosed,
 }
 
 impl UError for MkTempError {
@@ -388,6 +391,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let dry_run = options.dry_run;
     let suppress_file_err = options.quiet;
     let make_dir = options.directory;
+
+    #[cfg(unix)]
+    if uucore::signals::stdout_was_closed() {
+        return Err(MkTempError::StdoutClosed.into());
+    }
 
     // Parse file path parameters from the command-line options.
     let Params {

@@ -96,7 +96,15 @@ fn main() {
                 // Could be something like:
                 // #[cfg(not(feature = "only_english"))]
                 validation::setup_localization_or_exit(util);
-                process::exit(uumain(vec![util_os].into_iter().chain(args)));
+                let code = uumain(vec![util_os].into_iter().chain(args));
+                // Flush stdout and exit with code 1 if flush fails (GNU compatibility)
+                // Don't print message here - utilities handle their own error messages
+                let code = if io::stdout().flush().is_err() && code == 0 {
+                    1
+                } else {
+                    code
+                };
+                process::exit(code);
             }
             None => {
                 if util == "--help" || util == "-h" {
@@ -113,7 +121,13 @@ fn main() {
                                         .into_iter()
                                         .chain(args),
                                 );
-                                io::stdout().flush().expect("could not flush stdout");
+                                // Flush stdout and exit with code 1 if flush fails (GNU compatibility)
+                                // Don't print message here - utilities handle their own error messages
+                                let code = if io::stdout().flush().is_err() && code == 0 {
+                                    1
+                                } else {
+                                    code
+                                };
                                 process::exit(code);
                             }
                             None => validation::not_found(&util_os),

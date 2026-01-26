@@ -333,7 +333,7 @@ fn test_failed_write_is_reported() {
         .pipe_in("hello")
         .set_stdout(std::fs::File::create("/dev/full").unwrap())
         .fails()
-        .stderr_is("tac: failed to write to stdout: No space left on device (os error 28)\n");
+        .stderr_is("tac: write error: No space left on device (os error 28)\n");
 }
 
 #[cfg(target_os = "linux")]

@@ -12,7 +12,7 @@ use std::collections::{HashMap, HashSet};
 use std::convert::identity;
 use std::env;
 use std::fs::{self, exists};
-use std::io;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf, StripPrefixError};
 
 use indicatif::ProgressBar;
@@ -24,6 +24,7 @@ use uucore::fs::{
 use uucore::show;
 use uucore::translate;
 use uucore::uio_error;
+use uucore::writeln_stdout;
 use walkdir::{DirEntry, WalkDir};
 
 use crate::{
@@ -271,10 +272,10 @@ fn copy_direntry(
                 Some(&entry.source_absolute),
             )?;
             if options.verbose {
-                println!(
+                writeln_stdout!(
                     "{}",
                     context_for(&entry.source_relative, &entry.local_to_target)
-                );
+                )?;
             }
             Ok(())
         };
@@ -392,7 +393,7 @@ pub(crate) fn copy_directory(
                 //     a/b -> d/a/b
                 //
                 for (x, y) in aligned_ancestors(root, &target.join(root)) {
-                    println!("{} -> {}", x.display(), y.display());
+                    writeln_stdout!("{} -> {}", x.display(), y.display())?;
                 }
             }
 

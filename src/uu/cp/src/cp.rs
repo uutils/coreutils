@@ -9,6 +9,7 @@ use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
 use std::fmt::Display;
 use std::fs::{self, Metadata, OpenOptions, Permissions};
+use std::io::Write;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 #[cfg(unix)]
@@ -40,7 +41,7 @@ use uucore::{backup_control, update_control};
 pub use uucore::{backup_control::BackupMode, update_control::UpdateMode};
 use uucore::{
     format_usage, parser::shortcut_value_parser::ShortcutValueParser, prompt_yes, show_error,
-    show_warning,
+    show_warning, writeln_stdout,
 };
 
 use crate::copydir::copy_directory;
@@ -446,11 +447,11 @@ impl Display for SparseDebug {
 /// This function prints the debug information of a file copy operation if
 /// no hard link or symbolic link is required, and data copy is required.
 /// It prints the debug information of the offload, reflink, and sparse detection actions.
-fn show_debug(copy_debug: &CopyDebug) {
-    println!(
+fn show_debug(copy_debug: &CopyDebug) -> io::Result<()> {
+    writeln_stdout!(
         "{}",
         translate!("cp-debug-copy-offload", "offload" => copy_debug.offload, "reflink" => copy_debug.reflink, "sparse" => copy_debug.sparse_detection)
-    );
+    )
 }
 
 static EXIT_ERR: i32 = 1;
@@ -1618,7 +1619,7 @@ impl OverwriteMode {
         match *self {
             Self::NoClobber => {
                 if debug {
-                    println!("{}", translate!("cp-debug-skipped", "path" => path.quote()));
+                    writeln_stdout!("{}", translate!("cp-debug-skipped", "path" => path.quote()))?;
                 }
                 Err(CpError::Skipped(false))
             }
@@ -1955,7 +1956,7 @@ fn handle_existing_dest(
 
     if options.update == UpdateMode::None {
         if options.debug {
-            println!("skipped {}", dest.quote());
+            writeln_stdout!("skipped {}", dest.quote())?;
         }
         return Err(CpError::Skipped(false));
     }
@@ -2060,10 +2061,10 @@ fn delete_path(path: &Path, options: &Options) -> CopyResult<()> {
     match fs::remove_file(path) {
         Ok(()) => {
             if options.verbose {
-                println!(
+                writeln_stdout!(
                     "{}",
                     translate!("cp-verbose-removed", "path" => path.quote())
-                );
+                )?;
             }
         }
         Err(err) if err.kind() == io::ErrorKind::NotFound => {
@@ -2121,18 +2122,20 @@ fn print_verbose_output(
     progress_bar: Option<&ProgressBar>,
     source: &Path,
     dest: &Path,
-) {
+) -> io::Result<()> {
     if let Some(pb) = progress_bar {
         // Suspend (hide) the progress bar so the println won't overlap with the progress bar.
+        let mut result = Ok(());
         pb.suspend(|| {
-            print_paths(parents, source, dest);
+            result = print_paths(parents, source, dest);
         });
+        result
     } else {
-        print_paths(parents, source, dest);
+        print_paths(parents, source, dest)
     }
 }
 
-fn print_paths(parents: bool, source: &Path, dest: &Path) {
+fn print_paths(parents: bool, source: &Path, dest: &Path) -> io::Result<()> {
     if parents {
         // For example, if copying file `a/b/c` and its parents
         // to directory `d/`, then print
@@ -2141,14 +2144,14 @@ fn print_paths(parents: bool, source: &Path, dest: &Path) {
         //     a/b -> d/a/b
         //
         for (x, y) in aligned_ancestors(source, dest) {
-            println!(
+            writeln_stdout!(
                 "{}",
                 translate!("cp-verbose-created-directory", "source" => x.display(), "dest" => y.display())
-            );
+            )?;
         }
     }
 
-    println!("{}", context_for(source, dest));
+    writeln_stdout!("{}", context_for(source, dest))
 }
 
 /// Handles the copy mode for a file copy operation.
@@ -2245,7 +2248,7 @@ fn handle_copy_mode(
                     }
                     UpdateMode::None => {
                         if options.debug {
-                            println!("skipped {}", dest.quote());
+                            writeln_stdout!("skipped {}", dest.quote())?;
                         }
 
                         return Ok(PerformedAction::Skipped);
@@ -2492,7 +2495,7 @@ fn copy_file(
             fs::hard_link(new_source, dest)?;
 
             if options.verbose {
-                print_verbose_output(options.parents, progress_bar, source, dest);
+                print_verbose_output(options.parents, progress_bar, source, dest)?;
             }
 
             return Ok(());
@@ -2555,7 +2558,7 @@ fn copy_file(
     )?;
 
     if options.verbose && performed_action != PerformedAction::Skipped {
-        print_verbose_output(options.parents, progress_bar, source, dest);
+        print_verbose_output(options.parents, progress_bar, source, dest)?;
     }
 
     // TODO: implement something similar to gnu's lchown
@@ -2720,7 +2723,7 @@ fn copy_helper(
         )?;
 
         if !options.attributes_only && options.debug {
-            show_debug(&copy_debug);
+            show_debug(&copy_debug)?;
         }
     }
 
