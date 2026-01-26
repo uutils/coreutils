@@ -26,7 +26,7 @@ use args::{FilterMode, Settings, Signum, parse_args};
 use chunks::ReverseChunks;
 use follow::Observer;
 use memchr::{memchr_iter, memrchr_iter};
-use paths::{FileExtTail, HeaderPrinter, Input, InputKind};
+use paths::{FileExtTail, HeaderPrinter, Input, InputKind, MetadataExtTail};
 use same_file::Handle;
 use std::cmp::Ordering;
 use std::fs::File;
@@ -117,79 +117,103 @@ fn tail_file(
     observer: &mut Observer,
     offset: u64,
 ) -> UResult<()> {
-    if !path.exists() {
-        set_exit_code(1);
-        show_error!(
-            "{}",
-            translate!("tail-error-cannot-open-no-such-file", "file" => input.display_name.clone(), "error" => translate!("tail-no-such-file-or-directory"))
-        );
-        observer.add_bad_path(path, input.display_name.as_str(), false)?;
-    } else if path.is_dir() {
-        set_exit_code(1);
+    #[cfg(unix)]
+    let open_result = open_file(path, settings.pid != 0);
+    #[cfg(not(unix))]
+    let open_result = File::open(path);
 
-        header_printer.print_input(input);
-        let err_msg = translate!("tail-is-a-directory");
-
-        show_error!(
-            "{}",
-            translate!("tail-error-reading-file", "file" => input.display_name.clone(), "error" => err_msg)
-        );
-        if settings.follow.is_some() {
-            let msg = if settings.retry {
-                ""
-            } else {
-                &translate!("tail-giving-up-on-this-name")
-            };
-            show_error!(
-                "{}",
-                translate!("tail-error-cannot-follow-file-type", "file" => input.display_name.clone(), "msg" => msg)
-            );
-        }
-        if !observer.follow_name_retry() {
-            // skip directory if not retry
-            return Ok(());
-        }
-        observer.add_bad_path(path, input.display_name.as_str(), false)?;
-    } else {
-        #[cfg(unix)]
-        let open_result = open_file(path, settings.pid != 0);
-        #[cfg(not(unix))]
-        let open_result = File::open(path);
-
-        match open_result {
-            Ok(mut file) => {
-                let st = file.metadata()?;
-                let blksize_limit = uucore::fs::sane_blksize::sane_blksize_from_metadata(&st);
+    match open_result {
+        Ok(mut file) => {
+            let st = file.metadata()?;
+            if st.is_dir() {
+                set_exit_code(1);
                 header_printer.print_input(input);
-                let mut reader;
-                if !settings.presume_input_pipe
-                    && file.is_seekable(if input.is_stdin() { offset } else { 0 })
-                    && (!st.is_file() || st.len() > blksize_limit)
-                {
-                    bounded_tail(&mut file, settings);
-                    reader = BufReader::new(file);
-                } else {
-                    reader = BufReader::new(file);
-                    unbounded_tail(&mut reader, settings)?;
+                show_error!(
+                    "{}",
+                    translate!("tail-error-reading-file", "file" => input.display_name.clone(), "error" => translate!("tail-is-a-directory"))
+                );
+                if settings.follow.is_some() {
+                    let msg = if settings.retry {
+                        ""
+                    } else {
+                        &translate!("tail-giving-up-on-this-name")
+                    };
+                    show_error!(
+                        "{}",
+                        translate!("tail-error-cannot-follow-file-type", "file" => input.display_name.clone(), "msg" => msg)
+                    );
                 }
-                if input.is_tailable() {
-                    observer.add_path(
-                        path,
-                        input.display_name.as_str(),
-                        Some(Box::new(reader)),
-                        true,
-                    )?;
-                } else {
-                    observer.add_bad_path(path, input.display_name.as_str(), false)?;
+                if !observer.follow_name_retry() {
+                    return Ok(());
                 }
-            }
-            Err(e) if e.kind() == ErrorKind::PermissionDenied => {
                 observer.add_bad_path(path, input.display_name.as_str(), false)?;
+                return Ok(());
+            }
+
+            let blksize_limit = uucore::fs::sane_blksize::sane_blksize_from_metadata(&st);
+            header_printer.print_input(input);
+            let mut reader;
+            if !settings.presume_input_pipe
+                && file.is_seekable(if input.is_stdin() { offset } else { 0 })
+                && (!st.is_file() || st.len() > blksize_limit)
+            {
+                bounded_tail(&mut file, settings);
+                reader = BufReader::new(file);
+            } else {
+                reader = BufReader::new(file);
+                unbounded_tail(&mut reader, settings)?;
+            }
+            if st.is_tailable() {
+                observer.add_path(
+                    path,
+                    input.display_name.as_str(),
+                    Some(Box::new(reader)),
+                    true,
+                )?;
+            } else {
+                observer.add_bad_path(path, input.display_name.as_str(), false)?;
+            }
+        }
+        Err(e) => {
+            if e.kind() == ErrorKind::NotFound {
+                observer.add_bad_path(path, input.display_name.as_str(), false)?;
+                set_exit_code(1);
+                show_error!(
+                    "{}",
+                    translate!("tail-error-cannot-open-no-such-file", "file" => input.display_name.clone(), "error" => translate!("tail-no-such-file-or-directory"))
+                );
+            } else if e.kind() == ErrorKind::PermissionDenied {
+                #[cfg(windows)]
+                if path.is_dir() {
+                    set_exit_code(1);
+                    header_printer.print_input(input);
+                    show_error!(
+                        "{}",
+                        translate!("tail-error-reading-file", "file" => input.display_name.clone(), "error" => translate!("tail-is-a-directory"))
+                    );
+                    if settings.follow.is_some() {
+                        let msg = if settings.retry {
+                            ""
+                        } else {
+                            &translate!("tail-giving-up-on-this-name")
+                        };
+                        show_error!(
+                            "{}",
+                            translate!("tail-error-cannot-follow-file-type", "file" => input.display_name.clone(), "msg" => msg)
+                        );
+                    }
+                    if !observer.follow_name_retry() {
+                        return Ok(());
+                    }
+                    observer.add_bad_path(path, input.display_name.as_str(), false)?;
+                    return Ok(());
+                }
+                observer.add_bad_path(path, input.display_name.as_str(), false)?;
+                set_exit_code(1);
                 show!(e.map_err_context(|| {
                     translate!("tail-error-cannot-open-for-reading", "file" => input.display_name.clone())
                 }));
-            }
-            Err(e) => {
+            } else {
                 observer.add_bad_path(path, input.display_name.as_str(), false)?;
                 return Err(e.map_err_context(|| {
                     translate!("tail-error-cannot-open-for-reading", "file" => input.display_name.clone())
