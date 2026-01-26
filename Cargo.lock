@@ -3345,6 +3345,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "icu_calendar",
+ "icu_locale",
  "jiff",
  "nix",
  "parse_datetime",

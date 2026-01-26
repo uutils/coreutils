@@ -116,6 +116,96 @@ pub fn get_localized_day_name(year: i32, month: u8, day: u8, full: bool) -> Stri
     formatted.trim().to_string()
 }
 
+/// Determine the appropriate calendar system for a given locale
+pub fn get_locale_calendar_type(locale: &Locale) -> CalendarType {
+    let locale_str = locale.to_string();
+
+    match locale_str.as_str() {
+        // Thai locales use Buddhist calendar
+        s if s.starts_with("th") => CalendarType::Buddhist,
+        // Persian/Farsi locales use Persian calendar (Solar Hijri)
+        s if s.starts_with("fa") => CalendarType::Persian,
+        // Amharic (Ethiopian) locales use Ethiopian calendar
+        s if s.starts_with("am") => CalendarType::Ethiopian,
+        // Default to Gregorian for all other locales
+        _ => CalendarType::Gregorian,
+    }
+}
+
+/// Calendar types supported for locale-aware formatting
+#[derive(Debug, Clone, PartialEq)]
+pub enum CalendarType {
+    /// Gregorian calendar (used by most locales)
+    Gregorian,
+    /// Buddhist calendar (Thai locales) - adds 543 years to Gregorian year
+    Buddhist,
+    /// Persian Solar Hijri calendar (Persian/Farsi locales) - subtracts 621/622 years
+    Persian,
+    /// Ethiopian calendar (Amharic locales) - subtracts 7/8 years
+    Ethiopian,
+}
+
+/// Convert a Gregorian date to the appropriate calendar system for a locale
+///
+/// # Arguments
+/// * `year` - Gregorian year
+/// * `month` - Month (1-12)
+/// * `day` - Day (1-31)
+/// * `calendar_type` - Target calendar system
+///
+/// # Returns
+/// * `Some((era_year, month, day))` - Date in target calendar system
+/// * `None` - If conversion fails
+pub fn convert_date_to_locale_calendar(
+    year: i32,
+    month: u8,
+    day: u8,
+    calendar_type: &CalendarType,
+) -> Option<(i32, u8, u8)> {
+    match calendar_type {
+        CalendarType::Gregorian => Some((year, month, day)),
+        CalendarType::Buddhist => {
+            // Buddhist calendar: Gregorian year + 543
+            Some((year + 543, month, day))
+        }
+        CalendarType::Persian => {
+            // Persian calendar conversion (Solar Hijri)
+            // March 21 (Nowruz) is roughly the start of the Persian year
+            let persian_year = if month > 3 || (month == 3 && day >= 21) {
+                year - 621 // After March 21
+            } else {
+                year - 622 // Before March 21
+            };
+            Some((persian_year, month, day))
+        }
+        CalendarType::Ethiopian => {
+            // Ethiopian calendar conversion
+            // September 11/12 is roughly the start of the Ethiopian year
+            let ethiopian_year = if month > 9 || (month == 9 && day >= 11) {
+                year - 7 // After September 11
+            } else {
+                year - 8 // Before September 11
+            };
+            Some((ethiopian_year, month, day))
+        }
+    }
+}
+
+/// Get the era year for a given date and locale
+pub fn get_era_year(year: i32, month: u8, day: u8, locale: &Locale) -> Option<i32> {
+    // Validate input date
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+        return None;
+    }
+
+    let calendar_type = get_locale_calendar_type(locale);
+    match calendar_type {
+        CalendarType::Gregorian => None,
+        _ => convert_date_to_locale_calendar(year, month, day, &calendar_type)
+            .map(|(era_year, _, _)| era_year),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -127,5 +217,48 @@ mod tests {
         // The function may return empty string if ICU fails, which is fine
         // The caller (date.rs) will handle this by falling back to jiff
         assert!(name.is_empty() || name.len() >= 3);
+    }
+
+    #[test]
+    fn test_calendar_type_detection() {
+        let thai_locale = icu_locale::locale!("th-TH");
+        let persian_locale = icu_locale::locale!("fa-IR");
+        let amharic_locale = icu_locale::locale!("am-ET");
+        let english_locale = icu_locale::locale!("en-US");
+
+        assert_eq!(
+            get_locale_calendar_type(&thai_locale),
+            CalendarType::Buddhist
+        );
+        assert_eq!(
+            get_locale_calendar_type(&persian_locale),
+            CalendarType::Persian
+        );
+        assert_eq!(
+            get_locale_calendar_type(&amharic_locale),
+            CalendarType::Ethiopian
+        );
+        assert_eq!(
+            get_locale_calendar_type(&english_locale),
+            CalendarType::Gregorian
+        );
+    }
+
+    #[test]
+    fn test_era_year_conversion() {
+        let thai_locale = icu_locale::locale!("th-TH");
+        let persian_locale = icu_locale::locale!("fa-IR");
+        let amharic_locale = icu_locale::locale!("am-ET");
+
+        // Test Thai Buddhist calendar (2026 + 543 = 2569)
+        assert_eq!(get_era_year(2026, 6, 15, &thai_locale), Some(2569));
+
+        // Test Persian calendar (rough approximation)
+        assert_eq!(get_era_year(2026, 3, 22, &persian_locale), Some(1405));
+        assert_eq!(get_era_year(2026, 3, 19, &persian_locale), Some(1404));
+
+        // Test Ethiopian calendar (rough approximation)
+        assert_eq!(get_era_year(2026, 9, 12, &amharic_locale), Some(2019));
+        assert_eq!(get_era_year(2026, 9, 10, &amharic_locale), Some(2018));
     }
 }
