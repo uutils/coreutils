@@ -29,7 +29,7 @@ use uucore::fs::dir_strip_dot_for_creation;
 use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
 use uucore::process::{getegid, geteuid};
 #[cfg(unix)]
-use uucore::safe_traversal::{DirFd, create_dir_all_safe};
+use uucore::safe_traversal::{DirFd, SymlinkBehavior, create_dir_all_safe};
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::{
     SeLinuxError, contexts_differ, get_selinux_security_context, is_selinux_enabled,
@@ -648,7 +648,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                         && sources.len() == 1
                         && !is_potential_directory_path(&target)
                     {
-                        if let Ok(dir_fd) = DirFd::open(to_create, false) {
+                        if let Ok(dir_fd) = DirFd::open(to_create, SymlinkBehavior::NoFollow) {
                             if let Some(filename) = target.file_name() {
                                 target_parent_fd = Some(dir_fd);
                                 target_filename = Some(filename.to_os_string());
@@ -911,7 +911,7 @@ fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsS
     let ft = from_meta.file_type();
 
     // Check if source and destination are the same file
-    if let Ok(to_stat) = to_parent_fd.stat_at(to_filename, true) {
+    if let Ok(to_stat) = to_parent_fd.stat_at(to_filename, SymlinkBehavior::Follow) {
         // st_dev and st_ino types vary by platform (i32/u32 on macOS, u64 on Linux)
         #[allow(clippy::unnecessary_cast)]
         if from_meta.dev() == to_stat.st_dev as u64 && from_meta.ino() == to_stat.st_ino as u64 {

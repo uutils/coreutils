@@ -30,6 +30,33 @@ use os_display::Quotable;
 
 use crate::translate;
 
+/// Enum to specify symlink following behavior.
+///
+/// This replaces boolean `follow_symlinks` parameters for better readability
+/// at call sites. Instead of `open(path, true)`, use `open(path, SymlinkBehavior::Follow)`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SymlinkBehavior {
+    /// Follow symlinks (resolve to their target)
+    #[default]
+    Follow,
+    /// Do not follow symlinks (operate on the symlink itself)
+    NoFollow,
+}
+
+impl SymlinkBehavior {
+    /// Returns `true` if symlinks should be followed
+    #[inline]
+    pub fn should_follow(self) -> bool {
+        matches!(self, Self::Follow)
+    }
+}
+
+impl From<bool> for SymlinkBehavior {
+    fn from(follow: bool) -> Self {
+        if follow { Self::Follow } else { Self::NoFollow }
+    }
+}
+
 // Custom error types for better error reporting
 #[derive(thiserror::Error, Debug)]
 pub enum SafeTraversalError {
@@ -109,10 +136,10 @@ impl DirFd {
     ///
     /// # Arguments
     /// * `path` - The path to the directory to open
-    /// * `follow_symlinks` - Whether to follow symlinks when opening
-    pub fn open(path: &Path, follow_symlinks: bool) -> io::Result<Self> {
+    /// * `symlink_behavior` - Whether to follow symlinks when opening
+    pub fn open(path: &Path, symlink_behavior: SymlinkBehavior) -> io::Result<Self> {
         let mut flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC;
-        if !follow_symlinks {
+        if !symlink_behavior.should_follow() {
             flags |= OFlag::O_NOFOLLOW;
         }
         let fd = nix::fcntl::open(path, flags, Mode::empty()).map_err(|e| {
@@ -128,12 +155,12 @@ impl DirFd {
     ///
     /// # Arguments
     /// * `name` - The name of the subdirectory to open
-    /// * `follow_symlinks` - Whether to follow symlinks when opening
-    pub fn open_subdir(&self, name: &OsStr, follow_symlinks: bool) -> io::Result<Self> {
+    /// * `symlink_behavior` - Whether to follow symlinks when opening
+    pub fn open_subdir(&self, name: &OsStr, symlink_behavior: SymlinkBehavior) -> io::Result<Self> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
         let mut flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC;
-        if !follow_symlinks {
+        if !symlink_behavior.should_follow() {
             flags |= OFlag::O_NOFOLLOW;
         }
         let fd = openat(&self.fd, name_cstr.as_c_str(), flags, Mode::empty()).map_err(|e| {
@@ -146,11 +173,11 @@ impl DirFd {
     }
 
     /// Get raw stat data for a file relative to this directory
-    pub fn stat_at(&self, name: &OsStr, follow_symlinks: bool) -> io::Result<FileStat> {
+    pub fn stat_at(&self, name: &OsStr, symlink_behavior: SymlinkBehavior) -> io::Result<FileStat> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
 
-        let flags = if follow_symlinks {
+        let flags = if symlink_behavior.should_follow() {
             nix::fcntl::AtFlags::empty()
         } else {
             nix::fcntl::AtFlags::AT_SYMLINK_NOFOLLOW
@@ -167,8 +194,13 @@ impl DirFd {
     }
 
     /// Get metadata for a file relative to this directory
-    pub fn metadata_at(&self, name: &OsStr, follow_symlinks: bool) -> io::Result<Metadata> {
-        self.stat_at(name, follow_symlinks).map(Metadata::from_stat)
+    pub fn metadata_at(
+        &self,
+        name: &OsStr,
+        symlink_behavior: SymlinkBehavior,
+    ) -> io::Result<Metadata> {
+        self.stat_at(name, symlink_behavior)
+            .map(Metadata::from_stat)
     }
 
     /// Get metadata for this directory
@@ -223,12 +255,12 @@ impl DirFd {
         name: &OsStr,
         uid: Option<u32>,
         gid: Option<u32>,
-        follow_symlinks: bool,
+        symlink_behavior: SymlinkBehavior,
     ) -> io::Result<()> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
 
-        let flags = if follow_symlinks {
+        let flags = if symlink_behavior.should_follow() {
             nix::fcntl::AtFlags::empty()
         } else {
             nix::fcntl::AtFlags::AT_SYMLINK_NOFOLLOW
@@ -254,8 +286,13 @@ impl DirFd {
     }
 
     /// Change mode of a file relative to this directory
-    pub fn chmod_at(&self, name: &OsStr, mode: u32, follow_symlinks: bool) -> io::Result<()> {
-        let flags = if follow_symlinks {
+    pub fn chmod_at(
+        &self,
+        name: &OsStr,
+        mode: u32,
+        symlink_behavior: SymlinkBehavior,
+    ) -> io::Result<()> {
+        let flags = if symlink_behavior.should_follow() {
             FchmodatFlags::FollowSymlink
         } else {
             FchmodatFlags::NoFollowSymlink
@@ -360,10 +397,10 @@ pub fn create_dir_all_safe(path: &Path, mode: u32) -> io::Result<DirFd> {
                 .unwrap_or(false);
 
             if is_real_dir {
-                let mut dir_fd = DirFd::open(current_path, false)?;
+                let mut dir_fd = DirFd::open(current_path, SymlinkBehavior::NoFollow)?;
 
                 for component in components_to_create.iter().rev() {
-                    match dir_fd.stat_at(component.as_os_str(), false) {
+                    match dir_fd.stat_at(component.as_os_str(), SymlinkBehavior::NoFollow) {
                         Ok(stat) => {
                             if (stat.st_mode as libc::mode_t) & libc::S_IFMT != libc::S_IFDIR {
                                 return Err(io::Error::new(
@@ -373,11 +410,13 @@ pub fn create_dir_all_safe(path: &Path, mode: u32) -> io::Result<DirFd> {
                                     ),
                                 ));
                             }
-                            dir_fd = dir_fd.open_subdir(component.as_os_str(), false)?;
+                            dir_fd = dir_fd
+                                .open_subdir(component.as_os_str(), SymlinkBehavior::NoFollow)?;
                         }
                         Err(_) => {
                             dir_fd.mkdir_at(component.as_os_str(), mode)?;
-                            dir_fd = dir_fd.open_subdir(component.as_os_str(), false)?;
+                            dir_fd = dir_fd
+                                .open_subdir(component.as_os_str(), SymlinkBehavior::NoFollow)?;
                         }
                     }
                 }
@@ -415,10 +454,10 @@ pub fn create_dir_all_safe(path: &Path, mode: u32) -> io::Result<DirFd> {
         Path::new(".")
     };
 
-    let mut dir_fd = DirFd::open(root_path, true)?;
+    let mut dir_fd = DirFd::open(root_path, SymlinkBehavior::Follow)?;
 
     for component in components_to_create.iter().rev() {
-        match dir_fd.stat_at(component.as_os_str(), false) {
+        match dir_fd.stat_at(component.as_os_str(), SymlinkBehavior::NoFollow) {
             Ok(stat) => {
                 if (stat.st_mode as libc::mode_t) & libc::S_IFMT != libc::S_IFDIR {
                     return Err(io::Error::new(
@@ -426,11 +465,11 @@ pub fn create_dir_all_safe(path: &Path, mode: u32) -> io::Result<DirFd> {
                         format!("path component exists but is not a directory: {component:?}"),
                     ));
                 }
-                dir_fd = dir_fd.open_subdir(component.as_os_str(), false)?;
+                dir_fd = dir_fd.open_subdir(component.as_os_str(), SymlinkBehavior::NoFollow)?;
             }
             Err(_) => {
                 dir_fd.mkdir_at(component.as_os_str(), mode)?;
-                dir_fd = dir_fd.open_subdir(component.as_os_str(), false)?;
+                dir_fd = dir_fd.open_subdir(component.as_os_str(), SymlinkBehavior::NoFollow)?;
             }
         }
     }
@@ -708,13 +747,13 @@ mod tests {
     #[test]
     fn test_dirfd_open_valid_directory() {
         let temp_dir = TempDir::new().unwrap();
-        let dir_fd = DirFd::open(temp_dir.path(), true).unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
         assert!(dir_fd.as_raw_fd() >= 0);
     }
 
     #[test]
     fn test_dirfd_open_nonexistent_directory() {
-        let result = DirFd::open("/nonexistent/path".as_ref(), true);
+        let result = DirFd::open("/nonexistent/path".as_ref(), SymlinkBehavior::Follow);
         assert!(result.is_err());
         if let Err(e) = result {
             // The error should be the underlying io::Error
@@ -730,7 +769,7 @@ mod tests {
         let file_path = temp_dir.path().join("test_file");
         fs::write(&file_path, "test content").unwrap();
 
-        let result = DirFd::open(&file_path, true);
+        let result = DirFd::open(&file_path, SymlinkBehavior::Follow);
         assert!(result.is_err());
     }
 
@@ -740,17 +779,19 @@ mod tests {
         let subdir = temp_dir.path().join("subdir");
         fs::create_dir(&subdir).unwrap();
 
-        let parent_fd = DirFd::open(temp_dir.path(), true).unwrap();
-        let subdir_fd = parent_fd.open_subdir(OsStr::new("subdir"), true).unwrap();
+        let parent_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+        let subdir_fd = parent_fd
+            .open_subdir(OsStr::new("subdir"), SymlinkBehavior::Follow)
+            .unwrap();
         assert!(subdir_fd.as_raw_fd() >= 0);
     }
 
     #[test]
     fn test_dirfd_open_nonexistent_subdir() {
         let temp_dir = TempDir::new().unwrap();
-        let parent_fd = DirFd::open(temp_dir.path(), true).unwrap();
+        let parent_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
 
-        let result = parent_fd.open_subdir(OsStr::new("nonexistent"), true);
+        let result = parent_fd.open_subdir(OsStr::new("nonexistent"), SymlinkBehavior::Follow);
         assert!(result.is_err());
     }
 
@@ -760,8 +801,10 @@ mod tests {
         let file_path = temp_dir.path().join("test_file");
         fs::write(&file_path, "test content").unwrap();
 
-        let dir_fd = DirFd::open(temp_dir.path(), true).unwrap();
-        let stat = dir_fd.stat_at(OsStr::new("test_file"), true).unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+        let stat = dir_fd
+            .stat_at(OsStr::new("test_file"), SymlinkBehavior::Follow)
+            .unwrap();
 
         assert!(stat.st_size > 0);
         assert_eq!(stat.st_mode & libc::S_IFMT, libc::S_IFREG);
@@ -776,21 +819,25 @@ mod tests {
         fs::write(&target_file, "target content").unwrap();
         symlink(&target_file, &symlink_file).unwrap();
 
-        let dir_fd = DirFd::open(temp_dir.path(), true).unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
 
         // Follow symlinks
-        let stat_follow = dir_fd.stat_at(OsStr::new("link"), true).unwrap();
+        let stat_follow = dir_fd
+            .stat_at(OsStr::new("link"), SymlinkBehavior::Follow)
+            .unwrap();
         assert_eq!(stat_follow.st_mode & libc::S_IFMT, libc::S_IFREG);
 
         // Don't follow symlinks
-        let stat_nofollow = dir_fd.stat_at(OsStr::new("link"), false).unwrap();
+        let stat_nofollow = dir_fd
+            .stat_at(OsStr::new("link"), SymlinkBehavior::NoFollow)
+            .unwrap();
         assert_eq!(stat_nofollow.st_mode & libc::S_IFMT, libc::S_IFLNK);
     }
 
     #[test]
     fn test_dirfd_fstat() {
         let temp_dir = TempDir::new().unwrap();
-        let dir_fd = DirFd::open(temp_dir.path(), true).unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
         let stat = dir_fd.fstat().unwrap();
 
         assert_eq!(stat.st_mode & libc::S_IFMT, libc::S_IFDIR);
@@ -805,7 +852,7 @@ mod tests {
         fs::write(&file1, "content1").unwrap();
         fs::write(&file2, "content2").unwrap();
 
-        let dir_fd = DirFd::open(temp_dir.path(), true).unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
         let entries = dir_fd.read_dir().unwrap();
 
         assert_eq!(entries.len(), 2);
@@ -819,7 +866,7 @@ mod tests {
         let file_path = temp_dir.path().join("test_file");
         fs::write(&file_path, "test content").unwrap();
 
-        let dir_fd = DirFd::open(temp_dir.path(), true).unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
         dir_fd.unlink_at(OsStr::new("test_file"), false).unwrap();
 
         assert!(!file_path.exists());
@@ -831,7 +878,7 @@ mod tests {
         let subdir = temp_dir.path().join("empty_dir");
         fs::create_dir(&subdir).unwrap();
 
-        let dir_fd = DirFd::open(temp_dir.path(), true).unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
         dir_fd.unlink_at(OsStr::new("empty_dir"), true).unwrap();
 
         assert!(!subdir.exists());
@@ -840,7 +887,7 @@ mod tests {
     #[test]
     fn test_from_raw_fd() {
         let temp_dir = TempDir::new().unwrap();
-        let dir_fd = DirFd::open(temp_dir.path(), true).unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
 
         // Duplicate the fd first so we don't have ownership conflicts
         let dup_fd = nix::unistd::dup(&dir_fd).unwrap();
@@ -866,8 +913,10 @@ mod tests {
         let file_path = temp_dir.path().join("test_file");
         fs::write(&file_path, "test content").unwrap();
 
-        let dir_fd = DirFd::open(temp_dir.path(), true).unwrap();
-        let stat = dir_fd.stat_at(OsStr::new("test_file"), true).unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+        let stat = dir_fd
+            .stat_at(OsStr::new("test_file"), SymlinkBehavior::Follow)
+            .unwrap();
         let file_info = FileInfo::from_stat(&stat);
         assert_eq!(file_info.device(), stat.st_dev as u64);
         assert_eq!(file_info.inode(), stat.st_ino as u64);
@@ -914,8 +963,10 @@ mod tests {
         let file_path = temp_dir.path().join("test_file");
         fs::write(&file_path, "test content with some length").unwrap();
 
-        let dir_fd = DirFd::open(temp_dir.path(), true).unwrap();
-        let metadata = dir_fd.metadata_at(OsStr::new("test_file"), true).unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+        let metadata = dir_fd
+            .metadata_at(OsStr::new("test_file"), SymlinkBehavior::Follow)
+            .unwrap();
 
         assert_eq!(metadata.file_type(), FileType::RegularFile);
         assert!(metadata.size() > 0);
@@ -928,7 +979,7 @@ mod tests {
     #[test]
     fn test_metadata_directory() {
         let temp_dir = TempDir::new().unwrap();
-        let dir_fd = DirFd::open(temp_dir.path(), true).unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
         let metadata = dir_fd.metadata().unwrap();
 
         assert_eq!(metadata.file_type(), FileType::Directory);
@@ -939,9 +990,9 @@ mod tests {
     fn test_path_with_null_byte() {
         let path_with_null = OsString::from_vec(b"test\0file".to_vec());
         let temp_dir = TempDir::new().unwrap();
-        let dir_fd = DirFd::open(temp_dir.path(), true).unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
 
-        let result = dir_fd.open_subdir(&path_with_null, true);
+        let result = dir_fd.open_subdir(&path_with_null, SymlinkBehavior::Follow);
         assert!(result.is_err());
         if let Err(e) = result {
             // Should be InvalidInput for null byte error
@@ -951,7 +1002,10 @@ mod tests {
 
     #[test]
     fn test_error_chain() {
-        let result = DirFd::open("/nonexistent/deeply/nested/path".as_ref(), true);
+        let result = DirFd::open(
+            "/nonexistent/deeply/nested/path".as_ref(),
+            SymlinkBehavior::Follow,
+        );
         assert!(result.is_err());
 
         if let Err(e) = result {
@@ -967,7 +1021,7 @@ mod tests {
     #[test]
     fn test_mkdir_at_creates_directory() {
         let temp_dir = TempDir::new().unwrap();
-        let dir_fd = DirFd::open(temp_dir.path(), true).unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
 
         dir_fd.mkdir_at(OsStr::new("new_subdir"), 0o755).unwrap();
 
@@ -980,7 +1034,7 @@ mod tests {
         let subdir = temp_dir.path().join("existing");
         fs::create_dir(&subdir).unwrap();
 
-        let dir_fd = DirFd::open(temp_dir.path(), true).unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
         let result = dir_fd.mkdir_at(OsStr::new("existing"), 0o755);
 
         assert!(result.is_err());
@@ -989,7 +1043,7 @@ mod tests {
     #[test]
     fn test_open_file_at_creates_file() {
         let temp_dir = TempDir::new().unwrap();
-        let dir_fd = DirFd::open(temp_dir.path(), true).unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
 
         let mut file = dir_fd.open_file_at(OsStr::new("new_file.txt")).unwrap();
         use std::io::Write;
@@ -1005,7 +1059,7 @@ mod tests {
         let file_path = temp_dir.path().join("existing.txt");
         fs::write(&file_path, "old content that is longer").unwrap();
 
-        let dir_fd = DirFd::open(temp_dir.path(), true).unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
         let mut file = dir_fd.open_file_at(OsStr::new("existing.txt")).unwrap();
         use std::io::Write;
         file.write_all(b"new").unwrap();
@@ -1102,14 +1156,14 @@ mod tests {
         let link = temp_dir.path().join("link");
         symlink(&target, &link).unwrap();
 
-        let dir_fd = DirFd::open(temp_dir.path(), true).unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
 
         // With follow_symlinks=true, should succeed
-        let result_follow = dir_fd.open_subdir(OsStr::new("link"), true);
+        let result_follow = dir_fd.open_subdir(OsStr::new("link"), SymlinkBehavior::Follow);
         assert!(result_follow.is_ok());
 
         // With follow_symlinks=false, should fail (ELOOP or ENOTDIR)
-        let result_nofollow = dir_fd.open_subdir(OsStr::new("link"), false);
+        let result_nofollow = dir_fd.open_subdir(OsStr::new("link"), SymlinkBehavior::NoFollow);
         assert!(result_nofollow.is_err());
     }
 
@@ -1123,11 +1177,11 @@ mod tests {
         symlink(&target, &link).unwrap();
 
         // With follow_symlinks=true, should succeed
-        let result_follow = DirFd::open(&link, true);
+        let result_follow = DirFd::open(&link, SymlinkBehavior::Follow);
         assert!(result_follow.is_ok());
 
         // With follow_symlinks=false, should fail
-        let result_nofollow = DirFd::open(&link, false);
+        let result_nofollow = DirFd::open(&link, SymlinkBehavior::NoFollow);
         assert!(result_nofollow.is_err());
     }
 }
