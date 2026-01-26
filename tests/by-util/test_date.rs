@@ -1867,6 +1867,7 @@ fn test_date_thai_locale_solar_calendar() {
     assert!(rfc_output.starts_with(&current_year.to_string()));
 }
 
+#[cfg(unix)]
 fn check_date(locale: &str, date: &str, fmt: &str, expected: &str) {
     let actual = new_ucmd!()
         .env("LC_ALL", locale)
