@@ -314,7 +314,7 @@ clap = { version = "4.5", features = ["wrap_help", "cargo", "color"] }
 clap_complete = "4.4"
 clap_mangen = "0.2"
 compare = "0.1.0"
-crossterm = "0.29.0"
+crossterm = { version = "0.29.0", default-features = false }
 ctor = "0.6.0"
 ctrlc = { version = "3.4.7", features = ["termination"] }
 divan = { package = "codspeed-divan-compat", version = "4.0.5" }
