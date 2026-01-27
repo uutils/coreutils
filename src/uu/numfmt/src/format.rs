@@ -3,14 +3,17 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore powf
-use std::ffi::CStr;
 use std::io::Write;
-use std::sync::Once;
 use uucore::display::Quotable;
 use uucore::translate;
 
 use crate::options::{NumfmtOptions, RoundMethod, TransformOptions};
 use crate::units::{DisplayableSuffix, IEC_BASES, RawSuffix, Result, SI_BASES, Suffix, Unit};
+
+#[cfg(not(windows))]
+use std::ffi::CStr;
+#[cfg(not(windows))]
+use std::sync::Once;
 
 /// Iterate over a line's fields, where each field is a contiguous sequence of
 /// non-whitespace, optionally prefixed with one or more characters of leading
@@ -108,13 +111,18 @@ fn is_c_locale() -> bool {
     false
 }
 
+#[cfg(not(windows))]
 fn init_locale() {
     static INIT: Once = Once::new();
     INIT.call_once(|| unsafe {
-        let _ = libc::setlocale(libc::LC_ALL, b"\0".as_ptr() as *const i8);
+        let _ = libc::setlocale(libc::LC_ALL, c"".as_ptr());
     });
 }
 
+#[cfg(windows)]
+fn init_locale() {}
+
+#[cfg(not(windows))]
 fn locale_decimal_separator_char() -> char {
     if is_c_locale() {
         return '.';
@@ -130,6 +138,14 @@ fn locale_decimal_separator_char() -> char {
     }
 }
 
+#[cfg(windows)]
+fn locale_decimal_separator_char() -> char {
+    // libc::localeconv is unavailable on Windows in this build.
+    init_locale();
+    '.'
+}
+
+#[cfg(not(windows))]
 pub(crate) fn locale_grouping_separator_string() -> Option<String> {
     if is_c_locale() {
         return None;
@@ -144,6 +160,13 @@ pub(crate) fn locale_grouping_separator_string() -> Option<String> {
         let sep = c_str.to_string_lossy().to_string();
         if sep.is_empty() { None } else { Some(sep) }
     }
+}
+
+#[cfg(windows)]
+pub(crate) fn locale_grouping_separator_string() -> Option<String> {
+    // Locale grouping is not supported on Windows in this implementation.
+    init_locale();
+    None
 }
 
 fn locale_grouping_separator_char() -> Option<char> {
@@ -302,6 +325,7 @@ fn unit_separator_skip_char(unit_separator: &str, unit_separator_specified: bool
     None
 }
 
+#[cfg(test)]
 fn find_numeric_beginning(s: &str) -> Option<&str> {
     let mut decimal_point_seen = false;
     if s.is_empty() {
@@ -329,6 +353,7 @@ fn find_numeric_beginning(s: &str) -> Option<&str> {
 }
 
 // finds the valid beginning part of an input string, or None.
+#[cfg(test)]
 fn find_valid_number_with_suffix<'a>(s: &'a str, unit: &Unit) -> Option<&'a str> {
     let numeric_part = find_numeric_beginning(s)?;
 
@@ -357,6 +382,7 @@ fn find_valid_number_with_suffix<'a>(s: &'a str, unit: &Unit) -> Option<&'a str>
     }
 }
 
+#[cfg(test)]
 fn detailed_error_message(s: &str, unit: &Unit) -> Option<String> {
     parse_number_with_suffix(s, unit, "", false).err()
 }
@@ -379,20 +405,17 @@ fn parse_number_with_suffix(
     }
 
     let scan = scan_number_prefix(trimmed, decimal_sep, grouping_sep);
-    let scan = match scan {
-        Some(scan) => scan,
-        None => {
-            if decimal_separator_count(trimmed, decimal_sep) >= 2 {
-                return Err(translate!(
-                    "numfmt-error-invalid-suffix",
-                    "input" => trimmed.quote()
-                ));
-            }
+    let Some(scan) = scan else {
+        if decimal_separator_count(trimmed, decimal_sep) >= 2 {
             return Err(translate!(
-                "numfmt-error-invalid-number",
+                "numfmt-error-invalid-suffix",
                 "input" => trimmed.quote()
             ));
         }
+        return Err(translate!(
+            "numfmt-error-invalid-number",
+            "input" => trimmed.quote()
+        ));
     };
 
     let number = scan
@@ -440,14 +463,11 @@ fn parse_number_with_suffix(
 
     let mut chars = rest.chars();
     let suffix_char = chars.next().unwrap();
-    let raw_suffix = match RawSuffix::try_from(&suffix_char) {
-        Ok(s) => s,
-        Err(_) => {
-            return Err(translate!(
-                "numfmt-error-invalid-suffix",
-                "input" => trimmed.quote()
-            ));
-        }
+    let Ok(raw_suffix) = RawSuffix::try_from(&suffix_char) else {
+        return Err(translate!(
+            "numfmt-error-invalid-suffix",
+            "input" => trimmed.quote()
+        ));
     };
 
     let mut with_i = false;
@@ -501,6 +521,7 @@ fn parse_number_with_suffix(
     Ok((number, Some((raw_suffix, with_i))))
 }
 
+#[cfg(test)]
 fn parse_suffix(s: &str, unit: &Unit) -> Result<(f64, Option<Suffix>)> {
     parse_number_with_suffix(s, unit, "", false)
 }
@@ -920,7 +941,7 @@ pub fn format_and_print_whitespace(
             }
         } else {
             // the -z option converts an initial \n into a space
-            if options.zero_terminated && prefix.chars().next() == Some('\n') {
+            if options.zero_terminated && prefix.starts_with('\n') {
                 output.push(' ');
                 if prefix_len > 1 {
                     output.push_str(&" ".repeat(prefix_len - 1));
