@@ -1857,11 +1857,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), processed_args, 2)?;
 
     // Prevent -o/--output to be specified multiple times
-    if matches
-        .get_occurrences::<OsString>(options::OUTPUT)
-        .is_some_and(|out| out.len() > 1)
-    {
-        return Err(SortError::MultipleOutputFiles.into());
+    if let Some(mut outputs) = matches.get_many::<OsString>(options::OUTPUT) {
+        if let Some(first) = outputs.next() {
+            if outputs.any(|out| out != first) {
+                return Err(SortError::MultipleOutputFiles.into());
+            }
+        }
     }
 
     settings.debug = matches.get_flag(options::DEBUG);
@@ -2627,17 +2628,17 @@ fn compare_by<'a>(
 }
 
 /// Compare two byte slices in ASCII case-insensitive order without allocating.
-/// We lower each byte on the fly so that binary input (including `NUL`) stays
+/// We upper each byte on the fly so that binary input (including `NUL`) stays
 /// untouched and we avoid locale-sensitive routines such as `strcasecmp`.
 fn ascii_case_insensitive_cmp(a: &[u8], b: &[u8]) -> Ordering {
     #[inline]
-    fn lower(byte: u8) -> u8 {
-        byte.to_ascii_lowercase()
+    fn fold(byte: u8) -> u8 {
+        byte.to_ascii_uppercase()
     }
 
     for (lhs, rhs) in a.iter().copied().zip(b.iter().copied()) {
-        let l = lower(lhs);
-        let r = lower(rhs);
+        let l = fold(lhs);
+        let r = fold(rhs);
         if l != r {
             return l.cmp(&r);
         }

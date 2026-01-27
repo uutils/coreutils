@@ -209,6 +209,24 @@ fn test_version_sort_stable() {
 }
 
 #[test]
+fn test_ignore_case_orders_punctuation_after_letters() {
+    new_ucmd!()
+        .arg("-f")
+        .pipe_in("A\na\n_\n")
+        .succeeds()
+        .stdout_is("A\na\n_\n");
+}
+
+#[test]
+fn test_ignore_case_unique_orders_punctuation_after_letters() {
+    new_ucmd!()
+        .arg("-fu")
+        .pipe_in("a\n_\n")
+        .succeeds()
+        .stdout_is("a\n_\n");
+}
+
+#[test]
 fn test_human_numeric_whitespace() {
     test_helper(
         "human-numeric-whitespace",
@@ -1456,6 +1474,16 @@ fn test_multiple_output_files() {
         .args(&["-o", "foo", "-o", "bar"])
         .fails_with_code(2)
         .stderr_is("sort: multiple output files specified\n");
+}
+
+#[test]
+// Test for GNU tests/sort/sort.pl "o3"
+fn test_duplicate_output_files_allowed() {
+    new_ucmd!()
+        .args(&["-o", "foo", "-o", "foo"])
+        .pipe_in("")
+        .succeeds()
+        .no_stderr();
 }
 
 #[test]
