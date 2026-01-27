@@ -75,6 +75,12 @@ fn show_removal_error(error: std::io::Error, path: &Path) -> bool {
         io::ErrorKind::PermissionDenied => {
             show_error!("cannot remove {}: Permission denied", path.quote());
         }
+        io::ErrorKind::InvalidInput if !is_dir_empty(path).unwrap_or(false) => {
+            show_error!(
+                "{}: Directory not empty",
+                translate!("rm-error-cannot-remove", "file" => path.quote())
+            );
+        }
         io::ErrorKind::InvalidInput if path_is_current_or_parent_directory(path) => {
             show_error!(
                 "{}",
