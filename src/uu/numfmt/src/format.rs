@@ -111,7 +111,7 @@ fn is_c_locale() -> bool {
 fn init_locale() {
     static INIT: Once = Once::new();
     INIT.call_once(|| unsafe {
-        let _ = libc::setlocale(libc::LC_ALL, b"\0".as_ptr() as *const i8);
+        let _ = libc::setlocale(libc::LC_ALL, c"".as_ptr());
     });
 }
 
@@ -157,7 +157,6 @@ fn decimal_separator_count(s: &str, decimal_sep: char) -> usize {
 struct NumberScan {
     end: usize,
     normalized: String,
-    digits: usize,
 }
 
 fn scan_number_prefix(
@@ -218,11 +217,7 @@ fn scan_number_prefix(
         return None;
     }
 
-    Some(NumberScan {
-        end,
-        normalized,
-        digits,
-    })
+    Some(NumberScan { end, normalized })
 }
 
 fn apply_decimal_separator(num: &str, decimal_sep: char) -> String {
@@ -274,6 +269,7 @@ fn apply_grouping(num: &str, grouping_sep: &str, decimal_sep: char) -> String {
     out
 }
 
+#[cfg(test)]
 fn find_numeric_beginning(s: &str) -> Option<&str> {
     let mut decimal_point_seen = false;
     if s.is_empty() {
@@ -301,6 +297,7 @@ fn find_numeric_beginning(s: &str) -> Option<&str> {
 }
 
 // finds the valid beginning part of an input string, or None.
+#[cfg(test)]
 fn find_valid_number_with_suffix<'a>(s: &'a str, unit: &Unit) -> Option<&'a str> {
     let numeric_part = find_numeric_beginning(s)?;
 
@@ -329,6 +326,7 @@ fn find_valid_number_with_suffix<'a>(s: &'a str, unit: &Unit) -> Option<&'a str>
     }
 }
 
+#[cfg(test)]
 fn detailed_error_message(s: &str, unit: &Unit) -> Option<String> {
     parse_number_with_suffix(s, unit).err()
 }
@@ -345,21 +343,17 @@ fn parse_number_with_suffix(s: &str, unit: &Unit) -> Result<(f64, Option<Suffix>
         grouping_sep = None;
     }
 
-    let scan = scan_number_prefix(trimmed, decimal_sep, grouping_sep);
-    let scan = match scan {
-        Some(scan) => scan,
-        None => {
-            if decimal_separator_count(trimmed, decimal_sep) >= 2 {
-                return Err(translate!(
-                    "numfmt-error-invalid-suffix",
-                    "input" => trimmed.quote()
-                ));
-            }
+    let Some(scan) = scan_number_prefix(trimmed, decimal_sep, grouping_sep) else {
+        if decimal_separator_count(trimmed, decimal_sep) >= 2 {
             return Err(translate!(
-                "numfmt-error-invalid-number",
+                "numfmt-error-invalid-suffix",
                 "input" => trimmed.quote()
             ));
         }
+        return Err(translate!(
+            "numfmt-error-invalid-number",
+            "input" => trimmed.quote()
+        ));
     };
 
     let number = scan
@@ -375,14 +369,11 @@ fn parse_number_with_suffix(s: &str, unit: &Unit) -> Result<(f64, Option<Suffix>
 
     let mut chars = rest.chars();
     let suffix_char = chars.next().unwrap();
-    let raw_suffix = match RawSuffix::try_from(&suffix_char) {
-        Ok(s) => s,
-        Err(_) => {
-            return Err(translate!(
-                "numfmt-error-invalid-suffix",
-                "input" => trimmed.quote()
-            ));
-        }
+    let Ok(raw_suffix) = RawSuffix::try_from(&suffix_char) else {
+        return Err(translate!(
+            "numfmt-error-invalid-suffix",
+            "input" => trimmed.quote()
+        ));
     };
 
     let mut with_i = false;
@@ -436,6 +427,7 @@ fn parse_number_with_suffix(s: &str, unit: &Unit) -> Result<(f64, Option<Suffix>
     Ok((number, Some((raw_suffix, with_i))))
 }
 
+#[cfg(test)]
 fn parse_suffix(s: &str, unit: &Unit) -> Result<(f64, Option<Suffix>)> {
     parse_number_with_suffix(s, unit)
 }
@@ -828,7 +820,7 @@ pub fn format_and_print_whitespace(s: &str, options: &NumfmtOptions) -> Result<(
             }
         } else {
             // the -z option converts an initial \n into a space
-            if options.zero_terminated && prefix.chars().next() == Some('\n') {
+            if options.zero_terminated && prefix.starts_with('\n') {
                 output.push(' ');
                 if prefix_len > 1 {
                     output.push_str(&" ".repeat(prefix_len - 1));
