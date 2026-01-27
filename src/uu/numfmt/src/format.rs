@@ -5,7 +5,7 @@
 // spell-checker:ignore powf　localeconv
 use std::ffi::CStr;
 use std::io::Write;
-use std::sync::Once;
+use std::sync::OnceLock;
 use uucore::display::Quotable;
 use uucore::translate;
 
@@ -108,46 +108,66 @@ fn is_c_locale() -> bool {
     false
 }
 
-fn init_locale() {
-    static INIT: Once = Once::new();
-    INIT.call_once(|| unsafe {
-        let _ = libc::setlocale(libc::LC_ALL, c"".as_ptr());
-    });
+struct LocaleInfo {
+    decimal_sep: char,
+    grouping_sep: Option<String>,
+    grouping_sep_char: Option<char>,
+}
+
+fn locale_info() -> &'static LocaleInfo {
+    static INFO: OnceLock<LocaleInfo> = OnceLock::new();
+    INFO.get_or_init(|| {
+        if is_c_locale() {
+            return LocaleInfo {
+                decimal_sep: '.',
+                grouping_sep: None,
+                grouping_sep_char: None,
+            };
+        }
+
+        unsafe {
+            let _ = libc::setlocale(libc::LC_ALL, c"".as_ptr());
+            let conv = libc::localeconv();
+            if conv.is_null() {
+                return LocaleInfo {
+                    decimal_sep: '.',
+                    grouping_sep: None,
+                    grouping_sep_char: None,
+                };
+            }
+
+            let decimal_sep = CStr::from_ptr((*conv).decimal_point)
+                .to_string_lossy()
+                .chars()
+                .next()
+                .unwrap_or('.');
+            let sep = CStr::from_ptr((*conv).thousands_sep).to_string_lossy();
+            let grouping_sep = if sep.is_empty() {
+                None
+            } else {
+                Some(sep.into_owned())
+            };
+            let grouping_sep_char = grouping_sep.as_ref().and_then(|s| s.chars().next());
+
+            LocaleInfo {
+                decimal_sep,
+                grouping_sep,
+                grouping_sep_char,
+            }
+        }
+    })
 }
 
 fn locale_decimal_separator_char() -> char {
-    if is_c_locale() {
-        return '.';
-    }
-    init_locale();
-    unsafe {
-        let conv = libc::localeconv();
-        if conv.is_null() {
-            return '.';
-        }
-        let c_str = CStr::from_ptr((*conv).decimal_point);
-        c_str.to_string_lossy().chars().next().unwrap_or('.')
-    }
+    locale_info().decimal_sep
 }
 
-pub(crate) fn locale_grouping_separator_string() -> Option<String> {
-    if is_c_locale() {
-        return None;
-    }
-    init_locale();
-    unsafe {
-        let conv = libc::localeconv();
-        if conv.is_null() {
-            return None;
-        }
-        let c_str = CStr::from_ptr((*conv).thousands_sep);
-        let sep = c_str.to_string_lossy().to_string();
-        if sep.is_empty() { None } else { Some(sep) }
-    }
+pub(crate) fn locale_grouping_separator_string() -> Option<&'static str> {
+    locale_info().grouping_sep.as_deref()
 }
 
 fn locale_grouping_separator_char() -> Option<char> {
-    locale_grouping_separator_string().and_then(|sep| sep.chars().next())
+    locale_info().grouping_sep_char
 }
 
 fn decimal_separator_count(s: &str, decimal_sep: char) -> usize {
@@ -649,7 +669,7 @@ fn format_string(
     let grouping_requested = options.grouping || options.format.grouping;
     if grouping_requested && options.transform.to == Unit::None {
         if let Some(grouping_sep) = locale_grouping_separator_string() {
-            number = apply_grouping(&number, &grouping_sep, decimal_sep);
+            number = apply_grouping(&number, grouping_sep, decimal_sep);
         } else {
             number = apply_decimal_separator(&number, decimal_sep);
         }
