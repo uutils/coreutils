@@ -1847,11 +1847,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // Prevent -o/--output to be specified multiple times
     if let Some(mut outputs) = matches.get_many::<OsString>(options::OUTPUT) {
-       if let Some(first) = outputs.next() {
-           if outputs.any(|out| out != first) {
-               return Err(SortError::MultipleOutputFiles.into());
-           }
-       }
+        if let Some(first) = outputs.next() {
+            if outputs.any(|out| out != first) {
+                return Err(SortError::MultipleOutputFiles.into());
+            }
+        }
     }
 
     settings.debug = matches.get_flag(options::DEBUG);
