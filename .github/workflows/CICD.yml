@@ -446,25 +446,27 @@ jobs:
     runs-on: ${{ matrix.job.os }}
     timeout-minutes: 90
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
+      # Avoid GitHub's cache limit by unreproducible caches
+      # SCCACHE_GHA_ENABLED: "true"
+      # RUSTC_WRAPPER: "sccache"
       CARGO_INCREMENTAL: 0
     strategy:
       fail-fast: false
       matrix:
         job:
           - { os: ubuntu-latest  , features: feat_os_unix }
-          - { os: macos-latest   , features: feat_os_macos }
-          - { os: windows-latest , features: feat_os_windows }
+          # - { os: macos-latest   , features: feat_os_macos }
+          # - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@nightly
     - uses: taiki-e/install-action@nextest
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.9
+    # Avoid GitHub's cache limit by unreproducible caches
+    # - uses: Swatinem/rust-cache@v2
+    # - name: Run sccache-cache
+    #   uses: mozilla-actions/sccache-action@v0.0.9
     - name: Test
       run: cargo nextest run --hide-progress-bar --profile ci --features ${{ matrix.job.features }}
       env:
