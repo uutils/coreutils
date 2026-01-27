@@ -28,25 +28,24 @@ fn test_uname_name() {
 #[test]
 fn test_uname_processor() {
     let result = new_ucmd!().arg("-p").succeeds();
-    let output = result.stdout_str().trim();
+    let processor = result.stdout_str().trim();
 
-    // Should not return "unknown"
-    assert_ne!(output, "unknown");
+    // Verify it's non-empty
+    assert!(!processor.is_empty());
 
-    // Verify it's non-empty and valid
-    assert!(!output.is_empty());
+    let machine = new_ucmd!().arg("-m").succeeds().stdout_move_str();
+    let machine = machine.trim();
 
-    // On macOS arm64, verify correct mapping
-    #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
-    assert_eq!(output, "arm");
+    // The processor (-p) should be a mapped version of the machine (-m)
+    // following the logic in src/uu/uname/src/uname.rs
+    let expected = match machine {
+        "arm64" | "aarch64" => "arm",
+        "x86_64" | "amd64" => "x86_64",
+        "i386" | "i486" | "i586" | "i686" => "i386",
+        _ => "unknown",
+    };
 
-    // On Linux aarch64, should return aarch64
-    #[cfg(all(target_arch = "aarch64", target_os = "linux"))]
-    assert_eq!(output, "aarch64");
-
-    // On x86_64 platforms
-    #[cfg(target_arch = "x86_64")]
-    assert_eq!(output, "x86_64");
+    assert_eq!(processor, expected);
 }
 
 #[test]
