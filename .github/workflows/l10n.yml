@@ -40,9 +40,9 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
+    - uses: Swatinem/rust-cache@v2
     - uses: dtolnay/rust-toolchain@stable
     - uses: taiki-e/install-action@nextest
-    - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
     - name: Install/setup prerequisites
@@ -136,8 +136,8 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
+    - uses: dtolnay/rust-toolchain@stable
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
     - name: Install/setup prerequisites
@@ -307,8 +307,8 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
+    - uses: dtolnay/rust-toolchain@stable
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
     - name: Install/setup prerequisites
@@ -423,8 +423,8 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
+    - uses: dtolnay/rust-toolchain@stable
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
     - name: Install/setup prerequisites
@@ -575,8 +575,8 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
+    - uses: dtolnay/rust-toolchain@stable
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
     - name: Install/setup prerequisites
@@ -909,8 +909,8 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
+    - uses: dtolnay/rust-toolchain@stable
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
     - name: Install/setup prerequisites
@@ -1141,8 +1141,8 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
+    - uses: dtolnay/rust-toolchain@stable
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
     - name: Install/setup prerequisites

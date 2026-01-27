@@ -58,8 +58,8 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
-    - uses: taiki-e/install-action@cargo-udeps
     - uses: Swatinem/rust-cache@v2
+    - uses: taiki-e/install-action@cargo-udeps
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -111,11 +111,11 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
+    - uses: Swatinem/rust-cache@v2
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: stable
         components: clippy
-    - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
     - name: Install/setup prerequisites
@@ -171,12 +171,12 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
+    - uses: Swatinem/rust-cache@v2
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ env.RUST_MIN_SRV }}
         components: rustfmt
     - uses: taiki-e/install-action@nextest
-    - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
     - name: Initialize workflow variables
@@ -251,8 +251,8 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
+    - uses: dtolnay/rust-toolchain@stable
     - name: "`cargo update` testing"
       shell: bash
       run: |
@@ -279,11 +279,11 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
+    - uses: Swatinem/rust-cache@v2
     - uses: dtolnay/rust-toolchain@stable
       with:
         target: aarch64-unknown-linux-gnu
     - uses: taiki-e/install-action@nextest
-    - uses: Swatinem/rust-cache@v2
     # Test build on the system missing libselinux (don't install libselinux1-dev at here)
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
@@ -418,9 +418,9 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
+    - uses: Swatinem/rust-cache@v2
     - uses: dtolnay/rust-toolchain@stable
     - uses: taiki-e/install-action@nextest
-    - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
     - name: Test
@@ -458,9 +458,9 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
+    - uses: Swatinem/rust-cache@v2
     - uses: dtolnay/rust-toolchain@nightly
     - uses: taiki-e/install-action@nextest
-    - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
     - name: Test
@@ -497,8 +497,8 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
+    - uses: dtolnay/rust-toolchain@stable
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
     - name: "`make install PROFILE=release-fast`"
@@ -1025,10 +1025,10 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
+    - uses: Swatinem/rust-cache@v2
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ env.RUST_MIN_SRV }}
-    - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
     - name: Install/setup prerequisites
@@ -1112,6 +1112,7 @@ jobs:
           # - { os: windows-latest , features: windows, toolchain: nightly-x86_64-pc-windows-gnu }
     steps:
     - uses: actions/checkout@v6
+    - uses: Swatinem/rust-cache@v2
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ matrix.job.toolchain }}
@@ -1119,8 +1120,6 @@ jobs:
     - uses: taiki-e/install-action@v2
       with:
         tool: nextest,grcov@0.8.24
-    - uses: Swatinem/rust-cache@v2
-
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
 
@@ -1225,7 +1224,7 @@ jobs:
         fail_ci_if_error: false
 
   test_separately:
-    name: Separate Builds (individual and coreutils)# duplicated with other CI, but has better appearance 
+    name: Separate Builds (individual and coreutils)# duplicated with other CI, but has better appearance
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
@@ -1240,8 +1239,8 @@ jobs:
         persist-credentials: false
     - name: Avoid no space left on device
       run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android &
-    - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
+    - uses: dtolnay/rust-toolchain@stable
     - name: build and test all programs individually
       shell: bash
       run: |
@@ -1301,8 +1300,8 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
+    - uses: dtolnay/rust-toolchain@stable
     - name: Build SELinux utilities as stubs
       run: cargo build -p uu_chcon -p uu_runcon
     - name: Verify stub binaries exist
@@ -1322,8 +1321,8 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
+    - uses: dtolnay/rust-toolchain@stable
     - name: Install strace
       run: sudo apt-get update && sudo apt-get install -y strace
     - name: Build utilities with safe traversal
