@@ -363,14 +363,11 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
     }?;
 
     let try_help = format!("Try '{} --help' for more information.", uucore::util_name());
-    let field_values: Vec<String> = args.get_many::<String>(FIELD).map_or_else(
-        || vec![FIELD_DEFAULT.to_string()],
-        |values| values.cloned().collect(),
-    );
-    if field_values.len() > 1 {
-        return Err(translate!("numfmt-error-multiple-field-specifications"));
-    }
-    let fields = parse_field_list(&field_values[0], &try_help)?;
+    let field_value = args
+        .get_one::<String>(FIELD)
+        .map(String::as_str)
+        .unwrap_or(FIELD_DEFAULT);
+    let fields = parse_field_list(field_value, &try_help)?;
 
     let format = match args.get_one::<String>(FORMAT) {
         Some(s) => s.parse()?,
@@ -469,12 +466,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = match uu_app().try_get_matches_from(&args) {
         Ok(matches) => matches,
         Err(err) => {
-            let try_help = format!("Try '{} --help' for more information.", uucore::util_name());
-            let message = match err.kind() {
-                ErrorKind::UnknownArgument => format!("unrecognized option\n{try_help}"),
-                _ => err.to_string(),
-            };
-            return Err(NumfmtError::IllegalArgument(message).into());
+            if err.kind() == ErrorKind::UnknownArgument {
+                let try_help =
+                    format!("Try '{} --help' for more information.", uucore::util_name());
+                let message = format!("unrecognized option\n{try_help}");
+                return Err(NumfmtError::IllegalArgument(message).into());
+            }
+            return Err(err.into());
         }
     };
 
@@ -580,7 +578,7 @@ pub fn uu_app() -> Command {
                 .value_name("FIELDS")
                 .allow_hyphen_values(true)
                 .num_args(1)
-                .action(ArgAction::Append),
+                .action(ArgAction::Set),
         )
         .arg(
             Arg::new(FORMAT)

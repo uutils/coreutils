@@ -23,6 +23,8 @@ uucore = { workspace = true, features = ["parser", "ranges"] }
 thiserror = { workspace = true }
 fluent = { workspace = true }
 libc = { workspace = true }
+num-bigint = { workspace = true }
+num-traits = { workspace = true }
 
 [dev-dependencies]
 divan = { workspace = true }
