@@ -16,6 +16,8 @@ sed -i -e 's/no-mtab-status.sh/no-mtab-status-masked-proc.sh/' -e 's/nproc-quota
 curl -L ${repo}/raw/refs/heads/master/tests/df/no-mtab-status-masked-proc.sh > tests/df/no-mtab-status-masked-proc.sh
 curl -L ${repo}/raw/refs/heads/master/tests/nproc/nproc-quota-systemd.sh > tests/nproc/nproc-quota-systemd.sh
 curl -L ${repo}/raw/refs/heads/master/tests/stty/bad-speed.sh > tests/stty/bad-speed.sh
+# symlink to /bin/false should fail with --help. Freeze commit to avoid regression.
+curl -L https://raw.githubusercontent.com/coreutils/coreutils/d5164f3d216917005003877faeb1abe7cae5d765/tests/misc/coreutils.sh > tests/misc/coreutils.sh
 # Better support for single binary
 curl -L ${repo}/raw/refs/heads/master/tests/env/env.sh > tests/env/env.sh
 # Avoid incorrect PASS
