@@ -3,9 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore powf　localeconv
-use std::io::Write;
 use num_bigint::BigUint;
 use num_traits::Zero;
+use std::io::Write;
 use uucore::display::Quotable;
 use uucore::translate;
 
@@ -323,7 +323,11 @@ impl DecimalValue {
 
     fn normalized_string(&self) -> String {
         let int_trimmed = self.int_raw.trim_start_matches('0');
-        let int_out = if int_trimmed.is_empty() { "0" } else { int_trimmed };
+        let int_out = if int_trimmed.is_empty() {
+            "0"
+        } else {
+            int_trimmed
+        };
         let mut out = String::new();
         if self.negative && !self.is_zero {
             out.push('-');
@@ -365,7 +369,11 @@ impl DecimalValue {
         }
         let mantissa = int_str.chars().next().unwrap_or('0');
         let exp = int_str.len().saturating_sub(1);
-        let sign = if self.negative && !self.is_zero { "-" } else { "" };
+        let sign = if self.negative && !self.is_zero {
+            "-"
+        } else {
+            ""
+        };
         format!("{sign}{mantissa}e+{exp}")
     }
 }
@@ -991,6 +999,8 @@ fn format_string(
 
     let use_raw = options.transform.from == Unit::None
         && options.transform.to == Unit::None
+        && options.transform.from_unit == 1
+        && options.transform.to_unit == 1
         && options.format == FormatOptions::default();
 
     let mut number = if use_raw {
