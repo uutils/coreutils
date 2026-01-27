@@ -125,34 +125,46 @@ fn locale_info() -> &'static LocaleInfo {
             };
         }
 
-        unsafe {
-            let _ = libc::setlocale(libc::LC_ALL, c"".as_ptr());
-            let conv = libc::localeconv();
-            if conv.is_null() {
+        #[cfg(not(windows))]
+        {
+            unsafe {
+                let _ = libc::setlocale(libc::LC_ALL, c"".as_ptr());
+                let conv = libc::localeconv();
+                if conv.is_null() {
+                    return LocaleInfo {
+                        decimal_sep: '.',
+                        grouping_sep: None,
+                        grouping_sep_char: None,
+                    };
+                }
+
+                let decimal_sep = CStr::from_ptr((*conv).decimal_point)
+                    .to_string_lossy()
+                    .chars()
+                    .next()
+                    .unwrap_or('.');
+                let sep = CStr::from_ptr((*conv).thousands_sep).to_string_lossy();
+                let grouping_sep = if sep.is_empty() {
+                    None
+                } else {
+                    Some(sep.into_owned())
+                };
+                let grouping_sep_char = grouping_sep.as_ref().and_then(|s| s.chars().next());
+
                 return LocaleInfo {
-                    decimal_sep: '.',
-                    grouping_sep: None,
-                    grouping_sep_char: None,
+                    decimal_sep,
+                    grouping_sep,
+                    grouping_sep_char,
                 };
             }
+        }
 
-            let decimal_sep = CStr::from_ptr((*conv).decimal_point)
-                .to_string_lossy()
-                .chars()
-                .next()
-                .unwrap_or('.');
-            let sep = CStr::from_ptr((*conv).thousands_sep).to_string_lossy();
-            let grouping_sep = if sep.is_empty() {
-                None
-            } else {
-                Some(sep.into_owned())
-            };
-            let grouping_sep_char = grouping_sep.as_ref().and_then(|s| s.chars().next());
-
+        #[cfg(windows)]
+        {
             LocaleInfo {
-                decimal_sep,
-                grouping_sep,
-                grouping_sep_char,
+                decimal_sep: '.',
+                grouping_sep: None,
+                grouping_sep_char: None,
             }
         }
     })
