@@ -1852,7 +1852,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                return Err(SortError::MultipleOutputFiles.into());
            }
        }
-   }
     }
 
     settings.debug = matches.get_flag(options::DEBUG);
