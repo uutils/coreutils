@@ -3153,11 +3153,7 @@ fn display_item_long(
         output_display.extend(b" ");
 
         if config.dired {
-            dired::calculate_and_update_positions(
-                dired,
-                output_display.len(),
-                dired_name_len,
-            );
+            dired::calculate_and_update_positions(dired, output_display.len(), dired_name_len);
         }
         write_os_str(&mut output_display, &displayed_item)?;
         output_display.extend(config.line_ending.to_string().as_bytes());
