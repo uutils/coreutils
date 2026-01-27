@@ -1030,7 +1030,6 @@ jobs:
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ env.RUST_MIN_SRV }}
-        components: rustfmt
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
