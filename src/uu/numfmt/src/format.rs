@@ -393,11 +393,28 @@ fn parse_number_with_suffix(s: &str, unit: &Unit) -> Result<(f64, Option<Suffix>
         .normalized
         .parse::<f64>()
         .map_err(|_| translate!("numfmt-error-invalid-number", "input" => trimmed.quote()))?;
+    let number_str = &trimmed[..scan.end];
 
     let rest = &trimmed[scan.end..];
 
     if rest.is_empty() {
         return Ok((number, None));
+    }
+
+    if matches!(unit, Unit::None) {
+        let mut chars = rest.chars();
+        let suffix_char = chars.next().unwrap();
+        if RawSuffix::try_from(&suffix_char).is_ok() {
+            return Err(translate!(
+                "numfmt-error-rejecting-suffix",
+                "number" => number_str,
+                "suffix" => rest
+            ));
+        }
+        return Err(translate!(
+            "numfmt-error-invalid-suffix",
+            "input" => trimmed.quote()
+        ));
     }
 
     let mut chars = rest.chars();
@@ -445,15 +462,6 @@ fn parse_number_with_suffix(s: &str, unit: &Unit) -> Result<(f64, Option<Suffix>
             "numfmt-error-invalid-specific-suffix",
             "input" => trimmed.quote(),
             "suffix" => suffix_detail.quote()
-        ));
-    }
-
-    if matches!(unit, Unit::None) {
-        let suffix_str = format!("{raw_suffix:?}{}", if with_i { "i" } else { "" });
-        return Err(translate!(
-            "numfmt-error-rejecting-suffix",
-            "number" => number,
-            "suffix" => suffix_str
         ));
     }
 
