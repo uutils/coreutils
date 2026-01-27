@@ -44,9 +44,6 @@ jobs:
       with:
         path: 'uutils'
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: stable
     - uses: Swatinem/rust-cache@v2
       with:
         workspaces: "./uutils -> target"
@@ -207,12 +204,6 @@ jobs:
       with:
         path: 'uutils'
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: stable
-    - uses: Swatinem/rust-cache@v2
-      with:
-        workspaces: "./uutils -> target"
     - name: Checkout code (GNU coreutils)
       run: (mkdir -p gnu && cd gnu && bash ../uutils/util/fetch-gnu.sh)
 
@@ -325,9 +316,6 @@ jobs:
       with:
         path: 'uutils'
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: stable
     - uses: Swatinem/rust-cache@v2
       with:
         workspaces: "./uutils -> target"
