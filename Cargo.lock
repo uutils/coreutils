@@ -529,6 +529,7 @@ name = "coreutils"
 version = "0.6.0"
 dependencies = [
  "bytecount",
+ "cfg_aliases",
  "clap",
  "clap_complete",
  "clap_mangen",
@@ -3300,6 +3301,7 @@ dependencies = [
 name = "uu_cp"
 version = "0.6.0"
 dependencies = [
+ "cfg_aliases",
  "clap",
  "codspeed-divan-compat",
  "exacl",
@@ -4031,6 +4033,7 @@ dependencies = [
 name = "uu_stdbuf"
 version = "0.6.0"
 dependencies = [
+ "cfg_aliases",
  "clap",
  "fluent",
  "tempfile",
@@ -4332,6 +4335,7 @@ dependencies = [
  "blake2b_simd",
  "blake3",
  "bstr",
+ "cfg_aliases",
  "clap",
  "codspeed-divan-compat",
  "crc-fast",

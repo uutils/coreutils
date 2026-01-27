@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (jargon) xattributes
 
-#![cfg(feature = "feat_selinux")]
+#![cfg(selinux)]
 
 use uutests::new_ucmd;
 
@@ -84,7 +84,7 @@ fn invalid() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(selinux)]
 fn plain_context() {
     let ctx = "unconfined_u:unconfined_r:unconfined_t:s0-s0";
     new_ucmd!().args(&[ctx, "/bin/true"]).succeeds();
@@ -103,7 +103,7 @@ fn plain_context() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(selinux)]
 fn custom_context() {
     let t_ud = "unconfined_t";
     let u_ud = "unconfined_u";

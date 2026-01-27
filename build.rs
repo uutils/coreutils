@@ -10,7 +10,14 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 
+use cfg_aliases::cfg_aliases;
+
 pub fn main() {
+    cfg_aliases! {
+        external_libstdbuf: { feature = "feat_external_libstdbuf" },
+        selinux: { all(feature = "feat_selinux", any(target_os = "android", target_os = "linux")) },
+    }
+
     const ENV_FEATURE_PREFIX: &str = "CARGO_FEATURE_";
     const FEATURE_PREFIX: &str = "feat_";
     const OVERRIDE_PREFIX: &str = "uu_";
