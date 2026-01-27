@@ -9,7 +9,7 @@ use uucore::hardware::SimdPolicy;
 
 use super::WordCountable;
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 use std::fs::OpenOptions;
 use std::io::{self, ErrorKind, Read};
 
@@ -28,13 +28,13 @@ const FILE_ATTRIBUTE_ARCHIVE: u32 = 32;
 #[cfg(windows)]
 const FILE_ATTRIBUTE_NORMAL: u32 = 128;
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 use libc::S_IFIFO;
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 use uucore::pipes::{pipe, splice, splice_exact};
 
 const BUF_SIZE: usize = 256 * 1024;
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 const SPLICE_SIZE: usize = 128 * 1024;
 
 /// This is a Linux-specific function to count the number of bytes using the
@@ -43,7 +43,7 @@ const SPLICE_SIZE: usize = 128 * 1024;
 /// On error it returns the number of bytes it did manage to read, since the
 /// caller will fall back to a simpler method.
 #[inline]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn count_bytes_using_splice(fd: &impl AsFd) -> Result<usize, usize> {
     let null_file = OpenOptions::new()
         .write(true)
@@ -156,7 +156,7 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
                     }
                 }
             }
-            #[cfg(any(target_os = "linux", target_os = "android"))]
+            #[cfg(linux_android)]
             {
                 // Else, if we're on Linux and our file is a FIFO pipe
                 // (or stdin), we use splice to count the number of bytes.

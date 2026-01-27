@@ -33,7 +33,7 @@ fn test_du_basics() {
 
     let result = ts.ucmd().succeeds();
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(linux_android)]
     {
         let result_reference = unwrap_or_return!(expected_result(&ts, &[]));
         if result_reference.succeeded() {
@@ -96,7 +96,7 @@ fn test_du_basics_subdir() {
 
     let result = ts.ucmd().arg(SUB_DIR).succeeds();
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(linux_android)]
     {
         let result_reference = unwrap_or_return!(expected_result(&ts, &[SUB_DIR]));
         if result_reference.succeeded() {
@@ -421,7 +421,7 @@ fn test_du_soft_link() {
 
     let result = ts.ucmd().arg("subdir/links").succeeds();
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(linux_android)]
     {
         let result_reference = unwrap_or_return!(expected_result(&ts, &["subdir/links"]));
         if result_reference.succeeded() {
@@ -539,7 +539,7 @@ fn test_du_d_flag() {
 
     let result = ts.ucmd().arg("-d1").succeeds();
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(linux_android)]
     {
         let result_reference = unwrap_or_return!(expected_result(&ts, &["-d1"]));
         if result_reference.succeeded() {
@@ -587,7 +587,7 @@ fn test_du_dereference() {
 
     let result = ts.ucmd().arg("-L").arg(SUB_DIR_LINKS).succeeds();
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(linux_android)]
     {
         let result_reference = unwrap_or_return!(expected_result(&ts, &["-L", SUB_DIR_LINKS]));
 
@@ -741,7 +741,7 @@ fn test_du_inodes() {
     result.stdout_contains("3\t./subdir/links\n");
     result.stdout_contains("3\t.\n");
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(linux_android)]
     {
         let result_reference =
             unwrap_or_return!(expected_result(&ts, &["--separate-dirs", "--inodes"]));
@@ -1061,7 +1061,7 @@ fn test_du_no_permission() {
     let result = ts.ucmd().arg(SUB_DIR_LINKS).fails();
     result.stderr_contains("du: cannot read directory 'subdir/links': Permission denied");
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(linux_android)]
     {
         let result_reference = unwrap_or_return!(expected_result(&ts, &[SUB_DIR_LINKS]));
         if result_reference
@@ -1106,7 +1106,7 @@ fn test_du_one_file_system() {
 
     let result = ts.ucmd().arg("-x").arg("subdir/deeper").succeeds();
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(linux_android)]
     {
         let result_reference = unwrap_or_return!(expected_result(&ts, &["-x", "subdir/deeper"]));
         if result_reference.succeeded() {

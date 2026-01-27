@@ -9,10 +9,10 @@
 //! entirely (via #![cfg(...)]), which can break tooling and cross builds that
 //! expect this binary to exist even when it's a no-op off Linux.
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 uucore::bin!(uu_runcon);
 
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
+#[cfg(not(linux_android))]
 fn main() {
     eprintln!("runcon: SELinux is not supported on this platform");
     std::process::exit(1);

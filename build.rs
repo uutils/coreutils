@@ -19,6 +19,11 @@ pub fn main() {
     // See <https://doc.rust-lang.org/cargo/reference/build-scripts.html#change-detection>
     println!("cargo:rerun-if-changed=build.rs");
 
+    // Define cfg alias for Linux and Android platforms
+    // This avoids repetitive `any(target_os = "linux", target_os = "android")` patterns
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    println!("cargo:rustc-cfg=linux_android");
+
     // Check for tldr.zip when building uudoc to warn users once at build time
     // instead of repeatedly at runtime for each utility
     if env::var("CARGO_FEATURE_UUDOC").is_ok() && !Path::new("docs/tldr.zip").exists() {

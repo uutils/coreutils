@@ -6,12 +6,12 @@
 //! Thin pipe-related wrappers around functions from the `nix` crate.
 
 use std::fs::File;
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 use std::io::IoSlice;
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 use std::os::fd::AsFd;
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 use nix::fcntl::SpliceFFlags;
 
 pub use nix::{Error, Result};
@@ -34,7 +34,7 @@ pub fn pipe() -> Result<(File, File)> {
 /// To get around this requirement, consider splicing from your source into
 /// a [`pipe`] and then from the pipe into your target (with `splice_exact`):
 /// this is still very efficient.
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 pub fn splice(source: &impl AsFd, target: &impl AsFd, len: usize) -> Result<usize> {
     nix::fcntl::splice(source, None, target, None, len, SpliceFFlags::empty())
 }
@@ -44,7 +44,7 @@ pub fn splice(source: &impl AsFd, target: &impl AsFd, len: usize) -> Result<usiz
 /// Exactly `len` bytes are moved from `source` into `target`.
 ///
 /// Panics if `source` runs out of data before `len` bytes have been moved.
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 pub fn splice_exact(source: &impl AsFd, target: &impl AsFd, len: usize) -> Result<()> {
     let mut left = len;
     while left != 0 {
@@ -58,7 +58,7 @@ pub fn splice_exact(source: &impl AsFd, target: &impl AsFd, len: usize) -> Resul
 /// Copy data from `bytes` into `target`, which must be a pipe.
 ///
 /// Returns the number of successfully copied bytes.
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 pub fn vmsplice(target: &impl AsFd, bytes: &[u8]) -> Result<usize> {
     nix::fcntl::vmsplice(target, &[IoSlice::new(bytes)], SpliceFFlags::empty())
 }

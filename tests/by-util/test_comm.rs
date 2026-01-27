@@ -674,7 +674,7 @@ fn test_output_lossy_utf8() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn test_comm_anonymous_pipes() {
     use std::{io::Write, os::fd::AsRawFd, process};
     use uucore::pipes::pipe;

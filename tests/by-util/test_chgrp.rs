@@ -278,7 +278,7 @@ fn test_big_p() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn test_big_h() {
     if getegid() != 0 {
         assert!(

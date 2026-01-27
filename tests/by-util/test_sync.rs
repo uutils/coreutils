@@ -56,7 +56,7 @@ fn test_sync_data_but_not_file() {
         .stderr_contains("sync: --data needs at least one argument");
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 #[cfg(feature = "chmod")]
 #[test]
 fn test_sync_no_permission_dir() {
@@ -91,7 +91,7 @@ fn test_sync_no_permission_file() {
     ts.ucmd().arg(f).succeeds();
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 #[test]
 fn test_sync_data_nonblock_flag_reset() {
     // Test that O_NONBLOCK flag is properly reset when syncing files
@@ -109,7 +109,7 @@ fn test_sync_data_nonblock_flag_reset() {
     ts.ucmd().arg("--data").arg(test_file).succeeds();
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 #[test]
 fn test_sync_fs_nonblock_flag_reset() {
     // Test that O_NONBLOCK flag is properly reset when syncing filesystems
@@ -126,7 +126,7 @@ fn test_sync_fs_nonblock_flag_reset() {
         .succeeds();
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 #[test]
 fn test_sync_fdatasync_error_handling() {
     // Test that fdatasync properly handles file opening errors

@@ -19,9 +19,9 @@ mod macos;
 #[cfg(target_os = "macos")]
 pub(crate) use self::macos::copy_on_write;
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 mod linux;
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 pub(crate) use self::linux::copy_on_write;
 
 #[cfg(not(any(

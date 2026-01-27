@@ -55,7 +55,7 @@ macro_rules! assert_fixture_exists {
     }};
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 macro_rules! assert_fixture_not_exists {
     ($fname:expr) => {{
         let fpath = PathBuf::from(format!("./fixtures/dd/{}", $fname));
@@ -274,7 +274,7 @@ fn test_final_stats_unspec() {
         .stderr_contains("0.0 B/s");
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 #[test]
 fn test_excl_causes_failure_when_present() {
     let fname = "this-file-exists-excl.txt";
@@ -285,7 +285,7 @@ fn test_excl_causes_failure_when_present() {
         .fails();
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 #[test]
 fn test_noatime_does_not_update_infile_atime() {
     // NOTE: Not all environments support tracking access time. If this
@@ -305,7 +305,7 @@ fn test_noatime_does_not_update_infile_atime() {
     assert_eq!(pre_atime, post_atime);
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 #[test]
 fn test_noatime_does_not_update_ofile_atime() {
     // NOTE: Not all environments support tracking access time. If this
@@ -325,7 +325,7 @@ fn test_noatime_does_not_update_ofile_atime() {
     assert_eq!(pre_atime, post_atime);
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 #[test]
 fn test_nocreat_causes_failure_when_outfile_not_present() {
     let fname = "this-file-does-not-exist.txt";
@@ -1726,7 +1726,7 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn test_iflag_directory_fails_when_file_is_passed_via_std_in() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1740,7 +1740,7 @@ fn test_iflag_directory_fails_when_file_is_passed_via_std_in() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn test_iflag_directory_passes_when_dir_is_redirected() {
     new_ucmd!()
         .args(&["iflag=directory", "count=0"])
@@ -1749,7 +1749,7 @@ fn test_iflag_directory_passes_when_dir_is_redirected() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn test_iflag_directory_fails_when_file_is_piped_via_std_in() {
     new_ucmd!()
         .arg("iflag=directory")
@@ -1842,7 +1842,7 @@ fn test_no_dropped_writes() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn test_oflag_direct_partial_block() {
     // Test for issue #9003: dd should handle partial blocks with oflag=direct
     // This reproduces the scenario where writing a partial block with O_DIRECT fails
