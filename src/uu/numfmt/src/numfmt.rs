@@ -277,7 +277,7 @@ fn parse_field_list(list: &str, try_help: &str) -> Result<Vec<Range>> {
             Err(err) => {
                 let message = match err {
                     FieldParseError::InvalidValue(value) => {
-                        format!("invalid field value '{}'\n{try_help}", value)
+                        format!("invalid field value '{value}'\n{try_help}")
                     }
                     FieldParseError::InvalidRange => {
                         format!("invalid field range\n{try_help}")
@@ -357,10 +357,10 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
     }?;
 
     let try_help = format!("Try '{} --help' for more information.", uucore::util_name());
-    let field_values: Vec<String> = args
-        .get_many::<String>(FIELD)
-        .map(|values| values.cloned().collect())
-        .unwrap_or_else(|| vec![FIELD_DEFAULT.to_string()]);
+    let field_values: Vec<String> = args.get_many::<String>(FIELD).map_or_else(
+        || vec![FIELD_DEFAULT.to_string()],
+        |values| values.cloned().collect(),
+    );
     if field_values.len() > 1 {
         return Err(translate!("numfmt-error-multiple-field-specifications"));
     }
