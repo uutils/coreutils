@@ -8,6 +8,10 @@
 use filetime::FileTime;
 use std::fs;
 #[cfg(target_os = "linux")]
+use std::fs::File;
+#[cfg(target_os = "linux")]
+use std::io::{BufRead, BufReader};
+#[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 #[cfg(not(windows))]
@@ -2566,4 +2570,86 @@ fn test_install_normal_file_replaces_symlink() {
 
     // Verify sensitive file was NOT modified
     assert_eq!(at.read("sensitive"), "important data");
+}
+#[test]
+#[cfg(target_os = "linux")]
+fn test_install_set_owner_nonexistent_uid_and_gid() {
+    let file = File::open("/etc/login.defs").unwrap();
+    let reader = BufReader::new(file);
+    let mut uid_min: u32 = 0;
+    let mut uid_max: u32 = 0;
+    let mut gid_min: u32 = 0;
+    let mut gid_max: u32 = 0;
+    for line in reader.lines() {
+        let line = line.unwrap();
+        if line.starts_with("UID_MIN") {
+            let tokens: Vec<&str> = line.split_whitespace().collect();
+            uid_min = tokens[1].parse().unwrap();
+        }
+        if line.starts_with("UID_MAX") {
+            let tokens: Vec<&str> = line.split_whitespace().collect();
+            uid_max = tokens[1].parse().unwrap();
+        }
+        if line.starts_with("GID_MIN") {
+            let tokens: Vec<&str> = line.split_whitespace().collect();
+            gid_min = tokens[1].parse().unwrap();
+        }
+        if line.starts_with("GID_MAX") {
+            let tokens: Vec<&str> = line.split_whitespace().collect();
+            gid_max = tokens[1].parse().unwrap();
+        }
+    }
+    let file = File::open("/etc/passwd").unwrap();
+    let reader = BufReader::new(file);
+
+    let mut uids: Vec<u32> = vec![];
+    let mut gids: Vec<u32> = vec![];
+    for line in reader.lines() {
+        let line = line.unwrap();
+        let tokens: Vec<&str> = line.split(':').collect();
+        let uid: u32 = tokens[2].parse().unwrap();
+        if (uid_min..=uid_max).contains(&uid) {
+            uids.push(uid);
+        }
+        let gid: u32 = tokens[3].parse().unwrap();
+        if (gid_min..=gid_max).contains(&gid) {
+            gids.push(gid);
+        }
+    }
+    uids.sort_unstable();
+
+    let next_uid = if let Some(uid) = uids.last() {
+        *uid + 1
+    } else {
+        uid_min
+    };
+
+    let next_gid = if let Some(gid) = gids.last() {
+        *gid + 1
+    } else {
+        gid_min
+    };
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a");
+
+    if let Ok(result) = run_ucmd_as_root(
+        &ts,
+        &[
+            format!("-o{next_uid}").as_str(),
+            format!("-g{next_gid}").as_str(),
+            "a",
+            "b",
+        ],
+    ) {
+        result.success();
+        assert!(at.file_exists("b"));
+
+        let metadata = fs::metadata(at.plus("b")).unwrap();
+        assert_eq!(metadata.uid(), next_uid);
+        assert_eq!(metadata.gid(), next_gid);
+    } else {
+        println!("Test skipped; requires root user");
+    }
 }
