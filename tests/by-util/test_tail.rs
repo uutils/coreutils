@@ -5149,3 +5149,39 @@ fn test_debug_flag_with_inotify() {
         .with_all_output()
         .stderr_contains("tail: using notification mode");
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_follow_dangling_symlink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.symlink_file("target", "link");
+    let mut p = ucmd
+        .args(&["-s.1", "--max-unchanged-stats=1", "-F", "link"])
+        .run_no_wait();
+    p.delay(500);
+    at.write("target", "X\n");
+    p.delay(500);
+    p.kill().make_assertion().with_all_output().stdout_is("X\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_follow_symlink_target_change() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("t1", "A\n");
+    at.symlink_file("t1", "link");
+    let mut p = ucmd
+        .args(&["-s.1", "--max-unchanged-stats=1", "-F", "link"])
+        .run_no_wait();
+    p.delay(500);
+    at.remove("link");
+    at.symlink_file("t2", "link");
+    p.delay(500);
+    at.write("t2", "B\n");
+    p.delay(500);
+    p.kill()
+        .make_assertion()
+        .with_all_output()
+        .stdout_contains("A\n")
+        .stdout_contains("B\n");
+}
