@@ -7,11 +7,14 @@ use crate::errors::*;
 use crate::format::{format_and_print_delimited, format_and_print_whitespace};
 use crate::options::*;
 use crate::units::{Result, Unit};
-use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, parser::ValueSource};
+use clap::{
+    Arg, ArgAction, ArgMatches, Command, builder::ValueParser, error::ErrorKind,
+    parser::ValueSource,
+};
 use std::ffi::OsString;
-use std::io::{BufRead, Error, Write};
-use std::result::Result as StdResult;
+use std::io::{BufRead, Write};
 use std::str::FromStr;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use units::{IEC_BASES, SI_BASES};
 use uucore::display::Quotable;
@@ -28,9 +31,11 @@ pub mod format;
 pub mod options;
 mod units;
 
+static HAD_INVALID: AtomicBool = AtomicBool::new(false);
+
 fn handle_args<'a>(args: impl Iterator<Item = &'a [u8]>, options: &NumfmtOptions) -> UResult<()> {
     for l in args {
-        format_and_handle_validation(l, options)?;
+        format_and_handle_validation(l, options, true)?;
     }
     Ok(())
 }
@@ -40,29 +45,42 @@ where
     R: BufRead,
 {
     let terminator = if options.zero_terminated { 0u8 } else { b'\n' };
-    handle_buffer_iterator(input.split(terminator), options, terminator)
-}
+    let mut reader = input;
+    let mut buf = Vec::new();
+    let mut idx = 0usize;
 
-fn handle_buffer_iterator(
-    iter: impl Iterator<Item = StdResult<Vec<u8>, Error>>,
-    options: &NumfmtOptions,
-    terminator: u8,
-) -> UResult<()> {
-    for (idx, line_result) in iter.enumerate() {
-        match line_result {
-            Ok(line) if idx < options.header => {
-                std::io::stdout().write_all(&line)?;
+    loop {
+        buf.clear();
+        let read = reader
+            .read_until(terminator, &mut buf)
+            .map_err(|e| NumfmtError::IoError(e.to_string()))?;
+        if read == 0 {
+            break;
+        }
+        let has_terminator = buf.last() == Some(&terminator);
+        if has_terminator {
+            buf.pop();
+        }
+
+        if idx < options.header {
+            std::io::stdout().write_all(&buf)?;
+            if has_terminator {
                 std::io::stdout().write_all(&[terminator])?;
-                Ok(())
             }
-            Ok(line) => format_and_handle_validation(&line, options),
-            Err(err) => return Err(Box::new(NumfmtError::IoError(err.to_string()))),
-        }?;
+        } else {
+            format_and_handle_validation(&buf, options, has_terminator)?;
+        }
+        idx += 1;
     }
+
     Ok(())
 }
 
-fn format_and_handle_validation(input_line: &[u8], options: &NumfmtOptions) -> UResult<()> {
+fn format_and_handle_validation(
+    input_line: &[u8],
+    options: &NumfmtOptions,
+    append_eol: bool,
+) -> UResult<()> {
     let eol = if options.zero_terminated {
         b'\0'
     } else {
@@ -70,11 +88,11 @@ fn format_and_handle_validation(input_line: &[u8], options: &NumfmtOptions) -> U
     };
 
     let handled_line = if options.delimiter.is_some() {
-        format_and_print_delimited(input_line, options)
+        format_and_print_delimited(input_line, options, append_eol)
     } else {
         // Whitespace mode requires valid UTF-8
         match std::str::from_utf8(input_line) {
-            Ok(s) => format_and_print_whitespace(s, options),
+            Ok(s) => format_and_print_whitespace(s, options, append_eol),
             Err(_) => Err(translate!("numfmt-error-invalid-input")),
         }
     };
@@ -85,6 +103,7 @@ fn format_and_handle_validation(input_line: &[u8], options: &NumfmtOptions) -> U
                 return Err(Box::new(NumfmtError::FormattingError(error_message)));
             }
             InvalidModes::Fail => {
+                HAD_INVALID.store(true, Ordering::Relaxed);
                 show!(NumfmtError::FormattingError(error_message));
             }
             InvalidModes::Warn => {
@@ -93,7 +112,9 @@ fn format_and_handle_validation(input_line: &[u8], options: &NumfmtOptions) -> U
             InvalidModes::Ignore => {}
         }
         std::io::stdout().write_all(input_line)?;
-        std::io::stdout().write_all(&[eol])?;
+        if append_eol {
+            std::io::stdout().write_all(&[eol])?;
+        }
     }
 
     Ok(())
@@ -174,6 +195,127 @@ fn parse_delimiter(arg: &OsString) -> Result<Vec<u8>> {
     }
 }
 
+#[derive(Debug)]
+enum FieldParseError {
+    InvalidValue(String),
+    InvalidRange,
+    NumberedFromOne,
+    DecreasingRange,
+    TooLarge(String),
+}
+
+fn parse_field_number(value: &str) -> std::result::Result<usize, FieldParseError> {
+    if value.is_empty() {
+        return Err(FieldParseError::InvalidValue(value.to_string()));
+    }
+    if !value.chars().all(|c| c.is_ascii_digit()) {
+        return Err(FieldParseError::InvalidValue(value.to_string()));
+    }
+    let parsed: u128 = value.parse().unwrap_or(u128::MAX);
+    if parsed == 0 {
+        return Err(FieldParseError::NumberedFromOne);
+    }
+    let max_allowed = (usize::MAX - 1) as u128;
+    if parsed > max_allowed {
+        return Err(FieldParseError::TooLarge(value.to_string()));
+    }
+    Ok(parsed as usize)
+}
+
+fn parse_field_item(item: &str) -> std::result::Result<Range, FieldParseError> {
+    let dash_count = item.matches('-').count();
+    if dash_count > 1 {
+        return Err(FieldParseError::InvalidRange);
+    }
+    if dash_count == 0 {
+        let n = parse_field_number(item)?;
+        return Ok(Range { low: n, high: n });
+    }
+
+    let (low_raw, high_raw) = item.split_once('-').unwrap();
+    match (low_raw, high_raw) {
+        ("", "") => Err(FieldParseError::InvalidRange),
+        ("", high) => {
+            let high = parse_field_number(high)?;
+            Ok(Range { low: 1, high })
+        }
+        (low, "") => {
+            let low = parse_field_number(low)?;
+            Ok(Range {
+                low,
+                high: usize::MAX - 1,
+            })
+        }
+        (low, high) => {
+            let low = parse_field_number(low)?;
+            let high = parse_field_number(high)?;
+            if low > high {
+                Err(FieldParseError::DecreasingRange)
+            } else {
+                Ok(Range { low, high })
+            }
+        }
+    }
+}
+
+fn parse_field_list(list: &str, try_help: &str) -> Result<Vec<Range>> {
+    // a lone "-" means "all fields", even as part of a list of fields
+    if list.split(&[',', ' ']).any(|x| x == "-") {
+        return Ok(vec![Range {
+            low: 1,
+            high: usize::MAX,
+        }]);
+    }
+
+    let mut ranges = Vec::new();
+    for item in list.split(&[',', ' ']) {
+        if item.is_empty() {
+            continue;
+        }
+        match parse_field_item(item) {
+            Ok(range) => ranges.push(range),
+            Err(err) => {
+                let message = match err {
+                    FieldParseError::InvalidValue(value) => {
+                        format!("invalid field value '{}'\n{try_help}", value)
+                    }
+                    FieldParseError::InvalidRange => {
+                        format!("invalid field range\n{try_help}")
+                    }
+                    FieldParseError::NumberedFromOne => {
+                        format!("fields are numbered from 1\n{try_help}")
+                    }
+                    FieldParseError::DecreasingRange => {
+                        format!("invalid decreasing range\n{try_help}")
+                    }
+                    FieldParseError::TooLarge(value) => {
+                        format!("field number '{value}' is too large\n{try_help}")
+                    }
+                };
+                return Err(message);
+            }
+        }
+    }
+
+    Ok(merge_ranges(ranges))
+}
+
+fn merge_ranges(mut ranges: Vec<Range>) -> Vec<Range> {
+    ranges.sort();
+    let mut i = 0;
+    while i < ranges.len() {
+        let j = i + 1;
+        while j < ranges.len() && ranges[j].low <= ranges[i].high {
+            let j_high = ranges.remove(j).high;
+            if j_high > ranges[i].high {
+                ranges[i].high = j_high;
+            }
+        }
+        i += 1;
+    }
+    ranges
+}
+
 fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
     let from = parse_unit(args.get_one::<String>(FROM).unwrap())?;
     let to = parse_unit(args.get_one::<String>(TO).unwrap())?;
@@ -214,23 +356,34 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         Ok(0)
     }?;
 
-    let fields = args.get_one::<String>(FIELD).unwrap().as_str();
-    // a lone "-" means "all fields", even as part of a list of fields
-    let fields = if fields.split(&[',', ' ']).any(|x| x == "-") {
-        vec![Range {
-            low: 1,
-            high: usize::MAX,
-        }]
-    } else {
-        Range::from_list(fields)?
-    };
+    let try_help = format!("Try '{} --help' for more information.", uucore::util_name());
+    let field_values: Vec<String> = args
+        .get_many::<String>(FIELD)
+        .map(|values| values.cloned().collect())
+        .unwrap_or_else(|| vec![FIELD_DEFAULT.to_string()]);
+    if field_values.len() > 1 {
+        return Err(translate!("numfmt-error-multiple-field-specifications"));
+    }
+    let fields = parse_field_list(&field_values[0], &try_help)?;
 
     let format = match args.get_one::<String>(FORMAT) {
         Some(s) => s.parse()?,
         None => FormatOptions::default(),
     };
 
+    let grouping = args.get_flag(GROUPING);
+    if grouping && args.value_source(FORMAT) == Some(ValueSource::CommandLine) {
+        return Err(translate!(
+            "numfmt-error-grouping-cannot-be-combined-with-format"
+        ));
+    }
+
     if format.grouping && to != Unit::None {
+        return Err(translate!(
+            "numfmt-error-grouping-cannot-be-combined-with-to"
+        ));
+    }
+    if grouping && to != Unit::None {
         return Err(translate!(
             "numfmt-error-grouping-cannot-be-combined-with-to"
         ));
@@ -253,6 +406,8 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
 
     let suffix = args.get_one::<String>(SUFFIX).cloned();
 
+    let unit_separator_specified =
+        args.value_source(UNIT_SEPARATOR) == Some(ValueSource::CommandLine);
     let unit_separator = args
         .get_one::<String>(UNIT_SEPARATOR)
         .cloned()
@@ -273,10 +428,13 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         round,
         suffix,
         unit_separator,
+        unit_separator_specified,
         format,
+        grouping,
         invalid,
         zero_terminated,
         debug,
+        dev_debug: false,
     })
 }
 
@@ -297,9 +455,32 @@ fn print_debug_warnings(options: &NumfmtOptions, matches: &ArgMatches) {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    let mut args: Vec<OsString> = args.collect();
+    let mut dev_debug = false;
+    for arg in &mut args {
+        if arg == "---debug" {
+            *arg = OsString::from("--debug");
+            dev_debug = true;
+        }
+    }
 
-    let options = parse_options(&matches).map_err(NumfmtError::IllegalArgument)?;
+    let matches = match uu_app().try_get_matches_from(&args) {
+        Ok(matches) => matches,
+        Err(err) => {
+            let try_help = format!("Try '{} --help' for more information.", uucore::util_name());
+            let message = match err.kind() {
+                ErrorKind::UnknownArgument => format!("unrecognized option\n{try_help}"),
+                _ => err.to_string(),
+            };
+            return Err(NumfmtError::IllegalArgument(message).into());
+        }
+    };
+
+    let mut options = parse_options(&matches).map_err(NumfmtError::IllegalArgument)?;
+    if dev_debug {
+        options.dev_debug = true;
+        options.debug = true;
+    }
 
     if options.debug {
         print_debug_warnings(&options, &matches);
@@ -307,6 +488,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let result = match matches.get_many::<OsString>(NUMBER) {
         Some(values) => {
+            if options.debug && options.header > 0 {
+                show_error!("--header ignored with command-line input");
+            }
             let byte_args: Vec<&[u8]> = values
                 .map(|s| os_str_as_bytes(s).map_err(|e| e.to_string()))
                 .collect::<std::result::Result<Vec<_>, _>>()
@@ -320,6 +504,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
+    if options.dev_debug {
+        eprintln!("MAX_UNSCALED_DIGITS: 18");
+    }
+
+    if options.debug && !has_conversion_option(&options) {
+        show_error!("no conversion option specified");
+    }
+    if options.debug && grouping_requested(&options) && !locale_has_grouping() {
+        show_error!("grouping has no effect in this locale");
+    }
+    if options.debug && options.invalid == InvalidModes::Fail && HAD_INVALID.load(Ordering::Relaxed)
+    {
+        show_error!("failed to convert some of the input numbers");
+    }
+
     match result {
         Err(e) => {
             std::io::stdout().flush().expect("error flushing stdout");
@@ -327,6 +526,26 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
         _ => Ok(()),
     }
+}
+
+fn grouping_requested(options: &NumfmtOptions) -> bool {
+    options.grouping || options.format.grouping
+}
+
+fn has_conversion_option(options: &NumfmtOptions) -> bool {
+    options.transform.from != Unit::None
+        || options.transform.to != Unit::None
+        || options.transform.from_unit != 1
+        || options.transform.to_unit != 1
+        || options.padding != 0
+        || options.grouping
+        || options.format != FormatOptions::default()
+        || options.suffix.is_some()
+        || !options.unit_separator.is_empty()
+}
+
+fn locale_has_grouping() -> bool {
+    crate::format::locale_grouping_separator_string().is_some()
 }
 
 pub fn uu_app() -> Command {
@@ -358,7 +577,8 @@ pub fn uu_app() -> Command {
                 .help(translate!("numfmt-help-field"))
                 .value_name("FIELDS")
                 .allow_hyphen_values(true)
-                .default_value(FIELD_DEFAULT),
+                .num_args(1)
+                .action(ArgAction::Append),
         )
         .arg(
             Arg::new(FORMAT)
@@ -366,6 +586,12 @@ pub fn uu_app() -> Command {
                 .help(translate!("numfmt-help-format"))
                 .value_name("FORMAT")
                 .allow_hyphen_values(true),
+        )
+        .arg(
+            Arg::new(GROUPING)
+                .long(GROUPING)
+                .help(translate!("numfmt-help-grouping"))
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(FROM)
@@ -445,6 +671,12 @@ pub fn uu_app() -> Command {
                 .value_name("INVALID"),
         )
         .arg(
+            Arg::new(DEBUG)
+                .long(DEBUG)
+                .help(translate!("numfmt-help-debug"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
             Arg::new(ZERO_TERMINATED)
                 .long(ZERO_TERMINATED)
                 .short('z')
@@ -491,10 +723,13 @@ mod tests {
             round: RoundMethod::Nearest,
             suffix: None,
             unit_separator: String::new(),
+            unit_separator_specified: false,
             format: FormatOptions::default(),
+            grouping: false,
             invalid: InvalidModes::Abort,
             zero_terminated: false,
             debug: false,
+            dev_debug: false,
         }
     }
 
