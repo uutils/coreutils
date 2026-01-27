@@ -1116,7 +1116,7 @@ mod tests {
 
     #[test]
     fn test_whitespace_splitter_nbsp_not_separator() {
-        let s = format!("1\u{00A0}K 2");
+        let s = "1\u{00A0}K 2".to_string();
         let mut fields = WhitespaceSplitter {
             s: Some(&s),
             skip_whitespace: None,
@@ -1129,7 +1129,7 @@ mod tests {
 
     #[test]
     fn test_whitespace_splitter_em_space_is_separator() {
-        let s = format!("1\u{2003}2");
+        let s = "1\u{2003}2".to_string();
         let mut fields = WhitespaceSplitter {
             s: Some(&s),
             skip_whitespace: None,
