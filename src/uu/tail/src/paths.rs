@@ -228,6 +228,11 @@ pub fn path_is_tailable(path: &Path) -> bool {
     path.is_file() || path.exists() && path.metadata().is_ok_and(|meta| meta.is_tailable())
 }
 
+pub fn path_is_symlink(path: &Path) -> bool {
+    path.symlink_metadata()
+        .is_ok_and(|meta| meta.file_type().is_symlink())
+}
+
 #[inline]
 #[cfg(unix)]
 pub fn stdin_is_bad_fd() -> bool {
