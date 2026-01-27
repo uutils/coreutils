@@ -3,6 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore powf　localeconv
+#[cfg(not(windows))]
 use std::ffi::CStr;
 use std::io::Write;
 use std::sync::OnceLock;
