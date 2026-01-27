@@ -2745,7 +2745,7 @@ fn display_items(
                 LazyCell::new(Box::new(|| 0)),
             );
 
-            names_vec.push(cell);
+            names_vec.push(cell.displayed);
         }
 
         let mut names = names_vec.into_iter();
@@ -3040,19 +3040,23 @@ fn display_item_long(
             })),
         );
 
-        let displayed_item = if quoted && !os_str_starts_with(&item_name, b"'") {
+        let mut dired_name_len = item_name.dired_name_len;
+        let name = item_name.displayed;
+        let needs_space = quoted && !os_str_starts_with(&name, b"'");
+        let displayed_item = if needs_space {
+            dired_name_len += 1;
             let mut ret: OsString = " ".into();
-            ret.push(item_name);
+            ret.push(name);
             ret
         } else {
-            item_name
+            name
         };
 
         if config.dired {
             let (start, end) = dired::calculate_dired(
                 &dired.dired_positions,
                 output_display.len(),
-                displayed_item.len(),
+                dired_name_len,
             );
             dired::update_positions(dired, start, end);
         }
@@ -3138,6 +3142,8 @@ fn display_item_long(
                 ansi_width(&String::from_utf8_lossy(&output_display))
             })),
         );
+        let dired_name_len = displayed_item.dired_name_len;
+        let displayed_item = displayed_item.displayed;
         let date_len = 12;
 
         output_display.extend(b" ");
@@ -3150,7 +3156,7 @@ fn display_item_long(
             dired::calculate_and_update_positions(
                 dired,
                 output_display.len(),
-                displayed_item.to_string_lossy().trim().len(),
+                dired_name_len,
             );
         }
         write_os_str(&mut output_display, &displayed_item)?;
@@ -3317,6 +3323,11 @@ fn classify_file(path: &PathData) -> Option<char> {
 ///
 /// Note that non-unicode sequences in symlink targets are dealt with using
 /// [`std::path::Path::to_string_lossy`].
+struct DisplayItemName {
+    displayed: OsString,
+    dired_name_len: usize,
+}
+
 #[allow(clippy::cognitive_complexity)]
 fn display_item_name(
     path: &PathData,
@@ -3325,7 +3336,7 @@ fn display_item_name(
     more_info: Option<String>,
     state: &mut ListState,
     current_column: LazyCell<usize, Box<dyn FnOnce() -> usize + '_>>,
-) -> OsString {
+) -> DisplayItemName {
     // This is our return value. We start by `&path.display_name` and modify it along the way.
     let mut name = escape_name_with_locale(path.display_name(), config);
 
@@ -3375,6 +3386,8 @@ fn display_item_name(
             name.push(OsStr::new(&c.to_string()));
         }
     }
+
+    let dired_name_len = name.len();
 
     if config.format == Format::Long
         && path.file_type().is_some_and(|ft| ft.is_symlink())
@@ -3456,7 +3469,10 @@ fn display_item_name(
         }
     }
 
-    name
+    DisplayItemName {
+        displayed: name,
+        dired_name_len,
+    }
 }
 
 fn create_hyperlink(name: &OsStr, path: &PathData) -> OsString {
