@@ -10,7 +10,7 @@ use clap::{ArgMatches, parser::ValueSource};
 use thiserror::Error;
 use uucore::{
     display::Quotable,
-    parser::parse_size::{ParseSizeError, parse_size_u64, parse_size_u64_max},
+    parser::parse_size::{ParseSizeError, parse_size_u64_max},
     translate,
 };
 
@@ -121,7 +121,7 @@ impl NumberType {
         let mut parts = s.splitn(4, '/');
         match (parts.next(), parts.next(), parts.next(), parts.next()) {
             (Some(n_str), None, None, None) => {
-                let num_chunks = parse_size_u64(n_str)
+                let num_chunks = parse_size_u64_max(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 if num_chunks > 0 {
                     Ok(Self::Bytes(num_chunks))
@@ -132,9 +132,9 @@ impl NumberType {
             (Some(k_str), Some(n_str), None, None)
                 if !k_str.starts_with('l') && !k_str.starts_with('r') =>
             {
-                let num_chunks = parse_size_u64(n_str)
+                let num_chunks = parse_size_u64_max(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
-                let chunk_number = parse_size_u64(k_str)
+                let chunk_number = parse_size_u64_max(k_str)
                     .map_err(|_| NumberTypeError::ChunkNumber(k_str.to_string()))?;
                 if is_invalid_chunk(chunk_number, num_chunks) {
                     return Err(NumberTypeError::ChunkNumber(k_str.to_string()));
@@ -142,14 +142,14 @@ impl NumberType {
                 Ok(Self::KthBytes(chunk_number, num_chunks))
             }
             (Some("l"), Some(n_str), None, None) => {
-                let num_chunks = parse_size_u64(n_str)
+                let num_chunks = parse_size_u64_max(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 Ok(Self::Lines(num_chunks))
             }
             (Some("l"), Some(k_str), Some(n_str), None) => {
-                let num_chunks = parse_size_u64(n_str)
+                let num_chunks = parse_size_u64_max(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
-                let chunk_number = parse_size_u64(k_str)
+                let chunk_number = parse_size_u64_max(k_str)
                     .map_err(|_| NumberTypeError::ChunkNumber(k_str.to_string()))?;
                 if is_invalid_chunk(chunk_number, num_chunks) {
                     return Err(NumberTypeError::ChunkNumber(k_str.to_string()));
@@ -157,14 +157,14 @@ impl NumberType {
                 Ok(Self::KthLines(chunk_number, num_chunks))
             }
             (Some("r"), Some(n_str), None, None) => {
-                let num_chunks = parse_size_u64(n_str)
+                let num_chunks = parse_size_u64_max(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 Ok(Self::RoundRobin(num_chunks))
             }
             (Some("r"), Some(k_str), Some(n_str), None) => {
-                let num_chunks = parse_size_u64(n_str)
+                let num_chunks = parse_size_u64_max(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
-                let chunk_number = parse_size_u64(k_str)
+                let chunk_number = parse_size_u64_max(k_str)
                     .map_err(|_| NumberTypeError::ChunkNumber(k_str.to_string()))?;
                 if is_invalid_chunk(chunk_number, num_chunks) {
                     return Err(NumberTypeError::ChunkNumber(k_str.to_string()));
