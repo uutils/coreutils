@@ -100,6 +100,16 @@ else
     done
 fi
 [ -e "${UU_BUILD_DIR}/ginstall" ] || ln -vf "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests use ginstall
+
+# Install libstdbuf.so for stdbuf (required when feat_external_libstdbuf is enabled)
+LIBSTDBUF_DIR="${LIBSTDBUF_DIR:-/usr/local/libexec/coreutils}"
+if [ -w "${LIBSTDBUF_DIR}" ] || [ -w "$(dirname "${LIBSTDBUF_DIR}")" ]; then
+    mkdir -p "${LIBSTDBUF_DIR}"
+    cp -f "${UU_BUILD_DIR}/deps/libstdbuf.so" "${LIBSTDBUF_DIR}/"
+elif command -v sudo >/dev/null 2>&1; then
+    sudo mkdir -p "${LIBSTDBUF_DIR}"
+    sudo cp -f "${UU_BUILD_DIR}/deps/libstdbuf.so" "${LIBSTDBUF_DIR}/"
+fi
 ##
 
 cd "${path_GNU}" && echo "[ pwd:'${PWD}' ]"
