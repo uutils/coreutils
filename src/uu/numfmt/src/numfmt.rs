@@ -204,6 +204,26 @@ enum FieldParseError {
     TooLarge(String),
 }
 
+fn format_field_parse_error(err: FieldParseError, try_help: &str) -> String {
+    match err {
+        FieldParseError::InvalidValue(value) => {
+            format!("invalid field value '{value}'\n{try_help}")
+        }
+        FieldParseError::InvalidRange => {
+            format!("invalid field range\n{try_help}")
+        }
+        FieldParseError::NumberedFromOne => {
+            format!("fields are numbered from 1\n{try_help}")
+        }
+        FieldParseError::DecreasingRange => {
+            format!("invalid decreasing range\n{try_help}")
+        }
+        FieldParseError::TooLarge(value) => {
+            format!("field number '{value}' is too large\n{try_help}")
+        }
+    }
+}
+
 fn parse_field_number(value: &str) -> std::result::Result<usize, FieldParseError> {
     if value.is_empty() {
         return Err(FieldParseError::InvalidValue(value.to_string()));
@@ -274,26 +294,7 @@ fn parse_field_list(list: &str, try_help: &str) -> Result<Vec<Range>> {
         }
         match parse_field_item(item) {
             Ok(range) => ranges.push(range),
-            Err(err) => {
-                let message = match err {
-                    FieldParseError::InvalidValue(value) => {
-                        format!("invalid field value '{value}'\n{try_help}")
-                    }
-                    FieldParseError::InvalidRange => {
-                        format!("invalid field range\n{try_help}")
-                    }
-                    FieldParseError::NumberedFromOne => {
-                        format!("fields are numbered from 1\n{try_help}")
-                    }
-                    FieldParseError::DecreasingRange => {
-                        format!("invalid decreasing range\n{try_help}")
-                    }
-                    FieldParseError::TooLarge(value) => {
-                        format!("field number '{value}' is too large\n{try_help}")
-                    }
-                };
-                return Err(message);
-            }
+            Err(err) => return Err(format_field_parse_error(err, try_help)),
         }
     }
 
@@ -301,19 +302,24 @@ fn parse_field_list(list: &str, try_help: &str) -> Result<Vec<Range>> {
 }
 
 fn merge_ranges(mut ranges: Vec<Range>) -> Vec<Range> {
-    ranges.sort();
-    let mut i = 0;
-    while i < ranges.len() {
-        let j = i + 1;
-        while j < ranges.len() && ranges[j].low <= ranges[i].high {
-            let j_high = ranges.remove(j).high;
-            if j_high > ranges[i].high {
-                ranges[i].high = j_high;
-            }
-        }
-        i += 1;
+    if ranges.is_empty() {
+        return ranges;
     }
-    ranges
+    ranges.sort();
+
+    let mut merged = Vec::with_capacity(ranges.len());
+    let mut iter = ranges.into_iter();
+    let mut current = iter.next().unwrap();
+    for range in iter {
+        if range.low <= current.high {
+            current.high = current.high.max(range.high);
+        } else {
+            merged.push(current);
+            current = range;
+        }
+    }
+    merged.push(current);
+    merged
 }
 
 fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
@@ -372,18 +378,14 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
     };
 
     let grouping = args.get_flag(GROUPING);
-    if grouping && args.value_source(FORMAT) == Some(ValueSource::CommandLine) {
+    let format_specified = args.value_source(FORMAT) == Some(ValueSource::CommandLine);
+    if grouping && format_specified {
         return Err(translate!(
             "numfmt-error-grouping-cannot-be-combined-with-format"
         ));
     }
 
-    if format.grouping && to != Unit::None {
-        return Err(translate!(
-            "numfmt-error-grouping-cannot-be-combined-with-to"
-        ));
-    }
-    if grouping && to != Unit::None {
+    if (grouping || format.grouping) && to != Unit::None {
         return Err(translate!(
             "numfmt-error-grouping-cannot-be-combined-with-to"
         ));
