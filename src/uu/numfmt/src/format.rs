@@ -4,10 +4,12 @@
 // file that was distributed with this source code.
 // spell-checker:ignore powf　localeconv
 use std::io::Write;
+use num_bigint::BigUint;
+use num_traits::Zero;
 use uucore::display::Quotable;
 use uucore::translate;
 
-use crate::options::{NumfmtOptions, RoundMethod, TransformOptions};
+use crate::options::{FormatOptions, NumfmtOptions, RoundMethod, TransformOptions};
 use crate::units::{DisplayableSuffix, IEC_BASES, RawSuffix, Result, SI_BASES, Suffix, Unit};
 
 #[cfg(not(windows))]
@@ -183,6 +185,25 @@ struct NumberScan {
     digits: usize,
 }
 
+const MAX_CONVERSION_DIGITS: usize = 33;
+const MAX_UNSCALED_OUTPUT_DIGITS: usize = 19;
+
+struct ParsedNumber {
+    value: f64,
+    suffix: Option<Suffix>,
+    scan: NumberScan,
+}
+
+#[derive(Clone)]
+struct DecimalValue {
+    negative: bool,
+    int_raw: String,
+    frac_raw: String,
+    digits: BigUint,
+    scale: usize,
+    is_zero: bool,
+}
+
 fn scan_number_prefix(
     s: &str,
     decimal_sep: char,
@@ -246,6 +267,157 @@ fn scan_number_prefix(
         normalized,
         digits,
     })
+}
+
+fn total_significant_digits(scan: &NumberScan) -> usize {
+    let mut s = scan.normalized.as_str();
+    if let Some(rest) = s.strip_prefix('-') {
+        s = rest;
+    } else if let Some(rest) = s.strip_prefix('+') {
+        s = rest;
+    }
+    let (int_raw, frac_raw) = s.split_once('.').unwrap_or((s, ""));
+    let int_trimmed = int_raw.trim_start_matches('0');
+    if int_trimmed.is_empty() {
+        let frac_trimmed = frac_raw.trim_start_matches('0');
+        if frac_trimmed.is_empty() {
+            1
+        } else {
+            frac_raw.len()
+        }
+    } else {
+        int_trimmed.len() + frac_raw.len()
+    }
+}
+
+impl DecimalValue {
+    fn from_scan(scan: &NumberScan) -> Self {
+        let mut s = scan.normalized.as_str();
+        let mut negative = false;
+        if let Some(rest) = s.strip_prefix('-') {
+            negative = true;
+            s = rest;
+        } else if let Some(rest) = s.strip_prefix('+') {
+            s = rest;
+        }
+
+        let (int_raw, frac_raw) = s.split_once('.').unwrap_or((s, ""));
+        let digits_all = format!("{int_raw}{frac_raw}");
+        let digits_trimmed = digits_all.trim_start_matches('0');
+        let is_zero = digits_trimmed.is_empty();
+        let digits = if is_zero {
+            BigUint::zero()
+        } else {
+            BigUint::parse_bytes(digits_trimmed.as_bytes(), 10).unwrap_or_else(BigUint::zero)
+        };
+
+        Self {
+            negative,
+            int_raw: int_raw.to_string(),
+            frac_raw: frac_raw.to_string(),
+            digits,
+            scale: frac_raw.len(),
+            is_zero,
+        }
+    }
+
+    fn normalized_string(&self) -> String {
+        let int_trimmed = self.int_raw.trim_start_matches('0');
+        let int_out = if int_trimmed.is_empty() { "0" } else { int_trimmed };
+        let mut out = String::new();
+        if self.negative && !self.is_zero {
+            out.push('-');
+        }
+        out.push_str(int_out);
+        if !self.frac_raw.is_empty() {
+            out.push('.');
+            out.push_str(&self.frac_raw);
+        }
+        out
+    }
+
+    fn apply_multiplier(&mut self, multiplier: &BigUint) {
+        if !self.is_zero {
+            self.digits *= multiplier;
+        }
+    }
+
+    fn integer_part(&self) -> BigUint {
+        if self.scale == 0 {
+            return self.digits.clone();
+        }
+        if self.is_zero {
+            return BigUint::zero();
+        }
+        let divisor = pow10(self.scale);
+        &self.digits / divisor
+    }
+
+    fn integer_part_len(&self) -> usize {
+        let int_str = self.integer_part().to_str_radix(10);
+        int_str.len()
+    }
+
+    fn scientific_notation(&self) -> String {
+        let int_str = self.integer_part().to_str_radix(10);
+        if int_str == "0" {
+            return "0".to_string();
+        }
+        let mantissa = int_str.chars().next().unwrap_or('0');
+        let exp = int_str.len().saturating_sub(1);
+        let sign = if self.negative && !self.is_zero { "-" } else { "" };
+        format!("{sign}{mantissa}e+{exp}")
+    }
+}
+
+fn pow10(exp: usize) -> BigUint {
+    BigUint::from(10u8).pow(exp as u32)
+}
+
+fn pow1024(exp: usize) -> BigUint {
+    BigUint::from(1024u32).pow(exp as u32)
+}
+
+fn suffix_index(raw: RawSuffix) -> usize {
+    match raw {
+        RawSuffix::K => 1,
+        RawSuffix::M => 2,
+        RawSuffix::G => 3,
+        RawSuffix::T => 4,
+        RawSuffix::P => 5,
+        RawSuffix::E => 6,
+        RawSuffix::Z => 7,
+        RawSuffix::Y => 8,
+        RawSuffix::R => 9,
+        RawSuffix::Q => 10,
+    }
+}
+
+fn suffix_multiplier(suffix: Option<Suffix>, unit: &Unit) -> Result<BigUint> {
+    let Some((raw, with_i)) = suffix else {
+        return Ok(BigUint::from(1u8));
+    };
+    let idx = suffix_index(raw);
+    match unit {
+        Unit::Si => Ok(pow10(idx * 3)),
+        Unit::Iec(_) => Ok(pow1024(idx)),
+        Unit::Auto => {
+            if with_i {
+                Ok(pow1024(idx))
+            } else {
+                Ok(pow10(idx * 3))
+            }
+        }
+        Unit::None => Ok(BigUint::from(1u8)),
+    }
+}
+
+fn max_scaled_value(unit: &Unit) -> Option<BigUint> {
+    match unit {
+        Unit::Si => Some(BigUint::from(1000u16) * pow10(30)),
+        Unit::Iec(_) => Some(BigUint::from(1000u16) * pow1024(10)),
+        Unit::Auto | Unit::None => None,
+    }
 }
 
 fn maybe_warn_precision_loss(input: &str) {
@@ -387,12 +559,12 @@ fn detailed_error_message(s: &str, unit: &Unit) -> Option<String> {
     parse_number_with_suffix(s, unit, "", false).err()
 }
 
-fn parse_number_with_suffix(
+fn parse_number_with_suffix_parts(
     s: &str,
     unit: &Unit,
     unit_separator: &str,
     unit_separator_specified: bool,
-) -> Result<(f64, Option<Suffix>)> {
+) -> Result<ParsedNumber> {
     let trimmed = trim_trailing_blanks(s);
     if trimmed.is_empty() {
         return Err(translate!("numfmt-error-invalid-number-empty"));
@@ -417,6 +589,13 @@ fn parse_number_with_suffix(
             "input" => trimmed.quote()
         ));
     };
+
+    if total_significant_digits(&scan) > MAX_CONVERSION_DIGITS {
+        return Err(translate!(
+            "numfmt-error-value-too-large-to-be-converted",
+            "input" => trimmed.quote()
+        ));
+    }
 
     let number = scan
         .normalized
@@ -458,7 +637,11 @@ fn parse_number_with_suffix(
     }
 
     if rest.is_empty() {
-        return Ok((number, None));
+        return Ok(ParsedNumber {
+            value: number,
+            suffix: None,
+            scan,
+        });
     }
 
     let mut chars = rest.chars();
@@ -518,7 +701,22 @@ fn parse_number_with_suffix(
         ));
     }
 
-    Ok((number, Some((raw_suffix, with_i))))
+    Ok(ParsedNumber {
+        value: number,
+        suffix: Some((raw_suffix, with_i)),
+        scan,
+    })
+}
+
+#[cfg(test)]
+fn parse_number_with_suffix(
+    s: &str,
+    unit: &Unit,
+    unit_separator: &str,
+    unit_separator_specified: bool,
+) -> Result<(f64, Option<Suffix>)> {
+    let parsed = parse_number_with_suffix_parts(s, unit, unit_separator, unit_separator_specified)?;
+    Ok((parsed.value, parsed.suffix))
 }
 
 #[cfg(test)]
@@ -576,14 +774,7 @@ fn remove_suffix(i: f64, s: Option<Suffix>, u: &Unit) -> Result<f64> {
     }
 }
 
-fn transform_from(
-    s: &str,
-    opts: &TransformOptions,
-    unit_separator: &str,
-    unit_separator_specified: bool,
-) -> Result<f64> {
-    let (i, suffix) =
-        parse_number_with_suffix(s, &opts.from, unit_separator, unit_separator_specified)?;
+fn transform_from_parsed(i: f64, suffix: Option<Suffix>, opts: &TransformOptions) -> Result<f64> {
     let i = i * (opts.from_unit as f64);
 
     remove_suffix(i, suffix, &opts.from).map(|n| {
@@ -718,6 +909,43 @@ fn transform_to(
     })
 }
 
+fn validate_unscaled_output_size(value: &DecimalValue, precision: usize) -> Result<()> {
+    let int_len = value.integer_part_len();
+    if int_len + precision > MAX_UNSCALED_OUTPUT_DIGITS {
+        let sci = value.scientific_notation();
+        if precision > 0 {
+            let val = format!("{sci}/{precision}");
+            return Err(translate!(
+                "numfmt-error-value-precision-too-large-to-be-printed",
+                "value" => val.quote()
+            ));
+        }
+        return Err(translate!(
+            "numfmt-error-value-too-large-to-be-printed",
+            "value" => sci.quote()
+        ));
+    }
+    Ok(())
+}
+
+fn validate_scaled_output_size(value: &DecimalValue, unit: &Unit) -> Result<()> {
+    let Some(max_value) = max_scaled_value(unit) else {
+        return Ok(());
+    };
+    if value.is_zero {
+        return Ok(());
+    }
+    let threshold = max_value * pow10(value.scale);
+    if value.digits >= threshold {
+        let sci = value.scientific_notation();
+        return Err(translate!(
+            "numfmt-error-value-too-large-to-be-printed-max",
+            "value" => sci.quote()
+        ));
+    }
+    Ok(())
+}
+
 fn format_string(
     source: &str,
     options: &NumfmtOptions,
@@ -733,6 +961,20 @@ fn format_string(
         maybe_warn_precision_loss(source_without_suffix);
     }
 
+    let parsed = parse_number_with_suffix_parts(
+        source_without_suffix,
+        &options.transform.from,
+        &options.unit_separator,
+        options.unit_separator_specified,
+    )?;
+    let decimal = DecimalValue::from_scan(&parsed.scan);
+    let mut scaled = decimal.clone();
+    let multiplier = suffix_multiplier(parsed.suffix, &options.transform.from)?;
+    scaled.apply_multiplier(&multiplier);
+    if options.transform.from_unit != 1 {
+        scaled.apply_multiplier(&BigUint::from(options.transform.from_unit));
+    }
+
     let precision = if let Some(p) = options.format.precision {
         p
     } else if options.transform.from == Unit::None && options.transform.to == Unit::None {
@@ -741,18 +983,27 @@ fn format_string(
         0
     };
 
-    let mut number = transform_to(
-        transform_from(
-            source_without_suffix,
+    if options.transform.to == Unit::None {
+        validate_unscaled_output_size(&scaled, precision)?;
+    } else {
+        validate_scaled_output_size(&scaled, &options.transform.to)?;
+    }
+
+    let use_raw = options.transform.from == Unit::None
+        && options.transform.to == Unit::None
+        && options.format == FormatOptions::default();
+
+    let mut number = if use_raw {
+        decimal.normalized_string()
+    } else {
+        transform_to(
+            transform_from_parsed(parsed.value, parsed.suffix, &options.transform)?,
             &options.transform,
+            options.round,
+            precision,
             &options.unit_separator,
-            options.unit_separator_specified,
-        )?,
-        &options.transform,
-        options.round,
-        precision,
-        &options.unit_separator,
-    )?;
+        )?
+    };
 
     let decimal_sep = locale_decimal_separator_char();
     let grouping_requested = options.grouping || options.format.grouping;
@@ -780,22 +1031,39 @@ fn format_string(
     let padded_number = match padding {
         0 => number_with_suffix,
         p if p > 0 && options.format.zero_padding => {
-            let zero_padded = format!("{number_with_suffix:0>padding$}", padding = p as usize);
+            let zero_padded = pad_string(&number_with_suffix, p as usize, '0', false);
 
             match implicit_padding.unwrap_or(options.padding) {
                 0 => zero_padded,
-                p if p > 0 => format!("{zero_padded:>padding$}", padding = p as usize),
-                p => format!("{zero_padded:<padding$}", padding = p.unsigned_abs()),
+                p if p > 0 => pad_string(&zero_padded, p as usize, ' ', false),
+                p => pad_string(&zero_padded, p.unsigned_abs(), ' ', true),
             }
         }
-        p if p > 0 => format!("{number_with_suffix:>padding$}", padding = p as usize),
-        p => format!("{number_with_suffix:<padding$}", padding = p.unsigned_abs()),
+        p if p > 0 => pad_string(&number_with_suffix, p as usize, ' ', false),
+        p => pad_string(&number_with_suffix, p.unsigned_abs(), ' ', true),
     };
 
     Ok(format!(
         "{}{padded_number}{}",
         options.format.prefix, options.format.suffix
     ))
+}
+
+fn pad_string(input: &str, width: usize, pad_char: char, align_left: bool) -> String {
+    let len = input.chars().count();
+    if len >= width {
+        return input.to_string();
+    }
+    let pad_len = width - len;
+    let mut out = String::with_capacity(input.len() + pad_len * pad_char.len_utf8());
+    if align_left {
+        out.push_str(input);
+        out.extend(std::iter::repeat(pad_char).take(pad_len));
+    } else {
+        out.extend(std::iter::repeat(pad_char).take(pad_len));
+        out.push_str(input);
+    }
+    out
 }
 
 fn split_bytes<'a>(input: &'a [u8], delim: &'a [u8]) -> impl Iterator<Item = &'a [u8]> {
