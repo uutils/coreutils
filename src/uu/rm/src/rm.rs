@@ -71,12 +71,21 @@ fn verbose_removed_directory(path: &Path, options: &Options) {
 
 /// Helper function to show error with context and return error status
 fn show_removal_error(error: std::io::Error, path: &Path) -> bool {
-    if error.kind() == io::ErrorKind::PermissionDenied {
-        show_error!("cannot remove {}: Permission denied", path.quote());
-    } else {
-        let e =
-            error.map_err_context(|| translate!("rm-error-cannot-remove", "file" => path.quote()));
-        show_error!("{e}");
+    match error.kind() {
+        io::ErrorKind::PermissionDenied => {
+            show_error!("cannot remove {}: Permission denied", path.quote());
+        }
+        io::ErrorKind::InvalidInput if path_is_current_or_parent_directory(path) => {
+            show_error!(
+                "{}",
+                RmError::RefusingToRemoveDirectory(path.as_os_str().to_os_string())
+            );
+        }
+        _ => {
+            let e = error
+                .map_err_context(|| translate!("rm-error-cannot-remove", "file" => path.quote()));
+            show_error!("{e}");
+        }
     }
     true
 }
@@ -687,46 +696,14 @@ fn remove_dir_recursive(
 fn handle_dir(path: &Path, options: &Options, progress_bar: Option<&ProgressBar>) -> bool {
     let path = clean_trailing_slashes(path);
 
-    // Error priority: Is directory > Dir not empty > preserve-root > current/parent directory
-
-    // Refuse to remove a directory without -r/-R or -d
-    if !options.recursive && !options.dir {
-        show_error!(
-            "{}",
-            RmError::CannotRemoveIsDirectory(path.as_os_str().to_os_string())
-        );
-        return true;
-    }
-
-    // Refuse to remove non-empty directory without -r/-R
-    // If we can't read the directory, fall through to let remove_dir handle the error
-    if !options.recursive && !is_dir_empty(path).unwrap_or(true) {
-        show_error!(
-            "{}: Directory not empty",
-            translate!("rm-error-cannot-remove", "file" => path.quote())
-        );
-        return true;
-    }
-
-    // Preserve root directory
-    let is_root = path.has_root() && path.parent().is_none();
-    if is_root && options.preserve_root {
-        show_error!("{}", RmError::DangerousRecursiveOperation);
-        show_error!("{}", RmError::UseNoPreserveRoot);
-        return true;
-    }
-
-    // Refuse to remove current or parent directories
-    if path_is_current_or_parent_directory(path) {
-        show_error!(
-            "{}",
-            RmError::RefusingToRemoveDirectory(path.as_os_str().to_os_string())
-        );
-        return true;
-    }
-
-    // Now we can safely remove the directory
     if options.recursive {
+        // Preserve root directory
+        let is_root = path.has_root() && path.parent().is_none();
+        if is_root && options.preserve_root {
+            show_error!("{}", RmError::DangerousRecursiveOperation);
+            show_error!("{}", RmError::UseNoPreserveRoot);
+            return true;
+        }
         remove_dir_recursive(path, options, progress_bar)
     } else {
         remove_dir(path, options, progress_bar)
