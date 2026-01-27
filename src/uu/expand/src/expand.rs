@@ -15,9 +15,9 @@ use std::str::from_utf8;
 use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult, set_exit_code};
+use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::translate;
-use uucore::{format_usage, show_error};
+use uucore::{format_usage, show};
 
 pub mod options {
     pub static TABS: &str = "tabs";
@@ -296,6 +296,12 @@ fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read + 'static>>> {
         Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))
     } else {
         let path_ref = Path::new(path);
+        if path_ref.is_dir() {
+            return Err(USimpleError::new(
+                1,
+                translate!("expand-error-is-directory", "file" => path.maybe_quote()),
+            ));
+        }
         file_buf = File::open(path_ref).map_err_context(|| path.maybe_quote().to_string())?;
         Ok(BufReader::new(Box::new(file_buf) as Box<dyn Read>))
     }
@@ -474,34 +480,34 @@ fn expand_line(
     Ok(())
 }
 
+fn expand_file(
+    file: &OsString,
+    output: &mut BufWriter<std::io::Stdout>,
+    options: &Options,
+) -> UResult<()> {
+    let mut buf = Vec::new();
+    let mut input = open(file)?;
+    let ts = options.tabstops.as_ref();
+    loop {
+        match input.read_until(b'\n', &mut buf) {
+            Ok(0) => break,
+            Ok(_) => {
+                expand_line(&mut buf, output, ts, options)
+                    .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
+            }
+            Err(e) => return Err(e.map_err_context(|| file.maybe_quote().to_string())),
+        }
+    }
+    Ok(())
+}
+
 fn expand(options: &Options) -> UResult<()> {
     let mut output = BufWriter::new(stdout());
-    let ts = options.tabstops.as_ref();
-    let mut buf = Vec::new();
 
     for file in &options.files {
-        if Path::new(file).is_dir() {
-            show_error!(
-                "{}",
-                translate!("expand-error-is-directory", "file" => file.maybe_quote())
-            );
+        if let Err(e) = expand_file(file, &mut output, options) {
+            show!(e);
             set_exit_code(1);
-            continue;
-        }
-        match open(file) {
-            Ok(mut fh) => {
-                while match fh.read_until(b'\n', &mut buf) {
-                    Ok(s) => s > 0,
-                    Err(_) => buf.is_empty(),
-                } {
-                    expand_line(&mut buf, &mut output, ts, options)
-                        .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
-                }
-            }
-            Err(e) => {
-                show_error!("{e}");
-                set_exit_code(1);
-            }
         }
     }
     // Flush once at the end
