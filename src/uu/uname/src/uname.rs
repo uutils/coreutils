@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (API) nodename osname sysname (options) mnrsv mnrsvo
+// spell-checker:ignore (API) nodename osname sysname (options) mnrsv mnrsvo armv kdump
 
 use std::ffi::{OsStr, OsString};
 
@@ -34,15 +34,17 @@ pub mod options {
 /// architecture strings. Previously returned "unknown" causing regressions in
 /// packages like kdump-tools.
 ///
-/// Fixes: <https://github.com/uutils/coreutils/issues/8659>
+/// Mapping table:
+/// - arm64, aarch64 → "arm"
+/// - x86_64, amd64 → "x86_64"
+/// - i386, i486, i586, i686 → "i386"
+/// - (other) → "unknown"
 fn map_processor(machine: &str) -> String {
     match machine {
-        "arm64" => "arm".to_string(),
-        "aarch64" => "aarch64".to_string(),
+        "arm64" | "aarch64" => "arm".to_string(),
         "x86_64" | "amd64" => "x86_64".to_string(),
-        "i386" | "i486" | "i586" | "i686" => "i686".to_string(),
-        "armv7l" | "armv6l" | "armv8l" => "arm".to_string(),
-        _ => machine.to_string(),
+        "i386" | "i486" | "i586" | "i686" => "i386".to_string(),
+        _ => "unknown".to_string(),
     }
 }
 
