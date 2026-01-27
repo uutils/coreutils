@@ -587,8 +587,8 @@ fn test_locale_collation() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
-    at.write("f1.sorted", "abc:d 2\nab:d  1\n");
-    at.write("f2.sorted", "abc:d y\nab:d  x\n");
+    at.write("f1.sorted", "ab:d  1\nabc:d 2\n");
+    at.write("f2.sorted", "ab:d  x\nabc:d y\n");
 
     ts.ucmd()
         .env("LC_ALL", "en_US.UTF-8")
@@ -596,6 +596,6 @@ fn test_locale_collation() {
         .arg("f1.sorted")
         .arg("f2.sorted")
         .succeeds()
-        .stdout_contains("abc:d 2 y")
-        .stdout_contains("ab:d 1 x");
+        .stdout_contains("ab:d 1 x")
+        .stdout_contains("abc:d 2 y");
 }
