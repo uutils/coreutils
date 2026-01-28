@@ -249,14 +249,39 @@ pub fn normalize_path(path: &Path) -> PathBuf {
             }
             Component::CurDir => {}
             Component::ParentDir => {
-                ret.pop();
+                if ret.as_os_str().is_empty() || is_above_current_dir(&ret) {
+                    ret.push(component.as_os_str());
+                } else {
+                    ret.pop();
+                }
             }
             Component::Normal(c) => {
                 ret.push(c);
             }
         }
     }
+
+    if ret.as_os_str().is_empty() {
+        ret.push(".");
+    }
+
     ret
+}
+
+fn is_above_current_dir(path: &Path) -> bool {
+    let mut depth = 0;
+    for component in path.components() {
+        match component {
+            Component::ParentDir => {
+                depth -= 1;
+            }
+            Component::Normal(_) => {
+                depth += 1;
+            }
+            _ => {}
+        }
+    }
+    depth < 0
 }
 
 fn resolve_symlink<P: AsRef<Path>>(path: P) -> IOResult<Option<PathBuf>> {
@@ -874,7 +899,30 @@ mod tests {
         test: &'a str,
     }
 
-    const NORMALIZE_PATH_TESTS: [NormalizePathTestCase; 8] = [
+    const NORMALIZE_PATH_TESTS: [NormalizePathTestCase; 13] = [
+        NormalizePathTestCase {
+            path: "foo/bar/../..",
+            test: ".",
+        },
+        // Should not try to eliminate leading .. components,
+        // as it may point to a sibling of the current dir
+        NormalizePathTestCase {
+            path: "../foo",
+            test: "../foo",
+        },
+        // Try to go down, then escape above current dir and back down again
+        NormalizePathTestCase {
+            path: "foo/../../../bar/baz",
+            test: "../../bar/baz",
+        },
+        NormalizePathTestCase {
+            path: "foo/../../..",
+            test: "../..",
+        },
+        NormalizePathTestCase {
+            path: "foo/bar/../../..",
+            test: "..",
+        },
         NormalizePathTestCase {
             path: "./foo/bar.txt",
             test: "foo/bar.txt",
@@ -920,6 +968,17 @@ mod tests {
                 normalized.to_str().expect("Path is not valid utf-8!")
             );
         }
+    }
+
+    #[test]
+    fn test_is_above_current_dir() {
+        assert!(is_above_current_dir(Path::new("..")));
+        assert!(is_above_current_dir(Path::new("../..")));
+        assert!(is_above_current_dir(Path::new("foo/../../..")));
+        assert!(!is_above_current_dir(Path::new(".")));
+        assert!(!is_above_current_dir(Path::new("foo/..")));
+        assert!(!is_above_current_dir(Path::new("foo/../../bar/foo")));
+        assert!(!is_above_current_dir(Path::new("foo/bar/..")));
     }
 
     #[cfg(unix)]
