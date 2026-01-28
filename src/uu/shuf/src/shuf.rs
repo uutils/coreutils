@@ -5,37 +5,53 @@
 
 // spell-checker:ignore (ToDO) cmdline evec nonrepeating seps shufable rvec fdata
 
-use clap::builder::ValueParser;
-use clap::{Arg, ArgAction, Command};
-use rand::prelude::SliceRandom;
-use rand::seq::IndexedRandom;
-use rand::{Rng, RngCore};
-use std::collections::HashSet;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{BufWriter, Error, Read, Write, stdin, stdout};
+use std::io::{BufReader, BufWriter, Error, Read, Write, stdin, stdout};
 use std::ops::RangeInclusive;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+
+use clap::{Arg, ArgAction, Command, builder::ValueParser};
+use rand::rngs::ThreadRng;
+use rand::{
+    Rng,
+    seq::{IndexedRandom, SliceRandom},
+};
+
 use uucore::display::{OsWrite, Quotable};
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::translate;
 
-mod rand_read_adapter;
+mod compat_random_source;
+mod nonrepeating_iterator;
+mod random_seed;
+
+use compat_random_source::RandomSourceAdapter;
+use nonrepeating_iterator::NonrepeatingIterator;
+use random_seed::SeededRng;
 
 enum Mode {
     Default(PathBuf),
     Echo(Vec<OsString>),
-    InputRange(RangeInclusive<usize>),
+    InputRange(RangeInclusive<u64>),
 }
 
+const BUF_SIZE: usize = 64 * 1024;
+
 struct Options {
-    head_count: usize,
+    head_count: u64,
     output: Option<PathBuf>,
-    random_source: Option<PathBuf>,
+    random_source: RandomSource,
     repeat: bool,
     sep: u8,
+}
+
+enum RandomSource {
+    None,
+    Seed(String),
+    File(PathBuf),
 }
 
 mod options {
@@ -44,6 +60,7 @@ mod options {
     pub static HEAD_COUNT: &str = "head-count";
     pub static OUTPUT: &str = "output";
     pub static RANDOM_SOURCE: &str = "random-source";
+    pub static RANDOM_SEED: &str = "random-seed";
     pub static REPEAT: &str = "repeat";
     pub static ZERO_TERMINATED: &str = "zero-terminated";
     pub static FILE_OR_ARGS: &str = "file-or-args";
@@ -77,19 +94,27 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Mode::Default(file.into())
     };
 
+    let random_source = if let Some(filename) = matches.get_one(options::RANDOM_SOURCE).cloned() {
+        RandomSource::File(filename)
+    } else if let Some(seed) = matches.get_one(options::RANDOM_SEED).cloned() {
+        RandomSource::Seed(seed)
+    } else {
+        RandomSource::None
+    };
+
     let options = Options {
         // GNU shuf takes the lowest value passed, so we imitate that.
         // It's probably a bug or an implementation artifact though.
         // Busybox takes the final value which is more typical: later
         // options override earlier options.
         head_count: matches
-            .get_many::<usize>(options::HEAD_COUNT)
+            .get_many::<u64>(options::HEAD_COUNT)
             .unwrap_or_default()
             .copied()
             .min()
-            .unwrap_or(usize::MAX),
+            .unwrap_or(u64::MAX),
         output: matches.get_one(options::OUTPUT).cloned(),
-        random_source: matches.get_one(options::RANDOM_SOURCE).cloned(),
+        random_source,
         repeat: matches.get_flag(options::REPEAT),
         sep: if matches.get_flag(options::ZERO_TERMINATED) {
             b'\0'
@@ -98,15 +123,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         },
     };
 
-    let mut output = BufWriter::new(match options.output {
-        None => Box::new(stdout()) as Box<dyn OsWrite>,
-        Some(ref s) => {
-            let file = File::create(s).map_err_context(
-                || translate!("shuf-error-failed-to-open-for-writing", "file" => s.quote()),
-            )?;
-            Box::new(file) as Box<dyn OsWrite>
-        }
-    });
+    let mut output = BufWriter::with_capacity(
+        BUF_SIZE,
+        match options.output {
+            None => Box::new(stdout()) as Box<dyn OsWrite>,
+            Some(ref s) => {
+                let file = File::create(s).map_err_context(
+                    || translate!("shuf-error-failed-to-open-for-writing", "file" => s.quote()),
+                )?;
+                Box::new(file) as Box<dyn OsWrite>
+            }
+        },
+    );
 
     if options.head_count == 0 {
         // In this case we do want to touch the output file but we can quit immediately.
@@ -114,13 +142,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let mut rng = match options.random_source {
-        Some(ref r) => {
+        RandomSource::None => WrappedRng::Default(rand::rng()),
+        RandomSource::Seed(ref seed) => WrappedRng::Seed(SeededRng::new(seed)),
+        RandomSource::File(ref r) => {
             let file = File::open(r).map_err_context(
                 || translate!("shuf-error-failed-to-open-random-source", "file" => r.quote()),
             )?;
-            WrappedRng::RngFile(rand_read_adapter::ReadRng::new(file))
+            let file = BufReader::new(file);
+            WrappedRng::File(compat_random_source::RandomSourceAdapter::new(file))
         }
-        None => WrappedRng::RngDefault(rand::rng()),
     };
 
     match mode {
@@ -173,7 +203,7 @@ pub fn uu_app() -> Command {
                 .value_name("COUNT")
                 .action(ArgAction::Append)
                 .help(translate!("shuf-help-head-count"))
-                .value_parser(usize::from_str),
+                .value_parser(u64::from_str),
         )
         .arg(
             Arg::new(options::OUTPUT)
@@ -183,6 +213,15 @@ pub fn uu_app() -> Command {
                 .help(translate!("shuf-help-output"))
                 .value_parser(ValueParser::path_buf())
                 .value_hint(clap::ValueHint::FilePath),
+        )
+        .arg(
+            Arg::new(options::RANDOM_SEED)
+                .long(options::RANDOM_SEED)
+                .value_name("STRING")
+                .help(translate!("shuf-help-random-seed"))
+                .value_parser(ValueParser::string())
+                .value_hint(clap::ValueHint::Other)
+                .conflicts_with(options::RANDOM_SOURCE),
         )
         .arg(
             Arg::new(options::RANDOM_SOURCE)
@@ -243,12 +282,15 @@ fn split_seps(data: &[u8], sep: u8) -> Vec<&[u8]> {
 trait Shufable {
     type Item: Writable;
     fn is_empty(&self) -> bool;
-    fn choose(&self, rng: &mut WrappedRng) -> Self::Item;
+    fn choose(&self, rng: &mut WrappedRng) -> UResult<Self::Item>;
+    // In some modes we shuffle ahead of time and in some as we generate
+    // so we unfortunately need to double-wrap UResult.
+    // But it's monomorphized so the optimizer will hopefully Take Care Of It™.
     fn partial_shuffle<'b>(
         &'b mut self,
         rng: &'b mut WrappedRng,
-        amount: usize,
-    ) -> impl Iterator<Item = Self::Item>;
+        amount: u64,
+    ) -> UResult<impl Iterator<Item = UResult<Self::Item>>>;
 }
 
 impl<'a> Shufable for Vec<&'a [u8]> {
@@ -258,20 +300,22 @@ impl<'a> Shufable for Vec<&'a [u8]> {
         (**self).is_empty()
     }
 
-    fn choose(&self, rng: &mut WrappedRng) -> Self::Item {
-        // Note: "copied()" only copies the reference, not the entire [u8].
-        // Returns None if the slice is empty. We checked this before, so
-        // this is safe.
-        (**self).choose(rng).unwrap()
+    fn choose(&self, rng: &mut WrappedRng) -> UResult<Self::Item> {
+        rng.choose(self)
     }
 
     fn partial_shuffle<'b>(
         &'b mut self,
         rng: &'b mut WrappedRng,
-        amount: usize,
-    ) -> impl Iterator<Item = Self::Item> {
-        // Note: "copied()" only copies the reference, not the entire [u8].
-        (**self).partial_shuffle(rng, amount).0.iter().copied()
+        amount: u64,
+    ) -> UResult<impl Iterator<Item = UResult<Self::Item>>> {
+        // On 32-bit platforms it's possible that amount > usize::MAX.
+        // We saturate as usize::MAX since all of our shuffling modes require storing
+        // elements in memory so more than usize::MAX elements won't fit anyway.
+        // (With --repeat an output larger than usize::MAX is possible. But --repeat
+        // uses `choose()`.)
+        let amount = usize::try_from(amount).unwrap_or(usize::MAX);
+        Ok(rng.shuffle(self, amount)?.iter().copied().map(Ok))
     }
 }
 
@@ -282,126 +326,39 @@ impl<'a> Shufable for Vec<&'a OsStr> {
         (**self).is_empty()
     }
 
-    fn choose(&self, rng: &mut WrappedRng) -> Self::Item {
-        (**self).choose(rng).unwrap()
+    fn choose(&self, rng: &mut WrappedRng) -> UResult<Self::Item> {
+        rng.choose(self)
     }
 
     fn partial_shuffle<'b>(
         &'b mut self,
         rng: &'b mut WrappedRng,
-        amount: usize,
-    ) -> impl Iterator<Item = Self::Item> {
-        (**self).partial_shuffle(rng, amount).0.iter().copied()
+        amount: u64,
+    ) -> UResult<impl Iterator<Item = UResult<Self::Item>>> {
+        let amount = usize::try_from(amount).unwrap_or(usize::MAX);
+        Ok(rng.shuffle(self, amount)?.iter().copied().map(Ok))
     }
 }
 
-impl Shufable for RangeInclusive<usize> {
-    type Item = usize;
+impl Shufable for RangeInclusive<u64> {
+    type Item = u64;
 
     fn is_empty(&self) -> bool {
         self.is_empty()
     }
 
-    fn choose(&self, rng: &mut WrappedRng) -> usize {
-        rng.random_range(self.clone())
+    fn choose(&self, rng: &mut WrappedRng) -> UResult<Self::Item> {
+        rng.choose_from_range(self.clone())
     }
 
     fn partial_shuffle<'b>(
         &'b mut self,
         rng: &'b mut WrappedRng,
-        amount: usize,
-    ) -> impl Iterator<Item = Self::Item> {
-        NonrepeatingIterator::new(self.clone(), rng, amount)
+        amount: u64,
+    ) -> UResult<impl Iterator<Item = UResult<Self::Item>>> {
+        let amount = usize::try_from(amount).unwrap_or(usize::MAX);
+        Ok(NonrepeatingIterator::new(self.clone(), rng).take(amount))
     }
-}
-
-enum NumberSet {
-    AlreadyListed(HashSet<usize>),
-    Remaining(Vec<usize>),
-}
-
-struct NonrepeatingIterator<'a> {
-    range: RangeInclusive<usize>,
-    rng: &'a mut WrappedRng,
-    remaining_count: usize,
-    buf: NumberSet,
-}
-
-impl<'a> NonrepeatingIterator<'a> {
-    fn new(range: RangeInclusive<usize>, rng: &'a mut WrappedRng, amount: usize) -> Self {
-        let capped_amount = if range.start() > range.end() {
-            0
-        } else if range == (0..=usize::MAX) {
-            amount
-        } else {
-            amount.min(range.end() - range.start() + 1)
-        };
-        NonrepeatingIterator {
-            range,
-            rng,
-            remaining_count: capped_amount,
-            buf: NumberSet::AlreadyListed(HashSet::default()),
-        }
-    }
-
-    fn produce(&mut self) -> usize {
-        debug_assert!(self.range.start() <= self.range.end());
-        match &mut self.buf {
-            NumberSet::AlreadyListed(already_listed) => {
-                let chosen = loop {
-                    let guess = self.rng.random_range(self.range.clone());
-                    let newly_inserted = already_listed.insert(guess);
-                    if newly_inserted {
-                        break guess;
-                    }
-                };
-                // Once a significant fraction of the interval has already been enumerated,
-                // the number of attempts to find a number that hasn't been chosen yet increases.
-                // Therefore, we need to switch at some point from "set of already returned values" to "list of remaining values".
-                let range_size = (self.range.end() - self.range.start()).saturating_add(1);
-                if number_set_should_list_remaining(already_listed.len(), range_size) {
-                    let mut remaining = self
-                        .range
-                        .clone()
-                        .filter(|n| !already_listed.contains(n))
-                        .collect::<Vec<_>>();
-                    assert!(remaining.len() >= self.remaining_count);
-                    remaining.partial_shuffle(&mut self.rng, self.remaining_count);
-                    remaining.truncate(self.remaining_count);
-                    self.buf = NumberSet::Remaining(remaining);
-                }
-                chosen
-            }
-            NumberSet::Remaining(remaining_numbers) => {
-                debug_assert!(!remaining_numbers.is_empty());
-                // We only enter produce() when there is at least one actual element remaining, so popping must always return an element.
-                remaining_numbers.pop().unwrap()
-            }
-        }
-    }
-}
-
-impl Iterator for NonrepeatingIterator<'_> {
-    type Item = usize;
-
-    fn next(&mut self) -> Option<usize> {
-        if self.range.is_empty() || self.remaining_count == 0 {
-            return None;
-        }
-        self.remaining_count -= 1;
-        Some(self.produce())
-    }
-}
-
-// This could be a method, but it is much easier to test as a stand-alone function.
-fn number_set_should_list_remaining(listed_count: usize, range_size: usize) -> bool {
-    // Arbitrarily determine the switchover point to be around 25%. This is because:
-    // - HashSet has a large space overhead for the hash table load factor.
-    // - This means that somewhere between 25-40%, the memory required for a "positive" HashSet and a "negative" Vec should be the same.
-    // - HashSet has a small but non-negligible overhead for each lookup, so we have a slight preference for Vec anyway.
-    // - At 25%, on average 1.33 attempts are needed to find a number that hasn't been taken yet.
-    // - Finally, "24%" is computationally the simplest:
-    listed_count >= range_size / 4
 }
 
 trait Writable {
@@ -420,39 +377,32 @@ impl Writable for &OsStr {
     }
 }
 
-impl Writable for usize {
+impl Writable for u64 {
+    #[inline]
     fn write_all_to(&self, output: &mut impl OsWrite) -> Result<(), Error> {
-        let mut n = *self;
-
-        // Handle the zero case explicitly
-        if n == 0 {
-            return output.write_all(b"0");
-        }
-
-        // Maximum number of digits for u64 is 20 (18446744073709551615)
-        let mut buf = [0u8; 20];
-        let mut i = 20;
-
-        // Write digits from right to left
-        while n > 0 {
-            i -= 1;
-            buf[i] = b'0' + (n % 10) as u8;
-            n /= 10;
-        }
-
-        // Write the relevant part of the buffer to output
-        output.write_all(&buf[i..])
+        // The itoa crate is surprisingly much more efficient than a formatted write.
+        // It speeds up `shuf -r -n1000000 -i1-1024` by 1.8×.
+        let mut buf = itoa::Buffer::new();
+        output.write_all(buf.format(*self).as_bytes())
     }
 }
 
+#[cold]
+#[inline(never)]
+fn handle_write_error(e: std::io::Error) -> Box<dyn uucore::error::UError> {
+    use uucore::error::FromIo;
+    let ctx = translate!("shuf-error-write-failed");
+    e.map_err_context(move || ctx)
+}
+
+#[inline(never)]
 fn shuf_exec(
     input: &mut impl Shufable,
     opts: &Options,
     rng: &mut WrappedRng,
     output: &mut BufWriter<Box<dyn OsWrite>>,
 ) -> UResult<()> {
-    let ctx = || translate!("shuf-error-write-failed");
-
+    let sep = [opts.sep];
     if opts.repeat {
         if input.is_empty() {
             return Err(USimpleError::new(
@@ -461,26 +411,28 @@ fn shuf_exec(
             ));
         }
         for _ in 0..opts.head_count {
-            let r = input.choose(rng);
-
-            r.write_all_to(output).map_err_context(ctx)?;
-            output.write_all(&[opts.sep]).map_err_context(ctx)?;
+            let r = input.choose(rng)?;
+            r.write_all_to(output).map_err(handle_write_error)?;
+            output.write_all(&sep).map_err(handle_write_error)?;
         }
     } else {
-        let shuffled = input.partial_shuffle(rng, opts.head_count);
+        let shuffled = input.partial_shuffle(rng, opts.head_count)?;
+
         for r in shuffled {
-            r.write_all_to(output).map_err_context(ctx)?;
-            output.write_all(&[opts.sep]).map_err_context(ctx)?;
+            let r = r?;
+            r.write_all_to(output).map_err(handle_write_error)?;
+            output.write_all(&sep).map_err(handle_write_error)?;
         }
     }
+    output.flush().map_err(handle_write_error)?;
 
     Ok(())
 }
 
-fn parse_range(input_range: &str) -> Result<RangeInclusive<usize>, String> {
+fn parse_range(input_range: &str) -> Result<RangeInclusive<u64>, String> {
     if let Some((from, to)) = input_range.split_once('-') {
-        let begin = from.parse::<usize>().map_err(|e| e.to_string())?;
-        let end = to.parse::<usize>().map_err(|e| e.to_string())?;
+        let begin = from.parse::<u64>().map_err(|e| e.to_string())?;
+        let end = to.parse::<u64>().map_err(|e| e.to_string())?;
         if begin <= end || begin == end + 1 {
             Ok(begin..=end)
         } else {
@@ -492,29 +444,33 @@ fn parse_range(input_range: &str) -> Result<RangeInclusive<usize>, String> {
 }
 
 enum WrappedRng {
-    RngFile(rand_read_adapter::ReadRng<File>),
-    RngDefault(rand::rngs::ThreadRng),
+    Default(ThreadRng),
+    Seed(SeededRng),
+    File(RandomSourceAdapter<BufReader<File>>),
 }
 
-impl RngCore for WrappedRng {
-    fn next_u32(&mut self) -> u32 {
+impl WrappedRng {
+    fn choose<T: Copy>(&mut self, vals: &[T]) -> UResult<T> {
         match self {
-            Self::RngFile(r) => r.next_u32(),
-            Self::RngDefault(r) => r.next_u32(),
+            Self::Default(rng) => Ok(*vals.choose(rng).unwrap()),
+            Self::Seed(rng) => Ok(rng.choose_from_slice(vals)),
+            Self::File(rng) => rng.choose_from_slice(vals),
         }
     }
 
-    fn next_u64(&mut self) -> u64 {
+    fn shuffle<'a, T>(&mut self, vals: &'a mut [T], amount: usize) -> UResult<&'a mut [T]> {
         match self {
-            Self::RngFile(r) => r.next_u64(),
-            Self::RngDefault(r) => r.next_u64(),
+            Self::Default(rng) => Ok(vals.partial_shuffle(rng, amount).0),
+            Self::Seed(rng) => Ok(rng.shuffle(vals, amount)),
+            Self::File(rng) => rng.shuffle(vals, amount),
         }
     }
 
-    fn fill_bytes(&mut self, dest: &mut [u8]) {
+    fn choose_from_range(&mut self, range: RangeInclusive<u64>) -> UResult<u64> {
         match self {
-            Self::RngFile(r) => r.fill_bytes(dest),
-            Self::RngDefault(r) => r.fill_bytes(dest),
+            Self::Default(rng) => Ok(rng.random_range(range)),
+            Self::Seed(rng) => Ok(rng.choose_from_range(range)),
+            Self::File(rng) => rng.choose_from_range(range),
         }
     }
 }
@@ -541,87 +497,5 @@ mod test_split_seps {
     #[test]
     fn test_without_trailing() {
         assert_eq!(split_seps(b"a\nb\nc", b'\n'), &[b"a", b"b", b"c"]);
-    }
-}
-
-#[cfg(test)]
-// Since the computed value is a bool, it is more readable to write the expected value out:
-#[allow(clippy::bool_assert_comparison)]
-mod test_number_set_decision {
-    use super::number_set_should_list_remaining;
-
-    #[test]
-    fn test_stay_positive_large_remaining_first() {
-        assert_eq!(false, number_set_should_list_remaining(0, usize::MAX));
-    }
-
-    #[test]
-    fn test_stay_positive_large_remaining_second() {
-        assert_eq!(false, number_set_should_list_remaining(1, usize::MAX));
-    }
-
-    #[test]
-    fn test_stay_positive_large_remaining_tenth() {
-        assert_eq!(false, number_set_should_list_remaining(9, usize::MAX));
-    }
-
-    #[test]
-    fn test_stay_positive_smallish_range_first() {
-        assert_eq!(false, number_set_should_list_remaining(0, 12345));
-    }
-
-    #[test]
-    fn test_stay_positive_smallish_range_second() {
-        assert_eq!(false, number_set_should_list_remaining(1, 12345));
-    }
-
-    #[test]
-    fn test_stay_positive_smallish_range_tenth() {
-        assert_eq!(false, number_set_should_list_remaining(9, 12345));
-    }
-
-    #[test]
-    fn test_stay_positive_small_range_not_too_early() {
-        assert_eq!(false, number_set_should_list_remaining(1, 10));
-    }
-
-    // Don't want to test close to the border, in case we decide to change the threshold.
-    // However, at 50% coverage, we absolutely should switch:
-    #[test]
-    fn test_switch_half() {
-        assert_eq!(true, number_set_should_list_remaining(1234, 2468));
-    }
-
-    // Ensure that the decision is monotonous:
-    #[test]
-    fn test_switch_late1() {
-        assert_eq!(true, number_set_should_list_remaining(12340, 12345));
-    }
-
-    #[test]
-    fn test_switch_late2() {
-        assert_eq!(true, number_set_should_list_remaining(12344, 12345));
-    }
-
-    // Ensure that we are overflow-free:
-    #[test]
-    fn test_no_crash_exceed_max_size1() {
-        assert_eq!(false, number_set_should_list_remaining(12345, usize::MAX));
-    }
-
-    #[test]
-    fn test_no_crash_exceed_max_size2() {
-        assert_eq!(
-            true,
-            number_set_should_list_remaining(usize::MAX - 1, usize::MAX)
-        );
-    }
-
-    #[test]
-    fn test_no_crash_exceed_max_size3() {
-        assert_eq!(
-            true,
-            number_set_should_list_remaining(usize::MAX, usize::MAX)
-        );
     }
 }

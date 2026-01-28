@@ -20,6 +20,11 @@ use std::sync::OnceLock;
 use uucore::display::Quotable;
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
+#[cfg(feature = "i18n-datetime")]
+use uucore::i18n::datetime::{
+    get_era_year, get_localized_day_name, get_localized_month_name, get_time_locale,
+    should_use_icu_locale,
+};
 use uucore::translate;
 use uucore::{format_usage, show};
 #[cfg(windows)]
@@ -474,20 +479,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let config = Config::new().custom(PosixCustom::new()).lenient(true);
     for date in dates {
         match date {
-            Ok(date) => {
-                match BrokenDownTime::from(&date).to_string_with_config(&config, format_string) {
-                    Ok(s) => writeln!(stdout, "{s}").map_err(|e| {
-                        USimpleError::new(1, translate!("date-error-write", "error" => e))
-                    })?,
-                    Err(e) => {
-                        let _ = stdout.flush();
-                        return Err(USimpleError::new(
-                            1,
-                            translate!("date-error-invalid-format", "format" => format_string, "error" => e),
-                        ));
-                    }
+            Ok(date) => match format_date_with_locale_aware_months(&date, format_string, &config) {
+                Ok(s) => writeln!(stdout, "{s}").map_err(|e| {
+                    USimpleError::new(1, translate!("date-error-write", "error" => e))
+                })?,
+                Err(e) => {
+                    let _ = stdout.flush();
+                    return Err(USimpleError::new(
+                        1,
+                        translate!("date-error-invalid-format", "format" => format_string, "error" => e),
+                    ));
                 }
-            }
+            },
             Err((input, _err)) => {
                 let _ = stdout.flush();
                 show!(USimpleError::new(
@@ -610,6 +613,119 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(Arg::new(OPT_FORMAT).num_args(0..).trailing_var_arg(true))
+}
+
+fn format_date_with_locale_aware_months(
+    date: &Zoned,
+    format_string: &str,
+    config: &Config<PosixCustom>,
+) -> Result<String, jiff::Error> {
+    // Only use ICU for non-English locales and when format string contains month, day, or era year specifiers
+    if (format_string.contains("%B")
+        || format_string.contains("%b")
+        || format_string.contains("%A")
+        || format_string.contains("%a")
+        || format_string.contains("%Y")
+        || format_string.contains("%Ey"))
+        && should_use_icu_locale()
+    {
+        let broken_down = BrokenDownTime::from(date);
+        // Get localized month names if needed
+        let (full_month, abbrev_month) =
+            if format_string.contains("%B") || format_string.contains("%b") {
+                if let Some(month_val) = broken_down.month() {
+                    let month_u8 = if (1..=12).contains(&month_val) {
+                        month_val as u8
+                    } else {
+                        1 // fallback to January for invalid values
+                    };
+                    (
+                        get_localized_month_name(month_u8, true),
+                        get_localized_month_name(month_u8, false),
+                    )
+                } else {
+                    (String::new(), String::new())
+                }
+            } else {
+                (String::new(), String::new())
+            };
+
+        // Get localized day names if needed
+        let (full_day, abbrev_day) = if format_string.contains("%A") || format_string.contains("%a")
+        {
+            if let (Some(year), Some(month), Some(day)) =
+                (broken_down.year(), broken_down.month(), broken_down.day())
+            {
+                (
+                    get_localized_day_name(year.into(), month as u8, day as u8, true),
+                    get_localized_day_name(year.into(), month as u8, day as u8, false),
+                )
+            } else {
+                (String::new(), String::new())
+            }
+        } else {
+            (String::new(), String::new())
+        };
+
+        // Get era year if needed
+        let era_year = if format_string.contains("%Y") || format_string.contains("%Ey") {
+            if let (Some(year), Some(month), Some(day)) =
+                (broken_down.year(), broken_down.month(), broken_down.day())
+            {
+                let (locale, _encoding) = get_time_locale();
+                get_era_year(year.into(), month as u8, day as u8, locale)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        // Replace format specifiers with NULL-byte placeholders for successful ICU translations only
+        // Use NULL bytes to avoid collision with user format strings
+        let mut temp_format = format_string.to_string();
+        if !full_month.is_empty() {
+            temp_format = temp_format.replace("%B", "\0FULL_MONTH\0");
+        }
+        if !abbrev_month.is_empty() {
+            temp_format = temp_format.replace("%b", "\0ABBREV_MONTH\0");
+        }
+        if !full_day.is_empty() {
+            temp_format = temp_format.replace("%A", "\0FULL_DAY\0");
+        }
+        if !abbrev_day.is_empty() {
+            temp_format = temp_format.replace("%a", "\0ABBREV_DAY\0");
+        }
+        if era_year.is_some() {
+            temp_format = temp_format.replace("%Y", "\0ERA_YEAR\0");
+        }
+
+        // Format with the temporary string
+        let temp_result = broken_down.to_string_with_config(config, &temp_format)?;
+
+        // Replace NULL-byte placeholders with localized names
+        let mut final_result = temp_result;
+        if !full_month.is_empty() {
+            final_result = final_result.replace("\0FULL_MONTH\0", &full_month);
+        }
+        if !abbrev_month.is_empty() {
+            final_result = final_result.replace("\0ABBREV_MONTH\0", &abbrev_month);
+        }
+        if !full_day.is_empty() {
+            final_result = final_result.replace("\0FULL_DAY\0", &full_day);
+        }
+        if !abbrev_day.is_empty() {
+            final_result = final_result.replace("\0ABBREV_DAY\0", &abbrev_day);
+        }
+        if let Some(era_year_val) = era_year {
+            final_result = final_result.replace("\0ERA_YEAR\0", &era_year_val.to_string());
+        }
+
+        return Ok(final_result);
+    }
+
+    // Fallback to regular formatting
+    BrokenDownTime::from(date).to_string_with_config(config, format_string)
 }
 
 /// Return the appropriate format string for the given settings.

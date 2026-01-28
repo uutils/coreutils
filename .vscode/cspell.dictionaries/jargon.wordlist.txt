@@ -55,6 +55,7 @@ fileio
 filesystem
 filesystems
 flamegraph
+footgun
 freeram
 fsxattr
 fullblock
@@ -93,6 +94,7 @@ mergeable
 microbenchmark
 microbenchmarks
 microbenchmarking
+monomorphized
 multibyte
 multicall
 nmerge
@@ -107,6 +109,7 @@ nolinks
 nonblock
 nonportable
 nonprinting
+nonrepeating
 nonseekable
 notrunc
 nowrite
@@ -114,8 +117,10 @@ noxfer
 ofile
 oflag
 oflags
+pdeathsig
 peekable
 performant
+prctl
 precompiled
 precompute
 preload
@@ -140,8 +145,17 @@ SETFL
 setlocale
 shortcode
 shortcodes
+setpgid
 sigaction
+CHLD
+chld
+SIGCHLD
+sigchld
 siginfo
+SIGTTIN
+sigttin
+SIGTTOU
+sigttou
 sigusr
 strcasecmp
 subcommand
@@ -224,3 +238,8 @@ ENOTSUP
 enotsup
 SETFL
 tmpfs
+
+Hijri
+Nowruz
+charmap
+hijri

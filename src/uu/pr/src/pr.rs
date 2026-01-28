@@ -989,7 +989,7 @@ fn print_page(
     lines: &[FileLine],
     options: &OutputOptions,
     page: usize,
-) -> Result<usize, std::io::Error> {
+) -> Result<(), std::io::Error> {
     let line_separator = options.line_separator.as_bytes();
     let page_separator = options.page_separator_char.as_bytes();
 
@@ -1004,7 +1004,7 @@ fn print_page(
         out.write_all(line_separator)?;
     }
 
-    let lines_written = write_columns(lines, options, &mut out)?;
+    write_columns(lines, options, &mut out)?;
 
     for (index, x) in trailer_content.iter().enumerate() {
         out.write_all(x.as_bytes())?;
@@ -1014,7 +1014,7 @@ fn print_page(
     }
     out.write_all(page_separator)?;
     out.flush()?;
-    Ok(lines_written)
+    Ok(())
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -1022,7 +1022,7 @@ fn write_columns(
     lines: &[FileLine],
     options: &OutputOptions,
     out: &mut impl Write,
-) -> Result<usize, std::io::Error> {
+) -> Result<(), std::io::Error> {
     let line_separator = options.content_line_separator.as_bytes();
 
     let content_lines_per_page = if options.double_space {
@@ -1035,7 +1035,6 @@ fn write_columns(
         .merge_files_print
         .unwrap_or_else(|| get_columns(options));
     let line_width = options.line_width;
-    let mut lines_printed = 0;
     let feed_line_present = options.form_feed_used;
     let mut not_found_break = false;
 
@@ -1101,7 +1100,6 @@ fn write_columns(
                     get_line_for_printing(options, file_line, columns, i, line_width, indexes)
                         .as_bytes(),
                 )?;
-                lines_printed += 1;
             }
         }
         if not_found_break && feed_line_present {
@@ -1110,7 +1108,7 @@ fn write_columns(
         out.write_all(line_separator)?;
     }
 
-    Ok(lines_printed)
+    Ok(())
 }
 
 fn get_line_for_printing(

@@ -41,6 +41,7 @@ uu_split = { path = "../src/uu/split" }
 uu_tr = { path = "../src/uu/tr" }
 uu_env = { path = "../src/uu/env" }
 uu_cksum = { path = "../src/uu/cksum" }
+uu_dirname = { path = "../src/uu/dirname" }
 
 [[bin]]
 name = "fuzz_date"
@@ -147,5 +148,11 @@ doc = false
 [[bin]]
 name = "fuzz_non_utf8_paths"
 path = "fuzz_targets/fuzz_non_utf8_paths.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_dirname"
+path = "fuzz_targets/fuzz_dirname.rs"
 test = false
 doc = false
