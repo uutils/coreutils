@@ -106,6 +106,7 @@ where
                 let mut dst = OpenOptions::new().write(true).open(&dest)?;
                 desired_permissions.set_mode(0o600);
                 dst.set_permissions(desired_permissions)?;
+                dst.set_len(0)?;
                 dst.rewind()?;
                 dst
             } else {
