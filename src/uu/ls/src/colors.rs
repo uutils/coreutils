@@ -542,6 +542,17 @@ pub(crate) fn color_name(
     }
 
     if target_symlink.is_none() && path.file_type().is_some_and(|ft| ft.is_symlink()) {
+        if path.metadata().is_none() {
+            // Check if orphan coloring is actually disabled in indicator_codes
+            let orphan_raw = style_manager
+                .indicator_codes
+                .get(&Indicator::OrphanedSymbolicLink);
+            let orphan_raw_is_empty = orphan_raw.is_some_and(|value| value.is_empty());
+
+            if !orphan_raw_is_empty {
+                return style_manager.apply_orphan_link_style(name, wrap);
+            }
+        }
         if let Some(colored) = style_manager.color_symlink_name(path, name.clone(), wrap) {
             return colored;
         }
@@ -549,9 +560,17 @@ pub(crate) fn color_name(
 
     if let Some(target) = target_symlink {
         // use the optional target_symlink
-        // Use fn symlink_metadata directly instead of get_metadata() here because ls
-        // should not exit with an err, if we are unable to obtain the target_metadata
-        return style_manager.apply_style_for_path(target, name, wrap);
+        // Ensure proper coloring of symlink targets by checking for dangling links (orphans).
+        if let Some(md) = target.metadata() {
+            return style_manager.apply_style_based_on_metadata(target, Some(md), name, wrap);
+        }
+        // Check if missing/orphan coloring is actually disabled in indicator_codes
+        let mi_raw = style_manager.indicator_codes.get(&Indicator::MissingFile);
+        let mi_raw_is_empty = mi_raw.is_some_and(|value| value.is_empty());
+
+        if !mi_raw_is_empty {
+            return style_manager.apply_missing_target_style(name, wrap);
+        }
     }
 
     if !path.must_dereference {
@@ -565,15 +584,27 @@ pub(crate) fn color_name(
         .cloned()
         .or_else(|| path.p_buf.symlink_metadata().ok());
 
+    // Handle dangling symlink coloring for the name itself.
+    // If it's a symlink and we failed to get dereferenced metadata, it's an orphan.
+    if md_option
+        .as_ref()
+        .is_some_and(|m| m.file_type().is_symlink())
+        && path.metadata().is_none()
+    {
+        return style_manager.apply_orphan_link_style(name, wrap);
+    }
+
     style_manager.apply_style_based_on_metadata(path, md_option.as_ref(), name, wrap)
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub(crate) enum LsColorsParseError {
     UnrecognizedPrefix(String),
     InvalidSyntax,
 }
 
+#[allow(dead_code)]
 pub(crate) fn validate_ls_colors_env() -> Result<(), LsColorsParseError> {
     let Ok(ls_colors) = env::var("LS_COLORS") else {
         return Ok(());
@@ -587,6 +618,7 @@ pub(crate) fn validate_ls_colors_env() -> Result<(), LsColorsParseError> {
 }
 
 // GNU-like parser: ensure LS_COLORS has valid labels and well-formed escapes.
+#[allow(dead_code)]
 fn validate_ls_colors(ls_colors: &str) -> Result<(), LsColorsParseError> {
     let bytes = ls_colors.as_bytes();
     let mut idx = 0;
@@ -634,6 +666,7 @@ fn validate_ls_colors(ls_colors: &str) -> Result<(), LsColorsParseError> {
 }
 
 // Parse a value with GNU-compatible escape sequences, returning the index of the terminator.
+#[allow(dead_code)]
 fn parse_funky_string(
     bytes: &[u8],
     mut idx: usize,
@@ -716,6 +749,7 @@ fn parse_funky_string(
     }
 }
 
+#[allow(dead_code)]
 fn is_valid_ls_colors_prefix(label: [u8; 2]) -> bool {
     matches!(
         label,

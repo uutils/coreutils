@@ -3252,7 +3252,7 @@ fn display_item_name(
                 // This makes extra system calls, but provides important information that
                 // people run `ls -l --color` are very interested in.
                 if let Some(style_manager) = &mut state.style_manager {
-                    // We get the absolute path to be able to construct PathData with valid Metadata.
+                    // We get the absolute path to be able to get metadata.
                     // This is because relative symlinks will fail to get_metadata.
                     let mut absolute_target = target_path.clone();
                     if target_path.is_relative() {
@@ -3261,23 +3261,27 @@ fn display_item_name(
                         }
                     }
 
-                    let target_data = PathData::new(absolute_target, None, None, config, false);
+                    // Create PathData for the target to enable proper coloring.
+                    // Force must_dereference=true to follow symlink chains and color based on final target.
+                    // Set command_line=false as symlink targets are not CLI arguments.
+                    let mut target_data =
+                        PathData::new(absolute_target.clone(), None, None, config, false);
+                    target_data.must_dereference = true;
 
-                    // If we have a symlink to a valid file, we use the metadata of said file.
-                    // Because we use an absolute path, we can assume this is guaranteed to exist.
-                    // Otherwise, we use path.md(), which will guarantee we color to the same
-                    // color of non-existent symlinks according to style_for_path_with_metadata.
-                    if path.metadata().is_none() && target_data.metadata().is_none() {
-                        name.push(target_path);
-                    } else {
-                        name.push(color_name(
-                            locale_aware_escape_name(target_path.as_os_str(), config.quoting_style),
-                            path,
-                            style_manager,
-                            Some(&target_data),
-                            is_wrap(name.len()),
-                        ));
+                    // Pre-populate metadata to prevent error messages for dangling symlinks.
+                    // Check if target exists (following symlinks) to detect dangling chains.
+                    if !absolute_target.exists() {
+                        // Target doesn't exist - pre-set metadata to None to avoid error output
+                        target_data.md.get_or_init(|| None);
                     }
+
+                    name.push(color_name(
+                        locale_aware_escape_name(target_path.as_os_str(), config.quoting_style),
+                        path,
+                        style_manager,
+                        Some(&target_data),
+                        is_wrap(name.len()),
+                    ));
                 } else {
                     // If no coloring is required, we just use target as is.
                     // Apply the right quoting
