@@ -52,6 +52,11 @@ fn get_canonical_util_name(util_name: &str) -> &str {
 
         "dir" => "ls", // dir is an alias for ls
 
+        //reuse help message
+        "md5sum" | "b2sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum" => {
+            "cksum"
+        }
+
         // Default case - return the util name as is
         _ => util_name,
     }
