@@ -70,6 +70,7 @@ enum MkTempError {
     #[error("{}", translate!("mktemp-error-not-found", "template_type" => .0.clone(), "template" => .1.quote()))]
     NotFound(String, PathBuf),
 
+    #[cfg(unix)]
     #[error("{}", translate!("mktemp-error-stdout-closed"))]
     StdoutClosed,
 }
