@@ -149,11 +149,12 @@ format = [
   "quoting-style",
   "unit-prefix",
 ]
-i18n-all = ["i18n-collator", "i18n-decimal", "i18n-datetime"]
+i18n-all = ["i18n-collator", "i18n-decimal", "i18n-datetime", "i18n-month"]
 i18n-common = ["icu_locale"]
 i18n-collator = ["i18n-common", "icu_collator"]
 i18n-decimal = ["i18n-common", "icu_decimal", "icu_provider"]
 i18n-datetime = ["i18n-common", "icu_calendar", "icu_datetime"]
+i18n-month = ["i18n-common", "icu_datetime", "icu_provider", "libc"]
 mode = ["libc"]
 perms = ["entries", "libc", "walkdir"]
 buf-copy = []

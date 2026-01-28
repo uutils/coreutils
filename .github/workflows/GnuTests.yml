@@ -89,6 +89,7 @@ jobs:
         sudo locale-gen --keep-existing am_ET.UTF-8 # Ethiopia
         sudo locale-gen --keep-existing th_TH.UTF-8 # Thailand
         sudo locale-gen --keep-existing zh_CN.GB18030 # China
+        sudo locale-gen --keep-existing ja_JP.UTF-8 # Japan
 
         sudo update-locale
         echo "After:"
