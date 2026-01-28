@@ -74,20 +74,24 @@ fn verbose_removed_directory(path: &Path, options: &Options) {
 /// Helper function to show error with context and return error status
 fn show_removal_error(error: std::io::Error, path: &Path) -> bool {
     match error.kind() {
-        io::ErrorKind::PermissionDenied => {
-            show_error!("cannot remove {}: Permission denied", path.quote());
-        }
         io::ErrorKind::InvalidInput if !is_dir_empty(path).unwrap_or(false) => {
             show_error!(
                 "{}: Directory not empty",
                 translate!("rm-error-cannot-remove", "file" => path.quote())
             );
         }
-        io::ErrorKind::InvalidInput if path_is_current_or_parent_directory(path) => {
+        // When trying to remove current directory or parent directory,
+        // either InvalidInput or PermissionDenied may be returned depending on the platform.
+        io::ErrorKind::InvalidInput | io::ErrorKind::PermissionDenied
+            if path_is_current_or_parent_directory(path) =>
+        {
             show_error!(
                 "{}",
                 RmError::RefusingToRemoveDirectory(path.as_os_str().to_os_string())
             );
+        }
+        io::ErrorKind::PermissionDenied => {
+            show_error!("cannot remove {}: Permission denied", path.quote());
         }
         _ => {
             let e = error
