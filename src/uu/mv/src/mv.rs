@@ -967,8 +967,14 @@ fn rename_dir_fallback(
         (_, _) => None,
     };
 
+    // Retrieve xattrs using file descriptor to avoid TOCTOU races
     #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-    let xattrs = fsxattr::retrieve_xattrs(from).unwrap_or_else(|_| FxHashMap::default());
+    let xattrs = {
+        use std::fs::File;
+        File::open(from)
+            .and_then(|f| fsxattr::retrieve_xattrs_fd(&f))
+            .unwrap_or_else(|_| FxHashMap::default())
+    };
 
     // Use directory copying (with or without hardlink support)
     let result = copy_dir_contents(
@@ -983,8 +989,14 @@ fn rename_dir_fallback(
         display_manager,
     );
 
+    // Apply xattrs using file descriptor to avoid TOCTOU races
     #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-    fsxattr::apply_xattrs(to, xattrs)?;
+    {
+        use std::fs::OpenOptions;
+        if let Ok(f) = OpenOptions::new().write(true).open(to) {
+            fsxattr::apply_xattrs_fd(&f, xattrs)?;
+        }
+    }
 
     result?;
 
@@ -1206,12 +1218,19 @@ fn rename_file_fallback(
     Ok(())
 }
 
-/// Copy xattrs from source to destination, ignoring ENOTSUP/EOPNOTSUPP errors.
+/// Copy xattrs from source to destination using file descriptors, ignoring ENOTSUP/EOPNOTSUPP errors.
+/// This version avoids TOCTOU races by operating on file descriptors rather than paths.
 /// These errors indicate the filesystem doesn't support extended attributes,
 /// which is acceptable when moving files across filesystems.
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
 fn copy_xattrs_if_supported(from: &Path, to: &Path) -> io::Result<()> {
-    match fsxattr::copy_xattrs(from, to) {
+    use std::fs::{File, OpenOptions};
+
+    // Open both files to pin their inodes, avoiding TOCTOU races during xattr operations
+    let source_file = File::open(from)?;
+    let dest_file = OpenOptions::new().write(true).open(to)?;
+
+    match fsxattr::copy_xattrs_fd(&source_file, &dest_file) {
         Ok(()) => Ok(()),
         Err(e) if e.raw_os_error() == Some(libc::EOPNOTSUPP) => Ok(()),
         Err(e) => Err(e),
