@@ -504,7 +504,8 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
     let mut any_files_processed = false;
 
     for filename in files {
-        let file = Path::new(filename);
+        let file = normalize(Path::new(filename));
+        let file = file.as_path();
 
         had_err = match file.symlink_metadata() {
             Ok(metadata) => {
