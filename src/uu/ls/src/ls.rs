@@ -2283,24 +2283,24 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
 
         // Print dir heading - name... 'total' comes after error display
         if initial_locs_len > 1 || config.recursive {
-            if pos.eq(&0usize) && files.is_empty() {
-                if config.dired {
-                    dired::indent(&mut state.out)?;
-                }
-                show_dir_name(path_data, &mut state.out, config)?;
+            let needs_blank_line = !(pos.eq(&0usize) && files.is_empty());
+            if needs_blank_line {
                 writeln!(state.out)?;
                 if config.dired {
-                    // First directory displayed
-                    let dir_len = path_data.display_name().len();
-                    // add the //SUBDIRED// coordinates
-                    dired::calculate_subdired(&mut dired, dir_len);
-                    // Add the padding for the dir name
-                    dired::add_dir_name(&mut dired, dir_len);
+                    dired.padding += 1;
                 }
-            } else {
-                writeln!(state.out)?;
-                show_dir_name(path_data, &mut state.out, config)?;
-                writeln!(state.out)?;
+            }
+            if config.dired {
+                dired::indent(&mut state.out)?;
+            }
+            show_dir_name(path_data, &mut state.out, config)?;
+            writeln!(state.out)?;
+            if config.dired {
+                let dir_len = path_data.display_name().len();
+                // add the //SUBDIRED// coordinates
+                dired::calculate_subdired(&mut dired, dir_len);
+                // Add the padding for the dir name
+                dired::add_dir_name(&mut dired, dir_len);
             }
         }
         let mut listed_ancestors = HashSet::default();
@@ -2522,8 +2522,8 @@ fn enter_directory(
                         if config.dired {
                             // We already injected the first dir
                             // Continue with the others
-                            // 2 = \n + \n
-                            dired.padding = 2;
+                            // blank line between directory sections
+                            dired.padding += 1;
                             dired::indent(&mut state.out)?;
                             let dir_name_size = e.path().as_os_str().len();
                             dired::calculate_subdired(dired, dir_name_size);

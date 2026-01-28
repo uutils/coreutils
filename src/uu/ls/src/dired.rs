@@ -63,17 +63,13 @@ impl fmt::Display for BytePosition {
 // When --dired is used, all lines starts with 2 spaces
 static DIRED_TRAILING_OFFSET: usize = 2;
 
-fn get_offset_from_previous_line(dired: &DiredOutput) -> usize {
-    dired.line_offset
-}
-
 /// Calculates the byte positions for DIRED
 pub fn calculate_dired(
     dired: &DiredOutput,
     output_display_len: usize,
     dfn_len: usize,
 ) -> (usize, usize) {
-    let offset_from_previous_line = get_offset_from_previous_line(dired);
+    let offset_from_previous_line = dired.line_offset;
 
     let start = output_display_len + offset_from_previous_line;
     let end = start + dfn_len;
@@ -86,16 +82,8 @@ pub fn indent(out: &mut BufWriter<Stdout>) -> UResult<()> {
 }
 
 pub fn calculate_subdired(dired: &mut DiredOutput, path_len: usize) {
-    let offset_from_previous_line = get_offset_from_previous_line(dired);
-
-    let additional_offset = if dired.subdired_positions.is_empty() {
-        0
-    } else {
-        // if we have several directories: \n\n
-        2
-    };
-
-    let start = offset_from_previous_line + DIRED_TRAILING_OFFSET + additional_offset;
+    let offset_from_previous_line = dired.line_offset + dired.padding;
+    let start = offset_from_previous_line + DIRED_TRAILING_OFFSET;
     let end = start + path_len;
     dired.subdired_positions.push(BytePosition { start, end });
 }
@@ -110,7 +98,7 @@ pub fn print_dired_output(
     if !dired.dired_positions.is_empty() {
         print_positions("//DIRED//", &dired.dired_positions);
     }
-    if config.recursive {
+    if !dired.subdired_positions.is_empty() {
         print_positions("//SUBDIRED//", &dired.subdired_positions);
     }
     println!("//DIRED-OPTIONS// --quoting-style={}", config.quoting_style);
@@ -128,10 +116,9 @@ fn print_positions(prefix: &str, positions: &Vec<BytePosition>) {
 
 pub fn add_total(dired: &mut DiredOutput, total_len: usize) {
     if dired.padding == 0 {
-        let offset_from_previous_line = get_offset_from_previous_line(dired);
         // when dealing with "  total: xx", it isn't part of the //DIRED//
         // so, we just keep the size line to add it to the position of the next file
-        dired.padding = total_len + offset_from_previous_line + DIRED_TRAILING_OFFSET;
+        dired.padding = total_len + DIRED_TRAILING_OFFSET;
     } else {
         // += because if we are in -R, we have "  dir:\n  total X". So, we need to take the
         // previous padding too.
@@ -142,8 +129,8 @@ pub fn add_total(dired: &mut DiredOutput, total_len: usize) {
 
 // when using -R, we have the dirname. we need to add it to the padding
 pub fn add_dir_name(dired: &mut DiredOutput, dir_len: usize) {
-    // 1 for the ":" in "  dirname:"
-    dired.padding += dir_len + DIRED_TRAILING_OFFSET + 1;
+    // "  dirname:\n"
+    dired.padding += dir_len + DIRED_TRAILING_OFFSET + 2;
 }
 
 /// Calculates byte positions and updates the dired structure.
@@ -153,7 +140,7 @@ pub fn calculate_and_update_positions(
     dfn_len: usize,
     line_len: usize,
 ) {
-    let offset_from_previous_line = get_offset_from_previous_line(dired);
+    let offset_from_previous_line = dired.line_offset;
     let start = output_display_len + offset_from_previous_line;
     let end = start + dfn_len;
     update_positions(dired, start, end, line_len);
@@ -202,20 +189,6 @@ mod tests {
     }
 
     #[test]
-    fn test_get_offset_from_previous_line() {
-        let dired = DiredOutput {
-            dired_positions: vec![
-                BytePosition { start: 0, end: 3 },
-                BytePosition { start: 4, end: 7 },
-                BytePosition { start: 8, end: 11 },
-            ],
-            subdired_positions: vec![],
-            padding: 0,
-            line_offset: 12,
-        };
-        assert_eq!(get_offset_from_previous_line(&dired), 12);
-    }
-    #[test]
     fn test_calculate_subdired() {
         let mut dired = DiredOutput {
             dired_positions: vec![
@@ -258,8 +231,8 @@ mod tests {
                     BytePosition { start: 8, end: 11 },
                 ],
                 subdired_positions: vec![],
-                // 8 = 1 for the \n + 5 for dir_len + 2 for "  " + 1 for :
-                padding: 8,
+                // 9 = 5 for dir_len + 2 for "  " + 1 for : + 1 for \n
+                padding: 9,
                 line_offset: 0,
             }
         );
@@ -280,8 +253,8 @@ mod tests {
         // if we have "total: 2"
         let total_len = 8;
         add_total(&mut dired, total_len);
-        // 22 = 8 (len) + 2 (padding) + 11 (previous position) + 1 (\n)
-        assert_eq!(dired.padding, 22);
+        // 10 = 8 (len) + 2 ("  ")
+        assert_eq!(dired.padding, 10);
     }
 
     #[test]
@@ -303,12 +276,12 @@ mod tests {
         };
         let dir_len = 5;
         add_dir_name(&mut dired, dir_len);
-        // 8 = 2 ("  ") + 1 (\n) + 5 + 1 (: of dirname)
-        assert_eq!(dired.padding, 8);
+        // 9 = 2 ("  ") + 1 (\n) + 5 + 1 (: of dirname)
+        assert_eq!(dired.padding, 9);
 
         let total_len = 8;
         add_total(&mut dired, total_len);
-        assert_eq!(dired.padding, 18);
+        assert_eq!(dired.padding, 19);
     }
 
     #[test]
