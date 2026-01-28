@@ -401,7 +401,7 @@ fn uu_app(binary_name: &str) -> (Command, bool) {
         let usage = translate!("hashsum-usage-specific", "utility_name" => binary_name);
         command
             .help_template(uucore::localized_help_template(binary_name))
-            .override_usage(format_usage(&usage))
+            .override_usage(format_usage(&usage).replace("--<digest> ", ""))
     };
 
     (command, is_hashsum_bin)
