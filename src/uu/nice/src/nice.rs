@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, Command};
 use libc::PRIO_PROCESS;
 use std::ffi::OsString;
-use std::io::{Error, ErrorKind, Write};
+use std::io::{Error, ErrorKind, Write, stdout};
 use std::num::IntErrorKind;
 use std::os::unix::process::CommandExt;
 use std::process;
@@ -143,7 +143,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
         None => {
             if !matches.contains_id(options::COMMAND) {
-                println!("{niceness}");
+                writeln!(stdout(), "{niceness}")?;
                 return Ok(());
             }
             10_i32
