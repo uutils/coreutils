@@ -1711,8 +1711,6 @@ pub(crate) fn set_selinux_context(path: &Path, context: Option<&String>) -> Copy
 /// user-writable if needed and restoring its original permissions afterward. This avoids "Operation
 /// not permitted" errors on read-only files. Returns an error if permission or metadata operations fail,
 /// or if xattr copying fails.
-///
-/// Uses file descriptor-based operations to avoid TOCTOU races during xattr copying.
 #[cfg(all(unix, not(target_os = "android")))]
 fn copy_extended_attrs(source: &Path, dest: &Path, skip_selinux: bool) -> CopyResult<()> {
     use std::fs::File;
