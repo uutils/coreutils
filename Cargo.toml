@@ -86,6 +86,13 @@ feat_common_core = [
   "basenc",
   "cat",
   "cksum",
+  "b2sum",
+  "md5sum",
+  "sha1sum",
+  "sha224sum",
+  "sha256sum",
+  "sha384sum",
+  "sha512sum",
   "comm",
   "cp",
   "csplit",
@@ -407,6 +414,7 @@ uucore = { version = "0.6.0", package = "uucore", path = "src/uucore" }
 uucore_procs = { version = "0.6.0", package = "uucore_procs", path = "src/uucore_procs" }
 uu_ls = { version = "0.6.0", path = "src/uu/ls" }
 uu_base32 = { version = "0.6.0", path = "src/uu/base32" }
+uu_checksum_common = { version = "0.6.0", path = "src/uu/checksum_common" }
 uutests = { version = "0.6.0", package = "uutests", path = "tests/uutests" }
 
 [dependencies]
@@ -436,6 +444,13 @@ chmod = { optional = true, version = "0.6.0", package = "uu_chmod", path = "src/
 chown = { optional = true, version = "0.6.0", package = "uu_chown", path = "src/uu/chown" }
 chroot = { optional = true, version = "0.6.0", package = "uu_chroot", path = "src/uu/chroot" }
 cksum = { optional = true, version = "0.6.0", package = "uu_cksum", path = "src/uu/cksum" }
+b2sum = { optional = true, version = "0.6.0", package = "uu_b2sum", path = "src/uu/b2sum" }
+md5sum = { optional = true, version = "0.6.0", package = "uu_md5sum", path = "src/uu/md5sum" }
+sha1sum = { optional = true, version = "0.6.0", package = "uu_sha1sum", path = "src/uu/sha1sum" }
+sha224sum = { optional = true, version = "0.6.0", package = "uu_sha224sum", path = "src/uu/sha224sum" }
+sha256sum = { optional = true, version = "0.6.0", package = "uu_sha256sum", path = "src/uu/sha256sum" }
+sha384sum = { optional = true, version = "0.6.0", package = "uu_sha384sum", path = "src/uu/sha384sum" }
+sha512sum = { optional = true, version = "0.6.0", package = "uu_sha512sum", path = "src/uu/sha512sum" }
 comm = { optional = true, version = "0.6.0", package = "uu_comm", path = "src/uu/comm" }
 cp = { optional = true, version = "0.6.0", package = "uu_cp", path = "src/uu/cp" }
 csplit = { optional = true, version = "0.6.0", package = "uu_csplit", path = "src/uu/csplit" }

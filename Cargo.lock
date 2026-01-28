@@ -556,6 +556,7 @@ dependencies = [
  "unicode-width 0.2.2",
  "unindent",
  "uu_arch",
+ "uu_b2sum",
  "uu_base32",
  "uu_base64",
  "uu_basename",
@@ -599,6 +600,7 @@ dependencies = [
  "uu_ln",
  "uu_logname",
  "uu_ls",
+ "uu_md5sum",
  "uu_mkdir",
  "uu_mkfifo",
  "uu_mknod",
@@ -625,6 +627,11 @@ dependencies = [
  "uu_rmdir",
  "uu_runcon",
  "uu_seq",
+ "uu_sha1sum",
+ "uu_sha224sum",
+ "uu_sha256sum",
+ "uu_sha384sum",
+ "uu_sha512sum",
  "uu_shred",
  "uu_shuf",
  "uu_sleep",
@@ -3172,6 +3179,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "uu_b2sum"
+version = "0.6.0"
+dependencies = [
+ "clap",
+ "codspeed-divan-compat",
+ "fluent",
+ "tempfile",
+ "uu_checksum_common",
+ "uucore",
+]
+
+[[package]]
 name = "uu_base32"
 version = "0.6.0"
 dependencies = [
@@ -3240,6 +3259,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "uu_checksum_common"
+version = "0.6.0"
+dependencies = [
+ "clap",
+ "codspeed-divan-compat",
+ "fluent",
+ "tempfile",
+ "uucore",
+]
+
+[[package]]
 name = "uu_chgrp"
 version = "0.6.0"
 dependencies = [
@@ -3284,6 +3314,7 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
+ "uu_checksum_common",
  "uucore",
 ]
 
@@ -3664,6 +3695,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "uu_md5sum"
+version = "0.6.0"
+dependencies = [
+ "clap",
+ "codspeed-divan-compat",
+ "fluent",
+ "tempfile",
+ "uu_checksum_common",
+ "uucore",
+]
+
+[[package]]
 name = "uu_mkdir"
 version = "0.6.0"
 dependencies = [
@@ -3943,6 +3986,66 @@ dependencies = [
  "num-bigint",
  "num-traits",
  "thiserror 2.0.18",
+ "uucore",
+]
+
+[[package]]
+name = "uu_sha1sum"
+version = "0.6.0"
+dependencies = [
+ "clap",
+ "codspeed-divan-compat",
+ "fluent",
+ "tempfile",
+ "uu_checksum_common",
+ "uucore",
+]
+
+[[package]]
+name = "uu_sha224sum"
+version = "0.6.0"
+dependencies = [
+ "clap",
+ "codspeed-divan-compat",
+ "fluent",
+ "tempfile",
+ "uu_checksum_common",
+ "uucore",
+]
+
+[[package]]
+name = "uu_sha256sum"
+version = "0.6.0"
+dependencies = [
+ "clap",
+ "codspeed-divan-compat",
+ "fluent",
+ "tempfile",
+ "uu_checksum_common",
+ "uucore",
+]
+
+[[package]]
+name = "uu_sha384sum"
+version = "0.6.0"
+dependencies = [
+ "clap",
+ "codspeed-divan-compat",
+ "fluent",
+ "tempfile",
+ "uu_checksum_common",
+ "uucore",
+]
+
+[[package]]
+name = "uu_sha512sum"
+version = "0.6.0"
+dependencies = [
+ "clap",
+ "codspeed-divan-compat",
+ "fluent",
+ "tempfile",
+ "uu_checksum_common",
  "uucore",
 ]
 
