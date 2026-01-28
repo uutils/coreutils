@@ -170,6 +170,18 @@ fn test_cli_args() {
 }
 
 #[test]
+fn test_large_regression_number() {
+    let n = "15111234931751377131713914373267893176342349831";
+    new_ucmd!()
+        .arg(n)
+        .timeout(Duration::from_secs(240))
+        .succeeds()
+        .stdout_is(format!(
+            "{n}: 29 127 115319 1971799 82465494029827 218807630881735711\n"
+        ));
+}
+
+#[test]
 fn test_random() {
     let log_num_primes = f64::from(u32::try_from(NUM_PRIMES).unwrap()).log2().ceil();
     let primes = num_prime::nt_funcs::nprimes(NUM_PRIMES);

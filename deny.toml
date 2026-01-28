@@ -10,6 +10,7 @@ version = 2
 yanked = "warn"
 ignore = [
   #"RUSTSEC-0000-0000",
+  "RUSTSEC-2024-0436", # paste: unmaintained (via jemalloc-ctl in uu_factor bench)
 ]
 
 # This section is considered when running `cargo deny check licenses`
