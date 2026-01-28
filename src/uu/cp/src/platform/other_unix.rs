@@ -3,17 +3,17 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore reflink
-use std::fs::{self, File, OpenOptions};
+use std::fs::{File, OpenOptions};
+use std::io;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 
 use uucore::buf_copy;
-use uucore::mode::get_umask;
+use uucore::fs::copy_file_with_secure_permissions;
 use uucore::translate;
 
 use crate::{
     CopyDebug, CopyResult, CpError, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode,
-    is_stream,
 };
 
 /// Copies `source` to `dest` for systems without copy-on-write
@@ -43,27 +43,24 @@ pub(crate) fn copy_on_write(
 
     if source_is_stream {
         let mut src_file = File::open(source)?;
-        let mode = 0o622 & !get_umask();
+        // Create with restrictive permissions initially to prevent race conditions
+        // Mode 0o600 means read/write for owner only
         let mut dst_file = OpenOptions::new()
             .create(true)
             .write(true)
-            .mode(mode)
+            .truncate(true)
+            .mode(0o600)
             .open(dest)?;
 
-        let dest_is_stream = is_stream(&dst_file.metadata()?);
-        if !dest_is_stream {
-            // `copy_stream` doesn't clear the dest file, if dest is not a stream, we should clear it manually.
-            dst_file.set_len(0)?;
-        }
-
         buf_copy::copy_stream(&mut src_file, &mut dst_file)
-            .map_err(|_| std::io::Error::from(std::io::ErrorKind::Other))
+            .map_err(|_| io::Error::from(io::ErrorKind::Other))
             .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
 
         return Ok(copy_debug);
     }
 
-    fs::copy(source, dest).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+    copy_file_with_secure_permissions(source, dest)
+        .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
 
     Ok(copy_debug)
 }
