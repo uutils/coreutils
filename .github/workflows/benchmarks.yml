@@ -59,9 +59,9 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: dtolnay/rust-toolchain@stable
-
       - uses: Swatinem/rust-cache@v2
+
+      - uses: dtolnay/rust-toolchain@stable
 
       - name: Run sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.9
