@@ -103,6 +103,14 @@ fn maybe_sanitize_length(
         // For BLAKE2b, if a length is provided, validate it.
         (Some(AlgoKind::Blake2b), Some(len)) => calculate_blake2b_length_str(len),
 
+        // Bug: length is not applied for SHAKE.
+        (Some(AlgoKind::Shake128 | AlgoKind::Shake256), Some(s_len)) => {
+            let len = s_len
+                .parse::<usize>()
+                .map_err(|_| ChecksumError::InvalidLength(s_len.to_string()))?;
+            Ok(Some(len))
+        }
+
         // For any other provided algorithm, check if length is 0.
         // Otherwise, this is an error.
         (_, Some(len)) if len.parse::<u32>() == Ok(0_u32) => Ok(None),

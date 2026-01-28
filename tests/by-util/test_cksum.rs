@@ -3072,6 +3072,36 @@ mod debug_flag {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_dev_null_b3() {
+    new_ucmd!()
+        .arg("-a")
+        .arg("blake3")
+        .arg("/dev/null")
+        .succeeds()
+        .stdout_contains(
+            "BLAKE3 (/dev/null) = af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262",
+        );
+}
+
+#[test]
+fn test_shake() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("a");
+
+    ucmd.arg("a")
+        .arg("-a")
+        .arg("shake128")
+        .arg("-l")
+        .arg("128")
+        .succeeds()
+        .stdout_contains(
+            "SHAKE128 (a) = 7f9c2ba4e88f827d616045507605853ed73b8093f6efbc88eb1a6eacfa66ef26",
+        );
+}
+
+#[test]
 #[cfg(all(target_os = "linux", not(target_env = "musl")))]
 fn test_check_file_with_io_error() {
     // /proc/self/mem causes EIO when read without proper seeking
