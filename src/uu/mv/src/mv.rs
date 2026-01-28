@@ -1059,8 +1059,35 @@ fn copy_dir_contents_recursive(
             pb.set_message(from_path.to_string_lossy().to_string());
         }
 
-        if from_path.is_dir() {
-            // Recursively copy subdirectory
+        if from_path.is_symlink() {
+            // Handle symlinks first, before checking is_dir() which follows symlinks.
+            // This prevents symlinks to directories from being expanded into full copies.
+            #[cfg(unix)]
+            {
+                copy_file_with_hardlinks_helper(
+                    &from_path,
+                    &to_path,
+                    hardlink_tracker,
+                    hardlink_scanner,
+                )?;
+            }
+            #[cfg(not(unix))]
+            {
+                rename_symlink_fallback(&from_path, &to_path)?;
+            }
+
+            // Print verbose message for symlink
+            if verbose {
+                let message = translate!("mv-verbose-renamed", "from" => from_path.quote(), "to" => to_path.quote());
+                match display_manager {
+                    Some(pb) => pb.suspend(|| {
+                        println!("{message}");
+                    }),
+                    None => println!("{message}"),
+                }
+            }
+        } else if from_path.is_dir() {
+            // Recursively copy subdirectory (only real directories, not symlinks)
             fs::create_dir_all(&to_path)?;
 
             // Print verbose message for directory
