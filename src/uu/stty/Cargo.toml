@@ -21,6 +21,7 @@ path = "src/stty.rs"
 clap = { workspace = true }
 uucore = { workspace = true, features = ["parser"] }
 fluent = { workspace = true }
+libc.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true, features = ["ioctl", "term"] }

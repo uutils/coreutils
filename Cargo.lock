@@ -4170,6 +4170,7 @@ dependencies = [
  "cfg_aliases",
  "clap",
  "fluent",
+ "libc",
  "nix",
  "uucore",
 ]
