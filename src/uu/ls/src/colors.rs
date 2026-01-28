@@ -541,20 +541,28 @@ pub(crate) fn color_name(
         }
     }
 
-    if target_symlink.is_none() && path.file_type().is_some_and(|ft| ft.is_symlink()) {
-        if path.metadata().is_none() {
-            // Check if orphan coloring is actually disabled in indicator_codes
-            let orphan_raw = style_manager
-                .indicator_codes
-                .get(&Indicator::OrphanedSymbolicLink);
-            let orphan_raw_is_empty = orphan_raw.is_some_and(|value| value.is_empty());
+    if target_symlink.is_none() {
+        let is_symlink = path.file_type().is_some_and(|ft| ft.is_symlink())
+            || path
+                .path()
+                .symlink_metadata()
+                .is_ok_and(|md| md.file_type().is_symlink());
 
-            if !orphan_raw_is_empty {
-                return style_manager.apply_orphan_link_style(name, wrap);
+        if is_symlink {
+            if path.is_dangling_link() {
+                // Check if orphan coloring is actually disabled in indicator_codes
+                let orphan_raw = style_manager
+                    .indicator_codes
+                    .get(&Indicator::OrphanedSymbolicLink);
+                let orphan_raw_is_empty = orphan_raw.is_some_and(|value| value.is_empty());
+
+                if !orphan_raw_is_empty {
+                    return style_manager.apply_orphan_link_style(name, wrap);
+                }
             }
-        }
-        if let Some(colored) = style_manager.color_symlink_name(path, name.clone(), wrap) {
-            return colored;
+            if let Some(colored) = style_manager.color_symlink_name(path, name.clone(), wrap) {
+                return colored;
+            }
         }
     }
 
@@ -579,22 +587,8 @@ pub(crate) fn color_name(
         return style_manager.apply_style_for_path(path, name, wrap);
     }
 
-    let md_option: Option<Metadata> = path
-        .metadata()
-        .cloned()
-        .or_else(|| path.p_buf.symlink_metadata().ok());
-
-    // Handle dangling symlink coloring for the name itself.
-    // If it's a symlink and we failed to get dereferenced metadata, it's an orphan.
-    if md_option
-        .as_ref()
-        .is_some_and(|m| m.file_type().is_symlink())
-        && path.metadata().is_none()
-    {
-        return style_manager.apply_orphan_link_style(name, wrap);
-    }
-
-    style_manager.apply_style_based_on_metadata(path, md_option.as_ref(), name, wrap)
+    let md = path.metadata();
+    style_manager.apply_style_based_on_metadata(path, md, name, wrap)
 }
 
 #[derive(Debug)]

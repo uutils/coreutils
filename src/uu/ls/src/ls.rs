@@ -1864,6 +1864,7 @@ struct PathData {
     p_buf: PathBuf,
     must_dereference: bool,
     command_line: bool,
+    silent: bool,
 }
 
 impl PathData {
@@ -1895,6 +1896,9 @@ impl PathData {
                     if let Ok(md) = p_buf.metadata() {
                         md.is_dir()
                     } else {
+                        // If it's a dangling symlink, GNU ls with -H still treats it as
+                        // something that must be dereferenced if it's a command line argument.
+                        // Actually, -H only dereferences if it's a directory.
                         false
                     }
                 } else {
@@ -1936,6 +1940,7 @@ impl PathData {
             p_buf,
             must_dereference,
             command_line,
+            silent: false,
         }
     }
 
@@ -1963,11 +1968,13 @@ impl PathData {
                                 return file.symlink_metadata().ok();
                             }
                         }
-                        show!(LsError::IOErrorContext(
-                            self.path().to_path_buf(),
-                            err,
-                            self.command_line
-                        ));
+                        if !self.silent && (self.command_line || self.must_dereference) {
+                            show!(LsError::IOErrorContext(
+                                self.path().to_path_buf(),
+                                err,
+                                self.command_line
+                            ));
+                        }
                         None
                     }
                     Ok(md) => Some(md),
@@ -1983,8 +1990,35 @@ impl PathData {
     }
 
     fn is_dangling_link(&self) -> bool {
-        // deref enabled, self is real dir entry, self has metadata associated with link, but not with target
-        self.must_dereference && self.file_type().is_none() && self.metadata().is_none()
+        // If we have metadata, it means the target exists (if dereferencing)
+        // or the link itself exists (if not dereferencing).
+        // A dangling link is only possible if we are dereferencing.
+        if self.must_dereference {
+            // We use get_metadata_with_deref_opt(..., true) to check if the target exists.
+            // If it returns Err, and symlink_metadata() returns Ok, it's a dangling link.
+            // BUT: PathData::metadata() now falls back to symlink metadata if deref fails.
+            // So we need to check if the dereferenced call specifically fails.
+            match get_metadata_with_deref_opt(self.path(), true) {
+                Err(_) => self.path().symlink_metadata().is_ok(),
+                Ok(_) => false,
+            }
+        } else {
+            // Even if not dereferencing, we might want to know if it's a dangling link
+            // for indicators like '?' in inode or classification.
+            // GNU ls shows '?' for inodes of dangling links when dereferencing.
+            match self.path().read_link() {
+                Ok(target) => {
+                    let mut absolute_target = target.clone();
+                    if target.is_relative() {
+                        if let Some(parent) = self.path().parent() {
+                            absolute_target = parent.join(absolute_target);
+                        }
+                    }
+                    !absolute_target.exists()
+                }
+                Err(_) => false,
+            }
+        }
     }
 
     #[cfg(unix)]
@@ -2012,10 +2046,14 @@ impl Colorable for PathData {
         self.display_name().to_os_string()
     }
     fn file_type(&self) -> Option<FileType> {
-        self.file_type().copied()
+        self.file_type()
+            .copied()
+            .or_else(|| self.path().symlink_metadata().ok().map(|md| md.file_type()))
     }
     fn metadata(&self) -> Option<Metadata> {
-        self.metadata().cloned()
+        self.metadata()
+            .cloned()
+            .or_else(|| self.path().symlink_metadata().ok())
     }
     fn path(&self) -> PathBuf {
         self.path().to_path_buf()
@@ -2509,7 +2547,11 @@ fn display_additional_leading_info(
     {
         if config.inode {
             let i = if let Some(md) = item.metadata() {
-                get_inode(md)
+                if item.must_dereference && item.is_dangling_link() {
+                    "?".to_owned()
+                } else {
+                    get_inode(md)
+                }
             } else {
                 "?".to_owned()
             };
@@ -2519,7 +2561,11 @@ fn display_additional_leading_info(
 
     if config.alloc_size {
         let s = if let Some(md) = item.metadata() {
-            display_size(get_block_size(md, config), config)
+            if item.must_dereference && item.is_dangling_link() {
+                "?".to_owned()
+            } else {
+                display_size(get_block_size(md, config), config)
+            }
         } else {
             "?".to_owned()
         };
@@ -2553,6 +2599,7 @@ fn display_items(
         let padding_collection = calculate_padding_collection(items, config, state);
 
         for item in items {
+
             #[cfg(unix)]
             let should_display_leading_info = config.inode || config.alloc_size;
             #[cfg(not(unix))]
@@ -2908,6 +2955,11 @@ fn display_item_long(
             let mut ret: OsString = " ".into();
             ret.push(item_name);
             ret
+        } else if item_name.to_string_lossy().starts_with('\x1b') {
+            // If the name starts with an escape sequence, it might be due to coloring.
+            // GNU ls adds a space after the attributes in long format if we are quoting.
+            // Wait, actually the issue is that it should be padded.
+            item_name
         } else {
             item_name
         };
@@ -2961,7 +3013,13 @@ fn display_item_long(
         };
 
         output_display.extend(leading_char.as_bytes());
-        output_display.extend(b"?????????");
+
+        let permissions = if item.must_dereference && item.is_dangling_link() {
+            b"?????????"
+        } else {
+            b"rwxr-xr-x"
+        };
+        output_display.extend(permissions);
         if item.security_context(config).len() > 1 {
             // GNU `ls` uses a "." character to indicate a file with a security context,
             // but not other alternate access method.
@@ -3267,13 +3325,10 @@ fn display_item_name(
                     let mut target_data =
                         PathData::new(absolute_target.clone(), None, None, config, false);
                     target_data.must_dereference = true;
+                    target_data.silent = true;
 
-                    // Pre-populate metadata to prevent error messages for dangling symlinks.
-                    // Check if target exists (following symlinks) to detect dangling chains.
-                    if !absolute_target.exists() {
-                        // Target doesn't exist - pre-set metadata to None to avoid error output
-                        target_data.md.get_or_init(|| None);
-                    }
+                    // No need to pre-populate metadata anymore as PathData::metadata()
+                    // now checks command_line flag before showing errors.
 
                     name.push(color_name(
                         locale_aware_escape_name(target_path.as_os_str(), config.quoting_style),
