@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars) krate mangen
+// spell-checker:ignore (vars) krate mangen tldr
 
 use std::env;
 use std::fs::File;
@@ -18,6 +18,18 @@ pub fn main() {
     // Do not rebuild build script unless the script itself or the enabled features are modified
     // See <https://doc.rust-lang.org/cargo/reference/build-scripts.html#change-detection>
     println!("cargo:rerun-if-changed=build.rs");
+
+    // Check for tldr.zip when building uudoc to warn users once at build time
+    // instead of repeatedly at runtime for each utility
+    if env::var("CARGO_FEATURE_UUDOC").is_ok() && !Path::new("docs/tldr.zip").exists() {
+        println!(
+            "cargo:warning=No tldr archive found, so the documentation will not include examples."
+        );
+        println!("cargo:warning=To include examples, download the tldr archive:");
+        println!(
+            "cargo:warning=  curl -L https://github.com/tldr-pages/tldr/releases/latest/download/tldr.zip -o docs/tldr.zip"
+        );
+    }
 
     if let Ok(profile) = env::var("PROFILE") {
         println!("cargo:rustc-cfg=build={profile:?}");
@@ -77,15 +89,6 @@ pub fn main() {
             }
             "hashsum" => {
                 phf_map.entry(krate, format!("({krate}::uumain, {krate}::uu_app_custom)"));
-
-                let map_value = format!("({krate}::uumain, {krate}::uu_app_common)");
-                phf_map.entry("md5sum", map_value.clone());
-                phf_map.entry("sha1sum", map_value.clone());
-                phf_map.entry("sha224sum", map_value.clone());
-                phf_map.entry("sha256sum", map_value.clone());
-                phf_map.entry("sha384sum", map_value.clone());
-                phf_map.entry("sha512sum", map_value.clone());
-                phf_map.entry("b2sum", map_value.clone());
             }
             _ => {
                 phf_map.entry(krate, map_value.clone());

@@ -623,6 +623,29 @@ fn test_mv_symlink_into_target() {
     ucmd.arg("dir-link").arg("dir").succeeds();
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn test_mv_broken_symlink_to_another_fs() {
+    use tempfile::TempDir;
+
+    let scene = TestScenario::new(util_name!());
+
+    scene.fixtures.mkdir("foo");
+    scene.fixtures.symlink_file("missing", "foo/dangling");
+
+    let other_fs_tempdir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let dest = other_fs_tempdir.path().join("foo");
+
+    scene
+        .ucmd()
+        .arg("foo")
+        .arg(dest)
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+}
+
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
 fn test_mv_hardlink_to_symlink() {
@@ -2803,4 +2826,28 @@ fn test_mv_no_prompt_unwriteable_file_with_no_tty() {
 
     assert!(!at.file_exists("source_notty"));
     assert!(at.file_exists("target_notty"));
+}
+
+/// Test mv silently succeeds when dest filesystem doesn't support xattrs (ENOTSUP)
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_xattr_enotsup_silent() {
+    use std::process::Command;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("src", "x");
+
+    if Command::new("setfattr")
+        .args(["-n", "user.t", "-v", "v", &at.plus_as_string("src")])
+        .status()
+        .is_ok_and(|s| s.success())
+    {
+        scene
+            .ucmd()
+            .arg(at.plus_as_string("src"))
+            .arg("/dev/shm/mv_test")
+            .succeeds()
+            .no_stderr();
+        std::fs::remove_file("/dev/shm/mv_test").ok();
+    }
 }
