@@ -5341,7 +5341,7 @@ fn test_ls_dired_symlink_name_only() {
 
     at.mkdir("d");
     at.touch("d/target");
-    at.symlink_file("target", "d/link");
+    at.relative_symlink_file("target", "d/link");
 
     let result = scene
         .ucmd()

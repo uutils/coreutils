@@ -3053,12 +3053,14 @@ fn display_item_long(
         };
 
         if config.dired {
+            let line_len =
+                output_display.len() + displayed_item.len() + config.line_ending.to_string().len();
             let (start, end) = dired::calculate_dired(
-                &dired.dired_positions,
+                dired,
                 output_display.len(),
                 dired_name_len,
             );
-            dired::update_positions(dired, start, end);
+            dired::update_positions(dired, start, end, line_len);
         }
         write_os_str(&mut output_display, &displayed_item)?;
         output_display.extend(config.line_ending.to_string().as_bytes());
@@ -3153,7 +3155,14 @@ fn display_item_long(
         output_display.extend(b" ");
 
         if config.dired {
-            dired::calculate_and_update_positions(dired, output_display.len(), dired_name_len);
+            let line_len =
+                output_display.len() + displayed_item.len() + config.line_ending.to_string().len();
+            dired::calculate_and_update_positions(
+                dired,
+                output_display.len(),
+                dired_name_len,
+                line_len,
+            );
         }
         write_os_str(&mut output_display, &displayed_item)?;
         output_display.extend(config.line_ending.to_string().as_bytes());
