@@ -3055,11 +3055,7 @@ fn display_item_long(
         if config.dired {
             let line_len =
                 output_display.len() + displayed_item.len() + config.line_ending.to_string().len();
-            let (start, end) = dired::calculate_dired(
-                dired,
-                output_display.len(),
-                dired_name_len,
-            );
+            let (start, end) = dired::calculate_dired(dired, output_display.len(), dired_name_len);
             dired::update_positions(dired, start, end, line_len);
         }
         write_os_str(&mut output_display, &displayed_item)?;
