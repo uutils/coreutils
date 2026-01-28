@@ -249,8 +249,10 @@ pub fn normalize_path(path: &Path) -> PathBuf {
             }
             Component::CurDir => {}
             Component::ParentDir => {
-                if ret.as_os_str().is_empty() || is_above_current_dir(&ret) {
-                    ret.push(component.as_os_str());
+                if ret.as_os_str().is_empty()
+                    || matches!(ret.components().next_back(), Some(Component::ParentDir))
+                {
+                    ret.push("..");
                 } else {
                     ret.pop();
                 }
@@ -266,22 +268,6 @@ pub fn normalize_path(path: &Path) -> PathBuf {
     }
 
     ret
-}
-
-fn is_above_current_dir(path: &Path) -> bool {
-    let mut depth = 0;
-    for component in path.components() {
-        match component {
-            Component::ParentDir => {
-                depth -= 1;
-            }
-            Component::Normal(_) => {
-                depth += 1;
-            }
-            _ => {}
-        }
-    }
-    depth < 0
 }
 
 fn resolve_symlink<P: AsRef<Path>>(path: P) -> IOResult<Option<PathBuf>> {
@@ -899,9 +885,13 @@ mod tests {
         test: &'a str,
     }
 
-    const NORMALIZE_PATH_TESTS: [NormalizePathTestCase; 13] = [
+    const NORMALIZE_PATH_TESTS: [NormalizePathTestCase; 15] = [
         NormalizePathTestCase {
             path: "foo/bar/../..",
+            test: ".",
+        },
+        NormalizePathTestCase {
+            path: ".",
             test: ".",
         },
         // Should not try to eliminate leading .. components,
@@ -914,6 +904,10 @@ mod tests {
         NormalizePathTestCase {
             path: "foo/../../../bar/baz",
             test: "../../bar/baz",
+        },
+        NormalizePathTestCase {
+            path: "../../foo/..",
+            test: "../..",
         },
         NormalizePathTestCase {
             path: "foo/../../..",
@@ -968,17 +962,6 @@ mod tests {
                 normalized.to_str().expect("Path is not valid utf-8!")
             );
         }
-    }
-
-    #[test]
-    fn test_is_above_current_dir() {
-        assert!(is_above_current_dir(Path::new("..")));
-        assert!(is_above_current_dir(Path::new("../..")));
-        assert!(is_above_current_dir(Path::new("foo/../../..")));
-        assert!(!is_above_current_dir(Path::new(".")));
-        assert!(!is_above_current_dir(Path::new("foo/..")));
-        assert!(!is_above_current_dir(Path::new("foo/../../bar/foo")));
-        assert!(!is_above_current_dir(Path::new("foo/bar/..")));
     }
 
     #[cfg(unix)]
