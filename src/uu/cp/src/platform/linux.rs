@@ -90,24 +90,26 @@ where
     {
         Ok(file) => file,
         Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-            // Dest permissions is None if and only if dest is a dangling symlink (the other major
-            // point where std::fs:metadata(&dest) would fail is if the file didn't exist, but then
-            // we would have made it above).
-            let dest_permissions = match std::fs::metadata(&dest) {
-                Ok(metadata) => Some(metadata.permissions()),
+            let dest_metadata = match std::fs::metadata(&dest) {
+                Ok(metadata) => Some(metadata),
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
                 Err(e) => Err(e)?,
             };
 
-            // The file actually already exists
-            if let Some(mut desired_permissions) = dest_permissions {
+            // The file or pipe actually already exists
+            if let Some(dest_metadata) = dest_metadata {
+                let mut desired_permissions = dest_metadata.permissions();
                 // This will be reset to the correct permissions later, this is defensive as it is
                 // the most restrictive
                 let mut dst = OpenOptions::new().write(true).open(&dest)?;
-                desired_permissions.set_mode(0o600);
-                dst.set_permissions(desired_permissions)?;
-                dst.set_len(0)?;
-                dst.rewind()?;
+                if dest_metadata.is_file() {
+                    // Alternatively it is something we shouldn't modify
+                    // properties of
+                    desired_permissions.set_mode(0o600);
+                    dst.set_permissions(desired_permissions)?;
+                    dst.set_len(0)?;
+                    dst.rewind()?;
+                }
                 dst
             } else {
                 // If a symlink exists in the position we want to write the file to, and it symlinks to
