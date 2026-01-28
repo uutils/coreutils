@@ -975,14 +975,10 @@ fn rename_dir_fallback(
         (_, _) => None,
     };
 
-    // Retrieve xattrs using file descriptor to avoid TOCTOU races
+    // Retrieve xattrs before copying (directories use path-based operations
+    // since they cannot be opened in write mode for xattr operations)
     #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-    let xattrs = {
-        use std::fs::File;
-        File::open(from)
-            .and_then(|f| fsxattr::retrieve_xattrs_fd(&f))
-            .unwrap_or_else(|_| HashMap::new())
-    };
+    let xattrs = fsxattr::retrieve_xattrs(from).unwrap_or_else(|_| HashMap::new());
 
     // Use directory copying (with or without hardlink support)
     let result = copy_dir_contents(
@@ -997,12 +993,12 @@ fn rename_dir_fallback(
         display_manager,
     );
 
-    // Apply xattrs using file descriptor to avoid TOCTOU races
+    // Apply xattrs after directory contents are copied, ignoring ENOTSUP errors
+    // (filesystem doesn't support xattrs, which is acceptable for cross-device moves)
     #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-    {
-        use std::fs::OpenOptions;
-        if let Ok(f) = OpenOptions::new().write(true).open(to) {
-            fsxattr::apply_xattrs_fd(&f, xattrs)?;
+    if let Err(e) = fsxattr::apply_xattrs(to, xattrs) {
+        if e.raw_os_error() != Some(libc::EOPNOTSUPP) {
+            return Err(e);
         }
     }
 
@@ -1071,8 +1067,35 @@ fn copy_dir_contents_recursive(
             pb.set_message(from_path.to_string_lossy().to_string());
         }
 
-        if from_path.is_dir() {
-            // Recursively copy subdirectory
+        if from_path.is_symlink() {
+            // Handle symlinks first, before checking is_dir() which follows symlinks.
+            // This prevents symlinks to directories from being expanded into full copies.
+            #[cfg(unix)]
+            {
+                copy_file_with_hardlinks_helper(
+                    &from_path,
+                    &to_path,
+                    hardlink_tracker,
+                    hardlink_scanner,
+                )?;
+            }
+            #[cfg(not(unix))]
+            {
+                rename_symlink_fallback(&from_path, &to_path)?;
+            }
+
+            // Print verbose message for symlink
+            if verbose {
+                let message = translate!("mv-verbose-renamed", "from" => from_path.quote(), "to" => to_path.quote());
+                match display_manager {
+                    Some(pb) => pb.suspend(|| {
+                        println!("{message}");
+                    }),
+                    None => println!("{message}"),
+                }
+            }
+        } else if from_path.is_dir() {
+            // Recursively copy subdirectory (only real directories, not symlinks)
             fs::create_dir_all(&to_path)?;
 
             // Print verbose message for directory

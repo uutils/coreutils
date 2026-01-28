@@ -16,7 +16,7 @@ use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::{fmt, io};
 #[cfg(all(unix, not(target_os = "android")))]
-use uucore::fsxattr::copy_xattrs_fd;
+use uucore::fsxattr::copy_xattrs;
 use uucore::translate;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, value_parser};
@@ -1675,13 +1675,8 @@ fn handle_preserve<F: Fn() -> CopyResult<()>>(p: &Preserve, f: F) -> CopyResult<
 /// user-writable if needed and restoring its original permissions afterward. This avoids "Operation
 /// not permitted" errors on read-only files. Returns an error if permission or metadata operations fail,
 /// or if xattr copying fails.
-///
-/// Uses file descriptor-based operations to avoid TOCTOU races during xattr copying.
 #[cfg(all(unix, not(target_os = "android")))]
 fn copy_extended_attrs(source: &Path, dest: &Path) -> CopyResult<()> {
-    use std::fs::File;
-    use uucore::fsxattr::copy_xattrs;
-
     let metadata = fs::symlink_metadata(dest)?;
 
     // Check if the destination file is currently read-only for the user.
@@ -1695,18 +1690,9 @@ fn copy_extended_attrs(source: &Path, dest: &Path) -> CopyResult<()> {
         fs::set_permissions(dest, perms)?;
     }
 
-    // Use file descriptor-based operations for regular files to avoid TOCTOU races.
-    // For directories and symlinks, we must use path-based operations since:
-    // - Directories cannot be opened with write mode for xattr operations
-    // - Symlinks (especially dangling ones) cannot be opened via File::open
-    let copy_xattrs_result = if metadata.is_file() {
-        // Open both files to pin their inodes, avoiding TOCTOU races during xattr operations
-        let source_file = File::open(source)?;
-        let dest_file = OpenOptions::new().write(true).open(dest)?;
-        copy_xattrs_fd(&source_file, &dest_file)
-    } else {
-        copy_xattrs(source, dest)
-    };
+    // Perform the xattr copy and capture any potential error,
+    // so we can restore permissions before returning.
+    let copy_xattrs_result = copy_xattrs(source, dest);
 
     // Restore read-only if we changed it.
     if was_readonly {
