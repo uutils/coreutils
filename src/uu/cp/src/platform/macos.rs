@@ -5,6 +5,7 @@
 // spell-checker:ignore reflink
 use std::ffi::CString;
 use std::fs::{self, File, OpenOptions};
+use std::io;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
@@ -13,12 +14,29 @@ use uucore::buf_copy;
 use uucore::display::Quotable;
 use uucore::translate;
 
-use uucore::mode::get_umask;
-
 use crate::{
     CopyDebug, CopyResult, CpError, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode,
     is_stream,
 };
+
+/// Copy file contents with restrictive permissions initially to prevent race conditions.
+/// Creates the destination file with mode 0600 & !umask, copies the content,
+/// and lets the caller set the final permissions.
+fn copy_file_with_secure_permissions<P>(source: P, dest: P) -> io::Result<u64>
+where
+    P: AsRef<Path>,
+{
+    let mut src_file = File::open(&source)?;
+    // Create destination with restrictive permissions initially (to prevent race conditions)
+    // Mode 0o600 means read/write for owner only
+    let mut dst_file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(&dest)?;
+    io::copy(&mut src_file, &mut dst_file)
+}
 
 /// Copies `source` to `dest` using copy-on-write if possible.
 pub(crate) fn copy_on_write(
@@ -63,7 +81,7 @@ pub(crate) fn copy_on_write(
                 flags: u32,
             ) -> libc::c_int = std::mem::transmute(raw_pfn);
             error = pfn(src.as_ptr(), dst.as_ptr(), 0);
-            if std::io::Error::last_os_error().kind() == std::io::ErrorKind::AlreadyExists
+            if io::Error::last_os_error().kind() == io::ErrorKind::AlreadyExists
                 // Only remove the `dest` if the `source` and `dest` are not the same
                 && source != dest
             {
@@ -92,24 +110,24 @@ pub(crate) fn copy_on_write(
         copy_debug.reflink = OffloadReflinkDebug::Yes;
         if source_is_stream {
             let mut src_file = File::open(source)?;
-            let mode = 0o622 & !get_umask();
+            // Create with restrictive permissions initially to prevent race conditions
+            // Mode 0o600 means read/write for owner only
             let mut dst_file = OpenOptions::new()
                 .create(true)
                 .write(true)
-                .mode(mode)
+                .truncate(true)
+                .mode(0o600)
                 .open(dest)?;
 
-            let dest_is_stream = is_stream(&dst_file.metadata()?);
-            if !dest_is_stream {
-                // `copy_stream` doesn't clear the dest file, if dest is not a stream, we should clear it manually.
-                dst_file.set_len(0)?;
-            }
+            let _dest_is_stream = is_stream(&dst_file.metadata()?);
+            // No need to set_len(0) since we're already using truncate(true)
 
             buf_copy::copy_stream(&mut src_file, &mut dst_file)
-                .map_err(|_| std::io::Error::from(std::io::ErrorKind::Other))
+                .map_err(|_| io::Error::from(io::ErrorKind::Other))
                 .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
         } else {
-            fs::copy(source, dest).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+            copy_file_with_secure_permissions(source, dest)
+                .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
         }
     }
 
