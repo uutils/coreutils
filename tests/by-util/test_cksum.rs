@@ -3046,3 +3046,18 @@ mod debug_flag {
             .stderr_contains("pclmul");
     }
 }
+
+#[ignore = "Does not work on CI"]
+#[test]
+#[cfg(target_os = "linux")]
+fn test_check_file_with_io_error() {
+    // /proc/self/mem causes EIO when read without proper seeking
+    new_ucmd!()
+        .arg("-a")
+        .arg("md5")
+        .arg("--check")
+        .arg("eio.txt")
+        .fails()
+        .stderr_contains("Input/output error")
+        .stdout_contains("FAILED open or read");
+}
