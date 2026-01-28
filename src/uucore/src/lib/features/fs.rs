@@ -900,6 +900,23 @@ pub fn makedev(maj: libc::c_uint, min: libc::c_uint) -> libc::dev_t {
     (min & 0xff) | ((maj & 0xfff) << 8) | ((min & !0xff) << 12) | ((maj & !0xfff) << 32)
 }
 
+/// Copy file contents with restrictive permissions initially to prevent race conditions.
+/// Creates the destination file with mode 0o600 (read/write for owner only),
+/// copies the content, and lets the caller set the final permissions afterward.
+#[cfg(unix)]
+pub fn copy_file_with_secure_permissions<P: AsRef<Path>>(source: P, dest: P) -> IOResult<u64> {
+    use std::os::unix::fs::OpenOptionsExt;
+
+    let mut src_file = fs::File::open(&source)?;
+    let mut dst_file = fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(&dest)?;
+    std::io::copy(&mut src_file, &mut dst_file)
+}
+
 #[cfg(test)]
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
@@ -1195,5 +1212,36 @@ mod tests {
         let path2 = path.clone();
         std::thread::spawn(move || assert!(fs::write(&path2, b"foo").is_ok()));
         assert_eq!(fs::read(&path).unwrap(), b"foo");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_copy_file_with_secure_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempdir().unwrap();
+        let src = dir.path().join("src.txt");
+        let dst = dir.path().join("dst.txt");
+
+        fs::write(&src, b"hello world").unwrap();
+
+        let bytes = copy_file_with_secure_permissions(&src, &dst).unwrap();
+        assert_eq!(bytes, 11);
+        assert_eq!(fs::read(&dst).unwrap(), b"hello world");
+
+        let mode = fs::metadata(&dst).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_copy_file_with_secure_permissions_nonexistent_source() {
+        let dir = tempdir().unwrap();
+        let src = dir.path().join("nonexistent.txt");
+        let dst = dir.path().join("dst.txt");
+
+        let result = copy_file_with_secure_permissions(&src, &dst);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), ErrorKind::NotFound);
     }
 }

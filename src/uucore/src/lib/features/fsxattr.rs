@@ -9,9 +9,11 @@
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
 use std::ffi::{OsStr, OsString};
+use std::fs::File;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
+use xattr::FileExt;
 
 /// Copies extended attributes (xattrs) from one file or directory to another.
 ///
@@ -45,6 +47,29 @@ pub fn copy_xattrs_skip_selinux<P: AsRef<Path>>(source: P, dest: P) -> std::io::
     Ok(())
 }
 
+/// Copies extended attributes (xattrs) from one file to another using file descriptors.
+///
+/// This version avoids TOCTOU (time-of-check to time-of-use) races by operating
+/// on open file descriptors rather than paths, ensuring all operations target
+/// the same inodes throughout.
+///
+/// # Arguments
+///
+/// * `source` - A reference to the source file (open file descriptor).
+/// * `dest` - A reference to the destination file (open file descriptor).
+///
+/// # Returns
+///
+/// A result indicating success or failure.
+pub fn copy_xattrs_fd(source: &File, dest: &File) -> std::io::Result<()> {
+    for attr_name in source.list_xattr()? {
+        if let Some(value) = source.get_xattr(&attr_name)? {
+            dest.set_xattr(&attr_name, &value)?;
+        }
+    }
+    Ok(())
+}
+
 /// Retrieves the extended attributes (xattrs) of a given file or directory.
 ///
 /// # Arguments
@@ -58,6 +83,28 @@ pub fn retrieve_xattrs<P: AsRef<Path>>(source: P) -> std::io::Result<FxHashMap<O
     let mut attrs = FxHashMap::default();
     for attr_name in xattr::list(&source)? {
         if let Some(value) = xattr::get(&source, &attr_name)? {
+            attrs.insert(attr_name, value);
+        }
+    }
+    Ok(attrs)
+}
+
+/// Retrieves the extended attributes (xattrs) of a given file using a file descriptor.
+///
+/// This version avoids TOCTOU races by operating on an open file descriptor
+/// rather than a path, ensuring all operations target the same inode.
+///
+/// # Arguments
+///
+/// * `source` - A reference to the file (open file descriptor).
+///
+/// # Returns
+///
+/// A result containing a HashMap of attribute names and values, or an error.
+pub fn retrieve_xattrs_fd(source: &File) -> std::io::Result<FxHashMap<OsString, Vec<u8>>> {
+    let mut attrs = FxHashMap::default();
+    for attr_name in source.list_xattr()? {
+        if let Some(value) = source.get_xattr(&attr_name)? {
             attrs.insert(attr_name, value);
         }
     }
@@ -80,6 +127,26 @@ pub fn apply_xattrs<P: AsRef<Path>>(
 ) -> std::io::Result<()> {
     for (attr, value) in xattrs {
         xattr::set(&dest, &attr, &value)?;
+    }
+    Ok(())
+}
+
+/// Applies extended attributes (xattrs) to a given file using a file descriptor.
+///
+/// This version avoids TOCTOU races by operating on an open file descriptor
+/// rather than a path, ensuring all operations target the same inode.
+///
+/// # Arguments
+///
+/// * `dest` - A reference to the file (open file descriptor).
+/// * `xattrs` - A HashMap containing attribute names and their corresponding values.
+///
+/// # Returns
+///
+/// A result indicating success or failure.
+pub fn apply_xattrs_fd(dest: &File, xattrs: FxHashMap<OsString, Vec<u8>>) -> std::io::Result<()> {
+    for (attr, value) in xattrs {
+        dest.set_xattr(&attr, &value)?;
     }
     Ok(())
 }
@@ -298,5 +365,60 @@ mod tests {
 
             assert!(has_security_cap_acl(&file_path));
         }
+    }
+
+    #[test]
+    fn test_copy_xattrs_fd() {
+        use std::fs::OpenOptions;
+
+        let temp_dir = tempdir().unwrap();
+        let source_path = temp_dir.path().join("source.txt");
+        let dest_path = temp_dir.path().join("dest.txt");
+
+        File::create(&source_path).unwrap();
+        File::create(&dest_path).unwrap();
+
+        let test_attr = "user.test_fd";
+        let test_value = b"test value fd";
+        xattr::set(&source_path, test_attr, test_value).unwrap();
+
+        let source_file = File::open(&source_path).unwrap();
+        let dest_file = OpenOptions::new().write(true).open(&dest_path).unwrap();
+
+        copy_xattrs_fd(&source_file, &dest_file).unwrap();
+
+        let copied_value = xattr::get(&dest_path, test_attr).unwrap().unwrap();
+        assert_eq!(copied_value, test_value);
+    }
+
+    #[test]
+    fn test_apply_and_retrieve_xattrs_fd() {
+        use std::fs::OpenOptions;
+
+        let temp_dir = tempdir().unwrap();
+        let file_path = temp_dir.path().join("test_file.txt");
+
+        File::create(&file_path).unwrap();
+
+        let mut test_xattrs = FxHashMap::default();
+        let test_attr = "user.test_attr_fd";
+        let test_value = b"test value fd";
+        test_xattrs.insert(OsString::from(test_attr), test_value.to_vec());
+
+        // Apply using file descriptor
+        let file = OpenOptions::new().write(true).open(&file_path).unwrap();
+        apply_xattrs_fd(&file, test_xattrs).unwrap();
+        drop(file);
+
+        // Retrieve using file descriptor
+        let file = File::open(&file_path).unwrap();
+        let retrieved_xattrs = retrieve_xattrs_fd(&file).unwrap();
+        assert!(retrieved_xattrs.contains_key(OsString::from(test_attr).as_os_str()));
+        assert_eq!(
+            retrieved_xattrs
+                .get(OsString::from(test_attr).as_os_str())
+                .unwrap(),
+            test_value
+        );
     }
 }
