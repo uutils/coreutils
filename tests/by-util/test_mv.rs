@@ -2882,6 +2882,7 @@ fn test_mv_cross_device_symlink_preserved() {
     at.write("src_dir/local.txt", "local content");
     symlink("/etc", at.plus("src_dir/etc_link")).expect("Failed to create symlink");
 
+    // Verify initial state
     assert!(at.is_symlink("src_dir/etc_link"));
 
     // Force cross-filesystem move using /dev/shm (tmpfs)
@@ -2896,6 +2897,7 @@ fn test_mv_cross_device_symlink_preserved() {
         .succeeds()
         .no_stderr();
 
+    // Verify source was removed
     assert!(!at.dir_exists("src_dir"));
 
     // Verify the symlink was preserved (not expanded)
