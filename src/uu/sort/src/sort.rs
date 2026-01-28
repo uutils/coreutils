@@ -630,7 +630,7 @@ impl<'a> Line<'a> {
 
     fn print(&self, writer: &mut impl Write, settings: &GlobalSettings) -> std::io::Result<()> {
         if settings.debug {
-            self.print_debug(settings, writer)?;
+            self.write_debug(settings, writer)?;
         } else {
             writer.write_all(self.line)?;
             writer.write_all(&[settings.line_ending.into()])?;
@@ -640,7 +640,7 @@ impl<'a> Line<'a> {
 
     /// Writes indicators for the selections this line matched. The original line content is NOT expected
     /// to be already printed.
-    fn print_debug(
+    fn write_debug(
         &self,
         settings: &GlobalSettings,
         writer: &mut impl Write,
