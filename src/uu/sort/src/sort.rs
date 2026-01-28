@@ -47,7 +47,6 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, strip_errno};
 use uucore::error::{UError, UResult, USimpleError, UUsageError};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
-use uucore::format_usage;
 #[cfg(feature = "i18n-collator")]
 use uucore::i18n::collator::locale_cmp;
 use uucore::i18n::decimal::locale_decimal_separator;
@@ -59,6 +58,7 @@ use uucore::posix::{MODERN, TRADITIONAL};
 use uucore::show_error;
 use uucore::translate;
 use uucore::version_cmp::version_cmp;
+use uucore::{format_usage, i18n};
 
 use crate::buffer_hint::automatic_buffer_size;
 use crate::tmp_dir::TmpDirWrapper;
@@ -1086,11 +1086,22 @@ impl FieldSelector {
         };
         let mut range_str = &line[self.get_range(line, tokens)];
         if self.settings.mode == SortMode::Numeric || self.settings.mode == SortMode::HumanNumeric {
+            // Get the thousands separator from the locale, handling cases where the separator is empty or multi-character
+            let locale_thousands_separator = i18n::decimal::locale_grouping_separator().as_bytes();
+
+            // Upstream GNU coreutils ignore multibyte thousands separators
+            // (FIXME in C source). We keep the same single-byte behavior.
+            let thousands_separator = match locale_thousands_separator {
+                [b] => Some(*b),
+                _ => None,
+            };
+
             // Parse NumInfo for this number.
             let (info, num_range) = NumInfo::parse(
                 range_str,
                 &NumInfoParseSettings {
                     accept_si_units: self.settings.mode == SortMode::HumanNumeric,
+                    thousands_separator,
                     ..Default::default()
                 },
             );
@@ -1846,11 +1857,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), processed_args, 2)?;
 
     // Prevent -o/--output to be specified multiple times
-    if matches
-        .get_occurrences::<OsString>(options::OUTPUT)
-        .is_some_and(|out| out.len() > 1)
-    {
-        return Err(SortError::MultipleOutputFiles.into());
+    if let Some(mut outputs) = matches.get_many::<OsString>(options::OUTPUT) {
+        if let Some(first) = outputs.next() {
+            if outputs.any(|out| out != first) {
+                return Err(SortError::MultipleOutputFiles.into());
+            }
+        }
     }
 
     settings.debug = matches.get_flag(options::DEBUG);
@@ -2616,17 +2628,17 @@ fn compare_by<'a>(
 }
 
 /// Compare two byte slices in ASCII case-insensitive order without allocating.
-/// We lower each byte on the fly so that binary input (including `NUL`) stays
+/// We upper each byte on the fly so that binary input (including `NUL`) stays
 /// untouched and we avoid locale-sensitive routines such as `strcasecmp`.
 fn ascii_case_insensitive_cmp(a: &[u8], b: &[u8]) -> Ordering {
     #[inline]
-    fn lower(byte: u8) -> u8 {
-        byte.to_ascii_lowercase()
+    fn fold(byte: u8) -> u8 {
+        byte.to_ascii_uppercase()
     }
 
     for (lhs, rhs) in a.iter().copied().zip(b.iter().copied()) {
-        let l = lower(lhs);
-        let r = lower(rhs);
+        let l = fold(lhs);
+        let r = fold(rhs);
         if l != r {
             return l.cmp(&r);
         }
