@@ -357,6 +357,11 @@ pub fn usr2uid(name: &str) -> IOResult<uid_t> {
 }
 
 #[inline]
+pub fn usr2gid(name: &str) -> IOResult<uid_t> {
+    Passwd::locate(name).map(|p| p.gid)
+}
+
+#[inline]
 pub fn grp2gid(name: &str) -> IOResult<gid_t> {
     Group::locate(name).map(|p| p.gid)
 }
