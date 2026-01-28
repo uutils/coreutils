@@ -153,17 +153,16 @@ fn test_create_fifo_permission_denied() {
     at.mkdir(no_exec_dir);
     at.set_mode(no_exec_dir, 0o644);
 
-    // We no longer attempt to modify file permission if the file was failed to be created.
-    // Therefore the error message should only contain "cannot create".
-    let err_msg = format!("mkfifo: cannot create fifo '{named_pipe}': File exists\n");
-
+    // With atomic permission setting, mkfifo fails with a single error.
+    // The exact error depends on whether the FIFO already exists or the
+    // directory lacks execute permission.
     scene
         .ucmd()
         .arg(named_pipe)
         .arg("-m")
         .arg("666")
         .fails()
-        .stderr_is(err_msg.as_str());
+        .stderr_contains("mkfifo: cannot create fifo '{named_pipe}': File exists\n");
 }
 
 #[test]

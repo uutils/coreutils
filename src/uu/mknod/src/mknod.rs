@@ -64,57 +64,55 @@ pub struct Config<'a> {
 fn mknod(file_name: &str, config: Config) -> i32 {
     let c_str = CString::new(file_name).expect("Failed to convert to CString");
 
-    unsafe {
-        // set umask to 0 and store previous umask
-        let have_prev_umask = if config.use_umask {
+    let errno = {
+        // Use UmaskGuard to ensure umask is restored even on panic
+        let _guard = if config.use_umask {
             None
         } else {
-            Some(libc::umask(0))
+            Some(uucore::mode::UmaskGuard::set(0))
         };
 
-        let errno = libc::mknod(c_str.as_ptr(), config.mode, config.dev);
+        // SAFETY: mknod is a standard POSIX syscall. The c_str pointer is valid
+        // for the duration of the call.
+        unsafe { libc::mknod(c_str.as_ptr(), config.mode, config.dev) }
+    }; // Guard dropped here, restoring umask
 
-        // set umask back to original value
-        if let Some(prev_umask) = have_prev_umask {
-            libc::umask(prev_umask);
-        }
-
-        if errno == -1 {
-            let c_str = CString::new(uucore::execution_phrase().as_bytes())
-                .expect("Failed to convert to CString");
-            // shows the error from the mknod syscall
+    if errno == -1 {
+        let c_str = CString::new(uucore::execution_phrase().as_bytes())
+            .expect("Failed to convert to CString");
+        // shows the error from the mknod syscall
+        // SAFETY: perror is a standard C function that doesn't store the pointer
+        unsafe {
             libc::perror(c_str.as_ptr());
         }
-
-        // Apply SELinux context if requested
-        #[cfg(feature = "selinux")]
-        if config.set_security_context {
-            if let Err(e) = uucore::selinux::set_selinux_security_context(
-                std::path::Path::new(file_name),
-                config.context,
-            ) {
-                // if it fails, delete the file
-                let _ = std::fs::remove_dir(file_name);
-                eprintln!("{}: {}", uucore::util_name(), e);
-                return 1;
-            }
-        }
-
-        // Apply SMACK context if requested
-        #[cfg(feature = "smack")]
-        if config.set_security_context {
-            if let Err(e) =
-                uucore::smack::set_smack_label_and_cleanup(file_name, config.context, |p| {
-                    std::fs::remove_file(p)
-                })
-            {
-                eprintln!("{}: {}", uucore::util_name(), e);
-                return 1;
-            }
-        }
-
-        errno
     }
+
+    // Apply SELinux context if requested
+    #[cfg(feature = "selinux")]
+    if config.set_security_context {
+        if let Err(e) = uucore::selinux::set_selinux_security_context(
+            std::path::Path::new(file_name),
+            config.context,
+        ) {
+            // if it fails, delete the file
+            let _ = std::fs::remove_dir(file_name);
+            eprintln!("{}: {}", uucore::util_name(), e);
+            return 1;
+        }
+    }
+
+    // Apply SMACK context if requested
+    #[cfg(feature = "smack")]
+    if config.set_security_context {
+        if let Err(e) = uucore::smack::set_smack_label_and_cleanup(file_name, config.context, |p| {
+            std::fs::remove_file(p)
+        }) {
+            eprintln!("{}: {}", uucore::util_name(), e);
+            return 1;
+        }
+    }
+
+    errno
 }
 
 #[uucore::main]

@@ -6,8 +6,6 @@
 use clap::{Arg, ArgAction, Command, value_parser};
 use nix::sys::stat::Mode;
 use nix::unistd::mkfifo;
-use std::fs;
-use std::os::unix::fs::PermissionsExt;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::translate;
@@ -48,20 +46,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     for f in fifos {
-        if mkfifo(f.as_str(), Mode::from_bits_truncate(0o666)).is_err() {
+        // Create FIFO with exact mode by temporarily setting umask to 0.
+        // This avoids a race condition where the FIFO briefly exists with
+        // umask-based permissions before chmod is called.
+        let result = {
+            let _guard = uucore::mode::UmaskGuard::set(0);
+            mkfifo(f.as_str(), Mode::from_bits_truncate(mode as libc::mode_t))
+        };
+
+        if result.is_err() {
             show!(USimpleError::new(
                 1,
                 translate!("mkfifo-error-cannot-create-fifo", "path" => f.quote()),
             ));
             continue;
-        }
-
-        // Explicitly set the permissions to ignore umask
-        if let Err(e) = fs::set_permissions(&f, fs::Permissions::from_mode(mode)) {
-            return Err(USimpleError::new(
-                1,
-                translate!("mkfifo-error-cannot-set-permissions", "path" => f.quote(), "error" => e),
-            ));
         }
 
         // Apply SELinux context if requested
@@ -76,7 +74,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 if let Err(e) =
                     uucore::selinux::set_selinux_security_context(Path::new(&f), context)
                 {
-                    let _ = fs::remove_file(f);
+                    let _ = std::fs::remove_file(f);
                     return Err(USimpleError::new(1, e.to_string()));
                 }
             }
