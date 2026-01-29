@@ -201,22 +201,16 @@ macro_rules! test_digest_with_len {
     };
 }
 
-test_digest! {md5, md5}
-test_digest! {sha1, sha1}
 test_digest! {b3sum, b3sum}
 test_digest! {shake128, shake128}
 test_digest! {shake256, shake256}
 
-test_digest_with_len! {sha224, sha224, 224}
-test_digest_with_len! {sha256, sha256, 256}
-test_digest_with_len! {sha384, sha384, 384}
-test_digest_with_len! {sha512, sha512, 512}
 test_digest_with_len! {sha3_224, sha3, 224}
 test_digest_with_len! {sha3_256, sha3, 256}
 test_digest_with_len! {sha3_384, sha3, 384}
 test_digest_with_len! {sha3_512, sha3, 512}
-test_digest_with_len! {b2sum, b2sum, 512}
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_check_sha1() {
     // To make sure that #3815 doesn't happen again
@@ -237,6 +231,7 @@ fn test_check_sha1() {
         .stderr_is("");
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_check_md5_ignore_missing() {
     let scene = TestScenario::new(util_name!());
@@ -271,6 +266,7 @@ fn test_check_md5_ignore_missing() {
         .stderr_contains("the --ignore-missing option is meaningful only when verifying checksums");
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_check_b2sum_length_option_0() {
     let scene = TestScenario::new(util_name!());
@@ -288,6 +284,7 @@ fn test_check_b2sum_length_option_0() {
         .stdout_only("testf: OK\n");
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_check_b2sum_length_duplicate() {
     let scene = TestScenario::new(util_name!());
@@ -304,6 +301,7 @@ fn test_check_b2sum_length_duplicate() {
         .stdout_contains("d6d45901dec53e65d2b55fb6e2ab67b0");
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_check_b2sum_length_option_8() {
     let scene = TestScenario::new(util_name!());
@@ -321,6 +319,7 @@ fn test_check_b2sum_length_option_8() {
         .stdout_only("testf: OK\n");
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_invalid_b2sum_length_option_not_multiple_of_8() {
     let scene = TestScenario::new(util_name!());
@@ -338,8 +337,11 @@ fn test_invalid_b2sum_length_option_not_multiple_of_8() {
 }
 
 #[rstest]
+#[ignore = "moved to standalone"]
 #[case("513")]
+#[ignore = "moved to standalone"]
 #[case("1024")]
+#[ignore = "moved to standalone"]
 #[case("18446744073709552000")]
 fn test_invalid_b2sum_length_option_too_large(#[case] len: &str) {
     let scene = TestScenario::new(util_name!());
@@ -358,6 +360,7 @@ fn test_invalid_b2sum_length_option_too_large(#[case] len: &str) {
         .stderr_contains("b2sum: maximum digest length for 'BLAKE2b' is 512 bits");
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_check_b2sum_tag_output() {
     let scene = TestScenario::new(util_name!());
@@ -382,6 +385,7 @@ fn test_check_b2sum_tag_output() {
         .stdout_only("BLAKE2b-128 (f) = cae66941d9efbd404e4d88758ea67670\n");
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_check_b2sum_verify() {
     let scene = TestScenario::new(util_name!());
@@ -406,6 +410,7 @@ fn test_check_b2sum_verify() {
         .stdout_only("BLAKE2b-128 (a) = b93e0fc7bb21633c08bba07c5e71dc00\n");
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_check_file_not_found_warning() {
     let scene = TestScenario::new(util_name!());
@@ -428,6 +433,7 @@ fn test_check_file_not_found_warning() {
 
 // Asterisk `*` is a reserved paths character on win32, nor the path can end with a whitespace.
 // ref: https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file#naming-conventions
+#[ignore = "moved to standalone"]
 #[test]
 fn test_check_md5sum() {
     let scene = TestScenario::new(util_name!());
@@ -478,6 +484,7 @@ fn test_check_md5sum() {
 }
 
 // GNU also supports one line sep
+#[ignore = "moved to standalone"]
 #[test]
 fn test_check_md5sum_only_one_space() {
     let scene = TestScenario::new(util_name!());
@@ -501,6 +508,7 @@ fn test_check_md5sum_only_one_space() {
         .stdout_only("a: OK\n b: OK\nc: OK\n");
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_check_md5sum_reverse_bsd() {
     let scene = TestScenario::new(util_name!());
@@ -550,6 +558,7 @@ fn test_check_md5sum_reverse_bsd() {
     }
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_check_md5sum_mixed_format() {
     let scene = TestScenario::new(util_name!());
@@ -606,6 +615,7 @@ fn test_conflicting_arg() {
         .fails_with_code(1);
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_tag() {
     let scene = TestScenario::new(util_name!());
@@ -622,6 +632,7 @@ fn test_tag() {
         );
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 #[cfg(not(windows))]
 fn test_with_escape_filename() {
@@ -637,6 +648,7 @@ fn test_with_escape_filename() {
     assert!(stdout.trim().ends_with("a\\nb"));
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 #[cfg(not(windows))]
 fn test_with_escape_filename_zero_text() {
@@ -657,6 +669,7 @@ fn test_with_escape_filename_zero_text() {
     assert!(stdout.contains("a\nb"));
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_check_empty_line() {
     let scene = TestScenario::new(util_name!());
@@ -675,6 +688,7 @@ fn test_check_empty_line() {
         .stderr_contains("WARNING: 1 line is improperly formatted");
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 #[cfg(not(windows))]
 fn test_check_with_escape_filename() {
@@ -699,6 +713,7 @@ fn test_check_with_escape_filename() {
     result.stdout_is("\\a\\nb: OK\n");
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_check_strict_error() {
     let scene = TestScenario::new(util_name!());
@@ -718,6 +733,7 @@ fn test_check_strict_error() {
         .stderr_contains("WARNING: 3 lines are improperly formatted");
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_check_warn() {
     let scene = TestScenario::new(util_name!());
@@ -746,6 +762,7 @@ fn test_check_warn() {
         .fails();
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_check_status() {
     let scene = TestScenario::new(util_name!());
@@ -762,6 +779,7 @@ fn test_check_status() {
         .no_output();
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_check_status_code() {
     let scene = TestScenario::new(util_name!());
@@ -779,6 +797,7 @@ fn test_check_status_code() {
         .stdout_is("");
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_sha1_with_md5sum_should_fail() {
     let scene = TestScenario::new(util_name!());
@@ -795,6 +814,7 @@ fn test_sha1_with_md5sum_should_fail() {
         .stderr_does_not_contain("WARNING: 1 line is improperly formatted");
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 // Disabled on Windows because of the "*"
 #[cfg(not(windows))]
@@ -834,6 +854,7 @@ fn test_check_one_two_space_star() {
         .stdout_is("*empty: OK\n");
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 // Disabled on Windows because of the "*"
 #[cfg(not(windows))]
@@ -876,6 +897,7 @@ fn test_check_space_star_or_not() {
         .stderr_contains("WARNING: 1 line is improperly formatted");
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_check_no_backslash_no_space() {
     let scene = TestScenario::new(util_name!());
@@ -891,6 +913,7 @@ fn test_check_no_backslash_no_space() {
         .stdout_is("f: OK\n");
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_incomplete_format() {
     let scene = TestScenario::new(util_name!());
@@ -906,6 +929,7 @@ fn test_incomplete_format() {
         .stderr_contains("no properly formatted checksum lines found");
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_start_error() {
     let scene = TestScenario::new(util_name!());
@@ -923,6 +947,7 @@ fn test_start_error() {
         .stderr_contains("WARNING: 1 line is improperly formatted");
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_check_check_ignore_no_file() {
     let scene = TestScenario::new(util_name!());
@@ -939,6 +964,7 @@ fn test_check_check_ignore_no_file() {
         .stderr_contains("in.md5: no file was verified");
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_check_directory_error() {
     let scene = TestScenario::new(util_name!());
@@ -958,6 +984,7 @@ fn test_check_directory_error() {
         .stderr_contains(err_msg);
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 #[cfg(not(windows))]
 fn test_continue_after_directory_error() {
@@ -990,6 +1017,7 @@ fn test_continue_after_directory_error() {
         .stderr_is(err_msg);
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_check_quiet() {
     let scene = TestScenario::new(util_name!());
@@ -1030,6 +1058,7 @@ fn test_check_quiet() {
         .stderr_contains("md5sum: the --strict option is meaningful only when verifying checksums");
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_star_to_start() {
     let scene = TestScenario::new(util_name!());
@@ -1045,6 +1074,7 @@ fn test_star_to_start() {
         .stdout_only("f: OK\n");
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_check_b2sum_strict_check() {
     let scene = TestScenario::new(util_name!());
@@ -1081,6 +1111,7 @@ fn test_check_b2sum_strict_check() {
         .stdout_only(&output);
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_check_md5_comment_line() {
     // A comment in a checksum file shall be discarded unnoticed.
@@ -1106,6 +1137,7 @@ fn test_check_md5_comment_line() {
         .no_stderr();
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_check_md5_comment_only() {
     // A file only filled with comments is equivalent to an empty file,
@@ -1125,6 +1157,7 @@ fn test_check_md5_comment_only() {
         .stderr_contains("no properly formatted checksum lines found");
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_check_md5_comment_leading_space() {
     // A file only filled with comments is equivalent to an empty file,
@@ -1149,6 +1182,7 @@ fn test_check_md5_comment_leading_space() {
         .stderr_contains("WARNING: 1 line is improperly formatted");
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_sha256_binary() {
     let ts = TestScenario::new(util_name!());
@@ -1165,6 +1199,7 @@ fn test_sha256_binary() {
     );
 }
 
+#[ignore = "moved to standalone"]
 #[test]
 fn test_sha256_stdin_binary() {
     let ts = TestScenario::new(util_name!());
@@ -1182,8 +1217,8 @@ fn test_sha256_stdin_binary() {
 }
 
 // This test is currently disabled on windows
+#[ignore = "moved to standalone"]
 #[test]
-#[cfg_attr(windows, ignore = "Discussion is in #9168")]
 fn test_check_sha256_binary() {
     new_ucmd!()
         .args(&["--sha256", "--check", "binary.sha256.checkfile"])
@@ -1198,28 +1233,28 @@ fn test_help_shows_correct_utility_name() {
     let scene = TestScenario::new(util_name!());
 
     // Test md5sum
-    scene
-        .ccmd("md5sum")
-        .arg("--help")
-        .succeeds()
-        .stdout_contains("Usage: md5sum")
-        .stdout_does_not_contain("Usage: hashsum");
+    // scene
+    //     .ccmd("md5sum")
+    //     .arg("--help")
+    //     .succeeds()
+    //     .stdout_contains("Usage: md5sum")
+    //     .stdout_does_not_contain("Usage: hashsum");
 
     // Test sha256sum
-    scene
-        .ccmd("sha256sum")
-        .arg("--help")
-        .succeeds()
-        .stdout_contains("Usage: sha256sum")
-        .stdout_does_not_contain("Usage: hashsum");
+    // scene
+    //     .ccmd("sha256sum")
+    //     .arg("--help")
+    //     .succeeds()
+    //     .stdout_contains("Usage: sha256sum")
+    //     .stdout_does_not_contain("Usage: hashsum");
 
     // Test b2sum
-    scene
-        .ccmd("b2sum")
-        .arg("--help")
-        .succeeds()
-        .stdout_contains("Usage: b2sum")
-        .stdout_does_not_contain("Usage: hashsum");
+    // scene
+    //     .ccmd("b2sum")
+    //     .arg("--help")
+    //     .succeeds()
+    //     .stdout_contains("Usage: b2sum")
+    //     .stdout_does_not_contain("Usage: hashsum");
 
     // Test that generic hashsum still shows the correct usage
     scene

@@ -95,15 +95,6 @@ SELINUX_PROGS := \
 	chcon \
 	runcon
 
-HASHSUM_PROGS := \
-	b2sum \
-	md5sum \
-	sha1sum \
-	sha224sum \
-	sha256sum \
-	sha384sum \
-	sha512sum
-
 $(info Detected OS = $(OS))
 
 ifeq (,$(findstring MINGW,$(OS)))
@@ -124,78 +115,9 @@ ifneq ($(findstring stdbuf,$(UTILS)),)
 endif
 
 # Programs with usable tests
-TEST_PROGS  := \
-	base32 \
-	base64 \
-	basename \
-	cat \
-	chcon \
-	chgrp \
-	chmod \
-	chown \
-	cksum \
-	comm \
-	cp \
-	csplit \
-	cut \
-	date \
-	dircolors \
-	dirname \
-	echo \
-	env \
-	expr \
-	factor \
-	false \
-	fold \
-	hashsum \
-	head \
-	install \
-	link \
-	ln \
-	ls \
-	mkdir \
-	mktemp \
-	mv \
-	nl \
-	numfmt \
-	od \
-	paste \
-	pathchk \
-	pinky \
-	pr \
-	printf \
-	ptx \
-	pwd \
-	readlink \
-	realpath \
-	rm \
-	rmdir \
-	runcon \
-	seq \
-	sleep \
-	sort \
-	split \
-	stat \
-	stdbuf \
-	sum \
-	tac \
-	tail \
-	test \
-	touch \
-	tr \
-	true \
-	truncate \
-	tsort \
-	uname \
-	unexpand \
-	uniq \
-	unlink \
-	uudoc \
-	wc \
-	who
 
 TESTS       := \
-	$(sort $(filter $(UTILS),$(TEST_PROGS)))
+	$(sort $(filter $(UTILS),$(PROGS) $(UNIX_PROGS) $(SELINUX_PROGS)))
 
 TEST_NO_FAIL_FAST :=
 TEST_SPEC_FEATURE :=
