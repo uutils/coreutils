@@ -1355,6 +1355,7 @@ dependencies = [
  "icu_locale_core",
  "icu_provider",
  "ixdtf",
+ "serde",
  "tinystr",
  "zerovec",
 ]
@@ -1721,6 +1722,17 @@ dependencies = [
  "portable-atomic-util",
  "serde_core",
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "jiff-icu"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e67c2beaae8b10a82d849b9aabb698a43a682f32b17bcdc035d5ecadb44d646"
+dependencies = [
+ "icu_calendar",
+ "icu_time",
+ "jiff",
 ]
 
 [[package]]
@@ -3378,6 +3390,7 @@ dependencies = [
  "icu_calendar",
  "icu_locale",
  "jiff",
+ "jiff-icu",
  "nix",
  "parse_datetime",
  "tempfile",
@@ -4456,6 +4469,7 @@ dependencies = [
  "icu_provider",
  "itertools 0.14.0",
  "jiff",
+ "jiff-icu",
  "libc",
  "md-5",
  "memchr",
