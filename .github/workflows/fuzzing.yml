@@ -1,6 +1,7 @@
 name: Fuzzing
 
-# spell-checker:ignore fuzzer dtolnay Swatinem
+# spell-checker:ignore (people) dtolnay Swatinem taiki-e
+# spell-checker:ignore (misc) fuzzer
 
 on:
   pull_request:
@@ -59,15 +60,20 @@ jobs:
       with:
         persist-credentials: false
     - name: Install `cargo-fuzz`
+      uses: taiki-e/install-action@v2
+      with:
+        tool: cargo-fuzz
+    - name: Emulate a nightly toolchain
       run: |
-        echo "RUSTC_BOOTSTRAP=1" >> "${GITHUB_ENV}" # Use -Z
-        cargo install cargo-fuzz --locked
+        echo "RUSTC_BOOTSTRAP=1" >> "${GITHUB_ENV}"
     - uses: Swatinem/rust-cache@v2
       with:
         shared-key: "cargo-fuzz-cache-key"
         cache-directories: "fuzz/target"
     - name: Run `cargo-fuzz build`
-      run: cargo fuzz build
+      # Force the correct target
+      # https://github.com/rust-fuzz/cargo-fuzz/issues/398
+      run: cargo fuzz build --target $(rustc --print host-tuple)
 
   fuzz-run:
     needs: fuzz-build
@@ -104,9 +110,12 @@ jobs:
       with:
         persist-credentials: false
     - name: Install `cargo-fuzz`
+      uses: taiki-e/install-action@v2
+      with:
+        tool: cargo-fuzz
+    - name: Emulate a nightly toolchain
       run: |
-        echo "RUSTC_BOOTSTRAP=1" >> "${GITHUB_ENV}" # Use nightly
-        cargo install cargo-fuzz --locked
+        echo "RUSTC_BOOTSTRAP=1" >> "${GITHUB_ENV}"
     - uses: Swatinem/rust-cache@v2
       with:
         shared-key: "cargo-fuzz-cache-key"
@@ -124,7 +133,9 @@ jobs:
       run: |
         mkdir -p fuzz/stats
         STATS_FILE="fuzz/stats/${{ matrix.test-target.name }}.txt"
-        cargo fuzz run ${{ matrix.test-target.name }} -- -max_total_time=${{ env.RUN_FOR }} -timeout=${{ env.RUN_FOR }} -detect_leaks=0 -print_final_stats=1 2>&1 | tee "$STATS_FILE"
+        # Force the correct target
+        # https://github.com/rust-fuzz/cargo-fuzz/issues/398
+        cargo fuzz run --target $(rustc --print host-tuple) ${{ matrix.test-target.name }} -- -max_total_time=${{ env.RUN_FOR }} -timeout=${{ env.RUN_FOR }} -detect_leaks=0 -print_final_stats=1 2>&1 | tee "$STATS_FILE"
 
         # Extract key stats from the output
         if grep -q "stat::number_of_executed_units" "$STATS_FILE"; then
