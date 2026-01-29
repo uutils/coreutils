@@ -15,9 +15,11 @@ use std::ops::BitOr;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::MAIN_SEPARATOR;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
@@ -28,6 +30,32 @@ use uucore::{format_usage, os_str_as_bytes, prompt_yes, show_error};
 mod platform;
 #[cfg(all(unix, not(target_os = "redox")))]
 use platform::{safe_remove_dir_recursive, safe_remove_empty_dir, safe_remove_file};
+
+/// Cached device and inode numbers for the root directory.
+/// Used for --preserve-root to detect when a path resolves to "/".
+#[cfg(unix)]
+#[derive(Debug, Clone, Copy)]
+pub struct RootDevIno {
+    pub dev: u64,
+    pub ino: u64,
+}
+
+#[cfg(unix)]
+impl RootDevIno {
+    /// Get the device and inode numbers for "/".
+    /// Returns None if lstat("/") fails.
+    pub fn new() -> Option<Self> {
+        fs::symlink_metadata("/").ok().map(|meta| Self {
+            dev: meta.dev(),
+            ino: meta.ino(),
+        })
+    }
+
+    /// Check if the given metadata matches the root device/inode.
+    pub fn is_root(&self, meta: &Metadata) -> bool {
+        meta.dev() == self.dev && meta.ino() == self.ino
+    }
+}
 
 #[derive(Debug, Error)]
 enum RmError {
@@ -41,6 +69,9 @@ enum RmError {
     CannotRemoveIsDirectory(OsString),
     #[error("{}", translate!("rm-error-dangerous-recursive-operation"))]
     DangerousRecursiveOperation,
+    #[cfg(unix)]
+    #[error("{}", translate!("rm-error-dangerous-recursive-operation-same-as-root", "path" => _0.to_string_lossy()))]
+    DangerousRecursiveOperationSameAsRoot(OsString),
     #[error("{}", translate!("rm-error-use-no-preserve-root"))]
     UseNoPreserveRoot,
     #[error("{}", translate!("rm-error-refusing-to-remove-directory", "path" => _0.quote()))]
@@ -56,7 +87,7 @@ fn verbose_removed_file(path: &Path, options: &Options) {
     if options.verbose {
         println!(
             "{}",
-            translate!("rm-verbose-removed", "file" => normalize(path).quote())
+            translate!("rm-verbose-removed", "file" => uucore::fs::normalize_path(path).quote())
         );
     }
 }
@@ -66,7 +97,7 @@ fn verbose_removed_directory(path: &Path, options: &Options) {
     if options.verbose {
         println!(
             "{}",
-            translate!("rm-verbose-removed-directory", "file" => normalize(path).quote())
+            translate!("rm-verbose-removed-directory", "file" => uucore::fs::normalize_path(path).quote())
         );
     }
 }
@@ -155,6 +186,10 @@ pub struct Options {
     pub one_fs: bool,
     /// `--preserve-root`/`--no-preserve-root`
     pub preserve_root: bool,
+    /// Cached device/inode for "/" when preserve_root is enabled.
+    /// Used to detect symlinks or paths that resolve to root.
+    #[cfg(unix)]
+    pub root_dev_ino: Option<RootDevIno>,
     /// `-r`, `--recursive`
     pub recursive: bool,
     /// `-d`, `--dir`
@@ -176,6 +211,8 @@ impl Default for Options {
             interactive: InteractiveMode::PromptProtected,
             one_fs: false,
             preserve_root: true,
+            #[cfg(unix)]
+            root_dev_ino: None,
             recursive: false,
             dir: false,
             verbose: false,
@@ -229,6 +266,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             })
     };
 
+    let preserve_root = !matches.get_flag(OPT_NO_PRESERVE_ROOT);
+    let recursive = matches.get_flag(OPT_RECURSIVE);
+
+    // Cache the device/inode of "/" at startup when preserve_root is enabled
+    // and we're doing recursive operations. This allows us to detect symlinks
+    // or paths that resolve to root by comparing device/inode numbers.
+    #[cfg(unix)]
+    let root_dev_ino = if preserve_root && recursive {
+        RootDevIno::new()
+    } else {
+        None
+    };
+
     let options = Options {
         force: force_flag,
         interactive: {
@@ -245,8 +295,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
         },
         one_fs: matches.get_flag(OPT_ONE_FILE_SYSTEM),
-        preserve_root: !matches.get_flag(OPT_NO_PRESERVE_ROOT),
-        recursive: matches.get_flag(OPT_RECURSIVE),
+        preserve_root,
+        #[cfg(unix)]
+        root_dev_ino,
+        recursive,
         dir: matches.get_flag(OPT_DIR),
         verbose: matches.get_flag(OPT_VERBOSE),
         progress: matches.get_flag(OPT_PROGRESS),
@@ -487,6 +539,23 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
     for filename in files {
         let file = Path::new(filename);
 
+        // Check if the path (potentially with trailing slash) resolves to root
+        // This needs to happen before symlink_metadata to catch cases like "rootlink/"
+        // where rootlink is a symlink to root.
+        #[cfg(unix)]
+        {
+            // When a path has a trailing slash and points to a symlink to a directory,
+            // we should check if it resolves to root before processing.
+            if uucore::fs::path_ends_with_terminator(file)
+                && options.recursive
+                && options.preserve_root
+                && is_root_path(file, options) {
+                    show_preserve_root_error(file, options);
+                    had_err = true;
+                    continue;
+            }
+        }
+
         had_err = match file.symlink_metadata() {
             Ok(metadata) => {
                 // Create progress bar on first successful file metadata read
@@ -673,6 +742,70 @@ fn remove_dir_recursive(
     }
 }
 
+/// Check if a path resolves to the root directory by comparing device/inode.
+/// Returns true if the path is root, false otherwise.
+/// On non-Unix systems, falls back to path-based check only.
+#[cfg(unix)]
+fn is_root_path(path: &Path, options: &Options) -> bool {
+    // First check the simple path-based case (e.g., "/")
+    let path_looks_like_root = path.has_root() && path.parent().is_none();
+
+    // If preserve_root is enabled and we have cached root dev/ino,
+    // also check if the path resolves to root via symlink or mount
+    if options.preserve_root {
+        if let Some(ref root_dev_ino) = options.root_dev_ino {
+            // Use fs::metadata to get the target's dev/ino after following ALL symlinks
+            // This should handle nested symlinks automatically
+            if let Ok(metadata) = fs::metadata(path) {
+                if root_dev_ino.is_root(&metadata) {
+                    return true;
+                }
+            }
+
+            // Fallback: canonicalize the path and check if it resolves to "/"
+            // This handles cases where metadata retrieval fails but the path
+            // still resolves to root (e.g., on MacOS in some test scenarios)
+            if let Ok(canonical_path) = path.canonicalize() {
+                if canonical_path.has_root() && canonical_path.parent().is_none() {
+                    return true;
+                }
+            }
+        }
+    }
+
+    path_looks_like_root
+}
+
+#[cfg(not(unix))]
+fn is_root_path(path: &Path, _options: &Options) -> bool {
+    path.has_root() && path.parent().is_none()
+}
+
+/// Show appropriate error message for attempting to remove root.
+/// Differentiates between literal "/" and paths that resolve to root (e.g., symlinks).
+#[cfg(unix)]
+fn show_preserve_root_error(path: &Path, _options: &Options) {
+    let path_looks_like_root = path.has_root() && path.parent().is_none();
+
+    if path_looks_like_root {
+        // Path is literally "/"
+        show_error!("{}", RmError::DangerousRecursiveOperation);
+    } else {
+        // Path resolves to root but isn't literally "/" (e.g., symlink to /)
+        show_error!(
+            "{}",
+            RmError::DangerousRecursiveOperationSameAsRoot(path.as_os_str().to_os_string())
+        );
+    }
+    show_error!("{}", RmError::UseNoPreserveRoot);
+}
+
+#[cfg(not(unix))]
+fn show_preserve_root_error(_path: &Path, _options: &Options) {
+    show_error!("{}", RmError::DangerousRecursiveOperation);
+    show_error!("{}", RmError::UseNoPreserveRoot);
+}
+
 fn handle_dir(path: &Path, options: &Options, progress_bar: Option<&ProgressBar>) -> bool {
     let mut had_err = false;
 
@@ -685,14 +818,13 @@ fn handle_dir(path: &Path, options: &Options, progress_bar: Option<&ProgressBar>
         return true;
     }
 
-    let is_root = path.has_root() && path.parent().is_none();
+    let is_root = is_root_path(path, options);
     if options.recursive && (!is_root || !options.preserve_root) {
         had_err = remove_dir_recursive(path, options, progress_bar);
     } else if options.dir && (!is_root || !options.preserve_root) {
         had_err = remove_dir(path, options, progress_bar).bitor(had_err);
     } else if options.recursive {
-        show_error!("{}", RmError::DangerousRecursiveOperation);
-        show_error!("{}", RmError::UseNoPreserveRoot);
+        show_preserve_root_error(path, options);
         had_err = true;
     } else {
         show_error!(
@@ -938,14 +1070,6 @@ fn clean_trailing_slashes(path: &Path) -> &Path {
 
 fn prompt_descend(path: &Path) -> bool {
     prompt_yes!("descend into directory {}?", path.quote())
-}
-
-fn normalize(path: &Path) -> PathBuf {
-    // copied from https://github.com/rust-lang/cargo/blob/2e4cfc2b7d43328b207879228a2ca7d427d188bb/src/cargo/util/paths.rs#L65-L90
-    // both projects are MIT https://github.com/rust-lang/cargo/blob/master/LICENSE-MIT
-    // for std impl progress see rfc https://github.com/rust-lang/rfcs/issues/2208
-    // TODO: replace this once that lands
-    uucore::fs::normalize_path(path)
 }
 
 #[cfg(not(windows))]
