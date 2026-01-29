@@ -2091,3 +2091,20 @@ fn test_split_directory_already_exists() {
         .no_stdout()
         .stderr_is("split: xaa: Is a directory\n");
 }
+
+// Regression test for https://github.com/uutils/coreutils/issues/10389
+// split should accept overflow values like GNU (clamping to u64::MAX)
+#[test]
+fn test_split_number_overflow_accepted() {
+    // Test that split accepts u64::MAX+1 without error (should clamp to u64::MAX)
+    new_ucmd!()
+        .args(&["-n", "18446744073709551616"]) // 2^64 = u64::MAX + 1
+        .pipe_in("test")
+        .succeeds();
+
+    // Also test very large overflow value
+    new_ucmd!()
+        .args(&["-n", "999999999999999999999999999999"])
+        .pipe_in("test")
+        .succeeds();
+}
