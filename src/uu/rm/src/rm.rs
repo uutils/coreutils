@@ -586,6 +586,17 @@ fn is_writable_metadata(_metadata: &Metadata) -> bool {
     true
 }
 
+pub(crate) fn show_one_fs_error(path: &Path, options: &Options) {
+    show_error!(
+        "skipping {}, since it's on a different device",
+        path.quote()
+    );
+
+    if !options.one_fs && options.preserve_root == PreserveRoot::YesAll {
+        show_error!("and --preserve-root=all is in effect");
+    }
+}
+
 /// Helper function to check fs and report errors if necessary.
 /// Returns true if the operation should be skipped/returned (i.e., on error).
 fn check_and_report_one_fs(path: &Path, options: &Options) -> bool {
@@ -593,14 +604,7 @@ fn check_and_report_one_fs(path: &Path, options: &Options) -> bool {
         if !additional_reason.is_empty() {
             show_error!("{}", additional_reason);
         }
-        show_error!(
-            "skipping {}, since it's on a different device",
-            path.quote()
-        );
-
-        if options.preserve_root == PreserveRoot::YesAll {
-            show_error!("and --preserve-root=all is in effect");
-        }
+        show_one_fs_error(path, options);
 
         return true;
     }
