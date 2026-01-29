@@ -408,6 +408,11 @@ struct PaddingCollection {
     block_size: usize,
 }
 
+struct DisplayItemName {
+    displayed: OsString,
+    dired_name_len: usize,
+}
+
 /// Extracts the format to display the information based on the options provided.
 ///
 /// # Returns
@@ -3029,7 +3034,7 @@ fn display_item_long(
         display_date(md, config, state, &mut output_display)?;
         output_display.extend(b" ");
 
-        let item_name = display_item_name(
+        let item_display = display_item_name(
             item,
             config,
             None,
@@ -3040,16 +3045,16 @@ fn display_item_long(
             })),
         );
 
-        let mut dired_name_len = item_name.dired_name_len;
-        let name = item_name.displayed;
-        let needs_space = quoted && !os_str_starts_with(&name, b"'");
+        let mut dired_name_len = item_display.dired_name_len;
+        let item_name = item_display.displayed;
+        let needs_space = quoted && !os_str_starts_with(&item_name, b"'");
         let displayed_item = if needs_space {
             dired_name_len += 1;
             let mut ret: OsString = " ".into();
-            ret.push(name);
+            ret.push(&item_name);
             ret
         } else {
-            name
+            item_name
         };
 
         if config.dired {
@@ -3324,11 +3329,6 @@ fn classify_file(path: &PathData) -> Option<char> {
 ///
 /// Note that non-unicode sequences in symlink targets are dealt with using
 /// [`std::path::Path::to_string_lossy`].
-struct DisplayItemName {
-    displayed: OsString,
-    dired_name_len: usize,
-}
-
 #[allow(clippy::cognitive_complexity)]
 fn display_item_name(
     path: &PathData,
@@ -3388,7 +3388,7 @@ fn display_item_name(
         }
     }
 
-    let dired_name_len = name.len();
+    let dired_name_len = if config.dired { name.len() } else { 0 };
 
     if config.format == Format::Long
         && path.file_type().is_some_and(|ft| ft.is_symlink())
