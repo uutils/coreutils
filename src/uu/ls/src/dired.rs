@@ -98,6 +98,8 @@ pub fn print_dired_output(
     if !dired.dired_positions.is_empty() {
         print_positions("//DIRED//", &dired.dired_positions);
     }
+    // SUBDIRED is needed whenever directory headings are printed (multiple args or -R),
+    // so don't gate it on config.recursive.
     if !dired.subdired_positions.is_empty() {
         print_positions("//SUBDIRED//", &dired.subdired_positions);
     }
