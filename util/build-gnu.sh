@@ -297,7 +297,7 @@ sed -i '1s/^/exit 0  # Skip test - uutils du uses safe traversal that prevents t
 awk 'BEGIN {count=0} /compare exp out2/ && count < 6 {sub(/compare exp out2/, "grep -q \"cannot be used with\" out2"); count++} 1' tests/df/df-output.sh > tests/df/df-output.sh.tmp && mv tests/df/df-output.sh.tmp tests/df/df-output.sh
 
 # with ls --dired, in case of error, we have a slightly different error position
-sed -i -e "s|44 45|48 49|" tests/ls/stat-failed.sh
+#sed -i -e "s|44 45|48 49|" tests/ls/stat-failed.sh
 
 # small difference in the error message
 sed -i -e "s/ls: invalid argument 'XX' for 'time style'/ls: invalid --time-style argument 'XX'/" \
