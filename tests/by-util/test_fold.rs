@@ -66,6 +66,15 @@ fn test_wide_characters_with_characters_option() {
 }
 
 #[test]
+fn test_wide_characters_with_characters_short_option() {
+    new_ucmd!()
+        .args(&["-c", "-w", "5"])
+        .pipe_in("\u{B250}\u{B250}\u{B250}\n")
+        .succeeds()
+        .stdout_is("\u{B250}\u{B250}\u{B250}\n");
+}
+
+#[test]
 fn test_multiple_wide_characters_in_column_mode() {
     let wide = '\u{FF1A}';
     let mut input = wide.to_string().repeat(50);
@@ -538,6 +547,24 @@ fn test_fold_after_tab() {
         .pipe_in("a\tbbb\n")
         .succeeds()
         .stdout_is("a\tbb\nb\n");
+}
+
+#[test]
+fn test_fold_characters_tab_advances_to_next_tab_stop() {
+    new_ucmd!()
+        .args(&["-c", "-w", "4"])
+        .pipe_in("ab\tcd\n")
+        .succeeds()
+        .stdout_is("ab\n\t\ncd\n");
+}
+
+#[test]
+fn test_fold_characters_tab_with_non_ascii() {
+    new_ucmd!()
+        .args(&["-c", "-w", "2"])
+        .pipe_in("\u{00E9}\tb\n")
+        .succeeds()
+        .stdout_is("\u{00E9}\n\t\nb\n");
 }
 
 #[test]
