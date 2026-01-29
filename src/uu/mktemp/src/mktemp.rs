@@ -44,6 +44,8 @@ const TMPDIR_ENV_VAR: &str = "TMPDIR";
 #[cfg(windows)]
 const TMPDIR_ENV_VAR: &str = "TMP";
 
+const FALLBACK_TMPDIR: &str = "/tmp";
+
 #[derive(Error, Debug)]
 enum MkTempError {
     #[error("{}", translate!("mktemp-error-persist-file", "path" => .0.quote()))]
@@ -119,19 +121,17 @@ impl Options {
                 Some(d) => d.clone(),
                 // Otherwise use $TMPDIR if set, else use the system's default
                 // temporary directory.
-                None => env::var(TMPDIR_ENV_VAR)
-                    .ok()
-                    .map_or_else(env::temp_dir, PathBuf::from),
+                None => get_tmpdir_env().unwrap_or_else(|| PathBuf::from(FALLBACK_TMPDIR)),
             });
         let (tmpdir, template) = match matches.get_one::<OsString>(ARG_TEMPLATE) {
             // If no template argument is given, `--tmpdir` is implied.
             None => {
-                let tmpdir = Some(tmpdir.unwrap_or_else(env::temp_dir));
+                let tmpdir = Some(tmpdir.unwrap_or_else(|| PathBuf::from(FALLBACK_TMPDIR)));
                 let template = DEFAULT_TEMPLATE;
                 (tmpdir, OsString::from(template))
             }
             Some(template) => {
-                let tmpdir = if env::var(TMPDIR_ENV_VAR).is_ok() && matches.get_flag(OPT_T) {
+                let tmpdir = if get_tmpdir_env().is_some() && matches.get_flag(OPT_T) {
                     env::var_os(TMPDIR_ENV_VAR).map(|t| t.into())
                 } else if tmpdir.is_some() {
                     tmpdir
@@ -593,6 +593,13 @@ fn exec(dir: &Path, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> 
     let path = Path::new(dir).join(filename);
 
     Ok(path)
+}
+
+/// Reads the `TMPDIR_ENV_VAR` variable but treats the empty string as an unset environment variable.
+fn get_tmpdir_env() -> Option<PathBuf> {
+    env::var_os(TMPDIR_ENV_VAR)
+        .filter(|s| !s.is_empty())
+        .map(PathBuf::from)
 }
 
 /// Create a temporary file or directory
