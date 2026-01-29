@@ -28,7 +28,23 @@ fn test_uname_name() {
 #[test]
 fn test_uname_processor() {
     let result = new_ucmd!().arg("-p").succeeds();
-    assert_eq!(result.stdout_str().trim_end(), "unknown");
+    let output = result.stdout_str().trim();
+
+    // Verify it's non-empty
+    assert!(!output.is_empty());
+
+    // On aarch64 platforms (both macOS and Linux), should return "arm"
+    // based on the standard processor type mapping
+    #[cfg(target_arch = "aarch64")]
+    assert_eq!(output, "arm");
+
+    // On x86_64 platforms
+    #[cfg(target_arch = "x86_64")]
+    assert_eq!(output, "x86_64");
+
+    // On i686/i386 platforms
+    #[cfg(target_arch = "x86")]
+    assert_eq!(output, "i386");
 }
 
 #[test]
