@@ -23,7 +23,7 @@ mod options {
     pub static NUMBER: &str = "NUMBER";
 }
 
-fn print_factors_str(
+fn write_factors_str(
     num_str: &str,
     w: &mut io::BufWriter<impl Write>,
     print_exponents: bool,
@@ -159,7 +159,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if let Some(values) = matches.get_many::<String>(options::NUMBER) {
         for number in values {
-            print_factors_str(number, &mut w, print_exponents)?;
+            write_factors_str(number, &mut w, print_exponents)?;
         }
     } else {
         let stdin = stdin();
@@ -168,7 +168,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             match line {
                 Ok(line) => {
                     for number in line.split_whitespace() {
-                        print_factors_str(number, &mut w, print_exponents)?;
+                        write_factors_str(number, &mut w, print_exponents)?;
                     }
                 }
                 Err(e) => {
