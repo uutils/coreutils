@@ -48,6 +48,7 @@ ls-help-set-quoting-style = Définir le style de citation.
 ls-help-literal-quoting-style = Utiliser le style de citation littéral. Équivalent à `--quoting-style=literal`
 ls-help-escape-quoting-style = Utiliser le style de citation d'échappement. Équivalent à `--quoting-style=escape`
 ls-help-c-quoting-style = Utiliser le style de citation C. Équivalent à `--quoting-style=c`
+ls-help-locale-quoting-style = Utiliser le style de citation adapté à la locale. Utilise les guillemets appropriés à la locale actuelle (par ex., « » pour le français, „ " pour l'allemand, 「 」 pour le japonais). Équivalent à `--quoting-style=locale`
 ls-help-replace-control-chars = Remplacer les caractères de contrôle par '?' s'ils ne sont pas échappés.
 ls-help-show-control-chars = Afficher les caractères de contrôle 'tels quels' s'ils ne sont pas échappés.
 ls-help-show-time-field = Afficher l'heure dans <champ> :
