@@ -125,6 +125,7 @@ jobs:
       with:
         persist-credentials: false
     - name: Avoid no space left on device (Ubuntu runner)
+      shell: bash
       run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android &
     - name: Prepare, build and test
       uses: vmactions/freebsd-vm@v1.2.9
