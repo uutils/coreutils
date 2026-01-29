@@ -5,7 +5,7 @@
 
 //! Set of functions to parse modes
 
-// spell-checker:ignore (vars) fperm srwx
+// spell-checker:ignore (vars) fperm srwx RAII
 
 use libc::umask;
 
@@ -195,6 +195,53 @@ pub fn get_umask() -> u32 {
     return mask as u32;
 }
 
+/// RAII guard to restore umask on drop, ensuring cleanup even on panic.
+///
+/// This is useful when temporarily setting umask to 0 to create files or
+/// directories with exact permissions, bypassing umask. The guard ensures
+/// the original umask is restored even if a panic occurs.
+///
+/// # Example
+///
+/// ```no_run
+/// use uucore::mode::UmaskGuard;
+/// use std::fs;
+///
+/// // Temporarily set umask to 0, then restore original on drop
+/// let _guard = UmaskGuard::set(0);
+/// fs::create_dir("dir_with_exact_mode").unwrap();
+/// // Original umask is restored here when _guard is dropped
+/// ```
+#[cfg(unix)]
+pub struct UmaskGuard(libc::mode_t);
+
+#[cfg(unix)]
+impl UmaskGuard {
+    /// Set umask to the given value and return a guard that restores the original on drop.
+    ///
+    /// # Safety
+    ///
+    /// This function manipulates the process-wide umask. While this is safe from a
+    /// memory safety perspective, it can affect other threads in multi-threaded programs.
+    /// The guard pattern ensures restoration even on panic.
+    pub fn set(new_mask: libc::mode_t) -> Self {
+        // SAFETY: umask always succeeds and doesn't operate on memory.
+        // The returned value is the previous umask which we store for restoration.
+        let old_mask = unsafe { libc::umask(new_mask) };
+        Self(old_mask)
+    }
+}
+
+#[cfg(unix)]
+impl Drop for UmaskGuard {
+    fn drop(&mut self) {
+        // SAFETY: umask always succeeds. We're restoring the original value.
+        unsafe {
+            libc::umask(self.0);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -333,5 +380,68 @@ mod tests {
 
         // First add user write, then set to 755 (should override)
         assert_eq!(parse("u+w,755", false, 0).unwrap(), 0o755);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_umask_guard_basic() {
+        use super::{UmaskGuard, get_umask};
+
+        // Save original umask
+        let original = get_umask();
+
+        // Set umask to 0 and verify it's restored
+        {
+            let _guard = UmaskGuard::set(0);
+            assert_eq!(get_umask(), 0);
+        } // Guard dropped here
+
+        // Verify original umask is restored
+        assert_eq!(get_umask(), original);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_umask_guard_nested() {
+        use super::{UmaskGuard, get_umask};
+
+        let original = get_umask();
+
+        // Test nested guards work correctly
+        {
+            let _guard1 = UmaskGuard::set(0o077);
+            assert_eq!(get_umask(), 0o077);
+
+            {
+                let _guard2 = UmaskGuard::set(0);
+                assert_eq!(get_umask(), 0);
+            } // guard2 dropped, should restore to 0o077
+
+            assert_eq!(get_umask(), 0o077);
+        } // guard1 dropped, should restore to original
+
+        assert_eq!(get_umask(), original);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_umask_guard_panic_safety() {
+        use super::{UmaskGuard, get_umask};
+        use std::panic::{AssertUnwindSafe, catch_unwind};
+
+        let original = get_umask();
+
+        // Test that umask is restored even if code panics
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            let _guard = UmaskGuard::set(0o777);
+            assert_eq!(get_umask(), 0o777);
+            panic!("Test panic");
+        }));
+
+        // Panic should have been caught
+        assert!(result.is_err());
+
+        // Umask should still be restored to original
+        assert_eq!(get_umask(), original);
     }
 }
