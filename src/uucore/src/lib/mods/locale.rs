@@ -358,12 +358,19 @@ pub fn get_message_with_args(id: &str, ftl_args: FluentArgs) -> String {
 
 /// Function to detect system locale from environment variables
 fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
-    let locale_str = std::env::var("LANG")
-        .unwrap_or_else(|_| DEFAULT_LOCALE.to_string())
+    // Invalidate an empty string env var
+    let locale_var = |name| std::env::var(name).ok().filter(|v| !v.is_empty());
+
+    // We check LC_ALL -> LC_MESSAGES -> LANG - We fallback to DEFAULT_LOCALE
+    let locale_str = locale_var("LC_ALL")
+        .or_else(|| locale_var("LC_MESSAGES"))
+        .or_else(|| locale_var("LANG"))
+        .unwrap_or_else(|| DEFAULT_LOCALE.to_string())
         .split('.')
         .next()
         .unwrap_or(DEFAULT_LOCALE)
         .to_string();
+
     LanguageIdentifier::from_str(&locale_str).map_err(|_| {
         LocalizationError::ParseLocale(format!("Failed to parse locale: {locale_str}"))
     })
