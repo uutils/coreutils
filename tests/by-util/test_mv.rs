@@ -2081,6 +2081,61 @@ mod inter_partition_copying {
         );
     }
 
+    // Test that ownership is preserved when moving files across partitions as root.
+    //
+    // This specifically guards the EXDEV (copy+delete) fallback path, which must not
+    // change uid/gid compared to a same-filesystem rename.
+    #[test]
+    #[cfg(target_os = "linux")]
+    pub(crate) fn test_mv_preserves_ownership_across_partitions_when_root() {
+        use std::ffi::CString;
+        use std::fs::metadata;
+        use std::os::unix::ffi::OsStrExt as _;
+        use std::os::unix::fs::MetadataExt as _;
+        use tempfile::TempDir;
+        use uutests::util::TestScenario;
+
+        // Requires root to set an arbitrary uid/gid.
+        if unsafe { libc::geteuid() } != 0 {
+            return;
+        }
+
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        at.write("file", "test content");
+
+        let src_path = at.plus("file");
+        let src_path_c = CString::new(src_path.as_os_str().as_bytes()).unwrap();
+
+        // Pick a non-root uid/gid. If chown isn't possible in this environment, skip.
+        let target_uid: libc::uid_t = 1;
+        let target_gid: libc::gid_t = 1;
+        let chown_result = unsafe { libc::chown(src_path_c.as_ptr(), target_uid, target_gid) };
+        if chown_result != 0 {
+            return;
+        }
+
+        let src_meta = metadata(&src_path).expect("Failed to get metadata for source file");
+        assert_eq!(src_meta.uid(), target_uid);
+        assert_eq!(src_meta.gid(), target_gid);
+
+        // Force cross-filesystem move using /dev/shm (tmpfs)
+        let other_fs_tempdir = TempDir::new_in("/dev/shm/")
+            .expect("Unable to create temp directory in /dev/shm - test requires tmpfs");
+
+        scene
+            .ucmd()
+            .arg("file")
+            .arg(other_fs_tempdir.path().to_str().unwrap())
+            .succeeds();
+
+        let moved_file = other_fs_tempdir.path().join("file");
+        let moved_meta = metadata(&moved_file).expect("Failed to get metadata for moved file");
+        assert_eq!(moved_meta.uid(), target_uid);
+        assert_eq!(moved_meta.gid(), target_gid);
+    }
+
     // Test that hardlinks are preserved even with multiple sets of hardlinked files
     #[test]
     #[cfg(unix)]
@@ -2624,6 +2679,74 @@ fn test_mv_cross_device_permission_denied() {
 
     set_permissions(other_fs_tempdir.path(), PermissionsExt::from_mode(0o755))
         .expect("Unable to restore directory permissions");
+}
+
+/// Rootless cross-device move using unshare + tmpfs mounts.
+/// This mirrors the GNU part-fail scenario but avoids sudo by using user namespaces.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_rootless_unshare_tmpfs_dir_with_dangling_symlink() {
+    use std::fs;
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let base = at.plus("unshare-rootless");
+    fs::create_dir_all(&base).unwrap();
+
+    // Preflight: ensure unshare works in this environment (user namespaces enabled).
+    let preflight = match Command::new("unshare")
+        .args(["-rm", "sh", "-c", "true"])
+        .output()
+    {
+        Ok(out) => out,
+        Err(e) => {
+            println!("test skipped: unshare not available: {e}");
+            return;
+        }
+    };
+    if !preflight.status.success() {
+        let stderr = String::from_utf8_lossy(&preflight.stderr);
+        println!("test skipped: unshare not permitted: {stderr}");
+        return;
+    }
+
+    let script = r#"set -eu
+cleanup() {
+  umount -l "$BASE/a" 2>/dev/null || true
+  umount -l "$BASE/b" 2>/dev/null || true
+  rmdir "$BASE/a" "$BASE/b" 2>/dev/null || true
+}
+trap cleanup EXIT
+mkdir -p "$BASE/a" "$BASE/b"
+mount -t tmpfs tmpfs "$BASE/a"
+mount -t tmpfs tmpfs "$BASE/b"
+mkdir -p "$BASE/a/d"
+ln -s miss "$BASE/a/d/dang"
+"$UUTILS" mv -v "$BASE/a/d" "$BASE/b"
+test -L "$BASE/b/d/dang"
+test ! -e "$BASE/a/d"
+"#;
+
+    let output = Command::new("unshare")
+        .args(["-rm", "sh", "-c", script])
+        .env("BASE", &base)
+        .env("UUTILS", &scene.bin_path)
+        .output()
+        .expect("failed to run unshare");
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if stderr.contains("Operation not permitted")
+            || stderr.contains("permission denied")
+            || stderr.contains("not permitted")
+        {
+            println!("test skipped: unshare/mount not permitted: {stderr}");
+            return;
+        }
+        panic!("unshare rootless mv test failed: {stderr}");
+    }
 }
 
 #[test]
