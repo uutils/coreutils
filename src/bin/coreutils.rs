@@ -8,7 +8,8 @@ use coreutils::validation;
 use itertools::Itertools as _;
 use std::cmp;
 use std::ffi::OsString;
-use std::io::{self, Write};
+use std::fmt::Write as _;
+use std::io::{self, Write, stdout};
 use std::process;
 use uucore::Args;
 
@@ -17,25 +18,40 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
 
 fn usage<T>(utils: &UtilityMap<T>, name: &str) {
-    println!("{name} {VERSION} (multi-call binary)\n");
-    println!("Usage: {name} [function [arguments...]]");
-    println!("       {name} --list");
-    println!();
+    let mut buffer = String::new();
+    let _ = write!(
+        buffer,
+        r"{name} {VERSION} (multi-call binary)
+
+Usage: {name} [function [arguments...]]
+       {name} --list
+
+"
+    );
     #[cfg(feature = "feat_common_core")]
     {
-        println!("Functions:");
-        println!("      '<uutils>' [arguments...]");
-        println!();
+        let _ = writeln!(buffer, "Functions:");
+        let _ = writeln!(buffer, "      '<uutils>' [arguments...]\n");
     }
-    println!("Options:");
-    println!("      --list    lists all defined functions, one per row\n");
-    println!("Currently defined functions:\n");
-    let display_list = utils.keys().copied().join(", ");
+    let _ = writeln!(
+        buffer,
+        r"Options:
+      --list    lists all defined functions, one per row
+
+Currently defined functions:
+"
+    );
+    #[allow(clippy::map_clone)]
+    let mut utils: Vec<&str> = utils.keys().map(|&s| s).collect();
+    utils.sort_unstable();
+    let display_list = utils.join(", ");
     let width = cmp::min(textwrap::termwidth(), 100) - 4 * 2; // (opinion/heuristic) max 100 chars wide with 4 character side indentions
-    println!(
+    let _ = writeln!(
+        buffer,
         "{}",
         textwrap::indent(&textwrap::fill(&display_list, width), "    ")
     );
+    let _ = stdout().lock().write_all(buffer.as_bytes()); // todo: > /dev/full should be error
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -83,12 +99,12 @@ fn main() {
                 }
                 let utils: Vec<_> = utils.keys().collect();
                 for util in utils {
-                    println!("{util}");
+                    let _ = writeln!(stdout(), "{util}"); //todo: --list >/dev/full should be error
                 }
                 process::exit(0);
             }
             "--version" | "-V" => {
-                println!("{binary_as_util} {VERSION} (multi-call binary)");
+                let _ = writeln!(stdout(), "{binary_as_util} {VERSION} (multi-call binary)"); //todo: --version >/dev/full should be error
                 process::exit(0);
             }
             // Not a special command: fallthrough to calling a util
