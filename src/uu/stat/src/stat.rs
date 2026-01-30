@@ -139,20 +139,20 @@ fn pad_and_print_bytes<W: Write>(
     };
 
     if left_pad > 0 {
-        print_padding(&mut writer, left_pad)?;
+        write_padding(&mut writer, left_pad)?;
     }
     writer.write_all(display_bytes)?;
     if right_pad > 0 {
-        print_padding(&mut writer, right_pad)?;
+        write_padding(&mut writer, right_pad)?;
     }
 
     Ok(())
 }
 
-/// print padding based on a writer W and n size
+/// write padding based on a writer W and n size
 /// writer is genric to be any buffer like: `std::io::stdout`
 /// n is the calculated padding size
-fn print_padding<W: Write>(writer: &mut W, n: usize) -> Result<(), std::io::Error> {
+fn write_padding<W: Write>(writer: &mut W, n: usize) -> Result<(), std::io::Error> {
     for _ in 0..n {
         writer.write_all(b" ")?;
     }
@@ -1406,7 +1406,7 @@ fn pretty_time(meta: &Metadata, md_time_field: MetadataTimeField) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::{pad_and_print_bytes, print_padding, quote_file_name};
+    use crate::{pad_and_print_bytes, quote_file_name, write_padding};
 
     use super::{Flags, Precision, ScanUtil, Stater, Token, group_num, precision_trunc};
 
@@ -1554,7 +1554,7 @@ mod tests {
     #[test]
     fn test_print_padding() {
         let mut buffer = Vec::new();
-        print_padding(&mut buffer, 5).unwrap();
+        write_padding(&mut buffer, 5).unwrap();
         assert_eq!(&buffer, b"     ");
     }
 
