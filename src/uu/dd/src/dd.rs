@@ -17,7 +17,7 @@ use crate::bufferedoutput::BufferedOutput;
 use blocks::conv_block_unblock_helper;
 use datastructures::*;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::fcntl::FcntlArg::F_SETFL;
+use nix::fcntl::FcntlArg;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::fcntl::OFlag;
 use parseargs::Parser;
@@ -735,7 +735,7 @@ fn handle_o_direct_write(f: &mut File, buf: &[u8], original_error: io::Error) ->
         let flags_without_direct = oflags - OFlag::O_DIRECT;
 
         // Remove O_DIRECT flag using nix
-        if fcntl(&mut *f, F_SETFL(flags_without_direct)).is_err() {
+        if fcntl(&mut *f, FcntlArg::F_SETFL(flags_without_direct)).is_err() {
             return Err(original_error);
         }
 
@@ -744,7 +744,7 @@ fn handle_o_direct_write(f: &mut File, buf: &[u8], original_error: io::Error) ->
 
         // Restore O_DIRECT flag using nix (GNU doesn't restore it, but we'll be safer)
         // Log any restoration errors without failing the operation
-        if let Err(os_err) = fcntl(&mut *f, F_SETFL(oflags)) {
+        if let Err(os_err) = fcntl(&mut *f, FcntlArg::F_SETFL(oflags)) {
             // Just log the error, don't fail the whole operation
             show_error!("Failed to restore O_DIRECT flag: {}", os_err);
         }
@@ -895,7 +895,7 @@ impl<'a> Output<'a> {
         if let Some(libc_flags) = make_linux_oflags(&settings.oflags) {
             nix::fcntl::fcntl(
                 fx.as_raw().as_fd(),
-                F_SETFL(OFlag::from_bits_retain(libc_flags)),
+                FcntlArg::F_SETFL(OFlag::from_bits_retain(libc_flags)),
             )?;
         }
 

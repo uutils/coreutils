@@ -1921,7 +1921,7 @@ fn test_move_should_not_fallback_to_copy() {
 
 #[cfg(target_os = "linux")]
 mod inter_partition_copying {
-    use std::fs::{read_to_string, set_permissions, write};
+    use std::fs::{self, set_permissions, write};
     use std::os::unix::fs::{PermissionsExt, symlink};
     use tempfile::TempDir;
     use uutests::util::TestScenario;
@@ -1964,13 +1964,13 @@ mod inter_partition_copying {
 
         // make sure that file contents in other_fs_file didn't change.
         assert_eq!(
-            read_to_string(&other_fs_file_path).expect("Unable to read other_fs_file"),
+            fs::read_to_string(&other_fs_file_path).expect("Unable to read other_fs_file"),
             "other fs file contents"
         );
 
         // make sure that src file contents got copied into new file created in symlink_path
         assert_eq!(
-            read_to_string(&symlink_path).expect("Unable to read other_fs_file"),
+            fs::read_to_string(&symlink_path).expect("Unable to read other_fs_file"),
             "src contents"
         );
     }
@@ -2011,7 +2011,7 @@ mod inter_partition_copying {
     #[test]
     #[cfg(unix)]
     pub(crate) fn test_mv_preserves_hardlinks_across_partitions() {
-        use std::fs::metadata;
+        use std::fs;
         use std::os::unix::fs::MetadataExt;
         use tempfile::TempDir;
         use uutests::util::TestScenario;
@@ -2022,8 +2022,8 @@ mod inter_partition_copying {
         at.write("file1", "test content");
         at.hard_link("file1", "file2");
 
-        let metadata1 = metadata(at.plus("file1")).expect("Failed to get metadata for file1");
-        let metadata2 = metadata(at.plus("file2")).expect("Failed to get metadata for file2");
+        let metadata1 = fs::metadata(at.plus("file1")).expect("Failed to get metadata for file1");
+        let metadata2 = fs::metadata(at.plus("file2")).expect("Failed to get metadata for file2");
         assert_eq!(
             metadata1.ino(),
             metadata2.ino(),
@@ -2055,9 +2055,9 @@ mod inter_partition_copying {
         assert!(moved_file2.exists(), "file2 should exist in destination");
 
         let moved_metadata1 =
-            metadata(&moved_file1).expect("Failed to get metadata for moved file1");
+            fs::metadata(&moved_file1).expect("Failed to get metadata for moved file1");
         let moved_metadata2 =
-            metadata(&moved_file2).expect("Failed to get metadata for moved file2");
+            fs::metadata(&moved_file2).expect("Failed to get metadata for moved file2");
 
         assert_eq!(
             moved_metadata1.ino(),
@@ -2072,11 +2072,11 @@ mod inter_partition_copying {
 
         // Verify content is preserved
         assert_eq!(
-            read_to_string(&moved_file1).expect("Failed to read moved file1"),
+            fs::read_to_string(&moved_file1).expect("Failed to read moved file1"),
             "test content"
         );
         assert_eq!(
-            read_to_string(&moved_file2).expect("Failed to read moved file2"),
+            fs::read_to_string(&moved_file2).expect("Failed to read moved file2"),
             "test content"
         );
     }
@@ -2186,12 +2186,12 @@ mod inter_partition_copying {
             "Single file should still have nlink=1"
         );
 
-        assert_eq!(read_to_string(&moved_g1f1).unwrap(), "content group 1");
-        assert_eq!(read_to_string(&moved_g1f2).unwrap(), "content group 1");
-        assert_eq!(read_to_string(&moved_g2f1).unwrap(), "content group 2");
-        assert_eq!(read_to_string(&moved_g2f2).unwrap(), "content group 2");
+        assert_eq!(fs::read_to_string(&moved_g1f1).unwrap(), "content group 1");
+        assert_eq!(fs::read_to_string(&moved_g1f2).unwrap(), "content group 1");
+        assert_eq!(fs::read_to_string(&moved_g2f1).unwrap(), "content group 2");
+        assert_eq!(fs::read_to_string(&moved_g2f2).unwrap(), "content group 2");
         assert_eq!(
-            read_to_string(&moved_single).unwrap(),
+            fs::read_to_string(&moved_single).unwrap(),
             "single file content"
         );
     }
@@ -2284,14 +2284,14 @@ mod inter_partition_copying {
             "a/1 should have nlink=2 after move"
         );
 
-        assert_eq!(read_to_string(&moved_f).unwrap(), "file content");
-        assert_eq!(read_to_string(&moved_g).unwrap(), "file content");
+        assert_eq!(fs::read_to_string(&moved_f).unwrap(), "file content");
+        assert_eq!(fs::read_to_string(&moved_g).unwrap(), "file content");
         assert_eq!(
-            read_to_string(&moved_dir_a_file).unwrap(),
+            fs::read_to_string(&moved_dir_a_file).unwrap(),
             "directory file content"
         );
         assert_eq!(
-            read_to_string(&moved_dir_second_file).unwrap(),
+            fs::read_to_string(&moved_dir_second_file).unwrap(),
             "directory file content"
         );
     }
@@ -2424,14 +2424,23 @@ mod inter_partition_copying {
             "nested file group should still have nlink=2"
         );
 
-        assert_eq!(read_to_string(&moved_file_a).unwrap(), "content A");
-        assert_eq!(read_to_string(&moved_file_a_link1).unwrap(), "content A");
-        assert_eq!(read_to_string(&moved_file_a_link2).unwrap(), "content A");
-        assert_eq!(read_to_string(&moved_file_b).unwrap(), "content B");
-        assert_eq!(read_to_string(&moved_file_b_hardlink).unwrap(), "content B");
-        assert_eq!(read_to_string(&moved_nested).unwrap(), "nested content");
+        assert_eq!(fs::read_to_string(&moved_file_a).unwrap(), "content A");
         assert_eq!(
-            read_to_string(&moved_nested_link).unwrap(),
+            fs::read_to_string(&moved_file_a_link1).unwrap(),
+            "content A"
+        );
+        assert_eq!(
+            fs::read_to_string(&moved_file_a_link2).unwrap(),
+            "content A"
+        );
+        assert_eq!(fs::read_to_string(&moved_file_b).unwrap(), "content B");
+        assert_eq!(
+            fs::read_to_string(&moved_file_b_hardlink).unwrap(),
+            "content B"
+        );
+        assert_eq!(fs::read_to_string(&moved_nested).unwrap(), "nested content");
+        assert_eq!(
+            fs::read_to_string(&moved_nested_link).unwrap(),
             "nested content"
         );
     }

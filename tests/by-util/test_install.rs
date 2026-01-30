@@ -11,7 +11,7 @@ use std::fs;
 use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 #[cfg(not(windows))]
-use std::process::Command;
+use std::process;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::thread::sleep;
 use uucore::process::{getegid, geteuid};
@@ -777,7 +777,7 @@ fn test_install_and_strip() {
         .succeeds()
         .no_stderr();
 
-    let output = Command::new(SYMBOL_DUMP_PROGRAM)
+    let output = process::Command::new(SYMBOL_DUMP_PROGRAM)
         .arg("-t")
         .arg(at.plus(STRIP_TARGET_FILE))
         .output()
@@ -804,7 +804,7 @@ fn test_install_and_strip_with_program() {
         .succeeds()
         .no_stderr();
 
-    let output = Command::new(SYMBOL_DUMP_PROGRAM)
+    let output = process::Command::new(SYMBOL_DUMP_PROGRAM)
         .arg("-t")
         .arg(at.plus(STRIP_TARGET_FILE))
         .output()
@@ -1937,10 +1937,13 @@ fn test_install_compare_group_ownership() {
 
     at.write(source, "test content");
 
-    let user_group = Command::new("id").arg("-nrg").output().map_or_else(
-        |_| "users".to_string(),
-        |output| String::from_utf8_lossy(&output.stdout).trim().to_string(),
-    ); // fallback group name
+    let user_group = process::Command::new("id")
+        .arg("-nrg")
+        .output()
+        .map_or_else(
+            |_| "users".to_string(),
+            |output| String::from_utf8_lossy(&output.stdout).trim().to_string(),
+        ); // fallback group name
 
     // Install with explicit group
     scene
