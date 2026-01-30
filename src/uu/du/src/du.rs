@@ -1107,20 +1107,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         #[cfg(not(all(unix, not(target_os = "redox"))))]
         let use_safe_traversal = false;
 
+        // Pre-populate seen_inodes with the starting directory to detect cycles
+        let stat = Stat::new(&path, None, &traversal_options);
+        if let Ok(stat) = stat.as_ref() {
+            if let Some(inode) = stat.inode {
+                if !traversal_options.count_links && seen_inodes.contains(&inode) {
+                    continue 'loop_file;
+                }
+                seen_inodes.insert(inode);
+            }
+        }
+
         if use_safe_traversal {
             // Use safe traversal (Unix except Redox, when not using -L)
             #[cfg(all(unix, not(target_os = "redox")))]
             {
-                // Pre-populate seen_inodes with the starting directory to detect cycles
-                if let Ok(stat) = Stat::new(&path, None, &traversal_options) {
-                    if let Some(inode) = stat.inode {
-                        if !traversal_options.count_links && seen_inodes.contains(&inode) {
-                            continue 'loop_file;
-                        }
-                        seen_inodes.insert(inode);
-                    }
-                }
-
                 match safe_du(
                     &path,
                     &traversal_options,
@@ -1148,13 +1149,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
         } else {
             // Use regular traversal (non-Linux or when -L is used)
-            if let Ok(stat) = Stat::new(&path, None, &traversal_options) {
-                if let Some(inode) = stat.inode {
-                    if !traversal_options.count_links && seen_inodes.contains(&inode) {
-                        continue 'loop_file;
-                    }
-                    seen_inodes.insert(inode);
-                }
+            if let Ok(stat) = stat {
                 let stat = du_regular(
                     stat,
                     &traversal_options,
