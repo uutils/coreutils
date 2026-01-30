@@ -879,8 +879,14 @@ fn test_empty_tmpdir_env_var() {
             stderr.starts_with("mktemp: failed to create file via template"),
             "{stderr}"
         );
+        #[cfg(windows)]
         assert!(
             stderr.ends_with("/tmp\\tmp.XXXXXXXXXX': No such file or directory\n"),
+            "{stderr}",
+        );
+        #[cfg(target_os = "android")]
+        assert!(
+            stderr.ends_with("/tmp/tmp.XXXXXXXXXX': No such file or directory\n"),
             "{stderr}",
         );
     }
@@ -900,8 +906,14 @@ fn test_empty_tmpdir_env_var() {
             stderr.starts_with("mktemp: failed to create directory via template"),
             "{stderr}"
         );
+        #[cfg(windows)]
         assert!(
             stderr.ends_with("/tmp\\tmp.XXXXXXXXXX': No such file or directory\n"),
+            "{stderr}",
+        );
+        #[cfg(target_os = "android")]
+        assert!(
+            stderr.ends_with("/tmp/tmp.XXXXXXXXXX': No such file or directory\n"),
             "{stderr}",
         );
     }
