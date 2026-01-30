@@ -1478,7 +1478,7 @@ fn test_sparse() {
     // On common Linux filesystems, setting the length to one megabyte
     // should cause the file to become a sparse file, but it depends
     // on the system.
-    std::fs::File::create(at.plus("infile"))
+    File::create(at.plus("infile"))
         .unwrap()
         .set_len(1024 * 1024)
         .unwrap();
@@ -1734,7 +1734,7 @@ fn test_iflag_directory_fails_when_file_is_passed_via_std_in() {
     let filename = at.plus_as_string("input");
     new_ucmd!()
         .args(&["iflag=directory", "count=0"])
-        .set_stdin(std::process::Stdio::from(File::open(filename).unwrap()))
+        .set_stdin(Stdio::from(File::open(filename).unwrap()))
         .fails()
         .stderr_only("dd: setting flags for 'standard input': Not a directory\n");
 }
@@ -1744,7 +1744,7 @@ fn test_iflag_directory_fails_when_file_is_passed_via_std_in() {
 fn test_iflag_directory_passes_when_dir_is_redirected() {
     new_ucmd!()
         .args(&["iflag=directory", "count=0"])
-        .set_stdin(std::process::Stdio::from(File::open(".").unwrap()))
+        .set_stdin(Stdio::from(File::open(".").unwrap()))
         .succeeds();
 }
 

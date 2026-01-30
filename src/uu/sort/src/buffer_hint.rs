@@ -137,7 +137,7 @@ mod tests {
     fn desired_buffer_matches_total_when_small() {
         let six_mebibytes = 6 * 1024 * 1024;
         let expected = ((six_mebibytes as u128) * 12)
-            .clamp(six_mebibytes as u128, crate::MAX_AUTOMATIC_BUF_SIZE as u128);
+            .clamp(six_mebibytes as u128, MAX_AUTOMATIC_BUF_SIZE as u128);
         assert_eq!(desired_file_buffer_bytes(six_mebibytes as u128), expected);
     }
 
@@ -146,7 +146,7 @@ mod tests {
         let large = 256 * 1024 * 1024; // 256 MiB
         assert_eq!(
             desired_file_buffer_bytes(large as u128),
-            crate::MAX_AUTOMATIC_BUF_SIZE as u128
+            MAX_AUTOMATIC_BUF_SIZE as u128
         );
     }
 }

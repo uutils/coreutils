@@ -34,7 +34,7 @@ pub enum DigestOutput {
 }
 
 impl DigestOutput {
-    pub fn write_raw(&self, mut w: impl std::io::Write) -> io::Result<()> {
+    pub fn write_raw(&self, mut w: impl Write) -> io::Result<()> {
         match self {
             Self::Vec(buf) => w.write_all(buf),
             // For legacy outputs, print them in big endian
@@ -468,7 +468,7 @@ impl<'a> DigestWriter<'a> {
 
 impl Write for DigestWriter<'_> {
     #[cfg(not(windows))]
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.digest.hash_update(buf);
         Ok(buf.len())
     }
@@ -524,7 +524,7 @@ impl Write for DigestWriter<'_> {
         Ok(n)
     }
 
-    fn flush(&mut self) -> std::io::Result<()> {
+    fn flush(&mut self) -> io::Result<()> {
         Ok(())
     }
 }

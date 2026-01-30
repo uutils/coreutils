@@ -2072,11 +2072,11 @@ mod inter_partition_copying {
 
         // Verify content is preserved
         assert_eq!(
-            std::fs::read_to_string(&moved_file1).expect("Failed to read moved file1"),
+            read_to_string(&moved_file1).expect("Failed to read moved file1"),
             "test content"
         );
         assert_eq!(
-            std::fs::read_to_string(&moved_file2).expect("Failed to read moved file2"),
+            read_to_string(&moved_file2).expect("Failed to read moved file2"),
             "test content"
         );
     }
@@ -2187,23 +2187,23 @@ mod inter_partition_copying {
         );
 
         assert_eq!(
-            std::fs::read_to_string(&moved_g1f1).unwrap(),
+            read_to_string(&moved_g1f1).unwrap(),
             "content group 1"
         );
         assert_eq!(
-            std::fs::read_to_string(&moved_g1f2).unwrap(),
+            read_to_string(&moved_g1f2).unwrap(),
             "content group 1"
         );
         assert_eq!(
-            std::fs::read_to_string(&moved_g2f1).unwrap(),
+            read_to_string(&moved_g2f1).unwrap(),
             "content group 2"
         );
         assert_eq!(
-            std::fs::read_to_string(&moved_g2f2).unwrap(),
+            read_to_string(&moved_g2f2).unwrap(),
             "content group 2"
         );
         assert_eq!(
-            std::fs::read_to_string(&moved_single).unwrap(),
+            read_to_string(&moved_single).unwrap(),
             "single file content"
         );
     }
@@ -2296,14 +2296,14 @@ mod inter_partition_copying {
             "a/1 should have nlink=2 after move"
         );
 
-        assert_eq!(std::fs::read_to_string(&moved_f).unwrap(), "file content");
-        assert_eq!(std::fs::read_to_string(&moved_g).unwrap(), "file content");
+        assert_eq!(read_to_string(&moved_f).unwrap(), "file content");
+        assert_eq!(read_to_string(&moved_g).unwrap(), "file content");
         assert_eq!(
-            std::fs::read_to_string(&moved_dir_a_file).unwrap(),
+            read_to_string(&moved_dir_a_file).unwrap(),
             "directory file content"
         );
         assert_eq!(
-            std::fs::read_to_string(&moved_dir_second_file).unwrap(),
+            read_to_string(&moved_dir_second_file).unwrap(),
             "directory file content"
         );
     }
@@ -2436,26 +2436,26 @@ mod inter_partition_copying {
             "nested file group should still have nlink=2"
         );
 
-        assert_eq!(std::fs::read_to_string(&moved_file_a).unwrap(), "content A");
+        assert_eq!(read_to_string(&moved_file_a).unwrap(), "content A");
         assert_eq!(
-            std::fs::read_to_string(&moved_file_a_link1).unwrap(),
+            read_to_string(&moved_file_a_link1).unwrap(),
             "content A"
         );
         assert_eq!(
-            std::fs::read_to_string(&moved_file_a_link2).unwrap(),
+            read_to_string(&moved_file_a_link2).unwrap(),
             "content A"
         );
-        assert_eq!(std::fs::read_to_string(&moved_file_b).unwrap(), "content B");
+        assert_eq!(read_to_string(&moved_file_b).unwrap(), "content B");
         assert_eq!(
-            std::fs::read_to_string(&moved_file_b_hardlink).unwrap(),
+            read_to_string(&moved_file_b_hardlink).unwrap(),
             "content B"
         );
         assert_eq!(
-            std::fs::read_to_string(&moved_nested).unwrap(),
+            read_to_string(&moved_nested).unwrap(),
             "nested content"
         );
         assert_eq!(
-            std::fs::read_to_string(&moved_nested_link).unwrap(),
+            read_to_string(&moved_nested_link).unwrap(),
             "nested content"
         );
     }

@@ -2032,7 +2032,7 @@ fn test_split_non_utf8_prefix() {
 
     // Check that split files were created (functionality works)
     // The actual filename may be converted due to lossy conversion, but the command should succeed
-    let entries: Vec<_> = std::fs::read_dir(at.as_string()).unwrap().collect();
+    let entries: Vec<_> = read_dir(at.as_string()).unwrap().collect();
     let split_files = entries
         .iter()
         .filter_map(|e| e.as_ref().ok())
@@ -2063,7 +2063,7 @@ fn test_split_non_utf8_additional_suffix() {
 
     // Check that split files were created (functionality works)
     // The actual filename may be converted due to lossy conversion, but the command should succeed
-    let entries: Vec<_> = std::fs::read_dir(at.as_string()).unwrap().collect();
+    let entries: Vec<_> = read_dir(at.as_string()).unwrap().collect();
     let split_files = entries
         .iter()
         .filter_map(|e| e.as_ref().ok())

@@ -211,7 +211,7 @@ pub mod arguments {
         clap::Arg::new(OPT_BACKUP)
             .long("backup")
             .help("make a backup of each existing destination file")
-            .action(clap::ArgAction::Set)
+            .action(ArgAction::Set)
             .require_equals(true)
             .num_args(0..=1)
             .value_name("CONTROL")
@@ -231,7 +231,7 @@ pub mod arguments {
             .short('S')
             .long("suffix")
             .help("override the usual backup suffix")
-            .action(clap::ArgAction::Set)
+            .action(ArgAction::Set)
             .value_name("SUFFIX")
             .allow_hyphen_values(true)
     }
@@ -505,7 +505,7 @@ mod tests {
     // Environment variable for "VERSION_CONTROL"
     static ENV_VERSION_CONTROL: &str = "VERSION_CONTROL";
 
-    fn make_app() -> clap::Command {
+    fn make_app() -> Command {
         Command::new("command")
             .arg(arguments::backup())
             .arg(arguments::backup_no_args())

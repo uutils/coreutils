@@ -239,7 +239,7 @@ macro_rules! crate_version {
 /// as `{0}`.
 pub fn format_usage(s: &str) -> String {
     let s = s.replace('\n', &format!("\n{}", " ".repeat(7)));
-    s.replace("{}", crate::execution_phrase())
+    s.replace("{}", execution_phrase())
 }
 
 /// Creates a localized help template for clap commands.
@@ -288,7 +288,7 @@ pub fn localized_help_template_with_colors(
     use std::fmt::Write;
 
     // Ensure localization is initialized for this utility
-    let _ = crate::locale::setup_localization(util_name);
+    let _ = locale::setup_localization(util_name);
 
     // Get the localized "Usage" label
     let usage_label = crate::locale::translate!("common-usage");
@@ -319,13 +319,13 @@ pub fn localized_help_template_with_colors(
 /// Used to check if the utility is the second argument.
 /// Used to check if we were called as a multicall binary (`coreutils <utility>`)
 pub fn get_utility_is_second_arg() -> bool {
-    crate::macros::UTILITY_IS_SECOND_ARG.load(Ordering::SeqCst)
+    macros::UTILITY_IS_SECOND_ARG.load(Ordering::SeqCst)
 }
 
 /// Change the value of `UTILITY_IS_SECOND_ARG` to true
 /// Used to specify that the utility is the second argument.
 pub fn set_utility_is_second_arg() {
-    crate::macros::UTILITY_IS_SECOND_ARG.store(true, Ordering::SeqCst);
+    macros::UTILITY_IS_SECOND_ARG.store(true, Ordering::SeqCst);
 }
 
 // args_os() can be expensive to call, it copies all of argv before iterating.
@@ -467,7 +467,7 @@ pub fn os_str_as_bytes_lossy(os_string: &OsStr) -> Cow<'_, [u8]> {
 ///
 /// This always succeeds on unix platforms,
 /// and fails on other platforms if the bytes can't be parsed as UTF-8.
-pub fn os_str_from_bytes(bytes: &[u8]) -> mods::error::UResult<Cow<'_, OsStr>> {
+pub fn os_str_from_bytes(bytes: &[u8]) -> error::UResult<Cow<'_, OsStr>> {
     #[cfg(unix)]
     return Ok(Cow::Borrowed(OsStr::from_bytes(bytes)));
 
@@ -481,7 +481,7 @@ pub fn os_str_from_bytes(bytes: &[u8]) -> mods::error::UResult<Cow<'_, OsStr>> {
 ///
 /// This always succeeds on unix platforms,
 /// and fails on other platforms if the bytes can't be parsed as UTF-8.
-pub fn os_string_from_vec(vec: Vec<u8>) -> mods::error::UResult<OsString> {
+pub fn os_string_from_vec(vec: Vec<u8>) -> error::UResult<OsString> {
     #[cfg(unix)]
     return Ok(OsString::from_vec(vec));
 
@@ -495,7 +495,7 @@ pub fn os_string_from_vec(vec: Vec<u8>) -> mods::error::UResult<OsString> {
 ///
 /// This always succeeds on unix platforms,
 /// and fails on other platforms if the bytes can't be parsed as UTF-8.
-pub fn os_string_to_vec(s: OsString) -> mods::error::UResult<Vec<u8>> {
+pub fn os_string_to_vec(s: OsString) -> error::UResult<Vec<u8>> {
     #[cfg(unix)]
     let v = s.into_vec();
     #[cfg(not(unix))]

@@ -478,7 +478,7 @@ impl<'a> StyleManager<'a> {
     }
 
     #[cfg(unix)]
-    fn indicator_for_special_file(&self, file_type: &std::fs::FileType) -> Option<Indicator> {
+    fn indicator_for_special_file(&self, file_type: &fs::FileType) -> Option<Indicator> {
         if file_type.is_fifo() && self.has_indicator_style(Indicator::FIFO) {
             return Some(Indicator::FIFO);
         }

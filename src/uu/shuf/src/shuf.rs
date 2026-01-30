@@ -149,7 +149,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 || translate!("shuf-error-failed-to-open-random-source", "file" => r.quote()),
             )?;
             let file = BufReader::new(file);
-            WrappedRng::File(compat_random_source::RandomSourceAdapter::new(file))
+            WrappedRng::File(RandomSourceAdapter::new(file))
         }
     };
 
@@ -389,7 +389,7 @@ impl Writable for u64 {
 
 #[cold]
 #[inline(never)]
-fn handle_write_error(e: std::io::Error) -> Box<dyn uucore::error::UError> {
+fn handle_write_error(e: Error) -> Box<dyn uucore::error::UError> {
     use uucore::error::FromIo;
     let ctx = translate!("shuf-error-write-failed");
     e.map_err_context(move || ctx)

@@ -1024,10 +1024,10 @@ where
         // Set environment variable to communicate to Rust child processes
         // that SIGPIPE should be default (not ignored)
         if matches!(action_kind, SignalActionKind::Default)
-            && sig_value == nix::libc::SIGPIPE as usize
+            && sig_value == libc::SIGPIPE as usize
         {
             unsafe {
-                std::env::set_var("RUST_SIGPIPE", "default");
+                env::set_var("RUST_SIGPIPE", "default");
             }
         }
 

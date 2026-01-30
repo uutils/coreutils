@@ -431,7 +431,7 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
             OverwriteMode::Force => {}
             OverwriteMode::Default => {
                 let (writable, mode) = is_writable(target);
-                if !writable && std::io::stdin().is_terminal() {
+                if !writable && io::stdin().is_terminal() {
                     prompt_overwrite(target, mode)?;
                 }
             }
@@ -741,7 +741,7 @@ fn rename(
             OverwriteMode::Default => {
                 // GNU mv prompts when stdin is a TTY and target is not writable
                 let (writable, mode) = is_writable(to);
-                if !writable && std::io::stdin().is_terminal() {
+                if !writable && io::stdin().is_terminal() {
                     prompt_overwrite(to, mode)?;
                 }
             }
