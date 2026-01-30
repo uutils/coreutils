@@ -39,7 +39,7 @@ use uucore::{backup_control, update_control};
 // requires these enum.
 pub use uucore::{backup_control::BackupMode, update_control::UpdateMode};
 use uucore::{
-    format_usage, parser::shortcut_value_parser::ShortcutValueParser, prompt_yes, show_error,
+    format_usage, parser::shortcut_value_parser::ShortcutValueParser, print_error, prompt_yes,
     show_warning,
 };
 
@@ -833,7 +833,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             // code should still be EXIT_ERR as does GNU cp
             CpError::NotAllFilesCopied => {}
             // Else we caught a fatal bubbled-up error, log it to stderr
-            _ => show_error!("{error}"),
+            _ => print_error!("{error}"),
         }
         set_exit_code(EXIT_ERR);
     }
@@ -1344,10 +1344,10 @@ fn show_error_if_needed(error: &CpError) {
         // Format IoErrContext using strip_errno to remove "(os error N)" suffix
         // for GNU-compatible output
         CpError::IoErrContext(io_err, context) => {
-            show_error!("{}: {}", context, uucore::error::strip_errno(io_err));
+            print_error!("{}: {}", context, uucore::error::strip_errno(io_err));
         }
         _ => {
-            show_error!("{error}");
+            print_error!("{error}");
         }
     }
 }

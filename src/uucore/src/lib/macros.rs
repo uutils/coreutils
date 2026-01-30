@@ -134,25 +134,24 @@ macro_rules! show_if_err(
     })
 );
 
-/// Show an error to stderr in a similar style to GNU coreutils.
-///
-/// Takes a [`format!`]-like input and prints it to stderr. The output is
-/// prepended with the current utility's name.
-///
-/// # Examples
-///
-/// ```
-/// # #[macro_use]
-/// # extern crate uucore;
-/// # fn main() {
-/// show_error!("Couldn't apply {} to {}", "foo", "bar");
-/// # }
-/// ```
+// todo: Investigate how to show an error to stderr
+// show_error! cause abort with 2>/dev/full
+// Maybe, we should switch to print_error! macro ?
 #[macro_export]
 macro_rules! show_error(
     ($($args:tt)+) => ({
         eprint!("{}: ", $crate::util_name());
         eprintln!($($args)+);
+    })
+);
+
+#[macro_export]
+macro_rules! print_error(
+    ($($args:tt)+) => ({
+		use std::io::Write as _;
+		let mut error = std::io::stderr().lock();
+        let _ = write!(error, "{}: ", $crate::util_name());
+        let _ = writeln!(error, $($args)+);
     })
 );
 
