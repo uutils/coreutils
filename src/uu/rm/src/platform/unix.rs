@@ -310,11 +310,12 @@ pub fn safe_remove_dir_recursive(
         }
     };
 
-    let error = safe_remove_dir_recursive_impl(path, &dir_fd, options, Some(initial_dev));
+    let (cmd_error, child_remains) =
+        safe_remove_dir_recursive_impl(path, &dir_fd, options, Some(initial_dev));
 
     // After processing all children, remove the directory itself
-    if error {
-        error
+    if cmd_error || child_remains {
+        cmd_error
     } else {
         // Ask user permission if needed
         if options.interactive == InteractiveMode::Always
@@ -341,7 +342,7 @@ pub fn safe_remove_dir_recursive(
         if let Some(result) = safe_remove_empty_dir(path, options, progress_bar) {
             result
         } else {
-            remove_dir_with_special_cases(path, options, error)
+            remove_dir_with_special_cases(path, options, false)
         }
     }
 }
@@ -352,7 +353,7 @@ pub fn safe_remove_dir_recursive_impl(
     dir_fd: &DirFd,
     options: &Options,
     parent_dev: Option<u64>,
-) -> bool {
+) -> (bool, bool) {
     // Read directory entries using safe traversal
     let entries = match dir_fd.read_dir() {
         Ok(entries) => entries,
@@ -360,14 +361,15 @@ pub fn safe_remove_dir_recursive_impl(
             if !options.force {
                 show_permission_denied_error(path);
             }
-            return !options.force;
+            return (!options.force, true);
         }
         Err(e) => {
-            return handle_error_with_force(e, path, options);
+            return (handle_error_with_force(e, path, options), true);
         }
     };
 
-    let mut error = false;
+    let mut cmd_error = false;
+    let mut child_remains = false;
 
     // Process each entry
     for entry_name in entries {
@@ -377,7 +379,8 @@ pub fn safe_remove_dir_recursive_impl(
         let entry_stat = match dir_fd.stat_at(&entry_name, false) {
             Ok(stat) => stat,
             Err(e) => {
-                error |= handle_error_with_force(e, &entry_path, options);
+                cmd_error |= handle_error_with_force(e, &entry_path, options);
+                child_remains = true;
                 continue;
             }
         };
@@ -390,7 +393,8 @@ pub fn safe_remove_dir_recursive_impl(
                 if let Some(p_dev) = parent_dev {
                     if entry_stat.st_dev as u64 != p_dev {
                         show_one_fs_error(&entry_path, options);
-                        error = true;
+                        cmd_error = true;
+                        child_remains = true;
                         continue;
                     }
                 }
@@ -401,7 +405,7 @@ pub fn safe_remove_dir_recursive_impl(
                 && !is_dir_empty(&entry_path)
                 && !prompt_descend(&entry_path)
             {
-                error = true;
+                child_remains = true;
                 continue;
             }
 
@@ -412,29 +416,30 @@ pub fn safe_remove_dir_recursive_impl(
                     // If we can't open the subdirectory for safe traversal,
                     // try to handle it as best we can with safe operations
                     if e.kind() == std::io::ErrorKind::PermissionDenied {
-                        error |= handle_permission_denied(
+                        cmd_error |= handle_permission_denied(
                             dir_fd,
                             entry_name.as_ref(),
                             &entry_path,
                             options,
                         );
                     } else {
-                        error |= handle_error_with_force(e, &entry_path, options);
+                        cmd_error |= handle_error_with_force(e, &entry_path, options);
                     }
+                    child_remains = true;
                     continue;
                 }
             };
 
-            let child_error = safe_remove_dir_recursive_impl(
+            let (c_error, c_remains) = safe_remove_dir_recursive_impl(
                 &entry_path,
                 &child_dir_fd,
                 options,
-                Some(entry_stat.st_dev as u64)
+                Some(entry_stat.st_dev as u64),
             );
+            cmd_error |= c_error;
+            child_remains |= c_remains;
 
-            // If a child could not be removed, the parent directory cannot be removed either.
-            if child_error {
-                error = true;
+            if c_error || c_remains {
                 continue;
             }
 
@@ -442,23 +447,26 @@ pub fn safe_remove_dir_recursive_impl(
             if options.interactive == InteractiveMode::Always
                 && !prompt_dir_with_mode(&entry_path, entry_stat.st_mode as libc::mode_t, options)
             {
-                error = true;
+                child_remains = true;
                 continue;
             }
 
             // Remove the now-empty subdirectory using safe unlinkat
-            error |= handle_unlink(dir_fd, entry_name.as_ref(), &entry_path, true, options);
+            cmd_error |= handle_unlink(dir_fd, entry_name.as_ref(), &entry_path, true, options);
         } else {
             // Remove file - check if user wants to remove it first
             if prompt_file_with_stat(&entry_path, &entry_stat, options) {
-                error |= handle_unlink(dir_fd, entry_name.as_ref(), &entry_path, false, options);
+                if handle_unlink(dir_fd, entry_name.as_ref(), &entry_path, false, options) {
+                    cmd_error = true;
+                    child_remains = true;
+                }
             } else {
-                error = true;
+                child_remains = true;
             }
         }
     }
 
-    error
+    (cmd_error, child_remains)
 }
 
 #[cfg(target_os = "redox")]
@@ -467,8 +475,8 @@ pub fn safe_remove_dir_recursive_impl(
     _dir_fd: &DirFd,
     _options: &Options,
     _parent_dev: Option<u64>,
-) -> bool {
+) -> (bool, bool) {
     // safe_traversal stat_at is not supported on Redox
     // This shouldn't be called on Redox, but provide a stub for compilation
-    true // Return error
+    (true, true) // Return error
 }
