@@ -863,6 +863,51 @@ fn test_nonexistent_tmpdir_env_var() {
 }
 
 #[test]
+fn test_empty_tmpdir_env_var() {
+    #[cfg(not(windows))]
+    {
+        let result = new_ucmd!().env(TMPDIR, "").succeeds();
+        assert!(result.stdout_str().starts_with("/tmp"));
+    }
+
+    #[cfg(windows)]
+    {
+        let result = new_ucmd!().env(TMPDIR, "").fails();
+        result.no_stdout();
+        let stderr = result.stderr_str();
+        assert!(
+            stderr.starts_with("mktemp: failed to create file via template"),
+            "{stderr}"
+        );
+        assert!(
+            stderr.ends_with("no\\such\\dir\\tmp.XXXXXXXXXX': No such file or directory\n"),
+            "{stderr}",
+        );
+    }
+
+    #[cfg(not(windows))]
+    {
+        let result = new_ucmd!().env(TMPDIR, "").arg("-d").succeeds();
+        assert!(result.stdout_str().starts_with("/tmp"));
+    }
+
+    #[cfg(windows)]
+    {
+        let result = new_ucmd!().env(TMPDIR, "").arg("-d").fails();
+        result.no_stdout();
+        let stderr = result.stderr_str();
+        assert!(
+            stderr.starts_with("mktemp: failed to create directory via template"),
+            "{stderr}"
+        );
+        assert!(
+            stderr.ends_with("no\\such\\dir\\tmp.XXXXXXXXXX': No such file or directory\n"),
+            "{stderr}",
+        );
+    }
+}
+
+#[test]
 fn test_nonexistent_dir_prefix() {
     #[cfg(not(windows))]
     new_ucmd!().arg("d/XXX").fails().stderr_only(
