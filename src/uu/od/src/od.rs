@@ -280,7 +280,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             od_options.output_duplicates,
         );
 
-        odfunc(&mut input_offset, &mut input_decoder, &output_info, &mut out)
+        odfunc(
+            &mut input_offset,
+            &mut input_decoder,
+            &output_info,
+            &mut out,
+        )
     }
 }
 
