@@ -1290,3 +1290,35 @@ fn test_symlink_to_readonly_no_prompt() {
 
     assert!(!at.symlink_exists("bar"));
 }
+
+/// Test error 'Is directory' comes before 'Dir not empty'
+#[test]
+fn test_error_message_priority1() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("d");
+    at.touch("d/f");
+
+    ts.ucmd()
+        .arg("d")
+        .fails()
+        .stderr_is("rm: cannot remove 'd': Is a directory\n");
+}
+
+/// Test error 'Dir not empty' comes before 'Refusing to remove . or ..'
+#[test]
+fn test_error_message_priority2() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.touch("f");
+
+    let result = ts.ucmd().arg("-d").arg(".").fails();
+
+    #[cfg(not(windows))]
+    result.stderr_is("rm: cannot remove '.': Directory not empty\n");
+
+    #[cfg(windows)]
+    result.stderr_is("rm: cannot remove '.': The directory is not empty.\r\n");
+}

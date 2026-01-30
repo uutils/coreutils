@@ -324,7 +324,7 @@ pub fn safe_remove_dir_recursive(
 
         // Before trying to remove the directory, check if it's actually empty
         // This handles the case where some children weren't removed due to user "no" responses
-        if !is_dir_empty(path) {
+        if !is_dir_empty(path).unwrap_or(false) {
             // Directory is not empty, so we can't/shouldn't remove it
             // In interactive mode, this might be expected if user said "no" to some children
             // In non-interactive mode, this indicates an error (some children couldn't be removed)
@@ -382,7 +382,7 @@ pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Opt
         if is_dir {
             // Ask user if they want to descend into this directory
             if options.interactive == InteractiveMode::Always
-                && !is_dir_empty(&entry_path)
+                && !is_dir_empty(&entry_path).unwrap_or(false)
                 && !prompt_descend(&entry_path)
             {
                 continue;

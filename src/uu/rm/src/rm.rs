@@ -73,12 +73,31 @@ fn verbose_removed_directory(path: &Path, options: &Options) {
 
 /// Helper function to show error with context and return error status
 fn show_removal_error(error: std::io::Error, path: &Path) -> bool {
-    if error.kind() == io::ErrorKind::PermissionDenied {
-        show_error!("cannot remove {}: Permission denied", path.quote());
-    } else {
-        let e =
-            error.map_err_context(|| translate!("rm-error-cannot-remove", "file" => path.quote()));
-        show_error!("{e}");
+    match error.kind() {
+        io::ErrorKind::InvalidInput if !is_dir_empty(path).unwrap_or(false) => {
+            show_error!(
+                "{}: Directory not empty",
+                translate!("rm-error-cannot-remove", "file" => path.quote())
+            );
+        }
+        // When trying to remove current directory or parent directory,
+        // either InvalidInput or PermissionDenied may be returned depending on the platform.
+        io::ErrorKind::InvalidInput | io::ErrorKind::PermissionDenied
+            if path_is_current_or_parent_directory(path) =>
+        {
+            show_error!(
+                "{}",
+                RmError::RefusingToRemoveDirectory(path.as_os_str().to_os_string())
+            );
+        }
+        io::ErrorKind::PermissionDenied => {
+            show_error!("cannot remove {}: Permission denied", path.quote());
+        }
+        _ => {
+            let e = error
+                .map_err_context(|| translate!("rm-error-cannot-remove", "file" => path.quote()));
+            show_error!("{e}");
+        }
     }
     true
 }
@@ -485,7 +504,8 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
     let mut any_files_processed = false;
 
     for filename in files {
-        let file = Path::new(filename);
+        let file = normalize(Path::new(filename));
+        let file = file.as_path();
 
         had_err = match file.symlink_metadata() {
             Ok(metadata) => {
@@ -537,8 +557,8 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
 ///
 /// `path` must be a directory. If there is an error reading the
 /// contents of the directory, this returns `false`.
-fn is_dir_empty(path: &Path) -> bool {
-    fs::read_dir(path).is_ok_and(|mut iter| iter.next().is_none())
+fn is_dir_empty(path: &Path) -> Result<bool, io::Error> {
+    fs::read_dir(path).map(|mut iter| iter.next().is_none())
 }
 
 #[cfg(unix)]
@@ -588,7 +608,7 @@ fn remove_dir_recursive(
     // Base case 2: this is a non-empty directory, but the user
     // doesn't want to descend into it.
     if options.interactive == InteractiveMode::Always
-        && !is_dir_empty(path)
+        && !is_dir_empty(path).unwrap_or(false)
         && !prompt_descend(path)
     {
         return false;
@@ -674,35 +694,20 @@ fn remove_dir_recursive(
 }
 
 fn handle_dir(path: &Path, options: &Options, progress_bar: Option<&ProgressBar>) -> bool {
-    let mut had_err = false;
-
     let path = clean_trailing_slashes(path);
-    if path_is_current_or_parent_directory(path) {
-        show_error!(
-            "{}",
-            RmError::RefusingToRemoveDirectory(path.as_os_str().to_os_string())
-        );
-        return true;
-    }
 
-    let is_root = path.has_root() && path.parent().is_none();
-    if options.recursive && (!is_root || !options.preserve_root) {
-        had_err = remove_dir_recursive(path, options, progress_bar);
-    } else if options.dir && (!is_root || !options.preserve_root) {
-        had_err = remove_dir(path, options, progress_bar).bitor(had_err);
-    } else if options.recursive {
-        show_error!("{}", RmError::DangerousRecursiveOperation);
-        show_error!("{}", RmError::UseNoPreserveRoot);
-        had_err = true;
+    if options.recursive {
+        // Preserve root directory
+        let is_root = path.has_root() && path.parent().is_none();
+        if is_root && options.preserve_root {
+            show_error!("{}", RmError::DangerousRecursiveOperation);
+            show_error!("{}", RmError::UseNoPreserveRoot);
+            return true;
+        }
+        remove_dir_recursive(path, options, progress_bar)
     } else {
-        show_error!(
-            "{}",
-            RmError::CannotRemoveIsDirectory(path.as_os_str().to_os_string())
-        );
-        had_err = true;
+        remove_dir(path, options, progress_bar)
     }
-
-    had_err
 }
 
 /// Remove the given directory, asking the user for permission if necessary.
