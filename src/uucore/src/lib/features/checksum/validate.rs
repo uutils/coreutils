@@ -676,8 +676,26 @@ fn compute_and_check_digest_from_file(
 
     // TODO: improve function signature to use ReadingMode instead of binary bool
     // Set binary to false because --binary is not supported with --check
-    let (calculated_checksum, _) =
-        digest_reader(&mut digest, &mut file_reader, /* binary */ false).unwrap();
+
+    let (calculated_checksum, _) = match digest_reader(&mut digest, &mut file_reader, false) {
+        Ok(result) => result,
+        Err(err) => {
+            show!(err.map_err_context(|| {
+                locale_aware_escape_name(&real_filename_to_check, QuotingStyle::SHELL_ESCAPE)
+                    .to_string_lossy()
+                    .to_string()
+            }));
+
+            write_file_report(
+                std::io::stdout(),
+                filename,
+                FileChecksumResult::CantOpen,
+                prefix,
+                opts.verbose,
+            );
+            return Err(LineCheckError::CantOpenFile);
+        }
+    };
 
     // Do the checksum validation
     let checksum_correct = match calculated_checksum {
