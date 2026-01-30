@@ -1967,3 +1967,26 @@ fn test_locale_day_names() {
         check_date(loc, "2026-01-24", "+%A", sat);
     }
 }
+
+#[test]
+fn test_percent_percent_not_replaced() {
+    let cases = [
+        // Time conversion specifiers
+        (
+            "+%%H%%I%%k%%l%%M%%N%%p%%P%%r%%R%%s%%S%%T%%X%%z%%Z",
+            "%H%I%k%l%M%N%p%P%r%R%s%S%T%X%z%Z\n",
+        ),
+        // Date conversion specifiers
+        (
+            "+%%a%%A%%b%%B%%c%%C%%d%%D%%e%%F%%g%%G%%h%%j%%m%%u%%U%%V%%w%%W%%x%%y%%Y",
+            "%a%A%b%B%c%C%d%D%e%F%g%G%h%j%m%u%U%V%w%W%x%y%Y\n",
+        ),
+    ];
+    for (format, expected) in cases {
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .arg(format)
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
