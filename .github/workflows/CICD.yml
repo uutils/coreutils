@@ -1225,7 +1225,7 @@ jobs:
         fail_ci_if_error: false
 
   test_separately:
-    name: Separate Builds (individual and coreutils)# duplicated with other CI, but has better appearance 
+    name: Separate Builds (individual and coreutils) # duplicated with other CI, but has better appearance
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
