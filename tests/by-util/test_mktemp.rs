@@ -864,13 +864,13 @@ fn test_nonexistent_tmpdir_env_var() {
 
 #[test]
 fn test_empty_tmpdir_env_var() {
-    #[cfg(not(windows))]
+    #[cfg(not(any(windows, target_os = "android")))]
     {
         let result = new_ucmd!().env(TMPDIR, "").succeeds();
         assert!(result.stdout_str().starts_with("/tmp"));
     }
 
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "android"))]
     {
         let result = new_ucmd!().env(TMPDIR, "").fails();
         result.no_stdout();
@@ -885,13 +885,13 @@ fn test_empty_tmpdir_env_var() {
         );
     }
 
-    #[cfg(not(windows))]
+    #[cfg(not(any(windows, target_os = "android")))]
     {
         let result = new_ucmd!().env(TMPDIR, "").arg("-d").succeeds();
         assert!(result.stdout_str().starts_with("/tmp"));
     }
 
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "android"))]
     {
         let result = new_ucmd!().env(TMPDIR, "").arg("-d").fails();
         result.no_stdout();
