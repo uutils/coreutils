@@ -880,7 +880,7 @@ fn test_empty_tmpdir_env_var() {
             "{stderr}"
         );
         assert!(
-            stderr.ends_with("no\\such\\dir\\tmp.XXXXXXXXXX': No such file or directory\n"),
+            stderr.ends_with("/tmp\tmp.XXXXXXXXXX': No such file or directory\n"),
             "{stderr}",
         );
     }
@@ -901,7 +901,7 @@ fn test_empty_tmpdir_env_var() {
             "{stderr}"
         );
         assert!(
-            stderr.ends_with("no\\such\\dir\\tmp.XXXXXXXXXX': No such file or directory\n"),
+            stderr.ends_with("/tmp\tmp.XXXXXXXXXX': No such file or directory\n"),
             "{stderr}",
         );
     }
