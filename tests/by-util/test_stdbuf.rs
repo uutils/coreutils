@@ -25,20 +25,101 @@ fn test_permission() {
         .stderr_contains("Permission denied");
 }
 
-// TODO: Tests below are brittle when feat_external_libstdbuf is enabled and libstdbuf is not installed.
-// Align stdbuf with GNU search order to enable deterministic testing without installation:
-// 1) search for libstdbuf next to the stdbuf binary, 2) then in LIBSTDBUF_DIR, 3) then system locations.
-// After implementing this, rework tests to provide a temporary symlink rather than depending on system state.
-
-#[cfg(feature = "feat_external_libstdbuf")]
+// LD_DEBUG is not available on macOS, OpenBSD, Android, or musl
+#[cfg(all(
+    feature = "feat_external_libstdbuf",
+    not(target_os = "windows"),
+    not(target_os = "openbsd"),
+    not(target_os = "macos"),
+    not(target_os = "android"),
+    not(target_env = "musl")
+))]
 #[test]
-fn test_permission_external_missing_lib() {
-    // When built with external libstdbuf, running stdbuf fails early if lib is not installed
-    new_ucmd!()
-        .arg("-o1")
-        .arg(".")
-        .fails_with_code(1)
-        .stderr_contains("External libstdbuf not found");
+fn test_stdbuf_search_order_exe_dir_first() {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+
+    // Test that stdbuf searches for libstdbuf in its own directory first,
+    // before checking LIBSTDBUF_DIR.
+    let ts = TestScenario::new(util_name!());
+    let temp_dir = tempfile::tempdir().unwrap();
+    let temp_path = temp_dir.path();
+
+    // Determine the correct library extension for this platform
+    let lib_extension = if cfg!(target_vendor = "apple") {
+        "dylib"
+    } else {
+        "so"
+    };
+    let lib_name = format!("libstdbuf.{lib_extension}");
+
+    // Look for libstdbuf in the build directory deps folder
+    // During build, libstdbuf.so is in target/debug/deps/ or target/release/deps/
+    // This allows running tests without requiring installation to a root-owned path
+    // ts.bin_path is the path to the binary file, so we get its parent directory first
+    let source_lib = ts
+        .bin_path
+        .parent()
+        .expect("Binary should have a parent directory")
+        .join("deps")
+        .join(&lib_name);
+
+    // Fail test if the library doesn't exist - it should have been built
+    assert!(
+        source_lib.exists(),
+        "libstdbuf not found at {}. It should have been built.",
+        source_lib.display()
+    );
+
+    // Copy stdbuf binary to temp directory
+    // ts.bin_path is the full path to the coreutils binary
+    let stdbuf_copy = temp_path.join("stdbuf");
+    fs::copy(&ts.bin_path, &stdbuf_copy).unwrap();
+
+    // Make the copied binary executable
+    let mut perms = fs::metadata(&stdbuf_copy).unwrap().permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&stdbuf_copy, perms).unwrap();
+
+    // Copy libstdbuf to the same directory as stdbuf
+    let lib_copy = temp_path.join(&lib_name);
+    fs::copy(&source_lib, &lib_copy).unwrap();
+
+    // Run the copied stdbuf with LD_DEBUG to verify it loads the local libstdbuf
+    // This proves the exe-dir search happens first, before checking LIBSTDBUF_DIR
+    let output = std::process::Command::new(&stdbuf_copy)
+        .env("LD_DEBUG", "libs")
+        .args(["-o0", "echo", "test_output"])
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    // Verify the library was loaded from the temp directory (same dir as exe)
+    // LD_DEBUG output will show something like:
+    //   "     trying file=/tmp/.../libstdbuf.so"
+    let temp_dir_str = temp_path.to_string_lossy();
+    let loaded_from_exe_dir = stderr
+        .lines()
+        .any(|line| line.contains(&*lib_name) && line.contains(&*temp_dir_str));
+
+    assert!(
+        loaded_from_exe_dir,
+        "libstdbuf should be loaded from exe directory ({}), not from LIBSTDBUF_DIR. LD_DEBUG output:\n{}",
+        temp_path.display(),
+        stderr
+    );
+
+    // The command should succeed and produce the expected output
+    assert!(
+        output.status.success(),
+        "stdbuf should succeed when libstdbuf is in the same directory. stderr: {stderr}"
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        "test_output",
+        "stdbuf should execute echo successfully"
+    );
 }
 
 #[cfg(not(feature = "feat_external_libstdbuf"))]
@@ -49,17 +130,6 @@ fn test_no_such() {
         .arg("no_such")
         .fails_with_code(127)
         .stderr_contains("No such file or directory");
-}
-
-#[cfg(feature = "feat_external_libstdbuf")]
-#[test]
-fn test_no_such_external_missing_lib() {
-    // With external lib mode and missing installation, stdbuf fails before spawning the command
-    new_ucmd!()
-        .arg("-o1")
-        .arg("no_such")
-        .fails_with_code(1)
-        .stderr_contains("External libstdbuf not found");
 }
 
 // Disabled on x86_64-unknown-linux-musl because the cross-rs Docker image for this target
