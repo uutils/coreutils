@@ -495,7 +495,7 @@ impl<'a> StyleManager<'a> {
     }
 
     #[cfg(not(unix))]
-    fn indicator_for_special_file(&self, _file_type: &std::fs::FileType) -> Option<Indicator> {
+    fn indicator_for_special_file(&self, _file_type: &fs::FileType) -> Option<Indicator> {
         None
     }
 

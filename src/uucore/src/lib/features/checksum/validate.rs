@@ -687,7 +687,7 @@ fn compute_and_check_digest_from_file(
             }));
 
             write_file_report(
-                std::io::stdout(),
+                io::stdout(),
                 filename,
                 FileChecksumResult::CantOpen,
                 prefix,

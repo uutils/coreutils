@@ -2186,22 +2186,10 @@ mod inter_partition_copying {
             "Single file should still have nlink=1"
         );
 
-        assert_eq!(
-            read_to_string(&moved_g1f1).unwrap(),
-            "content group 1"
-        );
-        assert_eq!(
-            read_to_string(&moved_g1f2).unwrap(),
-            "content group 1"
-        );
-        assert_eq!(
-            read_to_string(&moved_g2f1).unwrap(),
-            "content group 2"
-        );
-        assert_eq!(
-            read_to_string(&moved_g2f2).unwrap(),
-            "content group 2"
-        );
+        assert_eq!(read_to_string(&moved_g1f1).unwrap(), "content group 1");
+        assert_eq!(read_to_string(&moved_g1f2).unwrap(), "content group 1");
+        assert_eq!(read_to_string(&moved_g2f1).unwrap(), "content group 2");
+        assert_eq!(read_to_string(&moved_g2f2).unwrap(), "content group 2");
         assert_eq!(
             read_to_string(&moved_single).unwrap(),
             "single file content"
@@ -2437,23 +2425,11 @@ mod inter_partition_copying {
         );
 
         assert_eq!(read_to_string(&moved_file_a).unwrap(), "content A");
-        assert_eq!(
-            read_to_string(&moved_file_a_link1).unwrap(),
-            "content A"
-        );
-        assert_eq!(
-            read_to_string(&moved_file_a_link2).unwrap(),
-            "content A"
-        );
+        assert_eq!(read_to_string(&moved_file_a_link1).unwrap(), "content A");
+        assert_eq!(read_to_string(&moved_file_a_link2).unwrap(), "content A");
         assert_eq!(read_to_string(&moved_file_b).unwrap(), "content B");
-        assert_eq!(
-            read_to_string(&moved_file_b_hardlink).unwrap(),
-            "content B"
-        );
-        assert_eq!(
-            read_to_string(&moved_nested).unwrap(),
-            "nested content"
-        );
+        assert_eq!(read_to_string(&moved_file_b_hardlink).unwrap(), "content B");
+        assert_eq!(read_to_string(&moved_nested).unwrap(), "nested content");
         assert_eq!(
             read_to_string(&moved_nested_link).unwrap(),
             "nested content"

@@ -474,7 +474,7 @@ impl Write for DigestWriter<'_> {
     }
 
     #[cfg(windows)]
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         if self.binary {
             self.digest.hash_update(buf);
             return Ok(buf.len());

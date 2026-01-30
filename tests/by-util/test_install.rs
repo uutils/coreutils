@@ -1937,13 +1937,10 @@ fn test_install_compare_group_ownership() {
 
     at.write(source, "test content");
 
-    let user_group = std::process::Command::new("id")
-        .arg("-nrg")
-        .output()
-        .map_or_else(
-            |_| "users".to_string(),
-            |output| String::from_utf8_lossy(&output.stdout).trim().to_string(),
-        ); // fallback group name
+    let user_group = Command::new("id").arg("-nrg").output().map_or_else(
+        |_| "users".to_string(),
+        |output| String::from_utf8_lossy(&output.stdout).trim().to_string(),
+    ); // fallback group name
 
     // Install with explicit group
     scene
@@ -2498,7 +2495,7 @@ fn test_install_non_utf8_paths() {
     let source_filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
     let dest_dir = "target_dir";
 
-    std::fs::write(at.plus(&source_filename), b"test content").unwrap();
+    fs::write(at.plus(&source_filename), b"test content").unwrap();
     at.mkdir(dest_dir);
 
     ucmd.arg(&source_filename).arg(dest_dir).succeeds();

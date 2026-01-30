@@ -473,7 +473,7 @@ pub fn os_str_from_bytes(bytes: &[u8]) -> error::UResult<Cow<'_, OsStr>> {
 
     #[cfg(not(unix))]
     Ok(Cow::Owned(OsString::from(str::from_utf8(bytes).map_err(
-        |_| mods::error::UUsageError::new(1, "Unable to transform bytes into OsStr"),
+        |_| error::UUsageError::new(1, "Unable to transform bytes into OsStr"),
     )?)))
 }
 
@@ -487,7 +487,7 @@ pub fn os_string_from_vec(vec: Vec<u8>) -> error::UResult<OsString> {
 
     #[cfg(not(unix))]
     Ok(OsString::from(String::from_utf8(vec).map_err(|_| {
-        mods::error::UUsageError::new(1, "invalid UTF-8 was detected in one or more arguments")
+        error::UUsageError::new(1, "invalid UTF-8 was detected in one or more arguments")
     })?))
 }
 
@@ -502,7 +502,7 @@ pub fn os_string_to_vec(s: OsString) -> error::UResult<Vec<u8>> {
     let v = s
         .into_string()
         .map_err(|_| {
-            mods::error::UUsageError::new(1, "invalid UTF-8 was detected in one or more arguments")
+            error::UUsageError::new(1, "invalid UTF-8 was detected in one or more arguments")
         })?
         .into();
 
