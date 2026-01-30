@@ -357,7 +357,7 @@ fn safe_du(
         // This is the initial directory - try regular Stat::new first, then fallback to DirFd
         let my_stat = match my_stat {
             Some(s) => s,
-            None => Stat::new(path, None, options)
+            None => Stat::new(path, None, options),
         };
 
         match my_stat {
