@@ -415,17 +415,16 @@ pub fn safe_remove_dir_recursive_impl(
                 Err(e) => {
                     // If we can't open the subdirectory for safe traversal,
                     // try to handle it as best we can with safe operations
-                    if e.kind() == std::io::ErrorKind::PermissionDenied {
-                        cmd_error |= handle_permission_denied(
-                            dir_fd,
-                            entry_name.as_ref(),
-                            &entry_path,
-                            options,
-                        );
+                    let failed = if e.kind() == std::io::ErrorKind::PermissionDenied {
+                        handle_permission_denied(dir_fd, entry_name.as_ref(), &entry_path, options)
                     } else {
-                        cmd_error |= handle_error_with_force(e, &entry_path, options);
+                        handle_error_with_force(e, &entry_path, options)
+                    };
+
+                    if failed {
+                        cmd_error = true;
+                        child_remains = true;
                     }
-                    child_remains = true;
                     continue;
                 }
             };
