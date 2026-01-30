@@ -570,28 +570,26 @@ pub fn ensure_stdout_not_broken() -> std::io::Result<bool> {
         return Ok(true);
     }
 
-    // POLLRDBAND is the flag used by GNU tee.
-    let mut pfds = [PollFd::new(out.as_fd(), PollFlags::POLLRDBAND)];
+    // Poll for POLLOUT to check if the pipe is writable.
+    // POLLERR and POLLHUP are always checked by poll() regardless of requested events.
+    // On a broken pipe (read end closed), poll returns immediately with POLLERR set.
+    // On a healthy pipe, poll returns immediately with POLLOUT set (pipe is writable).
+    // Using ZERO timeout ensures we never block.
+    let mut pfds = [PollFd::new(out.as_fd(), PollFlags::POLLOUT)];
 
-    // Then, ensure that the pipe is not broken.
-    // Use ZERO timeout to return immediately - we just want to check the current state.
     let res = poll(&mut pfds, PollTimeout::ZERO)?;
 
     if res > 0 {
-        // poll returned with events ready - check if POLLERR is set (pipe broken)
-        let error = pfds.iter().any(|pfd| {
-            if let Some(revents) = pfd.revents() {
-                revents.contains(PollFlags::POLLERR)
-            } else {
-                true
+        // poll returned with events - check if POLLERR is set (pipe broken)
+        if let Some(revents) = pfds[0].revents() {
+            if revents.contains(PollFlags::POLLERR) {
+                return Ok(false); // Pipe is broken
             }
-        });
-        return Ok(!error);
+        }
     }
 
-    // res == 0 means no events ready (timeout reached immediately with ZERO timeout).
-    // This means the pipe is healthy (not broken).
-    // res < 0 would be an error, but nix returns Err in that case.
+    // res == 0 means timeout with no events (unusual for POLLOUT on pipe, but treat as healthy)
+    // res > 0 without POLLERR means pipe is healthy
     Ok(true)
 }
 

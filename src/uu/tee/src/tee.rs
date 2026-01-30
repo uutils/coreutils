@@ -187,6 +187,9 @@ fn tee(options: &Options) -> Result<()> {
         inner: Box::new(stdin()) as Box<dyn Read>,
     };
 
+    // Check if stdout pipe is already broken before starting the copy loop.
+    // This allows early exit when stdout is the only writer and is broken,
+    // avoiding a hang when stdin would block waiting for input.
     #[cfg(target_os = "linux")]
     if options.ignore_pipe_errors && !ensure_stdout_not_broken()? && output.writers.len() == 1 {
         return Ok(());
