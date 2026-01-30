@@ -78,106 +78,15 @@ endif
 LN ?= ln -sf
 
 # Possible programs
-PROGS       := \
-	arch \
-	base32 \
-	base64 \
-	basenc \
-	basename \
-	cat \
-	cksum \
-	comm \
-	cp \
-	csplit \
-	cut \
-	date \
-	dd \
-	df \
-	dir \
-	dircolors \
-	dirname \
-	du \
-	echo \
-	env \
-	expand \
-	expr \
-	factor \
-	false \
-	fmt \
-	fold \
-	hashsum \
-	head \
-	hostname \
-	join \
-	link \
-	ln \
-	ls \
-	mkdir \
-	mktemp \
-	more \
-	mv \
-	nl \
-	numfmt \
-	nproc \
-	od \
-	paste \
-	pr \
-	printenv \
-	printf \
-	ptx \
-	pwd \
-	readlink \
-	realpath \
-	rm \
-	rmdir \
-	seq \
-	shred \
-	shuf \
-	sleep \
-	sort \
-	split \
-	sum \
-	sync \
-	tac \
-	tail \
-	tee \
-	test \
-	touch \
-	tr \
-	true \
-	truncate \
-	tsort \
-	uname \
-	unexpand \
-	uniq \
-	unlink \
-	vdir \
-	wc \
-	whoami \
-	yes
+PROGS := \
+	$(shell sed -n '/feat_Tier1 = \[/,/\]/p' Cargo.toml | sed '1d;2d' |tr -d '],"\n')\
+	$(shell sed -n '/feat_common_core = \[/,/\]/p' Cargo.toml | sed '1d' |tr -d '],"\n')
 
 UNIX_PROGS := \
-	chgrp \
-	chmod \
-	chown \
-	chroot \
-	groups \
+	$(shell sed -n '/feat_require_unix_core = \[/,/\]/p' Cargo.toml | sed '1d' |tr -d '],"\n') \
 	hostid \
-	id \
-	install \
-	kill \
-	logname \
-	mkfifo \
-	mknod \
-	nice \
-	nohup \
-	pathchk \
 	pinky \
-	stat \
 	stdbuf \
-	stty \
-	timeout \
-	tty \
 	uptime \
 	users \
 	who
@@ -185,15 +94,6 @@ UNIX_PROGS := \
 SELINUX_PROGS := \
 	chcon \
 	runcon
-
-HASHSUM_PROGS := \
-	b2sum \
-	md5sum \
-	sha1sum \
-	sha224sum \
-	sha256sum \
-	sha384sum \
-	sha512sum
 
 $(info Detected OS = $(OS))
 
@@ -215,78 +115,9 @@ ifneq ($(findstring stdbuf,$(UTILS)),)
 endif
 
 # Programs with usable tests
-TEST_PROGS  := \
-	base32 \
-	base64 \
-	basename \
-	cat \
-	chcon \
-	chgrp \
-	chmod \
-	chown \
-	cksum \
-	comm \
-	cp \
-	csplit \
-	cut \
-	date \
-	dircolors \
-	dirname \
-	echo \
-	env \
-	expr \
-	factor \
-	false \
-	fold \
-	hashsum \
-	head \
-	install \
-	link \
-	ln \
-	ls \
-	mkdir \
-	mktemp \
-	mv \
-	nl \
-	numfmt \
-	od \
-	paste \
-	pathchk \
-	pinky \
-	pr \
-	printf \
-	ptx \
-	pwd \
-	readlink \
-	realpath \
-	rm \
-	rmdir \
-	runcon \
-	seq \
-	sleep \
-	sort \
-	split \
-	stat \
-	stdbuf \
-	sum \
-	tac \
-	tail \
-	test \
-	touch \
-	tr \
-	true \
-	truncate \
-	tsort \
-	uname \
-	unexpand \
-	uniq \
-	unlink \
-	uudoc \
-	wc \
-	who
 
 TESTS       := \
-	$(sort $(filter $(UTILS),$(TEST_PROGS)))
+	$(sort $(filter $(UTILS),$(PROGS) $(UNIX_PROGS) $(SELINUX_PROGS)))
 
 TEST_NO_FAIL_FAST :=
 TEST_SPEC_FEATURE :=

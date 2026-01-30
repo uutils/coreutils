@@ -229,9 +229,9 @@ impl Display for FileChecksumResult {
     }
 }
 
-/// Print to the given buffer the checksum validation status of a file which
+/// Write to the given buffer the checksum validation status of a file which
 /// name might contain non-utf-8 characters.
-fn print_file_report<W: Write>(
+fn write_file_report<W: Write>(
     mut w: W,
     filename: &[u8],
     result: FileChecksumResult,
@@ -533,7 +533,7 @@ fn get_file_to_check(
         Ok(Box::new(io::stdin())) // Use stdin if "-" is specified in the checksum file
     } else {
         let failed_open = || {
-            print_file_report(
+            write_file_report(
                 io::stdout(),
                 filename_bytes,
                 FileChecksumResult::CantOpen,
@@ -685,7 +685,7 @@ fn compute_and_check_digest_from_file(
         DigestOutput::Crc(n) => n.to_be_bytes() == expected_checksum,
         DigestOutput::U16(n) => n.to_be_bytes() == expected_checksum,
     };
-    print_file_report(
+    write_file_report(
         std::io::stdout(),
         filename,
         FileChecksumResult::from_bool(checksum_correct),
@@ -1212,7 +1212,7 @@ mod tests {
     }
 
     #[test]
-    fn test_print_file_report() {
+    fn test_write_file_report() {
         let opts = ChecksumValidateOptions::default();
 
         let cases: &[(&[u8], FileChecksumResult, &str, &[u8])] = &[
@@ -1245,7 +1245,7 @@ mod tests {
 
         for (filename, result, prefix, expected) in cases {
             let mut buffer: Vec<u8> = vec![];
-            print_file_report(&mut buffer, filename, *result, prefix, opts.verbose);
+            write_file_report(&mut buffer, filename, *result, prefix, opts.verbose);
             assert_eq!(&buffer, expected);
         }
     }
