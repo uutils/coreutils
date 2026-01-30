@@ -202,14 +202,11 @@ impl FileLines<'_> {
                 return Some(line);
             }
 
-            let buf = match self.reader.fill_buf() {
-                Ok(b) => b,
-                Err(_) => {
-                    if self.pending.is_empty() {
-                        return None;
-                    }
-                    return Some(std::mem::take(&mut self.pending));
+            let Ok(buf) = self.reader.fill_buf() else {
+                if self.pending.is_empty() {
+                    return None;
                 }
+                return Some(std::mem::take(&mut self.pending));
             };
 
             if buf.is_empty() {
