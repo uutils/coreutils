@@ -172,7 +172,6 @@ fn test_check_sha256_binary() {
 
 #[test]
 fn test_help_shows_correct_utility_name() {
-    // Test that help output shows the actual utility name instead of "hashsum"
     new_ucmd!()
         .arg("--help")
         .succeeds()

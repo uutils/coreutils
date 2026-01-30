@@ -112,7 +112,6 @@ feat_common_core = [
   "false",
   "fmt",
   "fold",
-  "hashsum",
   "head",
   "join",
   "link",
@@ -472,7 +471,6 @@ false = { optional = true, version = "0.6.0", package = "uu_false", path = "src/
 fmt = { optional = true, version = "0.6.0", package = "uu_fmt", path = "src/uu/fmt" }
 fold = { optional = true, version = "0.6.0", package = "uu_fold", path = "src/uu/fold" }
 groups = { optional = true, version = "0.6.0", package = "uu_groups", path = "src/uu/groups" }
-hashsum = { optional = true, version = "0.6.0", package = "uu_hashsum", path = "src/uu/hashsum" }
 head = { optional = true, version = "0.6.0", package = "uu_head", path = "src/uu/head" }
 hostid = { optional = true, version = "0.6.0", package = "uu_hostid", path = "src/uu/hostid" }
 hostname = { optional = true, version = "0.6.0", package = "uu_hostname", path = "src/uu/hostname" }
