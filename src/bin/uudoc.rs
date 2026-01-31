@@ -275,15 +275,10 @@ fn main() -> io::Result<()> {
     }
 
     println!("Writing to utils");
-    let hashsum_cmd = utils.iter().find(|n| *n.0 == "hashsum").unwrap().1.1;
     for (&name, (_, command)) in utils {
         let (utils_name, usage_name, command) = match name {
             "[" => {
                 continue;
-            }
-            name if is_hashsum_family(name) => {
-                // These use the hashsum
-                ("hashsum", name, &hashsum_cmd)
             }
             n => (n, n, command),
         };
@@ -334,33 +329,8 @@ fn fix_usage(name: &str, usage: String) -> String {
                 .collect::<Vec<_>>()
                 .join("\n")
         }
-        "hashsum" => usage,
-        name if is_hashsum_family(name) => {
-            usage.replace("--<digest> ", "").replace("hashsum", name)
-        }
         _ => usage,
     }
-}
-
-fn is_hashsum_family(name: &str) -> bool {
-    matches!(
-        name,
-        "md5sum"
-            | "sha1sum"
-            | "sha224sum"
-            | "sha256sum"
-            | "sha384sum"
-            | "sha512sum"
-            | "sha3sum"
-            | "sha3-224sum"
-            | "sha3-256sum"
-            | "sha3-384sum"
-            | "sha3-512sum"
-            | "shake128sum"
-            | "shake256sum"
-            | "b2sum"
-            | "b3sum"
-    )
 }
 
 struct MDWriter<'a, 'b> {

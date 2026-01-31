@@ -113,7 +113,7 @@ fn uudoc_check_sums() {
             .find(|one_line| one_line.contains(one_sum))
             .unwrap();
         let (correct_path, content) = get_doc_file_from_output(output_path);
-        let formatted = format!("```\n{one_sum} [OPTIONS]... [FILE]...\n```");
+        let formatted = format!("```\n{one_sum} [OPTIONS] [FILE]...\n```");
         assert!(
             content.contains(&formatted),
             "Content of {correct_path} does not contain the expected format: {formatted}",
