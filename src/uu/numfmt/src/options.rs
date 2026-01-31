@@ -18,6 +18,7 @@ pub const FROM_UNIT: &str = "from-unit";
 pub const FROM_UNIT_DEFAULT: &str = "1";
 pub const HEADER: &str = "header";
 pub const HEADER_DEFAULT: &str = "1";
+pub const GROUPING: &str = "grouping";
 pub const INVALID: &str = "invalid";
 pub const NUMBER: &str = "NUMBER";
 pub const PADDING: &str = "padding";
@@ -55,6 +56,7 @@ pub struct NumfmtOptions {
     pub suffix: Option<String>,
     pub unit_separator: String,
     pub format: FormatOptions,
+    pub grouping: bool,
     pub invalid: InvalidModes,
     pub zero_terminated: bool,
 }

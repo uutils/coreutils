@@ -22,6 +22,7 @@ clap = { workspace = true }
 uucore = { workspace = true, features = ["parser", "ranges"] }
 thiserror = { workspace = true }
 fluent = { workspace = true }
+libc = { workspace = true }
 
 [dev-dependencies]
 divan = { workspace = true }
