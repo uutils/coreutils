@@ -226,6 +226,22 @@ mod linux_only {
         unsafe { File::from_raw_fd(fds[0]) }
     }
 
+    fn make_normal_pipe() -> (File, File) {
+        use libc::c_int;
+        use std::os::unix::io::FromRawFd;
+
+        let mut fds: [c_int; 2] = [0, 0];
+        assert!(
+            (unsafe { libc::pipe(std::ptr::from_mut::<c_int>(&mut fds[0])) } == 0),
+            "Failed to create pipe"
+        );
+
+        // Return both read and write ends as Files
+        let read_end = unsafe { File::from_raw_fd(fds[0]) };
+        let write_end = unsafe { File::from_raw_fd(fds[1]) };
+        (read_end, write_end)
+    }
+
     fn run_tee(proc: &mut UCommand) -> (String, CmdResult) {
         let content = (1..=100_000).fold(String::new(), |mut output, x| {
             let _ = writeln!(output, "{x}");
@@ -584,6 +600,39 @@ mod linux_only {
             .set_stdin(make_hanging_read())
             .set_stdout(make_broken_pipe())
             .succeeds();
+    }
+
+    /// Test that tee -p handles normal pipelines without hanging.
+    #[test]
+    fn test_pipe_mode_normal_pipeline_no_hang() {
+        use std::io::Read;
+
+        let content = "test data for pipeline\n";
+        let (mut stdout_read, stdout_write) = make_normal_pipe();
+
+        let (at, mut ucmd) = at_and_ucmd!();
+        let file_out = "pipeline_test_output.txt";
+
+        let result = ucmd
+            .timeout(Duration::from_secs(2))
+            .arg("-p")
+            .arg(file_out)
+            .set_stdout(stdout_write)
+            .pipe_in(content)
+            .succeeds();
+
+        assert!(at.file_exists(file_out));
+        assert_eq!(at.read(file_out), content);
+
+        let mut stdout_content = String::new();
+        stdout_read.read_to_string(&mut stdout_content).unwrap();
+        assert_eq!(stdout_content, content);
+
+        assert!(
+            result.stderr_str().is_empty(),
+            "Unexpected stderr: {}",
+            result.stderr_str()
+        );
     }
 
     #[test]

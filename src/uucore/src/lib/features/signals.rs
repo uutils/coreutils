@@ -553,6 +553,7 @@ pub const fn sigpipe_was_ignored() -> bool {
     false
 }
 
+// spell-checker:ignore POLLOUT POLLHUP POLLERR
 #[cfg(target_os = "linux")]
 pub fn ensure_stdout_not_broken() -> std::io::Result<bool> {
     use nix::{
@@ -570,23 +571,17 @@ pub fn ensure_stdout_not_broken() -> std::io::Result<bool> {
         return Ok(true);
     }
 
-    // POLLRDBAND is the flag used by GNU tee.
-    let mut pfds = [PollFd::new(out.as_fd(), PollFlags::POLLRDBAND)];
-
-    // Then, ensure that the pipe is not broken.
-    // Use ZERO timeout to return immediately - we just want to check the current state.
+    // Poll for POLLERR (broken pipe) or POLLOUT (writable) with no blocking
+    let mut pfds = [PollFd::new(out.as_fd(), PollFlags::POLLOUT)];
     let res = poll(&mut pfds, PollTimeout::ZERO)?;
 
     if res > 0 {
         // poll returned with events ready - check if POLLERR is set (pipe broken)
-        let error = pfds.iter().any(|pfd| {
-            if let Some(revents) = pfd.revents() {
-                revents.contains(PollFlags::POLLERR)
-            } else {
-                true
+        if let Some(revents) = pfds[0].revents() {
+            if revents.contains(PollFlags::POLLERR) {
+                return Ok(false);
             }
-        });
-        return Ok(!error);
+        }
     }
 
     // res == 0 means no events ready (timeout reached immediately with ZERO timeout).
