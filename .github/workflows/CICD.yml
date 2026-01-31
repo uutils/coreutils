@@ -645,6 +645,7 @@ jobs:
       with:
         persist-credentials: false
     - name: Avoid no space left on device
+      shell: bash
       run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android &
     - uses: dtolnay/rust-toolchain@master
       with:
@@ -1239,6 +1240,7 @@ jobs:
       with:
         persist-credentials: false
     - name: Avoid no space left on device
+      shell: bash
       run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android &
     - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
