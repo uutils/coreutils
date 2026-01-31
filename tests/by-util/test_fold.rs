@@ -4,7 +4,11 @@
 // file that was distributed with this source code.
 // spell-checker:ignore fullwidth
 
+use bytecount::count;
+use unicode_width::UnicodeWidthChar;
 use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
@@ -59,6 +63,310 @@ fn test_wide_characters_with_characters_option() {
         .pipe_in("\u{B250}\u{B250}\u{B250}\n")
         .succeeds()
         .stdout_is("\u{B250}\u{B250}\u{B250}\n");
+}
+
+#[test]
+fn test_wide_characters_with_characters_short_option() {
+    new_ucmd!()
+        .args(&["-c", "-w", "5"])
+        .pipe_in("\u{B250}\u{B250}\u{B250}\n")
+        .succeeds()
+        .stdout_is("\u{B250}\u{B250}\u{B250}\n");
+}
+
+#[test]
+fn test_multiple_wide_characters_in_column_mode() {
+    let wide = '\u{FF1A}';
+    let mut input = wide.to_string().repeat(50);
+    input.push('\n');
+
+    let mut expected = String::new();
+    for i in 1..=50 {
+        expected.push(wide);
+        if i % 5 == 0 {
+            expected.push('\n');
+        }
+    }
+
+    new_ucmd!()
+        .args(&["-w", "10"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
+fn test_multiple_wide_characters_in_character_mode() {
+    let wide = '\u{FF1A}';
+    let mut input = wide.to_string().repeat(50);
+    input.push('\n');
+
+    let mut expected = String::new();
+    for i in 1..=50 {
+        expected.push(wide);
+        if i % 10 == 0 {
+            expected.push('\n');
+        }
+    }
+
+    new_ucmd!()
+        .args(&["--characters", "-w", "10"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
+fn test_unicode_on_reader_buffer_boundary_in_character_mode() {
+    let boundary = buf_reader_capacity().saturating_sub(1);
+    assert!(boundary > 0, "BufReader capacity must be greater than 1");
+
+    let mut input = "a".repeat(boundary);
+    input.push('\u{B250}');
+    input.push_str(&"a".repeat(100));
+    input.push('\n');
+
+    let expected_tail = tail_inclusive(&fold_characters_reference(&input, 80), 4);
+
+    let result = new_ucmd!().arg("--characters").pipe_in(input).succeeds();
+
+    let actual_tail = tail_inclusive(result.stdout_str(), 4);
+
+    assert_eq!(actual_tail, expected_tail);
+}
+
+#[test]
+fn test_fold_preserves_invalid_utf8_sequences() {
+    let bad_input: &[u8] = b"\xC3|\xED\xBA\xAD|\x00|\x89|\xED\xA6\xBF\xED\xBF\xBF\n";
+
+    new_ucmd!()
+        .pipe_in(bad_input.to_vec())
+        .succeeds()
+        .stdout_is_bytes(bad_input);
+}
+
+#[test]
+fn test_fold_preserves_incomplete_utf8_at_eof() {
+    let trailing_byte: &[u8] = b"\xC3";
+
+    new_ucmd!()
+        .pipe_in(trailing_byte.to_vec())
+        .succeeds()
+        .stdout_is_bytes(trailing_byte);
+}
+
+#[test]
+fn test_zero_width_bytes_in_column_mode() {
+    let len = io_buf_size_times_two();
+    let input = vec![0u8; len];
+
+    new_ucmd!()
+        .pipe_in(input.clone())
+        .succeeds()
+        .stdout_is_bytes(input);
+}
+
+#[test]
+fn test_zero_width_bytes_in_character_mode() {
+    let len = io_buf_size_times_two();
+    let input = vec![0u8; len];
+    let expected = fold_characters_reference_bytes(&input, 80);
+
+    new_ucmd!()
+        .args(&["--characters"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is_bytes(expected);
+}
+
+#[test]
+fn test_zero_width_spaces_in_column_mode() {
+    let len = io_buf_size_times_two();
+    let input = "\u{200B}".repeat(len);
+
+    new_ucmd!()
+        .pipe_in(input.clone())
+        .succeeds()
+        .stdout_is(&input);
+}
+
+#[test]
+fn test_zero_width_spaces_in_character_mode() {
+    let len = io_buf_size_times_two();
+    let input = "\u{200B}".repeat(len);
+    let expected = fold_characters_reference(&input, 80);
+
+    new_ucmd!()
+        .args(&["--characters"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(&expected);
+}
+
+#[test]
+fn test_zero_width_bytes_from_file() {
+    let len = io_buf_size_times_two();
+    let input = vec![0u8; len];
+    let expected = fold_characters_reference_bytes(&input, 80);
+
+    let ts = TestScenario::new(util_name!());
+    let path = "zeros.bin";
+    ts.fixtures.write_bytes(path, &input);
+
+    ts.ucmd().arg(path).succeeds().stdout_is_bytes(&input);
+
+    ts.ucmd()
+        .args(&["--characters", path])
+        .succeeds()
+        .stdout_is_bytes(expected);
+}
+
+#[test]
+fn test_zero_width_spaces_from_file() {
+    let len = io_buf_size_times_two();
+    let input = "\u{200B}".repeat(len);
+    let expected = fold_characters_reference(&input, 80);
+
+    let ts = TestScenario::new(util_name!());
+    let path = "zero-width.txt";
+    ts.fixtures.write(path, &input);
+
+    ts.ucmd().arg(path).succeeds().stdout_is(&input);
+
+    ts.ucmd()
+        .args(&["--characters", path])
+        .succeeds()
+        .stdout_is(&expected);
+}
+
+#[test]
+fn test_zero_width_data_line_counts() {
+    let len = io_buf_size_times_two();
+
+    let zero_bytes = vec![0u8; len];
+    let column_bytes = new_ucmd!().pipe_in(zero_bytes.clone()).succeeds();
+    assert_eq!(
+        newline_count(column_bytes.stdout()),
+        0,
+        "fold should not wrap zero-width bytes in column mode",
+    );
+
+    let characters_bytes = new_ucmd!()
+        .args(&["--characters"])
+        .pipe_in(zero_bytes)
+        .succeeds();
+    assert_eq!(
+        newline_count(characters_bytes.stdout()),
+        len / 80,
+        "fold --characters should wrap zero-width bytes every 80 bytes",
+    );
+
+    if UnicodeWidthChar::width('\u{200B}') != Some(0) {
+        eprintln!("skip zero width space checks because width != 0");
+        return;
+    }
+
+    let zero_width_spaces = "\u{200B}".repeat(len);
+    let column_spaces = new_ucmd!().pipe_in(zero_width_spaces.clone()).succeeds();
+    assert_eq!(
+        newline_count(column_spaces.stdout()),
+        0,
+        "fold should keep zero-width spaces on a single line in column mode",
+    );
+
+    let characters_spaces = new_ucmd!()
+        .args(&["--characters"])
+        .pipe_in(zero_width_spaces)
+        .succeeds();
+    assert_eq!(
+        newline_count(characters_spaces.stdout()),
+        len / 80,
+        "fold --characters should wrap zero-width spaces every 80 characters",
+    );
+}
+
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+#[test]
+fn test_fold_reports_no_space_left_on_dev_full() {
+    use std::fs::OpenOptions;
+    use std::process::Stdio;
+
+    for &byte in &[b'\n', b'\0', 0xC3u8] {
+        let dev_full = OpenOptions::new()
+            .write(true)
+            .open("/dev/full")
+            .expect("/dev/full must exist on supported targets");
+
+        new_ucmd!()
+            .pipe_in(vec![byte; 1024])
+            .set_stdout(Stdio::from(dev_full))
+            .fails()
+            .stderr_contains("No space left");
+    }
+}
+
+fn buf_reader_capacity() -> usize {
+    std::io::BufReader::new(&b""[..]).capacity()
+}
+
+fn io_buf_size_times_two() -> usize {
+    buf_reader_capacity()
+        .checked_mul(2)
+        .expect("BufReader capacity overflow")
+}
+
+fn fold_characters_reference(input: &str, width: usize) -> String {
+    let mut output = String::with_capacity(input.len());
+    let mut col_count = 0usize;
+
+    for ch in input.chars() {
+        if ch == '\n' {
+            output.push('\n');
+            col_count = 0;
+            continue;
+        }
+
+        if col_count >= width {
+            output.push('\n');
+            col_count = 0;
+        }
+
+        output.push(ch);
+        col_count += 1;
+    }
+
+    output
+}
+
+fn fold_characters_reference_bytes(input: &[u8], width: usize) -> Vec<u8> {
+    let mut output = Vec::with_capacity(input.len() + input.len() / width + 1);
+
+    for chunk in input.chunks(width) {
+        output.extend_from_slice(chunk);
+        if chunk.len() == width {
+            output.push(b'\n');
+        }
+    }
+
+    output
+}
+
+fn newline_count(bytes: &[u8]) -> usize {
+    count(bytes, b'\n')
+}
+
+fn tail_inclusive(text: &str, lines: usize) -> String {
+    if lines == 0 {
+        return String::new();
+    }
+
+    let segments: Vec<&str> = text.split_inclusive('\n').collect();
+    if segments.is_empty() {
+        return text.to_owned();
+    }
+
+    let start = segments.len().saturating_sub(lines);
+    segments[start..].concat()
 }
 
 #[test]
@@ -239,6 +547,24 @@ fn test_fold_after_tab() {
         .pipe_in("a\tbbb\n")
         .succeeds()
         .stdout_is("a\tbb\nb\n");
+}
+
+#[test]
+fn test_fold_characters_tab_advances_to_next_tab_stop() {
+    new_ucmd!()
+        .args(&["-c", "-w", "4"])
+        .pipe_in("ab\tcd\n")
+        .succeeds()
+        .stdout_is("ab\n\t\ncd\n");
+}
+
+#[test]
+fn test_fold_characters_tab_with_non_ascii() {
+    new_ucmd!()
+        .args(&["-c", "-w", "2"])
+        .pipe_in("\u{00E9}\tb\n")
+        .succeeds()
+        .stdout_is("\u{00E9}\n\t\nb\n");
 }
 
 #[test]

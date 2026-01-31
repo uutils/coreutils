@@ -30,6 +30,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::io;
+use std::io::Write as _;
+use std::io::stderr;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
@@ -495,9 +497,10 @@ pub fn parse_args_from_str(text: &NativeIntStr) -> UResult<Vec<NativeIntString>>
 }
 
 fn debug_print_args(args: &[OsString]) {
-    eprintln!("input args:");
+    let mut error = stderr().lock();
+    let _ = writeln!(error, "input args:");
     for (i, arg) in args.iter().enumerate() {
-        eprintln!("arg[{i}]: {}", arg.quote());
+        let _ = writeln!(error, "arg[{i}]: {}", arg.quote());
     }
 }
 
@@ -749,34 +752,33 @@ impl EnvAppData {
         do_debug_printing: bool,
     ) -> Result<(), Box<dyn UError>> {
         let prog = Cow::from(opts.program[0]);
-        #[cfg(unix)]
-        let mut arg0 = prog.clone();
-        #[cfg(not(unix))]
-        let arg0 = prog.clone();
+
+        let arg0 = match opts.argv0 {
+            None => prog.clone(),
+            Some(argv0) if cfg!(unix) => {
+                let arg0 = Cow::Borrowed(argv0);
+                if do_debug_printing {
+                    let _ = writeln!(stderr(), "argv0:     {}", arg0.quote());
+                }
+                arg0
+            }
+            Some(_) => {
+                return Err(USimpleError::new(
+                    2,
+                    translate!("env-error-argv0-not-supported"),
+                ));
+            }
+        };
+
         let args = &opts.program[1..];
 
-        if let Some(_argv0) = opts.argv0 {
-            #[cfg(unix)]
-            {
-                arg0 = Cow::Borrowed(_argv0);
-                if do_debug_printing {
-                    eprintln!("argv0:     {}", arg0.quote());
-                }
-            }
-
-            #[cfg(not(unix))]
-            return Err(USimpleError::new(
-                2,
-                translate!("env-error-argv0-not-supported"),
-            ));
-        }
-
         if do_debug_printing {
-            eprintln!("executing: {}", prog.maybe_quote());
+            let mut error = stderr().lock();
+            let _ = writeln!(error, "executing: {}", prog.maybe_quote());
             let arg_prefix = "   arg";
-            eprintln!("{arg_prefix}[{}]= {}", 0, arg0.quote());
+            let _ = writeln!(error, "{arg_prefix}[{}]= {}", 0, arg0.quote());
             for (i, arg) in args.iter().enumerate() {
-                eprintln!("{arg_prefix}[{}]= {}", i + 1, arg.quote());
+                let _ = writeln!(error, "{arg_prefix}[{}]= {}", i + 1, arg.quote());
             }
         }
 
@@ -1097,12 +1099,6 @@ fn list_signal_handling(log: &SignalActionLog) {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    // Rust ignores SIGPIPE (see https://github.com/rust-lang/rust/issues/62569).
-    // We restore its default action here.
-    #[cfg(unix)]
-    unsafe {
-        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
-    }
     EnvAppData::default().run_env(args)
 }
 

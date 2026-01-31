@@ -3,13 +3,15 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) getpriority execvp setpriority nstr PRIO cstrs ENOENT
+// spell-checker:ignore (ToDO) getpriority setpriority nstr PRIO
 
 use clap::{Arg, ArgAction, Command};
-use libc::{PRIO_PROCESS, c_char, c_int, execvp};
-use std::ffi::{CString, OsString};
-use std::io::{Error, Write};
-use std::ptr;
+use libc::PRIO_PROCESS;
+use std::ffi::OsString;
+use std::io::{Error, ErrorKind, Write, stdout};
+use std::num::IntErrorKind;
+use std::os::unix::process::CommandExt;
+use std::process;
 
 use uucore::translate;
 use uucore::{
@@ -21,6 +23,8 @@ pub mod options {
     pub static ADJUSTMENT: &str = "adjustment";
     pub static COMMAND: &str = "COMMAND";
 }
+
+const NICE_BOUND_NO_OVERFLOW: i32 = 50;
 
 fn is_prefix_of(maybe_prefix: &str, target: &str, min_match: usize) -> bool {
     if maybe_prefix.len() < min_match || maybe_prefix.len() > target.len() {
@@ -125,17 +129,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
             match nstr.parse::<i32>() {
                 Ok(num) => num,
-                Err(e) => {
-                    return Err(USimpleError::new(
-                        125,
-                        translate!("nice-error-invalid-number", "value" => nstr.clone(), "error" => e),
-                    ));
-                }
+                Err(e) => match e.kind() {
+                    IntErrorKind::PosOverflow => NICE_BOUND_NO_OVERFLOW,
+                    IntErrorKind::NegOverflow => -NICE_BOUND_NO_OVERFLOW,
+                    _ => {
+                        return Err(USimpleError::new(
+                            125,
+                            translate!("nice-error-invalid-number", "value" => nstr.clone(), "error" => e),
+                        ));
+                    }
+                },
             }
         }
         None => {
             if !matches.contains_id(options::COMMAND) {
-                println!("{niceness}");
+                writeln!(stdout(), "{niceness}")?;
                 return Ok(());
             }
             10_i32
@@ -156,21 +164,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    let cstrs: Vec<CString> = matches
-        .get_many::<String>(options::COMMAND)
-        .unwrap()
-        .map(|x| CString::new(x.as_bytes()).unwrap())
-        .collect();
+    let mut cmd_iter = matches.get_many::<String>(options::COMMAND).unwrap();
+    let cmd = cmd_iter.next().unwrap();
+    let args: Vec<&String> = cmd_iter.collect();
 
-    let mut args: Vec<*const c_char> = cstrs.iter().map(|s| s.as_ptr()).collect();
-    args.push(ptr::null::<c_char>());
-    unsafe {
-        execvp(args[0], args.as_mut_ptr());
-    }
+    let err = process::Command::new(cmd).args(args).exec();
 
-    show_error!("execvp: {}", Error::last_os_error());
+    show_error!("{cmd}: {err}");
 
-    let exit_code = if Error::last_os_error().raw_os_error().unwrap() as c_int == libc::ENOENT {
+    let exit_code = if err.kind() == ErrorKind::NotFound {
         127
     } else {
         126

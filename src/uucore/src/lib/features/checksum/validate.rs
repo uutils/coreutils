@@ -229,9 +229,9 @@ impl Display for FileChecksumResult {
     }
 }
 
-/// Print to the given buffer the checksum validation status of a file which
+/// Write to the given buffer the checksum validation status of a file which
 /// name might contain non-utf-8 characters.
-fn print_file_report<W: Write>(
+fn write_file_report<W: Write>(
     mut w: W,
     filename: &[u8],
     result: FileChecksumResult,
@@ -456,7 +456,7 @@ impl LineInfo {
     /// In case of non-algo-based format, if `cached_line_format` is Some, it must take the priority
     /// over the detected format. Otherwise, we must set it the the detected format.
     /// This specific behavior is emphasized by the test
-    /// `test_hashsum::test_check_md5sum_only_one_space`.
+    /// `test_md5sum::test_check_md5sum_only_one_space`.
     fn parse(s: impl AsRef<OsStr>, cached_line_format: &mut Option<LineFormat>) -> Option<Self> {
         let line_bytes = os_str_as_bytes(s.as_ref()).ok()?;
 
@@ -533,7 +533,7 @@ fn get_file_to_check(
         Ok(Box::new(io::stdin())) // Use stdin if "-" is specified in the checksum file
     } else {
         let failed_open = || {
-            print_file_report(
+            write_file_report(
                 io::stdout(),
                 filename_bytes,
                 FileChecksumResult::CantOpen,
@@ -676,8 +676,26 @@ fn compute_and_check_digest_from_file(
 
     // TODO: improve function signature to use ReadingMode instead of binary bool
     // Set binary to false because --binary is not supported with --check
-    let (calculated_checksum, _) =
-        digest_reader(&mut digest, &mut file_reader, /* binary */ false).unwrap();
+
+    let (calculated_checksum, _) = match digest_reader(&mut digest, &mut file_reader, false) {
+        Ok(result) => result,
+        Err(err) => {
+            show!(err.map_err_context(|| {
+                locale_aware_escape_name(&real_filename_to_check, QuotingStyle::SHELL_ESCAPE)
+                    .to_string_lossy()
+                    .to_string()
+            }));
+
+            write_file_report(
+                std::io::stdout(),
+                filename,
+                FileChecksumResult::CantOpen,
+                prefix,
+                opts.verbose,
+            );
+            return Err(LineCheckError::CantOpenFile);
+        }
+    };
 
     // Do the checksum validation
     let checksum_correct = match calculated_checksum {
@@ -685,7 +703,7 @@ fn compute_and_check_digest_from_file(
         DigestOutput::Crc(n) => n.to_be_bytes() == expected_checksum,
         DigestOutput::U16(n) => n.to_be_bytes() == expected_checksum,
     };
-    print_file_report(
+    write_file_report(
         std::io::stdout(),
         filename,
         FileChecksumResult::from_bool(checksum_correct),
@@ -1212,7 +1230,7 @@ mod tests {
     }
 
     #[test]
-    fn test_print_file_report() {
+    fn test_write_file_report() {
         let opts = ChecksumValidateOptions::default();
 
         let cases: &[(&[u8], FileChecksumResult, &str, &[u8])] = &[
@@ -1245,7 +1263,7 @@ mod tests {
 
         for (filename, result, prefix, expected) in cases {
             let mut buffer: Vec<u8> = vec![];
-            print_file_report(&mut buffer, filename, *result, prefix, opts.verbose);
+            write_file_report(&mut buffer, filename, *result, prefix, opts.verbose);
             assert_eq!(&buffer, expected);
         }
     }

@@ -14,7 +14,7 @@ use std::env::temp_dir;
 use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use uufuzz::{CommandResult, run_gnu_cmd};
 // Programs that typically take file/path arguments and should be tested
@@ -83,7 +83,6 @@ static PATH_PROGRAMS: &[&str] = &[
     "vdir",
     "mkfifo",
     "mknod",
-    "hashsum",
     // File I/O utilities
     "dd",
     "sync",
@@ -148,7 +147,7 @@ fn setup_test_files() -> Result<(PathBuf, Vec<PathBuf>), std::io::Error> {
         // Try to create the file - this may fail on some filesystems
         if let Ok(mut file) = fs::File::create(&file_path) {
             use std::io::Write;
-            let _ = write!(file, "test content for file {}\n", i);
+            let _ = writeln!(file, "test content for file {}", i);
             test_files.push(file_path);
         }
     }
@@ -156,7 +155,7 @@ fn setup_test_files() -> Result<(PathBuf, Vec<PathBuf>), std::io::Error> {
     Ok((temp_root, test_files))
 }
 
-fn test_program_with_non_utf8_path(program: &str, path: &PathBuf) -> CommandResult {
+fn test_program_with_non_utf8_path(program: &str, path: &Path) -> CommandResult {
     let path_os = path.as_os_str();
 
     // Use the locally built uutils binary instead of system PATH
@@ -251,12 +250,6 @@ fn test_program_with_non_utf8_path(program: &str, path: &PathBuf) -> CommandResu
             OsString::from("of=/dev/null"),
             OsString::from("bs=1"),
             OsString::from("count=1"),
-        ],
-        // Hashsum needs algorithm
-        "hashsum" => vec![
-            OsString::from(program),
-            OsString::from("--md5"),
-            path_os.to_owned(),
         ],
         // Encoding/decoding programs
         "base32" | "base64" | "basenc" => vec![OsString::from(program), path_os.to_owned()],

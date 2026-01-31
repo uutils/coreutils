@@ -33,22 +33,13 @@ use std::fs::File;
 use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write, stdin, stdout};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError, get_exit_code, set_exit_code};
+use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
 use uucore::translate;
 
 use uucore::{show, show_error};
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    // When we receive a SIGPIPE signal, we want to terminate the process so
-    // that we don't print any error messages to stderr. Rust ignores SIGPIPE
-    // (see https://github.com/rust-lang/rust/issues/62569), so we restore it's
-    // default action here.
-    #[cfg(not(target_os = "windows"))]
-    unsafe {
-        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
-    }
-
     let settings = parse_args(args)?;
 
     settings.check_warnings();
@@ -74,6 +65,16 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
     let mut observer = Observer::from(settings);
 
     observer.start(settings)?;
+
+    // Print debug info about the follow implementation being used
+    if settings.debug && settings.follow.is_some() {
+        if observer.use_polling {
+            show_error!("{}", translate!("tail-debug-using-polling-mode"));
+        } else {
+            show_error!("{}", translate!("tail-debug-using-notification-mode"));
+        }
+    }
+
     // Do an initial tail print of each path's content.
     // Add `path` and `reader` to `files` map if `--follow` is selected.
     for input in &settings.inputs.clone() {
@@ -103,10 +104,6 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
         if !settings.has_only_stdin() || settings.pid != 0 {
             follow::follow(observer, settings)?;
         }
-    }
-
-    if get_exit_code() > 0 && paths::stdin_is_bad_fd() {
-        show_error!("{}: {}", text::DASH, translate!("tail-bad-fd"));
     }
 
     Ok(())
@@ -154,7 +151,12 @@ fn tail_file(
         }
         observer.add_bad_path(path, input.display_name.as_str(), false)?;
     } else {
-        match File::open(path) {
+        #[cfg(unix)]
+        let open_result = open_file(path, settings.pid != 0);
+        #[cfg(not(unix))]
+        let open_result = File::open(path);
+
+        match open_result {
             Ok(mut file) => {
                 let st = file.metadata()?;
                 let blksize_limit = uucore::fs::sane_blksize::sane_blksize_from_metadata(&st);
@@ -199,6 +201,43 @@ fn tail_file(
     Ok(())
 }
 
+/// Opens a file, using non-blocking mode for FIFOs when `use_nonblock_for_fifo` is true.
+///
+/// When opening a FIFO with `--pid`, we need to use O_NONBLOCK so that:
+/// 1. The open() call doesn't block waiting for a writer
+/// 2. We can periodically check if the monitored process is still alive
+///
+/// After opening, we clear O_NONBLOCK so subsequent reads block normally.
+/// Without `--pid`, FIFOs block on open() until a writer connects (GNU behavior).
+#[cfg(unix)]
+fn open_file(path: &Path, use_nonblock_for_fifo: bool) -> std::io::Result<File> {
+    use nix::fcntl::{FcntlArg, OFlag, fcntl};
+    use std::fs::OpenOptions;
+    use std::os::fd::AsFd;
+    use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
+
+    let is_fifo = path
+        .metadata()
+        .ok()
+        .is_some_and(|m| m.file_type().is_fifo());
+
+    if is_fifo && use_nonblock_for_fifo {
+        let file = OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NONBLOCK)
+            .open(path)?;
+
+        // Clear O_NONBLOCK so reads block normally
+        let flags = fcntl(file.as_fd(), FcntlArg::F_GETFL)?;
+        let new_flags = OFlag::from_bits_truncate(flags) & !OFlag::O_NONBLOCK;
+        fcntl(file.as_fd(), FcntlArg::F_SETFL(new_flags))?;
+
+        Ok(file)
+    } else {
+        File::open(path)
+    }
+}
+
 fn tail_stdin(
     settings: &Settings,
     header_printer: &mut HeaderPrinter,
@@ -225,6 +264,17 @@ fn tail_stdin(
                 }
             }
         }
+    }
+
+    // Check if stdin was closed before Rust reopened it as /dev/null
+    if paths::stdin_is_bad_fd() {
+        set_exit_code(1);
+        show_error!(
+            "{}",
+            translate!("tail-error-cannot-fstat", "file" => translate!("tail-stdin-header").quote(), "error" => translate!("tail-bad-fd"))
+        );
+        show_error!("{}", translate!("tail-no-files-remaining"));
+        return Ok(());
     }
 
     match input.resolve() {
@@ -267,7 +317,6 @@ fn tail_stdin(
             } else {
                 let mut reader = BufReader::new(stdin());
                 unbounded_tail(&mut reader, settings)?;
-                observer.add_stdin(input.display_name.as_str(), Some(Box::new(reader)), true)?;
             }
         }
     }
@@ -364,6 +413,10 @@ fn forwards_thru_file(
 /// `num_delimiters` instance of `delimiter`. The `file` is left seek'd to the
 /// position just after that delimiter.
 fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
+    if num_delimiters == 0 {
+        file.seek(SeekFrom::End(0)).unwrap();
+        return;
+    }
     // This variable counts the number of delimiters found in the file
     // so far (reading from the end of the file toward the beginning).
     let mut counter = 0;
@@ -421,10 +474,12 @@ fn bounded_tail(file: &mut File, settings: &Settings) {
             file.seek(SeekFrom::Start(i as u64)).unwrap();
         }
         FilterMode::Lines(Signum::MinusZero, _) => {
-            return;
+            file.seek(SeekFrom::End(0)).unwrap();
         }
         FilterMode::Bytes(Signum::Negative(count)) => {
-            file.seek(SeekFrom::End(-(*count as i64))).unwrap();
+            if file.seek(SeekFrom::End(-(*count as i64))).is_err() {
+                file.seek(SeekFrom::Start(0)).unwrap();
+            }
             limit = Some(*count);
         }
         FilterMode::Bytes(Signum::Positive(count)) if count > &1 => {
@@ -433,7 +488,7 @@ fn bounded_tail(file: &mut File, settings: &Settings) {
             file.seek(SeekFrom::Start(*count - 1)).unwrap();
         }
         FilterMode::Bytes(Signum::MinusZero) => {
-            return;
+            file.seek(SeekFrom::End(0)).unwrap();
         }
         _ => {}
     }
@@ -447,7 +502,7 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
         FilterMode::Lines(Signum::Negative(count), sep) => {
             let mut chunks = chunks::LinesChunkBuffer::new(*sep, *count);
             chunks.fill(reader)?;
-            chunks.print(&mut writer)?;
+            chunks.write(&mut writer)?;
         }
         FilterMode::Lines(Signum::PlusZero | Signum::Positive(1), _) => {
             io::copy(reader, &mut writer)?;
@@ -464,7 +519,7 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
                 }
             }
             if chunk.has_data() {
-                chunk.print_lines(&mut writer, num_skip as usize)?;
+                chunk.write_lines(&mut writer, num_skip as usize)?;
                 io::copy(reader, &mut writer)?;
             }
         }
@@ -472,6 +527,11 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
             let mut chunks = chunks::BytesChunkBuffer::new(*count);
             chunks.fill(reader)?;
             chunks.print(&mut writer)?;
+        }
+        FilterMode::Lines(Signum::MinusZero, sep) => {
+            let mut chunks = chunks::LinesChunkBuffer::new(*sep, 0);
+            chunks.fill(reader)?;
+            chunks.write(&mut writer)?;
         }
         FilterMode::Bytes(Signum::PlusZero | Signum::Positive(1)) => {
             io::copy(reader, &mut writer)?;

@@ -68,6 +68,34 @@ mod test_cksum;
 #[path = "by-util/test_comm.rs"]
 mod test_comm;
 
+#[cfg(feature = "b2sum")]
+#[path = "by-util/test_b2sum.rs"]
+mod test_b2sum;
+
+#[cfg(feature = "md5sum")]
+#[path = "by-util/test_md5sum.rs"]
+mod test_md5sum;
+
+#[cfg(feature = "sha1sum")]
+#[path = "by-util/test_sha1sum.rs"]
+mod test_sha1sum;
+
+#[cfg(feature = "sha224sum")]
+#[path = "by-util/test_sha224sum.rs"]
+mod test_sha224sum;
+
+#[cfg(feature = "sha256sum")]
+#[path = "by-util/test_sha256sum.rs"]
+mod test_sha256sum;
+
+#[cfg(feature = "sha384sum")]
+#[path = "by-util/test_sha384sum.rs"]
+mod test_sha384sum;
+
+#[cfg(feature = "sha512sum")]
+#[path = "by-util/test_sha512sum.rs"]
+mod test_sha512sum;
+
 #[cfg(feature = "cp")]
 #[path = "by-util/test_cp.rs"]
 mod test_cp;
@@ -143,10 +171,6 @@ mod test_fold;
 #[cfg(feature = "groups")]
 #[path = "by-util/test_groups.rs"]
 mod test_groups;
-
-#[cfg(feature = "hashsum")]
-#[path = "by-util/test_hashsum.rs"]
-mod test_hashsum;
 
 #[cfg(feature = "head")]
 #[path = "by-util/test_head.rs"]

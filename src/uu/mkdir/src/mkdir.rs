@@ -3,14 +3,15 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) ugoa cmode
+// spell-checker:ignore (ToDO) ugoa cmode RAII
 
 use clap::builder::ValueParser;
 use clap::parser::ValuesRef;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
+use std::io::{Write, stdout};
 use std::path::{Path, PathBuf};
-#[cfg(not(windows))]
+#[cfg(all(unix, target_os = "linux"))]
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
 use uucore::translate;
@@ -27,7 +28,7 @@ mod options {
     pub const PARENTS: &str = "parents";
     pub const VERBOSE: &str = "verbose";
     pub const DIRS: &str = "dirs";
-    pub const SELINUX: &str = "z";
+    pub const SECURITY_CONTEXT: &str = "z";
     pub const CONTEXT: &str = "context";
 }
 
@@ -42,8 +43,8 @@ pub struct Config<'a> {
     /// Print message for each created directory.
     pub verbose: bool,
 
-    /// Set `SELinux` security context.
-    pub set_selinux_context: bool,
+    /// Set security context (SELinux/SMACK).
+    pub set_security_context: bool,
 
     /// Specific `SELinux` context.
     pub context: Option<&'a String>,
@@ -79,7 +80,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let recursive = matches.get_flag(options::PARENTS);
 
     // Extract the SELinux related flags and options
-    let set_selinux_context = matches.get_flag(options::SELINUX);
+    let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
     let context = matches.get_one::<String>(options::CONTEXT);
 
     match get_mode(&matches) {
@@ -88,7 +89,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 recursive,
                 mode,
                 verbose,
-                set_selinux_context: set_selinux_context || context.is_some(),
+                set_security_context: set_security_context || context.is_some(),
                 context,
             };
             exec(dirs, &config)
@@ -129,7 +130,7 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(options::SELINUX)
+            Arg::new(options::SECURITY_CONTEXT)
                 .short('Z')
                 .help(translate!("mkdir-help-selinux"))
                 .action(ArgAction::SetTrue),
@@ -191,7 +192,8 @@ pub fn mkdir(path: &Path, config: &Config) -> UResult<()> {
     create_dir(path, false, config)
 }
 
-#[cfg(any(unix, target_os = "redox"))]
+/// Only needed on Linux to add ACL permission bits after directory creation.
+#[cfg(all(unix, target_os = "linux"))]
 fn chmod(path: &Path, mode: u32) -> UResult<()> {
     use std::fs::{Permissions, set_permissions};
     use std::os::unix::fs::PermissionsExt;
@@ -199,12 +201,6 @@ fn chmod(path: &Path, mode: u32) -> UResult<()> {
     set_permissions(path, mode).map_err_context(
         || translate!("mkdir-error-cannot-set-permissions", "path" => path.quote()),
     )
-}
-
-#[cfg(windows)]
-fn chmod(_path: &Path, _mode: u32) -> UResult<()> {
-    // chmod on Windows only sets the readonly flag, which isn't even honored on directories
-    Ok(())
 }
 
 // Create a directory at the given path.
@@ -250,49 +246,91 @@ fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
     create_single_dir(path, is_parent, config)
 }
 
+/// RAII guard to restore umask on drop, ensuring cleanup even on panic.
+#[cfg(unix)]
+struct UmaskGuard(uucore::libc::mode_t);
+
+#[cfg(unix)]
+impl UmaskGuard {
+    /// Set umask to the given value and return a guard that restores the original on drop.
+    fn set(new_mask: uucore::libc::mode_t) -> Self {
+        let old_mask = unsafe { uucore::libc::umask(new_mask) };
+        Self(old_mask)
+    }
+}
+
+#[cfg(unix)]
+impl Drop for UmaskGuard {
+    fn drop(&mut self) {
+        unsafe {
+            uucore::libc::umask(self.0);
+        }
+    }
+}
+
+/// Create a directory with the exact mode specified, bypassing umask.
+///
+/// GNU mkdir temporarily sets umask to 0 before calling mkdir(2), ensuring the
+/// directory is created atomically with the correct permissions. This avoids a
+/// race condition where the directory briefly exists with umask-based permissions.
+#[cfg(unix)]
+fn create_dir_with_mode(path: &Path, mode: u32) -> std::io::Result<()> {
+    use std::os::unix::fs::DirBuilderExt;
+
+    // Temporarily set umask to 0 so the directory is created with the exact mode.
+    // The guard restores the original umask on drop, even if we panic.
+    let _guard = UmaskGuard::set(0);
+
+    std::fs::DirBuilder::new().mode(mode).create(path)
+}
+
+#[cfg(not(unix))]
+fn create_dir_with_mode(path: &Path, _mode: u32) -> std::io::Result<()> {
+    std::fs::create_dir(path)
+}
+
 // Helper function to create a single directory with appropriate permissions
 // `is_parent` argument is not used on windows
 #[allow(unused_variables)]
 fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
     let path_exists = path.exists();
 
-    match std::fs::create_dir(path) {
+    // Calculate the mode to use for directory creation
+    #[cfg(unix)]
+    let create_mode = if is_parent {
+        // For parent directories with -p, use umask-derived mode with u+wx
+        (!mode::get_umask() & 0o777) | 0o300
+    } else {
+        config.mode
+    };
+    #[cfg(not(unix))]
+    let create_mode = config.mode;
+
+    match create_dir_with_mode(path, create_mode) {
         Ok(()) => {
             if config.verbose {
-                println!(
+                writeln!(
+                    stdout(),
                     "{}",
                     translate!("mkdir-verbose-created-directory", "util_name" => uucore::util_name(), "path" => path.quote())
-                );
+                )?;
             }
 
+            // On Linux, we may need to add ACL permission bits via chmod.
+            // On other Unix systems, the directory was already created with the correct mode.
             #[cfg(all(unix, target_os = "linux"))]
-            let new_mode = if path_exists {
-                config.mode
-            } else {
+            if !path_exists {
                 // TODO: Make this macos and freebsd compatible by creating a function to get permission bits from
                 // acl in extended attributes
                 let acl_perm_bits = uucore::fsxattr::get_acl_perm_bits_from_xattr(path);
-
-                if is_parent {
-                    (!mode::get_umask() & 0o777) | 0o300 | acl_perm_bits
-                } else {
-                    config.mode | acl_perm_bits
+                if acl_perm_bits != 0 {
+                    chmod(path, create_mode | acl_perm_bits)?;
                 }
-            };
-            #[cfg(all(unix, not(target_os = "linux")))]
-            let new_mode = if is_parent {
-                (!mode::get_umask() & 0o777) | 0o300
-            } else {
-                config.mode
-            };
-            #[cfg(windows)]
-            let new_mode = config.mode;
-
-            chmod(path, new_mode)?;
+            }
 
             // Apply SELinux context if requested
             #[cfg(feature = "selinux")]
-            if config.set_selinux_context && uucore::selinux::is_selinux_enabled() {
+            if config.set_security_context && uucore::selinux::is_selinux_enabled() {
                 if let Err(e) = uucore::selinux::set_selinux_security_context(path, config.context)
                 {
                     let _ = std::fs::remove_dir(path);
@@ -300,6 +338,13 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
                 }
             }
 
+            // Apply SMACK context if requested
+            #[cfg(feature = "smack")]
+            if config.set_security_context {
+                uucore::smack::set_smack_label_and_cleanup(path, config.context, |p| {
+                    std::fs::remove_dir(p)
+                })?;
+            }
             Ok(())
         }
 
@@ -314,10 +359,11 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
             // Print verbose message for logical directories, even if they exist
             // This matches GNU behavior for paths like "test_dir/../test_dir_a"
             if config.verbose && is_parent && config.recursive && !ends_with_parent_dir {
-                println!(
+                writeln!(
+                    stdout(),
                     "{}",
                     translate!("mkdir-verbose-created-directory", "util_name" => uucore::util_name(), "path" => path.quote())
-                );
+                )?;
             }
             Ok(())
         }

@@ -54,7 +54,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     match Settings::from(&matches, obs_lines.as_deref()) {
-        Ok(settings) => split(&settings),
+        Ok(settings) => {
+            // When using --filter, we write to a child process's stdin which may
+            // close early. Disable SIGPIPE so we get EPIPE errors instead of
+            // being terminated, allowing graceful handling of broken pipes.
+            #[cfg(unix)]
+            if settings.filter.is_some() {
+                let _ = uucore::signals::disable_pipe_errors();
+            }
+            split(&settings)
+        }
         Err(e) if e.requires_usage() => Err(UUsageError::new(1, format!("{e}"))),
         Err(e) => Err(USimpleError::new(1, format!("{e}"))),
     }
@@ -1019,14 +1028,16 @@ impl ManageOutFiles for OutFiles {
             // Could have hit system limit for open files.
             // Try to close one previously instantiated writer first
             for (i, out_file) in self.iter_mut().enumerate() {
-                if i != idx && out_file.maybe_writer.is_some() {
-                    out_file.maybe_writer.as_mut().unwrap().flush()?;
-                    out_file.maybe_writer = None;
-                    out_file.is_new = false;
-                    count += 1;
+                if i != idx {
+                    if let Some(writer) = out_file.maybe_writer.as_mut() {
+                        writer.flush()?;
+                        out_file.maybe_writer = None;
+                        out_file.is_new = false;
+                        count += 1;
 
-                    // And then try to instantiate the writer again
-                    continue 'loop1;
+                        // And then try to instantiate the writer again
+                        continue 'loop1;
+                    }
                 }
             }
 

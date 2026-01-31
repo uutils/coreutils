@@ -243,3 +243,18 @@ fn test_rmdir_remove_symlink_dangling() {
         .fails()
         .stderr_is("rmdir: failed to remove 'dl/': Symbolic link not followed\n");
 }
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_rmdir_remove_symlink_dir_with_trailing_slashes() {
+    // a symlink with trailing slashes should still be printing the 'Symbolic link not followed'
+    // message
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("dir");
+    at.symlink_dir("dir", "dl");
+
+    ucmd.arg("dl////")
+        .fails()
+        .stderr_is("rmdir: failed to remove 'dl////': Symbolic link not followed\n");
+}

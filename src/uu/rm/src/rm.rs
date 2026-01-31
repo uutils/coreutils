@@ -26,7 +26,7 @@ use uucore::translate;
 use uucore::{format_usage, os_str_as_bytes, prompt_yes, show_error};
 
 mod platform;
-#[cfg(target_os = "linux")]
+#[cfg(all(unix, not(target_os = "redox")))]
 use platform::{safe_remove_dir_recursive, safe_remove_empty_dir, safe_remove_file};
 
 #[derive(Debug, Error)]
@@ -45,6 +45,8 @@ enum RmError {
     UseNoPreserveRoot,
     #[error("{}", translate!("rm-error-refusing-to-remove-directory", "path" => _0.quote()))]
     RefusingToRemoveDirectory(OsString),
+    #[error("{}", translate!("rm-error-may-not-abbreviate-no-preserve-root"))]
+    MayNotAbbreviateNoPreserveRoot,
 }
 
 impl UError for RmError {}
@@ -200,7 +202,8 @@ static ARG_FILES: &str = "files";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    let args: Vec<OsString> = args.collect();
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args.iter())?;
 
     let files: Vec<_> = matches
         .get_many::<OsString>(ARG_FILES)
@@ -253,6 +256,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             None
         },
     };
+
+    // manually parse all args to verify --no-preserve-root did not get abbreviated (clap does
+    // allow this)
+    if !options.preserve_root && !args.iter().any(|arg| arg == "--no-preserve-root") {
+        return Err(RmError::MayNotAbbreviateNoPreserveRoot.into());
+    }
+
     if options.interactive == InteractiveMode::Once && (options.recursive || files.len() > 3) {
         let msg: String = format!(
             "remove {} {}{}",
@@ -538,17 +548,7 @@ fn is_readable_metadata(metadata: &Metadata) -> bool {
 }
 
 /// Whether the given file or directory is readable.
-#[cfg(unix)]
-#[cfg(not(target_os = "linux"))]
-fn is_readable(path: &Path) -> bool {
-    match fs::metadata(path) {
-        Err(_) => false,
-        Ok(metadata) => is_readable_metadata(&metadata),
-    }
-}
-
-/// Whether the given file or directory is readable.
-#[cfg(not(unix))]
+#[cfg(any(not(unix), target_os = "redox"))]
 fn is_readable(_path: &Path) -> bool {
     true
 }
@@ -559,19 +559,8 @@ fn is_writable_metadata(metadata: &Metadata) -> bool {
     (mode & 0o200) > 0
 }
 
-/// Whether the given file or directory is writable.
-#[cfg(unix)]
-fn is_writable(path: &Path) -> bool {
-    match fs::metadata(path) {
-        Err(_) => false,
-        Ok(metadata) => is_writable_metadata(&metadata),
-    }
-}
-
-/// Whether the given file or directory is writable.
 #[cfg(not(unix))]
-fn is_writable(_path: &Path) -> bool {
-    // TODO Not yet implemented.
+fn is_writable_metadata(_metadata: &Metadata) -> bool {
     true
 }
 
@@ -605,14 +594,14 @@ fn remove_dir_recursive(
         return false;
     }
 
-    // Use secure traversal on Linux for all recursive directory removals
-    #[cfg(target_os = "linux")]
+    // Use secure traversal on Unix (except Redox) for all recursive directory removals
+    #[cfg(all(unix, not(target_os = "redox")))]
     {
         safe_remove_dir_recursive(path, options, progress_bar)
     }
 
-    // Fallback for non-Linux or use fs::remove_dir_all for very long paths
-    #[cfg(not(target_os = "linux"))]
+    // Fallback for non-Unix, Redox, or use fs::remove_dir_all for very long paths
+    #[cfg(any(not(unix), target_os = "redox"))]
     {
         if let Some(s) = path.to_str() {
             if s.len() > 1000 {
@@ -734,8 +723,8 @@ fn remove_dir(path: &Path, options: &Options, progress_bar: Option<&ProgressBar>
         return true;
     }
 
-    // Use safe traversal on Linux for empty directory removal
-    #[cfg(target_os = "linux")]
+    // Use safe traversal on Unix (except Redox) for empty directory removal
+    #[cfg(all(unix, not(target_os = "redox")))]
     {
         if let Some(result) = safe_remove_empty_dir(path, options, progress_bar) {
             return result;
@@ -758,15 +747,15 @@ fn remove_file(path: &Path, options: &Options, progress_bar: Option<&ProgressBar
             pb.inc(1);
         }
 
-        // Use safe traversal on Linux for individual file removal
-        #[cfg(target_os = "linux")]
+        // Use safe traversal on Unix (except Redox) for individual file removal
+        #[cfg(all(unix, not(target_os = "redox")))]
         {
             if let Some(result) = safe_remove_file(path, options, progress_bar) {
                 return result;
             }
         }
 
-        // Fallback method for non-Linux or when safe traversal is unavailable
+        // Fallback method for non-Unix, Redox, or when safe traversal is unavailable
         match fs::remove_file(path) {
             Ok(_) => {
                 verbose_removed_file(path, options);
@@ -809,35 +798,33 @@ fn prompt_file(path: &Path, options: &Options) -> bool {
     if options.interactive == InteractiveMode::Never {
         return true;
     }
-    // If interactive is Always we want to check if the file is symlink to prompt the right message
-    if options.interactive == InteractiveMode::Always {
-        if let Ok(metadata) = fs::symlink_metadata(path) {
-            if metadata.is_symlink() {
-                return prompt_yes!("remove symbolic link {}?", path.quote());
-            }
-        }
-    }
 
-    let Ok(metadata) = fs::metadata(path) else {
+    let Ok(metadata) = fs::symlink_metadata(path) else {
         return true;
     };
 
-    if options.interactive == InteractiveMode::Always && is_writable(path) {
+    if metadata.is_symlink() {
+        return options.interactive != InteractiveMode::Always
+            || prompt_yes!("remove symbolic link {}?", path.quote());
+    }
+
+    if options.interactive == InteractiveMode::Always && is_writable_metadata(&metadata) {
         return if metadata.len() == 0 {
             prompt_yes!("remove regular empty file {}?", path.quote())
         } else {
             prompt_yes!("remove file {}?", path.quote())
         };
     }
-    prompt_file_permission_readonly(path, options)
+
+    prompt_file_permission_readonly(path, options, &metadata)
 }
 
-fn prompt_file_permission_readonly(path: &Path, options: &Options) -> bool {
+fn prompt_file_permission_readonly(path: &Path, options: &Options, metadata: &Metadata) -> bool {
     let stdin_ok = options.__presume_input_tty.unwrap_or(false) || stdin().is_terminal();
-    match (stdin_ok, fs::metadata(path), options.interactive) {
-        (false, _, InteractiveMode::PromptProtected) => true,
-        (_, Ok(_), _) if is_writable(path) => true,
-        (_, Ok(metadata), _) if metadata.len() == 0 => prompt_yes!(
+    match (stdin_ok, options.interactive) {
+        (false, InteractiveMode::PromptProtected) => true,
+        _ if is_writable_metadata(metadata) => true,
+        _ if metadata.len() == 0 => prompt_yes!(
             "remove write-protected regular empty file {}?",
             path.quote()
         ),
@@ -851,7 +838,9 @@ fn path_is_current_or_parent_directory(path: &Path) -> bool {
     let dir_separator = MAIN_SEPARATOR as u8;
     if let Ok(path_bytes) = path_str {
         return path_bytes == ([b'.'])
+            || path_bytes == ([b'.', dir_separator])
             || path_bytes == ([b'.', b'.'])
+            || path_bytes == ([b'.', b'.', dir_separator])
             || path_bytes.ends_with(&[dir_separator, b'.'])
             || path_bytes.ends_with(&[dir_separator, b'.', b'.'])
             || path_bytes.ends_with(&[dir_separator, b'.', dir_separator])
