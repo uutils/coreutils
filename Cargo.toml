@@ -593,7 +593,7 @@ rlimit = { workspace = true }
 # to deserialize an utmpx struct into a binary file
 [target.'cfg(all(target_family= "unix",not(target_os = "macos")))'.dev-dependencies]
 wincode = "0.2.5"
-wincode-derive = "0.2.3"
+wincode-derive = "0.3.0"
 
 [build-dependencies]
 phf_codegen.workspace = true
