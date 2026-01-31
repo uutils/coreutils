@@ -18,6 +18,9 @@ curl -L ${repo}/raw/refs/heads/master/tests/nproc/nproc-quota-systemd.sh > tests
 curl -L ${repo}/raw/refs/heads/master/tests/stty/bad-speed.sh > tests/stty/bad-speed.sh
 # Better support for single binary
 curl -L ${repo}/raw/refs/heads/master/tests/env/env.sh > tests/env/env.sh
+# Accurate errors on *sum with --binary --text and --tag. Freeze commit to avoid regression.
+curl -L ${repo}/raw/refs/heads/master/tests/cksum/cksum-a.sh > tests/cksum/cksum-a.sh
+curl -L https://raw.githubusercontent.com/coreutils/coreutils/9200747f65e3523f7b48184a331eec5a1225b435/tests/cksum/cksum-c.sh > tests/cksum/cksum-c.sh
 # Avoid incorrect PASS
 curl -L ${repo}/raw/refs/heads/master/tests/runcon/runcon-compute.sh > tests/runcon/runcon-compute.sh
 curl -L ${repo}/raw/refs/heads/master/tests/tac/tac-continue.sh > tests/tac/tac-continue.sh
