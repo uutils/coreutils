@@ -3684,15 +3684,50 @@ fn test_when_argument_file_is_a_symlink() {
 fn test_when_argument_file_is_a_symlink_to_directory_then_error() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
-
     at.mkdir("dir");
     at.symlink_file("dir", "dir_link");
-
     let expected = "tail: error reading 'dir_link': Is a directory\n";
     ts.ucmd()
         .arg("dir_link")
         .fails_with_code(1)
         .stderr_only(expected);
+}
+
+// TODO: make this work on windows
+#[test]
+#[cfg(unix)]
+fn test_follow_name_replaced_with_symlink() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let file = "testfile";
+    let target = "target";
+
+    at.write(file, "original\n");
+    at.write(target, "target\n");
+
+    let mut child = ts
+        .ucmd()
+        .args(&[
+            "--follow=name",
+            "-n",
+            "0",
+            "--sleep-interval=0.1",
+            "--use-polling",
+            file,
+        ])
+        .run_no_wait();
+
+    child.delay(500);
+    at.remove(file);
+    at.symlink_file(target, file);
+    child.delay(500);
+
+    child
+        .kill()
+        .make_assertion()
+        .with_all_output()
+        .stderr_contains("tail: 'testfile' has been replaced with an untailable symbolic link")
+        .stdout_is("");
 }
 
 // TODO: make this work on windows

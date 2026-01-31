@@ -7,7 +7,7 @@
 
 use crate::args::Settings;
 use crate::chunks::BytesChunkBuffer;
-use crate::paths::{HeaderPrinter, PathExtTail};
+use crate::paths::{HeaderPrinter, PathExtTail, path_is_symlink};
 use crate::text;
 use std::collections::HashMap;
 use std::collections::hash_map::Keys;
@@ -134,6 +134,10 @@ impl FileHandling {
         };
     }
 
+    pub fn update_symlink(&mut self, path: &Path, is_symlink: bool) {
+        self.get_mut(path).is_symlink = is_symlink;
+    }
+
     /// Read new data from `path` and print it to stdout
     pub fn tail_file(&mut self, path: &Path, verbose: bool) -> UResult<bool> {
         let mut chunks = BytesChunkBuffer::new(u64::MAX);
@@ -178,6 +182,7 @@ pub struct PathData {
     pub reader: Option<Box<dyn BufRead>>,
     pub metadata: Option<Metadata>,
     pub display_name: String,
+    pub is_symlink: bool,
 }
 
 impl PathData {
@@ -185,11 +190,13 @@ impl PathData {
         reader: Option<Box<dyn BufRead>>,
         metadata: Option<Metadata>,
         display_name: &str,
+        is_symlink: bool,
     ) -> Self {
         Self {
             reader,
             metadata,
             display_name: display_name.to_owned(),
+            is_symlink,
         }
     }
     pub fn from_other_with_path(data: Self, path: &Path) -> Self {
@@ -205,7 +212,13 @@ impl PathData {
             // Probably file was renamed/moved or removed again
             None
         };
+        let is_symlink = path_is_symlink(path);
 
-        Self::new(reader, path.metadata().ok(), data.display_name.as_str())
+        Self::new(
+            reader,
+            path.metadata().ok(),
+            data.display_name.as_str(),
+            is_symlink,
+        )
     }
 }
