@@ -36,10 +36,10 @@ jobs:
         # surface MSRV from CICD workflow
         RUST_MIN_SRV=$(grep -P "^\s+RUST_MIN_SRV:" .github/workflows/CICD.yml | grep -Po "(?<=\x22)\d+[.]\d+(?:[.]\d+)?(?=\x22)" )
         echo "RUST_MIN_SRV=${RUST_MIN_SRV}" >> $GITHUB_OUTPUT
+    - uses: Swatinem/rust-cache@v2
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ steps.vars.outputs.RUST_MIN_SRV }}
-    - uses: Swatinem/rust-cache@v2
     - name: Ensure updated 'Cargo.lock'
       shell: bash
       run: |
