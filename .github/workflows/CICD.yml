@@ -265,6 +265,8 @@ jobs:
   build_makefile:
     name: Build/Makefile
     needs: [ min_version, deps ]
+    permissions:
+      contents: write # Publish individual arm binaries instead of discarding
     runs-on: ${{ matrix.job.os }}
     env:
       SCCACHE_GHA_ENABLED: "true"
@@ -297,10 +299,6 @@ jobs:
         if [[ -d target ]]; then
           mv -T target target.cache
         fi
-        # Check that we don't cross-build uudoc
-        env CARGO_BUILD_TARGET=aarch64-unknown-linux-gnu make install-manpages PREFIX=/tmp/usr UTILS=true
-        # We don't build coreutils without MULTICALL=y
-        ! test -e target/debug/coreutils
         # build (host)
         make build
         echo "Check that target directory will be ignored by backup tools"
@@ -322,37 +320,60 @@ jobs:
         disable_search: true
         flags: makefile,${{ matrix.job.os }}
         fail_ci_if_error: false
-    - name: "`make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n`"
+    - name: "`make install PROG_PREFIX=uu- CARGO_BUILD_TARGET=aarch64-unknown-linux-gnu PROFILE=release COMPLETIONS=n MANPAGES=n LOCALES=n`"
       shell: bash
       run: |
         set -x
-        DESTDIR=/tmp/ make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n
-        # Check that utils are built with given profile
-        ./target/release-small/true
-        # Check that the progs have prefix
-        test -f /tmp/usr/local/bin/uu-tty
-        test -f /tmp/usr/local/libexec/uu-coreutils/libstdbuf.*
+        sudo apt-get install -y gcc-aarch64-linux-gnu
+        RUSTFLAGS="${RUSTFLAGS} -C strip=symbols"
+        export RUSTFLAGS
+        # Verify uudoc isn't cross-compiled by checking man pages were generated successfully
+        # (cross-compiled uudoc couldn't execute on host, so man pages would be missing)
+        env CARGO_BUILD_TARGET=aarch64-unknown-linux-gnu make install-manpages PREFIX=/tmp/usr UTILS=true
+        test -f /tmp/usr/share/man/man1/true.1
+        DESTDIR=/tmp/ make install CARGO_BUILD_TARGET=aarch64-unknown-linux-gnu PROG_PREFIX=uu- PROFILE=release COMPLETIONS=n MANPAGES=n LOCALES=n
+        # We don't build coreutils without MULTICALL=y
+        ! test -e target/aarch64-unknown-linux-gnu/release/coreutils
+        # Check that the progs are missing prefix
+        test -f /tmp/usr/local/bin/tty
         # Check that the manpage is not present
-        ! test -f /tmp/usr/local/share/man/man1/uu-whoami.1
+        ! test -f /tmp/usr/local/share/man/man1/whoami.1
         # Check that the completion is not present
-        ! test -f /tmp/usr/local/share/zsh/site-functions/_uu-install
-        ! test -f /tmp/usr/local/share/bash-completion/completions/uu-head.bash
-        ! test -f /tmp/usr/local/share/fish/vendor_completions.d/uu-cat.fish
+        ! test -f /tmp/usr/local/share/zsh/site-functions/_install
+        ! test -f /tmp/usr/local/share/bash-completion/completions/head.bash
+        ! test -f /tmp/usr/local/share/fish/vendor_completions.d/cat.fish
+        # We publish them instead of discarding
+        # This is a hack to reuse CI resources, but we should cleanup this job someday
+        mv /tmp/usr/local/libexec/coreutils/libstdbuf.* -t /tmp/usr/local/bin
+        ZSTD_CLEVEL=19 tar --zstd -caf individual-aarch64-unknown-linux-gnu.tar.zst -C /tmp/usr/local bin
       env:
         RUST_BACKTRACE: "1"
-    - name: "`make install`"
+    - name: Publish
+      uses: softprops/action-gh-release@v2
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      with:
+        tag_name: latest-commit
+        draft: false
+        prerelease: true
+        files: |
+          individual-aarch64-unknown-linux-gnu.tar.zst
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: "`make PROFILE=release-small PROG_PREFIX=uu- install`"
       shell: bash
       run: |
         set -x
-        DESTDIR=/tmp/ make PROFILE=release install
-        # Check that the utils are present
-        test -f /tmp/usr/local/bin/tty
+        DESTDIR=/tmp/ make PROFILE=release-small PROG_PREFIX=uu- install
+        # Check PROFILE
+        target/release-small/uu-true
+        # Check that the utils are prefixed
+        test -f /tmp/usr/local/bin/uu-tty
         # Check that the manpage is present
-        test -f /tmp/usr/local/share/man/man1/md5sum.1
+        test -f /tmp/usr/local/share/man/man1/uu-md5sum.1
         # Check that the completion is present
-        test -f /tmp/usr/local/share/zsh/site-functions/_b2sum
-        test -f /tmp/usr/local/share/bash-completion/completions/head.bash
-        test -f /tmp/usr/local/share/fish/vendor_completions.d/cat.fish
+        test -f /tmp/usr/local/share/zsh/site-functions/_uu-b2sum
+        test -f /tmp/usr/local/share/bash-completion/completions/uu-head.bash
+        test -f /tmp/usr/local/share/fish/vendor_completions.d/uu-cat.fish
       env:
         RUST_BACKTRACE: "1"
     - name: "`make uninstall`"
@@ -361,18 +382,19 @@ jobs:
         set -x
         DESTDIR=/tmp/ make uninstall
         # Check that the utils are not present
-        ! test -f /tmp/usr/local/bin/tty
+        ! test -f /tmp/usr/local/bin/u_tty
         # Check that the manpage is not present
-        ! test -f /tmp/usr/local/share/man/man1/whoami.1
+        ! test -f /tmp/usr/local/share/man/man1/u_whoami.1
         # Check that the completion is not present
-        ! test -f /tmp/usr/local/share/zsh/site-functions/_install
-        ! test -f /tmp/usr/local/share/bash-completion/completions/head.bash
-        ! test -f /tmp/usr/local/share/fish/vendor_completions.d/cat.fish
-    - name: "`make install MULTICALL=n`"
+        ! test -f /tmp/usr/local/share/zsh/site-functions/_u_install
+        ! test -f /tmp/usr/local/share/bash-completion/completions/u_head.bash
+        ! test -f /tmp/usr/local/share/fish/vendor_completions.d/u_cat.fish
+    - name: "`make install PROFILE=release-small MULTICALL=n`"
       shell: bash
       run: |
         set -x
-        DESTDIR=/tmp/ make PROFILE=release MULTICALL=n install
+        # cargo should not rebuild with same profile
+        timeout 30 DESTDIR=/tmp/ make PROFILE=release-small MULTICALL=n install
         # Check that *sum are present
         for s in {md5,b2,sha1,sha224,sha256,sha384,sha512}sum
           do test -e /tmp/usr/local/bin/${s}
@@ -381,7 +403,9 @@ jobs:
       shell: bash
       run: |
         set -x
-        DESTDIR=/tmp/ make PROFILE=release MULTICALL=y LN="ln -svf" install
+        DESTDIR=/tmp/ make MULTICALL=y LN="ln -svf" install
+        # release should be default profile
+        test -e target/release/coreutils
         # Check that symlinks of *sum are present
         for s in {md5,b2,sha1,sha224,sha256,sha384,sha512}sum
           do test $(readlink /tmp/usr/local/bin/${s}) = coreutils
