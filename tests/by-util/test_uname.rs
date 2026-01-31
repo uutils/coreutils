@@ -28,7 +28,24 @@ fn test_uname_name() {
 #[test]
 fn test_uname_processor() {
     let result = new_ucmd!().arg("-p").succeeds();
-    assert_eq!(result.stdout_str().trim_end(), "unknown");
+    let processor = result.stdout_str().trim();
+
+    // Verify it's non-empty
+    assert!(!processor.is_empty());
+
+    let machine = new_ucmd!().arg("-m").succeeds().stdout_move_str();
+    let machine = machine.trim();
+
+    // The processor (-p) should be a mapped version of the machine (-m)
+    // following the logic in src/uu/uname/src/uname.rs
+    let expected = match machine {
+        "arm64" | "aarch64" => "arm",
+        "x86_64" | "amd64" => "x86_64",
+        "i386" | "i486" | "i586" | "i686" => "i386",
+        _ => "unknown",
+    };
+
+    assert_eq!(processor, expected);
 }
 
 #[test]
