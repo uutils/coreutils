@@ -37,7 +37,7 @@ GNU `env` allows the empty string to be used as an environment variable name.
 This is unsupported by uutils, which will show a warning for any such
 assignment.
 
- `env` has an additional `-f`/`--file` flag that can
+`env` has an additional `-f`/`--file` flag that can
 parse `.env` files and set variables accordingly. This feature is adopted from `dotenv` style
 packages.
 
@@ -89,6 +89,7 @@ numbers. GNU coreutils uses `long double`, whose actual size may be [double prec
 [quadruple precision 128-bit float](https://en.wikipedia.org/wiki/Quadruple-precision_floating-point_format) (e.g. arm64).
 
 Practically, this means that printing a number with high precision will remain exact:
+
 ```
 printf "%.48f\n" 0.1
 0.100000000000000000000000000000000000000000000000 << uutils on all platforms
@@ -123,6 +124,7 @@ before the decimal point, 15 after).
 
 Practically, this means that the default hexadecimal floating point output is
 identical to x86(-64) GNU coreutils:
+
 ```
 printf "%a\n" 0.1
 0xc.ccccccccccccccdp-7 << uutils on all platforms
@@ -133,6 +135,7 @@ printf "%a\n" 0.1
 
 We _can_ print an arbitrary number of digits if a larger precision is requested,
 and the leading digit will still be in the `0x8`-`0xf` range:
+
 ```
 printf "%.32a\n" 0.1
 0xc.cccccccccccccccccccccccccccccccdp-7 << uutils on all platforms
@@ -141,8 +144,8 @@ printf "%.32a\n" 0.1
 0x1.999999999999a0000000000000000000p-4 << GNU coreutils on armv7 (32-bit)
 ```
 
-***Note: The architecture-specific behavior on non-x86(-64) platforms may change in
-the future.***
+**_Note: The architecture-specific behavior on non-x86(-64) platforms may change in
+the future._**
 
 ## `seq`
 
@@ -150,6 +153,8 @@ Unlike GNU coreutils, `seq` always uses arbitrary precision decimal numbers, no
 matter the parameters (integers, decimal numbers, positive or negative increments,
 format specified, etc.), so its output will be more correct than GNU coreutils for
 some inputs (e.g. small fractional increments where GNU coreutils uses `long double`).
+
+This also extends the range of values that can be represented beyond GNU coreutils' `long double` maximum.
 
 The only limitation is that the position of the decimal point is stored in a `i64`,
 so values smaller than 10**(-2**63) will underflow to 0, and some values larger
@@ -184,9 +189,10 @@ also provides a `-v`/`--verbose` flag.
 ## `id`
 
 `id` has three additional flags:
-* `-P` displays the id as a password file entry
-* `-p` makes the output human-readable
-* `-A` displays the process audit user ID
+
+- `-P` displays the id as a password file entry
+- `-p` makes the output human-readable
+- `-A` displays the process audit user ID
 
 ## `uptime`
 
