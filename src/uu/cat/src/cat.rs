@@ -24,7 +24,7 @@ use uucore::translate;
 use uucore::{fast_inc::fast_inc_one, format_usage};
 
 /// Linux splice support
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 mod splice;
 
 // Allocate 32 digits for the line number.
@@ -85,7 +85,7 @@ enum CatError {
     #[error("{0}")]
     Io(#[from] io::Error),
     /// Wrapper around `nix::Error`
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(linux_android)]
     #[error("{0}")]
     Nix(#[from] nix::Error),
     /// Unknown file type; it's not a regular file, socket, etc.
@@ -477,7 +477,7 @@ fn get_input_type(path: &OsString) -> CatResult<InputType> {
 fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
     let stdout = io::stdout();
     let mut stdout_lock = stdout.lock();
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(linux_android)]
     {
         // If we're on Linux or Android, try to use the splice() system call
         // for faster writing. If it works, we're done.

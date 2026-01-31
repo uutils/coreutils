@@ -252,11 +252,11 @@ fn test_chmod_umask_expected() {
 }
 
 fn get_expected_symlink_permissions() -> u32 {
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(linux_android)]
     {
         0o120_777
     }
-    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    #[cfg(not(linux_android))]
     {
         0o120_755
     }

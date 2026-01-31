@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (vars) RFILE execv execvp
 
-#![cfg(any(target_os = "linux", target_os = "android"))]
+#![cfg(linux_android)]
 
 use clap::builder::ValueParser;
 use uucore::error::{UError, UResult};

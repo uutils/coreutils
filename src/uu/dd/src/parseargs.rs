@@ -116,7 +116,7 @@ enum Block {
 /// Return an Unimplemented error when the target is not Linux or Android
 macro_rules! linux_only {
     ($s: expr, $val: expr) => {
-        if cfg!(any(target_os = "linux", target_os = "android")) {
+        if cfg!(linux_android) {
             $val
         } else {
             return Err(ParseError::Unimplemented($s.to_string()).into());

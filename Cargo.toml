@@ -638,8 +638,10 @@ workspace = true
 [workspace.lints.rust]
 # Allow "fuzzing" as a "cfg" condition name and "cygwin" as a value for "target_os"
 # https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html
+# "linux_android" is a cfg alias for any(target_os = "linux", target_os = "android")
 unexpected_cfgs = { level = "warn", check-cfg = [
   'cfg(fuzzing)',
+  'cfg(linux_android)',
   'cfg(target_os, values("cygwin"))',
 ] }
 #unused_qualifications = "warn" // TODO: fix warnings in uucore, then re-enable this lint

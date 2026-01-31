@@ -28,16 +28,16 @@ use std::path::Path;
 #[cfg(target_os = "linux")]
 use std::path::PathBuf;
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 use filetime::FileTime;
 #[cfg(target_os = "linux")]
 use std::ffi::OsString;
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 use std::fs as std_fs;
 use std::thread::sleep;
 use std::time::Duration;
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 #[cfg(feature = "truncate")]
 use uutests::util::PATH;
 
@@ -2366,7 +2366,7 @@ fn test_cp_archive_recursive() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn test_cp_preserve_timestamps() {
     let (at, mut ucmd) = at_and_ucmd!();
     let ts = time::OffsetDateTime::now_utc();
@@ -2399,7 +2399,7 @@ fn test_cp_preserve_timestamps() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn test_cp_no_preserve_timestamps() {
     let (at, mut ucmd) = at_and_ucmd!();
     let ts = time::OffsetDateTime::now_utc();
@@ -2444,7 +2444,7 @@ fn test_cp_no_preserve_timestamps() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn test_cp_target_file_dev_null() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file1 = "/dev/null";
@@ -2602,7 +2602,7 @@ fn test_cp_conflicting_update() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn test_cp_reflink_insufficient_permission() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -2645,7 +2645,7 @@ fn test_closes_file_descriptors() {
         .succeeds();
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 #[test]
 fn test_cp_sparse_never_empty() {
     const BUFFER_SIZE: usize = 4096 * 4;
@@ -2665,7 +2665,7 @@ fn test_cp_sparse_never_empty() {
     );
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 #[test]
 fn test_cp_sparse_always_empty() {
     const BUFFER_SIZE: usize = 4096 * 4;
@@ -2685,7 +2685,7 @@ fn test_cp_sparse_always_empty() {
     }
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 #[test]
 fn test_cp_sparse_always_non_empty() {
     const BUFFER_SIZE: usize = 4096 * 16 + 3;
@@ -2711,7 +2711,7 @@ fn test_cp_sparse_always_non_empty() {
     assert_eq!(at.metadata("dst_file_sparse").blocks(), touched_block_count);
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 #[test]
 fn test_cp_sparse_invalid_option() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -2722,7 +2722,7 @@ fn test_cp_sparse_invalid_option() {
         .fails();
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 #[test]
 fn test_cp_sparse_always_reflink_always() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -2738,7 +2738,7 @@ fn test_cp_sparse_always_reflink_always() {
     .fails();
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 #[test]
 fn test_cp_sparse_never_reflink_always() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -2754,7 +2754,7 @@ fn test_cp_sparse_never_reflink_always() {
     .fails();
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 #[cfg(feature = "truncate")]
 #[test]
 fn test_cp_reflink_always_override() {
@@ -4366,7 +4366,7 @@ fn test_acl_preserve() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn test_cp_debug_reflink_never_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -4391,7 +4391,7 @@ fn test_cp_debug_reflink_never_with_hole() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn test_cp_debug_reflink_never_empty_file_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -4416,7 +4416,7 @@ fn test_cp_debug_reflink_never_empty_file_with_hole() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn test_cp_debug_default_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -4442,7 +4442,7 @@ fn test_cp_debug_default_with_hole() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn test_cp_debug_default_less_than_512_bytes() {
     let ts = TestScenario::new(util_name!());
 
@@ -4465,7 +4465,7 @@ fn test_cp_debug_default_less_than_512_bytes() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn test_cp_debug_default_without_hole() {
     let ts = TestScenario::new(util_name!());
 
@@ -4485,7 +4485,7 @@ fn test_cp_debug_default_without_hole() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn test_cp_debug_default_empty_file_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -4511,7 +4511,7 @@ fn test_cp_debug_default_empty_file_with_hole() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn test_cp_debug_reflink_never_sparse_always_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -4537,7 +4537,7 @@ fn test_cp_debug_reflink_never_sparse_always_with_hole() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn test_cp_debug_reflink_never_sparse_always_without_hole() {
     let ts = TestScenario::new(util_name!());
     let empty_bytes = [0_u8; 10000];
@@ -4562,7 +4562,7 @@ fn test_cp_debug_reflink_never_sparse_always_without_hole() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn test_cp_debug_reflink_never_sparse_always_empty_file_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -4607,7 +4607,7 @@ fn test_cp_default_virtual_file() {
     assert!(dest_size > 0);
 }
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn test_cp_debug_reflink_auto_sparse_always_non_sparse_file_with_long_zero_sequence() {
     let ts = TestScenario::new(util_name!());
 
@@ -4649,7 +4649,7 @@ fn test_cp_debug_sparse_never_empty_sparse_file() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn test_cp_debug_reflink_never_sparse_always_non_sparse_file_with_long_zero_sequence() {
     let ts = TestScenario::new(util_name!());
 
@@ -4700,7 +4700,7 @@ fn test_cp_debug_sparse_always_sparse_virtual_file() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn test_cp_debug_reflink_never_less_than_512_bytes() {
     let ts = TestScenario::new(util_name!());
 
@@ -4722,7 +4722,7 @@ fn test_cp_debug_reflink_never_less_than_512_bytes() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn test_cp_debug_reflink_never_sparse_never_empty_file_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -4744,7 +4744,7 @@ fn test_cp_debug_reflink_never_sparse_never_empty_file_with_hole() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn test_cp_debug_reflink_never_file_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -4767,7 +4767,7 @@ fn test_cp_debug_reflink_never_file_with_hole() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn test_cp_debug_sparse_never_less_than_512_bytes() {
     let ts = TestScenario::new(util_name!());
 
@@ -4790,7 +4790,7 @@ fn test_cp_debug_sparse_never_less_than_512_bytes() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn test_cp_debug_sparse_never_without_hole() {
     let ts = TestScenario::new(util_name!());
 
@@ -4812,7 +4812,7 @@ fn test_cp_debug_sparse_never_without_hole() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn test_cp_debug_sparse_never_empty_file_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -4834,7 +4834,7 @@ fn test_cp_debug_sparse_never_empty_file_with_hole() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn test_cp_debug_sparse_never_file_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -4905,7 +4905,7 @@ fn test_cp_debug_default_zero_sized_virtual_file() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 fn test_cp_debug_reflink_never_without_hole() {
     let ts = TestScenario::new(util_name!());
     let filler_bytes = [0_u8; 1000];

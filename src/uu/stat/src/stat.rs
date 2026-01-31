@@ -1044,10 +1044,7 @@ impl Stater {
                     'B' => OutputType::Unsigned(512),
                     // SELinux security context string
                     'C' => {
-                        #[cfg(all(
-                            feature = "selinux",
-                            any(target_os = "linux", target_os = "android")
-                        ))]
+                        #[cfg(all(feature = "selinux", linux_android))]
                         {
                             if uucore::selinux::is_selinux_enabled() {
                                 match uucore::selinux::get_selinux_security_context(
@@ -1063,10 +1060,7 @@ impl Stater {
                                 OutputType::Str(translate!("stat-selinux-unsupported-system"))
                             }
                         }
-                        #[cfg(not(all(
-                            feature = "selinux",
-                            any(target_os = "linux", target_os = "android")
-                        )))]
+                        #[cfg(not(all(feature = "selinux", linux_android)))]
                         {
                             OutputType::Str(translate!("stat-selinux-unsupported-os"))
                         }

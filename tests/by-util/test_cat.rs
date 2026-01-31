@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore NOFILE nonewline cmdline
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 use rlimit::Resource;
 #[cfg(unix)]
 use std::fs::File;
@@ -128,7 +128,7 @@ fn test_fifo_symlink() {
 
 #[test]
 // TODO(#7542): Re-enable on Android once we figure out why setting limit is broken.
-// #[cfg(any(target_os = "linux", target_os = "android"))]
+// #[cfg(linux_android)]
 #[cfg(target_os = "linux")]
 fn test_closes_file_descriptors() {
     // Each file creates a pipe, which has two file descriptors.
@@ -524,10 +524,10 @@ fn test_squeeze_blank_before_numbering() {
 #[test]
 #[cfg(unix)]
 fn test_dev_random() {
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(linux_android)]
     const DEV_RANDOM: &str = "/dev/urandom";
 
-    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    #[cfg(not(linux_android))]
     const DEV_RANDOM: &str = "/dev/random";
 
     let mut proc = new_ucmd!()

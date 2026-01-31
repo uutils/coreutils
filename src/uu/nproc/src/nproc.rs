@@ -13,7 +13,7 @@ use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
 use uucore::translate;
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(linux_android)]
 pub const _SC_NPROCESSORS_CONF: libc::c_int = 83;
 #[cfg(target_vendor = "apple")]
 pub const _SC_NPROCESSORS_CONF: libc::c_int = libc::_SC_NPROCESSORS_CONF;
