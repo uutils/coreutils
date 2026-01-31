@@ -5049,7 +5049,7 @@ fn test_child_when_run_with_stderr_to_stdout() {
 fn test_failed_write_is_reported() {
     new_ucmd!()
         .pipe_in("hello")
-        .set_stdout(std::fs::File::create("/dev/full").unwrap())
+        .set_stdout(File::create("/dev/full").unwrap())
         .fails()
         .stderr_is("tail: No space left on device\n");
 }

@@ -25,7 +25,8 @@ use std::path::PathBuf;
     not(target_os = "freebsd"),
     feature = "printf"
 ))]
-use std::process::{Command, Stdio};
+use std::process::Command;
+use std::process::Stdio;
 #[cfg(not(windows))]
 use std::thread::sleep;
 #[cfg(not(windows))]
@@ -674,7 +675,6 @@ fn test_skip_beyond_file() {
 fn test_skip_beyond_file_seekable_stdin() {
     // When stdin is a seekable file, dd should use seek to skip bytes.
     // This tests that skipping beyond the file size issues a warning.
-    use std::process::Stdio;
 
     // Test cases: (bs, skip) pairs that skip beyond a 4-byte file
     let test_cases = [
@@ -1478,7 +1478,7 @@ fn test_sparse() {
     // On common Linux filesystems, setting the length to one megabyte
     // should cause the file to become a sparse file, but it depends
     // on the system.
-    std::fs::File::create(at.plus("infile"))
+    File::create(at.plus("infile"))
         .unwrap()
         .set_len(1024 * 1024)
         .unwrap();
@@ -1734,7 +1734,7 @@ fn test_iflag_directory_fails_when_file_is_passed_via_std_in() {
     let filename = at.plus_as_string("input");
     new_ucmd!()
         .args(&["iflag=directory", "count=0"])
-        .set_stdin(std::process::Stdio::from(File::open(filename).unwrap()))
+        .set_stdin(Stdio::from(File::open(filename).unwrap()))
         .fails()
         .stderr_only("dd: setting flags for 'standard input': Not a directory\n");
 }
@@ -1744,7 +1744,7 @@ fn test_iflag_directory_fails_when_file_is_passed_via_std_in() {
 fn test_iflag_directory_passes_when_dir_is_redirected() {
     new_ucmd!()
         .args(&["iflag=directory", "count=0"])
-        .set_stdin(std::process::Stdio::from(File::open(".").unwrap()))
+        .set_stdin(Stdio::from(File::open(".").unwrap()))
         .succeeds();
 }
 
@@ -1760,8 +1760,6 @@ fn test_iflag_directory_fails_when_file_is_piped_via_std_in() {
 
 #[test]
 fn test_stdin_stdout_not_rewound_even_when_connected_to_seekable_file() {
-    use std::process::Stdio;
-
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
@@ -1821,8 +1819,6 @@ fn test_wrong_number_err_msg() {
 #[test]
 #[cfg(unix)]
 fn test_no_dropped_writes() {
-    use std::process::Stdio;
-
     const BLK_SIZE: usize = 0x4000;
     const COUNT: usize = 1000;
     const NUM_BYTES: usize = BLK_SIZE * COUNT;

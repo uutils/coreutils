@@ -514,7 +514,7 @@ fn process_utf8_chars<W: Write>(line: &str, ctx: &mut FoldContext<'_, W>) -> URe
         // not coalesce zero-width scalars there.
         if ctx.mode == WidthMode::Columns {
             while let Some(&(_, next_ch)) = iter.peek() {
-                if unicode_width::UnicodeWidthChar::width(next_ch).unwrap_or(1) == 0 {
+                if UnicodeWidthChar::width(next_ch).unwrap_or(1) == 0 {
                     iter.next();
                 } else {
                     break;

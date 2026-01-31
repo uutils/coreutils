@@ -586,8 +586,7 @@ impl FsUsage {
                 blocks: statvfs.f_blocks,
                 bfree: statvfs.f_bfree,
                 bavail: statvfs.f_bavail.try_into().unwrap(),
-                bavail_top_bit_set: ((std::convert::TryInto::<u64>::try_into(statvfs.f_bavail)
-                    .unwrap())
+                bavail_top_bit_set: ((TryInto::<u64>::try_into(statvfs.f_bavail).unwrap())
                     & (1u64.rotate_right(1)))
                     != 0,
                 files: statvfs.f_files,
@@ -599,8 +598,7 @@ impl FsUsage {
                 blocks: statvfs.f_blocks,
                 bfree: statvfs.f_bfree,
                 bavail: statvfs.f_bavail.try_into().unwrap(),
-                bavail_top_bit_set: ((std::convert::TryInto::<u64>::try_into(statvfs.f_bavail)
-                    .unwrap())
+                bavail_top_bit_set: ((TryInto::<u64>::try_into(statvfs.f_bavail).unwrap())
                     & (1u64.rotate_right(1)))
                     != 0,
                 files: statvfs.f_files,

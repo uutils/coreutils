@@ -437,7 +437,7 @@ pub fn digest_reader<T: Read>(
     // "\n". But when "\r" is the last character read, we need to force
     // it to be written.)
     let mut digest_writer = DigestWriter::new(digest, binary);
-    let output_size = std::io::copy(reader, &mut digest_writer)? as usize;
+    let output_size = io::copy(reader, &mut digest_writer)? as usize;
     digest_writer.finalize();
 
     Ok((digest.result(), output_size))

@@ -2180,7 +2180,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Initialize locale collation if needed (UTF-8 locales)
     // This MUST happen before init_precomputed() to avoid the performance regression
     #[cfg(feature = "i18n-collator")]
-    let needs_locale_collation = uucore::i18n::collator::init_locale_collation();
+    let needs_locale_collation = i18n::collator::init_locale_collation();
 
     #[cfg(not(feature = "i18n-collator"))]
     let needs_locale_collation = false;

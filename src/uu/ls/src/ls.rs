@@ -3574,7 +3574,7 @@ fn get_security_context<'a>(
         // For SMACK, use the path to get the label
         // If must_dereference is true, we follow the symlink
         let target_path = if must_dereference {
-            std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+            fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
         } else {
             path.to_path_buf()
         };

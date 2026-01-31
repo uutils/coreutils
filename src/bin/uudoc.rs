@@ -45,8 +45,8 @@ fn usage<T: Args>(utils: &UtilityMap<T>) {
 }
 
 /// Generates the coreutils app for the utility map
-fn gen_coreutils_app<T: Args>(util_map: &UtilityMap<T>) -> clap::Command {
-    let mut command = clap::Command::new("coreutils");
+fn gen_coreutils_app<T: Args>(util_map: &UtilityMap<T>) -> Command {
+    let mut command = Command::new("coreutils");
     for (name, (_, sub_app)) in util_map {
         // Recreate a small subcommand with only the relevant info
         // (name & short description)
@@ -54,7 +54,7 @@ fn gen_coreutils_app<T: Args>(util_map: &UtilityMap<T>) -> clap::Command {
             .get_about()
             .expect("Could not get the 'about'")
             .to_string();
-        let sub_app = clap::Command::new(name).about(about);
+        let sub_app = Command::new(name).about(about);
         command = command.subcommand(sub_app);
     }
     command
@@ -172,7 +172,7 @@ fn main() -> io::Result<()> {
     }
     let utils = util_map::<Box<dyn Iterator<Item = OsString>>>();
     match std::fs::create_dir("docs/src/utils/") {
-        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
+        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => Ok(()),
         x => x,
     }?;
 
@@ -202,7 +202,7 @@ fn main() -> io::Result<()> {
         let mut map = HashMap::new();
         for platform in ["unix", "macos", "windows", "unix_android"] {
             let platform_utils: Vec<String> = String::from_utf8(
-                std::process::Command::new("./util/show-utils.sh")
+                process::Command::new("./util/show-utils.sh")
                     .arg(format!("--features=feat_os_{platform}"))
                     .output()?
                     .stdout,
@@ -217,7 +217,7 @@ fn main() -> io::Result<()> {
 
         // Linux is a special case because it can support selinux
         let platform_utils: Vec<String> = String::from_utf8(
-            std::process::Command::new("./util/show-utils.sh")
+            process::Command::new("./util/show-utils.sh")
                 .arg("--features=feat_os_unix feat_selinux")
                 .output()?
                 .stdout,
@@ -547,7 +547,7 @@ fn write_zip_examples(
     };
 
     match format_examples(content, output_markdown) {
-        Err(e) => Err(std::io::Error::other(format!(
+        Err(e) => Err(io::Error::other(format!(
             "Failed to format the tldr examples of {name}: {e}"
         ))),
         Ok(s) => Ok(s),

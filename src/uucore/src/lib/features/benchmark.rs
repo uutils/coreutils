@@ -22,7 +22,7 @@ pub fn create_test_file(data: &[u8], temp_dir: &Path) -> PathBuf {
     writer.write_all(data).unwrap();
     writer.flush().unwrap();
     // Ensure data is fully written to disk before returning
-    std::mem::drop(writer);
+    drop(writer);
     File::open(&file_path).unwrap().sync_all().unwrap();
     file_path
 }

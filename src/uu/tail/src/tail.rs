@@ -210,7 +210,7 @@ fn tail_file(
 /// After opening, we clear O_NONBLOCK so subsequent reads block normally.
 /// Without `--pid`, FIFOs block on open() until a writer connects (GNU behavior).
 #[cfg(unix)]
-fn open_file(path: &Path, use_nonblock_for_fifo: bool) -> std::io::Result<File> {
+fn open_file(path: &Path, use_nonblock_for_fifo: bool) -> io::Result<File> {
     use nix::fcntl::{FcntlArg, OFlag, fcntl};
     use std::fs::OpenOptions;
     use std::os::fd::AsFd;

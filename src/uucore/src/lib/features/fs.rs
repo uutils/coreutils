@@ -843,7 +843,7 @@ pub fn make_fifo(path: &Path) -> std::io::Result<()> {
     let name = CString::new(path.to_str().unwrap()).unwrap();
     let err = unsafe { mkfifo(name.as_ptr(), 0o666) };
     if err == -1 {
-        Err(std::io::Error::from_raw_os_error(err))
+        Err(Error::from_raw_os_error(err))
     } else {
         Ok(())
     }
@@ -957,8 +957,7 @@ mod tests {
             let path = Path::new(test.path);
             let normalized = normalize_path(path);
             assert_eq!(
-                test.test
-                    .replace('/', std::path::MAIN_SEPARATOR.to_string().as_str()),
+                test.test.replace('/', MAIN_SEPARATOR.to_string().as_str()),
                 normalized.to_str().expect("Path is not valid utf-8!")
             );
         }
@@ -1153,7 +1152,7 @@ mod tests {
         assert!(make_fifo(&path).is_ok());
 
         // Check that it is indeed a FIFO.
-        assert!(std::fs::metadata(&path).unwrap().file_type().is_fifo());
+        assert!(fs::metadata(&path).unwrap().file_type().is_fifo());
 
         // Check that we can write to it and read from it.
         //
@@ -1161,7 +1160,7 @@ mod tests {
         // otherwise `write` would block indefinitely while waiting
         // for the `read`.
         let path2 = path.clone();
-        std::thread::spawn(move || assert!(std::fs::write(&path2, b"foo").is_ok()));
-        assert_eq!(std::fs::read(&path).unwrap(), b"foo");
+        std::thread::spawn(move || assert!(fs::write(&path2, b"foo").is_ok()));
+        assert_eq!(fs::read(&path).unwrap(), b"foo");
     }
 }

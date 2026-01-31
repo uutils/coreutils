@@ -925,7 +925,7 @@ fn format_read_error(error: &io::Error) -> String {
 
 /// Determines if the input buffer contains any padding ('=') ignoring trailing whitespace.
 #[cfg(test)]
-fn read_and_has_padding<R: std::io::Read>(input: &mut R) -> UResult<(bool, Vec<u8>)> {
+fn read_and_has_padding<R: io::Read>(input: &mut R) -> UResult<(bool, Vec<u8>)> {
     let mut buf = Vec::new();
     input
         .read_to_end(&mut buf)

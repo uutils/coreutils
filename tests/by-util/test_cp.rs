@@ -7502,7 +7502,7 @@ fn test_cp_to_existing_file_permissions() {
 
     let mut src_permissions = std::fs::metadata(&src_path).unwrap().permissions();
     src_permissions.set_readonly(true);
-    std::fs::set_permissions(&src_path, src_permissions).unwrap();
+    set_permissions(&src_path, src_permissions).unwrap();
 
     let dst_mode = std::fs::metadata(&dst_path).unwrap().permissions().mode();
 
@@ -7531,7 +7531,7 @@ fn test_cp_xattr_enotsup_handling() {
     }
 
     // Check if /dev/shm exists
-    if !std::path::Path::new("/dev/shm").exists() {
+    if !Path::new("/dev/shm").exists() {
         return; // Skip: /dev/shm not available
     }
 
