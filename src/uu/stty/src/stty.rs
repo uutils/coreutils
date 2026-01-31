@@ -439,15 +439,26 @@ fn stty(opts: &Options) -> UResult<()> {
         // POSIX allows tcsetattr to return success while only partially applying
         // requested changes. We read back the settings and compare only the
         // fields that were actually changed (where requested != original).
-        let actual = tcgetattr(opts.file.as_fd()).map_err_context(|| opts.device_name.clone())?;
-        if !verify_termios_changes(&original, &termios, &actual) {
-            return Err(USimpleError::new(
-                1,
-                format!(
-                    "{}: unable to perform all requested operations",
-                    opts.device_name
-                ),
-            ));
+        //
+        // Skip verification when restoring a saved state because:
+        // 1. Saved states may contain platform-specific flags that can't be restored
+        // 2. Restoration is "best effort" - the user expects it to work across platforms
+        // 3. GNU stty also doesn't strictly verify saved state restoration
+        let has_saved_state = valid_args
+            .iter()
+            .any(|arg| matches!(arg, ArgOptions::SavedState(_)));
+        if !has_saved_state {
+            let actual =
+                tcgetattr(opts.file.as_fd()).map_err_context(|| opts.device_name.clone())?;
+            if !verify_termios_changes(&original, &termios, &actual) {
+                return Err(USimpleError::new(
+                    1,
+                    format!(
+                        "{}: unable to perform all requested operations",
+                        opts.device_name
+                    ),
+                ));
+            }
         }
     } else {
         let termios = tcgetattr(opts.file.as_fd()).map_err_context(|| opts.device_name.clone())?;
