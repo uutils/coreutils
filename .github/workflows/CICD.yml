@@ -265,6 +265,8 @@ jobs:
   build_makefile:
     name: Build/Makefile
     needs: [ min_version, deps ]
+    permissions:
+      contents: write # Publish individual arm binaries instead of discarding
     runs-on: ${{ matrix.job.os }}
     env:
       SCCACHE_GHA_ENABLED: "true"
@@ -322,13 +324,17 @@ jobs:
         disable_search: true
         flags: makefile,${{ matrix.job.os }}
         fail_ci_if_error: false
-    - name: "`make install PROG_PREFIX=uu- PROFILE=release-fast COMPLETIONS=n MANPAGES=n LOCALES=n`"
+    - name: "`make install PROG_PREFIX=uu- CARGO_BUILD_TARGET=aarch64-unknown-linux-gnu PROFILE=release-fast COMPLETIONS=n MANPAGES=n LOCALES=n`"
       shell: bash
       run: |
         set -x
-        DESTDIR=/tmp/ make install PROG_PREFIX=uu- PROFILE=release-fast COMPLETIONS=n MANPAGES=n LOCALES=n
-        # Check that utils are built with given profile
-        ./target/release-fast/true
+        sudo apt-get install -y gcc-aarch64-linux-gnu
+        RUSTFLAGS="${RUSTFLAGS} -C strip=symbols"
+        export RUSTFLAGS
+        DESTDIR=/tmp/ make install CARGO_BUILD_TARGET=aarch64-unknown-linux-gnu PROG_PREFIX=uu- PROFILE=release-fast COMPLETIONS=n MANPAGES=n LOCALES=n
+        # Check that target and profile are applied
+        test -e target/aarch64-unknown-linux-gnu/release-fast/true
+        file target/aarch64-unknown-linux-gnu/release-fast/true
         # Check that the progs have prefix
         test -f /tmp/usr/local/bin/uu-tty
         test -f /tmp/usr/local/libexec/uu-coreutils/libstdbuf.*
@@ -338,8 +344,22 @@ jobs:
         ! test -f /tmp/usr/local/share/zsh/site-functions/_uu-install
         ! test -f /tmp/usr/local/share/bash-completion/completions/uu-head.bash
         ! test -f /tmp/usr/local/share/fish/vendor_completions.d/uu-cat.fish
+        # We publish them instead of discarding
+        (cd /tmp/usr/local/bin && for b in uu-*;do mv "$b" "${b#uu-}";done )
+        ZSTD_CLEVEL=19 tar --zstd -caf individual-aarch64-unknown-linux-gnu.tar.zst -C /tmp/usr/local bin
       env:
         RUST_BACKTRACE: "1"
+    - name: Publish
+      uses: softprops/action-gh-release@v2
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      with:
+        tag_name: latest-commit
+        draft: false
+        prerelease: true
+        files: |
+          individual-aarch64-unknown-linux-gnu.tar.zst
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     - name: "`make install`"
       shell: bash
       run: |
