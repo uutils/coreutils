@@ -303,7 +303,7 @@ fn safe_du(
     seen_inodes: &mut HashSet<FileInfo>,
     print_tx: &mpsc::Sender<UResult<StatPrintInfo>>,
     parent_fd: Option<&DirFd>,
-    my_stat: Option<std::io::Result<Stat>>,
+    initial_stat: Option<std::io::Result<Stat>>,
 ) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
     // Get initial stat for this path - use DirFd if available to avoid path length issues
     let mut my_stat = if let Some(parent_fd) = parent_fd {
@@ -355,12 +355,12 @@ fn safe_du(
         }
     } else {
         // This is the initial directory - try regular Stat::new first, then fallback to DirFd
-        let my_stat = match my_stat {
+        let initial_stat = match initial_stat {
             Some(s) => s,
             None => Stat::new(path, None, options),
         };
 
-        match my_stat {
+        match initial_stat {
             Ok(s) => s,
             Err(_e) => {
                 // Try using our new DirFd method for the root directory
