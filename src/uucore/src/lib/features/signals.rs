@@ -553,6 +553,7 @@ pub const fn sigpipe_was_ignored() -> bool {
     false
 }
 
+// spell-checker:ignore POLLOUT POLLHUP POLLERR
 #[cfg(target_os = "linux")]
 pub fn ensure_stdout_not_broken() -> std::io::Result<bool> {
     use nix::{
@@ -564,32 +565,24 @@ pub fn ensure_stdout_not_broken() -> std::io::Result<bool> {
 
     let out = stdout();
 
-    // First, check that stdout is a fifo and return true if it's not the case
+    // Check that stdout is a fifo
     let stat = fstat(out.as_fd())?;
     if !SFlag::from_bits_truncate(stat.st_mode).contains(SFlag::S_IFIFO) {
         return Ok(true);
     }
 
-    // Poll for POLLOUT to check if the pipe is writable.
-    // POLLERR and POLLHUP are always checked by poll() regardless of requested events.
-    // On a broken pipe (read end closed), poll returns immediately with POLLERR set.
-    // On a healthy pipe, poll returns immediately with POLLOUT set (pipe is writable).
-    // Using ZERO timeout ensures we never block.
+    // Poll for POLLERR (broken pipe) or POLLOUT (writable) with no blocking
     let mut pfds = [PollFd::new(out.as_fd(), PollFlags::POLLOUT)];
-
     let res = poll(&mut pfds, PollTimeout::ZERO)?;
 
     if res > 0 {
-        // poll returned with events - check if POLLERR is set (pipe broken)
         if let Some(revents) = pfds[0].revents() {
             if revents.contains(PollFlags::POLLERR) {
-                return Ok(false); // Pipe is broken
+                return Ok(false);
             }
         }
     }
 
-    // res == 0 means timeout with no events (unusual for POLLOUT on pipe, but treat as healthy)
-    // res > 0 without POLLERR means pipe is healthy
     Ok(true)
 }
 

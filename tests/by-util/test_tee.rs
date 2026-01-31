@@ -226,6 +226,22 @@ mod linux_only {
         unsafe { File::from_raw_fd(fds[0]) }
     }
 
+    fn make_normal_pipe() -> (File, File) {
+        use libc::c_int;
+        use std::os::unix::io::FromRawFd;
+
+        let mut fds: [c_int; 2] = [0, 0];
+        assert!(
+            (unsafe { libc::pipe(std::ptr::from_mut::<c_int>(&mut fds[0])) } == 0),
+            "Failed to create pipe"
+        );
+
+        // Return both read and write ends as Files
+        let read_end = unsafe { File::from_raw_fd(fds[0]) };
+        let write_end = unsafe { File::from_raw_fd(fds[1]) };
+        (read_end, write_end)
+    }
+
     fn run_tee(proc: &mut UCommand) -> (String, CmdResult) {
         let content = (1..=100_000).fold(String::new(), |mut output, x| {
             let _ = writeln!(output, "{x}");
@@ -586,43 +602,17 @@ mod linux_only {
             .succeeds();
     }
 
-    /// Regression test for: tee -p hangs in normal pipelines
-    /// See: https://github.com/uutils/coreutils/issues/XXXX
-    ///
-    /// The issue was that tee -p would hang indefinitely when used in a normal
-    /// pipeline (e.g., `echo "test" | tee -p file | cat`) because the pre-check
-    /// using poll() with POLLRDBAND would block on normal (non-broken) pipes.
-    ///
-    /// This test verifies that tee -p works correctly in a normal pipeline where
-    /// stdout is connected to another process (simulated via a pipe) and data
-    /// flows through without hanging.
+    /// Test that tee -p handles normal pipelines without hanging.
     #[test]
     fn test_pipe_mode_normal_pipeline_no_hang() {
-        use std::fs::File;
         use std::io::Read;
-        use std::os::unix::io::FromRawFd;
 
         let content = "test data for pipeline\n";
-
-        // Create a pipe to simulate stdout being connected to another process
-        let (read_fd, write_fd) = unsafe {
-            let mut fds: [libc::c_int; 2] = [0, 0];
-            assert_eq!(
-                libc::pipe(fds.as_mut_ptr()),
-                0,
-                "Failed to create stdout pipe"
-            );
-            (fds[0], fds[1])
-        };
-
-        let stdout_write = unsafe { File::from_raw_fd(write_fd) };
-        let mut stdout_read = unsafe { File::from_raw_fd(read_fd) };
+        let (mut stdout_read, stdout_write) = make_normal_pipe();
 
         let (at, mut ucmd) = at_and_ucmd!();
         let file_out = "pipeline_test_output.txt";
 
-        // Run tee with -p flag, piping input and capturing stdout
-        // Use a timeout to fail fast if tee hangs
         let result = ucmd
             .timeout(Duration::from_secs(2))
             .arg("-p")
@@ -631,16 +621,13 @@ mod linux_only {
             .pipe_in(content)
             .succeeds();
 
-        // Verify data was written to the file
         assert!(at.file_exists(file_out));
         assert_eq!(at.read(file_out), content);
 
-        // Verify data passed through to stdout (the pipe)
         let mut stdout_content = String::new();
         stdout_read.read_to_string(&mut stdout_content).unwrap();
         assert_eq!(stdout_content, content);
 
-        // Ensure no stderr
         assert!(
             result.stderr_str().is_empty(),
             "Unexpected stderr: {}",
