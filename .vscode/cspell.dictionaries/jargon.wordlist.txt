@@ -49,6 +49,7 @@ canonicalization
 canonicalize
 canonicalizing
 capget
+cflags
 charmap
 chld
 codegen
@@ -124,6 +125,7 @@ kibi
 kibibytes
 langinfo
 lcase
+lflags
 libacl
 listxattr
 llistxattr
