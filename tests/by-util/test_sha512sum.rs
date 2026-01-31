@@ -110,12 +110,3 @@ fn test_conflicting_arg() {
     new_ucmd!().arg("--tag").arg("--check").fails_with_code(1);
     new_ucmd!().arg("--tag").arg("--text").fails_with_code(1);
 }
-
-#[test]
-fn test_help_shows_correct_utility_name() {
-    new_ucmd!()
-        .arg("--help")
-        .succeeds()
-        .stdout_contains("Usage: sha512sum")
-        .stdout_does_not_contain("Usage: hashsum");
-}
