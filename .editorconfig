@@ -57,6 +57,10 @@ switch_case_indent = true
 end_of_line = crlf
 insert_final_newline = false
 
+[*.toml]
+indent_size = 2
+indent_style = space
+
 [*.{yaml,yml,[Yy][Mm][Ll],[Yy][Aa][Mm][Ll]}]
 # YAML
 indent_size = 2
