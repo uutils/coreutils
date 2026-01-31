@@ -923,6 +923,7 @@ struct OutFile {
     filename: String,
     maybe_writer: Option<BufWriter<Box<dyn Write>>>,
     is_new: bool,
+    is_closed: bool,
 }
 
 /// A set of output files
@@ -994,6 +995,7 @@ impl ManageOutFiles for OutFiles {
                 filename,
                 maybe_writer,
                 is_new: true,
+                is_closed: false,
             });
         }
         Ok(out_files)
@@ -1198,7 +1200,7 @@ where
                 None => {
                     let idx = (i - 1) as usize;
                     let writer = out_files.get_writer(idx, settings)?;
-                    writer.write_all(buf)?;
+                    custom_write_all(buf, writer, settings)?;
                 }
             }
         } else {
@@ -1393,13 +1395,21 @@ where
     // Create one writer for each chunk.
     // This will create each of the underlying files
     // or stdin pipes to child shell/command processes if in `--filter` mode
+    // If in N chunks mode
+    // Create one writer for each chunk.
+    // This will create each of the underlying files
+    // or stdin pipes to child shell/command processes if in `--filter` mode.
+    // We use lazy initialization (is_writer_optional = true) to avoid hitting
+    // system resource limits (like EMFILE or EAGAIN on macOS) prematurely,
+    // especially when many filter processes would be spawned at once.
     if kth_chunk.is_none() {
-        out_files = OutFiles::init(num_chunks, settings, settings.elide_empty_files)?;
+        out_files = OutFiles::init(num_chunks, settings, true)?;
     }
 
-    let num_chunks: usize = num_chunks.try_into().unwrap();
+    let num_chunks_size: usize = num_chunks.try_into().unwrap();
     let sep = settings.separator;
-    let mut closed_writers = 0;
+    let mut any_writer_open = true;
+    let mut wrote_in_current_round = false;
 
     let mut i = 0;
     loop {
@@ -1413,22 +1423,56 @@ where
 
         let bytes = line.as_slice();
         if let Some(chunk_number) = kth_chunk {
-            if (i % num_chunks) == (chunk_number - 1) as usize {
+            if (i % num_chunks_size) == (chunk_number - 1) as usize {
                 stdout_writer.write_all(bytes)?;
             }
         } else {
-            let writer = out_files.get_writer(i % num_chunks, settings)?;
-            let writer_stdin_open = custom_write_all(bytes, writer, settings)?;
-            if !writer_stdin_open {
-                closed_writers += 1;
+            let chunk_idx = i % num_chunks_size;
+            if !out_files[chunk_idx].is_closed {
+                let writer = out_files.get_writer(chunk_idx, settings)?;
+                let writer_stdin_open = custom_write_all(bytes, writer, settings)?;
+                if writer_stdin_open {
+                    wrote_in_current_round = true;
+                    // Ensure data is sent to filter processes immediately in round-robin mode
+                    if let Err(e) = writer.flush() {
+                        if ignorable_io_error(&e, settings) {
+                            out_files[chunk_idx].is_closed = true;
+                        } else {
+                            return Err(e.into());
+                        }
+                    }
+                } else {
+                    out_files[chunk_idx].is_closed = true;
+                }
             }
         }
         i += 1;
-        if closed_writers == num_chunks {
+
+        // After completing a full round of chunks
+        if i % num_chunks_size == 0 && kth_chunk.is_none() {
+            if !wrote_in_current_round {
+                any_writer_open = false;
+            }
+            wrote_in_current_round = false;
+        }
+
+        if !any_writer_open {
             // all writers are closed - stop reading
             break;
         }
     }
+
+    // GNU coreutils compatibility: Ensure all files are created if !elide_empty_files,
+    // even if no data was written to them.
+    if kth_chunk.is_none() && !settings.elide_empty_files {
+        for chunk_idx in 0..num_chunks_size {
+            // We only need to "touch" the file (instantiate the writer).
+            // get_writer will create the file/process if it doesn't exist.
+            // If it already exists, it does nothing.
+            let _ = out_files.get_writer(chunk_idx, settings);
+        }
+    }
+
     Ok(())
 }
 

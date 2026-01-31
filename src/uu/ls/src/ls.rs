@@ -3,8 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly
-// spell-checker:ignore nohash strtime clocale
+// spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly nohash strtime
 
 #[cfg(unix)]
 use fnv::FnvHashMap as HashMap;
@@ -19,7 +18,7 @@ use std::{
     cell::{LazyCell, OnceCell},
     cmp::Reverse,
     ffi::{OsStr, OsString},
-    fmt::Write as _,
+    fmt::Write as FmtWrite,
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
     io::{BufWriter, ErrorKind, IsTerminal, Stdout, Write, stdout},
     iter,
@@ -82,7 +81,7 @@ mod dired;
 use dired::{DiredOutput, is_dired_arg_present};
 mod colors;
 use crate::options::QUOTING_STYLE;
-use colors::{LsColorsParseError, StyleManager, color_name, validate_ls_colors_env};
+use colors::{StyleManager, color_name};
 
 pub mod options {
     pub mod format {
@@ -339,12 +338,6 @@ enum IndicatorStyle {
     Classify,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum LocaleQuoting {
-    Single,
-    Double,
-}
-
 pub struct Config {
     // Dir and vdir needs access to this field
     pub format: Format,
@@ -368,12 +361,11 @@ pub struct Config {
     width: u16,
     // Dir and vdir needs access to this field
     pub quoting_style: QuotingStyle,
-    locale_quoting: Option<LocaleQuoting>,
     indicator_style: IndicatorStyle,
     time_format_recent: String,        // Time format for recent dates
     time_format_older: Option<String>, // Time format for older dates (optional, if not present, time_format_recent is used)
     context: bool,
-    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+    #[cfg(all(feature = "selinux", target_os = "linux"))]
     selinux_supported: bool,
     #[cfg(all(feature = "smack", target_os = "linux"))]
     smack_supported: bool,
@@ -663,62 +655,21 @@ fn extract_hyperlink(options: &clap::ArgMatches) -> bool {
 /// # Returns
 ///
 /// * An option with None if the style string is invalid, or a `QuotingStyle` wrapped in `Some`.
-struct QuotingStyleSpec {
-    style: QuotingStyle,
-    fixed_control: bool,
-    locale: Option<LocaleQuoting>,
-}
-
-impl QuotingStyleSpec {
-    fn new(style: QuotingStyle) -> Self {
-        Self {
-            style,
-            fixed_control: false,
-            locale: None,
-        }
-    }
-
-    fn with_locale(style: QuotingStyle, locale: LocaleQuoting) -> Self {
-        Self {
-            style,
-            fixed_control: true,
-            locale: Some(locale),
-        }
-    }
-}
-
-fn match_quoting_style_name(
-    style: &str,
-    show_control: bool,
-) -> Option<(QuotingStyle, Option<LocaleQuoting>)> {
-    let spec = match style {
-        "literal" => QuotingStyleSpec::new(QuotingStyle::Literal {
-            show_control: false,
+fn match_quoting_style_name(style: &str, show_control: bool) -> Option<QuotingStyle> {
+    match style {
+        "literal" => Some(QuotingStyle::Literal { show_control }),
+        "shell" => Some(QuotingStyle::SHELL),
+        "shell-always" => Some(QuotingStyle::SHELL_QUOTE),
+        "shell-escape" => Some(QuotingStyle::SHELL_ESCAPE),
+        "shell-escape-always" => Some(QuotingStyle::SHELL_ESCAPE_QUOTE),
+        "c" => Some(QuotingStyle::C_DOUBLE),
+        "escape" => Some(QuotingStyle::C_NO_QUOTES),
+        "locale" => Some(QuotingStyle::C {
+            quotes: uucore::quoting_style::Quotes::Locale,
         }),
-        "shell" => QuotingStyleSpec::new(QuotingStyle::SHELL),
-        "shell-always" => QuotingStyleSpec::new(QuotingStyle::SHELL_QUOTE),
-        "shell-escape" => QuotingStyleSpec::new(QuotingStyle::SHELL_ESCAPE),
-        "shell-escape-always" => QuotingStyleSpec::new(QuotingStyle::SHELL_ESCAPE_QUOTE),
-        "c" => QuotingStyleSpec::new(QuotingStyle::C_DOUBLE),
-        "escape" => QuotingStyleSpec::new(QuotingStyle::C_NO_QUOTES),
-        "locale" => QuotingStyleSpec {
-            style: QuotingStyle::Literal {
-                show_control: false,
-            },
-            fixed_control: true,
-            locale: Some(LocaleQuoting::Single),
-        },
-        "clocale" => QuotingStyleSpec::with_locale(QuotingStyle::C_DOUBLE, LocaleQuoting::Double),
-        _ => return None,
-    };
-
-    let style = if spec.fixed_control {
-        spec.style
-    } else {
-        spec.style.show_control(show_control)
-    };
-
-    Some((style, spec.locale))
+        _ => None,
+    }
+    .map(|qs| qs.show_control(show_control))
 }
 
 /// Extracts the quoting style to use based on the options provided.
@@ -733,30 +684,27 @@ fn match_quoting_style_name(
 /// # Returns
 ///
 /// A [`QuotingStyle`] variant representing the quoting style to use.
-fn extract_quoting_style(
-    options: &clap::ArgMatches,
-    show_control: bool,
-) -> (QuotingStyle, Option<LocaleQuoting>) {
+fn extract_quoting_style(options: &clap::ArgMatches, show_control: bool) -> QuotingStyle {
     let opt_quoting_style = options.get_one::<String>(QUOTING_STYLE);
 
     if let Some(style) = opt_quoting_style {
         match match_quoting_style_name(style, show_control) {
-            Some(pair) => pair,
+            Some(qs) => qs,
             None => unreachable!("Should have been caught by Clap"),
         }
     } else if options.get_flag(options::quoting::LITERAL) {
-        (QuotingStyle::Literal { show_control }, None)
+        QuotingStyle::Literal { show_control }
     } else if options.get_flag(options::quoting::ESCAPE) {
-        (QuotingStyle::C_NO_QUOTES, None)
+        QuotingStyle::C_NO_QUOTES
     } else if options.get_flag(options::quoting::C) {
-        (QuotingStyle::C_DOUBLE, None)
+        QuotingStyle::C_DOUBLE
     } else if options.get_flag(options::DIRED) {
-        (QuotingStyle::Literal { show_control }, None)
+        QuotingStyle::Literal { show_control }
     } else {
         // If set, the QUOTING_STYLE environment variable specifies a default style.
         if let Ok(style) = std::env::var("QUOTING_STYLE") {
             match match_quoting_style_name(style.as_str(), show_control) {
-                Some(pair) => return pair,
+                Some(qs) => return qs,
                 None => eprintln!(
                     "{}",
                     translate!("ls-invalid-quoting-style", "program" => std::env::args().next().unwrap_or_else(|| "ls".to_string()), "style" => style.clone())
@@ -767,9 +715,9 @@ fn extract_quoting_style(
         // By default, `ls` uses Shell escape quoting style when writing to a terminal file
         // descriptor and Literal otherwise.
         if stdout().is_terminal() {
-            (QuotingStyle::SHELL_ESCAPE.show_control(show_control), None)
+            QuotingStyle::SHELL_ESCAPE.show_control(show_control)
         } else {
-            (QuotingStyle::Literal { show_control }, None)
+            QuotingStyle::Literal { show_control }
         }
     }
 }
@@ -1025,7 +973,7 @@ impl Config {
             !stdout().is_terminal()
         };
 
-        let (mut quoting_style, mut locale_quoting) = extract_quoting_style(options, show_control);
+        let mut quoting_style = extract_quoting_style(options, show_control);
         let indicator_style = extract_indicator_style(options);
         // Only parse the value to "--time-style" if it will become relevant.
         let dired = options.get_flag(options::DIRED);
@@ -1148,23 +1096,6 @@ impl Config {
                 .unwrap_or(0)
         {
             quoting_style = QuotingStyle::Literal { show_control };
-            locale_quoting = None;
-        }
-
-        if needs_color {
-            if let Err(err) = validate_ls_colors_env() {
-                if let LsColorsParseError::UnrecognizedPrefix(prefix) = &err {
-                    show_warning!(
-                        "{}",
-                        translate!(
-                            "ls-warning-unrecognized-ls-colors-prefix",
-                            "prefix" => prefix.quote()
-                        )
-                    );
-                }
-                show_warning!("{}", translate!("ls-warning-unparsable-ls-colors"));
-                needs_color = false;
-            }
         }
 
         let color = if needs_color {
@@ -1228,12 +1159,11 @@ impl Config {
             block_size,
             width,
             quoting_style,
-            locale_quoting,
             indicator_style,
             time_format_recent,
             time_format_older,
             context,
-            #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+            #[cfg(all(feature = "selinux", target_os = "linux"))]
             selinux_supported: uucore::selinux::is_selinux_enabled(),
             #[cfg(all(feature = "smack", target_os = "linux"))]
             smack_supported: uucore::smack::is_smack_enabled(),
@@ -1431,14 +1361,13 @@ pub fn uu_app() -> Command {
             .help(translate!("ls-help-set-quoting-style"))
             .value_parser(ShortcutValueParser::new([
                 PossibleValue::new("literal"),
-                PossibleValue::new("locale"),
                 PossibleValue::new("shell"),
                 PossibleValue::new("shell-escape"),
                 PossibleValue::new("shell-always"),
                 PossibleValue::new("shell-escape-always"),
-                PossibleValue::new("clocale"),
                 PossibleValue::new("c").alias("c-maybe"),
                 PossibleValue::new("escape"),
+                PossibleValue::new("locale"),
             ]))
             .overrides_with_all([
                 QUOTING_STYLE,
@@ -2109,7 +2038,8 @@ fn show_dir_name(
     out: &mut BufWriter<Stdout>,
     config: &Config,
 ) -> std::io::Result<()> {
-    let escaped_name = escape_dir_name_with_locale(path_data.path().as_os_str(), config);
+    let escaped_name =
+        locale_aware_escape_dir_name(path_data.path().as_os_str(), config.quoting_style);
 
     let name = if config.hyperlink && !config.dired {
         create_hyperlink(&escaped_name, path_data)
@@ -2119,70 +2049,6 @@ fn show_dir_name(
 
     write_os_str(out, &name)?;
     write!(out, ":")
-}
-
-fn escape_with_locale<F>(name: &OsStr, config: &Config, fallback: F) -> OsString
-where
-    F: FnOnce(&OsStr, QuotingStyle) -> OsString,
-{
-    if let Some(locale) = config.locale_quoting {
-        locale_quote(name, locale)
-    } else {
-        fallback(name, config.quoting_style)
-    }
-}
-
-fn escape_dir_name_with_locale(name: &OsStr, config: &Config) -> OsString {
-    escape_with_locale(name, config, locale_aware_escape_dir_name)
-}
-
-fn escape_name_with_locale(name: &OsStr, config: &Config) -> OsString {
-    escape_with_locale(name, config, locale_aware_escape_name)
-}
-
-fn locale_quote(name: &OsStr, style: LocaleQuoting) -> OsString {
-    let bytes = os_str_as_bytes_lossy(name);
-    let mut quoted = String::new();
-    match style {
-        LocaleQuoting::Single => quoted.push('\''),
-        LocaleQuoting::Double => quoted.push('"'),
-    }
-    for &byte in bytes.as_ref() {
-        push_locale_byte(&mut quoted, byte, style);
-    }
-    match style {
-        LocaleQuoting::Single => quoted.push('\''),
-        LocaleQuoting::Double => quoted.push('"'),
-    }
-    OsString::from(quoted)
-}
-
-fn push_locale_byte(buf: &mut String, byte: u8, style: LocaleQuoting) {
-    match (style, byte) {
-        (LocaleQuoting::Single, b'\'') => buf.push_str("'\\''"),
-        (LocaleQuoting::Double, b'"') => buf.push_str("\\\""),
-        (_, b'\\') => buf.push_str("\\\\"),
-        _ => push_basic_escape(buf, byte),
-    }
-}
-
-fn push_basic_escape(buf: &mut String, byte: u8) {
-    match byte {
-        b'\x07' => buf.push_str("\\a"),
-        b'\x08' => buf.push_str("\\b"),
-        b'\t' => buf.push_str("\\t"),
-        b'\n' => buf.push_str("\\n"),
-        b'\x0b' => buf.push_str("\\v"),
-        b'\x0c' => buf.push_str("\\f"),
-        b'\r' => buf.push_str("\\r"),
-        b'\x1b' => buf.push_str("\\e"),
-        b'"' => buf.push('"'),
-        b'\'' => buf.push('\''),
-        b if (0x20..=0x7e).contains(&b) => buf.push(b as char),
-        _ => {
-            let _ = write!(buf, "\\{byte:03o}");
-        }
-    }
 }
 
 // A struct to encapsulate state that is passed around from `list` functions.
@@ -2679,7 +2545,7 @@ fn display_items(
     // option, print the security context to the left of the size column.
 
     let quoted = items.iter().any(|item| {
-        let name = escape_name_with_locale(item.display_name(), config);
+        let name = locale_aware_escape_name(item.display_name(), config.quoting_style);
         os_str_starts_with(&name, b"'")
     });
 
@@ -2968,10 +2834,8 @@ fn display_item_long(
             output_display.extend(b".");
         } else if is_acl_set {
             output_display.extend(b"+");
-        } else {
-            output_display.extend(b" ");
         }
-
+        output_display.extend(b" ");
         output_display.extend_pad_left(&display_symlink_count(md), padding.link_count);
 
         if config.long.owner {
@@ -3327,7 +3191,7 @@ fn display_item_name(
     current_column: LazyCell<usize, Box<dyn FnOnce() -> usize + '_>>,
 ) -> OsString {
     // This is our return value. We start by `&path.display_name` and modify it along the way.
-    let mut name = escape_name_with_locale(path.display_name(), config);
+    let mut name = locale_aware_escape_name(path.display_name(), config.quoting_style);
 
     let is_wrap =
         |namelen: usize| config.width != 0 && *current_column + namelen > config.width.into();
@@ -3388,7 +3252,6 @@ fn display_item_name(
                 // This makes extra system calls, but provides important information that
                 // people run `ls -l --color` are very interested in.
                 if let Some(style_manager) = &mut state.style_manager {
-                    let escaped_target = escape_name_with_locale(target_path.as_os_str(), config);
                     // We get the absolute path to be able to construct PathData with valid Metadata.
                     // This is because relative symlinks will fail to get_metadata.
                     let mut absolute_target = target_path.clone();
@@ -3398,36 +3261,30 @@ fn display_item_name(
                         }
                     }
 
-                    match fs::canonicalize(&absolute_target) {
-                        Ok(resolved_target) => {
-                            let target_data = PathData::new(
-                                resolved_target,
-                                None,
-                                target_path.file_name().map(|s| s.to_os_string()),
-                                config,
-                                false,
-                            );
-                            name.push(color_name(
-                                escaped_target,
-                                &target_data,
-                                style_manager,
-                                None,
-                                is_wrap(name.len()),
-                            ));
-                        }
-                        Err(_) => {
-                            name.push(
-                                style_manager.apply_missing_target_style(
-                                    escaped_target,
-                                    is_wrap(name.len()),
-                                ),
-                            );
-                        }
+                    let target_data = PathData::new(absolute_target, None, None, config, false);
+
+                    // If we have a symlink to a valid file, we use the metadata of said file.
+                    // Because we use an absolute path, we can assume this is guaranteed to exist.
+                    // Otherwise, we use path.md(), which will guarantee we color to the same
+                    // color of non-existent symlinks according to style_for_path_with_metadata.
+                    if path.metadata().is_none() && target_data.metadata().is_none() {
+                        name.push(target_path);
+                    } else {
+                        name.push(color_name(
+                            locale_aware_escape_name(target_path.as_os_str(), config.quoting_style),
+                            path,
+                            style_manager,
+                            Some(&target_data),
+                            is_wrap(name.len()),
+                        ));
                     }
                 } else {
                     // If no coloring is required, we just use target as is.
                     // Apply the right quoting
-                    name.push(escape_name_with_locale(target_path.as_os_str(), config));
+                    name.push(locale_aware_escape_name(
+                        target_path.as_os_str(),
+                        config.quoting_style,
+                    ));
                 }
             }
             Err(err) => {
@@ -3531,7 +3388,7 @@ fn get_security_context<'a>(
         }
     }
 
-    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+    #[cfg(all(feature = "selinux", target_os = "linux"))]
     if config.selinux_supported {
         match selinux::SecurityContext::of_path(path, must_dereference, false) {
             Err(_r) => {
@@ -3633,19 +3490,6 @@ fn calculate_padding_collection(
             if config.context {
                 padding_collections.context = context_len.max(padding_collections.context);
             }
-
-            // correctly align columns when some files have capabilities/ACLs and others do not
-            {
-                #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
-                // TODO: See how Mac should work here
-                let is_acl_set = false;
-                #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-                let is_acl_set = has_acl(item.display_name());
-                if context_len > 1 || is_acl_set {
-                    padding_collections.link_count += 1;
-                }
-            }
-
             if items.len() == 1usize {
                 padding_collections.size = 0usize;
                 padding_collections.major = 0usize;

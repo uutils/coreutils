@@ -3906,6 +3906,103 @@ fn test_ls_quoting_style_arg_overrides_env_var() {
 }
 
 #[test]
+fn test_ls_quoting_style_locale() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file with spaces.txt");
+
+    // Test locale-specific quote characters available in CI environment
+    // CI only generates: en_US.UTF-8, fr_FR.UTF-8, es_ES.UTF-8, sv_SE.UTF-8
+    let test_cases = vec![
+        // English - ASCII double quotes
+        ("en_US.UTF-8", "\"file with spaces.txt\""),
+        // French - Guillemets (U+00AB, U+00BB)
+        ("fr_FR.UTF-8", "«file with spaces.txt»"),
+        // Spanish - Guillemets (U+00AB, U+00BB)
+        ("es_ES.UTF-8", "«file with spaces.txt»"),
+        // Swedish - ASCII double quotes (for Nordic languages)
+        ("sv_SE.UTF-8", "\"file with spaces.txt\""),
+        // C/POSIX locales - ASCII double quotes
+        ("C", "\"file with spaces.txt\""),
+        ("POSIX", "\"file with spaces.txt\""),
+    ];
+    // Note: Additional locales (de_DE, ja_JP, zh_CN, pl_PL, ru_RU) are tested
+    // in the locale_quotes unit tests but not here to avoid CI locale availability issues
+
+    for (locale, expected_output) in test_cases {
+        scene
+            .ucmd()
+            .env("LC_ALL", locale)
+            .arg("--quoting-style=locale")
+            .arg("file with spaces.txt")
+            .succeeds()
+            .stdout_only(format!("{expected_output}\n"));
+    }
+
+    // Test escape sequences work with locale quoting
+    // Note: Windows doesn't allow newlines in filenames, so skip this test on Windows
+    #[cfg(not(target_os = "windows"))]
+    {
+        at.touch("newline\nfile");
+        scene
+            .ucmd()
+            .env("LC_ALL", "fr_FR.UTF-8")
+            .arg("--quoting-style=locale")
+            .arg("newline\nfile")
+            .succeeds()
+            .stdout_only("«newline\\nfile»\n");
+    }
+}
+
+#[test]
+fn test_ls_quoting_style_locale_env_vars() {
+    // Test that --quoting-style=locale respects different locale environment variables
+    // Note: Environment variable precedence (LC_ALL > LC_CTYPE > LANG) is tested
+    // comprehensively in unit tests (locale_quotes.rs). These integration tests
+    // verify the feature works end-to-end with different locales.
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("test file.txt");
+
+    // Test with LC_ALL set to French locale
+    scene
+        .ucmd()
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .arg("--quoting-style=locale")
+        .arg("test file.txt")
+        .succeeds()
+        .stdout_only("«test file.txt»\n"); // French guillemets
+
+    // Test with LC_ALL set to Spanish locale
+    scene
+        .ucmd()
+        .env("LC_ALL", "es_ES.UTF-8")
+        .arg("--quoting-style=locale")
+        .arg("test file.txt")
+        .succeeds()
+        .stdout_only("«test file.txt»\n"); // Spanish guillemets
+
+    // Test with LC_ALL set to Swedish locale (ASCII quotes)
+    scene
+        .ucmd()
+        .env("LC_ALL", "sv_SE.UTF-8")
+        .arg("--quoting-style=locale")
+        .arg("test file.txt")
+        .succeeds()
+        .stdout_only("\"test file.txt\"\n"); // Swedish ASCII quotes
+
+    // Test with LC_ALL set to C locale (ASCII quotes)
+    scene
+        .ucmd()
+        .env("LC_ALL", "C")
+        .arg("--quoting-style=locale")
+        .arg("test file.txt")
+        .succeeds()
+        .stdout_only("\"test file.txt\"\n"); // C locale ASCII quotes
+}
+
+#[test]
 fn test_ls_quoting_and_color() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
