@@ -66,11 +66,9 @@ jobs:
       - name: Run sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.9
 
-      - name: Install locales
+      - name: locales
         shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y locales
           sudo locale-gen fr_FR.UTF-8
           sudo update-locale
 

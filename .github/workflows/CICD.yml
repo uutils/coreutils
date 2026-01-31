@@ -120,8 +120,7 @@ jobs:
       uses: mozilla-actions/sccache-action@v0.0.9
     - name: Install/setup prerequisites
       shell: bash
-      run: |
-        sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu libselinux1-dev
+      run: sudo apt-get -y --no-install-recommends install gcc-aarch64-linux-gnu libselinux1-dev
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -202,7 +201,7 @@ jobs:
       shell: bash
       run: |
         # Install a package for one of the tests
-        sudo apt-get -y update ; sudo apt-get -y install attr
+        sudo apt-get -y --no-install-recommends install attr
     - name: Info
       shell: bash
       run: |
@@ -761,20 +760,16 @@ jobs:
         ## Install/setup prerequisites
         case '${{ matrix.job.target }}' in
           arm-unknown-linux-gnueabihf)
-            sudo apt-get -y update
-            sudo apt-get -y install gcc-arm-linux-gnueabihf
+            sudo apt-get -y --no-install-recommends install gcc-arm-linux-gnueabihf
           ;;
           aarch64-unknown-linux-*)
-            sudo apt-get -y update
-            sudo apt-get -y install gcc-aarch64-linux-gnu
+            sudo apt-get -y --no-install-recommends install gcc-aarch64-linux-gnu
           ;;
           riscv64gc-unknown-linux-*)
-            sudo apt-get -y update
-            sudo apt-get -y install gcc-riscv64-linux-gnu
+            sudo apt-get -y --no-install-recommends install gcc-riscv64-linux-gnu
           ;;
           *-redox*)
-            sudo apt-get -y update
-            sudo apt-get -y install fuse3 libfuse-dev
+            sudo apt-get -y --no-install-recommends install fuse3 libfuse-dev
           ;;
         esac
         case '${{ matrix.job.os }}' in
@@ -783,8 +778,8 @@ jobs:
         case '${{ matrix.job.os }}' in
           ubuntu-*)
             # selinux and systemd headers needed to build tests
-            sudo apt-get -y update
-            sudo apt-get -y install libselinux1-dev libsystemd-dev
+            sudo apt-get update -o Acquire::Languages=none
+            sudo apt-get -y --no-install-recommends install libselinux1-dev libsystemd-dev
             # pinky is a tool to show logged-in users from utmp, and gecos fields from /etc/passwd.
             # In GitHub Action *nix VMs, no accounts log in, even the "runner" account that runs the commands, and "system boot" entry is missing.
             # The account also has empty gecos fields.
@@ -947,7 +942,7 @@ jobs:
     - name: Install/setup prerequisites
       shell: bash
       run: |
-        sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
+        sudo apt-get -y --no-install-recommends install libselinux1-dev
         ## Install/setup prerequisites
         make prepare-busytest
     - name: Run BusyBox test suite
@@ -1034,7 +1029,7 @@ jobs:
     - name: Install/setup prerequisites
       shell: bash
       run: |
-        sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
+        sudo apt-get -y --no-install-recommends install libselinux1-dev
     - name: Build coreutils as multiple binaries
       shell: bash
       run: |
@@ -1166,8 +1161,7 @@ jobs:
         case '${{ matrix.job.os }}' in
           ubuntu-latest)
             # selinux and systemd headers needed to build tests
-            sudo apt-get -y update
-            sudo apt-get -y install libselinux1-dev libsystemd-dev
+            sudo apt-get -y --no-install-recommends install libselinux1-dev libsystemd-dev
             # pinky is a tool to show logged-in users from utmp, and gecos fields from /etc/passwd.
             # In GitHub Action *nix VMs, no accounts log in, even the "runner" account that runs the commands, and "system boot" entry is missing.
             # The account also has empty gecos fields.
@@ -1325,7 +1319,7 @@ jobs:
     - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
     - name: Install strace
-      run: sudo apt-get update && sudo apt-get install -y strace
+      run: sudo apt-get --no-install-recommends install -y strace
     - name: Build utilities with safe traversal
       run: cargo build --profile=release-small -p uu_rm -p uu_chmod -p uu_chown -p uu_chgrp -p uu_mv -p uu_du
     - name: Run safe traversal verification
