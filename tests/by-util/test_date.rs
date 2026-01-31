@@ -1988,5 +1988,11 @@ fn test_percent_percent_not_replaced() {
             .arg(format)
             .succeeds()
             .stdout_is(expected);
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .env("LC_ALL", "fr_FR.UTF-8")
+            .arg(format)
+            .succeeds()
+            .stdout_is(expected);
     }
 }
