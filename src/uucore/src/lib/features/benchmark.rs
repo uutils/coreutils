@@ -40,6 +40,17 @@ where
     util_func(os_args.into_iter())
 }
 
+/// Prepare benchmark arguments for a utility function
+pub fn get_bench_args(
+    args: &[&dyn AsRef<std::ffi::OsStr>],
+) -> std::vec::IntoIter<std::ffi::OsString> {
+    // Prepend a dummy program name as argv[0] since clap expects it
+    let os_args = std::iter::once("benchmark".into())
+        .chain(args.iter().map(Into::into))
+        .collect_vec();
+    os_args.into_iter()
+}
+
 /// Helper function to set up a temporary test file and leak the temporary directory
 /// so it persists for the duration of the benchmark
 pub fn setup_test_file(data: &[u8]) -> PathBuf {
