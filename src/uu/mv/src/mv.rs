@@ -20,6 +20,10 @@ use std::collections::HashSet;
 use std::env;
 use std::ffi::OsString;
 use std::fs;
+#[cfg(unix)]
+use std::io::Write as _;
+#[cfg(unix)]
+use std::io::stderr;
 use std::io::{self, IsTerminal};
 #[cfg(unix)]
 use std::os::unix;
@@ -588,12 +592,17 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
 
         // Pre-scan files if needed
         if let Err(e) = scanner.scan_files(files, &hardlink_options) {
+            let mut error = stderr().lock();
             if hardlink_options.verbose {
-                eprintln!("mv: warning: failed to scan files for hardlinks: {e}");
-                eprintln!("mv: continuing without hardlink preservation");
+                let _ = writeln!(
+                    error,
+                    "mv: warning: failed to scan files for hardlinks: {e}"
+                );
+                let _ = writeln!(error, "mv: continuing without hardlink preservation");
             } else {
                 // Show warning in non-verbose mode for serious errors
-                eprintln!(
+                let _ = writeln!(
+                    error,
                     "mv: warning: hardlink scanning failed, continuing without hardlink preservation"
                 );
             }
