@@ -263,9 +263,13 @@ locales:
 		fi; \
 	done
 
-
+# Some utils require extra locale files outside of their package:
+# - *sum binaries need the files from checksum_common
+INSTALLEES_WITH_EXTRA_LOCALE = \
+	$(INSTALLEES) \
+	$(if $(findstring sum, $(INSTALLEES)),checksum_common, )
 install-locales:
-	@for prog in $(INSTALLEES); do \
+	@for prog in $(INSTALLEES_WITH_EXTRA_LOCALE); do \
 		if [ -d "$(BASEDIR)/src/uu/$$prog/locales" ]; then \
 			mkdir -p "$(DESTDIR)$(DATAROOTDIR)/locales/$$prog"; \
 			for locale_file in "$(BASEDIR)"/src/uu/$$prog/locales/*.ftl; do \
