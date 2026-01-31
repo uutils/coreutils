@@ -3838,6 +3838,9 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
+ "libc",
+ "num-bigint",
+ "num-traits",
  "thiserror 2.0.18",
  "uucore",
 ]
