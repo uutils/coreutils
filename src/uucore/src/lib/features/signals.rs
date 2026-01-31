@@ -565,7 +565,7 @@ pub fn ensure_stdout_not_broken() -> std::io::Result<bool> {
 
     let out = stdout();
 
-    // Check that stdout is a fifo
+    // First, check that stdout is a fifo and return true if it's not the case
     let stat = fstat(out.as_fd())?;
     if !SFlag::from_bits_truncate(stat.st_mode).contains(SFlag::S_IFIFO) {
         return Ok(true);
@@ -576,6 +576,7 @@ pub fn ensure_stdout_not_broken() -> std::io::Result<bool> {
     let res = poll(&mut pfds, PollTimeout::ZERO)?;
 
     if res > 0 {
+        // poll returned with events ready - check if POLLERR is set (pipe broken)
         if let Some(revents) = pfds[0].revents() {
             if revents.contains(PollFlags::POLLERR) {
                 return Ok(false);
@@ -583,6 +584,9 @@ pub fn ensure_stdout_not_broken() -> std::io::Result<bool> {
         }
     }
 
+    // res == 0 means no events ready (timeout reached immediately with ZERO timeout).
+    // This means the pipe is healthy (not broken).
+    // res < 0 would be an error, but nix returns Err in that case.
     Ok(true)
 }
 
