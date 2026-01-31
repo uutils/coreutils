@@ -29,6 +29,8 @@ use uucore::translate;
 use std::cmp;
 use std::env;
 use std::ffi::OsString;
+#[cfg(unix)]
+use std::fs::Metadata;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -273,7 +275,7 @@ impl Source {
                     }
                 }
                 // Get file length before seeking to avoid race condition
-                let file_len = f.metadata().map(|m| m.len()).unwrap_or(u64::MAX);
+                let file_len = f.metadata().as_ref().map_or(u64::MAX, Metadata::len);
                 // Try seek first; fall back to read if not seekable
                 match n.try_into().ok().map(|n| f.seek(SeekFrom::Current(n))) {
                     Some(Ok(pos)) => {
