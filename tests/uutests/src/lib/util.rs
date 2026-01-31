@@ -1041,6 +1041,14 @@ impl AtPath {
             .unwrap_or_else(|e| panic!("Couldn't write {name}: {e}"));
     }
 
+    pub fn sync_file(&self, name: &str) {
+        log_info("sync_file", self.plus_as_string(name));
+        let file = File::open(self.plus(name))
+            .unwrap_or_else(|e| panic!("Couldn't open {name} for sync: {e}"));
+        file.sync_all()
+            .unwrap_or_else(|e| panic!("Couldn't sync {name}: {e}"));
+    }
+
     pub fn append(&self, name: impl AsRef<Path>, contents: &str) {
         let name = name.as_ref();
         log_info("write(append)", self.plus_as_string(name));

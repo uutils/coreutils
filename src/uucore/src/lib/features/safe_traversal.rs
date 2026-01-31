@@ -20,6 +20,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd, RawFd};
 use std::path::{Path, PathBuf};
 
+use libc::{dev_t, ino_t, stat};
 use nix::dir::Dir;
 use nix::fcntl::{OFlag, openat};
 use nix::libc;
@@ -296,32 +297,31 @@ impl AsFd for DirFd {
 /// File information for tracking inodes
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct FileInfo {
-    pub dev: u64,
-    pub ino: u64,
+    pub dev: dev_t,
+    pub ino: ino_t,
 }
 
 impl FileInfo {
-    pub fn from_stat(stat: &libc::stat) -> Self {
-        // Allow unnecessary cast because st_dev and st_ino have different types on different platforms
+    pub fn from_stat(stat: &stat) -> Self {
         #[allow(clippy::unnecessary_cast)]
         Self {
-            dev: stat.st_dev as u64,
-            ino: stat.st_ino as u64,
+            dev: stat.st_dev as dev_t,
+            ino: stat.st_ino as ino_t,
         }
     }
 
     /// Create FileInfo from device and inode numbers
-    pub fn new(dev: u64, ino: u64) -> Self {
+    pub fn new(dev: dev_t, ino: ino_t) -> Self {
         Self { dev, ino }
     }
 
     /// Get the device number
-    pub fn device(&self) -> u64 {
+    pub fn device(&self) -> dev_t {
         self.dev
     }
 
     /// Get the inode number
-    pub fn inode(&self) -> u64 {
+    pub fn inode(&self) -> ino_t {
         self.ino
     }
 }
@@ -389,12 +389,10 @@ impl Metadata {
         self.stat.st_mode as u32
     }
 
+    // st_nlink type varies by platform (u16 on FreeBSD, u32/u64 on others)
+    #[allow(clippy::unnecessary_cast)]
     pub fn nlink(&self) -> u64 {
-        // st_nlink type varies by platform (u16 on FreeBSD, u32/u64 on others)
-        #[allow(clippy::unnecessary_cast)]
-        {
-            self.stat.st_nlink as u64
-        }
+        self.stat.st_nlink as u64
     }
 
     /// Compatibility methods to match std::fs::Metadata interface
@@ -419,12 +417,10 @@ impl std::os::unix::fs::MetadataExt for Metadata {
         self.stat.st_dev as u64
     }
 
+    // st_ino type varies by platform (u32 on FreeBSD, u64 on Linux)
+    #[allow(clippy::unnecessary_cast)]
     fn ino(&self) -> u64 {
-        // st_ino type varies by platform (u32 on FreeBSD, u64 on Linux)
-        #[allow(clippy::unnecessary_cast)]
-        {
-            self.stat.st_ino as u64
-        }
+        self.stat.st_ino as u64
     }
 
     // st_mode type varies by platform (u16 on macOS, u32 on Linux)
@@ -433,12 +429,10 @@ impl std::os::unix::fs::MetadataExt for Metadata {
         self.stat.st_mode as u32
     }
 
+    // st_nlink type varies by platform (u16 on FreeBSD, u32/u64 on others)
+    #[allow(clippy::unnecessary_cast)]
     fn nlink(&self) -> u64 {
-        // st_nlink type varies by platform (u16 on FreeBSD, u32/u64 on others)
-        #[allow(clippy::unnecessary_cast)]
-        {
-            self.stat.st_nlink as u64
-        }
+        self.stat.st_nlink as u64
     }
 
     fn uid(&self) -> u32 {
@@ -703,7 +697,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::unnecessary_cast)]
     fn test_file_info() {
         let temp_dir = TempDir::new().unwrap();
         let file_path = temp_dir.path().join("test_file");
@@ -712,8 +705,8 @@ mod tests {
         let dir_fd = DirFd::open(temp_dir.path()).unwrap();
         let stat = dir_fd.stat_at(OsStr::new("test_file"), true).unwrap();
         let file_info = FileInfo::from_stat(&stat);
-        assert_eq!(file_info.device(), stat.st_dev as u64);
-        assert_eq!(file_info.inode(), stat.st_ino as u64);
+        assert_eq!(file_info.device(), stat.st_dev);
+        assert_eq!(file_info.inode(), stat.st_ino);
     }
 
     #[test]

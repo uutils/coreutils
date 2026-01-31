@@ -4,10 +4,18 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (paths) atim sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty tsublink testfile1 testfile2 filelist fpath testdir testfile
-// spell-checker:ignore selfref ELOOP smallfile
+// spell-checker:ignore selfref ELOOP smallfile fiemap
 
 #[cfg(not(windows))]
 use regex::Regex;
+#[cfg(target_os = "linux")]
+use {
+    du::fiemap::{FIEMAP_EXTENT_ENCODED, FIEMAP_EXTENT_SHARED, walk_fiemap_extents},
+    rand::rngs::StdRng,
+    rand::{RngCore, SeedableRng},
+    std::fs::File,
+    std::path::Path,
+};
 
 #[cfg(not(target_os = "windows"))]
 use uutests::unwrap_or_return;
@@ -530,6 +538,86 @@ fn du_hard_link(s: &str) {
     } else {
         assert_eq!(s, "16\tsubdir/links\n");
     }
+}
+
+#[cfg(target_os = "linux")]
+fn reflink_extents_all_shared(path: &Path) -> bool {
+    let Ok(file) = File::open(path) else {
+        return false;
+    };
+    let mut saw_extent = false;
+    let mut all_shared = true;
+
+    let result = walk_fiemap_extents(&file, 0, |extent| {
+        saw_extent = true;
+
+        if extent.fe_physical == 0
+            || (extent.fe_flags & FIEMAP_EXTENT_ENCODED) != 0
+            || (extent.fe_flags & FIEMAP_EXTENT_SHARED) == 0
+        {
+            all_shared = false;
+            return false;
+        }
+
+        true
+    });
+
+    if result.is_err() || !saw_extent {
+        return false;
+    }
+
+    all_shared
+}
+
+#[cfg(target_os = "linux")]
+fn find_du_size(output: &str, file: &str) -> Option<usize> {
+    let prefixed = format!("./{file}");
+    for line in output.lines() {
+        let mut parts = line.split_whitespace();
+        let size = parts.next()?;
+        let path = parts.next()?;
+        if path == file || path == prefixed {
+            return size.parse().ok();
+        }
+    }
+    None
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_du_reflink_dedup() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let file1 = "reflink_src";
+    let file2 = "reflink_dst";
+
+    let file_size = 256 * 1024;
+    let mut data = vec![0_u8; file_size];
+    let mut rng = StdRng::seed_from_u64(0x5eed);
+    rng.fill_bytes(&mut data);
+    at.write_bytes(file1, &data);
+    at.sync_file(file1);
+
+    let cp_result = ts
+        .ccmd("cp")
+        .arg("--reflink=always")
+        .arg(file1)
+        .arg(file2)
+        .run();
+
+    if !cp_result.succeeded() {
+        // reflink not supported, skip this test
+        return;
+    }
+
+    at.sync_file(file2);
+    assert!(reflink_extents_all_shared(&at.plus(file2)));
+
+    let result = ts.ucmd().arg("--all").arg("--bytes").succeeds();
+    let size1 = find_du_size(result.stdout_str(), file1).unwrap();
+    let size2 = find_du_size(result.stdout_str(), file2).unwrap();
+    assert_eq!(size1, file_size);
+    assert_eq!(size2, 0);
 }
 
 #[test]
