@@ -348,6 +348,168 @@ pub fn get_message_with_args(id: &str, ftl_args: FluentArgs) -> String {
     get_message_internal(id, Some(ftl_args))
 }
 
+/// Maximum safe integer value for f64 (2^53 - 1)
+const F64_SAFE_MAX: i64 = 9007199254740991; // 2^53 - 1
+
+/// Trait for safely setting Fluent arguments with proper precision handling.
+///
+/// This trait ensures that large integers outside the safe f64 range are
+/// passed as strings to avoid precision loss in localized messages.
+///
+/// # Implementation Notes
+///
+/// This is a workaround for <https://github.com/projectfluent/fluent-rs/issues/337>
+/// Once fluent-rs supports full i64/u64 precision, this can be simplified.
+pub trait SafeFluentValue {
+    fn set_fluent_arg<'a>(self, args: &mut FluentArgs<'a>, key: &'a str);
+}
+
+/// Helper for autoref-based specialization.
+///
+/// This allows us to provide a specialized implementation for types that
+/// implement `SafeFluentValue` (like integers that need precision protection)
+/// while falling back to `Display::to_string()` for everything else.
+pub struct SafeWrap<'a, T: ?Sized>(pub &'a T);
+
+pub trait SafeFluentSpecialization {
+    fn set_arg<'b>(self, args: &mut FluentArgs<'b>, key: &'b str);
+}
+
+impl<T: SafeFluentValue + Clone> SafeFluentSpecialization for &&SafeWrap<'_, T> {
+    #[inline]
+    fn set_arg<'b>(self, args: &mut FluentArgs<'b>, key: &'b str) {
+        self.0.clone().set_fluent_arg(args, key);
+    }
+}
+
+pub trait DisplayFallback {
+    fn set_arg<'b>(self, args: &mut FluentArgs<'b>, key: &'b str);
+}
+
+impl<T: std::fmt::Display + ?Sized> DisplayFallback for &SafeWrap<'_, T> {
+    #[inline]
+    fn set_arg<'b>(self, args: &mut FluentArgs<'b>, key: &'b str) {
+        args.set(key, self.0.to_string());
+    }
+}
+
+// Signed integer implementations
+macro_rules! impl_safe_fluent_signed {
+    ($($t:ty),*) => {
+        $(
+            impl SafeFluentValue for $t {
+                #[inline]
+                fn set_fluent_arg<'a>(self, args: &mut FluentArgs<'a>, key: &'a str) {
+                    // Check if value is within safe f64 range: -(2^53-1) to +(2^53-1)
+                    // We must check the range on the original type to avoid truncation
+                    if (self as i128) >= -(F64_SAFE_MAX as i128)
+                        && (self as i128) <= (F64_SAFE_MAX as i128)
+                    {
+                        args.set(key, self as i64);
+                    } else {
+                        args.set(key, self.to_string());
+                    }
+                }
+            }
+        )*
+    };
+}
+
+// Unsigned integer implementations
+macro_rules! impl_safe_fluent_unsigned {
+    ($($t:ty),*) => {
+        $(
+            impl SafeFluentValue for $t {
+                #[inline]
+                fn set_fluent_arg<'a>(self, args: &mut FluentArgs<'a>, key: &'a str) {
+                    // Check if value is within safe f64 range: 0 to 2^53-1
+                    // We must check the range on the original type to avoid truncation
+                    if (self as u128) <= (F64_SAFE_MAX as u128) {
+                        args.set(key, self as u64);
+                    } else {
+                        args.set(key, self.to_string());
+                    }
+                }
+            }
+        )*
+    };
+}
+
+impl_safe_fluent_signed!(i8, i16, i32, i64, i128, isize);
+impl_safe_fluent_unsigned!(u8, u16, u32, u64, u128, usize);
+
+// f64 passes through directly (no precision issues)
+impl SafeFluentValue for f64 {
+    #[inline]
+    fn set_fluent_arg<'a>(self, args: &mut FluentArgs<'a>, key: &'a str) {
+        args.set(key, self);
+    }
+}
+
+// String types - convert borrowed strings to owned to satisfy lifetime requirements
+impl SafeFluentValue for &str {
+    #[inline]
+    fn set_fluent_arg<'a>(self, args: &mut FluentArgs<'a>, key: &'a str) {
+        args.set(key, self.to_string());
+    }
+}
+
+impl SafeFluentValue for &String {
+    #[inline]
+    fn set_fluent_arg<'a>(self, args: &mut FluentArgs<'a>, key: &'a str) {
+        args.set(key, self.clone());
+    }
+}
+
+impl SafeFluentValue for &Path {
+    #[inline]
+    fn set_fluent_arg<'a>(self, args: &mut FluentArgs<'a>, key: &'a str) {
+        args.set(key, self.to_string_lossy().to_string());
+    }
+}
+
+impl SafeFluentValue for &std::ffi::OsStr {
+    #[inline]
+    fn set_fluent_arg<'a>(self, args: &mut FluentArgs<'a>, key: &'a str) {
+        args.set(key, self.to_string_lossy().to_string());
+    }
+}
+
+impl SafeFluentValue for &std::io::Error {
+    #[inline]
+    fn set_fluent_arg<'a>(self, args: &mut FluentArgs<'a>, key: &'a str) {
+        args.set(key, self.to_string());
+    }
+}
+
+impl SafeFluentValue for crate::error::UIoError {
+    #[inline]
+    fn set_fluent_arg<'a>(self, args: &mut FluentArgs<'a>, key: &'a str) {
+        args.set(key, self.to_string());
+    }
+}
+
+impl SafeFluentValue for &crate::error::UIoError {
+    #[inline]
+    fn set_fluent_arg<'a>(self, args: &mut FluentArgs<'a>, key: &'a str) {
+        args.set(key, self.to_string());
+    }
+}
+
+impl SafeFluentValue for os_display::Quoted<'_> {
+    #[inline]
+    fn set_fluent_arg<'a>(self, args: &mut FluentArgs<'a>, key: &'a str) {
+        args.set(key, self.to_string());
+    }
+}
+
+impl SafeFluentValue for String {
+    #[inline]
+    fn set_fluent_arg<'a>(self, args: &mut FluentArgs<'a>, key: &'a str) {
+        args.set(key, self);
+    }
+}
+
 /// Function to detect system locale from environment variables
 fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
     let locale_str = std::env::var("LANG")
@@ -547,14 +709,10 @@ macro_rules! translate {
         {
             let mut args = fluent::FluentArgs::new();
             $(
-                let value_str = $value.to_string();
-                if let Ok(num_val) = value_str.parse::<i64>() {
-                    args.set($key, num_val);
-                } else if let Ok(float_val) = value_str.parse::<f64>() {
-                    args.set($key, float_val);
-                } else {
-                    // Keep as string if not a number
-                    args.set($key, value_str);
+                {
+                    #[allow(unused_imports)]
+                    use $crate::locale::{DisplayFallback, SafeFluentSpecialization};
+                    (&&$crate::locale::SafeWrap(&$value)).set_arg(&mut args, $key);
                 }
             )+
             $crate::locale::get_message_with_args($id, args)
@@ -1400,6 +1558,152 @@ invalid-syntax = This is { $missing
             // Test usage key fallback
             let usage_key = get_message("common-usage");
             assert!(!usage_key.is_empty());
+        })
+        .join()
+        .unwrap();
+    }
+
+    #[test]
+    fn test_translate_macro_big_number_precision() {
+        std::thread::spawn(|| {
+            let temp_dir = create_test_locales_dir();
+            let locale = LanguageIdentifier::from_str("en-US").unwrap();
+
+            init_test_localization(&locale, temp_dir.path()).unwrap();
+
+            // Test with i64::MAX - should preserve precision
+            let result = translate!("welcome", "name" => i64::MAX);
+            assert!(
+                result.contains("9223372036854775807"),
+                "Expected i64::MAX (9223372036854775807) to be preserved, got: {result}"
+            );
+            assert!(
+                !result.contains("9223372036854776000"),
+                "Should not have precision loss, but got: {result}"
+            );
+
+            // Test with number within safe range
+            let result_safe = translate!("welcome", "name" => 1000);
+            assert!(result_safe.contains("1000"));
+
+            // Test with number at safe boundary
+            const F64_SAFE_MAX: i64 = (1_i64 << 53) - 1;
+            let result_boundary = translate!("welcome", "name" => F64_SAFE_MAX);
+            assert!(result_boundary.contains(&F64_SAFE_MAX.to_string()));
+
+            // Test with number just beyond safe boundary
+            let beyond_safe = F64_SAFE_MAX + 1;
+            let result_beyond = translate!("welcome", "name" => beyond_safe);
+            assert!(result_beyond.contains(&beyond_safe.to_string()));
+        })
+        .join()
+        .unwrap();
+    }
+
+    #[test]
+    fn test_translate_macro_preserves_existing_behavior() {
+        std::thread::spawn(|| {
+            let temp_dir = create_test_locales_dir();
+            let locale = LanguageIdentifier::from_str("en-US").unwrap();
+
+            init_test_localization(&locale, temp_dir.path()).unwrap();
+
+            // Test string values still work
+            let result_str = translate!("welcome", "name" => "Alice");
+            assert_eq!(result_str, "Welcome, Alice!");
+
+            // Test small numbers still work
+            let result_num = translate!("count-items", "count" => 5);
+            assert_eq!(result_num, "You have 5 items");
+
+            // Test with multiple arguments
+            let count = 10;
+            let result_multi = translate!(
+                "count-items",
+                "count" => count
+            );
+            assert!(result_multi.contains("10"));
+        })
+        .join()
+        .unwrap();
+    }
+
+    #[test]
+    fn test_translate_macro_u64_precision() {
+        std::thread::spawn(|| {
+            let temp_dir = create_test_locales_dir();
+            let locale = LanguageIdentifier::from_str("en-US").unwrap();
+
+            init_test_localization(&locale, temp_dir.path()).unwrap();
+
+            // Test u64::MAX - should preserve precision
+            let result = translate!("welcome", "name" => u64::MAX);
+            assert!(
+                result.contains("18446744073709551615"),
+                "Expected u64::MAX (18446744073709551615) to be preserved, got: {result}"
+            );
+            assert!(
+                !result.contains("18446744073709552000"),
+                "Should not have precision loss, but got: {result}"
+            );
+
+            // Test i64::MAX + 1 as u64 - should preserve precision
+            let big_u64 = i64::MAX as u64 + 1;
+            let result2 = translate!("welcome", "name" => big_u64);
+            assert!(
+                result2.contains("9223372036854775808"),
+                "Expected i64::MAX+1 (9223372036854775808) to be preserved, got: {result2}"
+            );
+            assert!(
+                !result2.contains("9223372036854776000"),
+                "Should not have precision loss, but got: {result2}"
+            );
+
+            // Test u64 within safe range - should work as number
+            let safe_u64: u64 = 1000;
+            let result_safe = translate!("welcome", "name" => safe_u64);
+            assert!(result_safe.contains("1000"));
+
+            // Test u64 at boundary of safe range
+            const F64_SAFE_MAX: u64 = (1_u64 << 53) - 1;
+            let result_boundary = translate!("welcome", "name" => F64_SAFE_MAX);
+            assert!(result_boundary.contains(&F64_SAFE_MAX.to_string()));
+
+            // Test u64 just beyond safe boundary
+            let beyond_safe = F64_SAFE_MAX + 1;
+            let result_beyond = translate!("welcome", "name" => beyond_safe);
+            assert!(
+                result_beyond.contains(&beyond_safe.to_string()),
+                "Expected {beyond_safe} to be preserved, got: {result_beyond}"
+            );
+        })
+        .join()
+        .unwrap();
+    }
+
+    #[test]
+    fn test_translate_macro_negative_large_numbers() {
+        std::thread::spawn(|| {
+            let temp_dir = create_test_locales_dir();
+            let locale = LanguageIdentifier::from_str("en-US").unwrap();
+
+            init_test_localization(&locale, temp_dir.path()).unwrap();
+
+            // Test i64::MIN - should preserve precision
+            let result = translate!("welcome", "name" => i64::MIN);
+            assert!(
+                result.contains("-9223372036854775808"),
+                "Expected i64::MIN to be preserved, got: {result}"
+            );
+
+            // Test large negative number beyond safe range
+            const F64_SAFE_MAX: i64 = (1_i64 << 53) - 1;
+            let large_negative = -F64_SAFE_MAX - 1;
+            let result2 = translate!("welcome", "name" => large_negative);
+            assert!(
+                result2.contains(&large_negative.to_string()),
+                "Expected {large_negative} to be preserved, got: {result2}"
+            );
         })
         .join()
         .unwrap();
