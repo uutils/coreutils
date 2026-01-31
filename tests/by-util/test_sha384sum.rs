@@ -113,7 +113,6 @@ fn test_conflicting_arg() {
 
 #[test]
 fn test_help_shows_correct_utility_name() {
-    // Test that help output shows the actual utility name instead of "hashsum"
     new_ucmd!()
         .arg("--help")
         .succeeds()
