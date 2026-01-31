@@ -221,8 +221,8 @@ jobs:
         # dependencies
         echo "## dependency list"
         ## * using the 'stable' toolchain is necessary to avoid "unexpected '--filter-platform'" errors
-        RUSTUP_TOOLCHAIN=stable cargo fetch --locked --quiet --target $(rustc --print host-tuple)
-        RUSTUP_TOOLCHAIN=stable cargo tree --no-dedupe --locked -e=no-dev --prefix=none ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} | grep -vE "$PWD" | sort --unique
+        cargo +stable fetch --locked --quiet --target $(rustc --print host-tuple)
+        cargo +stable tree --no-dedupe --locked -e=no-dev --prefix=none ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} | grep -vE "$PWD" | sort --unique
     - name: Test
       run: cargo nextest run --hide-progress-bar --profile ci ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -p uucore -p coreutils
       env:
@@ -548,14 +548,14 @@ jobs:
               --arg multisize "$SIZE_MULTI" \
               '{($date): { sha: $sha, size: $size, multisize: $multisize, }}' > size-result.json
     - name: Download the previous individual size result
-      uses: dawidd6/action-download-artifact@v12
+      uses: dawidd6/action-download-artifact@v13
       with:
         workflow: CICD.yml
         name: individual-size-result
         repo: uutils/coreutils
         path: dl
     - name: Download the previous size result
-      uses: dawidd6/action-download-artifact@v12
+      uses: dawidd6/action-download-artifact@v13
       with:
         workflow: CICD.yml
         name: size-result
@@ -1225,7 +1225,7 @@ jobs:
         fail_ci_if_error: false
 
   test_separately:
-    name: Separate Builds (individual and coreutils)# duplicated with other CI, but has better appearance 
+    name: Separate Builds (individual and coreutils)# duplicated with other CI, but has better appearance
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false

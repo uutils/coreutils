@@ -16,7 +16,7 @@ use std::{
     env,
     ffi::{OsStr, OsString},
     fs::{self, File},
-    io::{self, Write},
+    io::{self, Write, stderr},
     iter,
     path::{Path, PathBuf},
 };
@@ -33,7 +33,7 @@ use uucore::{
     hardware::{HardwareFeature, HasHardwareFeatures as _, SimdPolicy},
     parser::shortcut_value_parser::ShortcutValueParser,
     quoting_style::{self, QuotingStyle},
-    show, show_error,
+    show,
 };
 
 use crate::{
@@ -934,19 +934,22 @@ fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
         let runtime_disabled = !features.disabled_runtime.is_empty();
 
         if enabled_empty && !runtime_disabled {
-            show_error!("{}", translate!("wc-debug-hw-unavailable"));
+            let _ = writeln!(stderr(), "{}", translate!("wc-debug-hw-unavailable"));
         } else if runtime_disabled {
-            show_error!(
+            let _ = writeln!(
+                stderr(),
                 "{}",
                 translate!("wc-debug-hw-disabled-glibc", "features" => disabled.join(", "))
             );
         } else if !enabled_empty && disabled_empty {
-            show_error!(
+            let _ = writeln!(
+                stderr(),
                 "{}",
                 translate!("wc-debug-hw-using", "features" => enabled.join(", "))
             );
         } else {
-            show_error!(
+            let _ = writeln!(
+                stderr(),
                 "{}",
                 translate!(
                     "wc-debug-hw-limited-glibc",

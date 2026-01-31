@@ -283,17 +283,3 @@ fn test_check_b2sum_strict_check() {
         .succeeds()
         .stdout_only(&output);
 }
-
-#[test]
-fn test_help_shows_correct_utility_name() {
-    // Test that help output shows the actual utility name instead of "hashsum"
-    let scene = TestScenario::new(util_name!());
-
-    // Test b2sum
-    scene
-        .ccmd("b2sum")
-        .arg("--help")
-        .succeeds()
-        .stdout_contains("Usage: b2sum")
-        .stdout_does_not_contain("Usage: hashsum");
-}

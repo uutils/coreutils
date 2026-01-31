@@ -711,3 +711,19 @@ fn test_comm_anonymous_pipes() {
         .succeeds()
         .stdout_is("99999\n");
 }
+
+#[test]
+#[cfg(all(target_os = "linux", not(target_env = "musl")))]
+fn test_read_error() {
+    new_ucmd!()
+        .arg("/proc/self/mem")
+        .arg("/dev/null")
+        .fails()
+        .stderr_contains("comm: /proc/self/mem: Input/output error");
+
+    new_ucmd!()
+        .arg("/dev/null")
+        .arg("/proc/self/mem")
+        .fails()
+        .stderr_contains("comm: /proc/self/mem: Input/output error");
+}

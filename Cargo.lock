@@ -537,6 +537,7 @@ dependencies = [
  "fluent-syntax",
  "glob",
  "hex-literal",
+ "itertools 0.14.0",
  "jiff",
  "libc",
  "nix",
@@ -588,7 +589,6 @@ dependencies = [
  "uu_fmt",
  "uu_fold",
  "uu_groups",
- "uu_hashsum",
  "uu_head",
  "uu_hostid",
  "uu_hostname",
@@ -3567,15 +3567,6 @@ dependencies = [
  "clap",
  "fluent",
  "thiserror 2.0.18",
- "uucore",
-]
-
-[[package]]
-name = "uu_hashsum"
-version = "0.6.0"
-dependencies = [
- "clap",
- "fluent",
  "uucore",
 ]
 

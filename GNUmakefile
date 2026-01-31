@@ -105,9 +105,6 @@ ifeq ($(SELINUX_ENABLED),1)
 endif
 
 UTILS ?= $(filter-out $(SKIP_UTILS),$(PROGS))
-ifneq ($(filter hashsum,$(UTILS)),hashsum)
-	HASHSUM_PROGS :=
-endif
 
 ifneq ($(findstring stdbuf,$(UTILS)),)
     # Use external libstdbuf per default. It is more robust than embedding libstdbuf.
@@ -305,9 +302,6 @@ ifeq (${MULTICALL}, y)
 else
 	$(foreach prog, $(INSTALLEES), \
 		$(INSTALL) -m 755 $(BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog) $(newline) \
-	)
-	$(foreach prog, $(HASHSUM_PROGS), \
-		cd $(INSTALLDIR_BIN) && $(LN) $(PROG_PREFIX)hashsum $(PROG_PREFIX)$(prog) $(newline) \
 	)
 	$(if $(findstring test,$(INSTALLEES)), $(INSTALL) -m 755 $(BUILDDIR)/test $(INSTALLDIR_BIN)/$(PROG_PREFIX)[)
 endif
