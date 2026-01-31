@@ -38,20 +38,31 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let mut stdout = std::io::stdout();
-
     let name = nix::unistd::ttyname(std::io::stdin());
 
     let write_result = match name {
-        Ok(name) => stdout.write_all_os(name.as_os_str()),
+        Ok(name) => {
+            if let Err(e) = stdout.write_all_os(name.as_os_str()) {
+                Err(e)
+            } else if let Err(e) = writeln!(stdout) {
+                Err(e)
+            } else {
+                stdout.flush()
+            }
+        }
         Err(_) => {
             set_exit_code(1);
             writeln!(stdout, "{}", translate!("tty-not-a-tty"))
         }
     };
 
-    if write_result.is_err() || stdout.flush().is_err() {
-        // Don't return to prevent a panic later when another flush is attempted
-        // because the `uucore_procs::main` macro inserts a flush after execution for every utility.
+    if let Err(e) = write_result {
+        eprintln!("tty: write error: {}", e);
+        std::process::exit(3);
+    }
+
+    if let Err(e) = stdout.flush() {
+        eprintln!("tty: write error: {}", e);
         std::process::exit(3);
     }
 
