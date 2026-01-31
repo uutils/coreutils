@@ -350,7 +350,12 @@ pub fn get_message_with_args(id: &str, ftl_args: FluentArgs) -> String {
 
 /// Function to detect system locale from environment variables
 fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
-    let locale_str = std::env::var("LANG")
+    use std::env::var;
+
+    // We check LC_ALL -> LC_MESSAGES -> LANG
+    let locale_str = var("LC_ALL")
+        .or_else(|_| var("LC_MESSAGES"))
+        .or_else(|_| var("LANG"))
         .unwrap_or_else(|_| DEFAULT_LOCALE.to_string())
         .split('.')
         .next()
