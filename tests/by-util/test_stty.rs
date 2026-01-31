@@ -64,6 +64,29 @@ fn test_sane() {
         .stdout_str_check(|s| !s.contains("intr = ^A"));
 }
 
+/// Test that multiple settings are applied atomically and verified.
+/// This tests the tcsetattr verification logic - after setting multiple values,
+/// we verify they were all actually applied by reading them back.
+#[test]
+#[cfg(unix)]
+fn test_multiple_settings_verified() {
+    let (path, _controller, _replica) = pty_path();
+
+    // Set multiple settings at once
+    new_ucmd!()
+        .args(&["--file", &path, "intr", "^A", "quit", "^B", "erase", "^H"])
+        .succeeds();
+
+    // Verify all settings were applied
+    let result = new_ucmd!().args(&["--file", &path]).succeeds();
+    result.stdout_contains("intr = ^A");
+    result.stdout_contains("quit = ^B");
+    result.stdout_contains("erase = ^H");
+
+    // Reset to sane defaults
+    new_ucmd!().args(&["--file", &path, "sane"]).succeeds();
+}
+
 #[test]
 fn save_and_setting() {
     new_ucmd!()

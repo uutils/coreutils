@@ -10,7 +10,7 @@
 // spell-checker:ignore isig icanon iexten echoe crterase echok echonl noflsh xcase tostop echoprt prterase echoctl ctlecho echoke crtkill flusho extproc
 // spell-checker:ignore lnext rprnt susp swtch vdiscard veof veol verase vintr vkill vlnext vquit vreprint vstart vstop vsusp vswtc vwerase werase
 // spell-checker:ignore sigquit sigtstp
-// spell-checker:ignore cbreak decctlq evenp litout oddp tcsadrain exta extb NCCS cfsetispeed
+// spell-checker:ignore cbreak decctlq evenp litout oddp tcsadrain exta extb NCCS cfsetispeed cfgetispeed
 // spell-checker:ignore notaflag notacombo notabaud
 // spell-checker:ignore baudrate TCGETS
 
@@ -26,7 +26,7 @@ use nix::libc::{TCGETS2, termios2};
 
 use nix::sys::termios::{
     ControlFlags, InputFlags, LocalFlags, OutputFlags, SetArg, SpecialCharacterIndices as S,
-    Termios, cfsetispeed, cfsetospeed, tcgetattr, tcsetattr,
+    Termios, cfgetispeed, cfgetospeed, cfsetispeed, cfsetospeed, tcgetattr, tcsetattr,
 };
 use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
 use std::cmp::Ordering;
@@ -413,8 +413,9 @@ fn stty(opts: &Options) -> UResult<()> {
             }
         }
 
-        let mut termios =
-            tcgetattr(opts.file.as_fd()).map_err_context(|| opts.device_name.clone())?;
+        // Save original termios before applying changes for verification
+        let original = tcgetattr(opts.file.as_fd()).map_err_context(|| opts.device_name.clone())?;
+        let mut termios = original.clone();
 
         // iterate over valid_args, match on the arg type, do the matching apply function
         for arg in &valid_args {
@@ -433,11 +434,110 @@ fn stty(opts: &Options) -> UResult<()> {
             }
         }
         tcsetattr(opts.file.as_fd(), set_arg, &termios)?;
+
+        // Verify that tcsetattr applied all requested settings.
+        // POSIX allows tcsetattr to return success while only partially applying
+        // requested changes. We read back the settings and compare only the
+        // fields that were actually changed (where requested != original).
+        //
+        // Skip verification when restoring a saved state because:
+        // 1. Saved states may contain platform-specific flags that can't be restored
+        // 2. Restoration is "best effort" - the user expects it to work across platforms
+        // 3. GNU stty also doesn't strictly verify saved state restoration
+        let has_saved_state = valid_args
+            .iter()
+            .any(|arg| matches!(arg, ArgOptions::SavedState(_)));
+        if !has_saved_state {
+            let actual =
+                tcgetattr(opts.file.as_fd()).map_err_context(|| opts.device_name.clone())?;
+            if !verify_termios_changes(&original, &termios, &actual) {
+                return Err(USimpleError::new(
+                    1,
+                    format!(
+                        "{}: unable to perform all requested operations",
+                        opts.device_name
+                    ),
+                ));
+            }
+        }
     } else {
         let termios = tcgetattr(opts.file.as_fd()).map_err_context(|| opts.device_name.clone())?;
         print_settings(&termios, opts)?;
     }
     Ok(())
+}
+
+/// Verify that tcsetattr applied all requested changes.
+///
+/// POSIX allows tcsetattr to return success while only applying some settings.
+/// This function compares only the fields that were actually changed by the user
+/// (where requested != original), verifying those changes were applied.
+///
+/// We use `from_bits_truncate` to normalize flags before comparison, ensuring we
+/// only compare bits that nix recognizes. This is important because:
+/// 1. The saved state format uses `from_bits_truncate` when parsing
+/// 2. Different platforms (especially musl) may have platform-specific flag bits
+///    that aren't defined in nix's flag enums
+/// 3. Without normalization, we'd detect spurious "changes" from undefined bits
+///
+/// Returns true if all requested changes were applied successfully.
+fn verify_termios_changes(original: &Termios, requested: &Termios, actual: &Termios) -> bool {
+    // Normalize flags to only include bits recognized by nix.
+    // This ensures we don't fail verification due to platform-specific bits
+    // that may be set by the kernel but aren't portable/settable.
+    let orig_iflags = InputFlags::from_bits_truncate(original.input_flags.bits());
+    let req_iflags = InputFlags::from_bits_truncate(requested.input_flags.bits());
+    let act_iflags = InputFlags::from_bits_truncate(actual.input_flags.bits());
+
+    let orig_oflags = OutputFlags::from_bits_truncate(original.output_flags.bits());
+    let req_oflags = OutputFlags::from_bits_truncate(requested.output_flags.bits());
+    let act_oflags = OutputFlags::from_bits_truncate(actual.output_flags.bits());
+
+    let orig_cflags = ControlFlags::from_bits_truncate(original.control_flags.bits());
+    let req_cflags = ControlFlags::from_bits_truncate(requested.control_flags.bits());
+    let act_cflags = ControlFlags::from_bits_truncate(actual.control_flags.bits());
+
+    let orig_lflags = LocalFlags::from_bits_truncate(original.local_flags.bits());
+    let req_lflags = LocalFlags::from_bits_truncate(requested.local_flags.bits());
+    let act_lflags = LocalFlags::from_bits_truncate(actual.local_flags.bits());
+
+    // For each flag type, check: if we changed it (requested != original),
+    // verify the change was applied (actual == requested)
+    if req_iflags != orig_iflags && act_iflags != req_iflags {
+        return false;
+    }
+    if req_oflags != orig_oflags && act_oflags != req_oflags {
+        return false;
+    }
+    if req_cflags != orig_cflags && act_cflags != req_cflags {
+        return false;
+    }
+    if req_lflags != orig_lflags && act_lflags != req_lflags {
+        return false;
+    }
+
+    // Compare control characters - only verify changed ones
+    for i in 0..requested.control_chars.len() {
+        if requested.control_chars[i] != original.control_chars[i]
+            && actual.control_chars[i] != requested.control_chars[i]
+        {
+            return false;
+        }
+    }
+
+    // Compare baud rates - only verify if changed
+    if cfgetispeed(requested) != cfgetispeed(original)
+        && cfgetispeed(actual) != cfgetispeed(requested)
+    {
+        return false;
+    }
+    if cfgetospeed(requested) != cfgetospeed(original)
+        && cfgetospeed(actual) != cfgetospeed(requested)
+    {
+        return false;
+    }
+
+    true
 }
 
 // The GNU implementation adds the --help message when the args are incorrectly formatted
