@@ -2091,3 +2091,32 @@ fn test_split_directory_already_exists() {
         .no_stdout()
         .stderr_is("split: xaa: Is a directory\n");
 }
+
+#[test]
+fn test_round_robin_to_files() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input", "line1\nline2\nline3\nline4\n");
+
+    ucmd.args(&["-n", "r/2", "input", "out"]).succeeds();
+
+    assert_eq!(at.read("outaa"), "line1\nline3\n");
+    assert_eq!(at.read("outab"), "line2\nline4\n");
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_round_robin_filter_closes_early() {
+    // This test exercises the wrote_in_current_round logic
+    // We use a filter that only accepts one line then closes.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input", "line1\nline2\nline3\nline4\n");
+
+    // Filter 'head -n 1' will close its stdin after reading one line.
+    // In round-robin, this should cause split to mark that chunk as closed.
+    ucmd.args(&["--filter", "head -n 1 > $FILE", "-n", "r/2", "input", "out"])
+        .succeeds();
+
+    assert_eq!(at.read("outaa"), "line1\n");
+    // outab also only gets one line because 'head -n 1' closes for it too.
+    assert_eq!(at.read("outab"), "line2\n");
+}
