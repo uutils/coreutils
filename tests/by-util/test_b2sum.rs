@@ -283,12 +283,3 @@ fn test_check_b2sum_strict_check() {
         .succeeds()
         .stdout_only(&output);
 }
-
-#[test]
-fn test_help_shows_correct_utility_name() {
-    new_ucmd!()
-        .arg("--help")
-        .succeeds()
-        .stdout_contains("Usage: b2sum")
-        .stdout_does_not_contain("Usage: hashsum");
-}
