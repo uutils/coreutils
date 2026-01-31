@@ -419,10 +419,11 @@ uu_checksum_common = { version = "0.6.0", path = "src/uu/checksum_common" }
 uutests = { version = "0.6.0", package = "uutests", path = "tests/uutests" }
 
 [dependencies]
-clap.workspace = true
 clap_complete = { workspace = true, optional = true }
 clap_mangen = { workspace = true, optional = true }
+clap.workspace = true
 fluent-syntax = { workspace = true, optional = true }
+itertools.workspace = true
 phf.workspace = true
 selinux = { workspace = true, optional = true }
 textwrap.workspace = true

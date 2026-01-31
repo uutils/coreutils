@@ -537,6 +537,7 @@ dependencies = [
  "fluent-syntax",
  "glob",
  "hex-literal",
+ "itertools 0.14.0",
  "jiff",
  "libc",
  "nix",
