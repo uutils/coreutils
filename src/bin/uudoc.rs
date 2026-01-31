@@ -360,6 +360,7 @@ impl MDWriter<'_, '_> {
     fn extract_fluent_value(&self, key: &str) -> Option<String> {
         let content = self.fluent.as_ref()?;
         let resource = parser::parse(content.clone()).ok()?;
+
         for entry in resource.body {
             if let Entry::Message(Message {
                 id,
