@@ -3295,7 +3295,9 @@ name = "uu_chmod"
 version = "0.6.0"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
+ "tempfile",
  "thiserror 2.0.18",
  "uucore",
 ]

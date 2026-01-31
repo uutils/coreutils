@@ -29,6 +29,7 @@ jobs:
         type: [simulation] # , memory]  # memory profile disabled due to variance
         package: [
           uu_base64,
+          uu_chmod,
           uu_cksum,
           uu_cp,
           uu_cut,
