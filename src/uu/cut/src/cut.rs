@@ -9,7 +9,7 @@ use bstr::io::BufReadExt;
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, IsTerminal, Read, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, BufWriter, IsTerminal, Read, Write, stderr, stdin, stdout};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
@@ -20,7 +20,7 @@ use self::searcher::Searcher;
 use matcher::{ExactMatcher, Matcher, WhitespaceMatcher};
 use uucore::ranges::Range;
 use uucore::translate;
-use uucore::{format_usage, show_error, show_if_err};
+use uucore::{format_usage, show_if_err};
 
 mod matcher;
 mod searcher;
@@ -372,8 +372,9 @@ fn cut_files(mut filenames: Vec<OsString>, mode: &Mode) {
             let path = Path::new(filename);
 
             if path.is_dir() {
-                show_error!(
-                    "{}: {}",
+                let _ = writeln!(
+                    stderr(),
+                    "cut: {}: {}",
                     filename.maybe_quote(),
                     translate!("cut-error-is-directory")
                 );
