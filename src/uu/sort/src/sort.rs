@@ -121,12 +121,20 @@ fn locale_decimal_pt() -> u8 {
 const NEGATIVE: &u8 = &b'-';
 const POSITIVE: &u8 = &b'+';
 
+// SI unit constants for byte parsing
+const KILO: usize = 1024;
+const MEGA: usize = 1024 * 1024;
+const GIGA: usize = 1024 * 1024 * 1024;
+const TERA: usize = 1024 * 1024 * 1024 * 1024;
+const PETA: usize = 1024 * 1024 * 1024 * 1024 * 1024;
+const EXA: usize = 1024 * 1024 * 1024 * 1024 * 1024 * 1024;
+
 // The automatic buffer heuristics clamp to this range to avoid
 // over-committing memory on constrained systems while still keeping
 // reasonably large chunks for typical workloads.
-const MIN_AUTOMATIC_BUF_SIZE: usize = 512 * 1024; // 512 KiB
-const FALLBACK_AUTOMATIC_BUF_SIZE: usize = 32 * 1024 * 1024; // 32 MiB
-const MAX_AUTOMATIC_BUF_SIZE: usize = 1024 * 1024 * 1024; // 1 GiB
+const MIN_AUTOMATIC_BUF_SIZE: usize = (512 * KILO) as usize; // 512 KiB
+const FALLBACK_AUTOMATIC_BUF_SIZE: usize = (32 * MEGA) as usize; // 32 MiB
+const MAX_AUTOMATIC_BUF_SIZE: usize = GIGA as usize; // 1 GiB
 
 #[derive(Debug, Error)]
 pub enum SortError {
@@ -3164,24 +3172,24 @@ mod tests {
     fn test_parse_byte_count() {
         let valid_input = [
             ("0", 0),
-            ("50K", 50 * 1024),
-            ("50k", 50 * 1024),
-            ("1M", 1024 * 1024),
-            ("100M", 100 * 1024 * 1024),
+            ("50K", (50 * KILO) as usize),
+            ("50k", (50 * KILO) as usize),
+            ("1M", MEGA as usize),
+            ("100M", (100 * MEGA) as usize),
             #[cfg(not(target_pointer_width = "32"))]
-            ("1000G", 1000 * 1024 * 1024 * 1024),
+            ("1000G", (1000 * GIGA) as usize),
             #[cfg(not(target_pointer_width = "32"))]
-            ("10T", 10 * 1024 * 1024 * 1024 * 1024),
+            ("10T", (10 * TERA) as usize),
             ("1b", 1),
-            ("1024b", 1024),
-            ("1024Mb", 1024 * 1024 * 1024), // NOTE: This might not be how GNU `sort` behaves for 'Mb'
-            ("1", 1024),                    // K is default
-            ("50", 50 * 1024),
-            ("K", 1024),
-            ("k", 1024),
-            ("m", 1024 * 1024),
+            ("1024b", KILO),
+            ("1024Mb", KILO * MEGA), // NOTE: This might not be how GNU `sort` behaves for 'Mb'
+            ("1", KILO),                    // K is default
+            ("50", 50 * KILO),
+            ("K", KILO),
+            ("k", KILO),
+            ("m", MEGA),
             #[cfg(not(target_pointer_width = "32"))]
-            ("E", 1024 * 1024 * 1024 * 1024 * 1024 * 1024),
+            ("E", EXA as usize),
         ];
         for (input, expected_output) in &valid_input {
             assert_eq!(
