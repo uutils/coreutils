@@ -369,7 +369,7 @@ rand_chacha = { version = "0.9.0" }
 rand_core = "0.9.0"
 rayon = "1.10"
 regex = "1.10.4"
-rlimit = "0.10.1"
+rlimit = "0.11.0"
 rstest = "0.26.0"
 rust-ini = "0.21.0"
 same-file = "1.0.6"
