@@ -34,6 +34,7 @@ use crate::{
     compare_by, merge, sort_by,
 };
 use crate::{Line, print_sorted};
+use uucore::parser::parse_size::MEGA;
 
 // Note: update `test_sort::test_start_buffer` if this size is changed
 const START_BUFFER_SIZE: usize = 8_000;
@@ -114,11 +115,11 @@ fn reader_writer<
     // Cap oversized buffer requests to avoid unnecessary allocations and give the automatic
     // heuristic room to grow when the user does not provide an explicit value.
     let mut buffer_size = match settings.buffer_size {
-        size if size <= 512 * 1024 * 1024 => size,
+        size if size <= (512 * MEGA) as usize => size,
         size => size / 2,
     };
     if !settings.buffer_size_is_explicit {
-        buffer_size = buffer_size.max(8 * 1024 * 1024);
+        buffer_size = buffer_size.max((8 * MEGA) as usize);
     }
     let read_result: ReadResult<Tmp> = read_write_loop(
         files,

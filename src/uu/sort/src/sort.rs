@@ -51,6 +51,9 @@ use uucore::i18n::collator::locale_cmp;
 use uucore::i18n::decimal::locale_decimal_separator;
 use uucore::line_ending::LineEnding;
 use uucore::parser::num_parser::{ExtendedParser, ExtendedParserError};
+#[cfg(test)]
+use uucore::parser::parse_size::{EXA, TERA};
+use uucore::parser::parse_size::{GIGA, KILO, MEGA};
 use uucore::parser::parse_size::{ParseSizeError, Parser};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::posix::{MODERN, TRADITIONAL};
@@ -120,18 +123,6 @@ fn locale_decimal_pt() -> u8 {
 
 const NEGATIVE: &u8 = &b'-';
 const POSITIVE: &u8 = &b'+';
-
-// Non-breaking space constants
-const UTF8_NBSP: &[u8] = &[0xc2, 0xa0]; // UTF-8 encoding of non-breaking space (U+00A0)
-const ISO_NBSP: u8 = 0xa0; // ISO 8859-1 non-breaking space
-
-// SI unit constants for byte parsing
-const KILO: usize = 1024;
-const MEGA: usize = 1024 * 1024;
-const GIGA: usize = 1024 * 1024 * 1024;
-const TERA: usize = 1024 * 1024 * 1024 * 1024;
-const PETA: usize = 1024 * 1024 * 1024 * 1024 * 1024;
-const EXA: usize = 1024 * 1024 * 1024 * 1024 * 1024 * 1024;
 
 // The automatic buffer heuristics clamp to this range to avoid
 // over-committing memory on constrained systems while still keeping
@@ -3174,7 +3165,7 @@ mod tests {
 
     #[test]
     fn test_parse_byte_count() {
-        let valid_input = [
+        let valid_input: Vec<(&str, usize)> = vec![
             ("0", 0),
             ("50K", (50 * KILO) as usize),
             ("50k", (50 * KILO) as usize),
@@ -3185,13 +3176,13 @@ mod tests {
             #[cfg(not(target_pointer_width = "32"))]
             ("10T", (10 * TERA) as usize),
             ("1b", 1),
-            ("1024b", KILO),
-            ("1024Mb", KILO * MEGA), // NOTE: This might not be how GNU `sort` behaves for 'Mb'
-            ("1", KILO),                    // K is default
-            ("50", 50 * KILO),
-            ("K", KILO),
-            ("k", KILO),
-            ("m", MEGA),
+            ("1024b", KILO as usize),
+            ("1024Mb", (KILO * MEGA) as usize), // NOTE: This might not be how GNU `sort` behaves for 'Mb'
+            ("1", KILO as usize),               // K is default
+            ("50", (50 * KILO) as usize),
+            ("K", KILO as usize),
+            ("k", KILO as usize),
+            ("m", MEGA as usize),
             #[cfg(not(target_pointer_width = "32"))]
             ("E", EXA as usize),
         ];
