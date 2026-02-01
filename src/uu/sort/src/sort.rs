@@ -121,6 +121,10 @@ fn locale_decimal_pt() -> u8 {
 const NEGATIVE: &u8 = &b'-';
 const POSITIVE: &u8 = &b'+';
 
+// Non-breaking space constants
+const UTF8_NBSP: &[u8] = &[0xc2, 0xa0]; // UTF-8 encoding of non-breaking space (U+00A0)
+const ISO_NBSP: u8 = 0xa0; // ISO 8859-1 non-breaking space
+
 // SI unit constants for byte parsing
 const KILO: usize = 1024;
 const MEGA: usize = 1024 * 1024;
