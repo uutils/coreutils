@@ -34,7 +34,7 @@ use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{File, OpenOptions};
 use std::hash::{Hash, Hasher};
-use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write, stderr, stdin, stdout};
 use std::num::{IntErrorKind, NonZero};
 use std::ops::Range;
 #[cfg(unix)]
@@ -55,7 +55,6 @@ use uucore::parser::num_parser::{ExtendedParser, ExtendedParserError};
 use uucore::parser::parse_size::{ParseSizeError, Parser};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::posix::{MODERN, TRADITIONAL};
-use uucore::show_error;
 use uucore::translate;
 use uucore::version_cmp::version_cmp;
 use uucore::{format_usage, i18n};
@@ -1793,11 +1792,21 @@ fn emit_debug_warnings(
     flags: &GlobalOptionFlags,
     legacy_warnings: &[LegacyKeyWarning],
 ) {
+    // Reuse a locked stderr for slightly better performance
+    let mut error = stderr().lock();
     if locale_failed_to_set() {
-        show_error!("{}", translate!("sort-warning-failed-to-set-locale"));
+        let _ = writeln!(
+            error,
+            "sort: {}",
+            translate!("sort-warning-failed-to-set-locale")
+        );
     }
 
-    show_error!("{}", translate!("sort-warning-simple-byte-comparison"));
+    let _ = writeln!(
+        error,
+        "sort: {}",
+        translate!("sort-warning-simple-byte-comparison")
+    );
 
     for (idx, selector) in settings.selectors.iter().enumerate() {
         let key_index = idx + 1;
@@ -1805,8 +1814,9 @@ fn emit_debug_warnings(
             .iter()
             .find(|warning| warning.key_index == Some(key_index))
         {
-            show_error!(
-                "{}",
+            let _ = writeln!(
+                error,
+                "sort: {}",
                 translate!(
                     "sort-warning-obsolescent-key",
                     "key" => legacy.legacy_key_display(),
@@ -1816,24 +1826,27 @@ fn emit_debug_warnings(
         }
 
         if key_zero_width(selector) {
-            show_error!(
-                "{}",
+            let _ = writeln!(
+                error,
+                "sort: {}",
                 translate!("sort-warning-key-zero-width", "key" => key_index)
             );
             continue;
         }
 
         if flags.keys_specified && key_spans_multiple_fields(selector) {
-            show_error!(
-                "{}",
+            let _ = writeln!(
+                error,
+                "sort: {}",
                 translate!(
                     "sort-warning-key-numeric-spans-fields",
                     "key" => key_index
                 )
             );
         } else if flags.keys_specified && key_leading_blanks_significant(selector) {
-            show_error!(
-                "{}",
+            let _ = writeln!(
+                error,
+                "sort: {}",
                 translate!(
                     "sort-warning-leading-blanks-significant",
                     "key" => key_index
@@ -1854,21 +1867,24 @@ fn emit_debug_warnings(
         if let Some(sep) = settings.separator {
             match sep {
                 b'.' => {
-                    show_error!(
-                        "{}",
+                    let _ = writeln!(
+                        stderr().lock(),
+                        "sort: {}",
                         translate!("sort-warning-separator-decimal", "sep" => ".")
                     );
                     suppress_decimal_warning = true;
                 }
                 b'-' => {
-                    show_error!(
-                        "{}",
+                    let _ = writeln!(
+                        stderr().lock(),
+                        "sort: {}",
                         translate!("sort-warning-separator-minus", "sep" => "-")
                     );
                 }
                 b'+' => {
-                    show_error!(
-                        "{}",
+                    let _ = writeln!(
+                        stderr().lock(),
+                        "sort: {}",
                         translate!("sort-warning-separator-plus", "sep" => "+")
                     );
                 }
@@ -1877,7 +1893,11 @@ fn emit_debug_warnings(
         }
 
         if !suppress_decimal_warning {
-            show_error!("{}", translate!("sort-warning-numbers-use-decimal-point"));
+            let _ = writeln!(
+                stderr().lock(),
+                "sort: {}",
+                translate!("sort-warning-numbers-use-decimal-point")
+            );
         }
     }
 
@@ -1951,19 +1971,25 @@ fn emit_debug_warnings(
     }
 
     if ignored_opts.len() == 1 {
-        show_error!(
-            "{}",
+        let _ = writeln!(
+            stderr().lock(),
+            "sort: {}",
             translate!("sort-warning-option-ignored", "option" => ignored_opts)
         );
     } else if ignored_opts.len() > 1 {
-        show_error!(
-            "{}",
+        let _ = writeln!(
+            stderr().lock(),
+            "sort: {}",
             translate!("sort-warning-options-ignored", "options" => ignored_opts)
         );
     }
 
     if reverse_last_resort_warning {
-        show_error!("{}", translate!("sort-warning-option-reverse-last-resort"));
+        let _ = writeln!(
+            stderr().lock(),
+            "sort: {}",
+            translate!("sort-warning-option-reverse-last-resort")
+        );
     }
 }
 
@@ -2139,8 +2165,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         match n_merge.parse::<usize>() {
             Ok(parsed_value) => {
                 if parsed_value < 2 {
-                    show_error!(
-                        "{}",
+                    let _ = writeln!(
+                        stderr().lock(),
+                        "sort: {}",
                         translate!("sort-invalid-batch-size-arg", "arg" => n_merge)
                     );
                     return Err(UUsageError::new(
@@ -2159,7 +2186,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
                     #[cfg(target_os = "linux")]
                     {
-                        show_error!("{}", batch_too_large);
+                        let _ = writeln!(stderr().lock(), "sort: {batch_too_large}");
 
                         translate!(
                             "sort-maximum-batch-size-rlimit",
