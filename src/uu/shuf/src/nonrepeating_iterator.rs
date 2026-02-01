@@ -54,7 +54,7 @@ impl<'a> NonrepeatingIterator<'a> {
             Values::Full(items) => {
                 let this_idx = items.len() - 1;
 
-                let other_idx = self.rng.choose_from_range(0..=items.len() as u64 - 1)? as usize;
+                let other_idx = self.rng.choose_from_range(0..(items.len() as u64))? as usize;
                 // Flip the index to pretend we're going left-to-right
                 let other_idx = items.len() - other_idx - 1;
 
