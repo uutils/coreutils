@@ -841,12 +841,6 @@ jobs:
         echo "## dependency list"
         cargo fetch --locked --quiet --target $(rustc --print host-tuple)
         cargo tree --locked --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.vars.outputs.CARGO_DEFAULT_FEATURES_OPTION }} --no-dedupe -e=no-dev --prefix=none | grep -vE "$PWD" | sort --unique
-    - name: Build
-      shell: bash
-      run: |
-        ## Build
-        ${{ steps.vars.outputs.CARGO_CMD }} ${{ steps.vars.outputs.CARGO_CMD_OPTIONS }} build --release --config=profile.release.strip=true \
-        --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.vars.outputs.CARGO_DEFAULT_FEATURES_OPTION }}
     - name: Test
       if: matrix.job.skip-tests != true
       shell: bash
@@ -857,13 +851,15 @@ jobs:
         ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }} -p coreutils
       env:
         RUST_BACKTRACE: "1"
-    - name: Archive executable artifacts
-      uses: actions/upload-artifact@v6
-      with:
-        name: ${{ env.PROJECT_NAME }}-${{ matrix.job.target }}${{ steps.vars.outputs.ARTIFACTS_SUFFIX }}
-        path: target/${{ matrix.job.target }}/release/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}
+    - name: Build
+      shell: bash
+      if: matrix.job.skip-publish != true
+      run: |
+        ## Build
+        ${{ steps.vars.outputs.CARGO_CMD }} ${{ steps.vars.outputs.CARGO_CMD_OPTIONS }} build --release --config=profile.release.strip=true \
+        --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.vars.outputs.CARGO_DEFAULT_FEATURES_OPTION }}
     - name: Package
-      if: matrix.job.skip-package != true
+      if: matrix.job.skip-publish != true
       shell: bash
       run: |
         ## Package artifact(s)
@@ -1225,7 +1221,8 @@ jobs:
         fail_ci_if_error: false
 
   test_separately:
-    name: Separate Builds (individual and coreutils)# duplicated with other CI, but has better appearance
+    # duplicated with other CI, but has better appearance
+    name: Separate Builds (individual and coreutils)
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
