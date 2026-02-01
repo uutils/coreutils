@@ -63,9 +63,8 @@ jobs:
       shell: bash
       run: |
         ## Install dependencies
-        sudo apt-get update
         ## Check that build-gnu.sh works on the non SELinux system by installing libselinux only on lima
-        sudo apt-get install -y gperf gdb python3-pyinotify valgrind libexpect-perl libacl1-dev libattr1-dev libcap-dev attr quilt
+        sudo apt-get install -y --no-install-recommends gperf gdb python3-pyinotify valgrind libexpect-perl libacl1-dev libattr1-dev libcap-dev attr quilt
         curl http://launchpadlibrarian.net/831710181/automake_1.18.1-3_all.deb > automake-1.18.deb
         sudo dpkg -i --force-depends automake-1.18.deb
     - name: Add various locales
@@ -321,9 +320,7 @@ jobs:
     - name: Checkout code (GNU coreutils)
       run: (mkdir -p gnu && cd gnu && bash ../uutils/util/fetch-gnu.sh)
     - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y qemu-system-x86 zstd cpio
+      run: sudo apt-get install -y --no-install-recommends qemu-system-x86 cpio
     - name: Run GNU SMACK/ROOTFS tests
       run: |
         cd uutils
