@@ -7,7 +7,7 @@
 // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/sort.html
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 
-// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef
+// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef GETFD localeconv
 
 mod buffer_hint;
 mod check;
@@ -23,6 +23,7 @@ use chunks::LineData;
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use custom_str_cmp::custom_str_cmp;
+
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
 use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
@@ -46,7 +47,8 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, strip_errno};
 use uucore::error::{UError, UResult, USimpleError, UUsageError};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
-use uucore::format_usage;
+#[cfg(feature = "i18n-collator")]
+use uucore::i18n::collator::locale_cmp;
 use uucore::i18n::decimal::locale_decimal_separator;
 use uucore::line_ending::LineEnding;
 use uucore::parser::num_parser::{ExtendedParser, ExtendedParserError};
@@ -56,6 +58,7 @@ use uucore::posix::{MODERN, TRADITIONAL};
 use uucore::show_error;
 use uucore::translate;
 use uucore::version_cmp::version_cmp;
+use uucore::{format_usage, i18n};
 
 use crate::buffer_hint::automatic_buffer_size;
 use crate::tmp_dir::TmpDirWrapper;
@@ -101,6 +104,7 @@ mod options {
     pub const TMP_DIR: &str = "temporary-directory";
     pub const COMPRESS_PROG: &str = "compress-program";
     pub const BATCH_SIZE: &str = "batch-size";
+    pub const RANDOM_SOURCE: &str = "random-source";
 
     pub const FILES: &str = "files";
 }
@@ -271,6 +275,7 @@ pub struct GlobalSettings {
     check: bool,
     check_silent: bool,
     salt: Option<[u8; 16]>,
+    random_source: Option<PathBuf>,
     selectors: Vec<FieldSelector>,
     separator: Option<u8>,
     threads: String,
@@ -279,7 +284,33 @@ pub struct GlobalSettings {
     buffer_size_is_explicit: bool,
     compress_prog: Option<String>,
     merge_batch_size: usize,
+    numeric_locale: NumericLocaleSettings,
     precomputed: Precomputed,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct NumericLocaleSettings {
+    thousands_sep: Option<u8>,
+    decimal_pt: Option<u8>,
+}
+
+impl Default for NumericLocaleSettings {
+    fn default() -> Self {
+        Self {
+            thousands_sep: None,
+            decimal_pt: Some(DECIMAL_PT),
+        }
+    }
+}
+
+impl NumericLocaleSettings {
+    fn num_info_settings(&self, accept_si_units: bool) -> NumInfoParseSettings {
+        NumInfoParseSettings {
+            accept_si_units,
+            thousands_separator: self.thousands_sep,
+            decimal_pt: self.decimal_pt,
+        }
+    }
 }
 
 /// Data needed for sorting. Should be computed once before starting to sort
@@ -292,6 +323,8 @@ struct Precomputed {
     selections_per_line: usize,
     fast_lexicographic: bool,
     fast_ascii_insensitive: bool,
+    tokenize_blank_thousands_sep: bool,
+    tokenize_allow_unit_after_blank: bool,
 }
 
 impl GlobalSettings {
@@ -318,7 +351,10 @@ impl GlobalSettings {
     /// Precompute some data needed for sorting.
     /// This function **must** be called before starting to sort, and `GlobalSettings` may not be altered
     /// afterwards.
-    fn init_precomputed(&mut self) {
+    ///
+    /// When i18n-collator is enabled, `disable_fast_lexicographic` should be set to true if we're
+    /// in a UTF-8 locale (to force locale-aware collation instead of byte comparison).
+    fn init_precomputed(&mut self, disable_fast_lexicographic: bool) {
         self.precomputed.needs_tokens = self.selectors.iter().any(|s| s.needs_tokens);
         self.precomputed.selections_per_line =
             self.selectors.iter().filter(|s| s.needs_selection).count();
@@ -333,11 +369,29 @@ impl GlobalSettings {
             .filter(|s| matches!(s.settings.mode, SortMode::GeneralNumeric))
             .count();
 
-        self.precomputed.fast_lexicographic = self.can_use_fast_lexicographic();
+        let uses_numeric = self
+            .selectors
+            .iter()
+            .any(|s| matches!(s.settings.mode, SortMode::Numeric | SortMode::HumanNumeric));
+        let uses_human_numeric = self
+            .selectors
+            .iter()
+            .any(|s| matches!(s.settings.mode, SortMode::HumanNumeric));
+        self.precomputed.tokenize_blank_thousands_sep = self.separator.is_none()
+            && uses_numeric
+            && self.numeric_locale.thousands_sep == Some(b' ');
+        self.precomputed.tokenize_allow_unit_after_blank =
+            self.precomputed.tokenize_blank_thousands_sep && uses_human_numeric;
+
+        self.precomputed.fast_lexicographic =
+            !disable_fast_lexicographic && self.can_use_fast_lexicographic();
         self.precomputed.fast_ascii_insensitive = self.can_use_fast_ascii_insensitive();
     }
 
     /// Returns true when the fast lexicographic path can be used safely.
+    /// Note: When i18n-collator is enabled, the caller must have already determined
+    /// whether locale-aware collation is needed (via checking if we're in a UTF-8 locale).
+    /// This check is performed in uumain() before init_precomputed() is called.
     fn can_use_fast_lexicographic(&self) -> bool {
         self.mode == SortMode::Default
             && !self.ignore_case
@@ -392,6 +446,7 @@ impl Default for GlobalSettings {
             check: false,
             check_silent: false,
             salt: None,
+            random_source: None,
             selectors: vec![],
             separator: None,
             threads: String::new(),
@@ -400,6 +455,7 @@ impl Default for GlobalSettings {
             buffer_size_is_explicit: false,
             compress_prog: None,
             merge_batch_size: default_merge_batch_size(),
+            numeric_locale: NumericLocaleSettings::default(),
             precomputed: Precomputed::default(),
         }
     }
@@ -574,9 +630,22 @@ impl<'a> Line<'a> {
         token_buffer: &mut Vec<Field>,
         settings: &GlobalSettings,
     ) -> Self {
+        let needs_line_data = settings.precomputed.needs_tokens
+            || settings.precomputed.selections_per_line > 0
+            || settings.precomputed.num_infos_per_line > 0
+            || settings.precomputed.floats_per_line > 0
+            || settings.mode == SortMode::Numeric;
+        if !needs_line_data {
+            return Self { line, index };
+        }
         token_buffer.clear();
         if settings.precomputed.needs_tokens {
-            tokenize(line, settings.separator, token_buffer);
+            tokenize(
+                line,
+                settings.separator,
+                token_buffer,
+                &settings.precomputed,
+            );
         }
         if settings.mode == SortMode::Numeric {
             // exclude inf, nan, scientific notation
@@ -586,11 +655,12 @@ impl<'a> Line<'a> {
                 .and_then(|s| s.parse::<f64>().ok());
             line_data.line_num_floats.push(line_num_float);
         }
-        for (selector, selection) in settings
-            .selectors
-            .iter()
-            .map(|selector| (selector, selector.get_selection(line, token_buffer)))
-        {
+        for (selector, selection) in settings.selectors.iter().map(|selector| {
+            (
+                selector,
+                selector.get_selection(line, token_buffer, &settings.numeric_locale),
+            )
+        }) {
             match selection {
                 Selection::AsBigDecimal(parsed_float) => line_data.parsed_floats.push(parsed_float),
                 Selection::WithNumInfo(str, num_info) => {
@@ -609,7 +679,7 @@ impl<'a> Line<'a> {
 
     fn print(&self, writer: &mut impl Write, settings: &GlobalSettings) -> std::io::Result<()> {
         if settings.debug {
-            self.print_debug(settings, writer)?;
+            self.write_debug(settings, writer)?;
         } else {
             writer.write_all(self.line)?;
             writer.write_all(&[settings.line_ending.into()])?;
@@ -619,7 +689,7 @@ impl<'a> Line<'a> {
 
     /// Writes indicators for the selections this line matched. The original line content is NOT expected
     /// to be already printed.
-    fn print_debug(
+    fn write_debug(
         &self,
         settings: &GlobalSettings,
         writer: &mut impl Write,
@@ -639,19 +709,24 @@ impl<'a> Line<'a> {
         writeln!(writer)?;
 
         let mut fields = vec![];
-        tokenize(self.line, settings.separator, &mut fields);
+        tokenize(
+            self.line,
+            settings.separator,
+            &mut fields,
+            &settings.precomputed,
+        );
         for selector in &settings.selectors {
             let mut selection = selector.get_range(self.line, Some(&fields));
             match selector.settings.mode {
                 SortMode::Numeric | SortMode::HumanNumeric => {
                     // find out which range is used for numeric comparisons
-                    let (_, num_range) = NumInfo::parse(
-                        &self.line[selection.clone()],
-                        &NumInfoParseSettings {
-                            accept_si_units: selector.settings.mode == SortMode::HumanNumeric,
-                            ..Default::default()
-                        },
-                    );
+                    let mut parse_settings = settings
+                        .numeric_locale
+                        .num_info_settings(selector.settings.mode == SortMode::HumanNumeric);
+                    // Debug annotations should ignore thousands separators to match GNU output.
+                    parse_settings.thousands_separator = None;
+                    let (_, num_range) =
+                        NumInfo::parse(&self.line[selection.clone()], &parse_settings);
                     let initial_selection = selection.clone();
 
                     // Shorten selection to num_range.
@@ -768,24 +843,50 @@ impl<'a> Line<'a> {
 }
 
 /// Tokenize a line into fields. The result is stored into `token_buffer`.
-fn tokenize(line: &[u8], separator: Option<u8>, token_buffer: &mut Vec<Field>) {
+fn tokenize(
+    line: &[u8],
+    separator: Option<u8>,
+    token_buffer: &mut Vec<Field>,
+    precomputed: &Precomputed,
+) {
     assert!(token_buffer.is_empty());
     if let Some(separator) = separator {
         tokenize_with_separator(line, separator, token_buffer);
     } else {
-        tokenize_default(line, token_buffer);
+        tokenize_default(
+            line,
+            token_buffer,
+            precomputed.tokenize_blank_thousands_sep,
+            precomputed.tokenize_allow_unit_after_blank,
+        );
     }
 }
 
 /// By default fields are separated by the first whitespace after non-whitespace.
 /// Whitespace is included in fields at the start.
 /// The result is stored into `token_buffer`.
-fn tokenize_default(line: &[u8], token_buffer: &mut Vec<Field>) {
+fn tokenize_default(
+    line: &[u8],
+    token_buffer: &mut Vec<Field>,
+    blank_thousands_sep: bool,
+    allow_unit_after_blank: bool,
+) {
     token_buffer.push(0..0);
     // pretend that there was whitespace in front of the line
     let mut previous_was_whitespace = true;
     for (idx, char) in line.iter().enumerate() {
-        if char.is_ascii_whitespace() {
+        let is_whitespace = char.is_ascii_whitespace();
+        let treat_as_separator = if is_whitespace {
+            if blank_thousands_sep && *char == b' ' {
+                !is_blank_thousands_sep(line, idx, allow_unit_after_blank)
+            } else {
+                true
+            }
+        } else {
+            false
+        };
+
+        if treat_as_separator {
             if !previous_was_whitespace {
                 token_buffer.last_mut().unwrap().end = idx;
                 token_buffer.push(idx..0);
@@ -796,6 +897,31 @@ fn tokenize_default(line: &[u8], token_buffer: &mut Vec<Field>) {
         }
     }
     token_buffer.last_mut().unwrap().end = line.len();
+}
+
+fn is_blank_thousands_sep(line: &[u8], idx: usize, allow_unit_after_blank: bool) -> bool {
+    if line.get(idx) != Some(&b' ') {
+        return false;
+    }
+
+    let prev_is_digit = idx
+        .checked_sub(1)
+        .and_then(|prev_idx| line.get(prev_idx))
+        .is_some_and(u8::is_ascii_digit);
+    if !prev_is_digit {
+        return false;
+    }
+
+    let next = line.get(idx + 1).copied();
+    match next {
+        Some(c) if c.is_ascii_digit() => true,
+        Some(b'K' | b'k' | b'M' | b'G' | b'T' | b'P' | b'E' | b'Z' | b'Y' | b'R' | b'Q')
+            if allow_unit_after_blank =>
+        {
+            true
+        }
+        _ => false,
+    }
 }
 
 /// Split between separators. These separators are not included in fields.
@@ -1056,7 +1182,12 @@ impl FieldSelector {
 
     /// Get the selection that corresponds to this selector for the line.
     /// If `needs_fields` returned false, tokens may be empty.
-    fn get_selection<'a>(&self, line: &'a [u8], tokens: &[Field]) -> Selection<'a> {
+    fn get_selection<'a>(
+        &self,
+        line: &'a [u8],
+        tokens: &[Field],
+        numeric_locale: &NumericLocaleSettings,
+    ) -> Selection<'a> {
         // `get_range` expects `None` when we don't need tokens and would get confused by an empty vector.
         let tokens = if self.needs_tokens {
             Some(tokens)
@@ -1068,10 +1199,7 @@ impl FieldSelector {
             // Parse NumInfo for this number.
             let (info, num_range) = NumInfo::parse(
                 range_str,
-                &NumInfoParseSettings {
-                    accept_si_units: self.settings.mode == SortMode::HumanNumeric,
-                    ..Default::default()
-                },
+                &numeric_locale.num_info_settings(self.settings.mode == SortMode::HumanNumeric),
             );
             // Shorten the range to what we need to pass to numeric_str_cmp later.
             range_str = &range_str[num_range];
@@ -1184,6 +1312,33 @@ impl FieldSelector {
     }
 }
 
+fn detect_numeric_locale() -> NumericLocaleSettings {
+    let numeric_locale = i18n::get_numeric_locale();
+    let locale = &numeric_locale.0;
+    let encoding = numeric_locale.1;
+    let is_c_locale = encoding == i18n::UEncoding::Ascii && locale.to_string() == "und";
+
+    if is_c_locale {
+        return NumericLocaleSettings {
+            decimal_pt: Some(DECIMAL_PT),
+            thousands_sep: None,
+        };
+    }
+
+    let grouping = i18n::decimal::locale_grouping_separator();
+    NumericLocaleSettings {
+        decimal_pt: Some(locale_decimal_pt()),
+        // Upstream GNU coreutils ignore multibyte thousands separators
+        // (FIXME in C source). We keep the same single-byte behavior.
+        thousands_sep: match grouping.as_bytes() {
+            [b] => Some(*b),
+            // ICU returns NBSP as UTF-8 (0xC2 0xA0). In non-UTF8 locales like ISO-8859-1,
+            // the input byte is 0xA0, so map it to a single-byte separator.
+            [0xC2, 0xA0] if encoding != i18n::UEncoding::Utf8 => Some(0xA0),
+            _ => None,
+        },
+    }
+}
 /// Creates an `Arg` for a sort mode flag.
 fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
     Arg::new(mode)
@@ -1193,7 +1348,16 @@ fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
         .action(ArgAction::SetTrue)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(
+    unix,
+    not(any(
+        target_os = "redox",
+        target_os = "fuchsia",
+        target_os = "haiku",
+        target_os = "solaris",
+        target_os = "illumos"
+    ))
+))]
 fn get_rlimit() -> UResult<usize> {
     use nix::sys::resource::{RLIM_INFINITY, Resource, getrlimit};
 
@@ -1206,13 +1370,71 @@ fn get_rlimit() -> UResult<usize> {
         .map_err(|_| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(
+    unix,
+    not(any(
+        target_os = "redox",
+        target_os = "fuchsia",
+        target_os = "haiku",
+        target_os = "solaris",
+        target_os = "illumos"
+    ))
+))]
 pub(crate) fn fd_soft_limit() -> Option<usize> {
     get_rlimit().ok()
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(any(
+    not(unix),
+    target_os = "redox",
+    target_os = "fuchsia",
+    target_os = "haiku",
+    target_os = "solaris",
+    target_os = "illumos"
+))]
 pub(crate) fn fd_soft_limit() -> Option<usize> {
+    None
+}
+
+#[cfg(unix)]
+pub(crate) fn current_open_fd_count() -> Option<usize> {
+    use nix::libc;
+
+    fn count_dir(path: &str) -> Option<usize> {
+        let entries = std::fs::read_dir(path).ok()?;
+        let mut count = 0usize;
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if name.parse::<usize>().is_ok() {
+                count = count.saturating_add(1);
+            }
+        }
+        Some(count)
+    }
+
+    if let Some(count) = count_dir("/proc/self/fd").or_else(|| count_dir("/dev/fd")) {
+        return Some(count);
+    }
+
+    let limit = fd_soft_limit()?;
+    if limit > 16_384 {
+        return None;
+    }
+
+    let mut count = 0usize;
+    for fd in 0..limit {
+        let fd = fd as libc::c_int;
+        // Probe with libc::fcntl because the fd may be invalid.
+        if unsafe { libc::fcntl(fd, libc::F_GETFD) } != -1 {
+            count = count.saturating_add(1);
+        }
+    }
+    Some(count)
+}
+
+#[cfg(not(unix))]
+pub(crate) fn current_open_fd_count() -> Option<usize> {
     None
 }
 
@@ -1748,7 +1970,10 @@ fn emit_debug_warnings(
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let mut settings = GlobalSettings::default();
+    let mut settings = GlobalSettings {
+        numeric_locale: detect_numeric_locale(),
+        ..Default::default()
+    };
 
     let (processed_args, mut legacy_warnings) = preprocess_legacy_args(args);
     if !legacy_warnings.is_empty() {
@@ -1758,14 +1983,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), processed_args, 2)?;
 
     // Prevent -o/--output to be specified multiple times
-    if matches
-        .get_occurrences::<OsString>(options::OUTPUT)
-        .is_some_and(|out| out.len() > 1)
-    {
-        return Err(SortError::MultipleOutputFiles.into());
+    if let Some(mut outputs) = matches.get_many::<OsString>(options::OUTPUT) {
+        if let Some(first) = outputs.next() {
+            if outputs.any(|out| out != first) {
+                return Err(SortError::MultipleOutputFiles.into());
+            }
+        }
     }
 
     settings.debug = matches.get_flag(options::DEBUG);
+    if let Some(path) = matches.get_one::<OsString>(options::RANDOM_SOURCE) {
+        settings.random_source = Some(PathBuf::from(path));
+    }
 
     // check whether user specified a zero terminated list of files for input, otherwise read files from args
     let mut files: Vec<OsString> = if matches.contains_id(options::FILES0_FROM) {
@@ -1852,7 +2081,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let ignore_non_printing = matches.get_flag(options::IGNORE_NONPRINTING);
     let ignore_case = matches.get_flag(options::IGNORE_CASE);
 
-    if ordering_incompatible(mode_flags, dictionary_order, ignore_non_printing) {
+    if !matches.contains_id(options::KEY)
+        && ordering_incompatible(mode_flags, dictionary_order, ignore_non_printing)
+    {
         let opts = ordering_opts_string(
             mode_flags,
             dictionary_order,
@@ -2026,9 +2257,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if let Some(values) = matches.get_many::<String>(options::KEY) {
         for value in values {
             let selector = FieldSelector::parse(value, &settings)?;
-            if selector.settings.mode == SortMode::Random && settings.salt.is_none() {
-                settings.salt = Some(get_rand_string());
-            }
             settings.selectors.push(selector);
         }
     }
@@ -2050,6 +2278,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         );
     }
 
+    let needs_random = settings.mode == SortMode::Random
+        || settings
+            .selectors
+            .iter()
+            .any(|selector| selector.settings.mode == SortMode::Random);
+    if needs_random {
+        settings.salt = Some(match settings.random_source.as_deref() {
+            Some(path) => salt_from_random_source(path)?,
+            None => get_rand_string(),
+        });
+    }
+
     // Verify that we can open all input files.
     // It is the correct behavior to close all files afterwards,
     // and to reopen them at a later point. This is different from how the output file is handled,
@@ -2065,7 +2305,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         emit_debug_warnings(&settings, &global_flags, &legacy_warnings);
     }
 
-    settings.init_precomputed();
+    // Initialize locale collation if needed (UTF-8 locales)
+    // This MUST happen before init_precomputed() to avoid the performance regression
+    #[cfg(feature = "i18n-collator")]
+    let needs_locale_collation = uucore::i18n::collator::init_locale_collation();
+
+    #[cfg(not(feature = "i18n-collator"))]
+    let needs_locale_collation = false;
+
+    settings.init_precomputed(needs_locale_collation);
 
     let result = exec(&mut files, &settings, output, &mut tmp_dir);
     // Wait here if `SIGINT` was received,
@@ -2140,6 +2388,14 @@ pub fn uu_app() -> Command {
         'R',
         translate!("sort-help-random"),
     ))
+    .arg(
+        Arg::new(options::RANDOM_SOURCE)
+            .long(options::RANDOM_SOURCE)
+            .help(translate!("sort-help-random-source"))
+            .value_name("FILE")
+            .value_parser(ValueParser::os_string())
+            .value_hint(clap::ValueHint::FilePath),
+    )
     .arg(
         Arg::new(options::DICTIONARY_ORDER)
             .short('d')
@@ -2446,13 +2702,36 @@ fn compare_by<'a>(
             }
             SortMode::Month => month_compare(a_str, b_str),
             SortMode::Version => version_cmp(a_str, b_str),
-            SortMode::Default => custom_str_cmp(
-                a_str,
-                b_str,
-                settings.ignore_non_printing,
-                settings.dictionary_order,
-                settings.ignore_case,
-            ),
+            SortMode::Default => {
+                // Use locale-aware comparison if feature is enabled and no custom flags are set
+                #[cfg(feature = "i18n-collator")]
+                {
+                    if settings.ignore_case
+                        || settings.dictionary_order
+                        || settings.ignore_non_printing
+                    {
+                        custom_str_cmp(
+                            a_str,
+                            b_str,
+                            settings.ignore_non_printing,
+                            settings.dictionary_order,
+                            settings.ignore_case,
+                        )
+                    } else {
+                        locale_cmp(a_str, b_str)
+                    }
+                }
+                #[cfg(not(feature = "i18n-collator"))]
+                {
+                    custom_str_cmp(
+                        a_str,
+                        b_str,
+                        settings.ignore_non_printing,
+                        settings.dictionary_order,
+                        settings.ignore_case,
+                    )
+                }
+            }
         };
         if cmp != Ordering::Equal {
             return if settings.reverse { cmp.reverse() } else { cmp };
@@ -2477,17 +2756,17 @@ fn compare_by<'a>(
 }
 
 /// Compare two byte slices in ASCII case-insensitive order without allocating.
-/// We lower each byte on the fly so that binary input (including `NUL`) stays
+/// We upper each byte on the fly so that binary input (including `NUL`) stays
 /// untouched and we avoid locale-sensitive routines such as `strcasecmp`.
 fn ascii_case_insensitive_cmp(a: &[u8], b: &[u8]) -> Ordering {
     #[inline]
-    fn lower(byte: u8) -> u8 {
-        byte.to_ascii_lowercase()
+    fn fold(byte: u8) -> u8 {
+        byte.to_ascii_uppercase()
     }
 
     for (lhs, rhs) in a.iter().copied().zip(b.iter().copied()) {
-        let l = lower(lhs);
-        let r = lower(rhs);
+        let l = fold(lhs);
+        let r = fold(rhs);
         if l != r {
             return l.cmp(&r);
         }
@@ -2626,8 +2905,56 @@ fn general_numeric_compare(
     a.partial_cmp(b).unwrap()
 }
 
-fn get_rand_string() -> [u8; 16] {
+/// Generate a 128-bit salt from a uniform RNG distribution.
+fn get_rand_string() -> [u8; SALT_LEN] {
     rng().sample(rand::distr::StandardUniform)
+}
+
+const SALT_LEN: usize = 16; // 128-bit salt
+const MAX_BYTES: usize = 1024 * 1024; // Read cap: 1 MiB
+const BUF_LEN: usize = 8192; // 8 KiB read buffer
+const U64_LEN: usize = 8;
+const RANDOM_SOURCE_TAG: &[u8] = b"uutils-sort-random-source"; // Domain separation tag
+
+/// Create a 128-bit salt by hashing up to 1 MiB from the given file.
+fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
+    let mut reader = open_with_open_failed_error(path)?;
+    let mut buf = [0u8; BUF_LEN];
+    let mut total = 0usize;
+    let mut hasher = FnvHasher::default();
+
+    loop {
+        let n = reader
+            .read(&mut buf)
+            .map_err(|error| SortError::ReadFailed {
+                path: path.to_owned(),
+                error,
+            })?;
+        if n == 0 {
+            break;
+        }
+        let remaining = MAX_BYTES.saturating_sub(total);
+        if remaining == 0 {
+            break;
+        }
+        let take = n.min(remaining);
+        hasher.write(&buf[..take]);
+        total = total.saturating_add(take);
+        if take < n {
+            break;
+        }
+    }
+
+    let first = hasher.finish();
+    let mut second_hasher = FnvHasher::default();
+    second_hasher.write(RANDOM_SOURCE_TAG);
+    second_hasher.write_u64(first);
+    let second = second_hasher.finish();
+
+    let mut out = [0u8; SALT_LEN];
+    out[..U64_LEN].copy_from_slice(&first.to_le_bytes());
+    out[U64_LEN..].copy_from_slice(&second.to_le_bytes());
+    Ok(out)
 }
 
 fn get_hash<T: Hash>(t: &T) -> u64 {
@@ -2766,7 +3093,8 @@ mod tests {
 
     fn tokenize_helper(line: &[u8], separator: Option<u8>) -> Vec<Field> {
         let mut buffer = vec![];
-        tokenize(line, separator, &mut buffer);
+        let precomputed = Precomputed::default();
+        tokenize(line, separator, &mut buffer, &precomputed);
         buffer
     }
 

@@ -30,7 +30,7 @@ use std::cmp;
 use std::env;
 use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
-use std::io::{self, Read, Seek, SeekFrom, Stdout, Write};
+use std::io::{self, Read, Seek, SeekFrom, Write};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::fd::AsFd;
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -201,7 +201,7 @@ fn read_and_discard<R: Read>(reader: &mut R, n: u64, buf_size: usize) -> io::Res
                 total += bytes_read as u64;
                 remaining -= bytes_read as u64;
             }
-            Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
             Err(e) => return Err(e),
         }
     }
@@ -601,7 +601,7 @@ enum Density {
 /// Data destinations.
 enum Dest {
     /// Output to stdout.
-    Stdout(Stdout),
+    Stdout(File),
 
     /// Output to a file.
     ///
@@ -829,7 +829,8 @@ struct Output<'a> {
 impl<'a> Output<'a> {
     /// Instantiate this struct with stdout as a destination.
     fn new_stdout(settings: &'a Settings) -> UResult<Self> {
-        let mut dst = Dest::Stdout(io::stdout());
+        let fx = OwnedFileDescriptorOrHandle::from(io::stdout())?;
+        let mut dst = Dest::Stdout(fx.into_file());
         dst.seek(settings.seek, settings.obs)
             .map_err_context(|| translate!("dd-error-write-error"))?;
         Ok(Self { dst, settings })
@@ -1519,6 +1520,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .get_many::<String>(options::OPERANDS)
             .unwrap_or_default(),
     )?;
+
+    #[cfg(unix)]
+    if uucore::signals::stderr_was_closed() && settings.status != Some(StatusLevel::None) {
+        return Err(USimpleError::new(1, "write error"));
+    }
 
     let i = match settings.infile {
         #[cfg(unix)]

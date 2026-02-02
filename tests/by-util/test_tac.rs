@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore axxbxx bxxaxx axxx axxxx xxaxx xxax xxxxa axyz zyax zyxa
+// spell-checker:ignore axxbxx bxxaxx axxx axxxx xxaxx xxax xxxxa axyz zyax zyxa bbaaa aaabc bcdddd cddddaaabc xyzabc abcxyzabc nbbaaa
 #[cfg(target_os = "linux")]
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -369,4 +369,73 @@ fn test_stdin_bad_tmpdir_fallback() {
         .pipe_in("a\nb\nc\n")
         .succeeds()
         .stdout_is("c\nb\na\n");
+}
+
+#[test]
+fn test_regex_or_operator() {
+    new_ucmd!()
+        .args(&["-r", "-s", r"[^x]\|x"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_is("cba");
+}
+
+#[test]
+fn test_unescaped_middle_anchor() {
+    new_ucmd!()
+        .args(&["-r", "-s", r"1^2"])
+        .pipe_in("111^222")
+        .succeeds()
+        .stdout_is("22111^2");
+
+    new_ucmd!()
+        .args(&["-r", "-s", r"a$b"])
+        .pipe_in("aaa$bbb")
+        .succeeds()
+        .stdout_is("bbaaa$b");
+}
+
+#[test]
+fn test_escaped_middle_anchor() {
+    new_ucmd!()
+        .args(&["-r", "-s", r"c\^b"])
+        .pipe_in("aaabc^bcdddd")
+        .succeeds()
+        .stdout_is("cddddaaabc^b");
+
+    new_ucmd!()
+        .args(&["-r", "-s", r"c\$b"])
+        .pipe_in("aaabc$bcdddd")
+        .succeeds()
+        .stdout_is("cddddaaabc$b");
+}
+
+#[test]
+fn test_regular_start_anchor() {
+    new_ucmd!()
+        .args(&["-r", "-s", r"^abc"])
+        .pipe_in("xyzabc123abc")
+        .succeeds()
+        .stdout_is("xyzabc123abc");
+
+    new_ucmd!()
+        .args(&["-r", "-s", r"^b"])
+        .pipe_in("aaa\nbbb\nccc\n")
+        .succeeds()
+        .stdout_is("bb\nccc\naaa\nb");
+}
+
+#[test]
+fn test_regular_end_anchor() {
+    new_ucmd!()
+        .args(&["-r", "-s", r"abc$"])
+        .pipe_in("123abcxyzabc")
+        .succeeds()
+        .stdout_is("123abcxyzabc");
+
+    new_ucmd!()
+        .args(&["-r", "-s", r"b$"])
+        .pipe_in("aaa\nbbb\nccc\n")
+        .succeeds()
+        .stdout_is("\nccc\nbbaaa\nb");
 }
