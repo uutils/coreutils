@@ -1281,6 +1281,11 @@ pub fn uu_app() -> Command {
             Arg::new(options::BYTES)
                 .short('b')
                 .long("bytes")
+                .overrides_with_all([
+                    options::BLOCK_SIZE_1K,
+                    options::BLOCK_SIZE_1M,
+                    options::BYTES,
+                ])
                 .help(translate!("du-help-bytes"))
                 .action(ArgAction::SetTrue),
         )
@@ -1314,6 +1319,11 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::BLOCK_SIZE_1K)
                 .short('k')
+                .overrides_with_all([
+                    options::BLOCK_SIZE_1K,
+                    options::BLOCK_SIZE_1M,
+                    options::BYTES,
+                ])
                 .help(translate!("du-help-block-size-1k"))
                 .action(ArgAction::SetTrue),
         )
@@ -1350,6 +1360,11 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::BLOCK_SIZE_1M)
                 .short('m')
+                .overrides_with_all([
+                    options::BLOCK_SIZE_1K,
+                    options::BLOCK_SIZE_1M,
+                    options::BYTES,
+                ])
                 .help(translate!("du-help-block-size-1m"))
                 .action(ArgAction::SetTrue),
         )
