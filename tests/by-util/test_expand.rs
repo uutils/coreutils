@@ -451,3 +451,34 @@ fn test_expand_non_utf8_paths() {
         .succeeds()
         .stdout_is("hello   world\ntest    line\n");
 }
+
+#[test]
+#[cfg(unix)]
+fn test_expand_infinite_input_does_not_oom() {
+    use std::fs::File;
+    use std::time::Duration;
+
+    use rlimit::Resource;
+
+    if !Resource::AS.is_supported() {
+        return;
+    }
+
+    let dev_zero = match File::open("/dev/zero") {
+        Ok(f) => f,
+        Err(_) => return,
+    };
+    let dev_full = match File::create("/dev/full") {
+        Ok(f) => f,
+        Err(_) => return,
+    };
+
+    new_ucmd!()
+        .set_stdin(dev_zero)
+        .set_stdout(dev_full)
+        .limit(Resource::AS, 256 * 1024 * 1024, 256 * 1024 * 1024)
+        .timeout(Duration::from_secs(5))
+        .fails()
+        .stderr_contains("failed to write output")
+        .stderr_does_not_contain("memory allocation");
+}

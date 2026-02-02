@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
@@ -29,6 +29,7 @@ pub mod options {
 static LONG_HELP: &str = "";
 
 static DEFAULT_TABSTOP: usize = 8;
+const READ_BUF_SIZE: usize = 8192;
 
 /// The mode to use when replacing tabs beyond the last one specified in
 /// the `--tabs` argument.
@@ -220,6 +221,22 @@ impl Options {
     }
 }
 
+struct ExpandState {
+    col: usize,
+    init: bool,
+}
+
+impl ExpandState {
+    fn new() -> Self {
+        Self { col: 0, init: true }
+    }
+
+    fn reset_line(&mut self) {
+        self.col = 0;
+        self.init = true;
+    }
+}
+
 /// Preprocess command line arguments and expand shortcuts. For example, "-7" is expanded to
 /// "--tabs=7" and "-1,3" to "--tabs=1 --tabs=3".
 fn expand_shortcuts(args: Vec<OsString>) -> Vec<OsString> {
@@ -397,6 +414,32 @@ fn classify_char(buf: &[u8], byte: usize, utf8: bool) -> (CharType, usize, usize
     }
 }
 
+fn utf8_expected_len(first: u8) -> usize {
+    match first {
+        0x00..=0x7f => 1,
+        0xc2..=0xdf => 2,
+        0xe0..=0xef => 3,
+        0xf0..=0xf4 => 4,
+        _ => 1,
+    }
+}
+
+#[inline]
+fn classify_char_stream(
+    buf: &[u8],
+    byte: usize,
+    utf8: bool,
+    allow_incomplete_utf8: bool,
+) -> Option<(CharType, usize, usize)> {
+    if utf8 && !allow_incomplete_utf8 {
+        let expected = utf8_expected_len(buf[byte]);
+        if byte + expected > buf.len() {
+            return None;
+        }
+    }
+    Some(classify_char(buf, byte, utf8))
+}
+
 /// Write spaces for a tab expansion.
 #[inline]
 fn write_tab_spaces(
@@ -411,73 +454,71 @@ fn write_tab_spaces(
     }
 }
 
-fn expand_line(
-    buf: &mut Vec<u8>,
+fn expand_bytes(
+    buf: &[u8],
     output: &mut BufWriter<std::io::Stdout>,
     tabstops: &[usize],
     options: &Options,
-) -> std::io::Result<()> {
+    state: &mut ExpandState,
+    allow_incomplete_utf8: bool,
+) -> std::io::Result<usize> {
     use self::CharType::{Backspace, Other, Tab};
 
-    // Fast path: if there are no tabs, backspaces, and (in UTF-8 mode or no carriage returns),
-    // we can write the buffer directly without character-by-character processing
-    if !buf.contains(&b'\t') && !buf.contains(&b'\x08') && (options.utf8 || !buf.contains(&b'\r')) {
-        output.write_all(buf)?;
-        buf.truncate(0);
-        return Ok(());
-    }
-
-    let mut col = 0;
     let mut byte = 0;
-    let mut init = true;
 
     while byte < buf.len() {
-        let (ctype, cwidth, nbytes) = classify_char(buf, byte, options.utf8);
+        let Some((ctype, cwidth, nbytes)) =
+            classify_char_stream(buf, byte, options.utf8, allow_incomplete_utf8)
+        else {
+            break;
+        };
 
         // figure out how many columns this char takes up
         match ctype {
             Tab => {
                 // figure out how many spaces to the next tabstop
-                let nts = next_tabstop(tabstops, col, &options.remaining_mode);
-                col += nts;
+                let nts = next_tabstop(tabstops, state.col, &options.remaining_mode);
+                state.col += nts;
 
                 // now dump out either spaces if we're expanding, or a literal tab if we're not
-                if init || !options.iflag {
+                if state.init || !options.iflag {
                     write_tab_spaces(output, nts, &options.tspaces)?;
                 } else {
                     output.write_all(&buf[byte..byte + nbytes])?;
                 }
             }
             Backspace => {
-                col = col.saturating_sub(1);
+                state.col = state.col.saturating_sub(1);
 
                 // if we're writing anything other than a space, then we're
                 // done with the line's leading spaces
                 if buf[byte] != 0x20 {
-                    init = false;
+                    state.init = false;
                 }
 
                 output.write_all(&buf[byte..byte + nbytes])?;
             }
             Other => {
-                col += cwidth;
+                state.col += cwidth;
 
                 // if we're writing anything other than a space, then we're
                 // done with the line's leading spaces
                 if buf[byte] != 0x20 {
-                    init = false;
+                    state.init = false;
                 }
 
                 output.write_all(&buf[byte..byte + nbytes])?;
             }
         }
 
+        if buf[byte] == b'\n' {
+            state.reset_line();
+        }
+
         byte += nbytes; // advance the pointer
     }
 
-    buf.truncate(0); // clear the buffer
-
-    Ok(())
+    Ok(byte)
 }
 
 fn expand_file(
@@ -485,17 +526,31 @@ fn expand_file(
     output: &mut BufWriter<std::io::Stdout>,
     options: &Options,
 ) -> UResult<()> {
-    let mut buf = Vec::new();
     let mut input = open(file)?;
     let ts = options.tabstops.as_ref();
+    let mut state = ExpandState::new();
+    let mut pending: Vec<u8> = Vec::new();
+    let mut chunk = [0u8; READ_BUF_SIZE];
+
     loop {
-        match input.read_until(b'\n', &mut buf) {
-            Ok(0) => break,
-            Ok(_) => {
-                expand_line(&mut buf, output, ts, options)
-                    .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
+        let read_bytes = match input.read(&mut chunk) {
+            Ok(0) => {
+                if !pending.is_empty() {
+                    let consumed = expand_bytes(&pending, output, ts, options, &mut state, true)
+                        .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
+                    pending.drain(0..consumed);
+                }
+                break;
             }
+            Ok(n) => n,
             Err(e) => return Err(e.map_err_context(|| file.maybe_quote().to_string())),
+        };
+
+        pending.extend_from_slice(&chunk[..read_bytes]);
+        let consumed = expand_bytes(&pending, output, ts, options, &mut state, false)
+            .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
+        if consumed > 0 {
+            pending.drain(0..consumed);
         }
     }
     Ok(())
