@@ -261,6 +261,14 @@ fn create_english_bundle_from_embedded(
         bundle.add_resource_overriding(uucore_resource);
     }
 
+    // Checksum algorithms need locale messages from checksum_common
+    if util_name.ends_with("sum") {
+        if let Some(uucore_content) = get_embedded_locale("checksum_common/en-US.ftl") {
+            let uucore_resource = parse_fluent_resource(uucore_content)?;
+            bundle.add_resource_overriding(uucore_resource);
+        }
+    }
+
     // Then, try to load utility-specific strings
     let locale_key = format!("{util_name}/en-US.ftl");
     if let Some(ftl_content) = get_embedded_locale(&locale_key) {
