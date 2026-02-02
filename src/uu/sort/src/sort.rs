@@ -35,7 +35,7 @@ use std::ffi::{OsStr, OsString};
 use std::fs::{File, OpenOptions};
 use std::hash::{Hash, Hasher};
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
-use std::num::IntErrorKind;
+use std::num::{IntErrorKind, NonZero};
 use std::ops::Range;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
@@ -2107,9 +2107,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .get_one::<String>(options::PARALLEL)
             .map_or_else(|| "0".to_string(), String::from);
         let num_threads = match settings.threads.parse::<usize>() {
-            Ok(0) | Err(_) => std::thread::available_parallelism()
-                .map(|n| n.get())
-                .unwrap_or(1),
+            Ok(0) | Err(_) => std::thread::available_parallelism().map_or(1, NonZero::get),
             Ok(n) => n,
         };
         let _ = rayon::ThreadPoolBuilder::new()
