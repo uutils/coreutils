@@ -565,8 +565,8 @@ fn try_seek_end(file: &mut File) -> Option<u64> {
                 loop {
                     let mut byte = [0u8; 1];
                     match file.read(&mut byte) {
-                        Ok(0) => break,    // Found EOF
-                        Ok(_) => continue, // Keep looking
+                        Ok(0) => break, // Found EOF
+                        Ok(_) => {}     // Keep looking
                         Err(_) => break,
                     }
                 }
