@@ -22,6 +22,9 @@ clap = { workspace = true }
 uucore = { workspace = true, features = ["parser"] }
 fluent = { workspace = true }
 
+[target.'cfg(all(unix, not(target_os = "redox")))'.dependencies]
+nix = { workspace = true }
+
 [[bin]]
 name = "sleep"
 path = "src/main.rs"
