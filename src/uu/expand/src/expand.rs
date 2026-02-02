@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
@@ -29,7 +29,7 @@ pub mod options {
 static LONG_HELP: &str = "";
 
 static DEFAULT_TABSTOP: usize = 8;
-const READ_BUF_SIZE: usize = 8192;
+const MAX_LINE_BUFFER: usize = 1024 * 1024;
 
 /// The mode to use when replacing tabs beyond the last one specified in
 /// the `--tabs` argument.
@@ -521,6 +521,75 @@ fn expand_bytes(
     Ok(byte)
 }
 
+fn expand_line(
+    buf: &mut Vec<u8>,
+    output: &mut BufWriter<std::io::Stdout>,
+    tabstops: &[usize],
+    options: &Options,
+) -> std::io::Result<()> {
+    use self::CharType::{Backspace, Other, Tab};
+
+    // Fast path: if there are no tabs, backspaces, and (in UTF-8 mode or no carriage returns),
+    // we can write the buffer directly without character-by-character processing
+    if !buf.contains(&b'\t') && !buf.contains(&b'\x08') && (options.utf8 || !buf.contains(&b'\r')) {
+        output.write_all(buf)?;
+        buf.truncate(0);
+        return Ok(());
+    }
+
+    let mut col = 0;
+    let mut byte = 0;
+    let mut init = true;
+
+    while byte < buf.len() {
+        let (ctype, cwidth, nbytes) = classify_char(buf, byte, options.utf8);
+
+        // figure out how many columns this char takes up
+        match ctype {
+            Tab => {
+                // figure out how many spaces to the next tabstop
+                let nts = next_tabstop(tabstops, col, &options.remaining_mode);
+                col += nts;
+
+                // now dump out either spaces if we're expanding, or a literal tab if we're not
+                if init || !options.iflag {
+                    write_tab_spaces(output, nts, &options.tspaces)?;
+                } else {
+                    output.write_all(&buf[byte..byte + nbytes])?;
+                }
+            }
+            Backspace => {
+                col = col.saturating_sub(1);
+
+                // if we're writing anything other than a space, then we're
+                // done with the line's leading spaces
+                if buf[byte] != 0x20 {
+                    init = false;
+                }
+
+                output.write_all(&buf[byte..byte + nbytes])?;
+            }
+            Other => {
+                col += cwidth;
+
+                // if we're writing anything other than a space, then we're
+                // done with the line's leading spaces
+                if buf[byte] != 0x20 {
+                    init = false;
+                }
+
+                output.write_all(&buf[byte..byte + nbytes])?;
+            }
+        }
+
+        byte += nbytes; // advance the pointer
+    }
+
+    buf.truncate(0); // clear the buffer
+
+    Ok(())
+}
+
 fn expand_file(
     file: &OsString,
     output: &mut BufWriter<std::io::Stdout>,
@@ -528,29 +597,71 @@ fn expand_file(
 ) -> UResult<()> {
     let mut input = open(file)?;
     let ts = options.tabstops.as_ref();
-    let mut state = ExpandState::new();
-    let mut pending: Vec<u8> = Vec::new();
-    let mut chunk = [0u8; READ_BUF_SIZE];
+    let mut line_buf: Vec<u8> = Vec::new();
+    let mut stream_mode = false;
+    let mut stream_state = ExpandState::new();
 
     loop {
-        let read_bytes = match input.read(&mut chunk) {
-            Ok(0) => {
-                if !pending.is_empty() {
-                    let consumed = expand_bytes(&pending, output, ts, options, &mut state, true)
-                        .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
-                    pending.drain(0..consumed);
-                }
-                break;
-            }
-            Ok(n) => n,
+        let available = match input.fill_buf() {
+            Ok(buf) => buf,
             Err(e) => return Err(e.map_err_context(|| file.maybe_quote().to_string())),
         };
 
-        pending.extend_from_slice(&chunk[..read_bytes]);
-        let consumed = expand_bytes(&pending, output, ts, options, &mut state, false)
-            .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
-        if consumed > 0 {
-            pending.drain(0..consumed);
+        if available.is_empty() {
+            if stream_mode {
+                if !line_buf.is_empty() {
+                    let consumed =
+                        expand_bytes(&line_buf, output, ts, options, &mut stream_state, true)
+                            .map_err_context(|| {
+                                translate!("expand-error-failed-to-write-output")
+                            })?;
+                    if consumed > 0 {
+                        line_buf.drain(0..consumed);
+                    }
+                }
+            } else if !line_buf.is_empty() {
+                expand_line(&mut line_buf, output, ts, options)
+                    .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
+            }
+            break;
+        }
+
+        if !stream_mode {
+            match available.iter().position(|&b| b == b'\n') {
+                Some(pos) => {
+                    let take_len = pos + 1;
+                    line_buf.extend_from_slice(&available[..take_len]);
+                    input.consume(take_len);
+                    expand_line(&mut line_buf, output, ts, options)
+                        .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
+                }
+                None => {
+                    let take_len = available.len();
+                    line_buf.extend_from_slice(available);
+                    input.consume(take_len);
+                    if line_buf.len() > MAX_LINE_BUFFER {
+                        stream_mode = true;
+                        stream_state.reset_line();
+                        let consumed =
+                            expand_bytes(&line_buf, output, ts, options, &mut stream_state, false)
+                                .map_err_context(|| {
+                                    translate!("expand-error-failed-to-write-output")
+                                })?;
+                        if consumed > 0 {
+                            line_buf.drain(0..consumed);
+                        }
+                    }
+                }
+            }
+        } else {
+            let take_len = available.len();
+            line_buf.extend_from_slice(available);
+            input.consume(take_len);
+            let consumed = expand_bytes(&line_buf, output, ts, options, &mut stream_state, false)
+                .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
+            if consumed > 0 {
+                line_buf.drain(0..consumed);
+            }
         }
     }
     Ok(())
