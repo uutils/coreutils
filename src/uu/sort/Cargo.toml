@@ -43,6 +43,7 @@ uucore = { workspace = true, features = [
   "version-cmp",
   "i18n-decimal",
   "i18n-collator",
+  "i18n-month",
 ] }
 fluent = { workspace = true }
 
@@ -61,6 +62,7 @@ uucore = { workspace = true, features = [
   "parser-size",
   "version-cmp",
   "i18n-collator",
+  "i18n-month",
 ] }
 
 [[bin]]

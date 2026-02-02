@@ -50,6 +50,7 @@ use uucore::extendedbigdecimal::ExtendedBigDecimal;
 #[cfg(feature = "i18n-collator")]
 use uucore::i18n::collator::locale_cmp;
 use uucore::i18n::decimal::locale_decimal_separator;
+use uucore::i18n::month::month_parse as locale_month_parse;
 use uucore::line_ending::LineEnding;
 use uucore::parser::num_parser::{ExtendedParser, ExtendedParserError};
 use uucore::parser::parse_size::{ParseSizeError, Parser};
@@ -781,7 +782,7 @@ impl<'a> Line<'a> {
                         .enumerate()
                         .skip_while(|(_, c)| c.is_ascii_whitespace());
 
-                    let month = if month_parse(initial_selection) == Month::Unknown {
+                    let month = if locale_month_parse(initial_selection) == 0 {
                         // We failed to parse a month, which is equivalent to matching nothing.
                         // Add the "no match for key" marker to the first non-whitespace character.
                         let first_non_whitespace = month_chars.next();
@@ -2957,49 +2958,8 @@ fn random_shuffle(a: &[u8], b: &[u8], salt: &[u8]) -> Ordering {
     da.cmp(&db)
 }
 
-#[derive(Eq, Ord, PartialEq, PartialOrd, Clone, Copy)]
-enum Month {
-    Unknown,
-    January,
-    February,
-    March,
-    April,
-    May,
-    June,
-    July,
-    August,
-    September,
-    October,
-    November,
-    December,
-}
-
-/// Parse the beginning string into a Month, returning [`Month::Unknown`] on errors.
-fn month_parse(line: &[u8]) -> Month {
-    let line = line.trim_ascii_start();
-
-    match line.get(..3).map(|x| x.to_ascii_uppercase()).as_deref() {
-        Some(b"JAN") => Month::January,
-        Some(b"FEB") => Month::February,
-        Some(b"MAR") => Month::March,
-        Some(b"APR") => Month::April,
-        Some(b"MAY") => Month::May,
-        Some(b"JUN") => Month::June,
-        Some(b"JUL") => Month::July,
-        Some(b"AUG") => Month::August,
-        Some(b"SEP") => Month::September,
-        Some(b"OCT") => Month::October,
-        Some(b"NOV") => Month::November,
-        Some(b"DEC") => Month::December,
-        _ => Month::Unknown,
-    }
-}
-
 fn month_compare(a: &[u8], b: &[u8]) -> Ordering {
-    let ma = month_parse(a);
-    let mb = month_parse(b);
-
-    ma.cmp(&mb)
+    locale_month_parse(a).cmp(&locale_month_parse(b))
 }
 
 fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(

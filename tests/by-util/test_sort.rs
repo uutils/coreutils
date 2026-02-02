@@ -2704,4 +2704,51 @@ fn test_locale_complex_utf8_sorting() {
         .stdout_is("apple\nApple\nbanana\nBanana\nzebra\nZebra\n");
 }
 
+#[test]
+fn test_month_sort_english() {
+    new_ucmd!()
+        .arg("-M")
+        .pipe_in("Dec\nJan\nMar\nFeb\n")
+        .succeeds()
+        .stdout_only("Jan\nFeb\nMar\nDec\n");
+}
+
+#[test]
+fn test_month_sort_case_insensitive() {
+    new_ucmd!()
+        .arg("-M")
+        .pipe_in("dec\nJAN\nmar\nFEB\n")
+        .succeeds()
+        .stdout_only("JAN\nFEB\nmar\ndec\n");
+}
+
+#[test]
+fn test_month_sort_with_prefix() {
+    new_ucmd!()
+        .arg("-M")
+        .pipe_in("December 25\nJanuary 1\nMarch 15\n")
+        .succeeds()
+        .stdout_only("January 1\nMarch 15\nDecember 25\n");
+}
+
+#[test]
+fn test_month_sort_unknown_sorted_first() {
+    // Unknown month names sort before known months
+    new_ucmd!()
+        .arg("-M")
+        .pipe_in("Jan\nxyz\nFeb\nabc\n")
+        .succeeds()
+        .stdout_only("abc\nxyz\nJan\nFeb\n");
+}
+
+#[test]
+fn test_month_sort_french_locale() {
+    new_ucmd!()
+        .arg("-M")
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .pipe_in("déc.\njanv.\nmars\nfévr.\n")
+        .succeeds()
+        .stdout_only("janv.\nfévr.\nmars\ndéc.\n");
+}
+
 /* spell-checker: enable */
