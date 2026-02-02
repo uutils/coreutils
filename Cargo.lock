@@ -3468,6 +3468,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "glob",
+ "rustc-hash",
  "tempfile",
  "thiserror 2.0.18",
  "uucore",
