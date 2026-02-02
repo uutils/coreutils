@@ -9,7 +9,7 @@ use crate::options::*;
 use crate::units::{Result, Unit};
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, parser::ValueSource};
 use std::ffi::OsString;
-use std::io::{BufRead, Error, Write};
+use std::io::{BufRead, Error, Write, stderr};
 use std::result::Result as StdResult;
 use std::str::FromStr;
 
@@ -21,7 +21,7 @@ use uucore::translate;
 
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::ranges::Range;
-use uucore::{format_usage, show, show_error};
+use uucore::{format_usage, show, util_name};
 
 pub mod errors;
 pub mod format;
@@ -88,7 +88,7 @@ fn format_and_handle_validation(input_line: &[u8], options: &NumfmtOptions) -> U
                 show!(NumfmtError::FormattingError(error_message));
             }
             InvalidModes::Warn => {
-                show_error!("{error_message}");
+                let _ = writeln!(stderr(), "{}: {error_message}", util_name());
             }
             InvalidModes::Ignore => {}
         }
@@ -282,16 +282,27 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
 
 fn print_debug_warnings(options: &NumfmtOptions, matches: &ArgMatches) {
     // Warn if no conversion option is specified
+    // 2>/dev/full does not abort
     if options.transform.from == Unit::None
         && options.transform.to == Unit::None
         && options.padding == 0
     {
-        show_error!("{}", translate!("numfmt-debug-no-conversion"));
+        let _ = writeln!(
+            stderr(),
+            "{}: {}",
+            util_name(),
+            translate!("numfmt-debug-no-conversion")
+        );
     }
 
     // Warn if --header is used with command-line input
     if options.header > 0 && matches.get_many::<OsString>(NUMBER).is_some() {
-        show_error!("{}", translate!("numfmt-debug-header-ignored"));
+        let _ = writeln!(
+            stderr(),
+            "{}: {}",
+            util_name(),
+            translate!("numfmt-debug-header-ignored")
+        );
     }
 }
 
