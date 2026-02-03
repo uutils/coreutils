@@ -11,7 +11,7 @@ use rustc_hash::FxHashSet as HashSet;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, DirEntry, File, Metadata};
-use std::io::{BufRead, BufReader, stdout};
+use std::io::{BufRead, BufReader, Write, stdout};
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
 #[cfg(windows)]
@@ -888,7 +888,7 @@ impl StatPrinter {
     }
 
     fn print_stat(&self, stat: &Stat, size: u64) -> UResult<()> {
-        print!("{}\t", self.convert_size(size));
+        write!(stdout(), "{}\t", self.convert_size(size))?;
 
         if let Some(md_time) = &self.time {
             if let Some(time) = metadata_get_time(&stat.metadata, *md_time) {
@@ -904,8 +904,8 @@ impl StatPrinter {
             }
         }
 
-        print_verbatim(&stat.path).unwrap();
-        print!("{}", self.line_ending);
+        print_verbatim(&stat.path)?;
+        write!(stdout(), "{}", self.line_ending)?;
 
         Ok(())
     }
