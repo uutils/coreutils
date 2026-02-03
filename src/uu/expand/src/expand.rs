@@ -232,6 +232,7 @@ impl ExpandState {
         Self { col: 0, init: true }
     }
 
+    #[inline]
     fn reset_line(&mut self) {
         self.col = 0;
         self.init = true;
