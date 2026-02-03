@@ -25,7 +25,6 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
-use uucore::fsext::MountInfo;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::translate;
 use uucore::{format_usage, os_str_as_bytes, prompt_yes, show_error};
@@ -771,10 +770,18 @@ fn check_one_fs(path: &Path, options: &Options) -> Result<(), OneFsError> {
         }
         #[cfg(windows)]
         {
-            match (
-                child_meta.volume_serial_number(),
-                parent_meta.volume_serial_number(),
-            ) {
+            fn get_drive_prefix(p: &Path) -> Option<&std::ffi::OsStr> {
+                use std::path::Component;
+                p.components().next().and_then(|c| match c {
+                    Component::Prefix(prefix) => Some(prefix.as_os_str()),
+                    _ => None,
+                })
+            }
+
+            let child_drive = get_drive_prefix(path);
+            let parent_drive = get_drive_prefix(parent_path);
+
+            match (child_drive, parent_drive) {
                 (Some(c), Some(p)) => c != p,
                 _ => false,
             }
