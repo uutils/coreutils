@@ -365,8 +365,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
     let try_help = format!("Try '{} --help' for more information.", uucore::util_name());
     let field_value = args
         .get_one::<String>(FIELD)
-        .map(String::as_str)
-        .unwrap_or(FIELD_DEFAULT);
+        .map_or(FIELD_DEFAULT, String::as_str);
     let fields = parse_field_list(field_value, &try_help)?;
 
     let format = match args.get_one::<String>(FORMAT) {

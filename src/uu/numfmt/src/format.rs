@@ -97,6 +97,7 @@ fn trim_trailing_blanks(s: &str) -> &str {
     s.trim_end_matches(is_blank_for_suffix)
 }
 
+#[cfg(not(windows))]
 fn is_c_locale() -> bool {
     for key in ["LC_ALL", "LC_NUMERIC", "LANG"] {
         if let Ok(value) = std::env::var(key) {
@@ -1068,9 +1069,9 @@ fn pad_string(input: &str, width: usize, pad_char: char, align_left: bool) -> St
     let mut out = String::with_capacity(input.len() + pad_len * pad_char.len_utf8());
     if align_left {
         out.push_str(input);
-        out.extend(std::iter::repeat(pad_char).take(pad_len));
+        out.extend(std::iter::repeat_n(pad_char, pad_len));
     } else {
-        out.extend(std::iter::repeat(pad_char).take(pad_len));
+        out.extend(std::iter::repeat_n(pad_char, pad_len));
         out.push_str(input);
     }
     out
