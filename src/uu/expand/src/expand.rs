@@ -626,7 +626,16 @@ fn expand_file(
             break;
         }
 
-        if !stream_mode {
+        if stream_mode {
+            let take_len = available.len();
+            line_buf.extend_from_slice(available);
+            input.consume(take_len);
+            let consumed = expand_bytes(&line_buf, output, ts, options, &mut stream_state, false)
+                .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
+            if consumed > 0 {
+                line_buf.drain(0..consumed);
+            }
+        } else {
             match available.iter().position(|&b| b == b'\n') {
                 Some(pos) => {
                     let take_len = pos + 1;
@@ -652,15 +661,6 @@ fn expand_file(
                         }
                     }
                 }
-            }
-        } else {
-            let take_len = available.len();
-            line_buf.extend_from_slice(available);
-            input.consume(take_len);
-            let consumed = expand_bytes(&line_buf, output, ts, options, &mut stream_state, false)
-                .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
-            if consumed > 0 {
-                line_buf.drain(0..consumed);
             }
         }
     }
