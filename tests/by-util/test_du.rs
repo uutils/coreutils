@@ -2063,31 +2063,36 @@ fn test_du_symlinks_multiple_links_in_args() {
 fn test_block_size_args_override() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
-    let dir = "a";
+    let dir = "override_args_dir";
 
     at.mkdir(dir);
     let fpath = at.plus(format!("{dir}/file"));
-    std::fs::File::create(&fpath)
+    std::fs::File::create(fpath)
+        .expect("cannot create test file")
+        .set_len(100_000_000)
+        .expect("cannot set file size");
+
+    let fpath2 = at.plus(format!("{dir}/file_2"));
+    std::fs::File::create(fpath2)
         .expect("cannot create test file")
         .set_len(100_000_000)
         .expect("cannot set file size");
 
     let test_cases = [
-        (["-sb", "-m"], "-sm"),
-        (["-sm", "-b"], "-sb"),
+        (["-sk", "-m"], "-sm"),
         (["-sk", "-b"], "-sb"),
         (["-sm", "-k"], "-sk"),
     ];
 
-    for (overwriting_args, expected) in test_cases {
-        let decimal = ts
+    for (idx, (overwriting_args, expected)) in test_cases.into_iter().enumerate() {
+        let overridden_args = ts
             .ucmd()
             .arg(dir)
             .args(&overwriting_args)
             .succeeds()
             .stdout_move_str();
 
-        let binary = ts
+        let single_args = ts
             .ucmd()
             .arg(dir)
             .arg(expected)
@@ -2095,8 +2100,54 @@ fn test_block_size_args_override() {
             .stdout_move_str();
 
         assert_eq!(
-            decimal, binary,
-            "The last argument of m, k and b should overwrite"
+            overridden_args, single_args,
+            "The last argument of m, k and b should overwrite. Run: {idx}"
+        );
+    }
+}
+
+#[test]
+fn test_block_override_b_still_has_apparent_size() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let dir = "override_args_dir";
+
+    at.mkdir(dir);
+    let fpath = at.plus(format!("{dir}/file"));
+    std::fs::File::create(fpath)
+        .expect("cannot create test file")
+        .set_len(100_000_000)
+        .expect("cannot set file size");
+
+    let fpath2 = at.plus(format!("{dir}/file_2"));
+    std::fs::File::create(fpath2)
+        .expect("cannot create test file")
+        .set_len(100_000_000)
+        .expect("cannot set file size");
+
+    let test_cases = [
+        (["-sb", "-m"], ["-sm", "--apparent-size"]),
+        (["-sb", "-k"], ["-sk", "--apparent-size"]),
+    ];
+
+    for (idx, (overwriting_args, expected)) in test_cases.into_iter().enumerate() {
+        let overridden_args = ts
+            .ucmd()
+            .arg(dir)
+            .args(&overwriting_args)
+            .succeeds()
+            .stdout_move_str();
+
+        let single_args = ts
+            .ucmd()
+            .arg(dir)
+            .args(&expected)
+            .succeeds()
+            .stdout_move_str();
+
+        assert_eq!(
+            overridden_args, single_args,
+            "Overwriting the b flag should still leave --apparent-size active. Run: {idx}"
         );
     }
 }
