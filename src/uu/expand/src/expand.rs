@@ -222,6 +222,7 @@ impl Options {
     }
 }
 
+/// Keeps column position and leading-space state while streaming input.
 struct ExpandState {
     col: usize,
     init: bool,
