@@ -582,3 +582,46 @@ mod tests_hybrid_flavor {
         assert_eq!(translate_regex_flavor(r"\^"), r"\^");
     }
 }
+
+/// Attempt to seek to end of file
+///
+/// Returns `Some(size)` if successful, `None` if unable to determine size.
+/// Hangs if file is an infinite stream.
+///
+/// Leaves file cursor at start of file
+fn try_seek_end(file: &mut File) -> Option<u64> {
+    let size = file.seek(std::io::SeekFrom::End(0)).ok();
+
+    if size == Some(0) {
+        // Might be an empty file or infinite stream;
+        // Try reading a byte to distinguish
+        file.seek(std::io::SeekFrom::Start(0)).ok()?;
+        let mut test_byte = [0u8; 1];
+        match file.read(&mut test_byte).ok()? {
+            0 => {
+                // Truly empty file
+                return size;
+            }
+            _ => {
+                // Has data despite size 0 - likely a pipe or special file
+                // Loop forever looking for EOF
+                loop {
+                    let mut byte = [0u8; 1];
+                    match file.read(&mut byte) {
+                        Ok(0) => break, // Found EOF
+                        Ok(_) => {}     // Keep looking
+                        Err(_) => break,
+                    }
+                }
+
+                // TODO: Prove this is actually unreachable
+                unreachable!();
+            }
+        }
+    }
+
+    // Leave the file cursor at the start
+    file.seek(std::io::SeekFrom::Start(0)).ok()?;
+
+    size
+}
