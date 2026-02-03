@@ -7,8 +7,8 @@
 // spell-checker:ignore nohash strtime clocale
 
 #[cfg(unix)]
-use fnv::FnvHashMap as HashMap;
-use fnv::FnvHashSet as HashSet;
+use rustc_hash::FxHashMap;
+use rustc_hash::FxHashSet;
 use std::borrow::Cow;
 use std::cell::RefCell;
 #[cfg(unix)]
@@ -2195,9 +2195,9 @@ struct ListState<'a> {
     // performance was equivalent to BTreeMap.
     // It's possible a simple vector linear(binary?) search implementation would be even faster.
     #[cfg(unix)]
-    uid_cache: HashMap<u32, String>,
+    uid_cache: FxHashMap<u32, String>,
     #[cfg(unix)]
-    gid_cache: HashMap<u32, String>,
+    gid_cache: FxHashMap<u32, String>,
     recent_time_range: RangeInclusive<SystemTime>,
 }
 
@@ -2212,9 +2212,9 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         out: BufWriter::new(stdout()),
         style_manager: config.color.as_ref().map(StyleManager::new),
         #[cfg(unix)]
-        uid_cache: HashMap::default(),
+        uid_cache: FxHashMap::default(),
         #[cfg(unix)]
-        gid_cache: HashMap::default(),
+        gid_cache: FxHashMap::default(),
         // Time range for which to use the "recent" format. Anything from 0.5 year in the past to now
         // (files with modification time in the future use "old" format).
         // According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
@@ -2303,7 +2303,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
                 writeln!(state.out)?;
             }
         }
-        let mut listed_ancestors = HashSet::default();
+        let mut listed_ancestors = FxHashSet::default();
         listed_ancestors.insert(FileInformation::from_path(
             path_data.path(),
             path_data.must_dereference,
@@ -2441,7 +2441,7 @@ fn enter_directory(
     mut read_dir: ReadDir,
     config: &Config,
     state: &mut ListState,
-    listed_ancestors: &mut HashSet<FileInformation>,
+    listed_ancestors: &mut FxHashSet<FileInformation>,
     dired: &mut DiredOutput,
 ) -> UResult<()> {
     // Create vec of entries with initial dot files
