@@ -6,9 +6,9 @@
 // spell-checker:ignore (ToDO) ctype cwidth iflag nbytes nspaces nums tspaces Preprocess
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
+use memchr::memchr;
 use std::ffi::OsString;
 use std::fs::File;
-use memchr::memchr;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
