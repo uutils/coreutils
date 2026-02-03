@@ -605,6 +605,30 @@ fn expand_file(
 ) -> UResult<()> {
     let mut input = open(file)?;
     let ts = options.tabstops.as_ref();
+    let is_regular_file = if file == "-" {
+        false
+    } else {
+        Path::new(file)
+            .metadata()
+            .map(|m| m.is_file())
+            .unwrap_or(false)
+    };
+
+    if is_regular_file {
+        let mut line_buf = Vec::new();
+        loop {
+            match input.read_until(b'\n', &mut line_buf) {
+                Ok(0) => break,
+                Ok(_) => {
+                    expand_line(&mut line_buf, output, ts, options)
+                        .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
+                }
+                Err(e) => return Err(e.map_err_context(|| file.maybe_quote().to_string())),
+            }
+        }
+        return Ok(());
+    }
+
     let mut line_buf: Vec<u8> = Vec::new();
     let mut stream_mode = false;
     let mut stream_state = ExpandState::new();
