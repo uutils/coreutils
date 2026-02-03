@@ -195,18 +195,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // SMACK label
         #[cfg(feature = "smack")]
         if state.smack_supported {
-            match uucore::smack::get_smack_label_for_self() {
+            return match uucore::smack::get_smack_label_for_self() {
                 Ok(label) => {
                     write!(lock, "{label}{line_ending}")?;
-                    return Ok(());
+                    Ok(())
                 }
-                Err(_) => {
-                    return Err(USimpleError::new(
-                        1,
-                        translate!("id-error-cannot-get-context"),
-                    ));
-                }
-            }
+                Err(_) => Err(USimpleError::new(
+                    1,
+                    translate!("id-error-cannot-get-context"),
+                )),
+            };
         }
 
         // Neither SELinux nor SMACK supported

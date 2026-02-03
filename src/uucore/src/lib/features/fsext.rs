@@ -556,7 +556,7 @@ pub struct FsUsage {
 
 impl FsUsage {
     #[cfg(unix)]
-    pub fn new(statvfs: StatFs) -> Self {
+    pub fn new(statvfs: &StatFs) -> Self {
         {
             #[cfg(all(
                 not(any(target_os = "freebsd", target_os = "openbsd")),

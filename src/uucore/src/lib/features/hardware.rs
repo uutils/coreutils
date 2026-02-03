@@ -175,7 +175,7 @@ impl HasHardwareFeatures for CpuFeatures {
 /// This is used by GNU utilities to allow users to disable hardware acceleration.
 #[derive(Debug, Clone)]
 pub struct SimdPolicy {
-    /// Features disabled via GLIBC_TUNABLES (e.g., ["AVX2", "AVX512F"])
+    /// Features disabled via GLIBC_TUNABLES (e.g., `["AVX2", "AVX512F"]`)
     disabled_by_env: BTreeSet<HardwareFeature>,
     hardware_features: &'static CpuFeatures,
 }
