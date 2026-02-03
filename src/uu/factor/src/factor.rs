@@ -85,15 +85,24 @@ fn write_result_u64(
     print_exponents: bool,
 ) -> io::Result<()> {
     write!(w, "{x}:")?;
+
+    let mut buf = itoa::Buffer::new();
     for (factor, n) in factorization {
+        let factor_str = buf.format(factor);
+
         if print_exponents {
+            w.write_all(b" ")?;
+            w.write_all(factor_str.as_bytes())?;
+
             if n > 1 {
-                write!(w, " {factor}^{n}")?;
-            } else {
-                write!(w, " {factor}")?;
+                w.write_all(b"^")?;
+                w.write_all(buf.format(n).as_bytes())?;
             }
         } else {
-            w.write_all(format!(" {factor}").repeat(n).as_bytes())?;
+            for _ in 0..n {
+                w.write_all(b" ")?;
+                w.write_all(factor_str.as_bytes())?;
+            }
         }
     }
     writeln!(w)?;
@@ -107,16 +116,26 @@ fn write_result_u128(
     factorization: BTreeMap<u128, usize>,
     print_exponents: bool,
 ) -> io::Result<()> {
-    write!(w, "{x}:")?;
+    let mut buf = itoa::Buffer::new();
+    w.write_all(buf.format(*x).as_bytes())?;
+    w.write_all(b":")?;
+
     for (factor, n) in factorization {
+        let factor_str = buf.format(factor);
+
         if print_exponents {
+            w.write_all(b" ")?;
+            w.write_all(factor_str.as_bytes())?;
+
             if n > 1 {
-                write!(w, " {factor}^{n}")?;
-            } else {
-                write!(w, " {factor}")?;
+                w.write_all(b"^")?;
+                w.write_all(buf.format(n).as_bytes())?;
             }
         } else {
-            w.write_all(format!(" {factor}").repeat(n).as_bytes())?;
+            for _ in 0..n {
+                w.write_all(b" ")?;
+                w.write_all(factor_str.as_bytes())?;
+            }
         }
     }
     writeln!(w)?;
@@ -139,7 +158,9 @@ fn write_result_big_uint(
                 write!(w, " {factor}")?;
             }
         } else {
-            w.write_all(format!(" {factor}").repeat(n).as_bytes())?;
+            for _ in 0..n {
+                write!(w, " {factor}")?;
+            }
         }
     }
     writeln!(w)?;

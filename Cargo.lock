@@ -3528,6 +3528,7 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
+ "itoa",
  "num-bigint",
  "num-prime",
  "num-traits",
