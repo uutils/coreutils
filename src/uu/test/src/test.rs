@@ -261,26 +261,69 @@ enum PathCondition {
 
 #[cfg(not(windows))]
 fn path(path: &OsStr, condition: &PathCondition) -> bool {
-    use std::fs::Metadata;
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
     use std::os::unix::fs::FileTypeExt;
 
     const S_ISUID: u32 = 0o4000;
     const S_ISGID: u32 = 0o2000;
     const S_ISVTX: u32 = 0o1000;
 
-    enum Permission {
-        Read = 0o4,
-        Write = 0o2,
-        Execute = 0o1,
-    }
+    // Helper function to check file access permissions.
+    // Uses platform-specific access functions that properly handle supplementary groups
+    // and ACLs.
+    let check_access = |path: &OsStr, mode: i32| -> bool {
+        let path_bytes = path.as_bytes();
+        let Ok(c_path) = CString::new(path_bytes) else {
+            return false; // Path contains null byte
+        };
 
-    let perm = |metadata: Metadata, p: Permission| {
-        if geteuid() == metadata.uid() {
-            metadata.mode() & ((p as u32) << 6) != 0
-        } else if getegid() == metadata.gid() {
-            metadata.mode() & ((p as u32) << 3) != 0
-        } else {
-            metadata.mode() & (p as u32) != 0
+        unsafe {
+            #[cfg(any(
+                target_os = "linux",
+                target_os = "hurd",
+                target_os = "cygwin",
+                target_os = "solaris",
+                target_os = "illumos"
+            ))]
+            {
+                libc::euidaccess(c_path.as_ptr(), mode) == 0
+            }
+
+            #[cfg(target_os = "freebsd")]
+            {
+                libc::eaccess(c_path.as_ptr(), mode) == 0
+            }
+
+            #[cfg(any(
+                target_os = "macos",
+                target_os = "ios",
+                target_os = "netbsd",
+                target_os = "openbsd",
+                target_os = "dragonfly"
+            ))]
+            {
+                libc::faccessat(libc::AT_FDCWD, c_path.as_ptr(), mode, libc::AT_EACCESS) == 0
+            }
+
+            // Fallback for other OSes
+            #[cfg(not(any(
+                target_os = "linux",
+                target_os = "hurd",
+                target_os = "cygwin",
+                target_os = "solaris",
+                target_os = "illumos",
+                target_os = "freebsd",
+                target_os = "macos",
+                target_os = "ios",
+                target_os = "netbsd",
+                target_os = "openbsd",
+                target_os = "dragonfly"
+            )))]
+            {
+                // fallback: use regular access()
+                libc::access(c_path.as_ptr(), mode) == 0
+            }
         }
     };
 
@@ -311,12 +354,12 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
         PathCondition::Sticky => metadata.mode() & S_ISVTX != 0,
         PathCondition::UserOwns => metadata.uid() == geteuid(),
         PathCondition::Fifo => file_type.is_fifo(),
-        PathCondition::Readable => perm(metadata, Permission::Read),
+        PathCondition::Readable => check_access(path, libc::R_OK),
         PathCondition::Socket => file_type.is_socket(),
         PathCondition::NonEmpty => metadata.size() > 0,
         PathCondition::UserIdFlag => metadata.mode() & S_ISUID != 0,
-        PathCondition::Writable => perm(metadata, Permission::Write),
-        PathCondition::Executable => perm(metadata, Permission::Execute),
+        PathCondition::Writable => check_access(path, libc::W_OK),
+        PathCondition::Executable => check_access(path, libc::X_OK),
     }
 }
 
