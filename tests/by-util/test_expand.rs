@@ -454,18 +454,26 @@ fn test_expand_non_utf8_paths() {
 
 #[test]
 #[cfg(unix)]
-fn test_expand_infinite_input_does_not_oom() {
+fn test_expand_infinite_input_does_not_oom() -> Result<(), std::io::Error> {
     use std::fs::File;
     use std::time::Duration;
 
     use rlimit::Resource;
 
     if !Resource::AS.is_supported() {
-        return;
+        return Ok(());
     }
 
-    let dev_zero = File::open("/dev/zero").ok()?;
-    let dev_full = File::create("/dev/full").ok()?;
+    let dev_zero = match File::open("/dev/zero") {
+        Ok(f) => f,
+        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => return Ok(()),
+        Err(e) => return Err(e),
+    };
+    let dev_full = match File::create("/dev/full") {
+        Ok(f) => f,
+        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => return Ok(()),
+        Err(e) => return Err(e),
+    };
 
     new_ucmd!()
         .set_stdin(dev_zero)
@@ -475,4 +483,6 @@ fn test_expand_infinite_input_does_not_oom() {
         .fails()
         .stderr_contains("failed to write output")
         .stderr_does_not_contain("memory allocation");
+
+    Ok(())
 }

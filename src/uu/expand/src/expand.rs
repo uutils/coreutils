@@ -382,6 +382,14 @@ fn classify_char(buf: &[u8], byte: usize, utf8: bool) -> (CharType, usize, usize
     use self::CharType::{Backspace, Other, Tab};
 
     if utf8 {
+        let b = buf[byte];
+        if b < 0x80 {
+            return match b {
+                b'\t' => (Tab, 0, 1),
+                b'\x08' => (Backspace, 0, 1),
+                _ => (Other, 1, 1),
+            };
+        }
         let nbytes = char::from(buf[byte]).len_utf8();
 
         if byte + nbytes > buf.len() {
