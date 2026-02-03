@@ -274,6 +274,8 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
 
     let zero_terminated = args.get_flag(ZERO_TERMINATED);
 
+    let debug = args.get_flag(DEBUG);
+
     Ok(NumfmtOptions {
         transform,
         padding,
@@ -287,7 +289,23 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         grouping,
         invalid,
         zero_terminated,
+        debug,
     })
+}
+
+fn print_debug_warnings(options: &NumfmtOptions, matches: &ArgMatches) {
+    // Warn if no conversion option is specified
+    if options.transform.from == Unit::None
+        && options.transform.to == Unit::None
+        && options.padding == 0
+    {
+        show_error!("{}", translate!("numfmt-debug-no-conversion"));
+    }
+
+    // Warn if --header is used with command-line input
+    if options.header > 0 && matches.get_many::<OsString>(NUMBER).is_some() {
+        show_error!("{}", translate!("numfmt-debug-header-ignored"));
+    }
 }
 
 #[uucore::main]
@@ -295,6 +313,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let options = parse_options(&matches).map_err(NumfmtError::IllegalArgument)?;
+
+    if options.debug {
+        print_debug_warnings(&options, &matches);
+    }
 
     let result = match matches.get_many::<OsString>(NUMBER) {
         Some(values) => {
@@ -329,6 +351,12 @@ pub fn uu_app() -> Command {
         .override_usage(format_usage(&translate!("numfmt-usage")))
         .allow_negative_numbers(true)
         .infer_long_args(true)
+        .arg(
+            Arg::new(DEBUG)
+                .long(DEBUG)
+                .help(translate!("numfmt-help-debug"))
+                .action(ArgAction::SetTrue),
+        )
         .arg(
             Arg::new(DELIMITER)
                 .short('d')
@@ -486,6 +514,7 @@ mod tests {
             grouping: false,
             invalid: InvalidModes::Abort,
             zero_terminated: false,
+            debug: false,
         }
     }
 

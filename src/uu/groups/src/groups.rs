@@ -5,6 +5,7 @@
 
 // spell-checker:ignore (ToDO) passwd
 
+use std::io::{Write, stdout};
 use thiserror::Error;
 use uucore::{
     display::Quotable,
@@ -59,7 +60,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             return Err(GroupsError::GetGroupsFailed.into());
         };
         let groups: Vec<String> = gids.iter().map(infallible_gid2grp).collect();
-        println!("{}", groups.join(" "));
+        writeln!(stdout(), "{}", groups.join(" "))?;
         return Ok(());
     }
 
@@ -67,7 +68,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         match Passwd::locate(user.as_str()) {
             Ok(p) => {
                 let groups: Vec<String> = p.belongs_to().iter().map(infallible_gid2grp).collect();
-                println!("{user} : {}", groups.join(" "));
+                writeln!(stdout(), "{user} : {}", groups.join(" "))?;
             }
             Err(_) => {
                 // The `show!()` macro sets the global exit code for the program.

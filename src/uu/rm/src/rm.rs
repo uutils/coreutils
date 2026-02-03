@@ -451,21 +451,16 @@ fn count_files(paths: &[&OsStr], recursive: bool) -> u64 {
 
 /// A helper for `count_files` specialized for directories.
 fn count_files_in_directory(p: &Path) -> u64 {
-    let entries_count = fs::read_dir(p)
-        .map(|entries| {
-            entries
-                .filter_map(Result::ok)
-                .map(|entry| {
-                    let file_type = entry.file_type();
-                    match file_type {
-                        Ok(ft) if ft.is_dir() => count_files_in_directory(&entry.path()),
-                        Ok(_) => 1,
-                        Err(_) => 0,
-                    }
-                })
-                .sum()
-        })
-        .unwrap_or(0);
+    let entries_count = fs::read_dir(p).map_or(0, |entries| {
+        entries
+            .flatten()
+            .map(|entry| match entry.file_type() {
+                Ok(ft) if ft.is_dir() => count_files_in_directory(&entry.path()),
+                Ok(_) => 1,
+                Err(_) => 0,
+            })
+            .sum()
+    });
 
     1 + entries_count
 }

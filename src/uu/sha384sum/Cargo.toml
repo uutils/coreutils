@@ -1,0 +1,38 @@
+[package]
+name = "uu_sha384sum"
+description = "sha384sum ~ (uutils) Print or check the SHA384 checksums"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/sha384sum"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/sha384sum.rs"
+
+[dependencies]
+clap = { workspace = true }
+uu_checksum_common = { workspace = true }
+uucore = { workspace = true, features = [
+  "checksum",
+  "encoding",
+  "sum",
+  "hardware",
+] }
+fluent = { workspace = true }
+
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
+[[bin]]
+name = "sha384sum"
+path = "src/main.rs"

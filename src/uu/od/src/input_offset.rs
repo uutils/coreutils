@@ -2,6 +2,8 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+use std::io::{self, Write};
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Radix {
     Decimal,
@@ -60,10 +62,11 @@ impl InputOffset {
 
     /// Prints the byte offset followed by a newline, or nothing at all if
     /// both `Radix::NoPrefix` was set and no label (--traditional) is used.
-    pub fn print_final_offset(&self) {
+    pub fn print_final_offset<W: Write>(&self, out: &mut W) -> io::Result<()> {
         if self.radix != Radix::NoPrefix || self.label.is_some() {
-            println!("{}", self.format_byte_offset());
+            writeln!(out, "{}", self.format_byte_offset())?;
         }
+        Ok(())
     }
 }
 

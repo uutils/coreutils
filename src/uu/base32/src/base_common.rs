@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, ErrorKind, Write};
+use std::io::{self, BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::encoding::{
@@ -16,7 +16,7 @@ use uucore::encoding::{
     SupportsFastDecodeAndEncode, Z85Wrapper,
     for_base_common::{BASE32, BASE32HEX, BASE64URL, HEXUPPER_PERMISSIVE},
 };
-use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError, strip_errno};
 use uucore::format_usage;
 use uucore::translate;
 
@@ -179,7 +179,7 @@ pub fn handle_input<R: BufRead>(input: &mut R, format: Format, config: Config) -
             let mut buffered = Vec::new();
             input
                 .read_to_end(&mut buffered)
-                .map_err(|err| USimpleError::new(1, format_read_error(err.kind())))?;
+                .map_err(|err| USimpleError::new(1, format_read_error(&err)))?;
             if config.decode {
                 fast_decode::fast_decode_buffer(
                     buffered,
@@ -556,7 +556,7 @@ pub mod fast_encode {
         loop {
             let read_buffer = input
                 .fill_buf()
-                .map_err(|err| USimpleError::new(1, super::format_read_error(err.kind())))?;
+                .map_err(|err| USimpleError::new(1, super::format_read_error(&err)))?;
             if read_buffer.is_empty() {
                 break;
             }
@@ -823,7 +823,7 @@ pub mod fast_decode {
         loop {
             let read_buffer = input
                 .fill_buf()
-                .map_err(|err| USimpleError::new(1, super::format_read_error(err.kind())))?;
+                .map_err(|err| USimpleError::new(1, super::format_read_error(&err)))?;
             let read_len = read_buffer.len();
             if read_len == 0 {
                 break;
@@ -919,23 +919,8 @@ pub mod fast_decode {
     }
 }
 
-fn format_read_error(kind: ErrorKind) -> String {
-    let kind_string = kind.to_string();
-
-    // e.g. "is a directory" -> "Is a directory"
-    let mut kind_string_capitalized = String::with_capacity(kind_string.len());
-
-    for (index, ch) in kind_string.char_indices() {
-        if index == 0 {
-            for cha in ch.to_uppercase() {
-                kind_string_capitalized.push(cha);
-            }
-        } else {
-            kind_string_capitalized.push(ch);
-        }
-    }
-
-    translate!("base-common-read-error", "error" => kind_string_capitalized)
+fn format_read_error(error: &io::Error) -> String {
+    translate!("base-common-read-error", "error" => strip_errno(error))
 }
 
 /// Determines if the input buffer contains any padding ('=') ignoring trailing whitespace.
@@ -944,7 +929,7 @@ fn read_and_has_padding<R: std::io::Read>(input: &mut R) -> UResult<(bool, Vec<u
     let mut buf = Vec::new();
     input
         .read_to_end(&mut buf)
-        .map_err(|err| USimpleError::new(1, format_read_error(err.kind())))?;
+        .map_err(|err| USimpleError::new(1, format_read_error(&err)))?;
 
     // Treat the stream as padded if any '=' exists (GNU coreutils continues decoding
     // even when padding bytes are followed by more data).

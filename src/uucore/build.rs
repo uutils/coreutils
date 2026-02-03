@@ -144,6 +144,15 @@ fn embed_single_utility_locale(
             .join(format!("locales/{locale}.ftl"))
     })?;
 
+    if util_name.ends_with("sum") {
+        embed_component_locales(
+            embedded_file,
+            locales_to_embed,
+            "checksum_common",
+            |locale| project_root.join(format!("src/uu/checksum_common/locales/{locale}.ftl")),
+        )?;
+    }
+
     // Always embed uucore locale file if it exists
     embed_component_locales(embedded_file, locales_to_embed, "uucore", |locale| {
         project_root.join(format!("src/uucore/locales/{locale}.ftl"))

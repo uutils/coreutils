@@ -9,6 +9,7 @@ use clap::builder::ValueParser;
 use clap::parser::ValuesRef;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
+use std::io::{Write, stdout};
 use std::path::{Path, PathBuf};
 #[cfg(all(unix, target_os = "linux"))]
 use uucore::error::FromIo;
@@ -308,10 +309,11 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
     match create_dir_with_mode(path, create_mode) {
         Ok(()) => {
             if config.verbose {
-                println!(
+                writeln!(
+                    stdout(),
                     "{}",
                     translate!("mkdir-verbose-created-directory", "util_name" => uucore::util_name(), "path" => path.quote())
-                );
+                )?;
             }
 
             // On Linux, we may need to add ACL permission bits via chmod.
@@ -357,10 +359,11 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
             // Print verbose message for logical directories, even if they exist
             // This matches GNU behavior for paths like "test_dir/../test_dir_a"
             if config.verbose && is_parent && config.recursive && !ends_with_parent_dir {
-                println!(
+                writeln!(
+                    stdout(),
                     "{}",
                     translate!("mkdir-verbose-created-directory", "util_name" => uucore::util_name(), "path" => path.quote())
-                );
+                )?;
             }
             Ok(())
         }

@@ -12,6 +12,7 @@
 // spell-checker:ignore sigquit sigtstp
 // spell-checker:ignore cbreak decctlq evenp litout oddp tcsadrain exta extb NCCS cfsetispeed
 // spell-checker:ignore notaflag notacombo notabaud
+// spell-checker:ignore baudrate TCGETS
 
 mod flags;
 
@@ -19,9 +20,13 @@ use crate::flags::AllFlags;
 use crate::flags::COMBINATION_SETTINGS;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use nix::libc::{O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ, c_ushort};
+
+#[cfg(target_os = "linux")]
+use nix::libc::{TCGETS2, termios2};
+
 use nix::sys::termios::{
     ControlFlags, InputFlags, LocalFlags, OutputFlags, SetArg, SpecialCharacterIndices as S,
-    Termios, cfgetospeed, cfsetispeed, cfsetospeed, tcgetattr, tcsetattr,
+    Termios, cfsetispeed, cfsetospeed, tcgetattr, tcsetattr,
 };
 use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
 use std::cmp::Ordering;
@@ -613,16 +618,27 @@ fn print_terminal_size(
     window_size: Option<&TermSize>,
     term_size: Option<&TermSize>,
 ) -> nix::Result<()> {
-    let speed = cfgetospeed(termios);
+    // GNU linked against glibc 2.42 provides us baudrate 51 which panics cfgetospeed
+    #[cfg(not(target_os = "linux"))]
+    let speed = nix::sys::termios::cfgetospeed(termios);
+    #[cfg(target_os = "linux")]
+    ioctl_read_bad!(tcgets2, TCGETS2, termios2);
+    #[cfg(target_os = "linux")]
+    let speed = {
+        let mut t2 = unsafe { std::mem::zeroed::<termios2>() };
+        unsafe { tcgets2(opts.file.as_raw_fd(), &raw mut t2)? };
+        t2.c_ospeed
+    };
+
     let mut printer = WrappedPrinter::new(window_size);
 
-    // BSDs use a u32 for the baud rate, so we can simply print it.
-    #[cfg(bsd)]
+    // BSDs and Linux use a u32 for the baud rate, so we can simply print it.
+    #[cfg(any(target_os = "linux", bsd))]
     printer.print(&translate!("stty-output-speed", "speed" => speed));
 
     // Other platforms need to use the baud rate enum, so printing the right value
     // becomes slightly more complicated.
-    #[cfg(not(bsd))]
+    #[cfg(not(any(target_os = "linux", bsd)))]
     for (text, baud_rate) in BAUD_RATES {
         if *baud_rate == speed {
             printer.print(&translate!("stty-output-speed", "speed" => (*text)));

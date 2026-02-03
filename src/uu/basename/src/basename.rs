@@ -71,8 +71,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     //
 
     for path in name_args {
-        stdout().write_all(&basename(path, &suffix)?)?;
-        print!("{line_ending}");
+        let mut out = stdout();
+        out.write_all(&basename(path, &suffix)?)?;
+        write!(out, "{line_ending}")?;
     }
 
     Ok(())

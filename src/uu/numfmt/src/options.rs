@@ -8,6 +8,7 @@ use crate::units::Unit;
 use uucore::ranges::Range;
 use uucore::translate;
 
+pub const DEBUG: &str = "debug";
 pub const DELIMITER: &str = "delimiter";
 pub const FIELD: &str = "field";
 pub const FIELD_DEFAULT: &str = "1";
@@ -59,6 +60,7 @@ pub struct NumfmtOptions {
     pub grouping: bool,
     pub invalid: InvalidModes,
     pub zero_terminated: bool,
+    pub debug: bool,
 }
 
 #[derive(Clone, Copy)]
