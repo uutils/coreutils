@@ -6,7 +6,7 @@
 // spell-checker:ignore (ToDO) ctype cwidth iflag nbytes nspaces nums tspaces Preprocess
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use memchr::memchr;
+use memchr::{memchr, memchr_iter};
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
@@ -539,10 +539,37 @@ fn expand_line_bytes(
 ) -> std::io::Result<()> {
     use self::CharType::{Backspace, Other, Tab};
 
+    let has_tab = memchr(b'\t', buf).is_some();
+    let has_backspace = memchr(b'\x08', buf).is_some();
+    let has_cr = memchr(b'\r', buf).is_some();
+
     // Fast path: if there are no tabs, backspaces, and (in UTF-8 mode or no carriage returns),
     // we can write the buffer directly without character-by-character processing
-    if !buf.contains(&b'\t') && !buf.contains(&b'\x08') && (options.utf8 || !buf.contains(&b'\r')) {
+    if !has_tab && !has_backspace && (options.utf8 || !has_cr) {
         return output.write_all(buf);
+    }
+
+    // Fast path for ASCII (UTF-8) without backspaces and without -i: expand only tabs.
+    if options.utf8 && !options.iflag && !has_backspace {
+        let is_ascii = buf.iter().all(|&b| b < 0x80);
+        if is_ascii {
+            let mut col = 0usize;
+            let mut start = 0usize;
+            for pos in memchr_iter(b'\t', buf) {
+                if pos > start {
+                    output.write_all(&buf[start..pos])?;
+                    col += pos - start;
+                }
+                let nts = next_tabstop(tabstops, col, &options.remaining_mode);
+                col += nts;
+                write_tab_spaces(output, nts, &options.tspaces)?;
+                start = pos + 1;
+            }
+            if start < buf.len() {
+                output.write_all(&buf[start..])?;
+            }
+            return Ok(());
+        }
     }
 
     let mut col = 0;
