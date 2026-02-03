@@ -464,14 +464,8 @@ fn test_expand_infinite_input_does_not_oom() {
         return;
     }
 
-    let dev_zero = match File::open("/dev/zero") {
-        Ok(f) => f,
-        Err(_) => return,
-    };
-    let dev_full = match File::create("/dev/full") {
-        Ok(f) => f,
-        Err(_) => return,
-    };
+    let dev_zero = File::open("/dev/zero").ok()?;
+    let dev_full = File::create("/dev/full").ok()?;
 
     new_ucmd!()
         .set_stdin(dev_zero)
