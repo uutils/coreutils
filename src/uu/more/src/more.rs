@@ -3,6 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore keymods
+
 use std::{
     ffi::OsString,
     fs::File,
@@ -82,8 +84,7 @@ impl std::error::Error for MoreError {}
 
 const BELL: char = '\x07'; // Printing this character will ring the bell
 
-// The prompt to be displayed at the top of the screen when viewing multiple files,
-// with the file name in the middle
+/// The prompt to be displayed at the top of the screen when viewing multiple files, with the file name in the middle
 const MULTI_FILE_TOP_PROMPT: &str = "\r::::::::::::::\n\r{}\n\r::::::::::::::\n";
 
 pub mod options {
@@ -102,39 +103,50 @@ pub mod options {
     pub const FILES: &str = "files";
 }
 
-struct Options {
+struct Options<'args> {
     silent: bool,
-    _logical: bool,     // not implemented
-    _exit_on_eof: bool, // not implemented
-    _no_pause: bool,    // not implemented
+    _logical: bool, // not implemented
+    exit_on_eof: bool,
+    _no_pause: bool, // not implemented
     print_over: bool,
     clean_print: bool,
     squeeze: bool,
     lines: Option<u16>,
     from_line: usize,
-    pattern: Option<String>,
+    pattern: Option<&'args str>,
 }
 
-impl Options {
-    fn from(matches: &ArgMatches) -> Self {
-        let lines = match (
-            matches.get_one::<u16>(options::LINES).copied(),
-            matches.get_one::<u16>(options::NUMBER).copied(),
-        ) {
-            // We add 1 to the number of lines to display because the last line
-            // is used for the banner
-            (Some(n), _) | (None, Some(n)) if n > 0 => Some(n + 1),
-            _ => None, // Use terminal height
-        };
-        let from_line = match matches.get_one::<usize>(options::FROM_LINE).copied() {
-            Some(number) => number.saturating_sub(1),
-            _ => 0,
-        };
-        let pattern = matches.get_one::<String>(options::PATTERN).cloned();
+impl<'args> Options<'args> {
+    fn from(matches: &'args ArgMatches) -> Self {
+        // If lines is None, use terminal height
+        let lines = matches
+            .get_one::<u16>(options::LINES)
+            .or_else(|| matches.get_one::<u16>(options::NUMBER))
+            .filter(|&&n| n > 0)
+            // add 1 to the number of lines to display since the last line is used for the banner
+            .map(|n| n + 1);
+
+        let from_line = matches
+            .get_one::<usize>(options::FROM_LINE)
+            // convert from 1-indexed to 0-indexed
+            .map_or(0, |n| n.saturating_sub(1));
+
+        // exit_on_eof is enabled by default if:
+        // - POSIXLY_CORRECT environment variable is not set, or
+        // - not executed on terminal
+        let posixly_correct = std::env::var_os("POSIXLY_CORRECT").is_some();
+        let is_tty = stdout().is_tty();
+        let explicit_exit_on_eof = matches.get_flag(options::EXIT_ON_EOF);
+        let exit_on_eof = !posixly_correct || !is_tty || explicit_exit_on_eof;
+
+        let pattern = matches
+            .get_one::<String>(options::PATTERN)
+            .map(|s| s.as_str());
+
         Self {
             silent: matches.get_flag(options::SILENT),
             _logical: matches.get_flag(options::LOGICAL),
-            _exit_on_eof: matches.get_flag(options::EXIT_ON_EOF),
+            exit_on_eof,
             _no_pause: matches.get_flag(options::NO_PAUSE),
             print_over: matches.get_flag(options::PRINT_OVER),
             clean_print: matches.get_flag(options::CLEAN_PRINT),
@@ -158,7 +170,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let length = files.len();
 
         let mut files_iter = files.peekable();
-        while let (Some(file_os), next_file) = (files_iter.next(), files_iter.peek()) {
+        while let (Some(file_os), next_file_os) = (files_iter.next(), files_iter.peek()) {
             let file = Path::new(file_os);
             if file.is_dir() {
                 show!(UUsageError::new(
@@ -184,12 +196,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 }
                 Ok(opened_file) => opened_file,
             };
-            let next_file_str = next_file.map(|f| f.to_string_lossy().into_owned());
             more(
-                InputType::File(BufReader::new(opened_file)),
+                Input::from_file(opened_file)?,
                 length > 1,
                 Some(&file.to_string_lossy()),
-                next_file_str.as_deref(),
+                next_file_os.map(|f| f.to_string_lossy()).as_deref(),
                 &mut options,
             )?;
         }
@@ -199,7 +210,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             // stdin is not a pipe
             return Err(UUsageError::new(1, MoreError::BadUsage.to_string()));
         }
-        more(InputType::Stdin(stdin), false, None, None, &mut options)?;
+        more(Input::from_stdin(stdin), false, None, None, &mut options)?;
     }
 
     Ok(())
@@ -313,25 +324,33 @@ pub fn uu_app() -> Command {
         )
 }
 
-enum InputType {
-    File(BufReader<File>),
-    Stdin(Stdin),
+struct Input {
+    reader: Box<dyn BufRead>,
+    file_size: Option<u64>,
 }
 
-impl InputType {
-    fn read_line(&mut self, buf: &mut String) -> std::io::Result<usize> {
-        match self {
-            Self::File(reader) => reader.read_line(buf),
-            Self::Stdin(stdin) => stdin.read_line(buf),
+impl Input {
+    fn from_file(file: File) -> std::io::Result<Self> {
+        let file_size = Some(file.metadata()?.len());
+        Ok(Self {
+            reader: Box::new(BufReader::new(file)),
+            file_size,
+        })
+    }
+
+    fn from_stdin(stdin: Stdin) -> Self {
+        Self {
+            reader: Box::new(stdin.lock()),
+            file_size: None,
         }
     }
 
-    fn len(&self) -> std::io::Result<Option<u64>> {
-        let len = match self {
-            Self::File(reader) => Some(reader.get_ref().metadata()?.len()),
-            Self::Stdin(_) => None,
-        };
-        Ok(len)
+    fn read_line(&mut self, buf: &mut String) -> std::io::Result<usize> {
+        self.reader.read_line(buf)
+    }
+
+    fn len(&self) -> Option<u64> {
+        self.file_size
     }
 }
 
@@ -415,7 +434,7 @@ impl Drop for TerminalGuard {
 }
 
 fn more(
-    input: InputType,
+    input: Input,
     multiple_file: bool,
     file_name: Option<&str>,
     next_file: Option<&str>,
@@ -430,7 +449,8 @@ fn more(
     if let Some(number) = options.lines {
         rows = number;
     }
-    let mut pager = Pager::new(input, rows, file_name, next_file, options, out)?;
+    let pattern = options.pattern;
+    let mut pager = Pager::new(input, out, rows, file_name, next_file, pattern, options)?;
     // Start from the specified line
     pager.handle_from_line()?;
     // Search for pattern
@@ -441,6 +461,10 @@ fn more(
     }
     // Initial display
     pager.draw(None)?;
+    // Exit immediately if exit_on_eof is enabled and EOF is reached
+    if pager.exit_on_eof && pager.eof_reached {
+        return Ok(());
+    }
     // Reset multi-file settings after initial display
     if multiple_file {
         pager.reset_multi_file_header();
@@ -450,11 +474,13 @@ fn more(
     pager.process_events(options)
 }
 
-struct Pager<'a> {
-    /// Source of the content (file, stdin)
-    input: InputType,
+struct Pager<'args> {
+    input: Input,
+    stdout: OutputType,
     /// Total size of the file in bytes (only available for file inputs)
     file_size: Option<u64>,
+    file_name: Option<&'args str>,
+    next_file_name: Option<&'args str>,
     /// Storage for the lines read from the input
     lines: Vec<String>,
     /// Running total of byte sizes for each line, used for positioning
@@ -465,59 +491,75 @@ struct Pager<'a> {
     content_rows: usize,
     /// Count of blank lines that have been condensed in the current view
     lines_squeezed: usize,
-    pattern: Option<String>,
-    file_name: Option<&'a str>,
-    next_file: Option<&'a str>,
     eof_reached: bool,
+    pattern: Option<&'args str>,
+    /// Do not ring bell on unknown key press
     silent: bool,
+    /// Squeeze blank lines into a single line
     squeeze: bool,
-    stdout: OutputType,
+    /// Exit immediately when EOF is reached
+    exit_on_eof: bool,
 }
 
-impl<'a> Pager<'a> {
+impl<'args> Pager<'args> {
     fn new(
-        input: InputType,
-        rows: u16,
-        file_name: Option<&'a str>,
-        next_file: Option<&'a str>,
-        options: &Options,
+        input: Input,
         stdout: OutputType,
+        rows: u16,
+        file_name: Option<&'args str>,
+        next_file_name: Option<&'args str>,
+        pattern: Option<&'args str>,
+        options: &Options<'args>,
     ) -> UResult<Self> {
         // Reserve one line for the status bar, ensuring at least one content row
         let content_rows = rows.saturating_sub(1).max(1) as usize;
-        let file_size = input.len()?;
+        let file_size = input.len();
         let pager = Self {
             input,
+            stdout,
             file_size,
+            file_name,
+            next_file_name,
             lines: Vec::with_capacity(content_rows),
             cumulative_line_sizes: Vec::new(),
             upper_mark: options.from_line,
             content_rows,
             lines_squeezed: 0,
-            pattern: options.pattern.clone(),
-            file_name,
-            next_file,
             eof_reached: false,
+            pattern,
             silent: options.silent,
             squeeze: options.squeeze,
-            stdout,
+            exit_on_eof: options.exit_on_eof,
         };
         Ok(pager)
     }
 
+    fn clear_line(&mut self) -> std::io::Result<()> {
+        if self.stdout.is_tty() {
+            self.stdout.queue(Clear(ClearType::CurrentLine))?;
+        }
+        Ok(())
+    }
+
+    fn highlight_text(&self, text: &str) -> String {
+        if self.stdout.is_tty() {
+            format!("{}{text}{}", Attribute::Reverse, Attribute::Reset)
+        } else {
+            text.to_string()
+        }
+    }
+
     fn handle_from_line(&mut self) -> UResult<()> {
         if !self.read_until_line(self.upper_mark)? {
-            write!(
-                self.stdout,
-                "\r{}{} ({}){}",
-                Attribute::Reverse,
+            let msg = format!(
+                "{} ({})",
                 translate!(
                     "more-error-cannot-seek-to-line",
                     "line" => (self.upper_mark + 1)
                 ),
                 translate!("more-press-return"),
-                Attribute::Reset,
-            )?;
+            );
+            write!(self.stdout, "\r{}", self.highlight_text(&msg))?;
             self.stdout.flush()?;
             self.wait_for_enter_key()?;
             self.upper_mark = 0;
@@ -572,14 +614,12 @@ impl<'a> Pager<'a> {
             Some(line) => self.upper_mark = line,
             None => {
                 self.pattern = None;
-                write!(
-                    self.stdout,
-                    "\r{}{} ({}){}",
-                    Attribute::Reverse,
+                let msg = format!(
+                    "{} ({})",
                     translate!("more-error-pattern-not-found"),
                     translate!("more-press-return"),
-                    Attribute::Reset,
-                )?;
+                );
+                write!(self.stdout, "\r{}", self.highlight_text(&msg))?;
                 self.stdout.flush()?;
                 self.wait_for_enter_key()?;
             }
@@ -588,11 +628,11 @@ impl<'a> Pager<'a> {
     }
 
     fn search_pattern_in_file(&mut self) -> Option<usize> {
-        let pattern = self.pattern.clone().expect("pattern should be set");
+        let pattern = self.pattern.expect("pattern should be set");
         let mut line_num = self.upper_mark;
         loop {
             match self.get_line(line_num) {
-                Some(line) if line.contains(&pattern) => return Some(line_num),
+                Some(line) if line.contains(pattern) => return Some(line_num),
                 Some(_) => line_num += 1,
                 None => return None,
             }
@@ -607,7 +647,7 @@ impl<'a> Pager<'a> {
     }
 
     fn display_multi_file_header(&mut self) -> UResult<()> {
-        self.stdout.queue(Clear(ClearType::CurrentLine))?;
+        self.clear_line()?;
         self.stdout.write_all(
             MULTI_FILE_TOP_PROMPT
                 .replace("{}", self.file_name.unwrap_or_default())
@@ -626,14 +666,19 @@ impl<'a> Pager<'a> {
     }
 
     fn update_display(&mut self, options: &Options) -> UResult<()> {
-        if options.print_over {
-            self.stdout
-                .execute(MoveTo(0, 0))?
-                .execute(Clear(ClearType::FromCursorDown))?;
-        } else if options.clean_print {
-            self.stdout
-                .execute(Clear(ClearType::All))?
-                .execute(MoveTo(0, 0))?;
+        if self.stdout.is_tty() {
+            if options.print_over {
+                // Clear the whole screen and then display the text
+                self.stdout
+                    .execute(MoveTo(0, 0))?
+                    .execute(Clear(ClearType::FromCursorDown))?;
+            } else if options.clean_print {
+                // Paint each screen from the top,
+                // clearing the remainder of each line as it is displayed
+                self.stdout
+                    .execute(Clear(ClearType::All))?
+                    .execute(MoveTo(0, 0))?;
+            }
         }
         Ok(())
     }
@@ -644,7 +689,7 @@ impl<'a> Pager<'a> {
             if !event::poll(Duration::from_millis(100))? {
                 continue;
             }
-            let mut wrong_key = None;
+            let mut unknown_key = None;
             match event::read()? {
                 // --- Quit commands ---
                 Event::Key(
@@ -671,7 +716,7 @@ impl<'a> Pager<'a> {
                     modifiers: KeyModifiers::NONE,
                     ..
                 }) => {
-                    if self.eof_reached {
+                    if self.eof_reached && self.exit_on_eof {
                         return Ok(());
                     }
                     self.page_down();
@@ -681,7 +726,7 @@ impl<'a> Pager<'a> {
                     modifiers: KeyModifiers::NONE,
                     ..
                 }) => {
-                    if self.eof_reached {
+                    if self.eof_reached && self.exit_on_eof {
                         return Ok(());
                     }
                     self.next_line();
@@ -705,7 +750,7 @@ impl<'a> Pager<'a> {
 
                 // --- Terminal events ---
                 Event::Resize(col, row) => {
-                    self.page_resize(col, row, options.lines);
+                    self.resize_page(col, row, options.lines);
                 }
 
                 // --- Skip key release events ---
@@ -718,13 +763,13 @@ impl<'a> Pager<'a> {
                 Event::Key(KeyEvent {
                     code: KeyCode::Char(k),
                     ..
-                }) => wrong_key = Some(k),
+                }) => unknown_key = Some(k),
 
                 // --- Ignore other events ---
                 _ => continue,
             }
             self.update_display(options)?;
-            self.draw(wrong_key)?;
+            self.draw(unknown_key)?;
         }
     }
 
@@ -763,22 +808,22 @@ impl<'a> Pager<'a> {
     }
 
     // TODO: Deal with column size changes.
-    fn page_resize(&mut self, _col: u16, row: u16, option_line: Option<u16>) {
+    fn resize_page(&mut self, _col: u16, row: u16, option_line: Option<u16>) {
         if option_line.is_none() {
             self.content_rows = row.saturating_sub(1) as usize;
         }
     }
 
-    fn draw(&mut self, wrong_key: Option<char>) -> UResult<()> {
+    fn draw(&mut self, unknown_key: Option<char>) -> UResult<()> {
         self.draw_lines()?;
-        self.draw_status_bar(wrong_key);
+        self.draw_status_bar(unknown_key)?;
         self.stdout.flush()?;
         Ok(())
     }
 
     fn draw_lines(&mut self) -> UResult<()> {
         // Clear current prompt line
-        self.stdout.queue(Clear(ClearType::CurrentLine))?;
+        self.clear_line()?;
         // Reset squeezed lines counter
         self.lines_squeezed = 0;
         // Display lines until we've filled the screen
@@ -801,10 +846,8 @@ impl<'a> Pager<'a> {
             let mut line = self.lines[index].clone();
             if let Some(pattern) = &self.pattern {
                 // Highlight the pattern in the line
-                line = line.replace(
-                    pattern,
-                    &format!("{}{pattern}{}", Attribute::Reverse, Attribute::Reset),
-                );
+                let highlighted = self.highlight_text(pattern);
+                line = line.replace(pattern, &highlighted);
             }
             self.stdout.write_all(format!("\r{line}\n").as_bytes())?;
             lines_printed += 1;
@@ -830,7 +873,7 @@ impl<'a> Pager<'a> {
         }
     }
 
-    fn draw_status_bar(&mut self, wrong_key: Option<char>) {
+    fn draw_status_bar(&mut self, unknown_key: Option<char>) -> UResult<()> {
         // Calculate the index of the last visible line
         let lower_mark =
             (self.upper_mark + self.content_rows).min(self.lines.len().saturating_sub(1));
@@ -838,7 +881,7 @@ impl<'a> Pager<'a> {
         // - Show next file name when at EOF and there is a next file
         // - Otherwise show percentage of the file read (if available)
         let progress_info = if self.eof_reached {
-            self.next_file
+            self.next_file_name
                 .as_ref()
                 .map(|next_file| format!(" (Next file: {next_file})"))
                 .unwrap_or_default()
@@ -869,7 +912,7 @@ impl<'a> Pager<'a> {
         // Add appropriate user feedback based on silent mode and key input:
         // - In silent mode: show help text or unknown key message
         // - In normal mode: ring bell (BELL char) on wrong key or show basic prompt
-        let banner = match (self.silent, wrong_key) {
+        let banner = match (self.silent, unknown_key) {
             (true, Some(key)) => format!(
                 "{status}[{}]",
                 translate!(
@@ -882,13 +925,9 @@ impl<'a> Pager<'a> {
             (false, None) => status,
         };
         // Draw the status bar at the bottom of the screen
-        write!(
-            self.stdout,
-            "\r{}{banner}{}",
-            Attribute::Reverse,
-            Attribute::Reset
-        )
-        .unwrap();
+        let styled_banner = self.highlight_text(&banner);
+        write!(self.stdout, "\r{styled_banner}")?;
+        Ok(())
     }
 }
 
@@ -923,9 +962,9 @@ mod tests {
 
     struct TestPagerBuilder {
         content: String,
-        options: Options,
+        options: Options<'static>,
         rows: u16,
-        next_file: Option<&'static str>,
+        next_file_name: Option<&'static str>,
     }
 
     impl Default for TestPagerBuilder {
@@ -935,7 +974,7 @@ mod tests {
                 options: Options {
                     silent: false,
                     _logical: false,
-                    _exit_on_eof: false,
+                    exit_on_eof: false,
                     _no_pause: false,
                     print_over: false,
                     clean_print: false,
@@ -944,10 +983,39 @@ mod tests {
                     from_line: 0,
                     pattern: None,
                 },
-                rows: 10,
-                next_file: None,
+                rows: 24,
+                next_file_name: None,
             }
         }
+    }
+
+    macro_rules! option_builder {
+        ($name:ident: bool) => {
+            #[allow(clippy::used_underscore_binding)]
+            fn $name(mut self) -> Self {
+                self.options.$name = true;
+                self
+            }
+        };
+        ($name:ident: Option<$inner:ty>) => {
+            fn $name(mut self, value: $inner) -> Self {
+                self.options.$name = Some(value);
+                self
+            }
+        };
+        ($name:ident: $type:ty) => {
+            #[allow(clippy::wrong_self_convention)]
+            fn $name(mut self, value: $type) -> Self {
+                self.options.$name = value;
+                self
+            }
+        };
+        ($name:ident => $field:ident: $type:ty) => {
+            fn $name(mut self, value: $type) -> Self {
+                self.$field = value;
+                self
+            }
+        };
     }
 
     #[allow(dead_code)]
@@ -968,61 +1036,47 @@ mod tests {
                 self.rows = rows;
             }
             Pager::new(
-                InputType::File(BufReader::new(tmpfile)),
+                Input::from_file(tmpfile).unwrap(),
+                out,
                 self.rows,
                 None,
-                self.next_file,
+                self.next_file_name,
+                self.options.pattern,
                 &self.options,
-                out,
             )
             .unwrap()
         }
 
-        fn silent(mut self) -> Self {
-            self.options.silent = true;
-            self
-        }
+        option_builder!(silent: bool);
+        option_builder!(_logical: bool);
+        option_builder!(exit_on_eof: bool);
+        option_builder!(_no_pause: bool);
+        option_builder!(print_over: bool);
+        option_builder!(clean_print: bool);
+        option_builder!(squeeze: bool);
+        option_builder!(lines: Option<u16>);
+        option_builder!(from_line: usize);
+        option_builder!(pattern: Option<&'static str>);
+        option_builder!(rows => rows: u16);
+        option_builder!(next_file_name => next_file_name: Option<&'static str>);
+    }
 
-        fn print_over(mut self) -> Self {
-            self.options.print_over = true;
-            self
-        }
+    fn get_content_lines(stdout: &[u8]) -> Vec<String> {
+        let stdout = String::from_utf8_lossy(stdout);
+        stdout
+            .lines()
+            .map(|line| line.trim().to_string())
+            .filter(|line| line != "~" && !line.starts_with(':'))
+            .collect()
+    }
 
-        fn clean_print(mut self) -> Self {
-            self.options.clean_print = true;
-            self
-        }
-
-        fn squeeze(mut self) -> Self {
-            self.options.squeeze = true;
-            self
-        }
-
-        fn lines(mut self, lines: u16) -> Self {
-            self.options.lines = Some(lines);
-            self
-        }
-
-        #[allow(clippy::wrong_self_convention)]
-        fn from_line(mut self, from_line: usize) -> Self {
-            self.options.from_line = from_line;
-            self
-        }
-
-        fn pattern(mut self, pattern: &str) -> Self {
-            self.options.pattern = Some(pattern.to_owned());
-            self
-        }
-
-        fn rows(mut self, rows: u16) -> Self {
-            self.rows = rows;
-            self
-        }
-
-        fn next_file(mut self, next_file: &'static str) -> Self {
-            self.next_file = Some(next_file);
-            self
-        }
+    fn get_status_bar(stdout: &[u8]) -> String {
+        let stdout = String::from_utf8_lossy(stdout);
+        stdout
+            .lines()
+            .last()
+            .map(|line| line.trim().to_string())
+            .unwrap_or_default()
     }
 
     #[test]
@@ -1036,20 +1090,21 @@ mod tests {
 
     #[test]
     fn test_navigate_page() {
-        // create 10 lines "0\n".."9\n"
-        let content = (0..10).map(|i| i.to_string() + "\n").collect::<String>();
-
-        // content_rows = rows - 1 = 10 - 1 = 9
-        let mut pager = TestPagerBuilder::new(&content).build();
+        let lines = (0..24).map(|i| i.to_string()).collect::<Vec<String>>();
+        let mut pager = TestPagerBuilder::new(&lines.join("\n")).build();
         assert_eq!(pager.upper_mark, 0);
 
         pager.page_down();
         assert_eq!(pager.upper_mark, pager.content_rows);
+
         pager.draw(None).unwrap();
-        let mut stdout = String::from_utf8_lossy(&pager.stdout);
-        assert!(stdout.contains("9\n"));
-        assert!(!stdout.contains("8\n"));
-        assert_eq!(pager.upper_mark, 1); // EOF reached: upper_mark = 10 - content_rows = 1
+        let content_lines = get_content_lines(&pager.stdout);
+        assert_eq!(
+            content_lines,
+            lines[pager.content_rows..],
+            "Pager should display the next content_rows lines"
+        );
+        assert_eq!(pager.upper_mark, 1);
 
         pager.page_up();
         assert_eq!(pager.upper_mark, 0);
@@ -1060,22 +1115,51 @@ mod tests {
         pager.prev_line();
         assert_eq!(pager.upper_mark, 0);
         pager.stdout.clear();
+
         pager.draw(None).unwrap();
-        stdout = String::from_utf8_lossy(&pager.stdout);
-        assert!(stdout.contains("0\n"));
-        assert!(!stdout.contains("9\n")); // only lines 0 to 8 should be displayed
+        let content_lines = get_content_lines(&pager.stdout);
+        assert_eq!(
+            content_lines,
+            lines[0..pager.content_rows],
+            "Pager should display the first content_rows lines"
+        );
+    }
+
+    #[test]
+    fn test_no_next_file_in_status_bar() {
+        let content = "line1\nline2\n";
+        let mut pager = TestPagerBuilder::new(content).build();
+        pager.draw(None).unwrap();
+        let status_bar = get_status_bar(&pager.stdout);
+        assert_eq!(status_bar, ":", "Status bar should be empty");
+    }
+
+    #[test]
+    fn test_next_file_in_status_bar() {
+        let content = "line1\nline2\n";
+        let next_file_name = "next.txt";
+        let mut pager = TestPagerBuilder::new(content)
+            .next_file_name(Some(next_file_name))
+            .build();
+        pager.draw(None).unwrap();
+        let status_bar = get_status_bar(&pager.stdout);
+        assert_eq!(
+            status_bar,
+            format!(": (Next file: {next_file_name})"),
+            "Status bar should show the next file name"
+        );
     }
 
     #[test]
     fn test_silent_mode() {
-        let content = (0..5).map(|i| i.to_string() + "\n").collect::<String>();
-        let mut pager = TestPagerBuilder::new(&content)
-            .from_line(3)
-            .silent()
-            .build();
-        pager.draw_status_bar(None);
-        let stdout = String::from_utf8_lossy(&pager.stdout);
-        assert!(stdout.contains(&translate!("more-help-message")));
+        let content = (0..5).map(|i| i.to_string()).collect::<String>();
+        let mut pager = TestPagerBuilder::new(&content).silent().build();
+        pager.draw_status_bar(None).unwrap();
+        let status_bar = get_status_bar(&pager.stdout);
+        assert!(
+            status_bar.contains(&translate!("more-help-message")),
+            "Status bar should show the help message"
+        );
     }
 
     #[test]
@@ -1098,57 +1182,60 @@ mod tests {
         assert!(!pager.should_squeeze_line(7));
 
         pager.draw(None).unwrap();
-        let stdout = String::from_utf8_lossy(&pager.stdout);
-        assert!(stdout.contains("Line 0"));
-        assert!(stdout.contains("Line 4"));
-        assert!(stdout.contains("Line 7"));
+        let content_lines = get_content_lines(&pager.stdout);
+        assert_eq!(content_lines[0], "Line 0");
+        assert_eq!(content_lines[2], "Line 4");
+        assert_eq!(content_lines[4], "Line 7");
     }
 
     #[test]
     fn test_lines_option() {
-        let content = (0..5).map(|i| i.to_string() + "\n").collect::<String>();
+        let lines = (0..5).map(|i| i.to_string()).collect::<Vec<String>>();
 
-        // Output zero lines succeeds
-        let mut pager = TestPagerBuilder::new(&content).lines(0).build();
+        let mut pager = TestPagerBuilder::new(&lines.join("\n")).lines(0).build();
         pager.draw(None).unwrap();
-        let mut stdout = String::from_utf8_lossy(&pager.stdout);
-        assert!(!stdout.is_empty());
+        let content_lines = get_content_lines(&pager.stdout);
+        assert!(
+            !content_lines.is_empty(),
+            "lines = 0 should use default rows"
+        );
 
-        // Output two lines
-        let mut pager = TestPagerBuilder::new(&content).lines(3).build();
-        assert_eq!(pager.content_rows, 3 - 1); // 1 line for the status bar
+        let lines_opt = 3;
+        let mut pager = TestPagerBuilder::new(&(lines.join("\n")))
+            .lines(lines_opt as u16)
+            .build();
+        let output_lines = lines_opt - 1; // 1 line for the status bar
+        assert_eq!(pager.content_rows, output_lines);
         pager.draw(None).unwrap();
-        stdout = String::from_utf8_lossy(&pager.stdout);
-        assert!(stdout.contains("0\n"));
-        assert!(stdout.contains("1\n"));
-        assert!(!stdout.contains("2\n"));
+        let content_lines = get_content_lines(&pager.stdout);
+        assert_eq!(content_lines, lines[0..output_lines]);
     }
 
     #[test]
     fn test_from_line_option() {
-        let content = (0..5).map(|i| i.to_string() + "\n").collect::<String>();
+        let lines = vec!["0", "1", "2", "3", "4"];
+        let content = lines.join("\n");
 
         // Output from first line
         let mut pager = TestPagerBuilder::new(&content).from_line(0).build();
         assert!(pager.handle_from_line().is_ok());
         pager.draw(None).unwrap();
-        let stdout = String::from_utf8_lossy(&pager.stdout);
-        assert!(stdout.contains("0\n"));
+        let content_lines = get_content_lines(&pager.stdout);
+        assert_eq!(content_lines, lines);
 
         // Output from second line
         pager = TestPagerBuilder::new(&content).from_line(1).build();
         assert!(pager.handle_from_line().is_ok());
         pager.draw(None).unwrap();
-        let stdout = String::from_utf8_lossy(&pager.stdout);
-        assert!(stdout.contains("1\n"));
-        assert!(!stdout.contains("0\n"));
+        let content_lines = get_content_lines(&pager.stdout);
+        assert_eq!(content_lines, lines[1..]);
 
-        // Output from out of range line
+        // Out of range error
         pager = TestPagerBuilder::new(&content).from_line(99).build();
         assert!(pager.handle_from_line().is_ok());
         assert_eq!(pager.upper_mark, 0);
-        let stdout = String::from_utf8_lossy(&pager.stdout);
-        assert!(stdout.contains(&translate!(
+        let status_bar = get_status_bar(&pager.stdout);
+        assert!(status_bar.contains(&translate!(
             "more-error-cannot-seek-to-line",
             "line" => "100"
         )));
@@ -1161,9 +1248,8 @@ mod tests {
         assert!(pager.handle_pattern_search().is_ok());
         assert_eq!(pager.upper_mark, 1);
         pager.draw(None).unwrap();
-        let stdout = String::from_utf8_lossy(&pager.stdout);
-        assert!(stdout.contains("bar"));
-        assert!(!stdout.contains("foo"));
+        let content_lines = get_content_lines(&pager.stdout);
+        assert_eq!(content_lines, vec!["bar", "baz"]);
     }
 
     #[test]
@@ -1171,25 +1257,25 @@ mod tests {
         let content = "foo\nbar\nbaz\n";
         let mut pager = TestPagerBuilder::new(content).pattern("qux").build();
         assert!(pager.handle_pattern_search().is_ok());
-        let stdout = String::from_utf8_lossy(&pager.stdout);
-        assert!(stdout.contains(&translate!("more-error-pattern-not-found")));
         assert_eq!(pager.pattern, None);
         assert_eq!(pager.upper_mark, 0);
+        let status_bar = get_status_bar(&pager.stdout);
+        assert!(status_bar.contains(&translate!("more-error-pattern-not-found")));
     }
 
     #[test]
-    fn test_wrong_key() {
-        let mut pager = TestPagerBuilder::default().silent().build();
-        pager.draw_status_bar(Some('x'));
-        let stdout = String::from_utf8_lossy(&pager.stdout);
-        assert!(stdout.contains(&translate!(
+    fn test_unknown_key() {
+        let mut silent_pager = TestPagerBuilder::default().silent().build();
+        silent_pager.draw_status_bar(Some('x')).unwrap();
+        let status_bar = get_status_bar(&silent_pager.stdout);
+        assert!(status_bar.contains(&translate!(
             "more-error-unknown-key",
             "key" => "x"
         )));
 
-        pager = TestPagerBuilder::default().build();
-        pager.draw_status_bar(Some('x'));
-        let stdout = String::from_utf8_lossy(&pager.stdout);
-        assert!(stdout.contains(&BELL.to_string()));
+        let mut pager = TestPagerBuilder::default().build();
+        pager.draw_status_bar(Some('x')).unwrap();
+        let status_bar = get_status_bar(&pager.stdout);
+        assert!(status_bar.contains(&BELL.to_string()));
     }
 }
