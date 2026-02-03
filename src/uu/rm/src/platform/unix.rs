@@ -310,12 +310,12 @@ pub fn safe_remove_dir_recursive(
         }
     };
 
-    let (cmd_error, child_remains) =
+    let (had_command_error, has_remaining_children) =
         safe_remove_dir_recursive_impl(path, &dir_fd, options, Some(initial_dev));
 
     // After processing all children, remove the directory itself
-    if cmd_error || child_remains {
-        cmd_error
+    if had_command_error || has_remaining_children {
+        had_command_error
     } else {
         // Ask user permission if needed
         if options.interactive == InteractiveMode::Always
@@ -368,8 +368,8 @@ pub fn safe_remove_dir_recursive_impl(
         }
     };
 
-    let mut cmd_error = false;
-    let mut child_remains = false;
+    let mut had_command_error = false;
+    let mut has_remaining_children = false;
 
     // Process each entry
     for entry_name in entries {
@@ -379,8 +379,8 @@ pub fn safe_remove_dir_recursive_impl(
         let entry_stat = match dir_fd.stat_at(&entry_name, false) {
             Ok(stat) => stat,
             Err(e) => {
-                cmd_error |= handle_error_with_force(e, &entry_path, options);
-                child_remains = true;
+                had_command_error |= handle_error_with_force(e, &entry_path, options);
+                has_remaining_children = true;
                 continue;
             }
         };
@@ -393,8 +393,8 @@ pub fn safe_remove_dir_recursive_impl(
                 if let Some(p_dev) = parent_dev {
                     if entry_stat.st_dev as u64 != p_dev {
                         show_one_fs_error(&entry_path, options);
-                        cmd_error = true;
-                        child_remains = true;
+                        had_command_error = true;
+                        has_remaining_children = true;
                         continue;
                     }
                 }
@@ -405,7 +405,7 @@ pub fn safe_remove_dir_recursive_impl(
                 && !is_dir_empty(&entry_path)
                 && !prompt_descend(&entry_path)
             {
-                child_remains = true;
+                has_remaining_children = true;
                 continue;
             }
 
@@ -422,8 +422,8 @@ pub fn safe_remove_dir_recursive_impl(
                     };
 
                     if failed {
-                        cmd_error = true;
-                        child_remains = true;
+                        had_command_error = true;
+                        has_remaining_children = true;
                     }
                     continue;
                 }
@@ -435,8 +435,8 @@ pub fn safe_remove_dir_recursive_impl(
                 options,
                 Some(entry_stat.st_dev as u64),
             );
-            cmd_error |= c_error;
-            child_remains |= c_remains;
+            had_command_error |= c_error;
+            has_remaining_children |= c_remains;
 
             if c_error || c_remains {
                 continue;
@@ -446,26 +446,27 @@ pub fn safe_remove_dir_recursive_impl(
             if options.interactive == InteractiveMode::Always
                 && !prompt_dir_with_mode(&entry_path, entry_stat.st_mode as libc::mode_t, options)
             {
-                child_remains = true;
+                has_remaining_children = true;
                 continue;
             }
 
             // Remove the now-empty subdirectory using safe unlinkat
-            cmd_error |= handle_unlink(dir_fd, entry_name.as_ref(), &entry_path, true, options);
+            had_command_error |=
+                handle_unlink(dir_fd, entry_name.as_ref(), &entry_path, true, options);
         } else {
             // Remove file - check if user wants to remove it first
             if prompt_file_with_stat(&entry_path, &entry_stat, options) {
                 if handle_unlink(dir_fd, entry_name.as_ref(), &entry_path, false, options) {
-                    cmd_error = true;
-                    child_remains = true;
+                    had_command_error = true;
+                    has_remaining_children = true;
                 }
             } else {
-                child_remains = true;
+                has_remaining_children = true;
             }
         }
     }
 
-    (cmd_error, child_remains)
+    (had_command_error, has_remaining_children)
 }
 
 #[cfg(target_os = "redox")]
