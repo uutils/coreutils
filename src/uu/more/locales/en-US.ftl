@@ -20,7 +20,6 @@ more-help-clean-print = Do not scroll, display text and clean line ends
 more-help-squeeze = Squeeze multiple blank lines into one
 more-help-plain = Suppress underlining
 more-help-lines = The number of lines per screen full
-more-help-number = Same as --lines option argument
 more-help-from-line = Start displaying each file at line number
 more-help-pattern = The string to be searched in each file before starting to display it
 more-help-files = Path to the files to be read

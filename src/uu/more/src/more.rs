@@ -29,6 +29,8 @@ use uucore::{display::Quotable, show};
 
 use uucore::translate;
 
+mod parse;
+
 #[derive(Debug)]
 enum MoreError {
     IsDirectory(PathBuf),
@@ -96,7 +98,8 @@ pub mod options {
     pub const SQUEEZE: &str = "squeeze";
     pub const PLAIN: &str = "plain";
     pub const LINES: &str = "lines";
-    pub const NUMBER: &str = "number";
+    // PATTERN and FROM_LINE are uutils-only long flags hidden from --help;
+    // they exist as expansion targets for the GNU `+/pattern` and `+number` extra args.
     pub const PATTERN: &str = "pattern";
     pub const FROM_LINE: &str = "from-line";
     pub const FILES: &str = "files";
@@ -117,15 +120,13 @@ struct Options {
 
 impl Options {
     fn from(matches: &ArgMatches) -> Self {
-        let lines = match (
-            matches.get_one::<u16>(options::LINES).copied(),
-            matches.get_one::<u16>(options::NUMBER).copied(),
-        ) {
-            // We add 1 to the number of lines to display because the last line
-            // is used for the banner
-            (Some(n), _) | (None, Some(n)) if n > 0 => Some(n + 1),
-            _ => None, // Use terminal height
-        };
+        // We add 1 to the number of lines to display because the last line
+        // is used for the banner
+        let lines = matches
+            .get_one::<u16>(options::LINES)
+            .copied()
+            .filter(|&n| n > 0)
+            .map(|n| n + 1);
         let from_line = match matches.get_one::<usize>(options::FROM_LINE).copied() {
             Some(number) => number.saturating_sub(1),
             _ => 0,
@@ -152,6 +153,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         print!("\r");
         println!("{panic_info}");
     }));
+    let args = parse::preprocess_args(args);
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
     let mut options = Options::from(&matches);
     if let Some(files) = matches.get_many::<OsString>(options::FILES) {
@@ -278,29 +280,23 @@ pub fn uu_app() -> Command {
                 .value_parser(value_parser!(u16).range(0..))
                 .help(translate!("more-help-lines")),
         )
-        .arg(
-            Arg::new(options::NUMBER)
-                .long(options::NUMBER)
-                .num_args(1)
-                .value_parser(value_parser!(u16).range(0..))
-                .help(translate!("more-help-number")),
-        )
+        // Hidden long flags: targets for `+number` and `+/pattern` extra-arg expansion.
         .arg(
             Arg::new(options::FROM_LINE)
-                .short('F')
                 .long(options::FROM_LINE)
                 .num_args(1)
                 .value_name("number")
                 .value_parser(value_parser!(usize))
+                .hide(true)
                 .help(translate!("more-help-from-line")),
         )
         .arg(
             Arg::new(options::PATTERN)
-                .short('P')
                 .long(options::PATTERN)
                 .allow_hyphen_values(true)
                 .required(false)
                 .value_name("pattern")
+                .hide(true)
                 .help(translate!("more-help-pattern")),
         )
         .arg(
