@@ -366,7 +366,6 @@ platform-info = "2.0.3"
 procfs = "0.18"
 rand = { version = "0.9.0", features = ["small_rng"] }
 rand_chacha = { version = "0.9.0" }
-rand_core = "0.9.0"
 rayon = "1.10"
 regex = "1.10.4"
 rlimit = "0.11.0"
@@ -699,4 +698,4 @@ from_iter_instead_of_collect = "allow"
 large_types_passed_by_value = "allow"
 
 [workspace.metadata.cargo-shear]
-ignored = ["fluent", "libstdbuf"]
+ignored = ["clap", "fluent", "libstdbuf"]

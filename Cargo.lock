@@ -3201,9 +3201,7 @@ name = "uu_b2sum"
 version = "0.6.0"
 dependencies = [
  "clap",
- "codspeed-divan-compat",
  "fluent",
- "tempfile",
  "uu_checksum_common",
  "uucore",
 ]
@@ -3281,9 +3279,7 @@ name = "uu_checksum_common"
 version = "0.6.0"
 dependencies = [
  "clap",
- "codspeed-divan-compat",
  "fluent",
- "tempfile",
  "uucore",
 ]
 
@@ -3709,9 +3705,7 @@ name = "uu_md5sum"
 version = "0.6.0"
 dependencies = [
  "clap",
- "codspeed-divan-compat",
  "fluent",
- "tempfile",
  "uu_checksum_common",
  "uucore",
 ]
@@ -4004,9 +3998,7 @@ name = "uu_sha1sum"
 version = "0.6.0"
 dependencies = [
  "clap",
- "codspeed-divan-compat",
  "fluent",
- "tempfile",
  "uu_checksum_common",
  "uucore",
 ]
@@ -4016,9 +4008,7 @@ name = "uu_sha224sum"
 version = "0.6.0"
 dependencies = [
  "clap",
- "codspeed-divan-compat",
  "fluent",
- "tempfile",
  "uu_checksum_common",
  "uucore",
 ]
@@ -4028,9 +4018,7 @@ name = "uu_sha256sum"
 version = "0.6.0"
 dependencies = [
  "clap",
- "codspeed-divan-compat",
  "fluent",
- "tempfile",
  "uu_checksum_common",
  "uucore",
 ]
@@ -4040,9 +4028,7 @@ name = "uu_sha384sum"
 version = "0.6.0"
 dependencies = [
  "clap",
- "codspeed-divan-compat",
  "fluent",
- "tempfile",
  "uu_checksum_common",
  "uucore",
 ]
@@ -4052,9 +4038,7 @@ name = "uu_sha512sum"
 version = "0.6.0"
 dependencies = [
  "clap",
- "codspeed-divan-compat",
  "fluent",
- "tempfile",
  "uu_checksum_common",
  "uucore",
 ]
@@ -4080,7 +4064,6 @@ dependencies = [
  "itoa",
  "rand 0.9.2",
  "rand_chacha 0.9.0",
- "rand_core 0.9.5",
  "rustc-hash",
  "sha3",
  "uucore",
