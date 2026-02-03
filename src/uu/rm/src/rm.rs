@@ -72,7 +72,7 @@ fn verbose_removed_directory(path: &Path, options: &Options) {
 }
 
 /// Helper function to show error with context and return error status
-fn show_removal_error(error: std::io::Error, path: &Path) -> bool {
+fn show_removal_error(error: io::Error, path: &Path) -> bool {
     if error.kind() == io::ErrorKind::PermissionDenied {
         show_error!("cannot remove {}: Permission denied", path.quote());
     } else {

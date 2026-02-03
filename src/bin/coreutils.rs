@@ -10,6 +10,7 @@ use std::cmp;
 use std::ffi::OsString;
 use std::io::{self, Write};
 use std::process;
+use uucore::Args;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 

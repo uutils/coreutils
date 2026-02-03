@@ -641,7 +641,7 @@ unexpected_cfgs = { level = "warn", check-cfg = [
   'cfg(fuzzing)',
   'cfg(target_os, values("cygwin"))',
 ] }
-#unused_qualifications = "warn" // TODO: fix warnings in uucore, then re-enable this lint
+unused_qualifications = "warn"
 
 [workspace.lints.clippy]
 # The counts were generated with this command:

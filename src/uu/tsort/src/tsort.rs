@@ -151,7 +151,7 @@ enum TsortError {
 
     /// Wrapper for bubbling up IO errors
     #[error("{0}")]
-    IO(#[from] std::io::Error),
+    IO(#[from] io::Error),
 }
 
 // Auxiliary struct, just for printing loop nodes via show! macro

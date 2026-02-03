@@ -535,7 +535,7 @@ fn get_file_to_check(
     let filename_bytes = os_str_as_bytes(filename).map_err(|e| LineCheckError::UError(e.into()))?;
 
     if filename == "-" {
-        Ok(Box::new(io::stdin())) // Use stdin if "-" is specified in the checksum file
+        Ok(Box::new(stdin())) // Use stdin if "-" is specified in the checksum file
     } else {
         let failed_open = || {
             write_file_report(
@@ -692,7 +692,7 @@ fn compute_and_check_digest_from_file(
             }));
 
             write_file_report(
-                std::io::stdout(),
+                io::stdout(),
                 filename,
                 FileChecksumResult::CantOpen,
                 prefix,
@@ -709,7 +709,7 @@ fn compute_and_check_digest_from_file(
         DigestOutput::U16(n) => n.to_be_bytes() == expected_checksum,
     };
     write_file_report(
-        std::io::stdout(),
+        io::stdout(),
         filename,
         FileChecksumResult::from_bool(checksum_correct),
         prefix,

@@ -17,7 +17,7 @@ use crate::bufferedoutput::BufferedOutput;
 use blocks::conv_block_unblock_helper;
 use datastructures::*;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::fcntl::FcntlArg::F_SETFL;
+use nix::fcntl::FcntlArg;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::fcntl::OFlag;
 use parseargs::Parser;
@@ -897,7 +897,7 @@ impl<'a> Output<'a> {
         if let Some(libc_flags) = make_linux_oflags(&settings.oflags) {
             nix::fcntl::fcntl(
                 fx.as_raw().as_fd(),
-                F_SETFL(OFlag::from_bits_retain(libc_flags)),
+                FcntlArg::F_SETFL(OFlag::from_bits_retain(libc_flags)),
             )?;
         }
 

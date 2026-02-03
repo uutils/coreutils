@@ -141,11 +141,11 @@ fn create_bundle(
     // Disable Unicode directional isolate characters
     bundle.set_use_isolating(false);
 
-    let mut try_add_resource_from = |dir_opt: Option<std::path::PathBuf>| {
+    let mut try_add_resource_from = |dir_opt: Option<PathBuf>| {
         if let Some(resource) = dir_opt
             .map(|dir| dir.join(format!("{locale}.ftl")))
             .and_then(|locale_path| fs::read_to_string(locale_path).ok())
-            .and_then(|ftl| fluent_bundle::FluentResource::try_new(ftl).ok())
+            .and_then(|ftl| FluentResource::try_new(ftl).ok())
         {
             bundle.add_resource_overriding(resource);
         }
@@ -1339,7 +1339,7 @@ invalid-syntax = This is { $missing
         std::thread::spawn(|| {
             // Force English locale for this test
             unsafe {
-                std::env::set_var("LANG", "en-US");
+                env::set_var("LANG", "en-US");
             }
 
             // Test with a utility name that has embedded locales
