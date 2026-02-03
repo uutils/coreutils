@@ -26,6 +26,7 @@ rand_core = { workspace = true }
 sha3 = { workspace = true }
 uucore = { workspace = true }
 fluent = { workspace = true }
+rustc-hash = "2.1.1"
 
 [[bin]]
 name = "shuf"

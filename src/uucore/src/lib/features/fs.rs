@@ -249,13 +249,24 @@ pub fn normalize_path(path: &Path) -> PathBuf {
             }
             Component::CurDir => {}
             Component::ParentDir => {
-                ret.pop();
+                if ret.as_os_str().is_empty()
+                    || matches!(ret.components().next_back(), Some(Component::ParentDir))
+                {
+                    ret.push("..");
+                } else {
+                    ret.pop();
+                }
             }
             Component::Normal(c) => {
                 ret.push(c);
             }
         }
     }
+
+    if ret.as_os_str().is_empty() {
+        ret.push(".");
+    }
+
     ret
 }
 
@@ -874,7 +885,38 @@ mod tests {
         test: &'a str,
     }
 
-    const NORMALIZE_PATH_TESTS: [NormalizePathTestCase; 8] = [
+    const NORMALIZE_PATH_TESTS: [NormalizePathTestCase; 15] = [
+        NormalizePathTestCase {
+            path: "foo/bar/../..",
+            test: ".",
+        },
+        NormalizePathTestCase {
+            path: ".",
+            test: ".",
+        },
+        // Should not try to eliminate leading .. components,
+        // as it may point to a sibling of the current dir
+        NormalizePathTestCase {
+            path: "../foo",
+            test: "../foo",
+        },
+        // Try to go down, then escape above current dir and back down again
+        NormalizePathTestCase {
+            path: "foo/../../../bar/baz",
+            test: "../../bar/baz",
+        },
+        NormalizePathTestCase {
+            path: "../../foo/..",
+            test: "../..",
+        },
+        NormalizePathTestCase {
+            path: "foo/../../..",
+            test: "../..",
+        },
+        NormalizePathTestCase {
+            path: "foo/bar/../../..",
+            test: "..",
+        },
         NormalizePathTestCase {
             path: "./foo/bar.txt",
             test: "foo/bar.txt",

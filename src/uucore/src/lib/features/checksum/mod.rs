@@ -397,6 +397,8 @@ pub enum ChecksumError {
     BinaryTextConflict,
     #[error("--text mode is only supported with --untagged")]
     TextWithoutUntagged,
+    #[error("--tag does not support --text mode")]
+    TextAfterTag,
     #[error("--check is not supported with --algorithm={{bsd,sysv,crc,crc32b}}")]
     AlgorithmNotSupportedWithCheck,
     #[error("You cannot combine multiple hash algorithms!")]

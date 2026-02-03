@@ -20,9 +20,13 @@ jobs:
   benchmarks:
     name: Run ${{ matrix.type }} benchmarks for ${{ matrix.package }} (CodSpeed)
     runs-on: ubuntu-latest
+    env:
+      RUSTC_WRAPPER: sccache
+      CARGO_INCREMENTAL: 0
+      SCCACHE_GHA_ENABLED: "true"
     strategy:
       matrix:
-        type: [simulation] # , memory]  # memory profile disabled due to variance
+        type: [simulation, memory]
         package: [
           uu_base64,
           uu_cksum,

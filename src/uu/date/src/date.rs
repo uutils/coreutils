@@ -20,9 +20,8 @@ use std::sync::OnceLock;
 use uucore::display::Quotable;
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
-use uucore::i18n::datetime::{
-    get_localized_day_name, get_localized_month_name, should_use_icu_locale,
-};
+#[cfg(feature = "i18n-datetime")]
+use uucore::i18n::datetime::{localize_format_string, should_use_icu_locale};
 use uucore::translate;
 use uucore::{format_usage, show};
 #[cfg(windows)]
@@ -618,91 +617,14 @@ fn format_date_with_locale_aware_months(
     format_string: &str,
     config: &Config<PosixCustom>,
 ) -> Result<String, jiff::Error> {
-    // Only use ICU for non-default locales and when format string contains month or day specifiers
-    let use_icu = should_use_icu_locale();
+    let broken_down = BrokenDownTime::from(date);
 
-    if (format_string.contains("%B")
-        || format_string.contains("%b")
-        || format_string.contains("%A")
-        || format_string.contains("%a"))
-        && use_icu
-    {
-        let broken_down = BrokenDownTime::from(date);
-        // Get localized month names if needed
-        let (full_month, abbrev_month) =
-            if format_string.contains("%B") || format_string.contains("%b") {
-                if let Some(month_val) = broken_down.month() {
-                    let month_u8 = if (1..=12).contains(&month_val) {
-                        month_val as u8
-                    } else {
-                        1 // fallback to January for invalid values
-                    };
-                    (
-                        get_localized_month_name(month_u8, true),
-                        get_localized_month_name(month_u8, false),
-                    )
-                } else {
-                    (String::new(), String::new())
-                }
-            } else {
-                (String::new(), String::new())
-            };
-
-        // Get localized day names if needed
-        let (full_day, abbrev_day) = if format_string.contains("%A") || format_string.contains("%a")
-        {
-            if let (Some(year), Some(month), Some(day)) =
-                (broken_down.year(), broken_down.month(), broken_down.day())
-            {
-                (
-                    get_localized_day_name(year.into(), month as u8, day as u8, true),
-                    get_localized_day_name(year.into(), month as u8, day as u8, false),
-                )
-            } else {
-                (String::new(), String::new())
-            }
-        } else {
-            (String::new(), String::new())
-        };
-
-        // Replace format specifiers with placeholders for successful ICU translations only
-        let mut temp_format = format_string.to_string();
-        if !full_month.is_empty() {
-            temp_format = temp_format.replace("%B", "<<<FULL_MONTH>>>");
-        }
-        if !abbrev_month.is_empty() {
-            temp_format = temp_format.replace("%b", "<<<ABBREV_MONTH>>>");
-        }
-        if !full_day.is_empty() {
-            temp_format = temp_format.replace("%A", "<<<FULL_DAY>>>");
-        }
-        if !abbrev_day.is_empty() {
-            temp_format = temp_format.replace("%a", "<<<ABBREV_DAY>>>");
-        }
-
-        // Format with the temporary string
-        let temp_result = broken_down.to_string_with_config(config, &temp_format)?;
-
-        // Replace placeholders with localized names
-        let mut final_result = temp_result;
-        if !full_month.is_empty() {
-            final_result = final_result.replace("<<<FULL_MONTH>>>", &full_month);
-        }
-        if !abbrev_month.is_empty() {
-            final_result = final_result.replace("<<<ABBREV_MONTH>>>", &abbrev_month);
-        }
-        if !full_day.is_empty() {
-            final_result = final_result.replace("<<<FULL_DAY>>>", &full_day);
-        }
-        if !abbrev_day.is_empty() {
-            final_result = final_result.replace("<<<ABBREV_DAY>>>", &abbrev_day);
-        }
-
-        return Ok(final_result);
+    if !should_use_icu_locale() {
+        return broken_down.to_string_with_config(config, format_string);
     }
 
-    // Fallback to regular formatting
-    BrokenDownTime::from(date).to_string_with_config(config, format_string)
+    let fmt = localize_format_string(format_string, &date.date());
+    broken_down.to_string_with_config(config, &fmt)
 }
 
 /// Return the appropriate format string for the given settings.

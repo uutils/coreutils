@@ -19,12 +19,20 @@ workspace = true
 path = "src/date.rs"
 
 [features]
-i18n-datetime = ["uucore/i18n-datetime", "icu_calendar"]
+default = ["i18n-datetime"]
+i18n-datetime = [
+  "uucore/i18n-datetime",
+  "dep:icu_calendar",
+  "dep:icu_locale",
+  "dep:jiff-icu",
+]
 
 [dependencies]
 clap = { workspace = true }
 fluent = { workspace = true }
 icu_calendar = { workspace = true, optional = true }
+icu_locale = { workspace = true, optional = true }
+jiff-icu = { workspace = true, optional = true }
 jiff = { workspace = true, features = [
   "tzdb-bundle-platform",
   "tzdb-zoneinfo",
