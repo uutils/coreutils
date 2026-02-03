@@ -31,7 +31,7 @@ options might be missing or different behavior might be experienced.
 
 We provide prebuilt binaries, manpages, and shell completions from main branch at https://github.com/uutils/coreutils/releases/tag/latest-commit .
 The latest stable tag https://github.com/uutils/coreutils/releases/latest also exists for reproducible products and packagers.
-Bug reporter should use binary from latest commit.
+Bug reporters should use binary from latest commit.
 
 </div>
 
