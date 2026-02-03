@@ -513,24 +513,25 @@ pub fn os_string_to_vec(s: OsString) -> mods::error::UResult<Vec<u8>> {
 /// which avoids panicking on non UTF-8 input.
 pub fn read_byte_lines<R: std::io::Read>(
     mut buf_reader: BufReader<R>,
-) -> impl Iterator<Item = Vec<u8>> {
+) -> impl Iterator<Item = std::io::Result<Vec<u8>>> {
     iter::from_fn(move || {
         let mut buf = Vec::with_capacity(256);
-        let size = buf_reader.read_until(b'\n', &mut buf).ok()?;
 
-        if size == 0 {
-            return None;
-        }
+        match buf_reader.read_until(b'\n', &mut buf) {
+            Ok(0) => None,
+            Err(e) => Some(Err(e)),
+            Ok(_) => {
+                // Trim (\r)\n
+                if buf.ends_with(b"\n") {
+                    buf.pop();
+                    if buf.ends_with(b"\r") {
+                        buf.pop();
+                    }
+                }
 
-        // Trim (\r)\n
-        if buf.ends_with(b"\n") {
-            buf.pop();
-            if buf.ends_with(b"\r") {
-                buf.pop();
+                Some(Ok(buf))
             }
         }
-
-        Some(buf)
     })
 }
 
@@ -539,8 +540,9 @@ pub fn read_byte_lines<R: std::io::Read>(
 /// but it still will on Windows.
 pub fn read_os_string_lines<R: std::io::Read>(
     buf_reader: BufReader<R>,
-) -> impl Iterator<Item = OsString> {
-    read_byte_lines(buf_reader).map(|byte_line| os_string_from_vec(byte_line).expect("UTF-8 error"))
+) -> impl Iterator<Item = std::io::Result<OsString>> {
+    read_byte_lines(buf_reader)
+        .map(|byte_line_res| byte_line_res.map(|bl| os_string_from_vec(bl).expect("UTF-8 error")))
 }
 
 /// Prompt the user with a formatted string and returns `true` if they reply `'y'` or `'Y'`
