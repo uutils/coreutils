@@ -15,13 +15,17 @@ use std::ops::BitOr;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
+#[cfg(windows)]
+use std::os::windows::fs::MetadataExt;
 use std::path::MAIN_SEPARATOR;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
-use uucore::fsext::{MountInfo, read_fs_list};
+use uucore::fsext::MountInfo;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::translate;
 use uucore::{format_usage, os_str_as_bytes, prompt_yes, show_error};
@@ -597,20 +601,6 @@ pub(crate) fn show_one_fs_error(path: &Path, options: &Options) {
     }
 }
 
-/// Helper function to check fs and report errors if necessary.
-/// Returns true if the operation should be skipped/returned (i.e., on error).
-fn check_and_report_one_fs(path: &Path, options: &Options) -> bool {
-    if let Err(additional_reason) = check_one_fs(path, options) {
-        if !additional_reason.is_empty() {
-            show_error!("{}", additional_reason);
-        }
-        show_one_fs_error(path, options);
-
-        return true;
-    }
-    false
-}
-
 /// Recursively remove the directory tree rooted at the given path.
 ///
 /// If `path` is a file or a symbolic link, just remove it. If it is a
@@ -725,63 +715,78 @@ fn remove_dir_recursive(
     }
 }
 
-/// Return a reference to the best matching `MountInfo` whose `mount_dir`
-/// is a prefix of the canonicalized `path`.
-fn mount_for_path<'a>(path: &Path, mounts: &'a [MountInfo]) -> Option<&'a MountInfo> {
-    let canonical = path.canonicalize().ok()?;
-    let mut best: Option<(&MountInfo, usize)> = None;
+#[derive(Debug)]
+enum OneFsError {
+    /// The path is on a different device or file system (mount point boundary).
+    CrossDevice,
 
-    // Each `MountInfo` has a `mount_dir` that we compare.
-    for mi in mounts {
-        if mi.mount_dir.is_empty() {
-            continue;
+    /// Failed to retrieve metadata for the path or its parent.
+    StatFailed(String),
+}
+
+/// Helper function to check fs and report errors if necessary.
+/// Returns true if the operation should be skipped/returned (i.e., on error).
+fn check_and_report_one_fs(path: &Path, options: &Options) -> bool {
+    match check_one_fs(path, options) {
+        Ok(()) => false,
+        Err(OneFsError::StatFailed(msg)) => {
+            show_error!("{}", msg);
+            show_one_fs_error(path, options);
+            true
         }
-        let mount_dir = PathBuf::from(&mi.mount_dir);
-        if canonical.starts_with(&mount_dir) {
-            let len = mount_dir.as_os_str().len();
-            // Pick the mount with the longest matching prefix.
-            if best.is_none() || len > best.as_ref().unwrap().1 {
-                best = Some((mi, len));
-            }
+        Err(OneFsError::CrossDevice) => {
+            show_one_fs_error(path, options);
+            true
         }
     }
-
-    best.map(|(mi, _len)| mi)
 }
 
 /// Check if a path is on the same file system when `--one-file-system` or `--preserve-root=all` options are enabled.
 /// Return `OK(())` if the path is on the same file system,
 /// or an additional error describing why it should be skipped.
-fn check_one_fs(path: &Path, options: &Options) -> Result<(), String> {
+fn check_one_fs(path: &Path, options: &Options) -> Result<(), OneFsError> {
     // If neither `--one-file-system` nor `--preserve-root=all` is active,
     // always proceed
     if !options.one_fs && options.preserve_root != PreserveRoot::YesAll {
         return Ok(());
     }
 
-    // Read mount information
-    let fs_list = read_fs_list().map_err(|err| format!("cannot read mount info: {err}"))?;
+    let child_meta = path
+        .symlink_metadata()
+        .map_err(|err| OneFsError::StatFailed(format!("cannot stat {}: {}", path.quote(), err)))?;
 
-    // Canonicalize the path
-    let child_canon = path
-        .canonicalize()
-        .map_err(|err| format!("cannot canonicalize {}: {err}", path.quote()))?;
+    let parent_path = match path.parent() {
+        Some(p) if !p.as_os_str().is_empty() => p,
+        _ => Path::new("."),
+    };
 
-    // Get parent path, handling root case
-    let parent_canon = child_canon
-        .parent()
-        .ok_or_else(|| format!("cannot get parent of {}", child_canon.quote()))?
-        .to_path_buf();
+    let parent_meta = parent_path.symlink_metadata().map_err(|err| {
+        OneFsError::StatFailed(format!("cannot stat parent of {}: {}", path.quote(), err))
+    })?;
 
-    // Find mount points for child and parent
-    let child_mount = mount_for_path(&child_canon, &fs_list)
-        .ok_or_else(|| format!("cannot find mount point for {}", child_canon.quote()))?;
-    let parent_mount = mount_for_path(&parent_canon, &fs_list)
-        .ok_or_else(|| format!("cannot find mount point for {}", parent_canon.quote()))?;
+    let is_different = {
+        #[cfg(unix)]
+        {
+            child_meta.dev() != parent_meta.dev()
+        }
+        #[cfg(windows)]
+        {
+            match (
+                child_meta.volume_serial_number(),
+                parent_meta.volume_serial_number(),
+            ) {
+                (Some(c), Some(p)) => c != p,
+                _ => false,
+            }
+        }
+        #[cfg(not(any(unix, windows)))]
+        {
+            false
+        }
+    };
 
-    // Check if child and parent are on the same device
-    if child_mount.dev_id != parent_mount.dev_id {
-        return Err(String::new());
+    if is_different {
+        return Err(OneFsError::CrossDevice);
     }
 
     Ok(())
