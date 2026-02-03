@@ -8,6 +8,7 @@
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::fs::File;
+use memchr::memchr;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
@@ -521,8 +522,8 @@ fn expand_bytes(
     Ok(byte)
 }
 
-fn expand_line(
-    buf: &mut Vec<u8>,
+fn expand_line_bytes(
+    buf: &[u8],
     output: &mut BufWriter<std::io::Stdout>,
     tabstops: &[usize],
     options: &Options,
@@ -532,9 +533,7 @@ fn expand_line(
     // Fast path: if there are no tabs, backspaces, and (in UTF-8 mode or no carriage returns),
     // we can write the buffer directly without character-by-character processing
     if !buf.contains(&b'\t') && !buf.contains(&b'\x08') && (options.utf8 || !buf.contains(&b'\r')) {
-        output.write_all(buf)?;
-        buf.truncate(0);
-        return Ok(());
+        return output.write_all(buf);
     }
 
     let mut col = 0;
@@ -585,8 +584,17 @@ fn expand_line(
         byte += nbytes; // advance the pointer
     }
 
-    buf.truncate(0); // clear the buffer
+    Ok(())
+}
 
+fn expand_line(
+    buf: &mut Vec<u8>,
+    output: &mut BufWriter<std::io::Stdout>,
+    tabstops: &[usize],
+    options: &Options,
+) -> std::io::Result<()> {
+    expand_line_bytes(buf, output, tabstops, options)?;
+    buf.truncate(0);
     Ok(())
 }
 
@@ -636,30 +644,39 @@ fn expand_file(
                 line_buf.drain(0..consumed);
             }
         } else {
-            match available.iter().position(|&b| b == b'\n') {
-                Some(pos) => {
-                    let take_len = pos + 1;
-                    line_buf.extend_from_slice(&available[..take_len]);
-                    input.consume(take_len);
-                    expand_line(&mut line_buf, output, ts, options)
+            if line_buf.is_empty() {
+                let mut start = 0;
+                while let Some(pos) = memchr(b'\n', &available[start..]) {
+                    let end = start + pos + 1;
+                    expand_line_bytes(&available[start..end], output, ts, options)
                         .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
+                    start = end;
                 }
-                None => {
-                    let take_len = available.len();
-                    line_buf.extend_from_slice(available);
-                    input.consume(take_len);
-                    if line_buf.len() > MAX_LINE_BUFFER {
-                        stream_mode = true;
-                        stream_state.reset_line();
-                        let consumed =
-                            expand_bytes(&line_buf, output, ts, options, &mut stream_state, false)
-                                .map_err_context(|| {
-                                    translate!("expand-error-failed-to-write-output")
-                                })?;
-                        if consumed > 0 {
-                            line_buf.drain(0..consumed);
-                        }
-                    }
+                let available_len = available.len();
+                if start < available_len {
+                    line_buf.extend_from_slice(&available[start..available_len]);
+                }
+                input.consume(available_len);
+            } else if let Some(pos) = memchr(b'\n', available) {
+                let take_len = pos + 1;
+                line_buf.extend_from_slice(&available[..take_len]);
+                input.consume(take_len);
+                expand_line(&mut line_buf, output, ts, options)
+                    .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
+            } else {
+                let take_len = available.len();
+                line_buf.extend_from_slice(available);
+                input.consume(take_len);
+            }
+
+            if line_buf.len() > MAX_LINE_BUFFER {
+                stream_mode = true;
+                stream_state.reset_line();
+                let consumed =
+                    expand_bytes(&line_buf, output, ts, options, &mut stream_state, false)
+                        .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
+                if consumed > 0 {
+                    line_buf.drain(0..consumed);
                 }
             }
         }

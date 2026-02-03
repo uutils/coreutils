@@ -23,6 +23,7 @@ unicode-width = { workspace = true }
 uucore = { workspace = true }
 thiserror = { workspace = true }
 fluent = { workspace = true }
+memchr = { workspace = true }
 
 [dev-dependencies]
 divan = { workspace = true }
