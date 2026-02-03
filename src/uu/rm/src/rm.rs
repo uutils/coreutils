@@ -18,8 +18,6 @@ use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::MetadataExt;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
-#[cfg(windows)]
-use std::os::windows::fs::MetadataExt;
 use std::path::MAIN_SEPARATOR;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
@@ -720,6 +718,7 @@ enum OneFsError {
     CrossDevice,
 
     /// Failed to retrieve metadata for the path or its parent.
+    #[cfg(unix)]
     StatFailed(String),
 }
 
@@ -728,6 +727,7 @@ enum OneFsError {
 fn check_and_report_one_fs(path: &Path, options: &Options) -> bool {
     match check_one_fs(path, options) {
         Ok(()) => false,
+        #[cfg(unix)]
         Err(OneFsError::StatFailed(msg)) => {
             show_error!("{}", msg);
             show_one_fs_error(path, options);
@@ -750,22 +750,22 @@ fn check_one_fs(path: &Path, options: &Options) -> Result<(), OneFsError> {
         return Ok(());
     }
 
-    let child_meta = path
-        .symlink_metadata()
-        .map_err(|err| OneFsError::StatFailed(format!("cannot stat {}: {}", path.quote(), err)))?;
-
     let parent_path = match path.parent() {
         Some(p) if !p.as_os_str().is_empty() => p,
         _ => Path::new("."),
     };
 
-    let parent_meta = parent_path.symlink_metadata().map_err(|err| {
-        OneFsError::StatFailed(format!("cannot stat parent of {}: {}", path.quote(), err))
-    })?;
-
     let is_different = {
         #[cfg(unix)]
         {
+            let child_meta = path.symlink_metadata().map_err(|err| {
+                OneFsError::StatFailed(format!("cannot stat {}: {}", path.quote(), err))
+            })?;
+
+            let parent_meta = parent_path.symlink_metadata().map_err(|err| {
+                OneFsError::StatFailed(format!("cannot stat parent of {}: {}", path.quote(), err))
+            })?;
+
             child_meta.dev() != parent_meta.dev()
         }
         #[cfg(windows)]
