@@ -33,6 +33,7 @@ itertools = { workspace = true }
 memchr = { workspace = true }
 rand = { workspace = true }
 rayon = { workspace = true }
+rustc-hash = { workspace = true }
 self_cell = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }

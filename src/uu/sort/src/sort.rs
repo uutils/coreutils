@@ -25,15 +25,16 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use custom_str_cmp::custom_str_cmp;
 
 use ext_sort::ext_sort;
-use fnv::FnvHasher;
 use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
-use rand::{Rng, rng};
 use rayon::prelude::*;
+use rustc_hash::FxHashMap as HashMap;
+use rustc_hash::FxHasher as Hasher;
 use std::cmp::Ordering;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{File, OpenOptions};
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
+use std::hash::Hasher as _;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::{IntErrorKind, NonZero};
 use std::ops::Range;
@@ -1682,7 +1683,7 @@ fn index_legacy_warnings(processed_args: &[OsString], legacy_warnings: &mut [Leg
         return;
     }
 
-    let mut index_by_arg = std::collections::HashMap::new();
+    let mut index_by_arg = HashMap::default();
     for (warning_idx, warning) in legacy_warnings.iter().enumerate() {
         index_by_arg.insert(warning.arg_index, warning_idx);
     }
@@ -2896,7 +2897,8 @@ fn general_numeric_compare(
 
 /// Generate a 128-bit salt from a uniform RNG distribution.
 fn get_rand_string() -> [u8; SALT_LEN] {
-    rng().sample(rand::distr::StandardUniform)
+    use rand::Rng as _;
+    rand::rng().sample(rand::distr::StandardUniform)
 }
 
 const SALT_LEN: usize = 16; // 128-bit salt
@@ -2910,7 +2912,7 @@ fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
     let mut reader = open_with_open_failed_error(path)?;
     let mut buf = [0u8; BUF_LEN];
     let mut total = 0usize;
-    let mut hasher = FnvHasher::default();
+    let mut hasher = Hasher::default();
 
     loop {
         let n = reader
@@ -2935,7 +2937,7 @@ fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
     }
 
     let first = hasher.finish();
-    let mut second_hasher = FnvHasher::default();
+    let mut second_hasher = Hasher::default();
     second_hasher.write(RANDOM_SOURCE_TAG);
     second_hasher.write_u64(first);
     let second = second_hasher.finish();
@@ -2947,7 +2949,8 @@ fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
 }
 
 fn get_hash<T: Hash>(t: &T) -> u64 {
-    let mut s = FnvHasher::default();
+    // Using FxHash broke -R
+    let mut s = fnv::FnvHasher::default();
     t.hash(&mut s);
     s.finish()
 }
