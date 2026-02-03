@@ -12,16 +12,16 @@ use blocks::HumanReadable;
 use clap::builder::ValueParser;
 use table::HeaderMode;
 use uucore::display::Quotable;
-use uucore::error::{UError, UResult, USimpleError, get_exit_code};
+use uucore::error::{UError, UResult, USimpleError, get_exit_code, set_exit_code};
 use uucore::fsext::{MountInfo, read_fs_list};
 use uucore::parser::parse_size::ParseSizeError;
 use uucore::translate;
-use uucore::{format_usage, show};
+use uucore::{format_usage, util_name};
 
 use clap::{Arg, ArgAction, ArgMatches, Command, parser::ValueSource};
 
 use std::ffi::OsString;
-use std::io::stdout;
+use std::io::{Write, stderr, stdout};
 use std::path::Path;
 use thiserror::Error;
 
@@ -30,6 +30,8 @@ use crate::columns::{Column, ColumnError};
 use crate::filesystem::Filesystem;
 use crate::filesystem::FsError;
 use crate::table::Table;
+
+static EXIT_ERR: i32 = 1;
 
 static OPT_HELP: &str = "help";
 static OPT_ALL: &str = "all";
@@ -372,31 +374,34 @@ where
                 }
             }
             Err(FsError::InvalidPath) => {
-                show!(USimpleError::new(
-                    1,
-                    translate!("df-error-no-such-file-or-directory", "path" => path.as_ref().maybe_quote())
-                ));
+                let e = USimpleError::new(
+                    EXIT_ERR,
+                    translate!("df-error-no-such-file-or-directory", "path" => path.as_ref().maybe_quote()),
+                );
+                set_exit_code(EXIT_ERR);
+                let _ = writeln!(stderr(), "{}: {e}", util_name());
             }
             Err(FsError::MountMissing) => {
-                show!(USimpleError::new(
-                    1,
-                    translate!("df-error-no-file-systems-processed")
-                ));
+                let e =
+                    USimpleError::new(EXIT_ERR, translate!("df-error-no-file-systems-processed"));
+                set_exit_code(EXIT_ERR);
+                let _ = writeln!(stderr(), "{}: {e}", util_name());
             }
             #[cfg(not(windows))]
             Err(FsError::OverMounted) => {
-                show!(USimpleError::new(
-                    1,
-                    translate!("df-error-cannot-access-over-mounted", "path" => path.as_ref().quote())
-                ));
+                let e = USimpleError::new(
+                    EXIT_ERR,
+                    translate!("df-error-cannot-access-over-mounted", "path" => path.as_ref().quote()),
+                );
+                set_exit_code(EXIT_ERR);
+                let _ = writeln!(stderr(), "{}: {e}", util_name());
             }
         }
     }
     if get_exit_code() == 0 && result.is_empty() {
-        show!(USimpleError::new(
-            1,
-            translate!("df-error-no-file-systems-processed")
-        ));
+        let e = USimpleError::new(EXIT_ERR, translate!("df-error-no-file-systems-processed"));
+        set_exit_code(EXIT_ERR);
+        let _ = writeln!(stderr(), "{}: {e}", util_name());
         return Ok(result);
     }
 
