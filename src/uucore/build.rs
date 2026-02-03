@@ -6,7 +6,7 @@
 use std::env;
 use std::fs::File;
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let out_dir = env::var("OUT_DIR")?;
@@ -63,7 +63,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 ///
 /// Returns an error if the `CARGO_MANIFEST_DIR` environment variable is not set
 /// or if the current directory structure does not allow determining the project root.
-fn project_root() -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
+fn project_root() -> Result<PathBuf, Box<dyn std::error::Error>> {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR")?;
     let uucore_path = Path::new(&manifest_dir);
 
@@ -354,7 +354,7 @@ fn embed_component_locales<F>(
     path_builder: F,
 ) -> Result<(), Box<dyn std::error::Error>>
 where
-    F: Fn(&str) -> std::path::PathBuf,
+    F: Fn(&str) -> PathBuf,
 {
     for_each_locale(locales, |locale| {
         let locale_path = path_builder(locale);

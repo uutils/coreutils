@@ -236,8 +236,8 @@ impl Source {
     /// Create a source from stdin using its raw file descriptor.
     ///
     /// This returns an instance of the `Source::StdinFile` variant,
-    /// using the raw file descriptor of [`std::io::Stdin`] to create
-    /// the [`std::fs::File`] parameter. You can use this instead of
+    /// using the raw file descriptor of [`io::Stdin`] to create
+    /// the [`File`] parameter. You can use this instead of
     /// `Source::Stdin` to allow reading from stdin without consuming
     /// the entire contents of stdin when this process terminates.
     #[cfg(unix)]

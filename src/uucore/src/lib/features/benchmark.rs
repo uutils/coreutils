@@ -173,7 +173,7 @@ pub mod text_data {
     pub fn generate_ascii_data_simple(num_lines: usize) -> Vec<u8> {
         let mut data = Vec::new();
         for i in 0..num_lines {
-            let line = format!("line_{:06}\n", (num_lines - i - 1));
+            let line = format!("line_{:06}\n", num_lines - i - 1);
             data.extend_from_slice(line.as_bytes());
         }
         data
