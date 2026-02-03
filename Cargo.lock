@@ -4306,6 +4306,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "nix",
+ "rustc-hash",
  "string-interner",
  "thiserror 2.0.18",
  "uucore",
