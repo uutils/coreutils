@@ -18,7 +18,7 @@ pub fn parse_numeric(fperm: u32, mut mode: &str, considering_dir: bool) -> Resul
         u32::from_str_radix(mode, 8).map_err(|e| e.to_string())?
     };
     if change > 0o7777 {
-        Err(format!("mode is too large ({change} > 7777"))
+        Err(format!("mode is too large ({change:o} > 7777)"))
     } else {
         Ok(match op {
             Some('+') => fperm | change,
