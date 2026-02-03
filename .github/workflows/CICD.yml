@@ -701,7 +701,11 @@ jobs:
         outputs TARGET_ARCH TARGET_OS
         # package name
         PKG_suffix=".tar.gz" ; case '${{ matrix.job.target }}' in *-pc-windows-*) PKG_suffix=".zip" ;; esac;
-        PKG_BASENAME=${PROJECT_NAME}-${REF_TAG:-$REF_SHAS}-${{ matrix.job.target }}
+        # Some 3rd party utils need version at file names
+        # But we remove it from tag/latest-commit
+        test ${REF_TAG} \
+          && PKG_BASENAME=${PROJECT_NAME}-${REF_TAG}-${{ matrix.job.target }} \
+          || PKG_BASENAME=${PROJECT_NAME}-${{ matrix.job.target }}
         PKG_NAME=${PKG_BASENAME}${PKG_suffix}
         outputs PKG_suffix PKG_BASENAME PKG_NAME
         # deployable tag? (ie, leading "vM" or "M"; M == version number)
@@ -903,10 +907,11 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     - name: Publish latest commit
       uses: softprops/action-gh-release@v2
-      if: steps.vars.outputs.DEPLOY && matrix.job.skip-publish != true
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.job.skip-publish != true
       with:
         tag_name: latest-commit
-        force_update: true
+        body: |
+          commit: ${{ github.sha }}
         draft: false
         prerelease: true
         files: |
