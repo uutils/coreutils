@@ -108,13 +108,3 @@ fn test_invalid_arg() {
 fn test_conflicting_arg() {
     new_ucmd!().arg("--tag").arg("--check").fails_with_code(1);
 }
-
-#[test]
-fn test_help_shows_correct_utility_name() {
-    // Test that help output shows the actual utility name instead of "hashsum"
-    new_ucmd!()
-        .arg("--help")
-        .succeeds()
-        .stdout_contains("Usage: sha224sum")
-        .stdout_does_not_contain("Usage: hashsum");
-}

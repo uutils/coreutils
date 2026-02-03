@@ -9,7 +9,7 @@ use crate::options::*;
 use crate::units::{Result, Unit};
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, parser::ValueSource};
 use std::ffi::OsString;
-use std::io::{BufRead, Error, Write};
+use std::io::{BufRead, Error, Write, stderr};
 use std::result::Result as StdResult;
 use std::str::FromStr;
 
@@ -21,7 +21,7 @@ use uucore::translate;
 
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::ranges::Range;
-use uucore::{format_usage, show, show_error};
+use uucore::{format_usage, show, util_name};
 
 pub mod errors;
 pub mod format;
@@ -88,7 +88,7 @@ fn format_and_handle_validation(input_line: &[u8], options: &NumfmtOptions) -> U
                 show!(NumfmtError::FormattingError(error_message));
             }
             InvalidModes::Warn => {
-                show_error!("{error_message}");
+                let _ = writeln!(stderr(), "{}: {error_message}", util_name());
             }
             InvalidModes::Ignore => {}
         }
@@ -262,6 +262,8 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
 
     let zero_terminated = args.get_flag(ZERO_TERMINATED);
 
+    let debug = args.get_flag(DEBUG);
+
     Ok(NumfmtOptions {
         transform,
         padding,
@@ -274,7 +276,34 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         format,
         invalid,
         zero_terminated,
+        debug,
     })
+}
+
+fn print_debug_warnings(options: &NumfmtOptions, matches: &ArgMatches) {
+    // Warn if no conversion option is specified
+    // 2>/dev/full does not abort
+    if options.transform.from == Unit::None
+        && options.transform.to == Unit::None
+        && options.padding == 0
+    {
+        let _ = writeln!(
+            stderr(),
+            "{}: {}",
+            util_name(),
+            translate!("numfmt-debug-no-conversion")
+        );
+    }
+
+    // Warn if --header is used with command-line input
+    if options.header > 0 && matches.get_many::<OsString>(NUMBER).is_some() {
+        let _ = writeln!(
+            stderr(),
+            "{}: {}",
+            util_name(),
+            translate!("numfmt-debug-header-ignored")
+        );
+    }
 }
 
 #[uucore::main]
@@ -282,6 +311,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let options = parse_options(&matches).map_err(NumfmtError::IllegalArgument)?;
+
+    if options.debug {
+        print_debug_warnings(&options, &matches);
+    }
 
     let result = match matches.get_many::<OsString>(NUMBER) {
         Some(values) => {
@@ -316,6 +349,12 @@ pub fn uu_app() -> Command {
         .override_usage(format_usage(&translate!("numfmt-usage")))
         .allow_negative_numbers(true)
         .infer_long_args(true)
+        .arg(
+            Arg::new(DEBUG)
+                .long(DEBUG)
+                .help(translate!("numfmt-help-debug"))
+                .action(ArgAction::SetTrue),
+        )
         .arg(
             Arg::new(DELIMITER)
                 .short('d')
@@ -466,6 +505,7 @@ mod tests {
             format: FormatOptions::default(),
             invalid: InvalidModes::Abort,
             zero_terminated: false,
+            debug: false,
         }
     }
 

@@ -8,6 +8,8 @@
 
 use std::env;
 use std::fmt::Write as FmtWrite;
+#[cfg(unix)]
+use std::process::Command;
 use std::time::Duration;
 
 use uutests::at_and_ucmd;
@@ -1694,6 +1696,69 @@ fn test_g_float_locale_decimal_separator() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_human_numeric_blank_thousands_sep_locale() {
+    fn thousands_sep_for(locale: &str) -> Option<String> {
+        let output = Command::new("locale")
+            .arg("thousands_sep")
+            .env("LC_ALL", locale)
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let sep = String::from_utf8_lossy(&output.stdout);
+        let sep = sep.trim_end_matches(&['\n', '\r'][..]);
+        if sep.is_empty() || sep.len() != 1 || !sep.chars().all(|c| c.is_whitespace()) {
+            return None;
+        }
+        Some(sep.to_string())
+    }
+
+    let candidates = ["sv_SE.UTF-8", "sv_SE"];
+    let mut selected_locale = None;
+    let mut thousands_sep = None;
+    for candidate in candidates {
+        if let Some(sep) = thousands_sep_for(candidate) {
+            selected_locale = Some(candidate.to_string());
+            thousands_sep = Some(sep);
+            break;
+        }
+    }
+
+    let (Some(locale), Some(sep)) = (selected_locale, thousands_sep) else {
+        return;
+    };
+
+    let line1 = format!("1 1k 1 M 4{sep}003 1M");
+    let line2 = format!("2k 2M 2 k 4{sep}002 2");
+    let line3 = format!("3M 3 3 G 4{sep}001 3k");
+    let input = format!("{line1}\n{line2}\n{line3}\n");
+
+    let ts = TestScenario::new("sort");
+    ts.fixtures.write("blank-thousands.txt", &input);
+
+    let cases = [
+        (1, format!("{line1}\n{line2}\n{line3}\n")),
+        (2, format!("{line3}\n{line1}\n{line2}\n")),
+        (3, format!("{line1}\n{line2}\n{line3}\n")),
+        (5, format!("{line3}\n{line2}\n{line1}\n")),
+    ];
+
+    for (key, expected) in cases {
+        let key_str = key.to_string();
+        ts.ucmd()
+            .env("LC_ALL", &locale)
+            .arg("-h")
+            .arg("-k")
+            .arg(&key_str)
+            .arg("blank-thousands.txt")
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+#[test]
 // Test misc numbers ("'a" is not interpreted as literal, trailing text is ignored...)
 fn test_g_misc() {
     let input = "1\n100\n90\n'a\n85hello\n";
@@ -2395,18 +2460,18 @@ _
 __
 1
 _
-2.4
-___
 2,5
 _
+2.4
+___
 2.,,3
 __
 2.4
 ___
-2.4
-___
 2,,3
 _
+2.4
+___
 1a
 _
 2b

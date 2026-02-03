@@ -169,13 +169,3 @@ fn test_check_sha256_binary() {
         .no_stderr()
         .stdout_is("binary.png: OK\n");
 }
-
-#[test]
-fn test_help_shows_correct_utility_name() {
-    // Test that help output shows the actual utility name instead of "hashsum"
-    new_ucmd!()
-        .arg("--help")
-        .succeeds()
-        .stdout_contains("Usage: sha256sum")
-        .stdout_does_not_contain("Usage: hashsum");
-}

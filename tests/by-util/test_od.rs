@@ -1259,3 +1259,20 @@ fn test_od_eintr_handling() {
         .no_stderr()
         .stdout_contains("e"); // Should contain 'e' from "ello"
 }
+
+// Regression test: od should handle write errors to /dev/full without aborting.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_write_error_dev_full() {
+    use std::fs::File;
+
+    let dev_full = File::create("/dev/full").expect("Failed to open /dev/full");
+
+    new_ucmd!()
+        .arg("-An")
+        .pipe_in("abcd")
+        .set_stdout(dev_full)
+        .fails()
+        .code_is(1)
+        .stderr_contains("No space left on device");
+}
