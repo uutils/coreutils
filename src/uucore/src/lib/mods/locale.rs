@@ -156,6 +156,22 @@ fn create_bundle(
     // Then, try to load utility-specific strings from the utility's locale directory
     try_add_resource_from(get_locales_dir(util_name).ok());
 
+    // checksum binaries also require fluent files from the checksum_common crate
+    if [
+        "cksum",
+        "b2sum",
+        "md5sum",
+        "sha1sum",
+        "sha224sum",
+        "sha256sum",
+        "sha384sum",
+        "sha512sum",
+    ]
+    .contains(&util_name)
+    {
+        try_add_resource_from(get_locales_dir("checksum_common").ok());
+    }
+
     // If we have at least one resource, return the bundle
     if bundle.has_message("common-error") || bundle.has_message(&format!("{util_name}-about")) {
         Ok(bundle)
@@ -243,6 +259,14 @@ fn create_english_bundle_from_embedded(
     if let Some(uucore_content) = get_embedded_locale("uucore/en-US.ftl") {
         let uucore_resource = parse_fluent_resource(uucore_content)?;
         bundle.add_resource_overriding(uucore_resource);
+    }
+
+    // Checksum algorithms need locale messages from checksum_common
+    if util_name.ends_with("sum") {
+        if let Some(uucore_content) = get_embedded_locale("checksum_common/en-US.ftl") {
+            let uucore_resource = parse_fluent_resource(uucore_content)?;
+            bundle.add_resource_overriding(uucore_resource);
+        }
     }
 
     // Then, try to load utility-specific strings

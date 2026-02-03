@@ -5,9 +5,6 @@
 
 // spell-checker:ignore fname, ftype, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat seekable oconv canonicalized fadvise Fadvise FADV DONTNEED ESPIPE bufferedoutput, SETFL
 
-#[cfg(unix)]
-uucore::init_startup_state_capture!();
-
 mod blocks;
 mod bufferedoutput;
 mod conversion_tables;
@@ -32,6 +29,8 @@ use uucore::translate;
 use std::cmp;
 use std::env;
 use std::ffi::OsString;
+#[cfg(unix)]
+use std::fs::Metadata;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -276,7 +275,7 @@ impl Source {
                     }
                 }
                 // Get file length before seeking to avoid race condition
-                let file_len = f.metadata().map(|m| m.len()).unwrap_or(u64::MAX);
+                let file_len = f.metadata().as_ref().map_or(u64::MAX, Metadata::len);
                 // Try seek first; fall back to read if not seekable
                 match n.try_into().ok().map(|n| f.seek(SeekFrom::Current(n))) {
                     Some(Ok(pos)) => {

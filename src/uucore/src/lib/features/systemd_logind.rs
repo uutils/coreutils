@@ -391,10 +391,10 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
             }
         };
 
-        // Get start time using safe wrapper
-        let start_time = login::get_session_start_time(&session_id)
-            .map(|usec| UNIX_EPOCH + std::time::Duration::from_micros(usec))
-            .unwrap_or(UNIX_EPOCH); // fallback to epoch if unavailable
+        // Get start time using safe wrapper, fallback to epoch if unavailable
+        let start_time = login::get_session_start_time(&session_id).map_or(UNIX_EPOCH, |usec| {
+            UNIX_EPOCH + std::time::Duration::from_micros(usec)
+        });
 
         // Get TTY using safe wrapper
         let mut tty = login::get_session_tty(&session_id)

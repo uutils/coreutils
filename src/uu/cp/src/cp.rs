@@ -1790,7 +1790,7 @@ pub(crate) fn copy_attributes(
         Ok(())
     })?;
 
-    #[cfg(all(feature = "selinux", target_os = "linux"))]
+    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
     handle_preserve(&attributes.context, || -> CopyResult<()> {
         // Get the source context and apply it to the destination
         if let Ok(context) = selinux::SecurityContext::of_path(source, false, false) {
@@ -2381,9 +2381,7 @@ fn copy_file(
     let dest_target_exists = dest.try_exists().unwrap_or(false);
     // Fail if dest is a dangling symlink or a symlink this program created previously
     if dest_is_symlink {
-        if FileInformation::from_path(dest, false)
-            .map(|info| symlinked_files.contains(&info))
-            .unwrap_or(false)
+        if FileInformation::from_path(dest, false).is_ok_and(|info| symlinked_files.contains(&info))
         {
             return Err(CpError::Error(
                 translate!("cp-error-will-not-copy-through-symlink", "source" => source.quote(), "dest" => dest.quote()),
@@ -2586,7 +2584,7 @@ fn copy_file(
         copy_attributes(source, dest, &options.attributes)?;
     }
 
-    #[cfg(all(feature = "selinux", target_os = "linux"))]
+    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
     if options.set_selinux_context && uucore::selinux::is_selinux_enabled() {
         // Set the given selinux permissions on the copied file.
         if let Err(e) =

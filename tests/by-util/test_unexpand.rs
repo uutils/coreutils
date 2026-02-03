@@ -284,6 +284,15 @@ fn test_one_nonexisting_file() {
 }
 
 #[test]
+#[cfg(all(target_os = "linux", not(target_env = "musl")))]
+fn test_read_error() {
+    new_ucmd!()
+        .arg("/proc/self/mem")
+        .fails()
+        .stderr_contains("unexpand: /proc/self/mem: Input/output error");
+}
+
+#[test]
 #[cfg(target_os = "linux")]
 fn test_non_utf8_filename() {
     use std::os::unix::ffi::OsStringExt;

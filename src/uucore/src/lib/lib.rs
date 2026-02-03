@@ -122,7 +122,7 @@ pub use crate::features::fsext;
 #[cfg(all(unix, feature = "fsxattr"))]
 pub use crate::features::fsxattr;
 
-#[cfg(all(target_os = "linux", feature = "selinux"))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 pub use crate::features::selinux;
 
 #[cfg(all(target_os = "linux", feature = "smack"))]
@@ -171,11 +171,6 @@ pub fn get_canonical_util_name(util_name: &str) -> &str {
     match util_name {
         // uu_test aliases - '[' is an alias for test
         "[" => "test",
-
-        // hashsum aliases - all these hash commands are aliases for hashsum
-        "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum" | "b2sum" => {
-            "hashsum"
-        }
 
         "dir" => "ls", // dir is an alias for ls
 

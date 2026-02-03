@@ -30,6 +30,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::io;
+use std::io::Write as _;
+use std::io::stderr;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
@@ -495,9 +497,10 @@ pub fn parse_args_from_str(text: &NativeIntStr) -> UResult<Vec<NativeIntString>>
 }
 
 fn debug_print_args(args: &[OsString]) {
-    eprintln!("input args:");
+    let mut error = stderr().lock();
+    let _ = writeln!(error, "input args:");
     for (i, arg) in args.iter().enumerate() {
-        eprintln!("arg[{i}]: {}", arg.quote());
+        let _ = writeln!(error, "arg[{i}]: {}", arg.quote());
     }
 }
 
@@ -755,7 +758,7 @@ impl EnvAppData {
             Some(argv0) if cfg!(unix) => {
                 let arg0 = Cow::Borrowed(argv0);
                 if do_debug_printing {
-                    eprintln!("argv0:     {}", arg0.quote());
+                    let _ = writeln!(stderr(), "argv0:     {}", arg0.quote());
                 }
                 arg0
             }
@@ -770,11 +773,12 @@ impl EnvAppData {
         let args = &opts.program[1..];
 
         if do_debug_printing {
-            eprintln!("executing: {}", prog.maybe_quote());
+            let mut error = stderr().lock();
+            let _ = writeln!(error, "executing: {}", prog.maybe_quote());
             let arg_prefix = "   arg";
-            eprintln!("{arg_prefix}[{}]= {}", 0, arg0.quote());
+            let _ = writeln!(error, "{arg_prefix}[{}]= {}", 0, arg0.quote());
             for (i, arg) in args.iter().enumerate() {
-                eprintln!("{arg_prefix}[{}]= {}", i + 1, arg.quote());
+                let _ = writeln!(error, "{arg_prefix}[{}]= {}", i + 1, arg.quote());
             }
         }
 
@@ -1095,10 +1099,6 @@ fn list_signal_handling(log: &SignalActionLog) {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    // Rust ignores SIGPIPE (see https://github.com/rust-lang/rust/issues/62569).
-    // We restore its default action here.
-    #[cfg(unix)]
-    let _ = uucore::signals::enable_pipe_errors();
     EnvAppData::default().run_env(args)
 }
 

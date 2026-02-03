@@ -38,18 +38,8 @@ use uucore::translate;
 
 use uucore::{show, show_error};
 
-#[cfg(unix)]
-uucore::init_startup_state_capture!();
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    // When we receive a SIGPIPE signal, we want to terminate the process so
-    // that we don't print any error messages to stderr. Rust ignores SIGPIPE
-    // (see https://github.com/rust-lang/rust/issues/62569), so we restore it's
-    // default action here.
-    #[cfg(not(target_os = "windows"))]
-    let _ = uucore::signals::enable_pipe_errors();
-
     let settings = parse_args(args)?;
 
     settings.check_warnings();
@@ -512,7 +502,7 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
         FilterMode::Lines(Signum::Negative(count), sep) => {
             let mut chunks = chunks::LinesChunkBuffer::new(*sep, *count);
             chunks.fill(reader)?;
-            chunks.print(&mut writer)?;
+            chunks.write(&mut writer)?;
         }
         FilterMode::Lines(Signum::PlusZero | Signum::Positive(1), _) => {
             io::copy(reader, &mut writer)?;
@@ -529,7 +519,7 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
                 }
             }
             if chunk.has_data() {
-                chunk.print_lines(&mut writer, num_skip as usize)?;
+                chunk.write_lines(&mut writer, num_skip as usize)?;
                 io::copy(reader, &mut writer)?;
             }
         }
@@ -541,7 +531,7 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
         FilterMode::Lines(Signum::MinusZero, sep) => {
             let mut chunks = chunks::LinesChunkBuffer::new(*sep, 0);
             chunks.fill(reader)?;
-            chunks.print(&mut writer)?;
+            chunks.write(&mut writer)?;
         }
         FilterMode::Bytes(Signum::PlusZero | Signum::Positive(1)) => {
             io::copy(reader, &mut writer)?;
