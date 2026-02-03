@@ -1156,9 +1156,10 @@ where
         out_files = OutFiles::init(num_chunks, settings, false)?;
     }
 
+    let buf = &mut Vec::new();
     for i in 1_u64..=num_chunks {
         let chunk_size = chunk_size_base + (chunk_size_reminder > i - 1) as u64;
-        let buf = &mut Vec::new();
+        buf.clear();
         if num_bytes > 0 {
             // Read `chunk_size` bytes from the reader into `buf`
             // except the last.
