@@ -15,7 +15,7 @@ use std::io::{self, BufReader, Read, Write, stderr, stdin};
 use os_display::Quotable;
 
 use crate::checksum::{AlgoKind, ChecksumError, SizedAlgoKind, digest_reader, unescape_filename};
-use crate::error::{FromIo, UError, UResult, USimpleError};
+use crate::error::{FromIo, UError, UIoError, UResult, USimpleError};
 use crate::quoting_style::{QuotingStyle, locale_aware_escape_name};
 use crate::sum::DigestOutput;
 use crate::{
@@ -851,7 +851,6 @@ fn process_checksum_file(
     };
 
     let reader = BufReader::new(file);
-    let lines = read_os_string_lines(reader).collect::<Vec<_>>();
 
     // cached_line_format is used to ensure that several non algo-based checksum line
     // will use the same parser.
@@ -861,9 +860,16 @@ fn process_checksum_file(
     // Behavior tested in gnu_cksum_c::test_warn
     let mut last_algo = None;
 
-    for (i, line) in lines.iter().enumerate() {
+    for (i, line_res) in read_os_string_lines(reader).enumerate() {
+        let line = line_res.map_err(|e| {
+            USimpleError::new(
+                UIoError::from(e).code(),
+                format!("{}: read error", filename_input.maybe_quote()),
+            )
+        })?;
+
         let line_result = process_checksum_line(
-            line,
+            &line,
             i,
             cli_algo_kind,
             cli_algo_length,
