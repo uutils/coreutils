@@ -3,13 +3,17 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-//! Locale-aware datetime formatting utilities using ICU
-// spell-checker:ignore fieldsets janvier
+// spell-checker:ignore fieldsets prefs
+
+//! Locale-aware datetime formatting utilities using ICU and jiff-icu
 
 use icu_calendar::Date;
+use icu_calendar::cal::{Buddhist, Ethiopian, Iso, Persian};
 use icu_datetime::DateTimeFormatter;
 use icu_datetime::fieldsets;
 use icu_locale::Locale;
+use jiff::civil::Date as JiffDate;
+use jiff_icu::ConvertFrom;
 use std::sync::OnceLock;
 
 use crate::i18n::get_locale_from_env;
@@ -32,88 +36,6 @@ pub fn should_use_icu_locale() -> bool {
     // Use ICU for non-default locales (anything other than C/POSIX)
     // The default locale is "und" (undefined) representing C/POSIX
     *locale != locale!("und")
-}
-
-/// Get a localized month name for the given month number (1-12)
-///
-/// # Arguments
-/// * `month` - Month number (1 = January, 2 = February, etc.)
-/// * `full` - If true, return full month name (e.g., "January"), otherwise abbreviated (e.g., "Jan")
-///
-/// # Returns
-/// Localized month name, or falls back to English if locale is not supported
-pub fn get_localized_month_name(month: u8, full: bool) -> String {
-    // Get locale from environment
-    let (locale, _encoding) = get_time_locale();
-
-    // Create a date with the specified month (use year 2000, day 1 as arbitrary values)
-    let Ok(date) = Date::try_new_gregorian(2000, month, 1) else {
-        // Invalid month, return empty string to signal failure
-        return String::new();
-    };
-
-    // Configure field set for month formatting
-    // Use Year-Month-Day format to ensure we get textual month names
-    let field_set = if full {
-        fieldsets::YMD::long()
-    } else {
-        fieldsets::YMD::medium()
-    };
-
-    // Create formatter with locale
-    let Ok(formatter) = DateTimeFormatter::try_new(locale.clone().into(), field_set) else {
-        // Failed to create formatter, return empty string to signal failure
-        return String::new();
-    };
-
-    // Format the date to get full date, then extract month
-    let formatted = formatter.format(&date).to_string();
-    // Extract month name from formatted date like "15 janvier 2000" or "2000-01-15"
-    // Look for a word that contains letters (the month name)
-    let words: Vec<&str> = formatted.split_whitespace().collect();
-
-    // Return the month name as extracted from ICU (no further processing needed)
-    // ICU already handles the full vs abbreviated formatting correctly
-    words
-        .iter()
-        .find(|word| word.chars().any(|c| c.is_alphabetic()))
-        .map_or_else(String::new, |s| (*s).to_string())
-}
-
-/// Get a localized day name for the given date components
-///
-/// # Arguments
-/// * `year` - The year
-/// * `month` - The month (1-12)
-/// * `day` - The day of the month
-/// * `full` - If true, return full day name (e.g., "Monday"), otherwise abbreviated (e.g., "Mon")
-///
-/// # Returns
-/// Localized day name, or falls back to empty string if locale is not supported
-pub fn get_localized_day_name(year: i32, month: u8, day: u8, full: bool) -> String {
-    // Create ICU Date from components
-    let Ok(date) = Date::try_new_gregorian(year, month, day) else {
-        return String::new();
-    };
-
-    // Get locale from environment
-    let (locale, _encoding) = get_time_locale();
-
-    // Configure field set for day formatting
-    let field_set = if full {
-        fieldsets::E::long() // Full day name
-    } else {
-        fieldsets::E::short() // Abbreviated day name
-    };
-
-    // Create formatter with locale
-    let Ok(formatter) = DateTimeFormatter::try_new(locale.clone().into(), field_set) else {
-        return String::new();
-    };
-
-    // Format the date to get day name
-    let formatted = formatter.format(&date).to_string();
-    formatted.trim().to_string()
 }
 
 /// Determine the appropriate calendar system for a given locale
@@ -145,65 +67,66 @@ pub enum CalendarType {
     Ethiopian,
 }
 
-/// Convert a Gregorian date to the appropriate calendar system for a locale
-///
-/// # Arguments
-/// * `year` - Gregorian year
-/// * `month` - Month (1-12)
-/// * `day` - Day (1-31)
-/// * `calendar_type` - Target calendar system
-///
-/// # Returns
-/// * `Some((era_year, month, day))` - Date in target calendar system
-/// * `None` - If conversion fails
-pub fn convert_date_to_locale_calendar(
-    year: i32,
-    month: u8,
-    day: u8,
-    calendar_type: &CalendarType,
-) -> Option<(i32, u8, u8)> {
-    match calendar_type {
-        CalendarType::Gregorian => Some((year, month, day)),
-        CalendarType::Buddhist => {
-            // Buddhist calendar: Gregorian year + 543
-            Some((year + 543, month, day))
-        }
-        CalendarType::Persian => {
-            // Persian calendar conversion (Solar Hijri)
-            // March 21 (Nowruz) is roughly the start of the Persian year
-            let persian_year = if month > 3 || (month == 3 && day >= 21) {
-                year - 621 // After March 21
-            } else {
-                year - 622 // Before March 21
-            };
-            Some((persian_year, month, day))
-        }
-        CalendarType::Ethiopian => {
-            // Ethiopian calendar conversion
-            // September 11/12 is roughly the start of the Ethiopian year
-            let ethiopian_year = if month > 9 || (month == 9 && day >= 11) {
-                year - 7 // After September 11
-            } else {
-                year - 8 // Before September 11
-            };
-            Some((ethiopian_year, month, day))
-        }
-    }
-}
+/// Transform a strftime format string to use locale-specific calendar values
+pub fn localize_format_string(format: &str, date: &JiffDate) -> String {
+    let (locale, _) = get_time_locale();
+    let iso_date = Date::<Iso>::convert_from(*date);
 
-/// Get the era year for a given date and locale
-pub fn get_era_year(year: i32, month: u8, day: u8, locale: &Locale) -> Option<i32> {
-    // Validate input date
-    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
-        return None;
-    }
+    let mut fmt = format.to_string();
 
+    // For non-Gregorian calendars, replace date components with converted values
     let calendar_type = get_locale_calendar_type(locale);
-    match calendar_type {
-        CalendarType::Gregorian => None,
-        _ => convert_date_to_locale_calendar(year, month, day, &calendar_type)
-            .map(|(era_year, _, _)| era_year),
+    if calendar_type != CalendarType::Gregorian {
+        let (cal_year, cal_month, cal_day) = match calendar_type {
+            CalendarType::Buddhist => {
+                let d = iso_date.to_calendar(Buddhist);
+                (d.extended_year(), d.month().ordinal, d.day_of_month().0)
+            }
+            CalendarType::Persian => {
+                let d = iso_date.to_calendar(Persian);
+                (d.extended_year(), d.month().ordinal, d.day_of_month().0)
+            }
+            CalendarType::Ethiopian => {
+                let d = iso_date.to_calendar(Ethiopian::new());
+                (d.extended_year(), d.month().ordinal, d.day_of_month().0)
+            }
+            CalendarType::Gregorian => unreachable!(),
+        };
+        fmt = fmt
+            .replace("%Y", &cal_year.to_string())
+            .replace("%m", &format!("{cal_month:02}"))
+            .replace("%d", &format!("{cal_day:02}"))
+            .replace("%e", &format!("{cal_day:2}"));
     }
+
+    // Format localized names using ICU DateTimeFormatter
+    let locale_prefs = locale.clone().into();
+
+    if fmt.contains("%B") {
+        if let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::M::long()) {
+            fmt = fmt.replace("%B", &f.format(&iso_date).to_string());
+        }
+    }
+    if fmt.contains("%b") || fmt.contains("%h") {
+        if let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::M::medium()) {
+            let month_abbrev = f.format(&iso_date).to_string();
+            fmt = fmt
+                .replace("%b", &month_abbrev)
+                .replace("%h", &month_abbrev);
+        }
+    }
+    if fmt.contains("%A") {
+        if let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::E::long()) {
+            fmt = fmt.replace("%A", &f.format(&iso_date).to_string());
+        }
+    }
+    if fmt.contains("%a") {
+        if let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::E::short()) {
+            fmt = fmt.replace("%a", &f.format(&iso_date).to_string());
+        }
+    }
+
+    fmt
 }
 
 #[cfg(test)]
@@ -211,54 +134,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_localized_month_name_fallback() {
-        // This should work even if locale is not available
-        let name = get_localized_month_name(1, true);
-        // The function may return empty string if ICU fails, which is fine
-        // The caller (date.rs) will handle this by falling back to jiff
-        assert!(name.is_empty() || name.len() >= 3);
-    }
-
-    #[test]
     fn test_calendar_type_detection() {
-        let thai_locale = icu_locale::locale!("th-TH");
-        let persian_locale = icu_locale::locale!("fa-IR");
-        let amharic_locale = icu_locale::locale!("am-ET");
-        let english_locale = icu_locale::locale!("en-US");
-
+        use icu_locale::locale;
         assert_eq!(
-            get_locale_calendar_type(&thai_locale),
+            get_locale_calendar_type(&locale!("th-TH")),
             CalendarType::Buddhist
         );
         assert_eq!(
-            get_locale_calendar_type(&persian_locale),
+            get_locale_calendar_type(&locale!("fa-IR")),
             CalendarType::Persian
         );
         assert_eq!(
-            get_locale_calendar_type(&amharic_locale),
+            get_locale_calendar_type(&locale!("am-ET")),
             CalendarType::Ethiopian
         );
         assert_eq!(
-            get_locale_calendar_type(&english_locale),
+            get_locale_calendar_type(&locale!("en-US")),
             CalendarType::Gregorian
         );
-    }
-
-    #[test]
-    fn test_era_year_conversion() {
-        let thai_locale = icu_locale::locale!("th-TH");
-        let persian_locale = icu_locale::locale!("fa-IR");
-        let amharic_locale = icu_locale::locale!("am-ET");
-
-        // Test Thai Buddhist calendar (2026 + 543 = 2569)
-        assert_eq!(get_era_year(2026, 6, 15, &thai_locale), Some(2569));
-
-        // Test Persian calendar (rough approximation)
-        assert_eq!(get_era_year(2026, 3, 22, &persian_locale), Some(1405));
-        assert_eq!(get_era_year(2026, 3, 19, &persian_locale), Some(1404));
-
-        // Test Ethiopian calendar (rough approximation)
-        assert_eq!(get_era_year(2026, 9, 12, &amharic_locale), Some(2019));
-        assert_eq!(get_era_year(2026, 9, 10, &amharic_locale), Some(2018));
     }
 }
