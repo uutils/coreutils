@@ -10,7 +10,9 @@ use std::fs::File;
 use std::io::{self, BufReader, Read, Write};
 use std::path::Path;
 
-use crate::checksum::{AlgoKind, ChecksumError, SizedAlgoKind, digest_reader, escape_filename};
+use crate::checksum::{
+    AlgoKind, ChecksumError, ReadingMode, SizedAlgoKind, digest_reader, escape_filename,
+};
 use crate::error::{FromIo, UResult, USimpleError};
 use crate::line_ending::LineEnding;
 use crate::sum::DigestOutput;
@@ -34,33 +36,6 @@ pub struct ChecksumComputeOptions {
 
     /// Whether to finish lines with '\n' or '\0'.
     pub line_ending: LineEnding,
-}
-
-/// Reading mode used to compute digest.
-///
-/// On most linux systems, this is irrelevant, as there is no distinction
-/// between text and binary files. Refer to GNU's cksum documentation for more
-/// information.
-///
-/// As discussed in #9168, we decide to ignore the reading mode to compute the
-/// digest, both on Windows and UNIX. The reason for that is that this is a
-/// legacy feature that is poorly documented and used. This enum is kept
-/// nonetheless to still take into account the flags passed to cksum when
-/// generating untagged lines.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ReadingMode {
-    Binary,
-    Text,
-}
-
-impl ReadingMode {
-    #[inline]
-    fn as_char(self) -> char {
-        match self {
-            Self::Binary => '*',
-            Self::Text => ' ',
-        }
-    }
 }
 
 /// Whether to write the digest as hexadecimal or encoded in base64.
@@ -315,7 +290,7 @@ where
 
         // Always compute the "binary" version of the digest, i.e. on Windows,
         // never handle CRLFs specifically.
-        let (digest_output, sz) = digest_reader(&mut digest, &mut file, /* binary: */ true)
+        let (digest_output, sz) = digest_reader(&mut digest, &mut file, ReadingMode::Binary)
             .map_err_context(|| translate!("checksum-error-failed-to-read-input"))?;
 
         // Encodes the sum if df is Base64, leaves as-is otherwise.
