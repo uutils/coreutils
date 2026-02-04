@@ -62,11 +62,14 @@ pub fn main() {
     let mut mf = File::create(Path::new(&out_dir).join("uutils_map.rs")).unwrap();
 
     mf.write_all(
-        "type UtilityMap<T> = phf::OrderedMap<&'static str, (fn(T) -> i32, fn() -> Command)>;\n\
+        "use ::clap::Command;\n\
+         use ::uucore::Args;\n\
+         \n\
+         pub(crate) type UtilityMap<T> = phf::OrderedMap<&'static str, (fn(T) -> i32, fn() -> Command)>;\n\
          \n\
          #[allow(clippy::too_many_lines)]
          #[allow(clippy::unreadable_literal)]
-         fn util_map<T: Args>() -> UtilityMap<T> {\n"
+         pub(crate) fn util_map<T: Args>() -> UtilityMap<T> {\n"
             .as_bytes(),
     )
     .unwrap();
