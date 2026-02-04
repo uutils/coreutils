@@ -78,7 +78,7 @@ fn open_files<P>(source: P, dest: P) -> std::io::Result<(File, File)>
 where
     P: AsRef<Path>,
 {
-    use std::io::Seek;
+    use std::fs::set_permissions;
     use std::os::unix::fs::PermissionsExt;
 
     let src_file = File::open(&source)?;
@@ -101,16 +101,13 @@ where
                 let mut desired_permissions = dest_metadata.permissions();
                 // This will be reset to the correct permissions later, this is defensive as it is
                 // the most restrictive
-                let mut dst = OpenOptions::new().write(true).open(&dest)?;
                 if dest_metadata.is_file() {
-                    // Alternatively it is something we shouldn't modify
-                    // properties of
+                    // Alternatively it is something we cannot modify the permissions of like a
+                    // pipe.
                     desired_permissions.set_mode(0o600);
-                    dst.set_permissions(desired_permissions)?;
-                    dst.set_len(0)?;
-                    dst.rewind()?;
+                    set_permissions(&dest, desired_permissions)?;
                 }
-                dst
+                OpenOptions::new().write(true).truncate(true).open(&dest)?
             } else {
                 // If a symlink exists in the position we want to write the file to, and it symlinks to
                 // a nonexistent file, we should just overwrite the symlink
