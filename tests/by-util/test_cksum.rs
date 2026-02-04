@@ -2524,9 +2524,33 @@ mod gnu_cksum_c {
     }
 
     #[test]
-    #[ignore = "todo"]
     fn test_signed_checksums() {
-        todo!()
+        let ts = TestScenario::new(util_name!());
+        let at = &ts.fixtures;
+
+        let filename = "test_file";
+        at.touch(filename);
+
+        let checksum_result = ts.ucmd().arg("-a").arg("sha256").arg(filename).succeeds();
+        let valid_checksum_line = checksum_result.stdout_str().trim();
+
+        let signed_content = format!(
+            "-----BEGIN PGP SIGNED MESSAGE-----\n\
+             Hash: SHA256\n\
+             \n\
+             # This is a comment that should be ignored\n\
+             {valid_checksum_line}\n\
+             -----BEGIN PGP SIGNATURE-----\n\
+             \n\
+             xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n\
+             xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n\
+             =PlaceHolder\n\
+             -----END PGP SIGNATURE-----"
+        );
+
+        at.write("signed_CHECKSUMS", &signed_content);
+
+        ts.ucmd().arg("--check").arg("signed_CHECKSUMS").succeeds();
     }
 
     #[test]
