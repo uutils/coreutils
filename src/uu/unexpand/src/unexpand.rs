@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Read, Stdout, Write, stdin, stdout};
+use std::io::{BufReader, BufWriter, Read, Stdout, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
@@ -17,8 +17,10 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::translate;
 use uucore::{format_usage, show};
+use memchr::memchr;
 
 const DEFAULT_TABSTOP: usize = 8;
+const READ_BUF_SIZE: usize = 8192;
 
 #[derive(Debug, Error)]
 enum ParseError {
@@ -375,12 +377,41 @@ fn write_tabs(
     Ok(())
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Copy, Clone)]
 enum CharType {
     Backspace,
     Space,
     Tab,
     Other,
+}
+
+#[derive(Debug)]
+struct LineState {
+    col: usize,
+    scol: usize,
+    init: bool,
+    pctype: CharType,
+    convert: bool,
+}
+
+impl LineState {
+    fn new() -> Self {
+        Self {
+            col: 0,
+            scol: 0,
+            init: true,
+            pctype: CharType::Other,
+            convert: true,
+        }
+    }
+
+    fn reset_line(&mut self) {
+        self.col = 0;
+        self.scol = 0;
+        self.init = true;
+        self.pctype = CharType::Other;
+        self.convert = true;
+    }
 }
 
 fn next_char_info(uflag: bool, buf: &[u8], byte: usize) -> (CharType, usize, usize) {
@@ -423,102 +454,130 @@ fn next_char_info(uflag: bool, buf: &[u8], byte: usize) -> (CharType, usize, usi
     (ctype, cwidth, nbytes)
 }
 
+fn utf8_expected_len(b: u8) -> usize {
+    match b {
+        0x00..=0x7F => 1,
+        0xC2..=0xDF => 2,
+        0xE0..=0xEF => 3,
+        0xF0..=0xF4 => 4,
+        _ => 1,
+    }
+}
+
+fn utf8_incomplete_tail(buf: &[u8]) -> usize {
+    if buf.is_empty() {
+        return 0;
+    }
+
+    let len = buf.len();
+    let mut cont = 0usize;
+    let mut i = len;
+
+    while i > 0 {
+        let b = buf[i - 1];
+        if (b & 0b1100_0000) == 0b1000_0000 {
+            cont += 1;
+            i -= 1;
+            if cont == 3 {
+                break;
+            }
+            continue;
+        }
+        break;
+    }
+
+    if cont == 0 {
+        let expected = utf8_expected_len(buf[len - 1]);
+        return if expected > 1 { 1 } else { 0 };
+    }
+
+    if i == 0 {
+        return 0;
+    }
+
+    let lead = buf[i - 1];
+    let expected = utf8_expected_len(lead);
+    if expected <= 1 {
+        return 0;
+    }
+
+    let actual = cont + 1;
+    if actual < expected {
+        actual
+    } else {
+        0
+    }
+}
+
+#[inline]
+fn is_space_or_tab(b: u8) -> bool {
+    b == b' ' || b == b'\t'
+}
+
 #[allow(clippy::cognitive_complexity)]
-fn unexpand_line(
-    buf: &mut Vec<u8>,
+fn unexpand_chunk(
+    buf: &[u8],
     output: &mut BufWriter<Stdout>,
     options: &Options,
     lastcol: usize,
     tab_config: &TabConfig,
+    state: &mut LineState,
 ) -> UResult<()> {
-    // Fast path: if we're not converting all spaces (-a flag not set)
-    // and the line doesn't start with spaces, just write it directly
-    if !options.aflag && !buf.is_empty() && buf[0] != b' ' && buf[0] != b'\t' {
-        output.write_all(buf)?;
-        buf.truncate(0);
-        return Ok(());
-    }
-
     let mut byte = 0; // offset into the buffer
-    let mut col = 0; // the current column
-    let mut scol = 0; // the start col for the current span, i.e., the already-printed width
-    let mut init = true; // are we at the start of the line?
-    let mut pctype = CharType::Other;
 
-    // Fast path for leading spaces in non-UTF8 mode: count consecutive spaces/tabs at start
-    if !options.uflag && !options.aflag {
-        // In default mode (not -a), we only convert leading spaces
-        // So we can batch process them and then copy the rest
-        while byte < buf.len() {
-            match buf[byte] {
-                b' ' => {
-                    col += 1;
-                    byte += 1;
-                }
-                b'\t' => {
-                    col += next_tabstop(tab_config, col).unwrap_or(1);
-                    byte += 1;
-                    pctype = CharType::Tab;
-                }
-                _ => break,
+    while byte < buf.len() {
+        if state.init && !options.aflag && !is_space_or_tab(buf[byte]) {
+            state.convert = false;
+            continue;
+        }
+
+        if !state.convert {
+            if let Some(pos) = memchr(b'\n', &buf[byte..]) {
+                let end = byte + pos + 1;
+                output.write_all(&buf[byte..end])?;
+                state.reset_line();
+                byte = end;
+                continue;
+            } else {
+                output.write_all(&buf[byte..])?;
+                return Ok(());
             }
         }
 
-        // If we found spaces/tabs, write them as tabs
-        if byte > 0 {
-            write_tabs(
-                output,
-                tab_config,
-                0,
-                col,
-                pctype == CharType::Tab,
-                true,
-                true,
-            )?;
-        }
-
-        // Write the rest of the line directly (no more tab conversion needed)
-        if byte < buf.len() {
-            output.write_all(&buf[byte..])?;
-        }
-        buf.truncate(0);
-        return Ok(());
-    }
-
-    while byte < buf.len() {
         // when we have a finite number of columns, never convert past the last column
-        if lastcol > 0 && col >= lastcol {
+        if lastcol > 0 && state.col >= lastcol {
             write_tabs(
                 output,
                 tab_config,
-                scol,
-                col,
-                pctype == CharType::Tab,
-                init,
+                state.scol,
+                state.col,
+                state.pctype == CharType::Tab,
+                state.init,
                 true,
             )?;
-            output.write_all(&buf[byte..])?;
-            scol = col;
-            break;
+            state.scol = state.col;
+            state.convert = false;
+            continue;
         }
 
         // figure out how big the next char is, if it's UTF-8
         let (ctype, cwidth, nbytes) = next_char_info(options.uflag, buf, byte);
+        let is_newline = nbytes == 1 && buf[byte] == b'\n';
 
         // now figure out how many columns this char takes up, and maybe print it
-        let tabs_buffered = init || options.aflag;
+        let tabs_buffered = state.init || options.aflag;
         match ctype {
             CharType::Space | CharType::Tab => {
                 // compute next col, but only write space or tab chars if not buffering
-                col += if ctype == CharType::Space {
+                state.col += if ctype == CharType::Space {
                     1
                 } else {
-                    next_tabstop(tab_config, col).unwrap_or(1)
+                    next_tabstop(tab_config, state.col).unwrap_or(1)
                 };
 
                 if !tabs_buffered {
                     output.write_all(&buf[byte..byte + nbytes])?;
-                    scol = col; // now printed up to this column
+                    state.scol = state.col; // now printed up to this column
                 }
             }
             CharType::Other | CharType::Backspace => {
@@ -526,43 +585,57 @@ fn unexpand_line(
                 write_tabs(
                     output,
                     tab_config,
-                    scol,
-                    col,
-                    pctype == CharType::Tab,
-                    init,
+                    state.scol,
+                    state.col,
+                    state.pctype == CharType::Tab,
+                    state.init,
                     options.aflag,
                 )?;
-                init = false; // no longer at the start of a line
-                col = if ctype == CharType::Other {
+                state.init = false; // no longer at the start of a line
+                state.col = if ctype == CharType::Other {
                     // use computed width
-                    col + cwidth
-                } else if col > 0 {
+                    state.col + cwidth
+                } else if state.col > 0 {
                     // Backspace case, but only if col > 0
-                    col - 1
+                    state.col - 1
                 } else {
                     0
                 };
                 output.write_all(&buf[byte..byte + nbytes])?;
-                scol = col; // we've now printed up to this column
+                state.scol = state.col; // we've now printed up to this column
+                if !options.aflag {
+                    state.convert = false;
+                }
             }
         }
 
         byte += nbytes; // move on to next char
-        pctype = ctype; // save the previous type
+        state.pctype = ctype; // save the previous type
+
+        if is_newline {
+            state.reset_line();
+        }
     }
 
-    // write out anything remaining
-    write_tabs(
-        output,
-        tab_config,
-        scol,
-        col,
-        pctype == CharType::Tab,
-        init,
-        true,
-    )?;
-    buf.truncate(0); // clear out the buffer
+    Ok(())
+}
 
+fn finish_line(
+    output: &mut BufWriter<Stdout>,
+    tab_config: &TabConfig,
+    state: &mut LineState,
+) -> UResult<()> {
+    if state.convert && state.col != state.scol {
+        write_tabs(
+            output,
+            tab_config,
+            state.scol,
+            state.col,
+            state.pctype == CharType::Tab,
+            state.init,
+            true,
+        )?;
+    }
     Ok(())
 }
 
@@ -573,15 +646,99 @@ fn unexpand_file(
     lastcol: usize,
     tab_config: &TabConfig,
 ) -> UResult<()> {
-    let mut buf = Vec::new();
     let mut input = open(file)?;
+    let mut state = LineState::new();
+    let mut pending = [0u8; 4];
+    let mut pending_len: usize = 0;
+    let mut read_buf = [0u8; READ_BUF_SIZE];
+
     loop {
-        match input.read_until(b'\n', &mut buf) {
+        let n = match input.read(&mut read_buf) {
             Ok(0) => break,
-            Ok(_) => unexpand_line(&mut buf, output, options, lastcol, tab_config)?,
+            Ok(n) => n,
             Err(e) => return Err(e.map_err_context(|| file.maybe_quote().to_string())),
+        };
+
+        let slice = &read_buf[..n];
+        if options.uflag && pending_len > 0 {
+            let head_len = slice.len().min(4);
+            let mut small = [0u8; 8];
+            small[..pending_len].copy_from_slice(&pending[..pending_len]);
+            small[pending_len..pending_len + head_len].copy_from_slice(&slice[..head_len]);
+            let small_len = pending_len + head_len;
+
+            let carry_small = utf8_incomplete_tail(&small[..small_len]);
+            let process_len = small_len.saturating_sub(carry_small);
+            if process_len > 0 {
+                unexpand_chunk(
+                    &small[..process_len],
+                    output,
+                    options,
+                    lastcol,
+                    tab_config,
+                    &mut state,
+                )?;
+            }
+
+            if carry_small > 0 {
+                let start = small_len - carry_small;
+                pending_len = carry_small;
+                pending[..pending_len].copy_from_slice(&small[start..small_len]);
+                continue;
+            }
+
+            pending_len = 0;
+            if head_len >= slice.len() {
+                continue;
+            }
+
+            let rest = &slice[head_len..];
+            let carry = utf8_incomplete_tail(rest);
+            let process_len = rest.len().saturating_sub(carry);
+            if process_len > 0 {
+                unexpand_chunk(
+                    &rest[..process_len],
+                    output,
+                    options,
+                    lastcol,
+                    tab_config,
+                    &mut state,
+                )?;
+            }
+            if carry > 0 {
+                pending_len = carry;
+                pending[..pending_len].copy_from_slice(&rest[process_len..]);
+            }
+            continue;
+        }
+
+        let carry = if options.uflag {
+            utf8_incomplete_tail(slice)
+        } else {
+            0
+        };
+        let process_len = slice.len().saturating_sub(carry);
+        if process_len > 0 {
+            unexpand_chunk(
+                &slice[..process_len],
+                output,
+                options,
+                lastcol,
+                tab_config,
+                &mut state,
+            )?;
+        }
+        if carry > 0 {
+            pending_len = carry;
+            pending[..pending_len].copy_from_slice(&slice[process_len..]);
         }
     }
+
+    if pending_len > 0 {
+        unexpand_chunk(&pending[..pending_len], output, options, lastcol, tab_config, &mut state)?;
+    }
+
+    finish_line(output, tab_config, &mut state)?;
     Ok(())
 }
 

@@ -366,3 +366,21 @@ fn test_extended_tabstop_syntax() {
             .stdout_is(expected);
     }
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_dev_full_with_infinite_input_does_not_abort() {
+    use std::fs::File;
+    use std::time::Duration;
+
+    let dev_zero = File::open("/dev/zero").expect("Failed to open /dev/zero");
+    let dev_full = File::create("/dev/full").expect("Failed to open /dev/full");
+
+    new_ucmd!()
+        .set_stdin(dev_zero)
+        .set_stdout(dev_full)
+        .timeout(Duration::from_secs(2))
+        .fails()
+        .code_is(1)
+        .stderr_contains("No space left on device");
+}

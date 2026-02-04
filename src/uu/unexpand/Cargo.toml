@@ -22,6 +22,7 @@ thiserror = { workspace = true }
 clap = { workspace = true }
 uucore = { workspace = true }
 fluent = { workspace = true }
+memchr = { workspace = true }
 
 [dev-dependencies]
 divan = { workspace = true }
