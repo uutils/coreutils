@@ -5,20 +5,21 @@
 
 // spell-checker:ignore rsplit hexdigit bitlen invalidchecksum inva idchecksum xffname
 
+use crate::util_name;
+
 use std::ffi::OsStr;
 use std::fmt::Display;
 use std::fs::File;
-use std::io::{self, BufReader, Read, Write, stdin};
+use std::io::{self, BufReader, Read, Write, stderr, stdin};
 
 use os_display::Quotable;
 
 use crate::checksum::{AlgoKind, ChecksumError, SizedAlgoKind, digest_reader, unescape_filename};
-use crate::error::{FromIo, UError, UResult, USimpleError};
+use crate::error::{FromIo, UError, UIoError, UResult, USimpleError};
 use crate::quoting_style::{QuotingStyle, locale_aware_escape_name};
 use crate::sum::DigestOutput;
 use crate::{
-    os_str_as_bytes, os_str_from_bytes, read_os_string_lines, show, show_error, show_warning_caps,
-    translate,
+    os_str_as_bytes, os_str_from_bytes, read_os_string_lines, show, show_warning_caps, translate,
 };
 
 /// To what level should checksum validation print logging info.
@@ -173,8 +174,10 @@ fn print_cksum_report(res: &ChecksumResult) {
 /// Print a "no properly formatted lines" message in stderr
 #[inline]
 fn log_no_properly_formatted(filename: impl Display) {
-    show_error!(
-        "{}",
+    let _ = writeln!(
+        stderr(),
+        "{}: {}",
+        util_name(),
         translate!("checksum-no-properly-formatted", "checksum_file" => filename)
     );
 }
@@ -182,8 +185,10 @@ fn log_no_properly_formatted(filename: impl Display) {
 /// Print a "no file was verified" message in stderr
 #[inline]
 fn log_no_file_verified(filename: impl Display) {
-    show_error!(
-        "{}",
+    let _ = writeln!(
+        stderr(),
+        "{}: {}",
+        util_name(),
         translate!("checksum-no-file-verified", "checksum_file" => filename)
     );
 }
@@ -456,7 +461,7 @@ impl LineInfo {
     /// In case of non-algo-based format, if `cached_line_format` is Some, it must take the priority
     /// over the detected format. Otherwise, we must set it the the detected format.
     /// This specific behavior is emphasized by the test
-    /// `test_hashsum::test_check_md5sum_only_one_space`.
+    /// `test_md5sum::test_check_md5sum_only_one_space`.
     fn parse(s: impl AsRef<OsStr>, cached_line_format: &mut Option<LineFormat>) -> Option<Self> {
         let line_bytes = os_str_as_bytes(s.as_ref()).ok()?;
 
@@ -530,7 +535,7 @@ fn get_file_to_check(
     let filename_bytes = os_str_as_bytes(filename).map_err(|e| LineCheckError::UError(e.into()))?;
 
     if filename == "-" {
-        Ok(Box::new(io::stdin())) // Use stdin if "-" is specified in the checksum file
+        Ok(Box::new(stdin())) // Use stdin if "-" is specified in the checksum file
     } else {
         let failed_open = || {
             write_file_report(
@@ -687,7 +692,7 @@ fn compute_and_check_digest_from_file(
             }));
 
             write_file_report(
-                std::io::stdout(),
+                io::stdout(),
                 filename,
                 FileChecksumResult::CantOpen,
                 prefix,
@@ -704,7 +709,7 @@ fn compute_and_check_digest_from_file(
         DigestOutput::U16(n) => n.to_be_bytes() == expected_checksum,
     };
     write_file_report(
-        std::io::stdout(),
+        io::stdout(),
         filename,
         FileChecksumResult::from_bool(checksum_correct),
         prefix,
@@ -839,14 +844,13 @@ fn process_checksum_file(
             Ok(f) => f,
             Err(e) => {
                 // Could not read the file, show the error and continue to the next file
-                show_error!("{e}");
+                let _ = writeln!(stderr(), "{}: {e}", util_name());
                 return Err(FileCheckError::CantOpenChecksumFile);
             }
         }
     };
 
     let reader = BufReader::new(file);
-    let lines = read_os_string_lines(reader).collect::<Vec<_>>();
 
     // cached_line_format is used to ensure that several non algo-based checksum line
     // will use the same parser.
@@ -856,9 +860,16 @@ fn process_checksum_file(
     // Behavior tested in gnu_cksum_c::test_warn
     let mut last_algo = None;
 
-    for (i, line) in lines.iter().enumerate() {
+    for (i, line_res) in read_os_string_lines(reader).enumerate() {
+        let line = line_res.map_err(|e| {
+            USimpleError::new(
+                UIoError::from(e).code(),
+                format!("{}: read error", filename_input.maybe_quote()),
+            )
+        })?;
+
         let line_result = process_checksum_line(
-            line,
+            &line,
             i,
             cli_algo_kind,
             cli_algo_length,
@@ -891,8 +902,10 @@ fn process_checksum_file(
                     } else {
                         "Unknown algorithm"
                     };
-                    show_error!(
-                        "{}",
+                    let _ = writeln!(
+                        stderr(),
+                        "{}: {}",
+                        util_name(),
                         translate!("checksum-error-algo-bad-format", "file" => filename_input.maybe_quote(), "line" => i + 1, "algo" => algo)
                     );
                 }

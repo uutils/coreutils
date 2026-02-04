@@ -5,10 +5,12 @@
 
 use clap::Command;
 use coreutils::validation;
+use itertools::Itertools as _;
 use std::cmp;
 use std::ffi::OsString;
 use std::io::{self, Write};
 use std::process;
+use uucore::Args;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -28,10 +30,7 @@ fn usage<T>(utils: &UtilityMap<T>, name: &str) {
     println!("Options:");
     println!("      --list    lists all defined functions, one per row\n");
     println!("Currently defined functions:\n");
-    #[allow(clippy::map_clone)]
-    let mut utils: Vec<&str> = utils.keys().map(|&s| s).collect();
-    utils.sort_unstable();
-    let display_list = utils.join(", ");
+    let display_list = utils.keys().copied().sorted_unstable().join(", ");
     let width = cmp::min(textwrap::termwidth(), 100) - 4 * 2; // (opinion/heuristic) max 100 chars wide with 4 character side indentions
     println!(
         "{}",
