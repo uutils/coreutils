@@ -92,7 +92,7 @@ pub fn generate_type_output(fmt: &OutputFmt) -> String {
 }
 
 fn generate_ls_colors(fmt: &OutputFmt, sep: &str) -> String {
-    if *fmt == OutputFmt::Display {
+    if let OutputFmt::Display = fmt {
         let mut display_parts = vec![];
         let type_output = generate_type_output(fmt);
         display_parts.push(type_output);

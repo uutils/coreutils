@@ -486,7 +486,7 @@ fn invalid_speed<T>(arg: &str, speed: &str) -> Result<T, Box<dyn UError>> {
 /// this function returns the appropriate error message in the case of overflow or underflow, or u8 on success
 fn parse_u8_or_err(arg: &str) -> Result<u8, String> {
     arg.parse::<u8>().map_err(|e| {
-        if *e.kind() == IntErrorKind::PosOverflow {
+        if let IntErrorKind::PosOverflow = e.kind() {
             translate!("stty-error-invalid-integer-argument-value-too-large", "value" => format!("'{arg}'"))
         } else {
             translate!("stty-error-invalid-integer-argument", "value" => format!("'{arg}'"))
