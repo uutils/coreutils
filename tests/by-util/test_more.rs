@@ -29,6 +29,8 @@ fn run_more_with_pty(
     at.write(file, content);
 
     let mut child = ucmd
+        // Set POSIXLY_CORRECT to disable default exit_on_eof behavior
+        .env("POSIXLY_CORRECT", "1")
         .set_stdin(File::open(&path).unwrap())
         .set_stdout(File::create(&path).unwrap())
         .args(args)
@@ -37,7 +39,7 @@ fn run_more_with_pty(
 
     child.delay(200);
     let mut output = vec![0u8; 1024];
-    let n = read(&controller, &mut output).unwrap();
+    let n = read(&controller, &mut output).unwrap_or(0);
     let output_str = String::from_utf8_lossy(&output[..n]).to_string();
 
     (child, controller, output_str)
@@ -64,10 +66,18 @@ fn test_no_arg() {
 #[cfg(unix)]
 fn test_valid_arg() {
     let args_list: Vec<&[&str]> = vec![
-        &["-c"],
-        &["--clean-print"],
+        &["-d"],
+        &["--silent"],
+        &["-l"],
+        &["--logical"],
+        &["-e"],
+        &["--exit-on-eof"],
+        &["-f"],
+        &["--no-pause"],
         &["-p"],
         &["--print-over"],
+        &["-c"],
+        &["--clean-print"],
         &["-s"],
         &["--squeeze"],
         &["-u"],
@@ -90,11 +100,16 @@ fn test_alive(args: &[&str]) {
     let (at, mut ucmd) = at_and_ucmd!();
     let (path, controller, _replica) = pty_path();
 
-    let content = "test content";
+    let content = (0..50)
+        .map(|i| i.to_string())
+        .collect::<Vec<String>>()
+        .join("\n");
     let file = "test_file";
-    at.write(file, content);
+    at.write(file, &content);
 
     let mut child = ucmd
+        // Set POSIXLY_CORRECT to disable default exit_on_eof behavior
+        .env("POSIXLY_CORRECT", "1")
         .set_stdin(File::open(&path).unwrap())
         .set_stdout(File::create(&path).unwrap())
         .args(args)
@@ -219,6 +234,23 @@ fn test_more_non_utf8_paths() {
 fn test_basic_display() {
     let (child, controller, output) = run_more_with_pty(&[], "test.txt", "line1\nline2\nline3\n");
     assert!(output.contains("line1"));
+    quit_more(&controller, child);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_space_at_eof_does_not_exit_without_exit_on_eof() {
+    let (mut child, controller, _output) = run_more_with_pty(&[], "test.txt", "line1\n");
+    assert!(
+        child.is_alive(),
+        "more should be alive at EOF when exit_on_eof is disabled"
+    );
+    write(&controller, b" ").unwrap();
+    child.delay(100);
+    assert!(
+        child.is_alive(),
+        "more should remain alive after space at EOF when exit_on_eof is disabled"
+    );
     quit_more(&controller, child);
 }
 
