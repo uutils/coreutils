@@ -666,7 +666,6 @@ redundant_closure_for_method_calls = "allow" # 125
 cast_possible_truncation = "allow"           # 122
 too_many_lines = "allow"                     # 101
 trivially_copy_pass_by_ref = "allow"         # 84
-single_match_else = "allow"                  # 82
 cast_possible_wrap = "allow"                 # 78
 cast_sign_loss = "allow"                     # 70
 struct_excessive_bools = "allow"             # 68

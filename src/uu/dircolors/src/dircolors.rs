@@ -92,30 +92,27 @@ pub fn generate_type_output(fmt: &OutputFmt) -> String {
 }
 
 fn generate_ls_colors(fmt: &OutputFmt, sep: &str) -> String {
-    match fmt {
-        OutputFmt::Display => {
-            let mut display_parts = vec![];
-            let type_output = generate_type_output(fmt);
-            display_parts.push(type_output);
-            for &(extension, code) in FILE_COLORS {
-                let prefix = if extension.starts_with('*') { "" } else { "*" };
-                let formatted_extension = format!("\x1b[{code}m{prefix}{extension}\t{code}\x1b[0m");
-                display_parts.push(formatted_extension);
-            }
-            display_parts.join("\n")
+    if *fmt == OutputFmt::Display {
+        let mut display_parts = vec![];
+        let type_output = generate_type_output(fmt);
+        display_parts.push(type_output);
+        for &(extension, code) in FILE_COLORS {
+            let prefix = if extension.starts_with('*') { "" } else { "*" };
+            let formatted_extension = format!("\x1b[{code}m{prefix}{extension}\t{code}\x1b[0m");
+            display_parts.push(formatted_extension);
         }
-        _ => {
-            // existing logic for other formats
-            let mut parts = vec![];
-            for &(extension, code) in FILE_COLORS {
-                let prefix = if extension.starts_with('*') { "" } else { "*" };
-                let formatted_extension = format!("{prefix}{extension}");
-                parts.push(format!("{formatted_extension}={code}"));
-            }
-            let (prefix, suffix) = get_colors_format_strings(fmt);
-            let ls_colors = parts.join(sep);
-            format!("{prefix}{}:{ls_colors}:{suffix}", generate_type_output(fmt),)
+        display_parts.join("\n")
+    } else {
+        // existing logic for other formats
+        let mut parts = vec![];
+        for &(extension, code) in FILE_COLORS {
+            let prefix = if extension.starts_with('*') { "" } else { "*" };
+            let formatted_extension = format!("{prefix}{extension}");
+            parts.push(format!("{formatted_extension}={code}"));
         }
+        let (prefix, suffix) = get_colors_format_strings(fmt);
+        let ls_colors = parts.join(sep);
+        format!("{prefix}{}:{ls_colors}:{suffix}", generate_type_output(fmt),)
     }
 }
 

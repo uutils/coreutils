@@ -828,12 +828,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (sources, target) = parse_path_args(paths, &options)?;
 
     if let Err(error) = copy(&sources, &target, &options) {
-        match error {
+        if let CpError::NotAllFilesCopied = error {
             // Error::NotAllFilesCopied is non-fatal, but the error
             // code should still be EXIT_ERR as does GNU cp
-            CpError::NotAllFilesCopied => {}
+        } else {
             // Else we caught a fatal bubbled-up error, log it to stderr
-            _ => show_error!("{error}"),
+            show_error!("{error}");
         }
         set_exit_code(EXIT_ERR);
     }
