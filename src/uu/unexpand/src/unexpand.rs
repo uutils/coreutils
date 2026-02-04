@@ -6,6 +6,7 @@
 // spell-checker:ignore (ToDO) nums aflag uflag scol prevtab amode ctype cwidth nbytes lastcol pctype Preprocess
 
 use clap::{Arg, ArgAction, Command};
+use memchr::memchr;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Stdout, Write, stdin, stdout};
@@ -17,7 +18,6 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::translate;
 use uucore::{format_usage, show};
-use memchr::memchr;
 
 const DEFAULT_TABSTOP: usize = 8;
 const READ_BUF_SIZE: usize = 8192;
@@ -502,11 +502,7 @@ fn utf8_incomplete_tail(buf: &[u8]) -> usize {
     }
 
     let actual = cont + 1;
-    if actual < expected {
-        actual
-    } else {
-        0
-    }
+    if actual < expected { actual } else { 0 }
 }
 
 #[inline]
@@ -735,7 +731,14 @@ fn unexpand_file(
     }
 
     if pending_len > 0 {
-        unexpand_chunk(&pending[..pending_len], output, options, lastcol, tab_config, &mut state)?;
+        unexpand_chunk(
+            &pending[..pending_len],
+            output,
+            options,
+            lastcol,
+            tab_config,
+            &mut state,
+        )?;
     }
 
     finish_line(output, tab_config, &mut state)?;
