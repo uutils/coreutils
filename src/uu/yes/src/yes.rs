@@ -27,6 +27,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     match exec(&buffer) {
         Ok(()) => Ok(()),
+        // On Windows, silently handle broken pipe since there's no SIGPIPE
+        #[cfg(windows)]
         Err(err) if err.kind() == io::ErrorKind::BrokenPipe => Ok(()),
         Err(err) => Err(USimpleError::new(
             1,

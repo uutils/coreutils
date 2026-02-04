@@ -17,7 +17,7 @@ use crate::bufferedoutput::BufferedOutput;
 use blocks::conv_block_unblock_helper;
 use datastructures::*;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::fcntl::FcntlArg::F_SETFL;
+use nix::fcntl::FcntlArg;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::fcntl::OFlag;
 use parseargs::Parser;
@@ -29,6 +29,8 @@ use uucore::translate;
 use std::cmp;
 use std::env;
 use std::ffi::OsString;
+#[cfg(unix)]
+use std::fs::Metadata;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -234,8 +236,8 @@ impl Source {
     /// Create a source from stdin using its raw file descriptor.
     ///
     /// This returns an instance of the `Source::StdinFile` variant,
-    /// using the raw file descriptor of [`std::io::Stdin`] to create
-    /// the [`std::fs::File`] parameter. You can use this instead of
+    /// using the raw file descriptor of [`io::Stdin`] to create
+    /// the [`File`] parameter. You can use this instead of
     /// `Source::Stdin` to allow reading from stdin without consuming
     /// the entire contents of stdin when this process terminates.
     #[cfg(unix)]
@@ -273,7 +275,7 @@ impl Source {
                     }
                 }
                 // Get file length before seeking to avoid race condition
-                let file_len = f.metadata().map(|m| m.len()).unwrap_or(u64::MAX);
+                let file_len = f.metadata().as_ref().map_or(u64::MAX, Metadata::len);
                 // Try seek first; fall back to read if not seekable
                 match n.try_into().ok().map(|n| f.seek(SeekFrom::Current(n))) {
                     Some(Ok(pos)) => {
@@ -895,7 +897,7 @@ impl<'a> Output<'a> {
         if let Some(libc_flags) = make_linux_oflags(&settings.oflags) {
             nix::fcntl::fcntl(
                 fx.as_raw().as_fd(),
-                F_SETFL(OFlag::from_bits_retain(libc_flags)),
+                FcntlArg::F_SETFL(OFlag::from_bits_retain(libc_flags)),
             )?;
         }
 

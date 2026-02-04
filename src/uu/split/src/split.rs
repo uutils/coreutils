@@ -1028,14 +1028,16 @@ impl ManageOutFiles for OutFiles {
             // Could have hit system limit for open files.
             // Try to close one previously instantiated writer first
             for (i, out_file) in self.iter_mut().enumerate() {
-                if i != idx && out_file.maybe_writer.is_some() {
-                    out_file.maybe_writer.as_mut().unwrap().flush()?;
-                    out_file.maybe_writer = None;
-                    out_file.is_new = false;
-                    count += 1;
+                if i != idx {
+                    if let Some(writer) = out_file.maybe_writer.as_mut() {
+                        writer.flush()?;
+                        out_file.maybe_writer = None;
+                        out_file.is_new = false;
+                        count += 1;
 
-                    // And then try to instantiate the writer again
-                    continue 'loop1;
+                        // And then try to instantiate the writer again
+                        continue 'loop1;
+                    }
                 }
             }
 
@@ -1154,9 +1156,10 @@ where
         out_files = OutFiles::init(num_chunks, settings, false)?;
     }
 
+    let buf = &mut Vec::new();
     for i in 1_u64..=num_chunks {
         let chunk_size = chunk_size_base + (chunk_size_reminder > i - 1) as u64;
-        let buf = &mut Vec::new();
+        buf.clear();
         if num_bytes > 0 {
             // Read `chunk_size` bytes from the reader into `buf`
             // except the last.
@@ -1186,18 +1189,15 @@ where
                 }
             }
 
-            match kth_chunk {
-                Some(chunk_number) => {
-                    if i == chunk_number {
-                        stdout_writer.write_all(buf)?;
-                        break;
-                    }
+            if let Some(chunk_number) = kth_chunk {
+                if i == chunk_number {
+                    stdout_writer.write_all(buf)?;
+                    break;
                 }
-                None => {
-                    let idx = (i - 1) as usize;
-                    let writer = out_files.get_writer(idx, settings)?;
-                    writer.write_all(buf)?;
-                }
+            } else {
+                let idx = (i - 1) as usize;
+                let writer = out_files.get_writer(idx, settings)?;
+                writer.write_all(buf)?;
             }
         } else {
             break;
@@ -1298,18 +1298,15 @@ where
         }
         let bytes = line.as_slice();
 
-        match kth_chunk {
-            Some(kth) => {
-                if chunk_number == kth {
-                    stdout_writer.write_all(bytes)?;
-                }
+        if let Some(kth) = kth_chunk {
+            if chunk_number == kth {
+                stdout_writer.write_all(bytes)?;
             }
-            None => {
-                // Should write into a file
-                let idx = (chunk_number - 1) as usize;
-                let writer = out_files.get_writer(idx, settings)?;
-                custom_write_all(bytes, writer, settings)?;
-            }
+        } else {
+            // Should write into a file
+            let idx = (chunk_number - 1) as usize;
+            let writer = out_files.get_writer(idx, settings)?;
+            custom_write_all(bytes, writer, settings)?;
         }
 
         // Advance to the next chunk if the current one is filled.

@@ -773,7 +773,7 @@ mod tests {
 
     #[test]
     fn test_path_with_null_byte() {
-        let path_with_null = std::ffi::OsString::from_vec(b"test\0file".to_vec());
+        let path_with_null = OsString::from_vec(b"test\0file".to_vec());
         let temp_dir = TempDir::new().unwrap();
         let dir_fd = DirFd::open(temp_dir.path()).unwrap();
 

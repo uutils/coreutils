@@ -305,12 +305,11 @@ pub fn with_optional_hardlink_context<F, R>(
 where
     F: FnOnce(&mut HardlinkTracker, &HardlinkGroupScanner) -> R,
 {
-    match (tracker, scanner) {
-        (Some(tracker), Some(scanner)) => operation(tracker, scanner),
-        _ => {
-            let (mut dummy_tracker, dummy_scanner) = create_hardlink_context();
-            operation(&mut dummy_tracker, &dummy_scanner)
-        }
+    if let (Some(tracker), Some(scanner)) = (tracker, scanner) {
+        operation(tracker, scanner)
+    } else {
+        let (mut dummy_tracker, dummy_scanner) = create_hardlink_context();
+        operation(&mut dummy_tracker, &dummy_scanner)
     }
 }
 

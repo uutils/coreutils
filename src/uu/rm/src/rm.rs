@@ -72,7 +72,7 @@ fn verbose_removed_directory(path: &Path, options: &Options) {
 }
 
 /// Helper function to show error with context and return error status
-fn show_removal_error(error: std::io::Error, path: &Path) -> bool {
+fn show_removal_error(error: io::Error, path: &Path) -> bool {
     if error.kind() == io::ErrorKind::PermissionDenied {
         show_error!("cannot remove {}: Permission denied", path.quote());
     } else {
@@ -451,21 +451,16 @@ fn count_files(paths: &[&OsStr], recursive: bool) -> u64 {
 
 /// A helper for `count_files` specialized for directories.
 fn count_files_in_directory(p: &Path) -> u64 {
-    let entries_count = fs::read_dir(p)
-        .map(|entries| {
-            entries
-                .filter_map(Result::ok)
-                .map(|entry| {
-                    let file_type = entry.file_type();
-                    match file_type {
-                        Ok(ft) if ft.is_dir() => count_files_in_directory(&entry.path()),
-                        Ok(_) => 1,
-                        Err(_) => 0,
-                    }
-                })
-                .sum()
-        })
-        .unwrap_or(0);
+    let entries_count = fs::read_dir(p).map_or(0, |entries| {
+        entries
+            .flatten()
+            .map(|entry| match entry.file_type() {
+                Ok(ft) if ft.is_dir() => count_files_in_directory(&entry.path()),
+                Ok(_) => 1,
+                Err(_) => 0,
+            })
+            .sum()
+    });
 
     1 + entries_count
 }
@@ -838,7 +833,9 @@ fn path_is_current_or_parent_directory(path: &Path) -> bool {
     let dir_separator = MAIN_SEPARATOR as u8;
     if let Ok(path_bytes) = path_str {
         return path_bytes == ([b'.'])
+            || path_bytes == ([b'.', dir_separator])
             || path_bytes == ([b'.', b'.'])
+            || path_bytes == ([b'.', b'.', dir_separator])
             || path_bytes.ends_with(&[dir_separator, b'.'])
             || path_bytes.ends_with(&[dir_separator, b'.', b'.'])
             || path_bytes.ends_with(&[dir_separator, b'.', dir_separator])

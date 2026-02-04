@@ -5,7 +5,9 @@
 //
 // spell-checker:ignore dedupe dirfd fiemap fstatat openat reflinks
 
-use std::collections::HashSet;
+use clap::{Arg, ArgAction, ArgMatches, Command, builder::PossibleValue};
+use glob::Pattern;
+use rustc_hash::FxHashSet as HashSet;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, DirEntry, File, Metadata};
@@ -374,6 +376,7 @@ fn safe_du(
     shared_extents: &mut HashSet<SharedExtentKey>,
     print_tx: &mpsc::Sender<UResult<StatPrintInfo>>,
     parent_fd: Option<&DirFd>,
+    initial_stat: Option<std::io::Result<Stat>>,
 ) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
     // Get initial stat for this path - use DirFd if available to avoid path length issues
     let mut my_stat = if let Some(parent_fd) = parent_fd {
@@ -426,7 +429,12 @@ fn safe_du(
         }
     } else {
         // This is the initial directory - try regular Stat::new first, then fallback to DirFd
-        match Stat::new(path, None, options) {
+        let initial_stat = match initial_stat {
+            Some(s) => s,
+            None => Stat::new(path, None, options),
+        };
+
+        match initial_stat {
             Ok(s) => s,
             Err(_e) => {
                 // Try using our new DirFd method for the root directory
@@ -621,6 +629,7 @@ fn safe_du(
                 shared_extents,
                 print_tx,
                 Some(&dir_fd),
+                None,
             )?;
 
             if !options.separate_dirs {
@@ -663,7 +672,7 @@ fn du_regular(
     ancestors: Option<&mut HashSet<FileInfo>>,
     symlink_depth: Option<usize>,
 ) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
-    let mut default_ancestors = HashSet::new();
+    let mut default_ancestors = HashSet::default();
     let ancestors = ancestors.unwrap_or(&mut default_ancestors);
     let symlink_depth = symlink_depth.unwrap_or(0);
     // Maximum symlink depth to prevent infinite loops
@@ -1102,7 +1111,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             files.collect()
         } else {
             // Deduplicate while preserving order
-            let mut seen = HashSet::new();
+            let mut seen = HashSet::default();
             files
                 .filter(|path| seen.insert(path.clone()))
                 .collect::<Vec<_>>()
@@ -1198,8 +1207,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let printing_thread = thread::spawn(move || stat_printer.print_stats(&rx));
 
     // Check existence of path provided in argument
-    let mut seen_inodes: HashSet<FileInfo> = HashSet::new();
-    let mut seen_shared_extents: HashSet<SharedExtentKey> = HashSet::new();
+    let mut seen_inodes: HashSet<FileInfo> = HashSet::default();
+    let mut seen_shared_extents: HashSet<SharedExtentKey> = HashSet::default();
 
     'loop_file: for path in files {
         // Skip if we don't want to ignore anything
@@ -1225,20 +1234,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         #[cfg(not(all(unix, not(target_os = "redox"))))]
         let use_safe_traversal = false;
 
+        // Pre-populate seen_inodes with the starting directory to detect cycles
+        let stat = Stat::new(&path, None, &traversal_options);
+        if let Ok(stat) = stat.as_ref() {
+            if let Some(inode) = stat.inode {
+                if !traversal_options.count_links && seen_inodes.contains(&inode) {
+                    continue 'loop_file;
+                }
+                seen_inodes.insert(inode);
+            }
+        }
+
         if use_safe_traversal {
             // Use safe traversal (Unix except Redox, when not using -L)
             #[cfg(all(unix, not(target_os = "redox")))]
             {
-                // Pre-populate seen_inodes with the starting directory to detect cycles
-                if let Ok(stat) = Stat::new(&path, None, &traversal_options) {
-                    if let Some(inode) = stat.inode {
-                        if !traversal_options.count_links && seen_inodes.contains(&inode) {
-                            continue 'loop_file;
-                        }
-                        seen_inodes.insert(inode);
-                    }
-                }
-
                 match safe_du(
                     &path,
                     &traversal_options,
@@ -1247,6 +1257,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     &mut seen_shared_extents,
                     &print_tx,
                     None,
+                    Some(stat),
                 ) {
                     Ok(stat) => {
                         print_tx
@@ -1267,13 +1278,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
         } else {
             // Use regular traversal (non-Linux or when -L is used)
-            if let Ok(stat) = Stat::new(&path, None, &traversal_options) {
-                if let Some(inode) = stat.inode {
-                    if !traversal_options.count_links && seen_inodes.contains(&inode) {
-                        continue 'loop_file;
-                    }
-                    seen_inodes.insert(inode);
-                }
+            if let Ok(stat) = stat {
                 let stat = du_regular(
                     stat,
                     &traversal_options,
