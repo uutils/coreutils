@@ -15,6 +15,8 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, channel};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, set_exit_code};
+#[cfg(target_os = "linux")]
+use uucore::signals::ensure_stdout_not_broken;
 use uucore::translate;
 
 use uucore::show_error;
@@ -47,9 +49,6 @@ impl WatcherRx {
             Tested for notify::InotifyWatcher and for notify::PollWatcher.
             */
             if let Some(parent) = path.parent() {
-                // clippy::assigning_clones added with Rust 1.78
-                // Rust version = 1.76 on OpenBSD stable/7.5
-                #[cfg_attr(not(target_os = "openbsd"), allow(clippy::assigning_clones))]
                 if parent.is_dir() {
                     path = parent.to_owned();
                 } else {
@@ -155,24 +154,6 @@ impl Observer {
             self.files.insert(
                 &path,
                 PathData::new(reader, metadata, display_name),
-                update_last,
-            );
-        }
-
-        Ok(())
-    }
-
-    pub fn add_stdin(
-        &mut self,
-        display_name: &str,
-        reader: Option<Box<dyn BufRead>>,
-        update_last: bool,
-    ) -> UResult<()> {
-        if self.follow == Some(FollowMode::Descriptor) {
-            return self.add_path(
-                &PathBuf::from(text::DEV_STDIN),
-                display_name,
-                reader,
                 update_last,
             );
         }
@@ -296,6 +277,10 @@ impl Observer {
                             // If `path` is not a tailable file, add its parent to `Watcher`.
                             watcher_rx
                                 .watch(path.parent().unwrap(), RecursiveMode::NonRecursive)?;
+                            // Add symlinks to orphans for retry polling (target may not exist)
+                            if path.is_symlink() {
+                                self.orphans.push(path);
+                            }
                         } else {
                             // If there is no parent, add `path` to `orphans`.
                             self.orphans.push(path);
@@ -393,6 +378,9 @@ impl Observer {
                         }
                     }
                     self.files.update_metadata(event_path, Some(new_md));
+                } else if event_path.is_symlink() && settings.retry {
+                    self.files.reset_reader(event_path);
+                    self.orphans.push(event_path.clone());
                 }
             }
             EventKind::Remove(RemoveKind::File | RemoveKind::Any)
@@ -621,6 +609,11 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 timeout_counter += 1;
+                // Check if stdout pipe is still open
+                #[cfg(target_os = "linux")]
+                if let Ok(false) = ensure_stdout_not_broken() {
+                    return Ok(());
+                }
             }
             Err(e) => {
                 return Err(USimpleError::new(

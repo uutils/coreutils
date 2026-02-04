@@ -20,14 +20,11 @@ path = "src/chmod.rs"
 [dependencies]
 clap = { workspace = true }
 thiserror = { workspace = true }
-uucore = { workspace = true, features = [
-  "entries",
-  "fs",
-  "mode",
-  "perms",
-  "safe-traversal",
-] }
+uucore = { workspace = true, features = ["entries", "fs", "mode", "perms"] }
 fluent = { workspace = true }
+
+[target.'cfg(all(unix, not(target_os = "redox")))'.dependencies]
+uucore = { workspace = true, features = ["safe-traversal"] }
 
 [[bin]]
 name = "chmod"

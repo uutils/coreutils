@@ -116,7 +116,7 @@ impl<'a> Convert<&'a Vec<&'a str>, Vec<Cow<'a, NativeIntStr>>> for NCvt {
 
 impl<'a> Convert<Vec<&'a str>, Vec<Cow<'a, NativeIntStr>>> for NCvt {
     fn convert(f: Vec<&'a str>) -> Vec<Cow<'a, NativeIntStr>> {
-        f.iter().map(|x| Self::convert(*x)).collect()
+        f.into_iter().map(Self::convert).collect()
     }
 }
 

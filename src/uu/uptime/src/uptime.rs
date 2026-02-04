@@ -5,7 +5,8 @@
 
 // spell-checker:ignore getloadavg behaviour loadavg uptime upsecs updays upmins uphours boottime nusers utmpxname gettime clockid couldnt
 
-use chrono::{Local, TimeZone, Utc};
+use jiff::tz::TimeZone;
+use jiff::{Timestamp, ToSpan};
 #[cfg(unix)]
 use std::ffi::OsString;
 use std::io;
@@ -26,6 +27,7 @@ use uucore::utmpx::*;
 pub mod options {
     pub static SINCE: &str = "since";
     pub static PATH: &str = "path";
+    pub static PRETTY: &str = "pretty";
 }
 
 #[derive(Debug, Error)]
@@ -56,6 +58,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if matches.get_flag(options::SINCE) {
         uptime_since()
+    } else if matches.get_flag(options::PRETTY) {
+        pretty_print_uptime()
     } else if let Some(path) = file_path {
         uptime_with_file(path)
     } else {
@@ -90,6 +94,13 @@ pub fn uu_app() -> Command {
             .num_args(0..=1)
             .value_parser(ValueParser::os_string())
             .value_hint(ValueHint::AnyPath),
+    )
+    .arg(
+        Arg::new(options::PRETTY)
+            .short('p')
+            .long(options::PRETTY)
+            .help(translate!("uptime-help-pretty"))
+            .action(ArgAction::SetTrue),
     )
 }
 
@@ -196,10 +207,8 @@ fn uptime_since() -> UResult<()> {
     #[cfg(any(windows, target_os = "openbsd"))]
     let uptime = get_uptime(None)?;
 
-    let since_date = Local
-        .timestamp_opt(Utc::now().timestamp() - uptime, 0)
-        .unwrap();
-    println!("{}", since_date.format("%Y-%m-%d %H:%M:%S"));
+    let since_date = (Timestamp::now() - uptime.seconds()).to_zoned(TimeZone::system());
+    println!("{}", since_date.strftime("%Y-%m-%d %H:%M:%S"));
 
     Ok(())
 }
@@ -267,6 +276,17 @@ fn print_time() {
 }
 
 fn print_uptime(boot_time: Option<time_t>) -> UResult<()> {
-    print!("up  {},  ", get_formatted_uptime(boot_time)?);
+    let localized_text = translate!("uptime-output-up-text");
+    let uptime_message = get_formatted_uptime(boot_time, OutputFormat::HumanReadable)?;
+
+    print!("{localized_text}  {uptime_message},  ");
+    Ok(())
+}
+
+fn pretty_print_uptime() -> UResult<()> {
+    let localized_text = translate!("uptime-output-up-text");
+    let uptime_message = get_formatted_uptime(None, OutputFormat::PrettyPrint)?;
+
+    println!("{localized_text} {uptime_message}");
     Ok(())
 }

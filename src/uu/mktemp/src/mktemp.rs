@@ -44,6 +44,8 @@ const TMPDIR_ENV_VAR: &str = "TMPDIR";
 #[cfg(windows)]
 const TMPDIR_ENV_VAR: &str = "TMP";
 
+const FALLBACK_TMPDIR: &str = "/tmp";
+
 #[derive(Error, Debug)]
 enum MkTempError {
     #[error("{}", translate!("mktemp-error-persist-file", "path" => .0.quote()))]
@@ -119,14 +121,12 @@ impl Options {
                 Some(d) => d.clone(),
                 // Otherwise use $TMPDIR if set, else use the system's default
                 // temporary directory.
-                None => env::var(TMPDIR_ENV_VAR)
-                    .ok()
-                    .map_or_else(env::temp_dir, PathBuf::from),
+                None => get_tmpdir_env_or_default(),
             });
         let (tmpdir, template) = match matches.get_one::<OsString>(ARG_TEMPLATE) {
             // If no template argument is given, `--tmpdir` is implied.
             None => {
-                let tmpdir = Some(tmpdir.unwrap_or_else(env::temp_dir));
+                let tmpdir = Some(tmpdir.unwrap_or_else(get_tmpdir_env_or_default));
                 let template = DEFAULT_TEMPLATE;
                 (tmpdir, OsString::from(template))
             }
@@ -193,9 +193,22 @@ struct Params {
 /// assert_eq!(find_last_contiguous_block_of_xs("aXbXcX"), None);
 /// ```
 fn find_last_contiguous_block_of_xs(s: &str) -> Option<(usize, usize)> {
-    let j = s.rfind("XXX")? + 3;
-    let i = s[..j].rfind(|c| c != 'X').map_or(0, |i| i + 1);
-    Some((i, j))
+    let bytes = s.as_bytes();
+
+    // Find the index of the last 'X'.
+    let end = bytes.iter().rposition(|&b| b == b'X')?;
+
+    // Walk left to find the start of the run of Xs that ends at `end`.
+    let mut start = end;
+    while start > 0 && bytes[start - 1] == b'X' {
+        start -= 1;
+    }
+
+    if end + 1 - start >= 3 {
+        Some((start, end + 1))
+    } else {
+        None
+    }
 }
 
 impl Params {
@@ -580,6 +593,14 @@ fn exec(dir: &Path, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> 
     let path = Path::new(dir).join(filename);
 
     Ok(path)
+}
+
+/// Reads from `TMPDIR_ENV_VAR` but defaults to /tmp if value is set to empty string.
+fn get_tmpdir_env_or_default() -> PathBuf {
+    match env::var_os(TMPDIR_ENV_VAR) {
+        Some(val) if val.is_empty() => PathBuf::from(FALLBACK_TMPDIR),
+        _ => env::temp_dir(),
+    }
 }
 
 /// Create a temporary file or directory

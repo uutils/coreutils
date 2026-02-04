@@ -5,10 +5,12 @@
 
 use clap::Command;
 use coreutils::validation;
+use itertools::Itertools as _;
 use std::cmp;
 use std::ffi::OsString;
 use std::io::{self, Write};
 use std::process;
+use uucore::Args;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -28,10 +30,7 @@ fn usage<T>(utils: &UtilityMap<T>, name: &str) {
     println!("Options:");
     println!("      --list    lists all defined functions, one per row\n");
     println!("Currently defined functions:\n");
-    #[allow(clippy::map_clone)]
-    let mut utils: Vec<&str> = utils.keys().map(|&s| s).collect();
-    utils.sort_unstable();
-    let display_list = utils.join(", ");
+    let display_list = utils.keys().copied().sorted_unstable().join(", ");
     let width = cmp::min(textwrap::termwidth(), 100) - 4 * 2; // (opinion/heuristic) max 100 chars wide with 4 character side indentions
     println!(
         "{}",
@@ -52,24 +51,21 @@ fn main() {
         process::exit(0);
     });
 
-    // binary name equals util name?
-    if let Some(&(uumain, _)) = utils.get(binary_as_util) {
-        validation::setup_localization_or_exit(binary_as_util);
-        process::exit(uumain(vec![binary.into()].into_iter().chain(args)));
-    }
+    // binary name ends with util name?
+    let matched_util = utils
+        .keys()
+        .filter(|&&u| binary_as_util.ends_with(u) && !binary_as_util.ends_with("coreutils"))
+        .max_by_key(|u| u.len()); //Prefer stty more than tty. coreutils is not ls
 
-    // binary name equals prefixed util name?
-    // * prefix/stem may be any string ending in a non-alphanumeric character
-    // For example, if the binary is named `uu_test`, it will match `test` as a utility.
-    let util_name =
-        if let Some(util) = validation::find_prefixed_util(binary_as_util, utils.keys().copied()) {
-            // prefixed util => replace 0th (aka, executable name) argument
-            Some(OsString::from(util))
-        } else {
-            // unmatched binary name => regard as multi-binary container and advance argument list
-            uucore::set_utility_is_second_arg();
-            args.next()
-        };
+    let util_name = if let Some(&util) = matched_util {
+        Some(OsString::from(util))
+    } else if binary_as_util.ends_with("utils") || binary_as_util.ends_with("box") {
+        // todo: Remove support of "*box" from binary
+        uucore::set_utility_is_second_arg();
+        args.next()
+    } else {
+        validation::not_found(&OsString::from(binary_as_util));
+    };
 
     // 0th argument equals util name?
     if let Some(util_os) = util_name {
