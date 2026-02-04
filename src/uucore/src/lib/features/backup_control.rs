@@ -245,7 +245,7 @@ pub mod arguments {
 /// 2. From the "SIMPLE_BACKUP_SUFFIX" environment variable, if present
 /// 3. By using the default '~' if none of the others apply
 ///
-/// This function directly takes [`clap::ArgMatches`] as argument and looks for
+/// This function directly takes [`ArgMatches`] as argument and looks for
 /// the '-S' and '--suffix' arguments itself.
 pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
     let supplied_suffix = matches.get_one::<String>(arguments::OPT_SUFFIX);
@@ -261,7 +261,7 @@ pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
 /// Parses the backup options according to the [GNU manual][1], and converts
 /// them to an instance of `BackupMode` for further processing.
 ///
-/// Takes [`clap::ArgMatches`] as argument which **must** contain the options
+/// Takes [`ArgMatches`] as argument which **must** contain the options
 /// from [`arguments::backup()`] and [`arguments::backup_no_args()`]. Otherwise
 /// the `NoBackup` mode is returned unconditionally.
 ///
