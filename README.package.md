@@ -28,4 +28,3 @@ uutils coreutils is a cross-platform reimplementation of the GNU coreutils in
 [Rust](http://www.rust-lang.org).
 
 This package does not have its specific `README.md`.
-
