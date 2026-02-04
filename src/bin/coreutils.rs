@@ -3,18 +3,20 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use clap::Command;
+mod uutils_map {
+    include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
+}
+
+use crate::uutils_map::UtilityMap;
+use crate::uutils_map::util_map;
 use coreutils::validation;
 use itertools::Itertools as _;
 use std::cmp;
 use std::ffi::OsString;
 use std::io::{self, Write};
 use std::process;
-use uucore::Args;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-
-include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
 
 fn usage<T>(utils: &UtilityMap<T>, name: &str) {
     println!("{name} {VERSION} (multi-call binary)\n");
