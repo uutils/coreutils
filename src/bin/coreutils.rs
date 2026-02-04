@@ -75,6 +75,11 @@ fn main() {
 
         match util {
             "--list" => {
+                // If --help is also present, show usage instead of list
+                if args.any(|arg| arg == "--help" || arg == "-h") {
+                    usage(&utils, binary_as_util);
+                    process::exit(0);
+                }
                 let mut utils: Vec<_> = utils.keys().collect();
                 utils.sort();
                 for util in utils {
@@ -123,6 +128,9 @@ fn main() {
                     }
                     usage(&utils, binary_as_util);
                     process::exit(0);
+                } else if util.starts_with('-') {
+                    // Argument looks like an option but wasn't recognized
+                    validation::unrecognized_option(binary_as_util, &util_os);
                 } else {
                     validation::not_found(&util_os);
                 }
