@@ -15,7 +15,7 @@ mod progress;
 
 use crate::bufferedoutput::BufferedOutput;
 use blocks::conv_block_unblock_helper;
-use datastructures::*;
+use datastructures::{ConversionMode, IConvFlags, IFlags, OConvFlags, OFlags, options};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::fcntl::FcntlArg;
 #[cfg(any(target_os = "linux", target_os = "android"))]
