@@ -21,7 +21,7 @@ use uucore::translate;
 
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::ranges::Range;
-use uucore::{format_usage, show, util_name};
+use uucore::{format_usage, show};
 
 pub mod errors;
 pub mod format;
@@ -88,7 +88,7 @@ fn format_and_handle_validation(input_line: &[u8], options: &NumfmtOptions) -> U
                 show!(NumfmtError::FormattingError(error_message));
             }
             InvalidModes::Warn => {
-                let _ = writeln!(stderr(), "{}: {error_message}", util_name());
+                let _ = writeln!(stderr(), "{}: {error_message}", uucore::util_name());
             }
             InvalidModes::Ignore => {}
         }
@@ -290,7 +290,7 @@ fn print_debug_warnings(options: &NumfmtOptions, matches: &ArgMatches) {
         let _ = writeln!(
             stderr(),
             "{}: {}",
-            util_name(),
+            uucore::util_name(),
             translate!("numfmt-debug-no-conversion")
         );
     }
@@ -300,7 +300,7 @@ fn print_debug_warnings(options: &NumfmtOptions, matches: &ArgMatches) {
         let _ = writeln!(
             stderr(),
             "{}: {}",
-            util_name(),
+            uucore::util_name(),
             translate!("numfmt-debug-header-ignored")
         );
     }
