@@ -128,6 +128,32 @@ fn sort_numeric(bencher: Bencher, num_lines: usize) {
     });
 }
 
+/// Benchmark general numeric sorting (-g) with decimal and exponent notation
+#[divan::bench(args = [200_000])]
+fn sort_general_numeric(bencher: Bencher, num_lines: usize) {
+    let mut data = Vec::new();
+
+    // Generate numeric data with decimal points and exponents
+    for i in 0..num_lines {
+        let int_part = (i * 13) % 100_000;
+        let frac_part = (i * 7) % 1000;
+        let exp = (i % 5) as i32 - 2; // -2..=2
+        let sign = if i % 2 == 0 { "" } else { "-" };
+        data.extend_from_slice(format!("{sign}{int_part}.{frac_part:03}e{exp:+}\n").as_bytes());
+    }
+
+    let file_path = setup_test_file(&data);
+    let output_file = NamedTempFile::new().unwrap();
+    let output_path = output_file.path().to_str().unwrap();
+
+    bencher.bench(|| {
+        black_box(run_util_function(
+            uumain,
+            &["-g", "-o", output_path, file_path.to_str().unwrap()],
+        ));
+    });
+}
+
 /// Benchmark reverse sorting with locale-aware data
 #[divan::bench(args = [500_000])]
 fn sort_reverse_locale(bencher: Bencher, num_lines: usize) {

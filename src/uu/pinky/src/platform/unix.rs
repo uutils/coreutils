@@ -177,20 +177,17 @@ impl Pinky {
         let mesg;
         let last_change;
 
-        match pts_path.metadata() {
-            #[allow(clippy::unnecessary_cast)]
-            Ok(meta) => {
-                mesg = if meta.mode() & S_IWGRP as u32 == 0 {
-                    '*'
-                } else {
-                    ' '
-                };
-                last_change = meta.atime();
-            }
-            _ => {
-                mesg = '?';
-                last_change = 0;
-            }
+        #[allow(clippy::unnecessary_cast)]
+        if let Ok(meta) = pts_path.metadata() {
+            mesg = if (meta.mode() & (S_IWGRP as u32)) == 0 {
+                '*'
+            } else {
+                ' '
+            };
+            last_change = meta.atime();
+        } else {
+            mesg = '?';
+            last_change = 0;
         }
 
         print!("{1:<8.0$}", utmpx::UT_NAMESIZE, ut.user());

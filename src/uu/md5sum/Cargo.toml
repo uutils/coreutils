@@ -1,0 +1,40 @@
+[package]
+name = "uu_md5sum"
+description = "md5sum ~ (uutils) Print or check the MD5 checksums"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/md5sum"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/md5sum.rs"
+
+[dependencies]
+clap = { workspace = true }
+uu_checksum_common = { workspace = true }
+uucore = { workspace = true, features = [
+  "checksum",
+  "encoding",
+  "sum",
+  "hardware",
+] }
+fluent = { workspace = true }
+
+[dev-dependencies]
+uucore = { workspace = true, features = ["benchmark"] }
+
+[[bin]]
+name = "md5sum"
+path = "src/main.rs"
+
+# [[bench]]
+# name = "b2sum_bench"
+# harness = false

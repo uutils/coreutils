@@ -125,14 +125,12 @@ fn paste(
             output.clear();
 
             loop {
-                match input_source.read_until(line_ending_byte, &mut output)? {
-                    0 => break,
-                    _ => {
-                        remove_trailing_line_ending_byte(line_ending_byte, &mut output);
-
-                        delimiter_state.write_delimiter(&mut output);
-                    }
+                if input_source.read_until(line_ending_byte, &mut output)? == 0 {
+                    break;
                 }
+                remove_trailing_line_ending_byte(line_ending_byte, &mut output);
+
+                delimiter_state.write_delimiter(&mut output);
             }
 
             delimiter_state.remove_trailing_delimiter(&mut output);

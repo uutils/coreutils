@@ -568,21 +568,20 @@ impl<'a> Pager<'a> {
         if self.pattern.is_none() {
             return Ok(());
         }
-        match self.search_pattern_in_file() {
-            Some(line) => self.upper_mark = line,
-            None => {
-                self.pattern = None;
-                write!(
-                    self.stdout,
-                    "\r{}{} ({}){}",
-                    Attribute::Reverse,
-                    translate!("more-error-pattern-not-found"),
-                    translate!("more-press-return"),
-                    Attribute::Reset,
-                )?;
-                self.stdout.flush()?;
-                self.wait_for_enter_key()?;
-            }
+        if let Some(line) = self.search_pattern_in_file() {
+            self.upper_mark = line;
+        } else {
+            self.pattern = None;
+            write!(
+                self.stdout,
+                "\r{}{} ({}){}",
+                Attribute::Reverse,
+                translate!("more-error-pattern-not-found"),
+                translate!("more-press-return"),
+                Attribute::Reset,
+            )?;
+            self.stdout.flush()?;
+            self.wait_for_enter_key()?;
         }
         Ok(())
     }
@@ -837,8 +836,11 @@ impl<'a> Pager<'a> {
         // Determine progress information to display
         // - Show next file name when at EOF and there is a next file
         // - Otherwise show percentage of the file read (if available)
-        let progress_info = if self.eof_reached && self.next_file.is_some() {
-            format!(" (Next file: {})", self.next_file.unwrap())
+        let progress_info = if self.eof_reached {
+            self.next_file
+                .as_ref()
+                .map(|next_file| format!(" (Next file: {next_file})"))
+                .unwrap_or_default()
         } else if let Some(file_size) = self.file_size {
             // For files, show percentage or END
             let position = self

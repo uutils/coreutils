@@ -7,7 +7,7 @@
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::PossibleValue};
 use glob::Pattern;
-use std::collections::HashSet;
+use rustc_hash::FxHashSet as HashSet;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, DirEntry, File, Metadata};
@@ -25,7 +25,7 @@ use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::fsext::{MetadataTimeField, metadata_get_time};
 use uucore::line_ending::LineEnding;
-#[cfg(target_os = "linux")]
+#[cfg(all(unix, not(target_os = "redox")))]
 use uucore::safe_traversal::DirFd;
 use uucore::translate;
 
@@ -164,7 +164,7 @@ impl Stat {
     }
 
     /// Create a Stat using safe traversal methods with `DirFd` for the root directory
-    #[cfg(target_os = "linux")]
+    #[cfg(all(unix, not(target_os = "redox")))]
     fn new_from_dirfd(dir_fd: &DirFd, full_path: &Path) -> std::io::Result<Self> {
         // Get metadata for the directory itself using fstat
         let safe_metadata = dir_fd.metadata()?;
@@ -293,9 +293,9 @@ fn read_block_size(s: Option<&str>) -> UResult<u64> {
     }
 }
 
-#[cfg(target_os = "linux")]
-// For now, implement safe_du only on Linux
-// This is done for Ubuntu but should be extended to other platforms that support openat
+#[cfg(all(unix, not(target_os = "redox")))]
+// Implement safe_du on Unix (except Redox which lacks full stat support)
+// This is done for TOCTOU safety
 fn safe_du(
     path: &Path,
     options: &TraversalOptions,
@@ -303,6 +303,7 @@ fn safe_du(
     seen_inodes: &mut HashSet<FileInfo>,
     print_tx: &mpsc::Sender<UResult<StatPrintInfo>>,
     parent_fd: Option<&DirFd>,
+    initial_stat: Option<std::io::Result<Stat>>,
 ) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
     // Get initial stat for this path - use DirFd if available to avoid path length issues
     let mut my_stat = if let Some(parent_fd) = parent_fd {
@@ -354,7 +355,12 @@ fn safe_du(
         }
     } else {
         // This is the initial directory - try regular Stat::new first, then fallback to DirFd
-        match Stat::new(path, None, options) {
+        let initial_stat = match initial_stat {
+            Some(s) => s,
+            None => Stat::new(path, None, options),
+        };
+
+        match initial_stat {
             Ok(s) => s,
             Err(_e) => {
                 // Try using our new DirFd method for the root directory
@@ -439,7 +445,8 @@ fn safe_du(
         const S_IFMT: u32 = 0o170_000;
         const S_IFDIR: u32 = 0o040_000;
         const S_IFLNK: u32 = 0o120_000;
-        let is_symlink = (lstat.st_mode & S_IFMT) == S_IFLNK;
+        #[allow(clippy::unnecessary_cast)]
+        let is_symlink = (lstat.st_mode as u32 & S_IFMT) == S_IFLNK;
 
         // Handle symlinks with -L option
         // For safe traversal with -L, we skip symlinks to directories entirely
@@ -450,12 +457,14 @@ fn safe_du(
             continue;
         }
 
-        let is_dir = (lstat.st_mode & S_IFMT) == S_IFDIR;
+        #[allow(clippy::unnecessary_cast)]
+        let is_dir = (lstat.st_mode as u32 & S_IFMT) == S_IFDIR;
         let entry_stat = lstat;
 
+        #[allow(clippy::unnecessary_cast)]
         let file_info = (entry_stat.st_ino != 0).then_some(FileInfo {
             file_id: entry_stat.st_ino as u128,
-            dev_id: entry_stat.st_dev,
+            dev_id: entry_stat.st_dev as u64,
         });
 
         // For safe traversal, we need to handle stats differently
@@ -465,6 +474,7 @@ fn safe_du(
             Stat {
                 path: entry_path.clone(),
                 size: 0,
+                #[allow(clippy::unnecessary_cast)]
                 blocks: entry_stat.st_blocks as u64,
                 inodes: 1,
                 inode: file_info,
@@ -476,7 +486,9 @@ fn safe_du(
             // For files
             Stat {
                 path: entry_path.clone(),
+                #[allow(clippy::unnecessary_cast)]
                 size: entry_stat.st_size as u64,
+                #[allow(clippy::unnecessary_cast)]
                 blocks: entry_stat.st_blocks as u64,
                 inodes: 1,
                 inode: file_info,
@@ -501,10 +513,7 @@ fn safe_du(
 
         // Handle inodes
         if let Some(inode) = this_stat.inode {
-            if seen_inodes.contains(&inode) && (!options.count_links || !options.all) {
-                if options.count_links && !options.all {
-                    my_stat.inodes += 1;
-                }
+            if seen_inodes.contains(&inode) && !options.count_links {
                 continue;
             }
             seen_inodes.insert(inode);
@@ -527,6 +536,7 @@ fn safe_du(
                 seen_inodes,
                 print_tx,
                 Some(&dir_fd),
+                None,
             )?;
 
             if !options.separate_dirs {
@@ -568,7 +578,7 @@ fn du_regular(
     ancestors: Option<&mut HashSet<FileInfo>>,
     symlink_depth: Option<usize>,
 ) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
-    let mut default_ancestors = HashSet::new();
+    let mut default_ancestors = HashSet::default();
     let ancestors = ancestors.unwrap_or(&mut default_ancestors);
     let symlink_depth = symlink_depth.unwrap_or(0);
     // Maximum symlink depth to prevent infinite loops
@@ -660,13 +670,7 @@ fn du_regular(
 
                             if let Some(inode) = this_stat.inode {
                                 // Check if the inode has been seen before and if we should skip it
-                                if seen_inodes.contains(&inode)
-                                    && (!options.count_links || !options.all)
-                                {
-                                    // If `count_links` is enabled and `all` is not, increment the inode count
-                                    if options.count_links && !options.all {
-                                        my_stat.inodes += 1;
-                                    }
+                                if seen_inodes.contains(&inode) && !options.count_links {
                                     // Skip further processing for this inode
                                     continue;
                                 }
@@ -991,7 +995,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             files.collect()
         } else {
             // Deduplicate while preserving order
-            let mut seen = HashSet::new();
+            let mut seen = HashSet::default();
             files
                 .filter(|path| seen.insert(path.clone()))
                 .collect::<Vec<_>>()
@@ -1083,6 +1087,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (print_tx, rx) = mpsc::channel::<UResult<StatPrintInfo>>();
     let printing_thread = thread::spawn(move || stat_printer.print_stats(&rx));
 
+    // Check existence of path provided in argument
+    let mut seen_inodes: HashSet<FileInfo> = HashSet::default();
+
     'loop_file: for path in files {
         // Skip if we don't want to ignore anything
         if !&traversal_options.excludes.is_empty() {
@@ -1101,26 +1108,27 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
         }
 
-        // Check existence of path provided in argument
-        let mut seen_inodes: HashSet<FileInfo> = HashSet::new();
-
         // Determine which traversal method to use
-        #[cfg(target_os = "linux")]
+        #[cfg(all(unix, not(target_os = "redox")))]
         let use_safe_traversal = traversal_options.dereference != Deref::All;
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(not(all(unix, not(target_os = "redox"))))]
         let use_safe_traversal = false;
 
-        if use_safe_traversal {
-            // Use safe traversal (Linux only, when not using -L)
-            #[cfg(target_os = "linux")]
-            {
-                // Pre-populate seen_inodes with the starting directory to detect cycles
-                if let Ok(stat) = Stat::new(&path, None, &traversal_options) {
-                    if let Some(inode) = stat.inode {
-                        seen_inodes.insert(inode);
-                    }
+        // Pre-populate seen_inodes with the starting directory to detect cycles
+        let stat = Stat::new(&path, None, &traversal_options);
+        if let Ok(stat) = stat.as_ref() {
+            if let Some(inode) = stat.inode {
+                if !traversal_options.count_links && seen_inodes.contains(&inode) {
+                    continue 'loop_file;
                 }
+                seen_inodes.insert(inode);
+            }
+        }
 
+        if use_safe_traversal {
+            // Use safe traversal (Unix except Redox, when not using -L)
+            #[cfg(all(unix, not(target_os = "redox")))]
+            {
                 match safe_du(
                     &path,
                     &traversal_options,
@@ -1128,6 +1136,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     &mut seen_inodes,
                     &print_tx,
                     None,
+                    Some(stat),
                 ) {
                     Ok(stat) => {
                         print_tx
@@ -1148,10 +1157,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
         } else {
             // Use regular traversal (non-Linux or when -L is used)
-            if let Ok(stat) = Stat::new(&path, None, &traversal_options) {
-                if let Some(inode) = stat.inode {
-                    seen_inodes.insert(inode);
-                }
+            if let Ok(stat) = stat {
                 let stat = du_regular(
                     stat,
                     &traversal_options,
@@ -1167,9 +1173,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     .send(Ok(StatPrintInfo { stat, depth: 0 }))
                     .map_err(|e| USimpleError::new(1, e.to_string()))?;
             } else {
-                #[cfg(target_os = "linux")]
+                #[cfg(unix)]
                 let error_msg = translate!("du-error-cannot-access", "path" => path.quote());
-                #[cfg(not(target_os = "linux"))]
+                #[cfg(not(unix))]
                 let error_msg =
                     translate!("du-error-cannot-access-no-such-file", "path" => path.quote());
 

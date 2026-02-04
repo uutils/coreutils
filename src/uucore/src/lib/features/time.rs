@@ -57,33 +57,32 @@ pub fn format_system_time<W: Write>(
     mode: FormatSystemTimeFallback,
 ) -> UResult<()> {
     let zoned: Result<Zoned, _> = time.try_into();
-    match zoned {
-        Ok(zoned) => format_zoned(out, zoned, fmt),
-        Err(_) => {
-            // Assume that if we cannot build a Zoned element, the timestamp is
-            // out of reasonable range, just print it then.
-            // TODO: The range allowed by jiff is different from what GNU accepts,
-            // but it still far enough in the future/past to be unlikely to matter:
-            //  jiff: Year between -9999 to 9999 (UTC) [-377705023201..=253402207200]
-            //  GNU: Year fits in signed 32 bits (timezone dependent)
-            let (mut secs, mut nsecs) = system_time_to_sec(time);
-            match mode {
-                FormatSystemTimeFallback::Integer => out.write_all(secs.to_string().as_bytes())?,
-                FormatSystemTimeFallback::IntegerError => {
-                    let str = secs.to_string();
-                    show_error!("time '{str}' is out of range");
-                    out.write_all(str.as_bytes())?;
-                }
-                FormatSystemTimeFallback::Float => {
-                    if secs < 0 && nsecs != 0 {
-                        secs -= 1;
-                        nsecs = 1_000_000_000 - nsecs;
-                    }
-                    out.write_fmt(format_args!("{secs}.{nsecs:09}"))?;
-                }
+    if let Ok(zoned) = zoned {
+        format_zoned(out, zoned, fmt)
+    } else {
+        // Assume that if we cannot build a Zoned element, the timestamp is
+        // out of reasonable range, just print it then.
+        // TODO: The range allowed by jiff is different from what GNU accepts,
+        // but it still far enough in the future/past to be unlikely to matter:
+        //  jiff: Year between -9999 to 9999 (UTC) [-377705023201..=253402207200]
+        //  GNU: Year fits in signed 32 bits (timezone dependent)
+        let (mut secs, mut nsecs) = system_time_to_sec(time);
+        match mode {
+            FormatSystemTimeFallback::Integer => out.write_all(secs.to_string().as_bytes())?,
+            FormatSystemTimeFallback::IntegerError => {
+                let str = secs.to_string();
+                show_error!("time '{str}' is out of range");
+                out.write_all(str.as_bytes())?;
             }
-            Ok(())
+            FormatSystemTimeFallback::Float => {
+                if secs < 0 && nsecs != 0 {
+                    secs -= 1;
+                    nsecs = 1_000_000_000 - nsecs;
+                }
+                out.write_fmt(format_args!("{secs}.{nsecs:09}"))?;
+            }
         }
+        Ok(())
     }
 }
 

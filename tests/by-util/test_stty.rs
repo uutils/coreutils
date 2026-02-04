@@ -1237,7 +1237,7 @@ fn test_saved_state_invalid_formats() {
     let (path, _controller, _replica) = pty_path();
     let (_at, ts) = at_and_ts!();
 
-    let num_cc = nix::libc::NCCS;
+    let num_cc = libc::NCCS;
 
     // Build test strings with platform-specific counts
     let cc_zeros = vec!["0"; num_cc].join(":");
@@ -1540,7 +1540,7 @@ fn test_saved_state_with_control_chars() {
     let (_at, ts) = at_and_ts!();
 
     // Build a valid saved state with platform-specific number of control characters
-    let num_cc = nix::libc::NCCS;
+    let num_cc = libc::NCCS;
     let cc_values: Vec<String> = (1..=num_cc).map(|_| format!("{:x}", 0)).collect();
     let saved_state = format!("500:5:4bf:8a3b:{}", cc_values.join(":"));
 
@@ -1555,6 +1555,141 @@ fn test_saved_state_with_control_chars() {
         .stdout_is(exp_result.stdout_str())
         .stderr_is(exp_result.stderr_str())
         .code_is(exp_result.code());
+}
+
+// Per POSIX, stty uses stdin for TTY operations. When stdin is a pipe, it should fail.
+#[test]
+#[cfg(unix)]
+fn test_stdin_not_tty_fails() {
+    // ENOTTY error message varies by platform/libc:
+    // - glibc: "Inappropriate ioctl for device"
+    // - musl: "Not a tty"
+    // - Android: "Not a typewriter"
+    #[cfg(target_os = "android")]
+    let expected_error = "standard input: Not a typewriter";
+    #[cfg(all(not(target_os = "android"), target_env = "musl"))]
+    let expected_error = "standard input: Not a tty";
+    #[cfg(all(not(target_os = "android"), not(target_env = "musl")))]
+    let expected_error = "standard input: Inappropriate ioctl for device";
+
+    new_ucmd!()
+        .pipe_in("")
+        .fails()
+        .stderr_contains(expected_error);
+}
+
+// Test that stty uses stdin for TTY operations per POSIX.
+// Verifies: output redirection (#8012), save/restore pattern (#8608), stdin redirection (#8848)
+#[test]
+#[cfg(unix)]
+fn test_stty_uses_stdin() {
+    use std::fs::File;
+    use std::process::Stdio;
+
+    let (path, _controller, _replica) = pty_path();
+
+    // Output redirection: stty > file (stdin is still TTY)
+    let stdin = File::open(&path).unwrap();
+    new_ucmd!()
+        .set_stdin(stdin)
+        .set_stdout(Stdio::piped())
+        .succeeds()
+        .stdout_contains("speed");
+
+    // Save/restore: stty $(stty -g) pattern
+    let stdin = File::open(&path).unwrap();
+    let saved = new_ucmd!()
+        .arg("-g")
+        .set_stdin(stdin)
+        .set_stdout(Stdio::piped())
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .to_string();
+    assert!(saved.contains(':'), "Expected colon-separated saved state");
+
+    let stdin = File::open(&path).unwrap();
+    new_ucmd!().arg(&saved).set_stdin(stdin).succeeds();
+
+    // Stdin redirection: stty rows 30 cols 100 < /dev/pts/N
+    let stdin = File::open(&path).unwrap();
+    new_ucmd!()
+        .args(&["rows", "30", "cols", "100"])
+        .set_stdin(stdin)
+        .succeeds();
+
+    let stdin = File::open(&path).unwrap();
+    new_ucmd!()
+        .arg("--all")
+        .set_stdin(stdin)
+        .succeeds()
+        .stdout_contains("rows 30")
+        .stdout_contains("columns 100");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_ispeed_ospeed_valid_speeds() {
+    let (path, _controller, _replica) = pty_path();
+    let (_at, ts) = at_and_ts!();
+
+    // Test various valid baud rates for both ispeed and ospeed
+    let test_cases = [
+        ("ispeed", "50"),
+        ("ispeed", "9600"),
+        ("ispeed", "19200"),
+        ("ospeed", "1200"),
+        ("ospeed", "9600"),
+        ("ospeed", "38400"),
+    ];
+
+    for (arg, speed) in test_cases {
+        let result = ts.ucmd().args(&["--file", &path, arg, speed]).run();
+        let exp_result = unwrap_or_return!(expected_result(&ts, &["--file", &path, arg, speed]));
+        let normalized_stderr = normalize_stderr(result.stderr_str());
+
+        result
+            .stdout_is(exp_result.stdout_str())
+            .code_is(exp_result.code());
+        assert_eq!(normalized_stderr, exp_result.stderr_str());
+    }
+}
+
+#[test]
+#[cfg(all(
+    unix,
+    not(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))
+))]
+#[ignore = "Issue: #9547"]
+fn test_ispeed_ospeed_invalid_speeds() {
+    let (path, _controller, _replica) = pty_path();
+    let (_at, ts) = at_and_ts!();
+
+    // Test invalid speed values (non-standard baud rates)
+    let test_cases = [
+        ("ispeed", "12345"),
+        ("ospeed", "99999"),
+        ("ispeed", "abc"),
+        ("ospeed", "xyz"),
+    ];
+
+    for (arg, speed) in test_cases {
+        let result = ts.ucmd().args(&["--file", &path, arg, speed]).run();
+        let exp_result = unwrap_or_return!(expected_result(&ts, &["--file", &path, arg, speed]));
+        let normalized_stderr = normalize_stderr(result.stderr_str());
+
+        result
+            .stdout_is(exp_result.stdout_str())
+            .code_is(exp_result.code());
+        assert_eq!(normalized_stderr, exp_result.stderr_str());
+    }
 }
 
 #[test]

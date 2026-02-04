@@ -4,6 +4,8 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) unwritable
+use std::fmt::Write;
+
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 
@@ -327,7 +329,7 @@ fn test_echo_multi() {
         .stdout_str()
         .split('\n')
         .filter(|x| !x.is_empty())
-        .map(std::convert::Into::into)
+        .map(Into::into)
         .collect();
     result_seq.sort_unstable();
     assert_eq!(result_seq, ["a", "b", "c"], "Output is not a permutation");
@@ -342,7 +344,7 @@ fn test_echo_postfix() {
         .stdout_str()
         .split('\n')
         .filter(|x| !x.is_empty())
-        .map(std::convert::Into::into)
+        .map(Into::into)
         .collect();
     result_seq.sort_unstable();
     assert_eq!(result_seq, ["a", "b", "c"], "Output is not a permutation");
@@ -846,4 +848,267 @@ fn test_range_repeat_empty_minus_one() {
         .fails()
         .no_stdout()
         .stderr_contains("invalid value '5-3' for '--input-range <LO-HI>': start exceeds end\n");
+}
+
+// This test fails if we forget to flush the `BufWriter`.
+#[test]
+#[cfg(target_os = "linux")]
+fn write_errors_are_reported() {
+    new_ucmd!()
+        .arg("-i1-10")
+        .arg("-o/dev/full")
+        .fails()
+        .no_stdout()
+        .stderr_is("shuf: write failed: No space left on device\n");
+}
+
+// On 32-bit platforms, if we cast carelessly, this will give no output.
+#[test]
+fn test_head_count_does_not_overflow_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.append("input.txt", "hello\n");
+
+    ucmd.arg(format!("-n{}", u64::from(u32::MAX) + 1))
+        .arg("input.txt")
+        .succeeds()
+        .stdout_is("hello\n")
+        .no_stderr();
+}
+
+#[test]
+fn test_head_count_does_not_overflow_args() {
+    new_ucmd!()
+        .arg(format!("-n{}", u64::from(u32::MAX) + 1))
+        .arg("-e")
+        .arg("goodbye")
+        .succeeds()
+        .stdout_is("goodbye\n")
+        .no_stderr();
+}
+
+#[test]
+fn test_head_count_does_not_overflow_range() {
+    new_ucmd!()
+        .arg(format!("-n{}", u64::from(u32::MAX) + 1))
+        .arg("-i1-1")
+        .succeeds()
+        .stdout_is("1\n")
+        .no_stderr();
+}
+
+// Test reproducibility and compatibility of --random-source.
+// These hard-coded results match those of GNU shuf. They should not be changed.
+
+#[test]
+fn test_gnu_compat_range_repeat() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.append_bytes(
+        "random_bytes.bin",
+        b"\xfb\x83\x8f\x21\x9b\x3c\x2d\xc5\x73\xa5\x58\x6c\x54\x2f\x59\xf8",
+    );
+
+    ucmd.arg("--random-source=random_bytes.bin")
+        .arg("-r")
+        .arg("-i1-99")
+        .fails_with_code(1)
+        .stderr_is("shuf: end of random source\n")
+        .stdout_is("38\n30\n10\n26\n23\n61\n46\n99\n75\n43\n10\n89\n10\n44\n24\n59\n22\n51\n");
+}
+
+#[test]
+fn test_gnu_compat_args_no_repeat() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.append_bytes(
+        "random_bytes.bin",
+        b"\xd1\xfd\xb9\x9a\xf5\x81\x71\x42\xf9\x7a\x59\x79\xd4\x9c\x8c\x7d",
+    );
+
+    ucmd.arg("--random-source=random_bytes.bin")
+        .arg("-e")
+        .args(&["1", "2", "3", "4", "5", "6", "7"][..])
+        .succeeds()
+        .no_stderr()
+        .stdout_is("7\n1\n2\n5\n3\n4\n6\n");
+}
+
+#[test]
+fn test_gnu_compat_from_stdin() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.append_bytes(
+        "random_bytes.bin",
+        b"\xd1\xfd\xb9\x9a\xf5\x81\x71\x42\xf9\x7a\x59\x79\xd4\x9c\x8c\x7d",
+    );
+
+    at.append("input.txt", "1\n2\n3\n4\n5\n6\n7\n");
+
+    ucmd.arg("--random-source=random_bytes.bin")
+        .set_stdin(at.open("input.txt"))
+        .succeeds()
+        .no_stderr()
+        .stdout_is("7\n1\n2\n5\n3\n4\n6\n");
+}
+
+#[test]
+fn test_gnu_compat_from_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.append_bytes(
+        "random_bytes.bin",
+        b"\xd1\xfd\xb9\x9a\xf5\x81\x71\x42\xf9\x7a\x59\x79\xd4\x9c\x8c\x7d",
+    );
+
+    at.append("input.txt", "1\n2\n3\n4\n5\n6\n7\n");
+
+    ucmd.arg("--random-source=random_bytes.bin")
+        .arg("input.txt")
+        .succeeds()
+        .no_stderr()
+        .stdout_is("7\n1\n2\n5\n3\n4\n6\n");
+}
+
+#[test]
+fn test_gnu_compat_limited_from_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.append_bytes(
+        "random_bytes.bin",
+        b"\xd1\xfd\xb9\x9a\xf5\x81\x71\x42\xf9\x7a\x59\x79\xd4\x9c\x8c\x7d",
+    );
+
+    at.append("input.txt", "1\n2\n3\n4\n5\n6\n7\n");
+
+    ucmd.arg("--random-source=random_bytes.bin")
+        .arg("-n5")
+        .arg("input.txt")
+        .succeeds()
+        .no_stderr()
+        .stdout_is("7\n1\n2\n5\n3\n");
+}
+
+// This specific case causes GNU to give different results than other modes.
+#[ignore = "disabled until fixed"]
+#[test]
+fn test_gnu_compat_limited_from_stdin() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.append_bytes(
+        "random_bytes.bin",
+        b"\xd1\xfd\xb9\x9a\xf5\x81\x71\x42\xf9\x7a\x59\x79\xd4\x9c\x8c\x7d",
+    );
+
+    at.append("input.txt", "1\n2\n3\n4\n5\n6\n7\n");
+
+    ucmd.arg("--random-source=random_bytes.bin")
+        .arg("-n7")
+        .set_stdin(at.open("input.txt"))
+        .succeeds()
+        .no_stderr()
+        .stdout_is("6\n5\n1\n3\n2\n7\n4\n");
+}
+
+#[test]
+fn test_gnu_compat_range_no_repeat() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.append_bytes(
+        "random_bytes.bin",
+        b"\xd1\xfd\xb9\x9a\xf5\x81\x71\x42\xf9\x7a\x59\x79\xd4\x9c\x8c\x7d",
+    );
+
+    ucmd.arg("--random-source=random_bytes.bin")
+        .arg("-i1-10")
+        .succeeds()
+        .no_stderr()
+        .stdout_is("10\n2\n8\n7\n3\n9\n6\n5\n1\n4\n");
+}
+
+// Test reproducibility of --random-seed.
+// These results are arbitrary but they should not change unless we choose to break compatibility.
+
+#[test]
+fn test_seed_args_repeat() {
+    new_ucmd!()
+        .arg("--random-seed=🌱")
+        .arg("-e")
+        .arg("-r")
+        .arg("-n10")
+        .args(&["foo", "bar", "baz", "qux"])
+        .succeeds()
+        .no_stderr()
+        .stdout_is("qux\nbar\nbaz\nfoo\nbaz\nqux\nqux\nfoo\nqux\nqux\n");
+}
+
+#[test]
+fn test_seed_args_no_repeat() {
+    new_ucmd!()
+        .arg("--random-seed=🌱")
+        .arg("-e")
+        .args(&["foo", "bar", "baz", "qux"])
+        .succeeds()
+        .no_stderr()
+        .stdout_is("qux\nbaz\nfoo\nbar\n");
+}
+
+#[test]
+fn test_seed_range_repeat() {
+    new_ucmd!()
+        .arg("--random-seed=🦀")
+        .arg("-r")
+        .arg("-i1-99")
+        .arg("-n10")
+        .succeeds()
+        .no_stderr()
+        .stdout_is("60\n44\n38\n41\n63\n43\n31\n71\n46\n90\n");
+}
+
+#[test]
+fn test_seed_range_no_repeat() {
+    let expected = "8\n9\n1\n5\n2\n6\n4\n3\n10\n7\n";
+
+    new_ucmd!()
+        .arg("--random-seed=12345")
+        .arg("-i1-10")
+        .succeeds()
+        .no_stderr()
+        .stdout_is(expected);
+
+    // Piping from e.g. seq gives identical results.
+    new_ucmd!()
+        .arg("--random-seed=12345")
+        .pipe_in("1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n")
+        .succeeds()
+        .no_stderr()
+        .stdout_is(expected);
+}
+
+// Test a longer input to exercise some more code paths in the sparse representation.
+#[test]
+fn test_seed_long_range_no_repeat() {
+    let expected = "\
+        1\n3\n35\n37\n36\n45\n72\n17\n18\n40\n67\n74\n81\n77\n14\n90\n\
+        7\n12\n80\n54\n23\n61\n29\n41\n15\n56\n6\n32\n82\n76\n11\n2\n100\n\
+        50\n60\n97\n73\n79\n91\n89\n85\n86\n66\n70\n22\n55\n8\n83\n39\n27\n";
+
+    new_ucmd!()
+        .arg("--random-seed=67890")
+        .arg("-i1-100")
+        .arg("-n50")
+        .succeeds()
+        .no_stderr()
+        .stdout_is(expected);
+
+    let mut test_input = String::new();
+    for n in 1..=100 {
+        writeln!(&mut test_input, "{n}").unwrap();
+    }
+
+    new_ucmd!()
+        .arg("--random-seed=67890")
+        .pipe_in(test_input.as_bytes())
+        .arg("-n50")
+        .succeeds()
+        .no_stderr()
+        .stdout_is(expected);
+}
+
+#[test]
+fn test_empty_range_no_repeat() {
+    new_ucmd!().arg("-i4-3").succeeds().no_stderr().no_stdout();
 }

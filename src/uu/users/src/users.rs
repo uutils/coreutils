@@ -6,6 +6,7 @@
 // spell-checker:ignore (paths) wtmp
 
 use std::ffi::OsString;
+use std::io::{Write, stdout};
 use std::path::Path;
 
 use clap::builder::ValueParser;
@@ -73,7 +74,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if !users.is_empty() {
         users.sort();
-        println!("{}", users.join(" "));
+        writeln!(stdout().lock(), "{}", users.join(" "))?;
     }
 
     Ok(())

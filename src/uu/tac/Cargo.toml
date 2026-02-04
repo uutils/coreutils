@@ -24,9 +24,11 @@ memchr = { workspace = true }
 memmap2 = { workspace = true }
 regex = { workspace = true }
 clap = { workspace = true }
-uucore = { workspace = true }
+libc = { workspace = true }
+uucore = { workspace = true, features = ["signals"] }
 thiserror = { workspace = true }
 fluent = { workspace = true }
+tempfile = { workspace = true }
 
 [[bin]]
 name = "tac"

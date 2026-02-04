@@ -21,6 +21,7 @@ path = "src/pr.rs"
 clap = { workspace = true }
 uucore = { workspace = true, features = ["entries", "time"] }
 itertools = { workspace = true }
+memchr = { workspace = true }
 regex = { workspace = true }
 thiserror = { workspace = true }
 fluent = { workspace = true }

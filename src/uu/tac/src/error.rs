@@ -15,9 +15,9 @@ pub enum TacError {
     /// A regular expression given by the user is invalid.
     #[error("{}", translate!("tac-error-invalid-regex", "error" => .0))]
     InvalidRegex(regex::Error),
-    /// An argument to tac is invalid.
-    #[error("{}", translate!("tac-error-invalid-argument", "argument" => .0.maybe_quote()))]
-    InvalidArgument(OsString),
+    /// The argument to tac is a directory.
+    #[error("{}", translate!("tac-error-invalid-directory-argument", "argument" => .0.maybe_quote()))]
+    InvalidDirectoryArgument(OsString),
     /// The specified file is not found on the filesystem.
     #[error("{}", translate!("tac-error-file-not-found", "filename" => .0.quote()))]
     FileNotFound(OsString),

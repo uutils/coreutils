@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore udev pcent iuse itotal iused ipcent
+// spell-checker:ignore udev pcent iuse itotal iused ipcent binfmt
 #![allow(
     clippy::similar_names,
     clippy::cast_possible_truncation,
@@ -15,6 +15,8 @@ use std::collections::HashSet;
 #[cfg(not(any(target_os = "freebsd", target_os = "windows")))]
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
+#[cfg(target_os = "linux")]
+use uutests::util::TestScenario;
 
 #[test]
 fn test_invalid_arg() {
@@ -1045,4 +1047,108 @@ fn test_nonexistent_file() {
         .fails()
         .stderr_is("df: does-not-exist: No such file or directory\n")
         .stdout_is("File\n.\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_df_all_shows_binfmt_misc() {
+    // Check if binfmt_misc is mounted
+    let is_mounted = std::fs::read_to_string("/proc/self/mountinfo")
+        .map(|content| content.lines().any(|line| line.contains("binfmt_misc")))
+        .unwrap_or(false);
+
+    if is_mounted {
+        let output = new_ucmd!()
+            .args(&["--all", "--output=fstype,target"])
+            .succeeds()
+            .stdout_str_lossy();
+
+        assert!(
+            output.contains("binfmt_misc"),
+            "Expected binfmt_misc filesystem to appear in df --all output when it's mounted"
+        );
+    }
+    // If binfmt_misc is not mounted, skip the test silently
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_df_hides_binfmt_misc_by_default() {
+    // Check if binfmt_misc is mounted
+    let is_mounted = std::fs::read_to_string("/proc/self/mountinfo")
+        .map(|content| content.lines().any(|line| line.contains("binfmt_misc")))
+        .unwrap_or(false);
+
+    if is_mounted {
+        let output = new_ucmd!()
+            .args(&["--output=fstype,target"])
+            .succeeds()
+            .stdout_str_lossy();
+
+        // binfmt_misc should NOT appear in the output without --all
+        assert!(
+            !output.contains("binfmt_misc"),
+            "Expected binfmt_misc filesystem to be hidden in df output without --all"
+        );
+    }
+    // If binfmt_misc is not mounted, skip the test silently
+}
+
+/// Run df inside a mount namespace where /proc is masked with tmpfs.
+/// Returns (success, stdout, stderr).
+#[cfg(target_os = "linux")]
+fn run_df_with_masked_proc(args: &str) -> Option<(bool, String, String)> {
+    use std::process::Command;
+
+    // Check if user namespaces are available
+    if !Command::new("unshare")
+        .args(["-rm", "true"])
+        .status()
+        .is_ok_and(|s| s.success())
+    {
+        return None;
+    }
+
+    let df_path = TestScenario::new("df").bin_path.clone();
+    let output = Command::new("unshare")
+        .args(["-rm", "sh", "-c"])
+        .arg(format!(
+            "mount -t tmpfs tmpfs /proc && {} df {args}",
+            df_path.display()
+        ))
+        .output()
+        .ok()?;
+
+    Some((
+        output.status.success(),
+        String::from_utf8_lossy(&output.stdout).to_string(),
+        String::from_utf8_lossy(&output.stderr).to_string(),
+    ))
+}
+
+/// Test df fallback when /proc is masked - should work with path, fail without or with filters.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_df_masked_proc_fallback() {
+    if let Some((ok, stdout, stderr)) = run_df_with_masked_proc(".") {
+        assert!(ok, "df . should succeed: {stderr}");
+        assert!(stderr.contains("cannot read table of mounted file systems"));
+        assert!(stdout.contains("Filesystem"));
+    }
+
+    if let Some((ok, _, _)) = run_df_with_masked_proc("") {
+        assert!(!ok, "df without args should fail when /proc is masked");
+    }
+
+    for args in ["-a .", "-l .", "-t ext4 .", "-x tmpfs ."] {
+        if let Some((ok, _, _)) = run_df_with_masked_proc(args) {
+            assert!(!ok, "df {args} should fail when /proc is masked");
+        }
+    }
+
+    for args in ["-i .", "-T .", "--total ."] {
+        if let Some((ok, _, stderr)) = run_df_with_masked_proc(args) {
+            assert!(ok, "df {args} should succeed: {stderr}");
+        }
+    }
 }

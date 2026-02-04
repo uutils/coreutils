@@ -788,6 +788,153 @@ fn test_mkdir_environment_expansion() {
     }
 }
 
+/// Test that mkdir -m creates directories with the exact requested mode,
+/// bypassing umask. This verifies the fix for issue #10022.
+///
+/// Previously, mkdir would create the directory with umask-based permissions
+/// and then chmod afterward, leaving a brief window with wrong permissions.
+/// Now it temporarily sets umask to 0 and creates with the exact mode.
+#[cfg(not(windows))]
+#[test]
+fn test_mkdir_mode_ignores_umask() {
+    // Test that -m 0700 with restrictive umask still creates 0700
+    {
+        let (at, mut ucmd) = at_and_ucmd!();
+        let restrictive_umask: mode_t = 0o077; // Would normally block group/other
+
+        ucmd.arg("-m")
+            .arg("0700")
+            .arg("test_700")
+            .umask(restrictive_umask)
+            .succeeds();
+
+        let perms = at.metadata("test_700").permissions().mode() as mode_t;
+        assert_eq!(perms, 0o40700, "Expected 0700, got {:o}", perms & 0o777);
+    }
+
+    // Test that -m 0777 is honored even with umask 022
+    // This is the key test: without the fix, 0777 & ~022 = 0755
+    {
+        let (at, mut ucmd) = at_and_ucmd!();
+        let common_umask: mode_t = 0o022;
+
+        ucmd.arg("-m")
+            .arg("0777")
+            .arg("test_777")
+            .umask(common_umask)
+            .succeeds();
+
+        let perms = at.metadata("test_777").permissions().mode() as mode_t;
+        assert_eq!(
+            perms,
+            0o40777,
+            "Expected 0777 (umask should be ignored with -m), got {:o}",
+            perms & 0o777
+        );
+    }
+
+    // Test that -m 0755 with umask 077 still creates 0755
+    {
+        let (at, mut ucmd) = at_and_ucmd!();
+        let very_restrictive_umask: mode_t = 0o077;
+
+        ucmd.arg("-m")
+            .arg("0755")
+            .arg("test_755")
+            .umask(very_restrictive_umask)
+            .succeeds();
+
+        let perms = at.metadata("test_755").permissions().mode() as mode_t;
+        assert_eq!(perms, 0o40755, "Expected 0755, got {:o}", perms & 0o777);
+    }
+
+    // Test symbolic mode also ignores umask
+    {
+        let (at, mut ucmd) = at_and_ucmd!();
+        let umask: mode_t = 0o022;
+
+        ucmd.arg("-m")
+            .arg("a=rwx")
+            .arg("test_symbolic")
+            .umask(umask)
+            .succeeds();
+
+        let perms = at.metadata("test_symbolic").permissions().mode() as mode_t;
+        assert_eq!(perms, 0o40777, "Expected 0777, got {:o}", perms & 0o777);
+    }
+}
+
+/// Test that mkdir -p -m applies mode correctly:
+/// - Parent directories use umask-derived permissions (with u+wx)
+/// - Final directory uses the exact requested mode (ignoring umask)
+#[cfg(not(windows))]
+#[test]
+fn test_mkdir_parent_mode_with_explicit_mode() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let umask: mode_t = 0o022;
+
+    ucmd.arg("-p")
+        .arg("-m")
+        .arg("0700")
+        .arg("parent/child/target")
+        .umask(umask)
+        .succeeds();
+
+    // Parent directories created by -p use umask-derived mode with u+wx
+    let parent_perms = at.metadata("parent").permissions().mode() as mode_t;
+    let expected_parent = ((!umask & 0o777) | 0o300) + 0o40000;
+    assert_eq!(
+        parent_perms,
+        expected_parent,
+        "Parent should have umask-derived mode, got {:o}",
+        parent_perms & 0o777
+    );
+
+    let child_perms = at.metadata("parent/child").permissions().mode() as mode_t;
+    assert_eq!(
+        child_perms,
+        expected_parent,
+        "Intermediate dir should have umask-derived mode, got {:o}",
+        child_perms & 0o777
+    );
+
+    // Final directory should have exactly the requested mode
+    let target_perms = at.metadata("parent/child/target").permissions().mode() as mode_t;
+    assert_eq!(
+        target_perms,
+        0o40700,
+        "Target should have exact requested mode 0700, got {:o}",
+        target_perms & 0o777
+    );
+}
+
+/// Test that nested directories inherit the setgid bit with mkdir -p.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mkdir_parent_inherits_setgid() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("parent");
+    at.set_mode("parent", 0o2755);
+
+    ucmd.arg("-p")
+        .arg("parent/child/grandchild")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    // All descendants should inherit the setgid bit (0o2000)
+    assert_eq!(at.metadata("parent").permissions().mode() & 0o2000, 0o2000);
+    assert_eq!(
+        at.metadata("parent/child").permissions().mode() & 0o2000,
+        0o2000
+    );
+    assert_eq!(
+        at.metadata("parent/child/grandchild").permissions().mode() & 0o2000,
+        0o2000
+    );
+}
+
 #[test]
 fn test_mkdir_concurrent_creation() {
     // Test concurrent mkdir -p operations: 10 iterations, 8 threads, 40 levels nesting

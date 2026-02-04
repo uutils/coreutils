@@ -11,7 +11,7 @@ use std::fs;
 use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 #[cfg(not(windows))]
-use std::process::Command;
+use std::process;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::thread::sleep;
 use uucore::process::{getegid, geteuid};
@@ -777,7 +777,7 @@ fn test_install_and_strip() {
         .succeeds()
         .no_stderr();
 
-    let output = Command::new(SYMBOL_DUMP_PROGRAM)
+    let output = process::Command::new(SYMBOL_DUMP_PROGRAM)
         .arg("-t")
         .arg(at.plus(STRIP_TARGET_FILE))
         .output()
@@ -804,7 +804,7 @@ fn test_install_and_strip_with_program() {
         .succeeds()
         .no_stderr();
 
-    let output = Command::new(SYMBOL_DUMP_PROGRAM)
+    let output = process::Command::new(SYMBOL_DUMP_PROGRAM)
         .arg("-t")
         .arg(at.plus(STRIP_TARGET_FILE))
         .output()
@@ -1937,7 +1937,7 @@ fn test_install_compare_group_ownership() {
 
     at.write(source, "test content");
 
-    let user_group = std::process::Command::new("id")
+    let user_group = process::Command::new("id")
         .arg("-nrg")
         .output()
         .map_or_else(
@@ -2498,7 +2498,7 @@ fn test_install_non_utf8_paths() {
     let source_filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
     let dest_dir = "target_dir";
 
-    std::fs::write(at.plus(&source_filename), b"test content").unwrap();
+    fs::write(at.plus(&source_filename), b"test content").unwrap();
     at.mkdir(dest_dir);
 
     ucmd.arg(&source_filename).arg(dest_dir).succeeds();
@@ -2512,4 +2512,58 @@ fn test_install_non_utf8_paths() {
     at.touch(source_file);
 
     ucmd.arg("-D").arg(source_file).arg(&target_path).succeeds();
+}
+
+#[test]
+fn test_install_unprivileged_option_u_skips_chown() {
+    // This test only makes sense when not running as root.
+    if geteuid() == 0 {
+        return;
+    }
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let src = "source_file";
+    let dst_fail = "target_fail";
+    let dst_ok = "target_ok";
+    at.touch(src);
+
+    // Without -U, attempting to chown to root should fail for an unprivileged user.
+    let res = scene.ucmd().args(&["--owner=root", src, dst_fail]).run();
+
+    res.failure();
+
+    // With -U, install should not require elevated privileges for owner/group changes,
+    // meaning it should succeed and leave ownership as the current user.
+    scene
+        .ucmd()
+        .args(&["-U", "--owner=root", src, dst_ok])
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(dst_ok));
+    assert_eq!(at.metadata(dst_ok).uid(), geteuid());
+}
+
+#[test]
+fn test_install_normal_file_replaces_symlink() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("source", "new content");
+    at.write("sensitive", "important data");
+
+    // Create symlink at destination
+    at.symlink_file("sensitive", "dest");
+
+    // Install should replace symlink with normal file (not follow it)
+    scene.ucmd().arg("source").arg("dest").succeeds();
+
+    // Verify dest is now a normal file, not a symlink
+    assert!(at.file_exists("dest"));
+    assert_eq!(at.read("dest"), "new content");
+
+    // Verify sensitive file was NOT modified
+    assert_eq!(at.read("sensitive"), "important data");
 }

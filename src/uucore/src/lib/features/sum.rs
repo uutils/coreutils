@@ -34,7 +34,7 @@ pub enum DigestOutput {
 }
 
 impl DigestOutput {
-    pub fn write_raw(&self, mut w: impl std::io::Write) -> io::Result<()> {
+    pub fn write_raw(&self, mut w: impl Write) -> io::Result<()> {
         match self {
             Self::Vec(buf) => w.write_all(buf),
             // For legacy outputs, print them in big endian
@@ -284,8 +284,8 @@ impl Digest for Bsd {
     }
 
     fn result(&mut self) -> DigestOutput {
-        let mut _out = [0; 2];
-        self.hash_finalize(&mut _out);
+        let mut out = [0; 2];
+        self.hash_finalize(&mut out);
         DigestOutput::U16(self.state)
     }
 
@@ -319,8 +319,8 @@ impl Digest for SysV {
     }
 
     fn result(&mut self) -> DigestOutput {
-        let mut _out = [0; 2];
-        self.hash_finalize(&mut _out);
+        let mut out = [0; 2];
+        self.hash_finalize(&mut out);
         DigestOutput::U16((self.state & (u16::MAX as u32)) as u16)
     }
 
@@ -468,13 +468,13 @@ impl<'a> DigestWriter<'a> {
 
 impl Write for DigestWriter<'_> {
     #[cfg(not(windows))]
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.digest.hash_update(buf);
         Ok(buf.len())
     }
 
     #[cfg(windows)]
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         if self.binary {
             self.digest.hash_update(buf);
             return Ok(buf.len());
@@ -524,7 +524,7 @@ impl Write for DigestWriter<'_> {
         Ok(n)
     }
 
-    fn flush(&mut self) -> std::io::Result<()> {
+    fn flush(&mut self) -> io::Result<()> {
         Ok(())
     }
 }

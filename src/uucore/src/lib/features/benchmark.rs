@@ -12,6 +12,8 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 
+use itertools::Itertools as _;
+
 /// Create a temporary file with test data
 pub fn create_test_file(data: &[u8], temp_dir: &Path) -> PathBuf {
     let file_path = temp_dir.join("test_data.txt");
@@ -20,7 +22,7 @@ pub fn create_test_file(data: &[u8], temp_dir: &Path) -> PathBuf {
     writer.write_all(data).unwrap();
     writer.flush().unwrap();
     // Ensure data is fully written to disk before returning
-    std::mem::drop(writer);
+    drop(writer);
     File::open(&file_path).unwrap().sync_all().unwrap();
     file_path
 }
@@ -32,8 +34,9 @@ where
     F: FnOnce(std::vec::IntoIter<std::ffi::OsString>) -> i32,
 {
     // Prepend a dummy program name as argv[0] since clap expects it
-    let mut os_args: Vec<std::ffi::OsString> = vec!["benchmark".into()];
-    os_args.extend(args.iter().map(|s| (*s).into()));
+    let os_args = std::iter::once("benchmark".into())
+        .chain(args.iter().map(Into::into))
+        .collect_vec();
     util_func(os_args.into_iter())
 }
 
@@ -170,7 +173,7 @@ pub mod text_data {
     pub fn generate_ascii_data_simple(num_lines: usize) -> Vec<u8> {
         let mut data = Vec::new();
         for i in 0..num_lines {
-            let line = format!("line_{:06}\n", (num_lines - i - 1));
+            let line = format!("line_{:06}\n", num_lines - i - 1);
             data.extend_from_slice(line.as_bytes());
         }
         data
@@ -286,6 +289,46 @@ pub mod text_data {
             .map(|n| n.to_string())
             .collect::<Vec<_>>()
             .join("\n")
+    }
+}
+
+/// Binary data generation utilities for benchmarking
+pub mod binary_data {
+    use std::fs::File;
+    use std::io::Write;
+    use std::path::Path;
+
+    /// Create a binary file filled with a repeated pattern
+    ///
+    /// Creates a file of the specified size (in MB) filled with the given byte pattern.
+    /// This is useful for benchmarking utilities that work with large binary files like dd, cp, etc.
+    pub fn create_file(path: &Path, size_mb: usize, pattern: u8) {
+        let buffer = vec![pattern; size_mb * 1024 * 1024];
+        let mut file = File::create(path).unwrap();
+        file.write_all(&buffer).unwrap();
+        file.sync_all().unwrap();
+    }
+}
+
+/// Filesystem utilities for benchmarking
+pub mod fs_utils {
+    use std::fs;
+    use std::path::Path;
+
+    /// Remove a file or directory if it exists
+    ///
+    /// This is a convenience function for cleaning up between benchmark iterations.
+    /// It handles both files and directories, and is a no-op if the path doesn't exist.
+    pub fn remove_path(path: &Path) {
+        if !path.exists() {
+            return;
+        }
+
+        if path.is_dir() {
+            fs::remove_dir_all(path).unwrap();
+        } else {
+            fs::remove_file(path).unwrap();
+        }
     }
 }
 

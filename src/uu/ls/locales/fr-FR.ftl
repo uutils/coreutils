@@ -1,6 +1,9 @@
 ls-about = Lister le contenu des répertoires.
   Ignorer les fichiers et répertoires commençant par un '.' par défaut
+dir-about = Lister le contenu des répertoires.
+  Ignorer les fichiers et répertoires commençant par un '.' par défaut
 ls-usage = ls [OPTION]... [FICHIER]...
+dir-usage = dir [OPTION]... [FICHIER]...
 ls-after-help = L'argument TIME_STYLE peut être full-iso, long-iso, iso, locale ou +FORMAT. FORMAT est interprété comme dans date. De plus, la variable d'environnement TIME_STYLE définit le style par défaut à utiliser.
 
 # Messages d'erreur
@@ -123,4 +126,6 @@ ls-invalid-quoting-style = {$program} : Ignorer la valeur invalide de la variabl
 ls-invalid-columns-width = ignorer la largeur invalide dans la variable d'environnement COLUMNS : {$width}
 ls-invalid-ignore-pattern = Motif invalide pour ignore : {$pattern}
 ls-invalid-hide-pattern = Motif invalide pour hide : {$pattern}
+ls-warning-unrecognized-ls-colors-prefix = préfixe non reconnu : {$prefix}
+ls-warning-unparsable-ls-colors = valeur illisible pour la variable d'environnement LS_COLORS
 ls-total = total {$size}

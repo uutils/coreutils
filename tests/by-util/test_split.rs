@@ -14,7 +14,7 @@ use std::env;
 use std::os::unix::ffi::OsStringExt;
 use std::path::Path;
 use std::{
-    fs::{File, read_dir},
+    fs::{self, File},
     io::{BufWriter, Read, Write},
 };
 use uutests::util::{AtPath, TestScenario};
@@ -48,7 +48,7 @@ impl Glob {
 
     /// Get all files in `self.directory` that match `self.regex`
     fn collect(&self) -> Vec<String> {
-        read_dir(Path::new(&self.directory.subdir))
+        fs::read_dir(Path::new(&self.directory.subdir))
             .unwrap()
             .filter_map(|entry| {
                 let path = entry.unwrap().path();
@@ -2011,7 +2011,7 @@ fn test_split_non_utf8_paths() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     let filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
-    std::fs::write(at.plus(&filename), b"line1\nline2\nline3\nline4\nline5\n").unwrap();
+    fs::write(at.plus(&filename), b"line1\nline2\nline3\nline4\nline5\n").unwrap();
 
     ucmd.arg(&filename).succeeds();
 
@@ -2032,7 +2032,7 @@ fn test_split_non_utf8_prefix() {
 
     // Check that split files were created (functionality works)
     // The actual filename may be converted due to lossy conversion, but the command should succeed
-    let entries: Vec<_> = std::fs::read_dir(at.as_string()).unwrap().collect();
+    let entries: Vec<_> = fs::read_dir(at.as_string()).unwrap().collect();
     let split_files = entries
         .iter()
         .filter_map(|e| e.as_ref().ok())
@@ -2063,7 +2063,7 @@ fn test_split_non_utf8_additional_suffix() {
 
     // Check that split files were created (functionality works)
     // The actual filename may be converted due to lossy conversion, but the command should succeed
-    let entries: Vec<_> = std::fs::read_dir(at.as_string()).unwrap().collect();
+    let entries: Vec<_> = fs::read_dir(at.as_string()).unwrap().collect();
     let split_files = entries
         .iter()
         .filter_map(|e| e.as_ref().ok())
@@ -2077,4 +2077,17 @@ fn test_split_non_utf8_additional_suffix() {
         split_files > 0,
         "Expected at least one split file to be created"
     );
+}
+
+#[test]
+#[cfg(target_os = "linux")] // To re-enable on Windows once I work out what goes wrong with it.
+fn test_split_directory_already_exists() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("xaa"); // For collision with.
+    at.touch("file");
+    ucmd.args(&["file"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("split: xaa: Is a directory\n");
 }

@@ -5,11 +5,13 @@
 
 //! Utilities for reading files as chunks.
 
+// spell-checker:ignore ELEMS
 #![allow(dead_code)]
 // Ignores non-used warning for `borrow_buffer` in `Chunk`
 
 use std::{
     io::{ErrorKind, Read},
+    ops::Range,
     sync::mpsc::SyncSender,
 };
 
@@ -17,7 +19,12 @@ use memchr::memchr_iter;
 use self_cell::self_cell;
 use uucore::error::{UResult, USimpleError};
 
-use crate::{GeneralBigDecimalParseResult, GlobalSettings, Line, numeric_str_cmp::NumInfo};
+use crate::{
+    GeneralBigDecimalParseResult, GlobalSettings, Line, SortMode, numeric_str_cmp::NumInfo,
+};
+
+const MAX_TOKEN_BUFFER_BYTES: usize = 4 * 1024 * 1024;
+const MAX_TOKEN_BUFFER_ELEMS: usize = MAX_TOKEN_BUFFER_BYTES / size_of::<Range<usize>>();
 
 self_cell!(
     /// The chunk that is passed around between threads.
@@ -35,6 +42,8 @@ self_cell!(
 pub struct ChunkContents<'a> {
     pub lines: Vec<Line<'a>>,
     pub line_data: LineData<'a>,
+    pub token_buffer: Vec<Range<usize>>,
+    pub line_count_hint: usize,
 }
 
 #[derive(Debug)]
@@ -54,6 +63,7 @@ impl Chunk {
             contents.line_data.num_infos.clear();
             contents.line_data.parsed_floats.clear();
             contents.line_data.line_num_floats.clear();
+            contents.token_buffer.clear();
             let lines = unsafe {
                 // SAFETY: It is safe to (temporarily) transmute to a vector of lines with a longer lifetime,
                 // because the vector is empty.
@@ -76,6 +86,8 @@ impl Chunk {
                 std::mem::take(&mut contents.line_data.num_infos),
                 std::mem::take(&mut contents.line_data.parsed_floats),
                 std::mem::take(&mut contents.line_data.line_num_floats),
+                std::mem::take(&mut contents.token_buffer),
+                contents.line_count_hint,
             )
         });
         RecycledChunk {
@@ -84,6 +96,8 @@ impl Chunk {
             num_infos: recycled_contents.2,
             parsed_floats: recycled_contents.3,
             line_num_floats: recycled_contents.4,
+            token_buffer: recycled_contents.5,
+            line_count_hint: recycled_contents.6,
             buffer: self.into_owner(),
         }
     }
@@ -103,6 +117,8 @@ pub struct RecycledChunk {
     num_infos: Vec<NumInfo>,
     parsed_floats: Vec<GeneralBigDecimalParseResult>,
     line_num_floats: Vec<Option<f64>>,
+    token_buffer: Vec<Range<usize>>,
+    line_count_hint: usize,
     buffer: Vec<u8>,
 }
 
@@ -114,6 +130,8 @@ impl RecycledChunk {
             num_infos: Vec::new(),
             parsed_floats: Vec::new(),
             line_num_floats: Vec::new(),
+            token_buffer: Vec::new(),
+            line_count_hint: 0,
             buffer: vec![0; capacity],
         }
     }
@@ -157,6 +175,8 @@ pub fn read<T: Read>(
         num_infos,
         parsed_floats,
         line_num_floats,
+        mut token_buffer,
+        mut line_count_hint,
         mut buffer,
     } = recycled_chunk;
     if buffer.len() < carry_over.len() {
@@ -193,8 +213,21 @@ pub fn read<T: Read>(
                 parsed_floats,
                 line_num_floats,
             };
-            parse_lines(read, &mut lines, &mut line_data, separator, settings);
-            Ok(ChunkContents { lines, line_data })
+            parse_lines(
+                read,
+                &mut lines,
+                &mut line_data,
+                &mut token_buffer,
+                &mut line_count_hint,
+                separator,
+                settings,
+            );
+            Ok(ChunkContents {
+                lines,
+                line_data,
+                token_buffer,
+                line_count_hint,
+            })
         });
         sender.send(payload?).unwrap();
     }
@@ -206,6 +239,8 @@ fn parse_lines<'a>(
     read: &'a [u8],
     lines: &mut Vec<Line<'a>>,
     line_data: &mut LineData<'a>,
+    token_buffer: &mut Vec<Range<usize>>,
+    line_count_hint: &mut usize,
     separator: u8,
     settings: &GlobalSettings,
 ) {
@@ -216,12 +251,55 @@ fn parse_lines<'a>(
     assert!(line_data.num_infos.is_empty());
     assert!(line_data.parsed_floats.is_empty());
     assert!(line_data.line_num_floats.is_empty());
-    let mut token_buffer = vec![];
-    lines.extend(
-        read.split(|&c| c == separator)
-            .enumerate()
-            .map(|(index, line)| Line::create(line, index, line_data, &mut token_buffer, settings)),
-    );
+    token_buffer.clear();
+    if token_buffer.capacity() > MAX_TOKEN_BUFFER_ELEMS {
+        token_buffer.shrink_to(MAX_TOKEN_BUFFER_ELEMS);
+    }
+    const SMALL_CHUNK_BYTES: usize = 64 * 1024;
+    let mut estimated = (*line_count_hint).max(1);
+    let mut exact_line_count = None;
+    if *line_count_hint == 0 || read.len() <= SMALL_CHUNK_BYTES {
+        let count = if read.is_empty() {
+            1
+        } else {
+            memchr_iter(separator, read).count() + 1
+        };
+        exact_line_count = Some(count);
+        estimated = count;
+    } else if estimated == 1 {
+        const LINE_LEN_HINT: usize = 32;
+        estimated = (read.len() / LINE_LEN_HINT).max(1);
+    }
+    lines.reserve(estimated);
+    if settings.precomputed.selections_per_line > 0 {
+        line_data
+            .selections
+            .reserve(estimated.saturating_mul(settings.precomputed.selections_per_line));
+    }
+    if settings.precomputed.num_infos_per_line > 0 {
+        line_data
+            .num_infos
+            .reserve(estimated.saturating_mul(settings.precomputed.num_infos_per_line));
+    }
+    if settings.precomputed.floats_per_line > 0 {
+        line_data
+            .parsed_floats
+            .reserve(estimated.saturating_mul(settings.precomputed.floats_per_line));
+    }
+    if settings.mode == SortMode::Numeric {
+        line_data.line_num_floats.reserve(estimated);
+    }
+    let mut start = 0usize;
+    let mut index = 0usize;
+    for sep_idx in memchr_iter(separator, read) {
+        let line = &read[start..sep_idx];
+        lines.push(Line::create(line, index, line_data, token_buffer, settings));
+        index += 1;
+        start = sep_idx + 1;
+    }
+    let line = &read[start..];
+    lines.push(Line::create(line, index, line_data, token_buffer, settings));
+    *line_count_hint = exact_line_count.unwrap_or(index + 1);
 }
 
 /// Read from `file` into `buffer`.

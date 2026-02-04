@@ -25,11 +25,11 @@ uucore = { workspace = true, features = [
   "sum",
   "hardware",
 ] }
+uu_checksum_common = { workspace = true }
 fluent = { workspace = true }
 
 [dev-dependencies]
 divan = { workspace = true }
-tempfile = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }
 
 [[bin]]

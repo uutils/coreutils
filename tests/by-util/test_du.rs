@@ -804,6 +804,44 @@ fn test_du_inodes_with_count_links_all() {
     assert_eq!(result_seq, ["1\td/d", "1\td/f", "1\td/h", "4\td"]);
 }
 
+#[cfg(not(target_os = "android"))]
+#[test]
+fn test_du_count_links_hardlinks_separately() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("dir");
+    at.touch("dir/file");
+    at.hard_link("dir/file", "dir/hard_link");
+
+    let result_without_l = ts.ucmd().arg("-b").arg("dir").succeeds();
+    let size_without_l: u64 = result_without_l
+        .stdout_str()
+        .split('\t')
+        .next()
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap();
+
+    for arg in ["-l", "--count-links"] {
+        let result_with_l = ts.ucmd().arg("-b").arg(arg).arg("dir").succeeds();
+        let size_with_l: u64 = result_with_l
+            .stdout_str()
+            .split('\t')
+            .next()
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap();
+
+        assert!(
+            size_with_l >= size_without_l,
+            "With {arg}, size ({size_with_l}) should be >= size without -l ({size_without_l})"
+        );
+    }
+}
+
 #[test]
 fn test_du_h_flag_empty_file() {
     new_ucmd!()
@@ -1964,4 +2002,59 @@ fn test_du_long_path_from_unreadable() {
     let mut perms = fs::metadata(&inaccessible_path).unwrap().permissions();
     perms.set_mode(0o755);
     fs::set_permissions(&inaccessible_path, perms).unwrap();
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_du_hard_links_multiple_dirs_in_args() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("dir1");
+    at.mkdir("dir2");
+    at.write("dir1/file", "hello world");
+    at.hard_link("dir1/file", "dir2/link");
+
+    let result = ts.ucmd().args(&["dir1", "dir2"]).succeeds();
+    let lines: Vec<&str> = result.stdout_str().lines().collect();
+    let size = |i: usize| lines[i].split_once('\t').unwrap().0.parse::<u64>().unwrap();
+    assert!(size(0) > size(1));
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_du_hard_links_multiple_links_in_args() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("dir1");
+    at.write("dir1/file", "hello world");
+    at.hard_link("dir1/file", "dir1/link");
+
+    let result = ts.ucmd().args(&["dir1/file", "dir1/link"]).succeeds();
+    result.stdout_contains("dir1/file");
+    result.stdout_does_not_contain("dir1/link");
+
+    let result = ts.ucmd().args(&["-L", "dir1/file", "dir1/link"]).succeeds();
+    result.stdout_contains("dir1/file");
+    result.stdout_does_not_contain("dir1/link");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_du_symlinks_multiple_links_in_args() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("dir1");
+    at.write("dir1/file", "hello world");
+    at.symlink_file("dir1/file", "dir1/link");
+
+    let result = ts.ucmd().args(&["dir1/file", "dir1/link"]).succeeds();
+    result.stdout_contains("dir1/file");
+    result.stdout_contains("dir1/link");
+
+    let result = ts.ucmd().args(&["-L", "dir1/file", "dir1/link"]).succeeds();
+    result.stdout_contains("dir1/file");
+    result.stdout_does_not_contain("dir1/link");
 }

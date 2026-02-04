@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) asdf algo algos asha mgmt xffname hexa GFYEQ HYQK Yqxb dont
+// spell-checker:ignore (words) asdf algo algos asha mgmt xffname hexa GFYEQ HYQK Yqxb dont checkfile
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -3045,4 +3045,32 @@ mod debug_flag {
             .stderr_contains("avx2")
             .stderr_contains("pclmul");
     }
+}
+
+#[test]
+#[cfg(all(target_os = "linux", not(target_env = "musl")))]
+fn test_check_file_with_io_error() {
+    // /proc/self/mem causes EIO when read without proper seeking
+    new_ucmd!()
+        .arg("-a")
+        .arg("md5")
+        .arg("--check")
+        .pipe_in("d8e8fca2dc0f896fd7cb4cb0031ba249  /proc/self/mem\n")
+        .fails()
+        .stderr_contains("Input/output error")
+        .stdout_contains("FAILED open or read");
+}
+
+#[test]
+#[cfg(all(target_os = "linux", not(target_env = "musl")))]
+fn test_check_checkfile_with_io_error() {
+    // /proc/self/mem causes EIO when read without proper seeking
+    new_ucmd!()
+        .arg("-a")
+        .arg("md5")
+        .arg("--check")
+        .arg("/proc/self/mem")
+        .fails()
+        .stderr_contains("/proc/self/mem: read error")
+        .no_stdout();
 }

@@ -67,13 +67,11 @@ pub fn getpid() -> pid_t {
 /// so some system such as redox doesn't supported.
 #[cfg(not(target_os = "redox"))]
 pub fn getsid(pid: i32) -> Result<pid_t, Errno> {
-    unsafe {
-        let result = libc::getsid(pid);
-        if Errno::last() == Errno::UnknownErrno {
-            Ok(result)
-        } else {
-            Err(Errno::last())
-        }
+    let result = unsafe { libc::getsid(pid) };
+    if result == -1 {
+        Err(Errno::last())
+    } else {
+        Ok(result)
     }
 }
 
@@ -107,11 +105,29 @@ impl ChildExt for Child {
     }
 
     fn send_signal_group(&mut self, signal: usize) -> io::Result<()> {
-        // Ignore the signal, so we don't go into a signal loop.
-        if unsafe { libc::signal(signal as i32, libc::SIG_IGN) } == usize::MAX {
-            return Err(io::Error::last_os_error());
+        // Send signal to our process group (group 0 = caller's group).
+        // This matches GNU coreutils behavior: if the child has remained in our
+        // process group, it will receive this signal along with all other processes
+        // in the group. If the child has created its own process group (via setpgid),
+        // it won't receive this group signal, but will have received the direct signal.
+
+        // Signal 0 is special - it just checks if process exists, doesn't send anything.
+        // No need to manipulate signal handlers for it.
+        if signal == 0 {
+            let result = unsafe { libc::kill(0, 0) };
+            return if result == 0 {
+                Ok(())
+            } else {
+                Err(io::Error::last_os_error())
+            };
         }
-        if unsafe { libc::kill(0, signal as i32) } == 0 {
+
+        // Ignore the signal temporarily so we don't receive it ourselves.
+        let old_handler = unsafe { libc::signal(signal as i32, libc::SIG_IGN) };
+        let result = unsafe { libc::kill(0, signal as i32) };
+        // Restore the old handler
+        unsafe { libc::signal(signal as i32, old_handler) };
+        if result == 0 {
             Ok(())
         } else {
             Err(io::Error::last_os_error())
