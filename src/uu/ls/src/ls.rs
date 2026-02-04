@@ -2918,6 +2918,17 @@ fn calculate_line_len(output_len: usize, item_len: usize, line_ending: &LineEndi
     output_len + item_len + line_ending.to_string().len()
 }
 
+fn update_dired_for_item(
+    dired: &mut DiredOutput,
+    output_display_len: usize,
+    displayed_len: usize,
+    dired_name_len: usize,
+    line_ending: &LineEnding,
+) {
+    let line_len = calculate_line_len(output_display_len, displayed_len, line_ending);
+    dired::calculate_and_update_positions(dired, output_display_len, dired_name_len, line_len);
+}
+
 /// This writes to the [`BufWriter`] `state.out` a single string of the output of `ls -l`.
 ///
 /// It writes the following keys, in order:
@@ -3057,13 +3068,13 @@ fn display_item_long(
                 dired_name_len += 1;
             }
             let displayed_len = item_display.displayed.len() + usize::from(needs_space);
-            let line_len = calculate_line_len(
+            update_dired_for_item(
+                dired,
                 output_display.len(),
                 displayed_len,
+                dired_name_len,
                 &config.line_ending,
             );
-            let (start, end) = dired::calculate_dired(dired, output_display.len(), dired_name_len);
-            dired::update_positions(dired, start, end, line_len);
         }
 
         let item_name = item_display.displayed;
@@ -3166,16 +3177,12 @@ fn display_item_long(
         output_display.extend(b" ");
 
         if config.dired {
-            let line_len = calculate_line_len(
-                output_display.len(),
-                displayed_item.displayed.len(),
-                &config.line_ending,
-            );
-            dired::calculate_and_update_positions(
+            update_dired_for_item(
                 dired,
                 output_display.len(),
+                displayed_item.displayed.len(),
                 displayed_item.dired_name_len,
-                line_len,
+                &config.line_ending,
             );
         }
         let displayed_item = displayed_item.displayed;
