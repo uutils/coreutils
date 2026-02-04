@@ -340,7 +340,7 @@ impl DirFd {
 
     /// Open a file for writing relative to this directory
     /// Creates the file if it doesn't exist, truncates if it does
-    pub fn open_file_at(&self, name: &OsStr) -> io::Result<std::fs::File> {
+    pub fn open_file_at(&self, name: &OsStr) -> io::Result<fs::File> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
         let flags = OFlag::O_CREAT | OFlag::O_WRONLY | OFlag::O_TRUNC | OFlag::O_CLOEXEC;
@@ -351,7 +351,7 @@ impl DirFd {
 
         // Convert OwnedFd to raw fd and create File
         let raw_fd = fd.into_raw_fd();
-        Ok(unsafe { std::fs::File::from_raw_fd(raw_fd) })
+        Ok(unsafe { fs::File::from_raw_fd(raw_fd) })
     }
 
     /// Create a DirFd from an existing file descriptor (takes ownership)
@@ -400,24 +400,23 @@ pub fn create_dir_all_safe(path: &Path, mode: u32) -> io::Result<DirFd> {
                 let mut dir_fd = DirFd::open(current_path, SymlinkBehavior::NoFollow)?;
 
                 for component in components_to_create.iter().rev() {
-                    match dir_fd.stat_at(component.as_os_str(), SymlinkBehavior::NoFollow) {
-                        Ok(stat) => {
-                            if (stat.st_mode as libc::mode_t) & libc::S_IFMT != libc::S_IFDIR {
-                                return Err(io::Error::new(
-                                    io::ErrorKind::AlreadyExists,
-                                    format!(
-                                        "path component exists but is not a directory: {component:?}"
-                                    ),
-                                ));
-                            }
-                            dir_fd = dir_fd
-                                .open_subdir(component.as_os_str(), SymlinkBehavior::NoFollow)?;
+                    if let Ok(stat) =
+                        dir_fd.stat_at(component.as_os_str(), SymlinkBehavior::NoFollow)
+                    {
+                        if (stat.st_mode as libc::mode_t) & libc::S_IFMT != libc::S_IFDIR {
+                            return Err(io::Error::new(
+                                io::ErrorKind::AlreadyExists,
+                                format!(
+                                    "path component exists but is not a directory: {component:?}"
+                                ),
+                            ));
                         }
-                        Err(_) => {
-                            dir_fd.mkdir_at(component.as_os_str(), mode)?;
-                            dir_fd = dir_fd
-                                .open_subdir(component.as_os_str(), SymlinkBehavior::NoFollow)?;
-                        }
+                        dir_fd =
+                            dir_fd.open_subdir(component.as_os_str(), SymlinkBehavior::NoFollow)?;
+                    } else {
+                        dir_fd.mkdir_at(component.as_os_str(), mode)?;
+                        dir_fd =
+                            dir_fd.open_subdir(component.as_os_str(), SymlinkBehavior::NoFollow)?;
                     }
                 }
 
@@ -457,20 +456,17 @@ pub fn create_dir_all_safe(path: &Path, mode: u32) -> io::Result<DirFd> {
     let mut dir_fd = DirFd::open(root_path, SymlinkBehavior::Follow)?;
 
     for component in components_to_create.iter().rev() {
-        match dir_fd.stat_at(component.as_os_str(), SymlinkBehavior::NoFollow) {
-            Ok(stat) => {
-                if (stat.st_mode as libc::mode_t) & libc::S_IFMT != libc::S_IFDIR {
-                    return Err(io::Error::new(
-                        io::ErrorKind::AlreadyExists,
-                        format!("path component exists but is not a directory: {component:?}"),
-                    ));
-                }
-                dir_fd = dir_fd.open_subdir(component.as_os_str(), SymlinkBehavior::NoFollow)?;
+        if let Ok(stat) = dir_fd.stat_at(component.as_os_str(), SymlinkBehavior::NoFollow) {
+            if (stat.st_mode as libc::mode_t) & libc::S_IFMT != libc::S_IFDIR {
+                return Err(io::Error::new(
+                    io::ErrorKind::AlreadyExists,
+                    format!("path component exists but is not a directory: {component:?}"),
+                ));
             }
-            Err(_) => {
-                dir_fd.mkdir_at(component.as_os_str(), mode)?;
-                dir_fd = dir_fd.open_subdir(component.as_os_str(), SymlinkBehavior::NoFollow)?;
-            }
+            dir_fd = dir_fd.open_subdir(component.as_os_str(), SymlinkBehavior::NoFollow)?;
+        } else {
+            dir_fd.mkdir_at(component.as_os_str(), mode)?;
+            dir_fd = dir_fd.open_subdir(component.as_os_str(), SymlinkBehavior::NoFollow)?;
         }
     }
 
