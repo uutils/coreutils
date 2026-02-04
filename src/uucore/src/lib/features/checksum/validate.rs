@@ -215,7 +215,7 @@ impl FileChecksumResult {
 
     /// The cli options might prevent to display on the outcome of the
     /// comparison on STDOUT.
-    fn can_display(&self, verbose: ChecksumVerbose) -> bool {
+    fn can_display(self, verbose: ChecksumVerbose) -> bool {
         match self {
             Self::Ok => verbose.over_quiet(),
             Self::Failed => verbose.over_status(),

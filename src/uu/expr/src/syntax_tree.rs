@@ -56,11 +56,7 @@ pub enum StringOp {
 }
 
 impl BinOp {
-    fn eval(
-        &self,
-        left: ExprResult<NumOrStr>,
-        right: ExprResult<NumOrStr>,
-    ) -> ExprResult<NumOrStr> {
+    fn eval(self, left: ExprResult<NumOrStr>, right: ExprResult<NumOrStr>) -> ExprResult<NumOrStr> {
         match self {
             Self::Relation(op) => op.eval(left, right),
             Self::Numeric(op) => op.eval(left, right),
@@ -70,7 +66,7 @@ impl BinOp {
 }
 
 impl RelationOp {
-    fn eval(&self, a: ExprResult<NumOrStr>, b: ExprResult<NumOrStr>) -> ExprResult<NumOrStr> {
+    fn eval(self, a: ExprResult<NumOrStr>, b: ExprResult<NumOrStr>) -> ExprResult<NumOrStr> {
         // Make sure that the given comparison validates the relational operator.
         let check_cmp = |cmp| {
             use RelationOp::{Eq, Geq, Gt, Leq, Lt, Neq};
@@ -98,11 +94,7 @@ impl RelationOp {
 }
 
 impl NumericOp {
-    fn eval(
-        &self,
-        left: ExprResult<NumOrStr>,
-        right: ExprResult<NumOrStr>,
-    ) -> ExprResult<NumOrStr> {
+    fn eval(self, left: ExprResult<NumOrStr>, right: ExprResult<NumOrStr>) -> ExprResult<NumOrStr> {
         let a = left?.eval_as_bigint()?;
         let b = right?.eval_as_bigint()?;
         Ok(NumOrStr::Num(match self {
@@ -124,11 +116,7 @@ impl NumericOp {
 }
 
 impl StringOp {
-    fn eval(
-        &self,
-        left: ExprResult<NumOrStr>,
-        right: ExprResult<NumOrStr>,
-    ) -> ExprResult<NumOrStr> {
+    fn eval(self, left: ExprResult<NumOrStr>, right: ExprResult<NumOrStr>) -> ExprResult<NumOrStr> {
         match self {
             Self::Or => {
                 let left = left?;

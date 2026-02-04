@@ -35,12 +35,12 @@ enum GroupsError {
 
 impl UError for GroupsError {}
 
-fn infallible_gid2grp(gid: &u32) -> String {
-    if let Ok(grp) = gid2grp(*gid) {
+fn infallible_gid2grp(gid: u32) -> String {
+    if let Ok(grp) = gid2grp(gid) {
         grp
     } else {
         // The `show!()` macro sets the global exit code for the program.
-        show!(GroupsError::GroupNotFound(*gid));
+        show!(GroupsError::GroupNotFound(gid));
         gid.to_string()
     }
 }
@@ -58,7 +58,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let Ok(gids) = get_groups_gnu(None) else {
             return Err(GroupsError::GetGroupsFailed.into());
         };
-        let groups: Vec<String> = gids.iter().map(infallible_gid2grp).collect();
+        let groups: Vec<String> = gids.into_iter().map(infallible_gid2grp).collect();
         writeln!(stdout(), "{}", groups.join(" "))?;
         return Ok(());
     }
@@ -66,7 +66,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     for user in users {
         match Passwd::locate(user.as_str()) {
             Ok(p) => {
-                let groups: Vec<String> = p.belongs_to().iter().map(infallible_gid2grp).collect();
+                let groups: Vec<String> =
+                    p.belongs_to().into_iter().map(infallible_gid2grp).collect();
                 writeln!(stdout(), "{user} : {}", groups.join(" "))?;
             }
             Err(_) => {

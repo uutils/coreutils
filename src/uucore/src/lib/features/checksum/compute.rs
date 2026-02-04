@@ -55,7 +55,7 @@ pub enum ReadingMode {
 
 impl ReadingMode {
     #[inline]
-    fn as_char(&self) -> char {
+    fn as_char(self) -> char {
         match self {
             Self::Binary => '*',
             Self::Text => ' ',
@@ -72,8 +72,8 @@ pub enum DigestFormat {
 
 impl DigestFormat {
     #[inline]
-    fn is_base64(&self) -> bool {
-        *self == Self::Base64
+    fn is_base64(self) -> bool {
+        self == Self::Base64
     }
 }
 
