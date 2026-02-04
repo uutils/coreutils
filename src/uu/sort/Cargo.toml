@@ -20,6 +20,7 @@ workspace = true
 path = "src/sort.rs"
 
 [features]
+default = ["i18n-collator"]
 i18n-collator = ["uucore/i18n-collator"]
 
 [dependencies]

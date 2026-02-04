@@ -1,7 +1,7 @@
 [package]
-name = "uu_hashsum"
-description = "hashsum ~ (uutils) display or check input digests"
-repository = "https://github.com/uutils/coreutils/tree/main/src/uu/hashsum"
+name = "uu_sha512sum"
+description = "sha512sum ~ (uutils) Print or check the SHA512 checksums"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/sha512sum"
 version.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -15,16 +15,22 @@ readme.workspace = true
 workspace = true
 
 [lib]
-path = "src/hashsum.rs"
+path = "src/sha512sum.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["checksum", "encoding", "sum"] }
+uu_checksum_common = { workspace = true }
+uucore = { workspace = true, features = [
+  "checksum",
+  "encoding",
+  "sum",
+  "hardware",
+] }
 fluent = { workspace = true }
-
-[[bin]]
-name = "hashsum"
-path = "src/main.rs"
 
 [dev-dependencies]
 uucore = { workspace = true, features = ["benchmark"] }
+
+[[bin]]
+name = "sha512sum"
+path = "src/main.rs"

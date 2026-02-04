@@ -72,7 +72,7 @@ macro_rules! write_line_terminator {
 }
 
 impl Uniq {
-    pub fn print_uniq(&self, mut reader: impl BufRead, mut writer: impl Write) -> UResult<()> {
+    pub fn write_uniq(&self, mut reader: impl BufRead, mut writer: impl Write) -> UResult<()> {
         let mut first_line_printed = false;
         let mut group_count = 1;
         let line_terminator = self.get_line_terminator();
@@ -97,7 +97,7 @@ impl Uniq {
 
             if self.keys_are_equal(&current_buf, &current_meta, &next_buf, &next_meta) {
                 if self.all_repeated {
-                    self.print_line(writer, &current_buf, group_count, first_line_printed)?;
+                    self.write_line(writer, &current_buf, group_count, first_line_printed)?;
                     first_line_printed = true;
                     std::mem::swap(&mut current_buf, &mut next_buf);
                     std::mem::swap(&mut current_meta, &mut next_meta);
@@ -107,7 +107,7 @@ impl Uniq {
                 if (group_count == 1 && !self.repeats_only)
                     || (group_count > 1 && !self.uniques_only)
                 {
-                    self.print_line(writer, &current_buf, group_count, first_line_printed)?;
+                    self.write_line(writer, &current_buf, group_count, first_line_printed)?;
                     first_line_printed = true;
                 }
                 std::mem::swap(&mut current_buf, &mut next_buf);
@@ -118,7 +118,7 @@ impl Uniq {
         }
 
         if (group_count == 1 && !self.repeats_only) || (group_count > 1 && !self.uniques_only) {
-            self.print_line(writer, &current_buf, group_count, first_line_printed)?;
+            self.write_line(writer, &current_buf, group_count, first_line_printed)?;
             first_line_printed = true;
         }
         if (self.delimiters == Delimiters::Append || self.delimiters == Delimiters::Both)
@@ -250,7 +250,7 @@ impl Uniq {
                 || self.delimiters == Delimiters::Both)
     }
 
-    fn print_line(
+    fn write_line(
         &self,
         writer: &mut impl Write,
         line: &[u8],
@@ -678,7 +678,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     }
 
-    uniq.print_uniq(
+    uniq.write_uniq(
         open_input_file(in_file_name)?,
         open_output_file(out_file_name)?,
     )

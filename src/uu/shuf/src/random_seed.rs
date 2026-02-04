@@ -67,7 +67,7 @@ impl SeededRng {
         hasher.update(seed.as_bytes());
         let seed = hasher.finalize();
         let seed = seed.as_slice().try_into().unwrap();
-        Self(Box::new(rand_chacha::ChaCha12Rng::from_seed(seed)))
+        Self(Box::new(ChaCha12Rng::from_seed(seed)))
     }
 
     #[allow(clippy::many_single_char_names)] // use original lemire names for easy comparison

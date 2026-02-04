@@ -135,7 +135,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         os: matches.get_flag(options::OS),
     };
     let output = UNameOutput::new(&options)?;
-    println_verbatim(output.display().as_os_str()).unwrap();
+    println_verbatim(output.display().as_os_str())
+        .map_err(|e| USimpleError::new(1, e.to_string()))?;
     Ok(())
 }
 

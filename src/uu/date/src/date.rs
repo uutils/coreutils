@@ -20,6 +20,8 @@ use std::sync::OnceLock;
 use uucore::display::Quotable;
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
+#[cfg(feature = "i18n-datetime")]
+use uucore::i18n::datetime::{localize_format_string, should_use_icu_locale};
 use uucore::translate;
 use uucore::{format_usage, show};
 #[cfg(windows)]
@@ -474,20 +476,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let config = Config::new().custom(PosixCustom::new()).lenient(true);
     for date in dates {
         match date {
-            Ok(date) => {
-                match BrokenDownTime::from(&date).to_string_with_config(&config, format_string) {
-                    Ok(s) => writeln!(stdout, "{s}").map_err(|e| {
-                        USimpleError::new(1, translate!("date-error-write", "error" => e))
-                    })?,
-                    Err(e) => {
-                        let _ = stdout.flush();
-                        return Err(USimpleError::new(
-                            1,
-                            translate!("date-error-invalid-format", "format" => format_string, "error" => e),
-                        ));
-                    }
+            Ok(date) => match format_date_with_locale_aware_months(&date, format_string, &config) {
+                Ok(s) => writeln!(stdout, "{s}").map_err(|e| {
+                    USimpleError::new(1, translate!("date-error-write", "error" => e))
+                })?,
+                Err(e) => {
+                    let _ = stdout.flush();
+                    return Err(USimpleError::new(
+                        1,
+                        translate!("date-error-invalid-format", "format" => format_string, "error" => e),
+                    ));
                 }
-            }
+            },
             Err((input, _err)) => {
                 let _ = stdout.flush();
                 show!(USimpleError::new(
@@ -610,6 +610,21 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(Arg::new(OPT_FORMAT).num_args(0..).trailing_var_arg(true))
+}
+
+fn format_date_with_locale_aware_months(
+    date: &Zoned,
+    format_string: &str,
+    config: &Config<PosixCustom>,
+) -> Result<String, jiff::Error> {
+    let broken_down = BrokenDownTime::from(date);
+
+    if !should_use_icu_locale() {
+        return broken_down.to_string_with_config(config, format_string);
+    }
+
+    let fmt = localize_format_string(format_string, &date.date());
+    broken_down.to_string_with_config(config, &fmt)
 }
 
 /// Return the appropriate format string for the given settings.

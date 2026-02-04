@@ -277,6 +277,10 @@ impl Observer {
                             // If `path` is not a tailable file, add its parent to `Watcher`.
                             watcher_rx
                                 .watch(path.parent().unwrap(), RecursiveMode::NonRecursive)?;
+                            // Add symlinks to orphans for retry polling (target may not exist)
+                            if path.is_symlink() {
+                                self.orphans.push(path);
+                            }
                         } else {
                             // If there is no parent, add `path` to `orphans`.
                             self.orphans.push(path);
@@ -374,6 +378,9 @@ impl Observer {
                         }
                     }
                     self.files.update_metadata(event_path, Some(new_md));
+                } else if event_path.is_symlink() && settings.retry {
+                    self.files.reset_reader(event_path);
+                    self.orphans.push(event_path.clone());
                 }
             }
             EventKind::Remove(RemoveKind::File | RemoveKind::Any)
