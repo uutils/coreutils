@@ -15,7 +15,7 @@
 //! [radix]: https://en.wikipedia.org/wiki/Radix
 //! [positional notation]: https://en.wikipedia.org/wiki/Positional_notation
 use std::error::Error;
-use std::fmt::{self, Display, Formatter};
+use std::fmt::{self, Display, Formatter, Write};
 use uucore::translate;
 
 /// An overflow due to incrementing a number beyond its representable limit.
@@ -241,12 +241,10 @@ impl FixedWidthNumber {
 
 impl Display for FixedWidthNumber {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let digits: String = self
-            .digits
-            .iter()
-            .map(|d| map_digit(self.radix, *d))
-            .collect();
-        write!(f, "{digits}")
+        for d in &self.digits {
+            f.write_char(map_digit(self.radix, *d))?;
+        }
+        Ok(())
     }
 }
 
