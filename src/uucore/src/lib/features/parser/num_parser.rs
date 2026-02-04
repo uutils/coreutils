@@ -583,7 +583,7 @@ mod tests {
             u64::extended_parse("-9223372036854775808") // i64::MIN
         );
         assert_eq!(
-            Ok(1123372036854675616),
+            Ok(1_123_372_036_854_675_616),
             u64::extended_parse("-17323372036854876000") // 2*i64::MIN
         );
         assert_eq!(Ok(1), u64::extended_parse("-18446744073709551615")); // -u64::MAX
@@ -679,10 +679,10 @@ mod tests {
         assert_eq!(Ok(123.15), f64::extended_parse("0123.15"));
         assert_eq!(Ok(123.15), f64::extended_parse("+0123.15"));
         assert_eq!(Ok(-123.15), f64::extended_parse("-0123.15"));
-        assert_eq!(Ok(12315000.0), f64::extended_parse("123.15e5"));
-        assert_eq!(Ok(-12315000.0), f64::extended_parse("-123.15e5"));
-        assert_eq!(Ok(12315000.0), f64::extended_parse("123.15E+5"));
-        assert_eq!(Ok(0.0012315), f64::extended_parse("123.15E-5"));
+        assert_eq!(Ok(12_315_000.0), f64::extended_parse("123.15e5"));
+        assert_eq!(Ok(-12_315_000.0), f64::extended_parse("-123.15e5"));
+        assert_eq!(Ok(12_315_000.0), f64::extended_parse("123.15E+5"));
+        assert_eq!(Ok(0.001_231_5), f64::extended_parse("123.15E-5"));
         assert_eq!(
             Ok(0.15),
             f64::extended_parse(".150000000000000000000000000231313")
@@ -933,7 +933,7 @@ mod tests {
 
         // We cannot really check that 'e' is not a valid exponent indicator for hex floats...
         // but we can check that the number still gets parsed properly: 0x0.8e5 is 0x8e5 / 16**3
-        assert_eq!(Ok(0.555908203125), f64::extended_parse("0x0.8e5"));
+        assert_eq!(Ok(0.555_908_203_125), f64::extended_parse("0x0.8e5"));
 
         assert_eq!(
             f64::extended_parse("0x0.1p"),

@@ -354,7 +354,7 @@ fn build_regex(pattern_bytes: Vec<u8>) -> ExprResult<(Regex, String)> {
             // For UTF-8 locale, use UTF-8 encoding
             Regex::with_options_and_encoding(
                 &re_string,
-                RegexOptions::REGEX_OPTION_SINGLELINE,
+                RegexOptions::REGEX_OPTION_SINGLELINE | RegexOptions::REGEX_OPTION_MULTILINE,
                 Syntax::grep(),
             )
         }
@@ -362,7 +362,7 @@ fn build_regex(pattern_bytes: Vec<u8>) -> ExprResult<(Regex, String)> {
             // For non-UTF-8 locale, use ASCII encoding
             Regex::with_options_and_encoding(
                 EncodedBytes::ascii(re_string.as_bytes()),
-                RegexOptions::REGEX_OPTION_SINGLELINE,
+                RegexOptions::REGEX_OPTION_SINGLELINE | RegexOptions::REGEX_OPTION_MULTILINE,
                 Syntax::grep(),
             )
         }
@@ -427,7 +427,7 @@ fn find_match(regex: Regex, re_string: String, left_bytes: Vec<u8>) -> ExprResul
                 // Need to create ASCII version of regex too
                 let re_ascii = Regex::with_options_and_encoding(
                     EncodedBytes::ascii(re_string.as_bytes()),
-                    RegexOptions::REGEX_OPTION_SINGLELINE,
+                    RegexOptions::REGEX_OPTION_SINGLELINE | RegexOptions::REGEX_OPTION_MULTILINE,
                     Syntax::grep(),
                 )
                 .ok();

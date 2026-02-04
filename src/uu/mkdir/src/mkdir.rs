@@ -11,6 +11,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 #[cfg(all(unix, not(target_os = "linux")))]
 use std::os::unix::fs::MetadataExt;
+use std::io::{Write, stdout};
 use std::path::{Path, PathBuf};
 #[cfg(not(windows))]
 use uucore::error::FromIo;
@@ -330,10 +331,11 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
     match create_dir_with_mode(path, create_mode) {
         Ok(()) => {
             if config.verbose {
-                println!(
+                writeln!(
+                    stdout(),
                     "{}",
                     translate!("mkdir-verbose-created-directory", "util_name" => uucore::util_name(), "path" => path.quote())
-                );
+                )?;
             }
             // macos and bsd systems do not inherit the parents directories SETGID bit on the kernel
             // level so we have to manually set the SETGID
@@ -383,10 +385,11 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
             // Print verbose message for logical directories, even if they exist
             // This matches GNU behavior for paths like "test_dir/../test_dir_a"
             if config.verbose && is_parent && config.recursive && !ends_with_parent_dir {
-                println!(
+                writeln!(
+                    stdout(),
                     "{}",
                     translate!("mkdir-verbose-created-directory", "util_name" => uucore::util_name(), "path" => path.quote())
-                );
+                )?;
             }
             Ok(())
         }

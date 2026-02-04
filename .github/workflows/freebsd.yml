@@ -93,6 +93,7 @@ jobs:
           # To ensure that files are cleaned up, we don't want to exit on error
           set +e
           unset FAULT
+          export CARGO_INCREMENTAL=0
           ## cargo fmt testing
           echo "## cargo fmt testing"
           # * convert any errors/warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
@@ -179,6 +180,7 @@ jobs:
           set +e
           cd "${WORKSPACE}"
           unset FAULT
+          export CARGO_INCREMENTAL=0
           export RUSTFLAGS="-C strip=symbols" # for disk space
           cargo build || FAULT=1
           export PATH=~/.cargo/bin:${PATH}

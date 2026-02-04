@@ -24,7 +24,7 @@ use crate::{
 };
 
 const MAX_TOKEN_BUFFER_BYTES: usize = 4 * 1024 * 1024;
-const MAX_TOKEN_BUFFER_ELEMS: usize = MAX_TOKEN_BUFFER_BYTES / std::mem::size_of::<Range<usize>>();
+const MAX_TOKEN_BUFFER_ELEMS: usize = MAX_TOKEN_BUFFER_BYTES / size_of::<Range<usize>>();
 
 self_cell!(
     /// The chunk that is passed around between threads.
