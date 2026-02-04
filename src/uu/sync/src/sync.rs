@@ -41,6 +41,7 @@ mod platform {
 
     use uucore::error::UResult;
 
+    #[expect(clippy::unnecessary_wraps)] // To match all platforms
     pub fn do_sync() -> UResult<()> {
         sync();
         Ok(())

@@ -587,19 +587,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
         };
 
         // Pre-scan files if needed
-        if let Err(e) = scanner.scan_files(files, &hardlink_options) {
-            if hardlink_options.verbose {
-                eprintln!("mv: warning: failed to scan files for hardlinks: {e}");
-                eprintln!("mv: continuing without hardlink preservation");
-            } else {
-                // Show warning in non-verbose mode for serious errors
-                eprintln!(
-                    "mv: warning: hardlink scanning failed, continuing without hardlink preservation"
-                );
-            }
-            // Continue without hardlink tracking on scan failure
-            // This provides graceful degradation rather than failing completely
-        }
+        scanner.scan_files(files, &hardlink_options);
 
         (tracker, scanner)
     };
@@ -898,6 +886,7 @@ fn rename_fifo_fallback(from: &Path, to: &Path) -> io::Result<()> {
 }
 
 #[cfg(not(unix))]
+#[expect(clippy::unnecessary_wraps)] // To match all platforms
 fn rename_fifo_fallback(_from: &Path, _to: &Path) -> io::Result<()> {
     Ok(())
 }
@@ -1140,7 +1129,7 @@ fn copy_file_with_hardlinks_helper(
     let hardlink_options = HardlinkOptions::default();
     // Create a hardlink instead of copying
     if let Some(existing_target) =
-        hardlink_tracker.check_hardlink(from, to, hardlink_scanner, &hardlink_options)?
+        hardlink_tracker.check_hardlink(from, to, hardlink_scanner, &hardlink_options)
     {
         fs::hard_link(&existing_target, to)?;
         return Ok(());
@@ -1186,7 +1175,7 @@ fn rename_file_fallback(
             use crate::hardlink::HardlinkOptions;
             let hardlink_options = HardlinkOptions::default();
             if let Some(existing_target) =
-                tracker.check_hardlink(from, to, scanner, &hardlink_options)?
+                tracker.check_hardlink(from, to, scanner, &hardlink_options)
             {
                 // Create a hardlink to the first moved file instead of copying
                 fs::hard_link(&existing_target, to)?;

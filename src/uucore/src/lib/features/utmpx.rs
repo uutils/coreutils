@@ -521,7 +521,7 @@ impl UtmpxRecord {
         match self {
             Self::Traditional(utmpx) => utmpx.canon_host(),
             #[cfg(feature = "feat_systemd_logind")]
-            Self::Systemd(systemd) => systemd.canon_host(),
+            Self::Systemd(systemd) => Ok(systemd.canon_host()),
         }
     }
 }

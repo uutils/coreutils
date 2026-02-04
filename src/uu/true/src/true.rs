@@ -9,6 +9,7 @@ use uucore::error::{UResult, set_exit_code};
 use uucore::translate;
 
 #[uucore::main]
+#[expect(clippy::unnecessary_wraps)] // TODO: modify proc macro to allow no-result uumain
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args: Vec<OsString> = args.collect();
     if args.len() != 2 {

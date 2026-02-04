@@ -52,6 +52,7 @@ pub fn uu_app() -> Command {
 }
 
 /// Copies words from `i` into `buf`, separated by spaces.
+#[allow(clippy::unnecessary_wraps)] // needed for some platforms
 fn args_into_buffer<'a>(
     buf: &mut Vec<u8>,
     i: Option<impl Iterator<Item = &'a OsString>>,

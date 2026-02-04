@@ -367,7 +367,7 @@ fn build_regex(pattern_bytes: Vec<u8>) -> ExprResult<(Regex, String)> {
 }
 
 /// Find matches in the input using the compiled regex
-fn find_match(regex: Regex, re_string: String, left_bytes: Vec<u8>) -> ExprResult<String> {
+fn find_match(regex: Regex, re_string: String, left_bytes: Vec<u8>) -> String {
     use onig::EncodedBytes;
     use uucore::i18n::{UEncoding, get_locale_encoding};
 
@@ -375,7 +375,7 @@ fn find_match(regex: Regex, re_string: String, left_bytes: Vec<u8>) -> ExprResul
 
     // Match against the input using the appropriate encoding
     let mut region = onig::Region::new();
-    let result = match encoding {
+    match encoding {
         UEncoding::Utf8 => {
             // In UTF-8 locale, check if input is valid UTF-8
             if let Ok(left_str) = std::str::from_utf8(&left_bytes) {
@@ -483,7 +483,7 @@ fn find_match(regex: Regex, re_string: String, left_bytes: Vec<u8>) -> ExprResul
                     if let Some((start, end)) = region.pos(1) {
                         let capture_bytes = &left_bytes[start..end];
                         // Return raw bytes as String for consistency with other cases
-                        return Ok(String::from_utf8_lossy(capture_bytes).into_owned());
+                        return String::from_utf8_lossy(capture_bytes).into_owned();
                     }
                     String::new()
                 } else {
@@ -500,9 +500,7 @@ fn find_match(regex: Regex, re_string: String, left_bytes: Vec<u8>) -> ExprResul
                 }
             }
         }
-    };
-
-    Ok(result)
+    }
 }
 
 /// Evaluate a match expression with locale-aware regex matching
@@ -533,8 +531,7 @@ fn evaluate_match_expression(left_bytes: Vec<u8>, right_bytes: Vec<u8>) -> ExprR
         }
     }
 
-    let result = find_match(regex, re_string, left_bytes)?;
-    Ok(result.into())
+    Ok(find_match(regex, re_string, left_bytes).into())
 }
 
 /// Precedence for infix binary operators

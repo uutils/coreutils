@@ -90,11 +90,13 @@ enum ProgramOptionsError {
     target_os = "openbsd",
     target_os = "dragonfly"
 ))]
+#[expect(clippy::unnecessary_wraps)] // To match all platforms
 fn preload_strings() -> UResult<(&'static str, &'static str)> {
     Ok(("LD_PRELOAD", "so"))
 }
 
 #[cfg(target_vendor = "apple")]
+#[expect(clippy::unnecessary_wraps)] // To match all platforms
 fn preload_strings() -> UResult<(&'static str, &'static str)> {
     Ok(("DYLD_LIBRARY_PATH", "dylib"))
 }

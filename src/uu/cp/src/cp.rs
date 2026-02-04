@@ -2328,9 +2328,9 @@ fn calculate_dest_permissions(
     source_metadata: &Metadata,
     options: &Options,
     context: &str,
-) -> CopyResult<Permissions> {
+) -> Permissions {
     if let Some(metadata) = dest_metadata {
-        Ok(metadata.permissions())
+        metadata.permissions()
     } else {
         #[cfg(unix)]
         {
@@ -2341,12 +2341,11 @@ fn calculate_dest_permissions(
             use uucore::mode::get_umask;
             let mode = mode & !get_umask();
             permissions.set_mode(mode);
-            Ok(permissions)
+            permissions
         }
         #[cfg(not(unix))]
         {
-            let permissions = source_metadata.permissions();
-            Ok(permissions)
+            source_metadata.permissions()
         }
     }
 }
@@ -2524,7 +2523,7 @@ fn copy_file(
         &source_metadata,
         options,
         context,
-    )?;
+    );
 
     #[cfg(unix)]
     let source_is_fifo = source_metadata.file_type().is_fifo();
