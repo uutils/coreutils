@@ -431,7 +431,7 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
             OverwriteMode::Force => {}
             OverwriteMode::Default => {
                 let (writable, mode) = is_writable(target);
-                if !writable && std::io::stdin().is_terminal() {
+                if !writable && io::stdin().is_terminal() {
                     prompt_overwrite(target, mode)?;
                 }
             }
@@ -641,12 +641,11 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
             pb.set_message(msg);
         }
 
-        let targetpath = match sourcepath.file_name() {
-            Some(name) => target_dir.join(name),
-            None => {
-                show!(MvError::NoSuchFile(sourcepath.quote().to_string()));
-                continue;
-            }
+        let targetpath = if let Some(name) = sourcepath.file_name() {
+            target_dir.join(name)
+        } else {
+            show!(MvError::NoSuchFile(sourcepath.quote().to_string()));
+            continue;
         };
 
         if moved_destinations.contains(&targetpath) && options.backup != BackupMode::Numbered {
@@ -683,9 +682,10 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
                 let e = e.map_err_context(|| {
                     translate!("mv-error-cannot-move", "source" => sourcepath.quote(), "target" => targetpath.quote())
                 });
-                match display_manager {
-                    Some(ref pb) => pb.suspend(|| show!(e)),
-                    None => show!(e),
+                if let Some(ref pb) = display_manager {
+                    pb.suspend(|| show!(e));
+                } else {
+                    show!(e);
                 }
             }
             Ok(()) => (),
@@ -741,7 +741,7 @@ fn rename(
             OverwriteMode::Default => {
                 // GNU mv prompts when stdin is a TTY and target is not writable
                 let (writable, mode) = is_writable(to);
-                if !writable && std::io::stdin().is_terminal() {
+                if !writable && io::stdin().is_terminal() {
                     prompt_overwrite(to, mode)?;
                 }
             }
@@ -789,11 +789,10 @@ fn rename(
     }
 
     if opts.verbose {
-        let message = match backup_path {
-            Some(path) => {
-                translate!("mv-verbose-renamed-with-backup", "from" => from.quote(), "to" => to.quote(), "backup" => path.quote())
-            }
-            None => translate!("mv-verbose-renamed", "from" => from.quote(), "to" => to.quote()),
+        let message = if let Some(path) = backup_path {
+            translate!("mv-verbose-renamed-with-backup", "from" => from.quote(), "to" => to.quote(), "backup" => path.quote())
+        } else {
+            translate!("mv-verbose-renamed", "from" => from.quote(), "to" => to.quote())
         };
 
         match display_manager {
@@ -908,7 +907,12 @@ fn rename_fifo_fallback(_from: &Path, _to: &Path) -> io::Result<()> {
 #[cfg(unix)]
 fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     let path_symlink_points_to = fs::read_link(from)?;
-    unix::fs::symlink(path_symlink_points_to, to).and_then(|_| fs::remove_file(from))
+    unix::fs::symlink(path_symlink_points_to, to)?;
+    #[cfg(not(any(target_os = "macos", target_os = "redox")))]
+    {
+        let _ = copy_xattrs_if_supported(from, to);
+    }
+    fs::remove_file(from)
 }
 
 #[cfg(windows)]
@@ -1027,7 +1031,7 @@ fn copy_dir_contents(
     }
     #[cfg(not(unix))]
     {
-        copy_dir_contents_recursive(from, to, None, None, verbose, progress_bar, display_manager)?;
+        copy_dir_contents_recursive(from, to, verbose, progress_bar, display_manager)?;
     }
 
     Ok(())
@@ -1038,8 +1042,6 @@ fn copy_dir_contents_recursive(
     to_dir: &Path,
     #[cfg(unix)] hardlink_tracker: &mut HardlinkTracker,
     #[cfg(unix)] hardlink_scanner: &HardlinkGroupScanner,
-    #[cfg(not(unix))] _hardlink_tracker: Option<()>,
-    #[cfg(not(unix))] _hardlink_scanner: Option<()>,
     verbose: bool,
     progress_bar: Option<&ProgressBar>,
     display_manager: Option<&MultiProgress>,
@@ -1078,10 +1080,6 @@ fn copy_dir_contents_recursive(
                 hardlink_tracker,
                 #[cfg(unix)]
                 hardlink_scanner,
-                #[cfg(not(unix))]
-                _hardlink_tracker,
-                #[cfg(not(unix))]
-                _hardlink_scanner,
                 verbose,
                 progress_bar,
                 display_manager,
@@ -1099,7 +1097,13 @@ fn copy_dir_contents_recursive(
             }
             #[cfg(not(unix))]
             {
-                fs::copy(&from_path, &to_path)?;
+                if from_path.is_symlink() {
+                    // Copy a symlink file (no-follow).
+                    rename_symlink_fallback(&from_path, &to_path)?;
+                } else {
+                    // Copy a regular file.
+                    fs::copy(&from_path, &to_path)?;
+                }
             }
 
             // Print verbose message for file
@@ -1142,14 +1146,17 @@ fn copy_file_with_hardlinks_helper(
         return Ok(());
     }
 
-    // Regular file copy
-    #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-    {
-        fs::copy(from, to).and_then(|_| fsxattr::copy_xattrs(&from, &to))?;
-    }
-    #[cfg(any(target_os = "macos", target_os = "redox"))]
-    {
+    if from.is_symlink() {
+        // Copy a symlink file (no-follow).
+        rename_symlink_fallback(from, to)?;
+    } else {
+        // Copy a regular file.
         fs::copy(from, to)?;
+        // Copy xattrs, ignoring ENOTSUP errors (filesystem doesn't support xattrs)
+        #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
+        {
+            let _ = copy_xattrs_if_supported(from, to);
+        }
     }
 
     Ok(())
@@ -1190,16 +1197,30 @@ fn rename_file_fallback(
     }
 
     // Regular file copy
-    #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
     fs::copy(from, to)
-        .and_then(|_| fsxattr::copy_xattrs(&from, &to))
-        .and_then(|_| fs::remove_file(from))
         .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
-    #[cfg(any(target_os = "macos", target_os = "redox", not(unix)))]
-    fs::copy(from, to)
-        .and_then(|_| fs::remove_file(from))
+
+    // Copy xattrs, ignoring ENOTSUP errors (filesystem doesn't support xattrs)
+    #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
+    {
+        let _ = copy_xattrs_if_supported(from, to);
+    }
+
+    fs::remove_file(from)
         .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
     Ok(())
+}
+
+/// Copy xattrs from source to destination, ignoring ENOTSUP/EOPNOTSUPP errors.
+/// These errors indicate the filesystem doesn't support extended attributes,
+/// which is acceptable when moving files across filesystems.
+#[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
+fn copy_xattrs_if_supported(from: &Path, to: &Path) -> io::Result<()> {
+    match fsxattr::copy_xattrs(from, to) {
+        Ok(()) => Ok(()),
+        Err(e) if e.raw_os_error() == Some(libc::EOPNOTSUPP) => Ok(()),
+        Err(e) => Err(e),
+    }
 }
 
 fn is_empty_dir(path: &Path) -> bool {

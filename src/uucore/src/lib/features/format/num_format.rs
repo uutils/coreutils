@@ -257,8 +257,8 @@ impl Formatter<&ExtendedBigDecimal> for Float {
 
         let mut alignment = self.alignment;
 
-        let s = match abs {
-            ExtendedBigDecimal::BigDecimal(bd) => match self.variant {
+        let s = if let ExtendedBigDecimal::BigDecimal(bd) = abs {
+            match self.variant {
                 FloatVariant::Decimal => {
                     format_float_decimal(&bd, self.precision, self.force_decimal)
                 }
@@ -271,14 +271,13 @@ impl Formatter<&ExtendedBigDecimal> for Float {
                 FloatVariant::Hexadecimal => {
                     format_float_hexadecimal(&bd, self.precision, self.case, self.force_decimal)
                 }
-            },
-            _ => {
-                // Pad non-finite numbers with spaces, not zeros.
-                if alignment == NumberAlignment::RightZero {
-                    alignment = NumberAlignment::RightSpace;
-                }
-                format_float_non_finite(&abs, self.case)
             }
+        } else {
+            // Pad non-finite numbers with spaces, not zeros.
+            if alignment == NumberAlignment::RightZero {
+                alignment = NumberAlignment::RightSpace;
+            }
+            format_float_non_finite(&abs, self.case)
         };
         let sign_indicator = get_sign_indicator(self.positive_sign, negative);
 

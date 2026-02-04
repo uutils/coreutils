@@ -10,30 +10,27 @@ use uucore::translate;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let mut command = uu_app();
-
     let args: Vec<OsString> = args.collect();
-    if args.len() > 2 {
+    if args.len() != 2 {
         return Ok(());
     }
 
-    if let Err(e) = command.try_get_matches_from_mut(args) {
-        let error = match e.kind() {
-            clap::error::ErrorKind::DisplayHelp => command.print_help(),
-            clap::error::ErrorKind::DisplayVersion => {
-                write!(std::io::stdout(), "{}", command.render_version())
-            }
-            _ => Ok(()),
-        };
+    // args[0] is the name of the binary.
+    let error = if args[1] == "--help" {
+        uu_app().print_help()
+    } else if args[1] == "--version" {
+        write!(std::io::stdout(), "{}", uu_app().render_version())
+    } else {
+        Ok(())
+    };
 
-        if let Err(print_fail) = error {
-            // Try to display this error.
-            let _ = writeln!(std::io::stderr(), "{}: {print_fail}", uucore::util_name());
-            // Mirror GNU options. When failing to print warnings or version flags, then we exit
-            // with FAIL. This avoids allocation some error information which may result in yet
-            // other types of failure.
-            set_exit_code(1);
-        }
+    if let Err(print_fail) = error {
+        // Try to display this error.
+        let _ = writeln!(std::io::stderr(), "{}: {print_fail}", uucore::util_name());
+        // Mirror GNU options. When failing to print warnings or version flags, then we exit
+        // with FAIL. This avoids allocation some error information which may result in yet
+        // other types of failure.
+        set_exit_code(1);
     }
 
     Ok(())

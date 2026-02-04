@@ -8,6 +8,7 @@ use crate::units::Unit;
 use uucore::ranges::Range;
 use uucore::translate;
 
+pub const DEBUG: &str = "debug";
 pub const DELIMITER: &str = "delimiter";
 pub const FIELD: &str = "field";
 pub const FIELD_DEFAULT: &str = "1";
@@ -27,6 +28,7 @@ pub const TO: &str = "to";
 pub const TO_DEFAULT: &str = "none";
 pub const TO_UNIT: &str = "to-unit";
 pub const TO_UNIT_DEFAULT: &str = "1";
+pub const UNIT_SEPARATOR: &str = "unit-separator";
 pub const ZERO_TERMINATED: &str = "zero-terminated";
 
 pub struct TransformOptions {
@@ -49,12 +51,14 @@ pub struct NumfmtOptions {
     pub padding: isize,
     pub header: usize,
     pub fields: Vec<Range>,
-    pub delimiter: Option<String>,
+    pub delimiter: Option<Vec<u8>>,
     pub round: RoundMethod,
     pub suffix: Option<String>,
+    pub unit_separator: String,
     pub format: FormatOptions,
     pub invalid: InvalidModes,
     pub zero_terminated: bool,
+    pub debug: bool,
 }
 
 #[derive(Clone, Copy)]

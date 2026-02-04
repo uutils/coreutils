@@ -619,7 +619,6 @@ impl ChownExecutor {
                 );
                 continue;
             }
-
             ret = match wrap_chown(
                 path,
                 &meta,
@@ -632,7 +631,8 @@ impl ChownExecutor {
                     if !n.is_empty() {
                         show_error!("{n}");
                     }
-                    0
+                    // retain previous errors
+                    ret.max(0)
                 }
                 Err(e) => {
                     if self.verbosity.level != VerbosityLevel::Silent {
@@ -890,7 +890,7 @@ pub fn chown_base(
             .action(clap::ArgAction::Append)
             .required(true)
             .num_args(1..)
-            .value_parser(clap::value_parser!(std::ffi::OsString)),
+            .value_parser(clap::value_parser!(OsString)),
     );
     let matches = crate::clap_localization::handle_clap_result(command, args)?;
 

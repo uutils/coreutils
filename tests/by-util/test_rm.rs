@@ -767,12 +767,22 @@ fn test_current_or_parent_dir_rm4() {
 
     at.mkdir("d");
 
+    let file_1 = "file1";
+    let file_2 = "d/file2";
+
+    at.touch(file_1);
+    at.touch(file_2);
+
     let answers = [
         "rm: refusing to remove '.' or '..' directory: skipping 'd/.'",
         "rm: refusing to remove '.' or '..' directory: skipping 'd/./'",
         "rm: refusing to remove '.' or '..' directory: skipping 'd/./'",
         "rm: refusing to remove '.' or '..' directory: skipping 'd/..'",
         "rm: refusing to remove '.' or '..' directory: skipping 'd/../'",
+        "rm: refusing to remove '.' or '..' directory: skipping '.'",
+        "rm: refusing to remove '.' or '..' directory: skipping './'",
+        "rm: refusing to remove '.' or '..' directory: skipping '../'",
+        "rm: refusing to remove '.' or '..' directory: skipping '..'",
     ];
     let std_err_str = ts
         .ucmd()
@@ -782,12 +792,20 @@ fn test_current_or_parent_dir_rm4() {
         .arg("d/.////")
         .arg("d/..")
         .arg("d/../")
+        .arg(".")
+        .arg("./")
+        .arg("../")
+        .arg("..")
         .fails()
         .stderr_move_str();
 
     for (idx, line) in std_err_str.lines().enumerate() {
         assert_eq!(line, answers[idx]);
     }
+    // checks that no file was silently removed
+    assert!(at.dir_exists("d"));
+    assert!(at.file_exists(file_1));
+    assert!(at.file_exists(file_2));
 }
 
 #[test]
@@ -798,12 +816,22 @@ fn test_current_or_parent_dir_rm4_windows() {
 
     at.mkdir("d");
 
+    let file_1 = "file1";
+    let file_2 = "d/file2";
+
+    at.touch(file_1);
+    at.touch(file_2);
+
     let answers = [
         "rm: refusing to remove '.' or '..' directory: skipping 'd\\.'",
         "rm: refusing to remove '.' or '..' directory: skipping 'd\\.\\'",
         "rm: refusing to remove '.' or '..' directory: skipping 'd\\.\\'",
         "rm: refusing to remove '.' or '..' directory: skipping 'd\\..'",
         "rm: refusing to remove '.' or '..' directory: skipping 'd\\..\\'",
+        "rm: refusing to remove '.' or '..' directory: skipping '.'",
+        "rm: refusing to remove '.' or '..' directory: skipping '.\\'",
+        "rm: refusing to remove '.' or '..' directory: skipping '..'",
+        "rm: refusing to remove '.' or '..' directory: skipping '..\\'",
     ];
     let std_err_str = ts
         .ucmd()
@@ -813,12 +841,21 @@ fn test_current_or_parent_dir_rm4_windows() {
         .arg("d\\.\\\\\\\\")
         .arg("d\\..")
         .arg("d\\..\\")
+        .arg(".")
+        .arg(".\\")
+        .arg("..")
+        .arg("..\\")
         .fails()
         .stderr_move_str();
 
     for (idx, line) in std_err_str.lines().enumerate() {
         assert_eq!(line, answers[idx]);
     }
+
+    // checks that no file was silently removed
+    assert!(at.dir_exists("d"));
+    assert!(at.file_exists(file_1));
+    assert!(at.file_exists(file_2));
 }
 
 #[test]
@@ -1140,9 +1177,10 @@ fn test_rm_directory_not_writable() {
 
     // Check for expected error message
     // When the parent directory (b/a) doesn't have write permission,
-    // we get "Permission denied" when trying to remove the subdirectory
-    let stderr = result.stderr_str();
-    assert!(stderr.contains("rm: cannot remove 'b/a/p': Permission denied"));
+    // we get "Permission denied" when trying to remove the subdirectory.
+    // The error tracking must be correct so we don't attempt to remove the parent
+    // directory after child failure (which would produce extra "Directory not empty" errors).
+    result.stderr_only("rm: cannot remove 'b/a/p': Permission denied\n");
 
     // Check which directories still exist
     assert!(at.dir_exists("b/a/p")); // Should still exist (parent not writable)
@@ -1216,4 +1254,39 @@ fn test_progress_no_output_on_error() {
         .fails()
         .stderr_contains("cannot remove")
         .stderr_contains("No such file or directory");
+}
+
+#[test]
+fn no_preserve_root_may_not_be_abbreviated() {
+    let (at, _ucmd) = at_and_ucmd!();
+    let file = "test_file_123";
+
+    at.touch(file);
+
+    for arg in ["--n", "--no-pre", "--no-preserve-ro"] {
+        new_ucmd!()
+            .arg(arg)
+            .arg(file)
+            .fails()
+            .stderr_contains("you may not abbreviate the --no-preserve-root option");
+    }
+
+    assert!(at.file_exists(file));
+}
+
+#[cfg(unix)]
+#[test]
+fn test_symlink_to_readonly_no_prompt() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("foo");
+    at.set_mode("foo", 0o444);
+    at.symlink_file("foo", "bar");
+
+    ucmd.arg("---presume-input-tty")
+        .arg("bar")
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.symlink_exists("bar"));
 }
