@@ -3049,11 +3049,25 @@ fn display_item_long(
             })),
         );
 
-        let mut dired_name_len = item_display.dired_name_len;
+        let needs_space = quoted && !os_str_starts_with(&item_display.displayed, b"'");
+
+        if config.dired {
+            let mut dired_name_len = item_display.dired_name_len;
+            if needs_space {
+                dired_name_len += 1;
+            }
+            let displayed_len = item_display.displayed.len() + usize::from(needs_space);
+            let line_len = calculate_line_len(
+                output_display.len(),
+                displayed_len,
+                &config.line_ending,
+            );
+            let (start, end) = dired::calculate_dired(dired, output_display.len(), dired_name_len);
+            dired::update_positions(dired, start, end, line_len);
+        }
+
         let item_name = item_display.displayed;
-        let needs_space = quoted && !os_str_starts_with(&item_name, b"'");
         let displayed_item = if needs_space {
-            dired_name_len += 1;
             let mut ret: OsString = " ".into();
             ret.push(&item_name);
             ret
@@ -3061,15 +3075,6 @@ fn display_item_long(
             item_name
         };
 
-        if config.dired {
-            let line_len = calculate_line_len(
-                output_display.len(),
-                displayed_item.len(),
-                &config.line_ending,
-            );
-            let (start, end) = dired::calculate_dired(dired, output_display.len(), dired_name_len);
-            dired::update_positions(dired, start, end, line_len);
-        }
         write_os_str(&mut output_display, &displayed_item)?;
         output_display.extend(config.line_ending.to_string().as_bytes());
     } else {
@@ -3152,8 +3157,6 @@ fn display_item_long(
                 ansi_width(&String::from_utf8_lossy(&output_display))
             })),
         );
-        let dired_name_len = displayed_item.dired_name_len;
-        let displayed_item = displayed_item.displayed;
         let date_len = 12;
 
         output_display.extend(b" ");
@@ -3165,16 +3168,17 @@ fn display_item_long(
         if config.dired {
             let line_len = calculate_line_len(
                 output_display.len(),
-                displayed_item.len(),
+                displayed_item.displayed.len(),
                 &config.line_ending,
             );
             dired::calculate_and_update_positions(
                 dired,
                 output_display.len(),
-                dired_name_len,
+                displayed_item.dired_name_len,
                 line_len,
             );
         }
+        let displayed_item = displayed_item.displayed;
         write_os_str(&mut output_display, &displayed_item)?;
         output_display.extend(config.line_ending.to_string().as_bytes());
     }
