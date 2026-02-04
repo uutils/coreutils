@@ -94,7 +94,7 @@ fn get_local_to_root_parent(
 /// Given an iterator, return all its items except the last.
 fn skip_last<T>(mut iter: impl Iterator<Item = T>) -> impl Iterator<Item = T> {
     let last = iter.next();
-    iter.scan(last, |state, item| state.replace(item))
+    iter.scan(last, Option::replace)
 }
 
 /// Paths that are invariant throughout the traversal when copying a directory.
@@ -121,7 +121,7 @@ impl<'a> Context<'a> {
         let root_path = current_dir.join(root);
         let target_is_file = target.is_file();
         let root_parent = if target.exists() && !root.to_str().unwrap().ends_with("/.") {
-            root_path.parent().map(|p| p.to_path_buf())
+            root_path.parent().map(Path::to_path_buf)
         } else if root == Path::new(".") && target.is_dir() {
             // Special case: when copying current directory (.) to an existing directory,
             // we don't want to use the parent path as root_parent because we want to

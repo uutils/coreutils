@@ -122,7 +122,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let files = matches
         .get_many::<OsString>(options::FILE)
-        .map_or(vec![], |file_values| file_values.collect());
+        .map_or(vec![], Iterator::collect);
 
     // clap provides .conflicts_with / .conflicts_with_all, but we want to
     // manually handle conflicts so we can match the output of GNU coreutils

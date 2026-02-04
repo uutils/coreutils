@@ -240,7 +240,7 @@ impl Utmpx {
             + 1_000_i64 * self.inner.ut_tv.tv_usec as i64)
             .into();
         let local_offset =
-            time::OffsetDateTime::now_local().map_or_else(|_| time::UtcOffset::UTC, |v| v.offset());
+            time::OffsetDateTime::now_local().map_or_else(|_| time::UtcOffset::UTC, time::OffsetDateTime::offset);
         time::OffsetDateTime::from_unix_timestamp_nanos(ts_nanos)
             .unwrap()
             .to_offset(local_offset)
@@ -396,7 +396,7 @@ pub struct UtmpxIter {
 impl UtmpxIter {
     fn new() -> Self {
         // PoisonErrors can safely be ignored
-        let guard = LOCK.lock().unwrap_or_else(|err| err.into_inner());
+        let guard = LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         Self {
             guard,
             phantom: PhantomData,
@@ -408,7 +408,7 @@ impl UtmpxIter {
     #[cfg(feature = "feat_systemd_logind")]
     fn new_systemd() -> Self {
         // PoisonErrors can safely be ignored
-        let guard = LOCK.lock().unwrap_or_else(|err| err.into_inner());
+        let guard = LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let systemd_iter = match systemd_logind::SystemdUtmpxIter::new() {
             Ok(iter) => iter,
             Err(_) => {

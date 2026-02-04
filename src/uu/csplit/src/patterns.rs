@@ -193,7 +193,7 @@ mod tests {
     fn up_to_line_pattern() {
         let input: Vec<String> = vec!["24", "42", "{*}", "50", "{4}"]
             .into_iter()
-            .map(|v| v.to_string())
+            .map(ToString::to_string)
             .collect();
         let patterns = get_patterns(input.as_slice()).unwrap();
         assert_eq!(patterns.len(), 3);
@@ -225,7 +225,7 @@ mod tests {
             "/test6.*end$/-3",
         ]
         .into_iter()
-        .map(|v| v.to_string())
+        .map(ToString::to_string)
         .collect();
         let patterns = get_patterns(input.as_slice()).unwrap();
         assert_eq!(patterns.len(), 6);
@@ -287,7 +287,7 @@ mod tests {
             "%test6.*end$%-3",
         ]
         .into_iter()
-        .map(|v| v.to_string())
+        .map(ToString::to_string)
         .collect();
         let patterns = get_patterns(input.as_slice()).unwrap();
         assert_eq!(patterns.len(), 6);

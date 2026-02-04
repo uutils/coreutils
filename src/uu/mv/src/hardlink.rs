@@ -265,7 +265,7 @@ impl HardlinkGroupScanner {
     #[cfg(unix)]
     pub fn stats(&self) -> ScannerStats {
         let total_groups = self.hardlink_groups.len();
-        let total_files = self.hardlink_groups.values().map(|group| group.len()).sum();
+        let total_files = self.hardlink_groups.values().map(Vec::len).sum();
 
         ScannerStats {
             total_groups,

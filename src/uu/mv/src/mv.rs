@@ -360,7 +360,7 @@ fn parse_paths(files: &[OsString], opts: &Options) -> Vec<PathBuf> {
             .map(|p| p.components().as_path().to_owned())
             .collect::<Vec<PathBuf>>()
     } else {
-        paths.map(|p| p.to_owned()).collect::<Vec<PathBuf>>()
+        paths.map(ToOwned::to_owned).collect::<Vec<PathBuf>>()
     }
 }
 

@@ -1718,7 +1718,7 @@ fn test_human_numeric_blank_thousands_sep_locale() {
         }
         let sep = String::from_utf8_lossy(&output.stdout);
         let sep = sep.trim_end_matches(&['\n', '\r'][..]);
-        if sep.is_empty() || sep.len() != 1 || !sep.chars().all(|c| c.is_whitespace()) {
+        if sep.is_empty() || sep.len() != 1 || !sep.chars().all(char::is_whitespace) {
             return None;
         }
         Some(sep.to_string())

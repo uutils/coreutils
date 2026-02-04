@@ -99,7 +99,7 @@ impl Column {
                 let names = matches
                     .get_many::<String>(OPT_OUTPUT)
                     .unwrap()
-                    .map(|s| s.as_str());
+                    .map(String::as_str);
                 let mut seen: Vec<&str> = vec![];
                 let mut columns = vec![];
                 for name in names {

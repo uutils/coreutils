@@ -159,7 +159,7 @@ pub fn checksum_main(
     let files = matches
         .get_many::<OsString>(options::FILE)
         .unwrap()
-        .map(|s| s.as_os_str());
+        .map(OsString::as_os_str);
 
     if check {
         // cksum does not support '--check'ing legacy algorithms

@@ -25,7 +25,7 @@ const SPACE: u8 = b' ';
 fn block(buf: &[u8], cbs: usize, sync: bool, rstat: &mut ReadStat) -> Vec<Vec<u8>> {
     let mut blocks = buf
         .split(|&e| e == NEWLINE)
-        .map(|split| split.to_vec())
+        .map(<[u8]>::to_vec)
         .fold(Vec::new(), |mut blocks, mut split| {
             if split.len() > cbs {
                 rstat.records_truncated += 1;
