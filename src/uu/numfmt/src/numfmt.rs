@@ -16,12 +16,10 @@ use std::str::FromStr;
 use units::{IEC_BASES, SI_BASES};
 use uucore::display::Quotable;
 use uucore::error::UResult;
-use uucore::os_str_as_bytes;
-use uucore::translate;
 
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::ranges::Range;
-use uucore::{format_usage, show};
+use uucore::{format_usage, os_str_as_bytes, show, translate, util_name};
 
 pub mod errors;
 pub mod format;
@@ -88,7 +86,7 @@ fn format_and_handle_validation(input_line: &[u8], options: &NumfmtOptions) -> U
                 show!(NumfmtError::FormattingError(error_message));
             }
             InvalidModes::Warn => {
-                let _ = writeln!(stderr(), "{}: {error_message}", uucore::util_name());
+                let _ = writeln!(stderr(), "{}: {error_message}", util_name());
             }
             InvalidModes::Ignore => {}
         }
@@ -290,7 +288,7 @@ fn print_debug_warnings(options: &NumfmtOptions, matches: &ArgMatches) {
         let _ = writeln!(
             stderr(),
             "{}: {}",
-            uucore::util_name(),
+            util_name(),
             translate!("numfmt-debug-no-conversion")
         );
     }
@@ -300,7 +298,7 @@ fn print_debug_warnings(options: &NumfmtOptions, matches: &ArgMatches) {
         let _ = writeln!(
             stderr(),
             "{}: {}",
-            uucore::util_name(),
+            util_name(),
             translate!("numfmt-debug-header-ignored")
         );
     }
