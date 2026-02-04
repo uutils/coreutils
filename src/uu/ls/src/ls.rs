@@ -2914,6 +2914,10 @@ fn display_grid(
     Ok(())
 }
 
+fn calculate_line_len(output_len: usize, item_len: usize, line_ending: &LineEnding) -> usize {
+    output_len + item_len + line_ending.to_string().len()
+}
+
 /// This writes to the [`BufWriter`] `state.out` a single string of the output of `ls -l`.
 ///
 /// It writes the following keys, in order:
@@ -3058,8 +3062,11 @@ fn display_item_long(
         };
 
         if config.dired {
-            let line_len =
-                output_display.len() + displayed_item.len() + config.line_ending.to_string().len();
+            let line_len = calculate_line_len(
+                output_display.len(),
+                displayed_item.len(),
+                &config.line_ending,
+            );
             let (start, end) = dired::calculate_dired(dired, output_display.len(), dired_name_len);
             dired::update_positions(dired, start, end, line_len);
         }
@@ -3156,8 +3163,11 @@ fn display_item_long(
         output_display.extend(b" ");
 
         if config.dired {
-            let line_len =
-                output_display.len() + displayed_item.len() + config.line_ending.to_string().len();
+            let line_len = calculate_line_len(
+                output_display.len(),
+                displayed_item.len(),
+                &config.line_ending,
+            );
             dired::calculate_and_update_positions(
                 dired,
                 output_display.len(),
