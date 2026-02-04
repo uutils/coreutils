@@ -445,7 +445,7 @@ pub fn os_str_as_bytes(os_string: &OsStr) -> Result<&[u8], NonUtf8OsStrError> {
         .ok_or_else(|| NonUtf8OsStrError {
             input_lossy_string: os_string.to_string_lossy().into_owned(),
         })
-        .map(|s| s.as_bytes())
+        .map(str::as_bytes)
 }
 
 /// Performs a potentially lossy conversion from `OsStr` to UTF-8 bytes.
