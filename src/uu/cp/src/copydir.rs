@@ -121,7 +121,7 @@ impl<'a> Context<'a> {
         let root_path = current_dir.join(root);
         let target_is_file = target.is_file();
         let root_parent = if target.exists() && !root.to_str().unwrap().ends_with("/.") {
-            root_path.parent().map(Path::to_path_buf)
+            root_path.parent().map(ToOwned::to_owned)
         } else if root == Path::new(".") && target.is_dir() {
             // Special case: when copying current directory (.) to an existing directory,
             // we don't want to use the parent path as root_parent because we want to

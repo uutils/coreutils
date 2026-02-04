@@ -193,7 +193,7 @@ mod tests {
     fn up_to_line_pattern() {
         let input: Vec<String> = vec!["24", "42", "{*}", "50", "{4}"]
             .into_iter()
-            .map(ToString::to_string)
+            .map(ToOwned::to_owned)
             .collect();
         let patterns = get_patterns(input.as_slice()).unwrap();
         assert_eq!(patterns.len(), 3);
