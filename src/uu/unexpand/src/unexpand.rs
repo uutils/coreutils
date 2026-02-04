@@ -488,7 +488,7 @@ fn utf8_incomplete_tail(buf: &[u8]) -> usize {
 
     if cont == 0 {
         let expected = utf8_expected_len(buf[len - 1]);
-        return if expected > 1 { 1 } else { 0 };
+        return usize::from(expected > 1);
     }
 
     if i == 0 {
@@ -534,10 +534,9 @@ fn unexpand_chunk(
                 state.reset_line();
                 byte = end;
                 continue;
-            } else {
-                output.write_all(&buf[byte..])?;
-                return Ok(());
             }
+            output.write_all(&buf[byte..])?;
+            return Ok(());
         }
 
         // when we have a finite number of columns, never convert past the last column
