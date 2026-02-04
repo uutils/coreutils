@@ -365,7 +365,7 @@ phf_codegen = "0.13.1"
 platform-info = "2.0.3"
 procfs = "0.18"
 rand = { version = "0.9.0", features = ["small_rng"] }
-rand_chacha = { version = "0.9.0" }
+rand_chacha = { version = "0.10.0" }
 rayon = "1.10"
 regex = "1.10.4"
 rlimit = "0.11.0"
