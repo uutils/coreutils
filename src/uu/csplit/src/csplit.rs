@@ -454,16 +454,11 @@ impl SplitWriter<'_> {
 
                     // write the extra lines required by the offset
                     while offset > 0 {
-                        match input_iter.next() {
-                            Some((_, line)) => {
-                                self.writeln(&line?)?;
-                            }
-                            None => {
-                                self.finish_split()?;
-                                return Err(CsplitError::LineOutOfRange(
-                                    pattern_as_str.to_string(),
-                                ));
-                            }
+                        if let Some((_, line)) = input_iter.next() {
+                            self.writeln(&line?)?;
+                        } else {
+                            self.finish_split()?;
+                            return Err(CsplitError::LineOutOfRange(pattern_as_str.to_string()));
                         }
                         offset -= 1;
                     }

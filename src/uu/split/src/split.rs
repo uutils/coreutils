@@ -1189,18 +1189,15 @@ where
                 }
             }
 
-            match kth_chunk {
-                Some(chunk_number) => {
-                    if i == chunk_number {
-                        stdout_writer.write_all(buf)?;
-                        break;
-                    }
+            if let Some(chunk_number) = kth_chunk {
+                if i == chunk_number {
+                    stdout_writer.write_all(buf)?;
+                    break;
                 }
-                None => {
-                    let idx = (i - 1) as usize;
-                    let writer = out_files.get_writer(idx, settings)?;
-                    writer.write_all(buf)?;
-                }
+            } else {
+                let idx = (i - 1) as usize;
+                let writer = out_files.get_writer(idx, settings)?;
+                writer.write_all(buf)?;
             }
         } else {
             break;
@@ -1301,18 +1298,15 @@ where
         }
         let bytes = line.as_slice();
 
-        match kth_chunk {
-            Some(kth) => {
-                if chunk_number == kth {
-                    stdout_writer.write_all(bytes)?;
-                }
+        if let Some(kth) = kth_chunk {
+            if chunk_number == kth {
+                stdout_writer.write_all(bytes)?;
             }
-            None => {
-                // Should write into a file
-                let idx = (chunk_number - 1) as usize;
-                let writer = out_files.get_writer(idx, settings)?;
-                custom_write_all(bytes, writer, settings)?;
-            }
+        } else {
+            // Should write into a file
+            let idx = (chunk_number - 1) as usize;
+            let writer = out_files.get_writer(idx, settings)?;
+            custom_write_all(bytes, writer, settings)?;
         }
 
         // Advance to the next chunk if the current one is filled.

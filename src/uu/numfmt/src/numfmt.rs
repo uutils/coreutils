@@ -314,19 +314,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         print_debug_warnings(&options, &matches);
     }
 
-    let result = match matches.get_many::<OsString>(NUMBER) {
-        Some(values) => {
-            let byte_args: Vec<&[u8]> = values
-                .map(|s| os_str_as_bytes(s).map_err(|e| e.to_string()))
-                .collect::<std::result::Result<Vec<_>, _>>()
-                .map_err(NumfmtError::IllegalArgument)?;
-            handle_args(byte_args.into_iter(), &options)
-        }
-        None => {
-            let stdin = std::io::stdin();
-            let mut locked_stdin = stdin.lock();
-            handle_buffer(&mut locked_stdin, &options)
-        }
+    let result = if let Some(values) = matches.get_many::<OsString>(NUMBER) {
+        let byte_args: Vec<&[u8]> = values
+            .map(|s| os_str_as_bytes(s).map_err(|e| e.to_string()))
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(NumfmtError::IllegalArgument)?;
+        handle_args(byte_args.into_iter(), &options)
+    } else {
+        let stdin = std::io::stdin();
+        let mut locked_stdin = stdin.lock();
+        handle_buffer(&mut locked_stdin, &options)
     };
 
     match result {

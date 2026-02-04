@@ -216,22 +216,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     for i in 0..=users.len() {
         let possible_pw = if state.user_specified {
-            match Passwd::locate(users[i].as_str()) {
-                Ok(p) => Some(p),
-                Err(_) => {
-                    show_error!(
-                        "{}",
-                        translate!("id-error-no-such-user",
-                                                     "user" => users[i].quote()
-                        )
-                    );
-                    set_exit_code(1);
-                    if i + 1 >= users.len() {
-                        break;
-                    }
-
-                    continue;
+            if let Ok(p) = Passwd::locate(users[i].as_str()) {
+                Some(p)
+            } else {
+                show_error!(
+                    "{}",
+                    translate!("id-error-no-such-user",
+                                                 "user" => users[i].quote()
+                    )
+                );
+                set_exit_code(1);
+                if i + 1 >= users.len() {
+                    break;
                 }
+
+                continue;
             }
         } else {
             None

@@ -36,13 +36,12 @@ enum GroupsError {
 impl UError for GroupsError {}
 
 fn infallible_gid2grp(gid: &u32) -> String {
-    match gid2grp(*gid) {
-        Ok(grp) => grp,
-        Err(_) => {
-            // The `show!()` macro sets the global exit code for the program.
-            show!(GroupsError::GroupNotFound(*gid));
-            gid.to_string()
-        }
+    if let Ok(grp) = gid2grp(*gid) {
+        grp
+    } else {
+        // The `show!()` macro sets the global exit code for the program.
+        show!(GroupsError::GroupNotFound(*gid));
+        gid.to_string()
     }
 }
 

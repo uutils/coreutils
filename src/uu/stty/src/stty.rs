@@ -485,10 +485,12 @@ fn invalid_speed<T>(arg: &str, speed: &str) -> Result<T, Box<dyn UError>> {
 /// GNU uses different error messages if values overflow or underflow a u8,
 /// this function returns the appropriate error message in the case of overflow or underflow, or u8 on success
 fn parse_u8_or_err(arg: &str) -> Result<u8, String> {
-    arg.parse::<u8>().map_err(|e| match e.kind() {
-        IntErrorKind::PosOverflow => translate!("stty-error-invalid-integer-argument-value-too-large", "value" => format!("'{arg}'")),
-        _ => translate!("stty-error-invalid-integer-argument",
-                        "value" => format!("'{arg}'")),
+    arg.parse::<u8>().map_err(|e| {
+        if let IntErrorKind::PosOverflow = e.kind() {
+            translate!("stty-error-invalid-integer-argument-value-too-large", "value" => format!("'{arg}'"))
+        } else {
+            translate!("stty-error-invalid-integer-argument", "value" => format!("'{arg}'"))
+        }
     })
 }
 
@@ -567,16 +569,15 @@ impl WrappedPrinter {
     /// If term_size is None (typically when output is piped), falls back to
     /// the COLUMNS environment variable or a default width of 80 columns.
     fn new(term_size: Option<&TermSize>) -> Self {
-        let columns = match term_size {
-            Some(term_size) => term_size.columns,
-            None => {
-                const DEFAULT_TERM_WIDTH: u16 = 80;
+        let columns = if let Some(term_size) = term_size {
+            term_size.columns
+        } else {
+            const DEFAULT_TERM_WIDTH: u16 = 80;
 
-                std::env::var_os("COLUMNS")
-                    .and_then(|s| s.to_str()?.parse().ok())
-                    .filter(|&c| c > 0)
-                    .unwrap_or(DEFAULT_TERM_WIDTH)
-            }
+            std::env::var_os("COLUMNS")
+                .and_then(|s| s.to_str()?.parse().ok())
+                .filter(|&c| c > 0)
+                .unwrap_or(DEFAULT_TERM_WIDTH)
         };
 
         Self {

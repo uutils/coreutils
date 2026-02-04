@@ -900,15 +900,14 @@ pub fn statfs(path: &OsStr) -> Result<StatFs, String> {
         Ok(p) => {
             let mut buffer: StatFs = unsafe { mem::zeroed() };
             unsafe {
-                match statfs_fn(p.as_ptr(), &raw mut buffer) {
-                    0 => Ok(buffer),
-                    _ => {
-                        let errno = IOError::last_os_error().raw_os_error().unwrap_or(0);
-                        Err(CStr::from_ptr(strerror(errno))
-                            .to_str()
-                            .map_err(|_| "Error message contains invalid UTF-8".to_owned())?
-                            .to_owned())
-                    }
+                if statfs_fn(p.as_ptr(), &raw mut buffer) == 0 {
+                    Ok(buffer)
+                } else {
+                    let errno = IOError::last_os_error().raw_os_error().unwrap_or(0);
+                    Err(CStr::from_ptr(strerror(errno))
+                        .to_str()
+                        .map_err(|_| "Error message contains invalid UTF-8".to_owned())?
+                        .to_owned())
                 }
             }
         }

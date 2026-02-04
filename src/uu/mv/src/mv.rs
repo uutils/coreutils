@@ -641,12 +641,11 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
             pb.set_message(msg);
         }
 
-        let targetpath = match sourcepath.file_name() {
-            Some(name) => target_dir.join(name),
-            None => {
-                show!(MvError::NoSuchFile(sourcepath.quote().to_string()));
-                continue;
-            }
+        let targetpath = if let Some(name) = sourcepath.file_name() {
+            target_dir.join(name)
+        } else {
+            show!(MvError::NoSuchFile(sourcepath.quote().to_string()));
+            continue;
         };
 
         if moved_destinations.contains(&targetpath) && options.backup != BackupMode::Numbered {
@@ -683,9 +682,10 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
                 let e = e.map_err_context(|| {
                     translate!("mv-error-cannot-move", "source" => sourcepath.quote(), "target" => targetpath.quote())
                 });
-                match display_manager {
-                    Some(ref pb) => pb.suspend(|| show!(e)),
-                    None => show!(e),
+                if let Some(ref pb) = display_manager {
+                    pb.suspend(|| show!(e));
+                } else {
+                    show!(e);
                 }
             }
             Ok(()) => (),
@@ -789,11 +789,10 @@ fn rename(
     }
 
     if opts.verbose {
-        let message = match backup_path {
-            Some(path) => {
-                translate!("mv-verbose-renamed-with-backup", "from" => from.quote(), "to" => to.quote(), "backup" => path.quote())
-            }
-            None => translate!("mv-verbose-renamed", "from" => from.quote(), "to" => to.quote()),
+        let message = if let Some(path) = backup_path {
+            translate!("mv-verbose-renamed-with-backup", "from" => from.quote(), "to" => to.quote(), "backup" => path.quote())
+        } else {
+            translate!("mv-verbose-renamed", "from" => from.quote(), "to" => to.quote())
         };
 
         match display_manager {

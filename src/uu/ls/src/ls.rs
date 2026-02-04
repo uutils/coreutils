@@ -194,9 +194,10 @@ enum LsError {
                 translate!("ls-error-cannot-open-file-permission-denied", "path" => .0.quote())
             },
         },
-        _ => match .1.raw_os_error().unwrap_or(1) {
-            9 => translate!("ls-error-cannot-open-directory-bad-descriptor", "path" => .0.quote()),
-            _ => translate!("ls-error-unknown-io-error", "path" => .0.quote(), "error" => format!("{:?}", .1)),
+        _ => if 9 == .1.raw_os_error().unwrap_or(1) {
+            translate!("ls-error-cannot-open-directory-bad-descriptor", "path" => .0.quote())
+        } else {
+            translate!("ls-error-unknown-io-error", "path" => .0.quote(), "error" => format!("{:?}", .1))
         },
     })]
     IOErrorContext(PathBuf, std::io::Error, bool),
@@ -827,17 +828,17 @@ fn parse_width(width_match: Option<&String>) -> Result<u16, LsError> {
         }
     };
 
-    let parse_width_from_env =
-        |columns: OsString| match columns.to_str().and_then(|s| s.parse().ok()) {
-            Some(columns) => columns,
-            None => {
-                show_error!(
-                    "{}",
-                    translate!("ls-invalid-columns-width", "width" => columns.quote())
-                );
-                DEFAULT_TERM_WIDTH
-            }
-        };
+    let parse_width_from_env = |columns: OsString| {
+        if let Some(columns) = columns.to_str().and_then(|s| s.parse().ok()) {
+            columns
+        } else {
+            show_error!(
+                "{}",
+                translate!("ls-invalid-columns-width", "width" => columns.quote())
+            );
+            DEFAULT_TERM_WIDTH
+        }
+    };
 
     let calculate_term_size = || match terminal_size::terminal_size() {
         Some((width, _)) => width.0,
@@ -958,8 +959,8 @@ impl Config {
 
         let (file_size_block_size, block_size) = if !opt_si && !opt_hr && !raw_block_size.is_empty()
         {
-            match parse_size_non_zero_u64(&raw_block_size.to_string_lossy()) {
-                Ok(size) => match (is_env_var_blocksize, opt_kb) {
+            if let Ok(size) = parse_size_non_zero_u64(&raw_block_size.to_string_lossy()) {
+                match (is_env_var_blocksize, opt_kb) {
                     (true, true) => (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE),
                     (true, false) => (DEFAULT_FILE_SIZE_BLOCK_SIZE, size),
                     (false, true) => {
@@ -971,20 +972,19 @@ impl Config {
                         }
                     }
                     (false, false) => (size, size),
-                },
-                Err(_) => {
-                    // only fail if invalid block size was specified with --block-size,
-                    // ignore invalid block size from env vars
-                    if let Some(invalid_block_size) = opt_block_size {
-                        return Err(Box::new(LsError::BlockSizeParseError(
-                            invalid_block_size.clone(),
-                        )));
-                    }
-                    if is_env_var_blocksize {
-                        (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
-                    } else {
-                        (DEFAULT_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
-                    }
+                }
+            } else {
+                // only fail if invalid block size was specified with --block-size,
+                // ignore invalid block size from env vars
+                if let Some(invalid_block_size) = opt_block_size {
+                    return Err(Box::new(LsError::BlockSizeParseError(
+                        invalid_block_size.clone(),
+                    )));
+                }
+                if is_env_var_blocksize {
+                    (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
+                } else {
+                    (DEFAULT_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
                 }
             }
         } else if env_var_posixly_correct.is_some() {
@@ -1047,14 +1047,13 @@ impl Config {
             .into_iter()
             .flatten()
         {
-            match parse_glob::from_str(pattern) {
-                Ok(p) => {
-                    ignore_patterns.push(p);
-                }
-                Err(_) => show_warning!(
+            if let Ok(p) = parse_glob::from_str(pattern) {
+                ignore_patterns.push(p);
+            } else {
+                show_warning!(
                     "{}",
                     translate!("ls-invalid-ignore-pattern", "pattern" => pattern.quote())
-                ),
+                );
             }
         }
 
@@ -1064,14 +1063,13 @@ impl Config {
                 .into_iter()
                 .flatten()
             {
-                match parse_glob::from_str(pattern) {
-                    Ok(p) => {
-                        ignore_patterns.push(p);
-                    }
-                    Err(_) => show_warning!(
+                if let Ok(p) = parse_glob::from_str(pattern) {
+                    ignore_patterns.push(p);
+                } else {
+                    show_warning!(
                         "{}",
                         translate!("ls-invalid-hide-pattern", "pattern" => pattern.quote())
-                    ),
+                    );
                 }
             }
         }
@@ -2235,12 +2233,11 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
             continue;
         }
 
-        let show_dir_contents = match path_data.file_type() {
-            Some(ft) => !config.directory && ft.is_dir(),
-            None => {
-                set_exit_code(1);
-                false
-            }
+        let show_dir_contents = if let Some(ft) = path_data.file_type() {
+            !config.directory && ft.is_dir()
+        } else {
+            set_exit_code(1);
+            false
         };
 
         if show_dir_contents {
