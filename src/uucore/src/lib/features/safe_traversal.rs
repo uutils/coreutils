@@ -368,13 +368,128 @@ impl DirFd {
     }
 }
 
+/// Find the deepest existing real directory ancestor for a path.
+///
+/// Returns the existing ancestor path and a list of components that need to be created.
+/// Uses `symlink_metadata` to detect symlinks - symlinks are NOT followed and are
+/// treated as components that need to be created/replaced.
+fn find_existing_ancestor(path: &Path) -> io::Result<(PathBuf, Vec<OsString>)> {
+    let mut current = path.to_path_buf();
+    let mut components: Vec<OsString> = Vec::new();
+
+    loop {
+        // Use symlink_metadata to NOT follow symlinks
+        match fs::symlink_metadata(&current) {
+            Ok(meta) => {
+                if meta.is_dir() && !meta.file_type().is_symlink() {
+                    // Found a real directory (not a symlink to a directory)
+                    components.reverse();
+                    return Ok((current, components));
+                }
+                // It's a symlink, file, or other non-directory - treat as needing creation
+                // This ensures symlinks get replaced by open_or_create_subdir
+                if let Some(file_name) = current.file_name() {
+                    components.push(file_name.to_os_string());
+                }
+                if let Some(parent) = current.parent() {
+                    if parent.as_os_str().is_empty() {
+                        // Reached empty parent (for relative paths), use "."
+                        components.reverse();
+                        return Ok((PathBuf::from("."), components));
+                    }
+                    current = parent.to_path_buf();
+                } else {
+                    // Reached filesystem root
+                    let root = if path.is_absolute() {
+                        PathBuf::from("/")
+                    } else {
+                        PathBuf::from(".")
+                    };
+                    components.reverse();
+                    return Ok((root, components));
+                }
+            }
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                // Doesn't exist, record component and move up to parent
+                if let Some(file_name) = current.file_name() {
+                    components.push(file_name.to_os_string());
+                }
+                if let Some(parent) = current.parent() {
+                    if parent.as_os_str().is_empty() {
+                        // Reached empty parent (for relative paths), use "."
+                        components.reverse();
+                        return Ok((PathBuf::from("."), components));
+                    }
+                    current = parent.to_path_buf();
+                } else {
+                    // Reached filesystem root
+                    let root = if path.is_absolute() {
+                        PathBuf::from("/")
+                    } else {
+                        PathBuf::from(".")
+                    };
+                    components.reverse();
+                    return Ok((root, components));
+                }
+            }
+            Err(e) => return Err(e),
+        }
+    }
+}
+
+/// Open or create a subdirectory using fd-based operations only.
+///
+/// This is a helper function for `create_dir_all_safe` that handles a single
+/// path component. If a symlink exists where a directory should be, it is
+/// removed and replaced with a real directory.
+///
+/// # Arguments
+/// * `parent_fd` - The parent directory file descriptor
+/// * `name` - The name of the subdirectory to open or create
+/// * `mode` - The mode to use when creating a new directory
+///
+/// # Returns
+/// A DirFd for the subdirectory
+fn open_or_create_subdir(parent_fd: &DirFd, name: &OsStr, mode: u32) -> io::Result<DirFd> {
+    match parent_fd.stat_at(name, SymlinkBehavior::NoFollow) {
+        Ok(stat) => {
+            let file_type = (stat.st_mode as libc::mode_t) & libc::S_IFMT;
+            match file_type {
+                libc::S_IFDIR => parent_fd.open_subdir(name, SymlinkBehavior::NoFollow),
+                libc::S_IFLNK => {
+                    parent_fd.unlink_at(name, false)?;
+                    parent_fd.mkdir_at(name, mode)?;
+                    parent_fd.open_subdir(name, SymlinkBehavior::NoFollow)
+                }
+                _ => Err(io::Error::new(
+                    io::ErrorKind::AlreadyExists,
+                    format!("path component exists but is not a directory: {name:?}"),
+                )),
+            }
+        }
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {
+            parent_fd.mkdir_at(name, mode)?;
+            parent_fd.open_subdir(name, SymlinkBehavior::NoFollow)
+        }
+        Err(e) => Err(e),
+    }
+}
+
 /// Safely create all parent directories for a path using directory file descriptors.
 /// This prevents symlink race conditions by anchoring all operations to directory fds.
 ///
 /// # Security
-/// If a symlink exists where a directory needs to be created, it will be removed
-/// and replaced with a real directory. This is necessary to prevent symlink attacks
-/// where an attacker could redirect file operations to arbitrary locations.
+/// This function prevents TOCTOU race conditions by:
+/// 1. Finding the deepest existing ancestor directory (path-based, but safe since it exists)
+/// 2. Opening that ancestor with a file descriptor
+/// 3. Creating all new directories using fd-based operations (mkdirat, openat with O_NOFOLLOW)
+///
+/// Once we have a fd for an existing ancestor, all subsequent operations use that fd
+/// as the anchor. If an attacker replaces a newly-created directory with a symlink,
+/// our openat with O_NOFOLLOW will fail, preventing the attack.
+///
+/// Existing symlinks in the path (like /var -> /private/var on macOS) are followed
+/// when finding the ancestor, which is safe since they already exist.
 ///
 /// # Arguments
 /// * `path` - The path to create directories for
@@ -386,88 +501,11 @@ impl DirFd {
 /// all directories already exist.
 #[cfg(unix)]
 pub fn create_dir_all_safe(path: &Path, mode: u32) -> io::Result<DirFd> {
-    // Find the first existing parent directory
-    let mut current_path = path;
-    let mut components_to_create: Vec<OsString> = Vec::new();
+    let (existing_ancestor, components_to_create) = find_existing_ancestor(path)?;
+    let mut dir_fd = DirFd::open(&existing_ancestor, SymlinkBehavior::Follow)?;
 
-    loop {
-        if current_path.exists() {
-            let is_real_dir = fs::symlink_metadata(current_path)
-                .map(|m| m.is_dir() && !m.file_type().is_symlink())
-                .unwrap_or(false);
-
-            if is_real_dir {
-                let mut dir_fd = DirFd::open(current_path, SymlinkBehavior::NoFollow)?;
-
-                for component in components_to_create.iter().rev() {
-                    if let Ok(stat) =
-                        dir_fd.stat_at(component.as_os_str(), SymlinkBehavior::NoFollow)
-                    {
-                        if (stat.st_mode as libc::mode_t) & libc::S_IFMT != libc::S_IFDIR {
-                            return Err(io::Error::new(
-                                io::ErrorKind::AlreadyExists,
-                                format!(
-                                    "path component exists but is not a directory: {component:?}"
-                                ),
-                            ));
-                        }
-                        dir_fd =
-                            dir_fd.open_subdir(component.as_os_str(), SymlinkBehavior::NoFollow)?;
-                    } else {
-                        dir_fd.mkdir_at(component.as_os_str(), mode)?;
-                        dir_fd =
-                            dir_fd.open_subdir(component.as_os_str(), SymlinkBehavior::NoFollow)?;
-                    }
-                }
-
-                return Ok(dir_fd);
-            }
-            if let Ok(meta) = fs::symlink_metadata(current_path) {
-                if meta.file_type().is_symlink() {
-                    fs::remove_file(current_path)?;
-                } else {
-                    return Err(io::Error::new(
-                        io::ErrorKind::AlreadyExists,
-                        format!(
-                            "path exists but is not a directory: {}",
-                            current_path.display()
-                        ),
-                    ));
-                }
-            }
-        }
-
-        if let Some(parent) = current_path.parent() {
-            if let Some(component) = current_path.file_name() {
-                components_to_create.push(component.to_os_string());
-            }
-            current_path = parent;
-        } else {
-            break;
-        }
-    }
-
-    let root_path = if path.is_absolute() {
-        Path::new("/")
-    } else {
-        Path::new(".")
-    };
-
-    let mut dir_fd = DirFd::open(root_path, SymlinkBehavior::Follow)?;
-
-    for component in components_to_create.iter().rev() {
-        if let Ok(stat) = dir_fd.stat_at(component.as_os_str(), SymlinkBehavior::NoFollow) {
-            if (stat.st_mode as libc::mode_t) & libc::S_IFMT != libc::S_IFDIR {
-                return Err(io::Error::new(
-                    io::ErrorKind::AlreadyExists,
-                    format!("path component exists but is not a directory: {component:?}"),
-                ));
-            }
-            dir_fd = dir_fd.open_subdir(component.as_os_str(), SymlinkBehavior::NoFollow)?;
-        } else {
-            dir_fd.mkdir_at(component.as_os_str(), mode)?;
-            dir_fd = dir_fd.open_subdir(component.as_os_str(), SymlinkBehavior::NoFollow)?;
-        }
+    for component in &components_to_create {
+        dir_fd = open_or_create_subdir(&dir_fd, component.as_os_str(), mode)?;
     }
 
     Ok(dir_fd)

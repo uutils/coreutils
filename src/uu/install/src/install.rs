@@ -599,7 +599,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
     #[cfg(unix)]
     let mut target_parent_fd: Option<DirFd> = None;
     #[cfg(unix)]
-    let mut target_filename: Option<std::ffi::OsString> = None;
+    let mut target_filename: Option<OsString> = None;
 
     if b.create_leading {
         // if -t is used in combination with -D, create whole target because it does not include filename
@@ -902,13 +902,18 @@ fn perform_backup(to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
 }
 
 /// Copy a file using directory file descriptor for safe traversal.
-/// This prevents symlink race conditions when creating target files.
+///
+/// This is the fd-based counterpart to `copy_file`. It prevents symlink race
+/// conditions by using `openat` to create the destination file relative to a
+/// directory file descriptor, rather than using path-based operations.
+///
+/// Note: This function and `copy_file` share similar logic but cannot easily
+/// be consolidated because they use fundamentally different APIs:
+/// - `copy_file_safe` uses fd-based `DirFd::open_file_at()` (openat syscall)
+/// - `copy_file` uses path-based `OpenOptions::new().create_new().open()`
 #[cfg(unix)]
 fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsStr) -> UResult<()> {
-    use std::os::unix::fs::FileTypeExt;
-
     let from_meta = metadata(from)?;
-    let ft = from_meta.file_type();
 
     // Check if source and destination are the same file
     if let Ok(to_stat) = to_parent_fd.stat_at(to_filename, SymlinkBehavior::Follow) {
@@ -919,13 +924,6 @@ fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsS
                 InstallError::SameFile(from.to_path_buf(), PathBuf::from(to_filename)).into(),
             );
         }
-    }
-
-    if ft.is_char_device() || ft.is_block_device() || ft.is_fifo() {
-        let mut handle = File::open(from)?;
-        let mut dest = to_parent_fd.open_file_at(to_filename)?;
-        copy_stream(&mut handle, &mut dest)?;
-        return Ok(());
     }
 
     let mut src = File::open(from)?;
