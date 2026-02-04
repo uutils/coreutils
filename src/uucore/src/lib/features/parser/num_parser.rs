@@ -35,7 +35,7 @@ enum Base {
 
 impl Base {
     /// Return the digit value of a character in the given base
-    fn digit(&self, c: char) -> Option<u64> {
+    fn digit(self, c: char) -> Option<u64> {
         fn from_decimal(c: char) -> u64 {
             u64::from(c) - u64::from('0')
         }
@@ -53,7 +53,7 @@ impl Base {
 
     /// Greedily parse as many digits as possible from the string
     /// Returns parsed digits (if any), and the rest of the string.
-    fn parse_digits<'a>(&self, str: &'a str) -> (Option<BigUint>, &'a str) {
+    fn parse_digits(self, str: &str) -> (Option<BigUint>, &str) {
         let (digits, _, rest) = self.parse_digits_count(str, None);
         (digits, rest)
     }
@@ -61,11 +61,11 @@ impl Base {
     /// Greedily parse as many digits as possible from the string, adding to already parsed digits.
     /// This is meant to be used (directly) for the part after a decimal point.
     /// Returns parsed digits (if any), the number of parsed digits, and the rest of the string.
-    fn parse_digits_count<'a>(
-        &self,
-        str: &'a str,
+    fn parse_digits_count(
+        self,
+        str: &str,
         digits: Option<BigUint>,
-    ) -> (Option<BigUint>, i64, &'a str) {
+    ) -> (Option<BigUint>, i64, &str) {
         let mut digits: Option<BigUint> = digits;
         let mut count: i64 = 0;
         let mut rest = str;
@@ -77,9 +77,9 @@ impl Base {
         let mut mul_tmp: u64 = 1;
         while let Some(d) = rest.chars().next().and_then(|c| self.digit(c)) {
             (digits_tmp, count_tmp, mul_tmp) = (
-                digits_tmp * *self as u64 + d,
+                digits_tmp * self as u64 + d,
                 count_tmp + 1,
-                mul_tmp * *self as u64,
+                mul_tmp * self as u64,
             );
             rest = &rest[1..];
             // In base 16, we parse 4 bits at a time, so we can parse 16 digits at most in a u64.
