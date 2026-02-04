@@ -522,9 +522,12 @@ fn unexpand_chunk(
     let mut byte = 0; // offset into the buffer
 
     while byte < buf.len() {
-        if state.init && !options.aflag && !is_space_or_tab(buf[byte]) {
+        if state.init
+            && !options.aflag
+            && !is_space_or_tab(buf[byte])
+            && state.col == state.scol
+        {
             state.convert = false;
-            continue;
         }
 
         if !state.convert {
