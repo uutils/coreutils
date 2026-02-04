@@ -107,9 +107,9 @@ pub(crate) fn copy_on_write(
 
             buf_copy::copy_stream(&mut src_file, &mut dst_file)
                 .map_err(|_| std::io::Error::from(std::io::ErrorKind::Other))
-                .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?
+                .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
         } else {
-            fs::copy(source, dest).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?
+            fs::copy(source, dest).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
         }
     }
 
