@@ -59,9 +59,12 @@ fn main() {
 
     let util_name = if let Some(&util) = matched_util {
         Some(OsString::from(util))
-    } else {
+    } else if binary_as_util.ends_with("utils") || binary_as_util.ends_with("box") {
+        // todo: Remove support of "*box" from binary
         uucore::set_utility_is_second_arg();
         args.next()
+    } else {
+        validation::not_found(&OsString::from(binary_as_util));
     };
 
     // 0th argument equals util name?
