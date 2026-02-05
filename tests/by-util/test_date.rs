@@ -373,6 +373,13 @@ fn test_date_format_literal() {
 }
 
 #[test]
+fn test_date_format_s02ss_0us() {
+    // %02s = seconds since epoch (min width 2). Ensures coreutils date produces a number (same as standard date).
+    let re = Regex::new(r"^\d{5,}\n$").unwrap();
+    new_ucmd!().arg("+%02s").succeeds().stdout_matches(&re);
+}
+
+#[test]
 #[cfg(all(unix, not(target_os = "macos")))]
 fn test_date_set_valid() {
     if geteuid() == 0 {

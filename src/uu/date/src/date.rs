@@ -624,19 +624,48 @@ pub fn uu_app() -> Command {
         .arg(Arg::new(OPT_FORMAT).num_args(0..).trailing_var_arg(true))
 }
 
+/// Rewrite %\<digits\>s to %s in the format string.
+/// Workaround for jiff which asserts n <= 99 when a width is given for %s (epoch seconds);
+/// epoch seconds are large, so we drop the width so jiff outputs the full number.
+fn rewrite_epoch_width_format(fmt: &str) -> Cow<'_, str> {
+    if !fmt.contains('%') || !fmt.contains('s') {
+        return Cow::Borrowed(fmt);
+    }
+    let mut result = String::with_capacity(fmt.len());
+    let mut chars = fmt.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '%' {
+            result.push('%');
+            let mut digits = String::new();
+            while let Some(d) = chars.next_if(|c| c.is_ascii_digit()) {
+                digits.push(d);
+            }
+            if chars.next_if(|c| *c == 's').is_some() {
+                result.push('s');
+            } else {
+                result.push_str(&digits);
+            }
+        } else {
+            result.push(c);
+        }
+    }
+    Cow::Owned(result)
+}
+
 fn format_date_with_locale_aware_months(
     date: &Zoned,
     format_string: &str,
     config: &Config<PosixCustom>,
 ) -> Result<String, jiff::Error> {
     let broken_down = BrokenDownTime::from(date);
+    let format_string = rewrite_epoch_width_format(format_string);
 
     if !should_use_icu_locale() {
-        return broken_down.to_string_with_config(config, format_string);
+        return broken_down.to_string_with_config(config, format_string.as_ref());
     }
 
-    let fmt = localize_format_string(format_string, &date.date());
-    broken_down.to_string_with_config(config, &fmt)
+    let fmt = localize_format_string(format_string.as_ref(), &date.date());
+    broken_down.to_string_with_config(config, fmt)
 }
 
 /// Return the appropriate format string for the given settings.
