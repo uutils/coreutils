@@ -421,13 +421,9 @@ impl Iterator for ParagraphStream<'_> {
 
         let mut in_mail = false;
         let mut second_done = false; // for when we use crown or tagged mode
-        loop {
+        while let Some(Line::FormatLine(fl)) = self.lines.peek() {
             // peek ahead
             // need to explicitly force fl out of scope before we can call self.lines.next()
-            let Some(Line::FormatLine(fl)) = self.lines.peek() else {
-                break;
-            };
-
             if p_lines.is_empty() {
                 // first time through the loop, get things set up
                 // detect mail header
