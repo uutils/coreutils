@@ -1942,8 +1942,7 @@ fn test_install_compare_group_ownership() {
         .output()
         .map_or_else(
             |_| "users".to_owned(),
-            |output|
-            String::from_utf8_lossy(&output.stdout).trim().to_owned(),
+            |output| String::from_utf8_lossy(&output.stdout).trim().to_owned(),
         ); // fallback group name
 
     // Install with explicit group

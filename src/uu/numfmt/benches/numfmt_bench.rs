@@ -115,8 +115,7 @@ fn numfmt_round_modes(bencher: Bencher, (round_mode, count): (&str, usize)) {
     bencher
         .with_inputs(|| {
             let numbers: Vec<String> = (1..=count).map(|n| n.to_string()).collect();
-            let mut args: Vec<String> =
-                vec!["--to=si".to_owned(), format!("--round={round_mode}")];
+            let mut args: Vec<String> = vec!["--to=si".to_owned(), format!("--round={round_mode}")];
             args.extend(numbers);
             args
         })

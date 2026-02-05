@@ -503,7 +503,8 @@ fn get_date_format(matches: &ArgMatches) -> String {
                 format::LONG_ISO
             }
         }
-    }.to_owned()
+    }
+    .to_owned()
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -543,7 +544,8 @@ fn build_options(
                 paths[0]
             },
             |s| s.as_str(),
-        ).to_owned();
+        )
+        .to_owned();
 
     let default_first_number = NumberingMode::default().first_number;
     let first_number =

@@ -1123,10 +1123,7 @@ mod tests {
         );
         assert_eq!(
             f64::extended_parse("0b100.1"),
-            Err(ExtendedParserError::PartialMatch(
-                0f64,
-                "b100.1".to_owned()
-            ))
+            Err(ExtendedParserError::PartialMatch(0f64, "b100.1".to_owned()))
         );
 
         assert_eq!(

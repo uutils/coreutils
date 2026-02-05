@@ -183,7 +183,8 @@ where
             .split_once(':')
             .map(|x| x.1)
             .unwrap_or("")
-            .trim().to_owned(),
+            .trim()
+            .to_owned(),
         exit_code: uumain_exit_status,
     }
 }
@@ -283,7 +284,8 @@ pub fn run_gnu_cmd(
         .split_once(':')
         .map(|x| x.1)
         .unwrap_or("")
-        .trim().to_owned();
+        .trim()
+        .to_owned();
 
     if output.status.success() || !check_gnu {
         Ok(CommandResult {

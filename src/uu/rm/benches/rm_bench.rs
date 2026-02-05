@@ -21,7 +21,8 @@ fn rm_single_file(bencher: Bencher) {
                         .path()
                         .join(format!("f{i}"))
                         .to_str()
-                        .unwrap().to_owned()
+                        .unwrap()
+                        .to_owned()
                 })
                 .collect();
             (temp_dir, paths)
@@ -47,7 +48,8 @@ fn rm_multiple_files(bencher: Bencher) {
                         .path()
                         .join(format!("f{i}"))
                         .to_str()
-                        .unwrap().to_owned()
+                        .unwrap()
+                        .to_owned()
                 })
                 .collect();
             (temp_dir, paths)
@@ -90,7 +92,8 @@ fn rm_force_files(bencher: Bencher) {
                         .path()
                         .join(format!("f{i}"))
                         .to_str()
-                        .unwrap().to_owned()
+                        .unwrap()
+                        .to_owned()
                 })
                 .collect();
             (temp_dir, paths)

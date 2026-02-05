@@ -227,7 +227,8 @@ fn parse_fluent_resource(content: &str) -> Result<FluentResource, LocalizationEr
                     .slice
                     .clone()
                     .and_then(|range| content.get(range))
-                    .unwrap_or("").to_owned();
+                    .unwrap_or("")
+                    .to_owned();
                 LocalizationError::ParseResource {
                     error: first_err,
                     snippet,
@@ -361,7 +362,8 @@ fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
         .unwrap_or_else(|_| DEFAULT_LOCALE.to_owned())
         .split('.')
         .next()
-        .unwrap_or(DEFAULT_LOCALE).to_owned();
+        .unwrap_or(DEFAULT_LOCALE)
+        .to_owned();
     LanguageIdentifier::from_str(&locale_str).map_err(|_| {
         LocalizationError::ParseLocale(format!("Failed to parse locale: {locale_str}"))
     })

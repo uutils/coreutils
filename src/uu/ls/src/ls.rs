@@ -299,10 +299,7 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
                 "full-iso" => ok((format::FULL_ISO, None)),
                 "long-iso" => ok((format::LONG_ISO, None)),
                 // ISO older format needs extra padding.
-                "iso" => Ok((
-                    "%m-%d %H:%M".to_owned(),
-                    Some(format::ISO.to_owned() + " "),
-                )),
+                "iso" => Ok(("%m-%d %H:%M".to_owned(), Some(format::ISO.to_owned() + " "))),
                 "locale" => ok(LOCALE_FORMAT),
                 _ => match field.chars().next().unwrap() {
                     '+' => {
