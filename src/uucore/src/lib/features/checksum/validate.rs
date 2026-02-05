@@ -14,8 +14,10 @@ use std::io::{self, BufReader, Read, Write, stderr, stdin};
 
 use os_display::Quotable;
 
-use crate::checksum::{AlgoKind, ChecksumError, SizedAlgoKind, digest_reader, unescape_filename};
-use crate::error::{FromIo, UError, UResult, USimpleError};
+use crate::checksum::{
+    AlgoKind, ChecksumError, ReadingMode, SizedAlgoKind, digest_reader, unescape_filename,
+};
+use crate::error::{FromIo, UError, UIoError, UResult, USimpleError};
 use crate::quoting_style::{QuotingStyle, locale_aware_escape_name};
 use crate::sum::DigestOutput;
 use crate::{
@@ -215,7 +217,7 @@ impl FileChecksumResult {
 
     /// The cli options might prevent to display on the outcome of the
     /// comparison on STDOUT.
-    fn can_display(&self, verbose: ChecksumVerbose) -> bool {
+    fn can_display(self, verbose: ChecksumVerbose) -> bool {
         match self {
             Self::Ok => verbose.over_quiet(),
             Self::Failed => verbose.over_status(),
@@ -535,7 +537,7 @@ fn get_file_to_check(
     let filename_bytes = os_str_as_bytes(filename).map_err(|e| LineCheckError::UError(e.into()))?;
 
     if filename == "-" {
-        Ok(Box::new(io::stdin())) // Use stdin if "-" is specified in the checksum file
+        Ok(Box::new(stdin())) // Use stdin if "-" is specified in the checksum file
     } else {
         let failed_open = || {
             write_file_report(
@@ -679,28 +681,28 @@ fn compute_and_check_digest_from_file(
     // Read the file and calculate the checksum
     let mut digest = algo.create_digest();
 
-    // TODO: improve function signature to use ReadingMode instead of binary bool
     // Set binary to false because --binary is not supported with --check
 
-    let (calculated_checksum, _) = match digest_reader(&mut digest, &mut file_reader, false) {
-        Ok(result) => result,
-        Err(err) => {
-            show!(err.map_err_context(|| {
-                locale_aware_escape_name(&real_filename_to_check, QuotingStyle::SHELL_ESCAPE)
-                    .to_string_lossy()
-                    .to_string()
-            }));
+    let (calculated_checksum, _) =
+        match digest_reader(&mut digest, &mut file_reader, ReadingMode::Text) {
+            Ok(result) => result,
+            Err(err) => {
+                show!(err.map_err_context(|| {
+                    locale_aware_escape_name(&real_filename_to_check, QuotingStyle::SHELL_ESCAPE)
+                        .to_string_lossy()
+                        .to_string()
+                }));
 
-            write_file_report(
-                std::io::stdout(),
-                filename,
-                FileChecksumResult::CantOpen,
-                prefix,
-                opts.verbose,
-            );
-            return Err(LineCheckError::CantOpenFile);
-        }
-    };
+                write_file_report(
+                    io::stdout(),
+                    filename,
+                    FileChecksumResult::CantOpen,
+                    prefix,
+                    opts.verbose,
+                );
+                return Err(LineCheckError::CantOpenFile);
+            }
+        };
 
     // Do the checksum validation
     let checksum_correct = match calculated_checksum {
@@ -709,7 +711,7 @@ fn compute_and_check_digest_from_file(
         DigestOutput::U16(n) => n.to_be_bytes() == expected_checksum,
     };
     write_file_report(
-        std::io::stdout(),
+        io::stdout(),
         filename,
         FileChecksumResult::from_bool(checksum_correct),
         prefix,
@@ -851,7 +853,6 @@ fn process_checksum_file(
     };
 
     let reader = BufReader::new(file);
-    let lines = read_os_string_lines(reader).collect::<Vec<_>>();
 
     // cached_line_format is used to ensure that several non algo-based checksum line
     // will use the same parser.
@@ -861,9 +862,16 @@ fn process_checksum_file(
     // Behavior tested in gnu_cksum_c::test_warn
     let mut last_algo = None;
 
-    for (i, line) in lines.iter().enumerate() {
+    for (i, line_res) in read_os_string_lines(reader).enumerate() {
+        let line = line_res.map_err(|e| {
+            USimpleError::new(
+                UIoError::from(e).code(),
+                format!("{}: read error", filename_input.maybe_quote()),
+            )
+        })?;
+
         let line_result = process_checksum_line(
-            line,
+            &line,
             i,
             cli_algo_kind,
             cli_algo_length,

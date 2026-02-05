@@ -188,7 +188,7 @@ fn install_sigchld() {
 /// We should terminate child process when receiving termination signals.
 static SIGNALED: AtomicBool = AtomicBool::new(false);
 /// Track which signal was received (0 = none/timeout expired naturally).
-static RECEIVED_SIGNAL: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+static RECEIVED_SIGNAL: atomic::AtomicI32 = atomic::AtomicI32::new(0);
 
 /// Install signal handlers for termination signals.
 fn install_signal_handlers(term_signal: usize) {

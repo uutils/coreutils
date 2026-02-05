@@ -272,42 +272,41 @@ impl Chmoder {
     /// Calculate the new mode based on the current mode and the chmod specification.
     /// Returns (`new_mode`, `naively_expected_new_mode`) for symbolic modes, or (`new_mode`, `new_mode`) for numeric/reference modes.
     fn calculate_new_mode(&self, current_mode: u32, is_dir: bool) -> UResult<(u32, u32)> {
-        match self.fmode {
-            Some(mode) => Ok((mode, mode)),
-            None => {
-                let cmode_unwrapped = self.cmode.clone().unwrap();
-                let mut new_mode = current_mode;
-                let mut naively_expected_new_mode = current_mode;
+        if let Some(mode) = self.fmode {
+            Ok((mode, mode))
+        } else {
+            let cmode_unwrapped = self.cmode.clone().unwrap();
+            let mut new_mode = current_mode;
+            let mut naively_expected_new_mode = current_mode;
 
-                for mode in cmode_unwrapped.split(',') {
-                    let result = if mode.chars().any(|c| c.is_ascii_digit()) {
-                        mode::parse_numeric(new_mode, mode, is_dir).map(|v| (v, v))
-                    } else {
-                        mode::parse_symbolic(new_mode, mode, mode::get_umask(), is_dir).map(|m| {
-                            // calculate the new mode as if umask was 0
-                            let naive_mode =
-                                mode::parse_symbolic(naively_expected_new_mode, mode, 0, is_dir)
-                                    .unwrap(); // we know that mode must be valid, so this cannot fail
-                            (m, naive_mode)
-                        })
-                    };
+            for mode in cmode_unwrapped.split(',') {
+                let result = if mode.chars().any(|c| c.is_ascii_digit()) {
+                    mode::parse_numeric(new_mode, mode, is_dir).map(|v| (v, v))
+                } else {
+                    mode::parse_symbolic(new_mode, mode, mode::get_umask(), is_dir).map(|m| {
+                        // calculate the new mode as if umask was 0
+                        let naive_mode =
+                            mode::parse_symbolic(naively_expected_new_mode, mode, 0, is_dir)
+                                .unwrap(); // we know that mode must be valid, so this cannot fail
+                        (m, naive_mode)
+                    })
+                };
 
-                    match result {
-                        Ok((mode, naive_mode)) => {
-                            new_mode = mode;
-                            naively_expected_new_mode = naive_mode;
-                        }
-                        Err(f) => {
-                            return if self.quiet {
-                                Err(ExitCode::new(1))
-                            } else {
-                                Err(USimpleError::new(1, f))
-                            };
-                        }
+                match result {
+                    Ok((mode, naive_mode)) => {
+                        new_mode = mode;
+                        naively_expected_new_mode = naive_mode;
+                    }
+                    Err(f) => {
+                        return if self.quiet {
+                            Err(ExitCode::new(1))
+                        } else {
+                            Err(USimpleError::new(1, f))
+                        };
                     }
                 }
-                Ok((new_mode, naively_expected_new_mode))
             }
+            Ok((new_mode, naively_expected_new_mode))
         }
     }
 
@@ -655,32 +654,31 @@ impl Chmoder {
             self.calculate_new_mode(fperm, file.is_dir())?;
 
         // Determine how to apply the permissions
-        match self.fmode {
-            Some(mode) => self.change_file(fperm, mode, file)?,
-            None => {
-                // Special handling for symlinks when not dereferencing
-                if file.is_symlink() && !dereference {
-                    // TODO: On most Unix systems, symlink permissions are ignored by the kernel,
-                    // so changing them has no effect. We skip this operation for compatibility.
-                    // Note that "chmod without dereferencing" effectively does nothing on symlinks.
-                    if self.verbose {
-                        println!(
-                            "neither symbolic link {} nor referent has been changed",
-                            file.quote()
-                        );
-                    }
-                } else {
-                    self.change_file(fperm, new_mode, file)?;
+        if let Some(mode) = self.fmode {
+            self.change_file(fperm, mode, file)?;
+        } else {
+            // Special handling for symlinks when not dereferencing
+            if file.is_symlink() && !dereference {
+                // TODO: On most Unix systems, symlink permissions are ignored by the kernel,
+                // so changing them has no effect. We skip this operation for compatibility.
+                // Note that "chmod without dereferencing" effectively does nothing on symlinks.
+                if self.verbose {
+                    println!(
+                        "neither symbolic link {} nor referent has been changed",
+                        file.quote()
+                    );
                 }
-                // if a permission would have been removed if umask was 0, but it wasn't because umask was not 0, print an error and fail
-                if (new_mode & !naively_expected_new_mode) != 0 {
-                    return Err(ChmodError::NewPermissions(
-                        file.into(),
-                        display_permissions_unix(new_mode as mode_t, false),
-                        display_permissions_unix(naively_expected_new_mode as mode_t, false),
-                    )
-                    .into());
-                }
+            } else {
+                self.change_file(fperm, new_mode, file)?;
+            }
+            // if a permission would have been removed if umask was 0, but it wasn't because umask was not 0, print an error and fail
+            if (new_mode & !naively_expected_new_mode) != 0 {
+                return Err(ChmodError::NewPermissions(
+                    file.into(),
+                    display_permissions_unix(new_mode as mode_t, false),
+                    display_permissions_unix(naively_expected_new_mode as mode_t, false),
+                )
+                .into());
             }
         }
 

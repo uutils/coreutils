@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (path) eacces inacc rm-r4 unlinkat fstatat
+// spell-checker:ignore (path) eacces inacc rm-r4 unlinkat fstatat rootlink
 
 use clap::builder::{PossibleValue, ValueParser};
 use clap::{Arg, ArgAction, Command, parser::ValueSource};
@@ -17,7 +17,7 @@ use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::MAIN_SEPARATOR;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
@@ -56,7 +56,7 @@ fn verbose_removed_file(path: &Path, options: &Options) {
     if options.verbose {
         println!(
             "{}",
-            translate!("rm-verbose-removed", "file" => normalize(path).quote())
+            translate!("rm-verbose-removed", "file" => uucore::fs::normalize_path(path).quote())
         );
     }
 }
@@ -66,13 +66,13 @@ fn verbose_removed_directory(path: &Path, options: &Options) {
     if options.verbose {
         println!(
             "{}",
-            translate!("rm-verbose-removed-directory", "file" => normalize(path).quote())
+            translate!("rm-verbose-removed-directory", "file" => uucore::fs::normalize_path(path).quote())
         );
     }
 }
 
 /// Helper function to show error with context and return error status
-fn show_removal_error(error: std::io::Error, path: &Path) -> bool {
+fn show_removal_error(error: io::Error, path: &Path) -> bool {
     if error.kind() == io::ErrorKind::PermissionDenied {
         show_error!("cannot remove {}: Permission denied", path.quote());
     } else {
@@ -229,6 +229,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             })
     };
 
+    let preserve_root = !matches.get_flag(OPT_NO_PRESERVE_ROOT);
+    let recursive = matches.get_flag(OPT_RECURSIVE);
+
     let options = Options {
         force: force_flag,
         interactive: {
@@ -245,8 +248,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
         },
         one_fs: matches.get_flag(OPT_ONE_FILE_SYSTEM),
-        preserve_root: !matches.get_flag(OPT_NO_PRESERVE_ROOT),
-        recursive: matches.get_flag(OPT_RECURSIVE),
+        preserve_root,
+        recursive,
         dir: matches.get_flag(OPT_DIR),
         verbose: matches.get_flag(OPT_VERBOSE),
         progress: matches.get_flag(OPT_PROGRESS),
@@ -482,6 +485,19 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
     for filename in files {
         let file = Path::new(filename);
 
+        // Check if the path (potentially with trailing slash) resolves to root
+        // This needs to happen before symlink_metadata to catch cases like "rootlink/"
+        // where rootlink is a symlink to root.
+        if uucore::fs::path_ends_with_terminator(file)
+            && options.recursive
+            && options.preserve_root
+            && is_root_path(file)
+        {
+            show_preserve_root_error(file);
+            had_err = true;
+            continue;
+        }
+
         had_err = match file.symlink_metadata() {
             Ok(metadata) => {
                 // Create progress bar on first successful file metadata read
@@ -668,6 +684,40 @@ fn remove_dir_recursive(
     }
 }
 
+/// Check if a path resolves to the root directory.
+/// Returns true if the path is root, false otherwise.
+fn is_root_path(path: &Path) -> bool {
+    // Check simple case: literal "/" path
+    if path.has_root() && path.parent().is_none() {
+        return true;
+    }
+
+    // Check if path resolves to "/" after following symlinks
+    if let Ok(canonical) = path.canonicalize() {
+        canonical.has_root() && canonical.parent().is_none()
+    } else {
+        false
+    }
+}
+
+/// Show error message for attempting to remove root.
+fn show_preserve_root_error(path: &Path) {
+    let path_looks_like_root = path.has_root() && path.parent().is_none();
+
+    if path_looks_like_root {
+        // Path is literally "/"
+        show_error!("{}", RmError::DangerousRecursiveOperation);
+    } else {
+        // Path resolves to root but isn't literally "/" (e.g., symlink to /)
+        show_error!(
+            "{}",
+            translate!("rm-error-dangerous-recursive-operation-same-as-root",
+            "path" => path.display())
+        );
+    }
+    show_error!("{}", RmError::UseNoPreserveRoot);
+}
+
 fn handle_dir(path: &Path, options: &Options, progress_bar: Option<&ProgressBar>) -> bool {
     let mut had_err = false;
 
@@ -680,14 +730,13 @@ fn handle_dir(path: &Path, options: &Options, progress_bar: Option<&ProgressBar>
         return true;
     }
 
-    let is_root = path.has_root() && path.parent().is_none();
+    let is_root = is_root_path(path);
     if options.recursive && (!is_root || !options.preserve_root) {
         had_err = remove_dir_recursive(path, options, progress_bar);
     } else if options.dir && (!is_root || !options.preserve_root) {
         had_err = remove_dir(path, options, progress_bar).bitor(had_err);
     } else if options.recursive {
-        show_error!("{}", RmError::DangerousRecursiveOperation);
-        show_error!("{}", RmError::UseNoPreserveRoot);
+        show_preserve_root_error(path);
         had_err = true;
     } else {
         show_error!(
@@ -933,14 +982,6 @@ fn clean_trailing_slashes(path: &Path) -> &Path {
 
 fn prompt_descend(path: &Path) -> bool {
     prompt_yes!("descend into directory {}?", path.quote())
-}
-
-fn normalize(path: &Path) -> PathBuf {
-    // copied from https://github.com/rust-lang/cargo/blob/2e4cfc2b7d43328b207879228a2ca7d427d188bb/src/cargo/util/paths.rs#L65-L90
-    // both projects are MIT https://github.com/rust-lang/cargo/blob/master/LICENSE-MIT
-    // for std impl progress see rfc https://github.com/rust-lang/rfcs/issues/2208
-    // TODO: replace this once that lands
-    uucore::fs::normalize_path(path)
 }
 
 #[cfg(not(windows))]

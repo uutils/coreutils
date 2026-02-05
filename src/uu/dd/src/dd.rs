@@ -15,9 +15,9 @@ mod progress;
 
 use crate::bufferedoutput::BufferedOutput;
 use blocks::conv_block_unblock_helper;
-use datastructures::*;
+use datastructures::{ConversionMode, IConvFlags, IFlags, OConvFlags, OFlags, options};
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::fcntl::FcntlArg::F_SETFL;
+use nix::fcntl::FcntlArg;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::fcntl::OFlag;
 use parseargs::Parser;
@@ -236,8 +236,8 @@ impl Source {
     /// Create a source from stdin using its raw file descriptor.
     ///
     /// This returns an instance of the `Source::StdinFile` variant,
-    /// using the raw file descriptor of [`std::io::Stdin`] to create
-    /// the [`std::fs::File`] parameter. You can use this instead of
+    /// using the raw file descriptor of [`io::Stdin`] to create
+    /// the [`File`] parameter. You can use this instead of
     /// `Source::Stdin` to allow reading from stdin without consuming
     /// the entire contents of stdin when this process terminates.
     #[cfg(unix)]
@@ -897,7 +897,7 @@ impl<'a> Output<'a> {
         if let Some(libc_flags) = make_linux_oflags(&settings.oflags) {
             nix::fcntl::fcntl(
                 fx.as_raw().as_fd(),
-                F_SETFL(OFlag::from_bits_retain(libc_flags)),
+                FcntlArg::F_SETFL(OFlag::from_bits_retain(libc_flags)),
             )?;
         }
 
@@ -1092,7 +1092,7 @@ impl BlockWriter<'_> {
 
 /// depending on the command line arguments, this function
 /// informs the OS to flush/discard the caches for input and/or output file.
-fn flush_caches_full_length(i: &Input, o: &Output) -> io::Result<()> {
+fn flush_caches_full_length(i: &Input, o: &Output) {
     // Using len=0 in posix_fadvise means "to end of file"
     if i.settings.iflags.nocache {
         i.discard_cache(0, 0);
@@ -1100,8 +1100,6 @@ fn flush_caches_full_length(i: &Input, o: &Output) -> io::Result<()> {
     if i.settings.oflags.nocache {
         o.discard_cache(0, 0);
     }
-
-    Ok(())
 }
 
 /// Copy the given input data to this output, consuming both.
@@ -1163,7 +1161,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         // requests that we inform the system that we no longer
         // need the contents of the input file in a system cache.
         //
-        flush_caches_full_length(&i, &o)?;
+        flush_caches_full_length(&i, &o);
         return finalize(
             BlockWriter::Unbuffered(o),
             rstat,

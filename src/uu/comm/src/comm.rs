@@ -40,7 +40,7 @@ enum FileNumber {
 }
 
 impl FileNumber {
-    fn as_str(&self) -> &'static str {
+    fn as_str(self) -> &'static str {
         match self {
             Self::One => "1",
             Self::Two => "2",
