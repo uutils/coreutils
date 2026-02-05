@@ -458,7 +458,7 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
         .find_position(|x| e_regex.is_match(x.trim()));
     if let Some((pos, value)) = expand_tabs_option {
         if value.trim().len() <= 2 {
-            arguments[pos] = "-e\t8".to_owned();
+            "-e\t8".clone_into(&mut arguments[pos]);
         }
     }
 
