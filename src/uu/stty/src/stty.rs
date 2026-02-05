@@ -34,11 +34,11 @@ use std::fs::File;
 use std::io::{self, Stdin, stdin, stdout};
 use std::num::IntErrorKind;
 use std::os::fd::{AsFd, BorrowedFd};
-use std::os::unix::fs::OpenOptionsExt;
+use std::os::unix::fs::OpenOptionsExt as _;
 use std::os::unix::io::{AsRawFd, RawFd};
-use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError};
+use uucore::error::{FromIo as _, UError, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
-use uucore::parser::num_parser::ExtendedParser;
+use uucore::parser::num_parser::ExtendedParser as _;
 use uucore::translate;
 
 #[cfg(not(bsd))]

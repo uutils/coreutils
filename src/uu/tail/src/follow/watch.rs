@@ -7,13 +7,13 @@
 
 use crate::args::{FollowMode, Settings};
 use crate::follow::files::{FileHandling, PathData};
-use crate::paths::{Input, InputKind, MetadataExtTail, PathExtTail};
+use crate::paths::{Input, InputKind, MetadataExtTail as _, PathExtTail as _};
 use crate::{platform, text};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
 use std::io::BufRead;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, channel};
-use uucore::display::Quotable;
+use uucore::display::Quotable as _;
 use uucore::error::{UResult, USimpleError, set_exit_code};
 #[cfg(target_os = "linux")]
 use uucore::signals::ensure_stdout_not_broken;

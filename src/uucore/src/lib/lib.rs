@@ -138,10 +138,10 @@ use nix::sys::signal::{
 };
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead as _, BufReader};
 use std::iter;
 #[cfg(unix)]
-use std::os::unix::ffi::{OsStrExt, OsStringExt};
+use std::os::unix::ffi::{OsStrExt as _, OsStringExt as _};
 use std::str;
 use std::str::Utf8Chunk;
 use std::sync::{LazyLock, atomic::Ordering};
@@ -285,7 +285,7 @@ pub fn localized_help_template_with_colors(
     util_name: &str,
     colors_enabled: bool,
 ) -> clap::builder::StyledStr {
-    use std::fmt::Write;
+    use std::fmt::Write as _;
 
     // Ensure localization is initialized for this utility
     let _ = locale::setup_localization(util_name);
@@ -419,7 +419,7 @@ pub struct NonUtf8OsStrError {
 
 impl std::fmt::Display for NonUtf8OsStrError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use os_display::Quotable;
+        use os_display::Quotable as _;
         let quoted = self.input_lossy_string.quote();
         f.write_fmt(format_args!(
             "invalid UTF-8 input {quoted} encountered when converting to bytes on a platform that doesn't expose byte arguments",
@@ -726,7 +726,7 @@ mod tests {
     #[cfg(any(unix, target_os = "redox"))]
     #[test]
     fn invalid_utf8_args_unix() {
-        use std::os::unix::ffi::OsStrExt;
+        use std::os::unix::ffi::OsStrExt as _;
 
         let source = [0x66, 0x6f, 0x80, 0x6f];
         let os_str = OsStr::from_bytes(&source[..]);

@@ -10,13 +10,13 @@ use std::ffi::OsString;
 use std::io::{self, BufReader, ErrorKind};
 use std::{
     fs::{File, remove_file},
-    io::{BufRead, BufWriter, Write},
+    io::{BufRead, BufWriter, Write as _},
 };
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use regex::Regex;
-use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult};
+use uucore::display::Quotable as _;
+use uucore::error::{FromIo as _, UResult};
 use uucore::format_usage;
 
 mod csplit_error;

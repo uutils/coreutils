@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 use divan::{Bencher, black_box};
-use std::fmt::Write;
+use std::fmt::Write as _;
 use uu_expand::uumain;
 use uucore::benchmark::{create_test_file, run_util_function};
 

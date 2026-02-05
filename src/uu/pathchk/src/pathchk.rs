@@ -8,8 +8,8 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs;
-use std::io::{ErrorKind, Write};
-use uucore::display::Quotable;
+use std::io::{ErrorKind, Write as _};
+use uucore::display::Quotable as _;
 use uucore::error::{UResult, UUsageError, set_exit_code};
 use uucore::format_usage;
 use uucore::translate;

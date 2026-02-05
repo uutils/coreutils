@@ -7,20 +7,20 @@
 
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{self, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{self, BufReader, BufWriter, Read as _, Write as _, stdin, stdout};
 use std::ops::RangeInclusive;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
+use std::str::FromStr as _;
 
 use clap::{Arg, ArgAction, Command, builder::ValueParser};
 use rand::rngs::ThreadRng;
 use rand::{
-    Rng,
-    seq::{IndexedRandom, SliceRandom},
+    Rng as _,
+    seq::{IndexedRandom as _, SliceRandom as _},
 };
 
-use uucore::display::{OsWrite, Quotable};
-use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+use uucore::display::{OsWrite, Quotable as _};
+use uucore::error::{FromIo as _, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::translate;
 
@@ -390,7 +390,7 @@ impl Writable for u64 {
 #[cold]
 #[inline(never)]
 fn handle_write_error(e: io::Error) -> Box<dyn uucore::error::UError> {
-    use uucore::error::FromIo;
+    use uucore::error::FromIo as _;
     let ctx = translate!("shuf-error-write-failed");
     e.map_err_context(move || ctx)
 }

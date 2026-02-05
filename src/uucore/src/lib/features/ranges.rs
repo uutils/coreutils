@@ -10,7 +10,7 @@
 use std::cmp::max;
 use std::str::FromStr;
 
-use crate::display::Quotable;
+use crate::display::Quotable as _;
 
 /// A range of values
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
@@ -166,7 +166,7 @@ pub fn contain(ranges: &[Range], n: usize) -> bool {
 #[cfg(test)]
 mod test {
     use super::{Range, complement};
-    use std::str::FromStr;
+    use std::str::FromStr as _;
 
     fn m(a: Vec<Range>, b: &[Range]) {
         assert_eq!(Range::merge(a), b);

@@ -9,8 +9,8 @@ use clap::{Arg, ArgAction, Command};
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
 use std::io::Error;
-use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::display::Quotable as _;
+use uucore::error::{FromIo as _, UResult, USimpleError};
 use uucore::translate;
 
 use uucore::signals::{ALL_SIGNALS, signal_by_name_or_value, signal_name_by_value};

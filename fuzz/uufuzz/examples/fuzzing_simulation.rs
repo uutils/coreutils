@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use rand::Rng;
+use rand::Rng as _;
 use std::ffi::OsString;
 use uufuzz::{generate_and_run_uumain, generate_random_string, run_gnu_cmd};
 

@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore formatteriteminfo docopt fvox fvoxw vals acdx
 
-use uucore::display::Quotable;
+use uucore::display::Quotable as _;
 use uucore::translate;
 
 use crate::formatter_item_info::FormatterItemInfo;

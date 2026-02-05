@@ -7,13 +7,13 @@
 
 #![no_main]
 use libfuzzer_sys::fuzz_target;
-use rand::Rng;
-use rand::prelude::IndexedRandom;
+use rand::Rng as _;
+use rand::prelude::IndexedRandom as _;
 use std::collections::HashSet;
 use std::env::temp_dir;
 use std::ffi::{OsStr, OsString};
 use std::fs;
-use std::os::unix::ffi::{OsStrExt, OsStringExt};
+use std::os::unix::ffi::{OsStrExt as _, OsStringExt as _};
 use std::path::{Path, PathBuf};
 
 use uufuzz::{CommandResult, run_gnu_cmd};
@@ -146,7 +146,7 @@ fn setup_test_files() -> Result<(PathBuf, Vec<PathBuf>), std::io::Error> {
 
         // Try to create the file - this may fail on some filesystems
         if let Ok(mut file) = fs::File::create(&file_path) {
-            use std::io::Write;
+            use std::io::Write as _;
             let _ = writeln!(file, "test content for file {}", i);
             test_files.push(file_path);
         }

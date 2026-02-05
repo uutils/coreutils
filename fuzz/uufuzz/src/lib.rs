@@ -9,13 +9,13 @@ use libc::{STDERR_FILENO, STDOUT_FILENO, close, dup, dup2, pipe};
 use pretty_print::{
     print_diff, print_end_with_status, print_or_empty, print_section, print_with_style,
 };
-use rand::Rng;
-use rand::prelude::IndexedRandom;
+use rand::Rng as _;
+use rand::prelude::IndexedRandom as _;
 use std::env::temp_dir;
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{Seek, SeekFrom, Write};
-use std::os::fd::{AsRawFd, RawFd};
+use std::io::{Seek as _, SeekFrom, Write as _};
+use std::os::fd::{AsRawFd as _, RawFd};
 use std::process::{Command, Stdio};
 use std::sync::atomic::Ordering;
 use std::sync::{Once, atomic::AtomicBool};

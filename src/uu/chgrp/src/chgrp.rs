@@ -5,9 +5,9 @@
 
 // spell-checker:ignore (ToDO) COMFOLLOW Chowner RFILE RFILE's derefer dgid nonblank nonprint nonprinting
 
-use uucore::display::Quotable;
+use uucore::display::Quotable as _;
 use uucore::entries;
-use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::error::{FromIo as _, UResult, USimpleError};
 use uucore::format_usage;
 use uucore::perms::{GidUidOwnerFilter, IfFrom, chown_base, options};
 use uucore::translate;
@@ -15,7 +15,7 @@ use uucore::translate;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 
 use std::fs;
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::MetadataExt as _;
 
 fn parse_gid_from_str(group: &str) -> Result<u32, String> {
     if let Some(gid_str) = group.strip_prefix(':') {

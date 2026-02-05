@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (jargon) TOCTOU fchownat fchown
 
-use crate::display::Quotable;
+use crate::display::Quotable as _;
 use crate::error::{UResult, USimpleError, strip_errno};
 pub use crate::features::entries;
 use crate::show_error;
@@ -28,9 +28,9 @@ use std::ffi::CString;
 use std::fs::Metadata;
 use std::io::Error as IOError;
 use std::io::Result as IOResult;
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::MetadataExt as _;
 
-use std::os::unix::ffi::OsStrExt;
+use std::os::unix::ffi::OsStrExt as _;
 use std::path::{MAIN_SEPARATOR, Path};
 
 /// The various level of verbosity

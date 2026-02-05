@@ -10,11 +10,11 @@
 use indicatif::ProgressBar;
 use std::ffi::OsStr;
 use std::fs;
-use std::io::{IsTerminal, stdin};
-use std::os::unix::fs::PermissionsExt;
+use std::io::{IsTerminal as _, stdin};
+use std::os::unix::fs::PermissionsExt as _;
 use std::path::Path;
-use uucore::display::Quotable;
-use uucore::error::FromIo;
+use uucore::display::Quotable as _;
+use uucore::error::FromIo as _;
 use uucore::prompt_yes;
 use uucore::safe_traversal::DirFd;
 use uucore::show_error;

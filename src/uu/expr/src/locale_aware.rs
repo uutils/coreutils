@@ -6,7 +6,7 @@
 use std::cmp::Ordering;
 
 use uucore::{
-    CharByte, IntoCharByteIterator,
+    CharByte, IntoCharByteIterator as _,
     i18n::{
         UEncoding,
         collator::{AlternateHandling, CollatorOptions, locale_cmp, try_init_collator},

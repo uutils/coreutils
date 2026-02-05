@@ -139,7 +139,7 @@ pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
     use crate::utmpx::Utmpx;
     use libc::BOOT_TIME;
     use std::fs::File;
-    use std::io::Read;
+    use std::io::Read as _;
 
     let mut proc_uptime_s = String::new();
 

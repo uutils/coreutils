@@ -7,15 +7,15 @@
 // spell-checker:ignore (ToDO) adFfmprt, kmerge
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use itertools::Itertools;
+use itertools::Itertools as _;
 use regex::Regex;
 use std::fs::metadata;
-use std::io::{Read, Write, stderr, stdin, stdout};
+use std::io::{Read as _, Write, stderr, stdin, stdout};
 use std::string::FromUtf8Error;
 use std::time::SystemTime;
 use thiserror::Error;
 
-use uucore::display::Quotable;
+use uucore::display::Quotable as _;
 use uucore::error::UResult;
 use uucore::format_usage;
 use uucore::time::{FormatSystemTimeFallback, format, format_system_time};

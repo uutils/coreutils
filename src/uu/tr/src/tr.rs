@@ -9,13 +9,13 @@ mod unicode_table;
 
 use clap::{Arg, ArgAction, Command, value_parser};
 use operation::{
-    DeleteOperation, Sequence, SqueezeOperation, SymbolTranslator, TranslateOperation,
+    DeleteOperation, Sequence, SqueezeOperation, SymbolTranslator as _, TranslateOperation,
     flush_output, translate_input,
 };
 use simd::process_input;
 use std::ffi::OsString;
 use std::io::{stdin, stdout};
-use uucore::display::Quotable;
+use uucore::display::Quotable as _;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::fs::is_stdin_directory;
 use uucore::translate;

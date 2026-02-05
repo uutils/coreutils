@@ -82,7 +82,7 @@
 // spell-checker:ignore backupopt
 
 use crate::{
-    display::Quotable,
+    display::Quotable as _,
     error::{UError, UResult},
 };
 use clap::ArgMatches;

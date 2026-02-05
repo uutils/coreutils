@@ -562,7 +562,7 @@ mod tests {
         assert_eq!(result_crlf, result_lf);
     }
 
-    use super::{Crc, Digest};
+    use super::{Crc, Digest as _};
 
     #[test]
     fn test_crc_basic_functionality() {

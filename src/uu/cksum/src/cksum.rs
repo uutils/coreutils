@@ -6,10 +6,10 @@
 // spell-checker:ignore (ToDO) fname, algo, bitlen
 
 use std::ffi::OsStr;
-use std::io::{Write, stderr};
+use std::io::{Write as _, stderr};
 
 use clap::Command;
-use uu_checksum_common::{ChecksumCommand, checksum_main, default_checksum_app, options};
+use uu_checksum_common::{ChecksumCommand as _, checksum_main, default_checksum_app, options};
 
 use uucore::checksum::compute::OutputFormat;
 use uucore::checksum::{

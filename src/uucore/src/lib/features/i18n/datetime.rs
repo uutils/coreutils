@@ -13,7 +13,7 @@ use icu_datetime::DateTimeFormatter;
 use icu_datetime::fieldsets;
 use icu_locale::Locale;
 use jiff::civil::Date as JiffDate;
-use jiff_icu::ConvertFrom;
+use jiff_icu::ConvertFrom as _;
 use std::sync::OnceLock;
 
 use crate::i18n::get_locale_from_env;

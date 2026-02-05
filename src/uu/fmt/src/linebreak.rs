@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (ToDO) INFTY MULT accum breakwords linebreak linebreaking linebreaks linelen maxlength minlength nchars ostream overlen parasplit plass posn powf punct signum slen sstart tabwidth tlen underlen winfo wlen wordlen
 
-use std::io::{BufWriter, Stdout, Write};
+use std::io::{BufWriter, Stdout, Write as _};
 use std::{cmp, mem};
 
 use crate::FmtOptions;

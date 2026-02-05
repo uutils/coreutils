@@ -10,7 +10,7 @@ use uu_env::uumain;
 
 use std::ffi::OsString;
 
-use rand::Rng;
+use rand::Rng as _;
 use uufuzz::{
     CommandResult, compare_result, generate_and_run_uumain, generate_random_string, run_gnu_cmd,
 };

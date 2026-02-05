@@ -5,18 +5,18 @@
 
 // spell-checker:ignore (ToDO) COMFOLLOW Passwd RFILE RFILE's derefer dgid duid groupname
 
-use uucore::display::Quotable;
+use uucore::display::Quotable as _;
 pub use uucore::entries::{self, Group, Locate, Passwd};
 use uucore::format_usage;
 use uucore::perms::{GidUidOwnerFilter, IfFrom, chown_base, options};
 use uucore::translate;
 
-use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::error::{FromIo as _, UResult, USimpleError};
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 
 use std::fs;
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::MetadataExt as _;
 
 fn parse_gid_uid_and_filter(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> {
     let filter = if let Some(spec) = matches.get_one::<String>(options::FROM) {

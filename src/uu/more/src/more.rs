@@ -6,7 +6,7 @@
 use std::{
     ffi::OsString,
     fs::File,
-    io::{BufRead, BufReader, Stdin, Stdout, Write, stdin, stdout},
+    io::{BufRead as _, BufReader, Stdin, Stdout, Write, stdin, stdout},
     panic::set_hook,
     path::{Path, PathBuf},
     time::Duration,
@@ -14,8 +14,8 @@ use std::{
 
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use crossterm::{
-    ExecutableCommand,
-    QueueableCommand, // spell-checker:disable-line
+    ExecutableCommand as _,
+    QueueableCommand as _, // spell-checker:disable-line
     cursor::{Hide, MoveTo, Show},
     event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     style::Attribute,
@@ -25,7 +25,7 @@ use crossterm::{
 
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::format_usage;
-use uucore::{display::Quotable, show};
+use uucore::{display::Quotable as _, show};
 
 use uucore::translate;
 
@@ -894,7 +894,7 @@ impl<'a> Pager<'a> {
 #[cfg(test)]
 mod tests {
     use std::{
-        io::Seek,
+        io::Seek as _,
         ops::{Deref, DerefMut},
     };
 

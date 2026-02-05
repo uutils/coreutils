@@ -32,12 +32,12 @@ mod tests {
         crate::pipes,
         std::fs::OpenOptions,
         std::{
-            io::{Seek, SeekFrom},
+            io::{Seek as _, SeekFrom},
             thread,
         },
     };
 
-    use std::io::{Read, Write};
+    use std::io::{Read as _, Write as _};
 
     #[cfg(unix)]
     fn new_temp_file() -> File {

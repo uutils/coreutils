@@ -12,7 +12,7 @@
 
 use std::collections::VecDeque;
 use std::fs::File;
-use std::io::{BufRead, Read, Seek, SeekFrom, Write};
+use std::io::{BufRead, Read as _, Seek as _, SeekFrom, Write};
 use uucore::error::UResult;
 
 /// When reading files in reverse in `bounded_tail`, this is the size of each

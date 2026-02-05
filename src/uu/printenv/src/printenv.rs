@@ -4,11 +4,11 @@
 // file that was distributed with this source code.
 
 use std::env;
-use std::io::Write;
+use std::io::Write as _;
 
 use clap::{Arg, ArgAction, Command};
 
-use uucore::display::{OsWrite, print_all_env_vars};
+use uucore::display::{OsWrite as _, print_all_env_vars};
 use uucore::error::UResult;
 use uucore::line_ending::LineEnding;
 use uucore::{format_usage, translate};

@@ -5,11 +5,11 @@
 
 // spell-checker:ignore (ToDO) passwd
 
-use std::io::{Write, stdout};
+use std::io::{Write as _, stdout};
 use thiserror::Error;
 use uucore::{
-    display::Quotable,
-    entries::{Locate, Passwd, get_groups_gnu, gid2grp},
+    display::Quotable as _,
+    entries::{Locate as _, Passwd, get_groups_gnu, gid2grp},
     error::{UError, UResult},
     format_usage, show,
 };

@@ -26,14 +26,14 @@ use args::{FilterMode, Settings, Signum, parse_args};
 use chunks::ReverseChunks;
 use follow::Observer;
 use memchr::{memchr_iter, memrchr_iter};
-use paths::{FileExtTail, HeaderPrinter, Input, InputKind};
+use paths::{FileExtTail as _, HeaderPrinter, Input, InputKind};
 use same_file::Handle;
 use std::cmp::Ordering;
 use std::fs::File;
-use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write, stdin, stdout};
+use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Seek as _, SeekFrom, Write as _, stdin, stdout};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
+use uucore::error::{FromIo as _, UResult, USimpleError, set_exit_code};
 use uucore::translate;
 
 use uucore::{show, show_error};
@@ -213,8 +213,8 @@ fn tail_file(
 fn open_file(path: &Path, use_nonblock_for_fifo: bool) -> io::Result<File> {
     use nix::fcntl::{FcntlArg, OFlag, fcntl};
     use std::fs::OpenOptions;
-    use std::os::fd::AsFd;
-    use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
+    use std::os::fd::AsFd as _;
+    use std::os::unix::fs::{FileTypeExt as _, OpenOptionsExt as _};
 
     let is_fifo = path
         .metadata()

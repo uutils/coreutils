@@ -359,7 +359,7 @@ pub fn take_lines<R>(reader: R, limit: u64, separator: u8) -> TakeLines<R> {
 #[cfg(test)]
 mod tests {
 
-    use std::io::{BufRead, BufReader};
+    use std::io::{BufRead as _, BufReader};
 
     use crate::take::{
         TakeAllBuffer, TakeAllLinesBuffer, copy_all_but_n_bytes, copy_all_but_n_lines, take_lines,

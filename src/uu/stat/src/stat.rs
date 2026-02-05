@@ -8,10 +8,10 @@ use uucore::error::{UError, UResult, USimpleError};
 use uucore::translate;
 
 use clap::builder::ValueParser;
-use uucore::display::Quotable;
+use uucore::display::Quotable as _;
 use uucore::fs::{display_permissions, major, minor};
 use uucore::fsext::{
-    FsMeta, MetadataTimeField, StatFs, metadata_get_time, pretty_filetype, pretty_fstype,
+    FsMeta as _, MetadataTimeField, StatFs, metadata_get_time, pretty_filetype, pretty_fstype,
     read_fs_list, statfs,
 };
 use uucore::libc::mode_t;
@@ -22,7 +22,7 @@ use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
 use std::fs::{FileType, Metadata};
 use std::io::Write;
-use std::os::unix::fs::{FileTypeExt, MetadataExt};
+use std::os::unix::fs::{FileTypeExt as _, MetadataExt as _};
 use std::path::Path;
 use std::{env, fs};
 
@@ -418,7 +418,7 @@ fn print_str(s: &str, flags: Flags, width: usize, precision: Precision) {
 fn print_os_str(s: &OsString, flags: Flags, width: usize, precision: Precision) {
     #[cfg(unix)]
     {
-        use std::os::unix::ffi::OsStrExt;
+        use std::os::unix::ffi::OsStrExt as _;
 
         let bytes = s.as_bytes();
 
@@ -1408,7 +1408,7 @@ fn pretty_time(meta: &Metadata, md_time_field: MetadataTimeField) -> String {
 mod tests {
     use crate::{pad_and_print_bytes, quote_file_name, write_padding};
 
-    use super::{Flags, Precision, ScanUtil, Stater, Token, group_num, precision_trunc};
+    use super::{Flags, Precision, ScanUtil as _, Stater, Token, group_num, precision_trunc};
 
     #[test]
     fn test_scanners() {

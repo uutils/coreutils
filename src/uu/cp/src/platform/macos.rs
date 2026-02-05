@@ -5,12 +5,12 @@
 // spell-checker:ignore reflink
 use std::ffi::CString;
 use std::fs::{self, File, OpenOptions};
-use std::os::unix::ffi::OsStrExt;
-use std::os::unix::fs::OpenOptionsExt;
+use std::os::unix::ffi::OsStrExt as _;
+use std::os::unix::fs::OpenOptionsExt as _;
 use std::path::Path;
 
 use uucore::buf_copy;
-use uucore::display::Quotable;
+use uucore::display::Quotable as _;
 use uucore::translate;
 
 use uucore::mode::get_umask;

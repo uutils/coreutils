@@ -12,12 +12,12 @@
 // spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod
 
 #[cfg(test)]
-use std::os::unix::ffi::OsStringExt;
+use std::os::unix::ffi::OsStringExt as _;
 
 use std::ffi::{CString, OsStr, OsString};
 use std::io;
-use std::os::unix::ffi::OsStrExt;
-use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd, RawFd};
+use std::os::unix::ffi::OsStrExt as _;
+use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd as _, OwnedFd, RawFd};
 use std::path::{Path, PathBuf};
 
 use nix::dir::Dir;
@@ -25,7 +25,7 @@ use nix::fcntl::{OFlag, openat};
 use nix::libc;
 use nix::sys::stat::{FchmodatFlags, FileStat, Mode, fchmodat, fstatat};
 use nix::unistd::{Gid, Uid, UnlinkatFlags, fchown, fchownat, unlinkat};
-use os_display::Quotable;
+use os_display::Quotable as _;
 
 use crate::translate;
 
@@ -545,7 +545,7 @@ mod tests {
     use super::*;
     use std::fs;
     use std::os::unix::fs::symlink;
-    use std::os::unix::io::IntoRawFd;
+    use std::os::unix::io::IntoRawFd as _;
     use tempfile::TempDir;
 
     #[test]

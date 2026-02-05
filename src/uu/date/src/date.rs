@@ -14,11 +14,11 @@ use jiff::{Timestamp, Zoned};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Write};
+use std::io::{BufRead as _, BufReader, BufWriter, Write as _};
 use std::path::PathBuf;
 use std::sync::OnceLock;
-use uucore::display::Quotable;
-use uucore::error::FromIo;
+use uucore::display::Quotable as _;
+use uucore::error::FromIo as _;
 use uucore::error::{UResult, USimpleError};
 #[cfg(feature = "i18n-datetime")]
 use uucore::i18n::datetime::{localize_format_string, should_use_icu_locale};

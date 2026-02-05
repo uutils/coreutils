@@ -8,14 +8,14 @@
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{BufReader, BufWriter, Read, Write as _, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
 use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
-use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
+use uucore::display::Quotable as _;
+use uucore::error::{FromIo as _, UError, UResult, USimpleError, set_exit_code};
 use uucore::translate;
 use uucore::{format_usage, show};
 

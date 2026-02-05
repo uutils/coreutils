@@ -28,10 +28,10 @@ use std::env;
 use std::ffi::OsStr;
 use std::fmt;
 use std::fs::File;
-use std::io::{self, BufWriter, Stdout, StdoutLock, Write as IoWrite};
+use std::io::{self, BufWriter, Stdout, StdoutLock, Write as _};
 
 #[cfg(unix)]
-use std::os::unix::ffi::OsStrExt;
+use std::os::unix::ffi::OsStrExt as _;
 #[cfg(target_os = "wasi")]
 use std::os::wasi::ffi::OsStrExt;
 

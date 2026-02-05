@@ -8,13 +8,13 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Read, Stdout, Write, stdin, stdout};
+use std::io::{BufRead as _, BufReader, BufWriter, Read, Stdout, Write as _, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
 use thiserror::Error;
-use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
+use uucore::display::Quotable as _;
+use uucore::error::{FromIo as _, UError, UResult, USimpleError, set_exit_code};
 use uucore::translate;
 use uucore::{format_usage, show};
 

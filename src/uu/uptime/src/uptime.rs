@@ -6,7 +6,7 @@
 // spell-checker:ignore getloadavg behaviour loadavg uptime upsecs updays upmins uphours boottime nusers utmpxname gettime clockid couldnt
 
 use jiff::tz::TimeZone;
-use jiff::{Timestamp, ToSpan};
+use jiff::{Timestamp, ToSpan as _};
 #[cfg(unix)]
 use std::ffi::OsString;
 use std::io;
@@ -110,7 +110,7 @@ pub fn uu_app() -> Command {
 #[cfg(unix)]
 fn uptime_with_file(file_path: &OsString) -> UResult<()> {
     use std::fs;
-    use std::os::unix::fs::FileTypeExt;
+    use std::os::unix::fs::FileTypeExt as _;
     use uucore::error::set_exit_code;
     use uucore::show_error;
 
@@ -141,7 +141,7 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
 
     #[cfg(target_os = "macos")]
     {
-        use std::os::unix::ffi::OsStrExt;
+        use std::os::unix::ffi::OsStrExt as _;
         let bytes = file_path.as_os_str().as_bytes();
 
         if bytes[bytes.len() - 1] != b'x' {

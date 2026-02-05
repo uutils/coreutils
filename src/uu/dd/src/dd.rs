@@ -32,15 +32,15 @@ use std::ffi::OsString;
 #[cfg(unix)]
 use std::fs::Metadata;
 use std::fs::{File, OpenOptions};
-use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::io::{self, Read, Seek as _, SeekFrom, Write};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::fd::AsFd;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::unix::fs::OpenOptionsExt;
 #[cfg(unix)]
 use std::os::unix::{
-    fs::FileTypeExt,
-    io::{AsRawFd, FromRawFd},
+    fs::FileTypeExt as _,
+    io::{AsRawFd as _, FromRawFd as _},
 };
 #[cfg(windows)]
 use std::os::windows::{fs::MetadataExt, io::AsHandle};
@@ -57,8 +57,8 @@ use nix::{
     errno::Errno,
     fcntl::{PosixFadviseAdvice, posix_fadvise},
 };
-use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult};
+use uucore::display::Quotable as _;
+use uucore::error::{FromIo as _, UResult};
 #[cfg(unix)]
 use uucore::error::{USimpleError, set_exit_code};
 #[cfg(target_os = "linux")]

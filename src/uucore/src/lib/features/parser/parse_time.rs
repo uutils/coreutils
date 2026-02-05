@@ -9,13 +9,13 @@
 //! Use the [`from_str`] function to parse a [`Duration`] from a string.
 
 use crate::{
-    display::Quotable,
+    display::Quotable as _,
     extendedbigdecimal::ExtendedBigDecimal,
     parser::num_parser::{self, ExtendedParserError, ParseTarget},
 };
-use num_traits::ToPrimitive;
-use num_traits::Zero;
-use num_traits::{FromPrimitive, Signed};
+use num_traits::ToPrimitive as _;
+use num_traits::Zero as _;
+use num_traits::{FromPrimitive as _, Signed as _};
 use std::time::Duration;
 
 /// Parse a duration from a string.

@@ -6,9 +6,9 @@
 // spell-checker:ignore (ToDO) srcpath targetpath EEXIST
 
 use clap::{Arg, ArgAction, Command};
-use std::io::{Write, stdout};
-use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult};
+use std::io::{Write as _, stdout};
+use uucore::display::Quotable as _;
+use uucore::error::{FromIo as _, UError, UResult};
 use uucore::fs::{make_path_relative_to, paths_refer_to_same_file};
 use uucore::translate;
 use uucore::{format_usage, prompt_yes, show_error};

@@ -7,7 +7,7 @@
 
 use crate::operation::ChunkProcessor;
 use std::io::{BufRead, Write};
-use uucore::error::{FromIo, UResult};
+use uucore::error::{FromIo as _, UResult};
 use uucore::translate;
 
 /// Helper to detect single-character operations for optimization

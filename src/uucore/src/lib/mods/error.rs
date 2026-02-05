@@ -58,7 +58,7 @@ use std::{
     cell::Cell,
     error::Error,
     fmt::{Display, Formatter},
-    io::Write,
+    io::Write as _,
     sync::atomic::{AtomicI32, Ordering},
 };
 
@@ -781,7 +781,7 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn test_nix_error_conversion() {
-        use super::{FromIo, UIoError};
+        use super::{FromIo as _, UIoError};
         use nix::errno::Errno;
         use std::io::ErrorKind;
 
