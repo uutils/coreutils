@@ -21,9 +21,6 @@ use crate::flags::COMBINATION_SETTINGS;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use nix::libc::{O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ, c_ushort};
 
-#[cfg(target_os = "linux")]
-use nix::libc::{TCGETS2, termios2};
-
 use nix::sys::termios::{
     ControlFlags, InputFlags, LocalFlags, OutputFlags, SetArg, SpecialCharacterIndices as S,
     Termios, cfsetispeed, cfsetospeed, tcgetattr, tcsetattr,
@@ -624,13 +621,13 @@ fn print_terminal_size(
     term_size: Option<&TermSize>,
 ) -> nix::Result<()> {
     // GNU linked against glibc 2.42 provides us baudrate 51 which panics cfgetospeed
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(any(not(target_os = "linux"), target_arch = "powerpc64"))]
     let speed = nix::sys::termios::cfgetospeed(termios);
-    #[cfg(target_os = "linux")]
-    ioctl_read_bad!(tcgets2, TCGETS2, termios2);
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_arch = "powerpc64")))]
+    ioctl_read_bad!(tcgets2, nix::libc::TCGETS2, nix::libc::termios2);
+    #[cfg(all(target_os = "linux", not(target_arch = "powerpc64")))]
     let speed = {
-        let mut t2 = unsafe { std::mem::zeroed::<termios2>() };
+        let mut t2 = unsafe { std::mem::zeroed::<nix::libc::termios2>() };
         unsafe { tcgets2(opts.file.as_raw_fd(), &raw mut t2)? };
         t2.c_ospeed
     };
@@ -638,7 +635,7 @@ fn print_terminal_size(
     let mut printer = WrappedPrinter::new(window_size);
 
     // BSDs and Linux use a u32 for the baud rate, so we can simply print it.
-    #[cfg(any(target_os = "linux", bsd))]
+    #[cfg(all(target_os = "linux", not(target_arch = "powerpc64")))]
     printer.print(&translate!("stty-output-speed", "speed" => speed));
 
     // Other platforms need to use the baud rate enum, so printing the right value
