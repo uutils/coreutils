@@ -72,7 +72,7 @@ pub unsafe extern "C" fn utmpxname(_file: *const libc::c_char) -> libc::c_int {
     0
 }
 
-use crate::*; // import macros from `../../macros.rs`
+use crate::{LazyLock, libc}; // import macros from `../../macros.rs`
 
 // In case the c_char array doesn't end with NULL
 macro_rules! chars2string {
