@@ -41,7 +41,10 @@ mod platform {
 
     use uucore::error::UResult;
 
-    #[expect(clippy::unnecessary_wraps)] // To match all platforms
+    #[expect(
+        clippy::unnecessary_wraps,
+        reason = "fn sig must match on all platforms"
+    )]
     pub fn do_sync() -> UResult<()> {
         sync();
         Ok(())

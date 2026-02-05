@@ -262,7 +262,7 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
     const LOCALE_FORMAT: (&str, Option<&str>) = ("%b %e %H:%M", Some("%b %e  %Y"));
 
     // Convert time_styles references to owned String/option.
-    #[expect(clippy::unnecessary_wraps)] // Result helper
+    #[expect(clippy::unnecessary_wraps, reason = "internal result helper")]
     fn ok((recent, older): (&str, Option<&str>)) -> Result<(String, Option<String>), LsError> {
         Ok((recent.to_string(), older.map(String::from)))
     }

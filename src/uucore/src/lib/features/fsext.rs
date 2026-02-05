@@ -143,7 +143,10 @@ impl From<&str> for MetadataTimeField {
 }
 
 #[cfg(unix)]
-#[expect(clippy::unnecessary_wraps)] // To match all platforms
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "fn sig must match on all platforms"
+)]
 fn metadata_get_change_time(md: &Metadata) -> Option<SystemTime> {
     let mut st = UNIX_EPOCH;
     let (secs, nsecs) = (md.ctime(), md.ctime_nsec());

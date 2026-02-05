@@ -886,7 +886,10 @@ fn rename_fifo_fallback(from: &Path, to: &Path) -> io::Result<()> {
 }
 
 #[cfg(not(unix))]
-#[expect(clippy::unnecessary_wraps)] // To match all platforms
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "fn sig must match on all platforms"
+)]
 fn rename_fifo_fallback(_from: &Path, _to: &Path) -> io::Result<()> {
     Ok(())
 }

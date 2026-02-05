@@ -51,7 +51,10 @@ pub struct Config<'a> {
 }
 
 #[cfg(windows)]
-#[expect(clippy::unnecessary_wraps)] // To match all platforms
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "fn sig must match on all platforms"
+)]
 fn get_mode(_matches: &ArgMatches) -> Result<u32, String> {
     Ok(DEFAULT_PERM)
 }

@@ -138,7 +138,7 @@ mod tests {
         }
     }
 
-    #[expect(clippy::unnecessary_wraps)] // test helper
+    #[expect(clippy::unnecessary_wraps, reason = "test helper")]
     fn obsolete_result(src: &[&str]) -> Option<Result<Vec<String>, ParseError>> {
         Some(Ok(src.iter().map(|&s| s.to_string()).collect()))
     }

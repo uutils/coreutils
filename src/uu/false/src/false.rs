@@ -9,7 +9,8 @@ use uucore::error::{UResult, set_exit_code};
 use uucore::translate;
 
 #[uucore::main]
-#[expect(clippy::unnecessary_wraps)] // TODO: modify proc macro to allow no-result uumain
+// TODO: modify proc macro to allow no-result uumain
+#[expect(clippy::unnecessary_wraps, reason = "proc macro requires UResult")]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Mirror GNU options, always return `1`. In particular even the 'successful' cases of no-op,
     // and the interrupted display of help and version should return `1`. Also, we return Ok in all

@@ -613,7 +613,10 @@ impl WrappedPrinter {
     }
 }
 
-#[allow(clippy::unnecessary_wraps)] // needed for some platforms
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "needed for some platform-specific code"
+)]
 fn print_terminal_size(
     termios: &Termios,
     opts: &Options,
