@@ -39,6 +39,12 @@ test-after-help = Exit with the status determined by EXPRESSION.
   STRING1 != STRING2
         the strings are not equal
 
+  STRING1 > STRING2
+        STRING1 is greater than STRING2 in the current locale
+
+  STRING1 < STRING2
+        STRING1 is less than STRING2 in the current locale
+
   Integer comparisons:
 
   INTEGER1 -eq INTEGER2

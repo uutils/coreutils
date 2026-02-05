@@ -39,6 +39,12 @@ test-after-help = Quitter avec le statut déterminé par EXPRESSION.
   STRING1 != STRING2
         les chaînes ne sont pas égales
 
+  STRING1 > STRING2
+        STRING1 est plus grande que STRING2 dans les paramètres régionaux actuels
+
+  STRING1 < STRING2
+        STRING1 est plus petite que STRING2 dans les paramètres régionaux actuels
+
   Comparaisons d'entiers :
 
   INTEGER1 -eq INTEGER2
