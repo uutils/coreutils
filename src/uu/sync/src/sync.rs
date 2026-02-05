@@ -14,6 +14,8 @@ use nix::fcntl::{OFlag, open};
 use nix::sys::stat::Mode;
 use std::path::Path;
 use uucore::display::Quotable;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
 use uucore::show_error;
@@ -224,11 +226,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let path = Path::new(&f);
             if let Err(e) = open(path, OFlag::O_NONBLOCK, Mode::empty()) {
                 if e != Errno::EACCES || (e == Errno::EACCES && path.is_dir()) {
-                    show_error!(
-                        "{}",
-                        translate!("sync-error-no-such-file", "file" => f.quote())
+                    let err: UResult<()> = e.map_err_context(
+                        || translate!("sync-error-opening-file", "file" => f.quote()),
                     );
-                    has_error = true;
+                    if let Err(err) = err {
+                        show_error!("{}", err.to_string());
+                        has_error = true;
+                    }
                 }
             }
         }
