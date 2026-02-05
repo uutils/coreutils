@@ -233,6 +233,10 @@ fn get_blocks(path: &Path, _metadata: &Metadata) -> u64 {
 }
 
 #[cfg(not(windows))]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "fn sig must match on all platforms"
+)]
 fn get_file_info(_path: &Path, metadata: &Metadata) -> Option<FileInfo> {
     Some(FileInfo {
         file_id: metadata.ino() as u128,

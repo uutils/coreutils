@@ -669,7 +669,6 @@ cast_sign_loss = "allow"                     # 70
 struct_excessive_bools = "allow"             # 68
 cast_precision_loss = "allow"                # 52
 cast_lossless = "allow"                      # 35
-unnecessary_wraps = "allow"                  # 33
 ignored_unit_patterns = "allow"              # 21
 similar_names = "allow"                      # 20
 large_stack_arrays = "allow"                 # 20

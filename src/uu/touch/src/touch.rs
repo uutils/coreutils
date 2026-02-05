@@ -760,6 +760,7 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
 ///
 /// On Windows, uses `GetFinalPathNameByHandleW` to attempt to get the path
 /// from the stdout handle.
+#[cfg_attr(not(windows), expect(clippy::unnecessary_wraps))]
 fn pathbuf_from_stdout() -> Result<PathBuf, TouchError> {
     #[cfg(all(unix, not(target_os = "android")))]
     {

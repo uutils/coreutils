@@ -156,7 +156,7 @@ fn print_legacy_checksum(
     filename: &OsStr,
     sum: &DigestOutput,
     size: usize,
-) -> UResult<()> {
+) {
     debug_assert!(options.algo_kind.is_legacy());
     debug_assert!(matches!(sum, DigestOutput::U16(_) | DigestOutput::Crc(_)));
 
@@ -191,15 +191,9 @@ fn print_legacy_checksum(
         print!(" ");
         let _dropped_result = io::stdout().write_all(escaped_filename.as_bytes());
     }
-
-    Ok(())
 }
 
-fn print_tagged_checksum(
-    options: &ChecksumComputeOptions,
-    filename: &OsStr,
-    sum: &String,
-) -> UResult<()> {
+fn print_tagged_checksum(options: &ChecksumComputeOptions, filename: &OsStr, sum: &String) {
     let (escaped_filename, prefix) = if options.line_ending == LineEnding::Nul {
         (filename.to_string_lossy().to_string(), "")
     } else {
@@ -214,8 +208,6 @@ fn print_tagged_checksum(
 
     // Print closing parenthesis and sum
     print!(") = {sum}");
-
-    Ok(())
 }
 
 fn print_untagged_checksum(
@@ -223,7 +215,7 @@ fn print_untagged_checksum(
     filename: &OsStr,
     sum: &String,
     reading_mode: ReadingMode,
-) -> UResult<()> {
+) {
     let (escaped_filename, prefix) = if options.line_ending == LineEnding::Nul {
         (filename.to_string_lossy().to_string(), "")
     } else {
@@ -235,8 +227,6 @@ fn print_untagged_checksum(
 
     // Print filename
     let _dropped_result = io::stdout().write_all(escaped_filename.as_bytes());
-
-    Ok(())
 }
 
 /// Calculate checksum
@@ -309,14 +299,14 @@ where
                 return Ok(());
             }
             OutputFormat::Legacy => {
-                print_legacy_checksum(&options, filename, &digest_output, sz)?;
+                print_legacy_checksum(&options, filename, &digest_output, sz);
             }
             OutputFormat::Tagged(digest_format) => {
                 print_tagged_checksum(
                     &options,
                     filename,
                     &encode_sum(digest_output, digest_format)?,
-                )?;
+                );
             }
             OutputFormat::Untagged(digest_format, reading_mode) => {
                 print_untagged_checksum(
@@ -324,7 +314,7 @@ where
                     filename,
                     &encode_sum(digest_output, digest_format)?,
                     reading_mode,
-                )?;
+                );
             }
         }
 

@@ -428,7 +428,7 @@ fn stty(opts: &Options) -> UResult<()> {
                     print_special_setting(setting, opts.file.as_raw_fd())?;
                 }
                 ArgOptions::SavedState(state) => {
-                    apply_saved_state(&mut termios, state)?;
+                    apply_saved_state(&mut termios, state);
                 }
             }
         }
@@ -613,6 +613,10 @@ impl WrappedPrinter {
     }
 }
 
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "needed for some platform-specific code"
+)]
 fn print_terminal_size(
     termios: &Termios,
     opts: &Options,
@@ -986,10 +990,10 @@ fn apply_char_mapping(termios: &mut Termios, mapping: &(S, u8)) {
 ///
 /// If state has fewer than 4 elements, no changes are applied. This is a defensive
 /// check that should never trigger since `parse_saved_state` rejects such states.
-fn apply_saved_state(termios: &mut Termios, state: &[u32]) -> nix::Result<()> {
+fn apply_saved_state(termios: &mut Termios, state: &[u32]) {
     // Require at least 4 elements for the flags (defensive check)
     if state.len() < 4 {
-        return Ok(()); // No-op for invalid state (already validated by parser)
+        return; // No-op for invalid state (already validated by parser)
     }
 
     // Apply the four flag groups, done (as _) for MacOS size compatibility
@@ -1004,8 +1008,6 @@ fn apply_saved_state(termios: &mut Termios, state: &[u32]) -> nix::Result<()> {
             termios.control_chars[i] = cc_val as u8;
         }
     }
-
-    Ok(())
 }
 
 fn apply_special_setting(
