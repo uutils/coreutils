@@ -2064,24 +2064,42 @@ fn test_block_size_args_override() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     let dir = "override_args_dir";
+    let nested_dir = "override_args_dir/nested_dir";
+    let nested_dir_2 = "override_args_dir/nested_dir_2";
 
-    at.mkdir(dir);
-    let fpath = at.plus(format!("{dir}/file"));
+    at.mkdir_all(nested_dir);
+    at.mkdir_all(nested_dir_2);
+    let fpath = at.plus(format!("{nested_dir}/file"));
     std::fs::File::create(fpath)
         .expect("cannot create test file")
         .set_len(100_000_000)
         .expect("cannot set file size");
 
-    let fpath2 = at.plus(format!("{dir}/file_2"));
+    let fpath2 = at.plus(format!("{nested_dir}/file_2"));
     std::fs::File::create(fpath2)
         .expect("cannot create test file")
         .set_len(100_000_000)
         .expect("cannot set file size");
 
+    let fpath = at.plus(format!("{nested_dir_2}/file_3"));
+    std::fs::File::create(fpath)
+        .expect("cannot create test file")
+        .set_len(100_000)
+        .expect("cannot set file size");
+
+    let fpath2 = at.plus(format!("{nested_dir_2}/file_4"));
+    std::fs::File::create(fpath2)
+        .expect("cannot create test file")
+        .set_len(100)
+        .expect("cannot set file size");
+
     let test_cases = [
-        (["-sk", "-m"], "-sm"),
-        (["-sk", "-b"], "-sb"),
-        (["-sm", "-k"], "-sk"),
+        (["-sk", "-m"], vec!["-sm"]),
+        (["-sk", "-b"], vec!["-sb"]),
+        (["-sm", "-k"], vec!["-sk"]),
+        (["-sk", "--si"], vec!["-s", "--si"]),
+        (["-sk", "-h"], vec!["-s", "-h"]),
+        (["-sm", "--block-size=128"], vec!["-s", "--block-size=128"]),
     ];
 
     for (idx, (overwriting_args, expected)) in test_cases.into_iter().enumerate() {
@@ -2095,7 +2113,7 @@ fn test_block_size_args_override() {
         let single_args = ts
             .ucmd()
             .arg(dir)
-            .arg(expected)
+            .args(&expected)
             .succeeds()
             .stdout_move_str();
 
@@ -2111,23 +2129,30 @@ fn test_block_override_b_still_has_apparent_size() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     let dir = "override_args_dir";
+    let nested_dir = "override_args_dir/nested_dir";
 
-    at.mkdir(dir);
-    let fpath = at.plus(format!("{dir}/file"));
+    at.mkdir_all(nested_dir);
+    let fpath = at.plus(format!("{nested_dir}/file"));
     std::fs::File::create(fpath)
         .expect("cannot create test file")
         .set_len(100_000_000)
         .expect("cannot set file size");
 
-    let fpath2 = at.plus(format!("{dir}/file_2"));
+    let fpath2 = at.plus(format!("{nested_dir}/file_2"));
     std::fs::File::create(fpath2)
         .expect("cannot create test file")
         .set_len(100_000_000)
         .expect("cannot set file size");
 
     let test_cases = [
-        (["-sb", "-m"], ["-sm", "--apparent-size"]),
-        (["-sb", "-k"], ["-sk", "--apparent-size"]),
+        (["-b", "-m"], ["-m", "--apparent-size"]),
+        (["-b", "-k"], ["-k", "--apparent-size"]),
+        (["-b", "--si"], ["--si", "--apparent-size"]),
+        (["-b", "-h"], ["-h", "--apparent-size"]),
+        (
+            ["-b", "--block-size=128"],
+            ["--block-size=128", "--apparent-size"],
+        ),
     ];
 
     for (idx, (overwriting_args, expected)) in test_cases.into_iter().enumerate() {
