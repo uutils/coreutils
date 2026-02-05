@@ -2416,10 +2416,7 @@ impl UChild {
     /// If [`Child::kill`] returned an error or if the child process could not be terminated within
     /// `self.timeout` or the default of 60s.
     #[cfg(unix)]
-    pub fn try_kill_with_custom_signal(
-        &mut self,
-        signal_name: sys::signal::Signal,
-    ) -> Result<()> {
+    pub fn try_kill_with_custom_signal(&mut self, signal_name: sys::signal::Signal) -> Result<()> {
         let start = Instant::now();
         sys::signal::kill(
             nix::unistd::Pid::from_raw(self.raw.id().try_into().unwrap()),
