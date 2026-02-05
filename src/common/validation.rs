@@ -6,6 +6,7 @@
 // spell-checker:ignore prefixcat testcat
 
 use std::ffi::{OsStr, OsString};
+use std::io::{Write, stderr};
 use std::path::{Path, PathBuf};
 use std::process;
 
@@ -25,13 +26,18 @@ pub fn get_all_utilities<T: Args>(
 
 /// Prints a "utility not found" error and exits
 pub fn not_found(util: &OsStr) -> ! {
-    eprintln!("{}: function/utility not found", util.maybe_quote());
+    let _ = writeln!(
+        stderr(),
+        "coreutils: unknown program '{}'",
+        util.maybe_quote()
+    );
     process::exit(1);
 }
 
 /// Prints an "unrecognized option" error and exits
 pub fn unrecognized_option(binary_name: &str, option: &OsStr) -> ! {
-    eprintln!(
+    let _ = writeln!(
+        stderr(),
         "{binary_name}: unrecognized option '{}'",
         option.to_string_lossy()
     );

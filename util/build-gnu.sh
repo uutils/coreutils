@@ -173,8 +173,6 @@ sed -i 's/^print_ver_.*/require_selinux_/' tests/chcon/chcon-fail.sh
 
 # We use coreutils yes
 sed -i "s|--coreutils-prog=||g" tests/misc/coreutils.sh
-# Different message
-sed -i "s|coreutils: unknown program 'blah'|blah: function/utility not found|" tests/misc/coreutils.sh
 
 # Use the system coreutils where the test fails due to error in a util that is not the one being tested
 sed -i "s|grep '^#define HAVE_CAP 1' \$CONFIG_HEADER > /dev/null|true|"  tests/ls/capability.sh
