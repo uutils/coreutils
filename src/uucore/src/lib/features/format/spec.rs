@@ -8,8 +8,8 @@
 use super::{
     ExtendedBigDecimal, FormatChar as _, FormatError, OctalParsing,
     num_format::{
-        self, Case, FloatVariant, ForceDecimal, Formatter as _, NumberAlignment, PositiveSign, Prefix,
-        UnsignedIntVariant,
+        self, Case, FloatVariant, ForceDecimal, Formatter as _, NumberAlignment, PositiveSign,
+        Prefix, UnsignedIntVariant,
     },
     parse_escape_only,
 };

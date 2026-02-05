@@ -15,7 +15,8 @@ use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command, crate_name};
 use ini::Ini;
 use native_int_str::{
-    Convert as _, NCvt, NativeIntStr, NativeIntString, NativeStr, from_native_int_representation_owned,
+    Convert as _, NCvt, NativeIntStr, NativeIntString, NativeStr,
+    from_native_int_representation_owned,
 };
 #[cfg(unix)]
 use nix::libc;
