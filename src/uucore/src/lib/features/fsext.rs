@@ -328,12 +328,18 @@ impl MountInfo {
                 let mount_root = to_nul_terminated_wide_string(&mount_root);
                 GetDriveTypeW(mount_root.as_ptr())
             };
+
+        let mount_dir = Path::new(&mount_root)
+            .canonicalize()
+            .unwrap_or_default()
+            .into_os_string();
+
         Some(Self {
             dev_id: volume_name,
             dev_name,
             fs_type: fs_type.unwrap_or_default(),
             mount_root: mount_root.into(), // TODO: We should figure out how to keep an OsString here.
-            mount_dir: OsString::new(),
+            mount_dir,
             mount_option: String::new(),
             remote,
             dummy: false,

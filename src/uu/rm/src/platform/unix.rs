@@ -11,6 +11,7 @@ use indicatif::ProgressBar;
 use std::ffi::OsStr;
 use std::fs;
 use std::io::{IsTerminal, stdin};
+use std::os::unix::fs::MetadataExt;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use uucore::display::Quotable;
@@ -21,9 +22,9 @@ use uucore::show_error;
 use uucore::translate;
 
 use super::super::{
-    InteractiveMode, Options, is_dir_empty, is_readable_metadata, prompt_descend, remove_file,
-    show_permission_denied_error, show_removal_error, verbose_removed_directory,
-    verbose_removed_file,
+    InteractiveMode, Options, PreserveRoot, is_dir_empty, is_readable_metadata, prompt_descend,
+    remove_file, show_one_fs_error, show_permission_denied_error, show_removal_error,
+    verbose_removed_directory, verbose_removed_file,
 };
 
 #[inline]
@@ -279,11 +280,11 @@ pub fn safe_remove_dir_recursive(
 ) -> bool {
     // Base case 1: this is a file or a symbolic link.
     // Use lstat to avoid race condition between check and use
-    let initial_mode = match fs::symlink_metadata(path) {
+    let (initial_mode, initial_dev) = match fs::symlink_metadata(path) {
         Ok(metadata) if !metadata.is_dir() => {
             return remove_file(path, options, progress_bar);
         }
-        Ok(metadata) => metadata.permissions().mode(),
+        Ok(metadata) => (metadata.permissions().mode(), metadata.dev()),
         Err(e) => {
             return show_removal_error(e, path);
         }
@@ -309,11 +310,12 @@ pub fn safe_remove_dir_recursive(
         }
     };
 
-    let error = safe_remove_dir_recursive_impl(path, &dir_fd, options);
+    let (had_command_error, has_remaining_children) =
+        safe_remove_dir_recursive_impl(path, &dir_fd, options, Some(initial_dev));
 
     // After processing all children, remove the directory itself
-    if error {
-        error
+    if had_command_error || has_remaining_children {
+        had_command_error
     } else {
         // Ask user permission if needed
         if options.interactive == InteractiveMode::Always
@@ -340,13 +342,18 @@ pub fn safe_remove_dir_recursive(
         if let Some(result) = safe_remove_empty_dir(path, options, progress_bar) {
             result
         } else {
-            remove_dir_with_special_cases(path, options, error)
+            remove_dir_with_special_cases(path, options, false)
         }
     }
 }
 
 #[cfg(not(target_os = "redox"))]
-pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Options) -> bool {
+pub fn safe_remove_dir_recursive_impl(
+    path: &Path,
+    dir_fd: &DirFd,
+    options: &Options,
+    parent_dev: Option<u64>,
+) -> (bool, bool) {
     // Read directory entries using safe traversal
     let entries = match dir_fd.read_dir() {
         Ok(entries) => entries,
@@ -354,14 +361,15 @@ pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Opt
             if !options.force {
                 show_permission_denied_error(path);
             }
-            return !options.force;
+            return (!options.force, true);
         }
         Err(e) => {
-            return handle_error_with_force(e, path, options);
+            return (handle_error_with_force(e, path, options), true);
         }
     };
 
-    let mut error = false;
+    let mut had_command_error = false;
+    let mut has_remaining_children = false;
 
     // Process each entry
     for entry_name in entries {
@@ -371,7 +379,8 @@ pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Opt
         let entry_stat = match dir_fd.stat_at(&entry_name, false) {
             Ok(stat) => stat,
             Err(e) => {
-                error |= handle_error_with_force(e, &entry_path, options);
+                had_command_error |= handle_error_with_force(e, &entry_path, options);
+                has_remaining_children = true;
                 continue;
             }
         };
@@ -380,11 +389,23 @@ pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Opt
         let is_dir = ((entry_stat.st_mode as libc::mode_t) & libc::S_IFMT) == libc::S_IFDIR;
 
         if is_dir {
+            if options.one_fs || options.preserve_root == PreserveRoot::YesAll {
+                if let Some(p_dev) = parent_dev {
+                    if entry_stat.st_dev as u64 != p_dev {
+                        show_one_fs_error(&entry_path, options);
+                        had_command_error = true;
+                        has_remaining_children = true;
+                        continue;
+                    }
+                }
+            }
+
             // Ask user if they want to descend into this directory
             if options.interactive == InteractiveMode::Always
                 && !is_dir_empty(&entry_path)
                 && !prompt_descend(&entry_path)
             {
+                has_remaining_children = true;
                 continue;
             }
 
@@ -394,49 +415,68 @@ pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Opt
                 Err(e) => {
                     // If we can't open the subdirectory for safe traversal,
                     // try to handle it as best we can with safe operations
-                    if e.kind() == std::io::ErrorKind::PermissionDenied {
-                        error |= handle_permission_denied(
-                            dir_fd,
-                            entry_name.as_ref(),
-                            &entry_path,
-                            options,
-                        );
+                    let failed = if e.kind() == std::io::ErrorKind::PermissionDenied {
+                        handle_permission_denied(dir_fd, entry_name.as_ref(), &entry_path, options)
                     } else {
-                        error |= handle_error_with_force(e, &entry_path, options);
+                        handle_error_with_force(e, &entry_path, options)
+                    };
+
+                    if failed {
+                        had_command_error = true;
+                        has_remaining_children = true;
                     }
                     continue;
                 }
             };
 
-            let child_error = safe_remove_dir_recursive_impl(&entry_path, &child_dir_fd, options);
-            error |= child_error;
+            let (c_error, c_remains) = safe_remove_dir_recursive_impl(
+                &entry_path,
+                &child_dir_fd,
+                options,
+                Some(entry_stat.st_dev as u64),
+            );
+            had_command_error |= c_error;
+            has_remaining_children |= c_remains;
+
+            if c_error || c_remains {
+                continue;
+            }
 
             // Ask user permission if needed for this subdirectory
-            if !child_error
-                && options.interactive == InteractiveMode::Always
+            if options.interactive == InteractiveMode::Always
                 && !prompt_dir_with_mode(&entry_path, entry_stat.st_mode as libc::mode_t, options)
             {
+                has_remaining_children = true;
                 continue;
             }
 
             // Remove the now-empty subdirectory using safe unlinkat
-            if !child_error {
-                error |= handle_unlink(dir_fd, entry_name.as_ref(), &entry_path, true, options);
-            }
+            had_command_error |=
+                handle_unlink(dir_fd, entry_name.as_ref(), &entry_path, true, options);
         } else {
             // Remove file - check if user wants to remove it first
             if prompt_file_with_stat(&entry_path, &entry_stat, options) {
-                error |= handle_unlink(dir_fd, entry_name.as_ref(), &entry_path, false, options);
+                if handle_unlink(dir_fd, entry_name.as_ref(), &entry_path, false, options) {
+                    had_command_error = true;
+                    has_remaining_children = true;
+                }
+            } else {
+                has_remaining_children = true;
             }
         }
     }
 
-    error
+    (had_command_error, has_remaining_children)
 }
 
 #[cfg(target_os = "redox")]
-pub fn safe_remove_dir_recursive_impl(_path: &Path, _dir_fd: &DirFd, _options: &Options) -> bool {
+pub fn safe_remove_dir_recursive_impl(
+    _path: &Path,
+    _dir_fd: &DirFd,
+    _options: &Options,
+    _parent_dev: Option<u64>,
+) -> (bool, bool) {
     // safe_traversal stat_at is not supported on Redox
     // This shouldn't be called on Redox, but provide a stub for compilation
-    true // Return error
+    (true, true) // Return error
 }

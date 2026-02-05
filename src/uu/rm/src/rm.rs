@@ -15,6 +15,8 @@ use std::ops::BitOr;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::MAIN_SEPARATOR;
 use std::path::{Path, PathBuf};
@@ -128,6 +130,13 @@ impl From<&str> for InteractiveMode {
     }
 }
 
+#[derive(PartialEq)]
+pub enum PreserveRoot {
+    Default,
+    YesAll,
+    No,
+}
+
 /// Options for the `rm` command
 ///
 /// All options are public so that the options can be programmatically
@@ -154,7 +163,7 @@ pub struct Options {
     /// `--one-file-system`
     pub one_fs: bool,
     /// `--preserve-root`/`--no-preserve-root`
-    pub preserve_root: bool,
+    pub preserve_root: PreserveRoot,
     /// `-r`, `--recursive`
     pub recursive: bool,
     /// `-d`, `--dir`
@@ -175,7 +184,7 @@ impl Default for Options {
             force: false,
             interactive: InteractiveMode::PromptProtected,
             one_fs: false,
-            preserve_root: true,
+            preserve_root: PreserveRoot::Default,
             recursive: false,
             dir: false,
             verbose: false,
@@ -245,7 +254,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
         },
         one_fs: matches.get_flag(OPT_ONE_FILE_SYSTEM),
-        preserve_root: !matches.get_flag(OPT_NO_PRESERVE_ROOT),
+        preserve_root: if matches.get_flag(OPT_NO_PRESERVE_ROOT) {
+            PreserveRoot::No
+        } else {
+            match matches
+                .get_one::<String>(OPT_PRESERVE_ROOT)
+                .map(|s| s.as_str())
+            {
+                Some("all") => PreserveRoot::YesAll,
+                _ => PreserveRoot::Default,
+            }
+        },
         recursive: matches.get_flag(OPT_RECURSIVE),
         dir: matches.get_flag(OPT_DIR),
         verbose: matches.get_flag(OPT_VERBOSE),
@@ -259,7 +278,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // manually parse all args to verify --no-preserve-root did not get abbreviated (clap does
     // allow this)
-    if !options.preserve_root && !args.iter().any(|arg| arg == "--no-preserve-root") {
+    if options.preserve_root == PreserveRoot::No
+        && !args.iter().any(|arg| arg == "--no-preserve-root")
+    {
         return Err(RmError::MayNotAbbreviateNoPreserveRoot.into());
     }
 
@@ -351,7 +372,10 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_PRESERVE_ROOT)
                 .long(OPT_PRESERVE_ROOT)
                 .help(translate!("rm-help-preserve-root"))
-                .action(ArgAction::SetTrue),
+                .value_parser(["all"])
+                .default_value("all")
+                .default_missing_value("all")
+                .hide_default_value(true),
         )
         .arg(
             Arg::new(OPT_RECURSIVE)
@@ -465,7 +489,6 @@ fn count_files_in_directory(p: &Path) -> u64 {
     1 + entries_count
 }
 
-// TODO: implement one-file-system (this may get partially implemented in walkdir)
 /// Remove (or unlink) the given files
 ///
 /// Returns true if it has encountered an error.
@@ -559,6 +582,17 @@ fn is_writable_metadata(_metadata: &Metadata) -> bool {
     true
 }
 
+pub(crate) fn show_one_fs_error(path: &Path, options: &Options) {
+    show_error!(
+        "skipping {}, since it's on a different device",
+        path.quote()
+    );
+
+    if !options.one_fs && options.preserve_root == PreserveRoot::YesAll {
+        show_error!("and --preserve-root=all is in effect");
+    }
+}
+
 /// Recursively remove the directory tree rooted at the given path.
 ///
 /// If `path` is a file or a symbolic link, just remove it. If it is a
@@ -580,7 +614,12 @@ fn remove_dir_recursive(
         return remove_file(path, options, progress_bar);
     }
 
-    // Base case 2: this is a non-empty directory, but the user
+    // Base case 2: check if a path is on the same file system
+    if check_and_report_one_fs(path, options) {
+        return true;
+    }
+
+    // Base case 3: this is a non-empty directory, but the user
     // doesn't want to descend into it.
     if options.interactive == InteractiveMode::Always
         && !is_dir_empty(path)
@@ -668,8 +707,99 @@ fn remove_dir_recursive(
     }
 }
 
+#[derive(Debug)]
+enum OneFsError {
+    /// The path is on a different device or file system (mount point boundary).
+    CrossDevice,
+
+    /// Failed to retrieve metadata for the path or its parent.
+    #[cfg(unix)]
+    StatFailed(String),
+}
+
+/// Helper function to check fs and report errors if necessary.
+/// Returns true if the operation should be skipped/returned (i.e., on error).
+fn check_and_report_one_fs(path: &Path, options: &Options) -> bool {
+    match check_one_fs(path, options) {
+        Ok(()) => false,
+        #[cfg(unix)]
+        Err(OneFsError::StatFailed(msg)) => {
+            show_error!("{}", msg);
+            show_one_fs_error(path, options);
+            true
+        }
+        Err(OneFsError::CrossDevice) => {
+            show_one_fs_error(path, options);
+            true
+        }
+    }
+}
+
+/// Check if a path is on the same file system when `--one-file-system` or `--preserve-root=all` options are enabled.
+/// Return `OK(())` if the path is on the same file system,
+/// or an additional error describing why it should be skipped.
+fn check_one_fs(path: &Path, options: &Options) -> Result<(), OneFsError> {
+    // If neither `--one-file-system` nor `--preserve-root=all` is active,
+    // always proceed
+    if !options.one_fs && options.preserve_root != PreserveRoot::YesAll {
+        return Ok(());
+    }
+
+    let parent_path = match path.parent() {
+        Some(p) if !p.as_os_str().is_empty() => p,
+        _ => Path::new("."),
+    };
+
+    let is_different = {
+        #[cfg(unix)]
+        {
+            let child_meta = path.symlink_metadata().map_err(|err| {
+                OneFsError::StatFailed(format!("cannot stat {}: {}", path.quote(), err))
+            })?;
+
+            let parent_meta = parent_path.symlink_metadata().map_err(|err| {
+                OneFsError::StatFailed(format!("cannot stat parent of {}: {}", path.quote(), err))
+            })?;
+
+            child_meta.dev() != parent_meta.dev()
+        }
+        #[cfg(windows)]
+        {
+            fn get_drive_prefix(p: &Path) -> Option<&std::ffi::OsStr> {
+                use std::path::Component;
+                p.components().next().and_then(|c| match c {
+                    Component::Prefix(prefix) => Some(prefix.as_os_str()),
+                    _ => None,
+                })
+            }
+
+            let child_drive = get_drive_prefix(path);
+            let parent_drive = get_drive_prefix(parent_path);
+
+            match (child_drive, parent_drive) {
+                (Some(c), Some(p)) => c != p,
+                _ => false,
+            }
+        }
+        #[cfg(not(any(unix, windows)))]
+        {
+            false
+        }
+    };
+
+    if is_different {
+        return Err(OneFsError::CrossDevice);
+    }
+
+    Ok(())
+}
+
 fn handle_dir(path: &Path, options: &Options, progress_bar: Option<&ProgressBar>) -> bool {
     let mut had_err = false;
+
+    if check_and_report_one_fs(path, options) {
+        return true;
+    }
 
     let path = clean_trailing_slashes(path);
     if path_is_current_or_parent_directory(path) {
@@ -681,9 +811,9 @@ fn handle_dir(path: &Path, options: &Options, progress_bar: Option<&ProgressBar>
     }
 
     let is_root = path.has_root() && path.parent().is_none();
-    if options.recursive && (!is_root || !options.preserve_root) {
+    if options.recursive && (!is_root || options.preserve_root == PreserveRoot::No) {
         had_err = remove_dir_recursive(path, options, progress_bar);
-    } else if options.dir && (!is_root || !options.preserve_root) {
+    } else if options.dir && (!is_root || options.preserve_root == PreserveRoot::No) {
         had_err = remove_dir(path, options, progress_bar).bitor(had_err);
     } else if options.recursive {
         show_error!("{}", RmError::DangerousRecursiveOperation);
