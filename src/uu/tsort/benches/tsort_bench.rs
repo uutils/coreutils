@@ -85,10 +85,8 @@ fn generate_wide_dag(num_nodes: usize) -> Vec<u8> {
         for i in chain_start..chain_end.saturating_sub(1) {
             data.extend_from_slice(
                 format!(
-                    "chain{}_{} chain{}_{}\n",
-                    chain,
+                    "chain{chain}_{} chain{chain}_{}\n",
                     i - chain_start,
-                    chain,
                     i + 1 - chain_start
                 )
                 .as_bytes(),
@@ -102,10 +100,8 @@ fn generate_wide_dag(num_nodes: usize) -> Vec<u8> {
             let curr_mid = chain_start + chain_length / 4;
             data.extend_from_slice(
                 format!(
-                    "chain{}_{} chain{}_{}\n",
-                    prev_chain,
+                    "chain{prev_chain}_{} chain{chain}_{}\n",
                     prev_end - prev_chain * chain_length,
-                    chain,
                     curr_mid - chain_start
                 )
                 .as_bytes(),

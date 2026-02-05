@@ -1344,7 +1344,7 @@ fn show_error_if_needed(error: &CpError) {
         // Format IoErrContext using strip_errno to remove "(os error N)" suffix
         // for GNU-compatible output
         CpError::IoErrContext(io_err, context) => {
-            show_error!("{}: {}", context, uucore::error::strip_errno(io_err));
+            show_error!("{context}: {}", uucore::error::strip_errno(io_err));
         }
         _ => {
             show_error!("{error}");

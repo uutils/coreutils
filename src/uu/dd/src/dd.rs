@@ -748,7 +748,7 @@ fn handle_o_direct_write(f: &mut File, buf: &[u8], original_error: io::Error) ->
         // Log any restoration errors without failing the operation
         if let Err(os_err) = fcntl(&mut *f, FcntlArg::F_SETFL(oflags)) {
             // Just log the error, don't fail the whole operation
-            show_error!("Failed to restore O_DIRECT flag: {}", os_err);
+            show_error!("Failed to restore O_DIRECT flag: {os_err}");
         }
 
         write_result
