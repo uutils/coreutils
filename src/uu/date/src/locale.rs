@@ -86,14 +86,14 @@ cfg_langinfo! {
                 return None;
             }
 
-            Some(format.to_string())
+            Some(format.to_owned())
         }
     }
 
     /// Ensures the format string includes timezone (%Z)
     fn ensure_timezone_in_format(format: &str) -> String {
         if format.contains("%Z") {
-            return format.to_string();
+            return format.to_owned();
         }
 
         // Try to insert %Z before year specifier (%Y or %y)
@@ -105,7 +105,7 @@ cfg_langinfo! {
             result
         } else {
             // No year found, append %Z at the end
-            format.to_string() + " %Z"
+            format.to_owned() + " %Z"
         }
     }
 }
@@ -188,7 +188,7 @@ mod tests {
                 if ptr.is_null() {
                     None
                 } else {
-                    CStr::from_ptr(ptr).to_str().ok().map(ToString::to_string)
+                    CStr::from_ptr(ptr).to_str().ok().map(ToOwned::to_owned)
                 }
             };
 

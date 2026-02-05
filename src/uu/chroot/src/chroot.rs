@@ -58,15 +58,15 @@ fn parse_userspec(spec: &str) -> UserSpec {
         // ""
         None if spec.is_empty() => UserSpec::NeitherGroupNorUser,
         // "usr"
-        None => UserSpec::UserOnly(spec.to_string()),
+        None => UserSpec::UserOnly(spec.to_owned()),
         // ":"
         Some(("", "")) => UserSpec::NeitherGroupNorUser,
         // ":grp"
-        Some(("", grp)) => UserSpec::GroupOnly(grp.to_string()),
+        Some(("", grp)) => UserSpec::GroupOnly(grp.to_owned()),
         // "usr:"
-        Some((usr, "")) => UserSpec::UserOnly(usr.to_string()),
+        Some((usr, "")) => UserSpec::UserOnly(usr.to_owned()),
         // "usr:grp"
-        Some((usr, grp)) => UserSpec::UserAndGroup(usr.to_string(), grp.to_string()),
+        Some((usr, grp)) => UserSpec::UserAndGroup(usr.to_owned(), grp.to_owned()),
     }
 }
 
@@ -78,15 +78,15 @@ fn parse_group_list(list_str: &str) -> Result<Vec<String>, ChrootError> {
         if name.is_empty() {
             // --groups=" "
             // chroot: invalid group ' '
-            Err(ChrootError::InvalidGroup(name.to_string()))
+            Err(ChrootError::InvalidGroup(name.to_owned()))
         } else {
             // --groups="blah"
-            Ok(vec![name.to_string()])
+            Ok(vec![name.to_owned()])
         }
     } else if split.iter().all(|s| s.is_empty()) {
         // --groups=","
         // chroot: invalid group list ','
-        Err(ChrootError::InvalidGroupList(list_str.to_string()))
+        Err(ChrootError::InvalidGroupList(list_str.to_owned()))
     } else {
         let mut result = vec![];
         let mut err = false;
@@ -100,7 +100,7 @@ fn parse_group_list(list_str: &str) -> Result<Vec<String>, ChrootError> {
 
                 // --groups=", "
                 // chroot: invalid group ' '
-                show!(ChrootError::InvalidGroup(name.to_string()));
+                show!(ChrootError::InvalidGroup(name.to_owned()));
                 err = true;
             } else {
                 // TODO Figure out a better condition here.
@@ -109,10 +109,10 @@ fn parse_group_list(list_str: &str) -> Result<Vec<String>, ChrootError> {
                 {
                     // --groups="0trail"
                     // chroot: invalid group '0trail'
-                    show!(ChrootError::InvalidGroup(name.to_string()));
+                    show!(ChrootError::InvalidGroup(name.to_owned()));
                     err = true;
                 } else {
-                    result.push(trimmed_name.to_string());
+                    result.push(trimmed_name.to_owned());
                 }
             }
         }

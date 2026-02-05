@@ -370,7 +370,7 @@ fn parse_special_value(
             return if rest.is_empty() {
                 Ok(special)
             } else {
-                Err(ExtendedParserError::PartialMatch(special, rest.to_string()))
+                Err(ExtendedParserError::PartialMatch(special, rest.to_owned()))
             };
         }
     }
@@ -533,7 +533,7 @@ pub(crate) fn parse(
             } else {
                 ExtendedBigDecimal::zero()
             };
-            return Err(ExtendedParserError::PartialMatch(ebd, partial.to_string()));
+            return Err(ExtendedParserError::PartialMatch(ebd, partial.to_owned()));
         }
 
         return if target == ParseTarget::Integral {
@@ -557,7 +557,7 @@ pub(crate) fn parse(
     } else {
         Err(ExtendedParserError::PartialMatch(
             ebd_result.unwrap_or_else(ExtendedParserError::extract),
-            rest.to_string(),
+            rest.to_owned(),
         ))
     }
 }
@@ -605,11 +605,11 @@ mod tests {
         ));
         assert_eq!(
             u64::extended_parse("123.15"),
-            Err(ExtendedParserError::PartialMatch(123, ".15".to_string()))
+            Err(ExtendedParserError::PartialMatch(123, ".15".to_owned()))
         );
         assert_eq!(
             u64::extended_parse("123e10"),
-            Err(ExtendedParserError::PartialMatch(123, "e10".to_string()))
+            Err(ExtendedParserError::PartialMatch(123, "e10".to_owned()))
         );
     }
 
@@ -634,7 +634,7 @@ mod tests {
         ));
         assert_eq!(
             i64::extended_parse("-123e10"),
-            Err(ExtendedParserError::PartialMatch(-123, "e10".to_string()))
+            Err(ExtendedParserError::PartialMatch(-123, "e10".to_owned()))
         );
         assert!(matches!(
             i64::extended_parse(&format!("{}", -(u64::MAX as i128))),
@@ -689,31 +689,31 @@ mod tests {
         );
         assert_eq!(
             f64::extended_parse("123.15e"),
-            Err(ExtendedParserError::PartialMatch(123.15, "e".to_string()))
+            Err(ExtendedParserError::PartialMatch(123.15, "e".to_owned()))
         );
         assert_eq!(
             f64::extended_parse("123.15E"),
-            Err(ExtendedParserError::PartialMatch(123.15, "E".to_string()))
+            Err(ExtendedParserError::PartialMatch(123.15, "E".to_owned()))
         );
         assert_eq!(
             f64::extended_parse("123.15e-"),
-            Err(ExtendedParserError::PartialMatch(123.15, "e-".to_string()))
+            Err(ExtendedParserError::PartialMatch(123.15, "e-".to_owned()))
         );
         assert_eq!(
             f64::extended_parse("123.15e+"),
-            Err(ExtendedParserError::PartialMatch(123.15, "e+".to_string()))
+            Err(ExtendedParserError::PartialMatch(123.15, "e+".to_owned()))
         );
         assert_eq!(
             f64::extended_parse("123.15e."),
-            Err(ExtendedParserError::PartialMatch(123.15, "e.".to_string()))
+            Err(ExtendedParserError::PartialMatch(123.15, "e.".to_owned()))
         );
         assert_eq!(
             f64::extended_parse("1.2.3"),
-            Err(ExtendedParserError::PartialMatch(1.2, ".3".to_string()))
+            Err(ExtendedParserError::PartialMatch(1.2, ".3".to_owned()))
         );
         assert_eq!(
             f64::extended_parse("123.15p5"),
-            Err(ExtendedParserError::PartialMatch(123.15, "p5".to_string()))
+            Err(ExtendedParserError::PartialMatch(123.15, "p5".to_owned()))
         );
         // Minus zero. 0.0 == -0.0 so we explicitly check the sign.
         assert_eq!(Ok(0.0), f64::extended_parse("-0.0"));
@@ -741,14 +741,14 @@ mod tests {
             f64::extended_parse("-infinit"),
             Err(ExtendedParserError::PartialMatch(
                 f64::NEG_INFINITY,
-                "init".to_string()
+                "init".to_owned()
             ))
         );
         assert_eq!(
             f64::extended_parse("-infinity00"),
             Err(ExtendedParserError::PartialMatch(
                 f64::NEG_INFINITY,
-                "00".to_string()
+                "00".to_owned()
             ))
         );
         assert!(f64::extended_parse(&format!("{}", u64::MAX)).is_ok());
@@ -937,19 +937,19 @@ mod tests {
 
         assert_eq!(
             f64::extended_parse("0x0.1p"),
-            Err(ExtendedParserError::PartialMatch(0.0625, "p".to_string()))
+            Err(ExtendedParserError::PartialMatch(0.0625, "p".to_owned()))
         );
         assert_eq!(
             f64::extended_parse("0x0.1p-"),
-            Err(ExtendedParserError::PartialMatch(0.0625, "p-".to_string()))
+            Err(ExtendedParserError::PartialMatch(0.0625, "p-".to_owned()))
         );
         assert_eq!(
             f64::extended_parse("0x.1p+"),
-            Err(ExtendedParserError::PartialMatch(0.0625, "p+".to_string()))
+            Err(ExtendedParserError::PartialMatch(0.0625, "p+".to_owned()))
         );
         assert_eq!(
             f64::extended_parse("0x.1p."),
-            Err(ExtendedParserError::PartialMatch(0.0625, "p.".to_string()))
+            Err(ExtendedParserError::PartialMatch(0.0625, "p.".to_owned()))
         );
 
         assert_eq!(
@@ -1012,55 +1012,55 @@ mod tests {
         // Not actually hex numbers, but the prefixes look like it.
         assert_eq!(
             f64::extended_parse("0x"),
-            Err(ExtendedParserError::PartialMatch(0.0, "x".to_string()))
+            Err(ExtendedParserError::PartialMatch(0.0, "x".to_owned()))
         );
         assert_eq!(
             f64::extended_parse("0x."),
-            Err(ExtendedParserError::PartialMatch(0.0, "x.".to_string()))
+            Err(ExtendedParserError::PartialMatch(0.0, "x.".to_owned()))
         );
         assert_eq!(
             f64::extended_parse("0xp"),
-            Err(ExtendedParserError::PartialMatch(0.0, "xp".to_string()))
+            Err(ExtendedParserError::PartialMatch(0.0, "xp".to_owned()))
         );
         assert_eq!(
             f64::extended_parse("0xp-2"),
-            Err(ExtendedParserError::PartialMatch(0.0, "xp-2".to_string()))
+            Err(ExtendedParserError::PartialMatch(0.0, "xp-2".to_owned()))
         );
         assert_eq!(
             f64::extended_parse("0x.p-2"),
-            Err(ExtendedParserError::PartialMatch(0.0, "x.p-2".to_string()))
+            Err(ExtendedParserError::PartialMatch(0.0, "x.p-2".to_owned()))
         );
         assert_eq!(
             f64::extended_parse("0X"),
-            Err(ExtendedParserError::PartialMatch(0.0, "X".to_string()))
+            Err(ExtendedParserError::PartialMatch(0.0, "X".to_owned()))
         );
         assert_eq!(
             f64::extended_parse("-0x"),
-            Err(ExtendedParserError::PartialMatch(0.0, "x".to_string()))
+            Err(ExtendedParserError::PartialMatch(0.0, "x".to_owned()))
         );
         assert_eq!(
             f64::extended_parse("+0x"),
-            Err(ExtendedParserError::PartialMatch(0.0, "x".to_string()))
+            Err(ExtendedParserError::PartialMatch(0.0, "x".to_owned()))
         );
         assert_eq!(
             f64::extended_parse("-0x."),
-            Err(ExtendedParserError::PartialMatch(-0.0, "x.".to_string()))
+            Err(ExtendedParserError::PartialMatch(-0.0, "x.".to_owned()))
         );
         assert_eq!(
             u64::extended_parse("0x"),
-            Err(ExtendedParserError::PartialMatch(0, "x".to_string()))
+            Err(ExtendedParserError::PartialMatch(0, "x".to_owned()))
         );
         assert_eq!(
             u64::extended_parse("-0x"),
-            Err(ExtendedParserError::PartialMatch(0, "x".to_string()))
+            Err(ExtendedParserError::PartialMatch(0, "x".to_owned()))
         );
         assert_eq!(
             i64::extended_parse("0x"),
-            Err(ExtendedParserError::PartialMatch(0, "x".to_string()))
+            Err(ExtendedParserError::PartialMatch(0, "x".to_owned()))
         );
         assert_eq!(
             i64::extended_parse("-0x"),
-            Err(ExtendedParserError::PartialMatch(0, "x".to_string()))
+            Err(ExtendedParserError::PartialMatch(0, "x".to_owned()))
         );
     }
 
@@ -1074,15 +1074,15 @@ mod tests {
         assert_eq!(Ok(0), u64::extended_parse("00"));
         assert_eq!(
             u64::extended_parse("008"),
-            Err(ExtendedParserError::PartialMatch(0, "8".to_string()))
+            Err(ExtendedParserError::PartialMatch(0, "8".to_owned()))
         );
         assert_eq!(
             u64::extended_parse("08"),
-            Err(ExtendedParserError::PartialMatch(0, "8".to_string()))
+            Err(ExtendedParserError::PartialMatch(0, "8".to_owned()))
         );
         assert_eq!(
             u64::extended_parse("0."),
-            Err(ExtendedParserError::PartialMatch(0, ".".to_string()))
+            Err(ExtendedParserError::PartialMatch(0, ".".to_owned()))
         );
 
         // No float tests, leading zeros get parsed as decimal anyway.
@@ -1097,35 +1097,35 @@ mod tests {
 
         assert_eq!(
             u64::extended_parse("0b"),
-            Err(ExtendedParserError::PartialMatch(0, "b".to_string()))
+            Err(ExtendedParserError::PartialMatch(0, "b".to_owned()))
         );
         assert_eq!(
             u64::extended_parse("0b."),
-            Err(ExtendedParserError::PartialMatch(0, "b.".to_string()))
+            Err(ExtendedParserError::PartialMatch(0, "b.".to_owned()))
         );
         assert_eq!(
             u64::extended_parse("-0b"),
-            Err(ExtendedParserError::PartialMatch(0, "b".to_string()))
+            Err(ExtendedParserError::PartialMatch(0, "b".to_owned()))
         );
         assert_eq!(
             i64::extended_parse("0b"),
-            Err(ExtendedParserError::PartialMatch(0, "b".to_string()))
+            Err(ExtendedParserError::PartialMatch(0, "b".to_owned()))
         );
         assert_eq!(
             i64::extended_parse("-0b"),
-            Err(ExtendedParserError::PartialMatch(0, "b".to_string()))
+            Err(ExtendedParserError::PartialMatch(0, "b".to_owned()))
         );
 
         // Binary not allowed for floats
         assert_eq!(
             f64::extended_parse("0b100"),
-            Err(ExtendedParserError::PartialMatch(0f64, "b100".to_string()))
+            Err(ExtendedParserError::PartialMatch(0f64, "b100".to_owned()))
         );
         assert_eq!(
             f64::extended_parse("0b100.1"),
             Err(ExtendedParserError::PartialMatch(
                 0f64,
-                "b100.1".to_string()
+                "b100.1".to_owned()
             ))
         );
 
@@ -1133,7 +1133,7 @@ mod tests {
             ExtendedBigDecimal::extended_parse("0b100.1"),
             Err(ExtendedParserError::PartialMatch(
                 ExtendedBigDecimal::zero(),
-                "b100.1".to_string()
+                "b100.1".to_owned()
             ))
         );
 
@@ -1141,14 +1141,14 @@ mod tests {
             ExtendedBigDecimal::extended_parse("0b"),
             Err(ExtendedParserError::PartialMatch(
                 ExtendedBigDecimal::zero(),
-                "b".to_string()
+                "b".to_owned()
             ))
         );
         assert_eq!(
             ExtendedBigDecimal::extended_parse("0b."),
             Err(ExtendedParserError::PartialMatch(
                 ExtendedBigDecimal::zero(),
-                "b.".to_string()
+                "b.".to_owned()
             ))
         );
     }
@@ -1163,15 +1163,15 @@ mod tests {
 
         // Ensure that trailing whitespace is still a partial match
         assert_eq!(
-            Err(ExtendedParserError::PartialMatch(6, " ".to_string())),
+            Err(ExtendedParserError::PartialMatch(6, " ".to_owned())),
             u64::extended_parse("0x6 ")
         );
         assert_eq!(
-            Err(ExtendedParserError::PartialMatch(7, "\t".to_string())),
+            Err(ExtendedParserError::PartialMatch(7, "\t".to_owned())),
             u64::extended_parse("0x7\t")
         );
         assert_eq!(
-            Err(ExtendedParserError::PartialMatch(8, "\n".to_string())),
+            Err(ExtendedParserError::PartialMatch(8, "\n".to_owned())),
             u64::extended_parse("0x8\n")
         );
 

@@ -686,5 +686,7 @@ flat_map_option = "allow"
 from_iter_instead_of_collect = "allow"
 large_types_passed_by_value = "allow"
 
+str_to_string = "warn"
+
 [workspace.metadata.cargo-shear]
 ignored = ["clap", "fluent", "libstdbuf"]

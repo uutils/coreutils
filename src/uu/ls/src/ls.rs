@@ -264,7 +264,7 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
     // Convert time_styles references to owned String/option.
     #[expect(clippy::unnecessary_wraps, reason = "internal result helper")]
     fn ok((recent, older): (&str, Option<&str>)) -> Result<(String, Option<String>), LsError> {
-        Ok((recent.to_string(), older.map(String::from)))
+        Ok((recent.to_owned(), older.map(String::from)))
     }
 
     if let Some(field) = options
@@ -300,8 +300,8 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
                 "long-iso" => ok((format::LONG_ISO, None)),
                 // ISO older format needs extra padding.
                 "iso" => Ok((
-                    "%m-%d %H:%M".to_string(),
-                    Some(format::ISO.to_string() + " "),
+                    "%m-%d %H:%M".to_owned(),
+                    Some(format::ISO.to_owned() + " "),
                 )),
                 "locale" => ok(LOCALE_FORMAT),
                 _ => match field.chars().next().unwrap() {
@@ -766,7 +766,7 @@ fn extract_quoting_style(
                 Some(pair) => return pair,
                 None => eprintln!(
                     "{}",
-                    translate!("ls-invalid-quoting-style", "program" => std::env::args().next().unwrap_or_else(|| "ls".to_string()), "style" => style.clone())
+                    translate!("ls-invalid-quoting-style", "program" => std::env::args().next().unwrap_or_else(|| "ls".to_owned()), "style" => style.clone())
                 ),
             }
         }
@@ -3501,7 +3501,7 @@ fn display_item_name(
     if config.context {
         if let Some(pad_count) = prefix_context {
             let security_context = if matches!(config.format, Format::Commas) {
-                path.security_context(config).to_string()
+                path.security_context(config).to_owned()
             } else {
                 pad_left(path.security_context(config), pad_count)
             };

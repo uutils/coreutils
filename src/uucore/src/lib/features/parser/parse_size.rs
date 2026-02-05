@@ -220,7 +220,7 @@ impl<'parser> Parser<'parser> {
             let number: u128 = Self::parse_number(&numeric_string, 10, size)?;
             return match total_physical_memory() {
                 Ok(total) => Ok((number / 100) * total),
-                Err(_) => Err(ParseSizeError::PhysicalMem(size.to_string())),
+                Err(_) => Err(ParseSizeError::PhysicalMem(size.to_owned())),
             };
         }
 
@@ -368,7 +368,7 @@ impl<'parser> Parser<'parser> {
     ) -> Result<u128, ParseSizeError> {
         u128::from_str_radix(numeric_string, radix).map_err(|e| match e.kind() {
             IntErrorKind::PosOverflow => ParseSizeError::size_too_big(original_size),
-            _ => ParseSizeError::ParseFailure(original_size.to_string()),
+            _ => ParseSizeError::ParseFailure(original_size.to_owned()),
         })
     }
 }
@@ -400,7 +400,7 @@ pub fn parse_size_u64(size: &str) -> Result<u64, ParseSizeError> {
 pub fn parse_size_non_zero_u64(size: &str) -> Result<u64, ParseSizeError> {
     let v = Parser::default().parse_u64(size)?;
     if v == 0 {
-        return Err(ParseSizeError::ParseFailure("0".to_string()));
+        return Err(ParseSizeError::ParseFailure("0".to_owned()));
     }
     Ok(v)
 }
@@ -594,15 +594,15 @@ mod tests {
         ));
 
         assert_eq!(
-            ParseSizeError::SizeTooBig("'1Y': Value too large for defined data type".to_string()),
+            ParseSizeError::SizeTooBig("'1Y': Value too large for defined data type".to_owned()),
             parse_size_u64("1Y").unwrap_err()
         );
         assert_eq!(
-            ParseSizeError::SizeTooBig("'1R': Value too large for defined data type".to_string()),
+            ParseSizeError::SizeTooBig("'1R': Value too large for defined data type".to_owned()),
             parse_size_u64("1R").unwrap_err()
         );
         assert_eq!(
-            ParseSizeError::SizeTooBig("'1Q': Value too large for defined data type".to_string()),
+            ParseSizeError::SizeTooBig("'1Q': Value too large for defined data type".to_owned()),
             parse_size_u64("1Q").unwrap_err()
         );
     }

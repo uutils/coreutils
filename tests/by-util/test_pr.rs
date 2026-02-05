@@ -41,7 +41,7 @@ fn all_minutes(from: Timestamp, to: Timestamp) -> Vec<String> {
 fn valid_last_modified_template_vars(from: Timestamp) -> Vec<Vec<(String, String)>> {
     all_minutes(from, Timestamp::now())
         .into_iter()
-        .map(|time| vec![("{last_modified_time}".to_string(), time)])
+        .map(|time| vec![("{last_modified_time}".to_owned(), time)])
         .collect()
 }
 

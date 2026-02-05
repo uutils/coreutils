@@ -71,7 +71,7 @@ fn extract_negative_modes(mut args: impl uucore::Args) -> (Option<String>, Vec<O
     let (parsed_cmode_vec, pre_double_hyphen_args): (Vec<OsString>, Vec<OsString>) =
         args.by_ref().take_while(|a| a != "--").partition(|arg| {
             let arg = if let Some(arg) = arg.to_str() {
-                arg.to_string()
+                arg.to_owned()
             } else {
                 return false;
             };
@@ -713,19 +713,19 @@ mod tests {
         // "chmod -w -r file" becomes "chmod -w,-r file". clap does not accept "-w,-r" as MODE.
         // Therefore, "w" is added as pseudo mode to pass clap.
         let (c, a) = extract_negative_modes(["-w", "-r", "file"].iter().map(OsString::from));
-        assert_eq!(c, Some("-w,-r".to_string()));
+        assert_eq!(c, Some("-w,-r".to_owned()));
         assert_eq!(a, ["w", "file"]);
 
         // "chmod -w file -r" becomes "chmod -w,-r file". clap does not accept "-w,-r" as MODE.
         // Therefore, "w" is added as pseudo mode to pass clap.
         let (c, a) = extract_negative_modes(["-w", "file", "-r"].iter().map(OsString::from));
-        assert_eq!(c, Some("-w,-r".to_string()));
+        assert_eq!(c, Some("-w,-r".to_owned()));
         assert_eq!(a, ["w", "file"]);
 
         // "chmod -w -- -r file" becomes "chmod -w -r file", where "-r" is interpreted as file.
         // Again, "w" is needed as pseudo mode.
         let (c, a) = extract_negative_modes(["-w", "--", "-r", "f"].iter().map(OsString::from));
-        assert_eq!(c, Some("-w".to_string()));
+        assert_eq!(c, Some("-w".to_owned()));
         assert_eq!(a, ["w", "--", "-r", "f"]);
 
         // "chmod -- -r file" becomes "chmod -r file".

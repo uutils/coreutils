@@ -178,7 +178,7 @@ fn test_default_shell() {
     let dir = "CHROOT_DIR";
     at.mkdir(dir);
 
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_owned());
     let expected = format!("chroot: failed to run command '{shell}': No such file or directory");
 
     if let Ok(result) = run_ucmd_as_root(&ts, &[dir]) {

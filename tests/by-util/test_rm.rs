@@ -587,7 +587,7 @@ fn test_prompts() {
     let mut trimmed_output = Vec::new();
     for string in result.stderr_str().split("rm: ") {
         if !string.is_empty() {
-            let trimmed_string = format!("rm: {string}").trim().to_string();
+            let trimmed_string = format!("rm: {string}").trim().to_owned();
             trimmed_output.push(trimmed_string);
         }
     }

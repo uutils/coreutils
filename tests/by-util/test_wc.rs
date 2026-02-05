@@ -845,7 +845,7 @@ fn test_simd_respects_glibc_tunables() {
         .env("GLIBC_TUNABLES", "glibc.cpu.hwcaps=-AVX2,-AVX512F")
         .succeeds()
         .stderr_str()
-        .to_string();
+        .to_owned();
     assert!(
         !debug_output.contains("using hardware support"),
         "SIMD should be reported as disabled when GLIBC_TUNABLES blocks AVX features: {debug_output}"
@@ -871,7 +871,7 @@ fn test_simd_respects_glibc_tunables() {
             .succeeds()
             .stdout_str()
             .trim()
-            .to_string();
+            .to_owned();
 
         let no_avx512 = new_ucmd!()
             .arg("-l")
@@ -880,7 +880,7 @@ fn test_simd_respects_glibc_tunables() {
             .succeeds()
             .stdout_str()
             .trim()
-            .to_string();
+            .to_owned();
 
         let no_avx2_avx512 = new_ucmd!()
             .arg("-l")
@@ -889,7 +889,7 @@ fn test_simd_respects_glibc_tunables() {
             .succeeds()
             .stdout_str()
             .trim()
-            .to_string();
+            .to_owned();
 
         assert_eq!(
             base, no_avx512,

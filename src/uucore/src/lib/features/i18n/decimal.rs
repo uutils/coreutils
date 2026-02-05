@@ -23,7 +23,7 @@ fn get_decimal_separator(loc: Locale) -> String {
     let response: DataResponse<DecimalSymbolsV1> =
         icu_decimal::provider::Baked.load(request).unwrap();
 
-    response.payload.get().decimal_separator().to_string()
+    response.payload.get().decimal_separator().to_owned()
 }
 
 /// Return the decimal separator from the language we're working with.
@@ -49,7 +49,7 @@ fn get_grouping_separator(loc: Locale) -> String {
     let response: DataResponse<DecimalSymbolsV1> =
         icu_decimal::provider::Baked.load(request).unwrap();
 
-    response.payload.get().grouping_separator().to_string()
+    response.payload.get().grouping_separator().to_owned()
 }
 
 /// Return the grouping separator from the language we're working with.

@@ -53,7 +53,7 @@ fn get_dest_gid(matches: &ArgMatches) -> UResult<(Option<u32>, String)> {
             .get_one::<String>(options::ARG_GROUP)
             .map(String::as_str)
             .unwrap_or_default();
-        raw_group = group.to_string();
+        raw_group = group.to_owned();
         if group.is_empty() {
             None
         } else {

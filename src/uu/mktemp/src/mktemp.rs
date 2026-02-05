@@ -222,7 +222,7 @@ impl Params {
         } else {
             // For regular templates, maintain strict validation
             match options.template.to_str() {
-                Some(s) => s.to_string(),
+                Some(s) => s.to_owned(),
                 None => {
                     return Err(MkTempError::InvalidTemplate(
                         "template contains invalid UTF-8".into(),

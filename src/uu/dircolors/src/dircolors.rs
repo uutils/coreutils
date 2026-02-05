@@ -57,15 +57,15 @@ pub fn guess_syntax() -> OutputFmt {
 
 fn get_colors_format_strings(fmt: &OutputFmt) -> (String, String) {
     let prefix = match fmt {
-        OutputFmt::Shell => "LS_COLORS='".to_string(),
-        OutputFmt::CShell => "setenv LS_COLORS '".to_string(),
+        OutputFmt::Shell => "LS_COLORS='".to_owned(),
+        OutputFmt::CShell => "setenv LS_COLORS '".to_owned(),
         OutputFmt::Display => String::new(),
         OutputFmt::Unknown => unreachable!(),
     };
 
     let suffix = match fmt {
-        OutputFmt::Shell => "';\nexport LS_COLORS".to_string(),
-        OutputFmt::CShell => "'".to_string(),
+        OutputFmt::Shell => "';\nexport LS_COLORS".to_owned(),
+        OutputFmt::CShell => "'".to_owned(),
         OutputFmt::Display => String::new(),
         OutputFmt::Unknown => unreachable!(),
     };
@@ -436,7 +436,7 @@ fn append_entry(
         let entry = if key.starts_with('.') {
             format!("*{key}")
         } else {
-            key.to_string()
+            key.to_owned()
         };
         let disp = if *fmt == OutputFmt::Display {
             format!("\x1b[{val}m{entry}\t{val}\x1b[0m\n")

@@ -80,7 +80,7 @@ fn main() {
 
             // Simulate our own echo implementation result
             let our_result = CommandResult {
-                stdout: "hello world\n".to_string(),
+                stdout: "hello world\n".to_owned(),
                 stderr: String::new(),
                 exit_code: 0,
             };

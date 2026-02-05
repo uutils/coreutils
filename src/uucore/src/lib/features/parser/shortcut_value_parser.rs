@@ -45,12 +45,12 @@ impl ShortcutValueParser {
 
         err.insert(
             ContextKind::InvalidValue,
-            ContextValue::String(value.to_string()),
+            ContextValue::String(value.to_owned()),
         );
 
         err.insert(
             ContextKind::ValidValue,
-            ContextValue::Strings(self.0.iter().map(|x| x.get_name().to_string()).collect()),
+            ContextValue::Strings(self.0.iter().map(|x| x.get_name().to_owned()).collect()),
         );
 
         // if `possible_values` is not empty then that means this error is because of an ambiguous value.
@@ -106,10 +106,10 @@ impl TypedValueParser for ShortcutValueParser {
 
         match matched_values.len() {
             0 => Err(self.generate_clap_error(cmd, arg, value, &[])),
-            1 => Ok(matched_values[0].get_name().to_string()),
+            1 => Ok(matched_values[0].get_name().to_owned()),
             _ => {
                 if let Some(direct_match) = matched_values.iter().find(|x| x.get_name() == value) {
-                    Ok(direct_match.get_name().to_string())
+                    Ok(direct_match.get_name().to_owned())
                 } else {
                     Err(self.generate_clap_error(cmd, arg, value, &matched_values))
                 }

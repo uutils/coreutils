@@ -36,7 +36,7 @@ impl SplitName {
         n_digits_opt: Option<String>,
     ) -> Result<Self, CsplitError> {
         // get the prefix
-        let prefix = prefix_opt.unwrap_or_else(|| "xx".to_string());
+        let prefix = prefix_opt.unwrap_or_else(|| "xx".to_owned());
 
         // the width for the split offset
         let n_digits = n_digits_opt

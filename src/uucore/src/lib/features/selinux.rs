@@ -387,7 +387,7 @@ pub fn get_getfattr_output(f: &str) -> String {
         .split('"')
         .nth(1)
         .unwrap_or("")
-        .to_string()
+        .to_owned()
 }
 
 #[cfg(test)]

@@ -68,7 +68,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let path_str = p.to_string_lossy();
         let mut path = Vec::new();
         for path_segment in path_str.split('/') {
-            path.push(path_segment.to_string());
+            path.push(path_segment.to_owned());
         }
         res &= check_path(&mode, &path);
     }

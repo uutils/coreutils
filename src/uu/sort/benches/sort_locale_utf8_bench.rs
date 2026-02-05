@@ -19,7 +19,7 @@ fn sort_ascii_utf8_locale(bencher: Bencher) {
     let data = text_data::generate_ascii_data_simple(100_000);
     let file_path = setup_test_file(&data);
     let output_file = NamedTempFile::new().unwrap();
-    let output_path = output_file.path().to_str().unwrap().to_string();
+    let output_path = output_file.path().to_str().unwrap().to_owned();
 
     let args = ["-o", &output_path, file_path.to_str().unwrap()];
     black_box(run_util_function(uumain, &args));
@@ -34,7 +34,7 @@ fn sort_mixed_utf8_locale(bencher: Bencher) {
     let data = text_data::generate_mixed_locale_data(50_000);
     let file_path = setup_test_file(&data);
     let output_file = NamedTempFile::new().unwrap();
-    let output_path = output_file.path().to_str().unwrap().to_string();
+    let output_path = output_file.path().to_str().unwrap().to_owned();
 
     let args = ["-o", &output_path, file_path.to_str().unwrap()];
     black_box(run_util_function(uumain, &args));
@@ -53,7 +53,7 @@ fn sort_numeric_utf8_locale(bencher: Bencher) {
     }
     let file_path = setup_test_file(&data);
     let output_file = NamedTempFile::new().unwrap();
-    let output_path = output_file.path().to_str().unwrap().to_string();
+    let output_path = output_file.path().to_str().unwrap().to_owned();
 
     let args = ["-n", "-o", &output_path, file_path.to_str().unwrap()];
     black_box(run_util_function(uumain, &args));
@@ -68,7 +68,7 @@ fn sort_reverse_utf8_locale(bencher: Bencher) {
     let data = text_data::generate_mixed_locale_data(50_000);
     let file_path = setup_test_file(&data);
     let output_file = NamedTempFile::new().unwrap();
-    let output_path = output_file.path().to_str().unwrap().to_string();
+    let output_path = output_file.path().to_str().unwrap().to_owned();
 
     let args = ["-r", "-o", &output_path, file_path.to_str().unwrap()];
     black_box(run_util_function(uumain, &args));
@@ -83,7 +83,7 @@ fn sort_unique_utf8_locale(bencher: Bencher) {
     let data = text_data::generate_mixed_locale_data(50_000);
     let file_path = setup_test_file(&data);
     let output_file = NamedTempFile::new().unwrap();
-    let output_path = output_file.path().to_str().unwrap().to_string();
+    let output_path = output_file.path().to_str().unwrap().to_owned();
 
     let args = ["-u", "-o", &output_path, file_path.to_str().unwrap()];
     black_box(run_util_function(uumain, &args));

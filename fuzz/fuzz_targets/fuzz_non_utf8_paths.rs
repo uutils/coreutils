@@ -160,7 +160,7 @@ fn test_program_with_non_utf8_path(program: &str, path: &Path) -> CommandResult 
 
     // Use the locally built uutils binary instead of system PATH
     let local_binary = std::env::var("CARGO_BIN_FILE_COREUTILS")
-        .unwrap_or_else(|_| "target/release/coreutils".to_string());
+        .unwrap_or_else(|_| "target/release/coreutils".to_owned());
 
     // Build appropriate arguments for each program
     let local_args = match program {
@@ -187,7 +187,7 @@ fn test_program_with_non_utf8_path(program: &str, path: &Path) -> CommandResult 
         ],
         "runcon" => {
             let coreutils_binary = std::env::var("CARGO_BIN_FILE_COREUTILS")
-                .unwrap_or_else(|_| "target/release/coreutils".to_string());
+                .unwrap_or_else(|_| "target/release/coreutils".to_owned());
             vec![
                 OsString::from(program),
                 OsString::from("system_u:object_r:admin_home_t:s0"),
@@ -271,7 +271,7 @@ fn test_program_with_non_utf8_path(program: &str, path: &Path) -> CommandResult 
         "tty" => vec![OsString::from(program)], // tty doesn't take file args, but test anyway
         "env" => {
             let coreutils_binary = std::env::var("CARGO_BIN_FILE_COREUTILS")
-                .unwrap_or_else(|_| "target/release/coreutils".to_string());
+                .unwrap_or_else(|_| "target/release/coreutils".to_owned());
             vec![
                 OsString::from(program),
                 OsString::from(coreutils_binary),
@@ -281,7 +281,7 @@ fn test_program_with_non_utf8_path(program: &str, path: &Path) -> CommandResult 
         }
         "nohup" => {
             let coreutils_binary = std::env::var("CARGO_BIN_FILE_COREUTILS")
-                .unwrap_or_else(|_| "target/release/coreutils".to_string());
+                .unwrap_or_else(|_| "target/release/coreutils".to_owned());
             vec![
                 OsString::from(program),
                 OsString::from(coreutils_binary),
@@ -291,7 +291,7 @@ fn test_program_with_non_utf8_path(program: &str, path: &Path) -> CommandResult 
         }
         "nice" => {
             let coreutils_binary = std::env::var("CARGO_BIN_FILE_COREUTILS")
-                .unwrap_or_else(|_| "target/release/coreutils".to_string());
+                .unwrap_or_else(|_| "target/release/coreutils".to_owned());
             vec![
                 OsString::from(program),
                 OsString::from(coreutils_binary),
@@ -301,7 +301,7 @@ fn test_program_with_non_utf8_path(program: &str, path: &Path) -> CommandResult 
         }
         "timeout" => {
             let coreutils_binary = std::env::var("CARGO_BIN_FILE_COREUTILS")
-                .unwrap_or_else(|_| "target/release/coreutils".to_string());
+                .unwrap_or_else(|_| "target/release/coreutils".to_owned());
             vec![
                 OsString::from(program),
                 OsString::from("1"),
@@ -312,7 +312,7 @@ fn test_program_with_non_utf8_path(program: &str, path: &Path) -> CommandResult 
         }
         "stdbuf" => {
             let coreutils_binary = std::env::var("CARGO_BIN_FILE_COREUTILS")
-                .unwrap_or_else(|_| "target/release/coreutils".to_string());
+                .unwrap_or_else(|_| "target/release/coreutils".to_owned());
             vec![
                 OsString::from(program),
                 OsString::from("-o0"),
@@ -413,7 +413,7 @@ fuzz_target!(|_data: &[u8]| {
             let non_utf8_dir = temp_root.join(non_utf8_dir_name);
 
             let local_binary = std::env::var("CARGO_BIN_FILE_COREUTILS")
-                .unwrap_or_else(|_| "target/release/coreutils".to_string());
+                .unwrap_or_else(|_| "target/release/coreutils".to_owned());
             let mkdir_args = vec![OsString::from("mkdir"), non_utf8_dir.as_os_str().to_owned()];
 
             let mkdir_result = run_gnu_cmd(&local_binary, &mkdir_args, false, None);

@@ -295,7 +295,7 @@ impl Utmpx {
                 }
             } else {
                 // GNU coreutils has this behavior
-                return Ok(hostname.to_string());
+                return Ok(hostname.to_owned());
             }
         }
 

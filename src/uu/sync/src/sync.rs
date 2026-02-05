@@ -64,7 +64,7 @@ mod platform {
             .read(true)
             .custom_flags(OFlag::O_NONBLOCK.bits())
             .open(path)
-            .map_err_context(|| path.to_string())?;
+            .map_err_context(|| path.to_owned())?;
         // Reset O_NONBLOCK flag if it was set (matches GNU behavior)
         // This is non-critical, so we log errors but don't fail
         if let Err(e) = fcntl(&f, FcntlArg::F_SETFL(OFlag::empty())) {
@@ -217,7 +217,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
     let files: Vec<String> = matches
         .get_many::<String>(ARG_FILES)
-        .map(|v| v.map(ToString::to_string).collect())
+        .map(|v| v.map(ToOwned::to_owned).collect())
         .unwrap_or_default();
 
     if matches.get_flag(options::DATA) && files.is_empty() {

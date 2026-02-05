@@ -23,7 +23,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let variables: Vec<String> = matches
         .get_many::<String>(ARG_VARIABLES)
-        .map(|v| v.map(ToString::to_string).collect())
+        .map(|v| v.map(ToOwned::to_owned).collect())
         .unwrap_or_default();
 
     let separator = LineEnding::from_zero_flag(matches.get_flag(OPT_NULL));

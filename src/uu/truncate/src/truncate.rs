@@ -333,7 +333,7 @@ fn parse_mode_and_size(size_string: &str) -> Result<TruncateMode, ParseSizeError
             _ => TruncateMode::Absolute,
         })
     } else {
-        Err(ParseSizeError::ParseFailure(size_string.to_string()))
+        Err(ParseSizeError::ParseFailure(size_string.to_owned()))
     }
 }
 

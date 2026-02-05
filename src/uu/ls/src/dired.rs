@@ -174,8 +174,8 @@ mod tests {
 
     #[test]
     fn test_calculate_dired() {
-        let output_display = "sample_output".to_string();
-        let dfn = "sample_file".to_string();
+        let output_display = "sample_output".to_owned();
+        let dfn = "sample_file".to_owned();
         let dired = DiredOutput {
             dired_positions: vec![BytePosition { start: 5, end: 10 }],
             subdired_positions: vec![],

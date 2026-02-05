@@ -41,7 +41,7 @@ fn parse_tab_num(word: &str, allow_zero: bool) -> Result<usize, ParseError> {
         Err(e) => match e.kind() {
             IntErrorKind::PosOverflow => Err(ParseError::TabSizeTooLarge),
             _ => Err(ParseError::InvalidCharacter(
-                word.trim_start_matches(char::is_numeric).to_string(),
+                word.trim_start_matches(char::is_numeric).to_owned(),
             )),
         },
     }
@@ -63,7 +63,7 @@ fn parse_tabstops(s: &str) -> Result<TabConfig, ParseError> {
         if let Some(word) = word.strip_prefix('+') {
             // +N means N positions after the last tab stop (only allowed at end)
             if increment_size.is_some() || extend_size.is_some() {
-                return Err(ParseError::InvalidCharacter("+".to_string()));
+                return Err(ParseError::InvalidCharacter("+".to_owned()));
             }
             let value = parse_tab_num(word, true)?;
             if nums.is_empty() {
@@ -81,7 +81,7 @@ fn parse_tabstops(s: &str) -> Result<TabConfig, ParseError> {
         } else if let Some(word) = word.strip_prefix('/') {
             // /N means repeat every N positions after the last tab stop
             if increment_size.is_some() || extend_size.is_some() {
-                return Err(ParseError::InvalidCharacter("/".to_string()));
+                return Err(ParseError::InvalidCharacter("/".to_owned()));
             }
             let value = parse_tab_num(word, true)?;
             if nums.is_empty() {
@@ -99,7 +99,7 @@ fn parse_tabstops(s: &str) -> Result<TabConfig, ParseError> {
         } else {
             // Regular number
             if increment_size.is_some() || extend_size.is_some() {
-                return Err(ParseError::InvalidCharacter(word.to_string()));
+                return Err(ParseError::InvalidCharacter(word.to_owned()));
             }
             nums.push(parse_tab_num(word, false)?);
         }

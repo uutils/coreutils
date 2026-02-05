@@ -20,8 +20,8 @@ fn mv_single_file(bencher: Bencher) {
                     let src = temp_dir.path().join(format!("f{i}"));
                     let dst = temp_dir.path().join(format!("moved_{i}"));
                     (
-                        src.to_str().unwrap().to_string(),
-                        dst.to_str().unwrap().to_string(),
+                        src.to_str().unwrap().to_owned(),
+                        dst.to_str().unwrap().to_owned(),
                     )
                 })
                 .collect();
@@ -52,10 +52,10 @@ fn mv_multiple_to_dir(bencher: Bencher) {
                         .join(format!("f{i}"))
                         .to_str()
                         .unwrap()
-                        .to_string()
+                        .to_owned()
                 })
                 .collect();
-            args.push(dest_dir.to_str().unwrap().to_string());
+            args.push(dest_dir.to_str().unwrap().to_owned());
             (temp_dir, args)
         })
         .bench_values(|(temp_dir, args)| {
@@ -78,8 +78,8 @@ fn mv_directory(bencher: Bencher) {
             let dst_dir = temp_dir.path().join("dest_tree");
             (
                 temp_dir,
-                src_dir.to_str().unwrap().to_string(),
-                dst_dir.to_str().unwrap().to_string(),
+                src_dir.to_str().unwrap().to_owned(),
+                dst_dir.to_str().unwrap().to_owned(),
             )
         })
         .bench_values(|(temp_dir, src, dst)| {
@@ -100,8 +100,8 @@ fn mv_force_overwrite(bencher: Bencher) {
                     let src = temp_dir.path().join(format!("f{i}"));
                     let dst = temp_dir.path().join(format!("f{}", i + 1000));
                     (
-                        src.to_str().unwrap().to_string(),
-                        dst.to_str().unwrap().to_string(),
+                        src.to_str().unwrap().to_owned(),
+                        dst.to_str().unwrap().to_owned(),
                     )
                 })
                 .collect();

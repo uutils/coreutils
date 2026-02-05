@@ -300,7 +300,7 @@ fn main() -> io::Result<()> {
                 tldr_zip: &mut tldr_zip,
                 utils_per_platform: &utils_per_platform,
                 fluent,
-                fluent_key: utils_name.to_string(),
+                fluent_key: utils_name.to_owned(),
             }
             .markdown()?;
             println!("Wrote to '{p}'");
@@ -323,7 +323,7 @@ fn fix_usage(name: &str, usage: String) -> String {
                     if i > 1 {
                         l.replace("test", "[")
                     } else {
-                        l.to_string()
+                        l.to_owned()
                     }
                 })
                 .collect::<Vec<_>>()

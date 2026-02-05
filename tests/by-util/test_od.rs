@@ -24,7 +24,7 @@ static ALPHA_OUT: &str = "
 fn erange_message() -> String {
     let err = std::io::Error::from_raw_os_error(libc::ERANGE);
     let msg = err.to_string();
-    msg.split(" (os error").next().unwrap_or(&msg).to_string()
+    msg.split(" (os error").next().unwrap_or(&msg).to_owned()
 }
 
 fn run_skip_across_inputs(files: &[(&str, &str)], skip: u64, expected: &str) {

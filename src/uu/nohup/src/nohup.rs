@@ -167,7 +167,7 @@ fn find_stdout() -> UResult<File> {
                 Err(e2) => Err(NohupError::OpenFailed2(
                     internal_failure_code,
                     e1,
-                    homeout_str.to_string(),
+                    homeout_str.to_owned(),
                     e2,
                 )
                 .into()),

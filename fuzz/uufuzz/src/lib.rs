@@ -72,8 +72,8 @@ where
     let original_stderr_fd = unsafe { dup(STDERR_FILENO) };
     if original_stdout_fd == -1 || original_stderr_fd == -1 {
         return CommandResult {
-            stdout: "".to_string(),
-            stderr: "Failed to duplicate STDOUT_FILENO or STDERR_FILENO".to_string(),
+            stdout: "".to_owned(),
+            stderr: "Failed to duplicate STDOUT_FILENO or STDERR_FILENO".to_owned(),
             exit_code: -1,
         };
     }
@@ -87,8 +87,8 @@ where
         || unsafe { pipe(pipe_stderr_fds.as_mut_ptr()) } == -1
     {
         return CommandResult {
-            stdout: "".to_string(),
-            stderr: "Failed to create pipes".to_string(),
+            stdout: "".to_owned(),
+            stderr: "Failed to create pipes".to_owned(),
             exit_code: -1,
         };
     }
@@ -104,8 +104,8 @@ where
             close(pipe_stderr_fds[1]);
         }
         return CommandResult {
-            stdout: "".to_string(),
-            stderr: "Failed to redirect STDOUT_FILENO or STDERR_FILENO".to_string(),
+            stdout: "".to_owned(),
+            stderr: "Failed to redirect STDOUT_FILENO or STDERR_FILENO".to_owned(),
             exit_code: -1,
         };
     }
@@ -120,8 +120,8 @@ where
         let original_stdin_fd = unsafe { dup(STDIN_FILENO) };
         if original_stdin_fd == -1 || unsafe { dup2(input_file.as_raw_fd(), STDIN_FILENO) } == -1 {
             return CommandResult {
-                stdout: "".to_string(),
-                stderr: "Failed to set up stdin redirection".to_string(),
+                stdout: "".to_owned(),
+                stderr: "Failed to set up stdin redirection".to_owned(),
                 exit_code: -1,
             };
         }
@@ -155,8 +155,8 @@ where
         || unsafe { dup2(original_stderr_fd, STDERR_FILENO) } == -1
     {
         return CommandResult {
-            stdout: "".to_string(),
-            stderr: "Failed to restore the original STDOUT_FILENO or STDERR_FILENO".to_string(),
+            stdout: "".to_owned(),
+            stderr: "Failed to restore the original STDOUT_FILENO or STDERR_FILENO".to_owned(),
             exit_code: -1,
         };
     }
@@ -169,8 +169,8 @@ where
     if let Some(fd) = original_stdin_fd {
         if unsafe { dup2(fd, STDIN_FILENO) } == -1 {
             return CommandResult {
-                stdout: "".to_string(),
-                stderr: "Failed to restore the original STDIN".to_string(),
+                stdout: "".to_owned(),
+                stderr: "Failed to restore the original STDIN".to_owned(),
                 exit_code: -1,
             };
         }
@@ -183,8 +183,7 @@ where
             .split_once(':')
             .map(|x| x.1)
             .unwrap_or("")
-            .trim()
-            .to_string(),
+            .trim().to_owned(),
         exit_code: uumain_exit_status,
     }
 }
@@ -284,8 +283,7 @@ pub fn run_gnu_cmd(
         .split_once(':')
         .map(|x| x.1)
         .unwrap_or("")
-        .trim()
-        .to_string();
+        .trim().to_owned();
 
     if output.status.success() || !check_gnu {
         Ok(CommandResult {
@@ -423,7 +421,7 @@ pub fn generate_random_file() -> Result<String, std::io::Error> {
 
     file.write_all(content.as_bytes())?;
 
-    Ok(file_path.to_str().unwrap().to_string())
+    Ok(file_path.to_str().unwrap().to_owned())
 }
 
 #[allow(dead_code)]
@@ -442,8 +440,8 @@ mod tests {
     #[test]
     fn test_command_result_creation() {
         let result = CommandResult {
-            stdout: "Hello, world!".to_string(),
-            stderr: "".to_string(),
+            stdout: "Hello, world!".to_owned(),
+            stderr: "".to_owned(),
             exit_code: 0,
         };
 
@@ -466,8 +464,8 @@ mod tests {
     #[test]
     fn test_replace_fuzz_binary_name() {
         let mut result = CommandResult {
-            stdout: "fuzz/target/x86_64-unknown-linux-gnu/release/fuzz_echo: error".to_string(),
-            stderr: "fuzz/target/x86_64-unknown-linux-gnu/release/fuzz_echo failed".to_string(),
+            stdout: "fuzz/target/x86_64-unknown-linux-gnu/release/fuzz_echo: error".to_owned(),
+            stderr: "fuzz/target/x86_64-unknown-linux-gnu/release/fuzz_echo failed".to_owned(),
             exit_code: 1,
         };
 

@@ -18,7 +18,7 @@ fn split_lines(bencher: Bencher) {
         .with_inputs(|| {
             let output_dir = TempDir::new().unwrap();
             let prefix = output_dir.path().join("x");
-            (output_dir, prefix.to_str().unwrap().to_string())
+            (output_dir, prefix.to_str().unwrap().to_owned())
         })
         .bench_values(|(output_dir, prefix)| {
             black_box(run_util_function(
@@ -39,7 +39,7 @@ fn split_bytes(bencher: Bencher) {
         .with_inputs(|| {
             let output_dir = TempDir::new().unwrap();
             let prefix = output_dir.path().join("x");
-            (output_dir, prefix.to_str().unwrap().to_string())
+            (output_dir, prefix.to_str().unwrap().to_owned())
         })
         .bench_values(|(output_dir, prefix)| {
             black_box(run_util_function(
@@ -60,7 +60,7 @@ fn split_number_chunks(bencher: Bencher) {
         .with_inputs(|| {
             let output_dir = TempDir::new().unwrap();
             let prefix = output_dir.path().join("x");
-            (output_dir, prefix.to_str().unwrap().to_string())
+            (output_dir, prefix.to_str().unwrap().to_owned())
         })
         .bench_values(|(output_dir, prefix)| {
             black_box(run_util_function(
@@ -81,7 +81,7 @@ fn split_numeric_suffix(bencher: Bencher) {
         .with_inputs(|| {
             let output_dir = TempDir::new().unwrap();
             let prefix = output_dir.path().join("x");
-            (output_dir, prefix.to_str().unwrap().to_string())
+            (output_dir, prefix.to_str().unwrap().to_owned())
         })
         .bench_values(|(output_dir, prefix)| {
             black_box(run_util_function(

@@ -102,7 +102,7 @@ impl Localizer {
         }
 
         // Return the key ID if not found anywhere
-        id.to_string()
+        id.to_owned()
     }
 }
 
@@ -220,21 +220,20 @@ fn init_localization(
 
 /// Helper function to parse FluentResource from content string
 fn parse_fluent_resource(content: &str) -> Result<FluentResource, LocalizationError> {
-    FluentResource::try_new(content.to_string()).map_err(
+    FluentResource::try_new(content.to_owned()).map_err(
         |(_partial_resource, errs): (FluentResource, Vec<ParserError>)| {
             if let Some(first_err) = errs.into_iter().next() {
                 let snippet = first_err
                     .slice
                     .clone()
                     .and_then(|range| content.get(range))
-                    .unwrap_or("")
-                    .to_string();
+                    .unwrap_or("").to_owned();
                 LocalizationError::ParseResource {
                     error: first_err,
                     snippet,
                 }
             } else {
-                LocalizationError::LocalesDirNotFound("Parse error without details".to_string())
+                LocalizationError::LocalesDirNotFound("Parse error without details".to_owned())
             }
         },
     )
@@ -248,7 +247,7 @@ fn create_english_bundle_from_embedded(
     // Only support English from embedded files
     if *locale != "en-US" {
         return Err(LocalizationError::LocalesDirNotFound(
-            "Embedded locales only support en-US".to_string(),
+            "Embedded locales only support en-US".to_owned(),
         ));
     }
 
@@ -289,7 +288,7 @@ fn create_english_bundle_from_embedded(
 fn get_message_internal(id: &str, args: Option<FluentArgs>) -> String {
     LOCALIZER.with(|lock| {
         lock.get()
-            .map_or_else(|| id.to_string(), |loc| loc.format(id, args.as_ref())) // Return the key ID if localizer not initialized
+            .map_or_else(|| id.to_owned(), |loc| loc.format(id, args.as_ref())) // Return the key ID if localizer not initialized
     })
 }
 
@@ -359,11 +358,10 @@ pub fn get_message_with_args(id: &str, ftl_args: FluentArgs) -> String {
 /// Function to detect system locale from environment variables
 fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
     let locale_str = std::env::var("LANG")
-        .unwrap_or_else(|_| DEFAULT_LOCALE.to_string())
+        .unwrap_or_else(|_| DEFAULT_LOCALE.to_owned())
         .split('.')
         .next()
-        .unwrap_or(DEFAULT_LOCALE)
-        .to_string();
+        .unwrap_or(DEFAULT_LOCALE).to_owned();
     LanguageIdentifier::from_str(&locale_str).map_err(|_| {
         LocalizationError::ParseLocale(format!("Failed to parse locale: {locale_str}"))
     })
@@ -927,7 +925,7 @@ invalid-syntax = This is { $missing
             init_test_localization(&locale, temp_dir.path()).unwrap();
 
             let mut args = FluentArgs::new();
-            args.set("name".to_string(), "Bob".to_string());
+            args.set("name".to_owned(), "Bob".to_owned());
 
             let message = get_message_with_args("welcome", args);
             assert_eq!(message, "Welcome, Bob!");
@@ -1018,13 +1016,13 @@ invalid-syntax = This is { $missing
 
             // Test Japanese with arguments
             let mut args = FluentArgs::new();
-            args.set("name".to_string(), "田中".to_string());
+            args.set("name".to_owned(), "田中".to_owned());
             let welcome = get_message_with_args("welcome", args);
             assert_eq!(welcome, "ようこそ、田中さん！");
 
             // Test Japanese count (no pluralization)
             let mut count_args = FluentArgs::new();
-            count_args.set("count".to_string(), "5".to_string());
+            count_args.set("count".to_owned(), "5".to_owned());
             let count_message = get_message_with_args("count-items", count_args);
             assert_eq!(count_message, "5個のアイテムがあります");
         })
@@ -1048,7 +1046,7 @@ invalid-syntax = This is { $missing
 
             // Test Arabic with arguments
             let mut args = FluentArgs::new();
-            args.set("name", "أحمد".to_string());
+            args.set("name", "أحمد".to_owned());
             let welcome = get_message_with_args("welcome", args);
             assert_eq!(welcome, "أهلاً وسهلاً، أحمد！");
 
@@ -1160,7 +1158,7 @@ invalid-syntax = This is { $missing
             // Test that Latin script names are NOT isolated in RTL context
             // since we disabled Unicode directional isolation
             let mut args = FluentArgs::new();
-            args.set("name".to_string(), "John Smith".to_string());
+            args.set("name".to_owned(), "John Smith".to_owned());
             let message = get_message_with_args("welcome", args);
 
             // The Latin name should NOT be wrapped in directional isolate characters
@@ -1209,7 +1207,7 @@ invalid-syntax = This is { $missing
 
     #[test]
     fn test_localization_error_uerror_impl() {
-        let error = LocalizationError::Bundle("some error".to_string());
+        let error = LocalizationError::Bundle("some error".to_owned());
         assert_eq!(error.code(), 1);
     }
 
@@ -1365,7 +1363,7 @@ invalid-syntax = This is { $missing
         assert!(error_string.contains("I/O error loading"));
         assert!(error_string.contains("/test/path.ftl"));
 
-        let bundle_error = LocalizationError::Bundle("Bundle creation failed".to_string());
+        let bundle_error = LocalizationError::Bundle("Bundle creation failed".to_owned());
         let bundle_string = format!("{bundle_error}");
         assert!(bundle_string.contains("Bundle error: Bundle creation failed"));
     }

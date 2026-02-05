@@ -407,9 +407,9 @@ fn match_method(method: &str, origin: &str) -> UResult<BackupMode> {
                                  // from the list above.
         }
     } else if matches.is_empty() {
-        Err(BackupError::InvalidArgument(method.to_string(), origin.to_string()).into())
+        Err(BackupError::InvalidArgument(method.to_owned(), origin.to_owned()).into())
     } else {
-        Err(BackupError::AmbiguousArgument(method.to_string(), origin.to_string()).into())
+        Err(BackupError::AmbiguousArgument(method.to_owned(), origin.to_owned()).into())
     }
 }
 

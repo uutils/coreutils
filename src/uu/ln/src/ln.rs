@@ -273,7 +273,7 @@ fn exec(files: &[PathBuf], settings: &Settings) -> UResult<()> {
     if files.len() > 2 {
         return Err(LnError::ExtraOperand(
             files[2].clone().into(),
-            uucore::execution_phrase().to_string(),
+            uucore::execution_phrase().to_owned(),
         )
         .into());
     }

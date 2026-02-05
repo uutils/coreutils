@@ -253,7 +253,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Format::Custom(form)
     } else if let Some(fmt) = matches
         .get_many::<String>(OPT_ISO_8601)
-        .map(|mut iter| iter.next().unwrap_or(&DATE.to_string()).as_str().into())
+        .map(|mut iter| iter.next().unwrap_or(&DATE.to_owned()).as_str().into())
     {
         Format::Iso8601(fmt)
     } else if matches.get_flag(OPT_RFC_EMAIL) {
@@ -712,7 +712,7 @@ fn build_tz_abbrev_map() -> HashMap<String, String> {
 
     // First, add preferred mappings (these take precedence)
     for (abbrev, iana) in PREFERRED_TZ_MAPPINGS {
-        map.insert((*abbrev).to_string(), (*iana).to_string());
+        map.insert((*abbrev).to_owned(), (*iana).to_owned());
     }
 
     // Then, try to find additional abbreviations from IANA database
@@ -733,7 +733,7 @@ fn build_tz_abbrev_map() -> HashMap<String, String> {
                     && potential_abbrev.chars().all(|c| c.is_ascii_uppercase())
                 {
                     map.entry(potential_abbrev)
-                        .or_insert_with(|| tz_str.to_string());
+                        .or_insert_with(|| tz_str.to_owned());
                 }
             }
         }

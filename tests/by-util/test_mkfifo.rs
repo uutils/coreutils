@@ -100,7 +100,7 @@ fn test_create_fifo_with_mode_and_umask() {
 
         let metadata = std::fs::metadata(at.subdir.join(format!("fifo_test_{mode}"))).unwrap();
         let permissions = display_permissions(&metadata, true);
-        assert_eq!(permissions, expected.to_string());
+        assert_eq!(permissions, expected.to_owned());
     };
 
     test_fifo_creation("734", 0o077, "prwx-wxr--"); // spell-checker:disable-line
@@ -134,7 +134,7 @@ fn test_create_fifo_with_umask() {
 
         let metadata = std::fs::metadata(at.subdir.join("fifo_test")).unwrap();
         let permissions = display_permissions(&metadata, true);
-        assert_eq!(permissions, expected.to_string());
+        assert_eq!(permissions, expected.to_owned());
         at.remove("fifo_test");
     };
 
@@ -237,5 +237,5 @@ fn test_mkfifo_permission_unchanged_when_failed() {
     let metadata = std::fs::metadata(at.subdir.join(file_name)).unwrap();
     let permissions = display_permissions(&metadata, true);
     let expected = "-rw-------";
-    assert_eq!(permissions, expected.to_string());
+    assert_eq!(permissions, expected.to_owned());
 }

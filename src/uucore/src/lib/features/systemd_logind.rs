@@ -328,9 +328,9 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
     // Add boot time record first
     if let Ok(boot_time) = login::get_boot_time() {
         let boot_record = SystemdLoginRecord {
-            user: "reboot".to_string(),
-            session_id: "boot".to_string(),
-            seat_or_tty: "~".to_string(), // Traditional boot time indicator
+            user: "reboot".to_owned(),
+            session_id: "boot".to_owned(),
+            seat_or_tty: "~".to_owned(), // Traditional boot time indicator
             raw_device: String::new(),
             host: String::new(),
             login_time: boot_time,
@@ -675,22 +675,22 @@ mod tests {
         // Create iterator with mock records
         let mock_records = vec![
             SystemdLoginRecord {
-                session_id: "session1".to_string(),
-                user: "user1".to_string(),
-                seat_or_tty: "tty1".to_string(),
-                raw_device: "tty1".to_string(),
-                host: "host1".to_string(),
+                session_id: "session1".to_owned(),
+                user: "user1".to_owned(),
+                seat_or_tty: "tty1".to_owned(),
+                raw_device: "tty1".to_owned(),
+                host: "host1".to_owned(),
                 login_time: UNIX_EPOCH,
                 pid: 1234,
                 session_leader_pid: 1234,
                 record_type: SystemdRecordType::UserProcess,
             },
             SystemdLoginRecord {
-                session_id: "session2".to_string(),
-                user: "user2".to_string(),
-                seat_or_tty: "pts/0".to_string(),
-                raw_device: "pts/0".to_string(),
-                host: "host2".to_string(),
+                session_id: "session2".to_owned(),
+                user: "user2".to_owned(),
+                seat_or_tty: "pts/0".to_owned(),
+                raw_device: "pts/0".to_owned(),
+                host: "host2".to_owned(),
                 login_time: UNIX_EPOCH,
                 pid: 5678,
                 session_leader_pid: 5678,
@@ -723,11 +723,11 @@ mod tests {
     #[test]
     fn test_get_all_records() {
         let mock_records = vec![SystemdLoginRecord {
-            session_id: "session1".to_string(),
-            user: "user1".to_string(),
-            seat_or_tty: "tty1".to_string(),
-            raw_device: "tty1".to_string(),
-            host: "host1".to_string(),
+            session_id: "session1".to_owned(),
+            user: "user1".to_owned(),
+            seat_or_tty: "tty1".to_owned(),
+            raw_device: "tty1".to_owned(),
+            host: "host1".to_owned(),
             login_time: UNIX_EPOCH,
             pid: 1234,
             session_leader_pid: 1234,
@@ -747,11 +747,11 @@ mod tests {
     fn test_systemd_record_conversion() {
         // Test that SystemdLoginRecord converts correctly to SystemdUtmpxCompat
         let record = SystemdLoginRecord {
-            session_id: "c1".to_string(),
-            user: "testuser".to_string(),
-            seat_or_tty: "seat0".to_string(),
-            raw_device: "seat0".to_string(),
-            host: "localhost".to_string(),
+            session_id: "c1".to_owned(),
+            user: "testuser".to_owned(),
+            seat_or_tty: "seat0".to_owned(),
+            raw_device: "seat0".to_owned(),
+            host: "localhost".to_owned(),
             login_time: UNIX_EPOCH + std::time::Duration::from_secs(1000),
             pid: 9999,
             session_leader_pid: 9999,

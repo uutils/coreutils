@@ -193,7 +193,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .ok_or_else(|| {
             USimpleError::new(
                 1,
-                translate!("touch-error-missing-file-operand", "help_command" => uucore::execution_phrase().to_string(),),
+                translate!("touch-error-missing-file-operand", "help_command" => uucore::execution_phrase().to_owned(),),
             )
         })?
         .collect();
@@ -214,7 +214,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         timestamp = if first_file.len() == 10 {
             Some(shr2(first_file))
         } else {
-            Some(first_file.to_string())
+            Some(first_file.to_owned())
         };
         filenames = filenames[1..].to_vec();
     }
@@ -810,7 +810,7 @@ fn pathbuf_from_stdout() -> Result<PathBuf, TouchError> {
             0 => {
                 return Err(TouchError::WindowsStdoutPathError(translate!(
                 "touch-error-windows-stdout-path-failed",
-                    "code".to_string() =>
+                    "code".to_owned() =>
                     format!(
                         "{}",
                         // SAFETY: GetLastError is thread-safe and has no documented memory unsafety.

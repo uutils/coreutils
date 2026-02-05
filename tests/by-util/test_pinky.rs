@@ -117,7 +117,7 @@ fn test_lookup() {
                 }
                 true
             })
-            .map(|(_, s)| (*s).to_string())
+            .map(|(_, s)| (*s).to_owned())
             .collect()
     }
     let v_actual_filtered = filter_idle_times(&v_actual);

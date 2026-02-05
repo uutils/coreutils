@@ -1866,9 +1866,9 @@ fn test_oflag_direct_partial_block() {
         .args(&[
             format!("if={}", input_path.display()),
             format!("of={}", output_path.display()),
-            "oflag=direct".to_string(),
+            "oflag=direct".to_owned(),
             format!("bs={block_size}"),
-            "status=none".to_string(),
+            "status=none".to_owned(),
         ])
         .succeeds()
         .stdout_is("")

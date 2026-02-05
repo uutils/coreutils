@@ -13,7 +13,7 @@ fn numfmt_to_si(bencher: Bencher, count: usize) {
     bencher
         .with_inputs(|| {
             let numbers: Vec<String> = (1..=count).map(|n| n.to_string()).collect();
-            let mut args: Vec<String> = vec!["--to=si".to_string()];
+            let mut args: Vec<String> = vec!["--to=si".to_owned()];
             args.extend(numbers);
             args
         })
@@ -29,7 +29,7 @@ fn numfmt_to_si_precision(bencher: Bencher, count: usize) {
     bencher
         .with_inputs(|| {
             let numbers: Vec<String> = (1..=count).map(|n| n.to_string()).collect();
-            let mut args: Vec<String> = vec!["--to=si".to_string(), "--format=%.6f".to_string()];
+            let mut args: Vec<String> = vec!["--to=si".to_owned(), "--format=%.6f".to_owned()];
             args.extend(numbers);
             args
         })
@@ -45,7 +45,7 @@ fn numfmt_to_iec(bencher: Bencher, count: usize) {
     bencher
         .with_inputs(|| {
             let numbers: Vec<String> = (1..=count).map(|n| n.to_string()).collect();
-            let mut args: Vec<String> = vec!["--to=iec".to_string()];
+            let mut args: Vec<String> = vec!["--to=iec".to_owned()];
             args.extend(numbers);
             args
         })
@@ -62,7 +62,7 @@ fn numfmt_from_si(bencher: Bencher, count: usize) {
         .with_inputs(|| {
             // Generate SI formatted data (e.g., "1K", "2K", etc.)
             let numbers: Vec<String> = (1..=count).map(|n| format!("{n}K")).collect();
-            let mut args: Vec<String> = vec!["--from=si".to_string()];
+            let mut args: Vec<String> = vec!["--from=si".to_owned()];
             args.extend(numbers);
             args
         })
@@ -83,7 +83,7 @@ fn numfmt_large_numbers_si(bencher: Bencher, count: usize) {
                 .map(|n| ((n % 9) + 1) * 1_000_000)
                 .map(|n| n.to_string())
                 .collect();
-            let mut args: Vec<String> = vec!["--to=si".to_string()];
+            let mut args: Vec<String> = vec!["--to=si".to_owned()];
             args.extend(numbers);
             args
         })
@@ -99,7 +99,7 @@ fn numfmt_padding(bencher: Bencher, (count, padding): (usize, usize)) {
     bencher
         .with_inputs(|| {
             let numbers: Vec<String> = (1..=count).map(|n| n.to_string()).collect();
-            let mut args: Vec<String> = vec!["--to=si".to_string(), format!("--padding={padding}")];
+            let mut args: Vec<String> = vec!["--to=si".to_owned(), format!("--padding={padding}")];
             args.extend(numbers);
             args
         })
@@ -116,7 +116,7 @@ fn numfmt_round_modes(bencher: Bencher, (round_mode, count): (&str, usize)) {
         .with_inputs(|| {
             let numbers: Vec<String> = (1..=count).map(|n| n.to_string()).collect();
             let mut args: Vec<String> =
-                vec!["--to=si".to_string(), format!("--round={round_mode}")];
+                vec!["--to=si".to_owned(), format!("--round={round_mode}")];
             args.extend(numbers);
             args
         })

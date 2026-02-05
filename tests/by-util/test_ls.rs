@@ -1336,7 +1336,7 @@ fn test_ls_long_symlink_color() {
                         .last()
                         .unwrap();
                 // `target` is whatever comes after the arrow.
-                let target = s.split(" -> ").last().unwrap().to_string();
+                let target = s.split(" -> ").last().unwrap().to_owned();
                 Some((c, name, target))
             }
             None => None,
@@ -1376,14 +1376,14 @@ fn test_ls_long_symlink_color() {
         let colored_name = Regex::new(r"(?:\x1b\[0m\x1b)?\[([0-9;]+)m(.+)\x1b\[0m").unwrap();
         match colored_name.captures(input) {
             Some(captures) => {
-                dbg!(captures.get(1).unwrap().as_str().to_string());
-                dbg!(captures.get(2).unwrap().as_str().to_string());
+                dbg!(captures.get(1).unwrap().as_str().to_owned());
+                dbg!(captures.get(2).unwrap().as_str().to_owned());
                 (
-                    captures.get(1).unwrap().as_str().to_string(),
-                    captures.get(2).unwrap().as_str().to_string(),
+                    captures.get(1).unwrap().as_str().to_owned(),
+                    captures.get(2).unwrap().as_str().to_owned(),
                 )
             }
-            None => (String::new(), input.to_string()),
+            None => (String::new(), input.to_owned()),
         }
     }
 
@@ -1495,7 +1495,7 @@ fn test_ls_dangling_symlink_or_and_missing_colors() {
         .arg("dangling")
         .succeeds()
         .stdout_str()
-        .to_string();
+        .to_owned();
 
     let color_regex = Regex::new(
         r"\x1b\[0m\x1b\[(?P<link>[0-9;]*)mdangling\x1b\[0m -> \x1b\[(?P<target>[0-9;]*)m",
@@ -1525,7 +1525,7 @@ fn test_ls_dangling_symlink_ln_or_priority() {
         .arg("dangling")
         .succeeds()
         .stdout_str()
-        .to_string();
+        .to_owned();
 
     let color_regex = Regex::new(
         r"\x1b\[0m\x1b\[(?P<link>[0-9;]*)mdangling\x1b\[0m -> \x1b\[(?P<target>[0-9;]*)m",
@@ -1554,7 +1554,7 @@ fn test_ls_dangling_symlink_ln_and_missing_colors() {
         .arg("dangling")
         .succeeds()
         .stdout_str()
-        .to_string();
+        .to_owned();
 
     let color_regex = Regex::new(
         r"\x1b\[0m\x1b\[(?P<link>[0-9;]*)mdangling\x1b\[0m -> \x1b\[(?P<target>[0-9;]*)m",
@@ -1581,7 +1581,7 @@ fn test_ls_dangling_symlink_blank_or_still_emits_reset() {
         .arg("dangling")
         .succeeds()
         .stdout_str()
-        .to_string();
+        .to_owned();
 
     assert!(
         stdout.contains("\u{1b}[0m\u{1b}[mdangling\u{1b}[0m"),
@@ -1604,7 +1604,7 @@ fn test_ls_dangling_symlink_blank_or_in_directory_listing() {
         .arg("dir")
         .succeeds()
         .stdout_str()
-        .to_string();
+        .to_owned();
 
     assert!(
         stdout.contains("\u{1b}[0m\u{1b}[mentry\u{1b}[0m"),
@@ -1626,7 +1626,7 @@ fn test_ls_dangling_symlink_uses_ln_when_or_blank() {
         .arg("dangling")
         .succeeds()
         .stdout_str()
-        .to_string();
+        .to_owned();
 
     assert!(
         stdout.contains("\u{1b}[0m\u{1b}[1;36mdangling\u{1b}[0m"),
@@ -1649,7 +1649,7 @@ fn test_ls_directory_dangling_symlink_uses_ln_when_or_blank() {
         .arg("dir")
         .succeeds()
         .stdout_str()
-        .to_string();
+        .to_owned();
 
     assert!(
         stdout.contains("\u{1b}[0m\u{1b}[1;36mentry\u{1b}[0m"),
@@ -5224,7 +5224,7 @@ fn test_ls_dired_subdired_multiple_dirs_non_recursive() {
         .arg("dir2")
         .succeeds();
 
-    let output = result.stdout_str().to_string();
+    let output = result.stdout_str().to_owned();
     let subdired_line = output
         .lines()
         .find(|&line| line.starts_with("//SUBDIRED//"))
@@ -5245,7 +5245,7 @@ fn test_ls_dired_subdired_multiple_dirs_non_recursive() {
             String::from_utf8(output.as_bytes()[start_pos..end_pos].to_vec())
                 .unwrap()
                 .trim()
-                .to_string()
+                .to_owned()
         })
         .collect();
 
@@ -5306,7 +5306,7 @@ fn test_ls_dired_recursive_multiple() {
 
     let result = cmd.succeeds();
 
-    let output = result.stdout_str().to_string();
+    let output = result.stdout_str().to_owned();
     println!("Output:\n{output}");
 
     let dired_line = output
@@ -5329,7 +5329,7 @@ fn test_ls_dired_recursive_multiple() {
             let filename = String::from_utf8(output.as_bytes()[start_pos..=end_pos].to_vec())
                 .unwrap()
                 .trim()
-                .to_string();
+                .to_owned();
             println!("Extracted filename: {filename}");
             filename
         })
@@ -5398,7 +5398,7 @@ fn test_ls_dired_symlink_name_only() {
         .arg("d")
         .succeeds();
 
-    let output = result.stdout_str().to_string();
+    let output = result.stdout_str().to_owned();
     assert!(output.contains("link -> target"));
 
     let dired_line = output
@@ -5421,7 +5421,7 @@ fn test_ls_dired_symlink_name_only() {
             String::from_utf8(output.as_bytes()[start_pos..end_pos].to_vec())
                 .unwrap()
                 .trim()
-                .to_string()
+                .to_owned()
         })
         .collect();
 
@@ -5451,7 +5451,7 @@ fn test_ls_dired_complex() {
         result.stdout_contains("  total 4");
     }
 
-    let output = result.stdout_str().to_string();
+    let output = result.stdout_str().to_owned();
     println!("Output:\n{output}");
 
     let dired_line = output
@@ -5475,7 +5475,7 @@ fn test_ls_dired_complex() {
             let filename = String::from_utf8(output.as_bytes()[start_pos..=end_pos].to_vec())
                 .unwrap()
                 .trim()
-                .to_string();
+                .to_owned();
             println!("Extracted filename: {filename}");
             filename
         })
@@ -5502,7 +5502,7 @@ fn test_ls_subdired_complex() {
     cmd.arg("--dired").arg("-l").arg("-R").arg("dir1");
     let result = cmd.succeeds();
 
-    let output = result.stdout_str().to_string();
+    let output = result.stdout_str().to_owned();
     println!("Output:\n{output}");
 
     let dired_line = output

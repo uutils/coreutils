@@ -390,7 +390,7 @@ fn test_stdbuf_no_fork_regression() {
             // Wait for exec to complete (process name changes from original binary to target)
             // Handle both multicall binary (coreutils) and individual utilities (stdbuf)
             if !name.contains("coreutils") && !name.contains("stdbuf") && !name.is_empty() {
-                break name.to_string();
+                break name.to_owned();
             }
         }
 

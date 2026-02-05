@@ -405,7 +405,7 @@ fn find_match(regex: Regex, re_string: String, left_bytes: Vec<u8>) -> String {
                     if regex.captures_len() > 0 {
                         String::new()
                     } else {
-                        "0".to_string()
+                        "0".to_owned()
                     }
                 }
             } else {
@@ -446,14 +446,14 @@ fn find_match(regex: Regex, re_string: String, left_bytes: Vec<u8>) -> String {
                                 .unwrap_or_default()
                         } else {
                             // No capture groups - return 0 for invalid UTF-8 in UTF-8 locale
-                            "0".to_string()
+                            "0".to_owned()
                         }
                     } else {
                         // No match
                         if re_ascii.captures_len() > 0 {
                             String::new()
                         } else {
-                            "0".to_string()
+                            "0".to_owned()
                         }
                     }
                 } else {
@@ -461,7 +461,7 @@ fn find_match(regex: Regex, re_string: String, left_bytes: Vec<u8>) -> String {
                     if regex.captures_len() > 0 {
                         String::new()
                     } else {
-                        "0".to_string()
+                        "0".to_owned()
                     }
                 }
             }
@@ -496,7 +496,7 @@ fn find_match(regex: Regex, re_string: String, left_bytes: Vec<u8>) -> String {
                 if regex.captures_len() > 0 {
                     String::new()
                 } else {
-                    "0".to_string()
+                    "0".to_owned()
                 }
             }
         }
@@ -1090,11 +1090,11 @@ mod test {
     fn missing_closing_parenthesis() {
         assert_eq!(
             AstNode::parse(&["(", "42"]),
-            Err(ExprError::ExpectedClosingBraceAfter("42".to_string()))
+            Err(ExprError::ExpectedClosingBraceAfter("42".to_owned()))
         );
         assert_eq!(
             AstNode::parse(&["(", "42", "a"]),
-            Err(ExprError::ExpectedClosingBraceInsteadOf("a".to_string()))
+            Err(ExprError::ExpectedClosingBraceInsteadOf("a".to_owned()))
         );
     }
 

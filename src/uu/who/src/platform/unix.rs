@@ -31,7 +31,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let files: Vec<String> = matches
         .get_many::<String>(options::FILE)
-        .map(|v| v.map(ToString::to_string).collect())
+        .map(|v| v.map(ToOwned::to_owned).collect())
         .unwrap_or_default();
 
     // If true, attempt to canonicalize hostnames via a DNS lookup.

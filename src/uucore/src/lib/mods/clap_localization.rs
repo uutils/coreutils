@@ -74,7 +74,7 @@ impl ColorManager {
         if self.0 {
             format!("\x1b[{}m{text}\x1b[0m", color.code())
         } else {
-            text.to_string()
+            text.to_owned()
         }
     }
 }

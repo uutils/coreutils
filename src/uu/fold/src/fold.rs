@@ -155,7 +155,7 @@ fn fold(
             stdin_buf = stdin();
             &mut stdin_buf as &mut dyn Read
         } else {
-            file_buf = File::open(Path::new(filename)).map_err_context(|| filename.to_string())?;
+            file_buf = File::open(Path::new(filename)).map_err_context(|| filename.to_owned())?;
             &mut file_buf as &mut dyn Read
         });
 

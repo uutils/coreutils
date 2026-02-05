@@ -37,7 +37,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let users: Vec<String> = matches
         .get_many::<String>(options::USER)
-        .map(|v| v.map(ToString::to_string).collect())
+        .map(|v| v.map(ToOwned::to_owned).collect())
         .unwrap_or_default();
 
     // If true, display the hours:minutes since each user has touched

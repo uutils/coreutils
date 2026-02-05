@@ -458,7 +458,7 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
         .find_position(|x| e_regex.is_match(x.trim()));
     if let Some((pos, value)) = expand_tabs_option {
         if value.trim().len() <= 2 {
-            arguments[pos] = "-e\t8".to_string();
+            arguments[pos] = "-e\t8".to_owned();
         }
     }
 
@@ -503,8 +503,7 @@ fn get_date_format(matches: &ArgMatches) -> String {
                 format::LONG_ISO
             }
         }
-    }
-    .to_string()
+    }.to_owned()
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -544,8 +543,7 @@ fn build_options(
                 paths[0]
             },
             |s| s.as_str(),
-        )
-        .to_string();
+        ).to_owned();
 
     let default_first_number = NumberingMode::default().first_number;
     let first_number =
@@ -608,10 +606,10 @@ fn build_options(
     let content_line_separator = if double_space {
         "\n".repeat(2)
     } else {
-        "\n".to_string()
+        "\n".to_owned()
     };
 
-    let line_separator = "\n".to_string();
+    let line_separator = "\n".to_owned();
 
     let last_modified_time = {
         let time = if is_merge_mode || paths[0].eq(FILE_STDIN) {
@@ -640,7 +638,7 @@ fn build_options(
     let res = page_plus_re.captures(free_args).map(|i| {
         let unparsed_num = i.get(1).unwrap().as_str().trim();
         let x: Vec<_> = unparsed_num.split(':').collect();
-        x[0].to_string()
+        x[0].to_owned()
             .parse::<usize>()
             .map_err(|_e| PrError::EncounteredErrors {
                 msg: format!("invalid {} argument {}", "+", unparsed_num.quote()),
@@ -657,7 +655,7 @@ fn build_options(
         .filter(|i| i.contains(':'))
         .map(|unparsed_num| {
             let x: Vec<_> = unparsed_num.split(':').collect();
-            x[1].to_string()
+            x[1].to_owned()
                 .parse::<usize>()
                 .map_err(|_e| PrError::EncounteredErrors {
                     msg: format!("invalid {} argument {}", "+", unparsed_num.quote()),
@@ -679,7 +677,7 @@ fn build_options(
         .get_one::<String>(options::PAGES)
         .map(|i| {
             let x: Vec<_> = i.split(':').collect();
-            x[0].to_string()
+            x[0].to_owned()
         })
         .map(invalid_pages_map);
     let start_page = match res {
@@ -692,7 +690,7 @@ fn build_options(
         .filter(|i| i.contains(':'))
         .map(|i| {
             let x: Vec<_> = i.split(':').collect();
-            x[1].to_string()
+            x[1].to_owned()
         })
         .map(invalid_pages_map);
     let end_page = match res {
@@ -733,7 +731,7 @@ fn build_options(
         let bytes = vec![FF];
         String::from_utf8(bytes).unwrap()
     } else {
-        "\n".to_string()
+        "\n".to_owned()
     };
 
     let across_mode = matches.get_flag(options::ACROSS);
@@ -742,7 +740,7 @@ fn build_options(
         Some(x) => Some(x),
         None => matches.get_one::<String>(options::COLUMN_CHAR_SEPARATOR),
     }
-    .map_or_else(|| DEFAULT_COLUMN_SEPARATOR.to_string(), ToString::to_string);
+    .map_or_else(|| DEFAULT_COLUMN_SEPARATOR.to_string(), ToOwned::to_owned);
 
     let default_column_width = if matches.contains_id(options::COLUMN_WIDTH)
         && matches.contains_id(options::COLUMN_CHAR_SEPARATOR)

@@ -334,7 +334,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             && first_arg.chars().skip(2).any(|c| !c.is_ascii_digit());
         if malformed_number {
             return Err(FmtError::InvalidWidthMalformed(
-                first_arg.strip_prefix('-').unwrap().to_string(),
+                first_arg.strip_prefix('-').unwrap().to_owned(),
             )
             .into());
         }
