@@ -240,3 +240,21 @@ fn test_mknod_selinux_invalid() {
         }
     }
 }
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_mknod_selinux_invalid_cleanup() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let dest = "test_fifo";
+
+    new_ucmd!()
+        .arg("--context=invalid_context_t")
+        .arg(at.plus_as_string(dest))
+        .arg("p")
+        .fails()
+        .no_stdout();
+
+    // invalid context → node must not exist
+    assert!(!at.file_exists(dest));
+}

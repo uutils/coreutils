@@ -18,7 +18,7 @@ use std::time::Duration;
 #[cfg(target_os = "linux")]
 use signal_hook::iterator::Handle;
 use uucore::{
-    error::UResult,
+    error::{UResult, set_exit_code},
     format::num_format::{FloatVariant, Formatter},
     locale::setup_localization,
     translate,
@@ -231,7 +231,9 @@ impl ProgUpdate {
     /// See [`ProgUpdate::write_io_lines`] for more information.
     pub(crate) fn print_io_lines(&self) {
         let mut stderr = std::io::stderr();
-        self.write_io_lines(&mut stderr).unwrap();
+        if self.write_io_lines(&mut stderr).is_err() {
+            set_exit_code(1);
+        }
     }
 
     /// Re-print the number of bytes written, duration, and throughput.
@@ -240,7 +242,9 @@ impl ProgUpdate {
     pub(crate) fn reprint_prog_line(&self) {
         let mut stderr = std::io::stderr();
         let rewrite = true;
-        self.write_prog_line(&mut stderr, rewrite).unwrap();
+        if self.write_prog_line(&mut stderr, rewrite).is_err() {
+            set_exit_code(1);
+        }
     }
 
     /// Write all summary statistics.
@@ -248,7 +252,9 @@ impl ProgUpdate {
     /// See [`ProgUpdate::write_transfer_stats`] for more information.
     pub(crate) fn print_transfer_stats(&self, new_line: bool) {
         let mut stderr = std::io::stderr();
-        self.write_transfer_stats(&mut stderr, new_line).unwrap();
+        if self.write_transfer_stats(&mut stderr, new_line).is_err() {
+            set_exit_code(1);
+        }
     }
 
     /// Write all the final statistics.
@@ -454,7 +460,7 @@ impl SignalHandler {
     pub(crate) fn install_signal_handler(
         f: Box<dyn Send + Sync + Fn()>,
     ) -> Result<Self, std::io::Error> {
-        use signal_hook::consts::signal::*;
+        use signal_hook::consts::signal::SIGUSR1;
         use signal_hook::iterator::Signals;
 
         let mut signals = Signals::new([SIGUSR1])?;

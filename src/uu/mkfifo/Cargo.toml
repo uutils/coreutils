@@ -19,10 +19,11 @@ path = "src/mkfifo.rs"
 
 [dependencies]
 clap = { workspace = true }
-libc = { workspace = true }
-nix = { workspace = true, features = ["fs"] }
 uucore = { workspace = true, features = ["fs", "mode"] }
 fluent = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true, features = ["fs"] }
 
 [features]
 selinux = ["uucore/selinux"]

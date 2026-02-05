@@ -20,6 +20,7 @@ workspace = true
 path = "src/sort.rs"
 
 [features]
+default = ["i18n-collator"]
 i18n-collator = ["uucore/i18n-collator"]
 
 [dependencies]
@@ -27,7 +28,6 @@ bigdecimal = { workspace = true }
 binary-heap-plus = { workspace = true }
 clap = { workspace = true }
 compare = { workspace = true }
-ctrlc = { workspace = true }
 fnv = { workspace = true }
 itertools = { workspace = true }
 memchr = { workspace = true }
@@ -36,7 +36,6 @@ rayon = { workspace = true }
 self_cell = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
-unicode-width = { workspace = true }
 uucore = { workspace = true, features = [
   "fs",
   "parser-size",
@@ -45,6 +44,9 @@ uucore = { workspace = true, features = [
   "i18n-collator",
 ] }
 fluent = { workspace = true }
+
+[target.'cfg(not(target_os = "redox"))'.dependencies]
+ctrlc = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true, features = ["resource"] }

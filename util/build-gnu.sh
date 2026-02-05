@@ -15,7 +15,6 @@ command -v gsed && sed(){ gsed "$@";}
 SED=$(command -v gsed||command -v sed) # for find...exec...
 
 SYSTEM_TIMEOUT=$(command -v timeout)
-SYSTEM_YES=$(command -v yes)
 
 ME="${0}"
 ME_dir="$(dirname -- "$(readlink -fm -- "${ME}")")"
@@ -105,7 +104,6 @@ fi
 cd "${path_GNU}" && echo "[ pwd:'${PWD}' ]"
 
 # Any binaries that aren't built become `false` to make tests failure
-# Note that some test (e.g. runcon/runcon-compute.sh) incorrectly passes by this
 for binary in $(./build-aux/gen-lists-of-programs.sh --list-progs); do
     bin_path="${UU_BUILD_DIR}/${binary}"
     test -f "${bin_path}" || cp -v /usr/bin/false "${bin_path}"
@@ -170,8 +168,6 @@ sed -i 's/^print_ver_.*/require_selinux_/' tests/runcon/runcon-compute.sh
 sed -i 's/^print_ver_.*/require_selinux_/' tests/runcon/runcon-no-reorder.sh
 sed -i 's/^print_ver_.*/require_selinux_/' tests/chcon/chcon-fail.sh
 
-# Mask mtab by unshare instead of LD_PRELOAD (able to merge this to GNU?)
-sed -i -e 's|^export LD_PRELOAD=.*||' -e "s|.*maybe LD_PRELOAD.*|df() { unshare -rm bash -c \"mount -t tmpfs tmpfs /proc \&\& command df \\\\\"\\\\\$@\\\\\"\" -- \"\$@\"; }|" tests/df/no-mtab-status.sh
 # We use coreutils yes
 sed -i "s|--coreutils-prog=||g" tests/misc/coreutils.sh
 # Different message
@@ -189,13 +185,6 @@ sed -i "s|cannot create regular file 'no-such/': Not a directory|'no-such/' is n
 
 # Our message is better
 sed -i "s|warning: unrecognized escape|warning: incomplete hex escape|" tests/stat/stat-printf.pl
-
-sed -i 's|timeout |'"${SYSTEM_TIMEOUT}"' |' tests/tail/follow-stdin.sh
-
-# trap_sigpipe_or_skip_ fails with uutils tools because of a bug in
-# timeout/yes (https://github.com/uutils/coreutils/issues/7252), so we use
-# system's yes/timeout to make sure the tests run (instead of being skipped).
-sed -i 's|\(trap .* \)timeout\( .* \)yes|'"\1${SYSTEM_TIMEOUT}\2${SYSTEM_YES}"'|' init.cfg
 
 # Remove dup of /usr/bin/ and /usr/local/bin/ when executed several times
 grep -rlE '/usr/bin/\s?/usr/bin' init.cfg tests/* | xargs -r "${SED}" -Ei 's|/usr/bin/\s?/usr/bin/|/usr/bin/|g'
@@ -218,6 +207,17 @@ sed -i -e "s|rm: cannot remove 'a/1': Permission denied|rm: cannot remove 'a/1/2
 # overlay-headers.sh test intends to check for inotify events,
 # however there's a bug because `---dis` is an alias for: `---disable-inotify`
 sed -i -e "s|---dis ||g" tests/tail/overlay-headers.sh
+
+# Patch inotify-race tests to use Rust source lines for gdb breakpoints.
+# GNU test checks for race between initial read and watch setup. Rust sets up
+# watchers before initial read, so no exact equivalent exists. We break at
+# watch_with_parent as the closest semantic match. -iex suppresses Rust debug
+# script auto-load warnings that would cause the test to skip.
+sed -i \
+    -e "s|break_src=\"\$abs_top_srcdir/src/tail.c\"|break_src=\"${path_UUTILS}/src/uu/tail/src/follow/watch.rs\"|" \
+    -e 's|break_line=$(grep -n ^tail_forever_inotify "$break_src")|break_line=$(grep -n "watcher_rx.watch_with_parent" "$break_src")|' \
+    -e 's|gdb -nx --batch-silent|gdb -nx --batch-silent -iex "set auto-load no"|g' \
+    tests/tail/inotify-race.sh tests/tail/inotify-race2.sh
 
 # Do not FAIL, just do a regular ERROR
 sed -i -e "s|framework_failure_ 'no inotify_add_watch';|fail=1;|" tests/tail/inotify-rotate-resources.sh
@@ -316,7 +316,7 @@ echo "n_stat1 = \$n_stat1"\n\
 echo "n_stat2 = \$n_stat2"\n\
 test \$n_stat1 -ge \$n_stat2 \\' tests/ls/stat-free-color.sh
 
-# no need to replicate this output with hashsum
+# for clap
 sed -i -e  "s|Try 'md5sum --help' for more information.\\\n||" tests/cksum/md5sum.pl
 
 # Our ls command always outputs ANSI color codes prepended with a zero. However,

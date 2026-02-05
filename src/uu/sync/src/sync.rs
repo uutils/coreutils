@@ -29,13 +29,22 @@ static ARG_FILES: &str = "files";
 
 #[cfg(unix)]
 mod platform {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    use nix::fcntl::{FcntlArg, OFlag, fcntl};
     use nix::unistd::sync;
     #[cfg(any(target_os = "linux", target_os = "android"))]
     use nix::unistd::{fdatasync, syncfs};
     #[cfg(any(target_os = "linux", target_os = "android"))]
     use std::fs::File;
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    use uucore::error::FromIo;
+
     use uucore::error::UResult;
 
+    #[expect(
+        clippy::unnecessary_wraps,
+        reason = "fn sig must match on all platforms"
+    )]
     pub fn do_sync() -> UResult<()> {
         sync();
         Ok(())
@@ -44,7 +53,9 @@ mod platform {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     pub fn do_syncfs(files: Vec<String>) -> UResult<()> {
         for path in files {
-            let f = File::open(path).unwrap();
+            let f = File::open(&path).map_err_context(|| path.clone())?;
+            // Reset O_NONBLOCK flag if it was set (matches GNU behavior)
+            let _ = fcntl(&f, FcntlArg::F_SETFL(OFlag::empty()));
             syncfs(f)?;
         }
         Ok(())
@@ -53,7 +64,9 @@ mod platform {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     pub fn do_fdatasync(files: Vec<String>) -> UResult<()> {
         for path in files {
-            let f = File::open(path).unwrap();
+            let f = File::open(&path).map_err_context(|| path.clone())?;
+            // Reset O_NONBLOCK flag if it was set (matches GNU behavior)
+            let _ = fcntl(&f, FcntlArg::F_SETFL(OFlag::empty()));
             fdatasync(f)?;
         }
         Ok(())
@@ -157,15 +170,17 @@ mod platform {
 
     pub fn do_syncfs(files: Vec<String>) -> UResult<()> {
         for path in files {
-            flush_volume(
-                Path::new(&path)
-                    .components()
-                    .next()
-                    .unwrap()
-                    .as_os_str()
-                    .to_str()
-                    .unwrap(),
-            )?;
+            let maybe_first = Path::new(&path).components().next();
+            let vol_name = match maybe_first {
+                Some(c) => c.as_os_str().to_string_lossy().into_owned(),
+                None => {
+                    return Err(USimpleError::new(
+                        1,
+                        translate!("sync-error-no-such-file", "file" => path),
+                    ));
+                }
+            };
+            flush_volume(&vol_name)?;
         }
         Ok(())
     }

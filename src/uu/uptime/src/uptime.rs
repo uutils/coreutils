@@ -14,7 +14,10 @@ use thiserror::Error;
 use uucore::error::{UError, UResult};
 use uucore::libc::time_t;
 use uucore::translate;
-use uucore::uptime::*;
+use uucore::uptime::{
+    OutputFormat, format_nusers, get_formatted_loadavg, get_formatted_nusers, get_formatted_time,
+    get_formatted_uptime, get_uptime,
+};
 
 use clap::{Arg, ArgAction, Command, ValueHint, builder::ValueParser};
 
@@ -22,7 +25,7 @@ use uucore::format_usage;
 
 #[cfg(unix)]
 #[cfg(not(target_os = "openbsd"))]
-use uucore::utmpx::*;
+use uucore::utmpx::{BOOT_TIME, USER_PROCESS, Utmpx};
 
 pub mod options {
     pub static SINCE: &str = "since";

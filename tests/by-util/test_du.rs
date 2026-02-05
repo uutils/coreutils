@@ -2003,3 +2003,151 @@ fn test_du_long_path_from_unreadable() {
     perms.set_mode(0o755);
     fs::set_permissions(&inaccessible_path, perms).unwrap();
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_du_hard_links_multiple_dirs_in_args() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("dir1");
+    at.mkdir("dir2");
+    at.write("dir1/file", "hello world");
+    at.hard_link("dir1/file", "dir2/link");
+
+    let result = ts.ucmd().args(&["dir1", "dir2"]).succeeds();
+    let lines: Vec<&str> = result.stdout_str().lines().collect();
+    let size = |i: usize| lines[i].split_once('\t').unwrap().0.parse::<u64>().unwrap();
+    assert!(size(0) > size(1));
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_du_hard_links_multiple_links_in_args() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("dir1");
+    at.write("dir1/file", "hello world");
+    at.hard_link("dir1/file", "dir1/link");
+
+    let result = ts.ucmd().args(&["dir1/file", "dir1/link"]).succeeds();
+    result.stdout_contains("dir1/file");
+    result.stdout_does_not_contain("dir1/link");
+
+    let result = ts.ucmd().args(&["-L", "dir1/file", "dir1/link"]).succeeds();
+    result.stdout_contains("dir1/file");
+    result.stdout_does_not_contain("dir1/link");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_du_symlinks_multiple_links_in_args() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("dir1");
+    at.write("dir1/file", "hello world");
+    at.symlink_file("dir1/file", "dir1/link");
+
+    let result = ts.ucmd().args(&["dir1/file", "dir1/link"]).succeeds();
+    result.stdout_contains("dir1/file");
+    result.stdout_contains("dir1/link");
+
+    let result = ts.ucmd().args(&["-L", "dir1/file", "dir1/link"]).succeeds();
+    result.stdout_contains("dir1/file");
+    result.stdout_does_not_contain("dir1/link");
+}
+
+#[test]
+fn test_block_size_args_override() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let dir = "override_args_dir";
+
+    at.mkdir(dir);
+    let fpath = at.plus(format!("{dir}/file"));
+    std::fs::File::create(fpath)
+        .expect("cannot create test file")
+        .set_len(100_000_000)
+        .expect("cannot set file size");
+
+    let fpath2 = at.plus(format!("{dir}/file_2"));
+    std::fs::File::create(fpath2)
+        .expect("cannot create test file")
+        .set_len(100_000_000)
+        .expect("cannot set file size");
+
+    let test_cases = [
+        (["-sk", "-m"], "-sm"),
+        (["-sk", "-b"], "-sb"),
+        (["-sm", "-k"], "-sk"),
+    ];
+
+    for (idx, (overwriting_args, expected)) in test_cases.into_iter().enumerate() {
+        let overridden_args = ts
+            .ucmd()
+            .arg(dir)
+            .args(&overwriting_args)
+            .succeeds()
+            .stdout_move_str();
+
+        let single_args = ts
+            .ucmd()
+            .arg(dir)
+            .arg(expected)
+            .succeeds()
+            .stdout_move_str();
+
+        assert_eq!(
+            overridden_args, single_args,
+            "The last argument of m, k and b should overwrite. Run: {idx}"
+        );
+    }
+}
+
+#[test]
+fn test_block_override_b_still_has_apparent_size() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let dir = "override_args_dir";
+
+    at.mkdir(dir);
+    let fpath = at.plus(format!("{dir}/file"));
+    std::fs::File::create(fpath)
+        .expect("cannot create test file")
+        .set_len(100_000_000)
+        .expect("cannot set file size");
+
+    let fpath2 = at.plus(format!("{dir}/file_2"));
+    std::fs::File::create(fpath2)
+        .expect("cannot create test file")
+        .set_len(100_000_000)
+        .expect("cannot set file size");
+
+    let test_cases = [
+        (["-sb", "-m"], ["-sm", "--apparent-size"]),
+        (["-sb", "-k"], ["-sk", "--apparent-size"]),
+    ];
+
+    for (idx, (overwriting_args, expected)) in test_cases.into_iter().enumerate() {
+        let overridden_args = ts
+            .ucmd()
+            .arg(dir)
+            .args(&overwriting_args)
+            .succeeds()
+            .stdout_move_str();
+
+        let single_args = ts
+            .ucmd()
+            .arg(dir)
+            .args(&expected)
+            .succeeds()
+            .stdout_move_str();
+
+        assert_eq!(
+            overridden_args, single_args,
+            "Overwriting the b flag should still leave --apparent-size active. Run: {idx}"
+        );
+    }
+}

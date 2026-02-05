@@ -19,10 +19,13 @@ path = "src/shuf.rs"
 
 [dependencies]
 clap = { workspace = true }
+itoa = { workspace = true }
 rand = { workspace = true }
-rand_core = { workspace = true }
+rand_chacha = { workspace = true }
+sha3 = { workspace = true }
 uucore = { workspace = true }
 fluent = { workspace = true }
+rustc-hash = { workspace = true }
 
 [[bin]]
 name = "shuf"
@@ -34,5 +37,4 @@ harness = false
 
 [dev-dependencies]
 divan = { workspace = true }
-tempfile = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }

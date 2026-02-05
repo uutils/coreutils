@@ -86,6 +86,13 @@ feat_common_core = [
   "basenc",
   "cat",
   "cksum",
+  "b2sum",
+  "md5sum",
+  "sha1sum",
+  "sha224sum",
+  "sha256sum",
+  "sha384sum",
+  "sha512sum",
   "comm",
   "cp",
   "csplit",
@@ -105,7 +112,6 @@ feat_common_core = [
   "false",
   "fmt",
   "fold",
-  "hashsum",
   "head",
   "join",
   "link",
@@ -154,7 +160,6 @@ feat_common_core = [
 # "feat_Tier1" == expanded set of utilities which can be built/run on the usual rust "Tier 1" target platforms (ref: <https://forge.rust-lang.org/release/platform-support.html>)
 feat_Tier1 = [
   "feat_common_core",
-  #
   "arch",
   "hostname",
   "nproc",
@@ -315,7 +320,7 @@ clap = { version = "4.5", features = ["wrap_help", "cargo", "color"] }
 clap_complete = "4.4"
 clap_mangen = "0.2"
 compare = "0.1.0"
-crossterm = "0.29.0"
+crossterm = { version = "0.29.0", default-features = false }
 ctor = "0.6.0"
 ctrlc = { version = "3.4.7", features = ["termination"] }
 divan = { package = "codspeed-divan-compat", version = "4.0.5" }
@@ -330,15 +335,18 @@ gcd = "2.3"
 glob = "0.3.1"
 half = "2.4.1"
 hostname = "0.4"
+icu_calendar = "2.0.0"
 icu_collator = "2.0.0"
+icu_datetime = "2.0.0"
 icu_decimal = "2.0.0"
 icu_locale = "2.0.0"
 icu_provider = "2.0.0"
 indicatif = "0.18.0"
 itertools = "0.14.0"
+itoa = "1.0.15"
 jiff = "0.2.18"
+jiff-icu = "0.2.2"
 libc = "0.2.172"
-linux-raw-sys = "0.12"
 lscolors = { version = "0.21.0", default-features = false, features = [
   "gnu_legacy",
 ] }
@@ -357,10 +365,12 @@ phf_codegen = "0.13.1"
 platform-info = "2.0.3"
 procfs = "0.18"
 rand = { version = "0.9.0", features = ["small_rng"] }
-rand_core = "0.9.0"
+rand_chacha = { version = "0.9.0" }
 rayon = "1.10"
 regex = "1.10.4"
+rlimit = "0.11.0"
 rstest = "0.26.0"
+rustc-hash = "2.1.1"
 rust-ini = "0.21.0"
 same-file = "1.0.6"
 self_cell = "1.0.4"
@@ -404,13 +414,15 @@ uucore = { version = "0.6.0", package = "uucore", path = "src/uucore" }
 uucore_procs = { version = "0.6.0", package = "uucore_procs", path = "src/uucore_procs" }
 uu_ls = { version = "0.6.0", path = "src/uu/ls" }
 uu_base32 = { version = "0.6.0", path = "src/uu/base32" }
+uu_checksum_common = { version = "0.6.0", path = "src/uu/checksum_common" }
 uutests = { version = "0.6.0", package = "uutests", path = "tests/uutests" }
 
 [dependencies]
-clap.workspace = true
 clap_complete = { workspace = true, optional = true }
 clap_mangen = { workspace = true, optional = true }
+clap.workspace = true
 fluent-syntax = { workspace = true, optional = true }
+itertools.workspace = true
 phf.workspace = true
 selinux = { workspace = true, optional = true }
 textwrap.workspace = true
@@ -433,6 +445,13 @@ chmod = { optional = true, version = "0.6.0", package = "uu_chmod", path = "src/
 chown = { optional = true, version = "0.6.0", package = "uu_chown", path = "src/uu/chown" }
 chroot = { optional = true, version = "0.6.0", package = "uu_chroot", path = "src/uu/chroot" }
 cksum = { optional = true, version = "0.6.0", package = "uu_cksum", path = "src/uu/cksum" }
+b2sum = { optional = true, version = "0.6.0", package = "uu_b2sum", path = "src/uu/b2sum" }
+md5sum = { optional = true, version = "0.6.0", package = "uu_md5sum", path = "src/uu/md5sum" }
+sha1sum = { optional = true, version = "0.6.0", package = "uu_sha1sum", path = "src/uu/sha1sum" }
+sha224sum = { optional = true, version = "0.6.0", package = "uu_sha224sum", path = "src/uu/sha224sum" }
+sha256sum = { optional = true, version = "0.6.0", package = "uu_sha256sum", path = "src/uu/sha256sum" }
+sha384sum = { optional = true, version = "0.6.0", package = "uu_sha384sum", path = "src/uu/sha384sum" }
+sha512sum = { optional = true, version = "0.6.0", package = "uu_sha512sum", path = "src/uu/sha512sum" }
 comm = { optional = true, version = "0.6.0", package = "uu_comm", path = "src/uu/comm" }
 cp = { optional = true, version = "0.6.0", package = "uu_cp", path = "src/uu/cp" }
 csplit = { optional = true, version = "0.6.0", package = "uu_csplit", path = "src/uu/csplit" }
@@ -453,7 +472,6 @@ false = { optional = true, version = "0.6.0", package = "uu_false", path = "src/
 fmt = { optional = true, version = "0.6.0", package = "uu_fmt", path = "src/uu/fmt" }
 fold = { optional = true, version = "0.6.0", package = "uu_fold", path = "src/uu/fold" }
 groups = { optional = true, version = "0.6.0", package = "uu_groups", path = "src/uu/groups" }
-hashsum = { optional = true, version = "0.6.0", package = "uu_hashsum", path = "src/uu/hashsum" }
 head = { optional = true, version = "0.6.0", package = "uu_head", path = "src/uu/head" }
 hostid = { optional = true, version = "0.6.0", package = "uu_hostid", path = "src/uu/hostid" }
 hostname = { optional = true, version = "0.6.0", package = "uu_hostname", path = "src/uu/hostname" }
@@ -537,6 +555,7 @@ filetime.workspace = true
 glob.workspace = true
 jiff.workspace = true
 libc.workspace = true
+bytecount.workspace = true
 num-prime.workspace = true
 pretty_assertions = "1.4.0"
 rand.workspace = true
@@ -544,6 +563,7 @@ regex.workspace = true
 sha1 = { workspace = true, features = ["std"] }
 tempfile.workspace = true
 time = { workspace = true, features = ["local-offset"] }
+unicode-width.workspace = true
 unindent = "0.2.3"
 uutests.workspace = true
 uucore = { workspace = true, features = [
@@ -563,18 +583,16 @@ nix = { workspace = true, features = [
   "process",
   "signal",
   "socket",
-  "user",
   "term",
+  "user",
 ] }
-rlimit = "0.10.1"
-xattr.workspace = true
+rlimit = { workspace = true }
 
 # Used in test_uptime::test_uptime_with_file_containing_valid_boot_time_utmpx_record
 # to deserialize an utmpx struct into a binary file
 [target.'cfg(all(target_family= "unix",not(target_os = "macos")))'.dev-dependencies]
-serde = { version = "1.0.202", features = ["derive"] }
-wincode = "0.2.5"
-wincode-derive = "0.2.3"
+wincode = "0.3.1"
+wincode-derive = "0.3.1"
 
 [build-dependencies]
 phf_codegen.workspace = true
@@ -622,7 +640,7 @@ unexpected_cfgs = { level = "warn", check-cfg = [
   'cfg(fuzzing)',
   'cfg(target_os, values("cygwin"))',
 ] }
-#unused_qualifications = "warn" // TODO: fix warnings in uucore, then re-enable this lint
+unused_qualifications = "warn"
 
 [workspace.lints.clippy]
 # The counts were generated with this command:
@@ -646,23 +664,18 @@ match_same_arms = "allow"                    # 204
 redundant_closure_for_method_calls = "allow" # 125
 cast_possible_truncation = "allow"           # 122
 too_many_lines = "allow"                     # 101
-trivially_copy_pass_by_ref = "allow"         # 84
-single_match_else = "allow"                  # 82
 cast_possible_wrap = "allow"                 # 78
 cast_sign_loss = "allow"                     # 70
 struct_excessive_bools = "allow"             # 68
 cast_precision_loss = "allow"                # 52
 cast_lossless = "allow"                      # 35
-unnecessary_wraps = "allow"                  # 33
 ignored_unit_patterns = "allow"              # 21
 similar_names = "allow"                      # 20
 large_stack_arrays = "allow"                 # 20
-wildcard_imports = "allow"                   # 18
 needless_pass_by_value = "allow"             # 16
 float_cmp = "allow"                          # 12
 items_after_statements = "allow"             # 11
 return_self_not_must_use = "allow"           # 8
-needless_continue = "allow"                  # 6
 inline_always = "allow"                      # 6
 fn_params_excessive_bools = "allow"          # 6
 used_underscore_items = "allow"              # 2
@@ -671,7 +684,6 @@ should_panic_without_expect = "allow"        # 2
 doc_markdown = "allow"
 unused_self = "allow"
 enum_glob_use = "allow"
-unreadable_literal = "allow"
 unnested_or_patterns = "allow"
 implicit_hasher = "allow"
 struct_field_names = "allow"
@@ -680,3 +692,6 @@ format_push_string = "allow"
 flat_map_option = "allow"
 from_iter_instead_of_collect = "allow"
 large_types_passed_by_value = "allow"
+
+[workspace.metadata.cargo-shear]
+ignored = ["clap", "fluent", "libstdbuf"]
