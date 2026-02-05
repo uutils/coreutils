@@ -21,7 +21,7 @@ pub const TESTS_BINARY: &str = env!("CARGO_BIN_EXE_uudoc");
 fn init() {
     // No need for unsafe here
     unsafe {
-        std::env::set_var("UUTESTS_BINARY_PATH", TESTS_BINARY);
+        env::set_var("UUTESTS_BINARY_PATH", TESTS_BINARY);
     }
     // Print for debugging
     eprintln!("Setting UUTESTS_BINARY_PATH={TESTS_BINARY}");
