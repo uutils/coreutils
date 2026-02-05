@@ -963,6 +963,40 @@ fn read_files_from(file_name: &OsStr) -> Result<Vec<PathBuf>, std::io::Error> {
     Ok(paths)
 }
 
+fn get_block_size_arg_index_if_present(matches: &ArgMatches, flag: &str) -> Option<usize> {
+    if matches.get_flag(flag) {
+        // Indices of returns index even if flag is not present, thats why we need to if guard it
+        matches
+            .indices_of(flag)
+            .and_then(|mut indices| indices.next_back())
+    } else {
+        None
+    }
+}
+
+fn handle_block_size_arg_override(matches: &ArgMatches) -> Option<SizeFormat> {
+    let candidates = [
+        (
+            SizeFormat::BlockSize(1),
+            get_block_size_arg_index_if_present(matches, options::BYTES),
+        ),
+        (
+            SizeFormat::BlockSize(1024),
+            get_block_size_arg_index_if_present(matches, options::BLOCK_SIZE_1K),
+        ),
+        (
+            SizeFormat::BlockSize(1024 * 1024),
+            get_block_size_arg_index_if_present(matches, options::BLOCK_SIZE_1M),
+        ),
+    ];
+
+    candidates
+        .into_iter()
+        .filter(|(_, idx)| idx.is_some())
+        .max_by_key(|&(_, idx)| idx.unwrap_or(0))
+        .map(|(size_format, _)| size_format)
+}
+
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -1018,12 +1052,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         SizeFormat::HumanBinary
     } else if matches.get_flag(options::SI) {
         SizeFormat::HumanDecimal
-    } else if matches.get_flag(options::BYTES) {
-        SizeFormat::BlockSize(1)
-    } else if matches.get_flag(options::BLOCK_SIZE_1K) {
-        SizeFormat::BlockSize(1024)
-    } else if matches.get_flag(options::BLOCK_SIZE_1M) {
-        SizeFormat::BlockSize(1024 * 1024)
+    } else if let Some(size_format) = handle_block_size_arg_override(&matches) {
+        size_format
     } else {
         let block_size_str = matches.get_one::<String>(options::BLOCK_SIZE);
         let block_size = read_block_size(block_size_str.map(AsRef::as_ref))?;
