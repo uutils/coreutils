@@ -82,12 +82,7 @@ where
     use std::os::unix::fs::PermissionsExt;
 
     let src_file = File::open(&source)?;
-    let dst_file = match OpenOptions::new()
-        .create_new(true)
-        .write(true)
-        .mode(0o600)
-        .open(&dest)
-    {
+    let dst_file = match create_new_file(&dest) {
         Ok(file) => file,
         Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
             let dest_metadata = match std::fs::metadata(&dest) {
@@ -111,18 +106,26 @@ where
             } else {
                 // If a symlink exists in the position we want to write the file to, and it symlinks to
                 // a nonexistent file, we should just overwrite the symlink
-                let nonexistent_file = std::fs::read_link(&dest)?;
-                OpenOptions::new()
-                    .create_new(true)
-                    .write(true)
-                    .mode(0o600)
-                    .open(&nonexistent_file)?
+                create_new_file(std::fs::read_link(&dest)?)?
             }
         }
         Err(e) => Err(e)?,
     };
 
     Ok((src_file, dst_file))
+}
+
+/// Helper function to create a new file with set destination, returning Err if file already exists
+/// or other errors
+fn create_new_file<P>(dest: P) -> std::io::Result<File>
+where
+    P: AsRef<Path>,
+{
+    OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .mode(0o600)
+        .open(&dest)
 }
 
 /// Checks whether a file contains any non null bytes i.e. any byte != 0x0
