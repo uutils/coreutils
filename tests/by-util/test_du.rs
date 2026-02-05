@@ -2100,6 +2100,9 @@ fn test_block_size_args_override() {
         (["-sk", "--si"], vec!["-s", "--si"]),
         (["-sk", "-h"], vec!["-s", "-h"]),
         (["-sm", "--block-size=128"], vec!["-s", "--block-size=128"]),
+        (["--block-size=128", "-b"], vec!["-b"]),
+        (["--si", "-b"], vec!["-b"]),
+        (["-h", "-b"], vec!["-b"]),
     ];
 
     for (idx, (overwriting_args, expected)) in test_cases.into_iter().enumerate() {
