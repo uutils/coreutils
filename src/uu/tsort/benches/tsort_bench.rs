@@ -12,7 +12,7 @@ fn generate_linear_chain(num_nodes: usize) -> Vec<u8> {
     let mut data = Vec::new();
 
     for i in 0..num_nodes.saturating_sub(1) {
-        data.extend_from_slice(format!("node{} node{}\n", i, i + 1).as_bytes());
+        data.extend_from_slice(format!("node{i} node{}\n", i + 1).as_bytes());
     }
 
     data

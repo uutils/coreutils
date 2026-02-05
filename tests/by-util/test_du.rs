@@ -1782,7 +1782,7 @@ fn test_du_long_path_safe_traversal() {
     at.mkdir(&deep_path);
 
     for i in 0..15 {
-        let long_dir_name = format!("{}{}", "a".repeat(100), i);
+        let long_dir_name = format!("{}{i}", "a".repeat(100));
         deep_path = format!("{deep_path}/{long_dir_name}");
         at.mkdir_all(&deep_path);
     }
@@ -1830,7 +1830,7 @@ fn test_du_safe_traversal_with_symlinks() {
     at.mkdir(&deep_path);
 
     for i in 0..8 {
-        let dir_name = format!("{}{}", "b".repeat(50), i);
+        let dir_name = format!("{}{i}", "b".repeat(50));
         deep_path = format!("{deep_path}/{dir_name}");
         at.mkdir_all(&deep_path);
     }

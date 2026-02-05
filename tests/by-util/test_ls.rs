@@ -4785,8 +4785,8 @@ fn test_ls_selinux_context_indicator() {
         // The 11th character (0-indexed position 10) should be "." for SELinux context
         assert_eq!(
             chars[10], '.',
-            "Expected '.' indicator for SELinux context in position 11, got '{}' in line: {}",
-            chars[10], first_line
+            "Expected '.' indicator for SELinux context in position 11, got '{}' in line: {first_line}",
+            chars[10],
         );
     }
 
