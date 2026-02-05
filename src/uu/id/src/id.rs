@@ -307,7 +307,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             );
         }
 
-        let groups = entries::get_groups_gnu(Some(gid)).unwrap();
+        let groups = entries::get_groups_gnu(None).unwrap();
         let groups = if state.user_specified {
             possible_pw.as_ref().map(|p| p.belongs_to()).unwrap()
         } else {
