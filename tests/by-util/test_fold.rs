@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore fullwidth
+// spell-checker:ignore fullwidth refgh tefgh nefgh
 
 use bytecount::count;
 use unicode_width::UnicodeWidthChar;
@@ -957,4 +957,38 @@ fn test_fullwidth_characters() {
         .pipe_in(format!("{e_fullwidth}{e_fullwidth}"))
         .succeeds()
         .stdout_is(format!("{e_fullwidth}\n{e_fullwidth}"));
+}
+
+#[test]
+fn test_character_mode_special_chars() {
+    for (args, input, expected) in [
+        // backspace decreases column
+        (&["-c", "-w", "5"][..], "abcde\x08fg\n", "abcde\x08f\ng\n"),
+        // carriage return resets column
+        (&["-c", "-w", "5"], "abcd\refgh\n", "abcd\refgh\n"),
+        // tab at start exceeds width
+        (&["-c", "-w", "4"], "\tabc\n", "\t\nabc\n"),
+        // multiple tabs
+        (&["-c", "-w", "10"], "a\tb\tc\n", "a\tb\n\tc\n"),
+        // basic folding
+        (&["-c", "-w", "3"], "abcdef\n", "abc\ndef\n"),
+        // preserves empty lines
+        (&["-c", "-w", "5"], "abc\n\ndef\n", "abc\n\ndef\n"),
+        // word boundary with -s
+        (&["-c", "-s", "-w", "5"], "ab cd ef\n", "ab \ncd ef\n"),
+        // tab as word boundary
+        (&["-c", "-s", "-w", "10"], "abcd\tefgh\n", "abcd\t\nefgh\n"),
+        // wide chars count as 1 in -c mode
+        (
+            &["-c", "-w", "3"],
+            "\u{FF1A}\u{FF1A}\u{FF1A}\u{FF1A}\n",
+            "\u{FF1A}\u{FF1A}\u{FF1A}\n\u{FF1A}\n",
+        ),
+    ] {
+        new_ucmd!()
+            .args(args)
+            .pipe_in(input)
+            .succeeds()
+            .stdout_is(expected);
+    }
 }

@@ -58,4 +58,3 @@ With Cargo Flamegraph you can easily make a flamegraph of `rm`:
 ```shell
 cargo flamegraph --cmd coreutils -- rm [additional parameters]
 ```
-

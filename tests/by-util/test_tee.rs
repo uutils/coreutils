@@ -198,8 +198,9 @@ mod linux_only {
         use std::os::unix::io::FromRawFd;
 
         let mut fds: [c_int; 2] = [0, 0];
-        assert!(
-            (unsafe { libc::pipe(std::ptr::from_mut::<c_int>(&mut fds[0])) } == 0),
+        assert_eq!(
+            unsafe { libc::pipe(std::ptr::from_mut::<c_int>(&mut fds[0])) },
+            0,
             "Failed to create pipe"
         );
 
@@ -215,8 +216,9 @@ mod linux_only {
         use std::os::unix::io::FromRawFd;
 
         let mut fds: [c_int; 2] = [0, 0];
-        assert!(
-            (unsafe { libc::pipe(std::ptr::from_mut::<c_int>(&mut fds[0])) } == 0),
+        assert_eq!(
+            unsafe { libc::pipe(std::ptr::from_mut::<c_int>(&mut fds[0])) },
+            0,
             "Failed to create pipe"
         );
 
