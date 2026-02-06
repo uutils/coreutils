@@ -8,14 +8,14 @@ name = "coreutils"
 description = "coreutils ~ GNU coreutils (updated); implemented as universal (cross-platform) utils, written in Rust"
 default-run = "coreutils"
 repository = "https://github.com/uutils/coreutils"
-rust-version = "1.88.0"
+edition.workspace = true
+rust-version.workspace = true
 version.workspace = true
 authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
-edition.workspace = true
 
 [package.metadata.docs.rs]
 all-features = true
@@ -303,6 +303,7 @@ members = [
 authors = ["uutils developers"]
 categories = ["command-line-utilities"]
 edition = "2024"
+rust-version = "1.88.0"
 homepage = "https://github.com/uutils/coreutils"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 license = "MIT"
