@@ -2179,3 +2179,27 @@ fn test_block_override_b_still_has_apparent_size() {
         );
     }
 }
+
+#[test]
+fn test_overriding_block_size_arg_with_invalid_value_still_errors() {
+    new_ucmd!()
+        .args(&["--block-size=abc", "-m"])
+        .fails_with_code(1)
+        .stderr_contains("invalid --block-size argument 'abc'");
+    new_ucmd!()
+        .args(&["--block-size=abc", "-k"])
+        .fails_with_code(1)
+        .stderr_contains("invalid --block-size argument 'abc'");
+    new_ucmd!()
+        .args(&["--block-size=abc", "-b"])
+        .fails_with_code(1)
+        .stderr_contains("invalid --block-size argument 'abc'");
+    new_ucmd!()
+        .args(&["--block-size=abc", "-h"])
+        .fails_with_code(1)
+        .stderr_contains("invalid --block-size argument 'abc'");
+    new_ucmd!()
+        .args(&["--block-size=abc", "--si"])
+        .fails_with_code(1)
+        .stderr_contains("invalid --block-size argument 'abc'");
+}
