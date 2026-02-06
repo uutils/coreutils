@@ -92,7 +92,7 @@ struct Settings {
 ///
 /// After being constructed with [`Alarm::with_interval`], [`Alarm::get_trigger`]
 /// will return [`ALARM_TRIGGER_TIMER`] once per the given [`Duration`].
-/// Alarm can be manually triggered with closure returned by [`Alarm::manual_trigger_fn`].
+/// Alarm can be manually triggered with [`Alarm::manual_trigger`].
 /// [`Alarm::get_trigger`] will return [`ALARM_TRIGGER_SIGNAL`] in this case.
 ///
 /// Can be cloned, but the trigger status is shared across all instances so only
