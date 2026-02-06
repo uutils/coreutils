@@ -1113,7 +1113,7 @@ impl Options {
                 });
             }
         }
-        overriding_order.sort_by(|a, b| a.0.cmp(&b.0));
+        overriding_order.sort_by_key(|a| a.0);
 
         let mut attributes = Attributes::NONE;
 
