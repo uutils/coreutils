@@ -322,13 +322,13 @@ jobs:
         disable_search: true
         flags: makefile,${{ matrix.job.os }}
         fail_ci_if_error: false
-    - name: "`make install PROG_PREFIX=uu- PROFILE=release-fast COMPLETIONS=n MANPAGES=n LOCALES=n`"
+    - name: "`make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n`"
       shell: bash
       run: |
         set -x
-        DESTDIR=/tmp/ make install PROG_PREFIX=uu- PROFILE=release-fast COMPLETIONS=n MANPAGES=n LOCALES=n
+        DESTDIR=/tmp/ make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n
         # Check that utils are built with given profile
-        ./target/release-fast/true
+        ./target/release-small/true
         # Check that the progs have prefix
         test -f /tmp/usr/local/bin/uu-tty
         test -f /tmp/usr/local/libexec/uu-coreutils/libstdbuf.*
@@ -501,10 +501,10 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
-    - name: "`make install PROFILE=release-fast`"
+    - name: "`make install PROFILE=release`"
       shell: bash
       run: |
-        export CARGO_TARGET_DIR=cargo-target RUSTFLAGS="${RUSTFLAGS} -C strip=symbols" PROFILE=release-fast MANPAGES=n COMPLETIONS=n LOCALES=n
+        export CARGO_TARGET_DIR=cargo-target RUSTFLAGS="${RUSTFLAGS} -C strip=symbols" PROFILE=release MANPAGES=n COMPLETIONS=n LOCALES=n
         mkdir -p "${CARGO_TARGET_DIR}" && sudo mount -t tmpfs -o noatime,size=16G tmpfs "${CARGO_TARGET_DIR}"
         make install DESTDIR=target/size-release/
         make install COMPLETIONS=n MULTICALL=y LN="ln -vf" DESTDIR=target/size-multi-release/
