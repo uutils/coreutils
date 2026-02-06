@@ -8,7 +8,7 @@
 use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::fs::{File, metadata};
-use std::io::{self, BufRead, BufReader, BufWriter, Read, StdinLock, Write, stdin};
+use std::io::{self, BufRead, BufReader, BufWriter, Read, StdinLock, Write, stderr, stdin};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
@@ -40,7 +40,7 @@ enum FileNumber {
 }
 
 impl FileNumber {
-    fn as_str(&self) -> &'static str {
+    fn as_str(self) -> &'static str {
         match self {
             Self::One => "1",
             Self::Two => "2",
@@ -114,7 +114,8 @@ impl OrderChecker {
 
         let is_ordered = *current_line >= *self.last_line;
         if !is_ordered && !self.has_error {
-            eprintln!(
+            let _ = writeln!(
+                stderr(),
                 "{}",
                 translate!("comm-error-file-not-sorted", "file_num" => self.file_num.as_str())
             );
@@ -194,7 +195,14 @@ fn write_line_with_delimiter<W: Write>(writer: &mut W, delim: &[u8], line: &[u8]
     Ok(())
 }
 
-fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) -> UResult<()> {
+fn comm(
+    a: &mut LineReader,
+    b: &mut LineReader,
+    filename1: &OsString,
+    filename2: &OsString,
+    delim: &str,
+    opts: &ArgMatches,
+) -> UResult<()> {
     let width_col_1 = usize::from(!opts.get_flag(options::COLUMN_1));
     let width_col_2 = usize::from(!opts.get_flag(options::COLUMN_2));
 
@@ -204,9 +212,13 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
     let mut writer = BufWriter::new(io::stdout().lock());
 
     let ra = &mut Vec::new();
-    let mut na = a.read_line(ra);
+    let mut na = a
+        .read_line(ra)
+        .map_err_context(|| filename1.maybe_quote().to_string())?;
     let rb = &mut Vec::new();
-    let mut nb = b.read_line(rb);
+    let mut nb = b
+        .read_line(rb)
+        .map_err_context(|| filename2.maybe_quote().to_string())?;
 
     let mut total_col_1 = 0;
     let mut total_col_2 = 0;
@@ -218,31 +230,19 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
     // Determine if we should perform order checking
     let should_check_order = !no_check_order
         && (check_order
-            || if let (Some(file1), Some(file2)) = (
-                opts.get_one::<OsString>(options::FILE_1),
-                opts.get_one::<OsString>(options::FILE_2),
-            ) {
-                !(paths_refer_to_same_file(file1.as_os_str(), file2.as_os_str(), true)
-                    || are_files_identical(Path::new(file1), Path::new(file2)).unwrap_or(false))
-            } else {
-                true
-            });
+            || !(paths_refer_to_same_file(filename1.as_os_str(), filename2.as_os_str(), true)
+                || are_files_identical(Path::new(filename1), Path::new(filename2))
+                    .unwrap_or(false)));
 
     let mut checker1 = OrderChecker::new(FileNumber::One, check_order);
     let mut checker2 = OrderChecker::new(FileNumber::Two, check_order);
     let mut input_error = false;
 
-    while na.is_ok() || nb.is_ok() {
-        let ord = match (na.is_ok(), nb.is_ok()) {
-            (false, true) => Ordering::Greater,
-            (true, false) => Ordering::Less,
-            (true, true) => match (&na, &nb) {
-                (&Ok(0), &Ok(0)) => break,
-                (&Ok(0), _) => Ordering::Greater,
-                (_, &Ok(0)) => Ordering::Less,
-                _ => ra.cmp(&rb),
-            },
-            _ => unreachable!(),
+    while na != 0 || nb != 0 {
+        let ord = match (na, nb) {
+            (0, _) => Ordering::Greater,
+            (_, 0) => Ordering::Less,
+            (_, _) => ra.as_slice().cmp(rb.as_slice()),
         };
 
         match ord {
@@ -256,7 +256,9 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
                         .map_err_context(|| translate!("comm-error-write"))?;
                 }
                 ra.clear();
-                na = a.read_line(ra);
+                na = a
+                    .read_line(ra)
+                    .map_err_context(|| filename1.maybe_quote().to_string())?;
                 total_col_1 += 1;
             }
             Ordering::Greater => {
@@ -267,7 +269,9 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
                     write_line_with_delimiter(&mut writer, delim_col_2.as_bytes(), rb)?;
                 }
                 rb.clear();
-                nb = b.read_line(rb);
+                nb = b
+                    .read_line(rb)
+                    .map_err_context(|| filename2.maybe_quote().to_string())?;
                 total_col_2 += 1;
             }
             Ordering::Equal => {
@@ -280,8 +284,12 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
                 }
                 ra.clear();
                 rb.clear();
-                na = a.read_line(ra);
-                nb = b.read_line(rb);
+                na = a
+                    .read_line(ra)
+                    .map_err_context(|| filename1.maybe_quote().to_string())?;
+                nb = b
+                    .read_line(rb)
+                    .map_err_context(|| filename2.maybe_quote().to_string())?;
                 total_col_3 += 1;
             }
         }
@@ -307,7 +315,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
     if should_check_order && (checker1.has_error || checker2.has_error) {
         // Print the input error message once at the end
         if input_error {
-            eprintln!("{}", translate!("comm-error-input-not-sorted"));
+            let _ = writeln!(stderr(), "{}", translate!("comm-error-input-not-sorted"));
         }
         Err(USimpleError::new(1, ""))
     } else {
@@ -360,7 +368,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         delim => delim,
     };
 
-    comm(&mut f1, &mut f2, delim, &matches)
+    comm(&mut f1, &mut f2, filename1, filename2, delim, &matches)
 }
 
 pub fn uu_app() -> Command {

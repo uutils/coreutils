@@ -40,9 +40,6 @@ pub struct HardlinkOptions {
     pub verbose: bool,
 }
 
-/// Result type for hardlink operations
-pub type HardlinkResult<T> = Result<T, HardlinkError>;
-
 /// Errors that can occur during hardlink operations
 #[derive(Debug)]
 pub enum HardlinkError {
@@ -122,7 +119,7 @@ impl HardlinkTracker {
         dest: &Path,
         scanner: &HardlinkGroupScanner,
         options: &HardlinkOptions,
-    ) -> HardlinkResult<Option<PathBuf>> {
+    ) -> Option<PathBuf> {
         use std::os::unix::fs::MetadataExt;
 
         let metadata = match source.metadata() {
@@ -132,7 +129,7 @@ impl HardlinkTracker {
                 if options.verbose {
                     eprintln!("warning: cannot get metadata for {}: {}", source.quote(), e);
                 }
-                return Ok(None);
+                return None;
             }
         };
 
@@ -154,14 +151,14 @@ impl HardlinkTracker {
                         existing_path.quote()
                     );
                 }
-                return Ok(Some(existing_path.clone()));
+                return Some(existing_path.clone());
             }
         }
 
         // This is the first time we see this file, record its destination
         self.inode_map.insert(key, dest.to_path_buf());
 
-        Ok(None)
+        None
     }
 }
 
@@ -171,13 +168,9 @@ impl HardlinkGroupScanner {
     }
 
     /// Scan files and group them by hardlinks, including recursive directory scanning
-    pub fn scan_files(
-        &mut self,
-        files: &[PathBuf],
-        options: &HardlinkOptions,
-    ) -> HardlinkResult<()> {
+    pub fn scan_files(&mut self, files: &[PathBuf], options: &HardlinkOptions) {
         if self.scanned {
-            return Ok(());
+            return;
         }
 
         // Store the source files for destination mapping
@@ -206,8 +199,6 @@ impl HardlinkGroupScanner {
                 );
             }
         }
-
-        Ok(())
     }
 
     /// Scan a single path (file or directory)
@@ -305,12 +296,11 @@ pub fn with_optional_hardlink_context<F, R>(
 where
     F: FnOnce(&mut HardlinkTracker, &HardlinkGroupScanner) -> R,
 {
-    match (tracker, scanner) {
-        (Some(tracker), Some(scanner)) => operation(tracker, scanner),
-        _ => {
-            let (mut dummy_tracker, dummy_scanner) = create_hardlink_context();
-            operation(&mut dummy_tracker, &dummy_scanner)
-        }
+    if let (Some(tracker), Some(scanner)) = (tracker, scanner) {
+        operation(tracker, scanner)
+    } else {
+        let (mut dummy_tracker, dummy_scanner) = create_hardlink_context();
+        operation(&mut dummy_tracker, &dummy_scanner)
     }
 }
 

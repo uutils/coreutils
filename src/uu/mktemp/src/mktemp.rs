@@ -44,6 +44,8 @@ const TMPDIR_ENV_VAR: &str = "TMPDIR";
 #[cfg(windows)]
 const TMPDIR_ENV_VAR: &str = "TMP";
 
+const FALLBACK_TMPDIR: &str = "/tmp";
+
 #[derive(Error, Debug)]
 enum MkTempError {
     #[error("{}", translate!("mktemp-error-persist-file", "path" => .0.quote()))]
@@ -119,14 +121,12 @@ impl Options {
                 Some(d) => d.clone(),
                 // Otherwise use $TMPDIR if set, else use the system's default
                 // temporary directory.
-                None => env::var(TMPDIR_ENV_VAR)
-                    .ok()
-                    .map_or_else(env::temp_dir, PathBuf::from),
+                None => get_tmpdir_env_or_default(),
             });
         let (tmpdir, template) = match matches.get_one::<OsString>(ARG_TEMPLATE) {
             // If no template argument is given, `--tmpdir` is implied.
             None => {
-                let tmpdir = Some(tmpdir.unwrap_or_else(env::temp_dir));
+                let tmpdir = Some(tmpdir.unwrap_or_else(get_tmpdir_env_or_default));
                 let template = DEFAULT_TEMPLATE;
                 (tmpdir, OsString::from(template))
             }
@@ -399,7 +399,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // Create the temporary file or directory, or simulate creating it.
     let res = if dry_run {
-        dry_exec(&tmpdir, &prefix, rand, &suffix)
+        Ok(dry_exec(&tmpdir, &prefix, rand, &suffix))
     } else {
         exec(&tmpdir, &prefix, rand, &suffix, make_dir)
     };
@@ -483,7 +483,7 @@ pub fn uu_app() -> Command {
         )
 }
 
-fn dry_exec(tmpdir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult<PathBuf> {
+fn dry_exec(tmpdir: &Path, prefix: &str, rand: usize, suffix: &str) -> PathBuf {
     let len = prefix.len() + suffix.len() + rand;
     let mut buf = Vec::with_capacity(len);
     buf.extend(prefix.as_bytes());
@@ -503,8 +503,7 @@ fn dry_exec(tmpdir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult<P
     }
     // We guarantee utf8.
     let buf = String::from_utf8(buf).unwrap();
-    let tmpdir = Path::new(tmpdir).join(buf);
-    Ok(tmpdir)
+    Path::new(tmpdir).join(buf)
 }
 
 /// Create a temporary directory with the given parameters.
@@ -595,6 +594,14 @@ fn exec(dir: &Path, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> 
     Ok(path)
 }
 
+/// Reads from `TMPDIR_ENV_VAR` but defaults to /tmp if value is set to empty string.
+fn get_tmpdir_env_or_default() -> PathBuf {
+    match env::var_os(TMPDIR_ENV_VAR) {
+        Some(val) if val.is_empty() => PathBuf::from(FALLBACK_TMPDIR),
+        _ => env::temp_dir(),
+    }
+}
+
 /// Create a temporary file or directory
 ///
 /// Behavior is determined by the `options` parameter, see [`Options`] for details.
@@ -609,7 +616,7 @@ pub fn mktemp(options: &Options) -> UResult<PathBuf> {
 
     // Create the temporary file or directory, or simulate creating it.
     if options.dry_run {
-        dry_exec(&tmpdir, &prefix, rand, &suffix)
+        Ok(dry_exec(&tmpdir, &prefix, rand, &suffix))
     } else {
         exec(&tmpdir, &prefix, rand, &suffix, options.directory)
     }

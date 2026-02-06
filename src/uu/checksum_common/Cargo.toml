@@ -27,8 +27,6 @@ uucore = { workspace = true, features = [
 fluent = { workspace = true }
 
 [dev-dependencies]
-divan = { workspace = true }
-tempfile = { workspace = true }
 
 # [[bench]]
 # name = "b2sum_bench"

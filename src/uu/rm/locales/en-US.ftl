@@ -40,6 +40,7 @@ rm-error-cannot-remove-no-such-file = cannot remove {$file}: No such file or dir
 rm-error-cannot-remove-permission-denied = cannot remove {$file}: Permission denied
 rm-error-cannot-remove-is-directory = cannot remove {$file}: Is a directory
 rm-error-dangerous-recursive-operation = it is dangerous to operate recursively on '/'
+rm-error-dangerous-recursive-operation-same-as-root = it is dangerous to operate recursively on '{$path}' (same as '/')
 rm-error-use-no-preserve-root = use --no-preserve-root to override this failsafe
 rm-error-refusing-to-remove-directory = refusing to remove '.' or '..' directory: skipping {$path}
 rm-error-cannot-remove = cannot remove {$file}

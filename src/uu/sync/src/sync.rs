@@ -38,20 +38,41 @@ mod platform {
     use std::fs::File;
     #[cfg(any(target_os = "linux", target_os = "android"))]
     use uucore::error::FromIo;
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    use uucore::translate;
 
     use uucore::error::UResult;
 
+    #[expect(
+        clippy::unnecessary_wraps,
+        reason = "fn sig must match on all platforms"
+    )]
     pub fn do_sync() -> UResult<()> {
         sync();
         Ok(())
     }
 
+    /// Opens a file and resets its O_NONBLOCK flag to match GNU behavior.
+    /// Returns the opened file or an error if opening fails.
+    /// Logs a warning if fcntl fails but doesn't abort the operation.
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn open_and_reset_nonblock(path: &str) -> UResult<File> {
+        let f = File::open(path).map_err_context(|| path.to_string())?;
+        // Reset O_NONBLOCK flag if it was set (matches GNU behavior)
+        // This is non-critical, so we log errors but don't fail
+        if let Err(e) = fcntl(&f, FcntlArg::F_SETFL(OFlag::empty())) {
+            eprintln!(
+                "sync: {}",
+                translate!("sync-warning-fcntl-failed", "file" => path, "error" => e.to_string())
+            );
+        }
+        Ok(f)
+    }
+
     #[cfg(any(target_os = "linux", target_os = "android"))]
     pub fn do_syncfs(files: Vec<String>) -> UResult<()> {
         for path in files {
-            let f = File::open(&path).map_err_context(|| path.clone())?;
-            // Reset O_NONBLOCK flag if it was set (matches GNU behavior)
-            let _ = fcntl(&f, FcntlArg::F_SETFL(OFlag::empty()));
+            let f = open_and_reset_nonblock(&path)?;
             syncfs(f)?;
         }
         Ok(())
@@ -60,9 +81,7 @@ mod platform {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     pub fn do_fdatasync(files: Vec<String>) -> UResult<()> {
         for path in files {
-            let f = File::open(&path).map_err_context(|| path.clone())?;
-            // Reset O_NONBLOCK flag if it was set (matches GNU behavior)
-            let _ = fcntl(&f, FcntlArg::F_SETFL(OFlag::empty()));
+            let f = open_and_reset_nonblock(&path)?;
             fdatasync(f)?;
         }
         Ok(())

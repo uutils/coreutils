@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # spell-checker:ignore (shell) OSTYPE
-# spell-checker:ignore (utils) cksum coreutils dircolors hashsum mkdir mktemp printenv printf readlink realpath grealpath rmdir shuf tsort unexpand
+# spell-checker:ignore (utils) cksum coreutils dircolors mkdir mktemp printenv printf readlink realpath grealpath rmdir shuf tsort unexpand
 # spell-checker:ignore (jq) deps startswith
 
 # Use GNU version for realpath on *BSD

@@ -35,6 +35,7 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::ffi::CStr;
+use std::io::{self, Write};
 use uucore::display::Quotable;
 use uucore::entries::{self, Group, Locate, Passwd};
 use uucore::error::UResult;
@@ -124,6 +125,7 @@ struct State {
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    let mut lock = io::stdout().lock();
 
     let users: Vec<String> = matches
         .get_many::<String>(options::ARG_USERS)
@@ -181,7 +183,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if state.selinux_supported {
             if let Ok(context) = selinux::SecurityContext::current(false) {
                 let bytes = context.as_bytes();
-                print!("{}{line_ending}", String::from_utf8_lossy(bytes));
+                write!(lock, "{}{line_ending}", String::from_utf8_lossy(bytes))?;
                 return Ok(());
             }
             return Err(USimpleError::new(
@@ -195,7 +197,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if state.smack_supported {
             match uucore::smack::get_smack_label_for_self() {
                 Ok(label) => {
-                    print!("{label}{line_ending}");
+                    write!(lock, "{label}{line_ending}")?;
                     return Ok(());
                 }
                 Err(_) => {
@@ -216,22 +218,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     for i in 0..=users.len() {
         let possible_pw = if state.user_specified {
-            match Passwd::locate(users[i].as_str()) {
-                Ok(p) => Some(p),
-                Err(_) => {
-                    show_error!(
-                        "{}",
-                        translate!("id-error-no-such-user",
-                                                     "user" => users[i].quote()
-                        )
-                    );
-                    set_exit_code(1);
-                    if i + 1 >= users.len() {
-                        break;
-                    }
-
-                    continue;
+            if let Ok(p) = Passwd::locate(users[i].as_str()) {
+                Some(p)
+            } else {
+                show_error!(
+                    "{}",
+                    translate!("id-error-no-such-user",
+                                                 "user" => users[i].quote()
+                    )
+                );
+                set_exit_code(1);
+                if i + 1 >= users.len() {
+                    break;
                 }
+
+                continue;
             }
         } else {
             None
@@ -240,17 +241,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // GNU's `id` does not support the flags: -p/-P/-A.
         if matches.get_flag(options::OPT_PASSWORD) {
             // BSD's `id` ignores all but the first specified user
-            pline(possible_pw.as_ref().map(|v| v.uid));
+            pline(possible_pw.as_ref().map(|v| v.uid))?;
             return Ok(());
         }
         if matches.get_flag(options::OPT_HUMAN_READABLE) {
             // BSD's `id` ignores all but the first specified user
-            pretty(possible_pw);
+            pretty(possible_pw)?;
             return Ok(());
         }
         if matches.get_flag(options::OPT_AUDIT) {
             // BSD's `id` ignores specified users
-            auditid();
+            auditid()?;
             return Ok(());
         }
 
@@ -273,7 +274,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         });
 
         if state.gflag {
-            print!(
+            write!(
+                lock,
                 "{}",
                 if state.nflag {
                     entries::gid2grp(gid).unwrap_or_else(|_| {
@@ -287,11 +289,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 } else {
                     gid.to_string()
                 }
-            );
+            )?;
         }
 
         if state.uflag {
-            print!(
+            write!(
+                lock,
                 "{}",
                 if state.nflag {
                     entries::uid2usr(uid).unwrap_or_else(|_| {
@@ -305,10 +308,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 } else {
                     uid.to_string()
                 }
-            );
+            )?;
         }
 
-        let groups = entries::get_groups_gnu(Some(gid)).unwrap();
+        let groups = entries::get_groups_gnu(Some(gid))?;
         let groups = if state.user_specified {
             possible_pw.as_ref().map(|p| p.belongs_to()).unwrap()
         } else {
@@ -316,7 +319,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         };
 
         if state.gsflag {
-            print!(
+            write!(
+                lock,
                 "{}{}",
                 groups
                     .iter()
@@ -342,13 +346,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 } else {
                     ""
                 }
-            );
+            )?;
         }
 
         if default_format {
-            id_print(&state, &groups);
+            id_print(&state, &groups)?;
         }
-        print!("{line_ending}");
+        write!(lock, "{line_ending}")?;
 
         if i + 1 >= users.len() {
             break;
@@ -469,40 +473,44 @@ pub fn uu_app() -> Command {
         )
 }
 
-fn pretty(possible_pw: Option<Passwd>) {
+fn pretty(possible_pw: Option<Passwd>) -> io::Result<()> {
+    let mut lock = io::stdout().lock();
+
     if let Some(p) = possible_pw {
-        print!(
+        writeln!(
+            lock,
             "{}\t{}\n{}\t",
             translate!("id-output-uid"),
             p.name,
             translate!("id-output-groups")
-        );
-        println!(
+        )?;
+        writeln!(
+            lock,
             "{}",
             p.belongs_to()
                 .iter()
                 .map(|&gr| entries::gid2grp(gr).unwrap_or_else(|_| gr.to_string()))
                 .collect::<Vec<_>>()
                 .join(" ")
-        );
+        )?;
     } else {
         let login = cstr2cow!(getlogin().cast_const());
         let uid = getuid();
         if let Ok(p) = Passwd::locate(uid) {
             if let Some(user_name) = login {
-                println!("{}\t{user_name}", translate!("id-output-login"));
+                writeln!(lock, "{}\t{user_name}", translate!("id-output-login"))?;
             }
-            println!("{}\t{}", translate!("id-output-uid"), p.name);
+            writeln!(lock, "{}\t{}", translate!("id-output-uid"), p.name)?;
         } else {
-            println!("{}\t{uid}", translate!("id-output-uid"));
+            writeln!(lock, "{}\t{uid}", translate!("id-output-uid"))?;
         }
 
         let euid = geteuid();
         if euid != uid {
             if let Ok(p) = Passwd::locate(euid) {
-                println!("{}\t{}", translate!("id-output-euid"), p.name);
+                writeln!(lock, "{}\t{}", translate!("id-output-euid"), p.name)?;
             } else {
-                println!("{}\t{euid}", translate!("id-output-euid"));
+                writeln!(lock, "{}\t{euid}", translate!("id-output-euid"))?;
             }
         }
 
@@ -510,31 +518,34 @@ fn pretty(possible_pw: Option<Passwd>) {
         let egid = getegid();
         if egid != rgid {
             if let Ok(g) = Group::locate(rgid) {
-                println!("{}\t{}", translate!("id-output-rgid"), g.name);
+                writeln!(lock, "{}\t{}", translate!("id-output-rgid"), g.name)?;
             } else {
-                println!("{}\t{rgid}", translate!("id-output-rgid"));
+                writeln!(lock, "{}\t{rgid}", translate!("id-output-rgid"))?;
             }
         }
 
-        println!(
+        writeln!(
+            lock,
             "{}\t{}",
             translate!("id-output-groups"),
-            entries::get_groups_gnu(None)
-                .unwrap()
+            entries::get_groups_gnu(None)?
                 .iter()
                 .map(|&gr| entries::gid2grp(gr).unwrap_or_else(|_| gr.to_string()))
                 .collect::<Vec<_>>()
                 .join(" ")
-        );
+        )?;
     }
+
+    Ok(())
 }
 
 #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
-fn pline(possible_uid: Option<uid_t>) {
+fn pline(possible_uid: Option<uid_t>) -> io::Result<()> {
     let uid = possible_uid.unwrap_or_else(getuid);
-    let pw = Passwd::locate(uid).unwrap();
+    let pw = Passwd::locate(uid)?;
 
-    println!(
+    writeln!(
+        io::stdout().lock(),
         "{}:{}:{}:{}:{}:{}:{}:{}:{}:{}",
         pw.name,
         pw.user_passwd.unwrap_or_default(),
@@ -546,7 +557,7 @@ fn pline(possible_uid: Option<uid_t>) {
         pw.user_info.unwrap_or_default(),
         pw.user_dir.unwrap_or_default(),
         pw.user_shell.unwrap_or_default()
-    );
+    )
 }
 
 #[cfg(any(
@@ -555,11 +566,12 @@ fn pline(possible_uid: Option<uid_t>) {
     target_os = "openbsd",
     target_os = "cygwin"
 ))]
-fn pline(possible_uid: Option<uid_t>) {
+fn pline(possible_uid: Option<uid_t>) -> io::Result<()> {
     let uid = possible_uid.unwrap_or_else(getuid);
-    let pw = Passwd::locate(uid).unwrap();
+    let pw = Passwd::locate(uid)?;
 
-    println!(
+    writeln!(
+        io::stdout().lock(),
         "{}:{}:{}:{}:{}:{}:{}",
         pw.name,
         pw.user_passwd.unwrap_or_default(),
@@ -568,7 +580,8 @@ fn pline(possible_uid: Option<uid_t>) {
         pw.user_info.unwrap_or_default(),
         pw.user_dir.unwrap_or_default(),
         pw.user_shell.unwrap_or_default()
-    );
+    )?;
+    Ok(())
 }
 
 #[cfg(any(
@@ -577,7 +590,10 @@ fn pline(possible_uid: Option<uid_t>) {
     target_os = "openbsd",
     target_os = "cygwin"
 ))]
-fn auditid() {}
+#[allow(clippy::unnecessary_wraps)]
+fn auditid() -> io::Result<()> {
+    Ok(())
+}
 
 #[cfg(not(any(
     target_os = "linux",
@@ -585,33 +601,38 @@ fn auditid() {}
     target_os = "openbsd",
     target_os = "cygwin"
 )))]
-fn auditid() {
+fn auditid() -> io::Result<()> {
     use std::mem::MaybeUninit;
+    let mut lock = io::stdout().lock();
 
     let mut auditinfo: MaybeUninit<audit::c_auditinfo_addr_t> = MaybeUninit::uninit();
     let address = auditinfo.as_mut_ptr();
     if unsafe { audit::getaudit(address) } < 0 {
-        println!("{}", translate!("id-error-audit-retrieve"));
-        return;
+        writeln!(lock, "{}", translate!("id-error-audit-retrieve"))?;
+        return Ok(());
     }
 
     // SAFETY: getaudit wrote a valid struct to auditinfo
     let auditinfo = unsafe { auditinfo.assume_init() };
 
-    println!("auid={}", auditinfo.ai_auid);
-    println!("mask.success=0x{:x}", auditinfo.ai_mask.am_success);
-    println!("mask.failure=0x{:x}", auditinfo.ai_mask.am_failure);
-    println!("termid.port=0x{:x}", auditinfo.ai_termid.port);
-    println!("asid={}", auditinfo.ai_asid);
+    writeln!(lock, "auid={}", auditinfo.ai_auid)?;
+    writeln!(lock, "mask.success=0x{:x}", auditinfo.ai_mask.am_success)?;
+    writeln!(lock, "mask.failure=0x{:x}", auditinfo.ai_mask.am_failure)?;
+    writeln!(lock, "termid.port=0x{:x}", auditinfo.ai_termid.port)?;
+    writeln!(lock, "asid={}", auditinfo.ai_asid)?;
+    Ok(())
 }
 
-fn id_print(state: &State, groups: &[u32]) {
+fn id_print(state: &State, groups: &[u32]) -> io::Result<()> {
     let uid = state.ids.as_ref().unwrap().uid;
     let gid = state.ids.as_ref().unwrap().gid;
     let euid = state.ids.as_ref().unwrap().euid;
     let egid = state.ids.as_ref().unwrap().egid;
 
-    print!(
+    let mut lock = io::stdout().lock();
+
+    write!(
+        lock,
         "uid={uid}({})",
         entries::uid2usr(uid).unwrap_or_else(|_| {
             show_error!(
@@ -621,8 +642,9 @@ fn id_print(state: &State, groups: &[u32]) {
             set_exit_code(1);
             uid.to_string()
         })
-    );
-    print!(
+    )?;
+    write!(
+        lock,
         " gid={gid}({})",
         entries::gid2grp(gid).unwrap_or_else(|_| {
             show_error!(
@@ -632,9 +654,10 @@ fn id_print(state: &State, groups: &[u32]) {
             set_exit_code(1);
             gid.to_string()
         })
-    );
+    )?;
     if !state.user_specified && (euid != uid) {
-        print!(
+        write!(
+            lock,
             " euid={euid}({})",
             entries::uid2usr(euid).unwrap_or_else(|_| {
                 show_error!(
@@ -644,11 +667,12 @@ fn id_print(state: &State, groups: &[u32]) {
                 set_exit_code(1);
                 euid.to_string()
             })
-        );
+        )?;
     }
     if !state.user_specified && (egid != gid) {
         // BUG?  printing egid={euid} ?
-        print!(
+        write!(
+            lock,
             " egid={egid}({})",
             entries::gid2grp(egid).unwrap_or_else(|_| {
                 show_error!(
@@ -658,9 +682,10 @@ fn id_print(state: &State, groups: &[u32]) {
                 set_exit_code(1);
                 egid.to_string()
             })
-        );
+        )?;
     }
-    print!(
+    write!(
+        lock,
         " groups={}",
         groups
             .iter()
@@ -677,7 +702,7 @@ fn id_print(state: &State, groups: &[u32]) {
             ))
             .collect::<Vec<_>>()
             .join(",")
-    );
+    )?;
 
     #[cfg(feature = "selinux")]
     if state.selinux_supported
@@ -687,7 +712,7 @@ fn id_print(state: &State, groups: &[u32]) {
         // print SElinux context (does not depend on "-Z")
         if let Ok(context) = selinux::SecurityContext::current(false) {
             let bytes = context.as_bytes();
-            print!(" context={}", String::from_utf8_lossy(bytes));
+            write!(lock, " context={}", String::from_utf8_lossy(bytes))?;
         }
     }
 
@@ -698,9 +723,11 @@ fn id_print(state: &State, groups: &[u32]) {
     {
         // print SMACK label (does not depend on "-Z")
         if let Ok(label) = uucore::smack::get_smack_label_for_self() {
-            print!(" context={label}");
+            write!(lock, " context={label}")?;
         }
     }
+
+    Ok(())
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android", target_os = "openbsd")))]

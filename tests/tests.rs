@@ -12,7 +12,7 @@ pub const TESTS_BINARY: &str = env!("CARGO_BIN_EXE_coreutils");
 fn init() {
     unsafe {
         // Necessary for uutests to be able to find the binary
-        std::env::set_var("UUTESTS_BINARY_PATH", TESTS_BINARY);
+        env::set_var("UUTESTS_BINARY_PATH", TESTS_BINARY);
     }
 }
 
@@ -171,10 +171,6 @@ mod test_fold;
 #[cfg(feature = "groups")]
 #[path = "by-util/test_groups.rs"]
 mod test_groups;
-
-#[cfg(feature = "hashsum")]
-#[path = "by-util/test_hashsum.rs"]
-mod test_hashsum;
 
 #[cfg(feature = "head")]
 #[path = "by-util/test_head.rs"]

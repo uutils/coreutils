@@ -890,7 +890,7 @@ pub fn chown_base(
             .action(clap::ArgAction::Append)
             .required(true)
             .num_args(1..)
-            .value_parser(clap::value_parser!(std::ffi::OsString)),
+            .value_parser(clap::value_parser!(OsString)),
     );
     let matches = crate::clap_localization::handle_clap_result(command, args)?;
 

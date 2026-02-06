@@ -69,10 +69,12 @@ pub enum CalendarType {
 
 /// Transform a strftime format string to use locale-specific calendar values
 pub fn localize_format_string(format: &str, date: &JiffDate) -> String {
+    const PERCENT_PLACEHOLDER: &str = "\x00\x00";
+
     let (locale, _) = get_time_locale();
     let iso_date = Date::<Iso>::convert_from(*date);
 
-    let mut fmt = format.to_string();
+    let mut fmt = format.replace("%%", PERCENT_PLACEHOLDER);
 
     // For non-Gregorian calendars, replace date components with converted values
     let calendar_type = get_locale_calendar_type(locale);
@@ -126,7 +128,7 @@ pub fn localize_format_string(format: &str, date: &JiffDate) -> String {
         }
     }
 
-    fmt
+    fmt.replace(PERCENT_PLACEHOLDER, "%%")
 }
 
 #[cfg(test)]

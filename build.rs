@@ -66,7 +66,7 @@ pub fn main() {
          \n\
          #[allow(clippy::too_many_lines)]
          #[allow(clippy::unreadable_literal)]
-         fn util_map<T: uucore::Args>() -> UtilityMap<T> {\n"
+         fn util_map<T: Args>() -> UtilityMap<T> {\n"
             .as_bytes(),
     )
     .unwrap();
@@ -86,9 +86,6 @@ pub fn main() {
             }
             "false" | "true" => {
                 phf_map.entry(krate, format!("(r#{krate}::uumain, r#{krate}::uu_app)"));
-            }
-            "hashsum" => {
-                phf_map.entry(krate, format!("({krate}::uumain, {krate}::uu_app_custom)"));
             }
             _ => {
                 phf_map.entry(krate, map_value.clone());

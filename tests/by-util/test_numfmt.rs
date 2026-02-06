@@ -1181,3 +1181,23 @@ fn test_unit_separator() {
         new_ucmd!().args(args).succeeds().stdout_only(expected);
     }
 }
+
+#[test]
+fn test_debug_warnings() {
+    new_ucmd!()
+        .args(&["--debug", "4096"])
+        .succeeds()
+        .stdout_is("4096\n")
+        .stderr_is("numfmt: no conversion option specified\n");
+
+    new_ucmd!()
+        .args(&["--debug", "--padding=10", "4096"])
+        .succeeds()
+        .stdout_only("      4096\n");
+
+    new_ucmd!()
+        .args(&["--debug", "--header", "--to=iec", "4096"])
+        .succeeds()
+        .stdout_is("4.0K\n")
+        .stderr_is("numfmt: --header ignored with command-line input\n");
+}
