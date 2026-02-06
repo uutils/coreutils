@@ -144,7 +144,10 @@ impl Number {
     pub fn increment(&mut self) -> Result<(), Overflow> {
         match self {
             Self::FixedWidth(number) => number.increment(),
-            Self::DynamicWidth(number) => number.increment(),
+            Self::DynamicWidth(number) => {
+                number.increment();
+                Ok(())
+            }
         }
     }
 }
@@ -303,9 +306,8 @@ impl DynamicWidthNumber {
         }
     }
 
-    fn increment(&mut self) -> Result<(), Overflow> {
+    fn increment(&mut self) {
         self.current += 1;
-        Ok(())
     }
 
     fn digits(&self) -> Vec<u8> {
