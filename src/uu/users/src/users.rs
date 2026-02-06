@@ -6,7 +6,7 @@
 // spell-checker:ignore (paths) wtmp
 
 use std::ffi::OsString;
-use std::io::{Write, stdout};
+use std::io::{Write as _, stdout};
 use std::path::Path;
 
 use clap::builder::ValueParser;

@@ -10,12 +10,12 @@ use std::env;
 use std::ffi::OsString;
 use std::fmt::Write as _;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead as _, BufReader};
 use std::path::Path;
 
 use clap::{Arg, ArgAction, Command};
 use uucore::colors::{FILE_ATTRIBUTE_CODES, FILE_COLORS, FILE_TYPES, TERMS};
-use uucore::display::Quotable;
+use uucore::display::Quotable as _;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::translate;
 

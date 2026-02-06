@@ -8,7 +8,7 @@
 use std::ffi::{OsStr, OsString};
 
 use clap::{Arg, ArgAction, Command};
-use platform_info::{PlatformInfo, PlatformInfoAPI, UNameAPI};
+use platform_info::{PlatformInfo, PlatformInfoAPI as _, UNameAPI as _};
 use uucore::display::println_verbatim;
 use uucore::translate;
 use uucore::{

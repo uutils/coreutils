@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, Command, builder::ValueParser};
 use std::error::Error;
 use std::ffi::OsString;
-use std::io::{self, Write};
+use std::io::{self, Write as _};
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
 use uucore::translate;
@@ -66,7 +66,7 @@ fn args_into_buffer<'a>(
     #[cfg(any(unix, target_os = "wasi"))]
     {
         #[cfg(unix)]
-        use std::os::unix::ffi::OsStrExt;
+        use std::os::unix::ffi::OsStrExt as _;
         #[cfg(target_os = "wasi")]
         use std::os::wasi::ffi::OsStrExt;
 

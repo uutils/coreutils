@@ -6,10 +6,10 @@
 // spell-checker:ignore (vars) intmax ptrdiff padlen
 
 use super::{
-    ExtendedBigDecimal, FormatChar, FormatError, OctalParsing,
+    ExtendedBigDecimal, FormatChar as _, FormatError, OctalParsing,
     num_format::{
-        self, Case, FloatVariant, ForceDecimal, Formatter, NumberAlignment, PositiveSign, Prefix,
-        UnsignedIntVariant,
+        self, Case, FloatVariant, ForceDecimal, Formatter as _, NumberAlignment, PositiveSign,
+        Prefix, UnsignedIntVariant,
     },
     parse_escape_only,
 };

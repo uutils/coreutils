@@ -11,7 +11,7 @@ mod table;
 use blocks::HumanReadable;
 use clap::builder::ValueParser;
 use table::HeaderMode;
-use uucore::display::Quotable;
+use uucore::display::Quotable as _;
 use uucore::error::{UError, UResult, USimpleError, get_exit_code};
 use uucore::fsext::{MountInfo, read_fs_list};
 use uucore::parser::parse_size::ParseSizeError;

@@ -6,7 +6,7 @@
 use clap::Command;
 use std::ffi::OsString;
 use uucore::display::println_verbatim;
-use uucore::error::{FromIo, UResult};
+use uucore::error::{FromIo as _, UResult};
 use uucore::translate;
 
 mod platform;

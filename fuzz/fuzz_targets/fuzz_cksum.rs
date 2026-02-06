@@ -6,11 +6,11 @@
 
 #![no_main]
 use libfuzzer_sys::fuzz_target;
-use rand::Rng;
+use rand::Rng as _;
 use std::env::temp_dir;
 use std::ffi::OsString;
 use std::fs::{self, File};
-use std::io::Write;
+use std::io::Write as _;
 use std::process::Command;
 use uu_cksum::uumain;
 use uufuzz::{

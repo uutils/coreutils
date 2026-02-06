@@ -9,10 +9,10 @@ use std::ffi::OsString;
 use std::fs::{OpenOptions, metadata};
 use std::io::ErrorKind;
 #[cfg(unix)]
-use std::os::unix::fs::FileTypeExt;
+use std::os::unix::fs::FileTypeExt as _;
 use std::path::Path;
-use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+use uucore::display::Quotable as _;
+use uucore::error::{FromIo as _, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::translate;
 

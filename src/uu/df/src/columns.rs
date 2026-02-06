@@ -6,7 +6,7 @@
 use crate::{OPT_INODES, OPT_OUTPUT, OPT_PRINT_TYPE};
 use clap::{ArgMatches, parser::ValueSource};
 use thiserror::Error;
-use uucore::display::Quotable;
+use uucore::display::Quotable as _;
 
 /// The columns in the output table produced by `df`.
 ///

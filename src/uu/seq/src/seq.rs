@@ -8,10 +8,10 @@ use std::io::{BufWriter, Write, stdout};
 
 use clap::{Arg, ArgAction, Command};
 use num_bigint::BigUint;
-use num_traits::ToPrimitive;
+use num_traits::ToPrimitive as _;
 use num_traits::Zero;
 
-use uucore::error::{FromIo, UResult};
+use uucore::error::{FromIo as _, UResult};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
 use uucore::format::num_format::FloatVariant;
 use uucore::format::{Format, num_format};

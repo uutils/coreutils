@@ -101,7 +101,7 @@ impl<R: HasError> HasError for PartialReader<R> {
 mod tests {
     use super::*;
     use crate::mockstream::*;
-    use std::io::{Cursor, ErrorKind, Read};
+    use std::io::{Cursor, ErrorKind, Read as _};
 
     #[test]
     fn test_read_without_limits() {

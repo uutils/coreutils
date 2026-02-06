@@ -6,9 +6,9 @@
 //! Utilities for formatting numbers in various formats
 
 use bigdecimal::BigDecimal;
-use bigdecimal::num_bigint::ToBigInt;
-use num_traits::Signed;
-use num_traits::Zero;
+use bigdecimal::num_bigint::ToBigInt as _;
+use num_traits::Signed as _;
+use num_traits::Zero as _;
 use std::cmp::min;
 use std::io::Write;
 
@@ -737,8 +737,8 @@ fn write_output(
 #[cfg(test)]
 mod test {
     use bigdecimal::BigDecimal;
-    use num_traits::FromPrimitive;
-    use std::str::FromStr;
+    use num_traits::FromPrimitive as _;
+    use std::str::FromStr as _;
 
     use crate::format::{
         ExtendedBigDecimal, Format,
@@ -749,7 +749,7 @@ mod test {
 
     #[test]
     fn unsigned_octal() {
-        use super::{Formatter, NumberAlignment, Prefix, UnsignedInt, UnsignedIntVariant};
+        use super::{Formatter as _, NumberAlignment, Prefix, UnsignedInt, UnsignedIntVariant};
         let f = |x| {
             let mut s = Vec::new();
             UnsignedInt {

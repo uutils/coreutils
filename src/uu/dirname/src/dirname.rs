@@ -121,7 +121,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         #[cfg(unix)]
         {
-            use std::os::unix::ffi::OsStrExt;
+            use std::os::unix::ffi::OsStrExt as _;
             let result_os = std::ffi::OsStr::from_bytes(&result);
             print_verbatim(result_os).unwrap();
         }

@@ -18,9 +18,9 @@ use libc::{_SC_PAGESIZE, S_IFREG, sysconf};
 #[cfg(unix)]
 use nix::sys::stat;
 #[cfg(unix)]
-use std::io::{Seek, SeekFrom};
+use std::io::{Seek as _, SeekFrom};
 #[cfg(unix)]
-use std::os::fd::{AsFd, AsRawFd};
+use std::os::fd::{AsFd as _, AsRawFd as _};
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 #[cfg(windows)]

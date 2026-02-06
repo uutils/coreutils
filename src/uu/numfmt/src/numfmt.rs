@@ -14,12 +14,12 @@ use crate::options::{
 use crate::units::{Result, Unit};
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, parser::ValueSource};
 use std::ffi::OsString;
-use std::io::{BufRead, Error, Write, stderr};
+use std::io::{BufRead, Error, Write as _, stderr};
 use std::result::Result as StdResult;
-use std::str::FromStr;
+use std::str::FromStr as _;
 
 use units::{IEC_BASES, SI_BASES};
-use uucore::display::Quotable;
+use uucore::display::Quotable as _;
 use uucore::error::UResult;
 
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;

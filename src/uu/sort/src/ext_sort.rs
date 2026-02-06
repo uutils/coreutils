@@ -19,12 +19,12 @@ use std::{
     thread,
 };
 
-use itertools::Itertools;
+use itertools::Itertools as _;
 use uucore::error::{UResult, strip_errno};
 
 use crate::Output;
 use crate::chunks::RecycledChunk;
-use crate::merge::ClosedTmpFile;
+use crate::merge::ClosedTmpFile as _;
 use crate::merge::WriteableCompressedTmpFile;
 use crate::merge::WriteablePlainTmpFile;
 use crate::merge::WriteableTmpFile;

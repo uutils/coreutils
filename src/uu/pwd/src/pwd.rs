@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use uucore::format_usage;
 
 use uucore::display::println_verbatim;
-use uucore::error::{FromIo, UResult};
+use uucore::error::{FromIo as _, UResult};
 
 use uucore::translate;
 const OPT_LOGICAL: &str = "logical";
@@ -81,7 +81,7 @@ fn logical_path() -> io::Result<PathBuf> {
             #[cfg(unix)]
             {
                 use std::fs::metadata;
-                use std::os::unix::fs::MetadataExt;
+                use std::os::unix::fs::MetadataExt as _;
                 match (metadata(path), metadata(".")) {
                     (Ok(info1), Ok(info2)) => {
                         info1.dev() == info2.dev() && info1.ino() == info2.ino()

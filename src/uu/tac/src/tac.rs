@@ -11,7 +11,7 @@ use clap::{Arg, ArgAction, Command};
 use memchr::memmem;
 use memmap2::Mmap;
 use std::ffi::OsString;
-use std::io::{BufWriter, Read, Write, stdin, stdout};
+use std::io::{BufWriter, Read as _, Write as _, stdin, stdout};
 use std::{
     fs::{File, read},
     io::copy,

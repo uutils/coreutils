@@ -8,15 +8,15 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader, Write as _};
 use std::path::{Path, PathBuf};
-use uucore::display::Quotable;
+use uucore::display::Quotable as _;
 use uucore::encoding::{
     BASE2LSBF, BASE2MSBF, Base32Wrapper, Base58Wrapper, Base64SimdWrapper, EncodingWrapper, Format,
     SupportsFastDecodeAndEncode, Z85Wrapper,
     for_base_common::{BASE32, BASE32HEX, BASE64URL, HEXUPPER_PERMISSIVE},
 };
-use uucore::error::{FromIo, UResult, USimpleError, UUsageError, strip_errno};
+use uucore::error::{FromIo as _, UResult, USimpleError, UUsageError, strip_errno};
 use uucore::format_usage;
 use uucore::translate;
 

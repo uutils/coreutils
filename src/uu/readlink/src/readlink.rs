@@ -8,10 +8,10 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs;
-use std::io::{Write, stdout};
+use std::io::{Write as _, stdout};
 use std::path::{Path, PathBuf};
-use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, UUsageError};
+use uucore::display::Quotable as _;
+use uucore::error::{FromIo as _, UResult, UUsageError};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 use uucore::libc::EINVAL;
 use uucore::line_ending::LineEnding;

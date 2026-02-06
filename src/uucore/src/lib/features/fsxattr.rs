@@ -6,11 +6,11 @@
 // spell-checker:ignore getxattr posix_acl_default
 
 //! Set of functions to manage xattr on files and dirs
-use itertools::Itertools;
+use itertools::Itertools as _;
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 #[cfg(unix)]
-use std::os::unix::ffi::OsStrExt;
+use std::os::unix::ffi::OsStrExt as _;
 use std::path::Path;
 
 /// Copies extended attributes (xattrs) from one file or directory to another.

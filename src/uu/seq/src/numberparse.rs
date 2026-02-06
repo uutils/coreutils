@@ -9,7 +9,7 @@
 //! [`PreciseNumber`] struct.
 use std::str::FromStr;
 
-use uucore::parser::num_parser::{ExtendedParser, ExtendedParserError};
+use uucore::parser::num_parser::{ExtendedParser as _, ExtendedParserError};
 
 use crate::number::PreciseNumber;
 use uucore::extendedbigdecimal::ExtendedBigDecimal;

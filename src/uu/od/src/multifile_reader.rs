@@ -7,9 +7,9 @@
 use std::fs::File;
 use std::io;
 #[cfg(unix)]
-use std::os::fd::{AsRawFd, FromRawFd};
+use std::os::fd::{AsRawFd as _, FromRawFd as _};
 
-use uucore::display::Quotable;
+use uucore::display::Quotable as _;
 use uucore::show_error;
 
 pub enum InputSource<'a> {
@@ -154,7 +154,7 @@ impl HasError for MultifileReader<'_> {
 mod tests {
     use super::*;
     use crate::mockstream::*;
-    use std::io::{Cursor, ErrorKind, Read};
+    use std::io::{Cursor, ErrorKind, Read as _};
 
     #[test]
     fn test_multi_file_reader_one_read() {

@@ -13,7 +13,7 @@ use std::ffi::{OsStr, OsString};
 use std::fs::{self, DirEntry, File, Metadata};
 use std::io::{BufRead, BufReader, stdout};
 #[cfg(not(windows))]
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::MetadataExt as _;
 #[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
 use std::path::{Path, PathBuf};
@@ -21,8 +21,8 @@ use std::str::FromStr;
 use std::sync::mpsc;
 use std::thread;
 use thiserror::Error;
-use uucore::display::{Quotable, print_verbatim};
-use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
+use uucore::display::{Quotable as _, print_verbatim};
+use uucore::error::{FromIo as _, UError, UResult, USimpleError, set_exit_code};
 use uucore::fsext::{MetadataTimeField, metadata_get_time};
 use uucore::line_ending::LineEnding;
 #[cfg(all(unix, not(target_os = "redox")))]

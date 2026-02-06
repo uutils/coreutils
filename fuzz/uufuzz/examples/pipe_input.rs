@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 use std::ffi::OsString;
-use std::io::{self, Read};
+use std::io::{self, Read as _};
 use uufuzz::{compare_result, generate_and_run_uumain, run_gnu_cmd};
 
 // Mock cat implementation for demonstration

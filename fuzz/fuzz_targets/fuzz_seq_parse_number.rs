@@ -5,7 +5,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use std::str::FromStr;
+use std::str::FromStr as _;
 use uu_seq::number::PreciseNumber;
 
 fuzz_target!(|data: &[u8]| {

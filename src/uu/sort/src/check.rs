@@ -10,7 +10,7 @@ use crate::{
     chunks::{self, Chunk, RecycledChunk},
     compare_by, open,
 };
-use itertools::Itertools;
+use itertools::Itertools as _;
 use std::{
     cmp::Ordering,
     ffi::OsStr,

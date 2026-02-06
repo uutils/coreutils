@@ -7,7 +7,7 @@
 use std::io::Error;
 use std::path::PathBuf;
 use thiserror::Error;
-use uucore::display::Quotable;
+use uucore::display::Quotable as _;
 use uucore::error::UError;
 use uucore::libc;
 use uucore::translate;

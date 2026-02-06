@@ -8,10 +8,10 @@
 use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::fs::{File, metadata};
-use std::io::{self, BufRead, BufReader, BufWriter, Read, StdinLock, Write, stdin};
+use std::io::{self, BufRead as _, BufReader, BufWriter, Read as _, StdinLock, Write, stdin};
 use std::path::Path;
-use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::display::Quotable as _;
+use uucore::error::{FromIo as _, UResult, USimpleError};
 use uucore::format_usage;
 use uucore::fs::paths_refer_to_same_file;
 use uucore::line_ending::LineEnding;

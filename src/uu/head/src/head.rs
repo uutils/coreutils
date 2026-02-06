@@ -9,14 +9,14 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use memchr::memrchr_iter;
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{self, BufWriter, Read, Seek, SeekFrom, Write};
+use std::io::{self, BufWriter, Read, Seek, SeekFrom, Write as _};
 use std::num::TryFromIntError;
 #[cfg(unix)]
-use std::os::fd::AsFd;
+use std::os::fd::AsFd as _;
 use std::path::PathBuf;
 use thiserror::Error;
-use uucore::display::{Quotable, print_verbatim};
-use uucore::error::{FromIo, UError, UResult};
+use uucore::display::{Quotable as _, print_verbatim};
+use uucore::error::{FromIo as _, UError, UResult};
 use uucore::line_ending::LineEnding;
 use uucore::translate;
 use uucore::{format_usage, show};

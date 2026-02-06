@@ -15,7 +15,8 @@ use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command, crate_name};
 use ini::Ini;
 use native_int_str::{
-    Convert, NCvt, NativeIntStr, NativeIntString, NativeStr, from_native_int_representation_owned,
+    Convert as _, NCvt, NativeIntStr, NativeIntString, NativeStr,
+    from_native_int_representation_owned,
 };
 #[cfg(unix)]
 use nix::libc;
@@ -33,11 +34,11 @@ use std::io;
 use std::io::Write as _;
 use std::io::stderr;
 #[cfg(unix)]
-use std::os::unix::ffi::OsStrExt;
+use std::os::unix::ffi::OsStrExt as _;
 #[cfg(unix)]
-use std::os::unix::process::CommandExt;
+use std::os::unix::process::CommandExt as _;
 
-use uucore::display::{Quotable, print_all_env_vars};
+use uucore::display::{Quotable as _, print_all_env_vars};
 use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError};
 use uucore::line_ending::LineEnding;
 #[cfg(unix)]

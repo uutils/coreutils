@@ -6,10 +6,10 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{BufRead as _, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::path::Path;
-use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
+use uucore::display::Quotable as _;
+use uucore::error::{FromIo as _, UResult, USimpleError, set_exit_code};
 use uucore::{format_usage, show_error, translate};
 
 mod helper;

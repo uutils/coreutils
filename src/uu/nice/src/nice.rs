@@ -8,9 +8,9 @@
 use clap::{Arg, ArgAction, Command};
 use libc::PRIO_PROCESS;
 use std::ffi::OsString;
-use std::io::{Error, ErrorKind, Write, stdout};
+use std::io::{Error, ErrorKind, Write as _, stdout};
 use std::num::IntErrorKind;
-use std::os::unix::process::CommandExt;
+use std::os::unix::process::CommandExt as _;
 use std::process;
 
 use uucore::translate;

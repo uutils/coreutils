@@ -5,11 +5,11 @@
 
 // spell-checker:ignore (ToDO) BUFSIZE gecos fullname, mesg iobuf
 
-use crate::Capitalize;
+use crate::Capitalize as _;
 use crate::options;
 use crate::uu_app;
 
-use uucore::entries::{Locate, Passwd};
+use uucore::entries::{Locate as _, Passwd};
 use uucore::error::UResult;
 use uucore::libc::S_IWGRP;
 use uucore::translate;
@@ -19,7 +19,7 @@ use std::io::BufReader;
 use std::io::prelude::*;
 
 use std::fs::File;
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::MetadataExt as _;
 
 use std::path::PathBuf;
 

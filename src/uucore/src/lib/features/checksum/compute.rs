@@ -7,13 +7,13 @@
 
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{self, BufReader, Read, Write};
+use std::io::{self, BufReader, Read, Write as _};
 use std::path::Path;
 
 use crate::checksum::{
     AlgoKind, ChecksumError, ReadingMode, SizedAlgoKind, digest_reader, escape_filename,
 };
-use crate::error::{FromIo, UResult, USimpleError};
+use crate::error::{FromIo as _, UResult, USimpleError};
 use crate::line_ending::LineEnding;
 use crate::sum::DigestOutput;
 use crate::{show, translate};

@@ -14,10 +14,10 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Split, Stdin, Write, stdin, stdout};
 use std::num::IntErrorKind;
 #[cfg(unix)]
-use std::os::unix::ffi::OsStrExt;
+use std::os::unix::ffi::OsStrExt as _;
 use thiserror::Error;
-use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
+use uucore::display::Quotable as _;
+use uucore::error::{FromIo as _, UError, UResult, USimpleError, set_exit_code};
 use uucore::format_usage;
 use uucore::i18n::collator::{
     AlternateHandling, CollatorOptions, locale_cmp, should_use_locale_collation, try_init_collator,

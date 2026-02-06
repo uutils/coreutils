@@ -16,7 +16,7 @@ use std::io;
 use std::path::{Path, PathBuf, StripPrefixError};
 
 use indicatif::ProgressBar;
-use uucore::display::Quotable;
+use uucore::display::Quotable as _;
 use uucore::error::UIoError;
 use uucore::fs::{
     FileInformation, MissingHandling, ResolveMode, canonicalize, path_ends_with_terminator,
@@ -597,7 +597,7 @@ fn build_dir(
     #[cfg(unix)]
     {
         use crate::Preserve;
-        use std::os::unix::fs::PermissionsExt;
+        use std::os::unix::fs::PermissionsExt as _;
 
         // we need to allow trivial casts here because some systems like linux have u32 constants in
         // in libc while others don't.

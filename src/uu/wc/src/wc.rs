@@ -11,24 +11,24 @@ mod utf8;
 mod word_count;
 
 use std::{
-    borrow::{Borrow, Cow},
+    borrow::{Borrow as _, Cow},
     cmp::max,
     env,
     ffi::{OsStr, OsString},
     fs::{self, File},
-    io::{self, Write, stderr},
+    io::{self, Write as _, stderr},
     iter,
     path::{Path, PathBuf},
 };
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
 use thiserror::Error;
-use unicode_width::UnicodeWidthChar;
+use unicode_width::UnicodeWidthChar as _;
 use utf8::{BufReadDecoder, BufReadDecoderError};
-use uucore::{display::Quotable, translate};
+use uucore::{display::Quotable as _, translate};
 
 use uucore::{
-    error::{FromIo, UError, UResult},
+    error::{FromIo as _, UError, UResult},
     format_usage,
     hardware::{HardwareFeature, HasHardwareFeatures as _, SimdPolicy},
     parser::shortcut_value_parser::ShortcutValueParser,
@@ -297,7 +297,7 @@ impl<'a> Input<'a> {
 
 #[cfg(unix)]
 fn is_stdin_small_file() -> bool {
-    use std::os::unix::io::{AsRawFd, FromRawFd};
+    use std::os::unix::io::{AsRawFd as _, FromRawFd as _};
     // Safety: we'll rely on Rust to give us a valid RawFd for stdin with which we can attempt to
     // open a File, but only for the sake of fetching .metadata().  ManuallyDrop will ensure we
     // don't do anything else to the FD if anything unexpected happens.
@@ -793,7 +793,7 @@ fn files0_iter<'a>(
     r: impl io::Read + 'static,
     err_path: OsString,
 ) -> impl Iterator<Item = InputIterItem<'a>> {
-    use std::io::BufRead;
+    use std::io::BufRead as _;
     let mut i = Some(
         io::BufReader::new(r)
             .split(b'\0')
@@ -803,7 +803,7 @@ fn files0_iter<'a>(
                     // On Unix systems, OsStrings are just strings of bytes, not necessarily UTF-8.
                     #[cfg(unix)]
                     {
-                        use std::os::unix::ffi::OsStringExt;
+                        use std::os::unix::ffi::OsStringExt as _;
                         Ok(Input::Path(PathBuf::from(OsString::from_vec(p)).into()))
                     }
 

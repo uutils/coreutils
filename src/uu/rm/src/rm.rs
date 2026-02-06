@@ -10,17 +10,17 @@ use clap::{Arg, ArgAction, Command, parser::ValueSource};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, Metadata};
-use std::io::{self, IsTerminal, stdin};
-use std::ops::BitOr;
+use std::io::{self, IsTerminal as _, stdin};
+use std::ops::BitOr as _;
 #[cfg(unix)]
-use std::os::unix::ffi::OsStrExt;
+use std::os::unix::ffi::OsStrExt as _;
 #[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::PermissionsExt as _;
 use std::path::MAIN_SEPARATOR;
 use std::path::Path;
 use thiserror::Error;
-use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult};
+use uucore::display::Quotable as _;
+use uucore::error::{FromIo as _, UError, UResult};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::translate;
 use uucore::{format_usage, os_str_as_bytes, prompt_yes, show_error};

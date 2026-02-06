@@ -5,7 +5,7 @@
 
 use std::{io::BufRead, ops::RangeInclusive};
 
-use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::error::{FromIo as _, UResult, USimpleError};
 use uucore::translate;
 
 /// A uniform integer generator that tries to exactly match GNU shuf's --random-source.

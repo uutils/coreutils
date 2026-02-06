@@ -7,7 +7,7 @@
 
 use clap::Command;
 use std::ffi::CStr;
-use std::io::{Write, stdout};
+use std::io::{Write as _, stdout};
 use uucore::translate;
 use uucore::{error::UResult, show_error};
 

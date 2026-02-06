@@ -8,7 +8,7 @@ use std::ffi::OsString;
 use std::fs::OpenOptions;
 use std::io::{Error, ErrorKind, Read, Result, Write, stderr, stdin, stdout};
 use std::path::PathBuf;
-use uucore::display::Quotable;
+use uucore::display::Quotable as _;
 use uucore::error::UResult;
 use uucore::format_usage;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;

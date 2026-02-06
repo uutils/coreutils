@@ -6,8 +6,8 @@
 // spell-checker:ignore (ToDO) ttyname filedesc
 
 use clap::{Arg, ArgAction, Command};
-use std::io::{IsTerminal, Write};
-use uucore::display::OsWrite;
+use std::io::{IsTerminal as _, Write as _};
+use uucore::display::OsWrite as _;
 use uucore::error::{UResult, set_exit_code};
 use uucore::format_usage;
 

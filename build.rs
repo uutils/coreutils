@@ -7,7 +7,7 @@
 
 use std::env;
 use std::fs::File;
-use std::io::Write;
+use std::io::Write as _;
 use std::path::Path;
 
 pub fn main() {

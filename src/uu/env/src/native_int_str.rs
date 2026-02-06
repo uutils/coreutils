@@ -14,7 +14,7 @@
 
 use std::ffi::OsString;
 #[cfg(not(target_os = "windows"))]
-use std::os::unix::ffi::{OsStrExt, OsStringExt};
+use std::os::unix::ffi::{OsStrExt as _, OsStringExt as _};
 #[cfg(target_os = "windows")]
 use std::os::windows::prelude::*;
 use std::{borrow::Cow, ffi::OsStr};

@@ -6,14 +6,14 @@
 // spell-checker:ignore funcs
 
 use std::collections::BTreeMap;
-use std::io::BufRead;
+use std::io::BufRead as _;
 use std::io::{self, Write, stdin, stdout};
 
 use clap::{Arg, ArgAction, Command};
 use num_bigint::BigUint;
-use num_traits::FromPrimitive;
-use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
+use num_traits::FromPrimitive as _;
+use uucore::display::Quotable as _;
+use uucore::error::{FromIo as _, UResult, USimpleError, set_exit_code};
 use uucore::translate;
 use uucore::{format_usage, show_error, show_warning};
 

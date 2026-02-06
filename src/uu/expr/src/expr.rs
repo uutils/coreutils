@@ -4,13 +4,13 @@
 // file that was distributed with this source code.
 
 use clap::{Arg, ArgAction, Command};
-use std::io::Write;
+use std::io::Write as _;
 use syntax_tree::{AstNode, is_truthy};
 use thiserror::Error;
 use uucore::os_string_to_vec;
 use uucore::translate;
 use uucore::{
-    display::Quotable,
+    display::Quotable as _,
     error::{UError, UResult},
     format_usage,
 };

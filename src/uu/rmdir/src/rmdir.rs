@@ -11,7 +11,7 @@ use std::ffi::OsString;
 use std::fs::{read_dir, remove_dir};
 use std::io;
 use std::path::Path;
-use uucore::display::Quotable;
+use uucore::display::Quotable as _;
 use uucore::error::{UResult, set_exit_code, strip_errno};
 use uucore::translate;
 
@@ -60,7 +60,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             #[cfg(unix)]
             {
                 use std::ffi::OsStr;
-                use std::os::unix::ffi::OsStrExt;
+                use std::os::unix::ffi::OsStrExt as _;
 
                 fn points_to_directory(path: &Path) -> io::Result<bool> {
                     Ok(path.metadata()?.file_type().is_dir())

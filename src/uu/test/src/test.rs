@@ -14,8 +14,8 @@ use parser::{Operator, Symbol, UnaryOperator, parse};
 use std::ffi::{OsStr, OsString};
 use std::fs;
 #[cfg(unix)]
-use std::os::unix::fs::MetadataExt;
-use uucore::display::Quotable;
+use std::os::unix::fs::MetadataExt as _;
+use uucore::display::Quotable as _;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
 #[cfg(not(windows))]
@@ -262,7 +262,7 @@ enum PathCondition {
 #[cfg(not(windows))]
 fn path(path: &OsStr, condition: &PathCondition) -> bool {
     use std::fs::Metadata;
-    use std::os::unix::fs::FileTypeExt;
+    use std::os::unix::fs::FileTypeExt as _;
 
     const S_ISUID: u32 = 0o4000;
     const S_ISGID: u32 = 0o2000;

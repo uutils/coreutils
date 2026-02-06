@@ -12,13 +12,13 @@ use clap::{Arg, ArgAction, Command};
 use memchr::memchr2;
 use std::ffi::OsString;
 use std::fs::{File, metadata};
-use std::io::{self, BufWriter, ErrorKind, IsTerminal, Read, Write};
+use std::io::{self, BufWriter, ErrorKind, IsTerminal as _, Read, Write};
 #[cfg(unix)]
 use std::os::fd::AsFd;
 #[cfg(unix)]
-use std::os::unix::fs::FileTypeExt;
+use std::os::unix::fs::FileTypeExt as _;
 use thiserror::Error;
-use uucore::display::Quotable;
+use uucore::display::Quotable as _;
 use uucore::error::UResult;
 use uucore::translate;
 use uucore::{fast_inc::fast_inc_one, format_usage};

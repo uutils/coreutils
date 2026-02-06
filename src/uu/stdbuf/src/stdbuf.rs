@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 #[cfg(unix)]
-use std::os::unix::process::CommandExt;
+use std::os::unix::process::CommandExt as _;
 use std::path::PathBuf;
 use std::process;
 use tempfile::TempDir;

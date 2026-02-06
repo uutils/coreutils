@@ -10,7 +10,7 @@ use std::ffi::OsString;
 use std::fmt::Display;
 use std::fs::{self, Metadata, OpenOptions, Permissions};
 #[cfg(unix)]
-use std::os::unix::fs::{FileTypeExt, PermissionsExt};
+use std::os::unix::fs::{FileTypeExt as _, PermissionsExt as _};
 #[cfg(unix)]
 use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf, StripPrefixError};
@@ -25,7 +25,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use thiserror::Error;
 
 use platform::copy_on_write;
-use uucore::display::Quotable;
+use uucore::display::Quotable as _;
 use uucore::error::{UError, UResult, UUsageError, set_exit_code};
 #[cfg(unix)]
 use uucore::fs::make_fifo;
@@ -1579,7 +1579,7 @@ fn file_mode_for_interactive_overwrite(
         #[cfg(unix)]
         {
             use libc::{S_IWUSR, mode_t};
-            use std::os::unix::prelude::MetadataExt;
+            use std::os::unix::prelude::MetadataExt as _;
 
             match path.metadata() {
                 Ok(me) => {
@@ -1725,7 +1725,7 @@ pub(crate) fn copy_attributes(
     // Ownership must be changed first to avoid interfering with mode change.
     #[cfg(unix)]
     handle_preserve(attributes.ownership, || -> CopyResult<()> {
-        use std::os::unix::prelude::MetadataExt;
+        use std::os::unix::prelude::MetadataExt as _;
         use uucore::perms::Verbosity;
         use uucore::perms::VerbosityLevel;
         use uucore::perms::wrap_chown;

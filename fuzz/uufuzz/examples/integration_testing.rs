@@ -8,7 +8,7 @@ use uufuzz::{generate_and_run_uumain, run_gnu_cmd};
 
 // Mock sort implementation for demonstration
 fn mock_sort_main(args: std::vec::IntoIter<OsString>) -> i32 {
-    use std::io::{self, Read};
+    use std::io::{self, Read as _};
 
     let args: Vec<OsString> = args.collect();
     let mut numeric_sort = false;

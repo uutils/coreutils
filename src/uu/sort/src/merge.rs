@@ -25,7 +25,7 @@ use std::{
 };
 
 use compare::Compare;
-use uucore::error::{FromIo, UResult};
+use uucore::error::{FromIo as _, UResult};
 
 use crate::{
     GlobalSettings, Output, SortError,
