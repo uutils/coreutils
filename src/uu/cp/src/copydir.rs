@@ -135,7 +135,7 @@ impl<'a> Context<'a> {
 ///
 /// For convenience while traversing a directory, the [`Entry::new`]
 /// function allows creating an entry from a [`Context`] and a
-/// [`walkdir::DirEntry`].
+/// [`DirEntry`].
 ///
 /// # Examples
 ///
@@ -549,7 +549,7 @@ pub(crate) fn copy_directory(
 /// Decide whether the second path is a prefix of the first.
 ///
 /// This function canonicalizes the paths via
-/// [`uucore::fs::canonicalize`] before comparing.
+/// [`fs::canonicalize`] before comparing.
 ///
 /// # Errors
 ///

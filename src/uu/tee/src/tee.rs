@@ -6,13 +6,13 @@
 use clap::{Arg, ArgAction, Command, builder::PossibleValue};
 use std::ffi::OsString;
 use std::fs::OpenOptions;
-use std::io::{Error, ErrorKind, Read, Result, Write, stdin, stdout};
+use std::io::{Error, ErrorKind, Read, Result, Write, stderr, stdin, stdout};
 use std::path::PathBuf;
 use uucore::display::Quotable;
 use uucore::error::UResult;
+use uucore::format_usage;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::translate;
-use uucore::{format_usage, show_error};
 
 // spell-checker:ignore nopipe
 
@@ -271,7 +271,7 @@ fn open(
             name: name.clone(),
         })),
         Err(f) => {
-            show_error!("{}: {f}", name.maybe_quote());
+            let _ = writeln!(stderr(), "{}: {f}", name.maybe_quote());
             match output_error {
                 Some(OutputErrorMode::Exit | OutputErrorMode::ExitNoPipe) => Some(Err(f)),
                 _ => None,
@@ -308,26 +308,26 @@ fn process_error(
 ) -> Result<()> {
     match mode {
         Some(OutputErrorMode::Warn) => {
-            show_error!("{}: {f}", writer.name.maybe_quote());
+            let _ = writeln!(stderr(), "{}: {f}", writer.name.maybe_quote());
             *ignored_errors += 1;
             Ok(())
         }
         Some(OutputErrorMode::WarnNoPipe) | None => {
             if f.kind() != ErrorKind::BrokenPipe {
-                show_error!("{}: {f}", writer.name.maybe_quote());
+                let _ = writeln!(stderr(), "{}: {f}", writer.name.maybe_quote());
                 *ignored_errors += 1;
             }
             Ok(())
         }
         Some(OutputErrorMode::Exit) => {
-            show_error!("{}: {f}", writer.name.maybe_quote());
+            let _ = writeln!(stderr(), "{}: {f}", writer.name.maybe_quote());
             Err(f)
         }
         Some(OutputErrorMode::ExitNoPipe) => {
             if f.kind() == ErrorKind::BrokenPipe {
                 Ok(())
             } else {
-                show_error!("{}: {f}", writer.name.maybe_quote());
+                let _ = writeln!(stderr(), "{}: {f}", writer.name.maybe_quote());
                 Err(f)
             }
         }
@@ -416,7 +416,7 @@ impl Read for NamedReader {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         match self.inner.read(buf) {
             Err(f) => {
-                show_error!("{}", translate!("tee-error-stdin", "error" => f));
+                let _ = writeln!(stderr(), "{}", translate!("tee-error-stdin", "error" => f));
                 Err(f)
             }
             okay => okay,

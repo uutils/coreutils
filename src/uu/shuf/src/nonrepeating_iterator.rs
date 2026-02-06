@@ -1,4 +1,6 @@
-use std::collections::HashMap;
+// hijack HashMap for performance
+type HashMap<K, V> = std::collections::HashMap<K, V, rustc_hash::FxBuildHasher>;
+
 use std::ops::RangeInclusive;
 
 use uucore::error::UResult;

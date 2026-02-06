@@ -206,15 +206,14 @@ pub fn parse_offset_operand(s: &str) -> Result<u64, String> {
     match u64::from_str_radix(&s[start..len], radix) {
         Ok(i) => {
             // Check for overflow during multiplication
-            match i.checked_mul(multiply) {
-                Some(result) => Ok(result),
-                None => {
-                    let err = std::io::Error::from_raw_os_error(libc::ERANGE);
-                    let msg = err.to_string();
-                    // Strip "(os error N)" if present to match Perl's $!
-                    let msg = msg.split(" (os error").next().unwrap_or(&msg).to_string();
-                    Err(msg)
-                }
+            if let Some(result) = i.checked_mul(multiply) {
+                Ok(result)
+            } else {
+                let err = std::io::Error::from_raw_os_error(libc::ERANGE);
+                let msg = err.to_string();
+                // Strip "(os error N)" if present to match Perl's $!
+                let msg = msg.split(" (os error").next().unwrap_or(&msg).to_string();
+                Err(msg)
             }
         }
         Err(e) => {

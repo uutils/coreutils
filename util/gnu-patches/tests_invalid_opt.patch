@@ -5,7 +5,7 @@ Index: gnu/tests/misc/invalid-opt.pl
 @@ -74,23 +74,13 @@ foreach my $prog (@built_programs)
      defined $out
        or $out = '';
- 
+
 -    my $err = $expected_err{$prog};
 -    defined $err
 -      or $err = $x == 0 ? '' : "$prog: invalid option -- /\n$try";
@@ -22,11 +22,11 @@ Index: gnu/tests/misc/invalid-opt.pl
 +    # Strip all stderr output
 +    # Our output is better and more consistent
 +    my $err_subst = 's/(.|\n)*//ms';
- 
+
      my @Tests = (["$prog-invalid-opt", '-/', {OUT=>$out},
                    {ERR_SUBST => $err_subst},
 -                  {EXIT=>$x}, {ERR=>$err}]);
 +                  {EXIT=>$x}]);
- 
+
      my $save_temps = $ENV{DEBUG};
      my $verbose = $ENV{VERBOSE};

@@ -639,40 +639,34 @@ fn write_end<W: Write>(
 
 fn write_to_end<W: Write>(in_buf: &[u8], writer: &mut W) -> io::Result<usize> {
     // using memchr2 significantly improves performances
-    match memchr2(b'\n', b'\r', in_buf) {
-        Some(p) => {
-            writer.write_all(&in_buf[..p])?;
-            Ok(p)
-        }
-        None => {
-            writer.write_all(in_buf)?;
-            Ok(in_buf.len())
-        }
+    if let Some(p) = memchr2(b'\n', b'\r', in_buf) {
+        writer.write_all(&in_buf[..p])?;
+        Ok(p)
+    } else {
+        writer.write_all(in_buf)?;
+        Ok(in_buf.len())
     }
 }
 
 fn write_tab_to_end<W: Write>(mut in_buf: &[u8], writer: &mut W) -> io::Result<usize> {
     let mut count = 0;
     loop {
-        match in_buf
+        if let Some(p) = in_buf
             .iter()
             .position(|c| *c == b'\n' || *c == b'\t' || *c == b'\r')
         {
-            Some(p) => {
-                writer.write_all(&in_buf[..p])?;
-                if in_buf[p] == b'\t' {
-                    writer.write_all(b"^I")?;
-                    in_buf = &in_buf[p + 1..];
-                    count += p + 1;
-                } else {
-                    // b'\n' or b'\r'
-                    return Ok(count + p);
-                }
+            writer.write_all(&in_buf[..p])?;
+            if in_buf[p] == b'\t' {
+                writer.write_all(b"^I")?;
+                in_buf = &in_buf[p + 1..];
+                count += p + 1;
+            } else {
+                // b'\n' or b'\r'
+                return Ok(count + p);
             }
-            None => {
-                writer.write_all(in_buf)?;
-                return Ok(in_buf.len() + count);
-            }
+        } else {
+            writer.write_all(in_buf)?;
+            return Ok(in_buf.len() + count);
         }
     }
 }

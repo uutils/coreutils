@@ -133,16 +133,14 @@ impl WordFilter {
         let break_set: Option<HashSet<char>> = if matches.contains_id(options::BREAK_FILE)
             && !matches.contains_id(options::WORD_REGEXP)
         {
-            let chars =
+            let mut chars =
                 read_char_filter_file(matches, options::BREAK_FILE).map_err_context(String::new)?;
-            let mut hs: HashSet<char> = if config.gnu_ext {
-                HashSet::new() // really only chars found in file
-            } else {
+            if !config.gnu_ext {
                 // GNU off means at least these are considered
-                [' ', '\t', '\n'].iter().copied().collect()
-            };
-            hs.extend(chars);
-            Some(hs)
+                chars.extend([' ', '\t', '\n']);
+            }
+            // else only chars found in file
+            Some(chars)
         } else {
             // if -W takes precedence or default
             None
