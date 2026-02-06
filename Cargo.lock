@@ -3797,6 +3797,7 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
+ "itoa",
  "regex",
  "tempfile",
  "uucore",
