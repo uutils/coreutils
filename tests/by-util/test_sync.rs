@@ -167,3 +167,21 @@ fn test_sync_multiple_files() {
     // Sync both files
     new_ucmd!().arg("--data").arg(&file1).arg(&file2).succeeds();
 }
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_sync_data_fifo_fails_immediately() {
+    use std::time::Duration;
+    use uutests::util::TestScenario;
+    use uutests::util_name;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkfifo("testfifo");
+
+    ts.ucmd()
+        .arg("--data")
+        .arg(at.plus_as_string("testfifo"))
+        .timeout(Duration::from_secs(2))
+        .fails();
+}
