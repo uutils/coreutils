@@ -18,6 +18,4 @@ LIBSTDBUF_DIR = "/usr/local/libexec/coreutils"
 rustflags = [
   "-A",
   "clippy::collapsible_if",
-  "-A",
-  "clippy::manual_is_multiple_of",
 ]
