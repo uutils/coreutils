@@ -55,8 +55,12 @@ fn main() {
     let is_coreutils = binary_as_util.ends_with("utils");
     let matched_util = utils
         .keys()
+        //*utils is not ls
         .filter(|&&u| binary_as_util.ends_with(u) && !is_coreutils)
-        .max_by_key(|u| u.len()); //Prefer stty more than tty. *utils is not ls
+        //Prefer stty more than tty
+        .max_by_key(|u| u.len())
+        // todo: with coreutils -> ls -> blah symlink chain, blah calls ls
+        ;
 
     let util_name = if let Some(&util) = matched_util {
         Some(OsString::from(util))
