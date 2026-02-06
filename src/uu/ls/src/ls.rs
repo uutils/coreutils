@@ -3579,8 +3579,7 @@ fn get_security_context<'a>(
         };
 
         return uucore::smack::get_smack_label_for_path(&target_path)
-            .map(Cow::Owned)
-            .unwrap_or(Cow::Borrowed(SUBSTITUTE_STRING));
+            .map_or(Cow::Borrowed(SUBSTITUTE_STRING), Cow::Owned);
     }
 
     Cow::Borrowed(SUBSTITUTE_STRING)
