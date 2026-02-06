@@ -463,7 +463,7 @@ fn open_or_create_subdir(parent_fd: &DirFd, name: &OsStr, mode: u32) -> io::Resu
                 }
                 _ => Err(io::Error::new(
                     io::ErrorKind::AlreadyExists,
-                    format!("path component exists but is not a directory: {name:?}"),
+                    format!("path component exists but is not a directory: {}", name.display()),
                 )),
             }
         }
