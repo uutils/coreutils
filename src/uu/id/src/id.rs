@@ -183,7 +183,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if state.selinux_supported {
             if let Ok(context) = selinux::SecurityContext::current(false) {
                 let bytes = context.as_bytes();
-                return write!(lock, "{}{line_ending}", String::from_utf8_lossy(bytes));
+                write!(lock, "{}{line_ending}", String::from_utf8_lossy(bytes))?;
+                return Ok(());
             }
             return Err(USimpleError::new(
                 1,
@@ -196,7 +197,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if state.smack_supported {
             match uucore::smack::get_smack_label_for_self() {
                 Ok(label) => {
-                    return write!(lock, "{label}{line_ending}");
+                    write!(lock, "{label}{line_ending}")?;
+                    return Ok(());
                 }
                 Err(_) => {
                     return Err(USimpleError::new(
