@@ -177,11 +177,11 @@ fn test_sync_data_fifo_fails_immediately() {
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
-    at.mkfifo("testfifo");
+    at.mkfifo("test-fifo");
 
     ts.ucmd()
         .arg("--data")
-        .arg(at.plus_as_string("testfifo"))
+        .arg(at.plus_as_string("test-fifo"))
         .timeout(Duration::from_secs(2))
         .fails();
 }
