@@ -2,12 +2,10 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore powf　localeconv
-#[cfg(not(windows))]
-use std::ffi::CStr;
+// spell-checker:ignore powf
 use std::io::Write;
-use std::sync::OnceLock;
 use uucore::display::Quotable;
+use uucore::i18n::decimal::{locale_decimal_separator, locale_grouping_separator};
 use uucore::translate;
 
 use crate::options::{NumfmtOptions, RoundMethod, TransformOptions};
@@ -93,94 +91,21 @@ fn trim_trailing_blanks(s: &str) -> &str {
     s.trim_end_matches(is_blank_for_suffix)
 }
 
-fn is_c_locale() -> bool {
-    for key in ["LC_ALL", "LC_NUMERIC", "LANG"] {
-        if let Ok(value) = std::env::var(key) {
-            if value.is_empty() {
-                continue;
-            }
-            let lang = value.split('.').next().unwrap_or(&value);
-            if lang == "C" || lang == "POSIX" || lang.starts_with("C_") || lang.starts_with("C@") {
-                return true;
-            }
-            return false;
-        }
-    }
-    false
-}
-
-struct LocaleInfo {
-    decimal_sep: char,
-    grouping_sep: Option<String>,
-    grouping_sep_char: Option<char>,
-}
-
-fn locale_info() -> &'static LocaleInfo {
-    static INFO: OnceLock<LocaleInfo> = OnceLock::new();
-    INFO.get_or_init(|| {
-        if is_c_locale() {
-            return LocaleInfo {
-                decimal_sep: '.',
-                grouping_sep: None,
-                grouping_sep_char: None,
-            };
-        }
-
-        #[cfg(not(windows))]
-        {
-            unsafe {
-                let _ = libc::setlocale(libc::LC_ALL, c"".as_ptr());
-                let conv = libc::localeconv();
-                if conv.is_null() {
-                    LocaleInfo {
-                        decimal_sep: '.',
-                        grouping_sep: None,
-                        grouping_sep_char: None,
-                    }
-                } else {
-                    let decimal_sep = CStr::from_ptr((*conv).decimal_point)
-                        .to_string_lossy()
-                        .chars()
-                        .next()
-                        .unwrap_or('.');
-                    let sep = CStr::from_ptr((*conv).thousands_sep).to_string_lossy();
-                    let grouping_sep = if sep.is_empty() {
-                        None
-                    } else {
-                        Some(sep.into_owned())
-                    };
-                    let grouping_sep_char = grouping_sep.as_ref().and_then(|s| s.chars().next());
-
-                    LocaleInfo {
-                        decimal_sep,
-                        grouping_sep,
-                        grouping_sep_char,
-                    }
-                }
-            }
-        }
-
-        #[cfg(windows)]
-        {
-            LocaleInfo {
-                decimal_sep: '.',
-                grouping_sep: None,
-                grouping_sep_char: None,
-            }
-        }
-    })
-}
-
 fn locale_decimal_separator_char() -> char {
-    locale_info().decimal_sep
+    locale_decimal_separator().chars().next().unwrap_or('.')
 }
 
 pub(crate) fn locale_grouping_separator_string() -> Option<&'static str> {
-    locale_info().grouping_sep.as_deref()
+    let grouping = locale_grouping_separator();
+    if grouping.is_empty() {
+        None
+    } else {
+        Some(grouping)
+    }
 }
 
 fn locale_grouping_separator_char() -> Option<char> {
-    locale_info().grouping_sep_char
+    locale_grouping_separator_string().and_then(|sep| sep.chars().next())
 }
 
 fn decimal_separator_count(s: &str, decimal_sep: char) -> usize {
