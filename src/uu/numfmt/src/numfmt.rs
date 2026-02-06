@@ -3,9 +3,14 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use crate::errors::*;
+use crate::errors::NumfmtError;
 use crate::format::{format_and_print_delimited, format_and_print_whitespace};
-use crate::options::*;
+use crate::options::{
+    DEBUG, DELIMITER, FIELD, FIELD_DEFAULT, FORMAT, FROM, FROM_DEFAULT, FROM_UNIT,
+    FROM_UNIT_DEFAULT, FormatOptions, HEADER, HEADER_DEFAULT, INVALID, InvalidModes, NUMBER,
+    NumfmtOptions, PADDING, ROUND, RoundMethod, SUFFIX, TO, TO_DEFAULT, TO_UNIT, TO_UNIT_DEFAULT,
+    TransformOptions, UNIT_SEPARATOR, ZERO_TERMINATED,
+};
 use crate::units::{Result, Unit};
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, parser::ValueSource};
 use std::ffi::OsString;
@@ -314,19 +319,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         print_debug_warnings(&options, &matches);
     }
 
-    let result = match matches.get_many::<OsString>(NUMBER) {
-        Some(values) => {
-            let byte_args: Vec<&[u8]> = values
-                .map(|s| os_str_as_bytes(s).map_err(|e| e.to_string()))
-                .collect::<std::result::Result<Vec<_>, _>>()
-                .map_err(NumfmtError::IllegalArgument)?;
-            handle_args(byte_args.into_iter(), &options)
-        }
-        None => {
-            let stdin = std::io::stdin();
-            let mut locked_stdin = stdin.lock();
-            handle_buffer(&mut locked_stdin, &options)
-        }
+    let result = if let Some(values) = matches.get_many::<OsString>(NUMBER) {
+        let byte_args: Vec<&[u8]> = values
+            .map(|s| os_str_as_bytes(s).map_err(|e| e.to_string()))
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(NumfmtError::IllegalArgument)?;
+        handle_args(byte_args.into_iter(), &options)
+    } else {
+        let stdin = std::io::stdin();
+        let mut locked_stdin = stdin.lock();
+        handle_buffer(&mut locked_stdin, &options)
     };
 
     match result {

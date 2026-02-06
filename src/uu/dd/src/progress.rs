@@ -460,7 +460,7 @@ impl SignalHandler {
     pub(crate) fn install_signal_handler(
         f: Box<dyn Send + Sync + Fn()>,
     ) -> Result<Self, std::io::Error> {
-        use signal_hook::consts::signal::*;
+        use signal_hook::consts::signal::SIGUSR1;
         use signal_hook::iterator::Signals;
 
         let mut signals = Signals::new([SIGUSR1])?;

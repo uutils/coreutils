@@ -7,7 +7,7 @@ repos:
       - id: check-added-large-files
       - id: check-executables-have-shebangs
       - id: check-json
-        exclude: '.vscode/cSpell\.json' # cSpell.json uses comments
+        exclude: '\.vscode/(cSpell|extensions)\.json' # cSpell.json and extensions.json use comments
       - id: check-shebang-scripts-are-executable
         exclude: '.+\.rs' # would be triggered by #![some_attribute]
       - id: check-symlinks
