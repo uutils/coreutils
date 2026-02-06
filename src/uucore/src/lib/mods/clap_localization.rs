@@ -20,6 +20,9 @@ use clap::{ArgMatches, Command, Error};
 use std::error::Error as StdError;
 use std::ffi::OsString;
 
+use std::io::Write as _;
+use std::io::stderr;
+
 /// Color enum for consistent styling
 #[derive(Debug, Clone, Copy)]
 pub enum Color {
@@ -66,7 +69,7 @@ struct ColorManager(bool);
 impl ColorManager {
     /// Create a new ColorManager based on environment variables
     fn from_env() -> Self {
-        Self(should_use_color_for_stream(&std::io::stderr()))
+        Self(should_use_color_for_stream(&stderr()))
     }
 
     /// Apply color to text if colors are enabled
@@ -124,7 +127,7 @@ impl<'a> ErrorFormatter<'a> {
             ErrorKind::MissingRequiredArgument => self.handle_missing_required(err, exit_code),
             ErrorKind::TooFewValues | ErrorKind::TooManyValues | ErrorKind::WrongNumberOfValues => {
                 // These need full clap formatting
-                eprint!("{}", err.render());
+                let _ = write!(stderr(), "{}", err.render());
                 exit_code
             }
             _ => self.handle_generic_error(err, exit_code),
@@ -144,28 +147,28 @@ impl<'a> ErrorFormatter<'a> {
             let error_word = translate!("common-error");
 
             // Print main error
-            eprintln!(
-                "{}",
+            let _ = write!(
+                stderr(),
+                "{}\n\n",
                 translate!(
                     "clap-error-unexpected-argument",
                     "arg" => self.color_mgr.colorize(&arg_str, Color::Yellow),
                     "error_word" => self.color_mgr.colorize(&error_word, Color::Red)
                 )
             );
-            eprintln!();
 
             // Show suggestion if available
             if let Some(suggested_arg) = err.get(ContextKind::SuggestedArg) {
                 let tip_word = translate!("common-tip");
-                eprintln!(
-                    "{}",
+                let _ = write!(
+                    stderr(),
+                    "{}\n\n",
                     translate!(
                         "clap-error-similar-argument",
                         "tip_word" => self.color_mgr.colorize(&tip_word, Color::Green),
                         "suggestion" => self.color_mgr.colorize(&suggested_arg.to_string(), Color::Green)
                     )
                 );
-                eprintln!();
             } else {
                 // Look for other tips from clap
                 self.print_clap_tips(err);
@@ -190,7 +193,8 @@ impl<'a> ErrorFormatter<'a> {
             if value.is_empty() {
                 // Value required but not provided
                 let error_word = translate!("common-error");
-                eprintln!(
+                let _ = writeln!(
+                    stderr(),
                     "{}",
                     translate!("clap-error-value-required",
                         "error_word" => self.color_mgr.colorize(&error_word, Color::Red),
@@ -208,7 +212,7 @@ impl<'a> ErrorFormatter<'a> {
                 // Include validation error if present
                 match err.source() {
                     Some(source) if matches!(err.kind(), ErrorKind::ValueValidation) => {
-                        eprintln!("{error_msg}: {source}");
+                        let _ = writeln!(stderr(), "{error_msg}: {source}");
                     }
                     _ => eprintln!("{error_msg}"),
                 }
@@ -218,17 +222,15 @@ impl<'a> ErrorFormatter<'a> {
             if matches!(err.kind(), ErrorKind::InvalidValue) {
                 if let Some(valid_values) = err.get(ContextKind::ValidValue) {
                     if !valid_values.to_string().is_empty() {
-                        eprintln!();
-                        eprintln!(
-                            "  [{}: {valid_values}]",
+                        let _ = writeln!(
+                            stderr(),
+                            "\n  [{}: {valid_values}]",
                             translate!("clap-error-possible-values")
                         );
                     }
                 }
             }
-
-            eprintln!();
-            eprintln!("{}", translate!("common-help-suggestion"));
+            let _ = writeln!(stderr(), "\n{}", translate!("common-help-suggestion"));
         } else {
             self.print_simple_error_msg(&err.render().to_string());
         }
@@ -255,7 +257,8 @@ impl<'a> ErrorFormatter<'a> {
                     .starts_with("error: the following required arguments were not provided:") =>
             {
                 let error_word = translate!("common-error");
-                eprintln!(
+                let _ = writeln!(
+                    stderr(),
                     "{}",
                     translate!(
                         "clap-error-missing-required-arguments",
@@ -266,13 +269,13 @@ impl<'a> ErrorFormatter<'a> {
                 // Print the missing arguments
                 for line in lines.iter().skip(1) {
                     if line.starts_with("  ") {
-                        eprintln!("{line}");
+                        let _ = writeln!(stderr(), "{line}");
                     } else if line.starts_with("Usage:") || line.starts_with("For more information")
                     {
                         break;
                     }
                 }
-                eprintln!();
+                let _ = writeln!(stderr());
 
                 // Print usage
                 lines
@@ -280,9 +283,9 @@ impl<'a> ErrorFormatter<'a> {
                     .skip_while(|line| !line.starts_with("Usage:"))
                     .for_each(|line| {
                         if line.starts_with("For more information, try '--help'.") {
-                            eprintln!("{}", translate!("common-help-suggestion"));
+                            let _ = writeln!(stderr(), "{}", translate!("common-help-suggestion"));
                         } else {
-                            eprintln!("{line}");
+                            let _ = writeln!(stderr(), "{line}");
                         }
                     });
             }
@@ -296,10 +299,9 @@ impl<'a> ErrorFormatter<'a> {
         let rendered_str = err.render().to_string();
         if let Some(main_error_line) = rendered_str.lines().next() {
             self.print_localized_error_line(main_error_line);
-            eprintln!();
-            eprintln!("{}", translate!("common-help-suggestion"));
+            let _ = writeln!(stderr(), "\n{}", translate!("common-help-suggestion"));
         } else {
-            eprint!("{}", err.render());
+            let _ = write!(stderr(), "{}", err.render());
         }
         exit_code
     }
@@ -307,7 +309,8 @@ impl<'a> ErrorFormatter<'a> {
     /// Print a simple error message (no exit)
     fn print_simple_error_msg(&self, message: &str) {
         let error_word = translate!("common-error");
-        eprintln!(
+        let _ = writeln!(
+            stderr(),
             "{}: {message}",
             self.color_mgr.colorize(&error_word, Color::Red)
         );
@@ -320,9 +323,9 @@ impl<'a> ErrorFormatter<'a> {
 
         if let Some(colon_pos) = line.find(':') {
             let after_colon = &line[colon_pos..];
-            eprintln!("{colored_error}{after_colon}");
+            let _ = writeln!(stderr(), "{colored_error}{after_colon}");
         } else {
-            eprintln!("{line}");
+            let _ = writeln!(stderr(), "{line}");
         }
     }
 
@@ -335,14 +338,15 @@ impl<'a> ErrorFormatter<'a> {
                 let tip_word = translate!("common-tip");
                 if let Some(colon_pos) = trimmed.find(':') {
                     let after_colon = &trimmed[colon_pos..];
-                    eprintln!(
+                    let _ = writeln!(
+                        stderr(),
                         "  {}{after_colon}",
                         self.color_mgr.colorize(&tip_word, Color::Green)
                     );
                 } else {
-                    eprintln!("{line}");
+                    let _ = writeln!(stderr(), "{line}");
                 }
-                eprintln!();
+                let _ = writeln!(stderr());
             }
         }
     }
@@ -353,9 +357,11 @@ impl<'a> ErrorFormatter<'a> {
         let usage_text = translate!(&usage_key);
         let formatted_usage = crate::format_usage(&usage_text);
         let usage_label = translate!("common-usage");
-        eprintln!("{usage_label}: {formatted_usage}");
-        eprintln!();
-        eprintln!("{}", translate!("common-help-suggestion"));
+        let _ = writeln!(
+            stderr(),
+            "{usage_label}: {formatted_usage}\n\n{}",
+            translate!("common-help-suggestion")
+        );
     }
 }
 
@@ -609,7 +615,7 @@ mod tests {
             env::set_var("NO_COLOR", "1");
         }
         assert_eq!(get_color_choice(), clap::ColorChoice::Never);
-        assert!(!should_use_color_for_stream(&std::io::stderr()));
+        assert!(!should_use_color_for_stream(&stderr()));
         let mgr = ColorManager::from_env();
         assert!(!mgr.0);
         unsafe {
@@ -621,7 +627,7 @@ mod tests {
             env::set_var("CLICOLOR_FORCE", "1");
         }
         assert_eq!(get_color_choice(), clap::ColorChoice::Always);
-        assert!(should_use_color_for_stream(&std::io::stderr()));
+        assert!(should_use_color_for_stream(&stderr()));
         let mgr = ColorManager::from_env();
         assert!(mgr.0);
         unsafe {
@@ -633,7 +639,7 @@ mod tests {
             env::set_var("FORCE_COLOR", "1");
         }
         assert_eq!(get_color_choice(), clap::ColorChoice::Always);
-        assert!(should_use_color_for_stream(&std::io::stderr()));
+        assert!(should_use_color_for_stream(&stderr()));
         unsafe {
             env::remove_var("FORCE_COLOR");
         }
