@@ -10,6 +10,7 @@ use std::cmp;
 use std::ffi::OsString;
 use std::io::{self, Write};
 use std::process;
+use uucore::Args;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -51,16 +52,20 @@ fn main() {
     });
 
     // binary name ends with util name?
+    let is_coreutils = binary_as_util.ends_with("utils");
     let matched_util = utils
         .keys()
-        .filter(|&&u| binary_as_util.ends_with(u) && !binary_as_util.ends_with("coreutils"))
-        .max_by_key(|u| u.len()); //Prefer stty more than tty. coreutils is not ls
+        .filter(|&&u| binary_as_util.ends_with(u) && !is_coreutils)
+        .max_by_key(|u| u.len()); //Prefer stty more than tty. *utils is not ls
 
     let util_name = if let Some(&util) = matched_util {
         Some(OsString::from(util))
-    } else {
+    } else if is_coreutils || binary_as_util.ends_with("box") {
+        // todo: Remove support of "*box" from binary
         uucore::set_utility_is_second_arg();
         args.next()
+    } else {
+        validation::not_found(&OsString::from(binary_as_util));
     };
 
     // 0th argument equals util name?
@@ -71,6 +76,11 @@ fn main() {
 
         match util {
             "--list" => {
+                // If --help is also present, show usage instead of list
+                if args.any(|arg| arg == "--help" || arg == "-h") {
+                    usage(&utils, binary_as_util);
+                    process::exit(0);
+                }
                 let mut utils: Vec<_> = utils.keys().collect();
                 utils.sort();
                 for util in utils {
@@ -119,6 +129,9 @@ fn main() {
                     }
                     usage(&utils, binary_as_util);
                     process::exit(0);
+                } else if util.starts_with('-') {
+                    // Argument looks like an option but wasn't recognized
+                    validation::unrecognized_option(binary_as_util, &util_os);
                 } else {
                     validation::not_found(&util_os);
                 }

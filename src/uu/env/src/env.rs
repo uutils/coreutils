@@ -118,7 +118,7 @@ struct Options<'a> {
 fn parse_name_value_opt<'a>(opts: &mut Options<'a>, opt: &'a OsStr) -> UResult<bool> {
     // is it a NAME=VALUE like opt ?
     let wrap = NativeStr::<'a>::new(opt);
-    let split_o = wrap.split_once(&'=');
+    let split_o = wrap.split_once('=');
     if let Some((name, value)) = split_o {
         // yes, so push name, value pair
         opts.sets.push((name, value));
@@ -930,8 +930,8 @@ fn apply_unset_env_vars(opts: &Options<'_>) -> Result<(), Box<dyn UError>> {
     for name in &opts.unsets {
         let native_name = NativeStr::new(name);
         if name.is_empty()
-            || native_name.contains(&'\0').unwrap()
-            || native_name.contains(&'=').unwrap()
+            || native_name.contains('\0').unwrap()
+            || native_name.contains('=').unwrap()
         {
             return Err(USimpleError::new(
                 125,
@@ -1027,11 +1027,9 @@ where
 
         // Set environment variable to communicate to Rust child processes
         // that SIGPIPE should be default (not ignored)
-        if matches!(action_kind, SignalActionKind::Default)
-            && sig_value == nix::libc::SIGPIPE as usize
-        {
+        if matches!(action_kind, SignalActionKind::Default) && sig_value == libc::SIGPIPE as usize {
             unsafe {
-                std::env::set_var("RUST_SIGPIPE", "default");
+                env::set_var("RUST_SIGPIPE", "default");
             }
         }
 
