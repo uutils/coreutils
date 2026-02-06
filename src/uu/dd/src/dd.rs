@@ -23,6 +23,8 @@ use nix::fcntl::OFlag;
 use parseargs::Parser;
 use progress::ProgUpdateType;
 use progress::{ProgUpdate, ReadStat, StatusLevel, WriteStat, gen_prog_updater};
+#[cfg(target_os = "linux")]
+use progress::{check_and_reset_sigusr1, install_sigusr1_handler};
 use uucore::io::OwnedFileDescriptorOrHandle;
 use uucore::translate;
 
@@ -122,18 +124,9 @@ impl Alarm {
         Self { interval, trigger }
     }
 
-    /// Returns a closure that allows to manually trigger the alarm
-    ///
-    /// This is useful for cases where more than one alarm even source exists
-    /// In case of `dd` there is the SIGUSR1/SIGINFO case where we want to
-    /// trigger an manual progress report.
-    pub fn manual_trigger_fn(&self) -> Box<dyn Send + Sync + Fn()> {
-        let weak_trigger = Arc::downgrade(&self.trigger);
-        Box::new(move || {
-            if let Some(trigger) = weak_trigger.upgrade() {
-                trigger.store(ALARM_TRIGGER_SIGNAL, Relaxed);
-            }
-        })
+    /// Manually trigger the alarm as a signal event
+    pub fn manual_trigger(&self) {
+        self.trigger.store(ALARM_TRIGGER_SIGNAL, Relaxed);
     }
 
     /// Use this function to poll for any pending alarm event
@@ -1183,14 +1176,9 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     // This avoids the need to query the OS monotonic clock for every block.
     let alarm = Alarm::with_interval(Duration::from_secs(1));
 
-    // The signal handler spawns an own thread that waits for signals.
-    // When the signal is received, it calls a handler function.
-    // We inject a handler function that manually triggers the alarm.
     #[cfg(target_os = "linux")]
-    let signal_handler = progress::SignalHandler::install_signal_handler(alarm.manual_trigger_fn());
-    #[cfg(target_os = "linux")]
-    if let Err(e) = &signal_handler {
-        if Some(StatusLevel::None) != i.settings.status {
+    if let Err(e) = install_sigusr1_handler() {
+        if i.settings.status != Some(StatusLevel::None) {
             eprintln!("{}\n\t{e}", translate!("dd-warning-signal-handler"));
         }
     }
@@ -1270,6 +1258,10 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         // error.
         rstat += rstat_update;
         wstat += wstat_update;
+        #[cfg(target_os = "linux")]
+        if check_and_reset_sigusr1() {
+            alarm.manual_trigger();
+        }
         match alarm.get_trigger() {
             ALARM_TRIGGER_NONE => {}
             t @ (ALARM_TRIGGER_TIMER | ALARM_TRIGGER_SIGNAL) => {
