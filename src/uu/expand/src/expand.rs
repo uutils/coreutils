@@ -320,9 +320,10 @@ fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read + 'static>>> {
 fn next_tabstop(tabstops: &[usize], col: usize, remaining_mode: &RemainingMode) -> usize {
     let num_tabstops = tabstops.len();
     match remaining_mode {
-        RemainingMode::Plus => match tabstops[0..num_tabstops - 1].iter().find(|&&t| t > col) {
-            Some(t) => t - col,
-            None => {
+        RemainingMode::Plus => {
+            if let Some(t) = tabstops[0..num_tabstops - 1].iter().find(|&&t| t > col) {
+                t - col
+            } else {
                 let step_size = tabstops[num_tabstops - 1];
                 let last_fixed_tabstop = tabstops[num_tabstops - 2];
                 let characters_since_last_tabstop = col - last_fixed_tabstop;
@@ -330,11 +331,14 @@ fn next_tabstop(tabstops: &[usize], col: usize, remaining_mode: &RemainingMode) 
                 let steps_required = 1 + characters_since_last_tabstop / step_size;
                 steps_required * step_size - characters_since_last_tabstop
             }
-        },
-        RemainingMode::Slash => match tabstops[0..num_tabstops - 1].iter().find(|&&t| t > col) {
-            Some(t) => t - col,
-            None => tabstops[num_tabstops - 1] - col % tabstops[num_tabstops - 1],
-        },
+        }
+        RemainingMode::Slash => {
+            if let Some(t) = tabstops[0..num_tabstops - 1].iter().find(|&&t| t > col) {
+                t - col
+            } else {
+                tabstops[num_tabstops - 1] - col % tabstops[num_tabstops - 1]
+            }
+        }
         RemainingMode::None => {
             if num_tabstops == 1 {
                 tabstops[0] - col % tabstops[0]

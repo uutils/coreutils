@@ -106,8 +106,8 @@ fn filter_args(
     if let Some(slice) = os_slice.to_str() {
         if should_extract_obs_lines(
             slice,
-            preceding_long_opt_req_value,
-            preceding_short_opt_req_value,
+            *preceding_long_opt_req_value,
+            *preceding_short_opt_req_value,
         ) {
             // start of the short option string
             // that can have obsolete lines option value in it
@@ -137,8 +137,8 @@ fn filter_args(
 /// and if so, a short option that can contain obsolete lines value
 fn should_extract_obs_lines(
     slice: &str,
-    preceding_long_opt_req_value: &bool,
-    preceding_short_opt_req_value: &bool,
+    preceding_long_opt_req_value: bool,
+    preceding_short_opt_req_value: bool,
 ) -> bool {
     slice.starts_with('-')
         && !slice.starts_with("--")
@@ -1189,18 +1189,15 @@ where
                 }
             }
 
-            match kth_chunk {
-                Some(chunk_number) => {
-                    if i == chunk_number {
-                        stdout_writer.write_all(buf)?;
-                        break;
-                    }
+            if let Some(chunk_number) = kth_chunk {
+                if i == chunk_number {
+                    stdout_writer.write_all(buf)?;
+                    break;
                 }
-                None => {
-                    let idx = (i - 1) as usize;
-                    let writer = out_files.get_writer(idx, settings)?;
-                    writer.write_all(buf)?;
-                }
+            } else {
+                let idx = (i - 1) as usize;
+                let writer = out_files.get_writer(idx, settings)?;
+                writer.write_all(buf)?;
             }
         } else {
             break;
@@ -1301,18 +1298,15 @@ where
         }
         let bytes = line.as_slice();
 
-        match kth_chunk {
-            Some(kth) => {
-                if chunk_number == kth {
-                    stdout_writer.write_all(bytes)?;
-                }
+        if let Some(kth) = kth_chunk {
+            if chunk_number == kth {
+                stdout_writer.write_all(bytes)?;
             }
-            None => {
-                // Should write into a file
-                let idx = (chunk_number - 1) as usize;
-                let writer = out_files.get_writer(idx, settings)?;
-                custom_write_all(bytes, writer, settings)?;
-            }
+        } else {
+            // Should write into a file
+            let idx = (chunk_number - 1) as usize;
+            let writer = out_files.get_writer(idx, settings)?;
+            custom_write_all(bytes, writer, settings)?;
         }
 
         // Advance to the next chunk if the current one is filled.

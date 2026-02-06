@@ -387,16 +387,16 @@ fn filter_args(
     if let Some(slice) = os_slice.to_str() {
         if should_extract_obs_skip_fields(
             slice,
-            preceding_long_opt_req_value,
-            preceding_short_opt_req_value,
+            *preceding_long_opt_req_value,
+            *preceding_short_opt_req_value,
         ) {
             // start of the short option string
             // that can have obsolete skip fields option value in it
             filter = handle_extract_obs_skip_fields(slice, skip_fields_old);
         } else if should_extract_obs_skip_chars(
             slice,
-            preceding_long_opt_req_value,
-            preceding_short_opt_req_value,
+            *preceding_long_opt_req_value,
+            *preceding_short_opt_req_value,
         ) {
             // the obsolete skip chars option
             filter = handle_extract_obs_skip_chars(slice, skip_chars_old);
@@ -436,8 +436,8 @@ fn filter_args(
 /// and if so, a short option that can contain obsolete skip fields value
 fn should_extract_obs_skip_fields(
     slice: &str,
-    preceding_long_opt_req_value: &bool,
-    preceding_short_opt_req_value: &bool,
+    preceding_long_opt_req_value: bool,
+    preceding_short_opt_req_value: bool,
 ) -> bool {
     slice.starts_with('-')
         && !slice.starts_with("--")
@@ -452,8 +452,8 @@ fn should_extract_obs_skip_fields(
 /// Checks if the slice is a true obsolete skip chars short option
 fn should_extract_obs_skip_chars(
     slice: &str,
-    preceding_long_opt_req_value: &bool,
-    preceding_short_opt_req_value: &bool,
+    preceding_long_opt_req_value: bool,
+    preceding_short_opt_req_value: bool,
 ) -> bool {
     slice.starts_with('+')
         && posix_version().is_some_and(|v| v <= OBSOLETE)
