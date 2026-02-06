@@ -57,7 +57,6 @@ pub struct NumfmtOptions {
     pub suffix: Option<String>,
     pub unit_separator: String,
     pub format: FormatOptions,
-    pub grouping: bool,
     pub invalid: InvalidModes,
     pub zero_terminated: bool,
     pub debug: bool,

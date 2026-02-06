@@ -91,21 +91,13 @@ fn trim_trailing_blanks(s: &str) -> &str {
     s.trim_end_matches(is_blank_for_suffix)
 }
 
-fn locale_decimal_separator_char() -> char {
-    locale_decimal_separator().chars().next().unwrap_or('.')
-}
-
-pub(crate) fn locale_grouping_separator_string() -> Option<&'static str> {
-    let grouping = locale_grouping_separator();
-    if grouping.is_empty() {
-        None
-    } else {
-        Some(grouping)
-    }
-}
-
-fn locale_grouping_separator_char() -> Option<char> {
-    locale_grouping_separator_string().and_then(|sep| sep.chars().next())
+fn locale_separators() -> (char, Option<&'static str>) {
+    let decimal_sep = locale_decimal_separator().chars().next().unwrap_or('.');
+    let grouping_sep = match locale_grouping_separator() {
+        "" => None,
+        sep => Some(sep),
+    };
+    (decimal_sep, grouping_sep)
 }
 
 fn decimal_separator_count(s: &str, decimal_sep: char) -> usize {
@@ -295,11 +287,10 @@ fn parse_number_with_suffix(s: &str, unit: &Unit) -> Result<(f64, Option<Suffix>
         return Err(translate!("numfmt-error-invalid-number-empty"));
     }
 
-    let decimal_sep = locale_decimal_separator_char();
-    let mut grouping_sep = locale_grouping_separator_char();
-    if grouping_sep == Some(decimal_sep) {
-        grouping_sep = None;
-    }
+    let (decimal_sep, grouping_sep) = locale_separators();
+    let grouping_sep = grouping_sep
+        .and_then(|sep| sep.chars().next())
+        .filter(|&sep| sep != decimal_sep);
 
     let Some(scan) = scan_number_prefix(trimmed, decimal_sep, grouping_sep) else {
         if decimal_separator_count(trimmed, decimal_sep) >= 2 {
@@ -611,17 +602,16 @@ fn format_string(
         &options.unit_separator,
     )?;
 
-    let decimal_sep = locale_decimal_separator_char();
-    let grouping_requested = options.grouping || options.format.grouping;
-    if grouping_requested && options.transform.to == Unit::None {
-        if let Some(grouping_sep) = locale_grouping_separator_string() {
-            number = apply_grouping(&number, grouping_sep, decimal_sep);
-        } else {
-            number = apply_decimal_separator(&number, decimal_sep);
-        }
+    let (decimal_sep, grouping_sep) = locale_separators();
+    let grouping_requested = options.format.grouping && options.transform.to == Unit::None;
+    number = if grouping_requested {
+        grouping_sep.map_or_else(
+            || apply_decimal_separator(&number, decimal_sep),
+            |sep| apply_grouping(&number, sep, decimal_sep),
+        )
     } else {
-        number = apply_decimal_separator(&number, decimal_sep);
-    }
+        apply_decimal_separator(&number, decimal_sep)
+    };
 
     // bring back the suffix before applying padding
     let number_with_suffix = match &options.suffix {
@@ -669,6 +659,35 @@ fn split_bytes<'a>(input: &'a [u8], delim: &'a [u8]) -> impl Iterator<Item = &'a
     })
 }
 
+fn append_formatted_delimited_field(
+    output: &mut Vec<u8>,
+    field: &[u8],
+    options: &NumfmtOptions,
+) -> Result<()> {
+    let field_str = std::str::from_utf8(field)
+        .map_err(|_| {
+            translate!(
+                "numfmt-error-invalid-number",
+                "input" => String::from_utf8_lossy(field).into_owned().quote()
+            )
+        })?
+        .trim_start();
+    match format_string(field_str, options, None) {
+        Ok(formatted) => {
+            output.extend_from_slice(formatted.as_bytes());
+            Ok(())
+        }
+        Err(err) => {
+            if options.invalid == crate::options::InvalidModes::Abort {
+                std::io::stdout()
+                    .write_all(output)
+                    .map_err(|e| e.to_string())?;
+            }
+            Err(err)
+        }
+    }
+}
+
 pub fn format_and_print_delimited(input: &[u8], options: &NumfmtOptions) -> Result<()> {
     let delimiter = options.delimiter.as_ref().unwrap();
     let mut output: Vec<u8> = Vec::new();
@@ -681,25 +700,7 @@ pub fn format_and_print_delimited(input: &[u8], options: &NumfmtOptions) -> Resu
     if delimiter.is_empty() {
         let field_selected = uucore::ranges::contain(&options.fields, 1);
         if field_selected {
-            let field_str = std::str::from_utf8(input)
-                .map_err(|_| {
-                    translate!(
-                        "numfmt-error-invalid-number",
-                        "input" => String::from_utf8_lossy(input).into_owned().quote()
-                    )
-                })?
-                .trim_start();
-            match format_string(field_str, options, None) {
-                Ok(formatted) => output.extend_from_slice(formatted.as_bytes()),
-                Err(err) => {
-                    if options.invalid == crate::options::InvalidModes::Abort {
-                        std::io::stdout()
-                            .write_all(&output)
-                            .map_err(|e| e.to_string())?;
-                    }
-                    return Err(err);
-                }
-            }
+            append_formatted_delimited_field(&mut output, input, options)?;
         } else {
             output.extend_from_slice(input);
         }
@@ -713,26 +714,7 @@ pub fn format_and_print_delimited(input: &[u8], options: &NumfmtOptions) -> Resu
             }
 
             if field_selected {
-                // Field must be valid UTF-8 for numeric conversion
-                let field_str = std::str::from_utf8(field)
-                    .map_err(|_| {
-                        translate!(
-                            "numfmt-error-invalid-number",
-                            "input" => String::from_utf8_lossy(field).into_owned().quote()
-                        )
-                    })?
-                    .trim_start();
-                match format_string(field_str, options, None) {
-                    Ok(formatted) => output.extend_from_slice(formatted.as_bytes()),
-                    Err(err) => {
-                        if options.invalid == crate::options::InvalidModes::Abort {
-                            std::io::stdout()
-                                .write_all(&output)
-                                .map_err(|e| e.to_string())?;
-                        }
-                        return Err(err);
-                    }
-                }
+                append_formatted_delimited_field(&mut output, field, options)?;
             } else {
                 // add unselected field without conversion
                 output.extend_from_slice(field);

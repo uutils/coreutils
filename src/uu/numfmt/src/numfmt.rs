@@ -225,24 +225,22 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         Range::from_list(fields)?
     };
 
-    let format = match args.get_one::<String>(FORMAT) {
+    let mut format = match args.get_one::<String>(FORMAT) {
         Some(s) => s.parse()?,
         None => FormatOptions::default(),
     };
 
-    let grouping = args.get_flag(GROUPING);
-    if grouping && args.value_source(FORMAT) == Some(ValueSource::CommandLine) {
+    let grouping_flag = args.get_flag(GROUPING);
+    if grouping_flag && args.value_source(FORMAT) == Some(ValueSource::CommandLine) {
         return Err(translate!(
             "numfmt-error-grouping-cannot-be-combined-with-format"
         ));
     }
+    if grouping_flag {
+        format.grouping = true;
+    }
 
     if format.grouping && to != Unit::None {
-        return Err(translate!(
-            "numfmt-error-grouping-cannot-be-combined-with-to"
-        ));
-    }
-    if grouping && to != Unit::None {
         return Err(translate!(
             "numfmt-error-grouping-cannot-be-combined-with-to"
         ));
@@ -286,7 +284,6 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         suffix,
         unit_separator,
         format,
-        grouping,
         invalid,
         zero_terminated,
         debug,
@@ -511,7 +508,6 @@ mod tests {
             suffix: None,
             unit_separator: String::new(),
             format: FormatOptions::default(),
-            grouping: false,
             invalid: InvalidModes::Abort,
             zero_terminated: false,
             debug: false,
