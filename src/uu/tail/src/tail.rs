@@ -277,47 +277,44 @@ fn tail_stdin(
         return Ok(());
     }
 
-    match input.resolve() {
+    if let Some(path) = input.resolve() {
         // fifo
-        Some(path) => {
-            let mut stdin_offset = 0;
-            if cfg!(unix) {
-                // Save the current seek position/offset of a stdin redirected file.
-                // This is needed to pass "gnu/tests/tail-2/start-middle.sh"
-                if let Ok(mut stdin_handle) = Handle::stdin() {
-                    if let Ok(offset) = stdin_handle.as_file_mut().stream_position() {
-                        stdin_offset = offset;
-                    }
+        let mut stdin_offset = 0;
+        if cfg!(unix) {
+            // Save the current seek position/offset of a stdin redirected file.
+            // This is needed to pass "gnu/tests/tail-2/start-middle.sh"
+            if let Ok(mut stdin_handle) = Handle::stdin() {
+                if let Ok(offset) = stdin_handle.as_file_mut().stream_position() {
+                    stdin_offset = offset;
                 }
             }
-            tail_file(
-                settings,
-                header_printer,
-                input,
-                &path,
-                observer,
-                stdin_offset,
-            )?;
         }
+        tail_file(
+            settings,
+            header_printer,
+            input,
+            &path,
+            observer,
+            stdin_offset,
+        )?;
+    } else {
         // pipe
-        None => {
-            header_printer.print_input(input);
-            if paths::stdin_is_bad_fd() {
-                set_exit_code(1);
+        header_printer.print_input(input);
+        if paths::stdin_is_bad_fd() {
+            set_exit_code(1);
+            show_error!(
+                "{}",
+                translate!("tail-error-cannot-fstat", "file" => translate!("tail-stdin-header"), "error" => translate!("tail-bad-fd"))
+            );
+            if settings.follow.is_some() {
                 show_error!(
                     "{}",
-                    translate!("tail-error-cannot-fstat", "file" => translate!("tail-stdin-header"), "error" => translate!("tail-bad-fd"))
+                    translate!("tail-error-reading-file", "file" => translate!("tail-stdin-header"), "error" => translate!("tail-bad-fd"))
                 );
-                if settings.follow.is_some() {
-                    show_error!(
-                        "{}",
-                        translate!("tail-error-reading-file", "file" => translate!("tail-stdin-header"), "error" => translate!("tail-bad-fd"))
-                    );
-                }
-            } else {
-                let mut reader = BufReader::new(stdin());
-                unbounded_tail(&mut reader, settings)?;
             }
+        } else {
+            let mut reader = BufReader::new(stdin());
+            unbounded_tail(&mut reader, settings)?;
         }
     }
 
