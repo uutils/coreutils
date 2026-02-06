@@ -458,7 +458,12 @@ fn test_verbose_or_silent() {
         .ucmd()
         .args(&["-v", "regfile"])
         .fails_with_code(1)
-        .stderr_contains("Invalid argument")
+        .stderr_contains(
+            #[cfg(not(windows))]
+            "Invalid argument",
+            #[cfg(windows)]
+            "regfile: The file or directory is not a reparse point.",
+        )
         .no_stdout();
     scene
         .ucmd()
