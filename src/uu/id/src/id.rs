@@ -183,8 +183,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if state.selinux_supported {
             if let Ok(context) = selinux::SecurityContext::current(false) {
                 let bytes = context.as_bytes();
-                write!(lock, "{}{line_ending}", String::from_utf8_lossy(bytes));
-                return Ok(());
+                return write!(lock, "{}{line_ending}", String::from_utf8_lossy(bytes));
             }
             return Err(USimpleError::new(
                 1,
@@ -197,8 +196,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if state.smack_supported {
             match uucore::smack::get_smack_label_for_self() {
                 Ok(label) => {
-                    write!(lock, "{label}{line_ending}");
-                    return Ok(());
+                    return write!(lock, "{label}{line_ending}");
                 }
                 Err(_) => {
                     return Err(USimpleError::new(
@@ -558,7 +556,7 @@ fn pline(possible_uid: Option<uid_t>) -> io::Result<()> {
         pw.user_info.unwrap_or_default(),
         pw.user_dir.unwrap_or_default(),
         pw.user_shell.unwrap_or_default()
-    )?
+    )
 }
 
 #[cfg(any(
@@ -591,6 +589,7 @@ fn pline(possible_uid: Option<uid_t>) -> io::Result<()> {
     target_os = "openbsd",
     target_os = "cygwin"
 ))]
+#[allow(clippy::unnecessary_wraps)]
 fn auditid() -> io::Result<()> {
     Ok(())
 }
