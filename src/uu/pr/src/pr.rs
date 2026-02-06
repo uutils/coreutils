@@ -10,7 +10,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use itertools::Itertools;
 use regex::Regex;
 use std::fs::metadata;
-use std::io::{Read, Write, stdin, stdout};
+use std::io::{Read, Write, stderr, stdin, stdout};
 use std::string::FromUtf8Error;
 use std::time::SystemTime;
 use thiserror::Error;
@@ -410,7 +410,7 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
 
 fn print_error(matches: &ArgMatches, err: &PrError) {
     if !matches.get_flag(options::NO_FILE_WARNINGS) {
-        eprintln!("{err}");
+        let _ = writeln!(stderr(), "{err}");
     }
 }
 
