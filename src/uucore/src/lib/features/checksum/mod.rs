@@ -417,10 +417,37 @@ impl UError for ChecksumError {
     }
 }
 
+/// Reading mode used to compute digest.
+///
+/// On most linux systems, this is irrelevant, as there is no distinction
+/// between text and binary files. Refer to GNU's cksum documentation for more
+/// information.
+///
+/// As discussed in #9168, we decide to ignore the reading mode to compute the
+/// digest, both on Windows and UNIX. The reason for that is that this is a
+/// legacy feature that is poorly documented and used. This enum is kept
+/// nonetheless to still take into account the flags passed to cksum when
+/// generating untagged lines.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReadingMode {
+    Binary,
+    Text,
+}
+
+impl ReadingMode {
+    #[inline]
+    fn as_char(self) -> char {
+        match self {
+            Self::Binary => '*',
+            Self::Text => ' ',
+        }
+    }
+}
+
 pub fn digest_reader<T: Read>(
     digest: &mut Box<dyn Digest>,
     reader: &mut T,
-    binary: bool,
+    mode: ReadingMode,
 ) -> io::Result<(DigestOutput, usize)> {
     digest.reset();
 
@@ -436,7 +463,7 @@ pub fn digest_reader<T: Read>(
     // `DigestWriter` and only written if the following character is
     // "\n". But when "\r" is the last character read, we need to force
     // it to be written.)
-    let mut digest_writer = DigestWriter::new(digest, binary);
+    let mut digest_writer = DigestWriter::new(digest, mode == ReadingMode::Binary);
     let output_size = io::copy(reader, &mut digest_writer)? as usize;
     digest_writer.finalize();
 
@@ -516,10 +543,7 @@ pub fn sanitize_sha2_sha3_length_str(algo_kind: AlgoKind, length: &str) -> UResu
 pub fn unescape_filename(filename: &[u8]) -> (Vec<u8>, &'static str) {
     let mut unescaped = Vec::with_capacity(filename.len());
     let mut byte_iter = filename.iter().peekable();
-    loop {
-        let Some(byte) = byte_iter.next() else {
-            break;
-        };
+    while let Some(byte) = byte_iter.next() {
         if *byte == b'\\' {
             match byte_iter.next() {
                 Some(b'\\') => unescaped.push(b'\\'),

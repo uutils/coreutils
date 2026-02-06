@@ -1901,7 +1901,7 @@ fn test_skip_overflow() {
 #[cfg(target_os = "linux")]
 fn test_nocache_eof() {
     let (at, mut ucmd) = at_and_ucmd!();
-    at.write_bytes("in.f", &vec![0u8; 1234567]);
+    at.write_bytes("in.f", &vec![0u8; 1_234_567]);
     ucmd.args(&[
         "if=in.f",
         "of=out.f",
@@ -1910,7 +1910,7 @@ fn test_nocache_eof() {
         "status=noxfer",
     ])
     .succeeds();
-    assert_eq!(at.read_bytes("out.f").len(), 1234567);
+    assert_eq!(at.read_bytes("out.f").len(), 1_234_567);
 }
 
 #[test]
@@ -1918,7 +1918,7 @@ fn test_nocache_eof() {
 fn test_nocache_eof_fadvise_zero_length() {
     use std::process::Command;
     let (at, _ucmd) = at_and_ucmd!();
-    at.write_bytes("in.f", &vec![0u8; 1234567]);
+    at.write_bytes("in.f", &vec![0u8; 1_234_567]);
 
     let strace_file = at.plus_as_string("strace.out");
     let result = Command::new("strace")

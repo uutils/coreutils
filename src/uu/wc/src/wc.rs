@@ -335,7 +335,7 @@ impl<T: AsRef<str>> From<T> for TotalWhen {
 }
 
 impl TotalWhen {
-    fn is_total_row_visible(&self, num_inputs: usize) -> bool {
+    fn is_total_row_visible(self, num_inputs: usize) -> bool {
         match self {
             Self::Auto => num_inputs > 1,
             Self::Always | Self::Only => true,
@@ -846,14 +846,14 @@ fn hardware_feature_label(feature: HardwareFeature) -> &'static str {
     }
 }
 
-fn is_simd_runtime_feature(feature: &HardwareFeature) -> bool {
+fn is_simd_runtime_feature(feature: HardwareFeature) -> bool {
     matches!(
         feature,
         HardwareFeature::Avx2 | HardwareFeature::Sse2 | HardwareFeature::Asimd
     )
 }
 
-fn is_simd_debug_feature(feature: &HardwareFeature) -> bool {
+fn is_simd_debug_feature(feature: HardwareFeature) -> bool {
     matches!(
         feature,
         HardwareFeature::Avx512
@@ -872,16 +872,16 @@ struct WcSimdFeatures {
 fn wc_simd_features(policy: &SimdPolicy) -> WcSimdFeatures {
     let enabled = policy
         .iter_features()
-        .filter(is_simd_runtime_feature)
+        .filter(|v| is_simd_runtime_feature(*v))
         .collect();
 
     let mut disabled = Vec::new();
     let mut disabled_runtime = Vec::new();
     for feature in policy.disabled_features() {
-        if is_simd_debug_feature(&feature) {
+        if is_simd_debug_feature(feature) {
             disabled.push(feature);
         }
-        if is_simd_runtime_feature(&feature) {
+        if is_simd_runtime_feature(feature) {
             disabled_runtime.push(feature);
         }
     }
@@ -895,12 +895,10 @@ fn wc_simd_features(policy: &SimdPolicy) -> WcSimdFeatures {
 
 pub(crate) fn wc_simd_allowed(policy: &SimdPolicy) -> bool {
     let disabled_features = policy.disabled_features();
-    if disabled_features.iter().any(is_simd_runtime_feature) {
+    if disabled_features.into_iter().any(is_simd_runtime_feature) {
         return false;
     }
-    policy
-        .iter_features()
-        .any(|feature| is_simd_runtime_feature(&feature))
+    policy.iter_features().any(is_simd_runtime_feature)
 }
 
 fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {

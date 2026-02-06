@@ -351,21 +351,21 @@ fn print_it(output: &OutputType, flags: Flags, width: usize, precision: Precisio
     // A sign (+ or -) should always be placed before a number produced by a signed conversion.
     // By default, a sign  is  used only for negative numbers.
     // A + overrides a space if both are used.
-    let padding_char = determine_padding_char(&flags);
+    let padding_char = determine_padding_char(flags);
 
     match output {
-        OutputType::Str(s) => print_str(s, &flags, width, precision),
-        OutputType::OsStr(s) => print_os_str(s, &flags, width, precision),
-        OutputType::Integer(num) => print_integer(*num, &flags, width, precision, padding_char),
-        OutputType::Unsigned(num) => print_unsigned(*num, &flags, width, precision, padding_char),
+        OutputType::Str(s) => print_str(s, flags, width, precision),
+        OutputType::OsStr(s) => print_os_str(s, flags, width, precision),
+        OutputType::Integer(num) => print_integer(*num, flags, width, precision, padding_char),
+        OutputType::Unsigned(num) => print_unsigned(*num, flags, width, precision, padding_char),
         OutputType::UnsignedOct(num) => {
-            print_unsigned_oct(*num, &flags, width, precision, padding_char);
+            print_unsigned_oct(*num, flags, width, precision, padding_char);
         }
         OutputType::UnsignedHex(num) => {
-            print_unsigned_hex(*num, &flags, width, precision, padding_char);
+            print_unsigned_hex(*num, flags, width, precision, padding_char);
         }
         OutputType::Float(num) => {
-            print_float(*num, &flags, width, precision, padding_char);
+            print_float(*num, flags, width, precision, padding_char);
         }
         OutputType::Unknown => print!("?"),
     }
@@ -380,7 +380,7 @@ fn print_it(output: &OutputType, flags: Flags, width: usize, precision: Precisio
 /// # Returns
 ///
 /// * Padding - An instance of the Padding enum representing the padding character.
-fn determine_padding_char(flags: &Flags) -> Padding {
+fn determine_padding_char(flags: Flags) -> Padding {
     if flags.zero && !flags.left {
         Padding::Zero
     } else {
@@ -396,7 +396,7 @@ fn determine_padding_char(flags: &Flags) -> Padding {
 /// * `flags` - A reference to the Flags struct containing formatting flags.
 /// * `width` - The width of the field for the printed string.
 /// * `precision` - How many digits of precision, if any.
-fn print_str(s: &str, flags: &Flags, width: usize, precision: Precision) {
+fn print_str(s: &str, flags: Flags, width: usize, precision: Precision) {
     let s = match precision {
         Precision::Number(p) if p < s.len() => &s[..p],
         _ => s,
@@ -415,7 +415,7 @@ fn print_str(s: &str, flags: &Flags, width: usize, precision: Precision) {
 /// * `flags` - A reference to the Flags struct containing formatting flags.
 /// * `width` - The width of the field for the printed string.
 /// * `precision` - How many digits of precision, if any.
-fn print_os_str(s: &OsString, flags: &Flags, width: usize, precision: Precision) {
+fn print_os_str(s: &OsString, flags: Flags, width: usize, precision: Precision) {
     #[cfg(unix)]
     {
         use std::os::unix::ffi::OsStrExt;
@@ -452,7 +452,7 @@ fn quote_file_name(file_name: &str, quoting_style: &QuotingStyle) -> String {
 fn get_quoted_file_name(
     display_name: &str,
     file: &OsString,
-    file_type: &FileType,
+    file_type: FileType,
     from_user: bool,
 ) -> Result<String, i32> {
     let quoting_style = env::var("QUOTING_STYLE")
@@ -536,7 +536,7 @@ fn process_token_filesystem(t: &Token, meta: &StatFs, display_name: &str) {
 /// * `padding_char` - The padding character as determined by `determine_padding_char`.
 fn print_integer(
     num: i64,
-    flags: &Flags,
+    flags: Flags,
     width: usize,
     precision: Precision,
     padding_char: Padding,
@@ -601,7 +601,7 @@ fn precision_trunc(num: f64, precision: Precision) -> String {
     }
 }
 
-fn print_float(num: f64, flags: &Flags, width: usize, precision: Precision, padding_char: Padding) {
+fn print_float(num: f64, flags: Flags, width: usize, precision: Precision, padding_char: Padding) {
     let prefix = if flags.sign {
         "+"
     } else if flags.space {
@@ -625,7 +625,7 @@ fn print_float(num: f64, flags: &Flags, width: usize, precision: Precision, padd
 /// * `padding_char` - The padding character as determined by `determine_padding_char`.
 fn print_unsigned(
     num: u64,
-    flags: &Flags,
+    flags: Flags,
     width: usize,
     precision: Precision,
     padding_char: Padding,
@@ -655,7 +655,7 @@ fn print_unsigned(
 /// * `padding_char` - The padding character as determined by `determine_padding_char`.
 fn print_unsigned_oct(
     num: u32,
-    flags: &Flags,
+    flags: Flags,
     width: usize,
     precision: Precision,
     padding_char: Padding,
@@ -680,7 +680,7 @@ fn print_unsigned_oct(
 /// * `padding_char` - The padding character as determined by `determine_padding_char`.
 fn print_unsigned_hex(
     num: u64,
-    flags: &Flags,
+    flags: Flags,
     width: usize,
     precision: Precision,
     padding_char: Padding,
@@ -1015,7 +1015,7 @@ impl Stater {
         meta: &Metadata,
         display_name: &str,
         file: &OsString,
-        file_type: &FileType,
+        file_type: FileType,
         from_user: bool,
         #[cfg(feature = "selinux")] follow_symbolic_links: bool,
         #[cfg(not(feature = "selinux"))] _: bool,
@@ -1230,7 +1230,7 @@ impl Stater {
                             &meta,
                             &display_name,
                             &file,
-                            &file_type,
+                            file_type,
                             self.from_user,
                             follow_symbolic_links,
                         ) {

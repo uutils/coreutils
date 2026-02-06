@@ -7,8 +7,8 @@
 use jiff::{Timestamp, ToSpan};
 use regex::Regex;
 use std::fs::metadata;
-use uutests::new_ucmd;
 use uutests::util::UCommand;
+use uutests::{at_and_ucmd, new_ucmd};
 
 const DATE_TIME_FORMAT_DEFAULT: &str = "%Y-%m-%d %H:%M";
 
@@ -663,6 +663,96 @@ fn test_form_feed_followed_by_new_line() {
     // Command line: `printf "\f\nabc" | pr`.
     new_ucmd!()
         .pipe_in("\x0c\nabc")
+        .succeeds()
+        .stdout_matches(&regex);
+}
+
+#[test]
+fn test_columns() {
+    let whitespace = " ".repeat(50);
+    let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
+    let header = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\n");
+    // TODO Our output still does not match the behavior of GNU
+    // pr. The correct output should be:
+    //
+    //     "a\t\t\t\t    b\n";
+    //
+    let data = "a                                  \tb                                  \n";
+    let blank_lines_60 = "\n".repeat(60);
+    let pattern = format!("{header}{data}{blank_lines_60}");
+    let regex = Regex::new(&pattern).unwrap();
+
+    // Command line: `printf "a\nb\n" | pr -2`.
+    new_ucmd!()
+        .arg("-2")
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_matches(&regex);
+}
+
+#[test]
+fn test_merge() {
+    // Create the two files to merge.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "a\n");
+    at.write("g", "b\n");
+
+    let whitespace = " ".repeat(50);
+    let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
+    let header = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\n");
+    // TODO Our output still does not match the behavior of GNU
+    // pr. The correct output should be:
+    //
+    //     "a\t\t\t\t    b\n";
+    //
+    // and the blank lines should actually be empty lines.
+    let data = "a                                  \tb                                  \n";
+    let blank_lines_55 =
+        "                                   \t                                   \n".repeat(55);
+    let footer = "\n".repeat(5);
+    let pattern = format!("{header}{data}{blank_lines_55}{footer}");
+    let regex = Regex::new(&pattern).unwrap();
+
+    // Command line: `(echo "a" > f; echo "b" > g; pr -m f g)`.
+    ucmd.args(&["-m", "f", "g"])
+        .succeeds()
+        .stdout_matches(&regex);
+}
+
+#[test]
+fn test_merge_one_long_one_short() {
+    // Create the two files to merge.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "a\na\n");
+    at.write("g", "b\n");
+
+    // Page 1 should have the first line of `f` and the first line of
+    // `b` side-by-side.
+    let whitespace = " ".repeat(50);
+    let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
+    let header = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\n");
+    let data = "a                                  \tb                                  \n";
+    let footer = "\n".repeat(5);
+    let page1 = format!("{header}{data}{footer}");
+
+    // Page 2 should have just the second line of `f`.
+    let header = format!("\n\n{datetime_pattern}{whitespace}Page 2\n\n\n");
+    let data = "a                                  \t                                   \n";
+    let page2 = format!("{header}{data}{footer}");
+
+    let pattern = format!("{page1}{page2}");
+    let regex = Regex::new(&pattern).unwrap();
+
+    // Command line:
+    //
+    //     printf "a\na\n" > f
+    //     printf "b\n" > g
+    //     pr -l11 -m f g
+    //
+    // The line length of 11 leaves room for a 5-line header, a 5-line
+    // footer, and one line of data from the input files. The extra
+    // line from the file `f` will be on the second page.
+    ucmd.args(&["-l", "11", "-m", "f", "g"])
         .succeeds()
         .stdout_matches(&regex);
 }

@@ -33,7 +33,7 @@ impl Incomplete {
         }
     }
 
-    pub fn is_empty(&self) -> bool {
+    pub fn is_empty(self) -> bool {
         self.buffer_len == 0
     }
 

@@ -14,7 +14,6 @@
 [![dependency status](https://deps.rs/repo/github/uutils/coreutils/status.svg)](https://deps.rs/repo/github/uutils/coreutils)
 
 [![CodeCov](https://codecov.io/gh/uutils/coreutils/branch/main/graph/badge.svg)](https://codecov.io/gh/uutils/coreutils)
-![MSRV](https://img.shields.io/badge/MSRV-1.85.0-brightgreen)
 [![Weblate](https://hosted.weblate.org/widget/rust-coreutils/svg-badge.svg)](https://hosted.weblate.org/projects/rust-coreutils/)
 
 </div>
@@ -76,7 +75,7 @@ Use [weblate/rust-coreutils](https://hosted.weblate.org/projects/rust-coreutils/
 ### Rust Version
 
 uutils follows Rust's release channels and is tested against stable, beta and
-nightly. The current Minimum Supported Rust Version (MSRV) is `1.85.0`.
+nightly.
 
 ## Building
 
@@ -119,7 +118,7 @@ cargo build --release --features windows
 cargo build --release --features unix
 ```
 
-To build SELinux-specific features, including `chcon` and `runcon`, ensure that `libselinux` 
+To build SELinux-specific features, including `chcon` and `runcon`, ensure that `libselinux`
 and `libclang` are installed on your system. Then, run the following command:
 ```
 cargo build --release --features unix,feat_selinux

@@ -14,7 +14,9 @@ use std::io::{self, BufReader, Read, Write, stderr, stdin};
 
 use os_display::Quotable;
 
-use crate::checksum::{AlgoKind, ChecksumError, SizedAlgoKind, digest_reader, unescape_filename};
+use crate::checksum::{
+    AlgoKind, ChecksumError, ReadingMode, SizedAlgoKind, digest_reader, unescape_filename,
+};
 use crate::error::{FromIo, UError, UIoError, UResult, USimpleError};
 use crate::quoting_style::{QuotingStyle, locale_aware_escape_name};
 use crate::sum::DigestOutput;
@@ -215,7 +217,7 @@ impl FileChecksumResult {
 
     /// The cli options might prevent to display on the outcome of the
     /// comparison on STDOUT.
-    fn can_display(&self, verbose: ChecksumVerbose) -> bool {
+    fn can_display(self, verbose: ChecksumVerbose) -> bool {
         match self {
             Self::Ok => verbose.over_quiet(),
             Self::Failed => verbose.over_status(),
@@ -679,28 +681,28 @@ fn compute_and_check_digest_from_file(
     // Read the file and calculate the checksum
     let mut digest = algo.create_digest();
 
-    // TODO: improve function signature to use ReadingMode instead of binary bool
     // Set binary to false because --binary is not supported with --check
 
-    let (calculated_checksum, _) = match digest_reader(&mut digest, &mut file_reader, false) {
-        Ok(result) => result,
-        Err(err) => {
-            show!(err.map_err_context(|| {
-                locale_aware_escape_name(&real_filename_to_check, QuotingStyle::SHELL_ESCAPE)
-                    .to_string_lossy()
-                    .to_string()
-            }));
+    let (calculated_checksum, _) =
+        match digest_reader(&mut digest, &mut file_reader, ReadingMode::Text) {
+            Ok(result) => result,
+            Err(err) => {
+                show!(err.map_err_context(|| {
+                    locale_aware_escape_name(&real_filename_to_check, QuotingStyle::SHELL_ESCAPE)
+                        .to_string_lossy()
+                        .to_string()
+                }));
 
-            write_file_report(
-                io::stdout(),
-                filename,
-                FileChecksumResult::CantOpen,
-                prefix,
-                opts.verbose,
-            );
-            return Err(LineCheckError::CantOpenFile);
-        }
-    };
+                write_file_report(
+                    io::stdout(),
+                    filename,
+                    FileChecksumResult::CantOpen,
+                    prefix,
+                    opts.verbose,
+                );
+                return Err(LineCheckError::CantOpenFile);
+            }
+        };
 
     // Do the checksum validation
     let checksum_correct = match calculated_checksum {

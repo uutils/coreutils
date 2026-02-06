@@ -6,7 +6,7 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{self, BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
@@ -122,13 +122,41 @@ impl<T: AsRef<str>> From<T> for NumberFormat {
 impl NumberFormat {
     /// Turns a line number into a `String` with at least `min_width` chars,
     /// formatted according to the `NumberFormat`s variant.
-    fn format(&self, number: i64, min_width: usize) -> String {
+    fn format_to<W: Write>(&self, writer: &mut W, number: i64, min_width: usize) -> io::Result<()> {
+        let mut buffer = itoa::Buffer::new();
+
         match self {
-            Self::Left => format!("{number:<min_width$}"),
-            Self::Right => format!("{number:>min_width$}"),
-            Self::RightZero if number < 0 => format!("-{0:0>1$}", number.abs(), min_width - 1),
-            Self::RightZero => format!("{number:0>min_width$}"),
+            Self::Left => {
+                let num = buffer.format(number);
+                writer.write_all(num.as_bytes())?;
+                for _ in num.len()..min_width {
+                    writer.write_all(b" ")?;
+                }
+            }
+            Self::Right => {
+                let num = buffer.format(number);
+                for _ in num.len()..min_width {
+                    writer.write_all(b" ")?;
+                }
+                writer.write_all(num.as_bytes())?;
+            }
+            Self::RightZero if number < 0 => {
+                writer.write_all(b"-")?;
+                let num = buffer.format(number.abs());
+                for _ in num.len()..min_width.saturating_sub(1) {
+                    writer.write_all(b"0")?;
+                }
+                writer.write_all(num.as_bytes())?;
+            }
+            Self::RightZero => {
+                let num = buffer.format(number);
+                for _ in num.len()..min_width {
+                    writer.write_all(b"0")?;
+                }
+                writer.write_all(num.as_bytes())?;
+            }
         }
+        Ok(())
     }
 }
 
@@ -346,8 +374,7 @@ pub fn uu_app() -> Command {
 }
 
 /// Helper to write: prefix bytes + line bytes + newline
-fn write_line(writer: &mut impl Write, prefix: &[u8], line: &[u8]) -> std::io::Result<()> {
-    writer.write_all(prefix)?;
+fn write_line(writer: &mut impl Write, line: &[u8]) -> io::Result<()> {
     writer.write_all(line)?;
     writeln!(writer)
 }
@@ -416,19 +443,22 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
                         translate!("nl-error-line-number-overflow"),
                     ));
                 };
-                let mut prefix = settings
+                settings
                     .number_format
-                    .format(line_number, settings.number_width)
-                    .into_bytes();
-                prefix.extend_from_slice(settings.number_separator.as_encoded_bytes());
-                write_line(&mut writer, &prefix, &line)
+                    .format_to(&mut writer, line_number, settings.number_width)
+                    .map_err_context(|| translate!("nl-error-could-not-write"))?;
+                writer
+                    .write_all(settings.number_separator.as_encoded_bytes())
                     .map_err_context(|| translate!("nl-error-could-not-write"))?;
                 stats.line_number = line_number.checked_add(settings.line_increment);
             } else {
                 let prefix = " ".repeat(settings.number_width + 1);
-                write_line(&mut writer, prefix.as_bytes(), &line)
+                writer
+                    .write_all(prefix.as_bytes())
                     .map_err_context(|| translate!("nl-error-could-not-write"))?;
             }
+            write_line(&mut writer, &line)
+                .map_err_context(|| translate!("nl-error-could-not-write"))?;
         }
     }
     writer
@@ -442,21 +472,26 @@ mod test {
     use super::*;
 
     #[test]
-    #[allow(clippy::cognitive_complexity)]
     fn test_format() {
-        assert_eq!(NumberFormat::Left.format(12, 1), "12");
-        assert_eq!(NumberFormat::Left.format(-12, 1), "-12");
-        assert_eq!(NumberFormat::Left.format(12, 4), "12  ");
-        assert_eq!(NumberFormat::Left.format(-12, 4), "-12 ");
+        let helper = |fmt: NumberFormat, num: i64, width: usize| -> String {
+            let mut buf = Vec::new();
+            fmt.format_to(&mut buf, num, width).unwrap();
+            String::from_utf8(buf).unwrap()
+        };
 
-        assert_eq!(NumberFormat::Right.format(12, 1), "12");
-        assert_eq!(NumberFormat::Right.format(-12, 1), "-12");
-        assert_eq!(NumberFormat::Right.format(12, 4), "  12");
-        assert_eq!(NumberFormat::Right.format(-12, 4), " -12");
+        assert_eq!(helper(NumberFormat::Left, 12, 1), "12");
+        assert_eq!(helper(NumberFormat::Left, -12, 1), "-12");
+        assert_eq!(helper(NumberFormat::Left, 12, 4), "12  ");
+        assert_eq!(helper(NumberFormat::Left, -12, 4), "-12 ");
 
-        assert_eq!(NumberFormat::RightZero.format(12, 1), "12");
-        assert_eq!(NumberFormat::RightZero.format(-12, 1), "-12");
-        assert_eq!(NumberFormat::RightZero.format(12, 4), "0012");
-        assert_eq!(NumberFormat::RightZero.format(-12, 4), "-012");
+        assert_eq!(helper(NumberFormat::Right, 12, 1), "12");
+        assert_eq!(helper(NumberFormat::Right, -12, 1), "-12");
+        assert_eq!(helper(NumberFormat::Right, 12, 4), "  12");
+        assert_eq!(helper(NumberFormat::Right, -12, 4), " -12");
+
+        assert_eq!(helper(NumberFormat::RightZero, 12, 1), "12");
+        assert_eq!(helper(NumberFormat::RightZero, -12, 1), "-12");
+        assert_eq!(helper(NumberFormat::RightZero, 12, 4), "0012");
+        assert_eq!(helper(NumberFormat::RightZero, -12, 4), "-012");
     }
 }

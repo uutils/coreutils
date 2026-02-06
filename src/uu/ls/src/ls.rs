@@ -262,6 +262,7 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
     const LOCALE_FORMAT: (&str, Option<&str>) = ("%b %e %H:%M", Some("%b %e  %Y"));
 
     // Convert time_styles references to owned String/option.
+    #[expect(clippy::unnecessary_wraps, reason = "internal result helper")]
     fn ok((recent, older): (&str, Option<&str>)) -> Result<(String, Option<String>), LsError> {
         Ok((recent.to_string(), older.map(String::from)))
     }
@@ -2634,7 +2635,7 @@ fn display_additional_leading_info(
     item: &PathData,
     padding: &PaddingCollection,
     config: &Config,
-) -> UResult<String> {
+) -> String {
     let mut result = String::new();
     #[cfg(unix)]
     {
@@ -2661,7 +2662,8 @@ fn display_additional_leading_info(
             write!(result, "{} ", pad_left(&s, padding.block_size)).unwrap();
         }
     }
-    Ok(result)
+
+    result
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -2690,7 +2692,7 @@ fn display_items(
             let should_display_leading_info = config.alloc_size;
 
             if should_display_leading_info {
-                let more_info = display_additional_leading_info(item, &padding_collection, config)?;
+                let more_info = display_additional_leading_info(item, &padding_collection, config);
 
                 write!(state.out, "{more_info}")?;
             }
@@ -2725,7 +2727,7 @@ fn display_items(
 
         for i in items {
             let more_info = if should_display_leading_info {
-                Some(display_additional_leading_info(i, &padding, config)?)
+                Some(display_additional_leading_info(i, &padding, config))
             } else {
                 None
             };
@@ -3577,8 +3579,7 @@ fn get_security_context<'a>(
         };
 
         return uucore::smack::get_smack_label_for_path(&target_path)
-            .map(Cow::Owned)
-            .unwrap_or(Cow::Borrowed(SUBSTITUTE_STRING));
+            .map_or(Cow::Borrowed(SUBSTITUTE_STRING), Cow::Owned);
     }
 
     Cow::Borrowed(SUBSTITUTE_STRING)

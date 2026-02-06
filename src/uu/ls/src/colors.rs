@@ -376,7 +376,7 @@ impl<'a> StyleManager<'a> {
         } else if file_type.is_dir() {
             self.indicator_for_directory(path)
         } else {
-            self.indicator_for_special_file(file_type)
+            self.indicator_for_special_file(*file_type)
         }
     }
 
@@ -478,7 +478,7 @@ impl<'a> StyleManager<'a> {
     }
 
     #[cfg(unix)]
-    fn indicator_for_special_file(&self, file_type: &fs::FileType) -> Option<Indicator> {
+    fn indicator_for_special_file(&self, file_type: fs::FileType) -> Option<Indicator> {
         if file_type.is_fifo() && self.has_indicator_style(Indicator::FIFO) {
             return Some(Indicator::FIFO);
         }
@@ -495,7 +495,7 @@ impl<'a> StyleManager<'a> {
     }
 
     #[cfg(not(unix))]
-    fn indicator_for_special_file(&self, _file_type: &fs::FileType) -> Option<Indicator> {
+    fn indicator_for_special_file(&self, _file_type: fs::FileType) -> Option<Indicator> {
         None
     }
 

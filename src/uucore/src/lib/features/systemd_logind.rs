@@ -580,10 +580,10 @@ impl SystemdUtmpxCompat {
     }
 
     /// Canonical host name
-    pub fn canon_host(&self) -> std::io::Result<String> {
+    pub fn canon_host(&self) -> String {
         // Simple implementation - just return the host as-is
         // Could be enhanced with DNS lookup like the original
-        Ok(self.record.host.clone())
+        self.record.host.clone()
     }
 }
 

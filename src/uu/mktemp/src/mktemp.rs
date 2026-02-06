@@ -399,7 +399,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // Create the temporary file or directory, or simulate creating it.
     let res = if dry_run {
-        dry_exec(&tmpdir, &prefix, rand, &suffix)
+        Ok(dry_exec(&tmpdir, &prefix, rand, &suffix))
     } else {
         exec(&tmpdir, &prefix, rand, &suffix, make_dir)
     };
@@ -483,7 +483,7 @@ pub fn uu_app() -> Command {
         )
 }
 
-fn dry_exec(tmpdir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult<PathBuf> {
+fn dry_exec(tmpdir: &Path, prefix: &str, rand: usize, suffix: &str) -> PathBuf {
     let len = prefix.len() + suffix.len() + rand;
     let mut buf = Vec::with_capacity(len);
     buf.extend(prefix.as_bytes());
@@ -503,8 +503,7 @@ fn dry_exec(tmpdir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult<P
     }
     // We guarantee utf8.
     let buf = String::from_utf8(buf).unwrap();
-    let tmpdir = Path::new(tmpdir).join(buf);
-    Ok(tmpdir)
+    Path::new(tmpdir).join(buf)
 }
 
 /// Create a temporary directory with the given parameters.
@@ -617,7 +616,7 @@ pub fn mktemp(options: &Options) -> UResult<PathBuf> {
 
     // Create the temporary file or directory, or simulate creating it.
     if options.dry_run {
-        dry_exec(&tmpdir, &prefix, rand, &suffix)
+        Ok(dry_exec(&tmpdir, &prefix, rand, &suffix))
     } else {
         exec(&tmpdir, &prefix, rand, &suffix, options.directory)
     }
