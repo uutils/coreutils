@@ -26,7 +26,7 @@ mod prn_int;
 
 use std::cmp;
 use std::fmt::Write;
-use std::io::{BufReader, Read};
+use std::io::{BufReader, Read, Write as IoWrite};
 
 use crate::byteorder_io::ByteOrder;
 use crate::formatter_item_info::FormatWriter;
@@ -246,6 +246,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let clap_matches = uucore::clap_localization::handle_clap_result(clap_opts, &args)?;
 
     let od_options = OdOptions::new(&clap_matches, &args)?;
+    let mut out = std::io::stdout().lock();
 
     // Check if we're in strings mode
     if let Some(min_length) = od_options.string_min_length {
@@ -255,6 +256,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             od_options.read_bytes,
             min_length,
             od_options.radix,
+            &mut out,
         )
     } else {
         let mut input_offset =
@@ -278,7 +280,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             od_options.output_duplicates,
         );
 
-        odfunc(&mut input_offset, &mut input_decoder, &output_info)
+        odfunc(
+            &mut input_offset,
+            &mut input_decoder,
+            &output_info,
+            &mut out,
+        )
     }
 }
 
@@ -490,13 +497,15 @@ pub fn uu_app() -> Command {
 }
 
 /// Loops through the input line by line, calling `print_bytes` to take care of the output.
-fn odfunc<I>(
+fn odfunc<I, W>(
     input_offset: &mut InputOffset,
     input_decoder: &mut InputDecoder<I>,
     output_info: &OutputInfo,
+    out: &mut W,
 ) -> UResult<()>
 where
     I: PeekRead + HasError,
+    W: IoWrite,
 {
     let mut duplicate_line = false;
     let mut previous_bytes: Vec<u8> = Vec::new();
@@ -511,7 +520,7 @@ where
 
                 if length == 0 {
                     if !input_decoder.has_error() {
-                        input_offset.print_final_offset();
+                        input_offset.print_final_offset(out)?;
                     }
                     break;
                 }
@@ -533,7 +542,7 @@ where
                 {
                     if !duplicate_line {
                         duplicate_line = true;
-                        println!("*");
+                        writeln!(out, "*")?;
                     }
                 } else {
                     duplicate_line = false;
@@ -546,14 +555,15 @@ where
                         &input_offset.format_byte_offset(),
                         &memory_decoder,
                         output_info,
-                    );
+                        out,
+                    )?;
                 }
 
                 input_offset.increase_position(length as u64);
             }
             Err(e) => {
                 show_error!("{e}");
-                input_offset.print_final_offset();
+                input_offset.print_final_offset(out)?;
                 return Err(1.into());
             }
         }
@@ -573,6 +583,7 @@ fn extract_strings_from_input(
     read_bytes: Option<u64>,
     min_length: usize,
     radix: Radix,
+    out: &mut impl IoWrite,
 ) -> UResult<()> {
     let inputs = map_input_strings(input_strings);
     let mut mf = MultifileReader::new(inputs);
@@ -580,7 +591,7 @@ fn extract_strings_from_input(
     // Apply skip_bytes by reading and discarding
     let mut skipped = 0u64;
     while skipped < skip_bytes {
-        let to_skip = std::cmp::min(8192, skip_bytes - skipped);
+        let to_skip = cmp::min(8192, skip_bytes - skipped);
         let mut skip_buf = vec![0u8; to_skip as usize];
         match mf.read(&mut skip_buf) {
             Ok(0) => break, // EOF reached
@@ -590,13 +601,13 @@ fn extract_strings_from_input(
     }
 
     // Helper function to format and print a string
-    let print_string = |offset: u64, string: &[u8]| {
+    let mut print_string = |offset: u64, string: &[u8]| -> std::io::Result<()> {
         let string_content = String::from_utf8_lossy(string);
         match radix {
-            Radix::NoPrefix => println!("{string_content}"),
-            Radix::Decimal => println!("{offset:07} {string_content}"),
-            Radix::Hexadecimal => println!("{offset:07x} {string_content}"),
-            Radix::Octal => println!("{offset:07o} {string_content}"),
+            Radix::NoPrefix => writeln!(out, "{string_content}"),
+            Radix::Decimal => writeln!(out, "{offset:07} {string_content}"),
+            Radix::Hexadecimal => writeln!(out, "{offset:07x} {string_content}"),
+            Radix::Octal => writeln!(out, "{offset:07o} {string_content}"),
         }
     };
 
@@ -613,7 +624,7 @@ fn extract_strings_from_input(
                 // Special case: when -N limit is reached with a pending string
                 // that meets min_length, output it even without null terminator
                 if current_string.len() >= min_length {
-                    print_string(string_start_offset, &current_string);
+                    print_string(string_start_offset, &current_string)?;
                 }
                 break;
             }
@@ -636,7 +647,7 @@ fn extract_strings_from_input(
                     // Either null terminator or non-printable character
                     if byte == 0 && current_string.len() >= min_length {
                         // Null terminator found with valid string
-                        print_string(string_start_offset, &current_string);
+                        print_string(string_start_offset, &current_string)?;
                     }
                     current_string.clear();
                 }
@@ -666,7 +677,12 @@ fn extract_strings_from_input(
 }
 
 /// Outputs a single line of input, into one or more lines human readable output.
-fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder, output_info: &OutputInfo) {
+fn print_bytes<W: IoWrite>(
+    prefix: &str,
+    input_decoder: &MemoryDecoder,
+    output_info: &OutputInfo,
+    out: &mut W,
+) -> std::io::Result<()> {
     let mut first = true; // First line of a multi-format raster.
     for f in output_info.spaced_formatters_iter() {
         let mut output_text = String::new();
@@ -720,16 +736,17 @@ fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder, output_info: &Output
         }
 
         if first {
-            print!("{prefix}"); // print offset
+            write!(out, "{prefix}")?; // print offset
             // if printing in multiple formats offset is printed only once
             first = false;
         } else {
             // this takes the space of the file offset on subsequent
             // lines of multi-format rasters.
-            print!("{:>width$}", "", width = prefix.chars().count());
+            write!(out, "{:>width$}", "", width = prefix.chars().count())?;
         }
-        println!("{output_text}");
+        writeln!(out, "{output_text}")?;
     }
+    Ok(())
 }
 
 /// Helper function to convert input strings to InputSource

@@ -10,6 +10,9 @@ sync-error-data-needs-argument = --data needs at least one argument
 sync-error-opening-file = error opening { $file }
 sync-error-no-such-file = error opening { $file }: No such file or directory
 
+# Warning messages
+sync-warning-fcntl-failed = warning: failed to reset O_NONBLOCK flag for { $file }: { $error }
+
 # Windows-specific error messages
 sync-error-flush-file-buffer = failed to flush file buffer
 sync-error-create-volume-handle = failed to create volume handle

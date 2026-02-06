@@ -702,7 +702,7 @@ fn prepend_century(s: &str) -> UResult<String> {
 /// then cc is 20 for years in the range 0 … 68, and 19 for years in 69 … 99.
 /// in order to be compatible with GNU `touch`.
 fn parse_timestamp(s: &str) -> UResult<FileTime> {
-    use format::*;
+    use format::{YYYYMMDDHHMM, YYYYMMDDHHMM_DOT_SS};
 
     let current_year = || Timestamp::now().to_zoned(TimeZone::system()).year();
 
@@ -760,6 +760,7 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
 ///
 /// On Windows, uses `GetFinalPathNameByHandleW` to attempt to get the path
 /// from the stdout handle.
+#[cfg_attr(not(windows), expect(clippy::unnecessary_wraps))]
 fn pathbuf_from_stdout() -> Result<PathBuf, TouchError> {
     #[cfg(all(unix, not(target_os = "android")))]
     {

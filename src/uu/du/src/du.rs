@@ -7,7 +7,7 @@
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::PossibleValue};
 use glob::Pattern;
-use std::collections::HashSet;
+use rustc_hash::FxHashSet as HashSet;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, DirEntry, File, Metadata};
@@ -233,6 +233,10 @@ fn get_blocks(path: &Path, _metadata: &Metadata) -> u64 {
 }
 
 #[cfg(not(windows))]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "fn sig must match on all platforms"
+)]
 fn get_file_info(_path: &Path, metadata: &Metadata) -> Option<FileInfo> {
     Some(FileInfo {
         file_id: metadata.ino() as u128,
@@ -303,6 +307,7 @@ fn safe_du(
     seen_inodes: &mut HashSet<FileInfo>,
     print_tx: &mpsc::Sender<UResult<StatPrintInfo>>,
     parent_fd: Option<&DirFd>,
+    initial_stat: Option<std::io::Result<Stat>>,
 ) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
     // Get initial stat for this path - use DirFd if available to avoid path length issues
     let mut my_stat = if let Some(parent_fd) = parent_fd {
@@ -354,7 +359,12 @@ fn safe_du(
         }
     } else {
         // This is the initial directory - try regular Stat::new first, then fallback to DirFd
-        match Stat::new(path, None, options) {
+        let initial_stat = match initial_stat {
+            Some(s) => s,
+            None => Stat::new(path, None, options),
+        };
+
+        match initial_stat {
             Ok(s) => s,
             Err(_e) => {
                 // Try using our new DirFd method for the root directory
@@ -530,6 +540,7 @@ fn safe_du(
                 seen_inodes,
                 print_tx,
                 Some(&dir_fd),
+                None,
             )?;
 
             if !options.separate_dirs {
@@ -571,7 +582,7 @@ fn du_regular(
     ancestors: Option<&mut HashSet<FileInfo>>,
     symlink_depth: Option<usize>,
 ) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
-    let mut default_ancestors = HashSet::new();
+    let mut default_ancestors = HashSet::default();
     let ancestors = ancestors.unwrap_or(&mut default_ancestors);
     let symlink_depth = symlink_depth.unwrap_or(0);
     // Maximum symlink depth to prevent infinite loops
@@ -952,6 +963,40 @@ fn read_files_from(file_name: &OsStr) -> Result<Vec<PathBuf>, std::io::Error> {
     Ok(paths)
 }
 
+fn get_block_size_arg_index_if_present(matches: &ArgMatches, flag: &str) -> Option<usize> {
+    if matches.get_flag(flag) {
+        // Indices of returns index even if flag is not present, thats why we need to if guard it
+        matches
+            .indices_of(flag)
+            .and_then(|mut indices| indices.next_back())
+    } else {
+        None
+    }
+}
+
+fn handle_block_size_arg_override(matches: &ArgMatches) -> Option<SizeFormat> {
+    let candidates = [
+        (
+            SizeFormat::BlockSize(1),
+            get_block_size_arg_index_if_present(matches, options::BYTES),
+        ),
+        (
+            SizeFormat::BlockSize(1024),
+            get_block_size_arg_index_if_present(matches, options::BLOCK_SIZE_1K),
+        ),
+        (
+            SizeFormat::BlockSize(1024 * 1024),
+            get_block_size_arg_index_if_present(matches, options::BLOCK_SIZE_1M),
+        ),
+    ];
+
+    candidates
+        .into_iter()
+        .filter(|(_, idx)| idx.is_some())
+        .max_by_key(|&(_, idx)| idx.unwrap_or(0))
+        .map(|(size_format, _)| size_format)
+}
+
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -988,7 +1033,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             files.collect()
         } else {
             // Deduplicate while preserving order
-            let mut seen = HashSet::new();
+            let mut seen = HashSet::default();
             files
                 .filter(|path| seen.insert(path.clone()))
                 .collect::<Vec<_>>()
@@ -1007,12 +1052,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         SizeFormat::HumanBinary
     } else if matches.get_flag(options::SI) {
         SizeFormat::HumanDecimal
-    } else if matches.get_flag(options::BYTES) {
-        SizeFormat::BlockSize(1)
-    } else if matches.get_flag(options::BLOCK_SIZE_1K) {
-        SizeFormat::BlockSize(1024)
-    } else if matches.get_flag(options::BLOCK_SIZE_1M) {
-        SizeFormat::BlockSize(1024 * 1024)
+    } else if let Some(size_format) = handle_block_size_arg_override(&matches) {
+        size_format
     } else {
         let block_size_str = matches.get_one::<String>(options::BLOCK_SIZE);
         let block_size = read_block_size(block_size_str.map(AsRef::as_ref))?;
@@ -1081,7 +1122,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let printing_thread = thread::spawn(move || stat_printer.print_stats(&rx));
 
     // Check existence of path provided in argument
-    let mut seen_inodes: HashSet<FileInfo> = HashSet::new();
+    let mut seen_inodes: HashSet<FileInfo> = HashSet::default();
 
     'loop_file: for path in files {
         // Skip if we don't want to ignore anything
@@ -1107,20 +1148,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         #[cfg(not(all(unix, not(target_os = "redox"))))]
         let use_safe_traversal = false;
 
+        // Pre-populate seen_inodes with the starting directory to detect cycles
+        let stat = Stat::new(&path, None, &traversal_options);
+        if let Ok(stat) = stat.as_ref() {
+            if let Some(inode) = stat.inode {
+                if !traversal_options.count_links && seen_inodes.contains(&inode) {
+                    continue 'loop_file;
+                }
+                seen_inodes.insert(inode);
+            }
+        }
+
         if use_safe_traversal {
             // Use safe traversal (Unix except Redox, when not using -L)
             #[cfg(all(unix, not(target_os = "redox")))]
             {
-                // Pre-populate seen_inodes with the starting directory to detect cycles
-                if let Ok(stat) = Stat::new(&path, None, &traversal_options) {
-                    if let Some(inode) = stat.inode {
-                        if !traversal_options.count_links && seen_inodes.contains(&inode) {
-                            continue 'loop_file;
-                        }
-                        seen_inodes.insert(inode);
-                    }
-                }
-
                 match safe_du(
                     &path,
                     &traversal_options,
@@ -1128,6 +1170,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     &mut seen_inodes,
                     &print_tx,
                     None,
+                    Some(stat),
                 ) {
                     Ok(stat) => {
                         print_tx
@@ -1148,13 +1191,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
         } else {
             // Use regular traversal (non-Linux or when -L is used)
-            if let Ok(stat) = Stat::new(&path, None, &traversal_options) {
-                if let Some(inode) = stat.inode {
-                    if !traversal_options.count_links && seen_inodes.contains(&inode) {
-                        continue 'loop_file;
-                    }
-                    seen_inodes.insert(inode);
-                }
+            if let Ok(stat) = stat {
                 let stat = du_regular(
                     stat,
                     &traversal_options,

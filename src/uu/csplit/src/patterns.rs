@@ -71,21 +71,18 @@ impl Iterator for ExecutePatternIter {
     type Item = (Option<usize>, usize);
 
     fn next(&mut self) -> Option<(Option<usize>, usize)> {
-        match self.max {
+        if let Some(m) = self.max {
             // iterate until m is reached
-            Some(m) => {
-                if self.cur == m {
-                    None
-                } else {
-                    self.cur += 1;
-                    Some((self.max, self.cur))
-                }
-            }
-            // no limit, just increment a counter
-            None => {
+            if self.cur == m {
+                None
+            } else {
                 self.cur += 1;
-                Some((None, self.cur))
+                Some((self.max, self.cur))
             }
+        } else {
+            // no limit, just increment a counter
+            self.cur += 1;
+            Some((None, self.cur))
         }
     }
 }

@@ -474,7 +474,7 @@ impl Table {
             .columns
             .iter()
             .enumerate()
-            .map(|(i, col)| Column::min_width(col).max(headers[i].len()))
+            .map(|(i, col)| col.min_width().max(headers[i].len()))
             .collect();
 
         let mut rows = vec![headers.iter().map(Cell::from_string).collect()];
@@ -527,7 +527,7 @@ impl Table {
         let mut alignments = Vec::new();
 
         for column in columns {
-            alignments.push(Column::alignment(column));
+            alignments.push(column.alignment());
         }
 
         alignments
