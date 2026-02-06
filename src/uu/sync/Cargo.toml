@@ -21,7 +21,6 @@ path = "src/sync.rs"
 clap = { workspace = true }
 uucore = { workspace = true, features = ["wide"] }
 fluent = { workspace = true }
-thiserror = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true }

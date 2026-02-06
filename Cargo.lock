@@ -4172,7 +4172,6 @@ dependencies = [
  "clap",
  "fluent",
  "nix",
- "thiserror 2.0.18",
  "uucore",
  "windows-sys 0.61.2",
 ]
