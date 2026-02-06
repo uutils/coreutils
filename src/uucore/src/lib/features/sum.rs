@@ -175,10 +175,10 @@ impl Crc {
         crc_fast::CrcParams::new(
             "CRC-32/CKSUM", // Name
             32,             // Width
-            0x04c11db7,     // Polynomial
-            0x00000000,     // Initial CRC value: 0 (not 0xffffffff)
+            0x04c1_1db7,    // Polynomial
+            0x0000_0000,    // Initial CRC value: 0 (not 0xffffffff)
             false,          // No input reflection (refin)
-            0xffffffff,     // XOR output with 0xffffffff (xorout)
+            0xffff_ffff,    // XOR output with 0xffffffff (xorout)
             0,              // Check value (not used)
         )
     }
@@ -245,7 +245,7 @@ impl Digest for CRC32B {
         let result = self.digest.finalize();
         // crc_fast returns a 64-bit value, but CRC32B should be 32-bit
         // Take the lower 32 bits and convert to big-endian bytes
-        let crc32_value = (result & 0xffffffff) as u32;
+        let crc32_value = (result & 0xffff_ffff) as u32;
         out.copy_from_slice(&crc32_value.to_be_bytes());
     }
 
@@ -601,7 +601,7 @@ mod tests {
         assert_ne!(empty_result, test_result);
 
         // Test known value: "test" should give 3076352578
-        assert_eq!(test_result, 3076352578);
+        assert_eq!(test_result, 3_076_352_578);
     }
 
     #[test]
@@ -653,9 +653,9 @@ mod tests {
         // Test against our CRC implementation values
         // Note: These are the correct values for our POSIX cksum implementation
         let test_cases = [
-            ("", 4294967295_u64),
-            ("a", 1220704766_u64),
-            ("abc", 1219131554_u64),
+            ("", 4_294_967_295_u64),
+            ("a", 1_220_704_766_u64),
+            ("abc", 1_219_131_554_u64),
         ];
 
         for (input, expected) in test_cases {

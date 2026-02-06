@@ -8,7 +8,7 @@ name = "coreutils"
 description = "coreutils ~ GNU coreutils (updated); implemented as universal (cross-platform) utils, written in Rust"
 default-run = "coreutils"
 repository = "https://github.com/uutils/coreutils"
-rust-version = "1.85.0"
+rust-version = "1.88.0"
 version.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -374,8 +374,7 @@ rustc-hash = "2.1.1"
 rust-ini = "0.21.0"
 same-file = "1.0.6"
 self_cell = "1.0.4"
-# FIXME we use the exact version because the new 0.5.3 requires an MSRV of 1.88
-selinux = "=0.5.2"
+selinux = "=0.6.0"
 string-interner = "0.19.0"
 signal-hook = "0.4.1"
 tempfile = "3.15.0"
@@ -643,6 +642,8 @@ unexpected_cfgs = { level = "warn", check-cfg = [
 unused_qualifications = "warn"
 
 [workspace.lints.clippy]
+manual_is_multiple_of = { level = "allow", priority = 127 } # remove me
+collapsible_if = { level = "allow", priority = 127 }        # remove me
 # The counts were generated with this command:
 #   cargo clippy --all-targets --workspace --message-format=json --quiet \
 #     | jq -r '.message.code.code | select(. != null and startswith("clippy::"))' \
@@ -664,18 +665,14 @@ match_same_arms = "allow"                    # 204
 redundant_closure_for_method_calls = "allow" # 125
 cast_possible_truncation = "allow"           # 122
 too_many_lines = "allow"                     # 101
-trivially_copy_pass_by_ref = "allow"         # 84
-single_match_else = "allow"                  # 82
 cast_possible_wrap = "allow"                 # 78
 cast_sign_loss = "allow"                     # 70
 struct_excessive_bools = "allow"             # 68
 cast_precision_loss = "allow"                # 52
 cast_lossless = "allow"                      # 35
-unnecessary_wraps = "allow"                  # 33
 ignored_unit_patterns = "allow"              # 21
 similar_names = "allow"                      # 20
 large_stack_arrays = "allow"                 # 20
-wildcard_imports = "allow"                   # 18
 needless_pass_by_value = "allow"             # 16
 float_cmp = "allow"                          # 12
 items_after_statements = "allow"             # 11
@@ -688,7 +685,6 @@ should_panic_without_expect = "allow"        # 2
 doc_markdown = "allow"
 unused_self = "allow"
 enum_glob_use = "allow"
-unreadable_literal = "allow"
 unnested_or_patterns = "allow"
 implicit_hasher = "allow"
 struct_field_names = "allow"

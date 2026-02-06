@@ -222,6 +222,77 @@ fn test_date_utc_issue_6495() {
 }
 
 #[test]
+fn test_date_utc_with_d_flag() {
+    let cases = [
+        ("2024-01-01 12:00", "+%H:%M %Z", "12:00 UTC\n"),
+        ("2024-06-15 10:30", "+%H:%M %Z", "10:30 UTC\n"),
+        ("2024-12-31 23:59:59", "+%H:%M:%S %Z", "23:59:59 UTC\n"),
+        ("@0", "+%Y-%m-%d %H:%M:%S %Z", "1970-01-01 00:00:00 UTC\n"),
+        ("@3600", "+%H:%M:%S %Z", "01:00:00 UTC\n"),
+        ("@86400", "+%Y-%m-%d %Z", "1970-01-02 UTC\n"),
+        ("2024-06-15 10:30 EDT", "+%H:%M %Z", "14:30 UTC\n"),
+        ("2024-01-15 10:30 EST", "+%H:%M %Z", "15:30 UTC\n"),
+        ("2024-06-15 12:00 PDT", "+%H:%M %Z", "19:00 UTC\n"),
+        ("2024-01-15 12:00 PST", "+%H:%M %Z", "20:00 UTC\n"),
+        ("2024-01-01 12:00 +0000", "+%H:%M %Z", "12:00 UTC\n"),
+        ("2024-01-01 12:00 +0530", "+%H:%M %Z", "06:30 UTC\n"),
+        ("2024-01-01 12:00 -0500", "+%H:%M %Z", "17:00 UTC\n"),
+    ];
+    for (input, fmt, expected) in cases {
+        new_ucmd!()
+            .env("TZ", "America/New_York")
+            .args(&["-u", "-d", input, fmt])
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+#[test]
+fn test_date_utc_vs_local() {
+    let cases = [
+        ("-d", "2024-01-01 12:00", "+%H:%M %Z", "12:00 EST\n"),
+        ("-ud", "2024-01-01 12:00", "+%H:%M %Z", "12:00 UTC\n"),
+        ("-d", "2024-06-15 12:00", "+%H:%M %Z", "12:00 EDT\n"),
+        ("-ud", "2024-06-15 12:00", "+%H:%M %Z", "12:00 UTC\n"),
+        ("-d", "@0", "+%H:%M %Z", "19:00 EST\n"),
+        ("-ud", "@0", "+%H:%M %Z", "00:00 UTC\n"),
+    ];
+    for (flag, date, fmt, expected) in cases {
+        new_ucmd!()
+            .env("TZ", "America/New_York")
+            .args(&[flag, date, fmt])
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+#[test]
+fn test_date_utc_output_formats() {
+    let cases = [
+        ("-I", "2024-06-15"),
+        ("--rfc-3339=seconds", "+00:00"),
+        ("-R", "+0000"),
+    ];
+    for (fmt_flag, expected) in cases {
+        new_ucmd!()
+            .env("TZ", "America/New_York")
+            .args(&["-u", "-d", "2024-06-15 12:00", fmt_flag])
+            .succeeds()
+            .stdout_contains(expected);
+    }
+}
+
+#[test]
+fn test_date_utc_stdin() {
+    new_ucmd!()
+        .env("TZ", "America/New_York")
+        .args(&["-u", "-f", "-", "+%H:%M %Z"])
+        .pipe_in("2024-01-01 12:00\n2024-06-15 18:30\n")
+        .succeeds()
+        .stdout_is("12:00 UTC\n18:30 UTC\n");
+}
+
+#[test]
 fn test_date_format_y() {
     let scene = TestScenario::new(util_name!());
 
