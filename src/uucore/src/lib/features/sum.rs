@@ -97,6 +97,12 @@ impl Blake2b {
     }
 }
 
+impl Default for Blake2b {
+    fn default() -> Self {
+        Self::with_output_bytes(Self::DEFAULT_BYTE_SIZE)
+    }
+}
+
 impl Digest for Blake2b {
     fn hash_update(&mut self, input: &[u8]) {
         self.digest.update(input);
@@ -116,13 +122,8 @@ impl Digest for Blake2b {
     }
 }
 
+#[derive(Default)]
 pub struct Blake3(blake3::Hasher);
-
-impl Blake3 {
-    pub fn new() -> Self {
-        Self(blake3::Hasher::new())
-    }
-}
 
 impl Digest for Blake3 {
     fn hash_update(&mut self, input: &[u8]) {
@@ -135,7 +136,7 @@ impl Digest for Blake3 {
     }
 
     fn reset(&mut self) {
-        *self = Self::new();
+        *self = Self::default();
     }
 
     fn output_bits(&self) -> usize {
@@ -143,13 +144,8 @@ impl Digest for Blake3 {
     }
 }
 
+#[derive(Default)]
 pub struct Sm3(sm3::Sm3);
-
-impl Sm3 {
-    pub fn new() -> Self {
-        Self(<sm3::Sm3 as sm3::Digest>::new())
-    }
-}
 
 impl Digest for Sm3 {
     fn hash_update(&mut self, input: &[u8]) {
@@ -161,7 +157,7 @@ impl Digest for Sm3 {
     }
 
     fn reset(&mut self) {
-        *self = Self::new();
+        *self = Self::default();
     }
 
     fn output_bits(&self) -> usize {
@@ -188,8 +184,10 @@ impl Crc {
             0,              // Check value (not used)
         )
     }
+}
 
-    pub fn new() -> Self {
+impl Default for Crc {
+    fn default() -> Self {
         Self {
             digest: crc_fast::Digest::new_with_params(Self::get_posix_cksum_params()),
             size: 0,
@@ -236,8 +234,8 @@ pub struct CRC32B {
     digest: crc_fast::Digest,
 }
 
-impl CRC32B {
-    pub fn new() -> Self {
+impl Default for CRC32B {
+    fn default() -> Self {
         Self {
             digest: crc_fast::Digest::new(crc_fast::CrcAlgorithm::Crc32IsoHdlc),
         }
@@ -272,14 +270,9 @@ impl Digest for CRC32B {
     }
 }
 
+#[derive(Default)]
 pub struct Bsd {
     state: u16,
-}
-
-impl Bsd {
-    pub fn new() -> Self {
-        Self { state: 0 }
-    }
 }
 
 impl Digest for Bsd {
@@ -301,7 +294,7 @@ impl Digest for Bsd {
     }
 
     fn reset(&mut self) {
-        *self = Self::new();
+        *self = Self::default();
     }
 
     fn output_bits(&self) -> usize {
@@ -309,14 +302,9 @@ impl Digest for Bsd {
     }
 }
 
+#[derive(Default)]
 pub struct SysV {
     state: u32,
-}
-
-impl SysV {
-    pub fn new() -> Self {
-        Self { state: 0 }
-    }
 }
 
 impl Digest for SysV {
@@ -339,7 +327,7 @@ impl Digest for SysV {
     }
 
     fn reset(&mut self) {
-        *self = Self::new();
+        *self = Self::default();
     }
 
     fn output_bits(&self) -> usize {
@@ -350,8 +338,8 @@ impl Digest for SysV {
 // Implements the Digest trait for sha2 / sha3 algorithms with fixed output
 macro_rules! impl_digest_common {
     ($algo_type: ty, $size: literal) => {
-        impl $algo_type {
-            pub fn new() -> Self {
+        impl Default for $algo_type {
+            fn default() -> Self {
                 Self(Default::default())
             }
         }
@@ -365,7 +353,7 @@ macro_rules! impl_digest_common {
             }
 
             fn reset(&mut self) {
-                *self = Self::new();
+                *self = Self::default();
             }
 
             fn output_bits(&self) -> usize {
@@ -386,6 +374,11 @@ macro_rules! impl_digest_shake {
                     digest: Default::default(),
                     bit_size: bits,
                 }
+            }
+        }
+        impl Default for $algo_type {
+            fn default() -> Self {
+                Self::with_output_bits(Self::DEFAULT_BIT_SIZE)
             }
         }
         impl Digest for $algo_type {
@@ -600,8 +593,8 @@ mod tests {
     #[test]
     fn test_crc_basic_functionality() {
         // Test that our CRC implementation works with basic functionality
-        let mut crc1 = Crc::new();
-        let mut crc2 = Crc::new();
+        let mut crc1 = Crc::default();
+        let mut crc2 = Crc::default();
 
         // Same input should give same output
         crc1.hash_update(b"test");
@@ -617,7 +610,7 @@ mod tests {
 
     #[test]
     fn test_crc_digest_basic() {
-        let mut crc = Crc::new();
+        let mut crc = Crc::default();
 
         // Test empty input
         let mut output = [0u8; 8];
@@ -625,7 +618,7 @@ mod tests {
         let empty_result = u64::from_ne_bytes(output);
 
         // Reset and test with "test" string
-        let mut crc = Crc::new();
+        let mut crc = Crc::default();
         crc.hash_update(b"test");
         crc.hash_finalize(&mut output);
         let test_result = u64::from_ne_bytes(output);
@@ -639,8 +632,8 @@ mod tests {
 
     #[test]
     fn test_crc_digest_incremental() {
-        let mut crc1 = Crc::new();
-        let mut crc2 = Crc::new();
+        let mut crc1 = Crc::default();
+        let mut crc2 = Crc::default();
 
         // Test that processing in chunks gives same result as all at once
         let data = b"Hello, World! This is a test string for CRC computation.";
@@ -665,13 +658,13 @@ mod tests {
         // Test that our optimized slice-by-8 gives same results as byte-by-byte
         let test_data = b"This is a longer test string to verify slice-by-8 optimization works correctly with various data sizes including remainders.";
 
-        let mut crc_optimized = Crc::new();
+        let mut crc_optimized = Crc::default();
         crc_optimized.hash_update(test_data);
         let mut output_opt = [0u8; 8];
         crc_optimized.hash_finalize(&mut output_opt);
 
         // Create a reference implementation using hash_update
-        let mut crc_reference = Crc::new();
+        let mut crc_reference = Crc::default();
         for &byte in test_data {
             crc_reference.hash_update(&[byte]);
         }
@@ -692,7 +685,7 @@ mod tests {
         ];
 
         for (input, expected) in test_cases {
-            let mut crc = Crc::new();
+            let mut crc = Crc::default();
             crc.hash_update(input.as_bytes());
             let mut output = [0u8; 8];
             crc.hash_finalize(&mut output);
@@ -704,14 +697,14 @@ mod tests {
 
     #[test]
     fn test_crc_hash_update_edge_cases() {
-        let mut crc = Crc::new();
+        let mut crc = Crc::default();
 
         // Test with data that's not a multiple of 8 bytes
         let data7 = b"1234567"; // 7 bytes
         crc.hash_update(data7);
 
         let data9 = b"123456789"; // 9 bytes
-        let mut crc2 = Crc::new();
+        let mut crc2 = Crc::default();
         crc2.hash_update(data9);
 
         // Should not panic and should produce valid results

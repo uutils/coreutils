@@ -324,31 +324,31 @@ impl SizedAlgoKind {
     pub fn create_digest(&self) -> Box<dyn Digest + 'static> {
         use ShaLength::*;
         match self {
-            Self::Sysv => Box::new(SysV::new()),
-            Self::Bsd => Box::new(Bsd::new()),
-            Self::Crc => Box::new(Crc::new()),
-            Self::Crc32b => Box::new(CRC32B::new()),
-            Self::Md5 => Box::new(Md5::new()),
-            Self::Sm3 => Box::new(Sm3::new()),
-            Self::Sha1 => Box::new(Sha1::new()),
-            Self::Blake3 => Box::new(Blake3::new()),
-            Self::Sha2(Len224) => Box::new(Sha224::new()),
-            Self::Sha2(Len256) => Box::new(Sha256::new()),
-            Self::Sha2(Len384) => Box::new(Sha384::new()),
-            Self::Sha2(Len512) => Box::new(Sha512::new()),
-            Self::Sha3(Len224) => Box::new(Sha3_224::new()),
-            Self::Sha3(Len256) => Box::new(Sha3_256::new()),
-            Self::Sha3(Len384) => Box::new(Sha3_384::new()),
-            Self::Sha3(Len512) => Box::new(Sha3_512::new()),
-            Self::Blake2b(len_opt) => Box::new(Blake2b::with_output_bytes(
-                len_opt.unwrap_or(Blake2b::DEFAULT_BYTE_SIZE),
-            )),
-            Self::Shake128(len_opt) => Box::new(Shake128::with_output_bits(
-                len_opt.unwrap_or(Shake128::DEFAULT_BIT_SIZE),
-            )),
-            Self::Shake256(len_opt) => Box::new(Shake256::with_output_bits(
-                len_opt.unwrap_or(Shake256::DEFAULT_BIT_SIZE),
-            )),
+            Self::Sysv => Box::new(SysV::default()),
+            Self::Bsd => Box::new(Bsd::default()),
+            Self::Crc => Box::new(Crc::default()),
+            Self::Crc32b => Box::new(CRC32B::default()),
+            Self::Md5 => Box::new(Md5::default()),
+            Self::Sm3 => Box::new(Sm3::default()),
+            Self::Sha1 => Box::new(Sha1::default()),
+            Self::Blake3 => Box::new(Blake3::default()),
+            Self::Sha2(Len224) => Box::new(Sha224::default()),
+            Self::Sha2(Len256) => Box::new(Sha256::default()),
+            Self::Sha2(Len384) => Box::new(Sha384::default()),
+            Self::Sha2(Len512) => Box::new(Sha512::default()),
+            Self::Sha3(Len224) => Box::new(Sha3_224::default()),
+            Self::Sha3(Len256) => Box::new(Sha3_256::default()),
+            Self::Sha3(Len384) => Box::new(Sha3_384::default()),
+            Self::Sha3(Len512) => Box::new(Sha3_512::default()),
+            Self::Blake2b(len_opt) => {
+                Box::new(len_opt.map(Blake2b::with_output_bytes).unwrap_or_default())
+            }
+            Self::Shake128(len_opt) => {
+                Box::new(len_opt.map(Shake128::with_output_bits).unwrap_or_default())
+            }
+            Self::Shake256(len_opt) => {
+                Box::new(len_opt.map(Shake256::with_output_bits).unwrap_or_default())
+            }
         }
     }
 
