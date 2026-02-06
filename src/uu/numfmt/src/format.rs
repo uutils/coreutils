@@ -723,7 +723,7 @@ pub fn format_and_print_delimited(input: &[u8], options: &NumfmtOptions) -> Resu
     }
 
     output.push(eol);
-    std::io::Write::write_all(&mut std::io::stdout(), &output).map_err(|e| e.to_string())?;
+    Write::write_all(&mut std::io::stdout(), &output).map_err(|e| e.to_string())?;
 
     Ok(())
 }

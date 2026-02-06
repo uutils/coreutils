@@ -7,9 +7,9 @@ use crate::errors::NumfmtError;
 use crate::format::{format_and_print_delimited, format_and_print_whitespace};
 use crate::options::{
     DEBUG, DELIMITER, FIELD, FIELD_DEFAULT, FORMAT, FROM, FROM_DEFAULT, FROM_UNIT,
-    FROM_UNIT_DEFAULT, FormatOptions, HEADER, HEADER_DEFAULT, INVALID, InvalidModes, NUMBER,
-    NumfmtOptions, PADDING, ROUND, RoundMethod, SUFFIX, TO, TO_DEFAULT, TO_UNIT, TO_UNIT_DEFAULT,
-    TransformOptions, UNIT_SEPARATOR, ZERO_TERMINATED,
+    FROM_UNIT_DEFAULT, FormatOptions, GROUPING, HEADER, HEADER_DEFAULT, INVALID, InvalidModes,
+    NUMBER, NumfmtOptions, PADDING, ROUND, RoundMethod, SUFFIX, TO, TO_DEFAULT, TO_UNIT,
+    TO_UNIT_DEFAULT, TransformOptions, UNIT_SEPARATOR, ZERO_TERMINATED,
 };
 use crate::units::{Result, Unit};
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, parser::ValueSource};
