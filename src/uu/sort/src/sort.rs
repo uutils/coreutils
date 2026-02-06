@@ -191,6 +191,8 @@ impl UError for SortError {
     }
 }
 
+// refs are required because this fn is used by thiserror macro
+#[expect(clippy::trivially_copy_pass_by_ref)]
 fn format_disorder(file: &OsString, line_number: &usize, line: &String, silent: &bool) -> String {
     if *silent {
         String::new()
@@ -304,7 +306,7 @@ impl Default for NumericLocaleSettings {
 }
 
 impl NumericLocaleSettings {
-    fn num_info_settings(&self, accept_si_units: bool) -> NumInfoParseSettings {
+    fn num_info_settings(self, accept_si_units: bool) -> NumInfoParseSettings {
         NumInfoParseSettings {
             accept_si_units,
             thousands_separator: self.thousands_sep,
@@ -658,7 +660,7 @@ impl<'a> Line<'a> {
         for (selector, selection) in settings.selectors.iter().map(|selector| {
             (
                 selector,
-                selector.get_selection(line, token_buffer, &settings.numeric_locale),
+                selector.get_selection(line, token_buffer, settings.numeric_locale),
             )
         }) {
             match selection {
@@ -1186,7 +1188,7 @@ impl FieldSelector {
         &self,
         line: &'a [u8],
         tokens: &[Field],
-        numeric_locale: &NumericLocaleSettings,
+        numeric_locale: NumericLocaleSettings,
     ) -> Selection<'a> {
         // `get_range` expects `None` when we don't need tokens and would get confused by an empty vector.
         let tokens = if self.needs_tokens {

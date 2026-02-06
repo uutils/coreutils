@@ -291,13 +291,12 @@ impl SplitWriter<'_> {
     /// Some [`io::Error`] may occur when attempting to write the line.
     fn writeln(&mut self, line: &str) -> io::Result<()> {
         if !self.dev_null {
-            match self.current_writer {
-                Some(ref mut current_writer) => {
-                    let bytes = line.as_bytes();
-                    current_writer.write_all(bytes)?;
-                    self.size += bytes.len();
-                }
-                None => panic!("{}", translate!("csplit-write-split-not-created")),
+            if let Some(ref mut current_writer) = self.current_writer {
+                let bytes = line.as_bytes();
+                current_writer.write_all(bytes)?;
+                self.size += bytes.len();
+            } else {
+                panic!("{}", translate!("csplit-write-split-not-created"))
             }
         }
         Ok(())
