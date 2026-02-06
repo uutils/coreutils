@@ -59,9 +59,6 @@ impl DigestOutput {
 }
 
 pub trait Digest {
-    fn new() -> Self
-    where
-        Self: Sized;
     fn hash_update(&mut self, input: &[u8]);
     fn hash_finalize(&mut self, out: &mut [u8]);
     fn reset(&mut self);
@@ -79,31 +76,34 @@ pub trait Digest {
 
 /// first element of the tuple is the blake2b state
 /// second is the number of output bits
-pub struct Blake2b(blake2b_simd::State, usize);
+pub struct Blake2b {
+    digest: blake2b_simd::State,
+    bit_size: usize,
+}
 
 impl Blake2b {
+    pub const DEFAULT_BYTE_SIZE: usize = 64;
+
     /// Return a new Blake2b instance with a custom output bytes length
     pub fn with_output_bytes(output_bytes: usize) -> Self {
         let mut params = blake2b_simd::Params::new();
         params.hash_length(output_bytes);
 
         let state = params.to_state();
-        Self(state, output_bytes * 8)
+        Self {
+            digest: state,
+            bit_size: output_bytes * 8,
+        }
     }
 }
 
 impl Digest for Blake2b {
-    fn new() -> Self {
-        // by default, Blake2b output is 512 bits long (= 64B)
-        Self::with_output_bytes(64)
-    }
-
     fn hash_update(&mut self, input: &[u8]) {
-        self.0.update(input);
+        self.digest.update(input);
     }
 
     fn hash_finalize(&mut self, out: &mut [u8]) {
-        let hash_result = &self.0.finalize();
+        let hash_result = &self.digest.finalize();
         out.copy_from_slice(hash_result.as_bytes());
     }
 
@@ -112,16 +112,19 @@ impl Digest for Blake2b {
     }
 
     fn output_bits(&self) -> usize {
-        self.1
+        self.bit_size
     }
 }
 
 pub struct Blake3(blake3::Hasher);
-impl Digest for Blake3 {
-    fn new() -> Self {
+
+impl Blake3 {
+    pub fn new() -> Self {
         Self(blake3::Hasher::new())
     }
+}
 
+impl Digest for Blake3 {
     fn hash_update(&mut self, input: &[u8]) {
         self.0.update(input);
     }
@@ -141,11 +144,14 @@ impl Digest for Blake3 {
 }
 
 pub struct Sm3(sm3::Sm3);
-impl Digest for Sm3 {
-    fn new() -> Self {
+
+impl Sm3 {
+    pub fn new() -> Self {
         Self(<sm3::Sm3 as sm3::Digest>::new())
     }
+}
 
+impl Digest for Sm3 {
     fn hash_update(&mut self, input: &[u8]) {
         <sm3::Sm3 as sm3::Digest>::update(&mut self.0, input);
     }
@@ -182,16 +188,16 @@ impl Crc {
             0,              // Check value (not used)
         )
     }
-}
 
-impl Digest for Crc {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             digest: crc_fast::Digest::new_with_params(Self::get_posix_cksum_params()),
             size: 0,
         }
     }
+}
 
+impl Digest for Crc {
     fn hash_update(&mut self, input: &[u8]) {
         self.digest.update(input);
         self.size += input.len();
@@ -230,13 +236,15 @@ pub struct CRC32B {
     digest: crc_fast::Digest,
 }
 
-impl Digest for CRC32B {
-    fn new() -> Self {
+impl CRC32B {
+    pub fn new() -> Self {
         Self {
             digest: crc_fast::Digest::new(crc_fast::CrcAlgorithm::Crc32IsoHdlc),
         }
     }
+}
 
+impl Digest for CRC32B {
     fn hash_update(&mut self, input: &[u8]) {
         self.digest.update(input);
     }
@@ -267,11 +275,14 @@ impl Digest for CRC32B {
 pub struct Bsd {
     state: u16,
 }
-impl Digest for Bsd {
-    fn new() -> Self {
+
+impl Bsd {
+    pub fn new() -> Self {
         Self { state: 0 }
     }
+}
 
+impl Digest for Bsd {
     fn hash_update(&mut self, input: &[u8]) {
         for &byte in input {
             self.state = (self.state >> 1) + ((self.state & 1) << 15);
@@ -301,11 +312,14 @@ impl Digest for Bsd {
 pub struct SysV {
     state: u32,
 }
-impl Digest for SysV {
-    fn new() -> Self {
+
+impl SysV {
+    pub fn new() -> Self {
         Self { state: 0 }
     }
+}
 
+impl Digest for SysV {
     fn hash_update(&mut self, input: &[u8]) {
         for &byte in input {
             self.state = self.state.wrapping_add(u32::from(byte));
@@ -336,11 +350,12 @@ impl Digest for SysV {
 // Implements the Digest trait for sha2 / sha3 algorithms with fixed output
 macro_rules! impl_digest_common {
     ($algo_type: ty, $size: literal) => {
-        impl Digest for $algo_type {
-            fn new() -> Self {
+        impl $algo_type {
+            pub fn new() -> Self {
                 Self(Default::default())
             }
-
+        }
+        impl Digest for $algo_type {
             fn hash_update(&mut self, input: &[u8]) {
                 digest::Digest::update(&mut self.0, input);
             }
@@ -363,11 +378,12 @@ macro_rules! impl_digest_common {
 // Implements the Digest trait for sha2 / sha3 algorithms with variable output
 macro_rules! impl_digest_shake {
     ($algo_type: ty, $output_bits: literal) => {
-        impl Digest for $algo_type {
-            fn new() -> Self {
+        impl $algo_type {
+            pub fn new() -> Self {
                 Self(Default::default())
             }
-
+        }
+        impl Digest for $algo_type {
             fn hash_update(&mut self, input: &[u8]) {
                 digest::Update::update(&mut self.0, input);
             }

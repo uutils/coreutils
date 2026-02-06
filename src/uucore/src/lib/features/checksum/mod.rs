@@ -338,8 +338,9 @@ impl SizedAlgoKind {
             Self::Sha3(Len256) => Box::new(Sha3_256::new()),
             Self::Sha3(Len384) => Box::new(Sha3_384::new()),
             Self::Sha3(Len512) => Box::new(Sha3_512::new()),
-            Self::Blake2b(Some(byte_len)) => Box::new(Blake2b::with_output_bytes(*byte_len)),
-            Self::Blake2b(None) => Box::new(Blake2b::new()),
+            Self::Blake2b(len_opt) => Box::new(Blake2b::with_output_bytes(
+                len_opt.unwrap_or(Blake2b::DEFAULT_BYTE_SIZE),
+            )),
             Self::Shake128(_) => Box::new(Shake128::new()),
             Self::Shake256(_) => Box::new(Shake256::new()),
         }
