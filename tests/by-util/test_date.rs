@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker: ignore: AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes
+// spell-checker: ignore: AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado
 
 use std::cmp::Ordering;
 
@@ -219,6 +219,77 @@ fn test_date_utc_issue_6495() {
         .arg("@0")
         .succeeds()
         .stdout_is("Thu Jan  1 00:00:00 UTC 1970\n");
+}
+
+#[test]
+fn test_date_utc_with_d_flag() {
+    let cases = [
+        ("2024-01-01 12:00", "+%H:%M %Z", "12:00 UTC\n"),
+        ("2024-06-15 10:30", "+%H:%M %Z", "10:30 UTC\n"),
+        ("2024-12-31 23:59:59", "+%H:%M:%S %Z", "23:59:59 UTC\n"),
+        ("@0", "+%Y-%m-%d %H:%M:%S %Z", "1970-01-01 00:00:00 UTC\n"),
+        ("@3600", "+%H:%M:%S %Z", "01:00:00 UTC\n"),
+        ("@86400", "+%Y-%m-%d %Z", "1970-01-02 UTC\n"),
+        ("2024-06-15 10:30 EDT", "+%H:%M %Z", "14:30 UTC\n"),
+        ("2024-01-15 10:30 EST", "+%H:%M %Z", "15:30 UTC\n"),
+        ("2024-06-15 12:00 PDT", "+%H:%M %Z", "19:00 UTC\n"),
+        ("2024-01-15 12:00 PST", "+%H:%M %Z", "20:00 UTC\n"),
+        ("2024-01-01 12:00 +0000", "+%H:%M %Z", "12:00 UTC\n"),
+        ("2024-01-01 12:00 +0530", "+%H:%M %Z", "06:30 UTC\n"),
+        ("2024-01-01 12:00 -0500", "+%H:%M %Z", "17:00 UTC\n"),
+    ];
+    for (input, fmt, expected) in cases {
+        new_ucmd!()
+            .env("TZ", "America/New_York")
+            .args(&["-u", "-d", input, fmt])
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+#[test]
+fn test_date_utc_vs_local() {
+    let cases = [
+        ("-d", "2024-01-01 12:00", "+%H:%M %Z", "12:00 EST\n"),
+        ("-ud", "2024-01-01 12:00", "+%H:%M %Z", "12:00 UTC\n"),
+        ("-d", "2024-06-15 12:00", "+%H:%M %Z", "12:00 EDT\n"),
+        ("-ud", "2024-06-15 12:00", "+%H:%M %Z", "12:00 UTC\n"),
+        ("-d", "@0", "+%H:%M %Z", "19:00 EST\n"),
+        ("-ud", "@0", "+%H:%M %Z", "00:00 UTC\n"),
+    ];
+    for (flag, date, fmt, expected) in cases {
+        new_ucmd!()
+            .env("TZ", "America/New_York")
+            .args(&[flag, date, fmt])
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+#[test]
+fn test_date_utc_output_formats() {
+    let cases = [
+        ("-I", "2024-06-15"),
+        ("--rfc-3339=seconds", "+00:00"),
+        ("-R", "+0000"),
+    ];
+    for (fmt_flag, expected) in cases {
+        new_ucmd!()
+            .env("TZ", "America/New_York")
+            .args(&["-u", "-d", "2024-06-15 12:00", fmt_flag])
+            .succeeds()
+            .stdout_contains(expected);
+    }
+}
+
+#[test]
+fn test_date_utc_stdin() {
+    new_ucmd!()
+        .env("TZ", "America/New_York")
+        .args(&["-u", "-f", "-", "+%H:%M %Z"])
+        .pipe_in("2024-01-01 12:00\n2024-06-15 18:30\n")
+        .succeeds()
+        .stdout_is("12:00 UTC\n18:30 UTC\n");
 }
 
 #[test]
@@ -1865,4 +1936,134 @@ fn test_date_thai_locale_solar_calendar() {
         .succeeds();
     let rfc_output = rfc_result.stdout_str();
     assert!(rfc_output.starts_with(&current_year.to_string()));
+}
+
+#[cfg(unix)]
+fn check_date(locale: &str, date: &str, fmt: &str, expected: &str) {
+    let actual = new_ucmd!()
+        .env("LC_ALL", locale)
+        .arg("-d")
+        .arg(date)
+        .arg(fmt)
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .to_string();
+    assert_eq!(actual, expected, "LC_ALL={locale} date -d '{date}' '{fmt}'");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_locale_calendar_conversions() {
+    // Persian (Solar Hijri) - Nowruz is March 20/21
+    for (d, e) in [
+        ("2026-01-01", "1404-10-11"),
+        ("2026-01-26", "1404-11-06"),
+        ("2026-03-20", "1404-12-29"),
+        ("2026-03-21", "1405-01-01"),
+        ("2026-03-22", "1405-01-02"),
+        ("2026-06-15", "1405-03-25"),
+        ("2026-12-31", "1405-10-10"),
+        ("2025-03-20", "1403-12-30"),
+        ("2025-03-21", "1404-01-01"),
+        ("2024-03-19", "1402-12-29"),
+        ("2024-03-20", "1403-01-01"),
+        ("2000-03-20", "1379-01-01"),
+    ] {
+        check_date("fa_IR.UTF-8", d, "+%Y-%m-%d", e);
+    }
+
+    // Thai Buddhist (year + 543, same month/day)
+    for (d, e) in [
+        ("2026-01-01", "2569-01-01"),
+        ("2026-01-26", "2569-01-26"),
+        ("2026-06-15", "2569-06-15"),
+        ("2026-12-31", "2569-12-31"),
+        ("2025-01-01", "2568-01-01"),
+        ("2024-02-29", "2567-02-29"),
+        ("2000-01-01", "2543-01-01"),
+        ("1970-01-01", "2513-01-01"),
+    ] {
+        check_date("th_TH.UTF-8", d, "+%Y-%m-%d", e);
+    }
+
+    // Ethiopian (13 months, New Year on Sept 11)
+    for (d, e) in [
+        ("2026-01-01", "2018-04-23"),
+        ("2026-01-26", "2018-05-18"),
+        ("2026-09-10", "2018-13-05"),
+        ("2026-09-11", "2019-01-01"),
+        ("2026-09-12", "2019-01-02"),
+        ("2026-12-31", "2019-04-22"),
+        ("2025-09-11", "2018-01-01"),
+        ("2025-09-10", "2017-13-05"),
+        ("2000-09-11", "1993-01-01"),
+    ] {
+        check_date("am_ET.UTF-8", d, "+%Y-%m-%d", e);
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_locale_month_names() {
+    // %B full month names: Jan, Jun, Dec for each locale
+    for (loc, jan, jun, dec) in [
+        ("fr_FR.UTF-8", "janvier", "juin", "décembre"),
+        ("de_DE.UTF-8", "Januar", "Juni", "Dezember"),
+        ("es_ES.UTF-8", "enero", "junio", "diciembre"),
+        ("it_IT.UTF-8", "gennaio", "giugno", "dicembre"),
+        ("pt_BR.UTF-8", "janeiro", "junho", "dezembro"),
+        ("ja_JP.UTF-8", "1月", "6月", "12月"),
+        ("zh_CN.UTF-8", "一月", "六月", "十二月"),
+    ] {
+        check_date(loc, "2026-01-15", "+%B", jan);
+        check_date(loc, "2026-06-15", "+%B", jun);
+        check_date(loc, "2026-12-15", "+%B", dec);
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_locale_day_names() {
+    // %A full day names: Mon (26th), Sun (25th), Sat (24th) Jan 2026
+    for (loc, mon, sun, sat) in [
+        ("fr_FR.UTF-8", "lundi", "dimanche", "samedi"),
+        ("de_DE.UTF-8", "Montag", "Sonntag", "Samstag"),
+        ("es_ES.UTF-8", "lunes", "domingo", "sábado"),
+        ("ja_JP.UTF-8", "月曜日", "日曜日", "土曜日"),
+        ("zh_CN.UTF-8", "星期一", "星期日", "星期六"),
+    ] {
+        check_date(loc, "2026-01-26", "+%A", mon);
+        check_date(loc, "2026-01-25", "+%A", sun);
+        check_date(loc, "2026-01-24", "+%A", sat);
+    }
+}
+
+#[test]
+fn test_percent_percent_not_replaced() {
+    let cases = [
+        // Time conversion specifiers
+        (
+            "+%%H%%I%%k%%l%%M%%N%%p%%P%%r%%R%%s%%S%%T%%X%%z%%Z",
+            "%H%I%k%l%M%N%p%P%r%R%s%S%T%X%z%Z\n",
+        ),
+        // Date conversion specifiers
+        (
+            "+%%a%%A%%b%%B%%c%%C%%d%%D%%e%%F%%g%%G%%h%%j%%m%%u%%U%%V%%w%%W%%x%%y%%Y",
+            "%a%A%b%B%c%C%d%D%e%F%g%G%h%j%m%u%U%V%w%W%x%y%Y\n",
+        ),
+    ];
+    for (format, expected) in cases {
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .arg(format)
+            .succeeds()
+            .stdout_is(expected);
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .env("LC_ALL", "fr_FR.UTF-8")
+            .arg(format)
+            .succeeds()
+            .stdout_is(expected);
+    }
 }

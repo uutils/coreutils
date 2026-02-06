@@ -8,16 +8,16 @@
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
 use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult, set_exit_code};
+use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::translate;
-use uucore::{format_usage, show_error};
+use uucore::{format_usage, show};
 
 pub mod options {
     pub static TABS: &str = "tabs";
@@ -296,6 +296,12 @@ fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read + 'static>>> {
         Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))
     } else {
         let path_ref = Path::new(path);
+        if path_ref.is_dir() {
+            return Err(USimpleError::new(
+                1,
+                translate!("expand-error-is-directory", "file" => path.maybe_quote()),
+            ));
+        }
         file_buf = File::open(path_ref).map_err_context(|| path.maybe_quote().to_string())?;
         Ok(BufReader::new(Box::new(file_buf) as Box<dyn Read>))
     }
@@ -314,9 +320,10 @@ fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read + 'static>>> {
 fn next_tabstop(tabstops: &[usize], col: usize, remaining_mode: &RemainingMode) -> usize {
     let num_tabstops = tabstops.len();
     match remaining_mode {
-        RemainingMode::Plus => match tabstops[0..num_tabstops - 1].iter().find(|&&t| t > col) {
-            Some(t) => t - col,
-            None => {
+        RemainingMode::Plus => {
+            if let Some(t) = tabstops[0..num_tabstops - 1].iter().find(|&&t| t > col) {
+                t - col
+            } else {
                 let step_size = tabstops[num_tabstops - 1];
                 let last_fixed_tabstop = tabstops[num_tabstops - 2];
                 let characters_since_last_tabstop = col - last_fixed_tabstop;
@@ -324,11 +331,14 @@ fn next_tabstop(tabstops: &[usize], col: usize, remaining_mode: &RemainingMode) 
                 let steps_required = 1 + characters_since_last_tabstop / step_size;
                 steps_required * step_size - characters_since_last_tabstop
             }
-        },
-        RemainingMode::Slash => match tabstops[0..num_tabstops - 1].iter().find(|&&t| t > col) {
-            Some(t) => t - col,
-            None => tabstops[num_tabstops - 1] - col % tabstops[num_tabstops - 1],
-        },
+        }
+        RemainingMode::Slash => {
+            if let Some(t) = tabstops[0..num_tabstops - 1].iter().find(|&&t| t > col) {
+                t - col
+            } else {
+                tabstops[num_tabstops - 1] - col % tabstops[num_tabstops - 1]
+            }
+        }
         RemainingMode::None => {
             if num_tabstops == 1 {
                 tabstops[0] - col % tabstops[0]
@@ -405,11 +415,12 @@ fn write_tab_spaces(
     }
 }
 
-fn expand_line(
-    buf: &mut Vec<u8>,
+fn expand_buf(
+    buf: &[u8],
     output: &mut BufWriter<std::io::Stdout>,
     tabstops: &[usize],
     options: &Options,
+    col: &mut usize,
 ) -> std::io::Result<()> {
     use self::CharType::{Backspace, Other, Tab};
 
@@ -417,11 +428,12 @@ fn expand_line(
     // we can write the buffer directly without character-by-character processing
     if !buf.contains(&b'\t') && !buf.contains(&b'\x08') && (options.utf8 || !buf.contains(&b'\r')) {
         output.write_all(buf)?;
-        buf.truncate(0);
+        if let Some(n) = buf.iter().rposition(|&b| b == b'\n') {
+            *col = buf.len() - n - 1;
+        }
         return Ok(());
     }
 
-    let mut col = 0;
     let mut byte = 0;
     let mut init = true;
 
@@ -432,8 +444,8 @@ fn expand_line(
         match ctype {
             Tab => {
                 // figure out how many spaces to the next tabstop
-                let nts = next_tabstop(tabstops, col, &options.remaining_mode);
-                col += nts;
+                let nts = next_tabstop(tabstops, *col, &options.remaining_mode);
+                *col += nts;
 
                 // now dump out either spaces if we're expanding, or a literal tab if we're not
                 if init || !options.iflag {
@@ -443,23 +455,28 @@ fn expand_line(
                 }
             }
             Backspace => {
-                col = col.saturating_sub(1);
+                *col = col.saturating_sub(1);
 
                 // if we're writing anything other than a space, then we're
                 // done with the line's leading spaces
-                if buf[byte] != 0x20 {
+                if buf[byte] != b' ' {
                     init = false;
                 }
 
                 output.write_all(&buf[byte..byte + nbytes])?;
             }
             Other => {
-                col += cwidth;
+                *col += cwidth;
 
                 // if we're writing anything other than a space, then we're
                 // done with the line's leading spaces
-                if buf[byte] != 0x20 {
+                if buf[byte] != b' ' {
                     init = false;
+                }
+
+                if buf[byte] == b'\n' {
+                    *col = 0;
+                    init = true;
                 }
 
                 output.write_all(&buf[byte..byte + nbytes])?;
@@ -469,39 +486,38 @@ fn expand_line(
         byte += nbytes; // advance the pointer
     }
 
-    buf.truncate(0); // clear the buffer
+    Ok(())
+}
 
+fn expand_file(
+    file: &OsString,
+    output: &mut BufWriter<std::io::Stdout>,
+    options: &Options,
+) -> UResult<()> {
+    let mut buf = [0u8; 4096];
+    let mut input = open(file)?;
+    let ts = options.tabstops.as_ref();
+    let mut col = 0;
+    loop {
+        match input.read(&mut buf) {
+            Ok(0) => break,
+            Ok(n) => {
+                expand_buf(&buf[..n], output, ts, options, &mut col)
+                    .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
+            }
+            Err(e) => return Err(e.map_err_context(|| file.maybe_quote().to_string())),
+        }
+    }
     Ok(())
 }
 
 fn expand(options: &Options) -> UResult<()> {
     let mut output = BufWriter::new(stdout());
-    let ts = options.tabstops.as_ref();
-    let mut buf = Vec::new();
 
     for file in &options.files {
-        if Path::new(file).is_dir() {
-            show_error!(
-                "{}",
-                translate!("expand-error-is-directory", "file" => file.maybe_quote())
-            );
+        if let Err(e) = expand_file(file, &mut output, options) {
+            show!(e);
             set_exit_code(1);
-            continue;
-        }
-        match open(file) {
-            Ok(mut fh) => {
-                while match fh.read_until(b'\n', &mut buf) {
-                    Ok(s) => s > 0,
-                    Err(_) => buf.is_empty(),
-                } {
-                    expand_line(&mut buf, &mut output, ts, options)
-                        .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
-                }
-            }
-            Err(e) => {
-                show_error!("{e}");
-                set_exit_code(1);
-            }
         }
     }
     // Flush once at the end

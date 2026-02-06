@@ -8,9 +8,16 @@ use uucore::display::Quotable;
 use uucore::translate;
 
 use crate::formatter_item_info::FormatterItemInfo;
-use crate::prn_char::*;
-use crate::prn_float::*;
-use crate::prn_int::*;
+use crate::prn_char::{FORMAT_ITEM_A, FORMAT_ITEM_C};
+use crate::prn_float::{
+    FORMAT_ITEM_BF16, FORMAT_ITEM_F16, FORMAT_ITEM_F32, FORMAT_ITEM_F64, FORMAT_ITEM_LONG_DOUBLE,
+};
+use crate::prn_int::{
+    FORMAT_ITEM_DEC8S, FORMAT_ITEM_DEC8U, FORMAT_ITEM_DEC16S, FORMAT_ITEM_DEC16U,
+    FORMAT_ITEM_DEC32S, FORMAT_ITEM_DEC32U, FORMAT_ITEM_DEC64S, FORMAT_ITEM_DEC64U,
+    FORMAT_ITEM_HEX8, FORMAT_ITEM_HEX16, FORMAT_ITEM_HEX32, FORMAT_ITEM_HEX64, FORMAT_ITEM_OCT8,
+    FORMAT_ITEM_OCT16, FORMAT_ITEM_OCT32, FORMAT_ITEM_OCT64,
+};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct ParsedFormatterItemInfo {

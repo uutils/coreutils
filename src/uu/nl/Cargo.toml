@@ -19,6 +19,7 @@ path = "src/nl.rs"
 
 [dependencies]
 clap = { workspace = true }
+itoa = { workspace = true }
 regex = { workspace = true }
 uucore = { workspace = true }
 fluent = { workspace = true }
