@@ -543,10 +543,7 @@ pub fn sanitize_sha2_sha3_length_str(algo_kind: AlgoKind, length: &str) -> UResu
 pub fn unescape_filename(filename: &[u8]) -> (Vec<u8>, &'static str) {
     let mut unescaped = Vec::with_capacity(filename.len());
     let mut byte_iter = filename.iter().peekable();
-    loop {
-        let Some(byte) = byte_iter.next() else {
-            break;
-        };
+    while let Some(byte) = byte_iter.next() {
         if *byte == b'\\' {
             match byte_iter.next() {
                 Some(b'\\') => unescaped.push(b'\\'),
