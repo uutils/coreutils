@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore prefixcat testcat
+// spell-checker:ignore memfd_create prefixcat rsplit testcat
 
 use std::ffi::{OsStr, OsString};
 use std::io::{Write, stderr};
@@ -73,15 +73,41 @@ fn get_canonical_util_name(util_name: &str) -> &str {
 }
 
 /// Gets the binary path from command line arguments
-/// # Panics
 /// Panics if the binary path cannot be determined
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn binary_path(args: &mut impl Iterator<Item = OsString>) -> PathBuf {
     match args.next() {
         Some(ref s) if !s.is_empty() => PathBuf::from(s),
+        // the fallback is valid only for hardlinks
         _ => std::env::current_exe().unwrap(),
     }
 }
-
+/// Get actual binary path from kernel, not argv0, to prevent `env -a` from bypassing
+/// AppArmor, SELinux policies on hard-linked binaries
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn binary_path(args: &mut impl Iterator<Item = OsString>) -> PathBuf {
+    use std::fs::File;
+    use std::io::Read;
+    use std::os::unix::ffi::OsStrExt;
+    let execfn = rustix::param::linux_execfn();
+    let execfn_bytes = execfn.to_bytes();
+    let exec_path = Path::new(OsStr::from_bytes(execfn_bytes));
+    let argv0 = args.next().unwrap();
+    let mut shebang_buf = [0u8; 2];
+    // exec_path is wrong when called from shebang or memfd_create (/proc/self/fd/*)
+    // argv0 is not full-path when called from PATH
+    if execfn_bytes.rsplit(|&b| b == b'/').next() == argv0.as_bytes().rsplit(|&b| b == b'/').next()
+        || execfn_bytes.starts_with(b"/proc/")
+        || (File::open(Path::new(exec_path))
+            .and_then(|mut f| f.read_exact(&mut shebang_buf))
+            .is_ok()
+            && &shebang_buf == b"#!")
+    {
+        argv0.into()
+    } else {
+        exec_path.into()
+    }
+}
 /// Extracts the binary name from a path
 pub fn name(binary_path: &Path) -> Option<&str> {
     binary_path.file_stem()?.to_str()

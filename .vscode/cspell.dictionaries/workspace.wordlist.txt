@@ -8,6 +8,7 @@ advapi32-sys
 aho-corasick
 backtrace
 blake2b_simd
+rustix
 
 # * uutils project
 uutils
@@ -360,6 +361,7 @@ uutests
 uutils
 
 # * function names
+execfn
 getcwd
 
 # * other

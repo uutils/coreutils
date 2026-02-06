@@ -561,6 +561,7 @@ dependencies = [
  "rlimit",
  "rstest",
  "rustc-hash",
+ "rustix",
  "selinux",
  "sha1",
  "tempfile",
