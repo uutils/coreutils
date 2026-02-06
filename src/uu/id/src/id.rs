@@ -312,7 +312,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             )?;
         }
 
-        let groups = entries::get_groups_gnu(Some(gid)).unwrap();
+        let groups = entries::get_groups_gnu(Some(gid))?;
         let groups = if state.user_specified {
             possible_pw.as_ref().map(|p| p.belongs_to()).unwrap()
         } else {
@@ -543,7 +543,7 @@ fn pretty(possible_pw: Option<Passwd>) -> io::Result<()> {
 #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
 fn pline(possible_uid: Option<uid_t>) -> io::Result<()> {
     let uid = possible_uid.unwrap_or_else(getuid);
-    let pw = Passwd::locate(uid).unwrap();
+    let pw = Passwd::locate(uid)?;
 
     writeln!(
         io::stdout().lock(),
