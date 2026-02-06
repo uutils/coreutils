@@ -422,6 +422,7 @@ clap_mangen = { workspace = true, optional = true }
 clap.workspace = true
 fluent-syntax = { workspace = true, optional = true }
 itertools.workspace = true
+libc.workspace = true
 phf.workspace = true
 selinux = { workspace = true, optional = true }
 textwrap.workspace = true
