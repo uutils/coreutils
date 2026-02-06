@@ -10,7 +10,9 @@ use std::fs::File;
 use std::io::{self, BufReader, Read, Write};
 use std::path::Path;
 
-use crate::checksum::{AlgoKind, ChecksumError, SizedAlgoKind, digest_reader, escape_filename};
+use crate::checksum::{
+    AlgoKind, ChecksumError, ReadingMode, SizedAlgoKind, digest_reader, escape_filename,
+};
 use crate::error::{FromIo, UResult, USimpleError};
 use crate::line_ending::LineEnding;
 use crate::sum::DigestOutput;
@@ -36,33 +38,6 @@ pub struct ChecksumComputeOptions {
     pub line_ending: LineEnding,
 }
 
-/// Reading mode used to compute digest.
-///
-/// On most linux systems, this is irrelevant, as there is no distinction
-/// between text and binary files. Refer to GNU's cksum documentation for more
-/// information.
-///
-/// As discussed in #9168, we decide to ignore the reading mode to compute the
-/// digest, both on Windows and UNIX. The reason for that is that this is a
-/// legacy feature that is poorly documented and used. This enum is kept
-/// nonetheless to still take into account the flags passed to cksum when
-/// generating untagged lines.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ReadingMode {
-    Binary,
-    Text,
-}
-
-impl ReadingMode {
-    #[inline]
-    fn as_char(&self) -> char {
-        match self {
-            Self::Binary => '*',
-            Self::Text => ' ',
-        }
-    }
-}
-
 /// Whether to write the digest as hexadecimal or encoded in base64.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DigestFormat {
@@ -72,8 +47,8 @@ pub enum DigestFormat {
 
 impl DigestFormat {
     #[inline]
-    fn is_base64(&self) -> bool {
-        *self == Self::Base64
+    fn is_base64(self) -> bool {
+        self == Self::Base64
     }
 }
 
@@ -181,7 +156,7 @@ fn print_legacy_checksum(
     filename: &OsStr,
     sum: &DigestOutput,
     size: usize,
-) -> UResult<()> {
+) {
     debug_assert!(options.algo_kind.is_legacy());
     debug_assert!(matches!(sum, DigestOutput::U16(_) | DigestOutput::Crc(_)));
 
@@ -216,15 +191,9 @@ fn print_legacy_checksum(
         print!(" ");
         let _dropped_result = io::stdout().write_all(escaped_filename.as_bytes());
     }
-
-    Ok(())
 }
 
-fn print_tagged_checksum(
-    options: &ChecksumComputeOptions,
-    filename: &OsStr,
-    sum: &String,
-) -> UResult<()> {
+fn print_tagged_checksum(options: &ChecksumComputeOptions, filename: &OsStr, sum: &String) {
     let (escaped_filename, prefix) = if options.line_ending == LineEnding::Nul {
         (filename.to_string_lossy().to_string(), "")
     } else {
@@ -239,8 +208,6 @@ fn print_tagged_checksum(
 
     // Print closing parenthesis and sum
     print!(") = {sum}");
-
-    Ok(())
 }
 
 fn print_untagged_checksum(
@@ -248,7 +215,7 @@ fn print_untagged_checksum(
     filename: &OsStr,
     sum: &String,
     reading_mode: ReadingMode,
-) -> UResult<()> {
+) {
     let (escaped_filename, prefix) = if options.line_ending == LineEnding::Nul {
         (filename.to_string_lossy().to_string(), "")
     } else {
@@ -260,8 +227,6 @@ fn print_untagged_checksum(
 
     // Print filename
     let _dropped_result = io::stdout().write_all(escaped_filename.as_bytes());
-
-    Ok(())
 }
 
 /// Calculate checksum
@@ -315,7 +280,7 @@ where
 
         // Always compute the "binary" version of the digest, i.e. on Windows,
         // never handle CRLFs specifically.
-        let (digest_output, sz) = digest_reader(&mut digest, &mut file, /* binary: */ true)
+        let (digest_output, sz) = digest_reader(&mut digest, &mut file, ReadingMode::Binary)
             .map_err_context(|| translate!("checksum-error-failed-to-read-input"))?;
 
         // Encodes the sum if df is Base64, leaves as-is otherwise.
@@ -334,14 +299,14 @@ where
                 return Ok(());
             }
             OutputFormat::Legacy => {
-                print_legacy_checksum(&options, filename, &digest_output, sz)?;
+                print_legacy_checksum(&options, filename, &digest_output, sz);
             }
             OutputFormat::Tagged(digest_format) => {
                 print_tagged_checksum(
                     &options,
                     filename,
                     &encode_sum(digest_output, digest_format)?,
-                )?;
+                );
             }
             OutputFormat::Untagged(digest_format, reading_mode) => {
                 print_untagged_checksum(
@@ -349,7 +314,7 @@ where
                     filename,
                     &encode_sum(digest_output, digest_format)?,
                     reading_mode,
-                )?;
+                );
             }
         }
 

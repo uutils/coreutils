@@ -51,6 +51,10 @@ pub struct Config<'a> {
 }
 
 #[cfg(windows)]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "fn sig must match on all platforms"
+)]
 fn get_mode(_matches: &ArgMatches) -> Result<u32, String> {
     Ok(DEFAULT_PERM)
 }
@@ -92,7 +96,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 set_security_context: set_security_context || context.is_some(),
                 context,
             };
-            exec(dirs, &config)
+            exec(dirs, &config);
+            Ok(())
         }
         Err(f) => Err(USimpleError::new(1, f)),
     }
@@ -154,14 +159,13 @@ pub fn uu_app() -> Command {
 /**
  * Create the list of new directories
  */
-fn exec(dirs: ValuesRef<OsString>, config: &Config) -> UResult<()> {
+fn exec(dirs: ValuesRef<OsString>, config: &Config) {
     for dir in dirs {
         let path_buf = PathBuf::from(dir);
         let path = path_buf.as_path();
 
         show_if_err!(mkdir(path, config));
     }
-    Ok(())
 }
 
 /// Create directory at a given `path`.

@@ -11,7 +11,7 @@ use std::fs;
 use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 #[cfg(not(windows))]
-use std::process::Command;
+use std::process;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::thread::sleep;
 use uucore::process::{getegid, geteuid};
@@ -777,7 +777,7 @@ fn test_install_and_strip() {
         .succeeds()
         .no_stderr();
 
-    let output = Command::new(SYMBOL_DUMP_PROGRAM)
+    let output = process::Command::new(SYMBOL_DUMP_PROGRAM)
         .arg("-t")
         .arg(at.plus(STRIP_TARGET_FILE))
         .output()
@@ -804,7 +804,7 @@ fn test_install_and_strip_with_program() {
         .succeeds()
         .no_stderr();
 
-    let output = Command::new(SYMBOL_DUMP_PROGRAM)
+    let output = process::Command::new(SYMBOL_DUMP_PROGRAM)
         .arg("-t")
         .arg(at.plus(STRIP_TARGET_FILE))
         .output()
@@ -1937,7 +1937,7 @@ fn test_install_compare_group_ownership() {
 
     at.write(source, "test content");
 
-    let user_group = std::process::Command::new("id")
+    let user_group = process::Command::new("id")
         .arg("-nrg")
         .output()
         .map_or_else(
@@ -2498,7 +2498,7 @@ fn test_install_non_utf8_paths() {
     let source_filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
     let dest_dir = "target_dir";
 
-    std::fs::write(at.plus(&source_filename), b"test content").unwrap();
+    fs::write(at.plus(&source_filename), b"test content").unwrap();
     at.mkdir(dest_dir);
 
     ucmd.arg(&source_filename).arg(dest_dir).succeeds();

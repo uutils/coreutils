@@ -30,8 +30,8 @@ options might be missing or different behavior might be experienced.
 <div class="oranda-hide">
 
 We provide prebuilt binaries, manpages, and shell completions from main branch at https://github.com/uutils/coreutils/releases/tag/latest-commit .
-The latest stable tag https://github.com/uutils/coreutils/releases/latest exists only for reproducible products and packagers.
-You should use binary from latest commit generally.
+The latest stable tag https://github.com/uutils/coreutils/releases/latest also exists for reproducible products and packagers.
+Bug reporters should use binary from latest commit.
 
 </div>
 
@@ -119,7 +119,7 @@ cargo build --release --features windows
 cargo build --release --features unix
 ```
 
-To build SELinux-specific features, including `chcon` and `runcon`, ensure that `libselinux` 
+To build SELinux-specific features, including `chcon` and `runcon`, ensure that `libselinux`
 and `libclang` are installed on your system. Then, run the following command:
 ```
 cargo build --release --features unix,feat_selinux

@@ -28,6 +28,7 @@ uucore = { workspace = true, features = [
   "parser-glob",
   "time",
 ] }
+rustc-hash = { workspace = true }
 thiserror = { workspace = true }
 fluent = { workspace = true }
 

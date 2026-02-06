@@ -366,11 +366,11 @@ platform-info = "2.0.3"
 procfs = "0.18"
 rand = { version = "0.9.0", features = ["small_rng"] }
 rand_chacha = { version = "0.9.0" }
-rand_core = "0.9.0"
 rayon = "1.10"
 regex = "1.10.4"
 rlimit = "0.11.0"
 rstest = "0.26.0"
+rustc-hash = "2.1.1"
 rust-ini = "0.21.0"
 same-file = "1.0.6"
 self_cell = "1.0.4"
@@ -640,7 +640,7 @@ unexpected_cfgs = { level = "warn", check-cfg = [
   'cfg(fuzzing)',
   'cfg(target_os, values("cygwin"))',
 ] }
-#unused_qualifications = "warn" // TODO: fix warnings in uucore, then re-enable this lint
+unused_qualifications = "warn"
 
 [workspace.lints.clippy]
 # The counts were generated with this command:
@@ -664,18 +664,14 @@ match_same_arms = "allow"                    # 204
 redundant_closure_for_method_calls = "allow" # 125
 cast_possible_truncation = "allow"           # 122
 too_many_lines = "allow"                     # 101
-trivially_copy_pass_by_ref = "allow"         # 84
-single_match_else = "allow"                  # 82
 cast_possible_wrap = "allow"                 # 78
 cast_sign_loss = "allow"                     # 70
 struct_excessive_bools = "allow"             # 68
 cast_precision_loss = "allow"                # 52
 cast_lossless = "allow"                      # 35
-unnecessary_wraps = "allow"                  # 33
 ignored_unit_patterns = "allow"              # 21
 similar_names = "allow"                      # 20
 large_stack_arrays = "allow"                 # 20
-wildcard_imports = "allow"                   # 18
 needless_pass_by_value = "allow"             # 16
 float_cmp = "allow"                          # 12
 items_after_statements = "allow"             # 11
@@ -688,7 +684,6 @@ should_panic_without_expect = "allow"        # 2
 doc_markdown = "allow"
 unused_self = "allow"
 enum_glob_use = "allow"
-unreadable_literal = "allow"
 unnested_or_patterns = "allow"
 implicit_hasher = "allow"
 struct_field_names = "allow"
@@ -699,4 +694,4 @@ from_iter_instead_of_collect = "allow"
 large_types_passed_by_value = "allow"
 
 [workspace.metadata.cargo-shear]
-ignored = ["fluent", "libstdbuf"]
+ignored = ["clap", "fluent", "libstdbuf"]

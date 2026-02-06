@@ -119,35 +119,32 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     }
 
-    let adjustment = match matches.get_one::<String>(options::ADJUSTMENT) {
-        Some(nstr) => {
-            if !matches.contains_id(options::COMMAND) {
-                return Err(UUsageError::new(
-                    125,
-                    translate!("nice-error-command-required-with-adjustment"),
-                ));
-            }
-            match nstr.parse::<i32>() {
-                Ok(num) => num,
-                Err(e) => match e.kind() {
-                    IntErrorKind::PosOverflow => NICE_BOUND_NO_OVERFLOW,
-                    IntErrorKind::NegOverflow => -NICE_BOUND_NO_OVERFLOW,
-                    _ => {
-                        return Err(USimpleError::new(
-                            125,
-                            translate!("nice-error-invalid-number", "value" => nstr.clone(), "error" => e),
-                        ));
-                    }
-                },
-            }
+    let adjustment = if let Some(nstr) = matches.get_one::<String>(options::ADJUSTMENT) {
+        if !matches.contains_id(options::COMMAND) {
+            return Err(UUsageError::new(
+                125,
+                translate!("nice-error-command-required-with-adjustment"),
+            ));
         }
-        None => {
-            if !matches.contains_id(options::COMMAND) {
-                writeln!(stdout(), "{niceness}")?;
-                return Ok(());
-            }
-            10_i32
+        match nstr.parse::<i32>() {
+            Ok(num) => num,
+            Err(e) => match e.kind() {
+                IntErrorKind::PosOverflow => NICE_BOUND_NO_OVERFLOW,
+                IntErrorKind::NegOverflow => -NICE_BOUND_NO_OVERFLOW,
+                _ => {
+                    return Err(USimpleError::new(
+                        125,
+                        translate!("nice-error-invalid-number", "value" => nstr.clone(), "error" => e),
+                    ));
+                }
+            },
         }
+    } else {
+        if !matches.contains_id(options::COMMAND) {
+            writeln!(stdout(), "{niceness}")?;
+            return Ok(());
+        }
+        10_i32
     };
 
     niceness += adjustment;

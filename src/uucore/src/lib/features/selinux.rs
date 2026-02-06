@@ -274,8 +274,8 @@ pub fn contexts_differ(from_path: &Path, to_path: &Path) -> bool {
 
     // Check if SELinux contexts differ
     match (
-        selinux::SecurityContext::of_path(from_path, false, false),
-        selinux::SecurityContext::of_path(to_path, false, false),
+        SecurityContext::of_path(from_path, false, false),
+        SecurityContext::of_path(to_path, false, false),
     ) {
         (Ok(Some(from_ctx)), Ok(Some(to_ctx))) => {
             // Convert contexts to CString and compare

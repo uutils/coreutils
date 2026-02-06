@@ -298,7 +298,9 @@ impl Observer {
         event: &notify::Event,
         settings: &Settings,
     ) -> UResult<Vec<PathBuf>> {
-        use notify::event::*;
+        use notify::event::{
+            CreateKind, DataChange, EventKind, MetadataKind, ModifyKind, RemoveKind, RenameMode,
+        };
 
         let event_path = event.paths.first().unwrap();
         let mut paths: Vec<PathBuf> = vec![];

@@ -66,7 +66,7 @@ pub fn main() {
          \n\
          #[allow(clippy::too_many_lines)]
          #[allow(clippy::unreadable_literal)]
-         fn util_map<T: uucore::Args>() -> UtilityMap<T> {\n"
+         fn util_map<T: Args>() -> UtilityMap<T> {\n"
             .as_bytes(),
     )
     .unwrap();

@@ -1,12 +1,12 @@
 # Benchmarking `tsort`
 <!-- spell-checker:ignore (words) randint tsort DAG uu_tsort GNU  -->
-Much of what makes `tsort` fast is the efficiency of its algorithm and implementation for topological sorting. 
-Our implementation of `tsort` also outputs a cycle whenever such ordering does not exist, just like GNU  `tsort`. 
+Much of what makes `tsort` fast is the efficiency of its algorithm and implementation for topological sorting.
+Our implementation of `tsort` also outputs a cycle whenever such ordering does not exist, just like GNU  `tsort`.
 
 ## Strategies
 
-To test `tsort`'s performance for its nominal use case, we need to test it with a DAG. One of the worst cases is when all nodes are just representing a succession of independent steps. 
-We should also test cycle detection for good measure. 
+To test `tsort`'s performance for its nominal use case, we need to test it with a DAG. One of the worst cases is when all nodes are just representing a succession of independent steps.
+We should also test cycle detection for good measure.
 
 ### Random acyclic graph (DAG)
 
@@ -25,16 +25,16 @@ for i in range(100*N):
 
 ### Random graph with cycles
 
-The following will output a graph with multiples edges, it also allows some degree of tuning to test different cases. 
+The following will output a graph with multiples edges, it also allows some degree of tuning to test different cases.
 
 ```python
 import random
 
 # Parameters for the graph
-num_nodes = 100  
-num_edges = 150  
-cycle_percentage = 0.10  
-max_cycle_size = 6  
+num_nodes = 100
+num_edges = 150
+cycle_percentage = 0.10
+max_cycle_size = 6
 
 num_cycles = int(num_edges * cycle_percentage)
 
@@ -52,7 +52,7 @@ for _ in range(num_cycles):
 ```
 
 ## Running Benchmarks
-The above scripts will output the generated graphs to the standard output. They can therefore be used directly as tests. In order to run a Benchmark, the output should be redirected to a file. 
+The above scripts will output the generated graphs to the standard output. They can therefore be used directly as tests. In order to run a Benchmark, the output should be redirected to a file.
 Use [`hyperfine`](https://github.com/sharkdp/hyperfine) to compare the performance of different `tsort` versions. For example, you can compare the performance of GNU `tsort` and another implementation with the following command:
 
 ```sh

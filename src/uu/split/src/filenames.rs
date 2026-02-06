@@ -61,7 +61,7 @@ pub enum SuffixType {
 
 impl SuffixType {
     /// The radix to use when representing the suffix string as digits.
-    pub fn radix(&self) -> u8 {
+    pub fn radix(self) -> u8 {
         match self {
             Self::Alphabetic => 26,
             Self::Decimal => 10,
