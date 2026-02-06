@@ -17,7 +17,6 @@ use std::mem::MaybeUninit;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::{UResult, USimpleError};
-use crate::utmpx;
 
 /// FFI bindings for libsystemd login and D-Bus functions
 mod ffi {
@@ -304,18 +303,18 @@ impl SystemdLoginRecord {
     }
 
     /// Get login time as time::OffsetDateTime compatible with utmpx
-    pub fn login_time_offset(&self) -> utmpx::time::OffsetDateTime {
+    pub fn login_time_offset(&self) -> time::OffsetDateTime {
         let duration = self
             .login_time
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default();
         let ts_nanos: i128 = (duration.as_nanos()).try_into().unwrap_or(0);
-        let local_offset = utmpx::time::OffsetDateTime::now_local()
-            .map_or_else(|_| utmpx::time::UtcOffset::UTC, |v| v.offset());
-        utmpx::time::OffsetDateTime::from_unix_timestamp_nanos(ts_nanos)
+        let local_offset =
+            time::OffsetDateTime::now_local().map_or_else(|_| time::UtcOffset::UTC, |v| v.offset());
+        time::OffsetDateTime::from_unix_timestamp_nanos(ts_nanos)
             .unwrap_or_else(|_| {
-                utmpx::time::OffsetDateTime::now_local()
-                    .unwrap_or_else(|_| utmpx::time::OffsetDateTime::now_utc())
+                time::OffsetDateTime::now_local()
+                    .unwrap_or_else(|_| time::OffsetDateTime::now_utc())
             })
             .to_offset(local_offset)
     }
@@ -566,7 +565,7 @@ impl SystemdUtmpxCompat {
     }
 
     /// Login time
-    pub fn login_time(&self) -> utmpx::time::OffsetDateTime {
+    pub fn login_time(&self) -> time::OffsetDateTime {
         self.record.login_time_offset()
     }
 
@@ -581,10 +580,10 @@ impl SystemdUtmpxCompat {
     }
 
     /// Canonical host name
-    pub fn canon_host(&self) -> std::io::Result<String> {
+    pub fn canon_host(&self) -> String {
         // Simple implementation - just return the host as-is
         // Could be enhanced with DNS lookup like the original
-        Ok(self.record.host.clone())
+        self.record.host.clone()
     }
 }
 
@@ -681,7 +680,7 @@ mod tests {
                 seat_or_tty: "tty1".to_string(),
                 raw_device: "tty1".to_string(),
                 host: "host1".to_string(),
-                login_time: std::time::UNIX_EPOCH,
+                login_time: UNIX_EPOCH,
                 pid: 1234,
                 session_leader_pid: 1234,
                 record_type: SystemdRecordType::UserProcess,
@@ -692,7 +691,7 @@ mod tests {
                 seat_or_tty: "pts/0".to_string(),
                 raw_device: "pts/0".to_string(),
                 host: "host2".to_string(),
-                login_time: std::time::UNIX_EPOCH,
+                login_time: UNIX_EPOCH,
                 pid: 5678,
                 session_leader_pid: 5678,
                 record_type: SystemdRecordType::UserProcess,
@@ -729,7 +728,7 @@ mod tests {
             seat_or_tty: "tty1".to_string(),
             raw_device: "tty1".to_string(),
             host: "host1".to_string(),
-            login_time: std::time::UNIX_EPOCH,
+            login_time: UNIX_EPOCH,
             pid: 1234,
             session_leader_pid: 1234,
             record_type: SystemdRecordType::UserProcess,
@@ -753,7 +752,7 @@ mod tests {
             seat_or_tty: "seat0".to_string(),
             raw_device: "seat0".to_string(),
             host: "localhost".to_string(),
-            login_time: std::time::UNIX_EPOCH + std::time::Duration::from_secs(1000),
+            login_time: UNIX_EPOCH + std::time::Duration::from_secs(1000),
             pid: 9999,
             session_leader_pid: 9999,
             record_type: SystemdRecordType::UserProcess,
