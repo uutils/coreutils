@@ -52,14 +52,15 @@ fn main() {
     });
 
     // binary name ends with util name?
+    let is_coreutils = binary_as_util.ends_with("utils");
     let matched_util = utils
         .keys()
-        .filter(|&&u| binary_as_util.ends_with(u) && !binary_as_util.ends_with("coreutils"))
-        .max_by_key(|u| u.len()); //Prefer stty more than tty. coreutils is not ls
+        .filter(|&&u| binary_as_util.ends_with(u) && !is_coreutils)
+        .max_by_key(|u| u.len()); //Prefer stty more than tty. *utils is not ls
 
     let util_name = if let Some(&util) = matched_util {
         Some(OsString::from(util))
-    } else if binary_as_util.ends_with("utils") || binary_as_util.ends_with("box") {
+    } else if is_coreutils || binary_as_util.ends_with("box") {
         // todo: Remove support of "*box" from binary
         uucore::set_utility_is_second_arg();
         args.next()
