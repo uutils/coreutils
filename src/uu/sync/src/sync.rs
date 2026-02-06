@@ -14,9 +14,7 @@ use nix::fcntl::{OFlag, open};
 use nix::sys::stat::Mode;
 use std::path::Path;
 use uucore::display::Quotable;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use uucore::error::FromIo;
-use uucore::error::{UResult, USimpleError};
+use uucore::error::{UResult, USimpleError, get_exit_code, set_exit_code};
 use uucore::format_usage;
 use uucore::show_error;
 use uucore::translate;
@@ -217,8 +215,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     }
 
-    let mut has_error = false;
-
     for f in &files {
         // Use the Nix open to be able to set the NONBLOCK flags for fifo files
         #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -226,13 +222,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let path = Path::new(&f);
             if let Err(e) = open(path, OFlag::O_NONBLOCK, Mode::empty()) {
                 if e != Errno::EACCES || (e == Errno::EACCES && path.is_dir()) {
-                    let err: UResult<()> = e.map_err_context(
-                        || translate!("sync-error-opening-file", "file" => f.quote()),
+                    show_error!(
+                        "{}",
+                        translate!("sync-error-opening-file", "file" => f.quote(), "err" => e.desc())
                     );
-                    if let Err(err) = err {
-                        show_error!("{}", err.to_string());
-                        has_error = true;
-                    }
+                    set_exit_code(1);
                 }
             }
         }
@@ -243,12 +237,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     "{}",
                     translate!("sync-error-no-such-file", "file" => f.quote())
                 );
-                has_error = true;
+                set_exit_code(1);
             }
         }
     }
 
-    if has_error {
+    if get_exit_code() != 0 {
         return Err(USimpleError::new(1, ""));
     }
 

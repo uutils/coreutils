@@ -7,7 +7,7 @@ sync-help-data = synchroniser seulement les données des fichiers, pas les méta
 
 # Messages d'erreur
 sync-error-data-needs-argument = --data nécessite au moins un argument
-sync-error-opening-file = erreur lors de l'ouverture de { $file }
+sync-error-opening-file = erreur lors de l'ouverture de { $file } : { $err }
 sync-error-no-such-file = erreur lors de l'ouverture de { $file } : Aucun fichier ou répertoire de ce type
 
 # Messages d'avertissement
