@@ -6500,8 +6500,7 @@ fn test_cp_archive_preserves_directory_permissions() {
         assert_eq!(
             mode & 0o777,
             0o755,
-            "Directory {} has incorrect permissions: {:o}",
-            path,
+            "Directory {path} has incorrect permissions: {:o}",
             mode & 0o777
         );
     };
