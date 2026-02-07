@@ -31,7 +31,7 @@ use rayon::prelude::*;
 use std::cmp::Ordering;
 use std::env;
 use std::ffi::{OsStr, OsString};
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 use std::hash::{BuildHasher, Hash, Hasher};
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::{IntErrorKind, NonZero};
@@ -46,6 +46,7 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, strip_errno};
 use uucore::error::{UError, UResult, USimpleError, UUsageError};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
+use uucore::fs::create_file_restrictive_perm;
 #[cfg(feature = "i18n-collator")]
 use uucore::i18n::collator::locale_cmp;
 use uucore::i18n::decimal::locale_decimal_separator;
@@ -226,12 +227,8 @@ impl Output {
             let path = Path::new(name.as_ref());
             // This is different from `File::create()` because we don't truncate the output yet.
             // This allows using the output file as an input file.
-            #[allow(clippy::suspicious_open_options)]
-            let file = OpenOptions::new()
-                .write(true)
-                .create(true)
-                .open(path)
-                .map_err(|e| SortError::OpenFailed {
+            let file =
+                create_file_restrictive_perm(path, false).map_err(|e| SortError::OpenFailed {
                     path: path.to_owned(),
                     error: e,
                 })?;
