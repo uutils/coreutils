@@ -362,20 +362,19 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &str) -> UR
             }
         } else {
             let path = Path::new(filename);
-            if path.is_dir() {
+            let Ok(metadata) = path.metadata() else {
+                show!(TacError::FileNotFound(filename.clone()));
+                continue;
+            };
+
+            if metadata.is_dir() {
                 let e: Box<dyn UError> =
                     TacError::InvalidDirectoryArgument(filename.clone()).into();
                 show!(e);
                 continue;
             }
 
-            if path.metadata().is_err() {
-                let e: Box<dyn UError> = TacError::FileNotFound(filename.clone()).into();
-                show!(e);
-                continue;
-            }
-
-            if let Some(mmap1) = try_mmap_path(path) {
+            if let Some(mmap1) = metadata.is_file().then(|| try_mmap_path(path)).flatten() {
                 mmap = mmap1;
                 &mmap
             } else {

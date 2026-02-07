@@ -416,3 +416,43 @@ fn test_regular_end_anchor() {
         .succeeds()
         .stdout_is("\nccc\nbbaaa\nb");
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_non_regular_files() {
+    use std::process::Stdio;
+
+    new_ucmd!().arg("/dev/null").succeeds().no_output();
+
+    let content = std::fs::read_to_string("/proc/version").unwrap();
+    new_ucmd!()
+        .arg("/proc/version")
+        .succeeds()
+        .stdout_is(&content);
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkfifo("fifo");
+    let fifo_path = at.plus("fifo");
+    let writer = std::thread::spawn(move || std::fs::write(fifo_path, b"a\nb\nc\n").unwrap());
+    scene.ucmd().arg("fifo").succeeds().stdout_is("c\nb\na\n");
+    writer.join().unwrap();
+
+    for dev in &["/dev/zero", "/dev/urandom"] {
+        let mut child = new_ucmd!()
+            .arg(dev)
+            .set_stdout(Stdio::piped())
+            .run_no_wait();
+        child.make_assertion_with_delay(500).is_alive();
+        child.kill();
+    }
+
+    at.symlink_file("/dev/urandom", "sym_urandom");
+    let mut child = scene
+        .ucmd()
+        .arg("sym_urandom")
+        .set_stdout(Stdio::piped())
+        .run_no_wait();
+    child.make_assertion_with_delay(500).is_alive();
+    child.kill();
+}
