@@ -7570,3 +7570,104 @@ fn test_cp_xattr_enotsup_handling() {
         std::fs::remove_file(f).ok();
     }
 }
+
+#[test]
+#[cfg(not(target_os = "windows"))]
+fn test_cp_preserve_directory_permissions_by_default() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let dir = "a/b/c/d";
+    let file = "foo.txt";
+
+    at.mkdir_all(dir);
+
+    let file_path = format!("{dir}/{file}");
+
+    at.touch(file_path);
+
+    scene.cmd("chmod").arg("-R").arg("555").arg("a").succeeds();
+    scene.cmd("cp").arg("-r").arg("a").arg("b").succeeds();
+
+    scene.ucmd().arg("-r").arg("a").arg("c").succeeds();
+
+    // only verify owner bits on Android
+    if cfg!(target_os = "android") {
+        assert_eq!(at.metadata("b").mode() & 0o700, 0o500);
+        assert_eq!(at.metadata("b/b").mode() & 0o700, 0o500);
+        assert_eq!(at.metadata("b/b/c").mode() & 0o700, 0o500);
+        assert_eq!(at.metadata("b/b/c/d").mode() & 0o700, 0o500);
+
+        assert_eq!(at.metadata("c").mode() & 0o700, 0o500);
+        assert_eq!(at.metadata("c/b").mode() & 0o700, 0o500);
+        assert_eq!(at.metadata("c/b/c").mode() & 0o700, 0o500);
+        assert_eq!(at.metadata("c/b/c/d").mode() & 0o700, 0o500);
+    } else {
+        assert_eq!(at.metadata("b").mode(), 0o40555);
+        assert_eq!(at.metadata("b/b").mode(), 0o40555);
+        assert_eq!(at.metadata("b/b/c").mode(), 0o40555);
+        assert_eq!(at.metadata("b/b/c/d").mode(), 0o40555);
+
+        assert_eq!(at.metadata("c").mode(), 0o40555);
+        assert_eq!(at.metadata("c/b").mode(), 0o40555);
+        assert_eq!(at.metadata("c/b/c").mode(), 0o40555);
+        assert_eq!(at.metadata("c/b/c/d").mode(), 0o40555);
+    }
+}
+
+#[test]
+#[cfg(not(target_os = "windows"))]
+fn test_cp_existing_perm_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene
+        .cmd("mkdir")
+        .arg("-p")
+        .arg("-m")
+        .arg("ug-s,u=rwx,g=rwx,o=rx")
+        .arg("src/dir")
+        .umask(0o022)
+        .succeeds();
+    scene
+        .cmd("mkdir")
+        .arg("-p")
+        .arg("-m")
+        .arg("ug-s,u=rwx,g=,o=")
+        .arg("dst/dir")
+        .umask(0o022)
+        .succeeds();
+
+    scene.ucmd().arg("-r").arg("src/.").arg("dst/").succeeds();
+
+    let mode = at.metadata("dst/dir").mode();
+
+    assert_eq!(mode, 0o40700);
+}
+
+#[test]
+#[cfg(not(target_os = "windows"))]
+fn test_cp_gnu_preserve_mode() {
+    use std::io;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene.cmd("mkdir").arg("d1").succeeds();
+    scene.cmd("mkdir").arg("d2").succeeds();
+    scene.cmd("chmod").arg("705").arg("d2").succeeds();
+
+    scene
+        .ucmd()
+        .arg("--no-preserve=mode")
+        .arg("-r")
+        .arg("d2")
+        .arg("d3")
+        .set_stdout(io::stdout())
+        .succeeds();
+
+    let d1_mode = at.metadata("d1").mode();
+    let d3_mode = at.metadata("d3").mode();
+
+    assert_eq!(d1_mode, d3_mode);
+}
