@@ -321,7 +321,8 @@ fn next_tabstop(tabstops: &[usize], col: usize, remaining_mode: &RemainingMode) 
     let num_tabstops = tabstops.len();
     match remaining_mode {
         RemainingMode::Plus => {
-            if let Some(t) = tabstops[0..num_tabstops - 1].iter().find(|&&t| t > col) {
+            let stops = &tabstops[0..num_tabstops - 1];
+            if let Some(t) = stops.iter().find(|&&t| t > col) {
                 t - col
             } else {
                 let step_size = tabstops[num_tabstops - 1];
@@ -333,7 +334,8 @@ fn next_tabstop(tabstops: &[usize], col: usize, remaining_mode: &RemainingMode) 
             }
         }
         RemainingMode::Slash => {
-            if let Some(t) = tabstops[0..num_tabstops - 1].iter().find(|&&t| t > col) {
+            let stops = &tabstops[0..num_tabstops - 1];
+            if let Some(t) = stops.iter().find(|&&t| t > col) {
                 t - col
             } else {
                 tabstops[num_tabstops - 1] - col % tabstops[num_tabstops - 1]
@@ -422,10 +424,9 @@ fn expand_buf(
     options: &Options,
     col: &mut usize,
 ) -> std::io::Result<()> {
-    use self::CharType::{Backspace, Other, Tab};
-
     // Fast path: if there are no tabs, backspaces, and (in UTF-8 mode or no carriage returns),
     // we can write the buffer directly without character-by-character processing
+
     if !buf.contains(&b'\t') && !buf.contains(&b'\x08') && (options.utf8 || !buf.contains(&b'\r')) {
         output.write_all(buf)?;
         if let Some(n) = buf.iter().rposition(|&b| b == b'\n') {
@@ -434,6 +435,17 @@ fn expand_buf(
         return Ok(());
     }
 
+    expand_buf_slow(buf, output, tabstops, options, col)
+}
+
+fn expand_buf_slow(
+    buf: &[u8],
+    output: &mut BufWriter<std::io::Stdout>,
+    tabstops: &[usize],
+    options: &Options,
+    col: &mut usize,
+) -> std::io::Result<()> {
+    use self::CharType::{Backspace, Other, Tab};
     let mut byte = 0;
     let mut init = true;
 
@@ -493,13 +505,13 @@ fn expand_file(
     file: &OsString,
     output: &mut BufWriter<std::io::Stdout>,
     options: &Options,
+    buf: &mut [u8],
 ) -> UResult<()> {
-    let mut buf = [0u8; 4096];
     let mut input = open(file)?;
     let ts = options.tabstops.as_ref();
     let mut col = 0;
     loop {
-        match input.read(&mut buf) {
+        match input.read(buf) {
             Ok(0) => break,
             Ok(n) => {
                 expand_buf(&buf[..n], output, ts, options, &mut col)
@@ -513,9 +525,10 @@ fn expand_file(
 
 fn expand(options: &Options) -> UResult<()> {
     let mut output = BufWriter::new(stdout());
+    let mut buf = [0u8; 4096];
 
     for file in &options.files {
-        if let Err(e) = expand_file(file, &mut output, options) {
+        if let Err(e) = expand_file(file, &mut output, options, &mut buf) {
             show!(e);
             set_exit_code(1);
         }
