@@ -13,6 +13,7 @@ use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
 use std::os::unix::io::AsRawFd;
 use std::path::Path;
 use uucore::buf_copy;
+use uucore::fs::create_file_restrictive_perm;
 use uucore::mode::get_umask;
 use uucore::translate;
 
@@ -59,7 +60,7 @@ where
     P: AsRef<Path>,
 {
     let src_file = File::open(&source)?;
-    let dst_file = File::create(&dest)?;
+    let dst_file = create_file_restrictive_perm(&dest, true)?;
     let src_fd = src_file.as_raw_fd();
     let dst_fd = dst_file.as_raw_fd();
     let result = unsafe { libc::ioctl(dst_fd, libc::FICLONE, src_fd) };
@@ -125,7 +126,7 @@ where
     P: AsRef<Path>,
 {
     let src_file = File::open(source)?;
-    let dst_file = File::create(dest)?;
+    let dst_file = create_file_restrictive_perm(dest, true)?;
     let dst_fd = dst_file.as_raw_fd();
 
     let size = src_file.metadata()?.size();
@@ -175,7 +176,7 @@ where
     P: AsRef<Path>,
 {
     let mut src_file = File::open(source)?;
-    let dst_file = File::create(dest)?;
+    let dst_file = create_file_restrictive_perm(dest, true)?;
     let dst_fd = dst_file.as_raw_fd();
 
     let size: usize = src_file.metadata()?.size().try_into().unwrap();
