@@ -10,4 +10,3 @@ tests_sort_merge.pl.patch
 tests_du_move_dir_while_traversing.patch
 test_mkdir_restorecon.patch
 error_msg_uniq.diff
-tests_tail_overlay_headers.patch
