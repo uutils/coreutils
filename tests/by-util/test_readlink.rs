@@ -147,6 +147,13 @@ fn test_posixly_correct_regular_file() {
         .fails_with_code(1)
         .stderr_contains("Invalid argument")
         .no_stdout();
+    scene
+        .ucmd()
+        .env("POSIXLY_CORRECT", "1")
+        .args(&["-q", "regfile"])
+        .fails_with_code(1)
+        .stderr_contains("Invalid argument")
+        .no_stdout();
 }
 
 #[test]
@@ -470,5 +477,16 @@ fn test_verbose_or_silent() {
         .args(&["-vs", "regfile"])
         .fails_with_code(1)
         .no_stderr()
+        .no_stdout();
+    scene
+        .ucmd()
+        .args(&["-sv", "regfile"])
+        .fails_with_code(1)
+        .stderr_contains(
+            #[cfg(not(windows))]
+            "Invalid argument",
+            #[cfg(windows)]
+            "regfile: The file or directory is not a reparse point.",
+        )
         .no_stdout();
 }
