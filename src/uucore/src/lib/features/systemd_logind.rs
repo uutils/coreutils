@@ -37,7 +37,7 @@ mod ffi {
         pub fn sd_session_get_type(session: *const c_char, session_type: *mut *mut c_char)
         -> c_int;
         pub fn sd_session_get_seat(session: *const c_char, seat: *mut *mut c_char) -> c_int;
-
+        pub fn sd_session_get_leader(session: *const c_char, pid: *mut c_int) -> c_int;
     }
 }
 
@@ -253,6 +253,22 @@ mod login {
         Ok(Some(seat_string))
     }
 
+    /// Get leader PID for a session
+    pub fn get_session_pid(session_id: &str) -> Result<i32, Box<dyn std::error::Error>> {
+        let session_cstring = CString::new(session_id)?;
+        let mut pid: std::os::raw::c_int = 0;
+
+        let result = unsafe { ffi::sd_session_get_leader(session_cstring.as_ptr(), &mut pid) };
+
+        if result < 0 {
+            return Err(
+                format!("get_session_pid failed for session '{session_id}': {result}",).into(),
+            );
+        }
+
+        Ok(pid)
+    }
+
     /// Get system boot time using systemd random-seed file fallback
     ///
     /// TODO: This replicates GNU coreutils' fallback behavior for compatibility.
@@ -284,8 +300,7 @@ pub struct SystemdLoginRecord {
     pub raw_device: String,
     pub host: String,
     pub login_time: SystemTime,
-    pub pid: u32,
-    pub session_leader_pid: u32,
+    pub pid: i32,
     pub record_type: SystemdRecordType,
 }
 
@@ -335,7 +350,6 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
             host: String::new(),
             login_time: boot_time,
             pid: 0,
-            session_leader_pid: 0,
             record_type: SystemdRecordType::BootTime,
         };
         records.push(boot_record);
@@ -433,6 +447,9 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
             .flatten()
             .unwrap_or_default();
 
+        // Get session leader PID using safe wrapper
+        let pid = login::get_session_pid(&session_id).ok().unwrap_or_default();
+
         // Determine host (use remote_host if available)
         // If host is local (non-remote) we use display,
         let host = if remote_host.is_empty() {
@@ -464,8 +481,7 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
                 raw_device,
                 host,
                 login_time: start_time,
-                pid: 0, // systemd doesn't directly provide session leader PID in this context
-                session_leader_pid: 0,
+                pid,
                 record_type: SystemdRecordType::UserProcess,
             }
         };
@@ -535,7 +551,7 @@ impl SystemdUtmpxCompat {
 
     /// A.K.A. ut.ut_pid
     pub fn pid(&self) -> i32 {
-        self.record.pid as i32
+        self.record.pid
     }
 
     /// A.K.A. ut.ut_id
@@ -682,7 +698,6 @@ mod tests {
                 host: "host1".to_string(),
                 login_time: UNIX_EPOCH,
                 pid: 1234,
-                session_leader_pid: 1234,
                 record_type: SystemdRecordType::UserProcess,
             },
             SystemdLoginRecord {
@@ -693,7 +708,6 @@ mod tests {
                 host: "host2".to_string(),
                 login_time: UNIX_EPOCH,
                 pid: 5678,
-                session_leader_pid: 5678,
                 record_type: SystemdRecordType::UserProcess,
             },
         ];
@@ -730,7 +744,6 @@ mod tests {
             host: "host1".to_string(),
             login_time: UNIX_EPOCH,
             pid: 1234,
-            session_leader_pid: 1234,
             record_type: SystemdRecordType::UserProcess,
         }];
 
@@ -754,7 +767,6 @@ mod tests {
             host: "localhost".to_string(),
             login_time: UNIX_EPOCH + std::time::Duration::from_secs(1000),
             pid: 9999,
-            session_leader_pid: 9999,
             record_type: SystemdRecordType::UserProcess,
         };
 
