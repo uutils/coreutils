@@ -10,13 +10,10 @@
 //! [`gen_prog_updater`] function can be used to implement a progress
 //! updater that runs in its own thread.
 use std::io::Write;
+#[cfg(target_os = "linux")]
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
-#[cfg(target_os = "linux")]
-use std::thread::JoinHandle;
 use std::time::Duration;
-
-#[cfg(target_os = "linux")]
-use signal_hook::iterator::Handle;
 use uucore::{
     error::{UResult, set_exit_code},
     format::num_format::{FloatVariant, Formatter},
@@ -448,47 +445,22 @@ pub(crate) fn gen_prog_updater(
     }
 }
 
-/// signal handler listens for SIGUSR1 signal and runs provided closure.
 #[cfg(target_os = "linux")]
-pub(crate) struct SignalHandler {
-    handle: Handle,
-    thread: Option<JoinHandle<()>>,
+static SIGUSR1_RECEIVED: AtomicBool = AtomicBool::new(false);
+
+#[cfg(target_os = "linux")]
+pub(crate) fn check_and_reset_sigusr1() -> bool {
+    SIGUSR1_RECEIVED.swap(false, Ordering::Relaxed)
 }
 
 #[cfg(target_os = "linux")]
-impl SignalHandler {
-    pub(crate) fn install_signal_handler(
-        f: Box<dyn Send + Sync + Fn()>,
-    ) -> Result<Self, std::io::Error> {
-        use signal_hook::consts::signal::SIGUSR1;
-        use signal_hook::iterator::Signals;
-
-        let mut signals = Signals::new([SIGUSR1])?;
-        let handle = signals.handle();
-        let thread = std::thread::spawn(move || {
-            for signal in &mut signals {
-                match signal {
-                    SIGUSR1 => (*f)(),
-                    _ => unreachable!(),
-                }
-            }
-        });
-
-        Ok(Self {
-            handle,
-            thread: Some(thread),
-        })
-    }
+extern "C" fn sigusr1_handler(_: std::os::raw::c_int) {
+    SIGUSR1_RECEIVED.store(true, Ordering::Relaxed);
 }
 
 #[cfg(target_os = "linux")]
-impl Drop for SignalHandler {
-    fn drop(&mut self) {
-        self.handle.close();
-        if let Some(thread) = std::mem::take(&mut self.thread) {
-            thread.join().unwrap();
-        }
-    }
+pub(crate) fn install_sigusr1_handler() -> Result<(), nix::errno::Errno> {
+    uucore::signals::install_signal_handler(nix::sys::signal::Signal::SIGUSR1, sigusr1_handler)
 }
 
 /// Return a closure that can be used in its own thread to print progress info.
