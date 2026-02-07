@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (ToDO) hdsf ghead gtail ACDBK hexdigit
+// spell-checker:ignore (ToDO) hdsf ghead gtail ACDBK hexdigit MEMORYSTATUSEX
 
 //! Parser for sizes in SI or IEC units (multiples of 1000 or 1024 bytes).
 
@@ -11,14 +11,27 @@ use std::fmt;
 use std::num::{IntErrorKind, ParseIntError};
 
 use crate::display::Quotable;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use procfs::{Current, Meminfo};
 
 /// Error arising from trying to compute system memory.
+#[derive(Debug)]
 enum SystemError {
     IOError,
     ParseError,
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(any(
+        target_os = "macos",
+        all(
+            not(target_os = "linux"),
+            not(target_os = "macos"),
+            not(target_os = "windows"),
+            not(target_os = "android"),
+            not(target_os = "freebsd"),
+            not(target_os = "openbsd"),
+            not(target_os = "netbsd"),
+            not(target_os = "dragonfly")
+        )
+    ))]
     NotFound,
 }
 
@@ -42,14 +55,54 @@ impl From<ParseIntError> for SystemError {
 ///
 /// If there is a problem reading the file or finding the appropriate
 /// entry in the file.
-#[cfg(target_os = "linux")]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "freebsd",
+    target_os = "openbsd",
+    target_os = "netbsd",
+    target_os = "dragonfly",
+    target_os = "windows"
+))]
 fn total_physical_memory() -> Result<u128, SystemError> {
-    let info = Meminfo::current().map_err(|_| SystemError::IOError)?;
-    Ok((info.mem_total as u128).saturating_mul(1024))
+    #[cfg(target_family = "unix")]
+    {
+        // Try sysconf first as it is more robust than parsing /proc/meminfo
+        // which might be restricted or have an unexpected format in some environments (e.g. CI/containers).
+        let pages = unsafe { crate::libc::sysconf(crate::libc::_SC_PHYS_PAGES) };
+        let page_size = unsafe { crate::libc::sysconf(crate::libc::_SC_PAGESIZE) };
+
+        if pages > 0 && page_size > 0 {
+            return Ok((pages as u128).saturating_mul(page_size as u128));
+        }
+
+        // Fallback to /proc/meminfo on Linux/Android
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        {
+            if let Ok(info) = Meminfo::current() {
+                let total = (info.mem_total as u128).saturating_mul(1024);
+                if total > 0 {
+                    return Ok(total);
+                }
+            }
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
+        let mut mem_info: MEMORYSTATUSEX = unsafe { std::mem::zeroed() };
+        mem_info.dwLength = std::mem::size_of::<MEMORYSTATUSEX>() as u32;
+        if unsafe { GlobalMemoryStatusEx(&mut mem_info) } != 0 {
+            return Ok(mem_info.ullTotalPhys as u128);
+        }
+    }
+
+    Err(SystemError::IOError)
 }
 
 /// Return the number of bytes of memory that appear to be currently available.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn available_memory_bytes() -> Option<u128> {
     let info = Meminfo::current().ok()?;
 
@@ -72,7 +125,7 @@ pub fn available_memory_bytes() -> Option<u128> {
 }
 
 /// Return `None` when the platform does not expose Linux-like `/proc/meminfo`.
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn available_memory_bytes() -> Option<u128> {
     None
 }
@@ -80,7 +133,54 @@ pub fn available_memory_bytes() -> Option<u128> {
 /// Get the total number of bytes of physical memory.
 ///
 /// TODO Implement this for non-Linux systems.
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "macos")]
+fn total_physical_memory() -> Result<u128, SystemError> {
+    use std::ptr;
+    let mut mem: u64 = 0;
+    let mut len = std::mem::size_of::<u64>();
+    let name = "hw.memsize\0";
+    unsafe {
+        if crate::libc::sysctlbyname(
+            name.as_ptr().cast::<crate::libc::c_char>(),
+            ptr::addr_of_mut!(mem).cast::<crate::libc::c_void>(),
+            ptr::addr_of_mut!(len),
+            ptr::null_mut(),
+            0,
+        ) == 0
+        {
+            Ok(mem as u128)
+        } else {
+            Err(SystemError::NotFound)
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn total_physical_memory() -> Result<u128, SystemError> {
+    use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
+
+    let mut mem_status: MEMORYSTATUSEX = unsafe { std::mem::zeroed() };
+    mem_status.dwLength = std::mem::size_of::<MEMORYSTATUSEX>() as u32;
+
+    unsafe {
+        if GlobalMemoryStatusEx(&mut mem_status) != 0 {
+            Ok(mem_status.ullTotalPhys as u128)
+        } else {
+            Err(SystemError::IOError)
+        }
+    }
+}
+
+#[cfg(all(
+    not(target_os = "linux"),
+    not(target_os = "macos"),
+    not(target_os = "windows"),
+    not(target_os = "android"),
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd"),
+    not(target_os = "netbsd"),
+    not(target_os = "dragonfly")
+))]
 fn total_physical_memory() -> Result<u128, SystemError> {
     Err(SystemError::NotFound)
 }
@@ -111,27 +211,190 @@ enum NumberSystem {
 
 impl<'parser> Parser<'parser> {
     /// Change allow_list of the parser - whitelist for the suffix
-    pub fn with_allow_list(&mut self, allow_list: &'parser [&str]) -> &mut Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns `ParserBuilderError` if:
+    /// - Any entry in the allow_list is not a valid unit
+    /// - The allow_list contains duplicates
+    /// - The current default_unit (if set) is not in the new allow_list
+    pub fn with_allow_list(
+        &mut self,
+        allow_list: &'parser [&str],
+    ) -> Result<&mut Self, ParserBuilderError> {
+        // Validate the allow_list itself
+        Self::validate_allow_list(allow_list)?;
+
+        // Validate compatibility with current state
+        self.validate_allow_list_compat(allow_list)?;
+
         self.allow_list = Some(allow_list);
-        self
+        Ok(self)
     }
 
     /// Change default_unit of the parser - when no suffix is provided
-    pub fn with_default_unit(&mut self, default_unit: &'parser str) -> &mut Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns `ParserBuilderError` if:
+    /// - The unit string is empty or contains whitespace
+    /// - The unit is not a valid unit string
+    /// - The unit is not in the allow_list (if allow_list is set)
+    /// - The unit is "b" and b_byte_count is true (ambiguous)
+    pub fn with_default_unit(
+        &mut self,
+        default_unit: &'parser str,
+    ) -> Result<&mut Self, ParserBuilderError> {
+        // Validate unit string
+        Self::is_valid_unit_string(default_unit).map_err(|reason| {
+            ParserBuilderError::InvalidUnit {
+                unit: default_unit.to_string(),
+                reason,
+            }
+        })?;
+
+        // Validate compatibility with current state
+        self.validate_default_unit_compat(default_unit)?;
+
         self.default_unit = Some(default_unit);
-        self
+        Ok(self)
     }
 
     /// Change b_byte_count of the parser - to treat "b" as a "byte count" instead of "block"
-    pub fn with_b_byte_count(&mut self, value: bool) -> &mut Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns `ParserBuilderError` if:
+    /// - The default_unit is "b" (would create ambiguity)
+    pub fn with_b_byte_count(&mut self, value: bool) -> Result<&mut Self, ParserBuilderError> {
+        // Check for conflict with default_unit="b"
+        if value && self.default_unit == Some("b") {
+            return Err(ParserBuilderError::BByteCountConflict {
+                default_unit: "b".to_string(),
+                b_byte_count: value,
+            });
+        }
+
         self.b_byte_count = value;
-        self
+        Ok(self)
     }
 
     /// Change no_empty_numeric of the parser - to allow empty numeric strings
-    pub fn with_allow_empty_numeric(&mut self, value: bool) -> &mut Self {
+    ///
+    /// This method always succeeds as there are no validation constraints.
+    pub fn with_allow_empty_numeric(
+        &mut self,
+        value: bool,
+    ) -> Result<&mut Self, ParserBuilderError> {
         self.no_empty_numeric = value;
-        self
+        Ok(self)
+    }
+
+    /// Validate that a unit string is valid
+    fn is_valid_unit_string(unit: &str) -> Result<(), String> {
+        // Check empty
+        if unit.is_empty() {
+            return Err("empty string".to_string());
+        }
+
+        // Check whitespace
+        if unit.trim() != unit || unit.chars().any(|c| c.is_whitespace()) {
+            return Err("contains whitespace".to_string());
+        }
+
+        // Valid units based on test analysis (lines 540-580)
+        const VALID_UNITS: &[&str] = &[
+            // Single char uppercase (1024 powers)
+            "K", "M", "G", "T", "P", "E", "Z", "Y", "R", "Q",
+            // Single char lowercase (1024 powers) - GNU sort compatibility
+            "k", "m", "g", "t", "p", "e", "z", "y", "r", "q",
+            // Two char decimal (1000 powers)
+            "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB", "RB", "QB",
+            // Binary IEC (1024 powers)
+            "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB", "RiB", "QiB",
+            // Lowercase binary
+            "kiB", "miB", "giB", "tiB", "piB", "eiB", "ziB", "yiB", "riB", "qiB",
+            // Special
+            "b", "B", "%",
+        ];
+
+        if !VALID_UNITS.contains(&unit) {
+            return Err(format!("'{unit}' is not a valid unit"));
+        }
+
+        Ok(())
+    }
+
+    /// Validate an allow_list
+    fn validate_allow_list(allow_list: &[&str]) -> Result<(), ParserBuilderError> {
+        use std::collections::HashMap;
+
+        let mut invalid = Vec::new();
+        let mut seen = HashMap::new();
+
+        for (idx, &unit) in allow_list.iter().enumerate() {
+            // Check validity
+            if let Err(_reason) = Self::is_valid_unit_string(unit) {
+                invalid.push(unit.to_string());
+                continue;
+            }
+
+            // Check duplicates
+            if let Some(&prev_idx) = seen.get(unit) {
+                return Err(ParserBuilderError::DuplicateInAllowList {
+                    unit: unit.to_string(),
+                    indices: vec![prev_idx, idx],
+                });
+            }
+            seen.insert(unit, idx);
+        }
+
+        if !invalid.is_empty() {
+            return Err(ParserBuilderError::InvalidAllowList {
+                reason: "contains invalid units".to_string(),
+                invalid_entries: invalid,
+            });
+        }
+
+        Ok(())
+    }
+
+    /// Validate that default_unit is compatible with current state
+    fn validate_default_unit_compat(&self, unit: &str) -> Result<(), ParserBuilderError> {
+        // Check against allow_list if set
+        if let Some(allow_list) = self.allow_list {
+            if !allow_list.contains(&unit) {
+                return Err(ParserBuilderError::UnitNotAllowed {
+                    unit: unit.to_string(),
+                    allowed: allow_list.iter().map(|s| (*s).to_string()).collect(),
+                });
+            }
+        }
+
+        // Check b_byte_count conflict
+        if unit == "b" && self.b_byte_count {
+            return Err(ParserBuilderError::BByteCountConflict {
+                default_unit: unit.to_string(),
+                b_byte_count: self.b_byte_count,
+            });
+        }
+
+        Ok(())
+    }
+
+    /// Validate that allow_list is compatible with current state
+    fn validate_allow_list_compat(&self, allow_list: &[&str]) -> Result<(), ParserBuilderError> {
+        // Check that default_unit (if set) is in new allow_list
+        if let Some(default_unit) = self.default_unit {
+            if !allow_list.contains(&default_unit) {
+                return Err(ParserBuilderError::UnitNotAllowed {
+                    unit: default_unit.to_string(),
+                    allowed: allow_list.iter().map(|s| (*s).to_string()).collect(),
+                });
+            }
+        }
+
+        Ok(())
     }
     /// Parse a size string into a number of bytes.
     ///
@@ -195,6 +458,19 @@ impl<'parser> Parser<'parser> {
             }
         }
 
+        // Special case: for percentage, just compute the given fraction
+        // of the total physical memory on the machine, if possible.
+        if unit == "%" {
+            let number: u128 = Self::parse_number(&numeric_string, 10, size)?;
+            if number == 0 {
+                return Ok(0);
+            }
+            return match total_physical_memory() {
+                Ok(total) => Ok(number.saturating_mul(total) / 100),
+                Err(_) => Err(ParseSizeError::PhysicalMem(size.to_string())),
+            };
+        }
+
         // Check if `b` is a byte count and remove `b`
         if self.b_byte_count && unit.ends_with('b') {
             // If `unit` = 'b' then return error
@@ -212,16 +488,6 @@ impl<'parser> Parser<'parser> {
                 }
                 return Err(ParseSizeError::invalid_suffix(size));
             }
-        }
-
-        // Special case: for percentage, just compute the given fraction
-        // of the total physical memory on the machine, if possible.
-        if unit == "%" {
-            let number: u128 = Self::parse_number(&numeric_string, 10, size)?;
-            return match total_physical_memory() {
-                Ok(total) => Ok((number / 100) * total),
-                Err(_) => Err(ParseSizeError::PhysicalMem(size.to_string())),
-            };
         }
 
         // Compute the factor the unit represents.
@@ -424,6 +690,133 @@ pub fn parse_size_u128_max(size: &str) -> Result<u128, ParseSizeError> {
 }
 
 /// Error type for parse_size
+/// Error type for Parser builder configuration validation.
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum ParserBuilderError {
+    /// Invalid unit string provided
+    InvalidUnit { unit: String, reason: String },
+
+    /// Unit not in allow_list
+    UnitNotAllowed { unit: String, allowed: Vec<String> },
+
+    /// Conflicting configuration detected
+    ConflictingConfig {
+        setting: String,
+        previous: String,
+        current: String,
+    },
+
+    /// Empty or invalid allow_list
+    InvalidAllowList {
+        reason: String,
+        invalid_entries: Vec<String>,
+    },
+
+    /// Duplicate unit in allow_list
+    DuplicateInAllowList { unit: String, indices: Vec<usize> },
+
+    /// Case-sensitive conflict in allow_list
+    CaseSensitiveConflict {
+        units: Vec<String>,
+        explanation: String,
+    },
+
+    /// Invalid combination of settings
+    InvalidCombination {
+        settings: Vec<String>,
+        reason: String,
+    },
+
+    /// Default unit conflicts with b_byte_count setting
+    BByteCountConflict {
+        default_unit: String,
+        b_byte_count: bool,
+    },
+}
+
+impl fmt::Display for ParserBuilderError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::InvalidUnit { unit, reason } => {
+                write!(f, "invalid unit {}: {}", unit.quote(), reason)
+            }
+            Self::UnitNotAllowed { unit, allowed } => {
+                write!(
+                    f,
+                    "unit {} is not in allow list: allowed units are [{}]",
+                    unit.quote(),
+                    allowed.join(", ")
+                )
+            }
+            Self::ConflictingConfig {
+                setting,
+                previous,
+                current,
+            } => {
+                write!(
+                    f,
+                    "conflicting configuration for {}: previously set to {}, now {}",
+                    setting,
+                    previous.quote(),
+                    current.quote()
+                )
+            }
+            Self::InvalidAllowList {
+                reason,
+                invalid_entries,
+            } => {
+                write!(
+                    f,
+                    "invalid allow_list ({}): invalid entries: [{}]",
+                    reason,
+                    invalid_entries
+                        .iter()
+                        .map(|s| s.quote().to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }
+            Self::DuplicateInAllowList { unit, indices } => {
+                write!(
+                    f,
+                    "duplicate unit {} in allow_list at positions: {:?}",
+                    unit.quote(),
+                    indices
+                )
+            }
+            Self::CaseSensitiveConflict { units, explanation } => {
+                write!(
+                    f,
+                    "case-sensitive conflict in units [{}]: {}",
+                    units.join(", "),
+                    explanation
+                )
+            }
+            Self::InvalidCombination { settings, reason } => {
+                write!(
+                    f,
+                    "invalid combination of settings [{}]: {}",
+                    settings.join(", "),
+                    reason
+                )
+            }
+            Self::BByteCountConflict {
+                default_unit,
+                b_byte_count,
+            } => {
+                write!(
+                    f,
+                    "default_unit {} conflicts with b_byte_count={}",
+                    default_unit.quote(),
+                    b_byte_count
+                )
+            }
+        }
+    }
+}
+
+impl Error for ParserBuilderError {}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum ParseSizeError {
     /// Suffix
@@ -437,6 +830,9 @@ pub enum ParseSizeError {
 
     /// Could not determine total physical memory size.
     PhysicalMem(String),
+
+    /// Builder configuration error
+    BuilderConfig(ParserBuilderError),
 }
 
 impl Error for ParseSizeError {
@@ -446,19 +842,26 @@ impl Error for ParseSizeError {
             Self::ParseFailure(ref s) => s,
             Self::SizeTooBig(ref s) => s,
             Self::PhysicalMem(ref s) => s,
+            Self::BuilderConfig(_) => "builder configuration error",
         }
     }
 }
 
 impl fmt::Display for ParseSizeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        let s = match self {
+        match self {
             Self::InvalidSuffix(s)
             | Self::ParseFailure(s)
             | Self::SizeTooBig(s)
-            | Self::PhysicalMem(s) => s,
-        };
-        write!(f, "{s}")
+            | Self::PhysicalMem(s) => write!(f, "{s}"),
+            Self::BuilderConfig(e) => write!(f, "{e}"),
+        }
+    }
+}
+
+impl From<ParserBuilderError> for ParseSizeError {
+    fn from(e: ParserBuilderError) -> Self {
+        Self::BuilderConfig(e)
     }
 }
 
@@ -737,12 +1140,12 @@ mod tests {
     }
 
     #[test]
-    fn parse_size_options() {
+    fn parse_size_options() -> Result<(), ParserBuilderError> {
         let mut parser = Parser::default();
 
         parser
-            .with_allow_list(&["k", "K", "G", "MB", "M"])
-            .with_default_unit("K");
+            .with_allow_list(&["k", "K", "G", "MB", "M"])?
+            .with_default_unit("K")?;
 
         assert_eq!(Ok(1024), parser.parse("1"));
         assert_eq!(Ok(2 * 1024), parser.parse("2"));
@@ -757,9 +1160,9 @@ mod tests {
         parser
             .with_allow_list(&[
                 "b", "k", "K", "m", "M", "MB", "g", "G", "t", "T", "P", "E", "Z", "Y", "R", "Q",
-            ])
-            .with_default_unit("K")
-            .with_b_byte_count(true);
+            ])?
+            .with_default_unit("K")?
+            .with_b_byte_count(true)?;
 
         assert_eq!(Ok(1024), parser.parse("1"));
         assert_eq!(Ok(2 * 1024), parser.parse("2"));
@@ -782,6 +1185,8 @@ mod tests {
         assert!(parser.parse("b").is_err());
         assert!(parser.parse("1B").is_err());
         assert!(parser.parse("B").is_err());
+
+        Ok(())
     }
 
     #[test]

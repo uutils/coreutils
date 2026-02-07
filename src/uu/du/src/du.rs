@@ -1539,6 +1539,9 @@ fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String
         ParseSizeError::SizeTooBig(_) => {
             translate!("du-error-argument-too-large", "option" => option, "value" => s.quote())
         }
+        ParseSizeError::BuilderConfig(e) => {
+            format!("invalid configuration for {option}: {e}")
+        }
     }
 }
 

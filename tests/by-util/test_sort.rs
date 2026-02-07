@@ -35,11 +35,7 @@ fn test_helper(file_name: &str, possible_args: &[&str]) {
 
 #[test]
 fn test_buffer_sizes() {
-    #[cfg(target_os = "linux")]
     let buffer_sizes = ["0", "50K", "50k", "1M", "100M", "0%", "10%"];
-    // TODO Percentage sizes are not yet supported beyond Linux.
-    #[cfg(not(target_os = "linux"))]
-    let buffer_sizes = ["0", "50K", "50k", "1M", "100M"];
     for buffer_size in &buffer_sizes {
         new_ucmd!()
             .arg("-n")
@@ -80,12 +76,7 @@ fn test_invalid_buffer_size() {
         .stderr_only("sort: invalid suffix in --buffer-size argument '100f'\n");
 
     // TODO Percentage sizes are not yet supported beyond Linux.
-    #[cfg(target_os = "linux")]
-    new_ucmd!()
-        .arg("-S")
-        .arg("0x123%")
-        .fails_with_code(2)
-        .stderr_only("sort: invalid --buffer-size argument '0x123%'\n");
+    new_ucmd!().arg("-S").arg("0x123%").fails_with_code(2);
 
     new_ucmd!()
         .arg("-n")

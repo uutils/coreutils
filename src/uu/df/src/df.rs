@@ -174,6 +174,7 @@ impl Options {
                 ),
                 ParseSizeError::ParseFailure(s) => OptionsError::InvalidBlockSize(s),
                 ParseSizeError::PhysicalMem(s) => OptionsError::InvalidBlockSize(s),
+                ParseSizeError::BuilderConfig(e) => OptionsError::InvalidBlockSize(e.to_string()),
             })?,
             header_mode: {
                 if matches.get_flag(OPT_HUMAN_READABLE_BINARY)
