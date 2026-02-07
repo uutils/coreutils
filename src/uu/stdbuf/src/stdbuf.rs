@@ -160,13 +160,13 @@ fn set_command_env(command: &mut process::Command, buffer_name: &str, buffer_typ
 
 #[cfg(not(feature = "feat_external_libstdbuf"))]
 fn get_preload_env(tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
-    use std::fs::File;
     use std::io::Write;
+    use uucore::fs::create_file_restrictive_perm;
 
     let (preload, extension) = preload_strings()?;
     let inject_path = tmp_dir.path().join("libstdbuf").with_extension(extension);
 
-    let mut file = File::create(&inject_path)?;
+    let mut file = create_file_restrictive_perm(&inject_path, true)?;
     file.write_all(STDBUF_INJECT)?;
 
     Ok((preload.to_owned(), inject_path))
