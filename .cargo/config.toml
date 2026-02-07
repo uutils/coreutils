@@ -15,7 +15,4 @@ LIBSTDBUF_DIR = "/usr/local/libexec/coreutils"
 
 # remove me
 [build]
-rustflags = [
-  "-A",
-  "clippy::collapsible_if",
-]
+rustflags = ["-A", "clippy::collapsible_if"]
