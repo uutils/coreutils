@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) sbytes slen dlen memmem memmap Mmap mmap SIGBUS
+// spell-checker:ignore (ToDO) sbytes slen dlen memmem memmap Mmap mmap SIGBUS wouldblock
 
 mod error;
 
@@ -11,10 +11,9 @@ use clap::{Arg, ArgAction, Command};
 use memchr::memmem;
 use memmap2::Mmap;
 use std::ffi::OsString;
-use std::io::{BufWriter, Read, Write, stdin, stdout};
+use std::io::{self, BufWriter, Read, Write, stdin, stdout};
 use std::{
     fs::{File, read},
-    io::copy,
     path::Path,
 };
 #[cfg(unix)]
@@ -111,11 +110,7 @@ pub fn uu_app() -> Command {
 ///
 /// If there is a problem writing to `stdout`, then this function
 /// returns [`std::io::Error`].
-fn buffer_tac_regex(
-    data: &[u8],
-    pattern: &regex::bytes::Regex,
-    before: bool,
-) -> std::io::Result<()> {
+fn buffer_tac_regex(data: &[u8], pattern: &regex::bytes::Regex, before: bool) -> io::Result<()> {
     let out = stdout();
     let mut out = BufWriter::new(out.lock());
 
@@ -183,7 +178,7 @@ fn buffer_tac_regex(
 /// If `before` is `true`, then this function assumes that the
 /// `separator` appears at the beginning of each line, as in
 /// `"/abc/def"`.
-fn buffer_tac(data: &[u8], before: bool, separator: &str) -> std::io::Result<()> {
+fn buffer_tac(data: &[u8], before: bool, separator: &str) -> io::Result<()> {
     let out = stdout();
     let mut out = BufWriter::new(out.lock());
 
@@ -332,7 +327,7 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &str) -> UR
             if uucore::signals::stdin_was_closed() {
                 let e: Box<dyn UError> = TacError::ReadError(
                     OsString::from("-"),
-                    std::io::Error::from_raw_os_error(libc::EBADF),
+                    io::Error::from_raw_os_error(libc::EBADF),
                 )
                 .into();
                 show!(e);
@@ -419,13 +414,62 @@ enum StdinData {
     Vec(Vec<u8>),
 }
 
+/// Copy from `r` to `w`, retrying on `WouldBlock` (Windows non-blocking stdin pipes).
+#[cfg(windows)]
+fn copy_retry_wouldblock<R: Read, W: Write>(mut r: R, mut w: W) -> io::Result<u64> {
+    let mut buf = [0u8; 64 * 1024];
+    let mut total = 0u64;
+    loop {
+        match r.read(&mut buf) {
+            Ok(0) => return Ok(total),
+            Ok(n) => {
+                w.write_all(&buf[..n])?;
+                total += n as u64;
+            }
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                std::thread::yield_now();
+                continue;
+            }
+            Err(e) => return Err(e),
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn copy_retry_wouldblock<R: Read, W: Write>(mut r: R, mut w: W) -> io::Result<u64> {
+    io::copy(&mut r, &mut w)
+}
+
+/// Read all of `r` into `out`, retrying on `WouldBlock` (Windows non-blocking stdin pipes).
+#[cfg(windows)]
+fn read_to_end_retry_wouldblock<R: Read>(mut r: R, out: &mut Vec<u8>) -> io::Result<()> {
+    let mut buf = [0u8; 64 * 1024];
+    loop {
+        match r.read(&mut buf) {
+            Ok(0) => return Ok(()),
+            Ok(n) => out.extend_from_slice(&buf[..n]),
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                std::thread::yield_now();
+                continue;
+            }
+            Err(e) => return Err(e),
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn read_to_end_retry_wouldblock<R: Read>(mut r: R, out: &mut Vec<u8>) -> io::Result<()> {
+    r.read_to_end(out).map(|_| ())
+}
+
 /// Copy stdin to a temp file, then memory-map it.
 /// Falls back to reading directly into memory if temp file creation fails.
-fn buffer_stdin() -> std::io::Result<StdinData> {
+fn buffer_stdin() -> io::Result<StdinData> {
     // Try to create a temp file (respects TMPDIR)
     if let Ok(mut tmp) = tempfile::tempfile() {
         // Temp file created - copy stdin to it, then read back
-        copy(&mut stdin(), &mut tmp)?;
+        let handle = stdin();
+        copy_retry_wouldblock(handle.lock(), &mut tmp)?;
         // SAFETY: If the file is truncated while we map it, SIGBUS will be raised
         // and our process will be terminated, thus preventing access of invalid memory.
         let mmap = unsafe { Mmap::map(&tmp)? };
@@ -433,7 +477,8 @@ fn buffer_stdin() -> std::io::Result<StdinData> {
     } else {
         // Fall back to reading directly into memory (e.g., bad TMPDIR)
         let mut buf = Vec::new();
-        stdin().read_to_end(&mut buf)?;
+        let handle = stdin();
+        read_to_end_retry_wouldblock(handle.lock(), &mut buf)?;
         Ok(StdinData::Vec(buf))
     }
 }

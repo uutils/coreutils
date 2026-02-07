@@ -29,8 +29,6 @@ fn test_invalid_arg() {
 }
 
 #[test]
-// FIXME: See https://github.com/uutils/coreutils/issues/4204
-#[cfg(not(windows))]
 fn test_stdin_default() {
     new_ucmd!()
         .pipe_in("100\n200\n300\n400\n500")
@@ -39,8 +37,6 @@ fn test_stdin_default() {
 }
 
 #[test]
-// FIXME: See https://github.com/uutils/coreutils/issues/4204
-#[cfg(not(windows))]
 fn test_stdin_non_newline_separator() {
     new_ucmd!()
         .args(&["-s", ":"])
@@ -50,8 +46,6 @@ fn test_stdin_non_newline_separator() {
 }
 
 #[test]
-// FIXME: See https://github.com/uutils/coreutils/issues/4204
-#[cfg(not(windows))]
 fn test_stdin_non_newline_separator_before() {
     new_ucmd!()
         .args(&["-b", "-s", ":"])
@@ -110,8 +104,6 @@ fn test_no_line_separators() {
 }
 
 #[test]
-// FIXME: See https://github.com/uutils/coreutils/issues/4204
-#[cfg(not(windows))]
 fn test_before_trailing_separator_no_leading_separator() {
     new_ucmd!()
         .arg("-b")
@@ -121,8 +113,6 @@ fn test_before_trailing_separator_no_leading_separator() {
 }
 
 #[test]
-// FIXME: See https://github.com/uutils/coreutils/issues/4204
-#[cfg(not(windows))]
 fn test_before_trailing_separator_and_leading_separator() {
     new_ucmd!()
         .arg("-b")
@@ -132,8 +122,6 @@ fn test_before_trailing_separator_and_leading_separator() {
 }
 
 #[test]
-// FIXME: See https://github.com/uutils/coreutils/issues/4204
-#[cfg(not(windows))]
 fn test_before_leading_separator_no_trailing_separator() {
     new_ucmd!()
         .arg("-b")
@@ -143,8 +131,6 @@ fn test_before_leading_separator_no_trailing_separator() {
 }
 
 #[test]
-// FIXME: See https://github.com/uutils/coreutils/issues/4204
-#[cfg(not(windows))]
 fn test_before_no_separator() {
     new_ucmd!()
         .arg("-b")
@@ -154,15 +140,11 @@ fn test_before_no_separator() {
 }
 
 #[test]
-// FIXME: See https://github.com/uutils/coreutils/issues/4204
-#[cfg(not(windows))]
 fn test_before_empty_file() {
     new_ucmd!().arg("-b").pipe_in("").succeeds().stdout_is("");
 }
 
 #[test]
-// FIXME: See https://github.com/uutils/coreutils/issues/4204
-#[cfg(not(windows))]
 fn test_multi_char_separator() {
     new_ucmd!()
         .args(&["-s", "xx"])
@@ -172,8 +154,6 @@ fn test_multi_char_separator() {
 }
 
 #[test]
-// FIXME: See https://github.com/uutils/coreutils/issues/4204
-#[cfg(not(windows))]
 fn test_multi_char_separator_overlap() {
     // The right-most pair of "x" characters in the input is treated as
     // the only line separator. That is, "axxx" is interpreted as having
@@ -204,8 +184,6 @@ fn test_multi_char_separator_overlap() {
 }
 
 #[test]
-// FIXME: See https://github.com/uutils/coreutils/issues/4204
-#[cfg(not(windows))]
 fn test_multi_char_separator_overlap_before() {
     // With the "-b" option, the line separator is assumed to be at the
     // beginning of the line. In this case, That is, "axxx" is
@@ -248,8 +226,6 @@ fn test_multi_char_separator_overlap_before() {
 }
 
 #[test]
-// FIXME: See https://github.com/uutils/coreutils/issues/4204
-#[cfg(not(windows))]
 fn test_null_separator() {
     new_ucmd!()
         .args(&["-s", ""])
@@ -259,8 +235,6 @@ fn test_null_separator() {
 }
 
 #[test]
-// FIXME: See https://github.com/uutils/coreutils/issues/4204
-#[cfg(not(windows))]
 fn test_regex() {
     new_ucmd!()
         .args(&["-r", "-s", "[xyz]+"])
@@ -289,8 +263,6 @@ fn test_regex() {
 }
 
 #[test]
-// FIXME: See https://github.com/uutils/coreutils/issues/4204
-#[cfg(not(windows))]
 fn test_regex_before() {
     new_ucmd!()
         .args(&["-b", "-r", "-s", "[xyz]+"])
