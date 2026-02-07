@@ -4175,7 +4175,6 @@ version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
- "libc",
  "nix",
  "uucore",
  "windows-sys 0.61.2",

@@ -18,7 +18,6 @@ workspace = true
 path = "src/sync.rs"
 
 [dependencies]
-libc = { workspace = true }
 clap = { workspace = true }
 uucore = { workspace = true, features = ["wide"] }
 fluent = { workspace = true }

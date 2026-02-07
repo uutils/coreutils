@@ -183,5 +183,8 @@ fn test_sync_data_fifo_fails_immediately() {
         .arg("--data")
         .arg(at.plus_as_string("test-fifo"))
         .timeout(Duration::from_secs(2))
-        .fails();
+        .fails()
+        .stderr_contains("error syncing")
+        .stderr_contains("test-fifo")
+        .stderr_contains("Invalid input");
 }
