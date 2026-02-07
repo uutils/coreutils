@@ -38,29 +38,36 @@ fn handle_args<'a>(args: impl Iterator<Item = &'a [u8]>, options: &NumfmtOptions
     Ok(())
 }
 
-fn handle_buffer<R>(input: R, options: &NumfmtOptions) -> UResult<()>
+fn handle_buffer<R>(mut input: R, options: &NumfmtOptions) -> UResult<()>
 where
     R: BufRead,
 {
     let terminator = if options.zero_terminated { 0u8 } else { b'\n' };
-    handle_buffer_iterator(input.split(terminator), options, terminator)
-}
+    let mut buf = Vec::new();
+    let mut idx = 0;
 
-fn handle_buffer_iterator(
-    iter: impl Iterator<Item = StdResult<Vec<u8>, Error>>,
-    options: &NumfmtOptions,
-    terminator: u8,
-) -> UResult<()> {
-    for (idx, line_result) in iter.enumerate() {
-        match line_result {
-            Ok(line) if idx < options.header => {
-                std::io::stdout().write_all(&line)?;
+    loop {
+        match input.read_until(terminator, &mut buf) {
+            Ok(0) => break,
+            Ok(_) if idx < options.header => {
+                if buf.last() == Some(&terminator) {
+                    buf.pop();
+                }
+                std::io::stdout().write_all(&buf)?;
                 std::io::stdout().write_all(&[terminator])?;
                 Ok(())
             }
-            Ok(line) => format_and_handle_validation(&line, options),
+            Ok(_) => {
+                if buf.last() == Some(&terminator) {
+                    buf.pop();
+                }
+                format_and_handle_validation(&buf, options)
+            }
             Err(err) => return Err(Box::new(NumfmtError::IoError(err.to_string()))),
         }?;
+
+        buf.clear();
+        idx += 1;
     }
     Ok(())
 }
