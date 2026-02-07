@@ -174,6 +174,7 @@ fn test_sync_multiple_nonexistent_files() {
 
     result.stderr_contains("sync: error opening 'bad1': No such file or directory");
     result.stderr_contains("sync: error opening 'bad2': No such file or directory");
+}
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
