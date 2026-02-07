@@ -174,4 +174,24 @@ fn test_sync_multiple_nonexistent_files() {
 
     result.stderr_contains("sync: error opening 'bad1': No such file or directory");
     result.stderr_contains("sync: error opening 'bad2': No such file or directory");
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_sync_data_fifo_fails_immediately() {
+    use std::time::Duration;
+    use uutests::util::TestScenario;
+    use uutests::util_name;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkfifo("test-fifo");
+
+    ts.ucmd()
+        .arg("--data")
+        .arg(at.plus_as_string("test-fifo"))
+        .timeout(Duration::from_secs(2))
+        .fails()
+        .stderr_contains("error syncing")
+        .stderr_contains("test-fifo")
+        .stderr_contains("Invalid input");
 }

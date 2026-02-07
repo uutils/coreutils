@@ -8,14 +8,14 @@ name = "coreutils"
 description = "coreutils ~ GNU coreutils (updated); implemented as universal (cross-platform) utils, written in Rust"
 default-run = "coreutils"
 repository = "https://github.com/uutils/coreutils"
-rust-version = "1.88.0"
+edition.workspace = true
+rust-version.workspace = true
 version.workspace = true
 authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
-edition.workspace = true
 
 [package.metadata.docs.rs]
 all-features = true
@@ -303,6 +303,7 @@ members = [
 authors = ["uutils developers"]
 categories = ["command-line-utilities"]
 edition = "2024"
+rust-version = "1.88.0"
 homepage = "https://github.com/uutils/coreutils"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 license = "MIT"
@@ -376,7 +377,6 @@ same-file = "1.0.6"
 self_cell = "1.0.4"
 selinux = "=0.6.0"
 string-interner = "0.19.0"
-signal-hook = "0.4.1"
 tempfile = "3.15.0"
 terminal_size = "0.4.0"
 textwrap = { version = "0.16.1", features = ["terminal_size"] }
@@ -605,18 +605,19 @@ name = "uudoc"
 path = "src/bin/uudoc.rs"
 required-features = ["uudoc"]
 
-# The default release profile with some optimizations.
 [profile.release]
 lto = true
 panic = "abort"
-
-[profile.release-fast]
-inherits = "release"
 codegen-units = 1
+# FIXME: https://github.com/uutils/coreutils/issues/10654
+[profile.release.package.uu_expand]
+codegen-units = 16
+[profile.release.package.uu_unexpand]
+codegen-units = 16
 
 # A release-like profile that is as small as possible.
 [profile.release-small]
-inherits = "release-fast"
+inherits = "release"
 opt-level = "z"
 strip = true
 
@@ -642,8 +643,7 @@ unexpected_cfgs = { level = "warn", check-cfg = [
 unused_qualifications = "warn"
 
 [workspace.lints.clippy]
-manual_is_multiple_of = { level = "allow", priority = 127 } # remove me
-collapsible_if = { level = "allow", priority = 127 }        # remove me
+collapsible_if = { level = "allow", priority = 127 } # remove me
 # The counts were generated with this command:
 #   cargo clippy --all-targets --workspace --message-format=json --quiet \
 #     | jq -r '.message.code.code | select(. != null and startswith("clippy::"))' \

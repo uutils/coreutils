@@ -547,8 +547,8 @@ impl Sequence {
                     (Ok(c), Ok(())) => Ok(Self::Char(c)),
                     (Ok(c), Err(v)) => Err(BadSequence::MultipleCharInEquivalence(format!(
                         "{}{}",
-                        String::from_utf8_lossy(&[c]).into_owned(),
-                        String::from_utf8_lossy(v).into_owned()
+                        String::from_utf8_lossy(&[c]),
+                        String::from_utf8_lossy(v),
                     ))),
                 },
             )

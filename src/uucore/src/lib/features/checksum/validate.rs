@@ -417,7 +417,7 @@ impl LineFormat {
         // checksums that are fully alphanumeric. Another check happens later
         // when we are provided with a length hint to detect ambiguous
         // base64-encoded checksums.
-        if is_base64 && checksum.len() % 4 != 0 {
+        if is_base64 && !checksum.len().is_multiple_of(4) {
             return None;
         }
 
@@ -493,7 +493,7 @@ fn get_raw_expected_digest(checksum: &str, byte_len_hint: Option<usize>) -> Opti
     // If the length of the digest is not a multiple of 2, then it must be
     // improperly formatted (1 byte is 2 hex digits, and base64 strings should
     // always be a multiple of 4).
-    if checksum.len() % 2 != 0 {
+    if !checksum.len().is_multiple_of(2) {
         return None;
     }
 
@@ -516,7 +516,7 @@ fn get_raw_expected_digest(checksum: &str, byte_len_hint: Option<usize>) -> Opti
     // It is important to check it before trying to decode, because the
     // forgiving mode of decoding will ignore if padding characters '=' are
     // MISSING, but to match GNU's behavior, we must reject it.
-    if checksum.len() % 4 != 0 {
+    if !checksum.len().is_multiple_of(4) {
         return None;
     }
 
