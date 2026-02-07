@@ -2,9 +2,18 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-
 // spell-checker:ignore (paths) atim sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty tsublink testfile1 testfile2 filelist fpath testdir testfile
 // spell-checker:ignore selfref ELOOP smallfile
+
+#[cfg(target_os = "linux")]
+use {
+    rand::Rng,
+    std::{
+        fs::OpenOptions,
+        io::{self, BufWriter, Write},
+    },
+    uutests::util::AtPath,
+};
 
 #[cfg(not(windows))]
 use regex::Regex;
@@ -1761,6 +1770,76 @@ fn test_du_inodes_total_text() {
     assert_eq!(parts.len(), 2);
 
     assert!(parts[0].parse::<u64>().is_ok());
+}
+
+#[cfg(all(test, target_os = "linux"))]
+pub fn fill_file_rand(
+    file: &mut std::fs::File,
+    size_bytes: usize,
+    use_rng: bool,
+) -> io::Result<()> {
+    const CHUNK_SIZE: usize = 64 * 1024; // 64 kiB
+    let mut writer = BufWriter::new(file);
+    let mut written: usize = 0;
+    let mut to_write_len: usize;
+    let mut tx_buf = [b'a'; CHUNK_SIZE];
+    let mut tx_slice: &mut [u8];
+    let mut rng = if use_rng { Some(rand::rng()) } else { None };
+
+    while written < size_bytes {
+        to_write_len = (size_bytes - written).min(CHUNK_SIZE);
+        tx_slice = &mut tx_buf[..to_write_len];
+
+        if let Some(rng) = &mut rng {
+            rng.fill(tx_slice);
+        }
+
+        writer.write_all(tx_slice)?;
+        written += to_write_len;
+    }
+
+    writer.flush()?;
+    Ok(())
+}
+
+#[cfg(all(test, target_os = "linux"))]
+pub fn fill_bytes(at: &AtPath, name: &str, size_bytes: usize, use_rng: bool) {
+    let mut f = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .append(false)
+        .open(at.plus(name))
+        .unwrap();
+    fill_file_rand(&mut f, size_bytes, use_rng).unwrap();
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_du_summary_total_mega_duplicates() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    const BYTES_PER_MIB: usize = 1024 * 1024;
+
+    fill_bytes(at, "file1", 3 * BYTES_PER_MIB, true);
+
+    at.mkdir("dir1");
+    at.mkdir("dir2");
+
+    fill_bytes(at, "dir1/file1", 5 * BYTES_PER_MIB, true);
+    fill_bytes(at, "dir2/file1", 7 * BYTES_PER_MIB, true);
+
+    let result = ts
+        .ucmd()
+        .args(&["--apparent-size", "-sc", "dir1", "."])
+        .succeeds();
+
+    let result_ref_res = expected_result(&ts, &["--apparent-size", "-sc", "dir1", "."]);
+    if let Ok(result_ref) = result_ref_res {
+        assert_eq!(result.stdout_str(), result_ref.stdout_str());
+    } else {
+        assert_eq!(result.stdout_str(), "5120\tdir1\n10246\t.\n15366\ttotal\n");
+    }
 }
 
 #[test]
