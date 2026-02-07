@@ -122,9 +122,13 @@ impl<T: AsRef<str>> From<T> for NumberFormat {
 impl NumberFormat {
     /// Turns a line number into a `String` with at least `min_width` chars,
     /// formatted according to the `NumberFormat`s variant.
-    fn format_to<W: Write>(&self, writer: &mut W, number: i64, min_width: usize) -> io::Result<()> {
-        let mut buffer = itoa::Buffer::new();
-
+    fn format_to<W: Write>(
+        &self,
+        writer: &mut W,
+        buffer: &mut itoa::Buffer,
+        number: i64,
+        min_width: usize,
+    ) -> io::Result<()> {
         match self {
             Self::Left => {
                 let num = buffer.format(number);
@@ -384,6 +388,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
     let mut writer = BufWriter::new(stdout());
     let mut current_numbering_style = &settings.body_numbering;
     let mut line = Vec::new();
+    let mut itoa_buffer = itoa::Buffer::new();
 
     loop {
         line.clear();
@@ -447,7 +452,12 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
                 };
                 settings
                     .number_format
-                    .format_to(&mut writer, line_number, settings.number_width)
+                    .format_to(
+                        &mut writer,
+                        &mut itoa_buffer,
+                        line_number,
+                        settings.number_width,
+                    )
                     .map_err_context(|| translate!("nl-error-could-not-write"))?;
                 writer
                     .write_all(settings.number_separator.as_encoded_bytes())
@@ -477,7 +487,8 @@ mod test {
     fn test_format() {
         let helper = |fmt: NumberFormat, num: i64, width: usize| -> String {
             let mut buf = Vec::new();
-            fmt.format_to(&mut buf, num, width).unwrap();
+            let mut itoa_buf = itoa::Buffer::new();
+            fmt.format_to(&mut buf, &mut itoa_buf, num, width).unwrap();
             String::from_utf8(buf).unwrap()
         };
 
