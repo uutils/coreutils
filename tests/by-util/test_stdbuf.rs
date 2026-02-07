@@ -105,9 +105,8 @@ fn test_stdbuf_search_order_exe_dir_first() {
 
     assert!(
         loaded_from_exe_dir,
-        "libstdbuf should be loaded from exe directory ({}), not from LIBSTDBUF_DIR. LD_DEBUG output:\n{}",
-        temp_path.display(),
-        stderr
+        "libstdbuf should be loaded from exe directory ({}), not from LIBSTDBUF_DIR. LD_DEBUG output:\n{stderr}",
+        temp_path.display()
     );
 
     // The command should succeed and produce the expected output
