@@ -1717,16 +1717,16 @@ pub(crate) fn copy_attributes(
     source: &Path,
     dest: &Path,
     attributes: &Attributes,
-    created: bool,
+    dest_is_freshly_created_dir: bool,
 ) -> CopyResult<()> {
     let context = &*format!("{} -> {}", source.quote(), dest.quote());
     let source_metadata =
         fs::symlink_metadata(source).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
 
-    let is_explicit = matches!(attributes.mode, Preserve::No { explicit: true });
+    let mode_explicitly_disabled = matches!(attributes.mode, Preserve::No { explicit: true });
 
     // preserve is true by default if the destination is created by us and it's a directory
-    let mode = if !is_explicit && dest.is_dir() && created {
+    let mode = if !mode_explicitly_disabled && dest_is_freshly_created_dir {
         Preserve::Yes { required: false }
     } else {
         attributes.mode
