@@ -426,7 +426,9 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
                 NumberingStyle::All
                     if line.is_empty()
                         && settings.join_blank_lines > 0
-                        && !stats.consecutive_empty_lines.is_multiple_of(settings.join_blank_lines) =>
+                        && !stats
+                            .consecutive_empty_lines
+                            .is_multiple_of(settings.join_blank_lines) =>
                 {
                     false
                 }
