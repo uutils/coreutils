@@ -105,8 +105,8 @@ impl Display for BadSequence {
                 )
             }
             Self::BackwardsRange { end, start } => {
-                fn end_or_start_to_string(ut: &u32) -> String {
-                    match char::from_u32(*ut) {
+                fn end_or_start_to_string(ut: u32) -> String {
+                    match char::from_u32(ut) {
                         Some(ch @ '\x20'..='\x7E') => ch.escape_default().to_string(),
                         _ => {
                             format!("\\{ut:03o}")
@@ -116,7 +116,7 @@ impl Display for BadSequence {
                 write!(
                     f,
                     "{}",
-                    translate!("tr-error-backwards-range", "start" => end_or_start_to_string(start), "end" => end_or_start_to_string(end))
+                    translate!("tr-error-backwards-range", "start" => end_or_start_to_string(*start), "end" => end_or_start_to_string(*end))
                 )
             }
             Self::MultipleCharInEquivalence(s) => write!(

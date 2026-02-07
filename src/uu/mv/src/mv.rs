@@ -587,19 +587,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
         };
 
         // Pre-scan files if needed
-        if let Err(e) = scanner.scan_files(files, &hardlink_options) {
-            if hardlink_options.verbose {
-                eprintln!("mv: warning: failed to scan files for hardlinks: {e}");
-                eprintln!("mv: continuing without hardlink preservation");
-            } else {
-                // Show warning in non-verbose mode for serious errors
-                eprintln!(
-                    "mv: warning: hardlink scanning failed, continuing without hardlink preservation"
-                );
-            }
-            // Continue without hardlink tracking on scan failure
-            // This provides graceful degradation rather than failing completely
-        }
+        scanner.scan_files(files, &hardlink_options);
 
         (tracker, scanner)
     };
@@ -641,12 +629,11 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
             pb.set_message(msg);
         }
 
-        let targetpath = match sourcepath.file_name() {
-            Some(name) => target_dir.join(name),
-            None => {
-                show!(MvError::NoSuchFile(sourcepath.quote().to_string()));
-                continue;
-            }
+        let targetpath = if let Some(name) = sourcepath.file_name() {
+            target_dir.join(name)
+        } else {
+            show!(MvError::NoSuchFile(sourcepath.quote().to_string()));
+            continue;
         };
 
         if moved_destinations.contains(&targetpath) && options.backup != BackupMode::Numbered {
@@ -683,9 +670,10 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
                 let e = e.map_err_context(|| {
                     translate!("mv-error-cannot-move", "source" => sourcepath.quote(), "target" => targetpath.quote())
                 });
-                match display_manager {
-                    Some(ref pb) => pb.suspend(|| show!(e)),
-                    None => show!(e),
+                if let Some(ref pb) = display_manager {
+                    pb.suspend(|| show!(e));
+                } else {
+                    show!(e);
                 }
             }
             Ok(()) => (),
@@ -789,11 +777,10 @@ fn rename(
     }
 
     if opts.verbose {
-        let message = match backup_path {
-            Some(path) => {
-                translate!("mv-verbose-renamed-with-backup", "from" => from.quote(), "to" => to.quote(), "backup" => path.quote())
-            }
-            None => translate!("mv-verbose-renamed", "from" => from.quote(), "to" => to.quote()),
+        let message = if let Some(path) = backup_path {
+            translate!("mv-verbose-renamed-with-backup", "from" => from.quote(), "to" => to.quote(), "backup" => path.quote())
+        } else {
+            translate!("mv-verbose-renamed", "from" => from.quote(), "to" => to.quote())
         };
 
         match display_manager {
@@ -899,6 +886,10 @@ fn rename_fifo_fallback(from: &Path, to: &Path) -> io::Result<()> {
 }
 
 #[cfg(not(unix))]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "fn sig must match on all platforms"
+)]
 fn rename_fifo_fallback(_from: &Path, _to: &Path) -> io::Result<()> {
     Ok(())
 }
@@ -1141,7 +1132,7 @@ fn copy_file_with_hardlinks_helper(
     let hardlink_options = HardlinkOptions::default();
     // Create a hardlink instead of copying
     if let Some(existing_target) =
-        hardlink_tracker.check_hardlink(from, to, hardlink_scanner, &hardlink_options)?
+        hardlink_tracker.check_hardlink(from, to, hardlink_scanner, &hardlink_options)
     {
         fs::hard_link(&existing_target, to)?;
         return Ok(());
@@ -1187,7 +1178,7 @@ fn rename_file_fallback(
             use crate::hardlink::HardlinkOptions;
             let hardlink_options = HardlinkOptions::default();
             if let Some(existing_target) =
-                tracker.check_hardlink(from, to, scanner, &hardlink_options)?
+                tracker.check_hardlink(from, to, scanner, &hardlink_options)
             {
                 // Create a hardlink to the first moved file instead of copying
                 fs::hard_link(&existing_target, to)?;
