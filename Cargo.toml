@@ -642,8 +642,7 @@ unexpected_cfgs = { level = "warn", check-cfg = [
 unused_qualifications = "warn"
 
 [workspace.lints.clippy]
-manual_is_multiple_of = { level = "allow", priority = 127 } # remove me
-collapsible_if = { level = "allow", priority = 127 }        # remove me
+collapsible_if = { level = "allow", priority = 127 } # remove me
 # The counts were generated with this command:
 #   cargo clippy --all-targets --workspace --message-format=json --quiet \
 #     | jq -r '.message.code.code | select(. != null and startswith("clippy::"))' \
