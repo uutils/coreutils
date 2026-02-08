@@ -79,7 +79,7 @@ od-help-width = output BYTES bytes per output line. 32 is implied when BYTES is 
                 specified.
 od-help-traditional = compatibility mode with one input, offset and label.
 od-help-o = octal 2-byte units
-od-help-capital-i = decimal 8-byte units
+od-help-capital-i = decimal 4-byte units
 od-help-capital-l = decimal 8-byte units
 od-help-i = decimal 4-byte units
 od-help-l = decimal 8-byte units
