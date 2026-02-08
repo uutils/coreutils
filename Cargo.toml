@@ -1,7 +1,7 @@
 # coreutils (uutils)
 # * see the repository LICENSE, README, and CONTRIBUTING files for more information
 
-# spell-checker:ignore (libs) bigdecimal datetime serde wincode gethostid kqueue libselinux mangen memmap uuhelp startswith constness expl unnested logind cfgs interner
+# spell-checker:ignore (libs) bigdecimal datetime serde gethostid kqueue libselinux mangen memmap uuhelp startswith constness expl unnested logind cfgs interner
 
 [package]
 name = "coreutils"
@@ -587,11 +587,6 @@ nix = { workspace = true, features = [
 ] }
 rlimit = { workspace = true }
 
-# Used in test_uptime::test_uptime_with_file_containing_valid_boot_time_utmpx_record
-# to deserialize an utmpx struct into a binary file
-[target.'cfg(all(target_family= "unix",not(target_os = "macos")))'.dev-dependencies]
-wincode = "0.3.1"
-wincode-derive = "0.3.1"
 
 [build-dependencies]
 phf_codegen.workspace = true
