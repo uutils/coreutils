@@ -425,7 +425,7 @@ fn next_char_info(uflag: bool, buf: &[u8], byte: usize) -> (CharType, usize, usi
 
 #[allow(clippy::cognitive_complexity)]
 #[allow(clippy::too_many_arguments)]
-fn unexpand_line(
+fn unexpand_buf(
     buf: &[u8],
     output: &mut BufWriter<Stdout>,
     options: &Options,
@@ -434,12 +434,23 @@ fn unexpand_line(
     col: &mut usize,
     scol: &mut usize,
     leading: &mut bool,
+    pctype: &mut CharType,
 ) -> UResult<()> {
     // We can only fast forward if we don't need to calculate col/scol
     if let Some(b'\n') = buf.last() {
         // Fast path: if we're not converting all spaces (-a flag not set)
         // and the line doesn't start with spaces, just write it directly
         if !options.aflag && !buf.is_empty() && ((buf[0] != b' ' && buf[0] != b'\t') || !*leading) {
+            write_tabs(
+                output,
+                tab_config,
+                scol,
+                *col,
+                *pctype == CharType::Tab,
+                *leading,
+                options.aflag,
+            )?;
+            *scol = *col;
             *col += buf.len();
             output.write_all(buf)?;
             return Ok(());
@@ -447,7 +458,6 @@ fn unexpand_line(
     }
 
     let mut byte = 0; // offset into the buffer
-    let mut pctype = CharType::Other;
 
     // We can only fast forward if we don't need to calculate col/scol
     if let Some(b'\n') = buf.last() {
@@ -464,7 +474,7 @@ fn unexpand_line(
                     b'\t' => {
                         *col += next_tabstop(tab_config, *col).unwrap_or(1);
                         byte += 1;
-                        pctype = CharType::Tab;
+                        *pctype = CharType::Tab;
                     }
                     _ => break,
                 }
@@ -477,9 +487,9 @@ fn unexpand_line(
                     tab_config,
                     scol,
                     *col,
-                    pctype == CharType::Tab,
+                    *pctype == CharType::Tab,
                     true,
-                    true,
+                    options.aflag,
                 )?;
             }
 
@@ -500,7 +510,7 @@ fn unexpand_line(
                 tab_config,
                 scol,
                 *col,
-                pctype == CharType::Tab,
+                *pctype == CharType::Tab,
                 *leading,
                 true,
             )?;
@@ -535,7 +545,7 @@ fn unexpand_line(
                     tab_config,
                     scol,
                     *col,
-                    pctype == CharType::Tab,
+                    *pctype == CharType::Tab,
                     *leading,
                     options.aflag,
                 )?;
@@ -555,19 +565,8 @@ fn unexpand_line(
         }
 
         byte += nbytes; // move on to next char
-        pctype = ctype; // save the previous type
+        *pctype = ctype; // save the previous type
     }
-
-    // write out anything remaining
-    write_tabs(
-        output,
-        tab_config,
-        scol,
-        *col,
-        pctype == CharType::Tab,
-        *leading,
-        true,
-    )?;
 
     Ok(())
 }
@@ -584,12 +583,13 @@ fn unexpand_file(
     let mut col = 0;
     let mut scol = 0;
     let mut leading = true;
+    let mut pctype = CharType::Other;
     loop {
         match input.read(&mut buf) {
             Ok(0) => break,
             Ok(n) => {
                 for line in buf[..n].split_inclusive(|b| *b == b'\n') {
-                    unexpand_line(
+                    unexpand_buf(
                         line,
                         output,
                         options,
@@ -598,17 +598,29 @@ fn unexpand_file(
                         &mut col,
                         &mut scol,
                         &mut leading,
+                        &mut pctype,
                     )?;
                     if let Some(b'\n') = line.last() {
                         col = 0;
                         scol = 0;
                         leading = true;
+                        pctype = CharType::Other;
                     }
                 }
             }
             Err(e) => return Err(e.map_err_context(|| file.maybe_quote().to_string())),
         }
     }
+    // write out anything remaining
+    write_tabs(
+        output,
+        tab_config,
+        &mut scol,
+        col,
+        pctype == CharType::Tab,
+        leading,
+        options.aflag,
+    )?;
     Ok(())
 }
 
