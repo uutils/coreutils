@@ -1584,3 +1584,25 @@ fn test_stdin_is_socket() {
         .succeeds()
         .stdout_is(";;");
 }
+
+#[test]
+fn test_delete_graph_does_not_delete_space() {
+    // [:graph:] is all printable characters EXCEPT space.
+    // Deleting [:graph:] from "hello world" should leave the space.
+    new_ucmd!()
+        .args(&["-d", "[:graph:]"])
+        .pipe_in("hello world")
+        .succeeds()
+        .stdout_is(" ");
+}
+
+#[test]
+fn test_delete_print_deletes_space() {
+    // [:print:] is all printable characters INCLUDING space.
+    // Deleting [:print:] from "hello world" should leave nothing.
+    new_ucmd!()
+        .args(&["-d", "[:print:]"])
+        .pipe_in("hello world")
+        .succeeds()
+        .stdout_is("");
+}
