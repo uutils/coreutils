@@ -238,14 +238,14 @@ impl Who {
                             }
                             utmpx::BOOT_TIME if self.need_boottime => self.print_boottime(&ut)?,
                             utmpx::NEW_TIME if self.need_clockchange => {
-                                self.print_clockchange(&ut)?
+                                self.print_clockchange(&ut)?;
                             }
                             utmpx::INIT_PROCESS if self.need_initspawn => {
-                                self.print_initspawn(&ut)?
+                                self.print_initspawn(&ut)?;
                             }
                             utmpx::LOGIN_PROCESS if self.need_login => self.print_login(&ut)?,
                             utmpx::DEAD_PROCESS if self.need_deadprocs => {
-                                self.print_deadprocs(&ut)?
+                                self.print_deadprocs(&ut)?;
                             }
                             _ => {}
                         }
