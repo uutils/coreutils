@@ -9,7 +9,7 @@ use jiff::tz::TimeZone;
 use jiff::{Timestamp, ToSpan};
 #[cfg(unix)]
 use std::ffi::OsString;
-use std::io;
+use std::io::{self, stdout, Write};
 use thiserror::Error;
 use uucore::error::{UError, UResult};
 use uucore::libc::time_t;
@@ -143,7 +143,7 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
 
         if bytes[bytes.len() - 1] != b'x' {
             show_error!("{}", translate!("uptime-error-couldnt-get-boot-time"));
-            print_time();
+            print_time()?;
             print!("{}", translate!("uptime-output-unknown-uptime"));
             print_nusers(Some(0));
             print_loadavg();
@@ -153,14 +153,14 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
     }
 
     if non_fatal_error {
-        print_time();
+        print_time()?;
         print!("{}", translate!("uptime-output-unknown-uptime"));
         print_nusers(Some(0));
         print_loadavg();
         return Ok(());
     }
 
-    print_time();
+    print_time()?;
     let user_count;
 
     #[cfg(not(target_os = "openbsd"))]
@@ -208,14 +208,14 @@ fn uptime_since() -> UResult<()> {
     let uptime = get_uptime(None)?;
 
     let since_date = (Timestamp::now() - uptime.seconds()).to_zoned(TimeZone::system());
-    println!("{}", since_date.strftime("%Y-%m-%d %H:%M:%S"));
+    writeln!(stdout(), "{}", since_date.strftime("%Y-%m-%d %H:%M:%S"))?;
 
     Ok(())
 }
 
 /// Default uptime behaviour i.e. when no file argument is given.
 fn default_uptime() -> UResult<()> {
-    print_time();
+    print_time()?;
     print_uptime(None)?;
     print_nusers(None);
     print_loadavg();
@@ -271,8 +271,9 @@ fn print_nusers(nusers: Option<usize>) {
     );
 }
 
-fn print_time() {
-    print!(" {}  ", get_formatted_time());
+fn print_time() -> UResult<()> {
+    writeln!(stdout(), " {}  ", get_formatted_time())?;
+    Ok(())
 }
 
 fn print_uptime(boot_time: Option<time_t>) -> UResult<()> {
@@ -287,6 +288,6 @@ fn pretty_print_uptime() -> UResult<()> {
     let localized_text = translate!("uptime-output-up-text");
     let uptime_message = get_formatted_uptime(None, OutputFormat::PrettyPrint)?;
 
-    println!("{localized_text} {uptime_message}");
+    writeln!(stdout(), "{localized_text} {uptime_message}")?;
     Ok(())
 }
