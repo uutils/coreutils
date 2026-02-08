@@ -366,3 +366,114 @@ fn test_extended_tabstop_syntax() {
             .stdout_is(expected);
     }
 }
+
+#[test]
+fn test_buffered_reads_new_line_no_tabs_in_first_chunk() {
+    // fixture has newlines in first chunk and has leading spaces after newline in chunk
+    new_ucmd!()
+        .args(&["new_line_in_chunk.txt"])
+        .succeeds()
+        .stdout_is_fixture("new_line_in_chunk_expected.txt");
+}
+
+#[test]
+fn test_leading_spaces_after_chunk_without_newline() {
+    // fixture has newlines in first chunk and has leading spaces after newline in chunk
+    new_ucmd!()
+        .args(&["leading_spaces_after_chunk_without_newline.txt"])
+        .succeeds()
+        .stdout_is_fixture("leading_spaces_after_chunk_without_newline_expected.txt");
+}
+
+#[test]
+fn test_trailing_spaces_and_leading_spaces_in_chunk_without_newline() {
+    // fixture has newlines in first chunk and has leading spaces after newline in chunk
+    new_ucmd!()
+        .args(&["trailing_spaces_and_leading_spaces_in_chunk_without_newline.txt"])
+        .succeeds()
+        .stdout_is_fixture(
+            "trailing_spaces_and_leading_spaces_in_chunk_without_newline_expected.txt",
+        );
+}
+
+#[test]
+fn test_trailing_spaces_in_chunk_without_newline() {
+    // fixture has newlines in first chunk and has leading spaces after newline in chunk
+    new_ucmd!()
+        .args(&["trailing_spaces_in_chunk_without_newline.txt"])
+        .succeeds()
+        .stdout_is_fixture("trailing_spaces_in_chunk_without_newline_expected.txt");
+}
+
+#[test]
+fn test_new_line_in_chunk_all_normal_chars() {
+    // fixture has newlines in first chunk and has leading spaces after newline in chunk
+    new_ucmd!()
+        .args(&["new_line_in_chunk_all_normal_chars.txt"])
+        .succeeds()
+        .stdout_is_fixture("new_line_in_chunk_all_normal_chars_expected.txt");
+}
+
+#[test]
+fn test_new_line_in_chunk_few_trailing_blanks_into_normal_chars_into_leading_blanks_into_normal_chars()
+ {
+    // fixture has newlines in first chunk and has leading spaces after newline in chunk
+    new_ucmd!()
+        .args(&["new_line_in_chunk_few_trailing_blanks_into_normal_chars_into_leading_blanks_into_normal_chars.txt"])
+        .succeeds()
+        .stdout_is_fixture("new_line_in_chunk_few_trailing_blanks_into_normal_chars_into_leading_blanks_into_normal_chars_expected.txt");
+}
+
+#[test]
+fn test_new_line_in_chunk_few_trailing_spaces_into_normal_chars() {
+    // fixture has newlines in first chunk and has leading spaces after newline in chunk
+    new_ucmd!()
+        .args(&["new_line_in_chunk_few_trailing_spaces_into_normal_chars.txt"])
+        .succeeds()
+        .stdout_is_fixture("new_line_in_chunk_few_trailing_spaces_into_normal_chars_expected.txt");
+}
+
+#[test]
+fn test_new_line_in_chunk_normal_chars_into_leading_blanks() {
+    // fixture has newlines in first chunk and has leading spaces after newline in chunk
+    new_ucmd!()
+        .args(&["new_line_in_chunk_normal_chars_into_leading_blanks.txt"])
+        .succeeds()
+        .stdout_is_fixture("new_line_in_chunk_normal_chars_into_leading_blanks_expected.txt");
+}
+
+#[test]
+fn test_new_line_in_chunk_trailing_blanks_into_leading_blanks_into_normal_chars() {
+    // fixture has newlines in first chunk and has leading spaces after newline in chunk
+    new_ucmd!()
+        .args(&["new_line_in_chunk_trailing_blanks_into_leading_blanks_into_normal_chars.txt"])
+        .succeeds()
+        .stdout_is_fixture(
+            "new_line_in_chunk_trailing_blanks_into_leading_blanks_into_normal_chars_expected.txt",
+        );
+}
+
+#[test]
+fn test_new_line_in_chunk_trailing_spaces_into_normal_chars() {
+    // fixture has newlines in first chunk and has leading spaces after newline in chunk
+    new_ucmd!()
+        .args(&["new_line_in_chunk_trailing_spaces_into_normal_chars.txt"])
+        .succeeds()
+        .stdout_is_fixture("new_line_in_chunk_trailing_spaces_into_normal_chars_expected.txt");
+}
+
+//
+// i need tests for
+// 4050 chars, '\n', normal chars , normal chars
+// 4050 chars, '\n', normal chars , leading blanks normal chars
+//
+// 4050 chars, '\n', all blanks until 4096, normal chars
+// 4050 chars, '\n', all blanks until 4096, leading blanks normal chars
+//
+// 4050 chars, '\n', a few blanks until 4096, normal chars
+// 4050 chars, '\n', a few blanks until 4096, leading blanks normal chars
+//
+//
+//
+//
+//
