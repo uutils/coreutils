@@ -9,7 +9,7 @@ use jiff::tz::TimeZone;
 use jiff::{Timestamp, ToSpan};
 #[cfg(unix)]
 use std::ffi::OsString;
-use std::io::{self, stdout, Write};
+use std::io::{self, Write, stdout};
 use thiserror::Error;
 use uucore::error::{UError, UResult};
 use uucore::libc::time_t;
