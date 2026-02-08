@@ -15,6 +15,7 @@ use crate::display::Quotable;
 /// Error arising from trying to compute system memory.
 enum SystemError {
     IOError,
+    #[cfg(target_os = "linux")]
     ParseError,
     #[cfg(not(target_os = "linux"))]
     NotFound,
