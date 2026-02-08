@@ -552,8 +552,8 @@ fn get_ctable(
             Conversion::Ibm => &ASCII_TO_IBM,
         },
         (None, Some(case)) => match case {
-            Case::Lower => &ASCII_UCASE_TO_LCASE,
-            Case::Upper => &ASCII_LCASE_TO_UCASE,
+            Case::Lower => get_ucase_to_lcase_table(),
+            Case::Upper => get_lcase_to_ucase_table(),
         },
         (Some(conv), Some(case)) => match (conv, case) {
             (Conversion::Ascii, Case::Upper) => &EBCDIC_TO_ASCII_LCASE_TO_UCASE,
