@@ -12,7 +12,7 @@ use uu_checksum_common::{ChecksumCommand, checksum_main, default_checksum_app, o
 
 use uucore::checksum::compute::OutputFormat;
 use uucore::checksum::{
-    AlgoKind, ChecksumError, calculate_blake2b_length_str, sanitize_sha2_sha3_length_str,
+    AlgoKind, ChecksumError, calculate_blake_length_str, sanitize_sha2_sha3_length_str,
 };
 use uucore::error::UResult;
 use uucore::hardware::{HasHardwareFeatures as _, SimdPolicy};
@@ -67,8 +67,10 @@ fn maybe_sanitize_length(
             Err(_) => Err(ChecksumError::InvalidLength(len.into()).into()),
         },
 
-        // For BLAKE2b, if a length is provided, validate it.
-        (Some(AlgoKind::Blake2b), Some(len)) => calculate_blake2b_length_str(len),
+        // For BLAKE, if a length is provided, validate it.
+        (Some(algo @ (AlgoKind::Blake2b | AlgoKind::Blake3)), Some(len)) => {
+            calculate_blake_length_str(algo, len)
+        }
 
         // For any other provided algorithm, check if length is 0.
         // Otherwise, this is an error.
