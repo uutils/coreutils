@@ -559,6 +559,7 @@ dependencies = [
  "regex",
  "rlimit",
  "rstest",
+ "rstest_reuse",
  "rustc-hash",
  "selinux",
  "sha1",
@@ -2556,6 +2557,17 @@ dependencies = [
  "rustc_version",
  "syn",
  "unicode-ident",
+]
+
+[[package]]
+name = "rstest_reuse"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b3a8fb4672e840a587a66fc577a5491375df51ddb88f2a2c2a792598c326fe14"
+dependencies = [
+ "quote",
+ "rand 0.8.5",
+ "syn",
 ]
 
 [[package]]
