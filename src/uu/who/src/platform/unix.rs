@@ -18,9 +18,9 @@ use uucore::utmpx::{self, UtmpxRecord, time};
 use std::borrow::Cow;
 use std::ffi::CStr;
 use std::fmt::Write;
+use std::io::{self, Write as _};
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
-use std::io::{self, Write as _};
 
 fn get_long_usage() -> String {
     translate!("who-long-usage", "default_file" => utmpx::DEFAULT_FILE)
@@ -237,10 +237,16 @@ impl Who {
                                 }
                             }
                             utmpx::BOOT_TIME if self.need_boottime => self.print_boottime(&ut)?,
-                            utmpx::NEW_TIME if self.need_clockchange => self.print_clockchange(&ut)?,
-                            utmpx::INIT_PROCESS if self.need_initspawn => self.print_initspawn(&ut)?,
+                            utmpx::NEW_TIME if self.need_clockchange => {
+                                self.print_clockchange(&ut)?
+                            }
+                            utmpx::INIT_PROCESS if self.need_initspawn => {
+                                self.print_initspawn(&ut)?
+                            }
                             utmpx::LOGIN_PROCESS if self.need_login => self.print_login(&ut)?,
-                            utmpx::DEAD_PROCESS if self.need_deadprocs => self.print_deadprocs(&ut)?,
+                            utmpx::DEAD_PROCESS if self.need_deadprocs => {
+                                self.print_deadprocs(&ut)?
+                            }
                             _ => {}
                         }
                     }
@@ -443,11 +449,9 @@ impl Who {
             write!(buf, " {exit:<12}").unwrap();
         }
         let mut stdout = io::stdout().lock();
-        writeln!(stdout, "{}", buf.trim_end()).map_err_context(|| {
-            translate!("who-write-error")
-        })?;
+        writeln!(stdout, "{}", buf.trim_end()).map_err_context(|| translate!("who-write-error"))?;
 
-    Ok(())
+        Ok(())
     }
 
     #[inline]
