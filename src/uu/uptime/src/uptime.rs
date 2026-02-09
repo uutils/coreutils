@@ -272,7 +272,7 @@ fn print_nusers(nusers: Option<usize>) {
 }
 
 fn print_time() -> UResult<()> {
-    writeln!(stdout(), " {}  ", get_formatted_time())?;
+    write!(stdout(), " {}  ", get_formatted_time())?;
     Ok(())
 }
 
