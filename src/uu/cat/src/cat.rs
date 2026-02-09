@@ -26,7 +26,7 @@ use uucore::{fast_inc::fast_inc_one, format_usage};
 /// Linux splice support
 #[cfg(any(target_os = "linux", target_os = "android"))]
 mod splice;
-const FILE_SPLICE_SIZE_THRESHOLD: u64 = 1024 * 10; // 10KB
+const FILE_SPLICE_SIZE_THRESHOLD: u64 = 1024 * 16; // 16KB
 
 // Allocate 32 digits for the line number.
 // An estimate is that we can print about 1e8 lines/seconds, so 32 digits
