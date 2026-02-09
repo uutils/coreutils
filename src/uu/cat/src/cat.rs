@@ -26,6 +26,7 @@ use uucore::{fast_inc::fast_inc_one, format_usage};
 /// Linux splice support
 #[cfg(any(target_os = "linux", target_os = "android"))]
 mod splice;
+const FILE_SPLICE_SIZE_THRESHOLD: u64 = 1024 * 10; // 10KB
 
 // Allocate 32 digits for the line number.
 // An estimate is that we can print about 1e8 lines/seconds, so 32 digits
@@ -359,9 +360,10 @@ fn cat_handle<R: FdReadable>(
     handle: &mut InputHandle<R>,
     options: &OutputOptions,
     state: &mut OutputState,
+    skip_splice: bool,
 ) -> CatResult<()> {
     if options.can_write_fast() {
-        write_fast(handle)
+        write_fast(handle, skip_splice)
     } else {
         write_lines(handle, options, state)
     }
@@ -378,7 +380,7 @@ fn cat_path(path: &OsString, options: &OutputOptions, state: &mut OutputState) -
                 reader: stdin,
                 is_interactive: io::stdin().is_terminal(),
             };
-            cat_handle(&mut handle, options, state)
+            cat_handle(&mut handle, options, state, false)
         }
         InputType::Directory => Err(CatError::IsDirectory),
         #[cfg(unix)]
@@ -388,11 +390,20 @@ fn cat_path(path: &OsString, options: &OutputOptions, state: &mut OutputState) -
             if is_unsafe_overwrite(&file, &io::stdout()) {
                 return Err(CatError::OutputIsInput);
             }
+
+            // Skip splice if file is small enough
+            let metadata = file.metadata();
+            let skip_splice = if let Ok(metadata) = metadata {
+                metadata.len() <= FILE_SPLICE_SIZE_THRESHOLD
+            } else {
+                false
+            };
+
             let mut handle = InputHandle {
                 reader: file,
                 is_interactive: false,
             };
-            cat_handle(&mut handle, options, state)
+            cat_handle(&mut handle, options, state, skip_splice)
         }
     }
 }
@@ -474,14 +485,14 @@ fn get_input_type(path: &OsString) -> CatResult<InputType> {
 
 /// Writes handle to stdout with no configuration. This allows a
 /// simple memory copy.
-fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
+fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>, skip_splice: bool) -> CatResult<()> {
     let stdout = io::stdout();
     let mut stdout_lock = stdout.lock();
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         // If we're on Linux or Android, try to use the splice() system call
         // for faster writing. If it works, we're done.
-        if !splice::write_fast_using_splice(handle, &stdout_lock)? {
+        if !skip_splice && !splice::write_fast_using_splice(handle, &stdout_lock)? {
             return Ok(());
         }
     }
