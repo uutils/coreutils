@@ -457,11 +457,11 @@ fn get_output_chunks(
     // https://github.com/MaiZure/coreutils-8.3/blob/master/src/ptx.c#L1234
     let half_line_size = config.line_width / 2;
     let max_before_size = cmp::max(half_line_size as isize - config.gap_size as isize, 0) as usize;
+
+    let keyword_len = keyword.chars().count();
+    let trunc_len = config.trunc_str.chars().count();
     let max_after_size = cmp::max(
-        half_line_size as isize
-            - (2 * config.trunc_str.len()) as isize
-            - keyword.len() as isize
-            - 1,
+        half_line_size as isize - (2 * trunc_len) as isize - keyword_len as isize - 1,
         0,
     ) as usize;
 
@@ -502,7 +502,7 @@ fn get_output_chunks(
     // and get the string
     let after_str: String = all_after[0..after_end].iter().collect();
     after.push_str(&after_str);
-    assert!(max_after_size >= after.len());
+    assert!(max_after_size >= after.chars().count());
 
     // the tail chunk
 
