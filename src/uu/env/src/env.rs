@@ -30,6 +30,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::io;
+use std::io::Write as _;
+use std::io::stderr;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
@@ -116,7 +118,7 @@ struct Options<'a> {
 fn parse_name_value_opt<'a>(opts: &mut Options<'a>, opt: &'a OsStr) -> UResult<bool> {
     // is it a NAME=VALUE like opt ?
     let wrap = NativeStr::<'a>::new(opt);
-    let split_o = wrap.split_once(&'=');
+    let split_o = wrap.split_once('=');
     if let Some((name, value)) = split_o {
         // yes, so push name, value pair
         opts.sets.push((name, value));
@@ -495,9 +497,10 @@ pub fn parse_args_from_str(text: &NativeIntStr) -> UResult<Vec<NativeIntString>>
 }
 
 fn debug_print_args(args: &[OsString]) {
-    eprintln!("input args:");
+    let mut error = stderr().lock();
+    let _ = writeln!(error, "input args:");
     for (i, arg) in args.iter().enumerate() {
-        eprintln!("arg[{i}]: {}", arg.quote());
+        let _ = writeln!(error, "arg[{i}]: {}", arg.quote());
     }
 }
 
@@ -755,7 +758,7 @@ impl EnvAppData {
             Some(argv0) if cfg!(unix) => {
                 let arg0 = Cow::Borrowed(argv0);
                 if do_debug_printing {
-                    eprintln!("argv0:     {}", arg0.quote());
+                    let _ = writeln!(stderr(), "argv0:     {}", arg0.quote());
                 }
                 arg0
             }
@@ -770,11 +773,12 @@ impl EnvAppData {
         let args = &opts.program[1..];
 
         if do_debug_printing {
-            eprintln!("executing: {}", prog.maybe_quote());
+            let mut error = stderr().lock();
+            let _ = writeln!(error, "executing: {}", prog.maybe_quote());
             let arg_prefix = "   arg";
-            eprintln!("{arg_prefix}[{}]= {}", 0, arg0.quote());
+            let _ = writeln!(error, "{arg_prefix}[{}]= {}", 0, arg0.quote());
             for (i, arg) in args.iter().enumerate() {
-                eprintln!("{arg_prefix}[{}]= {}", i + 1, arg.quote());
+                let _ = writeln!(error, "{arg_prefix}[{}]= {}", i + 1, arg.quote());
             }
         }
 
@@ -926,8 +930,8 @@ fn apply_unset_env_vars(opts: &Options<'_>) -> Result<(), Box<dyn UError>> {
     for name in &opts.unsets {
         let native_name = NativeStr::new(name);
         if name.is_empty()
-            || native_name.contains(&'\0').unwrap()
-            || native_name.contains(&'=').unwrap()
+            || native_name.contains('\0').unwrap()
+            || native_name.contains('=').unwrap()
         {
             return Err(USimpleError::new(
                 125,
@@ -1023,11 +1027,9 @@ where
 
         // Set environment variable to communicate to Rust child processes
         // that SIGPIPE should be default (not ignored)
-        if matches!(action_kind, SignalActionKind::Default)
-            && sig_value == nix::libc::SIGPIPE as usize
-        {
+        if matches!(action_kind, SignalActionKind::Default) && sig_value == libc::SIGPIPE as usize {
             unsafe {
-                std::env::set_var("RUST_SIGPIPE", "default");
+                env::set_var("RUST_SIGPIPE", "default");
             }
         }
 
@@ -1089,16 +1091,12 @@ fn list_signal_handling(log: &SignalActionLog) {
             SignalActionKind::Block => "BLOCK",
         };
         let signal_name = signal_name_by_value(sig_value).unwrap_or("?");
-        eprintln!("{:<10} ({}): {}", signal_name, sig_value as i32, action);
+        eprintln!("{signal_name:<10} ({}): {action}", sig_value as i32);
     }
 }
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    // Rust ignores SIGPIPE (see https://github.com/rust-lang/rust/issues/62569).
-    // We restore its default action here.
-    #[cfg(unix)]
-    let _ = uucore::signals::enable_pipe_errors();
     EnvAppData::default().run_env(args)
 }
 

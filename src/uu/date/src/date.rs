@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres AWST ACST AEST
+// spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres AWST ACST AEST foobarbaz
 
 mod locale;
 
@@ -11,6 +11,7 @@ use clap::{Arg, ArgAction, Command};
 use jiff::fmt::strtime::{self, BrokenDownTime, Config, PosixCustom};
 use jiff::tz::{TimeZone, TimeZoneDatabase};
 use jiff::{Timestamp, Zoned};
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
@@ -19,6 +20,8 @@ use std::sync::OnceLock;
 use uucore::display::Quotable;
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
+#[cfg(feature = "i18n-datetime")]
+use uucore::i18n::datetime::{localize_format_string, should_use_icu_locale};
 use uucore::translate;
 use uucore::{format_usage, show};
 #[cfg(windows)]
@@ -130,6 +133,42 @@ enum DayDelta {
     Next,
 }
 
+/// Strip parenthesized comments from a date string.
+///
+/// GNU date removes balanced parentheses and their content, treating them as comments.
+/// If parentheses are unbalanced, everything from the unmatched '(' onwards is ignored.
+///
+/// Examples:
+/// - "2026(comment)-01-05" -> "2026-01-05"
+/// - "1(ignore comment to eol" -> "1"
+/// - "(" -> ""
+/// - "((foo)2026-01-05)" -> ""
+fn strip_parenthesized_comments(input: &str) -> Cow<'_, str> {
+    if !input.contains('(') {
+        return Cow::Borrowed(input);
+    }
+
+    let mut result = String::with_capacity(input.len());
+    let mut depth = 0;
+
+    for c in input.chars() {
+        match c {
+            '(' => {
+                depth += 1;
+            }
+            ')' if depth > 0 => {
+                depth -= 1;
+            }
+            _ if depth == 0 => {
+                result.push(c);
+            }
+            _ => {}
+        }
+    }
+
+    Cow::Owned(result)
+}
+
 /// Parse military timezone with optional hour offset.
 /// Pattern: single letter (a-z except j) optionally followed by 1-2 digits.
 /// Returns Some(total_hours_in_utc) or None if pattern doesn't match.
@@ -230,6 +269,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Format::Default
     };
 
+    let utc = matches.get_flag(OPT_UNIVERSAL);
+
+    // Get the current time, either in the local time zone or UTC.
+    let now = if utc {
+        Timestamp::now().to_zoned(TimeZone::UTC)
+    } else {
+        Zoned::now()
+    };
+
     let date_source = if let Some(date) = matches.get_one::<String>(OPT_DATE) {
         DateSource::Human(date.into())
     } else if let Some(file) = matches.get_one::<String>(OPT_FILE) {
@@ -245,7 +293,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         DateSource::Now
     };
 
-    let set_to = match matches.get_one::<String>(OPT_SET).map(parse_date) {
+    let set_to = match matches
+        .get_one::<String>(OPT_SET)
+        .map(|s| parse_date(s, &now))
+    {
         None => None,
         Some(Err((input, _err))) => {
             return Err(USimpleError::new(
@@ -257,7 +308,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let settings = Settings {
-        utc: matches.get_flag(OPT_UNIVERSAL),
+        utc,
         format,
         date_source,
         set_to,
@@ -276,17 +327,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return set_system_datetime(date);
     }
 
-    // Get the current time, either in the local time zone or UTC.
-    let now = if settings.utc {
-        Timestamp::now().to_zoned(TimeZone::UTC)
-    } else {
-        Zoned::now()
-    };
-
     // Iterate over all dates - whether it's a single date or a file.
     let dates: Box<dyn Iterator<Item = _>> = match settings.date_source {
         DateSource::Human(ref input) => {
+            // GNU compatibility (Comments in parentheses)
+            let input = strip_parenthesized_comments(input);
             let input = input.trim();
+
             // GNU compatibility (Empty string):
             // An empty string (or whitespace-only) should be treated as midnight today.
             let is_empty_or_whitespace = input.is_empty();
@@ -325,7 +372,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 } else {
                     format!("{date_part} 00:00 {offset}")
                 };
-                parse_date(composed)
+                parse_date(composed, &now)
             } else if let Some((total_hours, day_delta)) = military_tz_with_offset {
                 // Military timezone with optional hour offset
                 // Convert to UTC time: midnight + military_tz_offset + additional_hours
@@ -340,12 +387,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         .unwrap_or_else(|_| String::from("1970-01-01"))
                 };
                 let date_part = match day_delta {
-                    DayDelta::Same => format_date_with_epoch_fallback(Ok(now)),
+                    DayDelta::Same => format_date_with_epoch_fallback(Ok(now.clone())),
                     DayDelta::Next => format_date_with_epoch_fallback(now.tomorrow()),
                     DayDelta::Previous => format_date_with_epoch_fallback(now.yesterday()),
                 };
                 let composed = format!("{date_part} {total_hours:02}:00:00 +00:00");
-                parse_date(composed)
+                parse_date(composed, &now)
             } else if is_pure_digits {
                 // Derive HH and MM from the input
                 let (hh_opt, mm_opt) = if input.len() <= 2 {
@@ -371,13 +418,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     } else {
                         format!("{date_part} {hh:02}:{mm:02} {offset}")
                     };
-                    parse_date(composed)
+                    parse_date(composed, &now)
                 } else {
                     // Fallback on parse failure of digits
-                    parse_date(input)
+                    parse_date(input, &now)
                 }
             } else {
-                parse_date(input)
+                parse_date(input, &now)
             };
 
             let iter = std::iter::once(date);
@@ -385,7 +432,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
         DateSource::Stdin => {
             let lines = BufReader::new(std::io::stdin()).lines();
-            let iter = lines.map_while(Result::ok).map(parse_date);
+            let iter = lines.map_while(Result::ok).map(|s| parse_date(s, &now));
             Box::new(iter)
         }
         DateSource::File(ref path) => {
@@ -398,7 +445,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let file =
                 File::open(path).map_err_context(|| path.as_os_str().maybe_quote().to_string())?;
             let lines = BufReader::new(file).lines();
-            let iter = lines.map_while(Result::ok).map(parse_date);
+            let iter = lines.map_while(Result::ok).map(|s| parse_date(s, &now));
             Box::new(iter)
         }
         DateSource::FileMtime(ref path) => {
@@ -435,7 +482,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     for date in dates {
         match date {
             Ok(date) => {
-                match BrokenDownTime::from(&date).to_string_with_config(&config, format_string) {
+                let date = if settings.utc {
+                    date.with_time_zone(TimeZone::UTC)
+                } else {
+                    date
+                };
+                match format_date_with_locale_aware_months(&date, format_string, &config) {
                     Ok(s) => writeln!(stdout, "{s}").map_err(|e| {
                         USimpleError::new(1, translate!("date-error-write", "error" => e))
                     })?,
@@ -572,6 +624,21 @@ pub fn uu_app() -> Command {
         .arg(Arg::new(OPT_FORMAT).num_args(0..).trailing_var_arg(true))
 }
 
+fn format_date_with_locale_aware_months(
+    date: &Zoned,
+    format_string: &str,
+    config: &Config<PosixCustom>,
+) -> Result<String, jiff::Error> {
+    let broken_down = BrokenDownTime::from(date);
+
+    if !should_use_icu_locale() {
+        return broken_down.to_string_with_config(config, format_string);
+    }
+
+    let fmt = localize_format_string(format_string, &date.date());
+    broken_down.to_string_with_config(config, &fmt)
+}
+
 /// Return the appropriate format string for the given settings.
 fn make_format_string(settings: &Settings) -> &str {
     match settings.format {
@@ -701,15 +768,12 @@ fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S) -> Option<Zoned> {
                 if let Ok(tz) = TimeZone::get(iana_name) {
                     // Parse the date part (everything before the TZ abbreviation)
                     let date_part = s.trim_end_matches(last_word).trim();
-
-                    // Try to parse the date with UTC first to get timestamp
-                    let date_with_utc = format!("{date_part} +00:00");
-                    if let Ok(parsed) = parse_datetime::parse_datetime(&date_with_utc) {
-                        // Get timestamp from parsed date (which is already a Zoned)
-                        let ts = parsed.timestamp();
-
-                        // Get the offset for this specific timestamp in the target timezone
-                        return Some(ts.to_zoned(tz));
+                    // Parse in the target timezone so "10:30 EDT" means 10:30 in EDT
+                    if let Ok(parsed) = parse_datetime::parse_datetime(date_part) {
+                        let dt = parsed.datetime();
+                        if let Ok(zoned) = dt.to_zoned(tz) {
+                            return Some(zoned);
+                        }
                     }
                 }
             }
@@ -731,19 +795,17 @@ fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S) -> Option<Zoned> {
 /// "12345.123456789 seconds ago" which failed in 0.11 but works in 0.13).
 fn parse_date<S: AsRef<str> + Clone>(
     s: S,
+    now: &Zoned,
 ) -> Result<Zoned, (String, parse_datetime::ParseDateTimeError)> {
     // First, try to parse any timezone abbreviations
     if let Some(zoned) = try_parse_with_abbreviation(s.as_ref()) {
         return Ok(zoned);
     }
 
-    match parse_datetime::parse_datetime(s.as_ref()) {
-        Ok(date) => {
-            // Convert to system timezone for display
-            // (parse_datetime 0.13 returns Zoned in the input's timezone)
-            let timestamp = date.timestamp();
-            Ok(timestamp.to_zoned(TimeZone::try_system().unwrap_or(TimeZone::UTC)))
-        }
+    match parse_datetime::parse_datetime_at_date(now.clone(), s.as_ref()) {
+        // Convert to system timezone for display
+        // (parse_datetime 0.13 returns Zoned in the input's timezone)
+        Ok(date) => Ok(date.timestamp().to_zoned(now.time_zone().clone())),
         Err(e) => Err((s.as_ref().into(), e)),
     }
 }
@@ -886,5 +948,39 @@ mod tests {
         assert_eq!(parse_military_timezone_with_offset(""), None); // Empty
         assert_eq!(parse_military_timezone_with_offset("m999"), None); // Too long
         assert_eq!(parse_military_timezone_with_offset("9m"), None); // Starts with digit
+    }
+
+    #[test]
+    fn test_strip_parenthesized_comments() {
+        assert_eq!(strip_parenthesized_comments("hello"), "hello");
+        assert_eq!(strip_parenthesized_comments("2026-01-05"), "2026-01-05");
+        assert_eq!(strip_parenthesized_comments("("), "");
+        assert_eq!(strip_parenthesized_comments("1(comment"), "1");
+        assert_eq!(
+            strip_parenthesized_comments("2026-01-05(this is a comment"),
+            "2026-01-05"
+        );
+        assert_eq!(
+            strip_parenthesized_comments("2026(comment)-01-05"),
+            "2026-01-05"
+        );
+        assert_eq!(strip_parenthesized_comments("()"), "");
+        assert_eq!(strip_parenthesized_comments("((foo)2026-01-05)"), "");
+
+        // These cases test the balanced parentheses removal feature
+        // which extends beyond what GNU date strictly supports
+        assert_eq!(strip_parenthesized_comments("a(b)c"), "ac");
+        assert_eq!(strip_parenthesized_comments("a(b)c(d)e"), "ace");
+        assert_eq!(strip_parenthesized_comments("(a)(b)"), "");
+
+        // When parentheses are unmatched, processing stops at the unmatched opening paren
+        // In this case "a(b)c(d", the (b) is balanced but (d is unmatched
+        // We process "a(b)c" and stop at the unmatched "(d"
+        assert_eq!(strip_parenthesized_comments("a(b)c(d"), "ac");
+
+        // Additional edge cases for nested and complex parentheses
+        assert_eq!(strip_parenthesized_comments("a(b(c)d)e"), "ae"); // Nested balanced
+        assert_eq!(strip_parenthesized_comments("a(b(c)d"), "a"); // Nested unbalanced
+        assert_eq!(strip_parenthesized_comments("a(b)c(d)e(f"), "ace"); // Multiple groups, last unmatched
     }
 }

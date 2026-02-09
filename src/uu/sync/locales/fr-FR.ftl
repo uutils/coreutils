@@ -9,6 +9,10 @@ sync-help-data = synchroniser seulement les données des fichiers, pas les méta
 sync-error-data-needs-argument = --data nécessite au moins un argument
 sync-error-opening-file = erreur lors de l'ouverture de { $file }
 sync-error-no-such-file = erreur lors de l'ouverture de { $file } : Aucun fichier ou répertoire de ce type
+sync-error-syncing-file = erreur lors de la synchronisation de { $file }
+
+# Messages d'avertissement
+sync-warning-fcntl-failed = avertissement : échec de la réinitialisation du drapeau O_NONBLOCK pour { $file } : { $error }
 
 # Messages d'erreur spécifiques à Windows
 sync-error-flush-file-buffer = échec du vidage du tampon de fichier

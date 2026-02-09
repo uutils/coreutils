@@ -9,6 +9,7 @@ license.workspace = true
 homepage.workspace = true
 categories.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 readme.workspace = true
 
 [lints]
@@ -17,7 +18,8 @@ workspace = true
 [lib]
 path = "src/chcon.rs"
 
-[target.'cfg(target_os = "linux")'.dependencies] # todo: block fetching crates without feat_selinux
+# TODO: block fetching crates without feat_selinux
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 clap = { workspace = true }
 uucore = { workspace = true, features = ["entries", "fs", "perms"] }
 selinux = { workspace = true }

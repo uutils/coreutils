@@ -9,6 +9,7 @@ use clap::builder::ValueParser;
 use clap::parser::ValuesRef;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
+use std::io::{Write, stdout};
 use std::path::{Path, PathBuf};
 #[cfg(all(unix, target_os = "linux"))]
 use uucore::error::FromIo;
@@ -50,6 +51,10 @@ pub struct Config<'a> {
 }
 
 #[cfg(windows)]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "fn sig must match on all platforms"
+)]
 fn get_mode(_matches: &ArgMatches) -> Result<u32, String> {
     Ok(DEFAULT_PERM)
 }
@@ -91,7 +96,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 set_security_context: set_security_context || context.is_some(),
                 context,
             };
-            exec(dirs, &config)
+            exec(dirs, &config);
+            Ok(())
         }
         Err(f) => Err(USimpleError::new(1, f)),
     }
@@ -153,14 +159,13 @@ pub fn uu_app() -> Command {
 /**
  * Create the list of new directories
  */
-fn exec(dirs: ValuesRef<OsString>, config: &Config) -> UResult<()> {
+fn exec(dirs: ValuesRef<OsString>, config: &Config) {
     for dir in dirs {
         let path_buf = PathBuf::from(dir);
         let path = path_buf.as_path();
 
         show_if_err!(mkdir(path, config));
     }
-    Ok(())
 }
 
 /// Create directory at a given `path`.
@@ -308,10 +313,11 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
     match create_dir_with_mode(path, create_mode) {
         Ok(()) => {
             if config.verbose {
-                println!(
+                writeln!(
+                    stdout(),
                     "{}",
                     translate!("mkdir-verbose-created-directory", "util_name" => uucore::util_name(), "path" => path.quote())
-                );
+                )?;
             }
 
             // On Linux, we may need to add ACL permission bits via chmod.
@@ -357,10 +363,11 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
             // Print verbose message for logical directories, even if they exist
             // This matches GNU behavior for paths like "test_dir/../test_dir_a"
             if config.verbose && is_parent && config.recursive && !ends_with_parent_dir {
-                println!(
+                writeln!(
+                    stdout(),
                     "{}",
                     translate!("mkdir-verbose-created-directory", "util_name" => uucore::util_name(), "path" => path.quote())
-                );
+                )?;
             }
             Ok(())
         }

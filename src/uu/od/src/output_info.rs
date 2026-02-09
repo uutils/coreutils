@@ -222,10 +222,9 @@ fn assert_alignment(
     assert_eq!(
         expected,
         &spacing[..byte_size_block],
-        "unexpected spacing for byte_size={} print_width={} block_width={}",
+        "unexpected spacing for byte_size={} print_width={} block_width={print_width_block}",
         type_info.byte_size,
         type_info.print_width,
-        print_width_block
     );
     assert!(
         spacing[byte_size_block..].iter().all(|&s| s == 0),
