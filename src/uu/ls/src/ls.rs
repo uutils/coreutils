@@ -2913,7 +2913,7 @@ fn display_grid(
     Ok(())
 }
 
-fn calculate_line_len(output_len: usize, item_len: usize, line_ending: &LineEnding) -> usize {
+fn calculate_line_len(output_len: usize, item_len: usize, line_ending: LineEnding) -> usize {
     output_len + item_len + line_ending.to_string().len()
 }
 
@@ -2922,7 +2922,7 @@ fn update_dired_for_item(
     output_display_len: usize,
     displayed_len: usize,
     dired_name_len: usize,
-    line_ending: &LineEnding,
+    line_ending: LineEnding,
 ) {
     let line_len = calculate_line_len(output_display_len, displayed_len, line_ending);
     dired::calculate_and_update_positions(dired, output_display_len, dired_name_len, line_len);
@@ -3072,7 +3072,7 @@ fn display_item_long(
                 output_display.len(),
                 displayed_len,
                 dired_name_len,
-                &config.line_ending,
+                config.line_ending,
             );
         }
 
@@ -3181,7 +3181,7 @@ fn display_item_long(
                 output_display.len(),
                 displayed_item.displayed.len(),
                 displayed_item.dired_name_len,
-                &config.line_ending,
+                config.line_ending,
             );
         }
         let displayed_item = displayed_item.displayed;

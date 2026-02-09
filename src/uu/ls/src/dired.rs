@@ -142,9 +142,7 @@ pub fn calculate_and_update_positions(
     dfn_len: usize,
     line_len: usize,
 ) {
-    let offset_from_previous_line = dired.line_offset;
-    let start = output_display_len + offset_from_previous_line;
-    let end = start + dfn_len;
+    let (start, end) = calculate_dired(dired, output_display_len, dfn_len);
     update_positions(dired, start, end, line_len);
 }
 
