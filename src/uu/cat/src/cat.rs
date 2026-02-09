@@ -485,6 +485,7 @@ fn get_input_type(path: &OsString) -> CatResult<InputType> {
 
 /// Writes handle to stdout with no configuration. This allows a
 /// simple memory copy.
+#[allow(unused_variables)]
 fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>, skip_splice: bool) -> CatResult<()> {
     let stdout = io::stdout();
     let mut stdout_lock = stdout.lock();
