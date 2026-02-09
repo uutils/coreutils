@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Read, Stdout, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, BufWriter, Read, Stdout, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
@@ -347,7 +347,7 @@ fn next_tabstop(tab_config: &TabConfig, col: usize) -> Option<usize> {
 fn write_tabs(
     output: &mut BufWriter<Stdout>,
     tab_config: &TabConfig,
-    scol: &mut usize,
+    mut scol: usize,
     col: usize,
     prevtab: bool,
     init: bool,
@@ -357,20 +357,20 @@ fn write_tabs(
     // We never turn a single space before a non-blank into
     // a tab, unless it's at the start of the line.
     let ai = init || amode;
-    if (ai && !prevtab && col > *scol + 1) || (col > *scol && (init || ai && prevtab)) {
-        while let Some(nts) = next_tabstop(tab_config, *scol) {
-            if col < *scol + nts {
+    if (ai && !prevtab && col > scol + 1) || (col > scol && (init || ai && prevtab)) {
+        while let Some(nts) = next_tabstop(tab_config, scol) {
+            if col < scol + nts {
                 break;
             }
 
             output.write_all(b"\t")?;
-            *scol += nts;
+            scol += nts;
         }
     }
 
-    while col > *scol {
+    while col > scol {
         output.write_all(b" ")?;
-        *scol += 1;
+        scol += 1;
     }
     Ok(())
 }
@@ -424,88 +424,81 @@ fn next_char_info(uflag: bool, buf: &[u8], byte: usize) -> (CharType, usize, usi
 }
 
 #[allow(clippy::cognitive_complexity)]
-#[allow(clippy::too_many_arguments)]
 fn unexpand_line(
-    buf: &[u8],
+    buf: &mut Vec<u8>,
     output: &mut BufWriter<Stdout>,
     options: &Options,
     lastcol: usize,
     tab_config: &TabConfig,
-    col: &mut usize,
-    scol: &mut usize,
-    leading: &mut bool,
 ) -> UResult<()> {
-    // We can only fast forward if we don't need to calculate col/scol
-    if let Some(b'\n') = buf.last() {
-        // Fast path: if we're not converting all spaces (-a flag not set)
-        // and the line doesn't start with spaces, just write it directly
-        if !options.aflag && !buf.is_empty() && ((buf[0] != b' ' && buf[0] != b'\t') || !*leading) {
-            *col += buf.len();
-            output.write_all(buf)?;
-            return Ok(());
-        }
+    // Fast path: if we're not converting all spaces (-a flag not set)
+    // and the line doesn't start with spaces, just write it directly
+    if !options.aflag && !buf.is_empty() && buf[0] != b' ' && buf[0] != b'\t' {
+        output.write_all(buf)?;
+        buf.truncate(0);
+        return Ok(());
     }
 
     let mut byte = 0; // offset into the buffer
+    let mut col = 0; // the current column
+    let mut scol = 0; // the start col for the current span, i.e., the already-printed width
+    let mut init = true; // are we at the start of the line?
     let mut pctype = CharType::Other;
 
-    // We can only fast forward if we don't need to calculate col/scol
-    if let Some(b'\n') = buf.last() {
-        // Fast path for leading spaces in non-UTF8 mode: count consecutive spaces/tabs at start
-        if !options.uflag && !options.aflag && *leading {
-            // In default mode (not -a), we only convert leading spaces
-            // So we can batch process them and then copy the rest
-            while byte < buf.len() {
-                match buf[byte] {
-                    b' ' => {
-                        *col += 1;
-                        byte += 1;
-                    }
-                    b'\t' => {
-                        *col += next_tabstop(tab_config, *col).unwrap_or(1);
-                        byte += 1;
-                        pctype = CharType::Tab;
-                    }
-                    _ => break,
+    // Fast path for leading spaces in non-UTF8 mode: count consecutive spaces/tabs at start
+    if !options.uflag && !options.aflag {
+        // In default mode (not -a), we only convert leading spaces
+        // So we can batch process them and then copy the rest
+        while byte < buf.len() {
+            match buf[byte] {
+                b' ' => {
+                    col += 1;
+                    byte += 1;
                 }
+                b'\t' => {
+                    col += next_tabstop(tab_config, col).unwrap_or(1);
+                    byte += 1;
+                    pctype = CharType::Tab;
+                }
+                _ => break,
             }
-
-            // If we found spaces/tabs, write them as tabs
-            if byte > 0 {
-                write_tabs(
-                    output,
-                    tab_config,
-                    scol,
-                    *col,
-                    pctype == CharType::Tab,
-                    true,
-                    true,
-                )?;
-            }
-
-            // Write the rest of the line directly (no more tab conversion needed)
-            if byte < buf.len() {
-                *leading = false;
-                output.write_all(&buf[byte..])?;
-            }
-            return Ok(());
         }
+
+        // If we found spaces/tabs, write them as tabs
+        if byte > 0 {
+            write_tabs(
+                output,
+                tab_config,
+                0,
+                col,
+                pctype == CharType::Tab,
+                true,
+                true,
+            )?;
+        }
+
+        // Write the rest of the line directly (no more tab conversion needed)
+        if byte < buf.len() {
+            output.write_all(&buf[byte..])?;
+        }
+        buf.truncate(0);
+        return Ok(());
     }
 
     while byte < buf.len() {
         // when we have a finite number of columns, never convert past the last column
-        if lastcol > 0 && *col >= lastcol {
+        if lastcol > 0 && col >= lastcol {
             write_tabs(
                 output,
                 tab_config,
                 scol,
-                *col,
+                col,
                 pctype == CharType::Tab,
-                *leading,
+                init,
                 true,
             )?;
             output.write_all(&buf[byte..])?;
-            *scol = *col;
+            scol = col;
             break;
         }
 
@@ -513,19 +506,19 @@ fn unexpand_line(
         let (ctype, cwidth, nbytes) = next_char_info(options.uflag, buf, byte);
 
         // now figure out how many columns this char takes up, and maybe print it
-        let tabs_buffered = *leading || options.aflag;
+        let tabs_buffered = init || options.aflag;
         match ctype {
             CharType::Space | CharType::Tab => {
                 // compute next col, but only write space or tab chars if not buffering
-                *col += if ctype == CharType::Space {
+                col += if ctype == CharType::Space {
                     1
                 } else {
-                    next_tabstop(tab_config, *col).unwrap_or(1)
+                    next_tabstop(tab_config, col).unwrap_or(1)
                 };
 
                 if !tabs_buffered {
                     output.write_all(&buf[byte..byte + nbytes])?;
-                    *scol = *col; // now printed up to this column
+                    scol = col; // now printed up to this column
                 }
             }
             CharType::Other | CharType::Backspace => {
@@ -534,23 +527,23 @@ fn unexpand_line(
                     output,
                     tab_config,
                     scol,
-                    *col,
+                    col,
                     pctype == CharType::Tab,
-                    *leading,
+                    init,
                     options.aflag,
                 )?;
-                *leading = false; // no longer at the start of a line
-                *col = if ctype == CharType::Other {
+                init = false; // no longer at the start of a line
+                col = if ctype == CharType::Other {
                     // use computed width
-                    *col + cwidth
-                } else if *col > 0 {
+                    col + cwidth
+                } else if col > 0 {
                     // Backspace case, but only if col > 0
-                    *col - 1
+                    col - 1
                 } else {
                     0
                 };
                 output.write_all(&buf[byte..byte + nbytes])?;
-                *scol = *col; // we've now printed up to this column
+                scol = col; // we've now printed up to this column
             }
         }
 
@@ -563,11 +556,12 @@ fn unexpand_line(
         output,
         tab_config,
         scol,
-        *col,
+        col,
         pctype == CharType::Tab,
-        *leading,
+        init,
         true,
     )?;
+    buf.truncate(0); // clear out the buffer
 
     Ok(())
 }
@@ -579,33 +573,12 @@ fn unexpand_file(
     lastcol: usize,
     tab_config: &TabConfig,
 ) -> UResult<()> {
-    let mut buf = [0u8; 4096];
+    let mut buf = Vec::new();
     let mut input = open(file)?;
-    let mut col = 0;
-    let mut scol = 0;
-    let mut leading = true;
     loop {
-        match input.read(&mut buf) {
+        match input.read_until(b'\n', &mut buf) {
             Ok(0) => break,
-            Ok(n) => {
-                for line in buf[..n].split_inclusive(|b| *b == b'\n') {
-                    unexpand_line(
-                        line,
-                        output,
-                        options,
-                        lastcol,
-                        tab_config,
-                        &mut col,
-                        &mut scol,
-                        &mut leading,
-                    )?;
-                    if let Some(b'\n') = line.last() {
-                        col = 0;
-                        scol = 0;
-                        leading = true;
-                    }
-                }
-            }
+            Ok(_) => unexpand_line(&mut buf, output, options, lastcol, tab_config)?,
             Err(e) => return Err(e.map_err_context(|| file.maybe_quote().to_string())),
         }
     }
