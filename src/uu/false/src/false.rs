@@ -17,7 +17,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // paths to avoid the allocation of an error object, an operation that could, in theory, fail
     // and unwind through the standard library allocation handling machinery.
     set_exit_code(1);
-
+    // We don't call clap for binary size
     let args: Vec<OsString> = args.collect();
     if args.len() != 2 {
         return Ok(());
@@ -39,6 +39,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
+// We optimize the most simple usage
+#[cold]
+#[inline(never)]
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())

@@ -12,6 +12,7 @@ use uucore::translate;
 // TODO: modify proc macro to allow no-result uumain
 #[expect(clippy::unnecessary_wraps, reason = "proc macro requires UResult")]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    // We don't call clap for binary size
     let args: Vec<OsString> = args.collect();
     if args.len() != 2 {
         return Ok(());
@@ -38,6 +39,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
+// We optimize the most simple usage
+#[cold]
+#[inline(never)]
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
