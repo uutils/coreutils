@@ -1,21 +1,21 @@
 # coreutils (uutils)
 # * see the repository LICENSE, README, and CONTRIBUTING files for more information
 
-# spell-checker:ignore (libs) bigdecimal datetime serde wincode gethostid kqueue libselinux mangen memmap uuhelp startswith constness expl unnested logind cfgs interner
+# spell-checker:ignore (libs) bigdecimal datetime serde gethostid kqueue libselinux mangen memmap uuhelp startswith constness expl unnested logind cfgs interner
 
 [package]
 name = "coreutils"
 description = "coreutils ~ GNU coreutils (updated); implemented as universal (cross-platform) utils, written in Rust"
 default-run = "coreutils"
 repository = "https://github.com/uutils/coreutils"
-rust-version = "1.85.0"
+edition.workspace = true
+rust-version.workspace = true
 version.workspace = true
 authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
-edition.workspace = true
 
 [package.metadata.docs.rs]
 all-features = true
@@ -112,7 +112,6 @@ feat_common_core = [
   "false",
   "fmt",
   "fold",
-  "hashsum",
   "head",
   "join",
   "link",
@@ -304,6 +303,7 @@ members = [
 authors = ["uutils developers"]
 categories = ["command-line-utilities"]
 edition = "2024"
+rust-version = "1.88.0"
 homepage = "https://github.com/uutils/coreutils"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 license = "MIT"
@@ -367,18 +367,16 @@ platform-info = "2.0.3"
 procfs = "0.18"
 rand = { version = "0.9.0", features = ["small_rng"] }
 rand_chacha = { version = "0.9.0" }
-rand_core = "0.9.0"
 rayon = "1.10"
 regex = "1.10.4"
-rlimit = "0.10.1"
+rlimit = "0.11.0"
 rstest = "0.26.0"
+rustc-hash = "2.1.1"
 rust-ini = "0.21.0"
 same-file = "1.0.6"
 self_cell = "1.0.4"
-# FIXME we use the exact version because the new 0.5.3 requires an MSRV of 1.88
-selinux = "=0.5.2"
+selinux = "=0.6.0"
 string-interner = "0.19.0"
-signal-hook = "0.4.1"
 tempfile = "3.15.0"
 terminal_size = "0.4.0"
 textwrap = { version = "0.16.1", features = ["terminal_size"] }
@@ -419,10 +417,11 @@ uu_checksum_common = { version = "0.6.0", path = "src/uu/checksum_common" }
 uutests = { version = "0.6.0", package = "uutests", path = "tests/uutests" }
 
 [dependencies]
-clap.workspace = true
 clap_complete = { workspace = true, optional = true }
 clap_mangen = { workspace = true, optional = true }
+clap.workspace = true
 fluent-syntax = { workspace = true, optional = true }
+itertools.workspace = true
 phf.workspace = true
 selinux = { workspace = true, optional = true }
 textwrap.workspace = true
@@ -472,7 +471,6 @@ false = { optional = true, version = "0.6.0", package = "uu_false", path = "src/
 fmt = { optional = true, version = "0.6.0", package = "uu_fmt", path = "src/uu/fmt" }
 fold = { optional = true, version = "0.6.0", package = "uu_fold", path = "src/uu/fold" }
 groups = { optional = true, version = "0.6.0", package = "uu_groups", path = "src/uu/groups" }
-hashsum = { optional = true, version = "0.6.0", package = "uu_hashsum", path = "src/uu/hashsum" }
 head = { optional = true, version = "0.6.0", package = "uu_head", path = "src/uu/head" }
 hostid = { optional = true, version = "0.6.0", package = "uu_hostid", path = "src/uu/hostid" }
 hostname = { optional = true, version = "0.6.0", package = "uu_hostname", path = "src/uu/hostname" }
@@ -589,11 +587,6 @@ nix = { workspace = true, features = [
 ] }
 rlimit = { workspace = true }
 
-# Used in test_uptime::test_uptime_with_file_containing_valid_boot_time_utmpx_record
-# to deserialize an utmpx struct into a binary file
-[target.'cfg(all(target_family= "unix",not(target_os = "macos")))'.dev-dependencies]
-wincode = "0.2.5"
-wincode-derive = "0.2.3"
 
 [build-dependencies]
 phf_codegen.workspace = true
@@ -607,18 +600,17 @@ name = "uudoc"
 path = "src/bin/uudoc.rs"
 required-features = ["uudoc"]
 
-# The default release profile with some optimizations.
 [profile.release]
 lto = true
 panic = "abort"
-
-[profile.release-fast]
-inherits = "release"
 codegen-units = 1
+# FIXME: https://github.com/uutils/coreutils/issues/10654
+[profile.release.package.uu_expand]
+codegen-units = 16
 
 # A release-like profile that is as small as possible.
 [profile.release-small]
-inherits = "release-fast"
+inherits = "release"
 opt-level = "z"
 strip = true
 
@@ -641,9 +633,10 @@ unexpected_cfgs = { level = "warn", check-cfg = [
   'cfg(fuzzing)',
   'cfg(target_os, values("cygwin"))',
 ] }
-#unused_qualifications = "warn" // TODO: fix warnings in uucore, then re-enable this lint
+unused_qualifications = "warn"
 
 [workspace.lints.clippy]
+collapsible_if = { level = "allow", priority = 127 } # remove me
 # The counts were generated with this command:
 #   cargo clippy --all-targets --workspace --message-format=json --quiet \
 #     | jq -r '.message.code.code | select(. != null and startswith("clippy::"))' \
@@ -665,18 +658,14 @@ match_same_arms = "allow"                    # 204
 redundant_closure_for_method_calls = "allow" # 125
 cast_possible_truncation = "allow"           # 122
 too_many_lines = "allow"                     # 101
-trivially_copy_pass_by_ref = "allow"         # 84
-single_match_else = "allow"                  # 82
 cast_possible_wrap = "allow"                 # 78
 cast_sign_loss = "allow"                     # 70
 struct_excessive_bools = "allow"             # 68
 cast_precision_loss = "allow"                # 52
 cast_lossless = "allow"                      # 35
-unnecessary_wraps = "allow"                  # 33
 ignored_unit_patterns = "allow"              # 21
 similar_names = "allow"                      # 20
 large_stack_arrays = "allow"                 # 20
-wildcard_imports = "allow"                   # 18
 needless_pass_by_value = "allow"             # 16
 float_cmp = "allow"                          # 12
 items_after_statements = "allow"             # 11
@@ -689,7 +678,6 @@ should_panic_without_expect = "allow"        # 2
 doc_markdown = "allow"
 unused_self = "allow"
 enum_glob_use = "allow"
-unreadable_literal = "allow"
 unnested_or_patterns = "allow"
 implicit_hasher = "allow"
 struct_field_names = "allow"
@@ -700,4 +688,4 @@ from_iter_instead_of_collect = "allow"
 large_types_passed_by_value = "allow"
 
 [workspace.metadata.cargo-shear]
-ignored = ["fluent", "libstdbuf"]
+ignored = ["clap", "fluent", "libstdbuf"]

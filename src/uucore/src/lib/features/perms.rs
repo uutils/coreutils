@@ -388,14 +388,13 @@ impl ChownExecutor {
         // Use fchown (safe) to change the directory's ownership
         if let Err(e) = dir_fd.fchown(self.dest_uid, self.dest_gid) {
             let mut error_msg = format!(
-                "changing {} of {}: {}",
+                "changing {} of {}: {e}",
                 if self.verbosity.groups_only {
                     "group"
                 } else {
                     "ownership"
                 },
                 path.quote(),
-                e
             );
 
             if self.verbosity.level == VerbosityLevel::Verbose {
@@ -521,7 +520,7 @@ impl ChownExecutor {
                             entry_path.quote(),
                             strip_errno(&e)
                         );
-                        show_error!("{}", msg);
+                        show_error!("{msg}");
                     }
                 } else {
                     // Report the successful ownership change using the shared helper
@@ -890,7 +889,7 @@ pub fn chown_base(
             .action(clap::ArgAction::Append)
             .required(true)
             .num_args(1..)
-            .value_parser(clap::value_parser!(std::ffi::OsString)),
+            .value_parser(clap::value_parser!(OsString)),
     );
     let matches = crate::clap_localization::handle_clap_result(command, args)?;
 

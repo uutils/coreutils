@@ -800,13 +800,3 @@ fn test_check_md5_comment_leading_space() {
         .stdout_contains("foo: OK")
         .stderr_contains("WARNING: 1 line is improperly formatted");
 }
-
-#[test]
-fn test_help_shows_correct_utility_name() {
-    // Test md5sum
-    new_ucmd!()
-        .arg("--help")
-        .succeeds()
-        .stdout_contains("Usage: md5sum")
-        .stdout_does_not_contain("Usage: hashsum");
-}

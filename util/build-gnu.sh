@@ -124,7 +124,7 @@ else
     : > man/local.mk
     # Use CFLAGS for best build time since we discard GNU coreutils
     CFLAGS="${CFLAGS} -pipe -O0 -s" ./configure -C --quiet --disable-gcc-warnings --disable-nls --disable-dependency-tracking --disable-bold-man-page-references \
-      --enable-single-binary=symlinks --enable-install-program="arch,kill,uptime,hostname" \
+      --enable-single-binary=hardlinks --enable-install-program="arch,kill,uptime,hostname" \
       "$([ "${SELINUX_ENABLED}" = 1 ] && echo --with-selinux || echo --without-selinux)"
     #Add timeout to to protect against hangs
     sed -i 's|^"\$@|'"${SYSTEM_TIMEOUT}"' 600 "\$@|' build-aux/test-driver
@@ -213,7 +213,7 @@ sed -i -e "s|---dis ||g" tests/tail/overlay-headers.sh
 # watchers before initial read, so no exact equivalent exists. We break at
 # watch_with_parent as the closest semantic match. -iex suppresses Rust debug
 # script auto-load warnings that would cause the test to skip.
-"${SED}" -i \
+sed -i \
     -e "s|break_src=\"\$abs_top_srcdir/src/tail.c\"|break_src=\"${path_UUTILS}/src/uu/tail/src/follow/watch.rs\"|" \
     -e 's|break_line=$(grep -n ^tail_forever_inotify "$break_src")|break_line=$(grep -n "watcher_rx.watch_with_parent" "$break_src")|' \
     -e 's|gdb -nx --batch-silent|gdb -nx --batch-silent -iex "set auto-load no"|g' \
@@ -316,7 +316,7 @@ echo "n_stat1 = \$n_stat1"\n\
 echo "n_stat2 = \$n_stat2"\n\
 test \$n_stat1 -ge \$n_stat2 \\' tests/ls/stat-free-color.sh
 
-# no need to replicate this output with hashsum
+# for clap
 sed -i -e  "s|Try 'md5sum --help' for more information.\\\n||" tests/cksum/md5sum.pl
 
 # Our ls command always outputs ANSI color codes prepended with a zero. However,
