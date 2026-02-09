@@ -5,6 +5,7 @@
 
 // spell-checker:ignore getloadavg behaviour loadavg uptime upsecs updays upmins uphours boottime nusers utmpxname gettime clockid couldnt
 
+use clap::{Arg, ArgAction, Command, ValueHint, builder::ValueParser};
 use jiff::tz::TimeZone;
 use jiff::{Timestamp, ToSpan};
 #[cfg(unix)]
@@ -12,17 +13,17 @@ use std::ffi::OsString;
 use std::io::{self, Write, stdout};
 use thiserror::Error;
 use uucore::error::{UError, UResult};
+use uucore::format_usage;
 use uucore::libc::time_t;
 use uucore::translate;
-use uucore::uptime::*;
-
-use clap::{Arg, ArgAction, Command, ValueHint, builder::ValueParser};
-
-use uucore::format_usage;
+use uucore::uptime::{
+    OutputFormat, format_nusers, get_formatted_loadavg, get_formatted_nusers, get_formatted_time,
+    get_formatted_uptime, get_uptime,
+};
 
 #[cfg(unix)]
 #[cfg(not(target_os = "openbsd"))]
-use uucore::utmpx::*;
+use uucore::utmpx::{BOOT_TIME, USER_PROCESS, Utmpx};
 
 pub mod options {
     pub static SINCE: &str = "since";
@@ -188,7 +189,8 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
 
             write!(stdout(), "{}", translate!("uptime-output-unknown-uptime"))?;
         }
-        user_count = get_nusers(file_path.to_str().expect("invalid utmp path file"));
+        user_count =
+            uucore::uptime::get_nusers(file_path.to_str().expect("invalid utmp path file"));
     }
 
     print_nusers(Some(user_count))?;
