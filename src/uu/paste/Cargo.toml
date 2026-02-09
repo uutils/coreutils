@@ -19,7 +19,7 @@ path = "src/paste.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true }
+uucore = { workspace = true, features = ["i18n-charmap"] }
 fluent = { workspace = true }
 
 [[bin]]
