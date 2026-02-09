@@ -62,10 +62,8 @@ fn get_doc_file_from_output(output: &str) -> (String, String) {
         Ok(content) => content,
         Err(e) => {
             panic!(
-                "Failed to read file {}: {} from {:?}",
-                correct_path_test,
-                e,
-                env::current_dir()
+                "Failed to read file {correct_path_test}: {e} from {:?}",
+                env::current_dir(),
             );
         }
     };

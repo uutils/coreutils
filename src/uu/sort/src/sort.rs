@@ -1467,7 +1467,7 @@ struct LegacyKeyWarning {
 impl LegacyKeyWarning {
     fn legacy_key_display(&self) -> String {
         match self.to_field {
-            Some(to) => format!("+{} -{}", self.from_field, to),
+            Some(to) => format!("+{} -{to}", self.from_field),
             None => format!("+{}", self.from_field),
         }
     }
@@ -1569,14 +1569,13 @@ fn legacy_key_to_k(from: &LegacyKeyPart, to: Option<&LegacyKeyPart>) -> String {
     let start_char = from.char_pos.saturating_add(1);
 
     let mut keydef = format!(
-        "{}{}{}",
-        start_field,
+        "{start_field}{}{}",
         if from.char_pos == 0 {
             String::new()
         } else {
             format!(".{start_char}")
         },
-        from.opts
+        from.opts,
     );
 
     if let Some(to) = to {
@@ -2150,7 +2149,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
                     #[cfg(target_os = "linux")]
                     {
-                        show_error!("{}", batch_too_large);
+                        show_error!("{batch_too_large}");
 
                         translate!(
                             "sort-maximum-batch-size-rlimit",
