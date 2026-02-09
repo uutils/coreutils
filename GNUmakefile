@@ -1,4 +1,4 @@
-# spell-checker:ignore (misc) testsuite runtest findstring (targets) busytest toybox distclean pkgs nextest ; (vars/env) BINDIR BUILDDIR CARGOFLAGS DESTDIR DOCSDIR INSTALLDIR INSTALLEES MULTICALL DATAROOTDIR TESTDIR manpages
+# spell-checker:ignore (misc) testsuite runtest findstring (targets) busytest toybox distclean pkgs nextest ; (vars/env) BINDIR BUILDDIR CARGOFLAGS DESTDIR DOCSDIR INSTALLDIR INSTALLEES MULTICALL DATAROOTDIR TESTDIR manpages RUSTFLAGS codegen-units opt-level
 
 # Config options
 ifneq (,$(filter install, $(MAKECMDGOALS)))
@@ -215,8 +215,10 @@ distclean: clean
 
 ifeq ($(MANPAGES),y)
 # Do not cross-build uudoc
+# No need to optimize uudoc
+# todo: share crates with coreutils at build time
 build-uudoc:
-	@unset CARGO_BUILD_TARGET && ${CARGO} build ${CARGOFLAGS} --bin uudoc --features "uudoc ${EXES}" ${PROFILE_CMD} --no-default-features
+	@env -u CARGO_BUILD_TARGET RUSTFLAGS="-C opt-level=0 -C codegen-units=16" ${CARGO} build ${CARGOFLAGS} --bin uudoc --features "uudoc ${EXES}" ${PROFILE_CMD} --no-default-features
 
 install-manpages: build-uudoc
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/man/man1
