@@ -262,6 +262,7 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
     const LOCALE_FORMAT: (&str, Option<&str>) = ("%b %e %H:%M", Some("%b %e  %Y"));
 
     // Convert time_styles references to owned String/option.
+    #[expect(clippy::unnecessary_wraps, reason = "internal result helper")]
     fn ok((recent, older): (&str, Option<&str>)) -> Result<(String, Option<String>), LsError> {
         Ok((recent.to_string(), older.map(String::from)))
     }
@@ -2634,7 +2635,7 @@ fn display_additional_leading_info(
     item: &PathData,
     padding: &PaddingCollection,
     config: &Config,
-) -> UResult<String> {
+) -> String {
     let mut result = String::new();
     #[cfg(unix)]
     {
@@ -2661,7 +2662,8 @@ fn display_additional_leading_info(
             write!(result, "{} ", pad_left(&s, padding.block_size)).unwrap();
         }
     }
-    Ok(result)
+
+    result
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -2690,7 +2692,7 @@ fn display_items(
             let should_display_leading_info = config.alloc_size;
 
             if should_display_leading_info {
-                let more_info = display_additional_leading_info(item, &padding_collection, config)?;
+                let more_info = display_additional_leading_info(item, &padding_collection, config);
 
                 write!(state.out, "{more_info}")?;
             }
@@ -2725,7 +2727,7 @@ fn display_items(
 
         for i in items {
             let more_info = if should_display_leading_info {
-                Some(display_additional_leading_info(i, &padding, config)?)
+                Some(display_additional_leading_info(i, &padding, config))
             } else {
                 None
             };
@@ -3404,13 +3406,30 @@ fn display_item_name(
                                 config,
                                 false,
                             );
-                            name.push(color_name(
-                                escaped_target,
-                                &target_data,
-                                style_manager,
-                                None,
-                                is_wrap(name.len()),
-                            ));
+
+                            // Check if the target actually needs coloring
+                            let md_option: Option<Metadata> = target_data
+                                .metadata()
+                                .cloned()
+                                .or_else(|| target_data.p_buf.symlink_metadata().ok());
+                            let style = style_manager.colors.style_for_path_with_metadata(
+                                &target_data.p_buf,
+                                md_option.as_ref(),
+                            );
+
+                            if style.is_some() {
+                                // Only apply coloring if there's actually a style
+                                name.push(color_name(
+                                    escaped_target,
+                                    &target_data,
+                                    style_manager,
+                                    None,
+                                    is_wrap(name.len()),
+                                ));
+                            } else {
+                                // For regular files with no coloring, just use plain text
+                                name.push(escaped_target);
+                            }
                         }
                         Err(_) => {
                             name.push(
@@ -3461,29 +3480,34 @@ fn create_hyperlink(name: &OsStr, path: &PathData) -> OsString {
     let hostname = hostname.to_string_lossy();
 
     let absolute_path = fs::canonicalize(path.path()).unwrap_or_default();
-    let absolute_path = absolute_path.to_string_lossy();
 
+    // Get bytes for URL encoding in a cross-platform way
+    let absolute_path_bytes = os_str_as_bytes_lossy(absolute_path.as_os_str());
+
+    // Create a set of safe ASCII bytes that don't need encoding
     #[cfg(not(target_os = "windows"))]
-    let unencoded_chars = "_-.:~/";
+    let unencoded_bytes: std::collections::HashSet<u8> = "_-.~/".bytes().collect();
     #[cfg(target_os = "windows")]
-    let unencoded_chars = "_-.:~/\\";
+    let unencoded_bytes: std::collections::HashSet<u8> = "_-.~/\\:".bytes().collect();
 
-    // percentage encoding of path
-    let absolute_path: String = absolute_path
-        .chars()
-        .map(|c| {
-            if c.is_alphanumeric() || unencoded_chars.contains(c) {
-                c.to_string()
+    // Encode at byte level to properly handle UTF-8 sequences and preserve invalid UTF-8
+    let full_encoded_path: String = absolute_path_bytes
+        .iter()
+        .map(|&b: &u8| {
+            if b.is_ascii_alphanumeric() || unencoded_bytes.contains(&b) {
+                (b as char).to_string()
             } else {
-                format!("%{:02x}", c as u8)
+                format!("%{b:02x}")
             }
         })
         .collect();
 
-    // \x1b = ESC, \x07 = BEL
-    let mut ret: OsString = format!("\x1b]8;;file://{hostname}{absolute_path}\x07").into();
+    // OSC 8 hyperlink format: \x1b]8;;URL\x1b\\TEXT\x1b]8;;\x1b\\
+    // \x1b = ESC, \x1b\\ = ESC backslash
+    let mut ret: OsString = format!("\x1b]8;;file://{hostname}{full_encoded_path}\x1b\\").into();
     ret.push(name);
-    ret.push("\x1b]8;;\x07");
+    ret.push("\x1b]8;;\x1b\\");
+
     ret
 }
 
@@ -3577,8 +3601,7 @@ fn get_security_context<'a>(
         };
 
         return uucore::smack::get_smack_label_for_path(&target_path)
-            .map(Cow::Owned)
-            .unwrap_or(Cow::Borrowed(SUBSTITUTE_STRING));
+            .map_or(Cow::Borrowed(SUBSTITUTE_STRING), Cow::Owned);
     }
 
     Cow::Borrowed(SUBSTITUTE_STRING)

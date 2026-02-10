@@ -9,6 +9,8 @@ use uucore::error::{UResult, set_exit_code};
 use uucore::translate;
 
 #[uucore::main]
+// TODO: modify proc macro to allow no-result uumain
+#[expect(clippy::unnecessary_wraps, reason = "proc macro requires UResult")]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Mirror GNU options, always return `1`. In particular even the 'successful' cases of no-op,
     // and the interrupted display of help and version should return `1`. Also, we return Ok in all
@@ -31,10 +33,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     if let Err(print_fail) = error {
-        // Try to display this error.
         let _ = writeln!(std::io::stderr(), "{}: {print_fail}", uucore::util_name());
-        // Completely ignore any error here, no more failover and we will fail in any case.
-        set_exit_code(1);
     }
 
     Ok(())

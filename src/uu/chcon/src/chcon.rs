@@ -25,7 +25,7 @@ use std::{fs, io};
 mod errors;
 mod fts;
 
-use errors::*;
+use errors::{Error, Result, report_full_error};
 
 pub mod options {
     pub static HELP: &str = "help";

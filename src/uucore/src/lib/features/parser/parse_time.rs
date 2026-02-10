@@ -87,7 +87,7 @@ pub fn from_str(string: &str, allow_suffixes: bool) -> Result<Duration, String> 
                 return Ok(Duration::MAX);
             }
             // early return if number is too small (< 1 ns)
-            if !bd.is_zero() && bd < bigdecimal::BigDecimal::from_f64(0.0000000001).unwrap() {
+            if !bd.is_zero() && bd < bigdecimal::BigDecimal::from_f64(0.000_000_000_1).unwrap() {
                 return Ok(NANOSECOND_DURATION);
             }
             bd

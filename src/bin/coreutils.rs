@@ -30,7 +30,7 @@ fn usage<T>(utils: &UtilityMap<T>, name: &str) {
     println!("Options:");
     println!("      --list    lists all defined functions, one per row\n");
     println!("Currently defined functions:\n");
-    let display_list = utils.keys().copied().sorted_unstable().join(", ");
+    let display_list = utils.keys().copied().join(", ");
     let width = cmp::min(textwrap::termwidth(), 100) - 4 * 2; // (opinion/heuristic) max 100 chars wide with 4 character side indentions
     println!(
         "{}",
@@ -52,14 +52,15 @@ fn main() {
     });
 
     // binary name ends with util name?
+    let is_coreutils = binary_as_util.ends_with("utils");
     let matched_util = utils
         .keys()
-        .filter(|&&u| binary_as_util.ends_with(u) && !binary_as_util.ends_with("coreutils"))
-        .max_by_key(|u| u.len()); //Prefer stty more than tty. coreutils is not ls
+        .filter(|&&u| binary_as_util.ends_with(u) && !is_coreutils)
+        .max_by_key(|u| u.len()); //Prefer stty more than tty. *utils is not ls
 
     let util_name = if let Some(&util) = matched_util {
         Some(OsString::from(util))
-    } else if binary_as_util.ends_with("utils") || binary_as_util.ends_with("box") {
+    } else if is_coreutils || binary_as_util.ends_with("box") {
         // todo: Remove support of "*box" from binary
         uucore::set_utility_is_second_arg();
         args.next()
@@ -75,8 +76,12 @@ fn main() {
 
         match util {
             "--list" => {
-                let mut utils: Vec<_> = utils.keys().collect();
-                utils.sort();
+                // If --help is also present, show usage instead of list
+                if args.any(|arg| arg == "--help" || arg == "-h") {
+                    usage(&utils, binary_as_util);
+                    process::exit(0);
+                }
+                let utils: Vec<_> = utils.keys().collect();
                 for util in utils {
                     println!("{util}");
                 }
@@ -123,6 +128,9 @@ fn main() {
                     }
                     usage(&utils, binary_as_util);
                     process::exit(0);
+                } else if util.starts_with('-') {
+                    // Argument looks like an option but wasn't recognized
+                    validation::unrecognized_option(binary_as_util, &util_os);
                 } else {
                     validation::not_found(&util_os);
                 }
