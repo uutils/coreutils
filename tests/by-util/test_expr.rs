@@ -458,6 +458,14 @@ fn test_regex_range_quantifier() {
 }
 
 #[test]
+fn test_regex_newline() {
+    new_ucmd!()
+        .args(&["line1\nline2\nline3 ", ":", ".*line2.*"])
+        .succeeds()
+        .stdout_only("18\n");
+}
+
+#[test]
 fn test_substr() {
     new_ucmd!()
         .args(&["substr", "abc", "1", "1"])

@@ -94,8 +94,8 @@ fn mknod(file_name: &str, config: Config) -> i32 {
                 config.context,
             ) {
                 // if it fails, delete the file
-                let _ = std::fs::remove_dir(file_name);
-                eprintln!("{}: {}", uucore::util_name(), e);
+                let _ = std::fs::remove_file(file_name);
+                eprintln!("{}: {e}", uucore::util_name());
                 return 1;
             }
         }
@@ -108,7 +108,7 @@ fn mknod(file_name: &str, config: Config) -> i32 {
                     std::fs::remove_file(p)
                 })
             {
-                eprintln!("{}: {}", uucore::util_name(), e);
+                eprintln!("{}: {e}", uucore::util_name());
                 return 1;
             }
         }

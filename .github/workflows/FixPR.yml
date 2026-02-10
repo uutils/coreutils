@@ -67,7 +67,7 @@ jobs:
         echo "## dependency list"
         cargo fetch --locked --quiet --target $(rustc --print host-tuple)
         ## * using the 'stable' toolchain is necessary to avoid "unexpected '--filter-platform'" errors
-        RUSTUP_TOOLCHAIN=stable cargo tree --locked --no-dedupe -e=no-dev --prefix=none --features ${{ matrix.job.features }} | grep -vE "$PWD" | sort --unique
+        cargo +stable tree --locked --no-dedupe -e=no-dev --prefix=none --features ${{ matrix.job.features }} | grep -vE "$PWD" | sort --unique
     - name: Commit any changes (to '${{ env.BRANCH_TARGET }}')
       uses: EndBug/add-and-commit@v9
       with:

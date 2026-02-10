@@ -124,7 +124,7 @@ else
     : > man/local.mk
     # Use CFLAGS for best build time since we discard GNU coreutils
     CFLAGS="${CFLAGS} -pipe -O0 -s" ./configure -C --quiet --disable-gcc-warnings --disable-nls --disable-dependency-tracking --disable-bold-man-page-references \
-      --enable-single-binary=symlinks --enable-install-program="arch,kill,uptime,hostname" \
+      --enable-single-binary=hardlinks --enable-install-program="arch,kill,uptime,hostname" \
       "$([ "${SELINUX_ENABLED}" = 1 ] && echo --with-selinux || echo --without-selinux)"
     #Add timeout to to protect against hangs
     sed -i 's|^"\$@|'"${SYSTEM_TIMEOUT}"' 600 "\$@|' build-aux/test-driver
@@ -162,6 +162,9 @@ fi
 grep -rl 'path_prepend_' tests/* | xargs -r "${SED}" -i 's| path_prepend_ ./src||'
 # path_prepend_ sets $abs_path_dir_: set it manually instead.
 grep -rl '\$abs_path_dir_' tests/*/*.sh | xargs -r "${SED}" -i "s|\$abs_path_dir_|${UU_BUILD_DIR//\//\\/}|g"
+# Some tests use $abs_top_builddir/src for shebangs: point them to the uutils build dir.
+grep -rl '\$abs_top_builddir/src' tests/*/*.sh tests/*/*.pl | xargs -r "${SED}" -i "s|\$abs_top_builddir/src|${UU_BUILD_DIR//\//\\/}|g"
+grep -rl '\$ENV{abs_top_builddir}/src' tests/*/*.pl | xargs -r "${SED}" -i "s|\$ENV{abs_top_builddir}/src|${UU_BUILD_DIR//\//\\/}|g"
 
 # We can't build runcon and chcon without libselinux. But GNU no longer builds dummies of them. So consider they are SELinux specific.
 sed -i 's/^print_ver_.*/require_selinux_/' tests/runcon/runcon-compute.sh
@@ -213,7 +216,7 @@ sed -i -e "s|---dis ||g" tests/tail/overlay-headers.sh
 # watchers before initial read, so no exact equivalent exists. We break at
 # watch_with_parent as the closest semantic match. -iex suppresses Rust debug
 # script auto-load warnings that would cause the test to skip.
-"${SED}" -i \
+sed -i \
     -e "s|break_src=\"\$abs_top_srcdir/src/tail.c\"|break_src=\"${path_UUTILS}/src/uu/tail/src/follow/watch.rs\"|" \
     -e 's|break_line=$(grep -n ^tail_forever_inotify "$break_src")|break_line=$(grep -n "watcher_rx.watch_with_parent" "$break_src")|' \
     -e 's|gdb -nx --batch-silent|gdb -nx --batch-silent -iex "set auto-load no"|g' \
@@ -316,7 +319,7 @@ echo "n_stat1 = \$n_stat1"\n\
 echo "n_stat2 = \$n_stat2"\n\
 test \$n_stat1 -ge \$n_stat2 \\' tests/ls/stat-free-color.sh
 
-# no need to replicate this output with hashsum
+# for clap
 sed -i -e  "s|Try 'md5sum --help' for more information.\\\n||" tests/cksum/md5sum.pl
 
 # Our ls command always outputs ANSI color codes prepended with a zero. However,
