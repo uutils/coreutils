@@ -378,7 +378,6 @@ impl Writable for &OsStr {
 }
 
 impl Writable for u64 {
-    #[inline]
     fn write_all_to(&self, output: &mut impl OsWrite) -> Result<(), io::Error> {
         // The itoa crate is surprisingly much more efficient than a formatted write.
         // It speeds up `shuf -r -n1000000 -i1-1024` by 1.8×.
@@ -395,7 +394,6 @@ fn handle_write_error(e: io::Error) -> Box<dyn uucore::error::UError> {
     e.map_err_context(move || ctx)
 }
 
-#[inline(never)]
 fn shuf_exec(
     input: &mut impl Shufable,
     opts: &Options,

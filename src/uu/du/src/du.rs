@@ -233,6 +233,10 @@ fn get_blocks(path: &Path, _metadata: &Metadata) -> u64 {
 }
 
 #[cfg(not(windows))]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "fn sig must match on all platforms"
+)]
 fn get_file_info(_path: &Path, metadata: &Metadata) -> Option<FileInfo> {
     Some(FileInfo {
         file_id: metadata.ino() as u128,
@@ -959,6 +963,63 @@ fn read_files_from(file_name: &OsStr) -> Result<Vec<PathBuf>, std::io::Error> {
     Ok(paths)
 }
 
+fn get_size_format_flag_arg_index_if_present(matches: &ArgMatches, arg: &str) -> Option<usize> {
+    if let Some(clap::parser::ValueSource::CommandLine) = matches.value_source(arg) {
+        matches
+            .indices_of(arg)
+            .and_then(|mut indices| indices.next_back())
+    } else {
+        None
+    }
+}
+
+fn parse_block_size_arg_or_default_fallback(matches: &ArgMatches) -> UResult<SizeFormat> {
+    let block_size_str = matches.get_one::<String>(options::BLOCK_SIZE);
+    let block_size = read_block_size(block_size_str.map(AsRef::as_ref))?;
+    if block_size == 0 {
+        return Err(std::io::Error::other(translate!("du-error-invalid-block-size-argument", "option" => options::BLOCK_SIZE, "value" => block_size_str.map_or("???BUG", |v| v).quote()))
+        .into());
+    }
+    Ok(SizeFormat::BlockSize(block_size))
+}
+
+fn parse_size_format(matches: &ArgMatches) -> UResult<SizeFormat> {
+    let block_size_value_or_default_fallback = parse_block_size_arg_or_default_fallback(matches)?;
+    let candidates = [
+        (
+            SizeFormat::BlockSize(1),
+            get_size_format_flag_arg_index_if_present(matches, options::BYTES),
+        ),
+        (
+            SizeFormat::BlockSize(1024),
+            get_size_format_flag_arg_index_if_present(matches, options::BLOCK_SIZE_1K),
+        ),
+        (
+            SizeFormat::BlockSize(1024 * 1024),
+            get_size_format_flag_arg_index_if_present(matches, options::BLOCK_SIZE_1M),
+        ),
+        (
+            SizeFormat::HumanBinary,
+            get_size_format_flag_arg_index_if_present(matches, options::HUMAN_READABLE),
+        ),
+        (
+            SizeFormat::HumanDecimal,
+            get_size_format_flag_arg_index_if_present(matches, options::SI),
+        ),
+        (
+            block_size_value_or_default_fallback.clone(),
+            get_size_format_flag_arg_index_if_present(matches, options::BLOCK_SIZE),
+        ),
+    ];
+
+    Ok(candidates
+        .into_iter()
+        .filter(|(_, idx)| idx.is_some())
+        .max_by_key(|&(_, idx)| idx.unwrap_or(0))
+        .map(|(size_format, _)| size_format)
+        .unwrap_or(block_size_value_or_default_fallback))
+}
+
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -1010,25 +1071,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .map_or(MetadataTimeField::Modification, |s| s.as_str().into())
     });
 
-    let size_format = if matches.get_flag(options::HUMAN_READABLE) {
-        SizeFormat::HumanBinary
-    } else if matches.get_flag(options::SI) {
-        SizeFormat::HumanDecimal
-    } else if matches.get_flag(options::BYTES) {
-        SizeFormat::BlockSize(1)
-    } else if matches.get_flag(options::BLOCK_SIZE_1K) {
-        SizeFormat::BlockSize(1024)
-    } else if matches.get_flag(options::BLOCK_SIZE_1M) {
-        SizeFormat::BlockSize(1024 * 1024)
-    } else {
-        let block_size_str = matches.get_one::<String>(options::BLOCK_SIZE);
-        let block_size = read_block_size(block_size_str.map(AsRef::as_ref))?;
-        if block_size == 0 {
-            return Err(std::io::Error::other(translate!("du-error-invalid-block-size-argument", "option" => options::BLOCK_SIZE, "value" => block_size_str.map_or("???BUG", |v| v).quote()))
-            .into());
-        }
-        SizeFormat::BlockSize(block_size)
-    };
+    let size_format = parse_size_format(&matches)?;
 
     let traversal_options = TraversalOptions {
         all: matches.get_flag(options::ALL),

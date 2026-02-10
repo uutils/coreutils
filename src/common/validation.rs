@@ -32,8 +32,7 @@ pub fn not_found(util: &OsStr) -> ! {
 /// Prints an "unrecognized option" error and exits
 pub fn unrecognized_option(binary_name: &str, option: &OsStr) -> ! {
     eprintln!(
-        "{}: unrecognized option '{}'",
-        binary_name,
+        "{binary_name}: unrecognized option '{}'",
         option.to_string_lossy()
     );
     process::exit(1);
@@ -59,8 +58,8 @@ fn get_canonical_util_name(util_name: &str) -> &str {
     match util_name {
         // uu_test aliases - '[' is an alias for test
         "[" => "test",
-
-        "dir" => "ls", // dir is an alias for ls
+        "dir" => "ls",  // dir is an alias for ls
+        "vdir" => "ls", // vdir is an alias for ls
 
         // Default case - return the util name as is
         _ => util_name,
