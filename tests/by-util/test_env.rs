@@ -1962,3 +1962,81 @@ fn test_non_utf8_env_vars() {
         .succeeds()
         .stdout_contains_bytes(b"NON_UTF8_VAR=hello\x80world");
 }
+
+#[test]
+#[cfg(unix)]
+fn test_ignore_signal_pipe_broken_pipe_regression() {
+    // Test that --ignore-signal=PIPE properly ignores SIGPIPE in child processes.
+    // When SIGPIPE is ignored, processes should handle broken pipes gracefully
+    // instead of being terminated by the signal.
+    //
+    // Regression test for: https://github.com/uutils/coreutils/issues/9617
+
+    use std::io::{BufRead, BufReader};
+    use std::process::{Command, Stdio};
+
+    let scene = TestScenario::new(util_name!());
+
+    // Helper function to simulate a broken pipe scenario (like "seq 1000000 | head -n1")
+    let test_sigpipe_behavior = |use_ignore_signal: bool| -> i32 {
+        let mut cmd = Command::new(&scene.bin_path);
+        cmd.arg("env");
+
+        if use_ignore_signal {
+            cmd.arg("--ignore-signal=PIPE");
+        }
+
+        // Use seq instead of yes - writes bounded output but enough to trigger SIGPIPE
+        cmd.arg("seq")
+            .arg("1")
+            .arg("1000000")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null());
+
+        let mut child = cmd.spawn().expect("Failed to spawn env process");
+
+        // Read exactly one line then close the pipe to trigger SIGPIPE
+        if let Some(stdout) = child.stdout.take() {
+            let mut reader = BufReader::new(stdout);
+            let mut line = String::new();
+            let _ = reader.read_line(&mut line);
+            // Pipe closes when reader is dropped, sending SIGPIPE to writing process
+        }
+
+        // seq should exit quickly (either from SIGPIPE or after handling EPIPE)
+        match child.wait() {
+            Ok(status) => status.code().unwrap_or(141), // 128 + 13
+            Err(_) => 141,
+        }
+    };
+
+    // Test without signal ignoring - should be killed by SIGPIPE
+    let normal_exit_code = test_sigpipe_behavior(false);
+    println!("Normal 'env seq' exit code: {normal_exit_code}");
+
+    // Test with --ignore-signal=PIPE - should handle broken pipe gracefully
+    let ignore_signal_exit_code = test_sigpipe_behavior(true);
+    println!("With --ignore-signal=PIPE exit code: {ignore_signal_exit_code}");
+
+    // Verify the --ignore-signal=PIPE flag changes the behavior
+    assert!(
+        ignore_signal_exit_code != 141,
+        "--ignore-signal=PIPE had no effect! Process was still killed by SIGPIPE (exit code 141). Normal: {normal_exit_code}, --ignore-signal: {ignore_signal_exit_code}"
+    );
+
+    // Expected behavior:
+    assert_eq!(
+        normal_exit_code, 141,
+        "Without --ignore-signal, process should be killed by SIGPIPE"
+    );
+    assert_ne!(
+        ignore_signal_exit_code, 141,
+        "With --ignore-signal=PIPE, process should NOT be killed by SIGPIPE"
+    );
+
+    // Process should exit gracefully when SIGPIPE is ignored
+    assert!(
+        ignore_signal_exit_code == 0 || ignore_signal_exit_code == 1,
+        "With --ignore-signal=PIPE, process should exit gracefully (0 or 1), got: {ignore_signal_exit_code}"
+    );
+}

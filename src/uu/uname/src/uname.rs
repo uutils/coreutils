@@ -8,7 +8,7 @@
 use std::ffi::{OsStr, OsString};
 
 use clap::{Arg, ArgAction, Command};
-use platform_info::*;
+use platform_info::{PlatformInfo, PlatformInfoAPI, UNameAPI};
 use uucore::display::println_verbatim;
 use uucore::translate;
 use uucore::{
@@ -135,7 +135,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         os: matches.get_flag(options::OS),
     };
     let output = UNameOutput::new(&options)?;
-    println_verbatim(output.display().as_os_str()).unwrap();
+    println_verbatim(output.display().as_os_str())
+        .map_err(|e| USimpleError::new(1, e.to_string()))?;
     Ok(())
 }
 

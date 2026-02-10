@@ -284,6 +284,34 @@ fn test_chmod_error_permissions() {
 }
 
 #[test]
+fn test_chmod_permissions_too_large() {
+    let scenario = TestScenario::new(util_name!());
+    let at = &scenario.fixtures;
+
+    at.touch("file");
+
+    scenario
+        .ucmd()
+        .args(&["10777", "file"])
+        .fails_with_code(1)
+        .stderr_is(
+            // spell-checker:disable-next-line
+            "chmod: mode is too large (10777 > 7777)\n",
+        );
+    // test around the boundary of the acceptable octal mode
+    scenario
+        .ucmd()
+        .args(&["10000", "file"])
+        .fails_with_code(1)
+        .stderr_is(
+            // spell-checker:disable-next-line
+            "chmod: mode is too large (10000 > 7777)\n",
+        );
+    at.mkdir("dir");
+    scenario.ucmd().args(&["7777", "dir"]).succeeds();
+}
+
+#[test]
 #[allow(clippy::unreadable_literal)]
 fn test_chmod_ugo_copy() {
     let tests = vec![

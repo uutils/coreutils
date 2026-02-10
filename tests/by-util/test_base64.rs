@@ -265,3 +265,12 @@ cyBvdmVyIHRoZSBsYXp5IGRvZy4=
             // cSpell:enable
         );
 }
+
+#[test]
+#[cfg(all(target_os = "linux", not(target_env = "musl")))]
+fn test_read_error() {
+    new_ucmd!()
+        .arg("/proc/self/mem")
+        .fails()
+        .stderr_is("base64: read error: Input/output error\n");
+}
