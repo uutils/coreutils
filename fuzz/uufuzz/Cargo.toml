@@ -5,6 +5,7 @@ description = "uutils ~ 'core' uutils fuzzing library"
 repository = "https://github.com/uutils/coreutils/tree/main/fuzz/uufuzz"
 version = "0.6.0"
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 
 [dependencies]

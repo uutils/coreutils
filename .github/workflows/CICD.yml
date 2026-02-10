@@ -1,17 +1,17 @@
 name: CICD
 
 # spell-checker:ignore (abbrev/names) CACHEDIR CICD CodeCOV MacOS MinGW MSVC musl taiki
-# spell-checker:ignore (env/flags) Awarnings Ccodegen Coverflow Cpanic Dwarnings RUSTDOCFLAGS RUSTFLAGS Zpanic CARGOFLAGS CLEVEL
+# spell-checker:ignore (env/flags) Awarnings Ccodegen Coverflow Cpanic Dwarnings RUSTDOCFLAGS RUSTFLAGS Zpanic CARGOFLAGS CLEVEL nodocs
 # spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain fuzzers dedupe devel profdata
 # spell-checker:ignore (people) Peltoche rivy dtolnay Anson dawidd
 # spell-checker:ignore (shell/tools) binutils choco clippy dmake esac fakeroot fdesc fdescfs gmake grcov halium lcov libclang libfuse libssl limactl mkdir nextest nocross pacman popd printf pushd redoxer rsync rustc rustfmt rustup shopt sccache utmpdump xargs zstd
-# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos getenforce gnueabihf issuecomment maint manpages msys multisize noconfirm nofeatures nullglob onexitbegin onexitend pell runtest Swatinem tempfile testsuite toybox uutils libsystemd codspeed
+# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos getenforce gnueabihf issuecomment maint manpages msys multisize noconfirm nofeatures nullglob onexitbegin onexitend pell runtest Swatinem tempfile testsuite toybox uutils libsystemd codspeed wasip
 
 env:
   PROJECT_NAME: coreutils
   PROJECT_DESC: "Core universal (cross-platform) utilities"
   PROJECT_AUTH: "uutils"
-  RUST_MIN_SRV: "1.85.0"
+  RUST_MIN_SRV: "1.88.0"
   # * style job configuration
   STYLE_FAIL_ON_FAULT: true ## (bool) fail the build if a style job contains a fault (error or warning); may be overridden on a per-job basis
 
@@ -221,8 +221,8 @@ jobs:
         # dependencies
         echo "## dependency list"
         ## * using the 'stable' toolchain is necessary to avoid "unexpected '--filter-platform'" errors
-        RUSTUP_TOOLCHAIN=stable cargo fetch --locked --quiet --target $(rustc --print host-tuple)
-        RUSTUP_TOOLCHAIN=stable cargo tree --no-dedupe --locked -e=no-dev --prefix=none ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} | grep -vE "$PWD" | sort --unique
+        cargo +stable fetch --locked --quiet --target $(rustc --print host-tuple)
+        cargo +stable tree --no-dedupe --locked -e=no-dev --prefix=none ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} | grep -vE "$PWD" | sort --unique
     - name: Test
       run: cargo nextest run --hide-progress-bar --profile ci ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -p uucore -p coreutils
       env:
@@ -322,13 +322,13 @@ jobs:
         disable_search: true
         flags: makefile,${{ matrix.job.os }}
         fail_ci_if_error: false
-    - name: "`make install PROG_PREFIX=uu- PROFILE=release-fast COMPLETIONS=n MANPAGES=n LOCALES=n`"
+    - name: "`make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n`"
       shell: bash
       run: |
         set -x
-        DESTDIR=/tmp/ make install PROG_PREFIX=uu- PROFILE=release-fast COMPLETIONS=n MANPAGES=n LOCALES=n
+        DESTDIR=/tmp/ make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n
         # Check that utils are built with given profile
-        ./target/release-fast/true
+        ./target/release-small/true
         # Check that the progs have prefix
         test -f /tmp/usr/local/bin/uu-tty
         test -f /tmp/usr/local/libexec/uu-coreutils/libstdbuf.*
@@ -501,10 +501,10 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
-    - name: "`make install PROFILE=release-fast`"
+    - name: "`make install PROFILE=release`"
       shell: bash
       run: |
-        export CARGO_TARGET_DIR=cargo-target RUSTFLAGS="${RUSTFLAGS} -C strip=symbols" PROFILE=release-fast MANPAGES=n COMPLETIONS=n LOCALES=n
+        export CARGO_TARGET_DIR=cargo-target RUSTFLAGS="${RUSTFLAGS} -C strip=symbols" PROFILE=release MANPAGES=n COMPLETIONS=n LOCALES=n
         mkdir -p "${CARGO_TARGET_DIR}" && sudo mount -t tmpfs -o noatime,size=16G tmpfs "${CARGO_TARGET_DIR}"
         make install DESTDIR=target/size-release/
         make install COMPLETIONS=n MULTICALL=y LN="ln -vf" DESTDIR=target/size-multi-release/
@@ -548,14 +548,14 @@ jobs:
               --arg multisize "$SIZE_MULTI" \
               '{($date): { sha: $sha, size: $size, multisize: $multisize, }}' > size-result.json
     - name: Download the previous individual size result
-      uses: dawidd6/action-download-artifact@v12
+      uses: dawidd6/action-download-artifact@v14
       with:
         workflow: CICD.yml
         name: individual-size-result
         repo: uutils/coreutils
         path: dl
     - name: Download the previous size result
-      uses: dawidd6/action-download-artifact@v12
+      uses: dawidd6/action-download-artifact@v14
       with:
         workflow: CICD.yml
         name: size-result
@@ -631,7 +631,7 @@ jobs:
           - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: "feat_os_unix,uudoc"   , use-cross: no, workspace-tests: true }
           - { os: ubuntu-latest  , target: x86_64-unknown-linux-musl   , features: feat_os_unix_musl , use-cross: use-cross }
           - { os: ubuntu-latest  , target: x86_64-unknown-redox        , features: feat_os_unix_redox     , use-cross: redoxer , skip-tests: true }
-          - { os: ubuntu-latest  , target: wasm32-unknown-unknown      , default-features: false, features: uucore/format, skip-tests: true, skip-package: true, skip-publish: true }
+          - { os: ubuntu-latest  , target: wasm32-wasip1, default-features: false, features: "basenc,cksum", skip-tests: true }
           - { os: macos-latest   , target: aarch64-apple-darwin        , features: feat_os_macos, workspace-tests: true } # M1 CPU
           # PR #7964: Mac should still build even if the feature is not enabled. Do not publish this.
           - { os: macos-latest   , target: aarch64-apple-darwin        , workspace-tests: true, skip-publish: true } # M1 CPU
@@ -672,7 +672,11 @@ jobs:
         STAGING='_staging'
         outputs STAGING
         # determine EXE suffix
-        EXE_suffix="" ; case '${{ matrix.job.target }}' in *-pc-windows-*) EXE_suffix=".exe" ;; esac;
+        unset EXE_suffix
+        case '${{ matrix.job.target }}' in
+         *-pc-windows-*) EXE_suffix=".exe" ;;
+         *wasm-*) EXE_suffix=".wasm" ;;
+        esac;
         outputs EXE_suffix
         # parse commit reference info
         echo GITHUB_REF=${GITHUB_REF}
@@ -701,7 +705,11 @@ jobs:
         outputs TARGET_ARCH TARGET_OS
         # package name
         PKG_suffix=".tar.gz" ; case '${{ matrix.job.target }}' in *-pc-windows-*) PKG_suffix=".zip" ;; esac;
-        PKG_BASENAME=${PROJECT_NAME}-${{ matrix.job.target }}
+        # Some 3rd party utils need version at file names
+        # But we remove it from tag/latest-commit
+        test ${REF_TAG} \
+          && PKG_BASENAME=${PROJECT_NAME}-${REF_TAG}-${{ matrix.job.target }} \
+          || PKG_BASENAME=${PROJECT_NAME}-${{ matrix.job.target }}
         PKG_NAME=${PKG_BASENAME}${PKG_suffix}
         outputs PKG_suffix PKG_BASENAME PKG_NAME
         # deployable tag? (ie, leading "vM" or "M"; M == version number)
@@ -841,12 +849,6 @@ jobs:
         echo "## dependency list"
         cargo fetch --locked --quiet --target $(rustc --print host-tuple)
         cargo tree --locked --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.vars.outputs.CARGO_DEFAULT_FEATURES_OPTION }} --no-dedupe -e=no-dev --prefix=none | grep -vE "$PWD" | sort --unique
-    - name: Build
-      shell: bash
-      run: |
-        ## Build
-        ${{ steps.vars.outputs.CARGO_CMD }} ${{ steps.vars.outputs.CARGO_CMD_OPTIONS }} build --release --config=profile.release.strip=true \
-        --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.vars.outputs.CARGO_DEFAULT_FEATURES_OPTION }}
     - name: Test
       if: matrix.job.skip-tests != true
       shell: bash
@@ -857,18 +859,20 @@ jobs:
         ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }} -p coreutils
       env:
         RUST_BACKTRACE: "1"
-    - name: Archive executable artifacts
-      uses: actions/upload-artifact@v6
-      with:
-        name: ${{ env.PROJECT_NAME }}-${{ matrix.job.target }}${{ steps.vars.outputs.ARTIFACTS_SUFFIX }}
-        path: target/${{ matrix.job.target }}/release/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}
+    - name: Build
+      shell: bash
+      if: matrix.job.skip-publish != true
+      run: |
+        ## Build
+        ${{ steps.vars.outputs.CARGO_CMD }} ${{ steps.vars.outputs.CARGO_CMD_OPTIONS }} build --release --config=profile.release.strip=true \
+        --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.vars.outputs.CARGO_DEFAULT_FEATURES_OPTION }}
     - name: Package
-      if: matrix.job.skip-package != true
+      if: matrix.job.skip-publish != true
       shell: bash
       run: |
         ## Package artifact(s)
         # binaries
-        cp 'target/${{ matrix.job.target }}/release/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}' '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/'
+        cp 'target/${{ matrix.job.target }}/release/${{ env.PROJECT_NAME }}'* '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/'
         cp 'target/${{ matrix.job.target }}/release/uudoc${{ steps.vars.outputs.EXE_suffix }}' '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/' || :
         # README and LICENSE
         # * spell-checker:ignore EADME ICENSE
@@ -910,6 +914,8 @@ jobs:
       if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.job.skip-publish != true
       with:
         tag_name: latest-commit
+        body: |
+          commit: ${{ github.sha }}
         draft: false
         prerelease: true
         files: |
@@ -1225,7 +1231,8 @@ jobs:
         fail_ci_if_error: false
 
   test_separately:
-    name: Separate Builds (individual and coreutils)# duplicated with other CI, but has better appearance 
+    # duplicated with other CI, but has better appearance
+    name: Separate Builds (individual and coreutils)
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
@@ -1273,7 +1280,7 @@ jobs:
     - run: rsync -v -a -e ssh . lima-default:~/work/
     - name: Setup Rust and other build deps in VM
       run: |
-        lima sudo dnf install gcc g++ git rustup libselinux-devel clang-devel attr -y
+        lima sudo dnf install --nodocs gcc g++ git rustup libselinux-devel clang-devel attr -y
         lima rustup-init -y --default-toolchain stable --profile minimal -c clippy
     - name: Verify SELinux Status
       run: |

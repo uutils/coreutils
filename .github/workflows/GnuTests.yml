@@ -6,7 +6,7 @@ name: GnuTests
 # spell-checker:ignore (options) Ccodegen Coverflow Cpanic Zpanic
 # spell-checker:ignore (people) Dawid Dziurla * dawidd dtolnay
 # spell-checker:ignore (vars) FILESET SUBDIRS XPASS
-# spell-checker:ignore userns
+# spell-checker:ignore userns nodocs
 
 # * note: to run a single test => `REPO/util/run-gnu-test.sh PATH/TO/TEST/SCRIPT`
 
@@ -226,8 +226,7 @@ jobs:
 
     - name: Install dependencies in VM
       run: |
-        lima sudo dnf -y update
-        lima sudo dnf -y install autoconf bison gperf gcc gdb jq libacl-devel libattr-devel libcap-devel libselinux-devel attr rustup clang-devel automake patch quilt
+        lima sudo dnf -y install --nodocs autoconf bison gperf gcc gdb jq libacl-devel libattr-devel libcap-devel libselinux-devel attr rustup clang-devel automake patch quilt
         lima rustup-init -y --profile=minimal --default-toolchain stable
     - name: Copy the sources to VM
       run: |
@@ -373,7 +372,7 @@ jobs:
         path: 'uutils'
         persist-credentials: false
     - name: Retrieve reference artifacts
-      uses: dawidd6/action-download-artifact@v12
+      uses: dawidd6/action-download-artifact@v14
       # ref: <https://github.com/dawidd6/action-download-artifact>
       continue-on-error: true ## don't break the build for missing reference artifacts (may be expired or just not generated yet)
       with:

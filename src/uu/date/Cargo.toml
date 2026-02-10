@@ -10,6 +10,7 @@ homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 readme.workspace = true
 
 [lints]
@@ -20,13 +21,19 @@ path = "src/date.rs"
 
 [features]
 default = ["i18n-datetime"]
-i18n-datetime = ["uucore/i18n-datetime", "dep:icu_calendar", "dep:icu_locale"]
+i18n-datetime = [
+  "uucore/i18n-datetime",
+  "dep:icu_calendar",
+  "dep:icu_locale",
+  "dep:jiff-icu",
+]
 
 [dependencies]
 clap = { workspace = true }
 fluent = { workspace = true }
 icu_calendar = { workspace = true, optional = true }
 icu_locale = { workspace = true, optional = true }
+jiff-icu = { workspace = true, optional = true }
 jiff = { workspace = true, features = [
   "tzdb-bundle-platform",
   "tzdb-zoneinfo",
