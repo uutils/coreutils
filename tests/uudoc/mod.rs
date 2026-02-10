@@ -28,9 +28,11 @@ fn test_manpage_generation() {
         "Command failed with status: {}",
         output.status
     );
+    // Note: tldr warning is now printed at build time (in build.rs), not at runtime
     assert!(
-        String::from_utf8_lossy(&output.stderr).contains("Warning: No tldr archive found"),
-        "stderr should contains tldr alert",
+        output.stderr.is_empty(),
+        "stderr should be empty but got: {}",
+        String::from_utf8_lossy(&output.stderr)
     );
 
     let output_str = String::from_utf8_lossy(&output.stdout);
@@ -52,9 +54,11 @@ fn test_manpage_coreutils() {
         "Command failed with status: {}",
         output.status
     );
+    // Note: tldr warning is now printed at build time (in build.rs), not at runtime
     assert!(
-        String::from_utf8_lossy(&output.stderr).contains("Warning: No tldr archive found"),
-        "stderr should contains tldr alert",
+        output.stderr.is_empty(),
+        "stderr should be empty but got: {}",
+        String::from_utf8_lossy(&output.stderr)
     );
 
     let output_str = String::from_utf8_lossy(&output.stdout);
@@ -123,12 +127,50 @@ fn test_manpage_base64() {
         "Command failed with status: {}",
         output.status
     );
+    // Note: tldr warning is now printed at build time (in build.rs), not at runtime
     assert!(
-        String::from_utf8_lossy(&output.stderr).contains("Warning: No tldr archive found"),
-        "stderr should contains tldr alert",
+        output.stderr.is_empty(),
+        "stderr should be empty but got: {}",
+        String::from_utf8_lossy(&output.stderr)
     );
 
     let output_str = String::from_utf8_lossy(&output.stdout);
     assert!(output_str.contains("base64 alphabet"));
     assert!(!output_str.to_ascii_lowercase().contains("base32"));
+}
+
+// Test to ensure markdown headers are correctly formatted in generated markdown files
+// Prevents regression of https://github.com/uutils/coreutils/issues/10003
+#[test]
+fn test_markdown_header_format() {
+    use std::fs;
+
+    // Read a sample markdown file from the documentation
+    // This assumes the docs have been generated (they should be in the repo)
+    let docs_path = "docs/src/utils/cat.md";
+
+    if fs::metadata(docs_path).is_ok() {
+        let content =
+            fs::read_to_string(docs_path).expect("Failed to read generated markdown file");
+
+        // Verify Options header is in markdown format (## Options)
+        assert!(
+            content.contains("## Options"),
+            "Generated markdown should contain '## Options' header"
+        );
+
+        // Verify no HTML h2 tags for Options (old format)
+        assert!(
+            !content.contains("<h2>Options</h2>"),
+            "Generated markdown should not contain '<h2>Options</h2>' (use markdown format instead)"
+        );
+
+        // Also verify Examples if it exists
+        if content.contains("## Examples") {
+            assert!(
+                content.contains("## Examples"),
+                "Generated markdown should contain '## Examples' header in markdown format"
+            );
+        }
+    }
 }

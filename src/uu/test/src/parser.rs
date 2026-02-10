@@ -188,7 +188,16 @@ impl Parser {
         match symbol {
             Symbol::LParen => self.lparen()?,
             Symbol::Bang => self.bang()?,
-            Symbol::UnaryOp(_) => self.uop(symbol),
+            Symbol::UnaryOp(_) => {
+                // Three-argument string comparison: `-f = a` means "-f" = "a", not file test
+                let is_string_cmp = matches!(self.peek(), Symbol::Op(Operator::String(_)))
+                    && !matches!(Symbol::new(self.tokens.clone().nth(1)), Symbol::None);
+                if is_string_cmp {
+                    self.literal(symbol.into_literal())?;
+                } else {
+                    self.uop(symbol);
+                }
+            }
             Symbol::None => self.stack.push(symbol),
             literal => self.literal(literal)?,
         }
@@ -332,16 +341,15 @@ impl Parser {
                     .map(|token| Symbol::new(Some(token)))
                     .collect();
 
-                match peek4.as_slice() {
+                if let [Symbol::Literal(_), Symbol::BoolOp(_), Symbol::Literal(_)] =
+                    peek4.as_slice()
+                {
                     // we peeked ahead 4 but there were only 3 tokens left
-                    [Symbol::Literal(_), Symbol::BoolOp(_), Symbol::Literal(_)] => {
-                        self.expr()?;
-                        self.stack.push(Symbol::Bang);
-                    }
-                    _ => {
-                        self.term()?;
-                        self.stack.push(Symbol::Bang);
-                    }
+                    self.expr()?;
+                    self.stack.push(Symbol::Bang);
+                } else {
+                    self.term()?;
+                    self.stack.push(Symbol::Bang);
                 }
             }
         }

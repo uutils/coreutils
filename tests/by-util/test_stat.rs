@@ -9,6 +9,9 @@ use uutests::unwrap_or_return;
 use uutests::util::{TestScenario, expected_result};
 use uutests::util_name;
 
+use std::fs::metadata;
+use std::os::unix::fs::MetadataExt;
+
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
@@ -566,4 +569,66 @@ fn test_mount_point_combined_with_other_specifiers() {
         parts.len() >= 3,
         "Should print mount point, file name, and size"
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn test_percent_escaping() {
+    let ts = TestScenario::new(util_name!());
+    let result = ts
+        .ucmd()
+        .args(&["--printf", "%%%m%%m%m%%%", "/bin/sh"])
+        .succeeds();
+    assert_eq!(result.stdout_str(), "%/%m/%%");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_correct_metadata() {
+    use uucore::fs::{major, minor};
+
+    let ts = TestScenario::new(util_name!());
+    let parse = |(i, str): (usize, &str)| {
+        // Some outputs (%[fDRtT]) are in hex; they're redundant, but we might
+        // as well also test case conversion.
+        let radix = if matches!(i, 2 | 10 | 14..) { 16 } else { 10 };
+        i128::from_str_radix(str, radix)
+    };
+    for device in ["/", "/dev/null"] {
+        let metadata = metadata(device).unwrap();
+        // We avoid time vals because of fs race conditions, especially with
+        // access time and status time (this previously killed an otherwise
+        // perfect 11-hour-long CI run...). The large number of as-casts is
+        // due to inconsistencies on some platforms (read: BSDs), and we use
+        // i128 as a lowest-common denominator.
+        let test_str = "%u %g %f %b %s %h %i %d %Hd %Ld %D %r %Hr %Lr %R %t %T";
+        let expected = [
+            metadata.uid() as _,
+            metadata.gid() as _,
+            metadata.mode() as _,
+            metadata.blocks() as _,
+            metadata.size() as _,
+            metadata.nlink() as _,
+            metadata.ino() as _,
+            metadata.dev() as _,
+            major(metadata.dev() as _) as _,
+            minor(metadata.dev() as _) as _,
+            metadata.dev() as _,
+            metadata.rdev() as _,
+            major(metadata.rdev() as _) as _,
+            minor(metadata.rdev() as _) as _,
+            metadata.rdev() as _,
+            major(metadata.rdev() as _) as _,
+            minor(metadata.rdev() as _) as _,
+        ];
+        let result = ts.ucmd().args(&["--printf", test_str, device]).succeeds();
+        let output = result
+            .stdout_str()
+            .split(' ')
+            .enumerate()
+            .map(parse)
+            .collect::<Result<Vec<i128>, _>>()
+            .unwrap();
+        assert_eq!(output, &expected);
+    }
 }

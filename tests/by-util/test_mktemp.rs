@@ -30,6 +30,7 @@ static TEST_TEMPLATE7: &str = "XXXtemplate";
 static TEST_TEMPLATE8: &str = "tempXXXl/ate";
 #[cfg(windows)]
 static TEST_TEMPLATE8: &str = "tempXXXl\\ate";
+static TEST_TEMPLATE9: &str = "XXX_XX";
 
 #[cfg(not(windows))]
 const TMPDIR: &str = "TMPDIR";
@@ -109,6 +110,11 @@ fn test_mktemp_mktemp() {
         .env(TMPDIR, &pathname)
         .arg(TEST_TEMPLATE8)
         .fails();
+    scene
+        .ucmd()
+        .env(TMPDIR, &pathname)
+        .arg(TEST_TEMPLATE9)
+        .fails();
 }
 
 #[test]
@@ -168,6 +174,12 @@ fn test_mktemp_mktemp_t() {
         .no_stdout()
         .stderr_contains("invalid suffix")
         .stderr_contains("contains directory separator");
+    scene
+        .ucmd()
+        .env(TMPDIR, &pathname)
+        .arg("-t")
+        .arg(TEST_TEMPLATE9)
+        .fails();
 }
 
 #[test]
@@ -224,6 +236,12 @@ fn test_mktemp_make_temp_dir() {
         .arg("-d")
         .arg(TEST_TEMPLATE8)
         .fails();
+    scene
+        .ucmd()
+        .env(TMPDIR, &pathname)
+        .arg("-d")
+        .arg(TEST_TEMPLATE9)
+        .fails();
 }
 
 #[test]
@@ -279,6 +297,12 @@ fn test_mktemp_dry_run() {
         .env(TMPDIR, &pathname)
         .arg("-u")
         .arg(TEST_TEMPLATE8)
+        .fails();
+    scene
+        .ucmd()
+        .env(TMPDIR, &pathname)
+        .arg("-u")
+        .arg(TEST_TEMPLATE9)
         .fails();
 }
 
@@ -367,6 +391,13 @@ fn test_mktemp_suffix() {
         .arg("suf")
         .arg(TEST_TEMPLATE8)
         .fails();
+    scene
+        .ucmd()
+        .env(TMPDIR, &pathname)
+        .arg("--suffix")
+        .arg("suf")
+        .arg(TEST_TEMPLATE9)
+        .fails();
 }
 
 #[test]
@@ -423,6 +454,12 @@ fn test_mktemp_tmpdir() {
         .arg("-p")
         .arg(pathname)
         .arg(TEST_TEMPLATE8)
+        .fails();
+    scene
+        .ucmd()
+        .arg("-p")
+        .arg(pathname)
+        .arg(TEST_TEMPLATE9)
         .fails();
 }
 
@@ -826,6 +863,63 @@ fn test_nonexistent_tmpdir_env_var() {
 }
 
 #[test]
+fn test_empty_tmpdir_env_var() {
+    #[cfg(not(any(windows, target_os = "android")))]
+    {
+        let result = new_ucmd!().env(TMPDIR, "").succeeds();
+        assert!(result.stdout_str().starts_with("/tmp"));
+    }
+
+    #[cfg(any(windows, target_os = "android"))]
+    {
+        let result = new_ucmd!().env(TMPDIR, "").fails();
+        result.no_stdout();
+        let stderr = result.stderr_str();
+        assert!(
+            stderr.starts_with("mktemp: failed to create file via template"),
+            "{stderr}"
+        );
+        #[cfg(windows)]
+        assert!(
+            stderr.ends_with("/tmp\\tmp.XXXXXXXXXX': No such file or directory\n"),
+            "{stderr}",
+        );
+        #[cfg(target_os = "android")]
+        assert!(
+            stderr.ends_with("/tmp/tmp.XXXXXXXXXX': No such file or directory\n"),
+            "{stderr}",
+        );
+    }
+
+    #[cfg(not(any(windows, target_os = "android")))]
+    {
+        let result = new_ucmd!().env(TMPDIR, "").arg("-d").succeeds();
+        assert!(result.stdout_str().starts_with("/tmp"));
+    }
+
+    #[cfg(any(windows, target_os = "android"))]
+    {
+        let result = new_ucmd!().env(TMPDIR, "").arg("-d").fails();
+        result.no_stdout();
+        let stderr = result.stderr_str();
+        assert!(
+            stderr.starts_with("mktemp: failed to create directory via template"),
+            "{stderr}"
+        );
+        #[cfg(windows)]
+        assert!(
+            stderr.ends_with("/tmp\\tmp.XXXXXXXXXX': No such file or directory\n"),
+            "{stderr}",
+        );
+        #[cfg(target_os = "android")]
+        assert!(
+            stderr.ends_with("/tmp/tmp.XXXXXXXXXX': No such file or directory\n"),
+            "{stderr}",
+        );
+    }
+}
+
+#[test]
 fn test_nonexistent_dir_prefix() {
     #[cfg(not(windows))]
     new_ucmd!().arg("d/XXX").fails().stderr_only(
@@ -1041,6 +1135,26 @@ fn test_non_utf8_tmpdir_long_option() {
     // we'll test a more limited scenario that still validates non-UTF8 path handling
     ucmd.arg("-p")
         .arg(at.plus(dir_name))
+        .arg("tmpXXXXXX")
+        .succeeds();
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_invalid_utf8_suffix() {
+    use std::os::unix::ffi::OsStrExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // Create invalid UTF-8 bytes for suffix
+    // This mimics the GNU test which tests mktemp with bad unicode characters
+    let invalid_utf8 = std::ffi::OsStr::from_bytes(b"\xC3|\xED\xBA\xAD");
+
+    // Test that mktemp handles invalid UTF-8 in suffix gracefully
+    // It should succeed and create a file with the lossy conversion of the invalid UTF-8
+    ucmd.arg("-p")
+        .arg(at.as_string())
+        .arg("--suffix")
+        .arg(invalid_utf8)
         .arg("tmpXXXXXX")
         .succeeds();
 }

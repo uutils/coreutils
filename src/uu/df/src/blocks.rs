@@ -51,7 +51,7 @@ pub(crate) enum SuffixType {
 
 impl SuffixType {
     /// The first ten powers of 1024 and 1000, respectively.
-    fn bases(&self) -> [u128; 10] {
+    fn bases(self) -> [u128; 10] {
         match self {
             Self::Iec | Self::HumanReadable(HumanReadable::Binary) => IEC_BASES,
             Self::Si | Self::HumanReadable(HumanReadable::Decimal) => SI_BASES,
@@ -59,7 +59,7 @@ impl SuffixType {
     }
 
     /// Suffixes for the first nine multi-byte unit suffixes.
-    fn suffixes(&self) -> [&'static str; 9] {
+    fn suffixes(self) -> [&'static str; 9] {
         match self {
             // we use "kB" instead of "KB", same as GNU df
             Self::Si => ["B", "kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"],
@@ -107,7 +107,7 @@ pub(crate) fn to_magnitude_and_suffix(
 
         if quot >= 100 && rem > 0 {
             format!("{}{suffix}", quot + 1)
-        } else if rem % (bases[i] / 10) == 0 {
+        } else if rem.is_multiple_of(bases[i] / 10) {
             format!("{quot}.{tenths_place}{suffix}")
         } else if tenths_place + 1 == 10 || quot >= 10 {
             let quot = quot + 1;

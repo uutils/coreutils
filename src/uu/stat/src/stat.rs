@@ -9,7 +9,7 @@ use uucore::translate;
 
 use clap::builder::ValueParser;
 use uucore::display::Quotable;
-use uucore::fs::display_permissions;
+use uucore::fs::{display_permissions, major, minor};
 use uucore::fsext::{
     FsMeta, MetadataTimeField, StatFs, metadata_get_time, pretty_filetype, pretty_fstype,
     read_fs_list, statfs,
@@ -70,6 +70,8 @@ struct Flags {
     space: bool,
     sign: bool,
     group: bool,
+    major: bool,
+    minor: bool,
 }
 
 /// checks if the string is within the specified bound,
@@ -137,20 +139,20 @@ fn pad_and_print_bytes<W: Write>(
     };
 
     if left_pad > 0 {
-        print_padding(&mut writer, left_pad)?;
+        write_padding(&mut writer, left_pad)?;
     }
     writer.write_all(display_bytes)?;
     if right_pad > 0 {
-        print_padding(&mut writer, right_pad)?;
+        write_padding(&mut writer, right_pad)?;
     }
 
     Ok(())
 }
 
-/// print padding based on a writer W and n size
+/// write padding based on a writer W and n size
 /// writer is genric to be any buffer like: `std::io::stdout`
 /// n is the calculated padding size
-fn print_padding<W: Write>(writer: &mut W, n: usize) -> Result<(), std::io::Error> {
+fn write_padding<W: Write>(writer: &mut W, n: usize) -> Result<(), std::io::Error> {
     for _ in 0..n {
         writer.write_all(b" ")?;
     }
@@ -349,21 +351,21 @@ fn print_it(output: &OutputType, flags: Flags, width: usize, precision: Precisio
     // A sign (+ or -) should always be placed before a number produced by a signed conversion.
     // By default, a sign  is  used only for negative numbers.
     // A + overrides a space if both are used.
-    let padding_char = determine_padding_char(&flags);
+    let padding_char = determine_padding_char(flags);
 
     match output {
-        OutputType::Str(s) => print_str(s, &flags, width, precision),
-        OutputType::OsStr(s) => print_os_str(s, &flags, width, precision),
-        OutputType::Integer(num) => print_integer(*num, &flags, width, precision, padding_char),
-        OutputType::Unsigned(num) => print_unsigned(*num, &flags, width, precision, padding_char),
+        OutputType::Str(s) => print_str(s, flags, width, precision),
+        OutputType::OsStr(s) => print_os_str(s, flags, width, precision),
+        OutputType::Integer(num) => print_integer(*num, flags, width, precision, padding_char),
+        OutputType::Unsigned(num) => print_unsigned(*num, flags, width, precision, padding_char),
         OutputType::UnsignedOct(num) => {
-            print_unsigned_oct(*num, &flags, width, precision, padding_char);
+            print_unsigned_oct(*num, flags, width, precision, padding_char);
         }
         OutputType::UnsignedHex(num) => {
-            print_unsigned_hex(*num, &flags, width, precision, padding_char);
+            print_unsigned_hex(*num, flags, width, precision, padding_char);
         }
         OutputType::Float(num) => {
-            print_float(*num, &flags, width, precision, padding_char);
+            print_float(*num, flags, width, precision, padding_char);
         }
         OutputType::Unknown => print!("?"),
     }
@@ -378,7 +380,7 @@ fn print_it(output: &OutputType, flags: Flags, width: usize, precision: Precisio
 /// # Returns
 ///
 /// * Padding - An instance of the Padding enum representing the padding character.
-fn determine_padding_char(flags: &Flags) -> Padding {
+fn determine_padding_char(flags: Flags) -> Padding {
     if flags.zero && !flags.left {
         Padding::Zero
     } else {
@@ -394,7 +396,7 @@ fn determine_padding_char(flags: &Flags) -> Padding {
 /// * `flags` - A reference to the Flags struct containing formatting flags.
 /// * `width` - The width of the field for the printed string.
 /// * `precision` - How many digits of precision, if any.
-fn print_str(s: &str, flags: &Flags, width: usize, precision: Precision) {
+fn print_str(s: &str, flags: Flags, width: usize, precision: Precision) {
     let s = match precision {
         Precision::Number(p) if p < s.len() => &s[..p],
         _ => s,
@@ -413,7 +415,7 @@ fn print_str(s: &str, flags: &Flags, width: usize, precision: Precision) {
 /// * `flags` - A reference to the Flags struct containing formatting flags.
 /// * `width` - The width of the field for the printed string.
 /// * `precision` - How many digits of precision, if any.
-fn print_os_str(s: &OsString, flags: &Flags, width: usize, precision: Precision) {
+fn print_os_str(s: &OsString, flags: Flags, width: usize, precision: Precision) {
     #[cfg(unix)]
     {
         use std::os::unix::ffi::OsStrExt;
@@ -450,7 +452,7 @@ fn quote_file_name(file_name: &str, quoting_style: &QuotingStyle) -> String {
 fn get_quoted_file_name(
     display_name: &str,
     file: &OsString,
-    file_type: &FileType,
+    file_type: FileType,
     from_user: bool,
 ) -> Result<String, i32> {
     let quoting_style = env::var("QUOTING_STYLE")
@@ -534,7 +536,7 @@ fn process_token_filesystem(t: &Token, meta: &StatFs, display_name: &str) {
 /// * `padding_char` - The padding character as determined by `determine_padding_char`.
 fn print_integer(
     num: i64,
-    flags: &Flags,
+    flags: Flags,
     width: usize,
     precision: Precision,
     padding_char: Padding,
@@ -599,7 +601,7 @@ fn precision_trunc(num: f64, precision: Precision) -> String {
     }
 }
 
-fn print_float(num: f64, flags: &Flags, width: usize, precision: Precision, padding_char: Padding) {
+fn print_float(num: f64, flags: Flags, width: usize, precision: Precision, padding_char: Padding) {
     let prefix = if flags.sign {
         "+"
     } else if flags.space {
@@ -623,7 +625,7 @@ fn print_float(num: f64, flags: &Flags, width: usize, precision: Precision, padd
 /// * `padding_char` - The padding character as determined by `determine_padding_char`.
 fn print_unsigned(
     num: u64,
-    flags: &Flags,
+    flags: Flags,
     width: usize,
     precision: Precision,
     padding_char: Padding,
@@ -653,7 +655,7 @@ fn print_unsigned(
 /// * `padding_char` - The padding character as determined by `determine_padding_char`.
 fn print_unsigned_oct(
     num: u32,
-    flags: &Flags,
+    flags: Flags,
     width: usize,
     precision: Precision,
     padding_char: Padding,
@@ -678,7 +680,7 @@ fn print_unsigned_oct(
 /// * `padding_char` - The padding character as determined by `determine_padding_char`.
 fn print_unsigned_hex(
     num: u64,
-    flags: &Flags,
+    flags: Flags,
     width: usize,
     precision: Precision,
     padding_char: Padding,
@@ -739,7 +741,6 @@ impl Stater {
             return Ok(Token::Char('%'));
         }
         if chars[*i] == '%' {
-            *i += 1;
             return Ok(Token::Char('%'));
         }
 
@@ -794,13 +795,14 @@ impl Stater {
             if let Some(&next_char) = chars.get(*i + 1) {
                 if (chars[*i] == 'H' || chars[*i] == 'L') && (next_char == 'd' || next_char == 'r')
                 {
-                    let specifier = format!("{}{next_char}", chars[*i]);
+                    flag.major = chars[*i] == 'H';
+                    flag.minor = chars[*i] == 'L';
                     *i += 1;
                     return Ok(Token::Directive {
                         flag,
                         width,
                         precision,
-                        format: specifier.chars().next().unwrap(),
+                        format: next_char,
                     });
                 }
             }
@@ -908,6 +910,28 @@ impl Stater {
         Ok(tokens)
     }
 
+    fn populate_mount_list() -> UResult<Vec<OsString>> {
+        let mut mount_list = read_fs_list()
+            .map_err(|e| {
+                USimpleError::new(
+                    e.code(),
+                    StatError::CannotReadFilesystem {
+                        error: e.to_string(),
+                    }
+                    .to_string(),
+                )
+            })?
+            .iter()
+            .map(|mi| mi.mount_dir.clone())
+            .collect::<Vec<_>>();
+
+        // Reverse sort. The longer comes first.
+        mount_list.sort();
+        mount_list.reverse();
+
+        Ok(mount_list)
+    }
+
     fn new(matches: &ArgMatches) -> UResult<Self> {
         let files: Vec<OsString> = matches
             .get_many::<OsString>(options::FILES)
@@ -938,27 +962,16 @@ impl Stater {
         let default_dev_tokens =
             Self::generate_tokens(&Self::default_format(show_fs, terse, true), use_printf)?;
 
-        let mount_list = if show_fs {
-            // mount points aren't displayed when showing filesystem information
+        // mount points aren't displayed when showing filesystem information, or
+        // whenever the format string does not request the mount point.
+        let mount_list = if show_fs
+            || !default_tokens
+                .iter()
+                .any(|tok| matches!(tok, Token::Directive { format: 'm', .. }))
+        {
             None
         } else {
-            let mut mount_list = read_fs_list()
-                .map_err(|e| {
-                    USimpleError::new(
-                        e.code(),
-                        StatError::CannotReadFilesystem {
-                            error: e.to_string(),
-                        }
-                        .to_string(),
-                    )
-                })?
-                .iter()
-                .map(|mi| mi.mount_dir.clone())
-                .collect::<Vec<_>>();
-            // Reverse sort. The longer comes first.
-            mount_list.sort();
-            mount_list.reverse();
-            Some(mount_list)
+            Some(Self::populate_mount_list()?)
         };
 
         Ok(Self {
@@ -1002,9 +1015,10 @@ impl Stater {
         meta: &Metadata,
         display_name: &str,
         file: &OsString,
-        file_type: &FileType,
+        file_type: FileType,
         from_user: bool,
-        _follow_symbolic_links: bool,
+        #[cfg(feature = "selinux")] follow_symbolic_links: bool,
+        #[cfg(not(feature = "selinux"))] _: bool,
     ) -> Result<(), i32> {
         match *t {
             Token::Byte(byte) => write_raw_byte(byte),
@@ -1030,12 +1044,15 @@ impl Stater {
                     'B' => OutputType::Unsigned(512),
                     // SELinux security context string
                     'C' => {
-                        #[cfg(feature = "selinux")]
+                        #[cfg(all(
+                            feature = "selinux",
+                            any(target_os = "linux", target_os = "android")
+                        ))]
                         {
                             if uucore::selinux::is_selinux_enabled() {
                                 match uucore::selinux::get_selinux_security_context(
                                     Path::new(file),
-                                    _follow_symbolic_links,
+                                    follow_symbolic_links,
                                 ) {
                                     Ok(ctx) => OutputType::Str(ctx),
                                     Err(_) => OutputType::Str(translate!(
@@ -1046,12 +1063,17 @@ impl Stater {
                                 OutputType::Str(translate!("stat-selinux-unsupported-system"))
                             }
                         }
-                        #[cfg(not(feature = "selinux"))]
+                        #[cfg(not(all(
+                            feature = "selinux",
+                            any(target_os = "linux", target_os = "android")
+                        )))]
                         {
                             OutputType::Str(translate!("stat-selinux-unsupported-os"))
                         }
                     }
                     // device number in decimal
+                    'd' if flag.major => OutputType::Unsigned(major(meta.dev() as _) as u64),
+                    'd' if flag.minor => OutputType::Unsigned(minor(meta.dev() as _) as u64),
                     'd' => OutputType::Unsigned(meta.dev()),
                     // device number in hex
                     'D' => OutputType::UnsignedHex(meta.dev()),
@@ -1090,10 +1112,10 @@ impl Stater {
                     's' => OutputType::Integer(meta.len() as i64),
                     // major device type in hex, for character/block device special
                     // files
-                    't' => OutputType::UnsignedHex(meta.rdev() >> 8),
+                    't' => OutputType::UnsignedHex(major(meta.rdev() as _) as u64),
                     // minor device type in hex, for character/block device special
                     // files
-                    'T' => OutputType::UnsignedHex(meta.rdev() & 0xff),
+                    'T' => OutputType::UnsignedHex(minor(meta.rdev() as _) as u64),
                     // user ID of owner
                     'u' => OutputType::Unsigned(meta.uid() as u64),
                     // user name of owner
@@ -1136,15 +1158,10 @@ impl Stater {
                             .map_or((0, 0), system_time_to_sec);
                         OutputType::Float(sec as f64 + nsec as f64 / 1_000_000_000.0)
                     }
-                    'R' => {
-                        let major = meta.rdev() >> 8;
-                        let minor = meta.rdev() & 0xff;
-                        OutputType::Str(format!("{major},{minor}"))
-                    }
+                    'R' => OutputType::UnsignedHex(meta.rdev()),
+                    'r' if flag.major => OutputType::Unsigned(major(meta.rdev() as _) as u64),
+                    'r' if flag.minor => OutputType::Unsigned(minor(meta.rdev() as _) as u64),
                     'r' => OutputType::Unsigned(meta.rdev()),
-                    'H' => OutputType::Unsigned(meta.rdev() >> 8), // Major in decimal
-                    'L' => OutputType::Unsigned(meta.rdev() & 0xff), // Minor in decimal
-
                     _ => OutputType::Unknown,
                 };
                 print_it(&output, flag, width, precision);
@@ -1213,7 +1230,7 @@ impl Stater {
                             &meta,
                             &display_name,
                             &file,
-                            &file_type,
+                            file_type,
                             self.from_user,
                             follow_symbolic_links,
                         ) {
@@ -1269,7 +1286,7 @@ impl Stater {
         } else {
             let device_line = if show_dev_type {
                 format!(
-                    "{}: %Dh/%dd\t{}: %-10i  {}: %-5h {} {}: %t,%T\n",
+                    "{}: %Hd,%Ld\t{}: %-10i  {}: %-5h {} {}: %t,%T\n",
                     translate!("stat-word-device"),
                     translate!("stat-word-inode"),
                     translate!("stat-word-links"),
@@ -1278,7 +1295,7 @@ impl Stater {
                 )
             } else {
                 format!(
-                    "{}: %Dh/%dd\t{}: %-10i  {}: %h\n",
+                    "{}: %Hd,%Ld\t{}: %-10i  {}: %h\n",
                     translate!("stat-word-device"),
                     translate!("stat-word-inode"),
                     translate!("stat-word-links")
@@ -1286,13 +1303,12 @@ impl Stater {
             };
 
             format!(
-                "  {}: %N\n  {}: %-10s\t{}: %-10b {} {}: %-6o %F\n{}{}: (%04a/%10.10A)  {}: (%5u/%8U)   {}: (%5g/%8G)\n{}: %x\n{}: %y\n{}: %z\n {}: %w\n",
+                "  {}: %N\n  {}: %-10s\t{}: %-10b {} {}: %-6o %F\n{device_line}{}: (%04a/%10.10A)  {}: (%5u/%8U)   {}: (%5g/%8G)\n{}: %x\n{}: %y\n{}: %z\n {}: %w\n",
                 translate!("stat-word-file"),
                 translate!("stat-word-size"),
                 translate!("stat-word-blocks"),
                 translate!("stat-word-io"),
                 translate!("stat-word-block"),
-                device_line,
                 translate!("stat-word-access"),
                 translate!("stat-word-uid"),
                 translate!("stat-word-gid"),
@@ -1389,7 +1405,7 @@ fn pretty_time(meta: &Metadata, md_time_field: MetadataTimeField) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::{pad_and_print_bytes, print_padding, quote_file_name};
+    use crate::{pad_and_print_bytes, quote_file_name, write_padding};
 
     use super::{Flags, Precision, ScanUtil, Stater, Token, group_num, precision_trunc};
 
@@ -1537,7 +1553,7 @@ mod tests {
     #[test]
     fn test_print_padding() {
         let mut buffer = Vec::new();
-        print_padding(&mut buffer, 5).unwrap();
+        write_padding(&mut buffer, 5).unwrap();
         assert_eq!(&buffer, b"     ");
     }
 
