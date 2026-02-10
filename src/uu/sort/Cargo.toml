@@ -1,4 +1,4 @@
-# spell-checker:ignore bigdecimal
+# spell-checker:ignore ahash bigdecimal
 
 [package]
 name = "uu_sort"
@@ -11,6 +11,7 @@ homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 readme.workspace = true
 
 [lints]
@@ -20,6 +21,7 @@ workspace = true
 path = "src/sort.rs"
 
 [features]
+default = ["i18n-collator"]
 i18n-collator = ["uucore/i18n-collator"]
 
 [dependencies]
@@ -27,7 +29,6 @@ bigdecimal = { workspace = true }
 binary-heap-plus = { workspace = true }
 clap = { workspace = true }
 compare = { workspace = true }
-fnv = { workspace = true }
 itertools = { workspace = true }
 memchr = { workspace = true }
 rand = { workspace = true }
@@ -43,6 +44,7 @@ uucore = { workspace = true, features = [
   "i18n-collator",
 ] }
 fluent = { workspace = true }
+ahash = { workspace = true }
 
 [target.'cfg(not(target_os = "redox"))'.dependencies]
 ctrlc = { workspace = true }

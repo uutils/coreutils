@@ -9,6 +9,7 @@ homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 readme.workspace = true
 
 [lints]
@@ -19,10 +20,13 @@ path = "src/shuf.rs"
 
 [dependencies]
 clap = { workspace = true }
+itoa = { workspace = true }
 rand = { workspace = true }
-rand_core = { workspace = true }
+rand_chacha = { workspace = true }
+sha3 = { workspace = true }
 uucore = { workspace = true }
 fluent = { workspace = true }
+rustc-hash = { workspace = true }
 
 [[bin]]
 name = "shuf"

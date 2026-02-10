@@ -9,6 +9,7 @@ homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 readme.workspace = true
 
 [lints]
@@ -28,3 +29,6 @@ nix = { workspace = true, features = ["ioctl", "term"] }
 [[bin]]
 name = "stty"
 path = "src/main.rs"
+
+[build-dependencies]
+cfg_aliases = "0.2.1"
