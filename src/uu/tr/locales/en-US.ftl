@@ -23,6 +23,7 @@ tr-error-write-error = write error
 # Warning messages
 tr-warning-unescaped-backslash = warning: an unescaped backslash at end of string is not portable
 tr-warning-ambiguous-octal-escape = the ambiguous octal escape \{ $origin_octal } is being interpreted as the 2-byte sequence \0{ $actual_octal_tail }, { $outstand_char }
+tr-warning-invalid-utf8 = invalid utf8 sequence
 
 # Sequence parsing error messages
 tr-error-missing-char-class-name = missing character class name '[::]'
