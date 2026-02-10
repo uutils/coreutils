@@ -143,6 +143,10 @@ impl From<&str> for MetadataTimeField {
 }
 
 #[cfg(unix)]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "fn sig must match on all platforms"
+)]
 fn metadata_get_change_time(md: &Metadata) -> Option<SystemTime> {
     let mut st = UNIX_EPOCH;
     let (secs, nsecs) = (md.ctime(), md.ctime_nsec());
@@ -380,7 +384,7 @@ impl From<StatFs> for MountInfo {
     }
 }
 
-#[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
+#[cfg(all(unix, not(target_os = "redox")))]
 fn is_dummy_filesystem(fs_type: &str, mount_option: &str) -> bool {
     // spell-checker:disable
     match fs_type {
@@ -392,7 +396,11 @@ fn is_dummy_filesystem(fs_type: &str, mount_option: &str) -> bool {
         // for NetBSD 3.0
         | "kernfs"
         // for Irix 6.5
-        | "ignore" => true,
+        | "ignore"
+        // Linux initial root filesystem
+        | "rootfs"
+        // Binary format support pseudo-filesystem
+        | "binfmt_misc" => true,
         _ => fs_type == "none"
             && !mount_option.contains(MOUNT_OPT_BIND)
     }
@@ -416,40 +424,6 @@ fn mount_dev_id(mount_dir: &OsStr) -> String {
     } else {
         String::new()
     }
-}
-
-#[cfg(any(
-    target_os = "freebsd",
-    target_vendor = "apple",
-    target_os = "netbsd",
-    target_os = "openbsd"
-))]
-use libc::c_int;
-#[cfg(any(
-    target_os = "freebsd",
-    target_vendor = "apple",
-    target_os = "netbsd",
-    target_os = "openbsd"
-))]
-unsafe extern "C" {
-    #[cfg(all(target_vendor = "apple", target_arch = "x86_64"))]
-    #[link_name = "getmntinfo$INODE64"]
-    fn get_mount_info(mount_buffer_p: *mut *mut StatFs, flags: c_int) -> c_int;
-
-    #[cfg(any(
-        target_os = "netbsd",
-        target_os = "openbsd",
-        all(target_vendor = "apple", target_arch = "aarch64")
-    ))]
-    #[link_name = "getmntinfo"]
-    fn get_mount_info(mount_buffer_p: *mut *mut StatFs, flags: c_int) -> c_int;
-
-    // Rust on FreeBSD uses 11.x ABI for filesystem metadata syscalls.
-    // Call the right version of the symbol for getmntinfo() result to
-    // match libc StatFS layout.
-    #[cfg(target_os = "freebsd")]
-    #[link_name = "getmntinfo@FBSD_1.0"]
-    fn get_mount_info(mount_buffer_p: *mut *mut StatFs, flags: c_int) -> c_int;
 }
 
 use crate::error::UResult;
@@ -506,9 +480,9 @@ pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
     ))]
     {
         let mut mount_buffer_ptr: *mut StatFs = ptr::null_mut();
-        let len = unsafe { get_mount_info(&raw mut mount_buffer_ptr, 1_i32) };
+        let len = unsafe { libc::getmntinfo(&raw mut mount_buffer_ptr, 1_i32) };
         if len < 0 {
-            return Err(USimpleError::new(1, "get_mount_info() failed"));
+            return Err(USimpleError::new(1, "getmntinfo() failed"));
         }
         let mounts = unsafe { slice::from_raw_parts(mount_buffer_ptr, len as usize) };
         Ok(mounts
@@ -616,8 +590,7 @@ impl FsUsage {
                 blocks: statvfs.f_blocks,
                 bfree: statvfs.f_bfree,
                 bavail: statvfs.f_bavail.try_into().unwrap(),
-                bavail_top_bit_set: ((std::convert::TryInto::<u64>::try_into(statvfs.f_bavail)
-                    .unwrap())
+                bavail_top_bit_set: ((TryInto::<u64>::try_into(statvfs.f_bavail).unwrap())
                     & (1u64.rotate_right(1)))
                     != 0,
                 files: statvfs.f_files,
@@ -629,8 +602,7 @@ impl FsUsage {
                 blocks: statvfs.f_blocks,
                 bfree: statvfs.f_bfree,
                 bavail: statvfs.f_bavail.try_into().unwrap(),
-                bavail_top_bit_set: ((std::convert::TryInto::<u64>::try_into(statvfs.f_bavail)
-                    .unwrap())
+                bavail_top_bit_set: ((TryInto::<u64>::try_into(statvfs.f_bavail).unwrap())
                     & (1u64.rotate_right(1)))
                     != 0,
                 files: statvfs.f_files,
@@ -932,15 +904,14 @@ pub fn statfs(path: &OsStr) -> Result<StatFs, String> {
         Ok(p) => {
             let mut buffer: StatFs = unsafe { mem::zeroed() };
             unsafe {
-                match statfs_fn(p.as_ptr(), &raw mut buffer) {
-                    0 => Ok(buffer),
-                    _ => {
-                        let errno = IOError::last_os_error().raw_os_error().unwrap_or(0);
-                        Err(CStr::from_ptr(strerror(errno))
-                            .to_str()
-                            .map_err(|_| "Error message contains invalid UTF-8".to_owned())?
-                            .to_owned())
-                    }
+                if statfs_fn(p.as_ptr(), &raw mut buffer) == 0 {
+                    Ok(buffer)
+                } else {
+                    let errno = IOError::last_os_error().raw_os_error().unwrap_or(0);
+                    Err(CStr::from_ptr(strerror(errno))
+                        .to_str()
+                        .map_err(|_| "Error message contains invalid UTF-8".to_owned())?
+                        .to_owned())
                 }
             }
         }
@@ -1219,5 +1190,13 @@ mod tests {
             info.mount_dir,
             crate::os_str_from_bytes(b"/mnt/some- -dir-\xf3").unwrap()
         );
+    }
+
+    #[test]
+    #[cfg(all(unix, not(target_os = "redox")))]
+    // spell-checker:ignore (word) binfmt
+    fn test_binfmt_misc_is_dummy() {
+        use super::is_dummy_filesystem;
+        assert!(is_dummy_filesystem("binfmt_misc", ""));
     }
 }

@@ -30,6 +30,50 @@ pub fn init_collator(opts: CollatorOptions) {
         .expect("Collator already initialized");
 }
 
+/// Check if locale collation should be used.
+pub fn should_use_locale_collation() -> bool {
+    get_collating_locale().0 != DEFAULT_LOCALE
+}
+
+/// Initialize the collator for locale-aware string comparison if needed.
+///
+/// This function checks if the current locale requires locale-aware collation
+/// (UTF-8 encoding) and initializes the ICU collator with appropriate settings
+/// if necessary. For C/POSIX locales, no initialization is needed as byte
+/// comparison is sufficient.
+///
+/// # Returns
+///
+/// `true` if the collator was initialized for a UTF-8 locale, `false` if
+/// using C/POSIX locale (no initialization needed).
+///
+/// # Example
+///
+/// ```
+/// use uucore::i18n::collator::init_locale_collation;
+///
+/// if init_locale_collation() {
+///     // Using locale-aware collation
+/// } else {
+///     // Using byte comparison (C/POSIX locale)
+/// }
+/// ```
+pub fn init_locale_collation() -> bool {
+    use crate::i18n::{UEncoding, get_locale_encoding};
+
+    // Check if we need locale-aware collation
+    if get_locale_encoding() != UEncoding::Utf8 {
+        // C/POSIX locale - no collator needed
+        return false;
+    }
+
+    // UTF-8 locale - initialize collator with Shifted mode to match GNU behavior
+    let mut opts = CollatorOptions::default();
+    opts.alternate_handling = Some(AlternateHandling::Shifted);
+
+    try_init_collator(opts)
+}
+
 /// Compare both strings with regard to the current locale.
 pub fn locale_cmp(left: &[u8], right: &[u8]) -> Ordering {
     // If the detected locale is 'C', just do byte-wise comparison

@@ -59,6 +59,7 @@ numfmt-error-grouping-cannot-be-combined-with-to = le groupement ne peut pas êt
 numfmt-error-delimiter-must-be-single-character = le délimiteur doit être un seul caractère
 numfmt-error-invalid-number-empty = nombre invalide : ''
 numfmt-error-invalid-suffix = suffixe invalide dans l'entrée : { $input }
+numfmt-error-invalid-specific-suffix = suffixe invalide dans l'entrée { $input } : { $suffix }
 numfmt-error-invalid-number = nombre invalide : { $input }
 numfmt-error-missing-i-suffix = suffixe 'i' manquant dans l'entrée : '{ $number }{ $suffix }' (par ex. Ki/Mi/Gi)
 numfmt-error-rejecting-suffix = rejet du suffixe dans l'entrée : '{ $number }{ $suffix }' (considérez utiliser --from)

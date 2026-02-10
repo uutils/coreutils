@@ -3,9 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use platform_info::*;
-
 use clap::Command;
+use platform_info::{PlatformInfo, PlatformInfoAPI, UNameAPI};
+use std::io::{Write, stdout};
 use uucore::error::{UResult, USimpleError};
 use uucore::translate;
 
@@ -16,7 +16,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let uts =
         PlatformInfo::new().map_err(|_e| USimpleError::new(1, translate!("cannot-get-system")))?;
 
-    println!("{}", uts.machine().to_string_lossy().trim());
+    writeln!(stdout(), "{}", uts.machine().to_string_lossy().trim())?;
     Ok(())
 }
 

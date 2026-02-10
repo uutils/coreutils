@@ -195,13 +195,10 @@ fn current_tty() -> String {
 impl Who {
     #[allow(clippy::cognitive_complexity)]
     fn exec(&mut self) -> UResult<()> {
-        let run_level_chk = |_record: i16| {
-            #[cfg(not(target_os = "linux"))]
-            return false;
-
-            #[cfg(target_os = "linux")]
-            return _record == utmpx::RUN_LVL;
-        };
+        #[cfg(target_os = "linux")]
+        let run_level_chk = |record: i16| record == utmpx::RUN_LVL;
+        #[cfg(not(target_os = "linux"))]
+        let run_level_chk = |_| false;
 
         let f = if self.args.len() == 1 {
             self.args[0].as_ref()
@@ -357,23 +354,20 @@ impl Who {
         p.push(ut.tty_device().as_str());
         let mesg;
         let last_change;
-        match p.metadata() {
-            Ok(meta) => {
-                #[cfg(all(
-                    not(target_os = "android"),
-                    not(target_os = "freebsd"),
-                    not(target_vendor = "apple")
-                ))]
-                let iwgrp = S_IWGRP;
-                #[cfg(any(target_os = "android", target_os = "freebsd", target_vendor = "apple"))]
-                let iwgrp = S_IWGRP as u32;
-                mesg = if meta.mode() & iwgrp == 0 { '-' } else { '+' };
-                last_change = meta.atime();
-            }
-            _ => {
-                mesg = '?';
-                last_change = 0;
-            }
+        if let Ok(meta) = p.metadata() {
+            #[cfg(all(
+                not(target_os = "android"),
+                not(target_os = "freebsd"),
+                not(target_vendor = "apple")
+            ))]
+            let iwgrp = S_IWGRP;
+            #[cfg(any(target_os = "android", target_os = "freebsd", target_vendor = "apple"))]
+            let iwgrp = S_IWGRP as u32;
+            mesg = if meta.mode() & iwgrp == 0 { '-' } else { '+' };
+            last_change = meta.atime();
+        } else {
+            mesg = '?';
+            last_change = 0;
         }
 
         let idle = if last_change == 0 {

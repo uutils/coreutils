@@ -9,6 +9,7 @@ homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 readme.workspace = true
 
 [lints]
@@ -19,7 +20,7 @@ path = "src/join.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true }
+uucore = { workspace = true, features = ["i18n-collator"] }
 memchr = { workspace = true }
 thiserror = { workspace = true }
 fluent = { workspace = true }
@@ -27,3 +28,12 @@ fluent = { workspace = true }
 [[bin]]
 name = "join"
 path = "src/main.rs"
+
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
+[[bench]]
+name = "join_bench"
+harness = false
