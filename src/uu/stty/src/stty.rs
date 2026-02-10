@@ -10,8 +10,9 @@
 // spell-checker:ignore isig icanon iexten echoe crterase echok echonl noflsh xcase tostop echoprt prterase echoctl ctlecho echoke crtkill flusho extproc
 // spell-checker:ignore lnext rprnt susp swtch vdiscard veof veol verase vintr vkill vlnext vquit vreprint vstart vstop vsusp vswtc vwerase werase
 // spell-checker:ignore sigquit sigtstp
-// spell-checker:ignore cbreak decctlq evenp litout oddp tcsadrain exta extb NCCS
+// spell-checker:ignore cbreak decctlq evenp litout oddp tcsadrain exta extb NCCS cfsetispeed
 // spell-checker:ignore notaflag notacombo notabaud
+// spell-checker:ignore baudrate TCGETS
 
 mod flags;
 
@@ -19,31 +20,28 @@ use crate::flags::AllFlags;
 use crate::flags::COMBINATION_SETTINGS;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use nix::libc::{O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ, c_ushort};
+
+#[cfg(target_os = "linux")]
+use nix::libc::{TCGETS2, termios2};
+
 use nix::sys::termios::{
     ControlFlags, InputFlags, LocalFlags, OutputFlags, SetArg, SpecialCharacterIndices as S,
-    Termios, cfgetospeed, cfsetospeed, tcgetattr, tcsetattr,
+    Termios, cfsetispeed, cfsetospeed, tcgetattr, tcsetattr,
 };
 use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
 use std::cmp::Ordering;
 use std::fs::File;
-use std::io::{self, Stdout, stdout};
+use std::io::{self, Stdin, stdin, stdout};
 use std::num::IntErrorKind;
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::{AsRawFd, RawFd};
-use uucore::error::{UError, UResult, USimpleError, UUsageError};
+use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::parser::num_parser::ExtendedParser;
 use uucore::translate;
 
-#[cfg(not(any(
-    target_os = "freebsd",
-    target_os = "dragonfly",
-    target_os = "ios",
-    target_os = "macos",
-    target_os = "netbsd",
-    target_os = "openbsd"
-)))]
+#[cfg(not(bsd))]
 use flags::BAUD_RATES;
 use flags::{CONTROL_CHARS, CONTROL_FLAGS, INPUT_FLAGS, LOCAL_FLAGS, OUTPUT_FLAGS};
 
@@ -124,12 +122,13 @@ struct Options<'a> {
     all: bool,
     save: bool,
     file: Device,
+    device_name: String,
     settings: Option<Vec<&'a str>>,
 }
 
 enum Device {
     File(File),
-    Stdout(Stdout),
+    Stdin(Stdin),
 }
 
 #[derive(Debug)]
@@ -166,7 +165,7 @@ impl AsFd for Device {
     fn as_fd(&self) -> BorrowedFd<'_> {
         match self {
             Self::File(f) => f.as_fd(),
-            Self::Stdout(stdout) => stdout.as_fd(),
+            Self::Stdin(stdin) => stdin.as_fd(),
         }
     }
 }
@@ -175,45 +174,42 @@ impl AsRawFd for Device {
     fn as_raw_fd(&self) -> RawFd {
         match self {
             Self::File(f) => f.as_raw_fd(),
-            Self::Stdout(stdout) => stdout.as_raw_fd(),
+            Self::Stdin(stdin) => stdin.as_raw_fd(),
         }
     }
 }
 
 impl<'a> Options<'a> {
     fn from(matches: &'a ArgMatches) -> io::Result<Self> {
-        Ok(Self {
-            all: matches.get_flag(options::ALL),
-            save: matches.get_flag(options::SAVE),
-            file: match matches.get_one::<String>(options::FILE) {
-                // Two notes here:
-                // 1. O_NONBLOCK is needed because according to GNU docs, a
-                //    POSIX tty can block waiting for carrier-detect if the
-                //    "clocal" flag is not set. If your TTY is not connected
-                //    to a modem, it is probably not relevant though.
-                // 2. We never close the FD that we open here, but the OS
-                //    will clean up the FD for us on exit, so it doesn't
-                //    matter. The alternative would be to have an enum of
-                //    BorrowedFd/OwnedFd to handle both cases.
-                Some(f) => Device::File(
+        let (file, device_name) = match matches.get_one::<String>(options::FILE) {
+            // Two notes here:
+            // 1. O_NONBLOCK is needed because according to GNU docs, a
+            //    POSIX tty can block waiting for carrier-detect if the
+            //    "clocal" flag is not set. If your TTY is not connected
+            //    to a modem, it is probably not relevant though.
+            // 2. We never close the FD that we open here, but the OS
+            //    will clean up the FD for us on exit, so it doesn't
+            //    matter. The alternative would be to have an enum of
+            //    BorrowedFd/OwnedFd to handle both cases.
+            Some(f) => (
+                Device::File(
                     std::fs::OpenOptions::new()
                         .read(true)
                         .custom_flags(O_NONBLOCK)
                         .open(f)?,
                 ),
-                // default to /dev/tty, if that does not exist then default to stdout
-                None => {
-                    if let Ok(f) = std::fs::OpenOptions::new()
-                        .read(true)
-                        .custom_flags(O_NONBLOCK)
-                        .open("/dev/tty")
-                    {
-                        Device::File(f)
-                    } else {
-                        Device::Stdout(stdout())
-                    }
-                }
-            },
+                f.clone(),
+            ),
+            // Per POSIX, stdin is used for TTY operations when no device is specified.
+            // This matches GNU coreutils behavior: if stdin is not a TTY,
+            // tcgetattr will fail with "Inappropriate ioctl for device".
+            None => (Device::Stdin(stdin()), "standard input".to_string()),
+        };
+        Ok(Self {
+            all: matches.get_flag(options::ALL),
+            save: matches.get_flag(options::SAVE),
+            file,
+            device_name,
             settings: matches
                 .get_many::<String>(options::SETTINGS)
                 .map(|v| v.map(|s| s.as_ref()).collect()),
@@ -276,19 +272,24 @@ fn stty(opts: &Options) -> UResult<()> {
         let mut args_iter = args.iter();
         while let Some(&arg) = args_iter.next() {
             match arg {
-                "ispeed" | "ospeed" => match args_iter.next() {
+                "ispeed" => match args_iter.next() {
                     Some(speed) => {
-                        if let Some(baud_flag) = string_to_baud(speed) {
+                        if let Some(baud_flag) = string_to_baud(speed, flags::BaudType::Input) {
                             valid_args.push(ArgOptions::Flags(baud_flag));
                         } else {
-                            return Err(USimpleError::new(
-                                1,
-                                translate!(
-                                    "stty-error-invalid-speed",
-                                    "arg" => *arg,
-                                    "speed" => *speed,
-                                ),
-                            ));
+                            return invalid_speed(arg, speed);
+                        }
+                    }
+                    None => {
+                        return missing_arg(arg);
+                    }
+                },
+                "ospeed" => match args_iter.next() {
+                    Some(speed) => {
+                        if let Some(baud_flag) = string_to_baud(speed, flags::BaudType::Output) {
+                            valid_args.push(ArgOptions::Flags(baud_flag));
+                        } else {
+                            return invalid_speed(arg, speed);
                         }
                     }
                     None => {
@@ -385,12 +386,12 @@ fn stty(opts: &Options) -> UResult<()> {
                             return missing_arg(arg);
                         }
                     // baud rate
-                    } else if let Some(baud_flag) = string_to_baud(arg) {
+                    } else if let Some(baud_flag) = string_to_baud(arg, flags::BaudType::Both) {
                         valid_args.push(ArgOptions::Flags(baud_flag));
                     // non control char flag
                     } else if let Some(flag) = string_to_flag(arg) {
                         let remove_group = match flag {
-                            AllFlags::Baud(_) => false,
+                            AllFlags::Baud(_, _) => false,
                             AllFlags::ControlFlags((flag, remove)) => {
                                 check_flag_group(flag, remove)
                             }
@@ -412,14 +413,14 @@ fn stty(opts: &Options) -> UResult<()> {
             }
         }
 
-        // TODO: Figure out the right error message for when tcgetattr fails
-        let mut termios = tcgetattr(opts.file.as_fd())?;
+        let mut termios =
+            tcgetattr(opts.file.as_fd()).map_err_context(|| opts.device_name.clone())?;
 
         // iterate over valid_args, match on the arg type, do the matching apply function
         for arg in &valid_args {
             match arg {
                 ArgOptions::Mapping(mapping) => apply_char_mapping(&mut termios, mapping),
-                ArgOptions::Flags(flag) => apply_setting(&mut termios, flag),
+                ArgOptions::Flags(flag) => apply_setting(&mut termios, flag)?,
                 ArgOptions::Special(setting) => {
                     apply_special_setting(&mut termios, setting, opts.file.as_raw_fd())?;
                 }
@@ -427,14 +428,13 @@ fn stty(opts: &Options) -> UResult<()> {
                     print_special_setting(setting, opts.file.as_raw_fd())?;
                 }
                 ArgOptions::SavedState(state) => {
-                    apply_saved_state(&mut termios, state)?;
+                    apply_saved_state(&mut termios, state);
                 }
             }
         }
         tcsetattr(opts.file.as_fd(), set_arg, &termios)?;
     } else {
-        // TODO: Figure out the right error message for when tcgetattr fails
-        let termios = tcgetattr(opts.file.as_fd())?;
+        let termios = tcgetattr(opts.file.as_fd()).map_err_context(|| opts.device_name.clone())?;
         print_settings(&termios, opts)?;
     }
     Ok(())
@@ -471,13 +471,26 @@ fn invalid_integer_arg<T>(arg: &str) -> Result<T, Box<dyn UError>> {
     ))
 }
 
+fn invalid_speed<T>(arg: &str, speed: &str) -> Result<T, Box<dyn UError>> {
+    Err(UUsageError::new(
+        1,
+        translate!(
+            "stty-error-invalid-speed",
+            "arg" => arg,
+            "speed" => speed,
+        ),
+    ))
+}
+
 /// GNU uses different error messages if values overflow or underflow a u8,
 /// this function returns the appropriate error message in the case of overflow or underflow, or u8 on success
 fn parse_u8_or_err(arg: &str) -> Result<u8, String> {
-    arg.parse::<u8>().map_err(|e| match e.kind() {
-        IntErrorKind::PosOverflow => translate!("stty-error-invalid-integer-argument-value-too-large", "value" => format!("'{arg}'")),
-        _ => translate!("stty-error-invalid-integer-argument",
-                        "value" => format!("'{arg}'")),
+    arg.parse::<u8>().map_err(|e| {
+        if let IntErrorKind::PosOverflow = e.kind() {
+            translate!("stty-error-invalid-integer-argument-value-too-large", "value" => format!("'{arg}'"))
+        } else {
+            translate!("stty-error-invalid-integer-argument", "value" => format!("'{arg}'"))
+        }
     })
 }
 
@@ -556,16 +569,15 @@ impl WrappedPrinter {
     /// If term_size is None (typically when output is piped), falls back to
     /// the COLUMNS environment variable or a default width of 80 columns.
     fn new(term_size: Option<&TermSize>) -> Self {
-        let columns = match term_size {
-            Some(term_size) => term_size.columns,
-            None => {
-                const DEFAULT_TERM_WIDTH: u16 = 80;
+        let columns = if let Some(term_size) = term_size {
+            term_size.columns
+        } else {
+            const DEFAULT_TERM_WIDTH: u16 = 80;
 
-                std::env::var_os("COLUMNS")
-                    .and_then(|s| s.to_str()?.parse().ok())
-                    .filter(|&c| c > 0)
-                    .unwrap_or(DEFAULT_TERM_WIDTH)
-            }
+            std::env::var_os("COLUMNS")
+                .and_then(|s| s.to_str()?.parse().ok())
+                .filter(|&c| c > 0)
+                .unwrap_or(DEFAULT_TERM_WIDTH)
         };
 
         Self {
@@ -583,7 +595,7 @@ impl WrappedPrinter {
             self.first_in_line = true;
         }
 
-        print!("{}{}", self.prefix(), token);
+        print!("{}{token}", self.prefix());
         self.current += token_len;
         self.first_in_line = false;
     }
@@ -601,36 +613,37 @@ impl WrappedPrinter {
     }
 }
 
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "needed for some platform-specific code"
+)]
 fn print_terminal_size(
     termios: &Termios,
     opts: &Options,
     window_size: Option<&TermSize>,
     term_size: Option<&TermSize>,
 ) -> nix::Result<()> {
-    let speed = cfgetospeed(termios);
+    // GNU linked against glibc 2.42 provides us baudrate 51 which panics cfgetospeed
+    #[cfg(not(target_os = "linux"))]
+    let speed = nix::sys::termios::cfgetospeed(termios);
+    #[cfg(target_os = "linux")]
+    ioctl_read_bad!(tcgets2, TCGETS2, termios2);
+    #[cfg(target_os = "linux")]
+    let speed = {
+        let mut t2 = unsafe { std::mem::zeroed::<termios2>() };
+        unsafe { tcgets2(opts.file.as_raw_fd(), &raw mut t2)? };
+        t2.c_ospeed
+    };
+
     let mut printer = WrappedPrinter::new(window_size);
 
-    // BSDs use a u32 for the baud rate, so we can simply print it.
-    #[cfg(any(
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    ))]
+    // BSDs and Linux use a u32 for the baud rate, so we can simply print it.
+    #[cfg(any(target_os = "linux", bsd))]
     printer.print(&translate!("stty-output-speed", "speed" => speed));
 
     // Other platforms need to use the baud rate enum, so printing the right value
     // becomes slightly more complicated.
-    #[cfg(not(any(
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    )))]
+    #[cfg(not(any(target_os = "linux", bsd)))]
     for (text, baud_rate) in BAUD_RATES {
         if *baud_rate == speed {
             printer.print(&translate!("stty-output-speed", "speed" => (*text)));
@@ -722,7 +735,7 @@ fn parse_baud_with_rounding(normalized: &str) -> Option<u32> {
     Some(value)
 }
 
-fn string_to_baud(arg: &str) -> Option<AllFlags<'_>> {
+fn string_to_baud(arg: &str, baud_type: flags::BaudType) -> Option<AllFlags<'_>> {
     // Reject invalid formats
     if arg != arg.trim_end()
         || arg.trim().starts_with('-')
@@ -739,28 +752,14 @@ fn string_to_baud(arg: &str) -> Option<AllFlags<'_>> {
     let value = parse_baud_with_rounding(normalized)?;
 
     // BSDs use a u32 for the baud rate, so any decimal number applies.
-    #[cfg(any(
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    ))]
-    return Some(AllFlags::Baud(value));
+    #[cfg(bsd)]
+    return Some(AllFlags::Baud(value, baud_type));
 
-    #[cfg(not(any(
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    )))]
+    #[cfg(not(bsd))]
     {
         for (text, baud_rate) in BAUD_RATES {
             if text.parse::<u32>().ok() == Some(value) {
-                return Some(AllFlags::Baud(*baud_rate));
+                return Some(AllFlags::Baud(*baud_rate, baud_type));
             }
         }
         None
@@ -943,9 +942,9 @@ fn print_flags<T: TermiosFlag>(
 }
 
 /// Apply a single setting
-fn apply_setting(termios: &mut Termios, setting: &AllFlags) {
+fn apply_setting(termios: &mut Termios, setting: &AllFlags) -> nix::Result<()> {
     match setting {
-        AllFlags::Baud(_) => apply_baud_rate_flag(termios, setting),
+        AllFlags::Baud(_, _) => apply_baud_rate_flag(termios, setting)?,
         AllFlags::ControlFlags((setting, disable)) => {
             setting.flag.apply(termios, !disable);
         }
@@ -959,34 +958,21 @@ fn apply_setting(termios: &mut Termios, setting: &AllFlags) {
             setting.flag.apply(termios, !disable);
         }
     }
+    Ok(())
 }
 
-fn apply_baud_rate_flag(termios: &mut Termios, input: &AllFlags) {
-    // BSDs use a u32 for the baud rate, so any decimal number applies.
-    #[cfg(any(
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    ))]
-    if let AllFlags::Baud(n) = input {
-        cfsetospeed(termios, *n).expect("Failed to set baud rate");
+fn apply_baud_rate_flag(termios: &mut Termios, input: &AllFlags) -> nix::Result<()> {
+    if let AllFlags::Baud(rate, baud_type) = input {
+        match baud_type {
+            flags::BaudType::Input => cfsetispeed(termios, *rate)?,
+            flags::BaudType::Output => cfsetospeed(termios, *rate)?,
+            flags::BaudType::Both => {
+                cfsetispeed(termios, *rate)?;
+                cfsetospeed(termios, *rate)?;
+            }
+        }
     }
-
-    // Other platforms use an enum.
-    #[cfg(not(any(
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    )))]
-    if let AllFlags::Baud(br) = input {
-        cfsetospeed(termios, *br).expect("Failed to set baud rate");
-    }
+    Ok(())
 }
 
 fn apply_char_mapping(termios: &mut Termios, mapping: &(S, u8)) {
@@ -997,17 +983,17 @@ fn apply_char_mapping(termios: &mut Termios, mapping: &(S, u8)) {
 ///
 /// The state array contains:
 /// - `state[0]`: input flags
-/// - `state[1]`: output flags  
+/// - `state[1]`: output flags
 /// - `state[2]`: control flags
 /// - `state[3]`: local flags
 /// - `state[4..]`: control characters (optional)
 ///
 /// If state has fewer than 4 elements, no changes are applied. This is a defensive
 /// check that should never trigger since `parse_saved_state` rejects such states.
-fn apply_saved_state(termios: &mut Termios, state: &[u32]) -> nix::Result<()> {
+fn apply_saved_state(termios: &mut Termios, state: &[u32]) {
     // Require at least 4 elements for the flags (defensive check)
     if state.len() < 4 {
-        return Ok(()); // No-op for invalid state (already validated by parser)
+        return; // No-op for invalid state (already validated by parser)
     }
 
     // Apply the four flag groups, done (as _) for MacOS size compatibility
@@ -1022,8 +1008,6 @@ fn apply_saved_state(termios: &mut Termios, state: &[u32]) -> nix::Result<()> {
             termios.control_chars[i] = cc_val as u8;
         }
     }
-
-    Ok(())
 }
 
 fn apply_special_setting(
@@ -1036,11 +1020,15 @@ fn apply_special_setting(
     match setting {
         SpecialSetting::Rows(n) => size.rows = *n,
         SpecialSetting::Cols(n) => size.columns = *n,
-        SpecialSetting::Line(_n) => {
+        #[cfg_attr(
+            not(any(target_os = "linux", target_os = "android")),
+            expect(unused_variables)
+        )]
+        SpecialSetting::Line(n) => {
             // nix only defines Termios's `line_discipline` field on these platforms
             #[cfg(any(target_os = "linux", target_os = "android"))]
             {
-                _termios.line_discipline = *_n;
+                _termios.line_discipline = *n;
             }
         }
     }
@@ -1436,52 +1424,31 @@ mod tests {
     // Tests for string_to_baud
     #[test]
     fn test_string_to_baud_valid() {
-        #[cfg(not(any(
-            target_os = "freebsd",
-            target_os = "dragonfly",
-            target_os = "ios",
-            target_os = "macos",
-            target_os = "netbsd",
-            target_os = "openbsd"
-        )))]
+        #[cfg(not(bsd))]
         {
-            assert!(string_to_baud("9600").is_some());
-            assert!(string_to_baud("115200").is_some());
-            assert!(string_to_baud("38400").is_some());
-            assert!(string_to_baud("19200").is_some());
+            assert!(string_to_baud("9600", flags::BaudType::Both).is_some());
+            assert!(string_to_baud("115200", flags::BaudType::Both).is_some());
+            assert!(string_to_baud("38400", flags::BaudType::Both).is_some());
+            assert!(string_to_baud("19200", flags::BaudType::Both).is_some());
         }
 
-        #[cfg(any(
-            target_os = "freebsd",
-            target_os = "dragonfly",
-            target_os = "ios",
-            target_os = "macos",
-            target_os = "netbsd",
-            target_os = "openbsd"
-        ))]
+        #[cfg(bsd)]
         {
-            assert!(string_to_baud("9600").is_some());
-            assert!(string_to_baud("115200").is_some());
-            assert!(string_to_baud("1000000").is_some());
-            assert!(string_to_baud("0").is_some());
+            assert!(string_to_baud("9600", flags::BaudType::Both).is_some());
+            assert!(string_to_baud("115200", flags::BaudType::Both).is_some());
+            assert!(string_to_baud("1000000", flags::BaudType::Both).is_some());
+            assert!(string_to_baud("0", flags::BaudType::Both).is_some());
         }
     }
 
     #[test]
     fn test_string_to_baud_invalid() {
-        #[cfg(not(any(
-            target_os = "freebsd",
-            target_os = "dragonfly",
-            target_os = "ios",
-            target_os = "macos",
-            target_os = "netbsd",
-            target_os = "openbsd"
-        )))]
+        #[cfg(not(bsd))]
         {
-            assert_eq!(string_to_baud("995"), None);
-            assert_eq!(string_to_baud("invalid"), None);
-            assert_eq!(string_to_baud(""), None);
-            assert_eq!(string_to_baud("abc"), None);
+            assert_eq!(string_to_baud("995", flags::BaudType::Both), None);
+            assert_eq!(string_to_baud("invalid", flags::BaudType::Both), None);
+            assert_eq!(string_to_baud("", flags::BaudType::Both), None);
+            assert_eq!(string_to_baud("abc", flags::BaudType::Both), None);
         }
     }
 

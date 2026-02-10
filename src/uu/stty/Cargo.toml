@@ -9,6 +9,7 @@ homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 readme.workspace = true
 
 [lints]
@@ -20,9 +21,14 @@ path = "src/stty.rs"
 [dependencies]
 clap = { workspace = true }
 uucore = { workspace = true, features = ["parser"] }
-nix = { workspace = true, features = ["term", "ioctl"] }
 fluent = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true, features = ["ioctl", "term"] }
 
 [[bin]]
 name = "stty"
 path = "src/main.rs"
+
+[build-dependencies]
+cfg_aliases = "0.2.1"

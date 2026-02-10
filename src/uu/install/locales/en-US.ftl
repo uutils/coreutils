@@ -19,6 +19,7 @@ install-help-verbose = explain what is being done
 install-help-preserve-context = preserve security context
 install-help-context = set security context of files and directories
 install-help-default-context = set SELinux security context of destination file and each created directory to default type
+install-help-unprivileged = do not require elevated privileges to change the owner, the group, or the file flags of the destination
 
 # Error messages
 install-error-dir-needs-arg = { $util_name } with -d requires at least one argument.
@@ -29,7 +30,7 @@ install-error-chown-failed = failed to chown { $path }: { $error }
 install-error-invalid-target = invalid target { $path }: No such file or directory
 install-error-target-not-dir = target { $path } is not a directory
 install-error-backup-failed = cannot backup { $from } to { $to }
-install-error-install-failed = cannot install { $from } to { $to }
+install-error-install-failed = cannot install { $from } to { $to }: { $error }
 install-error-strip-failed = strip program failed: { $error }
 install-error-strip-abnormal = strip process terminated abnormally - exit code: { $code }
 install-error-metadata-failed = metadata error

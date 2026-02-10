@@ -18,7 +18,7 @@ use uucore::libc::mode_t;
 use uucore::mode;
 use uucore::perms::{TraverseSymlinks, configure_symlink_and_recursion};
 
-#[cfg(target_os = "linux")]
+#[cfg(all(unix, not(target_os = "redox")))]
 use uucore::safe_traversal::DirFd;
 use uucore::{format_usage, show, show_error};
 
@@ -272,42 +272,41 @@ impl Chmoder {
     /// Calculate the new mode based on the current mode and the chmod specification.
     /// Returns (`new_mode`, `naively_expected_new_mode`) for symbolic modes, or (`new_mode`, `new_mode`) for numeric/reference modes.
     fn calculate_new_mode(&self, current_mode: u32, is_dir: bool) -> UResult<(u32, u32)> {
-        match self.fmode {
-            Some(mode) => Ok((mode, mode)),
-            None => {
-                let cmode_unwrapped = self.cmode.clone().unwrap();
-                let mut new_mode = current_mode;
-                let mut naively_expected_new_mode = current_mode;
+        if let Some(mode) = self.fmode {
+            Ok((mode, mode))
+        } else {
+            let cmode_unwrapped = self.cmode.clone().unwrap();
+            let mut new_mode = current_mode;
+            let mut naively_expected_new_mode = current_mode;
 
-                for mode in cmode_unwrapped.split(',') {
-                    let result = if mode.chars().any(|c| c.is_ascii_digit()) {
-                        mode::parse_numeric(new_mode, mode, is_dir).map(|v| (v, v))
-                    } else {
-                        mode::parse_symbolic(new_mode, mode, mode::get_umask(), is_dir).map(|m| {
-                            // calculate the new mode as if umask was 0
-                            let naive_mode =
-                                mode::parse_symbolic(naively_expected_new_mode, mode, 0, is_dir)
-                                    .unwrap(); // we know that mode must be valid, so this cannot fail
-                            (m, naive_mode)
-                        })
-                    };
+            for mode in cmode_unwrapped.split(',') {
+                let result = if mode.chars().any(|c| c.is_ascii_digit()) {
+                    mode::parse_numeric(new_mode, mode, is_dir).map(|v| (v, v))
+                } else {
+                    mode::parse_symbolic(new_mode, mode, mode::get_umask(), is_dir).map(|m| {
+                        // calculate the new mode as if umask was 0
+                        let naive_mode =
+                            mode::parse_symbolic(naively_expected_new_mode, mode, 0, is_dir)
+                                .unwrap(); // we know that mode must be valid, so this cannot fail
+                        (m, naive_mode)
+                    })
+                };
 
-                    match result {
-                        Ok((mode, naive_mode)) => {
-                            new_mode = mode;
-                            naively_expected_new_mode = naive_mode;
-                        }
-                        Err(f) => {
-                            return if self.quiet {
-                                Err(ExitCode::new(1))
-                            } else {
-                                Err(USimpleError::new(1, f))
-                            };
-                        }
+                match result {
+                    Ok((mode, naive_mode)) => {
+                        new_mode = mode;
+                        naively_expected_new_mode = naive_mode;
+                    }
+                    Err(f) => {
+                        return if self.quiet {
+                            Err(ExitCode::new(1))
+                        } else {
+                            Err(USimpleError::new(1, f))
+                        };
                     }
                 }
-                Ok((new_mode, naively_expected_new_mode))
             }
+            Ok((new_mode, naively_expected_new_mode))
         }
     }
 
@@ -319,26 +318,20 @@ impl Chmoder {
 
             if new_mode != old_mode {
                 println!(
-                    "mode of {} changed from {:04o} ({}) to {:04o} ({})",
+                    "mode of {} changed from {old_mode:04o} ({current_permissions}) to {new_mode:04o} ({new_permissions})",
                     file_path.quote(),
-                    old_mode,
-                    current_permissions,
-                    new_mode,
-                    new_permissions
                 );
             } else if self.verbose {
                 println!(
-                    "mode of {} retained as {:04o} ({})",
+                    "mode of {} retained as {old_mode:04o} ({current_permissions})",
                     file_path.quote(),
-                    old_mode,
-                    current_permissions
                 );
             }
         }
     }
 
     /// Handle symlinks during directory traversal based on traversal mode
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(unix))]
     fn handle_symlink_during_traversal(
         &self,
         path: &Path,
@@ -419,11 +412,11 @@ impl Chmoder {
                 // should not change the permissions in this case
                 continue;
             }
-            if self.recursive && self.preserve_root && file == Path::new("/") {
+            if self.recursive && self.preserve_root && Self::is_root(file) {
                 return Err(ChmodError::PreserveRoot("/".into()).into());
             }
             if self.recursive {
-                r = self.walk_dir_with_context(file, true);
+                r = self.walk_dir_with_context(file, true).and(r);
             } else {
                 r = self.chmod_file(file).and(r);
             }
@@ -431,7 +424,12 @@ impl Chmoder {
         r
     }
 
-    #[cfg(not(target_os = "linux"))]
+    fn is_root(file: impl AsRef<Path>) -> bool {
+        matches!(fs::canonicalize(&file), Ok(p) if p == Path::new("/"))
+    }
+
+    // Non-safe traversal implementation for platforms without safe_traversal support
+    #[cfg(any(not(unix), target_os = "redox"))]
     fn walk_dir_with_context(&self, file_path: &Path, is_command_line_arg: bool) -> UResult<()> {
         let mut r = self.chmod_file(file_path);
 
@@ -444,17 +442,29 @@ impl Chmoder {
 
         // If the path is a directory (or we should follow symlinks), recurse into it
         if (!file_path.is_symlink() || should_follow_symlink) && file_path.is_dir() {
+            // We buffer all paths in this dir to not keep too many fd's open during recursion
+            let mut paths_in_this_dir = Vec::new();
+
             for dir_entry in file_path.read_dir()? {
-                let path = match dir_entry {
-                    Ok(entry) => entry.path(),
+                match dir_entry {
+                    Ok(entry) => paths_in_this_dir.push(entry.path()),
                     Err(err) => {
                         r = r.and(Err(err.into()));
                         continue;
                     }
-                };
-                if path.is_symlink() {
-                    r = self.handle_symlink_during_recursion(&path).and(r);
-                } else {
+                }
+            }
+            for path in paths_in_this_dir {
+                #[cfg(not(unix))]
+                {
+                    if path.is_symlink() {
+                        r = self.handle_symlink_during_recursion(&path).and(r);
+                    } else {
+                        r = self.walk_dir_with_context(path.as_path(), false).and(r);
+                    }
+                }
+                #[cfg(target_os = "redox")]
+                {
                     r = self.walk_dir_with_context(path.as_path(), false).and(r);
                 }
             }
@@ -462,7 +472,7 @@ impl Chmoder {
         r
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(unix, not(target_os = "redox")))]
     fn walk_dir_with_context(&self, file_path: &Path, is_command_line_arg: bool) -> UResult<()> {
         let mut r = self.chmod_file(file_path);
 
@@ -492,7 +502,7 @@ impl Chmoder {
         r
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(unix, not(target_os = "redox")))]
     fn safe_traverse_dir(&self, dir_fd: &DirFd, dir_path: &Path) -> UResult<()> {
         let mut r = Ok(());
 
@@ -548,7 +558,7 @@ impl Chmoder {
         r
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(unix, not(target_os = "redox")))]
     fn handle_symlink_during_safe_recursion(
         &self,
         path: &Path,
@@ -580,7 +590,7 @@ impl Chmoder {
         }
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(unix, not(target_os = "redox")))]
     fn safe_chmod_file(
         &self,
         file_path: &Path,
@@ -596,9 +606,8 @@ impl Chmoder {
         if let Err(_e) = dir_fd.chmod_at(entry_name, new_mode, follow_symlinks) {
             if self.verbose {
                 println!(
-                    "failed to change mode of {} to {:o}",
+                    "failed to change mode of {} to {new_mode:o}",
                     file_path.quote(),
-                    new_mode
                 );
             }
             return Err(ChmodError::PermissionDenied(file_path.into()).into());
@@ -610,7 +619,7 @@ impl Chmoder {
         Ok(())
     }
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(unix))]
     fn handle_symlink_during_recursion(&self, path: &Path) -> UResult<()> {
         // Use the common symlink handling logic
         self.handle_symlink_during_traversal(path, false)
@@ -650,32 +659,31 @@ impl Chmoder {
             self.calculate_new_mode(fperm, file.is_dir())?;
 
         // Determine how to apply the permissions
-        match self.fmode {
-            Some(mode) => self.change_file(fperm, mode, file)?,
-            None => {
-                // Special handling for symlinks when not dereferencing
-                if file.is_symlink() && !dereference {
-                    // TODO: On most Unix systems, symlink permissions are ignored by the kernel,
-                    // so changing them has no effect. We skip this operation for compatibility.
-                    // Note that "chmod without dereferencing" effectively does nothing on symlinks.
-                    if self.verbose {
-                        println!(
-                            "neither symbolic link {} nor referent has been changed",
-                            file.quote()
-                        );
-                    }
-                } else {
-                    self.change_file(fperm, new_mode, file)?;
+        if let Some(mode) = self.fmode {
+            self.change_file(fperm, mode, file)?;
+        } else {
+            // Special handling for symlinks when not dereferencing
+            if file.is_symlink() && !dereference {
+                // TODO: On most Unix systems, symlink permissions are ignored by the kernel,
+                // so changing them has no effect. We skip this operation for compatibility.
+                // Note that "chmod without dereferencing" effectively does nothing on symlinks.
+                if self.verbose {
+                    println!(
+                        "neither symbolic link {} nor referent has been changed",
+                        file.quote()
+                    );
                 }
-                // if a permission would have been removed if umask was 0, but it wasn't because umask was not 0, print an error and fail
-                if (new_mode & !naively_expected_new_mode) != 0 {
-                    return Err(ChmodError::NewPermissions(
-                        file.into(),
-                        display_permissions_unix(new_mode as mode_t, false),
-                        display_permissions_unix(naively_expected_new_mode as mode_t, false),
-                    )
-                    .into());
-                }
+            } else {
+                self.change_file(fperm, new_mode, file)?;
+            }
+            // if a permission would have been removed if umask was 0, but it wasn't because umask was not 0, print an error and fail
+            if (new_mode & !naively_expected_new_mode) != 0 {
+                return Err(ChmodError::NewPermissions(
+                    file.into(),
+                    display_permissions_unix(new_mode as mode_t, false),
+                    display_permissions_unix(naively_expected_new_mode as mode_t, false),
+                )
+                .into());
             }
         }
 

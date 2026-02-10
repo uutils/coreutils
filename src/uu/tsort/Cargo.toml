@@ -1,3 +1,4 @@
+#spell-checker:ignore (libs) interner
 [package]
 name = "uu_tsort"
 description = "tsort ~ (uutils) topologically sort input (partially ordered) pairs"
@@ -9,6 +10,7 @@ homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 readme.workspace = true
 
 [lints]
@@ -19,9 +21,14 @@ path = "src/tsort.rs"
 
 [dependencies]
 clap = { workspace = true }
+fluent = { workspace = true }
+string-interner = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true }
-fluent = { workspace = true }
+rustc-hash = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true, features = ["fs"] }
 
 [[bin]]
 name = "tsort"
@@ -29,7 +36,6 @@ path = "src/main.rs"
 
 [dev-dependencies]
 divan = { workspace = true }
-tempfile = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }
 
 [[bench]]
