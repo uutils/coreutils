@@ -7,6 +7,8 @@ use std::sync::OnceLock;
 
 use icu_locale::{Locale, locale};
 
+#[cfg(feature = "i18n-charmap")]
+pub mod charmap;
 #[cfg(feature = "i18n-collator")]
 pub mod collator;
 #[cfg(feature = "i18n-datetime")]
