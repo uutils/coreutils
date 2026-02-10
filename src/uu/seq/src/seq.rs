@@ -154,52 +154,51 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // If a format was passed on the command line, use that.
     // If not, use some default format based on parameters precision.
-    let (format, padding, fast_allowed) = match options.format {
-        Some(str) => (
+    let (format, padding, fast_allowed) = if let Some(str) = options.format {
+        (
             Format::<num_format::Float, &ExtendedBigDecimal>::parse(str)?,
             0,
             false,
-        ),
-        None => {
-            let precision = select_precision(&first, &increment, &last);
+        )
+    } else {
+        let precision = select_precision(&first, &increment, &last);
 
-            let padding = if options.equal_width {
-                let precision_value = precision.unwrap_or(0);
-                first
-                    .num_integral_digits
-                    .max(increment.num_integral_digits)
-                    .max(last.num_integral_digits)
-                    + if precision_value > 0 {
-                        precision_value + 1
-                    } else {
-                        0
-                    }
-            } else {
-                0
-            };
+        let padding = if options.equal_width {
+            let precision_value = precision.unwrap_or(0);
+            first
+                .num_integral_digits
+                .max(increment.num_integral_digits)
+                .max(last.num_integral_digits)
+                + if precision_value > 0 {
+                    precision_value + 1
+                } else {
+                    0
+                }
+        } else {
+            0
+        };
 
-            let formatter = match precision {
-                // format with precision: decimal floats and integers
-                Some(precision) => num_format::Float {
-                    variant: FloatVariant::Decimal,
-                    width: padding,
-                    alignment: num_format::NumberAlignment::RightZero,
-                    precision: Some(precision),
-                    ..Default::default()
-                },
-                // format without precision: hexadecimal floats
-                None => num_format::Float {
-                    variant: FloatVariant::Shortest,
-                    ..Default::default()
-                },
-            };
-            // Allow fast printing if precision is 0 (integer inputs), `print_seq` will do further checks.
-            (
-                Format::from_formatter(formatter),
-                padding,
-                precision == Some(0),
-            )
-        }
+        let formatter = match precision {
+            // format with precision: decimal floats and integers
+            Some(precision) => num_format::Float {
+                variant: FloatVariant::Decimal,
+                width: padding,
+                alignment: num_format::NumberAlignment::RightZero,
+                precision: Some(precision),
+                ..Default::default()
+            },
+            // format without precision: hexadecimal floats
+            None => num_format::Float {
+                variant: FloatVariant::Shortest,
+                ..Default::default()
+            },
+        };
+        // Allow fast printing if precision is 0 (integer inputs), `print_seq` will do further checks.
+        (
+            Format::from_formatter(formatter),
+            padding,
+            precision == Some(0),
+        )
     };
 
     let result = print_seq(
