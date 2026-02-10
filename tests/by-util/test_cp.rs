@@ -6472,6 +6472,36 @@ fn test_cp_preserve_xattr_readonly_source() {
 
 #[test]
 #[cfg(unix)]
+fn test_cp_archive_dir_no_write_permission() {
+    // Test for issue #10787
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // test-dir/inner/test: all without write permission (500)
+    at.mkdir("test-dir");
+    at.mkdir("test-dir/inner");
+    at.touch("test-dir/inner/test");
+    at.set_mode("test-dir/inner/test", 0o500);
+    at.set_mode("test-dir/inner", 0o500);
+    at.set_mode("test-dir", 0o500);
+
+    ucmd.arg("-a")
+        .arg("test-dir")
+        .arg("test-dir-copy")
+        .succeeds();
+
+    assert_eq!(at.metadata("test-dir").permissions().mode() & 0o777, 0o500);
+    assert_eq!(
+        at.metadata("test-dir/inner").permissions().mode() & 0o777,
+        0o500
+    );
+    assert_eq!(
+        at.metadata("test-dir/inner/test").permissions().mode() & 0o777,
+        0o500
+    );
+}
+
+#[test]
+#[cfg(unix)]
 fn test_cp_archive_preserves_directory_permissions() {
     // Test for issue #8407
     let (at, mut ucmd) = at_and_ucmd!();

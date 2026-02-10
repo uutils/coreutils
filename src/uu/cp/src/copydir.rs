@@ -618,12 +618,11 @@ fn build_dir(
     #[cfg(unix)]
     {
         use crate::Preserve;
-        use std::os::unix::fs::PermissionsExt;
 
         // we need to allow trivial casts here because some systems like linux have u32 constants in
         // in libc while others don't.
         #[allow(clippy::unnecessary_cast)]
-        let mut excluded_perms = if matches!(options.attributes.ownership, Preserve::Yes { .. }) {
+        let excluded_perms = if matches!(options.attributes.ownership, Preserve::Yes { .. }) {
             libc::S_IRWXG | libc::S_IRWXO // exclude rwx for group and other
         } else if matches!(options.attributes.mode, Preserve::Yes { .. }) {
             libc::S_IWGRP | libc::S_IWOTH //exclude w for group and other
@@ -634,13 +633,16 @@ fn build_dir(
         let umask = if let (Some(from), Preserve::Yes { .. }) =
             (copy_attributes_from, options.attributes.mode)
         {
-            !fs::symlink_metadata(from)?.permissions().mode()
+            // temporary u+wx permission before true permission is set by
+            // `dirs_needing_permissions`.
+            !0o300
         } else {
             uucore::mode::get_umask()
         };
 
-        excluded_perms |= umask;
-        let mode = !excluded_perms & 0o777; //use only the last three octet bits
+        let mode = !(excluded_perms | umask);
+        // use only the last three octet bits
+        let mode = mode & 0o777;
         std::os::unix::fs::DirBuilderExt::mode(&mut builder, mode);
     }
 
