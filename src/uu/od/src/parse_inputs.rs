@@ -91,7 +91,7 @@ pub fn parse_inputs(matches: &dyn CommandLineOpts) -> Result<CommandLineInputs, 
                     let expected_msg = msg.split(" (os error").next().unwrap_or(&msg).to_string();
 
                     if e == expected_msg {
-                        return Err(format!("{}: {}", input_strings[input_strings.len() - 1], e));
+                        return Err(format!("{}: {e}", input_strings[input_strings.len() - 1]));
                     }
                 }
             }
@@ -136,7 +136,7 @@ pub fn parse_inputs_traditional(input_strings: &[&str]) -> Result<CommandLineInp
                     m,
                     None,
                 ))),
-                (_, Err(e)) => Err(format!("{}: {}", input_strings[1], e)),
+                (_, Err(e)) => Err(format!("{}: {e}", input_strings[1])),
             }
         }
         3 => {
@@ -148,8 +148,8 @@ pub fn parse_inputs_traditional(input_strings: &[&str]) -> Result<CommandLineInp
                     n,
                     Some(m),
                 ))),
-                (Err(e), _) => Err(format!("{}: {}", input_strings[1], e)),
-                (_, Err(e)) => Err(format!("{}: {}", input_strings[2], e)),
+                (Err(e), _) => Err(format!("{}: {e}", input_strings[1])),
+                (_, Err(e)) => Err(format!("{}: {e}", input_strings[2])),
             }
         }
         _ => Err(translate!("od-error-too-many-inputs", "input" => input_strings[3])),
@@ -206,15 +206,14 @@ pub fn parse_offset_operand(s: &str) -> Result<u64, String> {
     match u64::from_str_radix(&s[start..len], radix) {
         Ok(i) => {
             // Check for overflow during multiplication
-            match i.checked_mul(multiply) {
-                Some(result) => Ok(result),
-                None => {
-                    let err = std::io::Error::from_raw_os_error(libc::ERANGE);
-                    let msg = err.to_string();
-                    // Strip "(os error N)" if present to match Perl's $!
-                    let msg = msg.split(" (os error").next().unwrap_or(&msg).to_string();
-                    Err(msg)
-                }
+            if let Some(result) = i.checked_mul(multiply) {
+                Ok(result)
+            } else {
+                let err = std::io::Error::from_raw_os_error(libc::ERANGE);
+                let msg = err.to_string();
+                // Strip "(os error N)" if present to match Perl's $!
+                let msg = msg.split(" (os error").next().unwrap_or(&msg).to_string();
+                Err(msg)
             }
         }
         Err(e) => {

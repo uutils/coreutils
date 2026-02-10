@@ -26,7 +26,7 @@ jobs:
       SCCACHE_GHA_ENABLED: "true"
     strategy:
       matrix:
-        type: [simulation] # , memory]  # memory profile disabled due to variance
+        type: [simulation, memory]
         package: [
           uu_base64,
           uu_cksum,
