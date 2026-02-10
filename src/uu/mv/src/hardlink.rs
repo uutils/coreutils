@@ -65,7 +65,7 @@ impl std::fmt::Display for HardlinkError {
                 )
             }
             Self::Metadata { path, error } => {
-                write!(f, "Metadata access error for {}: {}", path.quote(), error)
+                write!(f, "Metadata access error for {}: {error}", path.quote())
             }
         }
     }
@@ -99,9 +99,8 @@ impl From<HardlinkError> for io::Error {
             )),
 
             HardlinkError::Metadata { path, error } => Self::other(format!(
-                "Metadata access error for {}: {}",
+                "Metadata access error for {}: {error}",
                 path.quote(),
-                error
             )),
         }
     }
@@ -127,7 +126,7 @@ impl HardlinkTracker {
             Err(e) => {
                 // Gracefully handle metadata errors by logging and continuing without hardlink tracking
                 if options.verbose {
-                    eprintln!("warning: cannot get metadata for {}: {}", source.quote(), e);
+                    eprintln!("warning: cannot get metadata for {}: {e}", source.quote());
                 }
                 return None;
             }
@@ -180,7 +179,7 @@ impl HardlinkGroupScanner {
             if let Err(e) = self.scan_single_path(file) {
                 if options.verbose {
                     // Only show warnings for verbose mode
-                    eprintln!("warning: failed to scan {}: {}", file.quote(), e);
+                    eprintln!("warning: failed to scan {}: {e}", file.quote());
                 }
                 // For non-verbose mode, silently continue for missing files
                 // This provides graceful degradation - we'll lose hardlink info for this file

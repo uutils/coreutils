@@ -223,9 +223,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             } else {
                 show_error!(
                     "{}",
-                    translate!("id-error-no-such-user",
-                                                 "user" => users[i].quote()
-                    )
+                    translate!("id-error-no-such-user", "user" => users[i].quote())
                 );
                 set_exit_code(1);
                 if i + 1 >= users.len() {

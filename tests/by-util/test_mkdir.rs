@@ -468,9 +468,7 @@ fn test_selinux() {
         let context_value = get_getfattr_output(&at.plus_as_string(dest));
         assert!(
             context_value.contains("unconfined_u"),
-            "Expected '{}' not found in getfattr output:\n{}",
-            "unconfined_u",
-            context_value
+            "Expected 'unconfined_u' not found in getfattr output:\n{context_value}",
         );
         at.rmdir(dest);
     }

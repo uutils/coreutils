@@ -135,6 +135,30 @@ const EXAMPLE_DATA: &[TestData] = &[
         ins: &["1 \na \n", "2\t\nb\t\n"],
         out: "1 |2\t\na |b\t\n",
     },
+    TestData {
+        name: "utf8-2byte-delim",
+        args: &["-d", "\u{00A2}"],
+        ins: &["1\n2\n", "a\nb\n"],
+        out: "1\u{00A2}a\n2\u{00A2}b\n",
+    },
+    TestData {
+        name: "utf8-3byte-delim",
+        args: &["-d", "\u{20AC}"],
+        ins: &["1\n2\n", "a\nb\n"],
+        out: "1\u{20AC}a\n2\u{20AC}b\n",
+    },
+    TestData {
+        name: "utf8-4byte-delim",
+        args: &["-d", "\u{1F600}", "-s"],
+        ins: &["1\n2\n3\n"],
+        out: "1\u{1F600}2\u{1F600}3\n",
+    },
+    TestData {
+        name: "utf8-multi-delim-cycle",
+        args: &["-d", "\u{00A2}\u{20AC}"],
+        ins: &["a\nb\nc\n", "1\n2\n3\n", "x\ny\nz\n"],
+        out: "a\u{00A2}1\u{20AC}x\nb\u{00A2}2\u{20AC}y\nc\u{00A2}3\u{20AC}z\n",
+    },
 ];
 
 #[test]
@@ -334,6 +358,19 @@ fn test_backslash_zero_delimiter() {
     }
 }
 
+#[test]
+fn test_gnu_escape_sequences() {
+    let cases: &[(&str, u8)] = &[(r"\b", 0x08), (r"\f", 0x0C), (r"\r", 0x0D), (r"\v", 0x0B)];
+    for &(esc, byte) in cases {
+        let expected = [b'1', byte, b'2', byte, b'3', b'\n'];
+        new_ucmd!()
+            .args(&["-s", "-d", esc])
+            .pipe_in("1\n2\n3\n")
+            .succeeds()
+            .stdout_only_bytes(expected);
+    }
+}
+
 // As of 2024-10-09, only bsdutils (https://github.com/dcantrell/bsdutils, derived from FreeBSD) and toybox handle
 // multibyte delimiter characters in the way a user would likely expect. BusyBox and GNU Core Utilities do not.
 #[test]
@@ -376,6 +413,21 @@ fn test_data() {
             .succeeds()
             .stdout_is(example.out);
     }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_non_utf8_delimiter() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f1", "1\n2\n");
+    at.write("f2", "a\nb\n");
+    let delim = std::ffi::OsString::from_vec(vec![0xA2, 0xE3]);
+    ucmd.env("LC_ALL", "zh_CN.gb18030")
+        .arg("-d")
+        .arg(&delim)
+        .args(&["f1", "f2"])
+        .succeeds()
+        .stdout_only_bytes(b"1\xA2\xE3a\n2\xA2\xE3b\n");
 }
 
 #[test]

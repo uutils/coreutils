@@ -813,6 +813,7 @@ fn perform_backup(to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
 /// Returns an empty Result or an error in case of failure.
 ///
 fn copy_file(from: &Path, to: &Path) -> UResult<()> {
+    use std::os::unix::fs::OpenOptionsExt;
     if let Ok(to_abs) = to.canonicalize() {
         if from.canonicalize()? == to_abs {
             return Err(InstallError::SameFile(from.to_path_buf(), to.to_path_buf()).into());
@@ -841,7 +842,11 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
 
     let mut handle = File::open(from)?;
     // create_new provides TOCTOU protection
-    let mut dest = OpenOptions::new().write(true).create_new(true).open(to)?;
+    let mut dest = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(to)?;
 
     copy_stream(&mut handle, &mut dest).map_err(|err| {
         InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err.to_string())

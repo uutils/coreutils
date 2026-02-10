@@ -100,7 +100,7 @@ impl SupportsFastDecodeAndEncode for Base64SimdWrapper {
                     // If there are no more '=' bytes the tail might still be padded
                     // (len % 4 == 0) or purposely unpadded (GNU --ignore-garbage or
                     // concatenated streams), so select the matching alphabet.
-                    let decoder = if remaining.len() % 4 == 0 {
+                    let decoder = if remaining.len().is_multiple_of(4) {
                         Self::decode_with_standard
                     } else {
                         Self::decode_with_no_pad
@@ -448,7 +448,7 @@ impl SupportsFastDecodeAndEncode for Z85Wrapper {
     fn encode_to_vec_deque(&self, input: &[u8], output: &mut VecDeque<u8>) -> UResult<()> {
         // According to the spec we should not accept inputs whose len is not a multiple of 4.
         // However, the z85 crate implements a padded encoding and accepts such inputs. We have to manually check for them.
-        if input.len() % 4 != 0 {
+        if !input.len().is_multiple_of(4) {
             return Err(USimpleError::new(
                 1,
                 "error: invalid input (length must be multiple of 4 characters)".to_owned(),

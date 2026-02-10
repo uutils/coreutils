@@ -1141,6 +1141,26 @@ fn test_non_utf8_tmpdir_long_option() {
 
 #[test]
 #[cfg(target_os = "linux")]
+fn test_invalid_utf8_suffix() {
+    use std::os::unix::ffi::OsStrExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // Create invalid UTF-8 bytes for suffix
+    // This mimics the GNU test which tests mktemp with bad unicode characters
+    let invalid_utf8 = std::ffi::OsStr::from_bytes(b"\xC3|\xED\xBA\xAD");
+
+    // Test that mktemp handles invalid UTF-8 in suffix gracefully
+    // It should succeed and create a file with the lossy conversion of the invalid UTF-8
+    ucmd.arg("-p")
+        .arg(at.as_string())
+        .arg("--suffix")
+        .arg(invalid_utf8)
+        .arg("tmpXXXXXX")
+        .succeeds();
+}
+
+#[test]
+#[cfg(target_os = "linux")]
 fn test_non_utf8_tmpdir_directory_creation() {
     use std::os::unix::ffi::OsStrExt;
     let (at, mut ucmd) = at_and_ucmd!();

@@ -7,6 +7,7 @@ repository = "https://github.com/uutils/coreutils/tree/main/src/uucore"
 authors.workspace = true
 categories.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 homepage.workspace = true
 keywords.workspace = true
 license.workspace = true
@@ -150,7 +151,8 @@ format = [
   "quoting-style",
   "unit-prefix",
 ]
-i18n-all = ["i18n-collator", "i18n-decimal", "i18n-datetime"]
+i18n-all = ["i18n-charmap", "i18n-collator", "i18n-decimal", "i18n-datetime"]
+i18n-charmap = ["i18n-common"]
 i18n-common = ["icu_locale"]
 i18n-collator = ["i18n-common", "icu_collator"]
 i18n-decimal = ["i18n-common", "icu_decimal", "icu_provider"]
