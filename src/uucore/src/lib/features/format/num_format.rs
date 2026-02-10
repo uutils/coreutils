@@ -425,7 +425,7 @@ fn format_float_scientific(
         return if force_decimal == ForceDecimal::Yes && precision == 0 {
             format!("0.{exp_char}+00")
         } else {
-            format!("{:.*}{exp_char}+00", precision, 0.0)
+            format!("{:.precision$}{exp_char}+00", 0.0)
         };
     }
 

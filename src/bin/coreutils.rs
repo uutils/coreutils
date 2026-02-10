@@ -30,7 +30,7 @@ fn usage<T>(utils: &UtilityMap<T>, name: &str) {
     println!("Options:");
     println!("      --list    lists all defined functions, one per row\n");
     println!("Currently defined functions:\n");
-    let display_list = utils.keys().copied().sorted_unstable().join(", ");
+    let display_list = utils.keys().copied().join(", ");
     let width = cmp::min(textwrap::termwidth(), 100) - 4 * 2; // (opinion/heuristic) max 100 chars wide with 4 character side indentions
     println!(
         "{}",
@@ -81,8 +81,7 @@ fn main() {
                     usage(&utils, binary_as_util);
                     process::exit(0);
                 }
-                let mut utils: Vec<_> = utils.keys().collect();
-                utils.sort();
+                let utils: Vec<_> = utils.keys().collect();
                 for util in utils {
                     println!("{util}");
                 }
