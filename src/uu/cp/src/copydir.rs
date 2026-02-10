@@ -31,6 +31,16 @@ use crate::{
     copy_file,
 };
 
+/// Represents a directory that needs permission fixup after copying its contents.
+struct DirNeedingPermissions {
+    /// Absolute path to the source directory
+    source: PathBuf,
+    /// Path to the destination directory
+    dest: PathBuf,
+    /// Whether this directory was freshly created by the copy operation
+    was_created: bool,
+}
+
 /// Ensure a Windows path starts with a `\\?`.
 #[cfg(target_os = "windows")]
 fn adjust_canonicalization(p: &Path) -> Cow<'_, Path> {
@@ -237,7 +247,12 @@ impl Entry {
 
 #[allow(clippy::too_many_arguments)]
 /// Copy a single entry during a directory traversal.
-/// Returns a bool value indicating whether this function created a directory or not
+///
+/// # Returns
+///
+/// Returns `Ok(true)` if this function created a new directory, `Ok(false)` otherwise.
+/// This information is used to determine whether default directory permissions should
+/// be preserved during attribute copying.
 fn copy_direntry(
     progress_bar: Option<&ProgressBar>,
     entry: &Entry,
@@ -422,7 +437,7 @@ pub(crate) fn copy_directory(
     let mut last_iter: Option<DirEntry> = None;
 
     // Keep track of all directories we've created that need permission fixes
-    let mut dirs_needing_permissions: Vec<(PathBuf, PathBuf, bool)> = Vec::new();
+    let mut dirs_needing_permissions: Vec<DirNeedingPermissions> = Vec::new();
 
     // Traverse the contents of the directory, copying each one.
     for direntry_result in WalkDir::new(root)
@@ -481,11 +496,11 @@ pub(crate) fn copy_directory(
                         continue;
                     }
                     // Add this directory to our list for permission fixing later
-                    dirs_needing_permissions.push((
-                        entry.source_absolute.clone(),
-                        entry.local_to_target.clone(),
-                        created,
-                    ));
+                    dirs_needing_permissions.push(DirNeedingPermissions {
+                        source: entry.source_absolute.clone(),
+                        dest: entry.local_to_target.clone(),
+                        was_created: created,
+                    });
 
                     // If true, last_iter is not a parent of this iter.
                     // The means we just exited a directory.
@@ -534,8 +549,8 @@ pub(crate) fn copy_directory(
 
     // Fix permissions for all directories we created
     // This ensures that even sibling directories get their permissions fixed
-    for (source_path, dest_path, created) in dirs_needing_permissions {
-        copy_attributes(&source_path, &dest_path, &options.attributes, created)?;
+    for dir in dirs_needing_permissions {
+        copy_attributes(&dir.source, &dir.dest, &options.attributes, dir.was_created)?;
     }
 
     // Also fix permissions for parent directories,

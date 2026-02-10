@@ -1544,6 +1544,30 @@ fn test_non_digit_repeat() {
         .stderr_only("tr: invalid repeat count 'c' in [c*n] construct\n");
 }
 
+#[test]
+#[cfg(unix)]
+fn test_octal_escape_ambiguous_followed_by_non_utf8() {
+    // This case does not trigger the panic
+    let set1 = OsStr::from_bytes(b"\\501a");
+    new_ucmd!()
+        .arg("-d")
+        .arg(set1)
+        .pipe_in("(1a)")
+        .succeeds()
+        .stderr_contains("warning: the ambiguous octal escape")
+        .stdout_is(")");
+
+    // An user is not supposed to use this invalid utf8 set but
+    // we would need to make the command more error-proof still
+    let set1 = OsStr::from_bytes(b"\\501\xff");
+    new_ucmd!()
+        .arg("-d")
+        .arg(set1)
+        .pipe_in([b'(', b'1', 0xff, b')'])
+        .succeeds()
+        .stderr_contains("warning: invalid utf8 sequence");
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn test_failed_write_is_reported() {
