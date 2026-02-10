@@ -18,14 +18,13 @@ mod merge;
 mod numeric_str_cmp;
 mod tmp_dir;
 
+use ahash::AHashMap;
 use bigdecimal::BigDecimal;
 use chunks::LineData;
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use custom_str_cmp::custom_str_cmp;
-
 use ext_sort::ext_sort;
-use fnv::FnvHasher;
 use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
 use rand::{Rng, rng};
 use rayon::prelude::*;
@@ -33,7 +32,7 @@ use std::cmp::Ordering;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{File, OpenOptions};
-use std::hash::{Hash, Hasher};
+use std::hash::{BuildHasher, Hash, Hasher};
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::{IntErrorKind, NonZero};
 use std::ops::Range;
@@ -191,6 +190,8 @@ impl UError for SortError {
     }
 }
 
+// refs are required because this fn is used by thiserror macro
+#[expect(clippy::trivially_copy_pass_by_ref)]
 fn format_disorder(file: &OsString, line_number: &usize, line: &String, silent: &bool) -> String {
     if *silent {
         String::new()
@@ -304,7 +305,7 @@ impl Default for NumericLocaleSettings {
 }
 
 impl NumericLocaleSettings {
-    fn num_info_settings(&self, accept_si_units: bool) -> NumInfoParseSettings {
+    fn num_info_settings(self, accept_si_units: bool) -> NumInfoParseSettings {
         NumInfoParseSettings {
             accept_si_units,
             thousands_separator: self.thousands_sep,
@@ -658,7 +659,7 @@ impl<'a> Line<'a> {
         for (selector, selection) in settings.selectors.iter().map(|selector| {
             (
                 selector,
-                selector.get_selection(line, token_buffer, &settings.numeric_locale),
+                selector.get_selection(line, token_buffer, settings.numeric_locale),
             )
         }) {
             match selection {
@@ -1186,7 +1187,7 @@ impl FieldSelector {
         &self,
         line: &'a [u8],
         tokens: &[Field],
-        numeric_locale: &NumericLocaleSettings,
+        numeric_locale: NumericLocaleSettings,
     ) -> Selection<'a> {
         // `get_range` expects `None` when we don't need tokens and would get confused by an empty vector.
         let tokens = if self.needs_tokens {
@@ -1465,7 +1466,7 @@ struct LegacyKeyWarning {
 impl LegacyKeyWarning {
     fn legacy_key_display(&self) -> String {
         match self.to_field {
-            Some(to) => format!("+{} -{}", self.from_field, to),
+            Some(to) => format!("+{} -{to}", self.from_field),
             None => format!("+{}", self.from_field),
         }
     }
@@ -1567,14 +1568,13 @@ fn legacy_key_to_k(from: &LegacyKeyPart, to: Option<&LegacyKeyPart>) -> String {
     let start_char = from.char_pos.saturating_add(1);
 
     let mut keydef = format!(
-        "{}{}{}",
-        start_field,
+        "{start_field}{}{}",
         if from.char_pos == 0 {
             String::new()
         } else {
             format!(".{start_char}")
         },
-        from.opts
+        from.opts,
     );
 
     if let Some(to) = to {
@@ -1680,7 +1680,7 @@ fn index_legacy_warnings(processed_args: &[OsString], legacy_warnings: &mut [Leg
         return;
     }
 
-    let mut index_by_arg = std::collections::HashMap::new();
+    let mut index_by_arg = AHashMap::default();
     for (warning_idx, warning) in legacy_warnings.iter().enumerate() {
         index_by_arg.insert(warning.arg_index, warning_idx);
     }
@@ -2046,25 +2046,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .unwrap_or_default()
     };
 
-    let mut mode_flags = ModeFlags::default();
-    if matches.get_flag(options::modes::HUMAN_NUMERIC) {
-        mode_flags.human_numeric = true;
-    }
-    if matches.get_flag(options::modes::MONTH) {
-        mode_flags.month = true;
-    }
-    if matches.get_flag(options::modes::GENERAL_NUMERIC) {
-        mode_flags.general_numeric = true;
-    }
-    if matches.get_flag(options::modes::NUMERIC) {
-        mode_flags.numeric = true;
-    }
-    if matches.get_flag(options::modes::VERSION) {
-        mode_flags.version = true;
-    }
-    if matches.get_flag(options::modes::RANDOM) {
-        mode_flags.random = true;
-    }
+    let mut mode_flags = ModeFlags {
+        human_numeric: matches.get_flag(options::modes::HUMAN_NUMERIC),
+        month: matches.get_flag(options::modes::MONTH),
+        general_numeric: matches.get_flag(options::modes::GENERAL_NUMERIC),
+        numeric: matches.get_flag(options::modes::NUMERIC),
+        version: matches.get_flag(options::modes::VERSION),
+        random: matches.get_flag(options::modes::RANDOM),
+    };
     if let Some(sort_arg) = matches.get_one::<String>(options::modes::SORT) {
         match sort_arg.as_str() {
             "human-numeric" => mode_flags.human_numeric = true,
@@ -2159,7 +2148,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
                     #[cfg(target_os = "linux")]
                     {
-                        show_error!("{}", batch_too_large);
+                        show_error!("{batch_too_large}");
 
                         translate!(
                             "sort-maximum-batch-size-rlimit",
@@ -2306,7 +2295,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Initialize locale collation if needed (UTF-8 locales)
     // This MUST happen before init_precomputed() to avoid the performance regression
     #[cfg(feature = "i18n-collator")]
-    let needs_locale_collation = uucore::i18n::collator::init_locale_collation();
+    let needs_locale_collation = i18n::collator::init_locale_collation();
 
     #[cfg(not(feature = "i18n-collator"))]
     let needs_locale_collation = false;
@@ -2919,7 +2908,8 @@ fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
     let mut reader = open_with_open_failed_error(path)?;
     let mut buf = [0u8; BUF_LEN];
     let mut total = 0usize;
-    let mut hasher = FnvHasher::default();
+    // freeze seed for --random-source
+    let mut hasher = ahash::RandomState::with_seeds(1, 1, 1, 1).build_hasher();
 
     loop {
         let n = reader
@@ -2944,7 +2934,8 @@ fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
     }
 
     let first = hasher.finish();
-    let mut second_hasher = FnvHasher::default();
+    // freeze seed for --random-source
+    let mut second_hasher = ahash::RandomState::with_seeds(2, 2, 2, 2).build_hasher();
     second_hasher.write(RANDOM_SOURCE_TAG);
     second_hasher.write_u64(first);
     let second = second_hasher.finish();
@@ -2956,9 +2947,8 @@ fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
 }
 
 fn get_hash<T: Hash>(t: &T) -> u64 {
-    let mut s = FnvHasher::default();
-    t.hash(&mut s);
-    s.finish()
+    // Is reproducibility of get_hash itself needed for --random-source ?
+    ahash::RandomState::with_seeds(0, 0, 0, 0).hash_one(t)
 }
 
 fn random_shuffle(a: &[u8], b: &[u8], salt: &[u8]) -> Ordering {
@@ -3094,13 +3084,6 @@ mod tests {
         let precomputed = Precomputed::default();
         tokenize(line, separator, &mut buffer, &precomputed);
         buffer
-    }
-
-    #[test]
-    fn test_get_hash() {
-        let a = "Ted".to_string();
-
-        assert_eq!(2_646_829_031_758_483_623, get_hash(&a));
     }
 
     #[test]

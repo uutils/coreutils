@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 use clap::Command;
-use platform_info::*;
+use platform_info::{PlatformInfo, PlatformInfoAPI, UNameAPI};
 use std::io::{Write, stdout};
 use uucore::error::{UResult, USimpleError};
 use uucore::translate;
