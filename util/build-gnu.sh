@@ -163,6 +163,9 @@ fi
 grep -rl 'path_prepend_' tests/* | xargs -r "${SED}" -i 's| path_prepend_ ./src||'
 # path_prepend_ sets $abs_path_dir_: set it manually instead.
 grep -rl '\$abs_path_dir_' tests/*/*.sh | xargs -r "${SED}" -i "s|\$abs_path_dir_|${UU_BUILD_DIR//\//\\/}|g"
+# Some tests use $abs_top_builddir/src for shebangs: point them to the uutils build dir.
+grep -rl '\$abs_top_builddir/src' tests/*/*.sh tests/*/*.pl | xargs -r "${SED}" -i "s|\$abs_top_builddir/src|${UU_BUILD_DIR//\//\\/}|g"
+grep -rl '\$ENV{abs_top_builddir}/src' tests/*/*.pl | xargs -r "${SED}" -i "s|\$ENV{abs_top_builddir}/src|${UU_BUILD_DIR//\//\\/}|g"
 
 # We can't build runcon and chcon without libselinux. But GNU no longer builds dummies of them. So consider they are SELinux specific.
 sed -i 's/^print_ver_.*/require_selinux_/' tests/runcon/runcon-compute.sh
