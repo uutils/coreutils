@@ -92,22 +92,8 @@ fn select_precision(
     }
 }
 
-// Initialize SIGPIPE state capture at process startup (Unix only)
-#[cfg(unix)]
-uucore::init_startup_state_capture!();
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    // Restore SIGPIPE to default if it wasn't explicitly ignored by parent.
-    // The Rust runtime ignores SIGPIPE, but we need to respect the parent's
-    // signal disposition for proper pipeline behavior (GNU compatibility).
-    #[cfg(unix)]
-    if !signals::sigpipe_was_ignored() {
-        // Ignore the return value: if setting signal handler fails, we continue anyway.
-        // The worst case is we don't get proper SIGPIPE behavior, but seq will still work.
-        let _ = signals::enable_pipe_errors();
-    }
-
     let matches =
         uucore::clap_localization::handle_clap_result(uu_app(), split_short_args_with_value(args))?;
 
@@ -168,52 +154,51 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // If a format was passed on the command line, use that.
     // If not, use some default format based on parameters precision.
-    let (format, padding, fast_allowed) = match options.format {
-        Some(str) => (
+    let (format, padding, fast_allowed) = if let Some(str) = options.format {
+        (
             Format::<num_format::Float, &ExtendedBigDecimal>::parse(str)?,
             0,
             false,
-        ),
-        None => {
-            let precision = select_precision(&first, &increment, &last);
+        )
+    } else {
+        let precision = select_precision(&first, &increment, &last);
 
-            let padding = if options.equal_width {
-                let precision_value = precision.unwrap_or(0);
-                first
-                    .num_integral_digits
-                    .max(increment.num_integral_digits)
-                    .max(last.num_integral_digits)
-                    + if precision_value > 0 {
-                        precision_value + 1
-                    } else {
-                        0
-                    }
-            } else {
-                0
-            };
+        let padding = if options.equal_width {
+            let precision_value = precision.unwrap_or(0);
+            first
+                .num_integral_digits
+                .max(increment.num_integral_digits)
+                .max(last.num_integral_digits)
+                + if precision_value > 0 {
+                    precision_value + 1
+                } else {
+                    0
+                }
+        } else {
+            0
+        };
 
-            let formatter = match precision {
-                // format with precision: decimal floats and integers
-                Some(precision) => num_format::Float {
-                    variant: FloatVariant::Decimal,
-                    width: padding,
-                    alignment: num_format::NumberAlignment::RightZero,
-                    precision: Some(precision),
-                    ..Default::default()
-                },
-                // format without precision: hexadecimal floats
-                None => num_format::Float {
-                    variant: FloatVariant::Shortest,
-                    ..Default::default()
-                },
-            };
-            // Allow fast printing if precision is 0 (integer inputs), `print_seq` will do further checks.
-            (
-                Format::from_formatter(formatter),
-                padding,
-                precision == Some(0),
-            )
-        }
+        let formatter = match precision {
+            // format with precision: decimal floats and integers
+            Some(precision) => num_format::Float {
+                variant: FloatVariant::Decimal,
+                width: padding,
+                alignment: num_format::NumberAlignment::RightZero,
+                precision: Some(precision),
+                ..Default::default()
+            },
+            // format without precision: hexadecimal floats
+            None => num_format::Float {
+                variant: FloatVariant::Shortest,
+                ..Default::default()
+            },
+        };
+        // Allow fast printing if precision is 0 (integer inputs), `print_seq` will do further checks.
+        (
+            Format::from_formatter(formatter),
+            padding,
+            precision == Some(0),
+        )
     };
 
     let result = print_seq(

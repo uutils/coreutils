@@ -468,9 +468,7 @@ fn test_selinux() {
         let context_value = get_getfattr_output(&at.plus_as_string(dest));
         assert!(
             context_value.contains("unconfined_u"),
-            "Expected '{}' not found in getfattr output:\n{}",
-            "unconfined_u",
-            context_value
+            "Expected 'unconfined_u' not found in getfattr output:\n{context_value}",
         );
         at.rmdir(dest);
     }
@@ -905,6 +903,33 @@ fn test_mkdir_parent_mode_with_explicit_mode() {
         0o40700,
         "Target should have exact requested mode 0700, got {:o}",
         target_perms & 0o777
+    );
+}
+
+/// Test that nested directories inherit the setgid bit with mkdir -p.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mkdir_parent_inherits_setgid() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("parent");
+    at.set_mode("parent", 0o2755);
+
+    ucmd.arg("-p")
+        .arg("parent/child/grandchild")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    // All descendants should inherit the setgid bit (0o2000)
+    assert_eq!(at.metadata("parent").permissions().mode() & 0o2000, 0o2000);
+    assert_eq!(
+        at.metadata("parent/child").permissions().mode() & 0o2000,
+        0o2000
+    );
+    assert_eq!(
+        at.metadata("parent/child/grandchild").permissions().mode() & 0o2000,
+        0o2000
     );
 }
 

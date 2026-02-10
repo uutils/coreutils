@@ -249,13 +249,24 @@ pub fn normalize_path(path: &Path) -> PathBuf {
             }
             Component::CurDir => {}
             Component::ParentDir => {
-                ret.pop();
+                if ret.as_os_str().is_empty()
+                    || matches!(ret.components().next_back(), Some(Component::ParentDir))
+                {
+                    ret.push("..");
+                } else {
+                    ret.pop();
+                }
             }
             Component::Normal(c) => {
                 ret.push(c);
             }
         }
     }
+
+    if ret.as_os_str().is_empty() {
+        ret.push(".");
+    }
+
     ret
 }
 
@@ -832,7 +843,7 @@ pub fn make_fifo(path: &Path) -> std::io::Result<()> {
     let name = CString::new(path.to_str().unwrap()).unwrap();
     let err = unsafe { mkfifo(name.as_ptr(), 0o666) };
     if err == -1 {
-        Err(std::io::Error::from_raw_os_error(err))
+        Err(Error::from_raw_os_error(err))
     } else {
         Ok(())
     }
@@ -874,7 +885,38 @@ mod tests {
         test: &'a str,
     }
 
-    const NORMALIZE_PATH_TESTS: [NormalizePathTestCase; 8] = [
+    const NORMALIZE_PATH_TESTS: [NormalizePathTestCase; 15] = [
+        NormalizePathTestCase {
+            path: "foo/bar/../..",
+            test: ".",
+        },
+        NormalizePathTestCase {
+            path: ".",
+            test: ".",
+        },
+        // Should not try to eliminate leading .. components,
+        // as it may point to a sibling of the current dir
+        NormalizePathTestCase {
+            path: "../foo",
+            test: "../foo",
+        },
+        // Try to go down, then escape above current dir and back down again
+        NormalizePathTestCase {
+            path: "foo/../../../bar/baz",
+            test: "../../bar/baz",
+        },
+        NormalizePathTestCase {
+            path: "../../foo/..",
+            test: "../..",
+        },
+        NormalizePathTestCase {
+            path: "foo/../../..",
+            test: "../..",
+        },
+        NormalizePathTestCase {
+            path: "foo/bar/../../..",
+            test: "..",
+        },
         NormalizePathTestCase {
             path: "./foo/bar.txt",
             test: "foo/bar.txt",
@@ -915,8 +957,7 @@ mod tests {
             let path = Path::new(test.path);
             let normalized = normalize_path(path);
             assert_eq!(
-                test.test
-                    .replace('/', std::path::MAIN_SEPARATOR.to_string().as_str()),
+                test.test.replace('/', MAIN_SEPARATOR.to_string().as_str()),
                 normalized.to_str().expect("Path is not valid utf-8!")
             );
         }
@@ -1111,7 +1152,7 @@ mod tests {
         assert!(make_fifo(&path).is_ok());
 
         // Check that it is indeed a FIFO.
-        assert!(std::fs::metadata(&path).unwrap().file_type().is_fifo());
+        assert!(fs::metadata(&path).unwrap().file_type().is_fifo());
 
         // Check that we can write to it and read from it.
         //
@@ -1119,7 +1160,7 @@ mod tests {
         // otherwise `write` would block indefinitely while waiting
         // for the `read`.
         let path2 = path.clone();
-        std::thread::spawn(move || assert!(std::fs::write(&path2, b"foo").is_ok()));
-        assert_eq!(std::fs::read(&path).unwrap(), b"foo");
+        std::thread::spawn(move || assert!(fs::write(&path2, b"foo").is_ok()));
+        assert_eq!(fs::read(&path).unwrap(), b"foo");
     }
 }

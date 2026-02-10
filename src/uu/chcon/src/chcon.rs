@@ -2,8 +2,10 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (vars) RFILE
-#![cfg(target_os = "linux")]
+
+#![cfg(any(target_os = "linux", target_os = "android"))]
 #![allow(clippy::upper_case_acronyms)]
 
 use clap::builder::ValueParser;
@@ -23,7 +25,7 @@ use std::{fs, io};
 mod errors;
 mod fts;
 
-use errors::*;
+use errors::{Error, Result, report_full_error};
 
 pub mod options {
     pub static HELP: &str = "help";

@@ -1,6 +1,7 @@
 name: Fuzzing
 
-# spell-checker:ignore fuzzer dtolnay Swatinem
+# spell-checker:ignore (people) dtolnay Swatinem taiki-e
+# spell-checker:ignore (misc) fuzzer
 
 on:
   pull_request:
@@ -19,16 +20,13 @@ concurrency:
 jobs:
   uufuzz-examples:
     name: Build and test uufuzz examples
+    env:
+      CARGO_INCREMENTAL: 0
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
-    - uses: Swatinem/rust-cache@v2
-      with:
-        shared-key: "uufuzz-cache-key"
-        cache-directories: "fuzz/target"
     - name: Build uufuzz library
       run: |
         cd fuzz/uufuzz
@@ -58,15 +56,17 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@nightly
     - name: Install `cargo-fuzz`
-      run: cargo install cargo-fuzz
-    - uses: Swatinem/rust-cache@v2
+      uses: taiki-e/install-action@v2
       with:
-        shared-key: "cargo-fuzz-cache-key"
-        cache-directories: "fuzz/target"
+        tool: cargo-fuzz
+    - name: Emulate a nightly toolchain
+      run: |
+        echo "RUSTC_BOOTSTRAP=1" >> "${GITHUB_ENV}"
     - name: Run `cargo-fuzz build`
-      run: cargo +nightly fuzz build
+      # Force the correct target
+      # https://github.com/rust-fuzz/cargo-fuzz/issues/398
+      run: cargo fuzz build --target $(rustc --print host-tuple)
 
   fuzz-run:
     needs: fuzz-build
@@ -75,6 +75,7 @@ jobs:
     timeout-minutes: 5
     env:
       RUN_FOR: 60
+      CARGO_INCREMENTAL: 0
     strategy:
       matrix:
         test-target:
@@ -92,36 +93,33 @@ jobs:
           - { name: fuzz_env, should_pass: false }
           - { name: fuzz_cksum, should_pass: false }
           - { name: fuzz_parse_glob, should_pass: true }
-          - { name: fuzz_parse_size, should_pass: true }
-          - { name: fuzz_parse_time, should_pass: true }
+          - { name: fuzz_parse_size, should_pass: false }
+          - { name: fuzz_parse_time, should_pass: false }
           - { name: fuzz_seq_parse_number, should_pass: false }
           - { name: fuzz_non_utf8_paths, should_pass: true }
+          - { name: fuzz_dirname, should_pass: true }
 
     steps:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@nightly
     - name: Install `cargo-fuzz`
-      run: cargo install cargo-fuzz
-    - uses: Swatinem/rust-cache@v2
+      uses: taiki-e/install-action@v2
       with:
-        shared-key: "cargo-fuzz-cache-key"
-        cache-directories: "fuzz/target"
-    - name: Restore Cached Corpus
-      uses: actions/cache/restore@v5
-      with:
-        key: corpus-cache-${{ matrix.test-target.name }}
-        path: |
-          fuzz/corpus/${{ matrix.test-target.name }}
+        tool: cargo-fuzz
+    - name: Emulate a nightly toolchain
+      run: |
+        echo "RUSTC_BOOTSTRAP=1" >> "${GITHUB_ENV}"
     - name: Run ${{ matrix.test-target.name }} for XX seconds
       id: run_fuzzer
       shell: bash
-      continue-on-error: ${{ !matrix.test-target.name.should_pass }}
+      continue-on-error: ${{ !matrix.test-target.should_pass }}
       run: |
         mkdir -p fuzz/stats
         STATS_FILE="fuzz/stats/${{ matrix.test-target.name }}.txt"
-        cargo +nightly fuzz run ${{ matrix.test-target.name }} -- -max_total_time=${{ env.RUN_FOR }} -timeout=${{ env.RUN_FOR }} -detect_leaks=0 -print_final_stats=1 2>&1 | tee "$STATS_FILE"
+        # Force the correct target
+        # https://github.com/rust-fuzz/cargo-fuzz/issues/398
+        cargo fuzz run --target $(rustc --print host-tuple) ${{ matrix.test-target.name }} -- -max_total_time=${{ env.RUN_FOR }} -timeout=${{ env.RUN_FOR }} -detect_leaks=0 -print_final_stats=1 2>&1 | tee "$STATS_FILE"
 
         # Extract key stats from the output
         if grep -q "stat::number_of_executed_units" "$STATS_FILE"; then
@@ -155,7 +153,7 @@ jobs:
         echo "Runs:           $(grep -q "stat::number_of_executed_units" "$STATS_FILE" && grep "stat::number_of_executed_units" "$STATS_FILE" | awk '{print $2}' || echo "unknown")"
         echo "Execution Rate: $(grep -q "stat::average_exec_per_sec" "$STATS_FILE" && grep "stat::average_exec_per_sec" "$STATS_FILE" | awk '{print $2}' || echo "unknown") execs/sec"
         echo "New Units:      $(grep -q "stat::new_units_added" "$STATS_FILE" && grep "stat::new_units_added" "$STATS_FILE" | awk '{print $2}' || echo "unknown")"
-        echo "Expected:       ${{ matrix.test-target.name.should_pass }}"
+        echo "Expected:       ${{ matrix.test-target.should_pass }}"
         if grep -q "SUMMARY: " "$STATS_FILE"; then
           echo "Status:         $(grep "SUMMARY: " "$STATS_FILE" | head -1)"
         else
@@ -190,12 +188,6 @@ jobs:
         fi
 
         echo "" >> $GITHUB_STEP_SUMMARY
-    - name: Save Corpus Cache
-      uses: actions/cache/save@v5
-      with:
-        key: corpus-cache-${{ matrix.test-target.name }}
-        path: |
-          fuzz/corpus/${{ matrix.test-target.name }}
     - name: Upload Stats
       uses: actions/upload-artifact@v6
       with:

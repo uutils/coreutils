@@ -20,9 +20,13 @@ jobs:
   benchmarks:
     name: Run ${{ matrix.type }} benchmarks for ${{ matrix.package }} (CodSpeed)
     runs-on: ubuntu-latest
+    env:
+      RUSTC_WRAPPER: sccache
+      CARGO_INCREMENTAL: 0
+      SCCACHE_GHA_ENABLED: "true"
     strategy:
       matrix:
-        type: [performance, memory]
+        type: [simulation, memory]
         package: [
           uu_base64,
           uu_cksum,
@@ -63,6 +67,14 @@ jobs:
       - name: Run sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.9
 
+      - name: Install locales
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y locales
+          sudo locale-gen fr_FR.UTF-8
+          sudo update-locale
+
       - name: Install cargo-codspeed
         shell: bash
         run: cargo install cargo-codspeed --locked
@@ -71,18 +83,14 @@ jobs:
         shell: bash
         run: |
           echo "Building ${{ matrix.type }} benchmarks for ${{ matrix.package }}"
-          if [ "${{ matrix.type }}" = "memory" ]; then
-            cargo codspeed build -m analysis -p ${{ matrix.package }}
-          else
-            cargo codspeed build -p ${{ matrix.package }}
-          fi
+          cargo codspeed build -m ${{ matrix.type }} -p ${{ matrix.package }}
 
       - name: Run ${{ matrix.type }} benchmarks for ${{ matrix.package }}
         uses: CodSpeedHQ/action@v4
         env:
           CODSPEED_LOG: debug
         with:
-          mode: ${{ matrix.type == 'memory' && 'memory' || 'simulation' }}
+          mode: ${{ matrix.type }}
           run: |
             echo "Running ${{ matrix.type }} benchmarks for ${{ matrix.package }}"
             cargo codspeed run -p ${{ matrix.package }} > /dev/null

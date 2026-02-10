@@ -7,7 +7,7 @@
 // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/sort.html
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 
-// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef GETFD
+// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef GETFD localeconv
 
 mod buffer_hint;
 mod check;
@@ -18,14 +18,13 @@ mod merge;
 mod numeric_str_cmp;
 mod tmp_dir;
 
+use ahash::AHashMap;
 use bigdecimal::BigDecimal;
 use chunks::LineData;
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use custom_str_cmp::custom_str_cmp;
-
 use ext_sort::ext_sort;
-use fnv::FnvHasher;
 use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
 use rand::{Rng, rng};
 use rayon::prelude::*;
@@ -33,9 +32,9 @@ use std::cmp::Ordering;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{File, OpenOptions};
-use std::hash::{Hash, Hasher};
+use std::hash::{BuildHasher, Hash, Hasher};
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
-use std::num::IntErrorKind;
+use std::num::{IntErrorKind, NonZero};
 use std::ops::Range;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
@@ -47,7 +46,6 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, strip_errno};
 use uucore::error::{UError, UResult, USimpleError, UUsageError};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
-use uucore::format_usage;
 #[cfg(feature = "i18n-collator")]
 use uucore::i18n::collator::locale_cmp;
 use uucore::i18n::decimal::locale_decimal_separator;
@@ -59,6 +57,7 @@ use uucore::posix::{MODERN, TRADITIONAL};
 use uucore::show_error;
 use uucore::translate;
 use uucore::version_cmp::version_cmp;
+use uucore::{format_usage, i18n};
 
 use crate::buffer_hint::automatic_buffer_size;
 use crate::tmp_dir::TmpDirWrapper;
@@ -191,6 +190,8 @@ impl UError for SortError {
     }
 }
 
+// refs are required because this fn is used by thiserror macro
+#[expect(clippy::trivially_copy_pass_by_ref)]
 fn format_disorder(file: &OsString, line_number: &usize, line: &String, silent: &bool) -> String {
     if *silent {
         String::new()
@@ -284,7 +285,33 @@ pub struct GlobalSettings {
     buffer_size_is_explicit: bool,
     compress_prog: Option<String>,
     merge_batch_size: usize,
+    numeric_locale: NumericLocaleSettings,
     precomputed: Precomputed,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct NumericLocaleSettings {
+    thousands_sep: Option<u8>,
+    decimal_pt: Option<u8>,
+}
+
+impl Default for NumericLocaleSettings {
+    fn default() -> Self {
+        Self {
+            thousands_sep: None,
+            decimal_pt: Some(DECIMAL_PT),
+        }
+    }
+}
+
+impl NumericLocaleSettings {
+    fn num_info_settings(self, accept_si_units: bool) -> NumInfoParseSettings {
+        NumInfoParseSettings {
+            accept_si_units,
+            thousands_separator: self.thousands_sep,
+            decimal_pt: self.decimal_pt,
+        }
+    }
 }
 
 /// Data needed for sorting. Should be computed once before starting to sort
@@ -297,6 +324,8 @@ struct Precomputed {
     selections_per_line: usize,
     fast_lexicographic: bool,
     fast_ascii_insensitive: bool,
+    tokenize_blank_thousands_sep: bool,
+    tokenize_allow_unit_after_blank: bool,
 }
 
 impl GlobalSettings {
@@ -340,6 +369,20 @@ impl GlobalSettings {
             .iter()
             .filter(|s| matches!(s.settings.mode, SortMode::GeneralNumeric))
             .count();
+
+        let uses_numeric = self
+            .selectors
+            .iter()
+            .any(|s| matches!(s.settings.mode, SortMode::Numeric | SortMode::HumanNumeric));
+        let uses_human_numeric = self
+            .selectors
+            .iter()
+            .any(|s| matches!(s.settings.mode, SortMode::HumanNumeric));
+        self.precomputed.tokenize_blank_thousands_sep = self.separator.is_none()
+            && uses_numeric
+            && self.numeric_locale.thousands_sep == Some(b' ');
+        self.precomputed.tokenize_allow_unit_after_blank =
+            self.precomputed.tokenize_blank_thousands_sep && uses_human_numeric;
 
         self.precomputed.fast_lexicographic =
             !disable_fast_lexicographic && self.can_use_fast_lexicographic();
@@ -413,6 +456,7 @@ impl Default for GlobalSettings {
             buffer_size_is_explicit: false,
             compress_prog: None,
             merge_batch_size: default_merge_batch_size(),
+            numeric_locale: NumericLocaleSettings::default(),
             precomputed: Precomputed::default(),
         }
     }
@@ -597,7 +641,12 @@ impl<'a> Line<'a> {
         }
         token_buffer.clear();
         if settings.precomputed.needs_tokens {
-            tokenize(line, settings.separator, token_buffer);
+            tokenize(
+                line,
+                settings.separator,
+                token_buffer,
+                &settings.precomputed,
+            );
         }
         if settings.mode == SortMode::Numeric {
             // exclude inf, nan, scientific notation
@@ -607,11 +656,12 @@ impl<'a> Line<'a> {
                 .and_then(|s| s.parse::<f64>().ok());
             line_data.line_num_floats.push(line_num_float);
         }
-        for (selector, selection) in settings
-            .selectors
-            .iter()
-            .map(|selector| (selector, selector.get_selection(line, token_buffer)))
-        {
+        for (selector, selection) in settings.selectors.iter().map(|selector| {
+            (
+                selector,
+                selector.get_selection(line, token_buffer, settings.numeric_locale),
+            )
+        }) {
             match selection {
                 Selection::AsBigDecimal(parsed_float) => line_data.parsed_floats.push(parsed_float),
                 Selection::WithNumInfo(str, num_info) => {
@@ -630,7 +680,7 @@ impl<'a> Line<'a> {
 
     fn print(&self, writer: &mut impl Write, settings: &GlobalSettings) -> std::io::Result<()> {
         if settings.debug {
-            self.print_debug(settings, writer)?;
+            self.write_debug(settings, writer)?;
         } else {
             writer.write_all(self.line)?;
             writer.write_all(&[settings.line_ending.into()])?;
@@ -640,7 +690,7 @@ impl<'a> Line<'a> {
 
     /// Writes indicators for the selections this line matched. The original line content is NOT expected
     /// to be already printed.
-    fn print_debug(
+    fn write_debug(
         &self,
         settings: &GlobalSettings,
         writer: &mut impl Write,
@@ -660,19 +710,24 @@ impl<'a> Line<'a> {
         writeln!(writer)?;
 
         let mut fields = vec![];
-        tokenize(self.line, settings.separator, &mut fields);
+        tokenize(
+            self.line,
+            settings.separator,
+            &mut fields,
+            &settings.precomputed,
+        );
         for selector in &settings.selectors {
             let mut selection = selector.get_range(self.line, Some(&fields));
             match selector.settings.mode {
                 SortMode::Numeric | SortMode::HumanNumeric => {
                     // find out which range is used for numeric comparisons
-                    let (_, num_range) = NumInfo::parse(
-                        &self.line[selection.clone()],
-                        &NumInfoParseSettings {
-                            accept_si_units: selector.settings.mode == SortMode::HumanNumeric,
-                            ..Default::default()
-                        },
-                    );
+                    let mut parse_settings = settings
+                        .numeric_locale
+                        .num_info_settings(selector.settings.mode == SortMode::HumanNumeric);
+                    // Debug annotations should ignore thousands separators to match GNU output.
+                    parse_settings.thousands_separator = None;
+                    let (_, num_range) =
+                        NumInfo::parse(&self.line[selection.clone()], &parse_settings);
                     let initial_selection = selection.clone();
 
                     // Shorten selection to num_range.
@@ -789,24 +844,50 @@ impl<'a> Line<'a> {
 }
 
 /// Tokenize a line into fields. The result is stored into `token_buffer`.
-fn tokenize(line: &[u8], separator: Option<u8>, token_buffer: &mut Vec<Field>) {
+fn tokenize(
+    line: &[u8],
+    separator: Option<u8>,
+    token_buffer: &mut Vec<Field>,
+    precomputed: &Precomputed,
+) {
     assert!(token_buffer.is_empty());
     if let Some(separator) = separator {
         tokenize_with_separator(line, separator, token_buffer);
     } else {
-        tokenize_default(line, token_buffer);
+        tokenize_default(
+            line,
+            token_buffer,
+            precomputed.tokenize_blank_thousands_sep,
+            precomputed.tokenize_allow_unit_after_blank,
+        );
     }
 }
 
 /// By default fields are separated by the first whitespace after non-whitespace.
 /// Whitespace is included in fields at the start.
 /// The result is stored into `token_buffer`.
-fn tokenize_default(line: &[u8], token_buffer: &mut Vec<Field>) {
+fn tokenize_default(
+    line: &[u8],
+    token_buffer: &mut Vec<Field>,
+    blank_thousands_sep: bool,
+    allow_unit_after_blank: bool,
+) {
     token_buffer.push(0..0);
     // pretend that there was whitespace in front of the line
     let mut previous_was_whitespace = true;
     for (idx, char) in line.iter().enumerate() {
-        if char.is_ascii_whitespace() {
+        let is_whitespace = char.is_ascii_whitespace();
+        let treat_as_separator = if is_whitespace {
+            if blank_thousands_sep && *char == b' ' {
+                !is_blank_thousands_sep(line, idx, allow_unit_after_blank)
+            } else {
+                true
+            }
+        } else {
+            false
+        };
+
+        if treat_as_separator {
             if !previous_was_whitespace {
                 token_buffer.last_mut().unwrap().end = idx;
                 token_buffer.push(idx..0);
@@ -817,6 +898,31 @@ fn tokenize_default(line: &[u8], token_buffer: &mut Vec<Field>) {
         }
     }
     token_buffer.last_mut().unwrap().end = line.len();
+}
+
+fn is_blank_thousands_sep(line: &[u8], idx: usize, allow_unit_after_blank: bool) -> bool {
+    if line.get(idx) != Some(&b' ') {
+        return false;
+    }
+
+    let prev_is_digit = idx
+        .checked_sub(1)
+        .and_then(|prev_idx| line.get(prev_idx))
+        .is_some_and(u8::is_ascii_digit);
+    if !prev_is_digit {
+        return false;
+    }
+
+    let next = line.get(idx + 1).copied();
+    match next {
+        Some(c) if c.is_ascii_digit() => true,
+        Some(b'K' | b'k' | b'M' | b'G' | b'T' | b'P' | b'E' | b'Z' | b'Y' | b'R' | b'Q')
+            if allow_unit_after_blank =>
+        {
+            true
+        }
+        _ => false,
+    }
 }
 
 /// Split between separators. These separators are not included in fields.
@@ -1077,7 +1183,12 @@ impl FieldSelector {
 
     /// Get the selection that corresponds to this selector for the line.
     /// If `needs_fields` returned false, tokens may be empty.
-    fn get_selection<'a>(&self, line: &'a [u8], tokens: &[Field]) -> Selection<'a> {
+    fn get_selection<'a>(
+        &self,
+        line: &'a [u8],
+        tokens: &[Field],
+        numeric_locale: NumericLocaleSettings,
+    ) -> Selection<'a> {
         // `get_range` expects `None` when we don't need tokens and would get confused by an empty vector.
         let tokens = if self.needs_tokens {
             Some(tokens)
@@ -1089,10 +1200,7 @@ impl FieldSelector {
             // Parse NumInfo for this number.
             let (info, num_range) = NumInfo::parse(
                 range_str,
-                &NumInfoParseSettings {
-                    accept_si_units: self.settings.mode == SortMode::HumanNumeric,
-                    ..Default::default()
-                },
+                &numeric_locale.num_info_settings(self.settings.mode == SortMode::HumanNumeric),
             );
             // Shorten the range to what we need to pass to numeric_str_cmp later.
             range_str = &range_str[num_range];
@@ -1205,6 +1313,33 @@ impl FieldSelector {
     }
 }
 
+fn detect_numeric_locale() -> NumericLocaleSettings {
+    let numeric_locale = i18n::get_numeric_locale();
+    let locale = &numeric_locale.0;
+    let encoding = numeric_locale.1;
+    let is_c_locale = encoding == i18n::UEncoding::Ascii && locale.to_string() == "und";
+
+    if is_c_locale {
+        return NumericLocaleSettings {
+            decimal_pt: Some(DECIMAL_PT),
+            thousands_sep: None,
+        };
+    }
+
+    let grouping = i18n::decimal::locale_grouping_separator();
+    NumericLocaleSettings {
+        decimal_pt: Some(locale_decimal_pt()),
+        // Upstream GNU coreutils ignore multibyte thousands separators
+        // (FIXME in C source). We keep the same single-byte behavior.
+        thousands_sep: match grouping.as_bytes() {
+            [b] => Some(*b),
+            // ICU returns NBSP as UTF-8 (0xC2 0xA0). In non-UTF8 locales like ISO-8859-1,
+            // the input byte is 0xA0, so map it to a single-byte separator.
+            [0xC2, 0xA0] if encoding != i18n::UEncoding::Utf8 => Some(0xA0),
+            _ => None,
+        },
+    }
+}
 /// Creates an `Arg` for a sort mode flag.
 fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
     Arg::new(mode)
@@ -1331,7 +1466,7 @@ struct LegacyKeyWarning {
 impl LegacyKeyWarning {
     fn legacy_key_display(&self) -> String {
         match self.to_field {
-            Some(to) => format!("+{} -{}", self.from_field, to),
+            Some(to) => format!("+{} -{to}", self.from_field),
             None => format!("+{}", self.from_field),
         }
     }
@@ -1433,14 +1568,13 @@ fn legacy_key_to_k(from: &LegacyKeyPart, to: Option<&LegacyKeyPart>) -> String {
     let start_char = from.char_pos.saturating_add(1);
 
     let mut keydef = format!(
-        "{}{}{}",
-        start_field,
+        "{start_field}{}{}",
         if from.char_pos == 0 {
             String::new()
         } else {
             format!(".{start_char}")
         },
-        from.opts
+        from.opts,
     );
 
     if let Some(to) = to {
@@ -1546,7 +1680,7 @@ fn index_legacy_warnings(processed_args: &[OsString], legacy_warnings: &mut [Leg
         return;
     }
 
-    let mut index_by_arg = std::collections::HashMap::new();
+    let mut index_by_arg = AHashMap::default();
     for (warning_idx, warning) in legacy_warnings.iter().enumerate() {
         index_by_arg.insert(warning.arg_index, warning_idx);
     }
@@ -1836,7 +1970,10 @@ fn emit_debug_warnings(
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let mut settings = GlobalSettings::default();
+    let mut settings = GlobalSettings {
+        numeric_locale: detect_numeric_locale(),
+        ..Default::default()
+    };
 
     let (processed_args, mut legacy_warnings) = preprocess_legacy_args(args);
     if !legacy_warnings.is_empty() {
@@ -1846,11 +1983,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), processed_args, 2)?;
 
     // Prevent -o/--output to be specified multiple times
-    if matches
-        .get_occurrences::<OsString>(options::OUTPUT)
-        .is_some_and(|out| out.len() > 1)
-    {
-        return Err(SortError::MultipleOutputFiles.into());
+    if let Some(mut outputs) = matches.get_many::<OsString>(options::OUTPUT) {
+        if let Some(first) = outputs.next() {
+            if outputs.any(|out| out != first) {
+                return Err(SortError::MultipleOutputFiles.into());
+            }
+        }
     }
 
     settings.debug = matches.get_flag(options::DEBUG);
@@ -1908,25 +2046,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .unwrap_or_default()
     };
 
-    let mut mode_flags = ModeFlags::default();
-    if matches.get_flag(options::modes::HUMAN_NUMERIC) {
-        mode_flags.human_numeric = true;
-    }
-    if matches.get_flag(options::modes::MONTH) {
-        mode_flags.month = true;
-    }
-    if matches.get_flag(options::modes::GENERAL_NUMERIC) {
-        mode_flags.general_numeric = true;
-    }
-    if matches.get_flag(options::modes::NUMERIC) {
-        mode_flags.numeric = true;
-    }
-    if matches.get_flag(options::modes::VERSION) {
-        mode_flags.version = true;
-    }
-    if matches.get_flag(options::modes::RANDOM) {
-        mode_flags.random = true;
-    }
+    let mut mode_flags = ModeFlags {
+        human_numeric: matches.get_flag(options::modes::HUMAN_NUMERIC),
+        month: matches.get_flag(options::modes::MONTH),
+        general_numeric: matches.get_flag(options::modes::GENERAL_NUMERIC),
+        numeric: matches.get_flag(options::modes::NUMERIC),
+        version: matches.get_flag(options::modes::VERSION),
+        random: matches.get_flag(options::modes::RANDOM),
+    };
     if let Some(sort_arg) = matches.get_one::<String>(options::modes::SORT) {
         match sort_arg.as_str() {
             "human-numeric" => mode_flags.human_numeric = true,
@@ -1943,7 +2070,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let ignore_non_printing = matches.get_flag(options::IGNORE_NONPRINTING);
     let ignore_case = matches.get_flag(options::IGNORE_CASE);
 
-    if ordering_incompatible(mode_flags, dictionary_order, ignore_non_printing) {
+    if !matches.contains_id(options::KEY)
+        && ordering_incompatible(mode_flags, dictionary_order, ignore_non_printing)
+    {
         let opts = ordering_opts_string(
             mode_flags,
             dictionary_order,
@@ -1967,9 +2096,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .get_one::<String>(options::PARALLEL)
             .map_or_else(|| "0".to_string(), String::from);
         let num_threads = match settings.threads.parse::<usize>() {
-            Ok(0) | Err(_) => std::thread::available_parallelism()
-                .map(|n| n.get())
-                .unwrap_or(1),
+            Ok(0) | Err(_) => std::thread::available_parallelism().map_or(1, NonZero::get),
             Ok(n) => n,
         };
         let _ = rayon::ThreadPoolBuilder::new()
@@ -2021,7 +2148,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
                     #[cfg(target_os = "linux")]
                     {
-                        show_error!("{}", batch_too_large);
+                        show_error!("{batch_too_large}");
 
                         translate!(
                             "sort-maximum-batch-size-rlimit",
@@ -2168,7 +2295,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Initialize locale collation if needed (UTF-8 locales)
     // This MUST happen before init_precomputed() to avoid the performance regression
     #[cfg(feature = "i18n-collator")]
-    let needs_locale_collation = uucore::i18n::collator::init_locale_collation();
+    let needs_locale_collation = i18n::collator::init_locale_collation();
 
     #[cfg(not(feature = "i18n-collator"))]
     let needs_locale_collation = false;
@@ -2616,17 +2743,17 @@ fn compare_by<'a>(
 }
 
 /// Compare two byte slices in ASCII case-insensitive order without allocating.
-/// We lower each byte on the fly so that binary input (including `NUL`) stays
+/// We upper each byte on the fly so that binary input (including `NUL`) stays
 /// untouched and we avoid locale-sensitive routines such as `strcasecmp`.
 fn ascii_case_insensitive_cmp(a: &[u8], b: &[u8]) -> Ordering {
     #[inline]
-    fn lower(byte: u8) -> u8 {
-        byte.to_ascii_lowercase()
+    fn fold(byte: u8) -> u8 {
+        byte.to_ascii_uppercase()
     }
 
     for (lhs, rhs) in a.iter().copied().zip(b.iter().copied()) {
-        let l = lower(lhs);
-        let r = lower(rhs);
+        let l = fold(lhs);
+        let r = fold(rhs);
         if l != r {
             return l.cmp(&r);
         }
@@ -2781,7 +2908,8 @@ fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
     let mut reader = open_with_open_failed_error(path)?;
     let mut buf = [0u8; BUF_LEN];
     let mut total = 0usize;
-    let mut hasher = FnvHasher::default();
+    // freeze seed for --random-source
+    let mut hasher = ahash::RandomState::with_seeds(1, 1, 1, 1).build_hasher();
 
     loop {
         let n = reader
@@ -2806,7 +2934,8 @@ fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
     }
 
     let first = hasher.finish();
-    let mut second_hasher = FnvHasher::default();
+    // freeze seed for --random-source
+    let mut second_hasher = ahash::RandomState::with_seeds(2, 2, 2, 2).build_hasher();
     second_hasher.write(RANDOM_SOURCE_TAG);
     second_hasher.write_u64(first);
     let second = second_hasher.finish();
@@ -2818,9 +2947,8 @@ fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
 }
 
 fn get_hash<T: Hash>(t: &T) -> u64 {
-    let mut s = FnvHasher::default();
-    t.hash(&mut s);
-    s.finish()
+    // Is reproducibility of get_hash itself needed for --random-source ?
+    ahash::RandomState::with_seeds(0, 0, 0, 0).hash_one(t)
 }
 
 fn random_shuffle(a: &[u8], b: &[u8], salt: &[u8]) -> Ordering {
@@ -2953,15 +3081,9 @@ mod tests {
 
     fn tokenize_helper(line: &[u8], separator: Option<u8>) -> Vec<Field> {
         let mut buffer = vec![];
-        tokenize(line, separator, &mut buffer);
+        let precomputed = Precomputed::default();
+        tokenize(line, separator, &mut buffer, &precomputed);
         buffer
-    }
-
-    #[test]
-    fn test_get_hash() {
-        let a = "Ted".to_string();
-
-        assert_eq!(2_646_829_031_758_483_623, get_hash(&a));
     }
 
     #[test]

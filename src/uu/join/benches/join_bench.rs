@@ -50,7 +50,7 @@ fn create_partial_overlap_files(
     // File 2: keys (num_lines - overlap_count) to (2*num_lines - overlap_count - 1)
     let start = num_lines - overlap_count;
     for i in 0..num_lines {
-        writeln!(file2, "{:08} f2_data_{}", start + i, i).unwrap();
+        writeln!(file2, "{:08} f2_data_{i}", start + i).unwrap();
     }
 
     (
@@ -110,12 +110,53 @@ fn join_custom_separator(bencher: Bencher) {
     });
 }
 
-/// Benchmark join with French locale (fr_FR.UTF-8)
+/// Benchmark join with French locale (fr_FR.UTF-8) - ASCII data (fast path)
 #[divan::bench]
 fn join_french_locale(bencher: Bencher) {
     let num_lines = 10000;
     let temp_dir = TempDir::new().unwrap();
     let (file1, file2) = create_join_files(&temp_dir, num_lines);
+
+    bencher
+        .with_inputs(|| unsafe {
+            std::env::set_var("LC_ALL", "fr_FR.UTF-8");
+        })
+        .bench_values(|_| {
+            black_box(run_util_function(uumain, &[&file1, &file2]));
+        });
+}
+
+/// Create files with Unicode data that requires locale collation
+fn create_unicode_join_files(temp_dir: &TempDir, num_lines: usize) -> (String, String) {
+    let file1_path = temp_dir.path().join("file1.txt");
+    let file2_path = temp_dir.path().join("file2.txt");
+
+    let mut file1 = File::create(&file1_path).unwrap();
+    let mut file2 = File::create(&file2_path).unwrap();
+
+    // Create data with accented characters that require locale collation
+    let accented_chars = [
+        "àbc", "àbd", "abc", "abd", "èfg", "efg", "çar", "car", "öst", "ost",
+    ];
+
+    for i in 0..num_lines {
+        let key = &accented_chars[i % accented_chars.len()];
+        writeln!(file1, "{key}:{i:06} field1_{i}").unwrap();
+        writeln!(file2, "{key}:{i:06} data1_{i}").unwrap();
+    }
+
+    (
+        file1_path.to_str().unwrap().to_string(),
+        file2_path.to_str().unwrap().to_string(),
+    )
+}
+
+/// Benchmark join with actual Unicode data requiring locale collation
+#[divan::bench]
+fn join_unicode_locale(bencher: Bencher) {
+    let num_lines = 1000; // Smaller due to complexity
+    let temp_dir = TempDir::new().unwrap();
+    let (file1, file2) = create_unicode_join_files(&temp_dir, num_lines);
 
     bencher
         .with_inputs(|| unsafe {
