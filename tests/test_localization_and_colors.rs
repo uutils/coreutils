@@ -132,15 +132,6 @@ fn test_error_messages_have_colors() {
         println!("Testing error colors for {utility}");
 
         let mut cmd = create_utility_command(utility);
-        let uu_name = format!("uu_{utility}");
-        let binary_name = uucore::get_canonical_util_name(&uu_name);
-
-        // For hashsum aliases, we need to pass the hash algorithm as a subcommand
-        if binary_name == "hashsum" && utility != "hashsum" {
-            // Extract the hash algorithm from the utility name
-            let algo = utility.trim_end_matches("sum");
-            cmd.arg(algo);
-        }
 
         let output = cmd
             .arg("--invalid-option-that-should-not-exist")
@@ -232,15 +223,6 @@ fn test_error_messages_french_translation() {
         println!("Testing French error translation for {utility}");
 
         let mut cmd = create_utility_command(utility);
-        let uu_name = format!("uu_{utility}");
-        let binary_name = uucore::get_canonical_util_name(&uu_name);
-
-        // For hashsum aliases, we need to pass the hash algorithm as a subcommand
-        if binary_name == "hashsum" && utility != "hashsum" {
-            // Extract the hash algorithm from the utility name
-            let algo = utility.trim_end_matches("sum");
-            cmd.arg(algo);
-        }
 
         let output = cmd
             .arg("--invalid-option-that-should-not-exist")
@@ -285,15 +267,6 @@ fn test_french_colored_error_messages() {
         println!("Testing French colored errors for {utility}");
 
         let mut cmd = create_utility_command(utility);
-        let uu_name = format!("uu_{utility}");
-        let binary_name = uucore::get_canonical_util_name(&uu_name);
-
-        // For hashsum aliases, we need to pass the hash algorithm as a subcommand
-        if binary_name == "hashsum" && utility != "hashsum" {
-            // Extract the hash algorithm from the utility name
-            let algo = utility.trim_end_matches("sum");
-            cmd.arg(algo);
-        }
 
         let output = cmd
             .arg("--invalid-option-that-should-not-exist")

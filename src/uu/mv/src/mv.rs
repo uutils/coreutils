@@ -431,7 +431,7 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
             OverwriteMode::Force => {}
             OverwriteMode::Default => {
                 let (writable, mode) = is_writable(target);
-                if !writable && std::io::stdin().is_terminal() {
+                if !writable && io::stdin().is_terminal() {
                     prompt_overwrite(target, mode)?;
                 }
             }
@@ -587,19 +587,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
         };
 
         // Pre-scan files if needed
-        if let Err(e) = scanner.scan_files(files, &hardlink_options) {
-            if hardlink_options.verbose {
-                eprintln!("mv: warning: failed to scan files for hardlinks: {e}");
-                eprintln!("mv: continuing without hardlink preservation");
-            } else {
-                // Show warning in non-verbose mode for serious errors
-                eprintln!(
-                    "mv: warning: hardlink scanning failed, continuing without hardlink preservation"
-                );
-            }
-            // Continue without hardlink tracking on scan failure
-            // This provides graceful degradation rather than failing completely
-        }
+        scanner.scan_files(files, &hardlink_options);
 
         (tracker, scanner)
     };
@@ -641,12 +629,11 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
             pb.set_message(msg);
         }
 
-        let targetpath = match sourcepath.file_name() {
-            Some(name) => target_dir.join(name),
-            None => {
-                show!(MvError::NoSuchFile(sourcepath.quote().to_string()));
-                continue;
-            }
+        let targetpath = if let Some(name) = sourcepath.file_name() {
+            target_dir.join(name)
+        } else {
+            show!(MvError::NoSuchFile(sourcepath.quote().to_string()));
+            continue;
         };
 
         if moved_destinations.contains(&targetpath) && options.backup != BackupMode::Numbered {
@@ -683,9 +670,10 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
                 let e = e.map_err_context(|| {
                     translate!("mv-error-cannot-move", "source" => sourcepath.quote(), "target" => targetpath.quote())
                 });
-                match display_manager {
-                    Some(ref pb) => pb.suspend(|| show!(e)),
-                    None => show!(e),
+                if let Some(ref pb) = display_manager {
+                    pb.suspend(|| show!(e));
+                } else {
+                    show!(e);
                 }
             }
             Ok(()) => (),
@@ -741,7 +729,7 @@ fn rename(
             OverwriteMode::Default => {
                 // GNU mv prompts when stdin is a TTY and target is not writable
                 let (writable, mode) = is_writable(to);
-                if !writable && std::io::stdin().is_terminal() {
+                if !writable && io::stdin().is_terminal() {
                     prompt_overwrite(to, mode)?;
                 }
             }
@@ -789,11 +777,10 @@ fn rename(
     }
 
     if opts.verbose {
-        let message = match backup_path {
-            Some(path) => {
-                translate!("mv-verbose-renamed-with-backup", "from" => from.quote(), "to" => to.quote(), "backup" => path.quote())
-            }
-            None => translate!("mv-verbose-renamed", "from" => from.quote(), "to" => to.quote()),
+        let message = if let Some(path) = backup_path {
+            translate!("mv-verbose-renamed-with-backup", "from" => from.quote(), "to" => to.quote(), "backup" => path.quote())
+        } else {
+            translate!("mv-verbose-renamed", "from" => from.quote(), "to" => to.quote())
         };
 
         match display_manager {
@@ -899,6 +886,10 @@ fn rename_fifo_fallback(from: &Path, to: &Path) -> io::Result<()> {
 }
 
 #[cfg(not(unix))]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "fn sig must match on all platforms"
+)]
 fn rename_fifo_fallback(_from: &Path, _to: &Path) -> io::Result<()> {
     Ok(())
 }
@@ -908,7 +899,12 @@ fn rename_fifo_fallback(_from: &Path, _to: &Path) -> io::Result<()> {
 #[cfg(unix)]
 fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     let path_symlink_points_to = fs::read_link(from)?;
-    unix::fs::symlink(path_symlink_points_to, to).and_then(|_| fs::remove_file(from))
+    unix::fs::symlink(path_symlink_points_to, to)?;
+    #[cfg(not(any(target_os = "macos", target_os = "redox")))]
+    {
+        let _ = copy_xattrs_if_supported(from, to);
+    }
+    fs::remove_file(from)
 }
 
 #[cfg(windows)]
@@ -1136,7 +1132,7 @@ fn copy_file_with_hardlinks_helper(
     let hardlink_options = HardlinkOptions::default();
     // Create a hardlink instead of copying
     if let Some(existing_target) =
-        hardlink_tracker.check_hardlink(from, to, hardlink_scanner, &hardlink_options)?
+        hardlink_tracker.check_hardlink(from, to, hardlink_scanner, &hardlink_options)
     {
         fs::hard_link(&existing_target, to)?;
         return Ok(());
@@ -1147,13 +1143,11 @@ fn copy_file_with_hardlinks_helper(
         rename_symlink_fallback(from, to)?;
     } else {
         // Copy a regular file.
+        fs::copy(from, to)?;
+        // Copy xattrs, ignoring ENOTSUP errors (filesystem doesn't support xattrs)
         #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
         {
-            fs::copy(from, to).and_then(|_| fsxattr::copy_xattrs(&from, &to))?;
-        }
-        #[cfg(any(target_os = "macos", target_os = "redox"))]
-        {
-            fs::copy(from, to)?;
+            let _ = copy_xattrs_if_supported(from, to);
         }
     }
 
@@ -1184,7 +1178,7 @@ fn rename_file_fallback(
             use crate::hardlink::HardlinkOptions;
             let hardlink_options = HardlinkOptions::default();
             if let Some(existing_target) =
-                tracker.check_hardlink(from, to, scanner, &hardlink_options)?
+                tracker.check_hardlink(from, to, scanner, &hardlink_options)
             {
                 // Create a hardlink to the first moved file instead of copying
                 fs::hard_link(&existing_target, to)?;
@@ -1195,16 +1189,30 @@ fn rename_file_fallback(
     }
 
     // Regular file copy
-    #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
     fs::copy(from, to)
-        .and_then(|_| fsxattr::copy_xattrs(&from, &to))
-        .and_then(|_| fs::remove_file(from))
         .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
-    #[cfg(any(target_os = "macos", target_os = "redox", not(unix)))]
-    fs::copy(from, to)
-        .and_then(|_| fs::remove_file(from))
+
+    // Copy xattrs, ignoring ENOTSUP errors (filesystem doesn't support xattrs)
+    #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
+    {
+        let _ = copy_xattrs_if_supported(from, to);
+    }
+
+    fs::remove_file(from)
         .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
     Ok(())
+}
+
+/// Copy xattrs from source to destination, ignoring ENOTSUP/EOPNOTSUPP errors.
+/// These errors indicate the filesystem doesn't support extended attributes,
+/// which is acceptable when moving files across filesystems.
+#[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
+fn copy_xattrs_if_supported(from: &Path, to: &Path) -> io::Result<()> {
+    match fsxattr::copy_xattrs(from, to) {
+        Ok(()) => Ok(()),
+        Err(e) if e.raw_os_error() == Some(libc::EOPNOTSUPP) => Ok(()),
+        Err(e) => Err(e),
+    }
 }
 
 fn is_empty_dir(path: &Path) -> bool {
