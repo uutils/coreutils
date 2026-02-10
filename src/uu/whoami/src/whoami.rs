@@ -13,9 +13,16 @@ mod platform;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    // bypass clap for performance
+    let args: Vec<_> = args.collect();
+    if args.len() == 1 || (args.len() == 2 && args[1] == "--") {
+        let username = whoami()?;
+        println_verbatim(username)
+            .map_err_context(|| translate!("whoami-error-failed-to-print"))?;
+        return Ok(());
+    }
+    // todo: avoid large clap call for binary size
     uucore::clap_localization::handle_clap_result(uu_app(), args)?;
-    let username = whoami()?;
-    println_verbatim(username).map_err_context(|| translate!("whoami-error-failed-to-print"))?;
     Ok(())
 }
 
