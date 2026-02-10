@@ -11,12 +11,28 @@ use uucore::translate;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    // avoid large clap call for binary size
+    let args: Vec<_> = args.collect();
+    if args.len() == 1 {
+        let uts = PlatformInfo::new()
+            .map_err(|_e| USimpleError::new(1, translate!("cannot-get-system")))?;
 
-    let uts =
-        PlatformInfo::new().map_err(|_e| USimpleError::new(1, translate!("cannot-get-system")))?;
-
-    writeln!(stdout(), "{}", uts.machine().to_string_lossy().trim())?;
+        writeln!(stdout(), "{}", uts.machine().to_string_lossy().trim())?;
+        return Ok(());
+    }
+    let arg_bytes = &args[1].as_encoded_bytes();
+    if arg_bytes.starts_with(b"--v") && b"--version".starts_with(arg_bytes) || args[1] == "-V" {
+        write!(stdout(), "{}", uu_app().render_version())?;
+    } else if arg_bytes.starts_with(b"--h") && b"--help".starts_with(arg_bytes) || args[1] == "-h" {
+        uu_app().print_help()?;
+    } else {
+        return Err(uu_app()
+            .error(
+                clap::error::ErrorKind::UnknownArgument,
+                format!("unexpected argument '{}' found", args[1].to_string_lossy()),
+            )
+            .into());
+    }
     Ok(())
 }
 
