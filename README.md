@@ -101,7 +101,7 @@ other Rust program:
 cargo build --release
 ```
 
-Replace `--release` with `--profile=release-fast` or `--profile=release-small` to use all optimizations or save binary size.
+Replace `--release` with `--profile=release-small` to optimize binary size.
 
 This command builds the most portable common core set of uutils into a multicall
 (BusyBox-type) binary, named 'coreutils', on most Rust-supported platforms.
@@ -154,10 +154,10 @@ To simply build all available utilities (with debug profile):
 make
 ```
 
-In release-fast mode:
+In release mode:
 
 ```shell
-make PROFILE=release-fast
+make PROFILE=release
 ```
 
 To build all but a few of the available utilities:
@@ -191,16 +191,10 @@ manpages or shell completion to work, use `GNU Make` or see
 
 ### Install with GNU Make
 
-To install all available utilities:
+To install all available utilities (PROFILE=release by default):
 
 ```shell
 make install
-```
-
-To install all utilities with all possible optimizations:
-
-```shell
-make PROFILE=release-fast install
 ```
 
 To install using `sudo` switch `-E` must be used:

@@ -6,6 +6,7 @@ keywords = ["cross-platform", "proc-macros", "uucore", "uutils"]
 # categories = ["os"]
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 homepage.workspace = true
 license.workspace = true
 version.workspace = true

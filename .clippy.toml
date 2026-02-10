@@ -2,3 +2,4 @@ avoid-breaking-exported-api = false
 check-private-items = true
 cognitive-complexity-threshold = 24
 missing-docs-in-crate-items = true
+allow-mixed-uninlined-format-args = false

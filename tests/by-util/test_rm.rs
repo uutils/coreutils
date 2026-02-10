@@ -1103,7 +1103,7 @@ fn test_rm_recursive_long_path_safe_traversal() {
     at.mkdir(&deep_path);
 
     for i in 0..12 {
-        let long_dir_name = format!("{}{}", "z".repeat(80), i);
+        let long_dir_name = format!("{}{i}", "z".repeat(80));
         deep_path = format!("{deep_path}/{long_dir_name}");
         at.mkdir_all(&deep_path);
     }
