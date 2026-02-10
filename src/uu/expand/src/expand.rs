@@ -3,21 +3,21 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) ctype cwidth iflag nbytes nspaces nums tspaces uflag Preprocess
+// spell-checker:ignore (ToDO) ctype cwidth iflag nbytes nspaces nums tspaces Preprocess
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
 use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult, set_exit_code};
+use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::translate;
-use uucore::{format_usage, show_error};
+use uucore::{format_usage, show};
 
 pub mod options {
     pub static TABS: &str = "tabs";
@@ -174,7 +174,7 @@ struct Options {
     tabstops: Vec<usize>,
     tspaces: String,
     iflag: bool,
-    uflag: bool,
+    utf8: bool,
 
     /// Strategy for expanding tabs for columns beyond those specified
     /// in `tabstops`.
@@ -189,7 +189,7 @@ impl Options {
         };
 
         let iflag = matches.get_flag(options::INITIAL);
-        let uflag = !matches.get_flag(options::NO_UTF8);
+        let utf8 = !matches.get_flag(options::NO_UTF8);
 
         // avoid allocations when dumping out long sequences of spaces
         // by precomputing the longest string of spaces we will ever need
@@ -214,7 +214,7 @@ impl Options {
             tabstops,
             tspaces,
             iflag,
-            uflag,
+            utf8,
             remaining_mode,
         })
     }
@@ -296,6 +296,12 @@ fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read + 'static>>> {
         Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))
     } else {
         let path_ref = Path::new(path);
+        if path_ref.is_dir() {
+            return Err(USimpleError::new(
+                1,
+                translate!("expand-error-is-directory", "file" => path.maybe_quote()),
+            ));
+        }
         file_buf = File::open(path_ref).map_err_context(|| path.maybe_quote().to_string())?;
         Ok(BufReader::new(Box::new(file_buf) as Box<dyn Read>))
     }
@@ -314,9 +320,10 @@ fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read + 'static>>> {
 fn next_tabstop(tabstops: &[usize], col: usize, remaining_mode: &RemainingMode) -> usize {
     let num_tabstops = tabstops.len();
     match remaining_mode {
-        RemainingMode::Plus => match tabstops[0..num_tabstops - 1].iter().find(|&&t| t > col) {
-            Some(t) => t - col,
-            None => {
+        RemainingMode::Plus => {
+            if let Some(t) = tabstops[0..num_tabstops - 1].iter().find(|&&t| t > col) {
+                t - col
+            } else {
                 let step_size = tabstops[num_tabstops - 1];
                 let last_fixed_tabstop = tabstops[num_tabstops - 2];
                 let characters_since_last_tabstop = col - last_fixed_tabstop;
@@ -324,11 +331,14 @@ fn next_tabstop(tabstops: &[usize], col: usize, remaining_mode: &RemainingMode) 
                 let steps_required = 1 + characters_since_last_tabstop / step_size;
                 steps_required * step_size - characters_since_last_tabstop
             }
-        },
-        RemainingMode::Slash => match tabstops[0..num_tabstops - 1].iter().find(|&&t| t > col) {
-            Some(t) => t - col,
-            None => tabstops[num_tabstops - 1] - col % tabstops[num_tabstops - 1],
-        },
+        }
+        RemainingMode::Slash => {
+            if let Some(t) = tabstops[0..num_tabstops - 1].iter().find(|&&t| t > col) {
+                t - col
+            } else {
+                tabstops[num_tabstops - 1] - col % tabstops[num_tabstops - 1]
+            }
+        }
         RemainingMode::None => {
             if num_tabstops == 1 {
                 tabstops[0] - col % tabstops[0]
@@ -349,92 +359,124 @@ enum CharType {
     Other,
 }
 
-#[allow(clippy::cognitive_complexity)]
-fn expand_line(
-    buf: &mut Vec<u8>,
+/// Classify a character and determine its width and byte length.
+///
+/// Returns `(CharType, display_width, byte_length)`.
+#[inline]
+fn classify_char(buf: &[u8], byte: usize, utf8: bool) -> (CharType, usize, usize) {
+    use self::CharType::{Backspace, Other, Tab};
+
+    if utf8 {
+        let nbytes = char::from(buf[byte]).len_utf8();
+
+        if byte + nbytes > buf.len() {
+            // don't overrun buffer because of invalid UTF-8
+            return (Other, 1, 1);
+        }
+
+        if let Ok(t) = from_utf8(&buf[byte..byte + nbytes]) {
+            match t.chars().next() {
+                Some('\t') => (Tab, 0, 1),
+                Some('\x08') => (Backspace, 0, 1),
+                Some(c) => (Other, UnicodeWidthChar::width(c).unwrap_or(0), nbytes),
+                None => {
+                    // no valid char at start of t, so take 1 byte
+                    (Other, 1, 1)
+                }
+            }
+        } else {
+            (Other, 1, 1) // implicit assumption: non-UTF-8 char is 1 col wide
+        }
+    } else {
+        (
+            match buf.get(byte) {
+                // always take exactly 1 byte in strict ASCII mode
+                Some(0x09) => Tab,
+                Some(0x08) => Backspace,
+                _ => Other,
+            },
+            0,
+            1,
+        )
+    }
+}
+
+/// Write spaces for a tab expansion.
+#[inline]
+fn write_tab_spaces(
+    output: &mut BufWriter<std::io::Stdout>,
+    nts: usize,
+    tspaces: &str,
+) -> std::io::Result<()> {
+    if nts <= tspaces.len() {
+        output.write_all(&tspaces.as_bytes()[..nts])
+    } else {
+        output.write_all(" ".repeat(nts).as_bytes())
+    }
+}
+
+fn expand_buf(
+    buf: &[u8],
     output: &mut BufWriter<std::io::Stdout>,
     tabstops: &[usize],
     options: &Options,
+    col: &mut usize,
 ) -> std::io::Result<()> {
     use self::CharType::{Backspace, Other, Tab};
 
     // Fast path: if there are no tabs, backspaces, and (in UTF-8 mode or no carriage returns),
     // we can write the buffer directly without character-by-character processing
-    if !buf.contains(&b'\t') && !buf.contains(&b'\x08') && (options.uflag || !buf.contains(&b'\r'))
-    {
+    if !buf.contains(&b'\t') && !buf.contains(&b'\x08') && (options.utf8 || !buf.contains(&b'\r')) {
         output.write_all(buf)?;
-        buf.truncate(0);
+        if let Some(n) = buf.iter().rposition(|&b| b == b'\n') {
+            *col = buf.len() - n - 1;
+        }
         return Ok(());
     }
 
-    let mut col = 0;
     let mut byte = 0;
     let mut init = true;
 
     while byte < buf.len() {
-        let (ctype, cwidth, nbytes) = if options.uflag {
-            let nbytes = char::from(buf[byte]).len_utf8();
-
-            if byte + nbytes > buf.len() {
-                // don't overrun buffer because of invalid UTF-8
-                (Other, 1, 1)
-            } else if let Ok(t) = from_utf8(&buf[byte..byte + nbytes]) {
-                match t.chars().next() {
-                    Some('\t') => (Tab, 0, nbytes),
-                    Some('\x08') => (Backspace, 0, nbytes),
-                    Some(c) => (Other, UnicodeWidthChar::width(c).unwrap_or(0), nbytes),
-                    None => {
-                        // no valid char at start of t, so take 1 byte
-                        (Other, 1, 1)
-                    }
-                }
-            } else {
-                (Other, 1, 1) // implicit assumption: non-UTF-8 char is 1 col wide
-            }
-        } else {
-            (
-                match buf.get(byte) {
-                    // always take exactly 1 byte in strict ASCII mode
-                    Some(0x09) => Tab,
-                    Some(0x08) => Backspace,
-                    _ => Other,
-                },
-                1,
-                1,
-            )
-        };
+        let (ctype, cwidth, nbytes) = classify_char(buf, byte, options.utf8);
 
         // figure out how many columns this char takes up
         match ctype {
             Tab => {
                 // figure out how many spaces to the next tabstop
-                let nts = next_tabstop(tabstops, col, &options.remaining_mode);
-                col += nts;
+                let nts = next_tabstop(tabstops, *col, &options.remaining_mode);
+                *col += nts;
 
                 // now dump out either spaces if we're expanding, or a literal tab if we're not
                 if init || !options.iflag {
-                    if nts <= options.tspaces.len() {
-                        output.write_all(&options.tspaces.as_bytes()[..nts])?;
-                    } else {
-                        output.write_all(" ".repeat(nts).as_bytes())?;
-                    }
+                    write_tab_spaces(output, nts, &options.tspaces)?;
                 } else {
                     output.write_all(&buf[byte..byte + nbytes])?;
                 }
             }
-            _ => {
-                col = if ctype == Other {
-                    col + cwidth
-                } else if col > 0 {
-                    col - 1
-                } else {
-                    0
-                };
+            Backspace => {
+                *col = col.saturating_sub(1);
 
                 // if we're writing anything other than a space, then we're
                 // done with the line's leading spaces
-                if buf[byte] != 0x20 {
+                if buf[byte] != b' ' {
                     init = false;
+                }
+
+                output.write_all(&buf[byte..byte + nbytes])?;
+            }
+            Other => {
+                *col += cwidth;
+
+                // if we're writing anything other than a space, then we're
+                // done with the line's leading spaces
+                if buf[byte] != b' ' {
+                    init = false;
+                }
+
+                if buf[byte] == b'\n' {
+                    *col = 0;
+                    init = true;
                 }
 
                 output.write_all(&buf[byte..byte + nbytes])?;
@@ -444,39 +486,38 @@ fn expand_line(
         byte += nbytes; // advance the pointer
     }
 
-    buf.truncate(0); // clear the buffer
+    Ok(())
+}
 
+fn expand_file(
+    file: &OsString,
+    output: &mut BufWriter<std::io::Stdout>,
+    options: &Options,
+) -> UResult<()> {
+    let mut buf = [0u8; 4096];
+    let mut input = open(file)?;
+    let ts = options.tabstops.as_ref();
+    let mut col = 0;
+    loop {
+        match input.read(&mut buf) {
+            Ok(0) => break,
+            Ok(n) => {
+                expand_buf(&buf[..n], output, ts, options, &mut col)
+                    .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
+            }
+            Err(e) => return Err(e.map_err_context(|| file.maybe_quote().to_string())),
+        }
+    }
     Ok(())
 }
 
 fn expand(options: &Options) -> UResult<()> {
     let mut output = BufWriter::new(stdout());
-    let ts = options.tabstops.as_ref();
-    let mut buf = Vec::new();
 
     for file in &options.files {
-        if Path::new(file).is_dir() {
-            show_error!(
-                "{}",
-                translate!("expand-error-is-directory", "file" => file.maybe_quote())
-            );
+        if let Err(e) = expand_file(file, &mut output, options) {
+            show!(e);
             set_exit_code(1);
-            continue;
-        }
-        match open(file) {
-            Ok(mut fh) => {
-                while match fh.read_until(b'\n', &mut buf) {
-                    Ok(s) => s > 0,
-                    Err(_) => buf.is_empty(),
-                } {
-                    expand_line(&mut buf, &mut output, ts, options)
-                        .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
-                }
-            }
-            Err(e) => {
-                show_error!("{e}");
-                set_exit_code(1);
-            }
         }
     }
     // Flush once at the end

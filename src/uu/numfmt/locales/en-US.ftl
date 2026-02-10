@@ -36,6 +36,7 @@ numfmt-after-help = UNIT options:
   Optional precision (%.1f) will override the input determined precision.
 
 # Help messages
+numfmt-help-debug = print warnings about invalid input
 numfmt-help-delimiter = use X instead of whitespace for field delimiter
 numfmt-help-field = replace the numbers in these input fields; see FIELDS below
 numfmt-help-format = use printf style floating-point FORMAT; see FORMAT below for details
@@ -59,6 +60,7 @@ numfmt-error-invalid-header = invalid header value { $value }
 numfmt-error-grouping-cannot-be-combined-with-to = grouping cannot be combined with --to
 numfmt-error-delimiter-must-be-single-character = the delimiter must be a single character
 numfmt-error-invalid-number-empty = invalid number: ''
+numfmt-error-invalid-specific-suffix = invalid suffix in input { $input }: { $suffix }
 numfmt-error-invalid-suffix = invalid suffix in input: { $input }
 numfmt-error-invalid-number = invalid number: { $input }
 numfmt-error-missing-i-suffix = missing 'i' suffix in input: '{ $number }{ $suffix }' (e.g Ki/Mi/Gi)
@@ -73,3 +75,7 @@ numfmt-error-invalid-format-width-overflow = invalid format '{ $format }' (width
 numfmt-error-invalid-precision = invalid precision in format '{ $format }'
 numfmt-error-format-too-many-percent = format '{ $format }' has too many % directives
 numfmt-error-unknown-invalid-mode = Unknown invalid mode: { $mode }
+
+# Debug messages
+numfmt-debug-no-conversion = no conversion option specified
+numfmt-debug-header-ignored = --header ignored with command-line input

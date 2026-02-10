@@ -7,7 +7,7 @@
 
 use std::cmp;
 use std::cmp::PartialEq;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashSet};
 use std::ffi::{OsStr, OsString};
 use std::fmt::Write as FmtWrite;
 use std::fs::File;
@@ -133,16 +133,14 @@ impl WordFilter {
         let break_set: Option<HashSet<char>> = if matches.contains_id(options::BREAK_FILE)
             && !matches.contains_id(options::WORD_REGEXP)
         {
-            let chars =
+            let mut chars =
                 read_char_filter_file(matches, options::BREAK_FILE).map_err_context(String::new)?;
-            let mut hs: HashSet<char> = if config.gnu_ext {
-                HashSet::new() // really only chars found in file
-            } else {
+            if !config.gnu_ext {
                 // GNU off means at least these are considered
-                [' ', '\t', '\n'].iter().copied().collect()
-            };
-            hs.extend(chars);
-            Some(hs)
+                chars.extend([' ', '\t', '\n']);
+            }
+            // else only chars found in file
+            Some(chars)
         } else {
             // if -W takes precedence or default
             None
@@ -279,22 +277,16 @@ struct FileContent {
     offset: usize,
 }
 
-type FileMap = HashMap<OsString, FileContent>;
+type FileMap = Vec<(OsString, FileContent)>;
 
 fn read_input(input_files: &[OsString], config: &Config) -> std::io::Result<FileMap> {
-    let mut file_map: FileMap = HashMap::new();
+    let mut file_map: FileMap = FileMap::new();
     let mut offset: usize = 0;
 
-    let sentence_splitter = if let Some(re_str) = &config.sentence_regex {
-        Some(Regex::new(re_str).map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                translate!("ptx-error-invalid-regexp", "error" => e),
-            )
-        })?)
-    } else {
-        None
-    };
+    let sentence_splitter = config
+        .sentence_regex
+        .as_ref()
+        .and_then(|re_str| Regex::new(re_str).ok());
 
     for filename in input_files {
         let mut reader: BufReader<Box<dyn Read>> = BufReader::new(if filename == "-" {
@@ -310,14 +302,14 @@ fn read_input(input_files: &[OsString], config: &Config) -> std::io::Result<File
         // Since we will be jumping around the line a lot, we dump the content into a Vec<char>, which can be indexed in constant time.
         let chars_lines: Vec<Vec<char>> = lines.iter().map(|x| x.chars().collect()).collect();
         let size = lines.len();
-        file_map.insert(
+        file_map.push((
             filename.clone(),
             FileContent {
                 lines,
                 chars_lines,
                 offset,
             },
-        );
+        ));
         offset += size;
     }
     Ok(file_map)
@@ -343,8 +335,13 @@ fn read_lines(
 
 /// Go through every lines in the input files and record each match occurrence as a `WordRef`.
 fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> BTreeSet<WordRef> {
-    let reg = Regex::new(&filter.word_regex).unwrap();
-    let ref_reg = Regex::new(&config.context_regex).unwrap();
+    let Some(reg) = Regex::new(&filter.word_regex).ok() else {
+        return BTreeSet::new();
+    };
+    let Some(ref_reg) = Regex::new(&config.context_regex).ok() else {
+        return BTreeSet::new();
+    };
+
     let mut word_set: BTreeSet<WordRef> = BTreeSet::new();
     for (file, lines) in file_map {
         let mut count: usize = 0;
@@ -794,8 +791,17 @@ fn write_traditional_output(
     }
 
     for word_ref in words {
-        let file_map_value: &FileContent = file_map
-            .get(&word_ref.filename)
+        // Since `ptx` accepts duplicate file arguments (e.g., `ptx file file`),
+        // simply looking up by filename is ambiguous.
+        // We use the `global_line_nr` (which is unique across the entire input stream)
+        // to identify which file covers this line.
+        let (_, file_map_value) = file_map
+            .iter()
+            .find(|(name, content)| {
+                name == &word_ref.filename
+                    && word_ref.global_line_nr >= content.offset
+                    && word_ref.global_line_nr < content.offset + content.lines.len()
+            })
             .expect("Missing file in file map");
         let FileContent {
             ref lines,

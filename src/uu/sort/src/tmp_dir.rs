@@ -15,7 +15,7 @@ use uucore::{
     show_error, translate,
 };
 
-use crate::SortError;
+use crate::{SortError, current_open_fd_count, fd_soft_limit};
 
 /// A wrapper around [`TempDir`] that may only exist once in a process.
 ///
@@ -45,6 +45,17 @@ fn handler_state() -> Arc<Mutex<HandlerRegistration>> {
         .clone()
 }
 
+fn should_install_signal_handler() -> bool {
+    const CTRL_C_FDS: usize = 2;
+    const RESERVED_FOR_MERGE: usize = 3; // temp output + minimum inputs
+    let Some(limit) = fd_soft_limit() else {
+        return true;
+    };
+    let open_fds = current_open_fd_count().unwrap_or(3);
+    open_fds.saturating_add(CTRL_C_FDS + RESERVED_FOR_MERGE) <= limit
+}
+
+#[cfg(not(target_os = "redox"))]
 fn ensure_signal_handler_installed(state: Arc<Mutex<HandlerRegistration>>) -> UResult<()> {
     // This shared state must originate from `handler_state()` so the handler always sees
     // the current lock/path pair and can clean up the active temp directory on SIGINT.
@@ -94,6 +105,11 @@ fn ensure_signal_handler_installed(state: Arc<Mutex<HandlerRegistration>>) -> UR
     Ok(())
 }
 
+#[cfg(target_os = "redox")]
+fn ensure_signal_handler_installed(_state: Arc<Mutex<HandlerRegistration>>) -> UResult<()> {
+    Ok(())
+}
+
 impl TmpDirWrapper {
     pub fn new(path: PathBuf) -> Self {
         Self {
@@ -124,7 +140,10 @@ impl TmpDirWrapper {
             guard.path = Some(path);
         }
 
-        ensure_signal_handler_installed(state)
+        if should_install_signal_handler() {
+            ensure_signal_handler_installed(state)?;
+        }
+        Ok(())
     }
 
     pub fn next_file(&mut self) -> UResult<(File, PathBuf)> {
