@@ -6,6 +6,7 @@
 // spell-checker:ignore (ToDO) fname, algo, bitlen
 
 use std::ffi::OsStr;
+use std::io::{Write, stderr};
 
 use clap::Command;
 use uu_checksum_common::{ChecksumCommand, checksum_main, default_checksum_app, options};
@@ -16,18 +17,19 @@ use uucore::checksum::{
 };
 use uucore::error::UResult;
 use uucore::hardware::{HasHardwareFeatures as _, SimdPolicy};
-use uucore::{show_error, translate};
+use uucore::translate;
 
 /// Print CPU hardware capability detection information to stderr
+/// 2>/dev/full does not abort
 /// This matches GNU cksum's --debug behavior
 fn print_cpu_debug_info() {
     let features = SimdPolicy::detect();
 
     fn print_feature(name: &str, available: bool) {
         if available {
-            show_error!("using {name} hardware support");
+            let _ = writeln!(stderr(), "using {name} hardware support");
         } else {
-            show_error!("{name} support not detected");
+            let _ = writeln!(stderr(), "{name} support not detected");
         }
     }
 
@@ -97,6 +99,16 @@ fn maybe_sanitize_length(
         (Some(algo @ (AlgoKind::Sha2 | AlgoKind::Sha3)), Some(s_len)) => {
             sanitize_sha2_sha3_length_str(algo, s_len).map(Some)
         }
+
+        // SHAKE128 and SHAKE256 algorithms optionally take a bit length. No
+        // validation is performed on this length, any value is valid. If the
+        // given length is not a multiple of 8, the last byte of the output
+        // will have its extra bits set to zero.
+        (Some(AlgoKind::Shake128 | AlgoKind::Shake256), Some(len)) => match len.parse::<usize>() {
+            Ok(0) => Ok(None),
+            Ok(l) => Ok(Some(l)),
+            Err(_) => Err(ChecksumError::InvalidLength(len.into()).into()),
+        },
 
         // For BLAKE2b, if a length is provided, validate it.
         (Some(AlgoKind::Blake2b), Some(len)) => calculate_blake2b_length_str(len),

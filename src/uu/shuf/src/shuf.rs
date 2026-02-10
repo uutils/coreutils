@@ -7,7 +7,7 @@
 
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Error, Read, Write, stdin, stdout};
+use std::io::{self, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::ops::RangeInclusive;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -149,7 +149,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 || translate!("shuf-error-failed-to-open-random-source", "file" => r.quote()),
             )?;
             let file = BufReader::new(file);
-            WrappedRng::File(compat_random_source::RandomSourceAdapter::new(file))
+            WrappedRng::File(RandomSourceAdapter::new(file))
         }
     };
 
@@ -362,24 +362,23 @@ impl Shufable for RangeInclusive<u64> {
 }
 
 trait Writable {
-    fn write_all_to(&self, output: &mut impl OsWrite) -> Result<(), Error>;
+    fn write_all_to(&self, output: &mut impl OsWrite) -> Result<(), io::Error>;
 }
 
 impl Writable for &[u8] {
-    fn write_all_to(&self, output: &mut impl OsWrite) -> Result<(), Error> {
+    fn write_all_to(&self, output: &mut impl OsWrite) -> Result<(), io::Error> {
         output.write_all(self)
     }
 }
 
 impl Writable for &OsStr {
-    fn write_all_to(&self, output: &mut impl OsWrite) -> Result<(), Error> {
+    fn write_all_to(&self, output: &mut impl OsWrite) -> Result<(), io::Error> {
         output.write_all_os(self)
     }
 }
 
 impl Writable for u64 {
-    #[inline]
-    fn write_all_to(&self, output: &mut impl OsWrite) -> Result<(), Error> {
+    fn write_all_to(&self, output: &mut impl OsWrite) -> Result<(), io::Error> {
         // The itoa crate is surprisingly much more efficient than a formatted write.
         // It speeds up `shuf -r -n1000000 -i1-1024` by 1.8×.
         let mut buf = itoa::Buffer::new();
@@ -389,13 +388,12 @@ impl Writable for u64 {
 
 #[cold]
 #[inline(never)]
-fn handle_write_error(e: std::io::Error) -> Box<dyn uucore::error::UError> {
+fn handle_write_error(e: io::Error) -> Box<dyn uucore::error::UError> {
     use uucore::error::FromIo;
     let ctx = translate!("shuf-error-write-failed");
     e.map_err_context(move || ctx)
 }
 
-#[inline(never)]
 fn shuf_exec(
     input: &mut impl Shufable,
     opts: &Options,
