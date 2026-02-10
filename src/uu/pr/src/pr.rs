@@ -10,7 +10,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use itertools::Itertools;
 use regex::Regex;
 use std::fs::metadata;
-use std::io::{Read, Write, stdin, stdout};
+use std::io::{Read, Write, stderr, stdin, stdout};
 use std::string::FromUtf8Error;
 use std::time::SystemTime;
 use thiserror::Error;
@@ -410,7 +410,7 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
 
 fn print_error(matches: &ArgMatches, err: &PrError) {
     if !matches.get_flag(options::NO_FILE_WARNINGS) {
-        eprintln!("{err}");
+        let _ = writeln!(stderr(), "{err}");
     }
 }
 
@@ -1264,11 +1264,8 @@ fn header_content(options: &OutputOptions, page: usize) -> Vec<String> {
         let padding_after_filename = space_for_filename - filename_len - padding_before_filename;
 
         format!(
-            "{date_part}{:width1$}{filename}{:width2$}{page_part}",
-            "",
-            "",
-            width1 = padding_before_filename,
-            width2 = padding_after_filename
+            "{date_part}{:padding_before_filename$}{filename}{:padding_after_filename$}{page_part}",
+            "", ""
         )
     } else {
         // If content is too long, just use single spaces

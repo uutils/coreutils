@@ -1319,13 +1319,12 @@ impl Stater {
             };
 
             format!(
-                "  {}: %N\n  {}: %-10s\t{}: %-10b {} {}: %-6o %F\n{}{}: (%04a/%10.10A)  {}: (%5u/%8U)   {}: (%5g/%8G)\n{}: %x\n{}: %y\n{}: %z\n {}: %w\n",
+                "  {}: %N\n  {}: %-10s\t{}: %-10b {} {}: %-6o %F\n{device_line}{}: (%04a/%10.10A)  {}: (%5u/%8U)   {}: (%5g/%8G)\n{}: %x\n{}: %y\n{}: %z\n {}: %w\n",
                 translate!("stat-word-file"),
                 translate!("stat-word-size"),
                 translate!("stat-word-blocks"),
                 translate!("stat-word-io"),
                 translate!("stat-word-block"),
-                device_line,
                 translate!("stat-word-access"),
                 translate!("stat-word-uid"),
                 translate!("stat-word-gid"),
