@@ -90,5 +90,5 @@ od-help-s = unités décimales 2-octets
 od-help-capital-x = unités hexadécimales 4-octets
 od-help-capital-h = unités hexadécimales 4-octets
 od-help-e = unités virgule flottante double précision (64-bits)
-od-help-f = unités virgule flottante single précision (32-bits)
+od-help-f = unités virgule flottante simple précision (32-bits)
 od-help-capital-f = unités virgule flottante double précision (64-bits)
