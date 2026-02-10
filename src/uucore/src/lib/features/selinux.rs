@@ -365,7 +365,7 @@ pub fn preserve_security_context(from_path: &Path, to_path: &Path) -> Result<(),
 /// use uucore::selinux::get_getfattr_output;
 ///
 /// let context = get_getfattr_output("/path/to/file");
-/// println!("SELinux context: {}", context);
+/// println!("SELinux context: {context}");
 /// ```
 pub fn get_getfattr_output(f: &str) -> String {
     use std::process::Command;
