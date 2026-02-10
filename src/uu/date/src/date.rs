@@ -20,9 +20,8 @@ use std::sync::OnceLock;
 use uucore::display::Quotable;
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
-use uucore::i18n::datetime::{
-    get_localized_day_name, get_localized_month_name, should_use_icu_locale,
-};
+#[cfg(feature = "i18n-datetime")]
+use uucore::i18n::datetime::{localize_format_string, should_use_icu_locale};
 use uucore::translate;
 use uucore::{format_usage, show};
 #[cfg(windows)]
@@ -270,6 +269,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Format::Default
     };
 
+    let utc = matches.get_flag(OPT_UNIVERSAL);
+
+    // Get the current time, either in the local time zone or UTC.
+    let now = if utc {
+        Timestamp::now().to_zoned(TimeZone::UTC)
+    } else {
+        Zoned::now()
+    };
+
     let date_source = if let Some(date) = matches.get_one::<String>(OPT_DATE) {
         DateSource::Human(date.into())
     } else if let Some(file) = matches.get_one::<String>(OPT_FILE) {
@@ -285,7 +293,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         DateSource::Now
     };
 
-    let set_to = match matches.get_one::<String>(OPT_SET).map(parse_date) {
+    let set_to = match matches
+        .get_one::<String>(OPT_SET)
+        .map(|s| parse_date(s, &now))
+    {
         None => None,
         Some(Err((input, _err))) => {
             return Err(USimpleError::new(
@@ -297,7 +308,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let settings = Settings {
-        utc: matches.get_flag(OPT_UNIVERSAL),
+        utc,
         format,
         date_source,
         set_to,
@@ -315,13 +326,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         return set_system_datetime(date);
     }
-
-    // Get the current time, either in the local time zone or UTC.
-    let now = if settings.utc {
-        Timestamp::now().to_zoned(TimeZone::UTC)
-    } else {
-        Zoned::now()
-    };
 
     // Iterate over all dates - whether it's a single date or a file.
     let dates: Box<dyn Iterator<Item = _>> = match settings.date_source {
@@ -368,7 +372,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 } else {
                     format!("{date_part} 00:00 {offset}")
                 };
-                parse_date(composed)
+                parse_date(composed, &now)
             } else if let Some((total_hours, day_delta)) = military_tz_with_offset {
                 // Military timezone with optional hour offset
                 // Convert to UTC time: midnight + military_tz_offset + additional_hours
@@ -383,12 +387,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         .unwrap_or_else(|_| String::from("1970-01-01"))
                 };
                 let date_part = match day_delta {
-                    DayDelta::Same => format_date_with_epoch_fallback(Ok(now)),
+                    DayDelta::Same => format_date_with_epoch_fallback(Ok(now.clone())),
                     DayDelta::Next => format_date_with_epoch_fallback(now.tomorrow()),
                     DayDelta::Previous => format_date_with_epoch_fallback(now.yesterday()),
                 };
                 let composed = format!("{date_part} {total_hours:02}:00:00 +00:00");
-                parse_date(composed)
+                parse_date(composed, &now)
             } else if is_pure_digits {
                 // Derive HH and MM from the input
                 let (hh_opt, mm_opt) = if input.len() <= 2 {
@@ -414,13 +418,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     } else {
                         format!("{date_part} {hh:02}:{mm:02} {offset}")
                     };
-                    parse_date(composed)
+                    parse_date(composed, &now)
                 } else {
                     // Fallback on parse failure of digits
-                    parse_date(input)
+                    parse_date(input, &now)
                 }
             } else {
-                parse_date(input)
+                parse_date(input, &now)
             };
 
             let iter = std::iter::once(date);
@@ -428,7 +432,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
         DateSource::Stdin => {
             let lines = BufReader::new(std::io::stdin()).lines();
-            let iter = lines.map_while(Result::ok).map(parse_date);
+            let iter = lines.map_while(Result::ok).map(|s| parse_date(s, &now));
             Box::new(iter)
         }
         DateSource::File(ref path) => {
@@ -441,7 +445,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let file =
                 File::open(path).map_err_context(|| path.as_os_str().maybe_quote().to_string())?;
             let lines = BufReader::new(file).lines();
-            let iter = lines.map_while(Result::ok).map(parse_date);
+            let iter = lines.map_while(Result::ok).map(|s| parse_date(s, &now));
             Box::new(iter)
         }
         DateSource::FileMtime(ref path) => {
@@ -477,18 +481,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let config = Config::new().custom(PosixCustom::new()).lenient(true);
     for date in dates {
         match date {
-            Ok(date) => match format_date_with_locale_aware_months(&date, format_string, &config) {
-                Ok(s) => writeln!(stdout, "{s}").map_err(|e| {
-                    USimpleError::new(1, translate!("date-error-write", "error" => e))
-                })?,
-                Err(e) => {
-                    let _ = stdout.flush();
-                    return Err(USimpleError::new(
-                        1,
-                        translate!("date-error-invalid-format", "format" => format_string, "error" => e),
-                    ));
+            Ok(date) => {
+                let date = if settings.utc {
+                    date.with_time_zone(TimeZone::UTC)
+                } else {
+                    date
+                };
+                match format_date_with_locale_aware_months(&date, format_string, &config) {
+                    Ok(s) => writeln!(stdout, "{s}").map_err(|e| {
+                        USimpleError::new(1, translate!("date-error-write", "error" => e))
+                    })?,
+                    Err(e) => {
+                        let _ = stdout.flush();
+                        return Err(USimpleError::new(
+                            1,
+                            translate!("date-error-invalid-format", "format" => format_string, "error" => e),
+                        ));
+                    }
                 }
-            },
+            }
             Err((input, _err)) => {
                 let _ = stdout.flush();
                 show!(USimpleError::new(
@@ -618,91 +629,14 @@ fn format_date_with_locale_aware_months(
     format_string: &str,
     config: &Config<PosixCustom>,
 ) -> Result<String, jiff::Error> {
-    // Only use ICU for non-default locales and when format string contains month or day specifiers
-    let use_icu = should_use_icu_locale();
+    let broken_down = BrokenDownTime::from(date);
 
-    if (format_string.contains("%B")
-        || format_string.contains("%b")
-        || format_string.contains("%A")
-        || format_string.contains("%a"))
-        && use_icu
-    {
-        let broken_down = BrokenDownTime::from(date);
-        // Get localized month names if needed
-        let (full_month, abbrev_month) =
-            if format_string.contains("%B") || format_string.contains("%b") {
-                if let Some(month_val) = broken_down.month() {
-                    let month_u8 = if (1..=12).contains(&month_val) {
-                        month_val as u8
-                    } else {
-                        1 // fallback to January for invalid values
-                    };
-                    (
-                        get_localized_month_name(month_u8, true),
-                        get_localized_month_name(month_u8, false),
-                    )
-                } else {
-                    (String::new(), String::new())
-                }
-            } else {
-                (String::new(), String::new())
-            };
-
-        // Get localized day names if needed
-        let (full_day, abbrev_day) = if format_string.contains("%A") || format_string.contains("%a")
-        {
-            if let (Some(year), Some(month), Some(day)) =
-                (broken_down.year(), broken_down.month(), broken_down.day())
-            {
-                (
-                    get_localized_day_name(year.into(), month as u8, day as u8, true),
-                    get_localized_day_name(year.into(), month as u8, day as u8, false),
-                )
-            } else {
-                (String::new(), String::new())
-            }
-        } else {
-            (String::new(), String::new())
-        };
-
-        // Replace format specifiers with placeholders for successful ICU translations only
-        let mut temp_format = format_string.to_string();
-        if !full_month.is_empty() {
-            temp_format = temp_format.replace("%B", "<<<FULL_MONTH>>>");
-        }
-        if !abbrev_month.is_empty() {
-            temp_format = temp_format.replace("%b", "<<<ABBREV_MONTH>>>");
-        }
-        if !full_day.is_empty() {
-            temp_format = temp_format.replace("%A", "<<<FULL_DAY>>>");
-        }
-        if !abbrev_day.is_empty() {
-            temp_format = temp_format.replace("%a", "<<<ABBREV_DAY>>>");
-        }
-
-        // Format with the temporary string
-        let temp_result = broken_down.to_string_with_config(config, &temp_format)?;
-
-        // Replace placeholders with localized names
-        let mut final_result = temp_result;
-        if !full_month.is_empty() {
-            final_result = final_result.replace("<<<FULL_MONTH>>>", &full_month);
-        }
-        if !abbrev_month.is_empty() {
-            final_result = final_result.replace("<<<ABBREV_MONTH>>>", &abbrev_month);
-        }
-        if !full_day.is_empty() {
-            final_result = final_result.replace("<<<FULL_DAY>>>", &full_day);
-        }
-        if !abbrev_day.is_empty() {
-            final_result = final_result.replace("<<<ABBREV_DAY>>>", &abbrev_day);
-        }
-
-        return Ok(final_result);
+    if !should_use_icu_locale() {
+        return broken_down.to_string_with_config(config, format_string);
     }
 
-    // Fallback to regular formatting
-    BrokenDownTime::from(date).to_string_with_config(config, format_string)
+    let fmt = localize_format_string(format_string, &date.date());
+    broken_down.to_string_with_config(config, &fmt)
 }
 
 /// Return the appropriate format string for the given settings.
@@ -834,15 +768,12 @@ fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S) -> Option<Zoned> {
                 if let Ok(tz) = TimeZone::get(iana_name) {
                     // Parse the date part (everything before the TZ abbreviation)
                     let date_part = s.trim_end_matches(last_word).trim();
-
-                    // Try to parse the date with UTC first to get timestamp
-                    let date_with_utc = format!("{date_part} +00:00");
-                    if let Ok(parsed) = parse_datetime::parse_datetime(&date_with_utc) {
-                        // Get timestamp from parsed date (which is already a Zoned)
-                        let ts = parsed.timestamp();
-
-                        // Get the offset for this specific timestamp in the target timezone
-                        return Some(ts.to_zoned(tz));
+                    // Parse in the target timezone so "10:30 EDT" means 10:30 in EDT
+                    if let Ok(parsed) = parse_datetime::parse_datetime(date_part) {
+                        let dt = parsed.datetime();
+                        if let Ok(zoned) = dt.to_zoned(tz) {
+                            return Some(zoned);
+                        }
                     }
                 }
             }
@@ -864,19 +795,17 @@ fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S) -> Option<Zoned> {
 /// "12345.123456789 seconds ago" which failed in 0.11 but works in 0.13).
 fn parse_date<S: AsRef<str> + Clone>(
     s: S,
+    now: &Zoned,
 ) -> Result<Zoned, (String, parse_datetime::ParseDateTimeError)> {
     // First, try to parse any timezone abbreviations
     if let Some(zoned) = try_parse_with_abbreviation(s.as_ref()) {
         return Ok(zoned);
     }
 
-    match parse_datetime::parse_datetime(s.as_ref()) {
-        Ok(date) => {
-            // Convert to system timezone for display
-            // (parse_datetime 0.13 returns Zoned in the input's timezone)
-            let timestamp = date.timestamp();
-            Ok(timestamp.to_zoned(TimeZone::try_system().unwrap_or(TimeZone::UTC)))
-        }
+    match parse_datetime::parse_datetime_at_date(now.clone(), s.as_ref()) {
+        // Convert to system timezone for display
+        // (parse_datetime 0.13 returns Zoned in the input's timezone)
+        Ok(date) => Ok(date.timestamp().to_zoned(now.time_zone().clone())),
         Err(e) => Err((s.as_ref().into(), e)),
     }
 }

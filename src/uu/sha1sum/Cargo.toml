@@ -1,0 +1,37 @@
+[package]
+name = "uu_sha1sum"
+description = "sha1sum ~ (uutils) Print or check the SHA1 checksums"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/sha1sum"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/sha1sum.rs"
+
+[dependencies]
+clap = { workspace = true }
+uu_checksum_common = { workspace = true }
+uucore = { workspace = true, features = [
+  "checksum",
+  "encoding",
+  "sum",
+  "hardware",
+] }
+fluent = { workspace = true }
+
+[dev-dependencies]
+uucore = { workspace = true, features = ["benchmark"] }
+
+[[bin]]
+name = "sha1sum"
+path = "src/main.rs"

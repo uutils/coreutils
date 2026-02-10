@@ -73,7 +73,6 @@ hardfloat
 hardlink
 hardlinks
 hasher
-hashsums
 hwcaps
 infile
 iflag
@@ -117,8 +116,10 @@ noxfer
 ofile
 oflag
 oflags
+pdeathsig
 peekable
 performant
+prctl
 precompiled
 precompute
 preload
@@ -143,8 +144,17 @@ SETFL
 setlocale
 shortcode
 shortcodes
+setpgid
 sigaction
+CHLD
+chld
+SIGCHLD
+sigchld
 siginfo
+SIGTTIN
+sigttin
+SIGTTOU
+sigttou
 sigusr
 strcasecmp
 subcommand
@@ -227,3 +237,8 @@ ENOTSUP
 enotsup
 SETFL
 tmpfs
+
+Hijri
+Nowruz
+charmap
+hijri

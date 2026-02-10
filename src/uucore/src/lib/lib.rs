@@ -171,13 +171,8 @@ pub fn get_canonical_util_name(util_name: &str) -> &str {
     match util_name {
         // uu_test aliases - '[' is an alias for test
         "[" => "test",
-
-        // hashsum aliases - all these hash commands are aliases for hashsum
-        "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum" | "b2sum" => {
-            "hashsum"
-        }
-
-        "dir" => "ls", // dir is an alias for ls
+        "dir" => "ls",  // dir is an alias for ls
+        "vdir" => "ls", // vdir is an alias for ls
 
         // Default case - return the util name as is
         _ => util_name,
@@ -247,7 +242,7 @@ macro_rules! crate_version {
 /// as `{0}`.
 pub fn format_usage(s: &str) -> String {
     let s = s.replace('\n', &format!("\n{}", " ".repeat(7)));
-    s.replace("{}", crate::execution_phrase())
+    s.replace("{}", execution_phrase())
 }
 
 /// Creates a localized help template for clap commands.
@@ -296,7 +291,7 @@ pub fn localized_help_template_with_colors(
     use std::fmt::Write;
 
     // Ensure localization is initialized for this utility
-    let _ = crate::locale::setup_localization(util_name);
+    let _ = locale::setup_localization(util_name);
 
     // Get the localized "Usage" label
     let usage_label = crate::locale::translate!("common-usage");
@@ -327,13 +322,13 @@ pub fn localized_help_template_with_colors(
 /// Used to check if the utility is the second argument.
 /// Used to check if we were called as a multicall binary (`coreutils <utility>`)
 pub fn get_utility_is_second_arg() -> bool {
-    crate::macros::UTILITY_IS_SECOND_ARG.load(Ordering::SeqCst)
+    macros::UTILITY_IS_SECOND_ARG.load(Ordering::SeqCst)
 }
 
 /// Change the value of `UTILITY_IS_SECOND_ARG` to true
 /// Used to specify that the utility is the second argument.
 pub fn set_utility_is_second_arg() {
-    crate::macros::UTILITY_IS_SECOND_ARG.store(true, Ordering::SeqCst);
+    macros::UTILITY_IS_SECOND_ARG.store(true, Ordering::SeqCst);
 }
 
 // args_os() can be expensive to call, it copies all of argv before iterating.
@@ -442,6 +437,7 @@ impl error::UError for NonUtf8OsStrError {}
 ///
 /// This always succeeds on unix platforms,
 /// and fails on other platforms if the string can't be coerced to UTF-8.
+#[cfg_attr(unix, expect(clippy::unnecessary_wraps))]
 pub fn os_str_as_bytes(os_string: &OsStr) -> Result<&[u8], NonUtf8OsStrError> {
     #[cfg(unix)]
     return Ok(os_string.as_bytes());
@@ -475,13 +471,14 @@ pub fn os_str_as_bytes_lossy(os_string: &OsStr) -> Cow<'_, [u8]> {
 ///
 /// This always succeeds on unix platforms,
 /// and fails on other platforms if the bytes can't be parsed as UTF-8.
-pub fn os_str_from_bytes(bytes: &[u8]) -> mods::error::UResult<Cow<'_, OsStr>> {
+#[cfg_attr(unix, expect(clippy::unnecessary_wraps))]
+pub fn os_str_from_bytes(bytes: &[u8]) -> error::UResult<Cow<'_, OsStr>> {
     #[cfg(unix)]
     return Ok(Cow::Borrowed(OsStr::from_bytes(bytes)));
 
     #[cfg(not(unix))]
     Ok(Cow::Owned(OsString::from(str::from_utf8(bytes).map_err(
-        |_| mods::error::UUsageError::new(1, "Unable to transform bytes into OsStr"),
+        |_| error::UUsageError::new(1, "Unable to transform bytes into OsStr"),
     )?)))
 }
 
@@ -489,13 +486,14 @@ pub fn os_str_from_bytes(bytes: &[u8]) -> mods::error::UResult<Cow<'_, OsStr>> {
 ///
 /// This always succeeds on unix platforms,
 /// and fails on other platforms if the bytes can't be parsed as UTF-8.
-pub fn os_string_from_vec(vec: Vec<u8>) -> mods::error::UResult<OsString> {
+#[cfg_attr(unix, expect(clippy::unnecessary_wraps))]
+pub fn os_string_from_vec(vec: Vec<u8>) -> error::UResult<OsString> {
     #[cfg(unix)]
     return Ok(OsString::from_vec(vec));
 
     #[cfg(not(unix))]
     Ok(OsString::from(String::from_utf8(vec).map_err(|_| {
-        mods::error::UUsageError::new(1, "invalid UTF-8 was detected in one or more arguments")
+        error::UUsageError::new(1, "invalid UTF-8 was detected in one or more arguments")
     })?))
 }
 
@@ -503,14 +501,15 @@ pub fn os_string_from_vec(vec: Vec<u8>) -> mods::error::UResult<OsString> {
 ///
 /// This always succeeds on unix platforms,
 /// and fails on other platforms if the bytes can't be parsed as UTF-8.
-pub fn os_string_to_vec(s: OsString) -> mods::error::UResult<Vec<u8>> {
+#[cfg_attr(unix, expect(clippy::unnecessary_wraps))]
+pub fn os_string_to_vec(s: OsString) -> error::UResult<Vec<u8>> {
     #[cfg(unix)]
     let v = s.into_vec();
     #[cfg(not(unix))]
     let v = s
         .into_string()
         .map_err(|_| {
-            mods::error::UUsageError::new(1, "invalid UTF-8 was detected in one or more arguments")
+            error::UUsageError::new(1, "invalid UTF-8 was detected in one or more arguments")
         })?
         .into();
 
@@ -521,24 +520,25 @@ pub fn os_string_to_vec(s: OsString) -> mods::error::UResult<Vec<u8>> {
 /// which avoids panicking on non UTF-8 input.
 pub fn read_byte_lines<R: std::io::Read>(
     mut buf_reader: BufReader<R>,
-) -> impl Iterator<Item = Vec<u8>> {
+) -> impl Iterator<Item = std::io::Result<Vec<u8>>> {
     iter::from_fn(move || {
         let mut buf = Vec::with_capacity(256);
-        let size = buf_reader.read_until(b'\n', &mut buf).ok()?;
 
-        if size == 0 {
-            return None;
-        }
+        match buf_reader.read_until(b'\n', &mut buf) {
+            Ok(0) => None,
+            Err(e) => Some(Err(e)),
+            Ok(_) => {
+                // Trim (\r)\n
+                if buf.ends_with(b"\n") {
+                    buf.pop();
+                    if buf.ends_with(b"\r") {
+                        buf.pop();
+                    }
+                }
 
-        // Trim (\r)\n
-        if buf.ends_with(b"\n") {
-            buf.pop();
-            if buf.ends_with(b"\r") {
-                buf.pop();
+                Some(Ok(buf))
             }
         }
-
-        Some(buf)
     })
 }
 
@@ -547,8 +547,9 @@ pub fn read_byte_lines<R: std::io::Read>(
 /// but it still will on Windows.
 pub fn read_os_string_lines<R: std::io::Read>(
     buf_reader: BufReader<R>,
-) -> impl Iterator<Item = OsString> {
-    read_byte_lines(buf_reader).map(|byte_line| os_string_from_vec(byte_line).expect("UTF-8 error"))
+) -> impl Iterator<Item = std::io::Result<OsString>> {
+    read_byte_lines(buf_reader)
+        .map(|byte_line_res| byte_line_res.map(|bl| os_string_from_vec(bl).expect("UTF-8 error")))
 }
 
 /// Prompt the user with a formatted string and returns `true` if they reply `'y'` or `'Y'`

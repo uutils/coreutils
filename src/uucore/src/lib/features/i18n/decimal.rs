@@ -6,7 +6,7 @@
 use std::sync::OnceLock;
 
 use icu_decimal::provider::DecimalSymbolsV1;
-use icu_locale::Locale;
+use icu_locale::{Locale, locale};
 use icu_provider::prelude::*;
 
 use crate::i18n::get_numeric_locale;
@@ -60,7 +60,15 @@ fn get_grouping_separator(loc: Locale) -> String {
 pub fn locale_grouping_separator() -> &'static str {
     static GROUPING_SEP: OnceLock<String> = OnceLock::new();
 
-    GROUPING_SEP.get_or_init(|| get_grouping_separator(get_numeric_locale().0.clone()))
+    GROUPING_SEP.get_or_init(|| {
+        let loc = get_numeric_locale().0.clone();
+        // C/POSIX locale (represented as "und") has no grouping separator.
+        if loc == locale!("und") {
+            String::new()
+        } else {
+            get_grouping_separator(loc)
+        }
+    })
 }
 
 #[cfg(test)]

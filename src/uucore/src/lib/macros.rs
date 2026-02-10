@@ -91,7 +91,8 @@ macro_rules! show(
         use $crate::error::UError;
         let e = $err;
         $crate::error::set_exit_code(e.code());
-        eprintln!("{}: {e}", $crate::util_name());
+        use std::io::Write as _;
+        let _ = writeln!(std::io::stderr().lock(), "{}: {e}", $crate::util_name());
     })
 );
 
@@ -151,8 +152,10 @@ macro_rules! show_if_err(
 #[macro_export]
 macro_rules! show_error(
     ($($args:tt)+) => ({
-        eprint!("{}: ", $crate::util_name());
-        eprintln!($($args)+);
+		use std::io::Write as _;
+		let mut error = std::io::stderr().lock();
+        let _ = write!(error, "{}: ", $crate::util_name());
+        let _ = writeln!(error, $($args)+);
     })
 );
 
@@ -174,8 +177,10 @@ macro_rules! show_error(
 #[macro_export]
 macro_rules! show_warning(
     ($($args:tt)+) => ({
-        eprint!("{}: warning: ", $crate::util_name());
-        eprintln!($($args)+);
+		use std::io::Write as _;
+		let mut error = std::io::stderr().lock();
+        let _ = write!(error, "{}: warning: ", $crate::util_name());
+        let _ = writeln!(error, $($args)+);
     })
 );
 
@@ -183,8 +188,10 @@ macro_rules! show_warning(
 #[macro_export]
 macro_rules! show_warning_caps(
     ($($args:tt)+) => ({
-        eprint!("{}: WARNING: ", $crate::util_name());
-        eprintln!($($args)+);
+		use std::io::Write as _;
+		let mut error = std::io::stderr().lock();
+        let _ = write!(error, "{}: WARNING: ", $crate::util_name());
+        let _ = writeln!(error, $($args)+);
     })
 );
 

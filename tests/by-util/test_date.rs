@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker: ignore: AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes
+// spell-checker: ignore: AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado
 
 use std::cmp::Ordering;
 
@@ -222,6 +222,77 @@ fn test_date_utc_issue_6495() {
 }
 
 #[test]
+fn test_date_utc_with_d_flag() {
+    let cases = [
+        ("2024-01-01 12:00", "+%H:%M %Z", "12:00 UTC\n"),
+        ("2024-06-15 10:30", "+%H:%M %Z", "10:30 UTC\n"),
+        ("2024-12-31 23:59:59", "+%H:%M:%S %Z", "23:59:59 UTC\n"),
+        ("@0", "+%Y-%m-%d %H:%M:%S %Z", "1970-01-01 00:00:00 UTC\n"),
+        ("@3600", "+%H:%M:%S %Z", "01:00:00 UTC\n"),
+        ("@86400", "+%Y-%m-%d %Z", "1970-01-02 UTC\n"),
+        ("2024-06-15 10:30 EDT", "+%H:%M %Z", "14:30 UTC\n"),
+        ("2024-01-15 10:30 EST", "+%H:%M %Z", "15:30 UTC\n"),
+        ("2024-06-15 12:00 PDT", "+%H:%M %Z", "19:00 UTC\n"),
+        ("2024-01-15 12:00 PST", "+%H:%M %Z", "20:00 UTC\n"),
+        ("2024-01-01 12:00 +0000", "+%H:%M %Z", "12:00 UTC\n"),
+        ("2024-01-01 12:00 +0530", "+%H:%M %Z", "06:30 UTC\n"),
+        ("2024-01-01 12:00 -0500", "+%H:%M %Z", "17:00 UTC\n"),
+    ];
+    for (input, fmt, expected) in cases {
+        new_ucmd!()
+            .env("TZ", "America/New_York")
+            .args(&["-u", "-d", input, fmt])
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+#[test]
+fn test_date_utc_vs_local() {
+    let cases = [
+        ("-d", "2024-01-01 12:00", "+%H:%M %Z", "12:00 EST\n"),
+        ("-ud", "2024-01-01 12:00", "+%H:%M %Z", "12:00 UTC\n"),
+        ("-d", "2024-06-15 12:00", "+%H:%M %Z", "12:00 EDT\n"),
+        ("-ud", "2024-06-15 12:00", "+%H:%M %Z", "12:00 UTC\n"),
+        ("-d", "@0", "+%H:%M %Z", "19:00 EST\n"),
+        ("-ud", "@0", "+%H:%M %Z", "00:00 UTC\n"),
+    ];
+    for (flag, date, fmt, expected) in cases {
+        new_ucmd!()
+            .env("TZ", "America/New_York")
+            .args(&[flag, date, fmt])
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+#[test]
+fn test_date_utc_output_formats() {
+    let cases = [
+        ("-I", "2024-06-15"),
+        ("--rfc-3339=seconds", "+00:00"),
+        ("-R", "+0000"),
+    ];
+    for (fmt_flag, expected) in cases {
+        new_ucmd!()
+            .env("TZ", "America/New_York")
+            .args(&["-u", "-d", "2024-06-15 12:00", fmt_flag])
+            .succeeds()
+            .stdout_contains(expected);
+    }
+}
+
+#[test]
+fn test_date_utc_stdin() {
+    new_ucmd!()
+        .env("TZ", "America/New_York")
+        .args(&["-u", "-f", "-", "+%H:%M %Z"])
+        .pipe_in("2024-01-01 12:00\n2024-06-15 18:30\n")
+        .succeeds()
+        .stdout_is("12:00 UTC\n18:30 UTC\n");
+}
+
+#[test]
 fn test_date_format_y() {
     let scene = TestScenario::new(util_name!());
 
@@ -348,8 +419,7 @@ fn test_date_set_hyphen_prefixed_values() {
             // permission error, not argument parsing error
             assert!(
                 result.stderr_str().starts_with("date: cannot set date: "),
-                "Expected permission error for '{}', but got: {}",
-                date_str,
+                "Expected permission error for '{date_str}', but got: {}",
                 result.stderr_str()
             );
         }
@@ -1625,5 +1695,374 @@ fn test_date_parenthesis_vs_other_special_chars() {
             .arg(special_char)
             .fails()
             .stderr_contains("invalid date");
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_date_iranian_locale_solar_hijri_calendar() {
+    // Test Iranian locale uses Solar Hijri calendar
+    // Verify the Solar Hijri calendar is used in the Iranian locale
+    use std::process::Command;
+
+    // Check if Iranian locale is available
+    let locale_check = Command::new("locale")
+        .env("LC_ALL", "fa_IR.UTF-8")
+        .arg("charmap")
+        .output();
+
+    let locale_available = match locale_check {
+        Ok(output) => String::from_utf8_lossy(&output.stdout).trim() == "UTF-8",
+        Err(_) => false,
+    };
+
+    if !locale_available {
+        println!("Skipping Iranian locale test - fa_IR.UTF-8 locale not available");
+        return;
+    }
+
+    // Get current year in Gregorian calendar
+    let current_year: i32 = new_ucmd!()
+        .env("LC_ALL", "C")
+        .arg("+%Y")
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .parse()
+        .unwrap();
+
+    // 03-19 and 03-22 of the same Gregorian year are in different years in the
+    // Solar Hijri calendar
+    let year_march_19: i32 = new_ucmd!()
+        .env("LC_ALL", "fa_IR.UTF-8")
+        .arg("-d")
+        .arg(format!("{current_year}-03-19"))
+        .arg("+%Y")
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .parse()
+        .unwrap();
+
+    let year_march_22: i32 = new_ucmd!()
+        .env("LC_ALL", "fa_IR.UTF-8")
+        .arg("-d")
+        .arg(format!("{current_year}-03-22"))
+        .arg("+%Y")
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .parse()
+        .unwrap();
+
+    // Years should differ by 1
+    assert_eq!(year_march_19, year_march_22 - 1);
+
+    // The difference between the Gregorian year is 621 or 622 years
+    assert_eq!(year_march_19, current_year - 622);
+    assert_eq!(year_march_22, current_year - 621);
+
+    // Check that --iso-8601 and --rfc-3339 use the Gregorian calendar
+    let iso_result = new_ucmd!()
+        .env("LC_ALL", "fa_IR.UTF-8")
+        .arg("--iso-8601=hours")
+        .succeeds();
+    let iso_output = iso_result.stdout_str();
+    assert!(iso_output.starts_with(&current_year.to_string()));
+
+    let rfc_result = new_ucmd!()
+        .env("LC_ALL", "fa_IR.UTF-8")
+        .arg("--rfc-3339=date")
+        .succeeds();
+    let rfc_output = rfc_result.stdout_str();
+    assert!(rfc_output.starts_with(&current_year.to_string()));
+}
+
+#[test]
+#[cfg(unix)]
+fn test_date_ethiopian_locale_calendar() {
+    // Test Ethiopian locale uses Ethiopian calendar
+    // Verify the Ethiopian calendar is used in the Ethiopian locale
+    use std::process::Command;
+
+    // Check if Ethiopian locale is available
+    let locale_check = Command::new("locale")
+        .env("LC_ALL", "am_ET.UTF-8")
+        .arg("charmap")
+        .output();
+
+    let locale_available = match locale_check {
+        Ok(output) => String::from_utf8_lossy(&output.stdout).trim() == "UTF-8",
+        Err(_) => false,
+    };
+
+    if !locale_available {
+        println!("Skipping Ethiopian locale test - am_ET.UTF-8 locale not available");
+        return;
+    }
+
+    // Get current year in Gregorian calendar
+    let current_year: i32 = new_ucmd!()
+        .env("LC_ALL", "C")
+        .arg("+%Y")
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .parse()
+        .unwrap();
+
+    // 09-10 and 09-12 of the same Gregorian year are in different years in the
+    // Ethiopian calendar
+    let year_september_10: i32 = new_ucmd!()
+        .env("LC_ALL", "am_ET.UTF-8")
+        .arg("-d")
+        .arg(format!("{current_year}-09-10"))
+        .arg("+%Y")
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .parse()
+        .unwrap();
+
+    let year_september_12: i32 = new_ucmd!()
+        .env("LC_ALL", "am_ET.UTF-8")
+        .arg("-d")
+        .arg(format!("{current_year}-09-12"))
+        .arg("+%Y")
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .parse()
+        .unwrap();
+
+    // Years should differ by 1
+    assert_eq!(year_september_10, year_september_12 - 1);
+
+    // The difference between the Gregorian year is 7 or 8 years
+    assert_eq!(year_september_10, current_year - 8);
+    assert_eq!(year_september_12, current_year - 7);
+
+    // Check that --iso-8601 and --rfc-3339 use the Gregorian calendar
+    let iso_result = new_ucmd!()
+        .env("LC_ALL", "am_ET.UTF-8")
+        .arg("--iso-8601=hours")
+        .succeeds();
+    let iso_output = iso_result.stdout_str();
+    assert!(iso_output.starts_with(&current_year.to_string()));
+
+    let rfc_result = new_ucmd!()
+        .env("LC_ALL", "am_ET.UTF-8")
+        .arg("--rfc-3339=date")
+        .succeeds();
+    let rfc_output = rfc_result.stdout_str();
+    assert!(rfc_output.starts_with(&current_year.to_string()));
+}
+
+#[test]
+#[cfg(unix)]
+fn test_date_thai_locale_solar_calendar() {
+    // Test Thai locale uses Thai solar calendar
+    // Verify the Thai solar calendar is used with the Thai locale
+    use std::process::Command;
+
+    // Check if Thai locale is available
+    let locale_check = Command::new("locale")
+        .env("LC_ALL", "th_TH.UTF-8")
+        .arg("charmap")
+        .output();
+
+    let locale_available = match locale_check {
+        Ok(output) => String::from_utf8_lossy(&output.stdout).trim() == "UTF-8",
+        Err(_) => false,
+    };
+
+    if !locale_available {
+        println!("Skipping Thai locale test - th_TH.UTF-8 locale not available");
+        return;
+    }
+
+    // Get current year in Gregorian calendar
+    let current_year: i32 = new_ucmd!()
+        .env("LC_ALL", "C")
+        .arg("+%Y")
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .parse()
+        .unwrap();
+
+    // Since 1941, the year in the Thai solar calendar is the Gregorian year plus 543
+    let thai_year: i32 = new_ucmd!()
+        .env("LC_ALL", "th_TH.UTF-8")
+        .arg("+%Y")
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .parse()
+        .unwrap();
+
+    assert_eq!(thai_year, current_year + 543);
+
+    // All months that have 31 days have names that end with "คม" (Thai characters)
+    let days_31_suffix = "\u{0E04}\u{0E21}"; // "คม" in Unicode
+
+    for month in ["01", "03", "05", "07", "08", "10", "12"] {
+        let month_result = new_ucmd!()
+            .env("LC_ALL", "th_TH.UTF-8")
+            .arg("--date")
+            .arg(format!("{current_year}-{month}-01"))
+            .arg("+%B")
+            .succeeds();
+        let month_name = month_result.stdout_str();
+
+        assert!(
+            month_name.trim().ends_with(days_31_suffix),
+            "Month {month} should end with 'คม', got: {month_name}"
+        );
+    }
+
+    // Check that --iso-8601 and --rfc-3339 use the Gregorian calendar
+    let iso_result = new_ucmd!()
+        .env("LC_ALL", "th_TH.UTF-8")
+        .arg("--iso-8601=hours")
+        .succeeds();
+    let iso_output = iso_result.stdout_str();
+    assert!(iso_output.starts_with(&current_year.to_string()));
+
+    let rfc_result = new_ucmd!()
+        .env("LC_ALL", "th_TH.UTF-8")
+        .arg("--rfc-3339=date")
+        .succeeds();
+    let rfc_output = rfc_result.stdout_str();
+    assert!(rfc_output.starts_with(&current_year.to_string()));
+}
+
+#[cfg(unix)]
+fn check_date(locale: &str, date: &str, fmt: &str, expected: &str) {
+    let actual = new_ucmd!()
+        .env("LC_ALL", locale)
+        .arg("-d")
+        .arg(date)
+        .arg(fmt)
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .to_string();
+    assert_eq!(actual, expected, "LC_ALL={locale} date -d '{date}' '{fmt}'");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_locale_calendar_conversions() {
+    // Persian (Solar Hijri) - Nowruz is March 20/21
+    for (d, e) in [
+        ("2026-01-01", "1404-10-11"),
+        ("2026-01-26", "1404-11-06"),
+        ("2026-03-20", "1404-12-29"),
+        ("2026-03-21", "1405-01-01"),
+        ("2026-03-22", "1405-01-02"),
+        ("2026-06-15", "1405-03-25"),
+        ("2026-12-31", "1405-10-10"),
+        ("2025-03-20", "1403-12-30"),
+        ("2025-03-21", "1404-01-01"),
+        ("2024-03-19", "1402-12-29"),
+        ("2024-03-20", "1403-01-01"),
+        ("2000-03-20", "1379-01-01"),
+    ] {
+        check_date("fa_IR.UTF-8", d, "+%Y-%m-%d", e);
+    }
+
+    // Thai Buddhist (year + 543, same month/day)
+    for (d, e) in [
+        ("2026-01-01", "2569-01-01"),
+        ("2026-01-26", "2569-01-26"),
+        ("2026-06-15", "2569-06-15"),
+        ("2026-12-31", "2569-12-31"),
+        ("2025-01-01", "2568-01-01"),
+        ("2024-02-29", "2567-02-29"),
+        ("2000-01-01", "2543-01-01"),
+        ("1970-01-01", "2513-01-01"),
+    ] {
+        check_date("th_TH.UTF-8", d, "+%Y-%m-%d", e);
+    }
+
+    // Ethiopian (13 months, New Year on Sept 11)
+    for (d, e) in [
+        ("2026-01-01", "2018-04-23"),
+        ("2026-01-26", "2018-05-18"),
+        ("2026-09-10", "2018-13-05"),
+        ("2026-09-11", "2019-01-01"),
+        ("2026-09-12", "2019-01-02"),
+        ("2026-12-31", "2019-04-22"),
+        ("2025-09-11", "2018-01-01"),
+        ("2025-09-10", "2017-13-05"),
+        ("2000-09-11", "1993-01-01"),
+    ] {
+        check_date("am_ET.UTF-8", d, "+%Y-%m-%d", e);
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_locale_month_names() {
+    // %B full month names: Jan, Jun, Dec for each locale
+    for (loc, jan, jun, dec) in [
+        ("fr_FR.UTF-8", "janvier", "juin", "décembre"),
+        ("de_DE.UTF-8", "Januar", "Juni", "Dezember"),
+        ("es_ES.UTF-8", "enero", "junio", "diciembre"),
+        ("it_IT.UTF-8", "gennaio", "giugno", "dicembre"),
+        ("pt_BR.UTF-8", "janeiro", "junho", "dezembro"),
+        ("ja_JP.UTF-8", "1月", "6月", "12月"),
+        ("zh_CN.UTF-8", "一月", "六月", "十二月"),
+    ] {
+        check_date(loc, "2026-01-15", "+%B", jan);
+        check_date(loc, "2026-06-15", "+%B", jun);
+        check_date(loc, "2026-12-15", "+%B", dec);
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_locale_day_names() {
+    // %A full day names: Mon (26th), Sun (25th), Sat (24th) Jan 2026
+    for (loc, mon, sun, sat) in [
+        ("fr_FR.UTF-8", "lundi", "dimanche", "samedi"),
+        ("de_DE.UTF-8", "Montag", "Sonntag", "Samstag"),
+        ("es_ES.UTF-8", "lunes", "domingo", "sábado"),
+        ("ja_JP.UTF-8", "月曜日", "日曜日", "土曜日"),
+        ("zh_CN.UTF-8", "星期一", "星期日", "星期六"),
+    ] {
+        check_date(loc, "2026-01-26", "+%A", mon);
+        check_date(loc, "2026-01-25", "+%A", sun);
+        check_date(loc, "2026-01-24", "+%A", sat);
+    }
+}
+
+#[test]
+fn test_percent_percent_not_replaced() {
+    let cases = [
+        // Time conversion specifiers
+        (
+            "+%%H%%I%%k%%l%%M%%N%%p%%P%%r%%R%%s%%S%%T%%X%%z%%Z",
+            "%H%I%k%l%M%N%p%P%r%R%s%S%T%X%z%Z\n",
+        ),
+        // Date conversion specifiers
+        (
+            "+%%a%%A%%b%%B%%c%%C%%d%%D%%e%%F%%g%%G%%h%%j%%m%%u%%U%%V%%w%%W%%x%%y%%Y",
+            "%a%A%b%B%c%C%d%D%e%F%g%G%h%j%m%u%U%V%w%W%x%y%Y\n",
+        ),
+    ];
+    for (format, expected) in cases {
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .arg(format)
+            .succeeds()
+            .stdout_is(expected);
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .env("LC_ALL", "fr_FR.UTF-8")
+            .arg(format)
+            .succeeds()
+            .stdout_is(expected);
     }
 }
