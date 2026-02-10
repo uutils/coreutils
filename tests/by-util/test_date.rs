@@ -419,8 +419,7 @@ fn test_date_set_hyphen_prefixed_values() {
             // permission error, not argument parsing error
             assert!(
                 result.stderr_str().starts_with("date: cannot set date: "),
-                "Expected permission error for '{}', but got: {}",
-                date_str,
+                "Expected permission error for '{date_str}', but got: {}",
                 result.stderr_str()
             );
         }
