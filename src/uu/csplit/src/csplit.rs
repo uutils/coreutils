@@ -127,7 +127,7 @@ where
     let ret = do_csplit(&mut split_writer, patterns_vec, &mut input_iter);
 
     // consume the rest, unless there was an error
-    if ret.is_ok() {
+    let ret = if ret.is_ok() {
         input_iter.rewind_buffer();
         if let Some((_, line)) = input_iter.next() {
             // There is remaining input: create a final split and copy remainder
@@ -136,14 +136,18 @@ where
             for (_, line) in input_iter {
                 split_writer.writeln(&line?)?;
             }
-            split_writer.finish_split();
+            split_writer.finish_split()
         } else if all_up_to_line && options.suppress_matched {
             // GNU semantics for integer patterns with --suppress-matched:
             // even if no remaining input, create a final (possibly empty) split
             split_writer.new_writer()?;
-            split_writer.finish_split();
+            split_writer.finish_split()
+        } else {
+            Ok(())
         }
-    }
+    } else {
+        ret
+    };
     // delete files on error by default
     if ret.is_err() && !options.keep_files {
         split_writer.delete_all_splits()?;
@@ -287,13 +291,12 @@ impl SplitWriter<'_> {
     /// Some [`io::Error`] may occur when attempting to write the line.
     fn writeln(&mut self, line: &str) -> io::Result<()> {
         if !self.dev_null {
-            match self.current_writer {
-                Some(ref mut current_writer) => {
-                    let bytes = line.as_bytes();
-                    current_writer.write_all(bytes)?;
-                    self.size += bytes.len();
-                }
-                None => panic!("{}", translate!("csplit-write-split-not-created")),
+            if let Some(ref mut current_writer) = self.current_writer {
+                let bytes = line.as_bytes();
+                current_writer.write_all(bytes)?;
+                self.size += bytes.len();
+            } else {
+                panic!("{}", translate!("csplit-write-split-not-created"))
             }
         }
         Ok(())
@@ -305,15 +308,24 @@ impl SplitWriter<'_> {
     ///
     /// # Errors
     ///
-    /// Some [`io::Error`] if the split could not be removed in case it should be elided.
-    fn finish_split(&mut self) {
+    /// Returns an error if flushing the writer fails.
+    fn finish_split(&mut self) -> Result<(), CsplitError> {
         if !self.dev_null {
+            // Flush the writer to ensure all data is written and errors are detected
+            if let Some(ref mut writer) = self.current_writer {
+                let file_name = self.options.split_name.get(self.counter - 1);
+                writer
+                    .flush()
+                    .map_err_context(|| file_name.clone())
+                    .map_err(CsplitError::from)?;
+            }
             if self.options.elide_empty_files && self.size == 0 {
                 self.counter -= 1;
             } else if !self.options.quiet {
                 println!("{}", self.size);
             }
         }
+        Ok(())
     }
 
     /// Removes all the split files that were created.
@@ -379,7 +391,7 @@ impl SplitWriter<'_> {
             }
             self.writeln(&line)?;
         }
-        self.finish_split();
+        self.finish_split()?;
         ret
     }
 
@@ -441,20 +453,15 @@ impl SplitWriter<'_> {
 
                     // write the extra lines required by the offset
                     while offset > 0 {
-                        match input_iter.next() {
-                            Some((_, line)) => {
-                                self.writeln(&line?)?;
-                            }
-                            None => {
-                                self.finish_split();
-                                return Err(CsplitError::LineOutOfRange(
-                                    pattern_as_str.to_string(),
-                                ));
-                            }
+                        if let Some((_, line)) = input_iter.next() {
+                            self.writeln(&line?)?;
+                        } else {
+                            self.finish_split()?;
+                            return Err(CsplitError::LineOutOfRange(pattern_as_str.to_string()));
                         }
                         offset -= 1;
                     }
-                    self.finish_split();
+                    self.finish_split()?;
 
                     // if we have to suppress one line after we take the next and do nothing
                     if next_line_suppress_matched {
@@ -495,7 +502,7 @@ impl SplitWriter<'_> {
                         );
                     }
 
-                    self.finish_split();
+                    self.finish_split()?;
                     if input_iter.buffer_len() < offset_usize {
                         return Err(CsplitError::LineOutOfRange(pattern_as_str.to_string()));
                     }
@@ -511,7 +518,7 @@ impl SplitWriter<'_> {
             }
         }
 
-        self.finish_split();
+        self.finish_split()?;
         Err(CsplitError::MatchNotFound(pattern_as_str.to_string()))
     }
 }

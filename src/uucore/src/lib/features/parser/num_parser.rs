@@ -7,10 +7,8 @@
 
 // spell-checker:ignore powf copysign prec ilog inity infinit infs bigdecimal extendedbigdecimal biguint underflowed muls
 
-use std::num::NonZeroU64;
-
 use bigdecimal::{
-    BigDecimal, Context,
+    BigDecimal,
     num_bigint::{BigInt, BigUint, Sign},
 };
 use num_traits::Signed;
@@ -37,7 +35,7 @@ enum Base {
 
 impl Base {
     /// Return the digit value of a character in the given base
-    fn digit(&self, c: char) -> Option<u64> {
+    fn digit(self, c: char) -> Option<u64> {
         fn from_decimal(c: char) -> u64 {
             u64::from(c) - u64::from('0')
         }
@@ -55,7 +53,7 @@ impl Base {
 
     /// Greedily parse as many digits as possible from the string
     /// Returns parsed digits (if any), and the rest of the string.
-    fn parse_digits<'a>(&self, str: &'a str) -> (Option<BigUint>, &'a str) {
+    fn parse_digits(self, str: &str) -> (Option<BigUint>, &str) {
         let (digits, _, rest) = self.parse_digits_count(str, None);
         (digits, rest)
     }
@@ -63,11 +61,11 @@ impl Base {
     /// Greedily parse as many digits as possible from the string, adding to already parsed digits.
     /// This is meant to be used (directly) for the part after a decimal point.
     /// Returns parsed digits (if any), the number of parsed digits, and the rest of the string.
-    fn parse_digits_count<'a>(
-        &self,
-        str: &'a str,
+    fn parse_digits_count(
+        self,
+        str: &str,
         digits: Option<BigUint>,
-    ) -> (Option<BigUint>, i64, &'a str) {
+    ) -> (Option<BigUint>, i64, &str) {
         let mut digits: Option<BigUint> = digits;
         let mut count: i64 = 0;
         let mut rest = str;
@@ -79,9 +77,9 @@ impl Base {
         let mut mul_tmp: u64 = 1;
         while let Some(d) = rest.chars().next().and_then(|c| self.digit(c)) {
             (digits_tmp, count_tmp, mul_tmp) = (
-                digits_tmp * *self as u64 + d,
+                digits_tmp * self as u64 + d,
                 count_tmp + 1,
-                mul_tmp * *self as u64,
+                mul_tmp * self as u64,
             );
             rest = &rest[1..];
             // In base 16, we parse 4 bits at a time, so we can parse 16 digits at most in a u64.
@@ -398,71 +396,6 @@ fn make_error(overflow: bool, negative: bool) -> ExtendedParserError<ExtendedBig
     }
 }
 
-/// Compute bd**exp using exponentiation by squaring algorithm, while maintaining the
-/// precision specified in ctx (the number of digits would otherwise explode).
-///
-/// Algorithm comes from <https://en.wikipedia.org/wiki/Exponentiation_by_squaring>
-///
-/// TODO: Still pending discussion in <https://github.com/akubera/bigdecimal-rs/issues/147>,
-/// we do lose a little bit of precision, and the last digits may not be correct.
-/// Note: This has been copied from the latest revision in <https://github.com/akubera/bigdecimal-rs/pull/148>,
-/// so it's using minimum Rust version of `bigdecimal-rs`.
-fn pow_with_context(bd: &BigDecimal, exp: i64, ctx: &Context) -> BigDecimal {
-    if exp == 0 {
-        return 1.into();
-    }
-
-    // When performing a multiplication between 2 numbers, we may lose up to 2 digits
-    // of precision.
-    // "Proof": https://github.com/akubera/bigdecimal-rs/issues/147#issuecomment-2793431202
-    const MARGIN_PER_MUL: u64 = 2;
-    // When doing many multiplication, we still introduce additional errors, add 1 more digit
-    // per 10 multiplications.
-    const MUL_PER_MARGIN_EXTRA: u64 = 10;
-
-    fn trim_precision(bd: BigDecimal, ctx: &Context, margin: u64) -> BigDecimal {
-        let prec = ctx.precision().get() + margin;
-        if bd.digits() > prec {
-            bd.with_precision_round(NonZeroU64::new(prec).unwrap(), ctx.rounding_mode())
-        } else {
-            bd
-        }
-    }
-
-    // Count the number of multiplications we're going to perform, one per "1" binary digit
-    // in exp, and the number of times we can divide exp by 2.
-    let mut n = exp.unsigned_abs();
-    // Note: 63 - n.leading_zeros() == n.ilog2, but that's only available in recent Rust versions.
-    let muls = (n.count_ones() + (63 - n.leading_zeros()) - 1) as u64;
-    // Note: div_ceil would be nice to use here, but only available in recent Rust versions.
-    // (see note above about minimum Rust version in use)
-    let margin_extra = (muls + MUL_PER_MARGIN_EXTRA / 2) / MUL_PER_MARGIN_EXTRA;
-    let mut margin = margin_extra + MARGIN_PER_MUL * muls;
-
-    let mut bd_y: BigDecimal = 1.into();
-    let mut bd_x = if exp >= 0 {
-        bd.clone()
-    } else {
-        bd.inverse_with_context(&ctx.with_precision(
-            NonZeroU64::new(ctx.precision().get() + margin + MARGIN_PER_MUL).unwrap(),
-        ))
-    };
-
-    while n > 1 {
-        if n % 2 == 1 {
-            bd_y = trim_precision(&bd_x * bd_y, ctx, margin);
-            margin -= MARGIN_PER_MUL;
-            n -= 1;
-        }
-        bd_x = trim_precision(bd_x.square(), ctx, margin);
-        margin -= MARGIN_PER_MUL;
-        n /= 2;
-    }
-    debug_assert_eq!(margin, margin_extra);
-
-    trim_precision(bd_x * bd_y, ctx, 0)
-}
-
 /// Construct an [`ExtendedBigDecimal`] based on parsed data
 fn construct_extended_big_decimal(
     digits: BigUint,
@@ -510,7 +443,7 @@ fn construct_extended_big_decimal(
         let bd = BigDecimal::from_bigint(signed_digits, 0)
             / BigDecimal::from_bigint(BigInt::from(16).pow(scale as u32), 0);
 
-        // pow_with_context "only" supports i64 values. Just overflow/underflow if the value provided
+        // powi "only" supports i64 values. Just overflow/underflow if the value provided
         // is > 2**64 or < 2**-64.
         let Some(exponent) = exponent.to_i64() else {
             return Err(make_error(exponent.is_positive(), negative));
@@ -520,7 +453,7 @@ fn construct_extended_big_decimal(
         let base: BigDecimal = 2.into();
         // Note: We cannot overflow/underflow BigDecimal here, as we will not be able to reach the
         // maximum/minimum scale (i64 range).
-        let pow2 = pow_with_context(&base, exponent, &Context::default());
+        let pow2 = base.powi(exponent);
 
         bd * pow2
     } else {
@@ -650,7 +583,7 @@ mod tests {
             u64::extended_parse("-9223372036854775808") // i64::MIN
         );
         assert_eq!(
-            Ok(1123372036854675616),
+            Ok(1_123_372_036_854_675_616),
             u64::extended_parse("-17323372036854876000") // 2*i64::MIN
         );
         assert_eq!(Ok(1), u64::extended_parse("-18446744073709551615")); // -u64::MAX
@@ -746,10 +679,10 @@ mod tests {
         assert_eq!(Ok(123.15), f64::extended_parse("0123.15"));
         assert_eq!(Ok(123.15), f64::extended_parse("+0123.15"));
         assert_eq!(Ok(-123.15), f64::extended_parse("-0123.15"));
-        assert_eq!(Ok(12315000.0), f64::extended_parse("123.15e5"));
-        assert_eq!(Ok(-12315000.0), f64::extended_parse("-123.15e5"));
-        assert_eq!(Ok(12315000.0), f64::extended_parse("123.15E+5"));
-        assert_eq!(Ok(0.0012315), f64::extended_parse("123.15E-5"));
+        assert_eq!(Ok(12_315_000.0), f64::extended_parse("123.15e5"));
+        assert_eq!(Ok(-12_315_000.0), f64::extended_parse("-123.15e5"));
+        assert_eq!(Ok(12_315_000.0), f64::extended_parse("123.15E+5"));
+        assert_eq!(Ok(0.001_231_5), f64::extended_parse("123.15E-5"));
         assert_eq!(
             Ok(0.15),
             f64::extended_parse(".150000000000000000000000000231313")
@@ -1000,7 +933,7 @@ mod tests {
 
         // We cannot really check that 'e' is not a valid exponent indicator for hex floats...
         // but we can check that the number still gets parsed properly: 0x0.8e5 is 0x8e5 / 16**3
-        assert_eq!(Ok(0.555908203125), f64::extended_parse("0x0.8e5"));
+        assert_eq!(Ok(0.555_908_203_125), f64::extended_parse("0x0.8e5"));
 
         assert_eq!(
             f64::extended_parse("0x0.1p"),

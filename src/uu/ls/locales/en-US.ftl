@@ -1,6 +1,14 @@
 ls-about = List directory contents.
   Ignore files and directories starting with a '.' by default
+dir-about = List directory contents.
+  Ignore files and directories starting with a '.' by default
+vdir-about = List directory contents.
+  Ignore files and directories starting with a '.' by default
+
+  Mandatory arguments to long options are mandatory for short options too.
 ls-usage = ls [OPTION]... [FILE]...
+dir-usage = dir [OPTION]... [FILE]...
+vdir-usage = vdir [OPTION]... [FILE]...
 ls-after-help = The TIME_STYLE argument can be full-iso, long-iso, iso, locale or +FORMAT. FORMAT is interpreted like in date. Also the TIME_STYLE environment variable sets the default style to use.
 
 # Error messages
@@ -123,6 +131,8 @@ ls-invalid-quoting-style = {$program}: Ignoring invalid value of environment var
 ls-invalid-columns-width = ignoring invalid width in environment variable COLUMNS: {$width}
 ls-invalid-ignore-pattern = Invalid pattern for ignore: {$pattern}
 ls-invalid-hide-pattern = Invalid pattern for hide: {$pattern}
+ls-warning-unrecognized-ls-colors-prefix = unrecognized prefix: {$prefix}
+ls-warning-unparsable-ls-colors = unparsable value for LS_COLORS environment variable
 ls-total = total {$size}
 
 # Security context warnings

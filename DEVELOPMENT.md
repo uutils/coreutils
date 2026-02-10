@@ -262,6 +262,7 @@ To generate [gcov-based](https://github.com/mozilla/grcov#example-how-to-generat
 export CARGO_INCREMENTAL=0
 export RUSTFLAGS="-Cinstrument-coverage -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
 export RUSTDOCFLAGS="-Cpanic=abort"
+export RUSTUP_TOOLCHAIN="nightly"
 cargo build <options...> # e.g., --features feat_os_unix
 cargo test <options...> # e.g., --features feat_os_unix test_pathchk
 grcov . -s . --binary-path ./target/debug/ -t html --branch --ignore-not-existing --ignore build.rs --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?\#\[derive\()" -o ./target/debug/coverage/

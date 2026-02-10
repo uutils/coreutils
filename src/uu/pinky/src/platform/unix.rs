@@ -10,7 +10,7 @@ use crate::options;
 use crate::uu_app;
 
 use uucore::entries::{Locate, Passwd};
-use uucore::error::{FromIo, UResult};
+use uucore::error::UResult;
 use uucore::libc::S_IWGRP;
 use uucore::translate;
 use uucore::utmpx::{self, Utmpx, UtmpxRecord, time};
@@ -96,14 +96,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     if do_short_format {
-        match pk.short_pinky() {
-            Ok(_) => Ok(()),
-            Err(e) => Err(e.map_err_context(String::new)),
-        }
+        pk.short_pinky();
     } else {
         pk.long_pinky();
-        Ok(())
     }
+    Ok(())
 }
 
 struct Pinky {
@@ -170,27 +167,24 @@ fn gecos_to_fullname(pw: &Passwd) -> Option<String> {
 }
 
 impl Pinky {
-    fn print_entry(&self, ut: &UtmpxRecord) -> std::io::Result<()> {
+    fn print_entry(&self, ut: &UtmpxRecord) {
         let mut pts_path = PathBuf::from("/dev");
         pts_path.push(ut.tty_device().as_str());
 
         let mesg;
         let last_change;
 
-        match pts_path.metadata() {
-            #[allow(clippy::unnecessary_cast)]
-            Ok(meta) => {
-                mesg = if meta.mode() & S_IWGRP as u32 == 0 {
-                    '*'
-                } else {
-                    ' '
-                };
-                last_change = meta.atime();
-            }
-            _ => {
-                mesg = '?';
-                last_change = 0;
-            }
+        #[allow(clippy::unnecessary_cast)]
+        if let Ok(meta) = pts_path.metadata() {
+            mesg = if (meta.mode() & (S_IWGRP as u32)) == 0 {
+                '*'
+            } else {
+                ' '
+            };
+            last_change = meta.atime();
+        } else {
+            mesg = '?';
+            last_change = 0;
         }
 
         print!("{1:<8.0$}", utmpx::UT_NAMESIZE, ut.user());
@@ -233,7 +227,6 @@ impl Pinky {
         }
 
         println!();
-        Ok(())
     }
 
     fn print_heading(&self) {
@@ -252,7 +245,7 @@ impl Pinky {
         println!();
     }
 
-    fn short_pinky(&self) -> std::io::Result<()> {
+    fn short_pinky(&self) {
         if self.include_heading {
             self.print_heading();
         }
@@ -260,10 +253,9 @@ impl Pinky {
             if ut.is_user_process()
                 && (self.names.is_empty() || self.names.iter().any(|n| n.as_str() == ut.user()))
             {
-                self.print_entry(&ut)?;
+                self.print_entry(&ut);
             }
         }
-        Ok(())
     }
 
     fn long_pinky(&self) {

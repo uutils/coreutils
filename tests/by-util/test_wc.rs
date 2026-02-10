@@ -8,7 +8,7 @@ use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::vec_of_size;
 
-// spell-checker:ignore (flags) lwmcL clmwL ; (path) bogusfile emptyfile manyemptylines moby notrailingnewline onelongemptyline onelongword weirdchars
+// spell-checker:ignore (flags) lwmcL clmwL ; (path) bogusfile emptyfile manyemptylines moby notrailingnewline onelongemptyline onelongword weirdchars ioerrdir
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
@@ -65,7 +65,7 @@ fn test_utf8() {
         .args(&["-lwmcL"])
         .pipe_in_fixture("UTF_8_test.txt")
         .succeeds()
-        .stdout_is("    303    2119   22457   23025      79\n");
+        .stdout_is("    303    2178   22457   23025      79\n");
 }
 
 #[test]
@@ -449,6 +449,23 @@ fn test_read_from_directory_error() {
         .stdout_is(STDOUT);
 }
 
+#[cfg(unix)]
+#[test]
+fn test_read_error_order_with_stderr_to_stdout() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("ioerrdir");
+
+    let expected = format!(
+        "{:>7} {:>7} {:>7} ioerrdir\nwc: ioerrdir: Is a directory\n",
+        0, 0, 0
+    );
+
+    ucmd.arg("ioerrdir")
+        .stderr_to_stdout()
+        .fails()
+        .stdout_only(expected);
+}
+
 /// Test that getting counts from nonexistent file is an error.
 #[test]
 fn test_read_from_nonexistent_file() {
@@ -809,6 +826,16 @@ fn wc_w_words_with_emoji_separator() {
         .stdout_contains("3");
 }
 
+#[test]
+fn test_invalid_byte_sequence_word_count() {
+    // wc should count invalid byte sequences as words
+    // Input: "a \xff b\n" should produce: 1 line, 3 words, 6 bytes
+    new_ucmd!()
+        .pipe_in([b'a', b' ', 0xff, b' ', b'b', b'\n'])
+        .succeeds()
+        .stdout_is("      1       3       6\n");
+}
+
 #[cfg(unix)]
 #[test]
 fn test_simd_respects_glibc_tunables() {
@@ -873,4 +900,24 @@ fn test_simd_respects_glibc_tunables() {
             "Line counts should not change when AVX2/AVX512 are disabled (lines={lines})"
         );
     }
+}
+
+#[test]
+fn test_posixly_correct_whitespace() {
+    let input = "word\u{00A0}word"; // Non-breaking space
+
+    // Default: Unicode whitespace is respected
+    new_ucmd!()
+        .arg("-w")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("2\n");
+
+    // POSIXLY_CORRECT: Only ASCII whitespace
+    new_ucmd!()
+        .arg("-w")
+        .env("POSIXLY_CORRECT", "1")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("1\n");
 }
