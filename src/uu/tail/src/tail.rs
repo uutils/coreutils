@@ -68,13 +68,13 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
 
     // Print debug info about the follow implementation being used
     if settings.debug && settings.follow.is_some() {
-        if observer.use_polling || settings.follow == Some(FollowMode::Name) {
-            show_error!("{}", translate!("tail-debug-using-polling-mode"));
-        } else if settings
+        let all_non_regular = settings
             .inputs
             .iter()
-            .all(|i| !matches!(i.kind(), InputKind::File(p) if p.is_file()))
-        {
+            .all(|i| !matches!(i.kind(), InputKind::File(p) if p.is_file()));
+        if observer.use_polling || (all_non_regular && settings.follow == Some(FollowMode::Name)) {
+            show_error!("{}", translate!("tail-debug-using-polling-mode"));
+        } else if all_non_regular {
             show_error!("{}", translate!("tail-debug-using-blocking-mode"));
         } else {
             show_error!("{}", translate!("tail-debug-using-notification-mode"));
