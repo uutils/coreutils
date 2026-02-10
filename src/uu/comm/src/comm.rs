@@ -8,7 +8,7 @@
 use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::fs::{File, metadata};
-use std::io::{self, BufRead, BufReader, BufWriter, Read, StdinLock, Write, stdin};
+use std::io::{self, BufRead, BufReader, BufWriter, Read, StdinLock, Write, stderr, stdin};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
@@ -114,7 +114,8 @@ impl OrderChecker {
 
         let is_ordered = *current_line >= *self.last_line;
         if !is_ordered && !self.has_error {
-            eprintln!(
+            let _ = writeln!(
+                stderr(),
                 "{}",
                 translate!("comm-error-file-not-sorted", "file_num" => self.file_num.as_str())
             );
@@ -314,7 +315,7 @@ fn comm(
     if should_check_order && (checker1.has_error || checker2.has_error) {
         // Print the input error message once at the end
         if input_error {
-            eprintln!("{}", translate!("comm-error-input-not-sorted"));
+            let _ = writeln!(stderr(), "{}", translate!("comm-error-input-not-sorted"));
         }
         Err(USimpleError::new(1, ""))
     } else {

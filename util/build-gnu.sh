@@ -124,7 +124,7 @@ else
     : > man/local.mk
     # Use CFLAGS for best build time since we discard GNU coreutils
     CFLAGS="${CFLAGS} -pipe -O0 -s" ./configure -C --quiet --disable-gcc-warnings --disable-nls --disable-dependency-tracking --disable-bold-man-page-references \
-      --enable-single-binary=symlinks --enable-install-program="arch,kill,uptime,hostname" \
+      --enable-single-binary=hardlinks --enable-install-program="arch,kill,uptime,hostname" \
       "$([ "${SELINUX_ENABLED}" = 1 ] && echo --with-selinux || echo --without-selinux)"
     #Add timeout to to protect against hangs
     sed -i 's|^"\$@|'"${SYSTEM_TIMEOUT}"' 600 "\$@|' build-aux/test-driver
@@ -162,6 +162,9 @@ fi
 grep -rl 'path_prepend_' tests/* | xargs -r "${SED}" -i 's| path_prepend_ ./src||'
 # path_prepend_ sets $abs_path_dir_: set it manually instead.
 grep -rl '\$abs_path_dir_' tests/*/*.sh | xargs -r "${SED}" -i "s|\$abs_path_dir_|${UU_BUILD_DIR//\//\\/}|g"
+# Some tests use $abs_top_builddir/src for shebangs: point them to the uutils build dir.
+grep -rl '\$abs_top_builddir/src' tests/*/*.sh tests/*/*.pl | xargs -r "${SED}" -i "s|\$abs_top_builddir/src|${UU_BUILD_DIR//\//\\/}|g"
+grep -rl '\$ENV{abs_top_builddir}/src' tests/*/*.pl | xargs -r "${SED}" -i "s|\$ENV{abs_top_builddir}/src|${UU_BUILD_DIR//\//\\/}|g"
 
 # We can't build runcon and chcon without libselinux. But GNU no longer builds dummies of them. So consider they are SELinux specific.
 sed -i 's/^print_ver_.*/require_selinux_/' tests/runcon/runcon-compute.sh

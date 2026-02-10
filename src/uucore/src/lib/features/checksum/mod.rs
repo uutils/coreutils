@@ -114,6 +114,9 @@ impl AlgoKind {
             ALGORITHM_OPTIONS_SHA256 => Sha256,
             ALGORITHM_OPTIONS_SHA384 => Sha384,
             ALGORITHM_OPTIONS_SHA512 => Sha512,
+
+            ALGORITHM_OPTIONS_SHAKE128 => Shake128,
+            ALGORITHM_OPTIONS_SHAKE256 => Shake256,
             _ => return Err(ChecksumError::UnknownAlgorithm(algo.as_ref().to_string()).into()),
         })
     }
@@ -247,8 +250,8 @@ pub enum SizedAlgoKind {
     Sha3(ShaLength),
     // Note: we store Blake2b's length as BYTES.
     Blake2b(Option<usize>),
-    Shake128(usize),
-    Shake256(usize),
+    Shake128(Option<usize>),
+    Shake256(Option<usize>),
 }
 
 impl SizedAlgoKind {
@@ -280,8 +283,8 @@ impl SizedAlgoKind {
             (ak::Sha1, _) => Ok(Self::Sha1),
             (ak::Blake3, _) => Ok(Self::Blake3),
 
-            (ak::Shake128, Some(l)) => Ok(Self::Shake128(l)),
-            (ak::Shake256, Some(l)) => Ok(Self::Shake256(l)),
+            (ak::Shake128, l) => Ok(Self::Shake128(l)),
+            (ak::Shake256, l) => Ok(Self::Shake256(l)),
             (ak::Sha2, Some(l)) => Ok(Self::Sha2(ShaLength::try_from(l)?)),
             (ak::Sha3, Some(l)) => Ok(Self::Sha3(ShaLength::try_from(l)?)),
             (algo @ (ak::Sha2 | ak::Sha3), None) => {
@@ -298,7 +301,6 @@ impl SizedAlgoKind {
             (ak::Sha256, None) => Ok(Self::Sha2(ShaLength::Len256)),
             (ak::Sha384, None) => Ok(Self::Sha2(ShaLength::Len384)),
             (ak::Sha512, None) => Ok(Self::Sha2(ShaLength::Len512)),
-            (_, None) => Err(ChecksumError::LengthRequired(kind.to_uppercase().into()).into()),
         }
     }
 
@@ -322,45 +324,49 @@ impl SizedAlgoKind {
     pub fn create_digest(&self) -> Box<dyn Digest + 'static> {
         use ShaLength::*;
         match self {
-            Self::Sysv => Box::new(SysV::new()),
-            Self::Bsd => Box::new(Bsd::new()),
-            Self::Crc => Box::new(Crc::new()),
-            Self::Crc32b => Box::new(CRC32B::new()),
-            Self::Md5 => Box::new(Md5::new()),
-            Self::Sm3 => Box::new(Sm3::new()),
-            Self::Sha1 => Box::new(Sha1::new()),
-            Self::Blake3 => Box::new(Blake3::new()),
-            Self::Sha2(Len224) => Box::new(Sha224::new()),
-            Self::Sha2(Len256) => Box::new(Sha256::new()),
-            Self::Sha2(Len384) => Box::new(Sha384::new()),
-            Self::Sha2(Len512) => Box::new(Sha512::new()),
-            Self::Sha3(Len224) => Box::new(Sha3_224::new()),
-            Self::Sha3(Len256) => Box::new(Sha3_256::new()),
-            Self::Sha3(Len384) => Box::new(Sha3_384::new()),
-            Self::Sha3(Len512) => Box::new(Sha3_512::new()),
-            Self::Blake2b(Some(byte_len)) => Box::new(Blake2b::with_output_bytes(*byte_len)),
-            Self::Blake2b(None) => Box::new(Blake2b::new()),
-            Self::Shake128(_) => Box::new(Shake128::new()),
-            Self::Shake256(_) => Box::new(Shake256::new()),
+            Self::Sysv => Box::new(SysV::default()),
+            Self::Bsd => Box::new(Bsd::default()),
+            Self::Crc => Box::new(Crc::default()),
+            Self::Crc32b => Box::new(CRC32B::default()),
+            Self::Md5 => Box::new(Md5::default()),
+            Self::Sm3 => Box::new(Sm3::default()),
+            Self::Sha1 => Box::new(Sha1::default()),
+            Self::Blake3 => Box::new(Blake3::default()),
+            Self::Sha2(Len224) => Box::new(Sha224::default()),
+            Self::Sha2(Len256) => Box::new(Sha256::default()),
+            Self::Sha2(Len384) => Box::new(Sha384::default()),
+            Self::Sha2(Len512) => Box::new(Sha512::default()),
+            Self::Sha3(Len224) => Box::new(Sha3_224::default()),
+            Self::Sha3(Len256) => Box::new(Sha3_256::default()),
+            Self::Sha3(Len384) => Box::new(Sha3_384::default()),
+            Self::Sha3(Len512) => Box::new(Sha3_512::default()),
+            Self::Blake2b(len_opt) => {
+                Box::new(len_opt.map(Blake2b::with_output_bytes).unwrap_or_default())
+            }
+            Self::Shake128(len_opt) => {
+                Box::new(len_opt.map(Shake128::with_output_bits).unwrap_or_default())
+            }
+            Self::Shake256(len_opt) => {
+                Box::new(len_opt.map(Shake256::with_output_bits).unwrap_or_default())
+            }
         }
     }
 
     pub fn bitlen(&self) -> usize {
-        use SizedAlgoKind::*;
         match self {
-            Sysv => 512,
-            Bsd => 1024,
-            Crc => 256,
-            Crc32b => 32,
-            Md5 => 128,
-            Sm3 => 512,
-            Sha1 => 160,
-            Blake3 => 256,
-            Sha2(len) => len.as_usize(),
-            Sha3(len) => len.as_usize(),
-            Blake2b(len) => len.unwrap_or(512),
-            Shake128(len) => *len,
-            Shake256(len) => *len,
+            Self::Sysv => 512,
+            Self::Bsd => 1024,
+            Self::Crc => 256,
+            Self::Crc32b => 32,
+            Self::Md5 => 128,
+            Self::Sm3 => 512,
+            Self::Sha1 => 160,
+            Self::Blake3 => 256,
+            Self::Sha2(len) => len.as_usize(),
+            Self::Sha3(len) => len.as_usize(),
+            Self::Blake2b(len) => len.unwrap_or(Blake2b::DEFAULT_BYTE_SIZE * 8),
+            Self::Shake128(len) => len.unwrap_or(Shake128::DEFAULT_BIT_SIZE),
+            Self::Shake256(len) => len.unwrap_or(Shake256::DEFAULT_BIT_SIZE),
         }
     }
     pub fn is_legacy(&self) -> bool {
@@ -543,10 +549,7 @@ pub fn sanitize_sha2_sha3_length_str(algo_kind: AlgoKind, length: &str) -> UResu
 pub fn unescape_filename(filename: &[u8]) -> (Vec<u8>, &'static str) {
     let mut unescaped = Vec::with_capacity(filename.len());
     let mut byte_iter = filename.iter().peekable();
-    loop {
-        let Some(byte) = byte_iter.next() else {
-            break;
-        };
+    while let Some(byte) = byte_iter.next() {
         if *byte == b'\\' {
             match byte_iter.next() {
                 Some(b'\\') => unescaped.push(b'\\'),

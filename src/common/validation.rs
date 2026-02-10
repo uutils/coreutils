@@ -32,8 +32,7 @@ pub fn not_found(util: &OsStr) -> ! {
 /// Prints an "unrecognized option" error and exits
 pub fn unrecognized_option(binary_name: &str, option: &OsStr) -> ! {
     eprintln!(
-        "{}: unrecognized option '{}'",
-        binary_name,
+        "{binary_name}: unrecognized option '{}'",
         option.to_string_lossy()
     );
     process::exit(1);

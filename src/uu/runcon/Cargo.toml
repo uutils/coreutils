@@ -6,6 +6,7 @@ keywords = ["coreutils", "uutils", "cli", "utility"]
 authors.workspace = true
 categories.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 homepage.workspace = true
 license.workspace = true
 version.workspace = true

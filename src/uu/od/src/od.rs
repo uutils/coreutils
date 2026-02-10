@@ -658,7 +658,7 @@ fn extract_strings_from_input(
                 // Note: GNU od does not output unterminated strings at EOF
                 // Strings must be null-terminated to be output
                 if mf.has_error() {
-                    show_error!("{}", e);
+                    show_error!("{e}");
                     return Err(1.into());
                 }
                 break;

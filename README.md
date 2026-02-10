@@ -14,7 +14,6 @@
 [![dependency status](https://deps.rs/repo/github/uutils/coreutils/status.svg)](https://deps.rs/repo/github/uutils/coreutils)
 
 [![CodeCov](https://codecov.io/gh/uutils/coreutils/branch/main/graph/badge.svg)](https://codecov.io/gh/uutils/coreutils)
-![MSRV](https://img.shields.io/badge/MSRV-1.85.0-brightgreen)
 [![Weblate](https://hosted.weblate.org/widget/rust-coreutils/svg-badge.svg)](https://hosted.weblate.org/projects/rust-coreutils/)
 
 </div>
@@ -76,7 +75,7 @@ Use [weblate/rust-coreutils](https://hosted.weblate.org/projects/rust-coreutils/
 ### Rust Version
 
 uutils follows Rust's release channels and is tested against stable, beta and
-nightly. The current Minimum Supported Rust Version (MSRV) is `1.85.0`.
+nightly.
 
 ## Building
 
@@ -102,7 +101,7 @@ other Rust program:
 cargo build --release
 ```
 
-Replace `--release` with `--profile=release-fast` or `--profile=release-small` to use all optimizations or save binary size.
+Replace `--release` with `--profile=release-small` to optimize binary size.
 
 This command builds the most portable common core set of uutils into a multicall
 (BusyBox-type) binary, named 'coreutils', on most Rust-supported platforms.
@@ -155,10 +154,10 @@ To simply build all available utilities (with debug profile):
 make
 ```
 
-In release-fast mode:
+In release mode:
 
 ```shell
-make PROFILE=release-fast
+make PROFILE=release
 ```
 
 To build all but a few of the available utilities:
@@ -192,16 +191,10 @@ manpages or shell completion to work, use `GNU Make` or see
 
 ### Install with GNU Make
 
-To install all available utilities:
+To install all available utilities (PROFILE=release by default):
 
 ```shell
 make install
-```
-
-To install all utilities with all possible optimizations:
-
-```shell
-make PROFILE=release-fast install
 ```
 
 To install using `sudo` switch `-E` must be used:
