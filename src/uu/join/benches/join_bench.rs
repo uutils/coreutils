@@ -50,7 +50,7 @@ fn create_partial_overlap_files(
     // File 2: keys (num_lines - overlap_count) to (2*num_lines - overlap_count - 1)
     let start = num_lines - overlap_count;
     for i in 0..num_lines {
-        writeln!(file2, "{:08} f2_data_{}", start + i, i).unwrap();
+        writeln!(file2, "{:08} f2_data_{i}", start + i).unwrap();
     }
 
     (

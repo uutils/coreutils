@@ -413,7 +413,11 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &str) -> UR
 fn try_mmap_stdin() -> Option<Mmap> {
     // SAFETY: If the file is truncated while we map it, SIGBUS will be raised
     // and our process will be terminated, thus preventing access of invalid memory.
-    unsafe { Mmap::map(&stdin()).ok() }
+    let mmap = unsafe { Mmap::map(&stdin()).ok()? };
+    // On Windows, mmap on a pipe handle can "succeed" but return 0 bytes
+    // (the file size of a pipe is reported as 0). When that happens, return
+    // None so we fall through to buffer_stdin() which reads the pipe properly.
+    if mmap.is_empty() { None } else { Some(mmap) }
 }
 
 enum StdinData {

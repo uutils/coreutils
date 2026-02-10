@@ -141,11 +141,11 @@ fn create_bundle(
     // Disable Unicode directional isolate characters
     bundle.set_use_isolating(false);
 
-    let mut try_add_resource_from = |dir_opt: Option<std::path::PathBuf>| {
+    let mut try_add_resource_from = |dir_opt: Option<PathBuf>| {
         if let Some(resource) = dir_opt
             .map(|dir| dir.join(format!("{locale}.ftl")))
             .and_then(|locale_path| fs::read_to_string(locale_path).ok())
-            .and_then(|ftl| fluent_bundle::FluentResource::try_new(ftl).ok())
+            .and_then(|ftl| FluentResource::try_new(ftl).ok())
         {
             bundle.add_resource_overriding(resource);
         }
@@ -259,6 +259,14 @@ fn create_english_bundle_from_embedded(
     if let Some(uucore_content) = get_embedded_locale("uucore/en-US.ftl") {
         let uucore_resource = parse_fluent_resource(uucore_content)?;
         bundle.add_resource_overriding(uucore_resource);
+    }
+
+    // Checksum algorithms need locale messages from checksum_common
+    if util_name.ends_with("sum") {
+        if let Some(uucore_content) = get_embedded_locale("checksum_common/en-US.ftl") {
+            let uucore_resource = parse_fluent_resource(uucore_content)?;
+            bundle.add_resource_overriding(uucore_resource);
+        }
     }
 
     // Then, try to load utility-specific strings
@@ -404,24 +412,21 @@ pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
     });
 
     // Load common strings along with utility-specific strings
-    match get_locales_dir(p) {
-        Ok(locales_dir) => {
-            // Load both utility-specific and common strings
-            init_localization(&locale, &locales_dir, p)
-        }
-        Err(_) => {
-            // No locales directory found, use embedded English with common strings directly
-            let default_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
-                .expect("Default locale should always be valid");
-            let english_bundle = create_english_bundle_from_embedded(&default_locale, p)?;
-            let localizer = Localizer::new(english_bundle);
+    if let Ok(locales_dir) = get_locales_dir(p) {
+        // Load both utility-specific and common strings
+        init_localization(&locale, &locales_dir, p)
+    } else {
+        // No locales directory found, use embedded English with common strings directly
+        let default_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
+            .expect("Default locale should always be valid");
+        let english_bundle = create_english_bundle_from_embedded(&default_locale, p)?;
+        let localizer = Localizer::new(english_bundle);
 
-            LOCALIZER.with(|lock| {
-                lock.set(localizer)
-                    .map_err(|_| LocalizationError::Bundle("Localizer already initialized".into()))
-            })?;
-            Ok(())
-        }
+        LOCALIZER.with(|lock| {
+            lock.set(localizer)
+                .map_err(|_| LocalizationError::Bundle("Localizer already initialized".into()))
+        })?;
+        Ok(())
     }
 }
 
@@ -1331,7 +1336,7 @@ invalid-syntax = This is { $missing
         std::thread::spawn(|| {
             // Force English locale for this test
             unsafe {
-                std::env::set_var("LANG", "en-US");
+                env::set_var("LANG", "en-US");
             }
 
             // Test with a utility name that has embedded locales
