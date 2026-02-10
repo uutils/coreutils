@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) ttyname hostnames runlevel mesg wtmp statted boottime deadprocs initspawn clockchange curr pidstr exitstr hoststr
+// spell-checker:ignore (ToDO) ttyname hostnames runlevel mesg wtmp statted boottime deadprocs initspawn clockchange curr pidstr exitstr hoststr ESRCH
 
 use crate::options;
 use crate::uu_app;
@@ -11,6 +11,7 @@ use crate::uu_app;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
 use uucore::libc::{S_IWGRP, STDIN_FILENO, ttyname};
+use uucore::process::pid_is_alive;
 use uucore::translate;
 
 use uucore::utmpx::{self, UtmpxRecord, time};
@@ -207,7 +208,7 @@ impl Who {
         };
         if self.short_list {
             let users = utmpx::Utmpx::iter_all_records_from(f)
-                .filter(|ut| ut.is_user_process())
+                .filter(|ut| ut.is_user_process() && pid_is_alive(ut.pid()))
                 .map(|ut| ut.user())
                 .collect::<Vec<_>>();
             println!("{}", users.join(" "));
@@ -226,7 +227,7 @@ impl Who {
 
             for ut in records {
                 if !self.my_line_only || cur_tty == ut.tty_device() {
-                    if self.need_users && ut.is_user_process() {
+                    if self.need_users && ut.is_user_process() && pid_is_alive(ut.pid()) {
                         self.print_user(&ut)?;
                     } else {
                         match ut.record_type() {
