@@ -1,3 +1,5 @@
+use std::io::{Write, stdout};
+
 // This file is part of the uutils coreutils package.
 //
 // For the full copyright and license information, please view the LICENSE
@@ -479,7 +481,7 @@ pub fn format_and_print_delimited(input: &[u8], options: &NumfmtOptions) -> Resu
     }
 
     output.push(eol);
-    std::io::Write::write_all(&mut std::io::stdout(), &output).map_err(|e| e.to_string())?;
+    stdout().write_all(&output).map_err(|e| e.to_string())?;
 
     Ok(())
 }
@@ -523,7 +525,9 @@ pub fn format_and_print_whitespace(s: &str, options: &NumfmtOptions) -> Result<(
 
     let eol = if options.zero_terminated { '\0' } else { '\n' };
     output.push(eol);
-    print!("{output}");
+    stdout()
+        .write_all(output.as_bytes())
+        .map_err(|e| e.to_string())?;
 
     Ok(())
 }
