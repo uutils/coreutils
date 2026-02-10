@@ -7,7 +7,7 @@ sync-help-data = sync only file data, no unneeded metadata (Linux only)
 
 # Error messages
 sync-error-data-needs-argument = --data needs at least one argument
-sync-error-opening-file = error opening { $file }
+sync-error-opening-file = error opening { $file }: { $err }
 sync-error-no-such-file = error opening { $file }: No such file or directory
 sync-error-syncing-file = error syncing { $file }
 
