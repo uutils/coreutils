@@ -34,6 +34,34 @@ fn test_helper(file_name: &str, possible_args: &[&str]) {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_percentage_buffer_no_spill() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("tmp_dir");
+    at.write(
+        "input.txt",
+        &(0..100_000)
+            .rev()
+            .map(|i| format!("{i}\n"))
+            .collect::<String>(),
+    );
+    ucmd.args(&[
+        "input.txt",
+        "-n",
+        "-S",
+        "50%",
+        "--temporary-directory=tmp_dir",
+    ])
+    .succeeds();
+    assert!(
+        std::fs::read_dir(at.plus("tmp_dir"))
+            .unwrap()
+            .next()
+            .is_none()
+    );
+}
+
+#[test]
 fn test_buffer_sizes() {
     #[cfg(target_os = "linux")]
     let buffer_sizes = ["0", "50K", "50k", "1M", "100M", "0%", "10%"];

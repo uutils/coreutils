@@ -8,15 +8,14 @@
 
 use std::error::Error;
 use std::fmt;
-use std::num::{IntErrorKind, ParseIntError};
+use std::num::IntErrorKind;
 
 use crate::display::Quotable;
-#[cfg(target_os = "linux")]
-use procfs::{Current, Meminfo};
 
 /// Error arising from trying to compute system memory.
 enum SystemError {
     IOError,
+    #[cfg(target_os = "linux")]
     ParseError,
     #[cfg(not(target_os = "linux"))]
     NotFound,
@@ -28,10 +27,48 @@ impl From<std::io::Error> for SystemError {
     }
 }
 
-impl From<ParseIntError> for SystemError {
-    fn from(_: ParseIntError) -> Self {
-        Self::ParseError
+#[cfg(target_os = "linux")]
+fn parse_meminfo_kb(line: &str, key: &str) -> Option<u128> {
+    line.strip_prefix(key)?
+        .strip_prefix(':')?
+        .trim()
+        .trim_end_matches(" kB")
+        .trim()
+        .parse::<u128>()
+        .ok()
+        .map(|kb| kb.saturating_mul(1024))
+}
+
+#[cfg(target_os = "linux")]
+fn read_meminfo() -> Result<(u128, u128), SystemError> {
+    let contents = std::fs::read_to_string("/proc/meminfo")?;
+    let mut total = None;
+    let mut available = None;
+    let mut free = 0u128;
+    let mut buffers = 0u128;
+    let mut cached = 0u128;
+    for line in contents.lines() {
+        if let Some(v) = parse_meminfo_kb(line, "MemTotal") {
+            total = Some(v);
+        } else if let Some(v) = parse_meminfo_kb(line, "MemAvailable") {
+            available = Some(v);
+        } else if let Some(v) = parse_meminfo_kb(line, "MemFree") {
+            free = v;
+        } else if let Some(v) = parse_meminfo_kb(line, "Buffers") {
+            buffers = v;
+        } else if let Some(v) = parse_meminfo_kb(line, "Cached") {
+            cached = v;
+        }
     }
+    let total = total.ok_or(SystemError::ParseError)?;
+    let available = available
+        .filter(|&v| v > 0)
+        .or_else(|| {
+            let fallback = free.saturating_add(buffers).saturating_add(cached);
+            (fallback > 0).then_some(fallback)
+        })
+        .unwrap_or(total);
+    Ok((total, available))
 }
 
 /// Get the total number of bytes of physical memory.
@@ -44,31 +81,13 @@ impl From<ParseIntError> for SystemError {
 /// entry in the file.
 #[cfg(target_os = "linux")]
 fn total_physical_memory() -> Result<u128, SystemError> {
-    let info = Meminfo::current().map_err(|_| SystemError::IOError)?;
-    Ok((info.mem_total as u128).saturating_mul(1024))
+    read_meminfo().map(|(total, _)| total)
 }
 
 /// Return the number of bytes of memory that appear to be currently available.
 #[cfg(target_os = "linux")]
 pub fn available_memory_bytes() -> Option<u128> {
-    let info = Meminfo::current().ok()?;
-
-    if let Some(available_kib) = info.mem_available {
-        let available_bytes = (available_kib as u128).saturating_mul(1024);
-        if available_bytes > 0 {
-            return Some(available_bytes);
-        }
-    }
-
-    let fallback_kib = (info.mem_free as u128)
-        .saturating_add(info.buffers as u128)
-        .saturating_add(info.cached as u128);
-
-    if fallback_kib > 0 {
-        Some(fallback_kib.saturating_mul(1024))
-    } else {
-        total_physical_memory().ok()
-    }
+    read_meminfo().ok().map(|(_, available)| available)
 }
 
 /// Return `None` when the platform does not expose Linux-like `/proc/meminfo`.
@@ -219,7 +238,7 @@ impl<'parser> Parser<'parser> {
         if unit == "%" {
             let number: u128 = Self::parse_number(&numeric_string, 10, size)?;
             return match total_physical_memory() {
-                Ok(total) => Ok((number / 100) * total),
+                Ok(total) => Ok(total * number / 100),
                 Err(_) => Err(ParseSizeError::PhysicalMem(size.to_string())),
             };
         }
@@ -814,5 +833,19 @@ mod tests {
         assert!(parse_size_u64("-1%").is_err());
         assert!(parse_size_u64("1.0%").is_err());
         assert!(parse_size_u64("0x1%").is_err());
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn parse_percent_values() {
+        let total = total_physical_memory().ok().unwrap();
+
+        // 100% should equal total physical memory, not 1024x too large
+        assert_eq!(Ok(total), parse_size_u128("100%"));
+
+        // 50% should be half of total, not 0 from integer division truncation
+        assert_eq!(Ok(total / 2), parse_size_u128("50%"));
+
+        assert_eq!(Ok(0), parse_size_u128("0%"));
     }
 }

@@ -108,9 +108,6 @@ xattr = { workspace = true, optional = true }
 [dev-dependencies]
 tempfile = { workspace = true }
 
-[target.'cfg(target_os = "linux")'.dependencies]
-procfs = { workspace = true, optional = true }
-
 [target.'cfg(target_os = "windows")'.dependencies]
 wild = "2.2.1"
 winapi-util = { workspace = true, optional = true }
@@ -166,7 +163,7 @@ mode = ["libc"]
 perms = ["entries", "libc", "walkdir"]
 buf-copy = []
 parser-num = ["extendedbigdecimal", "num-traits"]
-parser-size = ["parser-num", "procfs"]
+parser-size = ["parser-num"]
 parser-glob = ["glob"]
 parser = ["parser-num", "parser-size", "parser-glob"]
 pipes = []
