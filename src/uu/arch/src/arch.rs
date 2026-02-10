@@ -11,12 +11,16 @@ use uucore::translate;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    // bypass clap for performance
+    let args: Vec<_> = args.collect();
+    if args.len() == 1 || (args.len() == 2 && args[1] == "--") {
+        let uts = PlatformInfo::new()
+            .map_err(|_e| USimpleError::new(1, translate!("cannot-get-system")))?;
+        writeln!(stdout(), "{}", uts.machine().to_string_lossy().trim())?;
+        return Ok(());
+    }
+    // todo: avoid large clap call for binary size
     uucore::clap_localization::handle_clap_result(uu_app(), args)?;
-
-    let uts =
-        PlatformInfo::new().map_err(|_e| USimpleError::new(1, translate!("cannot-get-system")))?;
-
-    writeln!(stdout(), "{}", uts.machine().to_string_lossy().trim())?;
     Ok(())
 }
 
