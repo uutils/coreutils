@@ -79,7 +79,7 @@ od-help-width = sortir OCTETS octets par ligne de sortie. 32 est impliqué quand
                 spécifié.
 od-help-traditional = mode de compatibilité avec une entrée, décalage et étiquette.
 od-help-o = unités octales 2-octets
-od-help-capital-i = unités décimales 4-octets
+od-help-capital-i = unités décimales 8-octets
 od-help-capital-l = unités décimales 8-octets
 od-help-i = unités décimales 4-octets
 od-help-l = unités décimales 8-octets
