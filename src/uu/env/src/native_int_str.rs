@@ -173,7 +173,7 @@ pub fn from_native_int_representation_owned(input: NativeIntString) -> OsString 
     }
 }
 
-pub fn get_single_native_int_value(c: &char) -> Option<NativeCharInt> {
+pub fn get_single_native_int_value(c: char) -> Option<NativeCharInt> {
     #[cfg(target_os = "windows")]
     {
         let mut buf = [0u16, 0];
@@ -229,7 +229,7 @@ impl<'a> NativeStr<'a> {
         self.native
     }
 
-    pub fn contains(&self, x: &char) -> Option<bool> {
+    pub fn contains(&self, x: char) -> Option<bool> {
         let n_c = get_single_native_int_value(x)?;
         Some(self.native.contains(&n_c))
     }
@@ -239,7 +239,7 @@ impl<'a> NativeStr<'a> {
         result.unwrap()
     }
 
-    pub fn split_once(&self, pred: &char) -> Option<(Cow<'a, OsStr>, Cow<'a, OsStr>)> {
+    pub fn split_once(&self, pred: char) -> Option<(Cow<'a, OsStr>, Cow<'a, OsStr>)> {
         let n_c = get_single_native_int_value(pred)?;
         let p = self.native.iter().position(|&x| x == n_c)?;
         let before = self.slice(0, p);

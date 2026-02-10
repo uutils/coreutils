@@ -12,3 +12,7 @@ rustflags = ["-C", "target-feature=+crt-static"]
 [env]
 # See feat_external_libstdbuf in src/uu/stdbuf/Cargo.toml
 LIBSTDBUF_DIR = "/usr/local/libexec/coreutils"
+
+# remove me
+[build]
+rustflags = ["-A", "clippy::collapsible_if"]

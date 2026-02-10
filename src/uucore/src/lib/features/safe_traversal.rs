@@ -345,15 +345,15 @@ impl FileType {
         }
     }
 
-    pub fn is_directory(&self) -> bool {
+    pub fn is_directory(self) -> bool {
         matches!(self, Self::Directory)
     }
 
-    pub fn is_regular_file(&self) -> bool {
+    pub fn is_regular_file(self) -> bool {
         matches!(self, Self::RegularFile)
     }
 
-    pub fn is_symlink(&self) -> bool {
+    pub fn is_symlink(self) -> bool {
         matches!(self, Self::Symlink)
     }
 }

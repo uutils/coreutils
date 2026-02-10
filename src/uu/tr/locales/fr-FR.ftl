@@ -24,6 +24,7 @@ tr-error-write-error = erreur d'écriture
 tr-warning-unescaped-backslash = avertissement : une barre oblique inverse non échappée à la fin de la chaîne n'est pas portable
 tr-warning-ambiguous-octal-escape = l'échappement octal ambigu \{ $origin_octal } est en cours
   d'interprétation comme la séquence de 2 octets \0{ $actual_octal_tail }, { $outstand_char }
+tr-warning-invalid-utf8 = séquence UTF-8 non valide
 
 # Messages d'erreur d'analyse de séquence
 tr-error-missing-char-class-name = nom de classe de caractères manquant '[::]'

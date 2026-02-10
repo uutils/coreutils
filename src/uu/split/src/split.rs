@@ -106,8 +106,8 @@ fn filter_args(
     if let Some(slice) = os_slice.to_str() {
         if should_extract_obs_lines(
             slice,
-            preceding_long_opt_req_value,
-            preceding_short_opt_req_value,
+            *preceding_long_opt_req_value,
+            *preceding_short_opt_req_value,
         ) {
             // start of the short option string
             // that can have obsolete lines option value in it
@@ -137,8 +137,8 @@ fn filter_args(
 /// and if so, a short option that can contain obsolete lines value
 fn should_extract_obs_lines(
     slice: &str,
-    preceding_long_opt_req_value: &bool,
-    preceding_short_opt_req_value: &bool,
+    preceding_long_opt_req_value: bool,
+    preceding_short_opt_req_value: bool,
 ) -> bool {
     slice.starts_with('-')
         && !slice.starts_with("--")

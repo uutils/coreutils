@@ -57,7 +57,7 @@ macro_rules! bench_shake_algorithm {
             let data = text_data::generate_by_size(100, 80);
 
             bencher.bench(|| {
-                let mut shake = Shake128::new();
+                let mut shake = Shake128::with_output_bits(256);
                 shake.hash_update(&data);
 
                 // SHAKE algorithms can output any length, use 256 bits (32 bytes) for meaningful comparison
@@ -76,7 +76,7 @@ macro_rules! bench_shake_algorithm {
             let data = text_data::generate_by_size(100, 80);
 
             bencher.bench(|| {
-                let mut shake = Shake256::new();
+                let mut shake = Shake256::with_output_bits(512);
                 shake.hash_update(&data);
 
                 // SHAKE algorithms can output any length, use 256 bits (32 bytes) for meaningful comparison

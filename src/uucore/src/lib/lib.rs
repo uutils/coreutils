@@ -171,8 +171,8 @@ pub fn get_canonical_util_name(util_name: &str) -> &str {
     match util_name {
         // uu_test aliases - '[' is an alias for test
         "[" => "test",
-
-        "dir" => "ls", // dir is an alias for ls
+        "dir" => "ls",  // dir is an alias for ls
+        "vdir" => "ls", // vdir is an alias for ls
 
         // Default case - return the util name as is
         _ => util_name,
@@ -434,6 +434,7 @@ impl error::UError for NonUtf8OsStrError {}
 ///
 /// This always succeeds on unix platforms,
 /// and fails on other platforms if the string can't be coerced to UTF-8.
+#[cfg_attr(unix, expect(clippy::unnecessary_wraps))]
 pub fn os_str_as_bytes(os_string: &OsStr) -> Result<&[u8], NonUtf8OsStrError> {
     #[cfg(unix)]
     return Ok(os_string.as_bytes());
@@ -467,6 +468,7 @@ pub fn os_str_as_bytes_lossy(os_string: &OsStr) -> Cow<'_, [u8]> {
 ///
 /// This always succeeds on unix platforms,
 /// and fails on other platforms if the bytes can't be parsed as UTF-8.
+#[cfg_attr(unix, expect(clippy::unnecessary_wraps))]
 pub fn os_str_from_bytes(bytes: &[u8]) -> error::UResult<Cow<'_, OsStr>> {
     #[cfg(unix)]
     return Ok(Cow::Borrowed(OsStr::from_bytes(bytes)));
@@ -481,6 +483,7 @@ pub fn os_str_from_bytes(bytes: &[u8]) -> error::UResult<Cow<'_, OsStr>> {
 ///
 /// This always succeeds on unix platforms,
 /// and fails on other platforms if the bytes can't be parsed as UTF-8.
+#[cfg_attr(unix, expect(clippy::unnecessary_wraps))]
 pub fn os_string_from_vec(vec: Vec<u8>) -> error::UResult<OsString> {
     #[cfg(unix)]
     return Ok(OsString::from_vec(vec));
@@ -495,6 +498,7 @@ pub fn os_string_from_vec(vec: Vec<u8>) -> error::UResult<OsString> {
 ///
 /// This always succeeds on unix platforms,
 /// and fails on other platforms if the bytes can't be parsed as UTF-8.
+#[cfg_attr(unix, expect(clippy::unnecessary_wraps))]
 pub fn os_string_to_vec(s: OsString) -> error::UResult<Vec<u8>> {
     #[cfg(unix)]
     let v = s.into_vec();

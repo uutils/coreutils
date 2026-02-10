@@ -104,8 +104,6 @@ skip = [
   { name = "zerocopy", version = "0.7.35" },
   # zerocopy
   { name = "zerocopy-derive", version = "0.7.35" },
-  # crossterm
-  { name = "signal-hook", version = "0.3.18" },
 ]
 # spell-checker: enable
 

@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore bytestream
-use super::*;
+use super::{Incomplete, str};
 use std::io::{self, BufRead};
 use thiserror::Error;
 use uucore::translate;
