@@ -14,10 +14,9 @@ use nix::fcntl::{OFlag, open};
 use nix::sys::stat::Mode;
 use std::path::Path;
 use uucore::display::Quotable;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use uucore::error::FromIo;
-use uucore::error::{UResult, USimpleError};
+use uucore::error::{UResult, USimpleError, get_exit_code, set_exit_code};
 use uucore::format_usage;
+use uucore::show_error;
 use uucore::translate;
 
 pub mod options {
@@ -235,21 +234,28 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let path = Path::new(&f);
             if let Err(e) = open(path, OFlag::O_NONBLOCK, Mode::empty()) {
                 if e != Errno::EACCES || (e == Errno::EACCES && path.is_dir()) {
-                    e.map_err_context(
-                        || translate!("sync-error-opening-file", "file" => f.quote()),
-                    )?;
+                    show_error!(
+                        "{}",
+                        translate!("sync-error-opening-file", "file" => f.quote(), "err" => e.desc())
+                    );
+                    set_exit_code(1);
                 }
             }
         }
         #[cfg(not(any(target_os = "linux", target_os = "android")))]
         {
             if !Path::new(&f).exists() {
-                return Err(USimpleError::new(
-                    1,
-                    translate!("sync-error-no-such-file", "file" => f.quote()),
-                ));
+                show_error!(
+                    "{}",
+                    translate!("sync-error-no-such-file", "file" => f.quote())
+                );
+                set_exit_code(1);
             }
         }
+    }
+
+    if get_exit_code() != 0 {
+        return Err(USimpleError::new(1, ""));
     }
 
     #[allow(clippy::if_same_then_else)]
