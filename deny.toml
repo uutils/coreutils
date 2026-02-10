@@ -88,7 +88,7 @@ skip = [
   { name = "itertools", version = "0.13.0" },
   # ordered-multimap
   { name = "hashbrown", version = "0.14.5" },
-  # lru (via num-prime)
+  # lru (via num-prime), icu4x
   { name = "hashbrown", version = "0.15.5" },
   # cexpr (via bindgen)
   { name = "nom", version = "7.1.3" },
