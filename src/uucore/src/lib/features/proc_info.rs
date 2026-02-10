@@ -465,16 +465,21 @@ mod tests {
             .flat_map(Teletype::try_from)
             .collect::<HashSet<_>>();
 
-        assert_eq!(result.len(), 1);
-        assert_eq!(
-            pid_entry.tty(),
-            Vec::from_iter(result.into_iter()).first().unwrap().clone()
-        );
+        // In CI environments or when running without a terminal, there may be no TTY
+        if result.is_empty() {
+            assert_eq!(pid_entry.tty(), Teletype::Unknown);
+        } else {
+            assert_eq!(result.len(), 1);
+            assert_eq!(
+                pid_entry.tty(),
+                Vec::from_iter(result.into_iter()).first().unwrap().clone()
+            );
+        }
     }
 
     #[test]
     fn test_thread_ids() {
-        let main_tid = unsafe { crate::libc::gettid() };
+        let main_tid = unsafe { libc::gettid() };
         std::thread::spawn(move || {
             let mut pid_entry = ProcessInformation::try_new(
                 PathBuf::from_str(&format!("/proc/{}", current_pid())).unwrap(),
@@ -484,7 +489,7 @@ mod tests {
 
             assert!(thread_ids.contains(&(main_tid as usize)));
 
-            let new_thread_tid = unsafe { crate::libc::gettid() };
+            let new_thread_tid = unsafe { libc::gettid() };
             assert!(thread_ids.contains(&(new_thread_tid as usize)));
         })
         .join()

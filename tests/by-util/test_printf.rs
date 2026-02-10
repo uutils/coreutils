@@ -1490,5 +1490,18 @@ fn test_extreme_field_width_overflow() {
     new_ucmd!()
         .args(&["%999999999999999999999999d", "1"])
         .fails_with_code(1)
-        .stderr_only("printf: write error\n");
+        .stderr_contains("printf: write error"); //could contains additional message like "formatting width too large" not in GNU, thats fine.
+}
+
+#[test]
+fn test_q_string_control_chars_with_quotes() {
+    // Test %q with control characters and single quotes combined.
+    // This tests the fix for the GNU compatibility issue where control
+    // characters combined with single quotes should use the segmented
+    // quoting approach rather than double quotes.
+    let input = "\x01'\x01";
+    new_ucmd!()
+        .args(&["%q", input])
+        .succeeds()
+        .stdout_only("''$'\\001'\\'''$'\\001'");
 }

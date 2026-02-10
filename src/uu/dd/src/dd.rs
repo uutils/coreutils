@@ -15,22 +15,26 @@ mod progress;
 
 use crate::bufferedoutput::BufferedOutput;
 use blocks::conv_block_unblock_helper;
-use datastructures::*;
+use datastructures::{ConversionMode, IConvFlags, IFlags, OConvFlags, OFlags, options};
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::fcntl::FcntlArg::F_SETFL;
+use nix::fcntl::FcntlArg;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::fcntl::OFlag;
 use parseargs::Parser;
 use progress::ProgUpdateType;
 use progress::{ProgUpdate, ReadStat, StatusLevel, WriteStat, gen_prog_updater};
+#[cfg(target_os = "linux")]
+use progress::{check_and_reset_sigusr1, install_sigusr1_handler};
 use uucore::io::OwnedFileDescriptorOrHandle;
 use uucore::translate;
 
 use std::cmp;
 use std::env;
 use std::ffi::OsString;
+#[cfg(unix)]
+use std::fs::Metadata;
 use std::fs::{File, OpenOptions};
-use std::io::{self, Read, Seek, SeekFrom, Stdout, Write};
+use std::io::{self, Read, Seek, SeekFrom, Write};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::fd::AsFd;
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -88,7 +92,7 @@ struct Settings {
 ///
 /// After being constructed with [`Alarm::with_interval`], [`Alarm::get_trigger`]
 /// will return [`ALARM_TRIGGER_TIMER`] once per the given [`Duration`].
-/// Alarm can be manually triggered with closure returned by [`Alarm::manual_trigger_fn`].
+/// Alarm can be manually triggered with [`Alarm::manual_trigger`].
 /// [`Alarm::get_trigger`] will return [`ALARM_TRIGGER_SIGNAL`] in this case.
 ///
 /// Can be cloned, but the trigger status is shared across all instances so only
@@ -120,18 +124,9 @@ impl Alarm {
         Self { interval, trigger }
     }
 
-    /// Returns a closure that allows to manually trigger the alarm
-    ///
-    /// This is useful for cases where more than one alarm even source exists
-    /// In case of `dd` there is the SIGUSR1/SIGINFO case where we want to
-    /// trigger an manual progress report.
-    pub fn manual_trigger_fn(&self) -> Box<dyn Send + Sync + Fn()> {
-        let weak_trigger = Arc::downgrade(&self.trigger);
-        Box::new(move || {
-            if let Some(trigger) = weak_trigger.upgrade() {
-                trigger.store(ALARM_TRIGGER_SIGNAL, Relaxed);
-            }
-        })
+    /// Manually trigger the alarm as a signal event
+    pub fn manual_trigger(&self) {
+        self.trigger.store(ALARM_TRIGGER_SIGNAL, Relaxed);
     }
 
     /// Use this function to poll for any pending alarm event
@@ -183,6 +178,32 @@ impl Num {
     }
 }
 
+/// Read and discard `n` bytes from `reader` using a buffer of size `buf_size`.
+///
+/// This is more efficient than `io::copy` with `BufReader` because it reads
+/// directly in `buf_size`-sized chunks, matching GNU dd's behavior.
+/// Returns the total number of bytes actually read.
+fn read_and_discard<R: Read>(reader: &mut R, n: u64, buf_size: usize) -> io::Result<u64> {
+    let mut buf = vec![0u8; buf_size];
+    let mut total = 0u64;
+    let mut remaining = n;
+
+    while remaining > 0 {
+        let to_read = cmp::min(remaining, buf_size as u64) as usize;
+        match reader.read(&mut buf[..to_read]) {
+            Ok(0) => break, // EOF
+            Ok(bytes_read) => {
+                total += bytes_read as u64;
+                remaining -= bytes_read as u64;
+            }
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
+            Err(e) => return Err(e),
+        }
+    }
+
+    Ok(total)
+}
+
 /// Data sources.
 ///
 /// Use [`Source::stdin_as_file`] if available to enable more
@@ -208,8 +229,8 @@ impl Source {
     /// Create a source from stdin using its raw file descriptor.
     ///
     /// This returns an instance of the `Source::StdinFile` variant,
-    /// using the raw file descriptor of [`std::io::Stdin`] to create
-    /// the [`std::fs::File`] parameter. You can use this instead of
+    /// using the raw file descriptor of [`io::Stdin`] to create
+    /// the [`File`] parameter. You can use this instead of
     /// `Source::Stdin` to allow reading from stdin without consuming
     /// the entire contents of stdin when this process terminates.
     #[cfg(unix)]
@@ -219,31 +240,19 @@ impl Source {
         Self::StdinFile(f)
     }
 
-    /// The length of the data source in number of bytes.
-    ///
-    /// If it cannot be determined, then this function returns 0.
-    fn len(&self) -> io::Result<i64> {
-        #[allow(clippy::match_wildcard_for_single_variants)]
-        match self {
-            Self::File(f) => Ok(f.metadata()?.len().try_into().unwrap_or(i64::MAX)),
-            _ => Ok(0),
-        }
-    }
-
-    fn skip(&mut self, n: u64) -> io::Result<u64> {
+    fn skip(&mut self, n: u64, ibs: usize) -> io::Result<u64> {
         match self {
             #[cfg(not(unix))]
-            Self::Stdin(stdin) => match io::copy(&mut stdin.take(n), &mut io::sink()) {
-                Ok(m) if m < n => {
+            Self::Stdin(stdin) => {
+                let m = read_and_discard(stdin, n, ibs)?;
+                if m < n {
                     show_error!(
                         "{}",
                         translate!("dd-error-cannot-skip-offset", "file" => "standard input")
                     );
-                    Ok(m)
                 }
-                Ok(m) => Ok(m),
-                Err(e) => Err(e),
-            },
+                Ok(m)
+            }
             #[cfg(unix)]
             Self::StdinFile(f) => {
                 if let Ok(Some(len)) = try_get_len_of_block_device(f) {
@@ -258,21 +267,44 @@ impl Source {
                         return Ok(len);
                     }
                 }
-                match io::copy(&mut f.take(n), &mut io::sink()) {
-                    Ok(m) if m < n => {
-                        show_error!(
-                            "{}",
-                            translate!("dd-error-cannot-skip-offset", "file" => "standard input")
-                        );
+                // Get file length before seeking to avoid race condition
+                let file_len = f.metadata().as_ref().map_or(u64::MAX, Metadata::len);
+                // Try seek first; fall back to read if not seekable
+                match n.try_into().ok().map(|n| f.seek(SeekFrom::Current(n))) {
+                    Some(Ok(pos)) => {
+                        if pos > file_len {
+                            show_error!(
+                                "{}",
+                                translate!("dd-error-cannot-skip-offset", "file" => "standard input")
+                            );
+                        }
+                        Ok(n)
+                    }
+                    // ESPIPE means the file descriptor is not seekable (e.g., a pipe),
+                    // so fall back to reading and discarding bytes using ibs-sized buffer
+                    Some(Err(e)) if e.raw_os_error() == Some(libc::ESPIPE) => {
+                        let m = read_and_discard(f, n, ibs)?;
+                        if m < n {
+                            show_error!(
+                                "{}",
+                                translate!("dd-error-cannot-skip-offset", "file" => "standard input")
+                            );
+                        }
                         Ok(m)
                     }
-                    Ok(m) => Ok(m),
-                    Err(e) => Err(e),
+                    _ => {
+                        show_error!(
+                            "{}",
+                            translate!("dd-error-cannot-skip-invalid", "file" => "standard input")
+                        );
+                        set_exit_code(1);
+                        Ok(0)
+                    }
                 }
             }
             Self::File(f) => f.seek(SeekFrom::Current(n.try_into().unwrap())),
             #[cfg(unix)]
-            Self::Fifo(f) => io::copy(&mut f.take(n), &mut io::sink()),
+            Self::Fifo(f) => read_and_discard(f, n, ibs),
         }
     }
 
@@ -357,7 +389,7 @@ impl<'a> Input<'a> {
             }
         }
         if settings.skip > 0 {
-            src.skip(settings.skip)?;
+            src.skip(settings.skip, settings.ibs)?;
         }
         Ok(Self { src, settings })
     }
@@ -380,7 +412,7 @@ impl<'a> Input<'a> {
 
         let mut src = Source::File(src);
         if settings.skip > 0 {
-            src.skip(settings.skip)?;
+            src.skip(settings.skip, settings.ibs)?;
         }
         Ok(Self { src, settings })
     }
@@ -394,7 +426,7 @@ impl<'a> Input<'a> {
         opts.custom_flags(make_linux_iflags(&settings.iflags).unwrap_or(0));
         let mut src = Source::Fifo(opts.open(filename)?);
         if settings.skip > 0 {
-            src.skip(settings.skip)?;
+            src.skip(settings.skip, settings.ibs)?;
         }
         Ok(Self { src, settings })
     }
@@ -564,7 +596,7 @@ enum Density {
 /// Data destinations.
 enum Dest {
     /// Output to stdout.
-    Stdout(Stdout),
+    Stdout(File),
 
     /// Output to a file.
     ///
@@ -616,7 +648,8 @@ impl Dest {
         }
     }
 
-    fn seek(&mut self, n: u64) -> io::Result<u64> {
+    #[cfg_attr(not(unix), allow(unused_variables))]
+    fn seek(&mut self, n: u64, obs: usize) -> io::Result<u64> {
         match self {
             Self::Stdout(stdout) => io::copy(&mut io::repeat(0).take(n), stdout),
             Self::File(f, _) => {
@@ -638,7 +671,7 @@ impl Dest {
             #[cfg(unix)]
             Self::Fifo(f) => {
                 // Seeking in a named pipe means *reading* from the pipe.
-                io::copy(&mut f.take(n), &mut io::sink())
+                read_and_discard(f, n, obs)
             }
             #[cfg(unix)]
             Self::Sink => Ok(0),
@@ -671,17 +704,6 @@ impl Dest {
                 posix_fadvise(f.as_fd(), offset, len, advice)
             }
             _ => Err(Errno::ESPIPE), // "Illegal seek"
-        }
-    }
-
-    /// The length of the data destination in number of bytes.
-    ///
-    /// If it cannot be determined, then this function returns 0.
-    fn len(&self) -> io::Result<i64> {
-        #[allow(clippy::match_wildcard_for_single_variants)]
-        match self {
-            Self::File(f, _) => Ok(f.metadata()?.len().try_into().unwrap_or(i64::MAX)),
-            _ => Ok(0),
         }
     }
 }
@@ -719,7 +741,7 @@ fn handle_o_direct_write(f: &mut File, buf: &[u8], original_error: io::Error) ->
         // Log any restoration errors without failing the operation
         if let Err(os_err) = fcntl(&mut *f, FcntlArg::F_SETFL(oflags)) {
             // Just log the error, don't fail the whole operation
-            show_error!("Failed to restore O_DIRECT flag: {}", os_err);
+            show_error!("Failed to restore O_DIRECT flag: {os_err}");
         }
 
         write_result
@@ -802,8 +824,9 @@ struct Output<'a> {
 impl<'a> Output<'a> {
     /// Instantiate this struct with stdout as a destination.
     fn new_stdout(settings: &'a Settings) -> UResult<Self> {
-        let mut dst = Dest::Stdout(io::stdout());
-        dst.seek(settings.seek)
+        let fx = OwnedFileDescriptorOrHandle::from(io::stdout())?;
+        let mut dst = Dest::Stdout(fx.into_file());
+        dst.seek(settings.seek, settings.obs)
             .map_err_context(|| translate!("dd-error-write-error"))?;
         Ok(Self { dst, settings })
     }
@@ -851,7 +874,7 @@ impl<'a> Output<'a> {
             Density::Dense
         };
         let mut dst = Dest::File(dst, density);
-        dst.seek(settings.seek)
+        dst.seek(settings.seek, settings.obs)
             .map_err_context(|| translate!("dd-error-failed-to-seek"))?;
         Ok(Self { dst, settings })
     }
@@ -867,7 +890,7 @@ impl<'a> Output<'a> {
         if let Some(libc_flags) = make_linux_oflags(&settings.oflags) {
             nix::fcntl::fcntl(
                 fx.as_raw().as_fd(),
-                F_SETFL(OFlag::from_bits_retain(libc_flags)),
+                FcntlArg::F_SETFL(OFlag::from_bits_retain(libc_flags)),
             )?;
         }
 
@@ -881,7 +904,7 @@ impl<'a> Output<'a> {
         // file for reading. But then we need to close the file and
         // re-open it for writing.
         if settings.seek > 0 {
-            Dest::Fifo(File::open(filename)?).seek(settings.seek)?;
+            Dest::Fifo(File::open(filename)?).seek(settings.seek, settings.obs)?;
         }
         // If `count=0`, then we don't bother opening the file for
         // writing because that would cause this process to block
@@ -1062,25 +1085,14 @@ impl BlockWriter<'_> {
 
 /// depending on the command line arguments, this function
 /// informs the OS to flush/discard the caches for input and/or output file.
-fn flush_caches_full_length(i: &Input, o: &Output) -> io::Result<()> {
-    // TODO Better error handling for overflowing `len`.
+fn flush_caches_full_length(i: &Input, o: &Output) {
+    // Using len=0 in posix_fadvise means "to end of file"
     if i.settings.iflags.nocache {
-        let offset = 0;
-        #[allow(clippy::useless_conversion)]
-        let len = i.src.len()?.try_into().unwrap();
-        i.discard_cache(offset, len);
+        i.discard_cache(0, 0);
     }
-    // Similarly, discard the system cache for the output file.
-    //
-    // TODO Better error handling for overflowing `len`.
     if i.settings.oflags.nocache {
-        let offset = 0;
-        #[allow(clippy::useless_conversion)]
-        let len = o.dst.len()?.try_into().unwrap();
-        o.discard_cache(offset, len);
+        o.discard_cache(0, 0);
     }
-
-    Ok(())
 }
 
 /// Copy the given input data to this output, consuming both.
@@ -1142,7 +1154,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         // requests that we inform the system that we no longer
         // need the contents of the input file in a system cache.
         //
-        flush_caches_full_length(&i, &o)?;
+        flush_caches_full_length(&i, &o);
         return finalize(
             BlockWriter::Unbuffered(o),
             rstat,
@@ -1164,14 +1176,9 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     // This avoids the need to query the OS monotonic clock for every block.
     let alarm = Alarm::with_interval(Duration::from_secs(1));
 
-    // The signal handler spawns an own thread that waits for signals.
-    // When the signal is received, it calls a handler function.
-    // We inject a handler function that manually triggers the alarm.
     #[cfg(target_os = "linux")]
-    let signal_handler = progress::SignalHandler::install_signal_handler(alarm.manual_trigger_fn());
-    #[cfg(target_os = "linux")]
-    if let Err(e) = &signal_handler {
-        if Some(StatusLevel::None) != i.settings.status {
+    if let Err(e) = install_sigusr1_handler() {
+        if i.settings.status != Some(StatusLevel::None) {
             eprintln!("{}\n\t{e}", translate!("dd-warning-signal-handler"));
         }
     }
@@ -1185,6 +1192,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
 
     let input_nocache = i.settings.iflags.nocache;
     let output_nocache = o.settings.oflags.nocache;
+    let output_direct = o.settings.oflags.direct;
 
     // Add partial block buffering, if needed.
     let mut o = if o.settings.buffered {
@@ -1208,6 +1216,12 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         let loop_bsize = calc_loop_bsize(i.settings.count, &rstat, &wstat, i.settings.ibs, bsize);
         let rstat_update = read_helper(&mut i, &mut buf, loop_bsize)?;
         if rstat_update.is_empty() {
+            if input_nocache {
+                i.discard_cache(read_offset.try_into().unwrap(), 0);
+            }
+            if output_nocache || output_direct {
+                o.discard_cache(write_offset.try_into().unwrap(), 0);
+            }
             break;
         }
         let wstat_update = o.write_blocks(&buf)?;
@@ -1244,6 +1258,10 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         // error.
         rstat += rstat_update;
         wstat += wstat_update;
+        #[cfg(target_os = "linux")]
+        if check_and_reset_sigusr1() {
+            alarm.manual_trigger();
+        }
         match alarm.get_trigger() {
             ALARM_TRIGGER_NONE => {}
             t @ (ALARM_TRIGGER_TIMER | ALARM_TRIGGER_SIGNAL) => {
@@ -1494,6 +1512,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .get_many::<String>(options::OPERANDS)
             .unwrap_or_default(),
     )?;
+
+    #[cfg(unix)]
+    if uucore::signals::stderr_was_closed() && settings.status != Some(StatusLevel::None) {
+        return Err(USimpleError::new(1, "write error"));
+    }
 
     let i = match settings.infile {
         #[cfg(unix)]

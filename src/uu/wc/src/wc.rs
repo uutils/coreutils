@@ -13,9 +13,10 @@ mod word_count;
 use std::{
     borrow::{Borrow, Cow},
     cmp::max,
+    env,
     ffi::{OsStr, OsString},
     fs::{self, File},
-    io::{self, Write},
+    io::{self, Write, stderr},
     iter,
     path::{Path, PathBuf},
 };
@@ -32,7 +33,7 @@ use uucore::{
     hardware::{HardwareFeature, HasHardwareFeatures as _, SimdPolicy},
     parser::shortcut_value_parser::ShortcutValueParser,
     quoting_style::{self, QuotingStyle},
-    show, show_error,
+    show,
 };
 
 use crate::{
@@ -334,7 +335,7 @@ impl<T: AsRef<str>> From<T> for TotalWhen {
 }
 
 impl TotalWhen {
-    fn is_total_row_visible(&self, num_inputs: usize) -> bool {
+    fn is_total_row_visible(self, num_inputs: usize) -> bool {
         match self {
             Self::Auto => num_inputs > 1,
             Self::Always | Self::Only => true,
@@ -578,10 +579,17 @@ fn process_chunk<
     text: &str,
     current_len: &mut usize,
     in_word: &mut bool,
+    posixly_correct: bool,
 ) {
     for ch in text.chars() {
         if SHOW_WORDS {
-            if ch.is_whitespace() {
+            let is_space = if posixly_correct {
+                matches!(ch, '\t'..='\r' | ' ')
+            } else {
+                ch.is_whitespace()
+            };
+
+            if is_space {
                 *in_word = false;
             } else if !(*in_word) {
                 // This also counts control characters! (As of GNU coreutils 9.5)
@@ -616,10 +624,18 @@ fn process_chunk<
     total.max_line_length = max(*current_len, total.max_line_length);
 }
 
-fn handle_error(error: BufReadDecoderError<'_>, total: &mut WordCount) -> Option<io::Error> {
+fn handle_error(
+    error: BufReadDecoderError<'_>,
+    total: &mut WordCount,
+    in_word: &mut bool,
+) -> Option<io::Error> {
     match error {
         BufReadDecoderError::InvalidByteSequence(bytes) => {
             total.bytes += bytes.len();
+            if !(*in_word) {
+                *in_word = true;
+                total.words += 1;
+            }
         }
         BufReadDecoderError::Io(e) => return Some(e),
     }
@@ -639,6 +655,7 @@ fn word_count_from_reader_specialized<
     let mut reader = BufReadDecoder::new(reader.buffered());
     let mut in_word = false;
     let mut current_len = 0;
+    let posixly_correct = env::var_os("POSIXLY_CORRECT").is_some();
     while let Some(chunk) = reader.next_strict() {
         match chunk {
             Ok(text) => {
@@ -647,10 +664,11 @@ fn word_count_from_reader_specialized<
                     text,
                     &mut current_len,
                     &mut in_word,
+                    posixly_correct,
                 );
             }
             Err(e) => {
-                if let Some(e) = handle_error(e, &mut total) {
+                if let Some(e) = handle_error(e, &mut total, &mut in_word) {
                     return (total, Some(e));
                 }
             }
@@ -828,14 +846,14 @@ fn hardware_feature_label(feature: HardwareFeature) -> &'static str {
     }
 }
 
-fn is_simd_runtime_feature(feature: &HardwareFeature) -> bool {
+fn is_simd_runtime_feature(feature: HardwareFeature) -> bool {
     matches!(
         feature,
         HardwareFeature::Avx2 | HardwareFeature::Sse2 | HardwareFeature::Asimd
     )
 }
 
-fn is_simd_debug_feature(feature: &HardwareFeature) -> bool {
+fn is_simd_debug_feature(feature: HardwareFeature) -> bool {
     matches!(
         feature,
         HardwareFeature::Avx512
@@ -854,16 +872,16 @@ struct WcSimdFeatures {
 fn wc_simd_features(policy: &SimdPolicy) -> WcSimdFeatures {
     let enabled = policy
         .iter_features()
-        .filter(is_simd_runtime_feature)
+        .filter(|v| is_simd_runtime_feature(*v))
         .collect();
 
     let mut disabled = Vec::new();
     let mut disabled_runtime = Vec::new();
     for feature in policy.disabled_features() {
-        if is_simd_debug_feature(&feature) {
+        if is_simd_debug_feature(feature) {
             disabled.push(feature);
         }
-        if is_simd_runtime_feature(&feature) {
+        if is_simd_runtime_feature(feature) {
             disabled_runtime.push(feature);
         }
     }
@@ -877,12 +895,10 @@ fn wc_simd_features(policy: &SimdPolicy) -> WcSimdFeatures {
 
 pub(crate) fn wc_simd_allowed(policy: &SimdPolicy) -> bool {
     let disabled_features = policy.disabled_features();
-    if disabled_features.iter().any(is_simd_runtime_feature) {
+    if disabled_features.into_iter().any(is_simd_runtime_feature) {
         return false;
     }
-    policy
-        .iter_features()
-        .any(|feature| is_simd_runtime_feature(&feature))
+    policy.iter_features().any(is_simd_runtime_feature)
 }
 
 fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
@@ -916,19 +932,22 @@ fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
         let runtime_disabled = !features.disabled_runtime.is_empty();
 
         if enabled_empty && !runtime_disabled {
-            show_error!("{}", translate!("wc-debug-hw-unavailable"));
+            let _ = writeln!(stderr(), "{}", translate!("wc-debug-hw-unavailable"));
         } else if runtime_disabled {
-            show_error!(
+            let _ = writeln!(
+                stderr(),
                 "{}",
                 translate!("wc-debug-hw-disabled-glibc", "features" => disabled.join(", "))
             );
         } else if !enabled_empty && disabled_empty {
-            show_error!(
+            let _ = writeln!(
+                stderr(),
                 "{}",
                 translate!("wc-debug-hw-using", "features" => enabled.join(", "))
             );
         } else {
-            show_error!(
+            let _ = writeln!(
+                stderr(),
                 "{}",
                 translate!(
                     "wc-debug-hw-limited-glibc",
@@ -950,12 +969,13 @@ fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
             }
         };
 
-        let word_count = match word_count_from_input(&input, settings) {
-            CountResult::Success(word_count) => word_count,
-            CountResult::Interrupted(word_count, err) => {
-                show!(err.map_err_context(|| input.path_display()));
-                word_count
-            }
+        // Store any I/O error from reading to print AFTER stats (matches GNU wc behavior)
+        let (word_count, deferred_error) = match word_count_from_input(&input, settings) {
+            CountResult::Success(word_count) => (word_count, None),
+            CountResult::Interrupted(word_count, err) => (
+                word_count,
+                Some(err.map_err_context(|| input.path_display())),
+            ),
             CountResult::Failure(err) => {
                 show!(err.map_err_context(|| input.path_display()));
                 continue;
@@ -969,6 +989,11 @@ fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
                 let title = maybe_title_str.unwrap_or(OsStr::new("<stdin>"));
                 show!(err.map_err_context(|| translate!("wc-error-failed-to-print-result", "title" => title.to_string_lossy())));
             }
+        }
+        // Print deferred error after stats to match GNU wc output order
+        if let Some(err) = deferred_error {
+            let _ = io::stdout().flush();
+            show!(err);
         }
     }
 
