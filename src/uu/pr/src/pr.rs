@@ -1264,11 +1264,8 @@ fn header_content(options: &OutputOptions, page: usize) -> Vec<String> {
         let padding_after_filename = space_for_filename - filename_len - padding_before_filename;
 
         format!(
-            "{date_part}{:width1$}{filename}{:width2$}{page_part}",
-            "",
-            "",
-            width1 = padding_before_filename,
-            width2 = padding_after_filename
+            "{date_part}{:padding_before_filename$}{filename}{:padding_after_filename$}{page_part}",
+            "", ""
         )
     } else {
         // If content is too long, just use single spaces

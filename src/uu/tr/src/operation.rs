@@ -379,13 +379,16 @@ impl Sequence {
                 let str_to_parse = std::str::from_utf8(out).unwrap();
                 let result = u8::from_str_radix(str_to_parse, 8).ok();
                 if result.is_none() {
-                    let origin_octal: &str = std::str::from_utf8(input).unwrap();
-                    let actual_octal_tail: &str = std::str::from_utf8(&input[0..2]).unwrap();
-                    let outstand_char: char = char::from_u32(input[2] as u32).unwrap();
-                    show_warning!(
-                        "{}",
-                        translate!("tr-warning-ambiguous-octal-escape", "origin_octal" => origin_octal, "actual_octal_tail" => actual_octal_tail, "outstand_char" => outstand_char)
-                    );
+                    if let Ok(origin_octal) = std::str::from_utf8(input) {
+                        let actual_octal_tail: &str = std::str::from_utf8(&input[0..2]).unwrap();
+                        let outstand_char: char = char::from_u32(input[2] as u32).unwrap();
+                        show_warning!(
+                            "{}",
+                            translate!("tr-warning-ambiguous-octal-escape", "origin_octal" => origin_octal, "actual_octal_tail" => actual_octal_tail, "outstand_char" => outstand_char)
+                        );
+                    } else {
+                        show_warning!("{}", translate!("tr-warning-invalid-utf8"));
+                    }
                 }
                 result
             },
@@ -547,8 +550,8 @@ impl Sequence {
                     (Ok(c), Ok(())) => Ok(Self::Char(c)),
                     (Ok(c), Err(v)) => Err(BadSequence::MultipleCharInEquivalence(format!(
                         "{}{}",
-                        String::from_utf8_lossy(&[c]).into_owned(),
-                        String::from_utf8_lossy(v).into_owned()
+                        String::from_utf8_lossy(&[c]),
+                        String::from_utf8_lossy(v),
                     ))),
                 },
             )

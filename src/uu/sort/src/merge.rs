@@ -548,7 +548,9 @@ impl ClosedTmpFile for ClosedCompressedTmpFile {
 
     fn reopen(self) -> UResult<Self::Reopened> {
         let mut command = Command::new(&self.compress_prog);
-        let file = File::open(&self.path).unwrap();
+        // mirroring what is done for ClosedPlainTmpFile
+        let file =
+            File::open(&self.path).map_err(|error| SortError::OpenTmpFileFailed { error })?;
         command.stdin(file).stdout(Stdio::piped()).arg("-d");
         let mut child = command
             .spawn()

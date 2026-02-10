@@ -1344,7 +1344,7 @@ fn show_error_if_needed(error: &CpError) {
         // Format IoErrContext using strip_errno to remove "(os error N)" suffix
         // for GNU-compatible output
         CpError::IoErrContext(io_err, context) => {
-            show_error!("{}: {}", context, uucore::error::strip_errno(io_err));
+            show_error!("{context}: {}", uucore::error::strip_errno(io_err));
         }
         _ => {
             show_error!("{error}");
@@ -1550,7 +1550,7 @@ fn copy_source(
         if options.parents {
             for (x, y) in aligned_ancestors(source, dest.as_path()) {
                 if let Ok(src) = canonicalize(x, MissingHandling::Normal, ResolveMode::Physical) {
-                    copy_attributes(&src, y, &options.attributes)?;
+                    copy_attributes(&src, y, &options.attributes, false)?;
                 }
             }
         }
@@ -1717,10 +1717,20 @@ pub(crate) fn copy_attributes(
     source: &Path,
     dest: &Path,
     attributes: &Attributes,
+    dest_is_freshly_created_dir: bool,
 ) -> CopyResult<()> {
     let context = &*format!("{} -> {}", source.quote(), dest.quote());
     let source_metadata =
         fs::symlink_metadata(source).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+
+    let mode_explicitly_disabled = matches!(attributes.mode, Preserve::No { explicit: true });
+
+    // preserve is true by default if the destination is created by us and it's a directory
+    let mode = if !mode_explicitly_disabled && dest_is_freshly_created_dir {
+        Preserve::Yes { required: false }
+    } else {
+        attributes.mode
+    };
 
     // Ownership must be changed first to avoid interfering with mode change.
     #[cfg(unix)]
@@ -1759,7 +1769,7 @@ pub(crate) fn copy_attributes(
         Ok(())
     })?;
 
-    handle_preserve(attributes.mode, || -> CopyResult<()> {
+    handle_preserve(mode, || -> CopyResult<()> {
         // The `chmod()` system call that underlies the
         // `fs::set_permissions()` call is unable to change the
         // permissions of a symbolic link. In that case, we just
@@ -2573,14 +2583,14 @@ fn copy_file(
             .ok()
             .filter(|p| p.exists())
             .unwrap_or_else(|| source.to_path_buf());
-        copy_attributes(&src_for_attrs, dest, &options.attributes)?;
+        copy_attributes(&src_for_attrs, dest, &options.attributes, false)?;
     } else if source_is_stream && !source.exists() {
         // Some stream files may not exist after we have copied it,
         // like anonymous pipes. Thus, we can't really copy its
         // attributes. However, this is already handled in the stream
         // copy function (see `copy_stream` under platform/linux.rs).
     } else {
-        copy_attributes(source, dest, &options.attributes)?;
+        copy_attributes(source, dest, &options.attributes, false)?;
     }
 
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
@@ -2762,7 +2772,7 @@ fn copy_link(
         delete_path(dest, options)?;
     }
     symlink_file(&link, dest, symlinked_files)?;
-    copy_attributes(source, dest, &options.attributes)
+    copy_attributes(source, dest, &options.attributes, false)
 }
 
 /// Generate an error message if `target` is not the correct `target_type`

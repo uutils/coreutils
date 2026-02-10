@@ -172,7 +172,7 @@ impl SectionDelimiter {
     fn parse(bytes: &[u8], pattern: &OsStr) -> Option<Self> {
         let pattern = pattern.as_encoded_bytes();
 
-        if bytes.is_empty() || pattern.is_empty() || bytes.len() % pattern.len() != 0 {
+        if bytes.is_empty() || pattern.is_empty() || !bytes.len().is_multiple_of(pattern.len()) {
             return None;
         }
 
@@ -426,7 +426,9 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
                 NumberingStyle::All
                     if line.is_empty()
                         && settings.join_blank_lines > 0
-                        && stats.consecutive_empty_lines % settings.join_blank_lines != 0 =>
+                        && !stats
+                            .consecutive_empty_lines
+                            .is_multiple_of(settings.join_blank_lines) =>
                 {
                     false
                 }
