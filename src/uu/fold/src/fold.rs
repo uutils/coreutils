@@ -260,57 +260,33 @@ fn next_tab_stop(col_count: usize) -> usize {
 }
 
 fn compute_col_count(buffer: &[u8], mode: WidthMode) -> usize {
-    match mode {
-        WidthMode::Characters => {
-            if let Ok(s) = std::str::from_utf8(buffer) {
-                let mut width = 0;
-                for ch in s.chars() {
-                    match ch {
-                        '\r' => width = 0,
-                        '\t' => width = next_tab_stop(width),
-                        '\x08' => width = width.saturating_sub(1),
-                        _ => width += 1,
+    if let Ok(s) = std::str::from_utf8(buffer) {
+        let mut width = 0;
+        for ch in s.chars() {
+            match ch {
+                '\r' => width = 0,
+                '\t' => width = next_tab_stop(width),
+                '\x08' => width = width.saturating_sub(1),
+                _ => {
+                    width += match mode {
+                        WidthMode::Characters => 1,
+                        WidthMode::Columns => UnicodeWidthChar::width(ch).unwrap_or(0),
                     }
                 }
-                width
-            } else {
-                let mut width = 0;
-                for &byte in buffer {
-                    match byte {
-                        CR => width = 0,
-                        TAB => width = next_tab_stop(width),
-                        0x08 => width = width.saturating_sub(1),
-                        _ => width += 1,
-                    }
-                }
-                width
             }
         }
-        WidthMode::Columns => {
-            if let Ok(s) = std::str::from_utf8(buffer) {
-                let mut width = 0;
-                for ch in s.chars() {
-                    match ch {
-                        '\r' => width = 0,
-                        '\t' => width = next_tab_stop(width),
-                        '\x08' => width = width.saturating_sub(1),
-                        _ => width += UnicodeWidthChar::width(ch).unwrap_or(0),
-                    }
-                }
-                width
-            } else {
-                let mut width = 0;
-                for &byte in buffer {
-                    match byte {
-                        CR => width = 0,
-                        TAB => width = next_tab_stop(width),
-                        0x08 => width = width.saturating_sub(1),
-                        _ => width += 1,
-                    }
-                }
-                width
+        width
+    } else {
+        let mut width = 0;
+        for &byte in buffer {
+            match byte {
+                CR => width = 0,
+                TAB => width = next_tab_stop(width),
+                0x08 => width = width.saturating_sub(1),
+                _ => width += 1,
             }
         }
+        width
     }
 }
 
@@ -514,7 +490,7 @@ fn process_utf8_chars<W: Write>(line: &str, ctx: &mut FoldContext<'_, W>) -> URe
         // not coalesce zero-width scalars there.
         if ctx.mode == WidthMode::Columns {
             while let Some(&(_, next_ch)) = iter.peek() {
-                if unicode_width::UnicodeWidthChar::width(next_ch).unwrap_or(1) == 0 {
+                if UnicodeWidthChar::width(next_ch).unwrap_or(1) == 0 {
                     iter.next();
                 } else {
                     break;

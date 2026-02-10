@@ -22,7 +22,7 @@ pub fn create_test_file(data: &[u8], temp_dir: &Path) -> PathBuf {
     writer.write_all(data).unwrap();
     writer.flush().unwrap();
     // Ensure data is fully written to disk before returning
-    std::mem::drop(writer);
+    drop(writer);
     File::open(&file_path).unwrap().sync_all().unwrap();
     file_path
 }
@@ -173,7 +173,7 @@ pub mod text_data {
     pub fn generate_ascii_data_simple(num_lines: usize) -> Vec<u8> {
         let mut data = Vec::new();
         for i in 0..num_lines {
-            let line = format!("line_{:06}\n", (num_lines - i - 1));
+            let line = format!("line_{:06}\n", num_lines - i - 1);
             data.extend_from_slice(line.as_bytes());
         }
         data

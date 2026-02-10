@@ -329,7 +329,7 @@ fn test_echo_multi() {
         .stdout_str()
         .split('\n')
         .filter(|x| !x.is_empty())
-        .map(std::convert::Into::into)
+        .map(Into::into)
         .collect();
     result_seq.sort_unstable();
     assert_eq!(result_seq, ["a", "b", "c"], "Output is not a permutation");
@@ -344,7 +344,7 @@ fn test_echo_postfix() {
         .stdout_str()
         .split('\n')
         .filter(|x| !x.is_empty())
-        .map(std::convert::Into::into)
+        .map(Into::into)
         .collect();
     result_seq.sort_unstable();
     assert_eq!(result_seq, ["a", "b", "c"], "Output is not a permutation");

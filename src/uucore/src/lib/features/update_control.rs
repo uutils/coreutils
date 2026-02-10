@@ -83,7 +83,7 @@ pub mod arguments {
             .default_missing_value("older")
             .require_equals(true)
             .overrides_with("update")
-            .action(clap::ArgAction::Set)
+            .action(ArgAction::Set)
     }
 
     /// `-u` argument
