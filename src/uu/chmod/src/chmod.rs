@@ -318,19 +318,13 @@ impl Chmoder {
 
             if new_mode != old_mode {
                 println!(
-                    "mode of {} changed from {:04o} ({}) to {:04o} ({})",
+                    "mode of {} changed from {old_mode:04o} ({current_permissions}) to {new_mode:04o} ({new_permissions})",
                     file_path.quote(),
-                    old_mode,
-                    current_permissions,
-                    new_mode,
-                    new_permissions
                 );
             } else if self.verbose {
                 println!(
-                    "mode of {} retained as {:04o} ({})",
+                    "mode of {} retained as {old_mode:04o} ({current_permissions})",
                     file_path.quote(),
-                    old_mode,
-                    current_permissions
                 );
             }
         }
@@ -600,9 +594,8 @@ impl Chmoder {
         if let Err(_e) = dir_fd.chmod_at(entry_name, new_mode, follow_symlinks) {
             if self.verbose {
                 println!(
-                    "failed to change mode of {} to {:o}",
+                    "failed to change mode of {} to {new_mode:o}",
                     file_path.quote(),
-                    new_mode
                 );
             }
             return Err(ChmodError::PermissionDenied(file_path.into()).into());

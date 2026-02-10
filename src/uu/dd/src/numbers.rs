@@ -45,7 +45,7 @@ pub(crate) enum SuffixType {
 }
 
 impl SuffixType {
-    fn base_and_suffix(&self, n: u128) -> (u128, &'static str) {
+    fn base_and_suffix(self, n: u128) -> (u128, &'static str) {
         let (bases, suffixes) = match self {
             Self::Iec => (IEC_BASES, IEC_SUFFIXES),
             Self::Si => (SI_BASES, SI_SUFFIXES),
