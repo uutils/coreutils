@@ -1237,7 +1237,7 @@ fn test_saved_state_invalid_formats() {
     let (path, _controller, _replica) = pty_path();
     let (_at, ts) = at_and_ts!();
 
-    let num_cc = nix::libc::NCCS;
+    let num_cc = libc::NCCS;
 
     // Build test strings with platform-specific counts
     let cc_zeros = vec!["0"; num_cc].join(":");
@@ -1540,7 +1540,7 @@ fn test_saved_state_with_control_chars() {
     let (_at, ts) = at_and_ts!();
 
     // Build a valid saved state with platform-specific number of control characters
-    let num_cc = nix::libc::NCCS;
+    let num_cc = libc::NCCS;
     let cc_values: Vec<String> = (1..=num_cc).map(|_| format!("{:x}", 0)).collect();
     let saved_state = format!("500:5:4bf:8a3b:{}", cc_values.join(":"));
 
@@ -1625,6 +1625,71 @@ fn test_stty_uses_stdin() {
         .succeeds()
         .stdout_contains("rows 30")
         .stdout_contains("columns 100");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_ispeed_ospeed_valid_speeds() {
+    let (path, _controller, _replica) = pty_path();
+    let (_at, ts) = at_and_ts!();
+
+    // Test various valid baud rates for both ispeed and ospeed
+    let test_cases = [
+        ("ispeed", "50"),
+        ("ispeed", "9600"),
+        ("ispeed", "19200"),
+        ("ospeed", "1200"),
+        ("ospeed", "9600"),
+        ("ospeed", "38400"),
+    ];
+
+    for (arg, speed) in test_cases {
+        let result = ts.ucmd().args(&["--file", &path, arg, speed]).run();
+        let exp_result = unwrap_or_return!(expected_result(&ts, &["--file", &path, arg, speed]));
+        let normalized_stderr = normalize_stderr(result.stderr_str());
+
+        result
+            .stdout_is(exp_result.stdout_str())
+            .code_is(exp_result.code());
+        assert_eq!(normalized_stderr, exp_result.stderr_str());
+    }
+}
+
+#[test]
+#[cfg(all(
+    unix,
+    not(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))
+))]
+#[ignore = "Issue: #9547"]
+fn test_ispeed_ospeed_invalid_speeds() {
+    let (path, _controller, _replica) = pty_path();
+    let (_at, ts) = at_and_ts!();
+
+    // Test invalid speed values (non-standard baud rates)
+    let test_cases = [
+        ("ispeed", "12345"),
+        ("ospeed", "99999"),
+        ("ispeed", "abc"),
+        ("ospeed", "xyz"),
+    ];
+
+    for (arg, speed) in test_cases {
+        let result = ts.ucmd().args(&["--file", &path, arg, speed]).run();
+        let exp_result = unwrap_or_return!(expected_result(&ts, &["--file", &path, arg, speed]));
+        let normalized_stderr = normalize_stderr(result.stderr_str());
+
+        result
+            .stdout_is(exp_result.stdout_str())
+            .code_is(exp_result.code());
+        assert_eq!(normalized_stderr, exp_result.stderr_str());
+    }
 }
 
 #[test]

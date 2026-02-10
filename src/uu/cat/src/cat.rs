@@ -20,8 +20,6 @@ use std::os::unix::fs::FileTypeExt;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UResult;
-#[cfg(not(target_os = "windows"))]
-use uucore::libc;
 use uucore::translate;
 use uucore::{fast_inc::fast_inc_one, format_usage};
 
@@ -220,15 +218,6 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    // When we receive a SIGPIPE signal, we want to terminate the process so
-    // that we don't print any error messages to stderr. Rust ignores SIGPIPE
-    // (see https://github.com/rust-lang/rust/issues/62569), so we restore it's
-    // default action here.
-    #[cfg(not(target_os = "windows"))]
-    unsafe {
-        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
-    }
-
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let number_mode = if matches.get_flag(options::NUMBER_NONBLANK) {
@@ -509,7 +498,7 @@ fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
                     .write_all(&buf[..n])
                     .inspect_err(handle_broken_pipe)?;
             }
-            Err(e) if e.kind() == ErrorKind::Interrupted => continue,
+            Err(e) if e.kind() == ErrorKind::Interrupted => {}
             Err(e) => return Err(e.into()),
         }
     }
@@ -650,40 +639,34 @@ fn write_end<W: Write>(
 
 fn write_to_end<W: Write>(in_buf: &[u8], writer: &mut W) -> io::Result<usize> {
     // using memchr2 significantly improves performances
-    match memchr2(b'\n', b'\r', in_buf) {
-        Some(p) => {
-            writer.write_all(&in_buf[..p])?;
-            Ok(p)
-        }
-        None => {
-            writer.write_all(in_buf)?;
-            Ok(in_buf.len())
-        }
+    if let Some(p) = memchr2(b'\n', b'\r', in_buf) {
+        writer.write_all(&in_buf[..p])?;
+        Ok(p)
+    } else {
+        writer.write_all(in_buf)?;
+        Ok(in_buf.len())
     }
 }
 
 fn write_tab_to_end<W: Write>(mut in_buf: &[u8], writer: &mut W) -> io::Result<usize> {
     let mut count = 0;
     loop {
-        match in_buf
+        if let Some(p) = in_buf
             .iter()
             .position(|c| *c == b'\n' || *c == b'\t' || *c == b'\r')
         {
-            Some(p) => {
-                writer.write_all(&in_buf[..p])?;
-                if in_buf[p] == b'\t' {
-                    writer.write_all(b"^I")?;
-                    in_buf = &in_buf[p + 1..];
-                    count += p + 1;
-                } else {
-                    // b'\n' or b'\r'
-                    return Ok(count + p);
-                }
+            writer.write_all(&in_buf[..p])?;
+            if in_buf[p] == b'\t' {
+                writer.write_all(b"^I")?;
+                in_buf = &in_buf[p + 1..];
+                count += p + 1;
+            } else {
+                // b'\n' or b'\r'
+                return Ok(count + p);
             }
-            None => {
-                writer.write_all(in_buf)?;
-                return Ok(in_buf.len() + count);
-            }
+        } else {
+            writer.write_all(in_buf)?;
+            return Ok(in_buf.len() + count);
         }
     }
 }

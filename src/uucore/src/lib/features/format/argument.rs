@@ -73,7 +73,7 @@ impl<'a> FormatArguments<'a> {
         self.next_arg_position = self.current_offset;
     }
 
-    pub fn next_char(&mut self, position: &ArgumentLocation) -> u8 {
+    pub fn next_char(&mut self, position: ArgumentLocation) -> u8 {
         match self.next_arg(position) {
             Some(FormatArgument::Char(c)) => *c as u8,
             Some(FormatArgument::Unparsed(os)) => match os_str_as_bytes(os) {
@@ -84,14 +84,14 @@ impl<'a> FormatArguments<'a> {
         }
     }
 
-    pub fn next_string(&mut self, position: &ArgumentLocation) -> &'a OsStr {
+    pub fn next_string(&mut self, position: ArgumentLocation) -> &'a OsStr {
         match self.next_arg(position) {
             Some(FormatArgument::Unparsed(os) | FormatArgument::String(os)) => os,
             _ => "".as_ref(),
         }
     }
 
-    pub fn next_i64(&mut self, position: &ArgumentLocation) -> i64 {
+    pub fn next_i64(&mut self, position: ArgumentLocation) -> i64 {
         match self.next_arg(position) {
             Some(FormatArgument::SignedInt(n)) => *n,
             Some(FormatArgument::Unparsed(os)) => Self::get_num::<i64>(os),
@@ -99,7 +99,7 @@ impl<'a> FormatArguments<'a> {
         }
     }
 
-    pub fn next_u64(&mut self, position: &ArgumentLocation) -> u64 {
+    pub fn next_u64(&mut self, position: ArgumentLocation) -> u64 {
         match self.next_arg(position) {
             Some(FormatArgument::UnsignedInt(n)) => *n,
             Some(FormatArgument::Unparsed(os)) => Self::get_num::<u64>(os),
@@ -107,7 +107,7 @@ impl<'a> FormatArguments<'a> {
         }
     }
 
-    pub fn next_extended_big_decimal(&mut self, position: &ArgumentLocation) -> ExtendedBigDecimal {
+    pub fn next_extended_big_decimal(&mut self, position: ArgumentLocation) -> ExtendedBigDecimal {
         match self.next_arg(position) {
             Some(FormatArgument::Float(n)) => n.clone(),
             Some(FormatArgument::Unparsed(os)) => Self::get_num::<ExtendedBigDecimal>(os),
@@ -188,14 +188,14 @@ impl<'a> FormatArguments<'a> {
         self.args.get(pos)
     }
 
-    fn next_arg(&mut self, position: &ArgumentLocation) -> Option<&'a FormatArgument> {
+    fn next_arg(&mut self, position: ArgumentLocation) -> Option<&'a FormatArgument> {
         match position {
             ArgumentLocation::NextArgument => {
                 let arg = self.args.get(self.next_arg_position);
                 self.next_arg_position += 1;
                 arg
             }
-            ArgumentLocation::Position(pos) => self.get_at_relative_position(*pos),
+            ArgumentLocation::Position(pos) => self.get_at_relative_position(pos),
         }
     }
 }
@@ -257,7 +257,7 @@ mod tests {
         assert!(!args.is_exhausted());
         assert_eq!(Some(&FormatArgument::Char('a')), args.peek_arg());
         assert!(!args.is_exhausted()); // Peek shouldn't consume
-        assert_eq!(b'a', args.next_char(&ArgumentLocation::NextArgument));
+        assert_eq!(b'a', args.next_char(ArgumentLocation::NextArgument));
         args.start_next_batch();
         assert!(args.is_exhausted()); // After batch, exhausted with a single arg
         assert_eq!(None, args.peek_arg());
@@ -278,26 +278,26 @@ mod tests {
         ]);
 
         // First batch - two sequential calls
-        assert_eq!(b'z', args.next_char(&ArgumentLocation::NextArgument));
-        assert_eq!(b'y', args.next_char(&ArgumentLocation::NextArgument));
+        assert_eq!(b'z', args.next_char(ArgumentLocation::NextArgument));
+        assert_eq!(b'y', args.next_char(ArgumentLocation::NextArgument));
         args.start_next_batch();
         assert!(!args.is_exhausted());
 
         // Second batch - same pattern
-        assert_eq!(b'x', args.next_char(&ArgumentLocation::NextArgument));
-        assert_eq!(b'w', args.next_char(&ArgumentLocation::NextArgument));
+        assert_eq!(b'x', args.next_char(ArgumentLocation::NextArgument));
+        assert_eq!(b'w', args.next_char(ArgumentLocation::NextArgument));
         args.start_next_batch();
         assert!(!args.is_exhausted());
 
         // Third batch - same pattern
-        assert_eq!(b'v', args.next_char(&ArgumentLocation::NextArgument));
-        assert_eq!(b'u', args.next_char(&ArgumentLocation::NextArgument));
+        assert_eq!(b'v', args.next_char(ArgumentLocation::NextArgument));
+        assert_eq!(b'u', args.next_char(ArgumentLocation::NextArgument));
         args.start_next_batch();
         assert!(!args.is_exhausted());
 
         // Fourth batch - same pattern (last batch)
-        assert_eq!(b't', args.next_char(&ArgumentLocation::NextArgument));
-        assert_eq!(b's', args.next_char(&ArgumentLocation::NextArgument));
+        assert_eq!(b't', args.next_char(ArgumentLocation::NextArgument));
+        assert_eq!(b's', args.next_char(ArgumentLocation::NextArgument));
         args.start_next_batch();
         assert!(args.is_exhausted());
     }
@@ -316,20 +316,20 @@ mod tests {
         let mut args = FormatArguments::new(&args);
 
         // First batch - next_char followed by next_string
-        assert_eq!(b'a', args.next_char(&ArgumentLocation::NextArgument));
-        assert_eq!("hello", args.next_string(&ArgumentLocation::NextArgument));
+        assert_eq!(b'a', args.next_char(ArgumentLocation::NextArgument));
+        assert_eq!("hello", args.next_string(ArgumentLocation::NextArgument));
         args.start_next_batch();
         assert!(!args.is_exhausted());
 
         // Second batch - same pattern
-        assert_eq!(b'1', args.next_char(&ArgumentLocation::NextArgument)); // First byte of 123
-        assert_eq!("world", args.next_string(&ArgumentLocation::NextArgument));
+        assert_eq!(b'1', args.next_char(ArgumentLocation::NextArgument)); // First byte of 123
+        assert_eq!("world", args.next_string(ArgumentLocation::NextArgument));
         args.start_next_batch();
         assert!(!args.is_exhausted());
 
         // Third batch - same pattern (last batch)
-        assert_eq!(b'z', args.next_char(&ArgumentLocation::NextArgument));
-        assert_eq!("test", args.next_string(&ArgumentLocation::NextArgument));
+        assert_eq!(b'z', args.next_char(ArgumentLocation::NextArgument));
+        assert_eq!("test", args.next_string(ArgumentLocation::NextArgument));
         args.start_next_batch();
         assert!(args.is_exhausted());
     }
@@ -354,23 +354,23 @@ mod tests {
         ]);
 
         // First batch - positional access
-        assert_eq!(b'b', args.next_char(&non_zero_pos(2))); // Position 2
-        assert_eq!(b'a', args.next_char(&non_zero_pos(1))); // Position 1
-        assert_eq!(b'c', args.next_char(&non_zero_pos(3))); // Position 3
+        assert_eq!(b'b', args.next_char(non_zero_pos(2))); // Position 2
+        assert_eq!(b'a', args.next_char(non_zero_pos(1))); // Position 1
+        assert_eq!(b'c', args.next_char(non_zero_pos(3))); // Position 3
         args.start_next_batch();
         assert!(!args.is_exhausted());
 
         // Second batch - same positional pattern
-        assert_eq!(b'e', args.next_char(&non_zero_pos(2))); // Position 2
-        assert_eq!(b'd', args.next_char(&non_zero_pos(1))); // Position 1
-        assert_eq!(b'f', args.next_char(&non_zero_pos(3))); // Position 3
+        assert_eq!(b'e', args.next_char(non_zero_pos(2))); // Position 2
+        assert_eq!(b'd', args.next_char(non_zero_pos(1))); // Position 1
+        assert_eq!(b'f', args.next_char(non_zero_pos(3))); // Position 3
         args.start_next_batch();
         assert!(!args.is_exhausted());
 
         // Third batch - same positional pattern (last batch)
-        assert_eq!(b'h', args.next_char(&non_zero_pos(2))); // Position 2
-        assert_eq!(b'g', args.next_char(&non_zero_pos(1))); // Position 1
-        assert_eq!(b'i', args.next_char(&non_zero_pos(3))); // Position 3
+        assert_eq!(b'h', args.next_char(non_zero_pos(2))); // Position 2
+        assert_eq!(b'g', args.next_char(non_zero_pos(1))); // Position 1
+        assert_eq!(b'i', args.next_char(non_zero_pos(3))); // Position 3
         args.start_next_batch();
         assert!(args.is_exhausted());
     }
@@ -390,20 +390,20 @@ mod tests {
         ]);
 
         // First batch - mix of sequential and positional
-        assert_eq!(b'a', args.next_char(&ArgumentLocation::NextArgument)); // Sequential
-        assert_eq!(b'c', args.next_char(&non_zero_pos(3))); // Positional
+        assert_eq!(b'a', args.next_char(ArgumentLocation::NextArgument)); // Sequential
+        assert_eq!(b'c', args.next_char(non_zero_pos(3))); // Positional
         args.start_next_batch();
         assert!(!args.is_exhausted());
 
         // Second batch - same mixed pattern
-        assert_eq!(b'd', args.next_char(&ArgumentLocation::NextArgument)); // Sequential
-        assert_eq!(b'f', args.next_char(&non_zero_pos(3))); // Positional
+        assert_eq!(b'd', args.next_char(ArgumentLocation::NextArgument)); // Sequential
+        assert_eq!(b'f', args.next_char(non_zero_pos(3))); // Positional
         args.start_next_batch();
         assert!(!args.is_exhausted());
 
         // Last batch - same mixed pattern
-        assert_eq!(b'g', args.next_char(&ArgumentLocation::NextArgument)); // Sequential
-        assert_eq!(b'\0', args.next_char(&non_zero_pos(3))); // Out of bounds
+        assert_eq!(b'g', args.next_char(ArgumentLocation::NextArgument)); // Sequential
+        assert_eq!(b'\0', args.next_char(non_zero_pos(3))); // Out of bounds
         args.start_next_batch();
         assert!(args.is_exhausted());
     }
@@ -422,17 +422,17 @@ mod tests {
         let mut args = FormatArguments::new(&args);
 
         // First batch - i64, u64, decimal
-        assert_eq!(10, args.next_i64(&ArgumentLocation::NextArgument));
-        assert_eq!(20, args.next_u64(&ArgumentLocation::NextArgument));
-        let result = args.next_extended_big_decimal(&ArgumentLocation::NextArgument);
+        assert_eq!(10, args.next_i64(ArgumentLocation::NextArgument));
+        assert_eq!(20, args.next_u64(ArgumentLocation::NextArgument));
+        let result = args.next_extended_big_decimal(ArgumentLocation::NextArgument);
         assert_eq!(ExtendedBigDecimal::zero(), result);
         args.start_next_batch();
         assert!(!args.is_exhausted());
 
         // Second batch - same pattern
-        assert_eq!(30, args.next_i64(&ArgumentLocation::NextArgument));
-        assert_eq!(40, args.next_u64(&ArgumentLocation::NextArgument));
-        let result = args.next_extended_big_decimal(&ArgumentLocation::NextArgument);
+        assert_eq!(30, args.next_i64(ArgumentLocation::NextArgument));
+        assert_eq!(40, args.next_u64(ArgumentLocation::NextArgument));
+        let result = args.next_extended_big_decimal(ArgumentLocation::NextArgument);
         assert_eq!(ExtendedBigDecimal::zero(), result);
         args.start_next_batch();
         assert!(args.is_exhausted());
@@ -450,14 +450,14 @@ mod tests {
         let mut args = FormatArguments::new(&args);
 
         // First batch - string, number
-        assert_eq!("hello", args.next_string(&ArgumentLocation::NextArgument));
-        assert_eq!(123, args.next_i64(&ArgumentLocation::NextArgument));
+        assert_eq!("hello", args.next_string(ArgumentLocation::NextArgument));
+        assert_eq!(123, args.next_i64(ArgumentLocation::NextArgument));
         args.start_next_batch();
         assert!(!args.is_exhausted());
 
         // Second batch - same pattern
-        assert_eq!("hello", args.next_string(&ArgumentLocation::NextArgument));
-        assert_eq!(456, args.next_i64(&ArgumentLocation::NextArgument));
+        assert_eq!("hello", args.next_string(ArgumentLocation::NextArgument));
+        assert_eq!(456, args.next_i64(ArgumentLocation::NextArgument));
         args.start_next_batch();
         assert!(args.is_exhausted());
     }
@@ -476,16 +476,16 @@ mod tests {
         let mut args = FormatArguments::new(&args);
 
         // First batch - positional access of different types
-        assert_eq!(b'a', args.next_char(&non_zero_pos(1)));
-        assert_eq!("test", args.next_string(&non_zero_pos(2)));
-        assert_eq!(42, args.next_u64(&non_zero_pos(3)));
+        assert_eq!(b'a', args.next_char(non_zero_pos(1)));
+        assert_eq!("test", args.next_string(non_zero_pos(2)));
+        assert_eq!(42, args.next_u64(non_zero_pos(3)));
         args.start_next_batch();
         assert!(!args.is_exhausted());
 
         // Second batch - same pattern
-        assert_eq!(b'b', args.next_char(&non_zero_pos(1)));
-        assert_eq!("more", args.next_string(&non_zero_pos(2)));
-        assert_eq!(99, args.next_u64(&non_zero_pos(3)));
+        assert_eq!(b'b', args.next_char(non_zero_pos(1)));
+        assert_eq!("more", args.next_string(non_zero_pos(2)));
+        assert_eq!(99, args.next_u64(non_zero_pos(3)));
         args.start_next_batch();
         assert!(args.is_exhausted());
     }
@@ -502,14 +502,14 @@ mod tests {
         ]);
 
         // First batch
-        assert_eq!(b'a', args.next_char(&ArgumentLocation::NextArgument));
-        assert_eq!(b'c', args.next_char(&non_zero_pos(3)));
+        assert_eq!(b'a', args.next_char(ArgumentLocation::NextArgument));
+        assert_eq!(b'c', args.next_char(non_zero_pos(3)));
         args.start_next_batch();
         assert!(!args.is_exhausted());
 
         // Second batch (partial)
-        assert_eq!(b'd', args.next_char(&ArgumentLocation::NextArgument));
-        assert_eq!(b'\0', args.next_char(&non_zero_pos(3))); // Out of bounds
+        assert_eq!(b'd', args.next_char(ArgumentLocation::NextArgument));
+        assert_eq!(b'\0', args.next_char(non_zero_pos(3))); // Out of bounds
         args.start_next_batch();
         assert!(args.is_exhausted());
     }
