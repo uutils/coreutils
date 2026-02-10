@@ -12,4 +12,3 @@ sleep-error-missing-operand = opérande manquant
 
 # Messages d'aide
 sleep-help-number = faire une pause de NOMBRE secondes
-

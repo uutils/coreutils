@@ -8,10 +8,17 @@
 //! filesystem mounted at a particular directory. It also includes
 //! information on amount of space available and amount of space used.
 // spell-checker:ignore canonicalized
+#[cfg(unix)]
+use std::io;
+#[cfg(unix)]
+use std::path::PathBuf;
 use std::{ffi::OsString, path::Path};
 
 #[cfg(unix)]
-use uucore::fsext::statfs;
+use std::os::unix::fs::MetadataExt;
+
+#[cfg(unix)]
+use uucore::fsext::{FsMeta, pretty_fstype, statfs};
 use uucore::fsext::{FsUsage, MountInfo};
 
 /// Summary representation of a filesystem.
@@ -58,6 +65,31 @@ fn is_over_mounted(mounts: &[MountInfo], mount: &MountInfo) -> bool {
     } else {
         // Should be unreachable if `mount` is in `mounts`
         false
+    }
+}
+
+/// Find mount point by walking up the directory tree until device ID changes.
+#[cfg(unix)]
+pub(crate) fn find_mount_point<P: AsRef<Path>>(path: P) -> io::Result<PathBuf> {
+    let mut current = path.as_ref().canonicalize()?;
+    let current_dev = current.metadata()?.dev();
+
+    loop {
+        let parent = match current.parent() {
+            Some(p) if !p.as_os_str().is_empty() => p,
+            _ => return Ok(current),
+        };
+
+        let parent_dev = parent.metadata()?.dev();
+        if parent_dev != current_dev {
+            return Ok(current);
+        }
+
+        if parent == current {
+            return Ok(current);
+        }
+
+        current = parent.to_path_buf();
     }
 }
 
@@ -194,6 +226,43 @@ impl Filesystem {
         return result.and_then(|mount_info| Self::from_mount(mount_info, Some(file)));
         #[cfg(not(windows))]
         return result.and_then(|mount_info| Self::from_mount(mounts, mount_info, Some(file)));
+    }
+
+    /// Fallback using statfs when mount table is unavailable.
+    #[cfg(unix)]
+    pub(crate) fn from_path_direct<P>(path: P) -> Result<Self, FsError>
+    where
+        P: AsRef<Path>,
+    {
+        let file = path.as_ref().as_os_str().to_owned();
+
+        let canonical_path = path
+            .as_ref()
+            .canonicalize()
+            .map_err(|_| FsError::InvalidPath)?;
+
+        let stat_result = statfs(canonical_path.as_os_str()).map_err(|_| FsError::MountMissing)?;
+        let mount_dir = find_mount_point(&canonical_path).map_err(|_| FsError::MountMissing)?;
+        let fs_type = pretty_fstype(stat_result.fs_type()).into_owned();
+
+        let mount_info = MountInfo {
+            dev_id: String::new(),
+            dev_name: "-".to_string(),
+            fs_type,
+            mount_dir: mount_dir.into_os_string(),
+            mount_option: String::new(),
+            mount_root: OsString::new(),
+            remote: false,
+            dummy: false,
+        };
+
+        let usage = FsUsage::new(stat_result);
+
+        Ok(Self {
+            file: Some(file),
+            mount_info,
+            usage,
+        })
     }
 }
 
