@@ -188,7 +188,7 @@ fn paste(
 }
 
 fn parse_delimiters(delimiters: &OsString) -> UResult<Box<[Box<[u8]>]>> {
-    let bytes = uucore::os_string_to_vec(delimiters.clone())?;
+    let bytes = uucore::os_str_as_bytes(delimiters)?;
     let mut vec = Vec::<Box<[u8]>>::with_capacity(bytes.len());
     let mut i = 0;
 
@@ -212,7 +212,8 @@ fn parse_delimiters(delimiters: &OsString) -> UResult<Box<[Box<[u8]>]>> {
                 b'v' => vec.push(Box::new([b'\x0B'])),
                 _ => {
                     // Unknown escape: strip backslash, use the following character(s)
-                    let len = mb_char_len(&bytes[i..]);
+                    let remaining = &bytes[i..];
+                    let len = mb_char_len(remaining).min(remaining.len());
                     vec.push(Box::from(&bytes[i..i + len]));
                     i += len;
                     continue;
@@ -220,7 +221,8 @@ fn parse_delimiters(delimiters: &OsString) -> UResult<Box<[Box<[u8]>]>> {
             }
             i += 1;
         } else {
-            let len = mb_char_len(&bytes[i..]);
+            let remaining = &bytes[i..];
+            let len = mb_char_len(remaining).min(remaining.len());
             vec.push(Box::from(&bytes[i..i + len]));
             i += len;
         }

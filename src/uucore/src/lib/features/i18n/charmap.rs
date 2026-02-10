@@ -52,11 +52,8 @@ fn get_encoding() -> &'static MbEncoding {
 }
 
 /// Byte length of the first character in `bytes` under the current locale encoding.
-/// Returns 1 for empty, invalid, or incomplete sequences.
 pub fn mb_char_len(bytes: &[u8]) -> usize {
-    if bytes.is_empty() {
-        return 1;
-    }
+    debug_assert!(!bytes.is_empty());
     let b0 = bytes[0];
     if b0 <= 0x7F {
         return 1;
