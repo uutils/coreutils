@@ -168,6 +168,14 @@ fn test_sync_multiple_files() {
     new_ucmd!().arg("--data").arg(&file1).arg(&file2).succeeds();
 }
 
+#[test]
+fn test_sync_multiple_nonexistent_files() {
+    let result = new_ucmd!().arg("--data").arg("bad1").arg("bad2").fails();
+
+    result.stderr_contains("sync: error opening 'bad1': No such file or directory");
+    result.stderr_contains("sync: error opening 'bad2': No such file or directory");
+}
+
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
 fn test_sync_data_fifo_fails_immediately() {
