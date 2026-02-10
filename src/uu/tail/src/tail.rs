@@ -22,7 +22,7 @@ mod platform;
 pub mod text;
 
 pub use args::uu_app;
-use args::{FilterMode, Settings, Signum, parse_args};
+use args::{FilterMode, FollowMode, Settings, Signum, parse_args};
 use chunks::ReverseChunks;
 use follow::Observer;
 use memchr::{memchr_iter, memrchr_iter};
@@ -68,8 +68,14 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
 
     // Print debug info about the follow implementation being used
     if settings.debug && settings.follow.is_some() {
-        if observer.use_polling {
+        if observer.use_polling || settings.follow == Some(FollowMode::Name) {
             show_error!("{}", translate!("tail-debug-using-polling-mode"));
+        } else if settings
+            .inputs
+            .iter()
+            .all(|i| !matches!(i.kind(), InputKind::File(p) if p.is_file()))
+        {
+            show_error!("{}", translate!("tail-debug-using-blocking-mode"));
         } else {
             show_error!("{}", translate!("tail-debug-using-notification-mode"));
         }

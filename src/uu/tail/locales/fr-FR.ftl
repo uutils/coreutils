@@ -70,3 +70,8 @@ tail-giving-up-on-this-name = ; abandon de ce nom
 tail-stdin-header = entrée standard
 tail-no-files-remaining = aucun fichier restant
 tail-become-inaccessible = est devenu inaccessible
+
+# Messages de débogage
+tail-debug-using-blocking-mode = utilisation du mode bloquant
+tail-debug-using-notification-mode = utilisation du mode notification
+tail-debug-using-polling-mode = utilisation du mode sondage
