@@ -70,8 +70,7 @@ pub fn ext_sort(
             Err(err) => {
                 // Print the error and disable compression
                 eprintln!(
-                    "sort: could not run compress program '{}': {}",
-                    prog,
+                    "sort: could not run compress program '{prog}': {}",
                     strip_errno(&err)
                 );
                 effective_settings.compress_prog = None;

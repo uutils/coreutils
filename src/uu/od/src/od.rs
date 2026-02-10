@@ -591,7 +591,7 @@ fn extract_strings_from_input(
     // Apply skip_bytes by reading and discarding
     let mut skipped = 0u64;
     while skipped < skip_bytes {
-        let to_skip = std::cmp::min(8192, skip_bytes - skipped);
+        let to_skip = cmp::min(8192, skip_bytes - skipped);
         let mut skip_buf = vec![0u8; to_skip as usize];
         match mf.read(&mut skip_buf) {
             Ok(0) => break, // EOF reached
@@ -658,7 +658,7 @@ fn extract_strings_from_input(
                 // Note: GNU od does not output unterminated strings at EOF
                 // Strings must be null-terminated to be output
                 if mf.has_error() {
-                    show_error!("{}", e);
+                    show_error!("{e}");
                     return Err(1.into());
                 }
                 break;

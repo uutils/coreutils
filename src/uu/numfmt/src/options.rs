@@ -71,7 +71,7 @@ pub enum RoundMethod {
 }
 
 impl RoundMethod {
-    pub fn round(&self, f: f64) -> f64 {
+    pub fn round(self, f: f64) -> f64 {
         match self {
             Self::Up => f.ceil(),
             Self::Down => f.floor(),
