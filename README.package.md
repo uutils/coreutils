@@ -14,7 +14,6 @@
 [![dependency status](https://deps.rs/repo/github/uutils/coreutils/status.svg)](https://deps.rs/repo/github/uutils/coreutils)
 
 [![CodeCov](https://codecov.io/gh/uutils/coreutils/branch/master/graph/badge.svg)](https://codecov.io/gh/uutils/coreutils)
-![MSRV](https://img.shields.io/badge/MSRV-1.70.0-brightgreen)
 
 </div>
 
@@ -28,4 +27,3 @@ uutils coreutils is a cross-platform reimplementation of the GNU coreutils in
 [Rust](http://www.rust-lang.org).
 
 This package does not have its specific `README.md`.
-

@@ -9,6 +9,7 @@ homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 readme.workspace = true
 
 [lints]
@@ -24,7 +25,6 @@ fluent = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 uucore = { workspace = true, features = ["pipes", "signals"] }
-nix = { workspace = true }
 
 [target.'cfg(not(unix))'.dependencies]
 uucore = { workspace = true, features = ["pipes"] }

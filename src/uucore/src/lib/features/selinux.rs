@@ -274,8 +274,8 @@ pub fn contexts_differ(from_path: &Path, to_path: &Path) -> bool {
 
     // Check if SELinux contexts differ
     match (
-        selinux::SecurityContext::of_path(from_path, false, false),
-        selinux::SecurityContext::of_path(to_path, false, false),
+        SecurityContext::of_path(from_path, false, false),
+        SecurityContext::of_path(to_path, false, false),
     ) {
         (Ok(Some(from_ctx)), Ok(Some(to_ctx))) => {
             // Convert contexts to CString and compare
@@ -365,7 +365,7 @@ pub fn preserve_security_context(from_path: &Path, to_path: &Path) -> Result<(),
 /// use uucore::selinux::get_getfattr_output;
 ///
 /// let context = get_getfattr_output("/path/to/file");
-/// println!("SELinux context: {}", context);
+/// println!("SELinux context: {context}");
 /// ```
 pub fn get_getfattr_output(f: &str) -> String {
     use std::process::Command;

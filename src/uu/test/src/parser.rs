@@ -341,16 +341,15 @@ impl Parser {
                     .map(|token| Symbol::new(Some(token)))
                     .collect();
 
-                match peek4.as_slice() {
+                if let [Symbol::Literal(_), Symbol::BoolOp(_), Symbol::Literal(_)] =
+                    peek4.as_slice()
+                {
                     // we peeked ahead 4 but there were only 3 tokens left
-                    [Symbol::Literal(_), Symbol::BoolOp(_), Symbol::Literal(_)] => {
-                        self.expr()?;
-                        self.stack.push(Symbol::Bang);
-                    }
-                    _ => {
-                        self.term()?;
-                        self.stack.push(Symbol::Bang);
-                    }
+                    self.expr()?;
+                    self.stack.push(Symbol::Bang);
+                } else {
+                    self.term()?;
+                    self.stack.push(Symbol::Bang);
                 }
             }
         }

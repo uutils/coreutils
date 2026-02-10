@@ -39,7 +39,7 @@ jobs:
         ram: [4096]
         api-level: [28]
         target: [google_apis_playstore]
-        arch: [x86, x86_64] # , arm64-v8a
+        arch: [x86_64] # ,x86 ,arm64-v8a
     runs-on: ${{ matrix.os }}
     env:
       EMULATOR_RAM_SIZE: ${{ matrix.ram }}

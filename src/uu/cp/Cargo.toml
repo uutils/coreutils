@@ -9,6 +9,7 @@ homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 readme.workspace = true
 
 [lints]
@@ -39,7 +40,6 @@ thiserror = { workspace = true }
 fluent = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
-xattr = { workspace = true }
 exacl = { workspace = true, optional = true }
 
 [[bin]]
