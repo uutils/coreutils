@@ -29,6 +29,15 @@ pub fn not_found(util: &OsStr) -> ! {
     process::exit(1);
 }
 
+/// Prints an "unrecognized option" error and exits
+pub fn unrecognized_option(binary_name: &str, option: &OsStr) -> ! {
+    eprintln!(
+        "{binary_name}: unrecognized option '{}'",
+        option.to_string_lossy()
+    );
+    process::exit(1);
+}
+
 /// Sets up localization for a utility with proper error handling
 pub fn setup_localization_or_exit(util_name: &str) {
     let util_name = get_canonical_util_name(util_name);
@@ -49,30 +58,12 @@ fn get_canonical_util_name(util_name: &str) -> &str {
     match util_name {
         // uu_test aliases - '[' is an alias for test
         "[" => "test",
-
-        // hashsum aliases - all these hash commands are aliases for hashsum
-        "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum" | "b2sum" => {
-            "hashsum"
-        }
-
-        "dir" => "ls", // dir is an alias for ls
+        "dir" => "ls",  // dir is an alias for ls
+        "vdir" => "ls", // vdir is an alias for ls
 
         // Default case - return the util name as is
         _ => util_name,
     }
-}
-
-/// Finds a utility with a prefix (e.g., "uu_test" -> "test")
-pub fn find_prefixed_util<'a>(
-    binary_name: &str,
-    mut util_keys: impl Iterator<Item = &'a str>,
-) -> Option<&'a str> {
-    util_keys.find(|util| {
-        binary_name.ends_with(*util)
-            && binary_name.len() > util.len() // Ensure there's actually a prefix
-            && !binary_name[..binary_name.len() - (*util).len()]
-                .ends_with(char::is_alphanumeric)
-    })
 }
 
 /// Gets the binary path from command line arguments
@@ -98,7 +89,6 @@ mod tests {
     fn test_get_canonical_util_name() {
         // Test a few key aliases
         assert_eq!(get_canonical_util_name("["), "test");
-        assert_eq!(get_canonical_util_name("md5sum"), "hashsum");
         assert_eq!(get_canonical_util_name("dir"), "ls");
 
         // Test passthrough case
@@ -122,36 +112,5 @@ mod tests {
         // Test edge cases
         assert_eq!(name(Path::new("")), None);
         assert_eq!(name(Path::new("/")), None);
-    }
-
-    #[test]
-    fn test_find_prefixed_util() {
-        let utils = ["test", "cat", "ls", "cp"];
-
-        // Test exact prefixed matches
-        assert_eq!(
-            find_prefixed_util("uu_test", utils.iter().copied()),
-            Some("test")
-        );
-        assert_eq!(
-            find_prefixed_util("my-cat", utils.iter().copied()),
-            Some("cat")
-        );
-        assert_eq!(
-            find_prefixed_util("prefix_ls", utils.iter().copied()),
-            Some("ls")
-        );
-
-        // Test non-alphanumeric separator requirement
-        assert_eq!(find_prefixed_util("prefixcat", utils.iter().copied()), None); // no separator
-        assert_eq!(find_prefixed_util("testcat", utils.iter().copied()), None); // no separator
-
-        // Test no match
-        assert_eq!(find_prefixed_util("unknown", utils.iter().copied()), None);
-        assert_eq!(find_prefixed_util("", utils.iter().copied()), None);
-
-        // Test exact util name (should not match as prefixed)
-        assert_eq!(find_prefixed_util("test", utils.iter().copied()), None);
-        assert_eq!(find_prefixed_util("cat", utils.iter().copied()), None);
     }
 }

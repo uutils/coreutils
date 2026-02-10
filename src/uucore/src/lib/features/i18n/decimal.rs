@@ -6,7 +6,7 @@
 use std::sync::OnceLock;
 
 use icu_decimal::provider::DecimalSymbolsV1;
-use icu_locale::Locale;
+use icu_locale::{Locale, locale};
 use icu_provider::prelude::*;
 
 use crate::i18n::get_numeric_locale;
@@ -37,15 +37,55 @@ pub fn locale_decimal_separator() -> &'static str {
     DECIMAL_SEP.get_or_init(|| get_decimal_separator(get_numeric_locale().0.clone()))
 }
 
+/// Return the grouping separator for the given locale
+fn get_grouping_separator(loc: Locale) -> String {
+    let data_locale = DataLocale::from(loc);
+
+    let request = DataRequest {
+        id: DataIdentifierBorrowed::for_locale(&data_locale),
+        metadata: DataRequestMetadata::default(),
+    };
+
+    let response: DataResponse<DecimalSymbolsV1> =
+        icu_decimal::provider::Baked.load(request).unwrap();
+
+    response.payload.get().grouping_separator().to_string()
+}
+
+/// Return the grouping separator from the language we're working with.
+/// Example:
+///  Say we need to format 1,000
+///     en_US: 1,000 -> grouping separator is ','
+///     fr_FR: 1 000 -> grouping separator is '\u{202f}'
+pub fn locale_grouping_separator() -> &'static str {
+    static GROUPING_SEP: OnceLock<String> = OnceLock::new();
+
+    GROUPING_SEP.get_or_init(|| {
+        let loc = get_numeric_locale().0.clone();
+        // C/POSIX locale (represented as "und") has no grouping separator.
+        if loc == locale!("und") {
+            String::new()
+        } else {
+            get_grouping_separator(loc)
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use icu_locale::locale;
 
-    use super::get_decimal_separator;
+    use super::{get_decimal_separator, get_grouping_separator};
 
     #[test]
-    fn test_simple_separator() {
+    fn test_simple_decimal_separator() {
         assert_eq!(get_decimal_separator(locale!("en")), ".");
         assert_eq!(get_decimal_separator(locale!("fr")), ",");
+    }
+
+    #[test]
+    fn test_simple_grouping_separator() {
+        assert_eq!(get_grouping_separator(locale!("en")), ",");
+        assert_eq!(get_grouping_separator(locale!("fr")), "\u{202f}");
     }
 }

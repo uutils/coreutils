@@ -376,7 +376,7 @@ impl<'a> StyleManager<'a> {
         } else if file_type.is_dir() {
             self.indicator_for_directory(path)
         } else {
-            self.indicator_for_special_file(file_type)
+            self.indicator_for_special_file(*file_type)
         }
     }
 
@@ -478,7 +478,7 @@ impl<'a> StyleManager<'a> {
     }
 
     #[cfg(unix)]
-    fn indicator_for_special_file(&self, file_type: &std::fs::FileType) -> Option<Indicator> {
+    fn indicator_for_special_file(&self, file_type: fs::FileType) -> Option<Indicator> {
         if file_type.is_fifo() && self.has_indicator_style(Indicator::FIFO) {
             return Some(Indicator::FIFO);
         }
@@ -495,7 +495,7 @@ impl<'a> StyleManager<'a> {
     }
 
     #[cfg(not(unix))]
-    fn indicator_for_special_file(&self, _file_type: &std::fs::FileType) -> Option<Indicator> {
+    fn indicator_for_special_file(&self, _file_type: fs::FileType) -> Option<Indicator> {
         None
     }
 
@@ -527,18 +527,16 @@ pub(crate) fn color_name(
     #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
     {
         // Skip checking capabilities if LS_COLORS=ca=:
-        let capabilities = style_manager
+        let has_capabilities = style_manager
             .colors
-            .style_for_indicator(Indicator::Capabilities);
-
-        let has_capabilities = if capabilities.is_none() {
-            false
-        } else {
-            uucore::fsxattr::has_acl(path.p_buf.as_path())
-        };
+            .has_explicit_style_for(Indicator::Capabilities)
+            && uucore::fsxattr::has_security_cap_acl(path.p_buf.as_path());
 
         // If the file has capabilities, use a specific style for `ca` (capabilities)
         if has_capabilities {
+            let capabilities = style_manager
+                .colors
+                .style_for_indicator(Indicator::Capabilities);
             return style_manager.apply_style(capabilities, Some(path), name, wrap);
         }
     }

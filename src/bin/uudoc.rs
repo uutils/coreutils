@@ -45,8 +45,8 @@ fn usage<T: Args>(utils: &UtilityMap<T>) {
 }
 
 /// Generates the coreutils app for the utility map
-fn gen_coreutils_app<T: Args>(util_map: &UtilityMap<T>) -> clap::Command {
-    let mut command = clap::Command::new("coreutils");
+fn gen_coreutils_app<T: Args>(util_map: &UtilityMap<T>) -> Command {
+    let mut command = Command::new("coreutils");
     for (name, (_, sub_app)) in util_map {
         // Recreate a small subcommand with only the relevant info
         // (name & short description)
@@ -54,7 +54,7 @@ fn gen_coreutils_app<T: Args>(util_map: &UtilityMap<T>) -> clap::Command {
             .get_about()
             .expect("Could not get the 'about'")
             .to_string();
-        let sub_app = clap::Command::new(name).about(about);
+        let sub_app = Command::new(name).about(about);
         command = command.subcommand(sub_app);
     }
     command
@@ -84,6 +84,8 @@ fn gen_manpage<T: Args>(
     } else {
         validation::setup_localization_or_exit(utility);
         let mut cmd = util_map.get(utility).unwrap().1();
+        cmd.set_bin_name(utility.clone());
+        let mut cmd = cmd.display_name(utility);
         if let Some(zip) = tldr {
             if let Ok(examples) = write_zip_examples(zip, utility, false) {
                 cmd = cmd.after_help(examples);
@@ -133,19 +135,6 @@ fn gen_completions<T: Args>(args: impl Iterator<Item = OsString>, util_map: &Uti
     process::exit(0);
 }
 
-/// print tldr error
-fn print_tldr_error() {
-    eprintln!("Warning: No tldr archive found, so the documentation will not include examples.");
-    eprintln!(
-        "To include examples in the documentation, download the tldr archive and put it in the docs/ folder."
-    );
-    eprintln!();
-    eprintln!(
-        "  curl -L https://github.com/tldr-pages/tldr/releases/latest/download/tldr.zip -o docs/tldr.zip"
-    );
-    eprintln!();
-}
-
 /// # Errors
 /// Returns an error if the writer fails.
 #[allow(clippy::too_many_lines)]
@@ -162,9 +151,6 @@ fn main() -> io::Result<()> {
         match command {
             "manpage" => {
                 let args_iter = args.into_iter().skip(2);
-                if tldr_zip.is_none() {
-                    print_tldr_error();
-                }
                 gen_manpage(
                     &mut tldr_zip,
                     args_iter,
@@ -186,12 +172,9 @@ fn main() -> io::Result<()> {
             }
         }
     }
-    if tldr_zip.is_none() {
-        print_tldr_error();
-    }
     let utils = util_map::<Box<dyn Iterator<Item = OsString>>>();
     match std::fs::create_dir("docs/src/utils/") {
-        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
+        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => Ok(()),
         x => x,
     }?;
 
@@ -221,7 +204,7 @@ fn main() -> io::Result<()> {
         let mut map = HashMap::new();
         for platform in ["unix", "macos", "windows", "unix_android"] {
             let platform_utils: Vec<String> = String::from_utf8(
-                std::process::Command::new("./util/show-utils.sh")
+                process::Command::new("./util/show-utils.sh")
                     .arg(format!("--features=feat_os_{platform}"))
                     .output()?
                     .stdout,
@@ -236,7 +219,7 @@ fn main() -> io::Result<()> {
 
         // Linux is a special case because it can support selinux
         let platform_utils: Vec<String> = String::from_utf8(
-            std::process::Command::new("./util/show-utils.sh")
+            process::Command::new("./util/show-utils.sh")
                 .arg("--features=feat_os_unix feat_selinux")
                 .output()?
                 .stdout,
@@ -293,12 +276,15 @@ fn main() -> io::Result<()> {
 
     println!("Writing to utils");
     for (&name, (_, command)) in utils {
-        if name == "[" {
-            continue;
-        }
-        let p = format!("docs/src/utils/{name}.md");
+        let (utils_name, usage_name, command) = match name {
+            "[" => {
+                continue;
+            }
+            n => (n, n, command),
+        };
+        let p = format!("docs/src/utils/{usage_name}.md");
 
-        let fluent = File::open(format!("src/uu/{name}/locales/en-US.ftl"))
+        let fluent = File::open(format!("src/uu/{utils_name}/locales/en-US.ftl"))
             .and_then(|mut f: File| {
                 let mut s = String::new();
                 f.read_to_string(&mut s)?;
@@ -310,19 +296,41 @@ fn main() -> io::Result<()> {
             MDWriter {
                 w: Box::new(f),
                 command: command(),
-                name,
+                name: usage_name,
                 tldr_zip: &mut tldr_zip,
                 utils_per_platform: &utils_per_platform,
                 fluent,
+                fluent_key: utils_name.to_string(),
             }
             .markdown()?;
             println!("Wrote to '{p}'");
         } else {
             println!("Error writing to {p}");
         }
-        writeln!(summary, "* [{name}](utils/{name}.md)")?;
+        writeln!(summary, "* [{usage_name}](utils/{usage_name}.md)")?;
     }
     Ok(())
+}
+
+fn fix_usage(name: &str, usage: String) -> String {
+    match name {
+        "test" => {
+            // replace to [ but not the first two line
+            usage
+                .lines()
+                .enumerate()
+                .map(|(i, l)| {
+                    if i > 1 {
+                        l.replace("test", "[")
+                    } else {
+                        l.to_string()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        }
+        _ => usage,
+    }
 }
 
 struct MDWriter<'a, 'b> {
@@ -332,6 +340,7 @@ struct MDWriter<'a, 'b> {
     tldr_zip: &'b mut Option<ZipArchive<File>>,
     utils_per_platform: &'b HashMap<&'b str, Vec<String>>,
     fluent: Option<String>,
+    fluent_key: String,
 }
 
 impl MDWriter<'_, '_> {
@@ -362,9 +371,20 @@ impl MDWriter<'_, '_> {
                 if id.name == key {
                     // Simple text extraction - just concatenate text elements
                     let mut result = String::new();
+                    use fluent_syntax::ast::{
+                        Expression, InlineExpression,
+                        PatternElement::{Placeable, TextElement},
+                    };
                     for element in elements {
-                        if let fluent_syntax::ast::PatternElement::TextElement { value } = element {
-                            result.push_str(&value);
+                        if let TextElement { ref value } = element {
+                            result.push_str(value);
+                        }
+                        if let Placeable {
+                            expression:
+                                Expression::Inline(InlineExpression::StringLiteral { ref value }),
+                        } = element
+                        {
+                            result.push_str(value);
                         }
                     }
                     return Some(result);
@@ -422,7 +442,8 @@ impl MDWriter<'_, '_> {
     /// # Errors
     /// Returns an error if the writer fails.
     fn usage(&mut self) -> io::Result<()> {
-        if let Some(usage) = self.extract_fluent_value(&format!("{}-usage", self.name)) {
+        if let Some(usage) = self.extract_fluent_value(&format!("{}-usage", self.fluent_key)) {
+            let usage = fix_usage(self.name, usage);
             writeln!(self.w, "\n```")?;
             writeln!(self.w, "{usage}")?;
             writeln!(self.w, "```")
@@ -434,7 +455,7 @@ impl MDWriter<'_, '_> {
     /// # Errors
     /// Returns an error if the writer fails.
     fn about(&mut self) -> io::Result<()> {
-        if let Some(about) = self.extract_fluent_value(&format!("{}-about", self.name)) {
+        if let Some(about) = self.extract_fluent_value(&format!("{}-about", self.fluent_key)) {
             writeln!(self.w, "{about}")
         } else {
             Ok(())
@@ -444,7 +465,9 @@ impl MDWriter<'_, '_> {
     /// # Errors
     /// Returns an error if the writer fails.
     fn after_help(&mut self) -> io::Result<()> {
-        if let Some(after_help) = self.extract_fluent_value(&format!("{}-after-help", self.name)) {
+        if let Some(after_help) =
+            self.extract_fluent_value(&format!("{}-after-help", self.fluent_key))
+        {
             writeln!(self.w, "\n\n{after_help}")
         } else {
             Ok(())
@@ -517,7 +540,7 @@ impl MDWriter<'_, '_> {
             writeln!(self.w, "</dt>")?;
             let help_text = arg.get_help().unwrap_or_default().to_string();
             // Try to resolve Fluent key if it looks like one, otherwise use as-is
-            let resolved_help = if help_text.starts_with(&format!("{}-help-", self.name)) {
+            let resolved_help = if help_text.starts_with(&format!("{}-help-", self.fluent_key)) {
                 self.extract_fluent_value(&help_text).unwrap_or(help_text)
             } else {
                 help_text
@@ -566,7 +589,7 @@ fn write_zip_examples(
     };
 
     match format_examples(content, output_markdown) {
-        Err(e) => Err(std::io::Error::other(format!(
+        Err(e) => Err(io::Error::other(format!(
             "Failed to format the tldr examples of {name}: {e}"
         ))),
         Ok(s) => Ok(s),

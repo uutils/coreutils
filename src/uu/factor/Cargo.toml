@@ -9,6 +9,7 @@ homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 readme.workspace = true
 
 [lints]
@@ -31,7 +32,6 @@ path = "src/main.rs"
 
 [dev-dependencies]
 divan = { workspace = true }
-rand = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }
 
 [lib]

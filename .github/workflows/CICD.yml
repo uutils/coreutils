@@ -1,17 +1,17 @@
 name: CICD
 
 # spell-checker:ignore (abbrev/names) CACHEDIR CICD CodeCOV MacOS MinGW MSVC musl taiki
-# spell-checker:ignore (env/flags) Awarnings Ccodegen Coverflow Cpanic Dwarnings RUSTDOCFLAGS RUSTFLAGS Zpanic CARGOFLAGS
+# spell-checker:ignore (env/flags) Awarnings Ccodegen Coverflow Cpanic Dwarnings RUSTDOCFLAGS RUSTFLAGS Zpanic CARGOFLAGS CLEVEL nodocs
 # spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain fuzzers dedupe devel profdata
 # spell-checker:ignore (people) Peltoche rivy dtolnay Anson dawidd
-# spell-checker:ignore (shell/tools) binutils choco clippy dmake esac fakeroot fdesc fdescfs gmake grcov halium lcov libclang libfuse libssl limactl mkdir nextest nocross pacman popd printf pushd redoxer rsync rustc rustfmt rustup shopt sccache utmpdump xargs
-# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos getenforce gnueabihf issuecomment maint manpages msys multisize noconfirm nofeatures nullglob onexitbegin onexitend pell runtest Swatinem tempfile testsuite toybox uutils libsystemd codspeed
+# spell-checker:ignore (shell/tools) binutils choco clippy dmake esac fakeroot fdesc fdescfs gmake grcov halium lcov libclang libfuse libssl limactl mkdir nextest nocross pacman popd printf pushd redoxer rsync rustc rustfmt rustup shopt sccache utmpdump xargs zstd
+# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos getenforce gnueabihf issuecomment maint manpages msys multisize noconfirm nofeatures nullglob onexitbegin onexitend pell runtest Swatinem tempfile testsuite toybox uutils libsystemd codspeed wasip
 
 env:
   PROJECT_NAME: coreutils
   PROJECT_DESC: "Core universal (cross-platform) utilities"
   PROJECT_AUTH: "uutils"
-  RUST_MIN_SRV: "1.85.0"
+  RUST_MIN_SRV: "1.88.0"
   # * style job configuration
   STYLE_FAIL_ON_FAULT: true ## (bool) fail the build if a style job contains a fault (error or warning); may be overridden on a per-job basis
 
@@ -58,15 +58,13 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@nightly
-    ## note: requires 'nightly' toolchain b/c `cargo-udeps` uses the `rustc` '-Z save-analysis' option
-    ## * ... ref: <https://github.com/est31/cargo-udeps/issues/73>
     - uses: taiki-e/install-action@cargo-udeps
     - uses: Swatinem/rust-cache@v2
     - name: Initialize workflow variables
       id: vars
       shell: bash
       run: |
+        echo "RUSTC_BOOTSTRAP=1" >> "${GITHUB_ENV}" # Use -Z
         ## VARs setup
         outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         # failure mode
@@ -88,7 +86,7 @@ jobs:
         fault_type="${{ steps.vars.outputs.FAULT_TYPE }}"
         fault_prefix=$(echo "$fault_type" | tr '[:lower:]' '[:upper:]')
         #
-        cargo +nightly udeps ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --all-targets &> udeps.log || cat udeps.log
+        cargo udeps ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --all-targets &> udeps.log || cat udeps.log
         grep --ignore-case "all deps seem to have been used" udeps.log || { printf "%s\n" "::${fault_type} ::${fault_prefix}: \`cargo udeps\`: style violation (unused dependency found)" ; fault=true ; }
         if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
 
@@ -98,6 +96,7 @@ jobs:
     env:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
+      CARGO_INCREMENTAL: 0
     strategy:
       fail-fast: false
       matrix:
@@ -163,6 +162,7 @@ jobs:
     env:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
+      CARGO_INCREMENTAL: 0
     strategy:
       matrix:
         job:
@@ -196,7 +196,7 @@ jobs:
         ## Confirm MinSRV compatible '*/Cargo.lock'
         # * '*/Cargo.lock' is required to be in a format that `cargo` of MinSRV can interpret (eg, v1-format for MinSRV < v1.38)
         for dir in "." "fuzz"; do
-          ( cd "$dir" && cargo fetch --locked --quiet ) || { echo "::error file=$dir/Cargo.lock::Incompatible (or out-of-date) '$dir/Cargo.lock' file; update using \`cd '$dir' && cargo +${{ env.RUST_MIN_SRV }} update\`" ; exit 1 ; }
+          ( cd "$dir" && cargo fetch --locked --quiet --target $(rustc --print host-tuple)) || { echo "::error file=$dir/Cargo.lock::Incompatible (or out-of-date) '$dir/Cargo.lock' file; update using \`cd '$dir' && cargo +${{ env.RUST_MIN_SRV }} update\`" ; exit 1 ; }
         done
     - name: Install/setup prerequisites
       shell: bash
@@ -221,8 +221,8 @@ jobs:
         # dependencies
         echo "## dependency list"
         ## * using the 'stable' toolchain is necessary to avoid "unexpected '--filter-platform'" errors
-        RUSTUP_TOOLCHAIN=stable cargo fetch --locked --quiet
-        RUSTUP_TOOLCHAIN=stable cargo tree --no-dedupe --locked -e=no-dev --prefix=none ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} | grep -vE "$PWD" | sort --unique
+        cargo +stable fetch --locked --quiet --target $(rustc --print host-tuple)
+        cargo +stable tree --no-dedupe --locked -e=no-dev --prefix=none ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} | grep -vE "$PWD" | sort --unique
     - name: Test
       run: cargo nextest run --hide-progress-bar --profile ci ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -p uucore -p coreutils
       env:
@@ -259,7 +259,7 @@ jobs:
         ## `cargo update` testing
         # * convert any errors/warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
         for dir in "." "fuzz"; do
-          ( cd "$dir" && cargo fetch --locked --quiet ) || { echo "::error file=$dir/Cargo.lock::'$dir/Cargo.lock' file requires update (use \`cd '$dir' && cargo +${{ env.RUST_MIN_SRV }} update\`)" ; exit 1 ; }
+          ( cd "$dir" && cargo fetch --locked --quiet --target $(rustc --print host-tuple)) || { echo "::error file=$dir/Cargo.lock::'$dir/Cargo.lock' file requires update (use \`cd '$dir' && cargo +${{ env.RUST_MIN_SRV }} update\`)" ; exit 1 ; }
         done
 
   build_makefile:
@@ -269,6 +269,7 @@ jobs:
     env:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
+      CARGO_INCREMENTAL: 0
     strategy:
       fail-fast: false
       matrix:
@@ -297,8 +298,9 @@ jobs:
           mv -T target target.cache
         fi
         # Check that we don't cross-build uudoc
-        # also do not try to generate manpages for part of hashsum
-        make install-manpages PREFIX=/tmp/usr UTILS=true RUSTC_ARCH="--target aarch64-unknown-linux-gnu"
+        env CARGO_BUILD_TARGET=aarch64-unknown-linux-gnu make install-manpages PREFIX=/tmp/usr UTILS=true
+        # We don't build coreutils without MULTICALL=y
+        ! test -e target/debug/coreutils
         # build (host)
         make build
         echo "Check that target directory will be ignored by backup tools"
@@ -320,13 +322,13 @@ jobs:
         disable_search: true
         flags: makefile,${{ matrix.job.os }}
         fail_ci_if_error: false
-    - name: "`make install PROG_PREFIX=uu- PROFILE=release-fast COMPLETIONS=n MANPAGES=n LOCALES=n`"
+    - name: "`make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n`"
       shell: bash
       run: |
         set -x
-        DESTDIR=/tmp/ make install PROG_PREFIX=uu- PROFILE=release-fast COMPLETIONS=n MANPAGES=n LOCALES=n
+        DESTDIR=/tmp/ make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n
         # Check that utils are built with given profile
-        ./target/release-fast/true
+        ./target/release-small/true
         # Check that the progs have prefix
         test -f /tmp/usr/local/bin/uu-tty
         test -f /tmp/usr/local/libexec/uu-coreutils/libstdbuf.*
@@ -371,25 +373,19 @@ jobs:
       run: |
         set -x
         DESTDIR=/tmp/ make PROFILE=release MULTICALL=n install
-        # Check that the utils are present
-        test -f /tmp/usr/local/bin/hashsum
-        # Check that hashsum symlinks are present
-        test -h /tmp/usr/local/bin/b2sum
-        test -h /tmp/usr/local/bin/md5sum
-        test -h /tmp/usr/local/bin/sha1sum
-        test -h /tmp/usr/local/bin/sha224sum
-        test -h /tmp/usr/local/bin/sha256sum
-        test -h /tmp/usr/local/bin/sha384sum
-        test -h /tmp/usr/local/bin/sha512sum
+        # Check that *sum are present
+        for s in {md5,b2,sha1,sha224,sha256,sha384,sha512}sum
+          do test -e /tmp/usr/local/bin/${s}
+        done
     - name: "`make install MULTICALL=y LN=ln -svf`"
       shell: bash
       run: |
         set -x
         DESTDIR=/tmp/ make PROFILE=release MULTICALL=y LN="ln -svf" install
-        # Check that relative symlinks of hashsum are present
-        [ $(readlink /tmp/usr/local/bin/b2sum) = coreutils ]
-        [ $(readlink /tmp/usr/local/bin/md5sum) = coreutils ]
-        [ $(readlink /tmp/usr/local/bin/sha512sum) = coreutils ]
+        # Check that symlinks of *sum are present
+        for s in {md5,b2,sha1,sha224,sha256,sha384,sha512}sum
+          do test $(readlink /tmp/usr/local/bin/${s}) = coreutils
+        done
     - name: "`make UTILS=XXX`"
       shell: bash
       run: |
@@ -410,6 +406,7 @@ jobs:
     env:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
+      CARGO_INCREMENTAL: 0
     strategy:
       fail-fast: false
       matrix:
@@ -449,6 +446,7 @@ jobs:
     env:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
+      CARGO_INCREMENTAL: 0
     strategy:
       fail-fast: false
       matrix:
@@ -484,9 +482,12 @@ jobs:
     name: Binary sizes
     needs: [ min_version, deps ]
     runs-on: ${{ matrix.job.os }}
+    permissions:
+      contents: write
     env:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
+      CARGO_INCREMENTAL: 0
     strategy:
       fail-fast: false
       matrix:
@@ -500,20 +501,25 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
-    - name: Install dependencies
+    - name: "`make install PROFILE=release`"
       shell: bash
       run: |
-        ## Install dependencies
-        sudo apt-get update
-        sudo apt-get install libselinux1-dev libsystemd-dev
-    - name: "`make install`"
-      shell: bash
-      run: |
-        ## `make install`
+        export CARGO_TARGET_DIR=cargo-target RUSTFLAGS="${RUSTFLAGS} -C strip=symbols" PROFILE=release MANPAGES=n COMPLETIONS=n LOCALES=n
+        mkdir -p "${CARGO_TARGET_DIR}" && sudo mount -t tmpfs -o noatime,size=16G tmpfs "${CARGO_TARGET_DIR}"
         make install DESTDIR=target/size-release/
-        make install MULTICALL=y LN="ln -vf" DESTDIR=target/size-multi-release/
-        # strip the results
-        strip target/size*/usr/local/bin/*
+        make install COMPLETIONS=n MULTICALL=y LN="ln -vf" DESTDIR=target/size-multi-release/
+        ZSTD_CLEVEL=19 tar --zstd -caf individual-x86_64-unknown-linux-gnu.tar.zst -C target/size-release/usr/local bin
+    - name: Publish
+      uses: softprops/action-gh-release@v2
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      with:
+        tag_name: latest-commit
+        draft: false
+        prerelease: true
+        files: |
+          individual-x86_64-unknown-linux-gnu.tar.zst
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     - name: Test for hardlinks
       shell: bash
       run: |
@@ -542,14 +548,14 @@ jobs:
               --arg multisize "$SIZE_MULTI" \
               '{($date): { sha: $sha, size: $size, multisize: $multisize, }}' > size-result.json
     - name: Download the previous individual size result
-      uses: dawidd6/action-download-artifact@v12
+      uses: dawidd6/action-download-artifact@v14
       with:
         workflow: CICD.yml
         name: individual-size-result
         repo: uutils/coreutils
         path: dl
     - name: Download the previous size result
-      uses: dawidd6/action-download-artifact@v12
+      uses: dawidd6/action-download-artifact@v14
       with:
         workflow: CICD.yml
         name: size-result
@@ -608,6 +614,7 @@ jobs:
       DOCKER_OPTS: '--volume /etc/passwd:/etc/passwd --volume /etc/group:/etc/group'
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
+      CARGO_INCREMENTAL: 0
     strategy:
       fail-fast: false
       matrix:
@@ -624,7 +631,7 @@ jobs:
           - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: "feat_os_unix,uudoc"   , use-cross: no, workspace-tests: true }
           - { os: ubuntu-latest  , target: x86_64-unknown-linux-musl   , features: feat_os_unix_musl , use-cross: use-cross }
           - { os: ubuntu-latest  , target: x86_64-unknown-redox        , features: feat_os_unix_redox     , use-cross: redoxer , skip-tests: true }
-          - { os: ubuntu-latest  , target: wasm32-unknown-unknown      , default-features: false, features: uucore/format, skip-tests: true, skip-package: true, skip-publish: true }
+          - { os: ubuntu-latest  , target: wasm32-wasip1, default-features: false, features: "basenc,cksum", skip-tests: true }
           - { os: macos-latest   , target: aarch64-apple-darwin        , features: feat_os_macos, workspace-tests: true } # M1 CPU
           # PR #7964: Mac should still build even if the feature is not enabled. Do not publish this.
           - { os: macos-latest   , target: aarch64-apple-darwin        , workspace-tests: true, skip-publish: true } # M1 CPU
@@ -637,6 +644,8 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
+    - name: Avoid no space left on device
+      run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android &
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ env.RUST_MIN_SRV }}
@@ -663,7 +672,11 @@ jobs:
         STAGING='_staging'
         outputs STAGING
         # determine EXE suffix
-        EXE_suffix="" ; case '${{ matrix.job.target }}' in *-pc-windows-*) EXE_suffix=".exe" ;; esac;
+        unset EXE_suffix
+        case '${{ matrix.job.target }}' in
+         *-pc-windows-*) EXE_suffix=".exe" ;;
+         *wasm-*) EXE_suffix=".wasm" ;;
+        esac;
         outputs EXE_suffix
         # parse commit reference info
         echo GITHUB_REF=${GITHUB_REF}
@@ -692,7 +705,11 @@ jobs:
         outputs TARGET_ARCH TARGET_OS
         # package name
         PKG_suffix=".tar.gz" ; case '${{ matrix.job.target }}' in *-pc-windows-*) PKG_suffix=".zip" ;; esac;
-        PKG_BASENAME=${PROJECT_NAME}-${REF_TAG:-$REF_SHAS}-${{ matrix.job.target }}
+        # Some 3rd party utils need version at file names
+        # But we remove it from tag/latest-commit
+        test ${REF_TAG} \
+          && PKG_BASENAME=${PROJECT_NAME}-${REF_TAG}-${{ matrix.job.target }} \
+          || PKG_BASENAME=${PROJECT_NAME}-${{ matrix.job.target }}
         PKG_NAME=${PKG_BASENAME}${PKG_suffix}
         outputs PKG_suffix PKG_BASENAME PKG_NAME
         # deployable tag? (ie, leading "vM" or "M"; M == version number)
@@ -737,16 +754,6 @@ jobs:
             CARGO_TEST_OPTIONS='--workspace'
             ;;
         esac
-        outputs CARGO_TEST_OPTIONS
-        # * executable for `strip`?
-        STRIP="strip"
-        case ${{ matrix.job.target }} in
-          aarch64-*-linux-*) STRIP="aarch64-linux-gnu-strip" ;;
-          riscv64gc-*-linux-*) STRIP="riscv64-linux-gnu-strip" ;;
-          arm-*-linux-gnueabihf) STRIP="arm-linux-gnueabihf-strip" ;;
-          *-pc-windows-msvc) STRIP="" ;;
-        esac;
-        outputs STRIP
     - uses: taiki-e/install-action@v2
       if: steps.vars.outputs.CARGO_CMD == 'cross'
       with:
@@ -840,48 +847,33 @@ jobs:
         cargo tree -V
         # dependencies
         echo "## dependency list"
-        cargo fetch --locked --quiet
+        cargo fetch --locked --quiet --target $(rustc --print host-tuple)
         cargo tree --locked --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.vars.outputs.CARGO_DEFAULT_FEATURES_OPTION }} --no-dedupe -e=no-dev --prefix=none | grep -vE "$PWD" | sort --unique
-    - name: Build
-      shell: bash
-      run: |
-        ## Build
-        ${{ steps.vars.outputs.CARGO_CMD }} ${{ steps.vars.outputs.CARGO_CMD_OPTIONS }} build --release \
-        --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.vars.outputs.CARGO_DEFAULT_FEATURES_OPTION }}
     - name: Test
       if: matrix.job.skip-tests != true
       shell: bash
       run: |
         ## Test
         ${{ steps.vars.outputs.CARGO_CMD }} ${{ steps.vars.outputs.CARGO_CMD_OPTIONS }} test --target=${{ matrix.job.target }} \
-        ${{ steps.vars.outputs.CARGO_TEST_OPTIONS}} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.vars.outputs.CARGO_DEFAULT_FEATURES_OPTION }}
+        ${{ steps.vars.outputs.CARGO_TEST_OPTIONS}} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.vars.outputs.CARGO_DEFAULT_FEATURES_OPTION }} \
+        ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }} -p coreutils
       env:
         RUST_BACKTRACE: "1"
-    - name: Test individual utilities
-      if: matrix.job.skip-tests != true
+    - name: Build
       shell: bash
+      if: matrix.job.skip-publish != true
       run: |
-        command -v sudo && sudo rm -rf /usr/local/lib/android /usr/share/dotnet # avoid no space left
-        df -h ||:
-        ## Test individual utilities
-        ${{ steps.vars.outputs.CARGO_CMD }} ${{ steps.vars.outputs.CARGO_CMD_OPTIONS }} test --target=${{ matrix.job.target }} \
-        ${{ matrix.job.cargo-options }} ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
-      env:
-        RUST_BACKTRACE: "1"
-    - name: Archive executable artifacts
-      uses: actions/upload-artifact@v6
-      with:
-        name: ${{ env.PROJECT_NAME }}-${{ matrix.job.target }}${{ steps.vars.outputs.ARTIFACTS_SUFFIX }}
-        path: target/${{ matrix.job.target }}/release/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}
+        ## Build
+        ${{ steps.vars.outputs.CARGO_CMD }} ${{ steps.vars.outputs.CARGO_CMD_OPTIONS }} build --release --config=profile.release.strip=true \
+        --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.vars.outputs.CARGO_DEFAULT_FEATURES_OPTION }}
     - name: Package
-      if: matrix.job.skip-package != true
+      if: matrix.job.skip-publish != true
       shell: bash
       run: |
         ## Package artifact(s)
-        # binary
-        cp 'target/${{ matrix.job.target }}/release/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}' '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/'
-        # `strip` binary (if needed)
-        if [ -n "${{ steps.vars.outputs.STRIP }}" ]; then "${{ steps.vars.outputs.STRIP }}" '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}' ; fi
+        # binaries
+        cp 'target/${{ matrix.job.target }}/release/${{ env.PROJECT_NAME }}'* '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/'
+        cp 'target/${{ matrix.job.target }}/release/uudoc${{ steps.vars.outputs.EXE_suffix }}' '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/' || :
         # README and LICENSE
         # * spell-checker:ignore EADME ICENSE
         (shopt -s nullglob; for f in [R]"EADME"{,.*}; do cp $f '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/' ; done)
@@ -893,6 +885,20 @@ jobs:
           *) tar czf '${{ steps.vars.outputs.PKG_NAME }}' '${{ steps.vars.outputs.PKG_BASENAME }}'/* ;;
         esac
         popd >/dev/null
+    - name: Package manpages and completions
+      if: matrix.job.target == 'x86_64-unknown-linux-gnu' && matrix.job.features == 'feat_os_unix,uudoc'
+      run: |
+        mkdir -p share/{man/man1,bash-completion/completions,fish/vendor_completions.d,zsh/site-functions,elvish/lib}
+        _uudoc=target/${{ matrix.job.target }}/release/uudoc
+        for bin in $('target/${{ matrix.job.target }}/release/coreutils' --list) coreutils;do
+          ${_uudoc} manpage ${bin} > share/man/man1/${bin}.1
+          ${_uudoc} completion ${bin} bash > share/bash-completion/completions/${bin}.bash
+          ${_uudoc} completion ${bin} fish > share/fish/vendor_completions.d/${bin}.fish
+          ${_uudoc} completion ${bin} zsh > share/zsh/site-functions/_${bin}
+          ${_uudoc} completion ${bin} elvish > share/elvish/lib/${bin}.elv
+        done
+        rm share/zsh/site-functions/_[ # not supported
+        tar --zstd -cf docs.tar.zst share
     - name: Publish
       uses: softprops/action-gh-release@v2
       if: steps.vars.outputs.DEPLOY && matrix.job.skip-publish != true
@@ -900,6 +906,21 @@ jobs:
         draft: true
         files: |
           ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_NAME }}
+          docs.tar.zst
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Publish latest commit
+      uses: softprops/action-gh-release@v2
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.job.skip-publish != true
+      with:
+        tag_name: latest-commit
+        body: |
+          commit: ${{ github.sha }}
+        draft: false
+        prerelease: true
+        files: |
+          ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_NAME }}
+          docs.tar.zst
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -910,6 +931,7 @@ jobs:
     env:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
+      CARGO_INCREMENTAL: 0
     strategy:
       fail-fast: false
       matrix:
@@ -991,6 +1013,7 @@ jobs:
     env:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
+      CARGO_INCREMENTAL: 0
     strategy:
       fail-fast: false
       matrix:
@@ -1011,7 +1034,6 @@ jobs:
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ env.RUST_MIN_SRV }}
-        components: rustfmt
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
@@ -1084,6 +1106,7 @@ jobs:
     env:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
+      CARGO_INCREMENTAL: 0
     strategy:
       fail-fast: false
       matrix:
@@ -1208,7 +1231,8 @@ jobs:
         fail_ci_if_error: false
 
   test_separately:
-    name: Separate Builds
+    # duplicated with other CI, but has better appearance
+    name: Separate Builds (individual and coreutils)
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
@@ -1221,6 +1245,8 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
+    - name: Avoid no space left on device
+      run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android &
     - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
     - name: build and test all programs individually
@@ -1230,36 +1256,7 @@ jobs:
         for f in $(util/show-utils.sh ${CARGO_FEATURES_OPTION})
         do
           echo "Building and testing $f"
-          cargo test -p "uu_$f"
-        done
-
-  test_all_features:
-    name: Test all features separately
-    needs: [ min_version, deps ]
-    runs-on: ${{ matrix.job.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - { os: ubuntu-latest  , features: feat_os_unix }
-          - { os: macos-latest   , features: feat_os_macos }
-          # - { os: windows-latest , features: feat_os_windows } https://github.com/uutils/coreutils/issues/7044
-    steps:
-    - uses: actions/checkout@v6
-      with:
-        persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
-    - uses: Swatinem/rust-cache@v2
-    - name: build and test all features individually
-      shell: bash
-      run: |
-        command -v sudo && sudo rm -rf /usr/local/lib/android /usr/share/dotnet # avoid no space left
-        df -h ||:
-        CARGO_FEATURES_OPTION='--features=${{ matrix.job.features }}' ;
-        for f in $(util/show-utils.sh ${CARGO_FEATURES_OPTION})
-        do
-          echo "Running tests with --features=$f and --no-default-features"
-          cargo test --features=$f --no-default-features
+          cargo test -p "uu_$f" -p coreutils --features=$f --no-default-features
         done
 
   test_selinux:
@@ -1270,7 +1267,6 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - name: Setup Lima
       uses: lima-vm/lima-actions/setup@v1
       id: lima-actions-setup
@@ -1284,8 +1280,8 @@ jobs:
     - run: rsync -v -a -e ssh . lima-default:~/work/
     - name: Setup Rust and other build deps in VM
       run: |
-        lima sudo dnf install gcc g++ git rustup libselinux-devel clang-devel attr -y
-        lima rustup-init -y --default-toolchain stable
+        lima sudo dnf install --nodocs gcc g++ git rustup libselinux-devel clang-devel attr -y
+        lima rustup-init -y --default-toolchain stable --profile minimal -c clippy
     - name: Verify SELinux Status
       run: |
         lima getenforce
@@ -1293,9 +1289,9 @@ jobs:
     - name: Build and Test with SELinux
       run: |
         lima ls
-        lima bash -c "cd work && cargo test --features 'feat_selinux'"
+        lima bash -c "cd work && cargo test --features 'feat_selinux' --no-default-features"
     - name: Lint with SELinux
-      run: lima bash -c "cd work && cargo clippy --all-targets --features 'feat_selinux' -- -D warnings"
+      run: lima bash -c "cd work && cargo clippy --all-targets --features 'feat_selinux' --no-default-features -- -D warnings"
 
   test_selinux_stubs:
     name: Build/SELinux-Stubs (Non-Linux)
@@ -1338,6 +1334,6 @@ jobs:
     - name: Install strace
       run: sudo apt-get update && sudo apt-get install -y strace
     - name: Build utilities with safe traversal
-      run: cargo build --release -p uu_rm -p uu_chmod -p uu_chown -p uu_chgrp -p uu_mv -p uu_du
+      run: cargo build --profile=release-small -p uu_rm -p uu_chmod -p uu_chown -p uu_chgrp -p uu_mv -p uu_du
     - name: Run safe traversal verification
       run: ./util/check-safe-traversal.sh

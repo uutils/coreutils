@@ -6,7 +6,7 @@ name: GnuTests
 # spell-checker:ignore (options) Ccodegen Coverflow Cpanic Zpanic
 # spell-checker:ignore (people) Dawid Dziurla * dawidd dtolnay
 # spell-checker:ignore (vars) FILESET SUBDIRS XPASS
-# spell-checker:ignore userns
+# spell-checker:ignore userns nodocs
 
 # * note: to run a single test => `REPO/util/run-gnu-test.sh PATH/TO/TEST/SCRIPT`
 
@@ -44,9 +44,6 @@ jobs:
       with:
         path: 'uutils'
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: stable
     - uses: Swatinem/rust-cache@v2
       with:
         workspaces: "./uutils -> target"
@@ -207,12 +204,6 @@ jobs:
       with:
         path: 'uutils'
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: stable
-    - uses: Swatinem/rust-cache@v2
-      with:
-        workspaces: "./uutils -> target"
     - name: Checkout code (GNU coreutils)
       run: (mkdir -p gnu && cd gnu && bash ../uutils/util/fetch-gnu.sh)
 
@@ -233,19 +224,9 @@ jobs:
         lima ls -laZ /etc/selinux
         lima sudo sestatus
 
-        # Ensure we're running in enforcing mode
-        lima sudo setenforce 1
-        lima getenforce
-
-        # Create test files with SELinux contexts for testing
-        lima sudo mkdir -p /var/test_selinux
-        lima sudo touch /var/test_selinux/test_file
-        lima sudo chcon -t etc_t /var/test_selinux/test_file
-        lima ls -Z /var/test_selinux/test_file  # Verify context
     - name: Install dependencies in VM
       run: |
-        lima sudo dnf -y update
-        lima sudo dnf -y install autoconf bison gperf gcc gdb jq libacl-devel libattr-devel libcap-devel libselinux-devel attr rustup clang-devel automake patch quilt
+        lima sudo dnf -y install --nodocs autoconf bison gperf gcc gdb jq libacl-devel libattr-devel libcap-devel libselinux-devel attr rustup clang-devel automake patch quilt
         lima rustup-init -y --profile=minimal --default-toolchain stable
     - name: Copy the sources to VM
       run: |
@@ -267,8 +248,16 @@ jobs:
         lima bash -c "cd ~/work/uutils/ && echo 'Found SELinux tests:'; wc -l selinux-tests.txt"
     - name: Run GNU SELinux tests
       run: |
+        # Ensure we're running in enforcing mode
         lima sudo setenforce 1
         lima getenforce
+
+        # Create test files with SELinux contexts for testing
+        lima sudo mkdir -p /var/test_selinux
+        lima sudo touch /var/test_selinux/test_file
+        lima sudo chcon -t etc_t /var/test_selinux/test_file
+        lima ls -Z /var/test_selinux/test_file  # Verify context
+
         lima cat /proc/filesystems
         lima bash -c "cd ~/work/uutils/ && bash util/run-gnu-test.sh \$(cat selinux-tests.txt)"
     - name: Extract testing info from individual logs into JSON
@@ -326,9 +315,6 @@ jobs:
       with:
         path: 'uutils'
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: stable
     - uses: Swatinem/rust-cache@v2
       with:
         workspaces: "./uutils -> target"
@@ -386,7 +372,7 @@ jobs:
         path: 'uutils'
         persist-credentials: false
     - name: Retrieve reference artifacts
-      uses: dawidd6/action-download-artifact@v12
+      uses: dawidd6/action-download-artifact@v14
       # ref: <https://github.com/dawidd6/action-download-artifact>
       continue-on-error: true ## don't break the build for missing reference artifacts (may be expired or just not generated yet)
       with:

@@ -25,7 +25,8 @@ use std::path::PathBuf;
     not(target_os = "freebsd"),
     feature = "printf"
 ))]
-use std::process::{Command, Stdio};
+use std::process::Command;
+use std::process::Stdio;
 #[cfg(not(windows))]
 use std::thread::sleep;
 #[cfg(not(windows))]
@@ -667,6 +668,38 @@ fn test_skip_beyond_file() {
         .stderr_contains(
             "'standard input': cannot skip to specified offset\n0+0 records in\n0+0 records out\n",
         );
+}
+
+#[test]
+#[cfg(unix)]
+fn test_skip_beyond_file_seekable_stdin() {
+    // When stdin is a seekable file, dd should use seek to skip bytes.
+    // This tests that skipping beyond the file size issues a warning.
+
+    // Test cases: (bs, skip) pairs that skip beyond a 4-byte file
+    let test_cases = [
+        ("bs=1", "skip=5"), // skip 5 bytes
+        ("bs=3", "skip=2"), // skip 6 bytes
+    ];
+
+    for (bs, skip) in test_cases {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("in", "abcd");
+
+        let stdin = OwnedFileDescriptorOrHandle::open_file(
+            OpenOptions::new().read(true),
+            at.plus("in").as_path(),
+        )
+        .unwrap();
+
+        ucmd.args(&[bs, skip, "count=0", "status=noxfer"])
+            .set_stdin(Stdio::from(stdin))
+            .succeeds()
+            .no_stdout()
+            .stderr_contains(
+                "'standard input': cannot skip to specified offset\n0+0 records in\n0+0 records out\n",
+            );
+    }
 }
 
 #[test]
@@ -1445,7 +1478,7 @@ fn test_sparse() {
     // On common Linux filesystems, setting the length to one megabyte
     // should cause the file to become a sparse file, but it depends
     // on the system.
-    std::fs::File::create(at.plus("infile"))
+    File::create(at.plus("infile"))
         .unwrap()
         .set_len(1024 * 1024)
         .unwrap();
@@ -1622,6 +1655,8 @@ fn test_reading_partial_blocks_from_fifo() {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .env("LANGUAGE", "C")
         .spawn()
         .unwrap();
 
@@ -1667,6 +1702,8 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .env("LANGUAGE", "C")
         .spawn()
         .unwrap();
 
@@ -1697,7 +1734,7 @@ fn test_iflag_directory_fails_when_file_is_passed_via_std_in() {
     let filename = at.plus_as_string("input");
     new_ucmd!()
         .args(&["iflag=directory", "count=0"])
-        .set_stdin(std::process::Stdio::from(File::open(filename).unwrap()))
+        .set_stdin(Stdio::from(File::open(filename).unwrap()))
         .fails()
         .stderr_only("dd: setting flags for 'standard input': Not a directory\n");
 }
@@ -1707,7 +1744,7 @@ fn test_iflag_directory_fails_when_file_is_passed_via_std_in() {
 fn test_iflag_directory_passes_when_dir_is_redirected() {
     new_ucmd!()
         .args(&["iflag=directory", "count=0"])
-        .set_stdin(std::process::Stdio::from(File::open(".").unwrap()))
+        .set_stdin(Stdio::from(File::open(".").unwrap()))
         .succeeds();
 }
 
@@ -1723,8 +1760,6 @@ fn test_iflag_directory_fails_when_file_is_piped_via_std_in() {
 
 #[test]
 fn test_stdin_stdout_not_rewound_even_when_connected_to_seekable_file() {
-    use std::process::Stdio;
-
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
@@ -1779,6 +1814,27 @@ fn test_wrong_number_err_msg() {
         .args(&["count=1kBb555"])
         .fails()
         .stderr_contains("dd: invalid number: '1kBb555'\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_no_dropped_writes() {
+    const BLK_SIZE: usize = 0x4000;
+    const COUNT: usize = 1000;
+    const NUM_BYTES: usize = BLK_SIZE * COUNT;
+
+    let result = new_ucmd!()
+        .args(&[
+            "if=/dev/urandom",
+            &format!("bs={BLK_SIZE}"),
+            &format!("count={COUNT}"),
+        ])
+        .set_stdout(Stdio::piped())
+        .set_stderr(Stdio::piped())
+        .succeeds();
+
+    assert_eq!(result.stdout().len(), NUM_BYTES);
+    assert!(result.stderr_str().contains(&format!("{NUM_BYTES} bytes")));
 }
 
 #[test]
@@ -1845,7 +1901,7 @@ fn test_skip_overflow() {
 #[cfg(target_os = "linux")]
 fn test_nocache_eof() {
     let (at, mut ucmd) = at_and_ucmd!();
-    at.write_bytes("in.f", &vec![0u8; 1234567]);
+    at.write_bytes("in.f", &vec![0u8; 1_234_567]);
     ucmd.args(&[
         "if=in.f",
         "of=out.f",
@@ -1854,7 +1910,7 @@ fn test_nocache_eof() {
         "status=noxfer",
     ])
     .succeeds();
-    assert_eq!(at.read_bytes("out.f").len(), 1234567);
+    assert_eq!(at.read_bytes("out.f").len(), 1_234_567);
 }
 
 #[test]
@@ -1862,7 +1918,7 @@ fn test_nocache_eof() {
 fn test_nocache_eof_fadvise_zero_length() {
     use std::process::Command;
     let (at, _ucmd) = at_and_ucmd!();
-    at.write_bytes("in.f", &vec![0u8; 1234567]);
+    at.write_bytes("in.f", &vec![0u8; 1_234_567]);
 
     let strace_file = at.plus_as_string("strace.out");
     let result = Command::new("strace")

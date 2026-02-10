@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (path) eacces inacc rm-r4 unlinkat fstatat
+// spell-checker:ignore (path) eacces inacc rm-r4 unlinkat fstatat rootlink
 
 use clap::builder::{PossibleValue, ValueParser};
 use clap::{Arg, ArgAction, Command, parser::ValueSource};
@@ -17,7 +17,7 @@ use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::MAIN_SEPARATOR;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
@@ -45,6 +45,8 @@ enum RmError {
     UseNoPreserveRoot,
     #[error("{}", translate!("rm-error-refusing-to-remove-directory", "path" => _0.quote()))]
     RefusingToRemoveDirectory(OsString),
+    #[error("{}", translate!("rm-error-may-not-abbreviate-no-preserve-root"))]
+    MayNotAbbreviateNoPreserveRoot,
 }
 
 impl UError for RmError {}
@@ -54,7 +56,7 @@ fn verbose_removed_file(path: &Path, options: &Options) {
     if options.verbose {
         println!(
             "{}",
-            translate!("rm-verbose-removed", "file" => normalize(path).quote())
+            translate!("rm-verbose-removed", "file" => uucore::fs::normalize_path(path).quote())
         );
     }
 }
@@ -64,13 +66,13 @@ fn verbose_removed_directory(path: &Path, options: &Options) {
     if options.verbose {
         println!(
             "{}",
-            translate!("rm-verbose-removed-directory", "file" => normalize(path).quote())
+            translate!("rm-verbose-removed-directory", "file" => uucore::fs::normalize_path(path).quote())
         );
     }
 }
 
 /// Helper function to show error with context and return error status
-fn show_removal_error(error: std::io::Error, path: &Path) -> bool {
+fn show_removal_error(error: io::Error, path: &Path) -> bool {
     if error.kind() == io::ErrorKind::PermissionDenied {
         show_error!("cannot remove {}: Permission denied", path.quote());
     } else {
@@ -200,7 +202,8 @@ static ARG_FILES: &str = "files";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    let args: Vec<OsString> = args.collect();
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args.iter())?;
 
     let files: Vec<_> = matches
         .get_many::<OsString>(ARG_FILES)
@@ -226,6 +229,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             })
     };
 
+    let preserve_root = !matches.get_flag(OPT_NO_PRESERVE_ROOT);
+    let recursive = matches.get_flag(OPT_RECURSIVE);
+
     let options = Options {
         force: force_flag,
         interactive: {
@@ -242,8 +248,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
         },
         one_fs: matches.get_flag(OPT_ONE_FILE_SYSTEM),
-        preserve_root: !matches.get_flag(OPT_NO_PRESERVE_ROOT),
-        recursive: matches.get_flag(OPT_RECURSIVE),
+        preserve_root,
+        recursive,
         dir: matches.get_flag(OPT_DIR),
         verbose: matches.get_flag(OPT_VERBOSE),
         progress: matches.get_flag(OPT_PROGRESS),
@@ -253,6 +259,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             None
         },
     };
+
+    // manually parse all args to verify --no-preserve-root did not get abbreviated (clap does
+    // allow this)
+    if !options.preserve_root && !args.iter().any(|arg| arg == "--no-preserve-root") {
+        return Err(RmError::MayNotAbbreviateNoPreserveRoot.into());
+    }
+
     if options.interactive == InteractiveMode::Once && (options.recursive || files.len() > 3) {
         let msg: String = format!(
             "remove {} {}{}",
@@ -441,21 +454,16 @@ fn count_files(paths: &[&OsStr], recursive: bool) -> u64 {
 
 /// A helper for `count_files` specialized for directories.
 fn count_files_in_directory(p: &Path) -> u64 {
-    let entries_count = fs::read_dir(p)
-        .map(|entries| {
-            entries
-                .filter_map(Result::ok)
-                .map(|entry| {
-                    let file_type = entry.file_type();
-                    match file_type {
-                        Ok(ft) if ft.is_dir() => count_files_in_directory(&entry.path()),
-                        Ok(_) => 1,
-                        Err(_) => 0,
-                    }
-                })
-                .sum()
-        })
-        .unwrap_or(0);
+    let entries_count = fs::read_dir(p).map_or(0, |entries| {
+        entries
+            .flatten()
+            .map(|entry| match entry.file_type() {
+                Ok(ft) if ft.is_dir() => count_files_in_directory(&entry.path()),
+                Ok(_) => 1,
+                Err(_) => 0,
+            })
+            .sum()
+    });
 
     1 + entries_count
 }
@@ -476,6 +484,19 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
 
     for filename in files {
         let file = Path::new(filename);
+
+        // Check if the path (potentially with trailing slash) resolves to root
+        // This needs to happen before symlink_metadata to catch cases like "rootlink/"
+        // where rootlink is a symlink to root.
+        if uucore::fs::path_ends_with_terminator(file)
+            && options.recursive
+            && options.preserve_root
+            && is_root_path(file)
+        {
+            show_preserve_root_error(file);
+            had_err = true;
+            continue;
+        }
 
         had_err = match file.symlink_metadata() {
             Ok(metadata) => {
@@ -549,19 +570,8 @@ fn is_writable_metadata(metadata: &Metadata) -> bool {
     (mode & 0o200) > 0
 }
 
-/// Whether the given file or directory is writable.
-#[cfg(unix)]
-fn is_writable(path: &Path) -> bool {
-    match fs::metadata(path) {
-        Err(_) => false,
-        Ok(metadata) => is_writable_metadata(&metadata),
-    }
-}
-
-/// Whether the given file or directory is writable.
 #[cfg(not(unix))]
-fn is_writable(_path: &Path) -> bool {
-    // TODO Not yet implemented.
+fn is_writable_metadata(_metadata: &Metadata) -> bool {
     true
 }
 
@@ -674,6 +684,40 @@ fn remove_dir_recursive(
     }
 }
 
+/// Check if a path resolves to the root directory.
+/// Returns true if the path is root, false otherwise.
+fn is_root_path(path: &Path) -> bool {
+    // Check simple case: literal "/" path
+    if path.has_root() && path.parent().is_none() {
+        return true;
+    }
+
+    // Check if path resolves to "/" after following symlinks
+    if let Ok(canonical) = path.canonicalize() {
+        canonical.has_root() && canonical.parent().is_none()
+    } else {
+        false
+    }
+}
+
+/// Show error message for attempting to remove root.
+fn show_preserve_root_error(path: &Path) {
+    let path_looks_like_root = path.has_root() && path.parent().is_none();
+
+    if path_looks_like_root {
+        // Path is literally "/"
+        show_error!("{}", RmError::DangerousRecursiveOperation);
+    } else {
+        // Path resolves to root but isn't literally "/" (e.g., symlink to /)
+        show_error!(
+            "{}",
+            translate!("rm-error-dangerous-recursive-operation-same-as-root",
+            "path" => path.display())
+        );
+    }
+    show_error!("{}", RmError::UseNoPreserveRoot);
+}
+
 fn handle_dir(path: &Path, options: &Options, progress_bar: Option<&ProgressBar>) -> bool {
     let mut had_err = false;
 
@@ -686,14 +730,13 @@ fn handle_dir(path: &Path, options: &Options, progress_bar: Option<&ProgressBar>
         return true;
     }
 
-    let is_root = path.has_root() && path.parent().is_none();
+    let is_root = is_root_path(path);
     if options.recursive && (!is_root || !options.preserve_root) {
         had_err = remove_dir_recursive(path, options, progress_bar);
     } else if options.dir && (!is_root || !options.preserve_root) {
         had_err = remove_dir(path, options, progress_bar).bitor(had_err);
     } else if options.recursive {
-        show_error!("{}", RmError::DangerousRecursiveOperation);
-        show_error!("{}", RmError::UseNoPreserveRoot);
+        show_preserve_root_error(path);
         had_err = true;
     } else {
         show_error!(
@@ -799,35 +842,33 @@ fn prompt_file(path: &Path, options: &Options) -> bool {
     if options.interactive == InteractiveMode::Never {
         return true;
     }
-    // If interactive is Always we want to check if the file is symlink to prompt the right message
-    if options.interactive == InteractiveMode::Always {
-        if let Ok(metadata) = fs::symlink_metadata(path) {
-            if metadata.is_symlink() {
-                return prompt_yes!("remove symbolic link {}?", path.quote());
-            }
-        }
-    }
 
-    let Ok(metadata) = fs::metadata(path) else {
+    let Ok(metadata) = fs::symlink_metadata(path) else {
         return true;
     };
 
-    if options.interactive == InteractiveMode::Always && is_writable(path) {
+    if metadata.is_symlink() {
+        return options.interactive != InteractiveMode::Always
+            || prompt_yes!("remove symbolic link {}?", path.quote());
+    }
+
+    if options.interactive == InteractiveMode::Always && is_writable_metadata(&metadata) {
         return if metadata.len() == 0 {
             prompt_yes!("remove regular empty file {}?", path.quote())
         } else {
             prompt_yes!("remove file {}?", path.quote())
         };
     }
-    prompt_file_permission_readonly(path, options)
+
+    prompt_file_permission_readonly(path, options, &metadata)
 }
 
-fn prompt_file_permission_readonly(path: &Path, options: &Options) -> bool {
+fn prompt_file_permission_readonly(path: &Path, options: &Options, metadata: &Metadata) -> bool {
     let stdin_ok = options.__presume_input_tty.unwrap_or(false) || stdin().is_terminal();
-    match (stdin_ok, fs::metadata(path), options.interactive) {
-        (false, _, InteractiveMode::PromptProtected) => true,
-        (_, Ok(_), _) if is_writable(path) => true,
-        (_, Ok(metadata), _) if metadata.len() == 0 => prompt_yes!(
+    match (stdin_ok, options.interactive) {
+        (false, InteractiveMode::PromptProtected) => true,
+        _ if is_writable_metadata(metadata) => true,
+        _ if metadata.len() == 0 => prompt_yes!(
             "remove write-protected regular empty file {}?",
             path.quote()
         ),
@@ -841,7 +882,9 @@ fn path_is_current_or_parent_directory(path: &Path) -> bool {
     let dir_separator = MAIN_SEPARATOR as u8;
     if let Ok(path_bytes) = path_str {
         return path_bytes == ([b'.'])
+            || path_bytes == ([b'.', dir_separator])
             || path_bytes == ([b'.', b'.'])
+            || path_bytes == ([b'.', b'.', dir_separator])
             || path_bytes.ends_with(&[dir_separator, b'.'])
             || path_bytes.ends_with(&[dir_separator, b'.', b'.'])
             || path_bytes.ends_with(&[dir_separator, b'.', dir_separator])
@@ -939,14 +982,6 @@ fn clean_trailing_slashes(path: &Path) -> &Path {
 
 fn prompt_descend(path: &Path) -> bool {
     prompt_yes!("descend into directory {}?", path.quote())
-}
-
-fn normalize(path: &Path) -> PathBuf {
-    // copied from https://github.com/rust-lang/cargo/blob/2e4cfc2b7d43328b207879228a2ca7d427d188bb/src/cargo/util/paths.rs#L65-L90
-    // both projects are MIT https://github.com/rust-lang/cargo/blob/master/LICENSE-MIT
-    // for std impl progress see rfc https://github.com/rust-lang/rfcs/issues/2208
-    // TODO: replace this once that lands
-    uucore::fs::normalize_path(path)
 }
 
 #[cfg(not(windows))]

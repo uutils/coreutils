@@ -11,6 +11,7 @@ homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 readme.workspace = true
 
 [lints]
@@ -30,7 +31,6 @@ fluent = { workspace = true }
 jiff = { workspace = true }
 
 [target.'cfg(target_os = "openbsd")'.dependencies]
-utmp-classic = { workspace = true }
 
 [[bin]]
 name = "uptime"
