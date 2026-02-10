@@ -29,6 +29,15 @@ pub fn not_found(util: &OsStr) -> ! {
     process::exit(1);
 }
 
+/// Prints an "unrecognized option" error and exits
+pub fn unrecognized_option(binary_name: &str, option: &OsStr) -> ! {
+    eprintln!(
+        "{binary_name}: unrecognized option '{}'",
+        option.to_string_lossy()
+    );
+    process::exit(1);
+}
+
 /// Sets up localization for a utility with proper error handling
 pub fn setup_localization_or_exit(util_name: &str) {
     let util_name = get_canonical_util_name(util_name);
@@ -49,13 +58,8 @@ fn get_canonical_util_name(util_name: &str) -> &str {
     match util_name {
         // uu_test aliases - '[' is an alias for test
         "[" => "test",
-
-        // hashsum aliases - all these hash commands are aliases for hashsum
-        "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum" | "b2sum" => {
-            "hashsum"
-        }
-
-        "dir" => "ls", // dir is an alias for ls
+        "dir" => "ls",  // dir is an alias for ls
+        "vdir" => "ls", // vdir is an alias for ls
 
         // Default case - return the util name as is
         _ => util_name,
@@ -85,7 +89,6 @@ mod tests {
     fn test_get_canonical_util_name() {
         // Test a few key aliases
         assert_eq!(get_canonical_util_name("["), "test");
-        assert_eq!(get_canonical_util_name("md5sum"), "hashsum");
         assert_eq!(get_canonical_util_name("dir"), "ls");
 
         // Test passthrough case

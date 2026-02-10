@@ -507,24 +507,24 @@ impl LinesChunk {
         bytes_offset
     }
 
-    /// Print the bytes contained in this buffer calculated with the given offset in number of
+    /// Write the bytes contained in this buffer calculated with the given offset in number of
     /// lines.
     ///
     /// # Arguments
     ///
     /// * `writer`: must implement [`Write`]
     /// * `offset`: An offset in number of lines.
-    pub fn print_lines(&self, writer: &mut impl Write, offset: usize) -> UResult<()> {
-        self.print_bytes(writer, self.calculate_bytes_offset_from(offset))
+    pub fn write_lines(&self, writer: &mut impl Write, offset: usize) -> UResult<()> {
+        self.write_bytes(writer, self.calculate_bytes_offset_from(offset))
     }
 
-    /// Print the bytes contained in this buffer beginning from the given offset in number of bytes.
+    /// Write the bytes contained in this buffer beginning from the given offset in number of bytes.
     ///
     /// # Arguments
     ///
     /// * `writer`: must implement [`Write`]
     /// * `offset`: An offset in number of bytes.
-    pub fn print_bytes(&self, writer: &mut impl Write, offset: usize) -> UResult<()> {
+    pub fn write_bytes(&self, writer: &mut impl Write, offset: usize) -> UResult<()> {
         writer.write_all(self.get_buffer_with(offset))?;
         Ok(())
     }
@@ -617,9 +617,9 @@ impl LinesChunkBuffer {
         Ok(())
     }
 
-    pub fn print(&self, mut writer: impl Write) -> UResult<()> {
+    pub fn write(&self, mut writer: impl Write) -> UResult<()> {
         for chunk in &self.chunks {
-            chunk.print_bytes(&mut writer, 0)?;
+            chunk.write_bytes(&mut writer, 0)?;
         }
         Ok(())
     }

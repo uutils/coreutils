@@ -7,6 +7,7 @@ repository = "https://github.com/uutils/coreutils/tree/main/src/uucore"
 authors.workspace = true
 categories.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 homepage.workspace = true
 keywords.workspace = true
 license.workspace = true
@@ -68,7 +69,13 @@ num-traits = { workspace = true, optional = true }
 selinux = { workspace = true, optional = true }
 
 # icu stuff
+icu_calendar = { workspace = true, optional = true, features = [
+  "compiled_data",
+] }
 icu_collator = { workspace = true, optional = true, features = [
+  "compiled_data",
+] }
+icu_datetime = { workspace = true, optional = true, features = [
   "compiled_data",
 ] }
 icu_decimal = { workspace = true, optional = true, features = [
@@ -76,6 +83,7 @@ icu_decimal = { workspace = true, optional = true, features = [
 ] }
 icu_locale = { workspace = true, optional = true, features = ["compiled_data"] }
 icu_provider = { workspace = true, optional = true }
+jiff-icu = { workspace = true, optional = true }
 
 # Fluent dependencies (always available for localization)
 fluent = { workspace = true }
@@ -83,19 +91,19 @@ fluent-syntax = { workspace = true }
 unic-langid = { workspace = true }
 fluent-bundle = { workspace = true }
 thiserror = { workspace = true }
+
 [target.'cfg(unix)'.dependencies]
-walkdir = { workspace = true, optional = true }
 nix = { workspace = true, features = [
-  "fs",
-  "uio",
-  "zerocopy",
-  "signal",
   "dir",
-  "user",
+  "fs",
   "poll",
+  "signal",
+  "uio",
+  "user",
+  "zerocopy",
 ] }
+walkdir = { workspace = true, optional = true }
 xattr = { workspace = true, optional = true }
-itertools = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
@@ -143,10 +151,18 @@ format = [
   "quoting-style",
   "unit-prefix",
 ]
-i18n-all = ["i18n-collator", "i18n-decimal"]
+i18n-all = ["i18n-charmap", "i18n-collator", "i18n-decimal", "i18n-datetime"]
+i18n-charmap = ["i18n-common"]
 i18n-common = ["icu_locale"]
 i18n-collator = ["i18n-common", "icu_collator"]
 i18n-decimal = ["i18n-common", "icu_decimal", "icu_provider"]
+i18n-datetime = [
+  "i18n-common",
+  "icu_calendar",
+  "icu_datetime",
+  "jiff-icu",
+  "jiff",
+]
 mode = ["libc"]
 perms = ["entries", "libc", "walkdir"]
 buf-copy = []

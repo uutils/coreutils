@@ -16,7 +16,7 @@ use uucore::error::{UError, UResult, USimpleError, get_exit_code};
 use uucore::fsext::{MountInfo, read_fs_list};
 use uucore::parser::parse_size::ParseSizeError;
 use uucore::translate;
-use uucore::{format_usage, show};
+use uucore::{format_usage, show, show_warning};
 
 use clap::{Arg, ArgAction, ArgMatches, Command, parser::ValueSource};
 
@@ -108,6 +108,13 @@ impl Default for Options {
                 Column::Target,
             ],
         }
+    }
+}
+
+impl Options {
+    /// Whether -a, -l, -t, or -x options require the mount table.
+    fn requires_mount_table(&self) -> bool {
+        self.show_all_fs || self.show_local_fs || self.include.is_some() || self.exclude.is_some()
     }
 }
 
@@ -358,14 +365,38 @@ where
     P: AsRef<Path>,
 {
     // The list of all mounted filesystems.
-    let mounts: Vec<MountInfo> = read_fs_list()?;
+    let mounts_result = read_fs_list();
+
+    #[allow(unused_variables)]
+    let (mounts, use_fallback) = match mounts_result {
+        Ok(m) => (m, false),
+        Err(e) => {
+            if opt.requires_mount_table() {
+                return Err(e);
+            }
+            show_warning!(
+                "{}",
+                translate!("df-error-cannot-read-table-of-mounted-filesystems")
+            );
+            (vec![], true)
+        }
+    };
 
     let mut result = vec![];
 
     // Convert each path into a `Filesystem`, which contains
     // both the mount information and usage information.
     for path in paths {
-        match Filesystem::from_path(&mounts, path) {
+        #[cfg(unix)]
+        let fs_result = if use_fallback {
+            Filesystem::from_path_direct(path)
+        } else {
+            Filesystem::from_path(&mounts, path)
+        };
+        #[cfg(not(unix))]
+        let fs_result = Filesystem::from_path(&mounts, path);
+
+        match fs_result {
             Ok(fs) => {
                 if is_included(&fs.mount_info, opt) {
                     result.push(fs);

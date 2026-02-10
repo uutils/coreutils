@@ -15,20 +15,24 @@ mod progress;
 
 use crate::bufferedoutput::BufferedOutput;
 use blocks::conv_block_unblock_helper;
-use datastructures::*;
+use datastructures::{ConversionMode, IConvFlags, IFlags, OConvFlags, OFlags, options};
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::fcntl::FcntlArg::F_SETFL;
+use nix::fcntl::FcntlArg;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::fcntl::OFlag;
 use parseargs::Parser;
 use progress::ProgUpdateType;
 use progress::{ProgUpdate, ReadStat, StatusLevel, WriteStat, gen_prog_updater};
+#[cfg(target_os = "linux")]
+use progress::{check_and_reset_sigusr1, install_sigusr1_handler};
 use uucore::io::OwnedFileDescriptorOrHandle;
 use uucore::translate;
 
 use std::cmp;
 use std::env;
 use std::ffi::OsString;
+#[cfg(unix)]
+use std::fs::Metadata;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -88,7 +92,7 @@ struct Settings {
 ///
 /// After being constructed with [`Alarm::with_interval`], [`Alarm::get_trigger`]
 /// will return [`ALARM_TRIGGER_TIMER`] once per the given [`Duration`].
-/// Alarm can be manually triggered with closure returned by [`Alarm::manual_trigger_fn`].
+/// Alarm can be manually triggered with [`Alarm::manual_trigger`].
 /// [`Alarm::get_trigger`] will return [`ALARM_TRIGGER_SIGNAL`] in this case.
 ///
 /// Can be cloned, but the trigger status is shared across all instances so only
@@ -120,18 +124,9 @@ impl Alarm {
         Self { interval, trigger }
     }
 
-    /// Returns a closure that allows to manually trigger the alarm
-    ///
-    /// This is useful for cases where more than one alarm even source exists
-    /// In case of `dd` there is the SIGUSR1/SIGINFO case where we want to
-    /// trigger an manual progress report.
-    pub fn manual_trigger_fn(&self) -> Box<dyn Send + Sync + Fn()> {
-        let weak_trigger = Arc::downgrade(&self.trigger);
-        Box::new(move || {
-            if let Some(trigger) = weak_trigger.upgrade() {
-                trigger.store(ALARM_TRIGGER_SIGNAL, Relaxed);
-            }
-        })
+    /// Manually trigger the alarm as a signal event
+    pub fn manual_trigger(&self) {
+        self.trigger.store(ALARM_TRIGGER_SIGNAL, Relaxed);
     }
 
     /// Use this function to poll for any pending alarm event
@@ -234,8 +229,8 @@ impl Source {
     /// Create a source from stdin using its raw file descriptor.
     ///
     /// This returns an instance of the `Source::StdinFile` variant,
-    /// using the raw file descriptor of [`std::io::Stdin`] to create
-    /// the [`std::fs::File`] parameter. You can use this instead of
+    /// using the raw file descriptor of [`io::Stdin`] to create
+    /// the [`File`] parameter. You can use this instead of
     /// `Source::Stdin` to allow reading from stdin without consuming
     /// the entire contents of stdin when this process terminates.
     #[cfg(unix)]
@@ -273,7 +268,7 @@ impl Source {
                     }
                 }
                 // Get file length before seeking to avoid race condition
-                let file_len = f.metadata().map(|m| m.len()).unwrap_or(u64::MAX);
+                let file_len = f.metadata().as_ref().map_or(u64::MAX, Metadata::len);
                 // Try seek first; fall back to read if not seekable
                 match n.try_into().ok().map(|n| f.seek(SeekFrom::Current(n))) {
                     Some(Ok(pos)) => {
@@ -746,7 +741,7 @@ fn handle_o_direct_write(f: &mut File, buf: &[u8], original_error: io::Error) ->
         // Log any restoration errors without failing the operation
         if let Err(os_err) = fcntl(&mut *f, FcntlArg::F_SETFL(oflags)) {
             // Just log the error, don't fail the whole operation
-            show_error!("Failed to restore O_DIRECT flag: {}", os_err);
+            show_error!("Failed to restore O_DIRECT flag: {os_err}");
         }
 
         write_result
@@ -895,7 +890,7 @@ impl<'a> Output<'a> {
         if let Some(libc_flags) = make_linux_oflags(&settings.oflags) {
             nix::fcntl::fcntl(
                 fx.as_raw().as_fd(),
-                F_SETFL(OFlag::from_bits_retain(libc_flags)),
+                FcntlArg::F_SETFL(OFlag::from_bits_retain(libc_flags)),
             )?;
         }
 
@@ -1090,7 +1085,7 @@ impl BlockWriter<'_> {
 
 /// depending on the command line arguments, this function
 /// informs the OS to flush/discard the caches for input and/or output file.
-fn flush_caches_full_length(i: &Input, o: &Output) -> io::Result<()> {
+fn flush_caches_full_length(i: &Input, o: &Output) {
     // Using len=0 in posix_fadvise means "to end of file"
     if i.settings.iflags.nocache {
         i.discard_cache(0, 0);
@@ -1098,8 +1093,6 @@ fn flush_caches_full_length(i: &Input, o: &Output) -> io::Result<()> {
     if i.settings.oflags.nocache {
         o.discard_cache(0, 0);
     }
-
-    Ok(())
 }
 
 /// Copy the given input data to this output, consuming both.
@@ -1161,7 +1154,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         // requests that we inform the system that we no longer
         // need the contents of the input file in a system cache.
         //
-        flush_caches_full_length(&i, &o)?;
+        flush_caches_full_length(&i, &o);
         return finalize(
             BlockWriter::Unbuffered(o),
             rstat,
@@ -1183,14 +1176,9 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     // This avoids the need to query the OS monotonic clock for every block.
     let alarm = Alarm::with_interval(Duration::from_secs(1));
 
-    // The signal handler spawns an own thread that waits for signals.
-    // When the signal is received, it calls a handler function.
-    // We inject a handler function that manually triggers the alarm.
     #[cfg(target_os = "linux")]
-    let signal_handler = progress::SignalHandler::install_signal_handler(alarm.manual_trigger_fn());
-    #[cfg(target_os = "linux")]
-    if let Err(e) = &signal_handler {
-        if Some(StatusLevel::None) != i.settings.status {
+    if let Err(e) = install_sigusr1_handler() {
+        if i.settings.status != Some(StatusLevel::None) {
             eprintln!("{}\n\t{e}", translate!("dd-warning-signal-handler"));
         }
     }
@@ -1270,6 +1258,10 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         // error.
         rstat += rstat_update;
         wstat += wstat_update;
+        #[cfg(target_os = "linux")]
+        if check_and_reset_sigusr1() {
+            alarm.manual_trigger();
+        }
         match alarm.get_trigger() {
             ALARM_TRIGGER_NONE => {}
             t @ (ALARM_TRIGGER_TIMER | ALARM_TRIGGER_SIGNAL) => {
