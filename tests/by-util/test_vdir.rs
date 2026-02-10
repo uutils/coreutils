@@ -56,3 +56,21 @@ fn test_column_output() {
 fn test_invalid_option_exit_code() {
     new_ucmd!().arg("-/").fails().code_is(2);
 }
+
+#[test]
+fn test_help_shows_vdir_not_ls() {
+    let result = new_ucmd!().arg("--help").succeeds();
+    let output = result.stdout_str();
+
+    // Verify help text contains "vdir" in the usage line
+    assert!(
+        output.contains("vdir [OPTION]"),
+        "Help should show 'vdir [OPTION]'"
+    );
+
+    // Verify help text does not incorrectly show "ls"
+    assert!(
+        !output.contains("ls [OPTION]"),
+        "Help should not show 'ls [OPTION]'"
+    );
+}

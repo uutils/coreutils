@@ -550,8 +550,8 @@ fn test_join_non_utf8_paths() {
     #[cfg(unix)]
     {
         use std::os::unix::ffi::OsStrExt;
-        let file1_name = std::ffi::OsStr::from_bytes(file1_bytes);
-        let file2_name = std::ffi::OsStr::from_bytes(file2_bytes);
+        let file1_name = OsStr::from_bytes(file1_bytes);
+        let file2_name = OsStr::from_bytes(file2_bytes);
 
         let mut file1 = File::create(test_dir.join(file1_name)).unwrap();
         file1.write_all(b"a 1\n").unwrap();

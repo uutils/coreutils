@@ -7,8 +7,12 @@ use std::sync::OnceLock;
 
 use icu_locale::{Locale, locale};
 
+#[cfg(feature = "i18n-charmap")]
+pub mod charmap;
 #[cfg(feature = "i18n-collator")]
 pub mod collator;
+#[cfg(feature = "i18n-datetime")]
+pub mod datetime;
 #[cfg(feature = "i18n-decimal")]
 pub mod decimal;
 
@@ -31,7 +35,7 @@ const DEFAULT_LOCALE: Locale = locale!("und");
 /// 3. LANG
 ///
 /// Or fallback on Posix locale, with ASCII encoding.
-fn get_locale_from_env(locale_name: &str) -> (Locale, UEncoding) {
+pub fn get_locale_from_env(locale_name: &str) -> (Locale, UEncoding) {
     let locale_var = ["LC_ALL", locale_name, "LANG"]
         .iter()
         .find_map(|&key| std::env::var(key).ok());

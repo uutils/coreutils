@@ -27,6 +27,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     match exec(&buffer) {
         Ok(()) => Ok(()),
+        // On Windows, silently handle broken pipe since there's no SIGPIPE
+        #[cfg(windows)]
         Err(err) if err.kind() == io::ErrorKind::BrokenPipe => Ok(()),
         Err(err) => Err(USimpleError::new(
             1,
@@ -50,6 +52,7 @@ pub fn uu_app() -> Command {
 }
 
 /// Copies words from `i` into `buf`, separated by spaces.
+#[allow(clippy::unnecessary_wraps, reason = "needed on some platforms")]
 fn args_into_buffer<'a>(
     buf: &mut Vec<u8>,
     i: Option<impl Iterator<Item = &'a OsString>>,

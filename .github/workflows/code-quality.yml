@@ -1,6 +1,6 @@
 name: Code Quality
 
-# spell-checker:ignore (people) reactivecircus Swatinem dtolnay juliangruber pell taplo
+# spell-checker:ignore (people) dtolnay juliangruber pell reactivecircus Swatinem taiki-e taplo
 # spell-checker:ignore (misc) TERMUX noaudio pkill swiftshader esac sccache pcoreutils shopt subshell dequote libsystemd
 
 on:
@@ -74,6 +74,7 @@ jobs:
     env:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
+      CARGO_INCREMENTAL: 0
     strategy:
       fail-fast: false
       matrix:
@@ -204,8 +205,13 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Install taplo-cli
+        uses: taiki-e/install-action@v2
+        with:
+          tool: taplo-cli
+
       - name: Check
-        run: npx --yes @taplo/cli fmt --check
+        run: taplo fmt --check --diff
 
   python:
     name: Style/Python

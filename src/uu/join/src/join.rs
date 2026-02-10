@@ -221,8 +221,8 @@ impl<'a, Sep: Separator> Repr<'a, Sep> {
         !self.format.is_empty()
     }
 
-    /// Print the field or empty filler if the field is not set.
-    fn print_field(
+    /// Write the field or empty filler if the field is not set.
+    fn write_field(
         &self,
         writer: &mut impl Write,
         field: Option<&[u8]>,
@@ -235,8 +235,8 @@ impl<'a, Sep: Separator> Repr<'a, Sep> {
         writer.write_all(value)
     }
 
-    /// Print each field except the one at the index.
-    fn print_fields(
+    /// Write each field except the one at the index.
+    fn write_fields(
         &self,
         writer: &mut impl Write,
         line: &Line,
@@ -251,8 +251,8 @@ impl<'a, Sep: Separator> Repr<'a, Sep> {
         Ok(())
     }
 
-    /// Print each field or the empty filler if the field is not set.
-    fn print_format<F>(&self, writer: &mut impl Write, f: F) -> Result<(), std::io::Error>
+    /// Write each field or the empty filler if the field is not set.
+    fn write_format<F>(&self, writer: &mut impl Write, f: F) -> Result<(), std::io::Error>
     where
         F: Fn(&Spec) -> Option<&'a [u8]>,
     {
@@ -271,7 +271,7 @@ impl<'a, Sep: Separator> Repr<'a, Sep> {
         Ok(())
     }
 
-    fn print_line_ending(&self, writer: &mut impl Write) -> Result<(), std::io::Error> {
+    fn write_line_ending(&self, writer: &mut impl Write) -> Result<(), std::io::Error> {
         writer.write_all(&[self.line_ending as u8])
     }
 }
@@ -471,7 +471,7 @@ impl<'a> State<'a> {
         repr: &Repr<'a, Sep>,
     ) -> UResult<()> {
         if self.print_unpaired {
-            self.print_first_line(writer, repr)?;
+            self.write_first_line(writer, repr)?;
         }
 
         self.reset_next_line(input)?;
@@ -494,8 +494,8 @@ impl<'a> State<'a> {
         Ok(None)
     }
 
-    /// Print lines in the buffers as headers.
-    fn print_headers<Sep: Separator>(
+    /// Write lines in the buffers as headers.
+    fn write_headers<Sep: Separator>(
         &self,
         writer: &mut impl Write,
         other: &State,
@@ -505,10 +505,10 @@ impl<'a> State<'a> {
             if other.has_line() {
                 self.combine(writer, other, repr)?;
             } else {
-                self.print_first_line(writer, repr)?;
+                self.write_first_line(writer, repr)?;
             }
         } else if other.has_line() {
-            other.print_first_line(writer, repr)?;
+            other.write_first_line(writer, repr)?;
         }
 
         Ok(())
@@ -526,7 +526,7 @@ impl<'a> State<'a> {
         for line1 in &self.seq {
             for line2 in &other.seq {
                 if repr.uses_format() {
-                    repr.print_format(writer, |spec| match *spec {
+                    repr.write_format(writer, |spec| match *spec {
                         Spec::Key => key,
                         Spec::Field(file_num, field_num) => {
                             if file_num == self.file_num {
@@ -541,12 +541,12 @@ impl<'a> State<'a> {
                         }
                     })?;
                 } else {
-                    repr.print_field(writer, key)?;
-                    repr.print_fields(writer, line1, self.key)?;
-                    repr.print_fields(writer, line2, other.key)?;
+                    repr.write_field(writer, key)?;
+                    repr.write_fields(writer, line1, self.key)?;
+                    repr.write_fields(writer, line2, other.key)?;
                 }
 
-                repr.print_line_ending(writer)?;
+                repr.write_line_ending(writer)?;
             }
         }
 
@@ -604,13 +604,13 @@ impl<'a> State<'a> {
     ) -> UResult<()> {
         if self.has_line() {
             if self.print_unpaired {
-                self.print_first_line(writer, repr)?;
+                self.write_first_line(writer, repr)?;
             }
 
             let mut next_line = self.next_line(input)?;
             while let Some(line) = &next_line {
                 if self.print_unpaired {
-                    self.print_line(writer, line, repr)?;
+                    self.write_line(writer, line, repr)?;
                 }
                 self.reset(next_line);
                 next_line = self.next_line(input)?;
@@ -668,14 +668,14 @@ impl<'a> State<'a> {
         self.seq[0].get_field(self.key)
     }
 
-    fn print_line<Sep: Separator>(
+    fn write_line<Sep: Separator>(
         &self,
         writer: &mut impl Write,
         line: &Line,
         repr: &Repr<'a, Sep>,
     ) -> Result<(), std::io::Error> {
         if repr.uses_format() {
-            repr.print_format(writer, |spec| match *spec {
+            repr.write_format(writer, |spec| match *spec {
                 Spec::Key => line.get_field(self.key),
                 Spec::Field(file_num, field_num) => {
                     if file_num == self.file_num {
@@ -686,19 +686,19 @@ impl<'a> State<'a> {
                 }
             })?;
         } else {
-            repr.print_field(writer, line.get_field(self.key))?;
-            repr.print_fields(writer, line, self.key)?;
+            repr.write_field(writer, line.get_field(self.key))?;
+            repr.write_fields(writer, line, self.key)?;
         }
 
-        repr.print_line_ending(writer)
+        repr.write_line_ending(writer)
     }
 
-    fn print_first_line<Sep: Separator>(
+    fn write_first_line<Sep: Separator>(
         &self,
         writer: &mut impl Write,
         repr: &Repr<'a, Sep>,
     ) -> Result<(), std::io::Error> {
-        self.print_line(writer, &self.seq[0], repr)
+        self.write_line(writer, &self.seq[0], repr)
     }
 }
 
@@ -1043,7 +1043,7 @@ fn exec<Sep: Separator>(
     let mut writer = BufWriter::new(stdout.lock());
 
     if settings.headers {
-        state1.print_headers(&mut writer, &state2, &repr)?;
+        state1.write_headers(&mut writer, &state2, &repr)?;
         state1.reset_read_line(&input)?;
         state2.reset_read_line(&input)?;
     }
