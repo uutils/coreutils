@@ -235,3 +235,17 @@ fn test_musl_no_dynamic_deps() {
         stdout
     );
 }
+
+#[test]
+fn test_sorted_utils() {
+    let s = TestScenario::new("list_sorted");
+    let out = String::from_utf8(
+        std::process::Command::new(&s.bin_path)
+            .arg("--list")
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap();
+    assert!(out.lines().filter(|s| !s.is_empty()).is_sorted());
+}
