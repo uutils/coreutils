@@ -247,6 +247,8 @@ fn get_config(matches: &mut clap::ArgMatches) -> UResult<Config> {
             .expect(err_msg)
             .parse()
             .map_err(PtxError::ParseError)?;
+    } else if matches.get_flag(options::TYPESET_MODE) {
+        config.line_width = 100;
     }
     if matches.contains_id(options::GAP_SIZE) {
         config.gap_size = matches
@@ -894,6 +896,7 @@ mod options {
     pub static IGNORE_FILE: &str = "ignore-file";
     pub static ONLY_FILE: &str = "only-file";
     pub static REFERENCES: &str = "references";
+    pub static TYPESET_MODE: &str = "typeset-mode";
     pub static WIDTH: &str = "width";
 }
 
@@ -1068,6 +1071,13 @@ pub fn uu_app() -> Command {
                 .long(options::REFERENCES)
                 .help(translate!("ptx-help-references"))
                 .value_name("FILE")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::TYPESET_MODE)
+                .short('t')
+                .long(options::TYPESET_MODE)
+                .help(translate!("ptx-help-typeset-mode"))
                 .action(ArgAction::SetTrue),
         )
         .arg(

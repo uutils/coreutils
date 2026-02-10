@@ -357,6 +357,32 @@ fn test_narrow_width_with_long_reference_no_panic() {
 }
 
 #[test]
+fn test_typeset_mode_default_width_100() {
+    new_ucmd!()
+        .args(&["-t"])
+        .pipe_in("bar\n")
+        .succeeds()
+        .stdout_only(format!("{}bar\n", " ".repeat(53)));
+}
+
+#[test]
+fn test_typeset_mode_w_overrides_t() {
+    new_ucmd!()
+        .args(&["-t", "-w", "10"])
+        .pipe_in("bar\n")
+        .succeeds()
+        .stdout_only(format!("{}bar\n", " ".repeat(8)));
+}
+
+#[test]
+fn test_default_width_72() {
+    new_ucmd!()
+        .pipe_in("bar\n")
+        .succeeds()
+        .stdout_only(format!("{}bar\n", " ".repeat(39)));
+}
+
+#[test]
 fn test_invalid_regex_word_trailing_backslash() {
     new_ucmd!().args(&["-W", "bar\\"]).succeeds().no_stderr();
 }
