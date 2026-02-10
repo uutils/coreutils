@@ -541,7 +541,9 @@ fn get_ctable(
     conversion: Option<Conversion>,
     case: Option<Case>,
 ) -> Option<&'static ConversionTable> {
+    #[allow(clippy::wildcard_imports)]
     use crate::conversion_tables::*;
+
     Some(match (conversion, case) {
         (None, None) => return None,
         (Some(conv), None) => match conv {

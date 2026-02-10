@@ -90,3 +90,109 @@ fn test_sync_no_permission_file() {
     ts.ccmd("chmod").arg("0200").arg(f).succeeds();
     ts.ucmd().arg(f).succeeds();
 }
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_sync_data_nonblock_flag_reset() {
+    // Test that O_NONBLOCK flag is properly reset when syncing files
+    use uutests::util::TestScenario;
+    use uutests::util_name;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let test_file = "test_file.txt";
+
+    // Create a test file
+    at.write(test_file, "test content");
+
+    // Run sync --data with the file - should succeed
+    ts.ucmd().arg("--data").arg(test_file).succeeds();
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_sync_fs_nonblock_flag_reset() {
+    // Test that O_NONBLOCK flag is properly reset when syncing filesystems
+    use std::fs;
+    use tempfile::tempdir;
+
+    let temporary_directory = tempdir().unwrap();
+    let temporary_path = fs::canonicalize(temporary_directory.path()).unwrap();
+
+    // Run sync --file-system with the path - should succeed
+    new_ucmd!()
+        .arg("--file-system")
+        .arg(&temporary_path)
+        .succeeds();
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_sync_fdatasync_error_handling() {
+    // Test that fdatasync properly handles file opening errors
+    new_ucmd!()
+        .arg("--data")
+        .arg("/nonexistent/path/to/file")
+        .fails()
+        .stderr_contains("error opening");
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn test_sync_syncfs_error_handling_macos() {
+    // Test that syncfs properly handles invalid paths on macOS
+    new_ucmd!()
+        .arg("--file-system")
+        .arg("/nonexistent/path/to/file")
+        .fails()
+        .stderr_contains("error opening");
+}
+
+#[test]
+fn test_sync_multiple_files() {
+    // Test syncing multiple files at once
+    use std::fs;
+    use tempfile::tempdir;
+
+    let temporary_directory = tempdir().unwrap();
+    let temp_path = temporary_directory.path();
+
+    // Create multiple test files
+    let file1 = temp_path.join("file1.txt");
+    let file2 = temp_path.join("file2.txt");
+
+    fs::write(&file1, "content1").unwrap();
+    fs::write(&file2, "content2").unwrap();
+
+    // Sync both files
+    new_ucmd!().arg("--data").arg(&file1).arg(&file2).succeeds();
+}
+
+#[test]
+fn test_sync_multiple_nonexistent_files() {
+    let result = new_ucmd!().arg("--data").arg("bad1").arg("bad2").fails();
+
+    result.stderr_contains("sync: error opening 'bad1': No such file or directory");
+    result.stderr_contains("sync: error opening 'bad2': No such file or directory");
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_sync_data_fifo_fails_immediately() {
+    use std::time::Duration;
+    use uutests::util::TestScenario;
+    use uutests::util_name;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkfifo("test-fifo");
+
+    ts.ucmd()
+        .arg("--data")
+        .arg(at.plus_as_string("test-fifo"))
+        .timeout(Duration::from_secs(2))
+        .fails()
+        .stderr_contains("error syncing")
+        .stderr_contains("test-fifo")
+        .stderr_contains("Invalid input");
+}

@@ -5,10 +5,12 @@
 
 use clap::Command;
 use coreutils::validation;
+use itertools::Itertools as _;
 use std::cmp;
 use std::ffi::OsString;
 use std::io::{self, Write};
 use std::process;
+use uucore::Args;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -28,10 +30,7 @@ fn usage<T>(utils: &UtilityMap<T>, name: &str) {
     println!("Options:");
     println!("      --list    lists all defined functions, one per row\n");
     println!("Currently defined functions:\n");
-    #[allow(clippy::map_clone)]
-    let mut utils: Vec<&str> = utils.keys().map(|&s| s).collect();
-    utils.sort_unstable();
-    let display_list = utils.join(", ");
+    let display_list = utils.keys().copied().join(", ");
     let width = cmp::min(textwrap::termwidth(), 100) - 4 * 2; // (opinion/heuristic) max 100 chars wide with 4 character side indentions
     println!(
         "{}",
@@ -52,24 +51,22 @@ fn main() {
         process::exit(0);
     });
 
-    // binary name equals util name?
-    if let Some(&(uumain, _)) = utils.get(binary_as_util) {
-        validation::setup_localization_or_exit(binary_as_util);
-        process::exit(uumain(vec![binary.into()].into_iter().chain(args)));
-    }
+    // binary name ends with util name?
+    let is_coreutils = binary_as_util.ends_with("utils");
+    let matched_util = utils
+        .keys()
+        .filter(|&&u| binary_as_util.ends_with(u) && !is_coreutils)
+        .max_by_key(|u| u.len()); //Prefer stty more than tty. *utils is not ls
 
-    // binary name equals prefixed util name?
-    // * prefix/stem may be any string ending in a non-alphanumeric character
-    // For example, if the binary is named `uu_test`, it will match `test` as a utility.
-    let util_name =
-        if let Some(util) = validation::find_prefixed_util(binary_as_util, utils.keys().copied()) {
-            // prefixed util => replace 0th (aka, executable name) argument
-            Some(OsString::from(util))
-        } else {
-            // unmatched binary name => regard as multi-binary container and advance argument list
-            uucore::set_utility_is_second_arg();
-            args.next()
-        };
+    let util_name = if let Some(&util) = matched_util {
+        Some(OsString::from(util))
+    } else if is_coreutils || binary_as_util.ends_with("box") {
+        // todo: Remove support of "*box" from binary
+        uucore::set_utility_is_second_arg();
+        args.next()
+    } else {
+        validation::not_found(&OsString::from(binary_as_util));
+    };
 
     // 0th argument equals util name?
     if let Some(util_os) = util_name {
@@ -79,8 +76,12 @@ fn main() {
 
         match util {
             "--list" => {
-                let mut utils: Vec<_> = utils.keys().collect();
-                utils.sort();
+                // If --help is also present, show usage instead of list
+                if args.any(|arg| arg == "--help" || arg == "-h") {
+                    usage(&utils, binary_as_util);
+                    process::exit(0);
+                }
+                let utils: Vec<_> = utils.keys().collect();
                 for util in utils {
                     println!("{util}");
                 }
@@ -127,6 +128,9 @@ fn main() {
                     }
                     usage(&utils, binary_as_util);
                     process::exit(0);
+                } else if util.starts_with('-') {
+                    // Argument looks like an option but wasn't recognized
+                    validation::unrecognized_option(binary_as_util, &util_os);
                 } else {
                     validation::not_found(&util_os);
                 }

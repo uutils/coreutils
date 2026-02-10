@@ -66,4 +66,5 @@ jobs:
         . "$HOME/.cargo/env"
         export CARGO_TERM_COLOR=always
         export RUST_BACKTRACE=1
+        CARGO_INCREMENTAL=0
         cargo nextest run --hide-progress-bar --profile ci --features '${{ matrix.job.features }}'

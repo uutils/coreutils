@@ -4,8 +4,9 @@
 // file that was distributed with this source code.
 
 use clap::{Arg, ArgAction, Command};
+use std::borrow::Cow;
 use std::ffi::OsString;
-use std::path::Path;
+#[cfg(unix)]
 use uucore::display::print_verbatim;
 use uucore::error::{UResult, UUsageError};
 use uucore::format_usage;
@@ -18,51 +19,84 @@ mod options {
     pub const DIR: &str = "dir";
 }
 
-/// Handle the special case where a path ends with "/."
+/// Perform dirname as pure string manipulation per POSIX/GNU behavior.
 ///
-/// This matches GNU/POSIX behavior where `dirname("/home/dos/.")` returns "/home/dos"
-/// rather than "/home" (which would be the result of `Path::parent()` due to normalization).
+/// dirname should NOT normalize paths. It does simple string manipulation:
+/// 1. Strip trailing slashes (unless path is all slashes)
+/// 2. If ends with `/.` (possibly `//.` or `///.`), strip the `/+.` pattern
+/// 3. Otherwise, remove everything after the last `/`
+/// 4. If no `/` found, return `.`
+/// 5. Strip trailing slashes from result (unless result would be empty)
+///
+/// Examples:
+/// - `foo/.` → `foo`
+/// - `foo/./bar` → `foo/.`
+/// - `foo/bar` → `foo`
+/// - `a/b/c` → `a/b`
+///
 /// Per POSIX.1-2017 dirname specification and GNU coreutils manual:
 /// - POSIX: <https://pubs.opengroup.org/onlinepubs/9699919799/utilities/dirname.html>
 /// - GNU: <https://www.gnu.org/software/coreutils/manual/html_node/dirname-invocation.html>
 ///
-/// dirname should do simple string manipulation without path normalization.
 /// See issue #8910 and similar fix in basename (#8373, commit c5268a897).
-///
-/// Returns `Some(())` if the special case was handled (output already printed),
-/// or `None` if normal `Path::parent()` logic should be used.
-fn handle_trailing_dot(path_bytes: &[u8]) -> Option<()> {
-    if !path_bytes.ends_with(b"/.") {
-        return None;
+fn dirname_string_manipulation(path_bytes: &[u8]) -> Cow<'_, [u8]> {
+    if path_bytes.is_empty() {
+        return Cow::Borrowed(b".");
     }
 
-    // Strip the "/." suffix and print the result
-    if path_bytes.len() == 2 {
-        // Special case: "/." -> "/"
-        print!("/");
-        Some(())
-    } else {
-        // General case: "/home/dos/." -> "/home/dos"
-        let stripped = &path_bytes[..path_bytes.len() - 2];
-        #[cfg(unix)]
-        {
-            use std::os::unix::ffi::OsStrExt;
-            let result = std::ffi::OsStr::from_bytes(stripped);
-            print_verbatim(result).unwrap();
-            Some(())
-        }
-        #[cfg(not(unix))]
-        {
-            // On non-Unix, fall back to lossy conversion
-            if let Ok(s) = std::str::from_utf8(stripped) {
-                print!("{s}");
-                Some(())
-            } else {
-                // Can't handle non-UTF-8 on non-Unix, fall through to normal logic
-                None
+    let mut bytes = path_bytes;
+
+    // Step 1: Strip trailing slashes (but not if the entire path is slashes)
+    let all_slashes = bytes.iter().all(|&b| b == b'/');
+    if all_slashes {
+        return Cow::Borrowed(b"/");
+    }
+
+    while bytes.len() > 1 && bytes.ends_with(b"/") {
+        bytes = &bytes[..bytes.len() - 1];
+    }
+
+    // Step 2: Check if it ends with `/.` and strip the `/+.` pattern
+    if bytes.ends_with(b".") && bytes.len() >= 2 {
+        let dot_pos = bytes.len() - 1;
+        if bytes[dot_pos - 1] == b'/' {
+            // Find where the slashes before the dot start
+            let mut slash_start = dot_pos - 1;
+            while slash_start > 0 && bytes[slash_start - 1] == b'/' {
+                slash_start -= 1;
             }
+            // Return the stripped result
+            if slash_start == 0 {
+                // Result would be empty
+                return if path_bytes.starts_with(b"/") {
+                    Cow::Borrowed(b"/")
+                } else {
+                    Cow::Borrowed(b".")
+                };
+            }
+            return Cow::Borrowed(&bytes[..slash_start]);
         }
     }
+
+    // Step 3: Normal dirname - find last / and remove everything after it
+    if let Some(last_slash_pos) = bytes.iter().rposition(|&b| b == b'/') {
+        // Found a slash, remove everything after it
+        let mut result = &bytes[..last_slash_pos];
+
+        // Strip trailing slashes from result (but keep at least one if at the start)
+        while result.len() > 1 && result.ends_with(b"/") {
+            result = &result[..result.len() - 1];
+        }
+
+        if result.is_empty() {
+            return Cow::Borrowed(b"/");
+        }
+
+        return Cow::Borrowed(result);
+    }
+
+    // No slash found, return "."
+    Cow::Borrowed(b".")
 }
 
 #[uucore::main]
@@ -83,27 +117,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     for path in &dirnames {
         let path_bytes = uucore::os_str_as_bytes(path.as_os_str()).unwrap_or(&[]);
+        let result = dirname_string_manipulation(path_bytes);
 
-        if handle_trailing_dot(path_bytes).is_none() {
-            // Normal path handling using Path::parent()
-            let p = Path::new(path);
-            match p.parent() {
-                Some(d) => {
-                    if d.components().next().is_none() {
-                        print!(".");
-                    } else {
-                        print_verbatim(d).unwrap();
-                    }
-                }
-                None => {
-                    if p.is_absolute() || path.as_os_str() == "/" {
-                        print!("/");
-                    } else {
-                        print!(".");
-                    }
-                }
+        #[cfg(unix)]
+        {
+            use std::os::unix::ffi::OsStrExt;
+            let result_os = std::ffi::OsStr::from_bytes(&result);
+            print_verbatim(result_os).unwrap();
+        }
+        #[cfg(not(unix))]
+        {
+            // On non-Unix, fall back to lossy conversion
+            if let Ok(s) = std::str::from_utf8(&result) {
+                print!("{s}");
+            } else {
+                // Fallback for non-UTF-8 paths on non-Unix systems
+                print!(".");
             }
         }
+
         print!("{line_ending}");
     }
 

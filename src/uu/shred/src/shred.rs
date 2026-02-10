@@ -549,17 +549,17 @@ fn create_test_compatible_sequence(
         }
     }
 
-    create_standard_pass_sequence(num_passes)
+    Ok(create_standard_pass_sequence(num_passes))
 }
 
 /// Create standard pass sequence with patterns and random passes
-fn create_standard_pass_sequence(num_passes: usize) -> UResult<Vec<PassType>> {
+fn create_standard_pass_sequence(num_passes: usize) -> Vec<PassType> {
     if num_passes == 0 {
-        return Ok(Vec::new());
+        return Vec::new();
     }
 
     if num_passes <= 3 {
-        return Ok(vec![PassType::Random; num_passes]);
+        return vec![PassType::Random; num_passes];
     }
 
     let mut sequence = Vec::new();
@@ -596,7 +596,7 @@ fn create_standard_pass_sequence(num_passes: usize) -> UResult<Vec<PassType>> {
     // Final pass is always random
     sequence.push(PassType::Random);
 
-    Ok(sequence)
+    sequence
 }
 
 /// Create compatible pass sequence using the standard algorithm
@@ -609,7 +609,7 @@ fn create_compatible_sequence(
         create_test_compatible_sequence(num_passes, random_source)
     } else {
         // For system random, use standard algorithm
-        create_standard_pass_sequence(num_passes)
+        Ok(create_standard_pass_sequence(num_passes))
     }
 }
 
@@ -679,7 +679,7 @@ fn wipe_file(
             if random_source.is_some() {
                 pass_sequence = create_compatible_sequence(n_passes, random_source)?;
             } else {
-                pass_sequence = create_standard_pass_sequence(n_passes)?;
+                pass_sequence = create_standard_pass_sequence(n_passes);
             }
         }
 
@@ -773,7 +773,7 @@ fn do_pass(
 
 /// Repeatedly renames the file with strings of decreasing length (most likely all 0s)
 /// Return the path of the file after its last renaming or None in case of an error
-fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> Option<PathBuf> {
+fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> PathBuf {
     let file_name_len = orig_path.file_name().unwrap().len();
 
     let mut last_path = PathBuf::from(orig_path);
@@ -821,7 +821,7 @@ fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> Op
         }
     }
 
-    Some(last_path)
+    last_path
 }
 
 fn do_remove(
@@ -838,14 +838,12 @@ fn do_remove(
     }
 
     let remove_path = if remove_method == RemoveMethod::Unlink {
-        Some(path.with_file_name(orig_filename))
+        path.with_file_name(orig_filename)
     } else {
         wipe_name(path, verbose, remove_method)
     };
 
-    if let Some(rp) = remove_path {
-        fs::remove_file(rp)?;
-    }
+    fs::remove_file(remove_path)?;
 
     if verbose {
         show_error!(
