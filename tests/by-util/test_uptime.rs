@@ -3,12 +3,10 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker:ignore wincode serde utmp runlevel testusr testx boottime
+// spell-checker:ignore utmp runlevel testusr testx boottime
 #![allow(clippy::cast_possible_wrap, clippy::unreadable_literal)]
 
-use uutests::at_and_ucmd;
-use uutests::util::TestScenario;
-use uutests::{new_ucmd, util_name};
+use uutests::{at_and_ucmd, new_ucmd};
 
 use regex::Regex;
 
@@ -47,6 +45,8 @@ fn test_uptime_for_file_without_utmpx_records() {
 #[test]
 #[cfg(all(unix, feature = "cp"))]
 fn test_uptime_with_fifo() {
+    use uutests::{util::TestScenario, util_name};
+
     // This test can go on forever in the CI in some cases, might need aborting
     // Sometimes writing to the pipe is broken
     let ts = TestScenario::new(util_name!());
@@ -97,8 +97,6 @@ fn test_uptime_with_non_existent_file() {
 fn test_uptime_with_file_containing_valid_boot_time_utmpx_record() {
     use std::fs::File;
     use std::{io::Write, path::PathBuf};
-    use wincode::serialize;
-    use wincode_derive::SchemaWrite;
 
     // This test will pass for freebsd but we currently don't support changing the utmpx file for
     // freebsd.
@@ -132,21 +130,18 @@ fn test_uptime_with_file_containing_valid_boot_time_utmpx_record() {
         const RUN_LVL: i32 = 1;
         const USER_PROCESS: i32 = 7;
 
-        #[derive(SchemaWrite)]
         #[repr(C)]
         pub struct TimeVal {
             pub tv_sec: i32,
             pub tv_usec: i32,
         }
 
-        #[derive(SchemaWrite)]
         #[repr(C)]
         pub struct ExitStatus {
             e_termination: i16,
             e_exit: i16,
         }
 
-        #[derive(SchemaWrite)]
         #[repr(C, align(4))]
         pub struct Utmp {
             pub ut_type: i32,
@@ -222,9 +217,35 @@ fn test_uptime_with_file_containing_valid_boot_time_utmpx_record() {
             glibc_reserved: [0; 20],
         };
 
-        let mut buf = serialize(&utmp).unwrap();
-        buf.append(&mut serialize(&utmp1).unwrap());
-        buf.append(&mut serialize(&utmp2).unwrap());
+        fn serialize_i8_arr(buf: &mut Vec<u8>, arr: &[i8]) {
+            for b in arr {
+                buf.push(*b as u8);
+            }
+        }
+
+        fn serialize(utmp: &Utmp) -> Vec<u8> {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(&utmp.ut_type.to_ne_bytes());
+            buf.extend_from_slice(&utmp.ut_pid.to_ne_bytes());
+            serialize_i8_arr(&mut buf, &utmp.ut_line);
+            serialize_i8_arr(&mut buf, &utmp.ut_id);
+            serialize_i8_arr(&mut buf, &utmp.ut_user);
+            serialize_i8_arr(&mut buf, &utmp.ut_host);
+            buf.extend_from_slice(&utmp.ut_exit.e_termination.to_ne_bytes());
+            buf.extend_from_slice(&utmp.ut_exit.e_exit.to_ne_bytes());
+            buf.extend_from_slice(&utmp.ut_session.to_ne_bytes());
+            buf.extend_from_slice(&utmp.ut_tv.tv_sec.to_ne_bytes());
+            buf.extend_from_slice(&utmp.ut_tv.tv_usec.to_ne_bytes());
+            for v in &utmp.ut_addr_v6 {
+                buf.extend_from_slice(&v.to_ne_bytes());
+            }
+            serialize_i8_arr(&mut buf, &utmp.glibc_reserved);
+            buf
+        }
+
+        let mut buf = serialize(&utmp);
+        buf.append(&mut serialize(&utmp1));
+        buf.append(&mut serialize(&utmp2));
         let mut f = File::create(path).unwrap();
         f.write_all(&buf).unwrap();
     }

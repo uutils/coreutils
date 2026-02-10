@@ -30,6 +30,11 @@ pub fn init_collator(opts: CollatorOptions) {
         .expect("Collator already initialized");
 }
 
+/// Check if locale collation should be used.
+pub fn should_use_locale_collation() -> bool {
+    get_collating_locale().0 != DEFAULT_LOCALE
+}
+
 /// Initialize the collator for locale-aware string comparison if needed.
 ///
 /// This function checks if the current locale requires locale-aware collation

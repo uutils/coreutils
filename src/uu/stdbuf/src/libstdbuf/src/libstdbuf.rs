@@ -191,12 +191,9 @@ fn set_buffer(stream: *mut FILE, value: &str) {
         "0" => (_IONBF, 0_usize),
         "L" => (_IOLBF, 0_usize),
         input => {
-            let buff_size: usize = match input.parse() {
-                Ok(num) => num,
-                Err(_) => {
-                    eprintln!("failed to allocate a {value} byte stdio buffer");
-                    std::process::exit(1);
-                }
+            let Ok(buff_size) = input.parse::<usize>() else {
+                eprintln!("failed to allocate a {value} byte stdio buffer");
+                std::process::exit(1);
             };
             (_IOFBF, buff_size as size_t)
         }

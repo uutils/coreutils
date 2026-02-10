@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore ctable, outfile, iseek, oseek
 
-use crate::conversion_tables::*;
+use crate::conversion_tables::ConversionTable;
 
 type Cbs = usize;
 

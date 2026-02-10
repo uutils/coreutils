@@ -34,7 +34,11 @@ pub fn parse_obsolete(src: &str) -> Option<Result<Vec<OsString>, ParseError>> {
             }
         }
         if has_num {
-            process_num_block(&src[num_start..num_end], last_char, &mut chars)
+            Some(process_num_block(
+                &src[num_start..num_end],
+                last_char,
+                &mut chars,
+            ))
         } else {
             None
         }
@@ -48,11 +52,11 @@ fn process_num_block(
     src: &str,
     last_char: char,
     chars: &mut std::str::CharIndices,
-) -> Option<Result<Vec<OsString>, ParseError>> {
+) -> Result<Vec<OsString>, ParseError> {
     let num = match src.parse::<usize>() {
         Ok(n) => n,
         Err(e) if *e.kind() == std::num::IntErrorKind::PosOverflow => usize::MAX,
-        _ => return Some(Err(ParseError)),
+        _ => return Err(ParseError),
     };
     let mut quiet = false;
     let mut verbose = false;
@@ -78,7 +82,7 @@ fn process_num_block(
             'k' => multiplier = Some(1024),
             'm' => multiplier = Some(1024 * 1024),
             '\0' => {}
-            _ => return Some(Err(ParseError)),
+            _ => return Err(ParseError),
         }
         if let Some((_, next)) = chars.next() {
             c = next;
@@ -104,7 +108,7 @@ fn process_num_block(
         options.push(OsString::from("-n"));
         options.push(OsString::from(format!("{num}")));
     }
-    Some(Ok(options))
+    Ok(options)
 }
 
 /// Parses an -c or -n argument,
@@ -134,6 +138,7 @@ mod tests {
         }
     }
 
+    #[expect(clippy::unnecessary_wraps, reason = "test helper")]
     fn obsolete_result(src: &[&str]) -> Option<Result<Vec<String>, ParseError>> {
         Some(Ok(src.iter().map(|&s| s.to_string()).collect()))
     }

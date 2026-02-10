@@ -44,6 +44,8 @@ const TMPDIR_ENV_VAR: &str = "TMPDIR";
 #[cfg(windows)]
 const TMPDIR_ENV_VAR: &str = "TMP";
 
+const FALLBACK_TMPDIR: &str = "/tmp";
+
 #[derive(Error, Debug)]
 enum MkTempError {
     #[error("{}", translate!("mktemp-error-persist-file", "path" => .0.quote()))]
@@ -99,7 +101,7 @@ pub struct Options {
     pub tmpdir: Option<PathBuf>,
 
     /// The suffix to append to the temporary file, if any.
-    pub suffix: Option<String>,
+    pub suffix: Option<OsString>,
 
     /// Whether to treat the template argument as a single file path component.
     pub treat_as_template: bool,
@@ -119,14 +121,12 @@ impl Options {
                 Some(d) => d.clone(),
                 // Otherwise use $TMPDIR if set, else use the system's default
                 // temporary directory.
-                None => env::var(TMPDIR_ENV_VAR)
-                    .ok()
-                    .map_or_else(env::temp_dir, PathBuf::from),
+                None => get_tmpdir_env_or_default(),
             });
         let (tmpdir, template) = match matches.get_one::<OsString>(ARG_TEMPLATE) {
             // If no template argument is given, `--tmpdir` is implied.
             None => {
-                let tmpdir = Some(tmpdir.unwrap_or_else(env::temp_dir));
+                let tmpdir = Some(tmpdir.unwrap_or_else(get_tmpdir_env_or_default));
                 let template = DEFAULT_TEMPLATE;
                 (tmpdir, OsString::from(template))
             }
@@ -150,7 +150,7 @@ impl Options {
             dry_run: matches.get_flag(OPT_DRY_RUN),
             quiet: matches.get_flag(OPT_QUIET),
             tmpdir,
-            suffix: matches.get_one::<String>(OPT_SUFFIX).map(String::from),
+            suffix: matches.get_one::<OsString>(OPT_SUFFIX).cloned(),
             treat_as_template: matches.get_flag(OPT_T),
             template,
         }
@@ -214,27 +214,39 @@ fn find_last_contiguous_block_of_xs(s: &str) -> Option<(usize, usize)> {
 impl Params {
     fn from(options: Options) -> Result<Self, MkTempError> {
         // Convert OsString template to string for processing
-        let Some(template_str) = options.template.to_str() else {
-            // For non-UTF-8 templates, return an error
-            return Err(MkTempError::InvalidTemplate(options.template));
+        // When using -t flag, be permissive with invalid UTF-8 like GNU mktemp
+        // Otherwise, maintain strict UTF-8 validation (existing behavior)
+        let template_str = if options.treat_as_template {
+            // For -t templates, use lossy conversion for GNU compatibility
+            options.template.to_string_lossy().into_owned()
+        } else {
+            // For regular templates, maintain strict validation
+            match options.template.to_str() {
+                Some(s) => s.to_string(),
+                None => {
+                    return Err(MkTempError::InvalidTemplate(
+                        "template contains invalid UTF-8".into(),
+                    ));
+                }
+            }
         };
 
         // The template argument must end in 'X' if a suffix option is given.
         if options.suffix.is_some() && !template_str.ends_with('X') {
-            return Err(MkTempError::MustEndInX(template_str.to_string()));
+            return Err(MkTempError::MustEndInX(template_str.clone()));
         }
 
         // Get the start and end indices of the randomized part of the template.
         //
         // For example, if the template is "abcXXXXyz", then `i` is 3 and `j` is 7.
-        let Some((i, j)) = find_last_contiguous_block_of_xs(template_str) else {
+        let Some((i, j)) = find_last_contiguous_block_of_xs(&template_str) else {
             let s = match options.suffix {
                 // If a suffix is specified, the error message includes the template without the suffix.
                 Some(_) => template_str
                     .chars()
                     .take(template_str.len())
                     .collect::<String>(),
-                None => template_str.to_string(),
+                None => template_str.clone(),
             };
             return Err(MkTempError::TooFewXs(s));
         };
@@ -249,11 +261,11 @@ impl Params {
         let prefix_path = Path::new(&prefix_from_option).join(prefix_from_template);
         if options.treat_as_template && prefix_from_template.contains(MAIN_SEPARATOR) {
             return Err(MkTempError::PrefixContainsDirSeparator(
-                template_str.to_string(),
+                template_str.clone(),
             ));
         }
         if tmpdir.is_some() && Path::new(prefix_from_template).is_absolute() {
-            return Err(MkTempError::InvalidTemplate(template_str.into()));
+            return Err(MkTempError::InvalidTemplate(template_str.clone().into()));
         }
 
         // Split the parent directory from the file part of the prefix.
@@ -271,7 +283,7 @@ impl Params {
                 };
                 let prefix = match prefix_path.file_name() {
                     None => String::new(),
-                    Some(f) => f.to_str().unwrap().to_string(),
+                    Some(f) => f.to_string_lossy().to_string(),
                 };
                 (directory, prefix)
             }
@@ -281,7 +293,10 @@ impl Params {
         //
         // For example, if the suffix command-line argument is ".txt" and
         // the template is "XXXabc", then `suffix` is "abc.txt".
-        let suffix_from_option = options.suffix.unwrap_or_default();
+        let suffix_from_option = options
+            .suffix
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_default();
         let suffix_from_template = &template_str[j..];
         let suffix = format!("{suffix_from_template}{suffix_from_option}");
         if suffix.contains(MAIN_SEPARATOR) {
@@ -399,7 +414,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // Create the temporary file or directory, or simulate creating it.
     let res = if dry_run {
-        dry_exec(&tmpdir, &prefix, rand, &suffix)
+        Ok(dry_exec(&tmpdir, &prefix, rand, &suffix))
     } else {
         exec(&tmpdir, &prefix, rand, &suffix, make_dir)
     };
@@ -445,7 +460,8 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_SUFFIX)
                 .long(OPT_SUFFIX)
                 .help(translate!("mktemp-help-suffix"))
-                .value_name("SUFFIX"),
+                .value_name("SUFFIX")
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(OPT_P)
@@ -483,7 +499,7 @@ pub fn uu_app() -> Command {
         )
 }
 
-fn dry_exec(tmpdir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult<PathBuf> {
+fn dry_exec(tmpdir: &Path, prefix: &str, rand: usize, suffix: &str) -> PathBuf {
     let len = prefix.len() + suffix.len() + rand;
     let mut buf = Vec::with_capacity(len);
     buf.extend(prefix.as_bytes());
@@ -503,8 +519,7 @@ fn dry_exec(tmpdir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult<P
     }
     // We guarantee utf8.
     let buf = String::from_utf8(buf).unwrap();
-    let tmpdir = Path::new(tmpdir).join(buf);
-    Ok(tmpdir)
+    Path::new(tmpdir).join(buf)
 }
 
 /// Create a temporary directory with the given parameters.
@@ -595,6 +610,14 @@ fn exec(dir: &Path, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> 
     Ok(path)
 }
 
+/// Reads from `TMPDIR_ENV_VAR` but defaults to /tmp if value is set to empty string.
+fn get_tmpdir_env_or_default() -> PathBuf {
+    match env::var_os(TMPDIR_ENV_VAR) {
+        Some(val) if val.is_empty() => PathBuf::from(FALLBACK_TMPDIR),
+        _ => env::temp_dir(),
+    }
+}
+
 /// Create a temporary file or directory
 ///
 /// Behavior is determined by the `options` parameter, see [`Options`] for details.
@@ -609,7 +632,7 @@ pub fn mktemp(options: &Options) -> UResult<PathBuf> {
 
     // Create the temporary file or directory, or simulate creating it.
     if options.dry_run {
-        dry_exec(&tmpdir, &prefix, rand, &suffix)
+        Ok(dry_exec(&tmpdir, &prefix, rand, &suffix))
     } else {
         exec(&tmpdir, &prefix, rand, &suffix, options.directory)
     }

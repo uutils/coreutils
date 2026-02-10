@@ -18,12 +18,13 @@ fuzz_target!(|data: &[u8]| {
     for i in 0..fuzz_args.len() {
         if let Some(arg) = fuzz_args.get(i) {
             let arg_str = arg.to_string_lossy();
-            // Skip if -f- or --file=- (reads dates from stdin)
-            if (arg_str == "-f"
-                && fuzz_args
-                    .get(i + 1)
-                    .map(|a| a.to_string_lossy() == "-")
-                    .unwrap_or(false))
+            // Skip if -f- or --file=- or combined options like -Rf- (reads dates from stdin)
+            if (arg_str.starts_with('-') && !arg_str.starts_with("--") && arg_str.ends_with("f-"))
+                || (arg_str == "-f"
+                    && fuzz_args
+                        .get(i + 1)
+                        .map(|a| a.to_string_lossy() == "-")
+                        .unwrap_or(false))
                 || arg_str == "-f-"
                 || arg_str == "--file=-"
             {

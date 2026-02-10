@@ -12,6 +12,8 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 
+use itertools::Itertools as _;
+
 /// Create a temporary file with test data
 pub fn create_test_file(data: &[u8], temp_dir: &Path) -> PathBuf {
     let file_path = temp_dir.join("test_data.txt");
@@ -20,7 +22,7 @@ pub fn create_test_file(data: &[u8], temp_dir: &Path) -> PathBuf {
     writer.write_all(data).unwrap();
     writer.flush().unwrap();
     // Ensure data is fully written to disk before returning
-    std::mem::drop(writer);
+    drop(writer);
     File::open(&file_path).unwrap().sync_all().unwrap();
     file_path
 }
@@ -32,8 +34,9 @@ where
     F: FnOnce(std::vec::IntoIter<std::ffi::OsString>) -> i32,
 {
     // Prepend a dummy program name as argv[0] since clap expects it
-    let mut os_args: Vec<std::ffi::OsString> = vec!["benchmark".into()];
-    os_args.extend(args.iter().map(|s| (*s).into()));
+    let os_args = std::iter::once("benchmark".into())
+        .chain(args.iter().map(Into::into))
+        .collect_vec();
     util_func(os_args.into_iter())
 }
 
@@ -170,7 +173,7 @@ pub mod text_data {
     pub fn generate_ascii_data_simple(num_lines: usize) -> Vec<u8> {
         let mut data = Vec::new();
         for i in 0..num_lines {
-            let line = format!("line_{:06}\n", (num_lines - i - 1));
+            let line = format!("line_{:06}\n", num_lines - i - 1);
             data.extend_from_slice(line.as_bytes());
         }
         data

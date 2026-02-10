@@ -7,6 +7,7 @@ repository = "https://github.com/uutils/coreutils/tree/main/tests/uutests"
 authors.workspace = true
 categories.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 homepage.workspace = true
 keywords.workspace = true
 license.workspace = true
@@ -14,6 +15,9 @@ version.workspace = true
 
 [package.metadata.docs.rs]
 all-features = true
+
+[lints]
+workspace = true
 
 [lib]
 path = "src/lib/lib.rs"
@@ -36,6 +40,8 @@ uucore = { workspace = true, features = [
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 
 [target.'cfg(unix)'.dependencies]
-nix = { workspace = true, features = ["process", "signal", "user", "term"] }
-rlimit = "0.10.1"
+nix = { workspace = true, features = ["process", "signal", "term", "user"] }
+rlimit = { workspace = true }
+
+[target.'cfg(all(unix, not(any(target_os = "macos", target_os = "openbsd"))))'.dependencies]
 xattr = { workspace = true }

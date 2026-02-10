@@ -59,4 +59,4 @@ jobs:
                 issue_number: issue_number,
                 body: 'GNU testsuite comparison:\n```\n' + content + '```'
               });
-            } 
+            }

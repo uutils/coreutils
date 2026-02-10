@@ -5,8 +5,9 @@
 //spell-checker:ignore TAOCP indegree fadvise FADV
 //spell-checker:ignore (libs) interner uclibc
 use clap::{Arg, ArgAction, Command};
+use rustc_hash::FxHashMap;
+use std::collections::VecDeque;
 use std::collections::hash_map::Entry;
-use std::collections::{HashMap, VecDeque};
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
@@ -19,7 +20,7 @@ use uucore::{format_usage, show, translate};
 
 // short types for switching interning behavior on the fly.
 type Sym = string_interner::symbol::SymbolUsize;
-type Interner = StringInterner<BucketBackend<Sym>>;
+type Interner = StringInterner<BucketBackend<Sym>, rustc_hash::FxBuildHasher>;
 
 mod options {
     pub const FILE: &str = "file";
@@ -150,7 +151,7 @@ enum TsortError {
 
     /// Wrapper for bubbling up IO errors
     #[error("{0}")]
-    IO(#[from] std::io::Error),
+    IO(#[from] io::Error),
 }
 
 // Auxiliary struct, just for printing loop nodes via show! macro
@@ -224,18 +225,18 @@ impl Node {
 
 struct Graph {
     name_sym: Sym,
-    nodes: HashMap<Sym, Node>,
+    nodes: FxHashMap<Sym, Node>,
     interner: Interner,
 }
 
 impl Graph {
     fn new(name: String) -> Self {
-        let mut interner = Interner::new();
+        let mut interner = Interner::with_hasher(rustc_hash::FxBuildHasher);
         let name_sym = interner.get_or_intern(name);
         Self {
             name_sym,
             interner,
-            nodes: HashMap::default(),
+            nodes: FxHashMap::default(),
         }
     }
 
@@ -357,7 +358,7 @@ impl Graph {
         let mut nodes: Vec<_> = self.nodes.keys().copied().collect();
         nodes.sort_unstable_by(|a, b| self.get_node_name(*a).cmp(self.get_node_name(*b)));
 
-        let mut visited = HashMap::new();
+        let mut visited = FxHashMap::default();
         let mut stack = Vec::with_capacity(self.nodes.len());
         for &node in &nodes {
             if self.dfs(node, &mut visited, &mut stack) {
@@ -376,7 +377,7 @@ impl Graph {
     fn dfs<'a>(
         &'a self,
         node: Sym,
-        visited: &mut HashMap<Sym, VisitedState>,
+        visited: &mut FxHashMap<Sym, VisitedState>,
         stack: &mut Vec<(Sym, &'a [Sym])>,
     ) -> bool {
         stack.push((
