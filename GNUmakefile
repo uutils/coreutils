@@ -25,7 +25,6 @@ endif
 # Binaries
 CARGO  ?= cargo
 CARGOFLAGS ?=
-RUSTC_ARCH ?= # should be empty except for cross-build, not --target $(shell rustc --print host-tuple)
 
 #prefix prepended to all binaries and library dir
 PROG_PREFIX ?=
@@ -46,8 +45,11 @@ INSTALLDIR_BIN=$(DESTDIR)$(BINDIR)
 BASEDIR       ?= $(shell pwd)
 ifdef CARGO_TARGET_DIR
 BUILDDIR 	  := $(CARGO_TARGET_DIR)/${PROFILE}
+BUILDDIR_UUDOC := $(CARGO_TARGET_DIR)/${PROFILE}
 else
-BUILDDIR      := $(BASEDIR)/target/${PROFILE}
+BUILDDIR      := $(BASEDIR)/target/$(CARGO_BUILD_TARGET)/${PROFILE}
+# uudoc should not be cross build
+BUILDDIR_UUDOC := $(BASEDIR)/target/$(PROFILE)
 endif
 PKG_BUILDDIR  := $(BUILDDIR)/deps
 DOCSDIR       := $(BASEDIR)/docs
@@ -76,106 +78,15 @@ endif
 LN ?= ln -sf
 
 # Possible programs
-PROGS       := \
-	arch \
-	base32 \
-	base64 \
-	basenc \
-	basename \
-	cat \
-	cksum \
-	comm \
-	cp \
-	csplit \
-	cut \
-	date \
-	dd \
-	df \
-	dir \
-	dircolors \
-	dirname \
-	du \
-	echo \
-	env \
-	expand \
-	expr \
-	factor \
-	false \
-	fmt \
-	fold \
-	hashsum \
-	head \
-	hostname \
-	join \
-	link \
-	ln \
-	ls \
-	mkdir \
-	mktemp \
-	more \
-	mv \
-	nl \
-	numfmt \
-	nproc \
-	od \
-	paste \
-	pr \
-	printenv \
-	printf \
-	ptx \
-	pwd \
-	readlink \
-	realpath \
-	rm \
-	rmdir \
-	seq \
-	shred \
-	shuf \
-	sleep \
-	sort \
-	split \
-	sum \
-	sync \
-	tac \
-	tail \
-	tee \
-	test \
-	touch \
-	tr \
-	true \
-	truncate \
-	tsort \
-	uname \
-	unexpand \
-	uniq \
-	unlink \
-	vdir \
-	wc \
-	whoami \
-	yes
+PROGS := \
+	$(shell sed -n '/feat_Tier1 = \[/,/\]/p' Cargo.toml | sed '1d;2d' |tr -d '],"\n')\
+	$(shell sed -n '/feat_common_core = \[/,/\]/p' Cargo.toml | sed '1d' |tr -d '],"\n')
 
 UNIX_PROGS := \
-	chgrp \
-	chmod \
-	chown \
-	chroot \
-	groups \
+	$(shell sed -n '/feat_require_unix_core = \[/,/\]/p' Cargo.toml | sed '1d' |tr -d '],"\n') \
 	hostid \
-	id \
-	install \
-	kill \
-	logname \
-	mkfifo \
-	mknod \
-	nice \
-	nohup \
-	pathchk \
 	pinky \
-	stat \
 	stdbuf \
-	stty \
-	timeout \
-	tty \
 	uptime \
 	users \
 	who
@@ -183,15 +94,6 @@ UNIX_PROGS := \
 SELINUX_PROGS := \
 	chcon \
 	runcon
-
-HASHSUM_PROGS := \
-	b2sum \
-	md5sum \
-	sha1sum \
-	sha224sum \
-	sha256sum \
-	sha384sum \
-	sha512sum
 
 $(info Detected OS = $(OS))
 
@@ -203,9 +105,6 @@ ifeq ($(SELINUX_ENABLED),1)
 endif
 
 UTILS ?= $(filter-out $(SKIP_UTILS),$(PROGS))
-ifneq ($(filter hashsum,$(UTILS)),hashsum)
-	HASHSUM_PROGS :=
-endif
 
 ifneq ($(findstring stdbuf,$(UTILS)),)
     # Use external libstdbuf per default. It is more robust than embedding libstdbuf.
@@ -213,78 +112,9 @@ ifneq ($(findstring stdbuf,$(UTILS)),)
 endif
 
 # Programs with usable tests
-TEST_PROGS  := \
-	base32 \
-	base64 \
-	basename \
-	cat \
-	chcon \
-	chgrp \
-	chmod \
-	chown \
-	cksum \
-	comm \
-	cp \
-	csplit \
-	cut \
-	date \
-	dircolors \
-	dirname \
-	echo \
-	env \
-	expr \
-	factor \
-	false \
-	fold \
-	hashsum \
-	head \
-	install \
-	link \
-	ln \
-	ls \
-	mkdir \
-	mktemp \
-	mv \
-	nl \
-	numfmt \
-	od \
-	paste \
-	pathchk \
-	pinky \
-	pr \
-	printf \
-	ptx \
-	pwd \
-	readlink \
-	realpath \
-	rm \
-	rmdir \
-	runcon \
-	seq \
-	sleep \
-	sort \
-	split \
-	stat \
-	stdbuf \
-	sum \
-	tac \
-	tail \
-	test \
-	touch \
-	tr \
-	true \
-	truncate \
-	tsort \
-	uname \
-	unexpand \
-	uniq \
-	unlink \
-	uudoc \
-	wc \
-	who
 
 TESTS       := \
-	$(sort $(filter $(UTILS),$(TEST_PROGS)))
+	$(sort $(filter $(UTILS),$(PROGS) $(UNIX_PROGS) $(SELINUX_PROGS)))
 
 TEST_NO_FAIL_FAST :=
 TEST_SPEC_FEATURE :=
@@ -316,16 +146,20 @@ all: build
 build-pkgs:
 ifneq (${MULTICALL}, y)
 ifdef BUILD_SPEC_FEATURE
-	${CARGO} build ${CARGOFLAGS} --features "$(BUILD_SPEC_FEATURE)" ${PROFILE_CMD} $(foreach pkg,$(EXES),-p uu_$(pkg)) $(RUSTC_ARCH)
+	${CARGO} build ${CARGOFLAGS} --features "$(BUILD_SPEC_FEATURE)" ${PROFILE_CMD} $(foreach pkg,$(EXES),-p uu_$(pkg))
 else
-	${CARGO} build ${CARGOFLAGS} ${PROFILE_CMD} $(foreach pkg,$(EXES),-p uu_$(pkg)) $(RUSTC_ARCH)
+	${CARGO} build ${CARGOFLAGS} ${PROFILE_CMD} $(foreach pkg,$(EXES),-p uu_$(pkg))
 endif
 endif
 
 build-coreutils:
-	${CARGO} build ${CARGOFLAGS} --features "${EXES} $(BUILD_SPEC_FEATURE)" ${PROFILE_CMD} --no-default-features $(RUSTC_ARCH)
+	${CARGO} build ${CARGOFLAGS} --features "${EXES} $(BUILD_SPEC_FEATURE)" ${PROFILE_CMD} --no-default-features
 
-build: build-coreutils build-pkgs locales
+ifeq (${MULTICALL}, y)
+build: build-coreutils locales
+else
+build: build-pkgs locales
+endif
 
 $(foreach test,$(UTILS),$(eval $(call TEST_BUSYBOX,$(test))))
 
@@ -373,21 +207,21 @@ busytest: $(BUILDDIR)/busybox $(addprefix test_busybox_,$(filter-out $(SKIP_UTIL
 endif
 
 clean:
-	cargo clean $(RUSTC_ARCH)
-	cd $(DOCSDIR) && $(MAKE) clean $(RUSTC_ARCH)
+	cargo clean
+	cd $(DOCSDIR) && $(MAKE) clean
 
 distclean: clean
-	$(CARGO) clean $(CARGOFLAGS) $(RUSTC_ARCH) && $(CARGO) update $(CARGOFLAGS) $(RUSTC_ARCH)
+	$(CARGO) clean $(CARGOFLAGS) && $(CARGO) update $(CARGOFLAGS)
 
 ifeq ($(MANPAGES),y)
+# Do not cross-build uudoc
 build-uudoc:
-	# Use same PROFILE with coreutils to share crates (if not cross-build)
-	${CARGO} build ${CARGOFLAGS} --bin uudoc --features "uudoc ${EXES}" ${PROFILE_CMD} --no-default-features
+	@unset CARGO_BUILD_TARGET && ${CARGO} build ${CARGOFLAGS} --bin uudoc --features "uudoc ${EXES}" ${PROFILE_CMD} --no-default-features
 
 install-manpages: build-uudoc
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/man/man1
-	$(foreach prog, $(INSTALLEES) $(HASHSUM_PROGS), \
-		$(BUILDDIR)/uudoc manpage $(prog) > $(DESTDIR)$(DATAROOTDIR)/man/man1/$(PROG_PREFIX)$(prog).1 $(newline) \
+	$(foreach prog, $(INSTALLEES), \
+		$(BUILDDIR_UUDOC)/uudoc manpage $(prog) > $(DESTDIR)$(DATAROOTDIR)/man/man1/$(PROG_PREFIX)$(prog).1 $(newline) \
 	)
 else
 install-manpages:
@@ -399,10 +233,10 @@ install-completions: build-uudoc
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d
-	$(foreach prog, $(INSTALLEES) $(HASHSUM_PROGS) , \
-		$(BUILDDIR)/uudoc completion $(prog) zsh > $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions/_$(PROG_PREFIX)$(prog) $(newline) \
-		$(BUILDDIR)/uudoc completion $(prog) bash > $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/$(PROG_PREFIX)$(prog).bash $(newline) \
-		$(BUILDDIR)/uudoc completion $(prog) fish > $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/$(PROG_PREFIX)$(prog).fish $(newline) \
+	$(foreach prog, $(INSTALLEES), \
+		$(BUILDDIR_UUDOC)/uudoc completion $(prog) zsh > $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions/_$(PROG_PREFIX)$(prog) $(newline) \
+		$(BUILDDIR_UUDOC)/uudoc completion $(prog) bash > $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/$(PROG_PREFIX)$(prog).bash $(newline) \
+		$(BUILDDIR_UUDOC)/uudoc completion $(prog) fish > $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/$(PROG_PREFIX)$(prog).fish $(newline) \
 	)
 else
 install-completions:
@@ -429,9 +263,13 @@ locales:
 		fi; \
 	done
 
-
+# Some utils require extra locale files outside of their package:
+# - *sum binaries need the files from checksum_common
+INSTALLEES_WITH_EXTRA_LOCALE = \
+	$(INSTALLEES) \
+	$(if $(findstring sum, $(INSTALLEES)),checksum_common, )
 install-locales:
-	@for prog in $(INSTALLEES); do \
+	@for prog in $(INSTALLEES_WITH_EXTRA_LOCALE); do \
 		if [ -d "$(BASEDIR)/src/uu/$$prog/locales" ]; then \
 			mkdir -p "$(DESTDIR)$(DATAROOTDIR)/locales/$$prog"; \
 			for locale_file in "$(BASEDIR)"/src/uu/$$prog/locales/*.ftl; do \
@@ -461,16 +299,10 @@ ifeq (${MULTICALL}, y)
 	$(foreach prog, $(filter-out coreutils, $(INSTALLEES)), \
 		cd $(INSTALLDIR_BIN) && $(LN) $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline) \
 	)
-	$(foreach prog, $(HASHSUM_PROGS), \
-		cd $(INSTALLDIR_BIN) && $(LN) $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline) \
-	)
 	$(if $(findstring test,$(INSTALLEES)), cd $(INSTALLDIR_BIN) && $(LN) $(PROG_PREFIX)coreutils $(PROG_PREFIX)[)
 else
 	$(foreach prog, $(INSTALLEES), \
 		$(INSTALL) -m 755 $(BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog) $(newline) \
-	)
-	$(foreach prog, $(HASHSUM_PROGS), \
-		cd $(INSTALLDIR_BIN) && $(LN) $(PROG_PREFIX)hashsum $(PROG_PREFIX)$(prog) $(newline) \
 	)
 	$(if $(findstring test,$(INSTALLEES)), $(INSTALL) -m 755 $(BUILDDIR)/test $(INSTALLDIR_BIN)/$(PROG_PREFIX)[)
 endif

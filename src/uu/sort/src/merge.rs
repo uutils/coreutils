@@ -30,7 +30,7 @@ use uucore::error::{FromIo, UResult};
 use crate::{
     GlobalSettings, Output, SortError,
     chunks::{self, Chunk, RecycledChunk},
-    compare_by, fd_soft_limit, open,
+    compare_by, current_open_fd_count, fd_soft_limit, open,
     tmp_dir::TmpDirWrapper,
 };
 
@@ -66,14 +66,19 @@ fn replace_output_file_in_input_files(
 /// file-descriptor soft limit after reserving stdio/output and a safety margin.
 fn effective_merge_batch_size(settings: &GlobalSettings) -> usize {
     const MIN_BATCH_SIZE: usize = 2;
-    const RESERVED_STDIO: usize = 3;
-    const RESERVED_OUTPUT: usize = 1;
+    const RESERVED_TMP_OUTPUT: usize = 1;
+    const RESERVED_CTRL_C: usize = 2;
+    const RESERVED_RANDOM_SOURCE: usize = 1;
     const SAFETY_MARGIN: usize = 1;
     let mut batch_size = settings.merge_batch_size.max(MIN_BATCH_SIZE);
 
     if let Some(limit) = fd_soft_limit() {
-        let reserved = RESERVED_STDIO + RESERVED_OUTPUT + SAFETY_MARGIN;
-        let available_inputs = limit.saturating_sub(reserved);
+        let open_fds = current_open_fd_count().unwrap_or(3);
+        let mut reserved = RESERVED_TMP_OUTPUT + RESERVED_CTRL_C + SAFETY_MARGIN;
+        if settings.salt.is_some() {
+            reserved = reserved.saturating_add(RESERVED_RANDOM_SOURCE);
+        }
+        let available_inputs = limit.saturating_sub(open_fds.saturating_add(reserved));
         if available_inputs >= MIN_BATCH_SIZE {
             batch_size = batch_size.min(available_inputs);
         } else {
@@ -543,7 +548,9 @@ impl ClosedTmpFile for ClosedCompressedTmpFile {
 
     fn reopen(self) -> UResult<Self::Reopened> {
         let mut command = Command::new(&self.compress_prog);
-        let file = File::open(&self.path).unwrap();
+        // mirroring what is done for ClosedPlainTmpFile
+        let file =
+            File::open(&self.path).map_err(|error| SortError::OpenTmpFileFailed { error })?;
         command.stdin(file).stdout(Stdio::piped()).arg("-d");
         let mut child = command
             .spawn()

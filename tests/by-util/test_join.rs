@@ -550,8 +550,8 @@ fn test_join_non_utf8_paths() {
     #[cfg(unix)]
     {
         use std::os::unix::ffi::OsStrExt;
-        let file1_name = std::ffi::OsStr::from_bytes(file1_bytes);
-        let file2_name = std::ffi::OsStr::from_bytes(file2_bytes);
+        let file1_name = OsStr::from_bytes(file1_bytes);
+        let file2_name = OsStr::from_bytes(file2_bytes);
 
         let mut file1 = File::create(test_dir.join(file1_name)).unwrap();
         file1.write_all(b"a 1\n").unwrap();
@@ -579,4 +579,23 @@ fn join_emoji_delim_inner_key() {
         .args(&["-t🗿", "-1", "2", "-2", "2", "file1", "file2"])
         .succeeds()
         .stdout_only("b🗿a🗿u\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_locale_collation() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("f1.sorted", "abc:d 2\nab:d  1\n");
+    at.write("f2.sorted", "abc:d y\nab:d  x\n");
+
+    ts.ucmd()
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("--check-order")
+        .arg("f1.sorted")
+        .arg("f2.sorted")
+        .succeeds()
+        .stdout_contains("abc:d 2 y")
+        .stdout_contains("ab:d 1 x");
 }

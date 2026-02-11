@@ -9,6 +9,7 @@ homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 readme.workspace = true
 
 [lints]
@@ -19,6 +20,7 @@ path = "src/nl.rs"
 
 [dependencies]
 clap = { workspace = true }
+itoa = { workspace = true }
 regex = { workspace = true }
 uucore = { workspace = true }
 fluent = { workspace = true }

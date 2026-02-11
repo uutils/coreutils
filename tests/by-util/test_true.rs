@@ -38,6 +38,13 @@ fn test_short_options() {
 }
 
 #[test]
+fn test_extra_args() {
+    for option in ["--help", "--version"] {
+        new_ucmd!().args(&[option, "test"]).succeeds().no_output();
+    }
+}
+
+#[test]
 fn test_conflict() {
     new_ucmd!()
         .args(&["--help", "--version"])
