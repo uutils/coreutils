@@ -968,42 +968,20 @@ fn rename_fifo_fallback(_from: &Path, _to: &Path) -> io::Result<()> {
 /// symlinks return an error.
 #[cfg(unix)]
 fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
-    let from_meta = from.symlink_metadata()?;
-    let path_symlink_points_to = fs::read_link(from)?;
-    unix::fs::symlink(path_symlink_points_to, to)?;
-    #[cfg(not(any(target_os = "macos", target_os = "redox")))]
-    {
-        let _ = copy_xattrs_if_supported(from, to);
-    }
-    try_preserve_ownership(&from_meta, to, false);
+    copy_symlink(from, to)?;
     fs::remove_file(from)
 }
 
 #[cfg(windows)]
 fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
-    let path_symlink_points_to = fs::read_link(from)?;
-    if path_symlink_points_to.exists() {
-        if path_symlink_points_to.is_dir() {
-            windows::fs::symlink_dir(&path_symlink_points_to, to)?;
-        } else {
-            windows::fs::symlink_file(&path_symlink_points_to, to)?;
-        }
-        fs::remove_file(from)
-    } else {
-        Err(io::Error::new(
-            io::ErrorKind::NotFound,
-            translate!("mv-error-dangling-symlink"),
-        ))
-    }
+    copy_symlink(from, to)?;
+    fs::remove_file(from)
 }
 
 #[cfg(not(any(windows, unix)))]
 fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
-    let path_symlink_points_to = fs::read_link(from)?;
-    Err(io::Error::new(
-        io::ErrorKind::Other,
-        translate!("mv-error-no-symlink-support"),
-    ))
+    copy_symlink(from, to)?;
+    fs::remove_file(from)
 }
 
 /// Copy the given symlink to the given destination without dereferencing.
@@ -1012,9 +990,13 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
 fn copy_symlink(from: &Path, to: &Path) -> io::Result<()> {
     let from_meta = from.symlink_metadata()?;
     let path_symlink_points_to = fs::read_link(from)?;
-    unix::fs::symlink(path_symlink_points_to, to).map(|_| {
-        try_preserve_ownership(&from_meta, to, false);
-    })
+    unix::fs::symlink(path_symlink_points_to, to)?;
+    #[cfg(not(any(target_os = "macos", target_os = "redox")))]
+    {
+        let _ = copy_xattrs_if_supported(from, to);
+    }
+    try_preserve_ownership(&from_meta, to, false);
+    Ok(())
 }
 
 #[cfg(windows)]
@@ -1231,7 +1213,7 @@ fn copy_dir_contents_recursive(
             {
                 if from_path.is_symlink() {
                     // Copy a symlink file (no-follow).
-                    rename_symlink_fallback(&from_path, &to_path)?;
+                    copy_symlink(&from_path, &to_path)?;
                 } else {
                     // Copy a regular file.
                     fs::copy(&from_path, &to_path)?;
@@ -1282,8 +1264,8 @@ fn copy_file_with_hardlinks_helper(
 
     if from_meta.file_type().is_symlink() {
         // Copy a symlink file (no-follow).
-        rename_symlink_fallback(from, to)?;
-    } else if is_fifo(from.symlink_metadata()?.file_type()) {
+        copy_symlink(from, to)?;
+    } else if is_fifo(from_meta.file_type()) {
         make_fifo(to)?;
     } else {
         // Copy a regular file.
