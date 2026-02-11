@@ -352,3 +352,18 @@ fn test_chroot_userspec_does_not_set_gid_with_uid() {
         println!("Test skipped; requires 'sync' user");
     }
 }
+
+#[test]
+fn test_chroot_userspec_unknown_uid() {
+    let ts = TestScenario::new(util_name!());
+    if let Ok(result) =
+        run_ucmd_as_root(&ts, &["--userspec=99999", "--groups=root", "/", "id", "-g"])
+    {
+        result
+            .failure()
+            .code_is(125)
+            .stderr_is("chroot: no group specified for unknown uid: 99999\n");
+    } else {
+        println!("Test skipped; requires root user");
+    }
+}
