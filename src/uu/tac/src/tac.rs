@@ -479,18 +479,18 @@ fn try_seek_end(file: &mut File) -> Option<u64> {
             return size;
         } else {
             // Has data despite size 0 - likely a pipe or special file
-            // Loop forever looking for EOF
+            // Loop looking for EOF
+            let mut read_size = 1;
             loop {
                 let mut byte = [0u8; 1];
                 match file.read(&mut byte) {
-                    Ok(0) => break, // Found EOF
-                    Ok(_) => {}     // Keep looking
-                    Err(_) => break,
+                    Ok(0) => break,          // Found EOF
+                    Ok(n) => read_size += n, // Keep looking
+                    Err(_) => return None,   // Error reading - give up on seeking
                 }
             }
 
-            // TODO: Prove this is actually unreachable
-            unreachable!();
+            return Some(read_size as u64);
         }
     }
 
