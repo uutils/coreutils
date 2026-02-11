@@ -145,6 +145,8 @@ matter the parameters (integers, decimal numbers, positive or negative increment
 format specified, etc.), so its output will be more correct than GNU coreutils for
 some inputs (e.g. small fractional increments where GNU coreutils uses `long double`).
 
+This also extends the range of values that can be represented beyond GNU coreutils' `long double` maximum.
+
 The only limitation is that the position of the decimal point is stored in a `i64`,
 so values smaller than 10**(-2**63) will underflow to 0, and some values larger
 than 10**(2**63) may overflow to infinity.
