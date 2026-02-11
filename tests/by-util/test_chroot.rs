@@ -341,7 +341,7 @@ fn test_chroot_userspec_does_not_set_gid_with_uid() {
             }
             // Ubuntu has a sync user whose gid is 65534 per default
             if let Ok(result) = run_ucmd_as_root(&ts, &["--userspec=sync", "/", "id", "-g"]) {
-                result.success().no_stderr().stdout_is("{gid}");
+                result.success().no_stderr().stdout_is(format!("{gid}\n"));
             } else {
                 println!("Test skipped; requires root user");
             }
