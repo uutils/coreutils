@@ -357,7 +357,7 @@ pub fn usr2uid(name: &str) -> IOResult<uid_t> {
 }
 
 #[inline]
-pub fn usr2gid(name: &str) -> IOResult<uid_t> {
+pub fn usr2gid(name: &str) -> IOResult<gid_t> {
     Passwd::locate(name).map(|p| p.gid)
 }
 

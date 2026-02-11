@@ -279,16 +279,6 @@ fn name_to_uid(name: &str) -> Result<libc::uid_t, ChrootError> {
     }
 }
 
-/// Get the GID for the given username, falling back to numeric parsing.
-fn usr_name_to_gid(name: &str) -> Result<libc::gid_t, ChrootError> {
-    match usr2gid(name) {
-        Ok(gid) => Ok(gid),
-        Err(_) => name
-            .parse::<libc::gid_t>()
-            .map_err(|_| ChrootError::NoSuchGroup),
-    }
-}
-
 /// Get the GID for the given group name, falling back to numeric parsing.
 ///
 /// According to the documentation of GNU `chroot`, "POSIX requires that
@@ -411,7 +401,7 @@ fn set_context(options: &Options) -> UResult<()> {
         }
         Some(UserSpec::UserOnly(user)) => {
             let uid = name_to_uid(user)?;
-            let gid = usr_name_to_gid(user)?;
+            let gid = usr2gid(user).map_err(|_| ChrootError::NoGroupSpecified(uid))?;
             let strategy = Strategy::FromUID(uid, false);
             set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
             set_gid(gid).map_err(|e| ChrootError::SetGidFailed(user.to_owned(), e))?;
