@@ -477,21 +477,21 @@ fn try_seek_end(file: &mut File) -> Option<u64> {
         if file.read(&mut test_byte).ok()? == 0 {
             // Truly empty file
             return size;
-        } else {
-            // Has data despite size 0 - likely a pipe or special file
-            // Loop looking for EOF
-            let mut read_size = 1;
-            loop {
-                let mut byte = [0u8; 1];
-                match file.read(&mut byte) {
-                    Ok(0) => break,          // Found EOF
-                    Ok(n) => read_size += n, // Keep looking
-                    Err(_) => return None,   // Error reading - give up on seeking
-                }
-            }
-
-            return Some(read_size as u64);
         }
+
+        // Has data despite size 0 - likely a pipe or special file
+        // Loop looking for EOF
+        let mut read_size = 1;
+        loop {
+            let mut byte = [0u8; 1];
+            match file.read(&mut byte) {
+                Ok(0) => break,          // Found EOF
+                Ok(n) => read_size += n, // Keep looking
+                Err(_) => return None,   // Error reading - give up on seeking
+            }
+        }
+
+        return Some(read_size as u64);
     }
 
     // Leave the file cursor at the start
