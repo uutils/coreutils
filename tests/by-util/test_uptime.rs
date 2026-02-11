@@ -34,7 +34,6 @@ fn test_write_error_handling() {
         File::create("/dev/full").expect("Failed to open /dev/full - test must run on Linux");
 
     new_ucmd!()
-        .pipe_in("test content that should cause write error to /dev/full")
         .set_stdout(dev_full)
         .fails()
         .code_is(1)
