@@ -1280,7 +1280,7 @@ fn copy_file_with_hardlinks_helper(
         return Ok(());
     }
 
-    if from.is_symlink() {
+    if from_meta.file_type().is_symlink() {
         // Copy a symlink file (no-follow).
         rename_symlink_fallback(from, to)?;
     } else if is_fifo(from.symlink_metadata()?.file_type()) {
