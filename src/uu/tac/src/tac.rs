@@ -473,26 +473,24 @@ fn try_seek_end(file: &mut File) -> Option<u64> {
         // Try reading a byte to distinguish
         file.seek(std::io::SeekFrom::Start(0)).ok()?;
         let mut test_byte = [0u8; 1];
-        match file.read(&mut test_byte).ok()? {
-            0 => {
-                // Truly empty file
-                return size;
-            }
-            _ => {
-                // Has data despite size 0 - likely a pipe or special file
-                // Loop forever looking for EOF
-                loop {
-                    let mut byte = [0u8; 1];
-                    match file.read(&mut byte) {
-                        Ok(0) => break, // Found EOF
-                        Ok(_) => {}     // Keep looking
-                        Err(_) => break,
-                    }
-                }
 
-                // TODO: Prove this is actually unreachable
-                unreachable!();
+        if file.read(&mut test_byte).ok()? == 0 {
+            // Truly empty file
+            return size;
+        } else {
+            // Has data despite size 0 - likely a pipe or special file
+            // Loop forever looking for EOF
+            loop {
+                let mut byte = [0u8; 1];
+                match file.read(&mut byte) {
+                    Ok(0) => break, // Found EOF
+                    Ok(_) => {}     // Keep looking
+                    Err(_) => break,
+                }
             }
+
+            // TODO: Prove this is actually unreachable
+            unreachable!();
         }
     }
 
