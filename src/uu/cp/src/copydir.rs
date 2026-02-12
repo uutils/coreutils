@@ -640,7 +640,10 @@ fn build_dir(
         };
 
         excluded_perms |= umask;
-        let mode = !excluded_perms & 0o777; //use only the last three octet bits
+        let mut mode = !excluded_perms & 0o777; //use only the last three octet bits
+        // force S_IWUSR and S_IXUSR to be active while creating directories
+        // permissions will be fixed later in "cleanup" faze
+        mode |= 0o300;
         std::os::unix::fs::DirBuilderExt::mode(&mut builder, mode);
     }
 

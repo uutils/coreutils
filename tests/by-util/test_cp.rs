@@ -7648,8 +7648,6 @@ fn test_cp_existing_perm_dir() {
 #[test]
 #[cfg(not(target_os = "windows"))]
 fn test_cp_gnu_preserve_mode() {
-    use std::io;
-
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
@@ -7663,11 +7661,37 @@ fn test_cp_gnu_preserve_mode() {
         .arg("-r")
         .arg("d2")
         .arg("d3")
-        .set_stdout(io::stdout())
         .succeeds();
 
     let d1_mode = at.metadata("d1").mode();
     let d3_mode = at.metadata("d3").mode();
 
     assert_eq!(d1_mode, d3_mode);
+}
+
+#[test]
+#[cfg(not(target_os = "windows"))]
+fn test_cp_archive_readonly_directories() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene.cmd("mkdir").arg("-p").arg("test_a/b").succeeds();
+    scene.cmd("touch").arg("test_a/b/file.txt").succeeds();
+    scene
+        .cmd("chmod")
+        .arg("-R")
+        .arg("-w")
+        .arg("test_a")
+        .succeeds();
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("test_a")
+        .arg("test_gnu")
+        .succeeds();
+
+    let test_gnu_mode = at.metadata("test_gnu").mode();
+
+    assert_eq!(test_gnu_mode, 0o40555);
 }
