@@ -309,6 +309,29 @@ fn test_failed_write_is_reported() {
         .stderr_is("tac: failed to write to stdout: No space left on device (os error 28)\n");
 }
 
+// Test that `tac` can handle an infinite input stream without exiting.
+// Only run on 64-bit systems, as on 32-bit systems,
+// `tac` may run out of memory when trying to buffer the infinite input.
+#[cfg(all(target_os = "linux", target_pointer_width = "64"))]
+#[test]
+fn test_infinite_pipe() {
+    use std::{fs::File, time::Duration};
+
+    let mut child = new_ucmd!()
+        .arg("/dev/zero")
+        .set_stdout(File::open("/dev/null").unwrap())
+        .run_no_wait();
+
+    // Wait for a while
+    std::thread::sleep(Duration::from_secs(5));
+
+    // The process should not have exited, as the stream is infinite
+    assert!(child.is_alive());
+
+    // Clean up
+    child.kill();
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn test_stdin_bad_tmpdir_fallback() {
