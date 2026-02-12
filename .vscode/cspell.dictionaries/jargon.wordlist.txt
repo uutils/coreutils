@@ -157,6 +157,7 @@ SIGTTOU
 sigttou
 sigusr
 strcasecmp
+strtime
 subcommand
 subexpression
 submodule

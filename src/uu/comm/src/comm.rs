@@ -55,12 +55,12 @@ struct OrderChecker {
     has_error: bool,
 }
 
-enum Input {
-    Stdin(StdinLock<'static>),
+enum Input<'a> {
+    Stdin(StdinLock<'a>),
     FileIn(BufReader<File>),
 }
 
-impl Input {
+impl Input<'_> {
     fn stdin() -> Self {
         Self::Stdin(stdin().lock())
     }
@@ -70,13 +70,13 @@ impl Input {
     }
 }
 
-struct LineReader {
+struct LineReader<'a> {
     line_ending: LineEnding,
-    input: Input,
+    input: Input<'a>,
 }
 
-impl LineReader {
-    fn new(input: Input, line_ending: LineEnding) -> Self {
+impl<'a> LineReader<'a> {
+    fn new(input: Input<'a>, line_ending: LineEnding) -> Self {
         Self { line_ending, input }
     }
 
@@ -196,8 +196,8 @@ fn write_line_with_delimiter<W: Write>(writer: &mut W, delim: &[u8], line: &[u8]
 }
 
 fn comm(
-    a: &mut LineReader,
-    b: &mut LineReader,
+    a: &mut LineReader<'_>,
+    b: &mut LineReader<'_>,
     filename1: &OsString,
     filename2: &OsString,
     delim: &str,
@@ -323,7 +323,7 @@ fn comm(
     }
 }
 
-fn open_file(name: &OsString, line_ending: LineEnding) -> io::Result<LineReader> {
+fn open_file(name: &OsString, line_ending: LineEnding) -> io::Result<LineReader<'static>> {
     if name == "-" {
         Ok(LineReader::new(Input::stdin(), line_ending))
     } else {
