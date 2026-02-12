@@ -87,6 +87,32 @@ fn test_date_email_multiple_aliases() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_date_rfc_822_uses_english() {
+    // RFC-822/RFC-2822/RFC-5322 formats should always use English day/month names
+    // regardless of locale (per RFC specification)
+    let scene = TestScenario::new(util_name!());
+
+    // Test with German locale - should still output "Sun" not "So"
+    scene
+        .ucmd()
+        .env("LC_ALL", "de_DE.UTF-8")
+        .env("TZ", "UTC")
+        .args(&["-R", "-d", "1997-01-19 08:17:48 +0"])
+        .succeeds()
+        .stdout_contains("Sun, 19 Jan 1997");
+
+    // Test with French locale - should still output "Sun" not "dim."
+    scene
+        .ucmd()
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .env("TZ", "UTC")
+        .args(&["-R", "-d", "1997-01-19 08:17:48 +0"])
+        .succeeds()
+        .stdout_contains("Sun, 19 Jan 1997");
+}
+
+#[test]
 fn test_date_rfc_3339() {
     let scene = TestScenario::new(util_name!());
 

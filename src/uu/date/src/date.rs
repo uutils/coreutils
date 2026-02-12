@@ -487,7 +487,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 } else {
                     date
                 };
-                match format_date_with_locale_aware_months(&date, format_string, &config) {
+                let skip_localization =
+                    matches!(settings.format, Format::Rfc5322 | Format::Rfc3339(_));
+                match format_date_with_locale_aware_months(
+                    &date,
+                    format_string,
+                    &config,
+                    skip_localization,
+                ) {
                     Ok(s) => writeln!(stdout, "{s}").map_err(|e| {
                         USimpleError::new(1, translate!("date-error-write", "error" => e))
                     })?,
@@ -631,10 +638,11 @@ fn format_date_with_locale_aware_months(
     date: &Zoned,
     format_string: &str,
     config: &Config<PosixCustom>,
+    skip_localization: bool,
 ) -> Result<String, jiff::Error> {
     let broken_down = BrokenDownTime::from(date);
 
-    if !should_use_icu_locale() {
+    if !should_use_icu_locale() || skip_localization {
         return broken_down.to_string_with_config(config, format_string);
     }
 
