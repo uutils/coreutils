@@ -1141,6 +1141,8 @@ fn copy_file_with_hardlinks_helper(
     if from.is_symlink() {
         // Copy a symlink file (no-follow).
         rename_symlink_fallback(from, to)?;
+    } else if is_fifo(from.symlink_metadata()?.file_type()) {
+        make_fifo(to)?;
     } else {
         // Copy a regular file.
         fs::copy(from, to)?;

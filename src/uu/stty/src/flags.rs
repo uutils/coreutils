@@ -13,14 +13,7 @@
 
 use crate::Flag;
 
-#[cfg(not(any(
-    target_os = "freebsd",
-    target_os = "dragonfly",
-    target_os = "ios",
-    target_os = "macos",
-    target_os = "netbsd",
-    target_os = "openbsd"
-)))]
+#[cfg(not(bsd))]
 use nix::sys::termios::BaudRate;
 use nix::sys::termios::{
     ControlFlags as C, InputFlags as I, LocalFlags as L, OutputFlags as O,
@@ -38,23 +31,9 @@ pub enum BaudType {
 #[derive(Debug)]
 #[cfg_attr(test, derive(PartialEq))]
 pub enum AllFlags<'a> {
-    #[cfg(any(
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    ))]
+    #[cfg(bsd)]
     Baud(u32, BaudType),
-    #[cfg(not(any(
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    )))]
+    #[cfg(not(bsd))]
     Baud(BaudRate, BaudType),
     ControlFlags((&'a Flag<C>, bool)),
     InputFlags((&'a Flag<I>, bool)),
@@ -280,14 +259,7 @@ pub const LOCAL_FLAGS: &[Flag<L>] = &[
 ];
 
 // BSD's use u32 as baud rate, to using the enum is unnecessary.
-#[cfg(not(any(
-    target_os = "freebsd",
-    target_os = "dragonfly",
-    target_os = "ios",
-    target_os = "macos",
-    target_os = "netbsd",
-    target_os = "openbsd"
-)))]
+#[cfg(not(bsd))]
 pub const BAUD_RATES: &[(&str, BaudRate)] = &[
     ("0", BaudRate::B0),
     ("50", BaudRate::B50),
