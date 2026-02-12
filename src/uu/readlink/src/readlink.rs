@@ -6,6 +6,7 @@
 // spell-checker:ignore (ToDO) errno
 
 use clap::{Arg, ArgAction, Command};
+use std::env;
 use std::ffi::OsString;
 use std::fs;
 use std::io::{Write, stdout};
@@ -35,8 +36,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut no_trailing_delimiter = matches.get_flag(OPT_NO_NEWLINE);
     let use_zero = matches.get_flag(OPT_ZERO);
-    let silent = matches.get_flag(OPT_SILENT) || matches.get_flag(OPT_QUIET);
-    let verbose = matches.get_flag(OPT_VERBOSE);
+    let verbose = matches.get_flag(OPT_VERBOSE) || env::var("POSIXLY_CORRECT").is_ok();
 
     // GNU readlink -f/-e/-m follows symlinks first and then applies `..` (physical resolution).
     // ResolveMode::Logical collapses `..` before following links, which yields the opposite order,
@@ -70,7 +70,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     }
 
-    if no_trailing_delimiter && files.len() > 1 && !silent {
+    if no_trailing_delimiter && files.len() > 1 {
         show_error!("{}", translate!("readlink-error-ignoring-no-newline"));
         no_trailing_delimiter = false;
     }
@@ -93,7 +93,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 show(&path, line_ending).map_err_context(String::new)?;
             }
             Err(err) => {
-                if silent && !verbose {
+                if !verbose {
                     return Err(1.into());
                 }
 
@@ -151,6 +151,7 @@ pub fn uu_app() -> Command {
                 .short('q')
                 .long(OPT_QUIET)
                 .help(translate!("readlink-help-quiet"))
+                .overrides_with_all([OPT_QUIET, OPT_SILENT, OPT_VERBOSE])
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -158,6 +159,7 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .long(OPT_SILENT)
                 .help(translate!("readlink-help-silent"))
+                .overrides_with_all([OPT_QUIET, OPT_SILENT, OPT_VERBOSE])
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -165,6 +167,7 @@ pub fn uu_app() -> Command {
                 .short('v')
                 .long(OPT_VERBOSE)
                 .help(translate!("readlink-help-verbose"))
+                .overrides_with_all([OPT_QUIET, OPT_SILENT, OPT_VERBOSE])
                 .action(ArgAction::SetTrue),
         )
         .arg(
