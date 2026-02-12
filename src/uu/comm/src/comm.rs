@@ -327,9 +327,6 @@ fn open_file(name: &OsString, line_ending: LineEnding) -> io::Result<LineReader>
     if name == "-" {
         Ok(LineReader::new(Input::stdin(), line_ending))
     } else {
-        if metadata(name)?.is_dir() {
-            return Err(io::Error::other(translate!("comm-error-is-directory")));
-        }
         let f = File::open(name)?;
         Ok(LineReader::new(Input::from_file(f), line_ending))
     }

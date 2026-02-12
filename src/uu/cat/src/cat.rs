@@ -94,8 +94,6 @@ enum CatError {
         /// A debug print of the file type
         ft_debug: String,
     },
-    #[error("{}", translate!("cat-error-is-directory"))]
-    IsDirectory,
     #[cfg(unix)]
     #[error("{}", translate!("cat-error-no-such-device-or-address"))]
     NoSuchDeviceOrAddress,
@@ -185,10 +183,7 @@ struct InputHandle<R: FdReadable> {
 
 /// Concrete enum of recognized file types.
 ///
-/// *Note*: `cat`-ing a directory should result in an
-/// [`CatError::IsDirectory`]
 enum InputType {
-    Directory,
     File,
     StdIn,
     SymLink,
@@ -380,7 +375,6 @@ fn cat_path(path: &OsString, options: &OutputOptions, state: &mut OutputState) -
             };
             cat_handle(&mut handle, options, state)
         }
-        InputType::Directory => Err(CatError::IsDirectory),
         #[cfg(unix)]
         InputType::Socket => Err(CatError::NoSuchDeviceOrAddress),
         _ => {
@@ -463,8 +457,7 @@ fn get_input_type(path: &OsString) -> CatResult<InputType> {
         ft if ft.is_fifo() => Ok(InputType::Fifo),
         #[cfg(unix)]
         ft if ft.is_socket() => Ok(InputType::Socket),
-        ft if ft.is_dir() => Ok(InputType::Directory),
-        ft if ft.is_file() => Ok(InputType::File),
+        ft if ft.is_file() | ft.is_dir() => Ok(InputType::File),
         ft if ft.is_symlink() => Ok(InputType::SymLink),
         _ => Err(CatError::UnknownFiletype {
             ft_debug: format!("{ft:?}"),

@@ -14,5 +14,4 @@ expand-error-specifier-only-allowed-with-last = { $specifier } specifier only al
 expand-error-tab-size-cannot-be-zero = tab size cannot be 0
 expand-error-tab-size-too-large = tab stop is too large { $size }
 expand-error-tab-sizes-must-be-ascending = tab sizes must be ascending
-expand-error-is-directory = { $file }: Is a directory
 expand-error-failed-to-write-output = failed to write output

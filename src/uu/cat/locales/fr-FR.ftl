@@ -16,7 +16,6 @@ cat-help-ignored-u = (ignoré)
 
 # Messages d'erreur
 cat-error-unknown-filetype = type de fichier inconnu : { $ft_debug }
-cat-error-is-directory = Est un répertoire
 cat-error-input-file-is-output-file = le fichier d'entrée est le fichier de sortie
 cat-error-too-many-symbolic-links = Trop de niveaux de liens symboliques
 cat-error-no-such-device-or-address = Aucun appareil ou adresse de ce type

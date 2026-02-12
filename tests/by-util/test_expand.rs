@@ -414,8 +414,8 @@ int main() {
 fn test_expand_directory() {
     new_ucmd!()
         .args(&["."])
-        .fails()
-        .stderr_contains("expand: .: Is a directory");
+        .fails_with_code(1)
+        .stderr_is("expand: .: Is a directory\n");
 }
 
 #[test]
