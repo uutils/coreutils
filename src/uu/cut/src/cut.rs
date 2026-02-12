@@ -254,35 +254,82 @@ fn cut_fields_implicit_out_delim<R: Read, W: Write, M: Matcher>(
     Ok(())
 }
 
+/// Iterator that yields (segment, was_followed_by_delimiter) pairs.
+/// Unlike `BufRead::split`, this correctly tracks whether each segment ended with delimiter.
+struct DelimReader<R> {
+    inner: BufReader<R>,
+    delim: u8,
+}
+
+impl<R: Read> DelimReader<R> {
+    fn new(reader: R, delim: u8) -> Self {
+        Self {
+            inner: BufReader::new(reader),
+            delim,
+        }
+    }
+}
+
+impl<R: Read> Iterator for DelimReader<R> {
+    type Item = std::io::Result<(Vec<u8>, bool)>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut buf = Vec::new();
+        match self.inner.read_until(self.delim, &mut buf) {
+            Ok(0) => None,
+            Ok(_) => {
+                let was_delimited = buf.last() == Some(&self.delim);
+                if was_delimited {
+                    buf.pop();
+                }
+                Some(Ok((buf, was_delimited)))
+            }
+            Err(e) => Some(Err(e)),
+        }
+    }
+}
+
+/// Check if a field number is within any of the given ranges
+fn is_field_in_ranges(field: usize, ranges: &[Range]) -> bool {
+    ranges.iter().any(|r| field >= r.low && field <= r.high)
+}
+
 /// The input delimiter is identical to `newline_char`
 fn cut_fields_newline_char_delim<R: Read, W: Write>(
     reader: R,
     out: &mut W,
     ranges: &[Range],
+    only_delimited: bool,
     newline_char: u8,
     out_delim: &[u8],
 ) -> UResult<()> {
-    let buf_in = BufReader::new(reader);
+    // Stream through input, collecting only selected fields
+    let mut has_delim = false;
+    let mut selected: Vec<Vec<u8>> = Vec::new();
 
-    let segments: Vec<_> = buf_in.split(newline_char).filter_map(|x| x.ok()).collect();
-    let mut print_delim = false;
-
-    for &Range { low, high } in ranges {
-        for i in low..=high {
-            // "- 1" is necessary because fields start from 1 whereas a Vec starts from 0
-            if let Some(segment) = segments.get(i - 1) {
-                if print_delim {
-                    out.write_all(out_delim)?;
-                } else {
-                    print_delim = true;
-                }
-                out.write_all(segment.as_slice())?;
-            } else {
-                break;
-            }
+    for (idx, result) in DelimReader::new(reader, newline_char).enumerate() {
+        let (segment, was_delimited) = result?;
+        has_delim = has_delim || was_delimited;
+        if is_field_in_ranges(idx + 1, ranges) {
+            selected.push(segment);
         }
     }
-    out.write_all(&[newline_char])?;
+
+    // With -s and no delimiter, suppress output
+    if only_delimited && !has_delim {
+        return Ok(());
+    }
+
+    // Output selected fields joined by delimiter
+    if let Some((first, rest)) = selected.split_first() {
+        out.write_all(first)?;
+        for seg in rest {
+            out.write_all(out_delim)?;
+            out.write_all(seg)?;
+        }
+        out.write_all(&[newline_char])?;
+    }
+
     Ok(())
 }
 
@@ -297,7 +344,14 @@ fn cut_fields<R: Read, W: Write>(
     match field_opts.delimiter {
         Delimiter::Slice(delim) if delim == [newline_char] => {
             let out_delim = opts.out_delimiter.unwrap_or(delim);
-            cut_fields_newline_char_delim(reader, out, ranges, newline_char, out_delim)
+            cut_fields_newline_char_delim(
+                reader,
+                out,
+                ranges,
+                field_opts.only_delimited,
+                newline_char,
+                out_delim,
+            )
         }
         Delimiter::Slice(delim) => {
             let matcher = ExactMatcher::new(delim);
