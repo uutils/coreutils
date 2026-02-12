@@ -623,16 +623,19 @@ fn build_dir(
         // we need to allow trivial casts here because some systems like linux have u32 constants in
         // in libc while others don't.
         #[allow(clippy::unnecessary_cast)]
-        let mut excluded_perms = if matches!(options.attributes.ownership, Preserve::Yes { .. }) {
+        let mut excluded_perms = if cfg!(target_os = "android") {
+            0
+        } else if matches!(options.attributes.ownership, Preserve::Yes { .. }) {
             libc::S_IRWXG | libc::S_IRWXO // exclude rwx for group and other
         } else if matches!(options.attributes.mode, Preserve::Yes { .. }) {
-            libc::S_IWGRP | libc::S_IWOTH //exclude w for group and other
+            libc::S_IWGRP | libc::S_IWOTH // exclude w for group and other
         } else {
             0
         } as u32;
 
-        let umask = if let (Some(from), Preserve::Yes { .. }) =
-            (copy_attributes_from, options.attributes.mode)
+        let umask = if !cfg!(target_os = "android")
+            && let (Some(from), Preserve::Yes { .. }) =
+                (copy_attributes_from, options.attributes.mode)
         {
             !fs::symlink_metadata(from)?.permissions().mode()
         } else {
