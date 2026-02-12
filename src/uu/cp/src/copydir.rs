@@ -266,6 +266,7 @@ fn copy_direntry(
     copied_destinations: &HashSet<PathBuf>,
     copied_files: &mut HashMap<FileInformation, PathBuf>,
     created_parent_dirs: &mut HashSet<PathBuf>,
+    #[cfg(unix)] orig_umask: u32,
 ) -> CopyResult<bool> {
     let source_is_symlink = entry_is_symlink;
     let source_is_dir = if source_is_symlink && !options.dereference {
@@ -282,12 +283,7 @@ fn copy_direntry(
         return if entry.target_is_file {
             Err(translate!("cp-error-cannot-overwrite-non-directory-with-directory").into())
         } else {
-            build_dir(
-                &entry.local_to_target,
-                false,
-                options,
-                Some(&entry.source_absolute),
-            )?;
+            build_dir(&entry.local_to_target, false)?;
             if options.verbose {
                 println!(
                     "{}",
@@ -310,6 +306,8 @@ fn copy_direntry(
             copied_files,
             created_parent_dirs,
             false,
+            #[cfg(unix)]
+            orig_umask,
         ) {
             if preserve_hard_links {
                 if !source_is_symlink {
@@ -363,6 +361,7 @@ pub(crate) fn copy_directory(
     copied_files: &mut HashMap<FileInformation, PathBuf>,
     created_parent_dirs: &mut HashSet<PathBuf>,
     source_in_command_line: bool,
+    #[cfg(unix)] orig_umask: u32,
 ) -> CopyResult<()> {
     // if no-dereference is enabled and this is a symlink, copy it as a file
     if !options.dereference(source_in_command_line) && root.is_symlink() {
@@ -376,6 +375,8 @@ pub(crate) fn copy_directory(
             copied_files,
             created_parent_dirs,
             source_in_command_line,
+            #[cfg(unix)]
+            orig_umask,
         );
     }
 
@@ -401,7 +402,7 @@ pub(crate) fn copy_directory(
     let tmp = if options.parents {
         if let Some(parent) = root.parent() {
             let new_target = target.join(parent);
-            build_dir(&new_target, true, options, None)?;
+            build_dir(&new_target, true)?;
             if options.verbose {
                 // For example, if copying file `a/b/c` and its parents
                 // to directory `d/`, then print
@@ -471,6 +472,8 @@ pub(crate) fn copy_directory(
                     copied_destinations,
                     copied_files,
                     created_parent_dirs,
+                    #[cfg(unix)]
+                    orig_umask,
                 )?;
 
                 // We omit certain permissions when creating directories
@@ -495,6 +498,8 @@ pub(crate) fn copy_directory(
                             &options.attributes,
                             false,
                             options.set_selinux_context,
+                            #[cfg(unix)]
+                            orig_umask,
                         )?;
                         continue;
                     }
@@ -538,6 +543,8 @@ pub(crate) fn copy_directory(
                                 &options.attributes,
                                 false,
                                 options.set_selinux_context,
+                                #[cfg(unix)]
+                                orig_umask,
                             )?;
                         }
                     }
@@ -560,6 +567,8 @@ pub(crate) fn copy_directory(
             &options.attributes,
             dir.was_created,
             options.set_selinux_context,
+            #[cfg(unix)]
+            orig_umask,
         )?;
 
         #[cfg(all(feature = "selinux", target_os = "linux"))]
@@ -580,6 +589,8 @@ pub(crate) fn copy_directory(
                     &options.attributes,
                     false,
                     options.set_selinux_context,
+                    #[cfg(unix)]
+                    orig_umask,
                 )?;
 
                 #[cfg(all(feature = "selinux", target_os = "linux"))]
@@ -619,57 +630,12 @@ pub fn path_has_prefix(p1: &Path, p2: &Path) -> io::Result<bool> {
 
 /// Builds a directory at the specified path with the given options.
 ///
-/// # Notes
-/// - If `copy_attributes_from` is `Some`, the new directory's attributes will be
-///   copied from the provided file. Otherwise, the new directory will have the default
-///   attributes for the current user.
-/// - This method excludes certain permissions if ownership or special mode bits could
-///   potentially change. (See `test_dir_perm_race_with_preserve_mode_and_ownership`)
-/// - The `recursive` flag determines whether parent directories should be created
-///   if they do not already exist.
-// we need to allow unused_variable since `options` might be unused in non unix systems
-#[allow(unused_variables)]
-fn build_dir(
-    path: &PathBuf,
-    recursive: bool,
-    options: &Options,
-    copy_attributes_from: Option<&Path>,
-) -> CopyResult<()> {
+/// The `recursive` flag determines whether parent directories should be created if they do not
+/// already exist.
+#[inline]
+fn build_dir(path: &PathBuf, recursive: bool) -> CopyResult<()> {
     let mut builder = fs::DirBuilder::new();
     builder.recursive(recursive);
-
-    // To prevent unauthorized access before the folder is ready,
-    // exclude certain permissions if ownership or special mode bits
-    // could potentially change.
-    #[cfg(unix)]
-    {
-        use crate::Preserve;
-        use std::os::unix::fs::PermissionsExt;
-
-        // we need to allow trivial casts here because some systems like linux have u32 constants in
-        // in libc while others don't.
-        #[allow(clippy::unnecessary_cast)]
-        let mut excluded_perms = if matches!(options.attributes.ownership, Preserve::Yes { .. }) {
-            libc::S_IRWXG | libc::S_IRWXO // exclude rwx for group and other
-        } else if matches!(options.attributes.mode, Preserve::Yes { .. }) {
-            libc::S_IWGRP | libc::S_IWOTH //exclude w for group and other
-        } else {
-            0
-        } as u32;
-
-        let umask = if let (Some(from), Preserve::Yes { .. }) =
-            (copy_attributes_from, options.attributes.mode)
-        {
-            !fs::symlink_metadata(from)?.permissions().mode()
-        } else {
-            uucore::mode::get_umask()
-        };
-
-        excluded_perms |= umask;
-        let mode = !excluded_perms & 0o777; //use only the last three octet bits
-        std::os::unix::fs::DirBuilderExt::mode(&mut builder, mode);
-    }
-
     builder.create(path)?;
     Ok(())
 }
