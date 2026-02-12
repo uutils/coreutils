@@ -729,7 +729,7 @@ fn test_read_error() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 fn test_comm_write_error_dev_full() {
     use std::fs::OpenOptions;
     let scene = TestScenario::new(util_name!());

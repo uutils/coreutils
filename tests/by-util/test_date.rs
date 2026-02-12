@@ -2068,7 +2068,7 @@ fn test_percent_percent_not_replaced() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 fn test_date_write_error_dev_full() {
     use std::fs::OpenOptions;
     let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
