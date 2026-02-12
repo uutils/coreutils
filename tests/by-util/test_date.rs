@@ -2156,3 +2156,18 @@ fn test_date_rel2b_month_arithmetic() {
         .succeeds()
         .stdout_is("1996-03-02\n");
 }
+
+// Tests for GNU test cross-TZ-mishandled: embedded timezone parsing
+#[test]
+fn test_date_cross_tz_mishandled() {
+    // GNU test cross-TZ-mishandled: Parse date with embedded timezone
+    // Date should be interpreted in embedded TZ, then displayed in environment TZ
+    new_ucmd!()
+        .env("TZ", "PST8")
+        .env("LC_ALL", "C")
+        .args(&["-d", r#"TZ="EST5" 1970-01-01 00:00"#])
+        .succeeds()
+        .stdout_contains("Dec 31")
+        .stdout_contains("21:00:00")
+        .stdout_contains("1969");
+}
