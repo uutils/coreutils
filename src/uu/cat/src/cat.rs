@@ -19,7 +19,7 @@ use std::os::fd::AsFd;
 use std::os::unix::fs::FileTypeExt;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::UResult;
+use uucore::error::{UResult, strip_errno};
 use uucore::translate;
 use uucore::{fast_inc::fast_inc_one, format_usage};
 
@@ -82,7 +82,7 @@ impl LineNumber {
 #[derive(Error, Debug)]
 enum CatError {
     /// Wrapper around `io::Error`
-    #[error("{0}")]
+    #[error("{}", strip_errno(.0))]
     Io(#[from] io::Error),
     /// Wrapper around `nix::Error`
     #[cfg(any(target_os = "linux", target_os = "android"))]
