@@ -2066,3 +2066,15 @@ fn test_percent_percent_not_replaced() {
             .stdout_is(expected);
     }
 }
+
+#[test]
+#[cfg(unix)]
+fn test_date_write_error_dev_full() {
+    use std::fs::OpenOptions;
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+    new_ucmd!()
+        .arg("+%s")
+        .set_stdout(dev_full)
+        .fails()
+        .stderr_contains("write error");
+}
