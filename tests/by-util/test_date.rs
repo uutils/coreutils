@@ -2087,3 +2087,26 @@ fn test_date_write_error_dev_full() {
         .fails()
         .stderr_contains("write error");
 }
+
+// Tests for GNU test leap-1: leap year overflow in date arithmetic
+#[test]
+fn test_date_leap1_leap_year_overflow() {
+    // GNU test leap-1: Adding years to Feb 29 should overflow to March 1
+    // if target year is not a leap year
+    new_ucmd!()
+        .args(&["--date", "02/29/1996 1 year", "+%Y-%m-%d"])
+        .succeeds()
+        .stdout_is("1997-03-01\n");
+
+    // Additional cases: 2 years
+    new_ucmd!()
+        .args(&["--date", "1996-02-29 + 2 years", "+%Y-%m-%d"])
+        .succeeds()
+        .stdout_is("1998-03-01\n");
+
+    // Leap year to leap year should not overflow
+    new_ucmd!()
+        .args(&["--date", "1996-02-29 + 4 years", "+%Y-%m-%d"])
+        .succeeds()
+        .stdout_is("2000-02-29\n");
+}
