@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (ToDO) Sdivide
+// spell-checker:ignore (ToDO) Sdivide ading
 
 use jiff::{Timestamp, ToSpan};
 use regex::Regex;
@@ -759,236 +759,58 @@ fn test_merge_one_long_one_short() {
 
 #[test]
 fn test_simple_expand_tab() {
-    let test_cases = vec![
-        (
-            "-e",
-            vec!["test_e1.log"],
-            vec!["test_e_no_args1.log.expected"],
-            0,
-        ),
-        (
-            "-e",
-            vec!["test_e2.log"],
-            vec!["test_e_no_args2.log.expected"],
-            0,
-        ),
-        (
-            "-e",
-            vec!["test_e3.log"],
-            vec!["test_e_no_args3.log.expected"],
-            0,
-        ),
-    ];
-    for test_case in test_cases {
-        let (flags, input_file, expected_file, return_code) = test_case;
-        let mut scenario = new_ucmd!();
-        let input_file_path = input_file.first().unwrap();
-        let test_file_path = expected_file.first().unwrap();
-        let value = file_last_modified_time(&scenario, input_file_path);
-        let mut arguments: Vec<&str> = flags
-            .split(' ')
-            .filter(|i| i.trim() != "")
-            .collect::<Vec<&str>>();
+    let whitespace = " ".repeat(50);
+    let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
+    let page_1_beginning = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\n");
 
-        arguments.extend(input_file.clone());
+    let output_regex = Regex::new(&format!("{page_1_beginning}hello   world\nabc     def\n        leading\ntrail   \n8chars00        \n")).unwrap();
 
-        let scenario_with_args = scenario.args(&arguments);
-
-        let scenario_with_expected_status = if return_code == 0 {
-            scenario_with_args.succeeds()
-        } else {
-            scenario_with_args.fails()
-        };
-
-        scenario_with_expected_status.stdout_is_templated_fixture(
-            test_file_path,
-            &[
-                ("{last_modified_time}", &value),
-                ("{file_name}", input_file_path),
-            ],
-        );
-    }
+    new_ucmd!()
+        .arg("-e")
+        .pipe_in("hello\tworld\nabc\tdef\n\tleading\ntrail\t\n8chars00\t\n")
+        .succeeds()
+        .stdout_matches(&output_regex);
 }
 
 #[test]
 fn test_simple_expand_tab_with_digit_argument() {
-    // test different variations of width
-    // 2, 3, 8, 10
+    let whitespace = " ".repeat(50);
+    let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
+    let page_1_beginning = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\n");
+    let input = "hello\tworld\nabc\tdef\n\tleading\ntrail\t\n8chars00\t\n";
+
     let test_cases = vec![
-        (
-            "-e2",
-            vec!["test_e1.log"],
-            vec!["test_e_width_2_1.log.expected"],
-            0,
-        ),
-        (
-            "-e2",
-            vec!["test_e2.log"],
-            vec!["test_e_width_2_2.log.expected"],
-            0,
-        ),
-        (
-            "-e2",
-            vec!["test_e3.log"],
-            vec!["test_e_width_2_3.log.expected"],
-            0,
-        ),
-        (
-            "-e3",
-            vec!["test_e1.log"],
-            vec!["test_e_width_3_1.log.expected"],
-            0,
-        ),
-        (
-            "-e3",
-            vec!["test_e2.log"],
-            vec!["test_e_width_3_2.log.expected"],
-            0,
-        ),
-        (
-            "-e3",
-            vec!["test_e3.log"],
-            vec!["test_e_width_3_3.log.expected"],
-            0,
-        ),
-        (
-            "-e8",
-            vec!["test_e1.log"],
-            vec!["test_e_width_8_1.log.expected"],
-            0,
-        ),
-        (
-            "-e8",
-            vec!["test_e2.log"],
-            vec!["test_e_width_8_2.log.expected"],
-            0,
-        ),
-        (
-            "-e8",
-            vec!["test_e3.log"],
-            vec!["test_e_width_8_3.log.expected"],
-            0,
-        ),
-        (
-            "-e10",
-            vec!["test_e1.log"],
-            vec!["test_e_width_10_1.log.expected"],
-            0,
-        ),
-        (
-            "-e10",
-            vec!["test_e2.log"],
-            vec!["test_e_width_10_2.log.expected"],
-            0,
-        ),
-        (
-            "-e10",
-            vec!["test_e3.log"],
-            vec!["test_e_width_10_3.log.expected"],
-            0,
-        ),
+        ("-e2", Regex::new(&format!("{page_1_beginning}hello world\nabc def\n  leading\ntrail \n8chars00  \n")).unwrap()),
+        ("-e3", Regex::new(&format!("{page_1_beginning}hello world\nabc   def\n   leading\ntrail \n8chars00 \n")).unwrap()),
+        ("-e8", Regex::new(&format!("{page_1_beginning}hello   world\nabc     def\n        leading\ntrail   \n8chars00        \n")).unwrap()),
+        ("-e10", Regex::new(&format!("{page_1_beginning}hello     world\nabc       def\n          leading\ntrail     \n8chars00  \n")).unwrap()),
     ];
-    for test_case in test_cases {
-        let (flags, input_file, expected_file, return_code) = test_case;
-        let mut scenario = new_ucmd!();
-        let input_file_path = input_file.first().unwrap();
-        let test_file_path = expected_file.first().unwrap();
-        let value = file_last_modified_time(&scenario, input_file_path);
-        let mut arguments: Vec<&str> = flags
-            .split(' ')
-            .filter(|i| i.trim() != "")
-            .collect::<Vec<&str>>();
-
-        arguments.extend(input_file.clone());
-
-        let scenario_with_args = scenario.args(&arguments);
-
-        let scenario_with_expected_status = if return_code == 0 {
-            scenario_with_args.succeeds()
-        } else {
-            scenario_with_args.fails()
-        };
-
-        scenario_with_expected_status.stdout_is_templated_fixture(
-            test_file_path,
-            &[
-                ("{last_modified_time}", &value),
-                ("{file_name}", input_file_path),
-            ],
-        );
+    for (arg, output_regex) in test_cases {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in(input)
+            .succeeds()
+            .stdout_matches(&output_regex);
     }
 }
 
 #[test]
 fn test_simple_expand_tab_with_char_argument() {
-    // test different variations of what char to expand
-    // a, e
+    let whitespace = " ".repeat(50);
+    let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
+    let page_1_beginning = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\n");
+    let input = "hello\tworld\nabc\tdef\n\tleading\ntrail\t\n8chars00\t\n";
+
     let test_cases = vec![
-        (
-            "-ea",
-            vec!["test_e1.log"],
-            vec!["test_e_input_char_a_1.log.expected"],
-            0,
-        ),
-        (
-            "-ea",
-            vec!["test_e2.log"],
-            vec!["test_e_input_char_a_2.log.expected"],
-            0,
-        ),
-        (
-            "-ea",
-            vec!["test_e3.log"],
-            vec!["test_e_input_char_a_3.log.expected"],
-            0,
-        ),
-        (
-            "-ee",
-            vec!["test_e1.log"],
-            vec!["test_e_input_char_e_1.log.expected"],
-            0,
-        ),
-        (
-            "-ee",
-            vec!["test_e2.log"],
-            vec!["test_e_input_char_e_2.log.expected"],
-            0,
-        ),
-        (
-            "-ee",
-            vec!["test_e3.log"],
-            vec!["test_e_input_char_e_3.log.expected"],
-            0,
-        ),
+        ("-ea", Regex::new(&format!("{page_1_beginning}hello   world\n        bc      def\n        le      ding\ntr      il      \n8ch     rs00    \n")).unwrap()),
+        ("-ee", Regex::new(&format!("{page_1_beginning}h       llo     world\nabc     d       f\n        l       ading\ntrail   \n8chars00        \n")).unwrap()),
     ];
-    for test_case in test_cases {
-        let (flags, input_file, expected_file, return_code) = test_case;
-        let mut scenario = new_ucmd!();
-        let input_file_path = input_file.first().unwrap();
-        let test_file_path = expected_file.first().unwrap();
-        let value = file_last_modified_time(&scenario, input_file_path);
-        let mut arguments: Vec<&str> = flags
-            .split(' ')
-            .filter(|i| i.trim() != "")
-            .collect::<Vec<&str>>();
-
-        arguments.extend(input_file.clone());
-
-        let scenario_with_args = scenario.args(&arguments);
-
-        let scenario_with_expected_status = if return_code == 0 {
-            scenario_with_args.succeeds()
-        } else {
-            scenario_with_args.fails()
-        };
-
-        scenario_with_expected_status.stdout_is_templated_fixture(
-            test_file_path,
-            &[
-                ("{last_modified_time}", &value),
-                ("{file_name}", input_file_path),
-            ],
-        );
+    for (arg, output_regex) in test_cases {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in(input)
+            .succeeds()
+            .stdout_matches(&output_regex);
     }
 }
 
@@ -996,90 +818,22 @@ fn test_simple_expand_tab_with_char_argument() {
 fn test_simple_expand_tab_with_both_arguments() {
     // test different variations of what char to expand
     // a2, e3, t10
+    let whitespace = " ".repeat(50);
+    let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
+    let page_1_beginning = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\n");
+    let input = "hello\tworld\nabc\tdef\n\tleading\ntrail\t\n8chars00\t\n";
+
     let test_cases = vec![
-        (
-            "-ea2",
-            vec!["test_e1.log"],
-            vec!["test_e_input_char_a_width_2_1.log.expected"],
-            0,
-        ),
-        (
-            "-ea2",
-            vec!["test_e2.log"],
-            vec!["test_e_input_char_a_width_2_2.log.expected"],
-            0,
-        ),
-        (
-            "-ea2",
-            vec!["test_e3.log"],
-            vec!["test_e_input_char_a_width_2_3.log.expected"],
-            0,
-        ),
-        (
-            "-ee3",
-            vec!["test_e1.log"],
-            vec!["test_e_input_char_e_width_3_1.log.expected"],
-            0,
-        ),
-        (
-            "-ee3",
-            vec!["test_e2.log"],
-            vec!["test_e_input_char_e_width_3_2.log.expected"],
-            0,
-        ),
-        (
-            "-ee3",
-            vec!["test_e3.log"],
-            vec!["test_e_input_char_e_width_3_3.log.expected"],
-            0,
-        ),
-        (
-            "-et10",
-            vec!["test_e1.log"],
-            vec!["test_e_input_char_t_width_10_1.log.expected"],
-            0,
-        ),
-        (
-            "-et10",
-            vec!["test_e2.log"],
-            vec!["test_e_input_char_t_width_10_2.log.expected"],
-            0,
-        ),
-        (
-            "-et10",
-            vec!["test_e3.log"],
-            vec!["test_e_input_char_t_width_10_3.log.expected"],
-            0,
-        ),
+        ("-ea2", Regex::new(&format!("{page_1_beginning}hello   world\n  bc    def\n        le  ding\ntr  il  \n8ch rs00        \n")).unwrap()),
+        ("-ee3", Regex::new(&format!("{page_1_beginning}h  llo  world\nabc     d   f\n        l   ading\ntrail   \n8chars00        \n")).unwrap()),
+        ("-et10", Regex::new(&format!("{page_1_beginning}hello   world\nabc     def\n        leading\n          rail  \n8chars00        \n")).unwrap()),
     ];
-    for test_case in test_cases {
-        let (flags, input_file, expected_file, return_code) = test_case;
-        let mut scenario = new_ucmd!();
-        let input_file_path = input_file.first().unwrap();
-        let test_file_path = expected_file.first().unwrap();
-        let value = file_last_modified_time(&scenario, input_file_path);
-        let mut arguments: Vec<&str> = flags
-            .split(' ')
-            .filter(|i| i.trim() != "")
-            .collect::<Vec<&str>>();
-
-        arguments.extend(input_file.clone());
-
-        let scenario_with_args = scenario.args(&arguments);
-
-        let scenario_with_expected_status = if return_code == 0 {
-            scenario_with_args.succeeds()
-        } else {
-            scenario_with_args.fails()
-        };
-
-        scenario_with_expected_status.stdout_is_templated_fixture(
-            test_file_path,
-            &[
-                ("{last_modified_time}", &value),
-                ("{file_name}", input_file_path),
-            ],
-        );
+    for (arg, output_regex) in test_cases {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in(input)
+            .succeeds()
+            .stdout_matches(&output_regex);
     }
 }
 
