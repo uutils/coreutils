@@ -444,8 +444,19 @@ fn quote_file_name(file_name: &str, quoting_style: &QuotingStyle) -> String {
             format!("'{escaped}'")
         }
         QuotingStyle::ShellEscapeAlways => {
-            let quote = if file_name.contains('\'') { '"' } else { '\'' };
-            format!("{quote}{file_name}{quote}")
+            if !file_name.contains(|x: char| x.is_control()) {
+                let quote = if file_name.contains('\'') { '"' } else { '\'' };
+                return format!("{quote}{file_name}{quote}");
+            }
+            let mut escaped_file_name = String::from("$'");
+            for c in file_name.chars() {
+                match c {
+                    '\n' => escaped_file_name.push_str("\\n"),
+                    _ => escaped_file_name.push(c),
+                }
+            }
+            escaped_file_name.push('\'');
+            escaped_file_name
         }
         QuotingStyle::Quote => file_name.to_string(),
     }
