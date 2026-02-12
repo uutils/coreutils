@@ -841,36 +841,28 @@ fn test_simple_expand_tab_with_both_arguments() {
 #[test]
 fn test_invalid_expand_tab_arguments() {
     let test_file_path = "empty_test_file";
-    // incorrect argument
-    new_ucmd!()
-        .args(&["-esdgjiojiosdgjiogd", test_file_path])
-        .fails()
-        .stderr_contains("pr: '-e' extra characters or invalid number in the argument: ‘dgjiojiosdgjiogd’\nTry 'pr --help' for more information.");
-    // non digit 2 parameter
-    new_ucmd!()
-        .args(&["-eab", test_file_path])
-        .fails()
-        .stderr_contains("pr: '-e' extra characters or invalid number in the argument: ‘b’\nTry 'pr --help' for more information.");
-    // non digit after first digit
-    new_ucmd!()
-        .args(&["-e1a", test_file_path])
-        .fails()
-        .stderr_contains("pr: '-e' extra characters or invalid number in the argument: ‘1a’\nTry 'pr --help' for more information.");
-    // non digit after first digit
-    new_ucmd!()
-        .args(&["-ea1a", test_file_path])
-        .fails()
-        .stderr_contains("pr: '-e' extra characters or invalid number in the argument: ‘1a’\nTry 'pr --help' for more information.");
-    // > i32 max
-    new_ucmd!()
-        .args(&["-e2147483648", test_file_path])
-        .fails()
-        .stderr_contains("pr: '-e' extra characters or invalid number in the argument: ‘2147483648’\nTry 'pr --help' for more information.");
-    // > i32 max after allowed input char
-    new_ucmd!()
-        .args(&["-ea2147483648", test_file_path])
-        .fails()
-        .stderr_contains("pr: '-e' extra characters or invalid number in the argument: ‘2147483648’\nTry 'pr --help' for more information.");
+
+    let test_cases = vec![
+        // incorrect argument
+        ("-esdgjiojiosdgjiogd", "dgjiojiosdgjiogd"),
+        // 2 non digit parameter
+        ("-eab", "b"),
+        // non digit after first digit
+        ("-e1a", "1a"),
+        // non digit after first digit after allowed input char
+        ("-ea1a", "1a"),
+        // > i32 max
+        ("-e2147483648", "2147483648"),
+        // > i32 max after allowed input char
+        ("-ea2147483648", "2147483648"),
+    ];
+
+    for (arg, error_msg_field) in test_cases {
+        new_ucmd!()
+            .args(&[arg, test_file_path])
+            .fails()
+            .stderr_contains(format!("pr: '-e' extra characters or invalid number in the argument: ‘{error_msg_field}’\nTry 'pr --help' for more information."));
+    }
 }
 /* cSpell:enable */
 
