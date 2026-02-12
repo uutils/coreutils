@@ -6489,13 +6489,13 @@ fn test_cp_archive_dir_no_write_permission() {
         .arg("test-dir-copy")
         .succeeds();
 
-    assert_eq!(at.metadata("test-dir").permissions().mode() & 0o777, 0o500);
+    assert_eq!(at.metadata("test-dir-copy").permissions().mode() & 0o777, 0o500);
     assert_eq!(
-        at.metadata("test-dir/inner").permissions().mode() & 0o777,
+        at.metadata("test-dir-copy/inner").permissions().mode() & 0o777,
         0o500
     );
     assert_eq!(
-        at.metadata("test-dir/inner/test").permissions().mode() & 0o777,
+        at.metadata("test-dir-copy/inner/test").permissions().mode() & 0o777,
         0o500
     );
 }
