@@ -2496,6 +2496,11 @@ fn enter_directory(
     display_items(&entries, config, state, dired)?;
 
     if config.recursive {
+        // release the open fd before recursing to not run out of resources
+        for entry in &entries {
+            entry.de.take();
+        }
+        drop(read_dir);
         for e in entries
             .iter()
             .skip(if config.files == Files::All { 2 } else { 0 })
