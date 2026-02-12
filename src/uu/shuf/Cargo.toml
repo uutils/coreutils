@@ -1,3 +1,5 @@
+# spell-checker:ignore ahash
+
 [package]
 name = "uu_shuf"
 description = "shuf ~ (uutils) display random permutations of input lines"
@@ -19,6 +21,7 @@ workspace = true
 path = "src/shuf.rs"
 
 [dependencies]
+ahash = { workspace = true }
 clap = { workspace = true }
 itoa = { workspace = true }
 rand = { workspace = true }

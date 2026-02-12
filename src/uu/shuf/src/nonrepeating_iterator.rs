@@ -1,5 +1,5 @@
 // hijack HashMap for performance
-type HashMap<K, V> = std::collections::HashMap<K, V, rustc_hash::FxBuildHasher>;
+use ahash::AHashMap;
 
 use std::ops::RangeInclusive;
 
@@ -42,12 +42,12 @@ pub(crate) struct NonrepeatingIterator<'a> {
 
 enum Values {
     Full(Vec<u64>),
-    Sparse(RangeInclusive<u64>, HashMap<u64, u64>),
+    Sparse(RangeInclusive<u64>, AHashMap<u64, u64>),
 }
 
 impl<'a> NonrepeatingIterator<'a> {
     pub(crate) fn new(range: RangeInclusive<u64>, rng: &'a mut WrappedRng) -> Self {
-        let values = Values::Sparse(range, HashMap::default());
+        let values = Values::Sparse(range, AHashMap::default());
         NonrepeatingIterator { rng, values }
     }
 
@@ -107,7 +107,7 @@ impl Iterator for NonrepeatingIterator<'_> {
     }
 }
 
-fn hashmap_to_vec(range: RangeInclusive<u64>, map: &HashMap<u64, u64>) -> Vec<u64> {
+fn hashmap_to_vec(range: RangeInclusive<u64>, map: &AHashMap<u64, u64>) -> Vec<u64> {
     let lookup = |idx| *map.get(&idx).unwrap_or(&idx);
     range.rev().map(lookup).collect()
 }
