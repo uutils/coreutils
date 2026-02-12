@@ -2171,3 +2171,410 @@ fn test_date_cross_tz_mishandled() {
         .stdout_contains("21:00:00")
         .stdout_contains("1969");
 }
+
+// Tests for GNU test invalid-high-bit-set: invalid UTF-8 in date string
+#[test]
+#[cfg(unix)]
+fn test_date_invalid_high_bit_set() {
+    use std::os::unix::ffi::OsStrExt;
+
+    // GNU test invalid-high-bit-set: Invalid UTF-8 byte (0xb0) should produce
+    // GNU-compatible error message with octal escape sequence
+    let invalid_bytes = b"\xb0";
+    let invalid_arg = std::ffi::OsStr::from_bytes(invalid_bytes);
+
+    new_ucmd!()
+        .args(&[std::ffi::OsStr::new("-d"), invalid_arg])
+        .fails()
+        .code_is(1)
+        .stderr_contains("invalid date '\\260'");
+}
+
+// Tests for GNU format modifiers
+#[test]
+fn test_date_format_modifier_width() {
+    // Test width modifier: %10Y should pad year to 10 digits
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .args(&["-d", "1999-06-01", "+%10Y"])
+        .succeeds()
+        .stdout_is("0000001999\n");
+}
+
+#[test]
+fn test_date_format_modifier_underscore_padding() {
+    // Test underscore flag: %_10m should pad month with spaces
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .args(&["-d", "1999-06-01", "+%_10m"])
+        .succeeds()
+        .stdout_is("         6\n");
+}
+
+#[test]
+fn test_date_format_modifier_no_pad() {
+    // Test no-pad flag: %-10Y suppresses all padding (width ignored)
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .args(&["-d", "1999-06-01", "+%-10Y"])
+        .succeeds()
+        .stdout_is("1999\n");
+
+    // Test no-pad on day: %-d strips default zero padding
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .args(&["-d", "1999-06-01", "+%-d"])
+        .succeeds()
+        .stdout_is("1\n");
+}
+
+#[test]
+fn test_date_format_modifier_uppercase() {
+    // Test uppercase flag: %^B should uppercase month name
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .env("LC_ALL", "C")
+        .args(&["-d", "1999-06-01", "+%^B"])
+        .succeeds()
+        .stdout_is("JUNE\n");
+}
+
+#[test]
+fn test_date_format_modifier_force_sign() {
+    // Test force sign flag: %+6Y should show + sign for positive years
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .args(&["-d", "1970-01-01", "+%+6Y"])
+        .succeeds()
+        .stdout_is("+01970\n");
+}
+
+#[test]
+fn test_date_format_modifier_combined_flags() {
+    // Test combined flags: %-^10B should uppercase, no-pad suppresses all padding
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .env("LC_ALL", "C")
+        .args(&["-d", "1999-06-01", "+%-^10B"])
+        .succeeds()
+        .stdout_is("JUNE\n");
+}
+
+#[test]
+fn test_date_format_modifier_case_precedence() {
+    // Test that ^ (uppercase) takes precedence over # (swap case) regardless of order
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .env("LC_ALL", "C")
+        .args(&["-d", "1999-06-01", "+%^#B"])
+        .succeeds()
+        .stdout_is("JUNE\n");
+
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .env("LC_ALL", "C")
+        .args(&["-d", "1999-06-01", "+%#^B"])
+        .succeeds()
+        .stdout_is("JUNE\n");
+}
+
+#[test]
+fn test_date_format_modifier_multiple() {
+    // Test multiple modifiers in one format string
+    // %-5d: no-pad suppresses all padding → "1"
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .args(&["-d", "1999-06-01", "+%10Y-%_5m-%-5d"])
+        .succeeds()
+        .stdout_is("0000001999-    6-1\n");
+}
+
+#[test]
+fn test_date_format_modifier_percent_escape() {
+    // Test that %% is preserved correctly with modifiers
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .args(&["-d", "1999-06-01", "+%%Y=%10Y"])
+        .succeeds()
+        .stdout_is("%Y=0000001999\n");
+}
+
+// Tests for --debug flag
+#[test]
+fn test_date_debug_basic() {
+    // Test that --debug outputs to stderr, not stdout
+    let result = new_ucmd!()
+        .env("TZ", "UTC")
+        .args(&["--debug", "-d", "2005-01-01", "+%Y"])
+        .succeeds();
+
+    // Stdout should contain only the formatted date
+    assert_eq!(result.stdout_str().trim(), "2005");
+
+    // Stderr should contain debug information
+    let stderr = result.stderr_str();
+    assert!(stderr.contains("date: input string:"));
+    assert!(stderr.contains("date: parsed date part:"));
+    assert!(stderr.contains("date: parsed time part:"));
+    assert!(stderr.contains("date: input timezone:"));
+}
+
+#[test]
+fn test_date_debug_various_formats() {
+    // Test debug mode with various date formats and expected output
+    let test_cases = [
+        // (input, format, expected_stdout_contains, expected_stderr_contains, stderr_not_contains, check_input_string)
+        (
+            "2005-01-01 +345 day",
+            "+%Y-%m-%d",
+            "2005-12-12",
+            "date: parsed date part: (Y-M-D) 2005-12-12",
+            "",
+            true,
+        ),
+        (
+            "@0",
+            "+%Y-%m-%d",
+            "1970-01-01",
+            "date: parsed date part: (Y-M-D) 1970-01-01",
+            "warning: using midnight",
+            true,
+        ),
+        (
+            "@-22",
+            "+%s",
+            "-22",
+            "date: parsed date part: (Y-M-D) 1969-12-31",
+            "",
+            true,
+        ),
+        (
+            "2021-03-20 14:53:01 EST",
+            "+%Y-%m-%d",
+            "2021-03-20",
+            "date: parsed date part: (Y-M-D) 2021-03-20",
+            "",
+            true,
+        ),
+        (
+            "m9",
+            "+%T",
+            "21:00:00",
+            "date: parsed time part:",
+            "",
+            false,
+        ), // Military TZ is composed before parsing
+        (
+            " ",
+            "+%T",
+            "00:00:00",
+            "date: warning: using midnight",
+            "",
+            false,
+        ), // Whitespace is composed
+        (
+            "1 day ago",
+            "+%Y-%m-%d",
+            "",
+            "date: parsed date part: (Y-M-D)",
+            "",
+            true,
+        ),
+    ];
+
+    for (
+        input,
+        format,
+        stdout_contains,
+        stderr_contains,
+        stderr_not_contains,
+        check_input_string,
+    ) in test_cases
+    {
+        let result = new_ucmd!()
+            .env("TZ", "UTC")
+            .args(&["--debug", "-d", input, format])
+            .succeeds();
+
+        if !stdout_contains.is_empty() {
+            assert!(
+                result.stdout_str().contains(stdout_contains),
+                "For input '{input}': stdout should contain '{stdout_contains}', got: {}",
+                result.stdout_str()
+            );
+        }
+
+        let stderr = result.stderr_str();
+        assert!(
+            stderr.contains(stderr_contains),
+            "For input '{input}': stderr should contain '{stderr_contains}'"
+        );
+
+        if check_input_string {
+            assert!(
+                stderr.contains(&format!("date: input string: {input}")),
+                "For input '{input}': stderr should contain input string"
+            );
+        } else {
+            // Just check that there is some input string
+            assert!(
+                stderr.contains("date: input string:"),
+                "For input '{input}': stderr should contain some input string"
+            );
+        }
+
+        if !stderr_not_contains.is_empty() {
+            assert!(
+                !stderr.contains(stderr_not_contains),
+                "For input '{input}': stderr should not contain '{stderr_not_contains}'"
+            );
+        }
+    }
+}
+
+#[test]
+fn test_date_debug_midnight_warnings() {
+    // Test midnight warning behavior with various inputs
+    let test_cases = [
+        // (input, format, should_warn)
+        ("2005-01-01", "+%Y", true), // No time specified
+        ("1997-01-19 08:17:48 +0", "+%Y-%m-%d", false), // Time specified
+        ("@0", "+%Y-%m-%d", false),  // Epoch format
+        (" ", "+%T", true),          // Whitespace (defaults to midnight)
+    ];
+
+    for (input, format, should_warn) in test_cases {
+        let result = new_ucmd!()
+            .env("TZ", "UTC")
+            .args(&["--debug", "-d", input, format])
+            .succeeds();
+
+        let stderr = result.stderr_str();
+        if should_warn {
+            assert!(
+                stderr.contains("date: warning: using midnight"),
+                "Input '{input}' should produce midnight warning"
+            );
+        } else {
+            assert!(
+                !stderr.contains("warning: using midnight"),
+                "Input '{input}' should not produce midnight warning"
+            );
+        }
+    }
+}
+
+#[test]
+fn test_date_debug_without_flag() {
+    // Test that without --debug, no debug output appears
+    let result = new_ucmd!()
+        .env("TZ", "UTC")
+        .args(&["-d", "2005-01-01", "+%Y"])
+        .succeeds();
+
+    let stderr = result.stderr_str();
+    assert!(!stderr.contains("date: input string:"));
+    assert!(!stderr.contains("date: parsed date part:"));
+}
+
+#[test]
+fn test_date_debug_with_multiple_inputs() {
+    // Test debug mode with file and stdin input (multiple dates)
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "debug_test_file";
+    at.write(file, "2005-01-01\n2006-02-02\n");
+
+    let result = ucmd
+        .env("TZ", "UTC")
+        .args(&["--debug", "-f", file, "+%Y"])
+        .succeeds();
+
+    assert_eq!(result.stdout_str(), "2005\n2006\n");
+
+    let stderr = result.stderr_str();
+    // Should show debug output for both lines
+    assert!(stderr.contains("date: input string: 2005-01-01"));
+    assert!(stderr.contains("date: input string: 2006-02-02"));
+    assert!(stderr.contains("date: parsed date part: (Y-M-D) 2005-01-01"));
+    assert!(stderr.contains("date: parsed date part: (Y-M-D) 2006-02-02"));
+
+    // Test with stdin
+    let result = new_ucmd!()
+        .env("TZ", "UTC")
+        .args(&["--debug", "-f", "-", "+%Y"])
+        .pipe_in("2005-01-01\n2006-02-02\n")
+        .succeeds();
+
+    assert_eq!(result.stdout_str(), "2005\n2006\n");
+    let stderr = result.stderr_str();
+    assert!(stderr.contains("date: input string: 2005-01-01"));
+    assert!(stderr.contains("date: input string: 2006-02-02"));
+}
+
+#[test]
+fn test_date_debug_with_flags() {
+    // Test debug mode combined with other flags and exit codes
+    let test_cases = [
+        // (args, should_succeed, stdout_contains, stderr_contains)
+        (
+            vec!["--debug", "-d", "2005-01-01", "+%Y"],
+            true,
+            "2005",
+            "date: input string:",
+        ),
+        (
+            vec!["--debug", "-u", "-d", "2005-01-01", "+%Y-%m-%d %Z"],
+            true,
+            "UTC",
+            "date: parsed date part:",
+        ),
+        (
+            vec!["--debug", "-R", "-d", "2005-01-01"],
+            true,
+            "Sat, 01 Jan 2005",
+            "date: input string:",
+        ),
+        (
+            vec!["--debug", "-d", "invalid", "+%Y"],
+            false,
+            "",
+            "invalid date",
+        ),
+    ];
+
+    for (args, should_succeed, stdout_contains, stderr_contains) in test_cases {
+        let mut cmd = new_ucmd!();
+        cmd.env("TZ", "UTC").args(&args);
+
+        if should_succeed {
+            let result = cmd.succeeds();
+            assert!(
+                result.stdout_str().contains(stdout_contains),
+                "Args {args:?}: stdout should contain '{stdout_contains}'"
+            );
+            assert!(
+                result.stderr_str().contains(stderr_contains),
+                "Args {args:?}: stderr should contain '{stderr_contains}'"
+            );
+        } else {
+            let result = cmd.fails();
+            assert!(
+                result.stderr_str().contains(stderr_contains),
+                "Args {args:?}: stderr should contain '{stderr_contains}'"
+            );
+        }
+    }
+}
+
+#[test]
+fn test_date_debug_current_time() {
+    // Test that debug mode without -d doesn't produce debug output (no parsing)
+    let result = new_ucmd!()
+        .env("TZ", "UTC")
+        .args(&["--debug", "+%Y"])
+        .succeeds();
+
+    let stderr = result.stderr_str();
+    // No parsing happens for "now", so no debug output
+    assert_eq!(stderr, "");
+}
