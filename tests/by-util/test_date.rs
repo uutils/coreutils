@@ -2136,3 +2136,23 @@ fn test_date_leap1_leap_year_overflow() {
         .succeeds()
         .stdout_is("2000-02-29\n");
 }
+
+// Tests for GNU test rel-2b: month arithmetic precision
+#[test]
+fn test_date_rel2b_month_arithmetic() {
+    // GNU test rel-2b: Subtracting months should maintain same day of month
+    new_ucmd!()
+        .args(&[
+            "--date",
+            "1997-01-19 08:17:48 +0 7 months ago",
+            "+%Y-%m-%d %T",
+        ])
+        .succeeds()
+        .stdout_contains("1996-06-19");
+
+    // Month overflow: Adding months should overflow to next month if day doesn't exist
+    new_ucmd!()
+        .args(&["--date", "1996-01-31 + 1 month", "+%Y-%m-%d"])
+        .succeeds()
+        .stdout_is("1996-03-02\n");
+}
