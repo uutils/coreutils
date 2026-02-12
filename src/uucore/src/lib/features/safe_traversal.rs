@@ -21,6 +21,7 @@ use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd, RawFd};
 use std::path::{Path, PathBuf};
 
 use nix::dir::Dir;
+use nix::errno::Errno;
 use nix::fcntl::{OFlag, openat};
 use nix::libc;
 use nix::sys::stat::{FchmodatFlags, FileStat, Mode, fchmodat, fstatat};
@@ -77,6 +78,19 @@ impl From<SafeTraversalError> for io::Error {
             SafeTraversalError::UnlinkFailed { source, .. } => source,
         }
     }
+}
+
+/// Clear errno and return any error that was set after an operation
+/// This is used because the nix library does not propagate folder reading errors correctly
+pub fn take_errno() -> Option<io::Error> {
+    let errno = Errno::last();
+    Errno::clear();
+    (errno != Errno::from_raw(0)).then(|| io::Error::from_raw_os_error(errno as i32))
+}
+
+/// Clear errno before an operation, required to read error messages not propagated by nix from reading folders
+pub fn clear_errno() {
+    Errno::clear();
 }
 
 // Helper function to read directory entries using nix
