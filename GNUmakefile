@@ -68,7 +68,7 @@ TOYBOX_SRC  := $(TOYBOX_ROOT)/toybox-$(TOYBOX_VER)
 # Otherwise let it default to the kernel name returned by uname -s
 # (Linux, Darwin, FreeBSD, …).
 #------------------------------------------------------------------------
-OS := $(shell uname -s)
+OS ?= $(shell uname -s)
 
 # Windows does not allow symlink by default.
 # Allow to override LN for AppArmor.
