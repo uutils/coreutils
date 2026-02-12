@@ -21,6 +21,7 @@ ptx-help-gap-size = gap size in columns between output fields
 ptx-help-ignore-file = read ignore word list from FILE
 ptx-help-only-file = read only word list from this FILE
 ptx-help-references = first field of each line is a reference
+ptx-help-typeset-mode = change the default width from 72 to 100
 ptx-help-width = output width in columns, reference excluded
 
 # Error messages
