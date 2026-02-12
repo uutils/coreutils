@@ -2864,3 +2864,145 @@ fn test_mv_xattr_enotsup_silent() {
         std::fs::remove_file("/dev/shm/mv_test").ok();
     }
 }
+
+/// Test that symlinks inside directories are preserved during cross-device moves
+/// (not expanded into full copies of their targets)
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_symlink_preserved() {
+    use std::fs;
+    use std::os::unix::fs::symlink;
+    use tempfile::TempDir;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create a directory with a symlink to /etc inside
+    at.mkdir("src_dir");
+    at.write("src_dir/local.txt", "local content");
+    symlink("/etc", at.plus("src_dir/etc_link")).expect("Failed to create symlink");
+
+    assert!(at.is_symlink("src_dir/etc_link"));
+
+    // Force cross-filesystem move using /dev/shm (tmpfs)
+    let target_dir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let target_path = target_dir.path().join("dst_dir");
+
+    scene
+        .ucmd()
+        .arg("src_dir")
+        .arg(target_path.to_str().unwrap())
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.dir_exists("src_dir"));
+
+    // Verify the symlink was preserved (not expanded)
+    let moved_symlink = target_path.join("etc_link");
+    assert!(
+        moved_symlink.is_symlink(),
+        "etc_link should still be a symlink after cross-device move"
+    );
+    assert_eq!(
+        fs::read_link(&moved_symlink).expect("Failed to read symlink"),
+        Path::new("/etc"),
+        "symlink should still point to /etc"
+    );
+
+    assert!(target_path.join("local.txt").exists());
+}
+
+/// Test that broken/dangling symlinks are preserved during cross-device moves
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_broken_symlink_preserved() {
+    use std::fs;
+    use std::os::unix::fs::symlink;
+    use tempfile::TempDir;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create a directory with a broken symlink inside
+    at.mkdir("src_dir");
+    symlink("/nonexistent/path", at.plus("src_dir/broken_link"))
+        .expect("Failed to create broken symlink");
+
+    assert!(at.is_symlink("src_dir/broken_link"));
+    assert!(!at.file_exists("src_dir/broken_link"));
+
+    // Force cross-filesystem move using /dev/shm (tmpfs)
+    let target_dir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let target_path = target_dir.path().join("dst_dir");
+
+    scene
+        .ucmd()
+        .arg("src_dir")
+        .arg(target_path.to_str().unwrap())
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.dir_exists("src_dir"));
+
+    let moved_symlink = target_path.join("broken_link");
+    assert!(
+        moved_symlink.is_symlink(),
+        "broken_link should still be a symlink after cross-device move"
+    );
+    assert_eq!(
+        fs::read_link(&moved_symlink).expect("Failed to read broken symlink"),
+        Path::new("/nonexistent/path"),
+        "broken symlink should still point to its original (nonexistent) target"
+    );
+}
+
+/// Test that symlinks to regular files are preserved during cross-device moves
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_file_symlink_preserved() {
+    use std::fs;
+    use std::os::unix::fs::symlink;
+    use tempfile::TempDir;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create a directory with a file and a symlink to it
+    at.mkdir("src_dir");
+    at.write("src_dir/target.txt", "target content");
+    symlink(at.plus("src_dir/target.txt"), at.plus("src_dir/file_link"))
+        .expect("Failed to create file symlink");
+
+    assert!(at.is_symlink("src_dir/file_link"));
+
+    // Force cross-filesystem move using /dev/shm (tmpfs)
+    let target_dir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let target_path = target_dir.path().join("dst_dir");
+
+    scene
+        .ucmd()
+        .arg("src_dir")
+        .arg(target_path.to_str().unwrap())
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.dir_exists("src_dir"));
+
+    // Verify the symlink was preserved (not expanded)
+    let moved_symlink = target_path.join("file_link");
+    assert!(
+        moved_symlink.is_symlink(),
+        "file_link should still be a symlink after cross-device move"
+    );
+
+    // Verify the target file was also moved
+    let moved_target = target_path.join("target.txt");
+    assert!(moved_target.exists());
+    assert_eq!(
+        fs::read_to_string(&moved_target).expect("Failed to read target file"),
+        "target content"
+    );
+}
