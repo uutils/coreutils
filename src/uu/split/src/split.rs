@@ -21,7 +21,7 @@ use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Wr
 use std::path::Path;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError};
+use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError, strip_errno};
 use uucore::translate;
 
 use uucore::parser::parse_size::parse_size_u64;
@@ -47,6 +47,9 @@ static OPT_IO_BLKSIZE: &str = "-io-blksize";
 
 static ARG_INPUT: &str = "input";
 static ARG_PREFIX: &str = "prefix";
+
+// 128 KiB buffer for I/O operations
+const COPY_BUFFER_SIZE: usize = 128 * 1024;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -551,6 +554,20 @@ impl Settings {
 
         platform::instantiate_current_writer(self.filter.as_deref(), filename, is_new)
     }
+
+    /// Open a raw output writer without BufWriter wrapping.
+    ///
+    /// Used by chunk writers that manage their own BufWriter and swap
+    /// the inner writer at chunk boundaries via `get_mut()`.
+    fn open_output_writer(&self, filename: &str, is_new: bool) -> io::Result<Box<dyn Write>> {
+        if platform::paths_refer_to_same_file(&self.input, filename.as_ref()) {
+            return Err(io::Error::other(
+                translate!("split-error-would-overwrite-input", "file" => filename.quote()),
+            ));
+        }
+
+        platform::open_output_writer(self.filter.as_deref(), filename, is_new)
+    }
 }
 
 /// When using `--filter` option, writing to child command process stdin
@@ -708,8 +725,12 @@ struct ByteChunkWriter<'a> {
     ///
     /// Once the number of bytes written to this writer exceeds
     /// `chunk_size`, a new writer is initialized and assigned to this
-    /// field.
+    /// field. The BufWriter is reused across chunks; only the inner
+    /// writer is swapped via `get_mut()`.
     inner: BufWriter<Box<dyn Write>>,
+
+    /// The name of the current output file.
+    current_filename: String,
 
     /// Iterator that yields filenames for each chunk.
     filename_iterator: FilenameIterator<'a>,
@@ -724,13 +745,15 @@ impl<'a> ByteChunkWriter<'a> {
         if settings.verbose {
             println!("creating file {}", filename.quote());
         }
-        let inner = settings.instantiate_current_writer(&filename, true)?;
+        let writer = settings.open_output_writer(&filename, true)?;
+        let inner = BufWriter::with_capacity(COPY_BUFFER_SIZE, writer);
         Ok(ByteChunkWriter {
             settings,
             chunk_size,
             num_bytes_remaining_in_current_chunk: chunk_size,
             num_chunks_written: 0,
             inner,
+            current_filename: filename,
             filename_iterator,
         })
     }
@@ -751,9 +774,13 @@ impl Write for ByteChunkWriter<'_> {
             }
 
             if self.num_bytes_remaining_in_current_chunk == 0 {
-                // Increment the chunk number, reset the number of bytes remaining, and instantiate the new underlying writer.
+                // Increment the chunk number, reset the number of bytes remaining.
                 self.num_chunks_written += 1;
                 self.num_bytes_remaining_in_current_chunk = self.chunk_size;
+
+                self.inner.flush().map_err(|e| {
+                    io::Error::other(format!("{}: {}", self.current_filename, strip_errno(&e)))
+                })?;
 
                 // Allocate the new file, since at this point we know there are bytes to be written to it.
                 let filename = self.filename_iterator.next().ok_or_else(|| {
@@ -762,7 +789,8 @@ impl Write for ByteChunkWriter<'_> {
                 if self.settings.verbose {
                     println!("creating file {}", filename.quote());
                 }
-                self.inner = self.settings.instantiate_current_writer(&filename, true)?;
+                *self.inner.get_mut() = self.settings.open_output_writer(&filename, true)?;
+                self.current_filename = filename;
             }
 
             // If the capacity of this chunk is greater than the number of
@@ -832,8 +860,12 @@ struct LineChunkWriter<'a> {
     ///
     /// Once the number of lines written to this writer exceeds
     /// `chunk_size`, a new writer is initialized and assigned to this
-    /// field.
+    /// field. The BufWriter is reused across chunks; only the inner
+    /// writer is swapped via `get_mut()`.
     inner: BufWriter<Box<dyn Write>>,
+
+    /// The name of the current output file.
+    current_filename: String,
 
     /// Iterator that yields filenames for each chunk.
     filename_iterator: FilenameIterator<'a>,
@@ -842,28 +874,38 @@ struct LineChunkWriter<'a> {
 impl<'a> LineChunkWriter<'a> {
     fn new(chunk_size: u64, settings: &'a Settings) -> UResult<Self> {
         let mut filename_iterator = FilenameIterator::new(&settings.prefix, &settings.suffix)?;
-        let inner = Self::start_new_chunk(settings, &mut filename_iterator)?;
+        let filename = filename_iterator.next().ok_or_else(|| {
+            USimpleError::new(1, translate!("split-error-output-file-suffixes-exhausted"))
+        })?;
+        if settings.verbose {
+            println!("creating file {}", filename.quote());
+        }
+        let writer = settings.open_output_writer(&filename, true)?;
+        let inner = BufWriter::with_capacity(COPY_BUFFER_SIZE, writer);
         Ok(LineChunkWriter {
             settings,
             chunk_size,
             num_lines_remaining_in_current_chunk: chunk_size,
             num_chunks_written: 0,
             inner,
+            current_filename: filename,
             filename_iterator,
         })
     }
 
-    fn start_new_chunk(
-        settings: &Settings,
-        filename_iterator: &mut FilenameIterator,
-    ) -> io::Result<BufWriter<Box<dyn Write>>> {
-        let filename = filename_iterator.next().ok_or_else(|| {
+    fn start_new_chunk(&mut self) -> io::Result<()> {
+        self.inner.flush().map_err(|e| {
+            io::Error::other(format!("{}: {}", self.current_filename, strip_errno(&e)))
+        })?;
+        let filename = self.filename_iterator.next().ok_or_else(|| {
             io::Error::other(translate!("split-error-output-file-suffixes-exhausted"))
         })?;
-        if settings.verbose {
+        if self.settings.verbose {
             println!("creating file {}", filename.quote());
         }
-        settings.instantiate_current_writer(&filename, true)
+        *self.inner.get_mut() = self.settings.open_output_writer(&filename, true)?;
+        self.current_filename = filename;
+        Ok(())
     }
 }
 
@@ -884,7 +926,7 @@ impl Write for LineChunkWriter<'_> {
             // corresponding writer.
             if self.num_lines_remaining_in_current_chunk == 0 {
                 self.num_chunks_written += 1;
-                self.inner = Self::start_new_chunk(self.settings, &mut self.filename_iterator)?;
+                self.start_new_chunk()?;
                 self.num_lines_remaining_in_current_chunk = self.chunk_size;
             }
 
@@ -903,7 +945,7 @@ impl Write for LineChunkWriter<'_> {
         // limit.
         if prev < buf.len() {
             if self.num_lines_remaining_in_current_chunk == 0 {
-                self.inner = Self::start_new_chunk(self.settings, &mut self.filename_iterator)?;
+                self.start_new_chunk()?;
                 self.num_lines_remaining_in_current_chunk = self.chunk_size;
             }
             let num_bytes_written =
@@ -1065,6 +1107,17 @@ impl ManageOutFiles for OutFiles {
     }
 }
 
+/// Copy exactly `num_bytes` from `reader` to `writer` using a buffered
+/// streaming approach to avoid reading entire chunks into memory.
+fn copy_exact<R: Read, W: Write>(
+    reader: &mut R,
+    writer: &mut W,
+    num_bytes: u64,
+) -> io::Result<u64> {
+    let mut buf_reader = BufReader::with_capacity(COPY_BUFFER_SIZE, reader.take(num_bytes));
+    io::copy(&mut buf_reader, writer)
+}
+
 /// Split a file or STDIN into a specific number of chunks by byte.
 ///
 /// When file size cannot be evenly divided into the number of chunks of the same size,
@@ -1156,49 +1209,34 @@ where
         out_files = OutFiles::init(num_chunks, settings, false)?;
     }
 
-    let buf = &mut Vec::new();
     for i in 1_u64..=num_chunks {
         let chunk_size = chunk_size_base + (chunk_size_reminder > i - 1) as u64;
-        buf.clear();
         if num_bytes > 0 {
-            // Read `chunk_size` bytes from the reader into `buf`
+            // Read `chunk_size` bytes from the reader
             // except the last.
             //
             // The last chunk gets all remaining bytes so that if the number
             // of bytes in the input file was not evenly divisible by
             // `num_chunks`, we don't leave any bytes behind.
-            let limit = {
-                if i == num_chunks {
-                    num_bytes
-                } else {
-                    chunk_size
-                }
+            let limit = if i == num_chunks {
+                num_bytes
+            } else {
+                chunk_size
             };
 
-            let n_bytes_read = reader.by_ref().take(limit).read_to_end(buf);
-
-            match n_bytes_read {
-                Ok(n_bytes) => {
-                    num_bytes -= n_bytes as u64;
-                }
-                Err(error) => {
-                    return Err(USimpleError::new(
-                        1,
-                        translate!("split-error-cannot-read-from-input", "input" => settings.input.maybe_quote(), "error" => error),
-                    ));
-                }
-            }
-
-            if let Some(chunk_number) = kth_chunk {
-                if i == chunk_number {
-                    stdout_writer.write_all(buf)?;
+            let n_bytes = match kth_chunk {
+                Some(chunk_number) if i == chunk_number => {
+                    copy_exact(&mut reader, &mut stdout_writer, limit)?;
                     break;
                 }
-            } else {
-                let idx = (i - 1) as usize;
-                let writer = out_files.get_writer(idx, settings)?;
-                writer.write_all(buf)?;
-            }
+                Some(_) => copy_exact(&mut reader, &mut io::sink(), limit)?,
+                None => {
+                    let idx = (i - 1) as usize;
+                    let writer = out_files.get_writer(idx, settings)?;
+                    copy_exact(&mut reader, writer, limit)?
+                }
+            };
+            num_bytes -= n_bytes;
         } else {
             break;
         }

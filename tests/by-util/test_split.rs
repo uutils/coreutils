@@ -2080,6 +2080,49 @@ fn test_split_non_utf8_additional_suffix() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_split_write_error_dev_full_bytes() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.symlink_file("/dev/full", "xaa");
+    ucmd.args(&["-b", "1"])
+        .pipe_in("ab")
+        .fails_with_code(1)
+        .stderr_contains("split: xaa: No space left on device");
+    assert!(at.symlink_exists("xaa"));
+    assert!(!at.file_exists("xab"));
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_split_write_error_dev_full_lines() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.symlink_file("/dev/full", "xaa");
+    ucmd.args(&["-l", "1"])
+        .pipe_in("a\nb\n")
+        .fails_with_code(1)
+        .stderr_contains("split: xaa: No space left on device");
+    assert!(at.symlink_exists("xaa"));
+    assert!(!at.file_exists("xab"));
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_number_n_chunks_streaming() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // 100MB file, 100MB memory limit, split into 2x50MB chunks
+    let mut f = File::create(at.plus("hundred_mb.bin")).unwrap();
+    f.write_all(&vec![0u8; 100 * 1024 * 1024]).unwrap();
+
+    ucmd.args(&["--number=2", "hundred_mb.bin"])
+        .limit(Resource::AS, 100 * 1024 * 1024, 100 * 1024 * 1024)
+        .succeeds();
+
+    assert_eq!(at.metadata("xaa").len(), 50 * 1024 * 1024);
+    assert_eq!(at.metadata("xab").len(), 50 * 1024 * 1024);
+}
+
+#[test]
 #[cfg(target_os = "linux")] // To re-enable on Windows once I work out what goes wrong with it.
 fn test_split_directory_already_exists() {
     let (at, mut ucmd) = at_and_ucmd!();

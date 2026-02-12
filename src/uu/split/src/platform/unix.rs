@@ -124,12 +124,12 @@ impl Drop for FilterWriter {
     }
 }
 
-/// Instantiate either a file writer or a "write to shell process's stdin" writer
-pub fn instantiate_current_writer(
+/// Open an output writer without BufWriter wrapping.
+pub fn open_output_writer(
     filter: Option<&str>,
     filename: &str,
     is_new: bool,
-) -> Result<BufWriter<Box<dyn Write>>> {
+) -> Result<Box<dyn Write>> {
     match filter {
         None => {
             let file = if is_new {
@@ -158,13 +158,24 @@ pub fn instantiate_current_writer(
                         )
                     })?
             };
-            Ok(BufWriter::new(Box::new(file) as Box<dyn Write>))
+            Ok(Box::new(file) as Box<dyn Write>)
         }
-        Some(filter_command) => Ok(BufWriter::new(Box::new(
+        Some(filter_command) => Ok(Box::new(
             // spawn a shell command and write to it
             FilterWriter::new(filter_command, filename)?,
-        ) as Box<dyn Write>)),
+        ) as Box<dyn Write>),
     }
+}
+
+/// Instantiate either a file writer or a "write to shell process's stdin" writer
+pub fn instantiate_current_writer(
+    filter: Option<&str>,
+    filename: &str,
+    is_new: bool,
+) -> Result<BufWriter<Box<dyn Write>>> {
+    Ok(BufWriter::new(open_output_writer(
+        filter, filename, is_new,
+    )?))
 }
 
 pub fn paths_refer_to_same_file(p1: &OsStr, p2: &OsStr) -> bool {

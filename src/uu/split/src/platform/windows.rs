@@ -9,15 +9,15 @@ use std::path::Path;
 use uucore::fs;
 use uucore::translate;
 
-/// Get a file writer
+/// Open an output writer without BufWriter wrapping.
 ///
 /// Unlike the unix version of this function, this _always_ returns
 /// a file writer
-pub fn instantiate_current_writer(
+pub fn open_output_writer(
     _filter: Option<&str>,
     filename: &str,
     is_new: bool,
-) -> Result<BufWriter<Box<dyn Write>>> {
+) -> Result<Box<dyn Write>> {
     let file = if is_new {
         // create new file
         std::fs::OpenOptions::new()
@@ -42,7 +42,18 @@ pub fn instantiate_current_writer(
                 Error::other(translate!("split-error-unable-to-reopen-file", "file" => filename))
             })?
     };
-    Ok(BufWriter::new(Box::new(file) as Box<dyn Write>))
+    Ok(Box::new(file) as Box<dyn Write>)
+}
+
+/// Get a file writer wrapped in a BufWriter.
+pub fn instantiate_current_writer(
+    filter: Option<&str>,
+    filename: &str,
+    is_new: bool,
+) -> Result<BufWriter<Box<dyn Write>>> {
+    Ok(BufWriter::new(open_output_writer(
+        filter, filename, is_new,
+    )?))
 }
 
 pub fn paths_refer_to_same_file(p1: &OsStr, p2: &OsStr) -> bool {
