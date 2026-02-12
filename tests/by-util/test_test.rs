@@ -518,6 +518,32 @@ fn test_file_is_not_executable() {
 
 #[test]
 #[cfg(not(windows))] // FIXME: implement on Windows
+fn test_root_permissions() {
+    use uutests::{unwrap_or_return, util::run_ucmd_as_root};
+
+    let scenario = TestScenario::new(util_name!());
+    let mut chmod = scenario.cmd("chmod");
+
+    scenario.fixtures.touch("no_permissions_file");
+    chmod.args(&["0", "no_permissions_file"]).succeeds();
+
+    // root can always read
+    unwrap_or_return!(run_ucmd_as_root(&scenario, &["-r", "no_permissions_file"])).success();
+    // root can always write
+    unwrap_or_return!(run_ucmd_as_root(&scenario, &["-w", "no_permissions_file"])).success();
+    // root can not execute if nobody can execute
+    unwrap_or_return!(run_ucmd_as_root(&scenario, &["-x", "no_permissions_file"]))
+        .failure()
+        .code_is(1);
+
+    let mut chmod = scenario.cmd("chmod");
+    chmod.args(&["o+x", "no_permissions_file"]).succeeds();
+    // root can execute now because others can execute
+    unwrap_or_return!(run_ucmd_as_root(&scenario, &["-x", "no_permissions_file"])).success();
+}
+
+#[test]
+#[cfg(not(windows))] // FIXME: implement on Windows
 fn test_file_is_executable() {
     let scenario = TestScenario::new(util_name!());
     let mut chmod = scenario.cmd("chmod");

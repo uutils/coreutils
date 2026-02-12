@@ -275,7 +275,10 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
     }
 
     let perm = |metadata: Metadata, p: Permission| {
-        if geteuid() == metadata.uid() {
+        let euid = geteuid();
+        if euid == 0 {
+            !matches!(p, Permission::Execute) || metadata.is_dir() || (metadata.mode() & 0o111 != 0)
+        } else if euid == metadata.uid() {
             metadata.mode() & ((p as u32) << 6) != 0
         } else if getegid() == metadata.gid() {
             metadata.mode() & ((p as u32) << 3) != 0
