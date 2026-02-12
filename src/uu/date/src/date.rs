@@ -635,7 +635,7 @@ fn format_date_with_locale_aware_months(
         return broken_down.to_string_with_config(config, format_string);
     }
 
-    let fmt = localize_format_string(format_string, &date.date());
+    let fmt = localize_format_string(format_string, date.date());
     broken_down.to_string_with_config(config, &fmt)
 }
 
