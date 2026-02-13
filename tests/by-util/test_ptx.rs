@@ -340,6 +340,18 @@ fn test_unicode_truncation_alignment() {
 }
 
 #[test]
+fn test_unicode_in_after_chunk_does_not_panic() {
+    // Regression test for a panic in get_output_chunks() when the computed
+    // max_after_size used byte lengths but the output was assembled as chars.
+    // The emoji is multibyte in UTF-8 and previously could trigger:
+    // `assertion failed: max_after_size >= after.len()`.
+    new_ucmd!()
+        .pipe_in("We've got +11 more G of 1.70. 🛠\n")
+        .succeeds()
+        .stdout_contains("We've got +11");
+}
+
+#[test]
 fn test_duplicate_input_files() {
     new_ucmd!()
         .args(&["one_word", "one_word"])

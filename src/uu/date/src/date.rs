@@ -510,6 +510,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
+    stdout
+        .flush()
+        .map_err(|e| USimpleError::new(1, translate!("date-error-write", "error" => e)))?;
     Ok(())
 }
 

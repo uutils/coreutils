@@ -2816,7 +2816,7 @@ fn get_leading_gen(inp: &[u8], decimal_pt: u8) -> Range<usize> {
             if let Some(&(_, &next_char)) = char_indices.peek() {
                 if (next_char == b'+' || next_char == b'-')
                     && matches!(
-                        char_indices.peek_nth(2),
+                        char_indices.peek_nth(1),
                         Some((_, c)) if c.is_ascii_digit()
                     )
                 {
