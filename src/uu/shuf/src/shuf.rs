@@ -67,7 +67,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::parse_deferred(uu_app, args)?;
+    let matches = uucore::clap_localization::parse_deferred(uu_app_base, args)?;
 
     let mode = if matches.get_flag(options::ECHO) {
         Mode::Echo(
@@ -171,6 +171,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
+    uucore::clap_localization::localize_command(uu_app_base())
+}
+
+fn uu_app_base() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
         .infer_long_args(true)
