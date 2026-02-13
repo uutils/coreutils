@@ -52,6 +52,15 @@ fn test_invalid_short_option() {
 }
 
 #[test]
+fn test_format_option_not_to_capture_other_valid_arguments() {
+    new_ucmd!()
+        .arg("+%Y%m%d%H%M%S")
+        .arg("--date")
+        .arg("@1770996496")
+        .succeeds();
+}
+
+#[test]
 fn test_single_dash_as_date() {
     new_ucmd!()
         .arg("-")
