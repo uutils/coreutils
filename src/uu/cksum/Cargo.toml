@@ -9,6 +9,7 @@ homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 readme.workspace = true
 
 [lints]
@@ -25,6 +26,7 @@ uucore = { workspace = true, features = [
   "sum",
   "hardware",
 ] }
+uu_checksum_common = { workspace = true }
 fluent = { workspace = true }
 
 [dev-dependencies]

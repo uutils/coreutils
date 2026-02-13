@@ -315,6 +315,26 @@ fn test_invalid_utf8_integer_compare() {
 }
 
 #[test]
+fn test_integer_whitespace_stripping() {
+    new_ucmd!().args(&["42", "-eq", " 42 "]).succeeds();
+    new_ucmd!().args(&["42", "-eq", " 42"]).succeeds();
+    new_ucmd!().args(&["42", "-eq", "42 "]).succeeds();
+    new_ucmd!().args(&[" 42 ", "-eq", "42"]).succeeds();
+
+    new_ucmd!().args(&["42", "-eq", "\t42"]).succeeds();
+    new_ucmd!().args(&["42", "-eq", "\n42"]).succeeds();
+    new_ucmd!().args(&["42", "-eq", "\x0b42"]).succeeds(); // Vertical tab
+    new_ucmd!().args(&["42", "-eq", "\x0c42"]).succeeds(); // Form feed
+    new_ucmd!().args(&["42", "-eq", "\r42"]).succeeds();
+}
+
+#[test]
+fn test_isatty_whitespace_stripping() {
+    new_ucmd!().args(&["-t", " 0 "]).fails_with_code(1);
+    new_ucmd!().args(&["-t", "\n0\t"]).fails_with_code(1);
+}
+
+#[test]
 #[cfg(unix)]
 fn test_file_is_itself() {
     new_ucmd!()

@@ -133,16 +133,14 @@ impl WordFilter {
         let break_set: Option<HashSet<char>> = if matches.contains_id(options::BREAK_FILE)
             && !matches.contains_id(options::WORD_REGEXP)
         {
-            let chars =
+            let mut chars =
                 read_char_filter_file(matches, options::BREAK_FILE).map_err_context(String::new)?;
-            let mut hs: HashSet<char> = if config.gnu_ext {
-                HashSet::new() // really only chars found in file
-            } else {
+            if !config.gnu_ext {
                 // GNU off means at least these are considered
-                [' ', '\t', '\n'].iter().copied().collect()
-            };
-            hs.extend(chars);
-            Some(hs)
+                chars.extend([' ', '\t', '\n']);
+            }
+            // else only chars found in file
+            Some(chars)
         } else {
             // if -W takes precedence or default
             None
@@ -249,6 +247,8 @@ fn get_config(matches: &mut clap::ArgMatches) -> UResult<Config> {
             .expect(err_msg)
             .parse()
             .map_err(PtxError::ParseError)?;
+    } else if matches.get_flag(options::TYPESET_MODE) {
+        config.line_width = 100;
     }
     if matches.contains_id(options::GAP_SIZE) {
         config.gap_size = matches
@@ -459,11 +459,11 @@ fn get_output_chunks(
     // https://github.com/MaiZure/coreutils-8.3/blob/master/src/ptx.c#L1234
     let half_line_size = config.line_width / 2;
     let max_before_size = cmp::max(half_line_size as isize - config.gap_size as isize, 0) as usize;
+
+    let keyword_len = keyword.chars().count();
+    let trunc_len = config.trunc_str.chars().count();
     let max_after_size = cmp::max(
-        half_line_size as isize
-            - (2 * config.trunc_str.len()) as isize
-            - keyword.len() as isize
-            - 1,
+        half_line_size as isize - (2 * trunc_len) as isize - keyword_len as isize - 1,
         0,
     ) as usize;
 
@@ -504,7 +504,7 @@ fn get_output_chunks(
     // and get the string
     let after_str: String = all_after[0..after_end].iter().collect();
     after.push_str(&after_str);
-    assert!(max_after_size >= after.len());
+    assert!(max_after_size >= after.chars().count());
 
     // the tail chunk
 
@@ -896,6 +896,7 @@ mod options {
     pub static IGNORE_FILE: &str = "ignore-file";
     pub static ONLY_FILE: &str = "only-file";
     pub static REFERENCES: &str = "references";
+    pub static TYPESET_MODE: &str = "typeset-mode";
     pub static WIDTH: &str = "width";
 }
 
@@ -1070,6 +1071,13 @@ pub fn uu_app() -> Command {
                 .long(options::REFERENCES)
                 .help(translate!("ptx-help-references"))
                 .value_name("FILE")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::TYPESET_MODE)
+                .short('t')
+                .long(options::TYPESET_MODE)
+                .help(translate!("ptx-help-typeset-mode"))
                 .action(ArgAction::SetTrue),
         )
         .arg(

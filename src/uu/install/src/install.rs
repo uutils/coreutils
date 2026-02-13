@@ -16,6 +16,7 @@ use std::ffi::OsString;
 use std::fmt::Debug;
 use std::fs::{self, metadata};
 use std::fs::{File, OpenOptions};
+use std::io::{Write, stdout};
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 use std::process;
 use thiserror::Error;
@@ -496,10 +497,11 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
                 }
 
                 if b.verbose {
-                    println!(
+                    writeln!(
+                        stdout(),
                         "{}",
                         translate!("install-verbose-creating-directory", "path" => path_to_create.quote())
-                    );
+                    )?;
                 }
             }
 
@@ -627,10 +629,11 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                         result.push(part.as_os_str());
                         if !result.is_dir() {
                             // Don't display when the directory already exists
-                            println!(
+                            writeln!(
+                                stdout(),
                                 "{}",
                                 translate!("install-verbose-creating-directory-step", "path" => result.quote())
-                            );
+                            )?;
                         }
                     }
                 }
@@ -757,7 +760,7 @@ fn chown_optional_user_group(path: &Path, b: &Behavior) -> UResult<()> {
         Err(e) => return Err(InstallError::MetadataFailed(e).into()),
     };
     match wrap_chown(path, &meta, owner_id, group_id, false, verbosity) {
-        Ok(msg) if b.verbose && !msg.is_empty() => println!("chown: {msg}"),
+        Ok(msg) if b.verbose && !msg.is_empty() => writeln!(stdout(), "chown: {msg}")?,
         Ok(_) => {}
         Err(e) => return Err(InstallError::ChownFailed(path.to_path_buf(), e).into()),
     }
@@ -779,10 +782,11 @@ fn chown_optional_user_group(path: &Path, b: &Behavior) -> UResult<()> {
 fn perform_backup(to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
     if to.exists() {
         if b.verbose {
-            println!(
+            writeln!(
+                stdout(),
                 "{}",
                 translate!("install-verbose-removed", "path" => to.quote())
-            );
+            )?;
         }
         let backup_path = backup_control::get_backup_path(b.backup_mode, to, &b.suffix);
         if let Some(ref backup_path) = backup_path {
@@ -809,6 +813,7 @@ fn perform_backup(to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
 /// Returns an empty Result or an error in case of failure.
 ///
 fn copy_file(from: &Path, to: &Path) -> UResult<()> {
+    use std::os::unix::fs::OpenOptionsExt;
     if let Ok(to_abs) = to.canonicalize() {
         if from.canonicalize()? == to_abs {
             return Err(InstallError::SameFile(from.to_path_buf(), to.to_path_buf()).into());
@@ -837,7 +842,11 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
 
     let mut handle = File::open(from)?;
     // create_new provides TOCTOU protection
-    let mut dest = OpenOptions::new().write(true).create_new(true).open(to)?;
+    let mut dest = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(to)?;
 
     copy_stream(&mut handle, &mut dest).map_err(|err| {
         InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err.to_string())
@@ -988,16 +997,18 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
     }
 
     if b.verbose {
-        print!(
+        write!(
+            stdout(),
             "{}",
             translate!("install-verbose-copy", "from" => from.quote(), "to" => to.quote())
-        );
+        )?;
         match backup_path {
-            Some(path) => println!(
+            Some(path) => writeln!(
+                stdout(),
                 " {}",
                 translate!("install-verbose-backup", "backup" => path.quote())
-            ),
-            None => println!(),
+            )?,
+            None => writeln!(stdout())?,
         }
     }
 

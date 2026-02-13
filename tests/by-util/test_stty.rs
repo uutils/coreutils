@@ -1237,7 +1237,7 @@ fn test_saved_state_invalid_formats() {
     let (path, _controller, _replica) = pty_path();
     let (_at, ts) = at_and_ts!();
 
-    let num_cc = nix::libc::NCCS;
+    let num_cc = libc::NCCS;
 
     // Build test strings with platform-specific counts
     let cc_zeros = vec!["0"; num_cc].join(":");
@@ -1540,7 +1540,7 @@ fn test_saved_state_with_control_chars() {
     let (_at, ts) = at_and_ts!();
 
     // Build a valid saved state with platform-specific number of control characters
-    let num_cc = nix::libc::NCCS;
+    let num_cc = libc::NCCS;
     let cc_values: Vec<String> = (1..=num_cc).map(|_| format!("{:x}", 0)).collect();
     let saved_state = format!("500:5:4bf:8a3b:{}", cc_values.join(":"));
 

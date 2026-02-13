@@ -1,0 +1,34 @@
+[package]
+name = "uu_checksum_common"
+description = "Base for checksum utils"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+clap = { workspace = true }
+uucore = { workspace = true, features = [
+  "checksum",
+  "encoding",
+  "sum",
+  "hardware",
+] }
+fluent = { workspace = true }
+
+[dev-dependencies]
+
+# [[bench]]
+# name = "b2sum_bench"
+# harness = false

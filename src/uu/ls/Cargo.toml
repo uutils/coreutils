@@ -11,6 +11,7 @@ homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 readme.workspace = true
 
 [lints]
@@ -24,8 +25,8 @@ ansi-width = { workspace = true }
 clap = { workspace = true, features = ["env"] }
 glob = { workspace = true }
 hostname = { workspace = true }
-fnv = { workspace = true }
 lscolors = { workspace = true }
+rustc-hash = { workspace = true }
 selinux = { workspace = true, optional = true }
 terminal_size = { workspace = true }
 thiserror = { workspace = true }

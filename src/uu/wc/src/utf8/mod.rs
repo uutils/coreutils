@@ -33,7 +33,7 @@ impl Incomplete {
         }
     }
 
-    pub fn is_empty(&self) -> bool {
+    pub fn is_empty(self) -> bool {
         self.buffer_len == 0
     }
 
@@ -76,20 +76,15 @@ impl Incomplete {
                     let consumed = valid_up_to.checked_sub(initial_buffer_len).unwrap();
                     self.buffer_len = valid_up_to as u8;
                     (consumed, Some(Ok(())))
+                } else if let Some(invalid_sequence_length) = error.error_len() {
+                    let consumed = invalid_sequence_length
+                        .checked_sub(initial_buffer_len)
+                        .unwrap();
+                    self.buffer_len = invalid_sequence_length as u8;
+                    (consumed, Some(Err(())))
                 } else {
-                    match error.error_len() {
-                        Some(invalid_sequence_length) => {
-                            let consumed = invalid_sequence_length
-                                .checked_sub(initial_buffer_len)
-                                .unwrap();
-                            self.buffer_len = invalid_sequence_length as u8;
-                            (consumed, Some(Err(())))
-                        }
-                        None => {
-                            self.buffer_len = spliced.len() as u8;
-                            (copied_from_input, None)
-                        }
-                    }
+                    self.buffer_len = spliced.len() as u8;
+                    (copied_from_input, None)
                 }
             }
         }
