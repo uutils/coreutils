@@ -356,6 +356,18 @@ fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> 
             };
             // match words with given regex
             for mat in reg.find_iter(line) {
+                // GNU-compatible default behavior: ignore non-alphabetic starts
+                // when no explicit word-regexp was provided.
+                if filter.word_regex == Config::default().context_regex {
+                    if !&line[mat.start()..mat.end()]
+                        .chars()
+                        .next()
+                        .is_some_and(char::is_alphabetic)
+                    {
+                        continue;
+                    }
+                }
+
                 let (beg, end) = (mat.start(), mat.end());
                 if config.input_ref && ((beg, end) == (ref_beg, ref_end)) {
                     continue;

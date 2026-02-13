@@ -331,6 +331,16 @@ fn test_unicode_padding_alignment() {
 }
 
 #[test]
+fn test_gnu_compat_numeric_token_with_emoji_produces_no_index() {
+    // GNU ptx produces no output for this input in default mode.
+    new_ucmd!()
+        .pipe_in("012345678901234567890123456789🛠\n")
+        .succeeds()
+        .stdout_only("")
+        .no_stderr();
+}
+
+#[test]
 fn test_unicode_truncation_alignment() {
     new_ucmd!()
         .args(&["-w", "10"])
