@@ -22,6 +22,7 @@ mod mods; // core cross-platform modules
 pub use uucore_procs::*;
 
 // * cross-platform modules
+pub use mimalloc;
 pub use crate::mods::clap_localization;
 pub use crate::mods::display;
 pub use crate::mods::error;
@@ -186,6 +187,8 @@ pub fn get_canonical_util_name(util_name: &str) -> &str {
 #[macro_export]
 macro_rules! bin {
     ($util:ident) => {
+        #[global_allocator]
+        static GLOBAL: $crate::mimalloc::MiMalloc = $crate::mimalloc::MiMalloc;
         pub fn main() {
             use std::io::Write;
             use uucore::locale;
