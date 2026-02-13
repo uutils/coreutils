@@ -287,9 +287,6 @@ pub fn localized_help_template_with_colors(
 ) -> clap::builder::StyledStr {
     use std::fmt::Write;
 
-    // Ensure localization is initialized for this utility
-    let _ = locale::setup_localization(util_name);
-
     // Get the localized "Usage" label
     let usage_label = crate::locale::translate!("common-usage");
 
