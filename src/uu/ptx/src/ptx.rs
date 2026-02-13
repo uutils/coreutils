@@ -455,6 +455,7 @@ fn get_output_chunks(
     all_after: &[char],
     config: &Config,
 ) -> (String, String, String, String) {
+    
     // Chunk size logics are mostly copied from the GNU ptx source.
     // https://github.com/MaiZure/coreutils-8.3/blob/master/src/ptx.c#L1234
     let half_line_size = config.line_width / 2;
@@ -489,7 +490,7 @@ fn get_output_chunks(
     // and get the string.
     let before_str: String = all_before[before_beg..before_end].iter().collect();
     before.push_str(&before_str);
-    assert!(max_before_size >= before.len());
+    assert!(max_before_size >= before.chars().count());
 
     // the after chunk
 
