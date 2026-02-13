@@ -624,7 +624,7 @@ pub fn uu_app() -> Command {
                 .help(translate!("date-help-universal"))
                 .action(ArgAction::SetTrue),
         )
-        .arg(Arg::new(OPT_FORMAT).num_args(0..).trailing_var_arg(true))
+        .arg(Arg::new(OPT_FORMAT).num_args(0..))
 }
 
 fn format_date_with_locale_aware_months(
