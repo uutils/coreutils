@@ -171,7 +171,7 @@ fn is_probable_prime(candidate: &BigUint) -> bool {
 
     let bases_32: [u64; 3] = [2, 7, 61];
     let bases_64: [u64; 12] = [
-        2, 325, 9375, 28178, 450775, 9780504, 1795265022, 3, 5, 7, 11, 13,
+        2, 325, 9375, 28178, 450_775, 9_780_504, 1_795_265_022, 3, 5, 7, 11, 13,
     ];
 
     let bases: Vec<u64> = if candidate.bits() <= 32 {
@@ -316,8 +316,8 @@ fn pollard_rho(composite: &BigUint) -> Option<BigUint> {
     }
 
     // Use a deterministic LCG to generate parameter sequences.
-    const LCG_MULTIPLIER: u128 = 6364136223846793005;
-    const LCG_INCREMENT: u128 = 1442695040888963407;
+    const LCG_MULTIPLIER: u128 = 6_364_136_223_846_793_005;
+    const LCG_INCREMENT: u128 = 1_442_695_040_888_963_407;
 
     fn lcg_next(x: &mut u128) {
         *x = x.wrapping_mul(LCG_MULTIPLIER).wrapping_add(LCG_INCREMENT);
@@ -330,7 +330,7 @@ fn pollard_rho(composite: &BigUint) -> Option<BigUint> {
     let max_tries: u64 = 16;
     let max_iter: u64 = (bits * bits).clamp(10_000, 200_000);
 
-    const LCG_DEFAULT_SEED: u128 = 0x9e3779b97f4a7c15;
+    const LCG_DEFAULT_SEED: u128 = 0x9e37_79b9_7f4a_7c15;
     let mut seed: u128 = LCG_DEFAULT_SEED;
 
     for _try in 0..max_tries {
