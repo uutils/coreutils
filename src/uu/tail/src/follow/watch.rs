@@ -381,6 +381,14 @@ impl Observer {
                     }
                     self.files.update_metadata(event_path, Some(new_md));
                 } else if event_path.is_symlink() && settings.retry {
+                    if let Some(old_md) = self.files.get_mut_metadata(event_path) {
+                        if old_md.is_tailable() && self.files.get(event_path).reader.is_some() {
+                            show_error!(
+                                "{}",
+                                translate!("tail-status-file-became-inaccessible", "file" => display_name.quote(), "become_inaccessible" => translate!("tail-become-inaccessible"), "no_such_file" => translate!("tail-no-such-file-or-directory"))
+                            );
+                        }
+                    }
                     self.files.reset_reader(event_path);
                     self.orphans.push(event_path.clone());
                 }

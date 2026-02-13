@@ -5135,6 +5135,50 @@ fn test_debug_flag_with_polling() {
 
 #[test]
 #[cfg(target_os = "linux")]
+fn test_debug_flag_blocking_mode_non_regular() {
+    let mut child = new_ucmd!()
+        .args(&["--debug", "-f", "/dev/null"])
+        .run_no_wait();
+    child.make_assertion_with_delay(500).is_alive();
+    child
+        .kill()
+        .make_assertion()
+        .with_all_output()
+        .stderr_contains("tail: using blocking mode");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_debug_flag_polling_mode_non_regular_follow_name() {
+    let mut child = new_ucmd!()
+        .args(&["--debug", "-F", "/dev/null"])
+        .run_no_wait();
+    child.make_assertion_with_delay(500).is_alive();
+    child
+        .kill()
+        .make_assertion()
+        .with_all_output()
+        .stderr_contains("tail: using polling mode");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_debug_flag_notification_mode_regular_follow_name() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("f");
+
+    let mut child = ts.ucmd().args(&["--debug", "-F", "f"]).run_no_wait();
+    child.make_assertion_with_delay(500).is_alive();
+    child
+        .kill()
+        .make_assertion()
+        .with_all_output()
+        .stderr_contains("tail: using notification mode");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
 fn test_debug_flag_with_inotify() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
