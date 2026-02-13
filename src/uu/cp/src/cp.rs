@@ -1585,7 +1585,7 @@ fn copy_source(
                         &src,
                         y,
                         &options.attributes,
-                        false,
+                        true,
                         options.set_selinux_context,
                         #[cfg(unix)]
                         orig_umask,

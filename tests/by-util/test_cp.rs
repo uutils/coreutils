@@ -7934,7 +7934,7 @@ fn test_cp_not_existing_no_preserve_dir() {
 
     let d2_mode = at.metadata("d2").mode();
 
-    assert_eq!(0o777 & !0o700, d2_mode & 0o777);
+    assert_eq!(!0o700 & 0o777, d2_mode & 0o777);
 }
 
 #[test]
@@ -7958,7 +7958,7 @@ fn test_cp_not_existing_default_file() {
 
     let f2_mode = at.metadata("f2").mode();
 
-    assert_eq!(0o770 & !0o700, f2_mode & 0o777);
+    assert_eq!(!0o700 & 0o770, f2_mode & 0o777);
 }
 
 #[test]
@@ -7983,7 +7983,7 @@ fn test_cp_not_existing_default_dir() {
 
     let d2_mode = at.metadata("d2").mode();
 
-    assert_eq!(0o770 & !0o700, d2_mode & 0o777);
+    assert_eq!(!0o700 & 0o770, d2_mode & 0o777);
 }
 
 #[test]
@@ -8039,4 +8039,40 @@ fn test_cp_not_existing_preserve_dir() {
     let d2_mode = at.metadata("d2").mode();
 
     assert_eq!(d1_mode, d2_mode);
+}
+
+#[test]
+#[cfg(unix)]
+// adapted from GNU tests/cp/cp-parents
+fn test_cp_not_existing_no_preserve_file_parents() {
+    use std::io;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene.cmd("mkdir").arg("d1").succeeds();
+    scene.cmd("mkdir").arg("d1/d2").succeeds();
+    scene.cmd("touch").arg("d1/d2/f").succeeds();
+    scene.cmd("chmod").arg("770").arg("d1").succeeds();
+    scene.cmd("chmod").arg("700").arg("d1/d2").succeeds();
+    scene.cmd("chmod").arg("775").arg("d1/d2/f").succeeds();
+    scene.cmd("mkdir").arg("d3").succeeds();
+
+    scene
+        .ucmd()
+        .umask(0o022)
+        .arg("--no-preserve=mode")
+        .arg("--parents")
+        .arg("d1/d2/f")
+        .arg("d3")
+        .set_stdout(io::stdout())
+        .succeeds();
+
+    let d1_mode = at.metadata("d3/d1").mode();
+    let d2_mode = at.metadata("d3/d1/d2").mode();
+    let f_mode = at.metadata("d3/d1/d2/f").mode();
+
+    assert_eq!(!0o022 & 0o777, d1_mode & 0o777);
+    assert_eq!(!0o022 & 0o777, d2_mode & 0o777);
+    assert_eq!(!0o022 & 0o666, f_mode & 0o777);
 }
