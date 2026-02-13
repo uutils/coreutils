@@ -455,7 +455,6 @@ fn get_output_chunks(
     all_after: &[char],
     config: &Config,
 ) -> (String, String, String, String) {
-    
     // Chunk size logics are mostly copied from the GNU ptx source.
     // https://github.com/MaiZure/coreutils-8.3/blob/master/src/ptx.c#L1234
     let half_line_size = config.line_width / 2;
