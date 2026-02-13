@@ -402,6 +402,7 @@ blake3 = "1.5.1"
 sm3 = "0.4.2"
 crc-fast = "1.5.0"
 digest = "0.10.7"
+mimalloc = { version = "0.1.48", default-features = false, features = [ "override", "local_dynamic_tls" ] }
 
 # Fluent dependencies
 fluent = "0.17.0"
@@ -422,12 +423,12 @@ clap_mangen = { workspace = true, optional = true }
 clap.workspace = true
 fluent-syntax = { workspace = true, optional = true }
 itertools.workspace = true
+mimalloc.workspace = true
 phf.workspace = true
 selinux = { workspace = true, optional = true }
 textwrap.workspace = true
 uucore.workspace = true
 zip = { workspace = true, optional = true }
-
 
 # * uutils
 uu_test = { optional = true, version = "0.6.0", package = "uu_test", path = "src/uu/test" }

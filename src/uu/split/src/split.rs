@@ -156,7 +156,7 @@ fn should_extract_obs_lines(
 /// Extracts obsolete lines numeric part from argument slice
 /// and filters it out
 fn handle_extract_obs_lines(slice: &str, obs_lines: &mut Option<String>) -> Option<OsString> {
-    let mut obs_lines_extracted: Vec<char> = vec![];
+    let mut obs_lines_extracted: Vec<char> = Vec::with_capacity(32);
     let mut obs_lines_end_reached = false;
     let filtered_slice: Vec<char> = slice
         .chars()
@@ -625,8 +625,12 @@ where
         custom_blksize
     } else {
         // otherwise try to get it from filesystem, or use default
-        uucore::fs::sane_blksize::sane_blksize_from_path(Path::new(input))
+        let os_blksize = uucore::fs::sane_blksize::sane_blksize_from_path(Path::new(input));
+        std::cmp::max(os_blksize, 256 * 1024)
     };
+
+    buf.clear();
+    buf.reserve(read_limit as usize);
 
     // Try to read into buffer up to a limit
     let num_bytes = reader
@@ -1103,7 +1107,7 @@ where
     R: BufRead,
 {
     // Get the size of the input in bytes
-    let initial_buf = &mut Vec::new();
+    let initial_buf = &mut Vec::with_capacity(256 * 1024);
     let mut num_bytes = get_input_size(&settings.input, reader, initial_buf, settings.io_blksize)?;
     let mut reader = initial_buf.chain(reader);
 
@@ -1156,7 +1160,7 @@ where
         out_files = OutFiles::init(num_chunks, settings, false)?;
     }
 
-    let buf = &mut Vec::new();
+    let buf = &mut Vec::with_capacity(256 * 1024);
     for i in 1_u64..=num_chunks {
         let chunk_size = chunk_size_base + (chunk_size_reminder > i - 1) as u64;
         buf.clear();
@@ -1247,7 +1251,7 @@ where
 {
     // Get the size of the input in bytes and compute the number
     // of bytes per chunk.
-    let initial_buf = &mut Vec::new();
+    let initial_buf = &mut Vec::with_capacity(256 * 1024);
     let num_bytes = get_input_size(&settings.input, reader, initial_buf, settings.io_blksize)?;
     let reader = initial_buf.chain(reader);
 
@@ -1397,8 +1401,9 @@ where
     let mut closed_writers = 0;
 
     let mut i = 0;
+    let line = &mut Vec::with_capacity(256 * 1024);
     loop {
-        let line = &mut Vec::new();
+        line.clear();
         let num_bytes_read = reader.by_ref().read_until(sep, line)?;
 
         // if there is nothing else to read - exit the loop
@@ -1434,6 +1439,7 @@ where
 pub struct LinesWithSep<R> {
     inner: R,
     separator: u8,
+    buf: Vec<u8>,
 }
 
 impl<R> Iterator for LinesWithSep<R>
@@ -1444,10 +1450,11 @@ where
 
     /// Read bytes from a buffer up to the requested number of lines.
     fn next(&mut self) -> Option<Self::Item> {
-        let mut buf = vec![];
-        match self.inner.read_until(self.separator, &mut buf) {
+        self.buf.clear();
+        self.buf.reserve(256 * 1024);
+        match self.inner.read_until(self.separator, &mut self.buf) {
             Ok(0) => None,
-            Ok(_) => Some(Ok(buf)),
+            Ok(_) => Some(Ok(self.buf.clone())),
             Err(e) => Some(Err(e)),
         }
     }
@@ -1464,6 +1471,7 @@ where
     LinesWithSep {
         inner: reader,
         separator,
+        buf: Vec::with_capacity(256 * 1024),
     }
 }
 
@@ -1477,7 +1485,7 @@ where
     // to be overwritten for sure at the beginning of the loop below
     // because we start with `remaining == 0`, indicating that a new
     // chunk should start.
-    let mut writer: BufWriter<Box<dyn Write>> = BufWriter::new(Box::new(io::Cursor::new(vec![])));
+    let mut writer: BufWriter<Box<dyn Write>> = BufWriter::with_capacity(256 * 1024, Box::new(io::Cursor::new(vec![])));
 
     let mut remaining = 0;
     for line in lines_with_sep(reader, settings.separator) {
