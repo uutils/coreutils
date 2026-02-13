@@ -2141,7 +2141,7 @@ fn escape_name_with_locale(name: &OsStr, config: &Config) -> OsString {
 
 fn locale_quote(name: &OsStr, style: LocaleQuoting) -> OsString {
     let bytes = os_str_as_bytes_lossy(name);
-    let mut quoted = String::new();
+    let mut quoted = String::with_capacity(bytes.len() * 4 + 2);
     match style {
         LocaleQuoting::Single => quoted.push('\''),
         LocaleQuoting::Double => quoted.push('"'),
