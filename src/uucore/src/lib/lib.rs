@@ -263,7 +263,7 @@ pub fn format_usage(s: &str) -> String {
 /// let app = Command::new("myutil")
 ///     .help_template(localized_help_template("myutil"));
 /// ```
-pub fn localized_help_template(util_name: &str) -> clap::builder::StyledStr {
+pub fn localized_help_template(_util_name: &str) -> clap::builder::StyledStr {
     use std::io::IsTerminal;
 
     // Determine if colors should be enabled - same logic as configure_localized_command
@@ -276,15 +276,12 @@ pub fn localized_help_template(util_name: &str) -> clap::builder::StyledStr {
             && std::env::var("TERM").unwrap_or_default() != "dumb"
     };
 
-    localized_help_template_with_colors(util_name, colors_enabled)
+    localized_help_template_with_colors(colors_enabled)
 }
 
 /// Create a localized help template with explicit color control
 /// This ensures color detection consistency between clap and our template
-pub fn localized_help_template_with_colors(
-    util_name: &str,
-    colors_enabled: bool,
-) -> clap::builder::StyledStr {
+pub fn localized_help_template_with_colors(colors_enabled: bool) -> clap::builder::StyledStr {
     use std::fmt::Write;
 
     // Get the localized "Usage" label

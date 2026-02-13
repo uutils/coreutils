@@ -516,11 +516,52 @@ pub fn configure_localized_command(mut cmd: Command) -> Command {
     // For help output (stdout), we check stdout TTY status
     let colors_enabled = should_use_color_for_stream(&std::io::stdout());
 
-    cmd = cmd.help_template(crate::localized_help_template_with_colors(
-        crate::util_name(),
-        colors_enabled,
-    ));
+    cmd = cmd.help_template(crate::localized_help_template_with_colors(colors_enabled));
     cmd
+}
+
+/// Apply localized about, usage, help template, and per-arg help to a
+/// `Command` using the naming convention `{name}-about`, `{name}-usage`,
+/// `{name}-help-{arg_id}`.
+pub fn localize_command(mut cmd: Command) -> Command {
+    let name = cmd.get_name().to_string();
+
+    cmd = cmd
+        .about(crate::locale::get_message(&format!("{name}-about")))
+        .override_usage(crate::format_usage(&crate::locale::get_message(&format!(
+            "{name}-usage"
+        ))))
+        .help_template(crate::localized_help_template(&name));
+
+    let arg_ids: Vec<String> = cmd
+        .get_arguments()
+        .map(|a| a.get_id().to_string())
+        .collect();
+
+    for arg_id in arg_ids {
+        let help_key = format!("{name}-help-{arg_id}");
+        let help_text = crate::locale::get_message(&help_key);
+        if help_text != help_key {
+            cmd = cmd.mut_arg(&arg_id, |a| a.help(help_text));
+        }
+    }
+
+    cmd
+}
+
+/// Parse arguments with deferred translation loading. On the happy path,
+/// no FTL files are loaded. `app_fn` should build a bare `Command` without
+/// `translate!()` calls; translations are applied via `localize_command`
+/// only when help or error output is needed.
+pub fn parse_deferred<F>(app_fn: F, args: impl crate::Args) -> UResult<ArgMatches>
+where
+    F: Fn() -> Command,
+{
+    let args: Vec<OsString> = args.collect();
+    match app_fn().try_get_matches_from(args.iter().map(Clone::clone)) {
+        Ok(m) => Ok(m),
+        Err(_) => handle_clap_result(localize_command(app_fn()), args),
+    }
 }
 
 /* spell-checker: disable */
