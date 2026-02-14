@@ -2124,6 +2124,16 @@ mod inter_partition_copying {
         let other_fs_tempdir = TempDir::new_in("/dev/shm/")
             .expect("Unable to create temp directory in /dev/shm - test requires tmpfs");
 
+        let dest_meta =
+            metadata(other_fs_tempdir.path()).expect("Failed to get metadata for destination dir");
+        if src_meta.dev() == dest_meta.dev() {
+            println!(
+                "test skipped: source and destination are on the same filesystem (dev={})",
+                src_meta.dev()
+            );
+            return;
+        }
+
         scene
             .ucmd()
             .arg("file")
