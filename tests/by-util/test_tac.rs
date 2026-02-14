@@ -236,6 +236,19 @@ fn test_null_separator() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_non_utf8_separator() {
+    use std::os::unix::ffi::OsStringExt;
+    new_ucmd!()
+        .arg("-s")
+        .arg(std::ffi::OsString::from_vec(b"\xe9".to_vec()))
+        .pipe_in(b"1\xe92".to_vec())
+        .succeeds()
+        .no_stderr()
+        .stdout_is_bytes(b"21\xe9");
+}
+
+#[test]
 fn test_regex() {
     new_ucmd!()
         .args(&["-r", "-s", "[xyz]+"])
