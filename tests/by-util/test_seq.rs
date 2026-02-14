@@ -692,7 +692,7 @@ fn test_infinite_sequence(#[case] args: &[&str], #[case] expected_start: &[u8]) 
     #[cfg(unix)]
     result.signal_name_is("PIPE");
     #[cfg(not(unix))]
-    result.success();
+    result.code_is(1);
 }
 
 #[test]
