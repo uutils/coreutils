@@ -667,8 +667,15 @@ fn parse_date(ref_zoned: Zoned, s: &str) -> Result<FileTime, TouchError> {
         }
     }
 
-    if let Ok(zoned) = parse_datetime::parse_datetime_at_date(ref_zoned, s) {
-        return Ok(timestamp_to_filetime(zoned.timestamp()));
+    if let Ok(parsed) = parse_datetime::parse_datetime_at_date(ref_zoned, s) {
+        return Ok(match parsed {
+            parse_datetime::ParsedDateTime::InRange(zoned) => {
+                timestamp_to_filetime(zoned.timestamp())
+            }
+            parse_datetime::ParsedDateTime::Extended(dt) => {
+                FileTime::from_unix_time(dt.unix_seconds(), dt.nanosecond)
+            }
+        });
     }
 
     Err(TouchError::InvalidDateFormat(s.to_owned()))
