@@ -1446,7 +1446,7 @@ fn test_chmod_recursive_wide_tree_does_not_exhaust_fds() {
 
     at.mkdir("wide");
     for i in 0..256 {
-        at.mkdir(&format!("wide/d{i}"));
+        at.mkdir(format!("wide/d{i}"));
     }
 
     // Constrain NOFILE only for the child process under test

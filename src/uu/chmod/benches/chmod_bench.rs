@@ -112,8 +112,9 @@ fn maybe_report_allocs(label: &str, args: &[&str]) {
     let current_delta = stats.current.saturating_sub(baseline);
 
     eprintln!(
-        "chmod mem {label}: peak={}B current={}B allocs={} deallocs={}",
-        peak_delta, current_delta, stats.allocs, stats.deallocs
+        "chmod mem {label}: peak={peak_delta}B current={current_delta}B allocs={allocs} deallocs={deallocs}",
+        allocs = stats.allocs,
+        deallocs = stats.deallocs
     );
 }
 
