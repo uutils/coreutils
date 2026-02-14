@@ -7,7 +7,7 @@ use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
 use std::env;
 use std::ffi::{OsStr, OsString};
-use std::io::{self, StdoutLock, Write};
+use std::io::{StdoutLock, Write, stdout};
 use uucore::error::UResult;
 use uucore::format::{FormatChar, OctalParsing, parse_escape_only};
 use uucore::{format_usage, os_str_as_bytes};
@@ -166,7 +166,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             uu_app().print_help()?;
             return Ok(());
         } else if first_arg == "--version" && args.peek().is_none() {
-            print!("{}", uu_app().render_version());
+            write!(stdout(), "{}", uu_app().render_version())?;
             return Ok(());
         }
 
@@ -177,7 +177,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         (Box::new(args), Options::default())
     };
 
-    execute(&mut io::stdout().lock(), args, options)?;
+    execute(&mut stdout().lock(), args, options)?;
 
     Ok(())
 }

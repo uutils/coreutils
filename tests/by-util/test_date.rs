@@ -52,6 +52,15 @@ fn test_invalid_short_option() {
 }
 
 #[test]
+fn test_format_option_not_to_capture_other_valid_arguments() {
+    new_ucmd!()
+        .arg("+%Y%m%d%H%M%S")
+        .arg("--date")
+        .arg("@1770996496")
+        .succeeds();
+}
+
+#[test]
 fn test_single_dash_as_date() {
     new_ucmd!()
         .arg("-")
@@ -2065,4 +2074,16 @@ fn test_percent_percent_not_replaced() {
             .succeeds()
             .stdout_is(expected);
     }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_date_write_error_dev_full() {
+    use std::fs::OpenOptions;
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+    new_ucmd!()
+        .arg("+%s")
+        .set_stdout(dev_full)
+        .fails()
+        .stderr_contains("write error");
 }
