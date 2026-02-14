@@ -15,20 +15,7 @@ use uucore::format_usage;
 use uucore::fs::makedev;
 use uucore::translate;
 
-#[cfg(not(any(
-    target_os = "android",
-    target_os = "macos",
-    target_os = "freebsd",
-    target_os = "redox",
-)))]
-const MODE_RW_UGO: u32 = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
-
-#[cfg(any(
-    target_os = "android",
-    target_os = "macos",
-    target_os = "freebsd",
-    target_os = "redox",
-))]
+#[allow(clippy::unnecessary_cast)]
 const MODE_RW_UGO: u32 = (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
 
 mod options {
@@ -116,8 +103,8 @@ fn mknod(file_name: &str, config: Config) -> i32 {
             config.context.as_ref(),
         ) {
             // if it fails, delete the file
-            let _ = std::fs::remove_dir(file_name);
-            eprintln!("{}: {}", uucore::util_name(), e);
+            let _ = std::fs::remove_file(file_name);
+            eprintln!("{}: {e}", uucore::util_name());
             return 1;
         }
     }
@@ -130,7 +117,7 @@ fn mknod(file_name: &str, config: Config) -> i32 {
                 std::fs::remove_file(p)
             })
         {
-            eprintln!("{}: {}", uucore::util_name(), e);
+            eprintln!("{}: {e}", uucore::util_name());
             return 1;
         }
     }
@@ -259,7 +246,6 @@ pub fn uu_app() -> Command {
         )
 }
 
-#[allow(clippy::unnecessary_cast)]
 fn parse_mode(str_mode: &str) -> Result<u32, String> {
     let default_mode = MODE_RW_UGO;
     uucore::mode::parse_chmod(default_mode, str_mode, true, uucore::mode::get_umask())
