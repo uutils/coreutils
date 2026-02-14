@@ -16,7 +16,7 @@ use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::{fmt, io};
 #[cfg(all(unix, not(target_os = "android")))]
-use uucore::fsxattr::copy_xattrs;
+use uucore::fsxattr::{copy_acl_xattrs, copy_xattrs};
 use uucore::translate;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, value_parser};
@@ -925,7 +925,7 @@ impl Attributes {
         ownership: Preserve::Yes { required: true },
         mode: Preserve::Yes { required: true },
         timestamps: Preserve::Yes { required: true },
-        xattr: Preserve::Yes { required: true },
+        xattr: Preserve::No { explicit: false },
         ..Self::NONE
     };
 
@@ -1783,6 +1783,12 @@ pub(crate) fn copy_attributes(
             exacl::getfacl(source, None)
                 .and_then(|acl| exacl::setfacl(&[dest], &acl, None))
                 .map_err(|err| CpError::Error(err.to_string()))?;
+
+            // When preserving mode with -p, also preserve ACL xattrs
+            // ACLs are stored as xattrs (system.posix_acl_*) and should be
+            // preserved even when general xattrs are not
+            #[cfg(all(unix, not(any(target_os = "android", target_os = "openbsd"))))]
+            copy_acl_xattrs(source, dest)?;
         }
 
         Ok(())
