@@ -10,7 +10,7 @@ pub mod error;
 
 use clap::builder::{PossibleValue, ValueParser};
 use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command};
-use filetime::{set_file_times, set_symlink_file_times, FileTime};
+use filetime::{FileTime, set_file_times, set_symlink_file_times};
 use jiff::civil::Time;
 use jiff::fmt::strtime;
 use jiff::tz::TimeZone;
@@ -853,11 +853,11 @@ fn pathbuf_from_stdout() -> Result<PathBuf, TouchError> {
     {
         use std::os::windows::prelude::AsRawHandle;
         use windows_sys::Win32::Foundation::{
-            GetLastError, ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY, ERROR_PATH_NOT_FOUND,
+            ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY, ERROR_PATH_NOT_FOUND, GetLastError,
             HANDLE, MAX_PATH,
         };
         use windows_sys::Win32::Storage::FileSystem::{
-            GetFinalPathNameByHandleW, FILE_NAME_OPENED,
+            FILE_NAME_OPENED, GetFinalPathNameByHandleW,
         };
 
         let handle = std::io::stdout().lock().as_raw_handle() as HANDLE;
@@ -912,8 +912,8 @@ mod tests {
     use filetime::FileTime;
 
     use crate::{
-        determine_atime_mtime_change, error::TouchError, touch, uu_app, ChangeTimes, Options,
-        Source,
+        ChangeTimes, Options, Source, determine_atime_mtime_change, error::TouchError, touch,
+        uu_app,
     };
 
     #[cfg(unix)]
@@ -937,10 +937,12 @@ mod tests {
         let _ = locale::setup_localization("touch");
         // We can trigger an error by not setting stdout to anything (will
         // fail with code 1)
-        assert!(super::pathbuf_from_stdout()
-            .expect_err("pathbuf_from_stdout should have failed")
-            .to_string()
-            .contains("GetFinalPathNameByHandleW failed with code 1"));
+        assert!(
+            super::pathbuf_from_stdout()
+                .expect_err("pathbuf_from_stdout should have failed")
+                .to_string()
+                .contains("GetFinalPathNameByHandleW failed with code 1")
+        );
     }
 
     #[test]
@@ -1023,9 +1025,10 @@ mod tests {
         let err = super::try_futimens_via_write_fd(dir.path(), atime, mtime)
             .expect_err("expected error for non-regular file");
         assert_eq!(err.kind(), ErrorKind::Other);
-        assert!(err
-            .to_string()
-            .contains(&translate!("touch-error-not-a-regular-file")));
+        assert!(
+            err.to_string()
+                .contains(&translate!("touch-error-not-a-regular-file"))
+        );
     }
 
     #[cfg(unix)]
