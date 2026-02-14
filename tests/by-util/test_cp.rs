@@ -7751,7 +7751,7 @@ fn test_cp_existing_no_preserve_dir() {
     scene.cmd("mkdir").arg("d1").succeeds();
     scene.cmd("mkdir").arg("d2").succeeds();
     scene.cmd("chmod").arg("770").arg("d1").succeeds();
-    scene.cmd("chmod").arg("700").arg("d2").succeeds();
+    scene.cmd("chmod").arg("707").arg("d2").succeeds();
     let d2_mode = at.metadata("d2").mode();
 
     scene
@@ -7809,7 +7809,7 @@ fn test_cp_existing_default_dir() {
     scene.cmd("mkdir").arg("d1").succeeds();
     scene.cmd("mkdir").arg("d2").succeeds();
     scene.cmd("chmod").arg("770").arg("d1").succeeds();
-    scene.cmd("chmod").arg("700").arg("d2").succeeds();
+    scene.cmd("chmod").arg("707").arg("d2").succeeds();
     let d2_mode = at.metadata("d2").mode();
 
     scene
@@ -7867,7 +7867,7 @@ fn test_cp_existing_preserve_dir() {
     scene.cmd("mkdir").arg("d1").succeeds();
     scene.cmd("mkdir").arg("d2").succeeds();
     scene.cmd("chmod").arg("770").arg("d1").succeeds();
-    scene.cmd("chmod").arg("700").arg("d2").succeeds();
+    scene.cmd("chmod").arg("707").arg("d2").succeeds();
     let d1_mode = at.metadata("d1").mode();
 
     scene

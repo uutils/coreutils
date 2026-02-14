@@ -831,7 +831,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // We follow it here by setting it to permit all user modes, and passing the original down
     // functions such that it is used when creating new dir/file and not preserving mode.
     #[cfg(unix)]
-    let orig_umask = unsafe { libc::umask(!0o700) as u32 };
+    let orig_umask = unsafe { libc::umask(!libc::S_IRWXU) as u32 };
 
     if let Err(error) = copy(
         &sources,
@@ -2766,33 +2766,11 @@ fn handle_created_mode(mode: Preserve, is_dir: bool, source_mode: u32, umask: u3
     const S_IRWXUGO: u32 = (S_IRWXU | S_IRWXG | S_IRWXO) as u32;
 
     if let Preserve::No { explicit } = mode {
-        #[cfg(not(any(
-            target_os = "android",
-            target_os = "macos",
-            target_os = "freebsd",
-            target_os = "redox",
-        )))]
-        {
-            (if explicit {
-                if is_dir { S_IRWXUGO } else { MODE_RW_UGO }
-            } else {
-                source_mode & S_IRWXUGO
-            }) & !umask
-        }
-
-        #[cfg(any(
-            target_os = "android",
-            target_os = "macos",
-            target_os = "freebsd",
-            target_os = "redox",
-        ))]
-        {
-            (if explicit {
-                if is_dir { S_IRWXUGO } else { MODE_RW_UGO }
-            } else {
-                source_mode & S_IRWXUGO
-            }) & !umask
-        }
+        (if explicit {
+            if is_dir { S_IRWXUGO } else { MODE_RW_UGO }
+        } else {
+            source_mode & S_IRWXUGO
+        }) & !umask
     } else {
         source_mode & S_IRWXUGO
     }
