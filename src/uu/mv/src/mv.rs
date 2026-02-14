@@ -24,7 +24,7 @@ use std::io::{self, IsTerminal};
 #[cfg(unix)]
 use std::os::unix;
 #[cfg(unix)]
-use std::os::unix::fs::{FileTypeExt, PermissionsExt};
+use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 #[cfg(windows)]
 use std::os::windows;
 use std::path::{Path, PathBuf, absolute};
@@ -1191,8 +1191,16 @@ fn rename_file_fallback(
     }
 
     // Regular file copy
+    #[cfg(unix)]
+    let meta = fs::symlink_metadata(from)?;
     fs::copy(from, to)
         .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
+    // Preserve ownership then mode. chown clears setuid/setgid, so chmod must come after.
+    #[cfg(unix)]
+    {
+        let _ = unix::fs::chown(to, Some(meta.uid()), Some(meta.gid()));
+        fs::set_permissions(to, fs::Permissions::from_mode(meta.mode()))?;
+    }
 
     // Copy xattrs, ignoring ENOTSUP errors (filesystem doesn't support xattrs)
     #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
