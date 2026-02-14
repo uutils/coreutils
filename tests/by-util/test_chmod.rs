@@ -1436,6 +1436,29 @@ fn test_chmod_recursive_does_not_exhaust_fds() {
         .succeeds();
 }
 
+#[cfg(unix)]
+#[test]
+fn test_chmod_recursive_wide_tree_does_not_exhaust_fds() {
+    use rlimit::Resource;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("wide");
+    for i in 0..256 {
+        at.mkdir(&format!("wide/d{i}"));
+    }
+
+    // Constrain NOFILE only for the child process under test
+    scene
+        .ucmd()
+        .limit(Resource::NOFILE, 64, 64)
+        .arg("-R")
+        .arg("777")
+        .arg("wide")
+        .succeeds();
+}
+
 #[test]
 fn test_chmod_colored_output() {
     // Test colored help message

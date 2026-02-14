@@ -491,15 +491,30 @@ impl Chmoder {
     }
 
     #[cfg(all(unix, not(target_os = "redox")))]
-    fn safe_traverse_dir(&self, dir_fd: DirFd, dir_path: &Path) -> UResult<()> {
+    fn safe_traverse_dir(&self, root_fd: DirFd, root_path: &Path) -> UResult<()> {
         let mut r = Ok(());
-        // Depth-first traversal without recursive calls to avoid stacking FDs.
-        let mut stack: Vec<(DirFd, PathBuf)> = vec![(dir_fd, dir_path.to_path_buf())];
+        // Depth-first traversal without recursive calls while keeping descriptor usage bounded.
+        let mut stack: Vec<(Vec<OsString>, PathBuf)> = vec![(Vec::new(), root_path.to_path_buf())];
 
         // Determine if we should follow symlinks (doesn't depend on entry_name)
         let should_follow_symlink = self.traverse_symlinks == TraverseSymlinks::All;
 
-        while let Some((dir_fd, dir_path)) = stack.pop() {
+        while let Some((relative_dir_components, dir_path)) = stack.pop() {
+            let dir_fd = match root_fd
+                .open_subdir_chain(relative_dir_components.iter().map(OsString::as_os_str))
+            {
+                Ok(fd) => fd,
+                Err(err) => {
+                    let error = if err.kind() == std::io::ErrorKind::PermissionDenied {
+                        ChmodError::PermissionDenied(dir_path).into()
+                    } else {
+                        err.into()
+                    };
+                    r = r.and(Err(error));
+                    continue;
+                }
+            };
+
             let entries = dir_fd.read_dir()?;
 
             for entry_name in entries {
@@ -530,19 +545,9 @@ impl Chmoder {
 
                     // Queue subdirectories; parent dir_fd can be dropped before processing children.
                     if meta.is_dir() {
-                        match dir_fd.open_subdir(&entry_name) {
-                            Ok(child_dir_fd) => {
-                                stack.push((child_dir_fd, entry_path.clone()));
-                            }
-                            Err(err) => {
-                                let error = if err.kind() == std::io::ErrorKind::PermissionDenied {
-                                    ChmodError::PermissionDenied(entry_path).into()
-                                } else {
-                                    err.into()
-                                };
-                                r = r.and(Err(error));
-                            }
-                        }
+                        let mut child_components = relative_dir_components.clone();
+                        child_components.push(entry_name.clone());
+                        stack.push((child_components, entry_path.clone()));
                     }
                 }
             }

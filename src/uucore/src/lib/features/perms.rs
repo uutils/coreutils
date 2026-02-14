@@ -458,13 +458,26 @@ impl ChownExecutor {
     }
 
     #[cfg(target_os = "linux")]
-    fn safe_traverse_dir(&self, dir_fd: DirFd, dir_path: &Path, ret: &mut i32) {
+    fn safe_traverse_dir(&self, root_fd: DirFd, root_path: &Path, ret: &mut i32) {
         // Iterative depth-first traversal to avoid stacking directory FDs.
         let follow_all = self.traverse_symlinks == TraverseSymlinks::All;
         let follow_symlinks = self.dereference || follow_all;
-        let mut stack: Vec<(DirFd, PathBuf)> = vec![(dir_fd, dir_path.to_path_buf())];
+        let mut stack: Vec<(Vec<OsString>, PathBuf)> = vec![(Vec::new(), root_path.to_path_buf())];
 
-        while let Some((dir_fd, dir_path)) = stack.pop() {
+        while let Some((relative_dir_components, dir_path)) = stack.pop() {
+            let dir_fd = match root_fd
+                .open_subdir_chain(relative_dir_components.iter().map(OsString::as_os_str))
+            {
+                Ok(fd) => fd,
+                Err(e) => {
+                    *ret = 1;
+                    if self.verbosity.level != VerbosityLevel::Silent {
+                        show_error!("cannot access {}: {}", dir_path.quote(), strip_errno(&e));
+                    }
+                    continue;
+                }
+            };
+
             // Read directory entries
             let entries = match dir_fd.read_dir() {
                 Ok(entries) => entries,
@@ -538,21 +551,9 @@ impl ChownExecutor {
 
                 // Recurse into subdirectories iteratively
                 if meta.is_dir() && (follow_all || !meta.file_type().is_symlink()) {
-                    match dir_fd.open_subdir(&entry_name) {
-                        Ok(subdir_fd) => {
-                            stack.push((subdir_fd, entry_path.clone()));
-                        }
-                        Err(e) => {
-                            *ret = 1;
-                            if self.verbosity.level != VerbosityLevel::Silent {
-                                show_error!(
-                                    "cannot access {}: {}",
-                                    entry_path.quote(),
-                                    strip_errno(&e)
-                                );
-                            }
-                        }
-                    }
+                    let mut child_components = relative_dir_components.clone();
+                    child_components.push(entry_name.clone());
+                    stack.push((child_components, entry_path.clone()));
                 }
             }
             // dir_fd dropped here, releasing the descriptor before descending further
