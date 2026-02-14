@@ -4,8 +4,8 @@
 // file that was distributed with this source code.
 use super::PathData;
 use lscolors::{Indicator, LsColors, Style};
+use rustc_hash::FxHashMap as HashMap;
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::env;
 use std::ffi::OsString;
 use std::fs::{self, Metadata};
@@ -747,7 +747,7 @@ fn is_valid_ls_colors_prefix(label: [u8; 2]) -> bool {
 }
 
 fn parse_indicator_codes() -> (HashMap<Indicator, String>, bool) {
-    let mut indicator_codes = HashMap::new();
+    let mut indicator_codes = HashMap::default();
     let mut ln_color_from_target = false;
 
     // LS_COLORS validity is checked before enabling color output, so parse
@@ -827,21 +827,21 @@ mod tests {
     #[test]
     fn has_indicator_style_ignores_fallback_styles() {
         let colors = LsColors::from_string("ex=00:fi=32");
-        let manager = style_manager(&colors, HashMap::new());
+        let manager = style_manager(&colors, HashMap::default());
         assert!(!manager.has_indicator_style(Indicator::ExecutableFile));
     }
 
     #[test]
     fn has_indicator_style_detects_explicit_styles() {
         let colors = LsColors::from_string("ex=01;32");
-        let manager = style_manager(&colors, HashMap::new());
+        let manager = style_manager(&colors, HashMap::default());
         assert!(manager.has_indicator_style(Indicator::ExecutableFile));
     }
 
     #[test]
     fn has_indicator_style_detects_raw_codes() {
         let colors = LsColors::empty();
-        let mut indicator_codes = HashMap::new();
+        let mut indicator_codes = HashMap::default();
         indicator_codes.insert(Indicator::Directory, "01;34".to_string());
         let manager = style_manager(&colors, indicator_codes);
         assert!(manager.has_indicator_style(Indicator::Directory));
