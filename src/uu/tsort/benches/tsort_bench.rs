@@ -5,7 +5,7 @@
 
 use divan::{Bencher, black_box};
 use uu_tsort::uumain;
-use uucore::benchmark::{run_util_function, setup_test_file};
+use uucore::benchmark::{get_bench_args, setup_test_file};
 
 /// Generate topological sort test data - linear chain
 fn generate_linear_chain(num_nodes: usize) -> Vec<u8> {
@@ -118,11 +118,10 @@ fn generate_wide_dag(num_nodes: usize) -> Vec<u8> {
 fn tsort_linear_chain(bencher: Bencher, num_nodes: usize) {
     let data = generate_linear_chain(num_nodes);
     let file_path = setup_test_file(&data);
-    let file_path_str = file_path.to_str().unwrap();
 
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &[file_path_str]));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark tree-like DAG structures
@@ -130,11 +129,10 @@ fn tsort_linear_chain(bencher: Bencher, num_nodes: usize) {
 fn tsort_tree_dag(bencher: Bencher, (depth, branching): (usize, usize)) {
     let data = generate_tree_dag(depth, branching);
     let file_path = setup_test_file(&data);
-    let file_path_str = file_path.to_str().unwrap();
 
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &[file_path_str]));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark complex DAG with cross-dependencies
@@ -142,11 +140,10 @@ fn tsort_tree_dag(bencher: Bencher, (depth, branching): (usize, usize)) {
 fn tsort_complex_dag(bencher: Bencher, num_nodes: usize) {
     let data = generate_complex_dag(num_nodes);
     let file_path = setup_test_file(&data);
-    let file_path_str = file_path.to_str().unwrap();
 
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &[file_path_str]));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark wide DAG with many parallel chains
@@ -155,11 +152,10 @@ fn tsort_complex_dag(bencher: Bencher, num_nodes: usize) {
 fn tsort_wide_dag(bencher: Bencher, num_nodes: usize) {
     let data = generate_wide_dag(num_nodes);
     let file_path = setup_test_file(&data);
-    let file_path_str = file_path.to_str().unwrap();
 
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &[file_path_str]));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /*
@@ -189,11 +185,10 @@ fn generate_input_parsing_heavy(num_edges: usize) -> Vec<u8> {
 fn tsort_input_parsing_heavy(bencher: Bencher, num_edges: usize) {
     let data = generate_input_parsing_heavy(num_edges);
     let file_path = setup_test_file(&data);
-    let file_path_str = file_path.to_str().unwrap();
 
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &[file_path_str]));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 */
 
