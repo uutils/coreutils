@@ -2156,6 +2156,7 @@ dependencies = [
 [[package]]
 name = "parse_datetime"
 version = "0.14.0"
+source = "git+https://github.com/abhishekpradhan/parse_datetime?rev=7d80124f102a28bb72d659045dcfb2bf9c6c3f8c#7d80124f102a28bb72d659045dcfb2bf9c6c3f8c"
 dependencies = [
  "jiff",
  "num-traits",
