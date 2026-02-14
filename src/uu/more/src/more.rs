@@ -568,21 +568,20 @@ impl<'a> Pager<'a> {
         if self.pattern.is_none() {
             return Ok(());
         }
-        match self.search_pattern_in_file() {
-            Some(line) => self.upper_mark = line,
-            None => {
-                self.pattern = None;
-                write!(
-                    self.stdout,
-                    "\r{}{} ({}){}",
-                    Attribute::Reverse,
-                    translate!("more-error-pattern-not-found"),
-                    translate!("more-press-return"),
-                    Attribute::Reset,
-                )?;
-                self.stdout.flush()?;
-                self.wait_for_enter_key()?;
-            }
+        if let Some(line) = self.search_pattern_in_file() {
+            self.upper_mark = line;
+        } else {
+            self.pattern = None;
+            write!(
+                self.stdout,
+                "\r{}{} ({}){}",
+                Attribute::Reverse,
+                translate!("more-error-pattern-not-found"),
+                translate!("more-press-return"),
+                Attribute::Reset,
+            )?;
+            self.stdout.flush()?;
+            self.wait_for_enter_key()?;
         }
         Ok(())
     }

@@ -428,7 +428,7 @@ fn stty(opts: &Options) -> UResult<()> {
                     print_special_setting(setting, opts.file.as_raw_fd())?;
                 }
                 ArgOptions::SavedState(state) => {
-                    apply_saved_state(&mut termios, state)?;
+                    apply_saved_state(&mut termios, state);
                 }
             }
         }
@@ -485,10 +485,12 @@ fn invalid_speed<T>(arg: &str, speed: &str) -> Result<T, Box<dyn UError>> {
 /// GNU uses different error messages if values overflow or underflow a u8,
 /// this function returns the appropriate error message in the case of overflow or underflow, or u8 on success
 fn parse_u8_or_err(arg: &str) -> Result<u8, String> {
-    arg.parse::<u8>().map_err(|e| match e.kind() {
-        IntErrorKind::PosOverflow => translate!("stty-error-invalid-integer-argument-value-too-large", "value" => format!("'{arg}'")),
-        _ => translate!("stty-error-invalid-integer-argument",
-                        "value" => format!("'{arg}'")),
+    arg.parse::<u8>().map_err(|e| {
+        if let IntErrorKind::PosOverflow = e.kind() {
+            translate!("stty-error-invalid-integer-argument-value-too-large", "value" => format!("'{arg}'"))
+        } else {
+            translate!("stty-error-invalid-integer-argument", "value" => format!("'{arg}'"))
+        }
     })
 }
 
@@ -567,16 +569,15 @@ impl WrappedPrinter {
     /// If term_size is None (typically when output is piped), falls back to
     /// the COLUMNS environment variable or a default width of 80 columns.
     fn new(term_size: Option<&TermSize>) -> Self {
-        let columns = match term_size {
-            Some(term_size) => term_size.columns,
-            None => {
-                const DEFAULT_TERM_WIDTH: u16 = 80;
+        let columns = if let Some(term_size) = term_size {
+            term_size.columns
+        } else {
+            const DEFAULT_TERM_WIDTH: u16 = 80;
 
-                std::env::var_os("COLUMNS")
-                    .and_then(|s| s.to_str()?.parse().ok())
-                    .filter(|&c| c > 0)
-                    .unwrap_or(DEFAULT_TERM_WIDTH)
-            }
+            std::env::var_os("COLUMNS")
+                .and_then(|s| s.to_str()?.parse().ok())
+                .filter(|&c| c > 0)
+                .unwrap_or(DEFAULT_TERM_WIDTH)
         };
 
         Self {
@@ -594,7 +595,7 @@ impl WrappedPrinter {
             self.first_in_line = true;
         }
 
-        print!("{}{}", self.prefix(), token);
+        print!("{}{token}", self.prefix());
         self.current += token_len;
         self.first_in_line = false;
     }
@@ -612,6 +613,10 @@ impl WrappedPrinter {
     }
 }
 
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "needed for some platform-specific code"
+)]
 fn print_terminal_size(
     termios: &Termios,
     opts: &Options,
@@ -985,10 +990,10 @@ fn apply_char_mapping(termios: &mut Termios, mapping: &(S, u8)) {
 ///
 /// If state has fewer than 4 elements, no changes are applied. This is a defensive
 /// check that should never trigger since `parse_saved_state` rejects such states.
-fn apply_saved_state(termios: &mut Termios, state: &[u32]) -> nix::Result<()> {
+fn apply_saved_state(termios: &mut Termios, state: &[u32]) {
     // Require at least 4 elements for the flags (defensive check)
     if state.len() < 4 {
-        return Ok(()); // No-op for invalid state (already validated by parser)
+        return; // No-op for invalid state (already validated by parser)
     }
 
     // Apply the four flag groups, done (as _) for MacOS size compatibility
@@ -1003,8 +1008,6 @@ fn apply_saved_state(termios: &mut Termios, state: &[u32]) -> nix::Result<()> {
             termios.control_chars[i] = cc_val as u8;
         }
     }
-
-    Ok(())
 }
 
 fn apply_special_setting(

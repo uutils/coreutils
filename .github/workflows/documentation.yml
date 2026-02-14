@@ -42,7 +42,7 @@ jobs:
       - name: Get current version from Cargo.toml
         id: version
         run: |
-          VERSION=$(awk '/\[workspace\.package\]/{flag=1; next} flag && /version = /{gsub(/.*= "/, ""); gsub(/".*/, ""); print; exit}' Cargo.toml)
+          VERSION=$(awk '/\[workspace\.package\]/{flag=1; next} flag && /^version = /{gsub(/.*= "/, ""); gsub(/".*/, ""); print; exit}' Cargo.toml)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Detected version: $VERSION"
 

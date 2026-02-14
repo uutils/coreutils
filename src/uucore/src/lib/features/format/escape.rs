@@ -33,21 +33,21 @@ enum Base {
 }
 
 impl Base {
-    fn as_base(&self) -> u8 {
+    fn as_base(self) -> u8 {
         match self {
             Self::Oct(_) => 8,
             Self::Hex => 16,
         }
     }
 
-    fn max_digits(&self) -> u8 {
+    fn max_digits(self) -> u8 {
         match self {
-            Self::Oct(parsing) => *parsing as u8,
+            Self::Oct(parsing) => parsing as u8,
             Self::Hex => 2,
         }
     }
 
-    fn convert_digit(&self, c: u8) -> Option<u8> {
+    fn convert_digit(self, c: u8) -> Option<u8> {
         match self {
             Self::Oct(_) => {
                 if matches!(c, b'0'..=b'7') {

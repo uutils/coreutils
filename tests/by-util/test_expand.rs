@@ -451,3 +451,13 @@ fn test_expand_non_utf8_paths() {
         .succeeds()
         .stdout_is("hello   world\ntest    line\n");
 }
+
+#[test]
+fn test_buffered_reads_new_line_no_tabs_in_first_chunk() {
+    // test includes tabs after 1 full chunk of no tabs with new line
+    // checks that the tabstop calculation is done to correct column
+    new_ucmd!()
+        .args(&["new_line_in_chunk.txt"])
+        .succeeds()
+        .stdout_is_fixture("new_line_in_chunk_expected.txt");
+}

@@ -6,10 +6,6 @@
 //! Heuristics for determining buffer size for external sorting.
 use std::ffi::OsString;
 
-use crate::{
-    FALLBACK_AUTOMATIC_BUF_SIZE, MAX_AUTOMATIC_BUF_SIZE, MIN_AUTOMATIC_BUF_SIZE, STDIN_FILE,
-};
-
 // Heuristics to size the external sort buffer without overcommit memory.
 pub(crate) fn automatic_buffer_size(files: &[OsString]) -> usize {
     let file_hint = file_size_hint(files);
@@ -20,7 +16,7 @@ pub(crate) fn automatic_buffer_size(files: &[OsString]) -> usize {
         (Some(file), Some(mem)) => file.min(mem),
         (Some(file), None) => file,
         (None, Some(mem)) => mem,
-        (None, None) => FALLBACK_AUTOMATIC_BUF_SIZE,
+        (None, None) => crate::FALLBACK_AUTOMATIC_BUF_SIZE,
     }
 }
 
@@ -29,7 +25,7 @@ fn file_size_hint(files: &[OsString]) -> Option<usize> {
     let mut total_bytes: u128 = 0;
 
     for file in files {
-        if file == STDIN_FILE {
+        if file == crate::STDIN_FILE {
             continue;
         }
 
@@ -43,7 +39,7 @@ fn file_size_hint(files: &[OsString]) -> Option<usize> {
 
         total_bytes = total_bytes.saturating_add(metadata.len() as u128);
 
-        if total_bytes >= (MAX_AUTOMATIC_BUF_SIZE as u128) * 8 {
+        if total_bytes >= (crate::MAX_AUTOMATIC_BUF_SIZE as u128) * 8 {
             break;
         }
     }
@@ -66,8 +62,8 @@ fn available_memory_hint() -> Option<usize> {
 }
 
 fn clamp_hint(bytes: u128) -> usize {
-    let min = MIN_AUTOMATIC_BUF_SIZE as u128;
-    let max = MAX_AUTOMATIC_BUF_SIZE as u128;
+    let min = crate::MIN_AUTOMATIC_BUF_SIZE as u128;
+    let max = crate::MAX_AUTOMATIC_BUF_SIZE as u128;
     let clamped = bytes.clamp(min, max);
     clamped.min(usize::MAX as u128) as usize
 }
@@ -77,7 +73,7 @@ fn desired_file_buffer_bytes(total_bytes: u128) -> u128 {
         return 0;
     }
 
-    let max = MAX_AUTOMATIC_BUF_SIZE as u128;
+    let max = crate::MAX_AUTOMATIC_BUF_SIZE as u128;
 
     if total_bytes <= max {
         return total_bytes.saturating_mul(12).clamp(total_bytes, max);

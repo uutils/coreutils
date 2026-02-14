@@ -727,3 +727,18 @@ fn test_read_error() {
         .fails()
         .stderr_contains("comm: /proc/self/mem: Input/output error");
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_comm_write_error_dev_full() {
+    use std::fs::OpenOptions;
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("a", "a\n");
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+    scene
+        .ucmd()
+        .args(&["a", "a"])
+        .set_stdout(dev_full)
+        .fails()
+        .stderr_contains("No space left on device");
+}

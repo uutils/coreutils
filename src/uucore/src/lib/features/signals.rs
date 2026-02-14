@@ -14,7 +14,8 @@
 use nix::errno::Errno;
 #[cfg(unix)]
 use nix::sys::signal::{
-    SigHandler::SigDfl, SigHandler::SigIgn, Signal::SIGINT, Signal::SIGPIPE, signal,
+    SaFlags, SigAction, SigHandler, SigHandler::SigDfl, SigHandler::SigIgn, SigSet, Signal,
+    Signal::SIGINT, Signal::SIGPIPE, sigaction, signal,
 };
 
 /// The default signal value.
@@ -433,6 +434,21 @@ pub fn ignore_interrupts() -> Result<(), Errno> {
     // We pass the error as is, the return value would just be Ok(SigIgn), so we can safely ignore it.
     // SAFETY: this function is safe as long as we do not use a custom SigHandler -- we use the default one.
     unsafe { signal(SIGINT, SigIgn) }.map(|_| ())
+}
+
+/// Installs a signal handler. The handler must be async-signal-safe.
+#[cfg(unix)]
+pub fn install_signal_handler(
+    sig: Signal,
+    handler: extern "C" fn(std::os::raw::c_int),
+) -> Result<(), Errno> {
+    let action = SigAction::new(
+        SigHandler::Handler(handler),
+        SaFlags::SA_RESTART,
+        SigSet::empty(),
+    );
+    unsafe { sigaction(sig, &action) }?;
+    Ok(())
 }
 
 // Detect closed stdin/stdout before Rust reopens them as /dev/null (see issue #2873)

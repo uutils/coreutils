@@ -2,7 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) asdf algo algos asha mgmt xffname hexa GFYEQ HYQK Yqxb dont
+// spell-checker:ignore (words) asdf algo algos asha mgmt xffname hexa GFYEQ HYQK Yqxb dont checkfile
+
+use rstest::rstest;
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -2524,9 +2526,33 @@ mod gnu_cksum_c {
     }
 
     #[test]
-    #[ignore = "todo"]
     fn test_signed_checksums() {
-        todo!()
+        let ts = TestScenario::new(util_name!());
+        let at = &ts.fixtures;
+
+        let filename = "test_file";
+        at.touch(filename);
+
+        let checksum_result = ts.ucmd().arg("-a").arg("sha256").arg(filename).succeeds();
+        let valid_checksum_line = checksum_result.stdout_str().trim();
+
+        let signed_content = format!(
+            "-----BEGIN PGP SIGNED MESSAGE-----\n\
+             Hash: SHA256\n\
+             \n\
+             # This is a comment that should be ignored\n\
+             {valid_checksum_line}\n\
+             -----BEGIN PGP SIGNATURE-----\n\
+             \n\
+             xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n\
+             xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n\
+             =PlaceHolder\n\
+             -----END PGP SIGNATURE-----"
+        );
+
+        at.write("signed_CHECKSUMS", &signed_content);
+
+        ts.ucmd().arg("--check").arg("signed_CHECKSUMS").succeeds();
     }
 
     #[test]
@@ -3059,4 +3085,144 @@ fn test_check_file_with_io_error() {
         .fails()
         .stderr_contains("Input/output error")
         .stdout_contains("FAILED open or read");
+}
+
+#[test]
+#[cfg(all(target_os = "linux", not(target_env = "musl")))]
+fn test_check_checkfile_with_io_error() {
+    // /proc/self/mem causes EIO when read without proper seeking
+    new_ucmd!()
+        .arg("-a")
+        .arg("md5")
+        .arg("--check")
+        .arg("/proc/self/mem")
+        .fails()
+        .stderr_contains("/proc/self/mem: read error")
+        .no_stdout();
+}
+
+#[rstest]
+#[case::default_length(
+    &[],
+    "ac8549b2861a151896ab721bd29d7a20c1a3d1f75b31266f786f20d963fb0fdf"
+)]
+#[case::pass_default_length(
+    &["-l", "256"],
+    "ac8549b2861a151896ab721bd29d7a20c1a3d1f75b31266f786f20d963fb0fdf"
+)]
+#[case::smaller_length(
+    &["-l", "128"],
+    "ac8549b2861a151896ab721bd29d7a20"
+)]
+#[case::bigger_length(
+    &["-l", "264"],
+    "ac8549b2861a151896ab721bd29d7a20c1a3d1f75b31266f786f20d963fb0fdfc2"
+)]
+#[case::length_0(
+    &["-l", "0"],
+    "ac8549b2861a151896ab721bd29d7a20c1a3d1f75b31266f786f20d963fb0fdf"
+)]
+#[case::length_1(
+    &["-l", "1"],
+    "00"
+)]
+#[case::length_2(
+    &["-l", "2"],
+    "00"
+)]
+#[case::length_3(
+    &["-l", "3"],
+    "04"
+)]
+#[case::length_4(
+    &["-l", "4"],
+    "0c"
+)]
+#[case::length_5(
+    &["-l", "5"],
+    "0c"
+)]
+#[case::length_6(
+    &["-l", "6"],
+    "2c"
+)]
+#[case::length_7(
+    &["-l", "7"],
+    "2c"
+)]
+#[case::length_8(
+    &["-l", "8"],
+    "ac"
+)]
+fn test_shake128(#[case] args: &[&str], #[case] expected: &str) {
+    new_ucmd!()
+        .arg("-a")
+        .arg("shake128")
+        .args(args)
+        .pipe_in("xxx")
+        .succeeds()
+        .stdout_only(format!("SHAKE128 (-) = {expected}\n"));
+}
+
+#[rstest]
+#[case::default_length(
+    &[],
+    "2fa631503c3ea5fe85131dbfa24805185474740e6dcb5f2a64f69d932bcb55f7b24958f3e3c4cc0e71f1fe6f054cd3fb28b9efb62b4f8f3fbe6d50d90f5c6eba"
+)]
+#[case::pass_default_length(
+    &["-l", "512"],
+    "2fa631503c3ea5fe85131dbfa24805185474740e6dcb5f2a64f69d932bcb55f7b24958f3e3c4cc0e71f1fe6f054cd3fb28b9efb62b4f8f3fbe6d50d90f5c6eba"
+)]
+#[case::smaller_length(
+    &["-l", "128"],
+    "2fa631503c3ea5fe85131dbfa2480518"
+)]
+#[case::bigger_length(
+    &["-l", "1024"],
+    "2fa631503c3ea5fe85131dbfa24805185474740e6dcb5f2a64f69d932bcb55f7b24958f3e3c4cc0e71f1fe6f054cd3fb28b9efb62b4f8f3fbe6d50d90f5c6eba18783d25f8b36d92b8607f016352b5c405945a7859a8339201728f680647324d1b8ea93a01d2ef965dadf4a1bee3ff044ed2b4bd95e4311f5e3f2cd5bae0b7c6"
+)]
+#[case::length_0(
+    &["-l", "0"],
+    "2fa631503c3ea5fe85131dbfa24805185474740e6dcb5f2a64f69d932bcb55f7b24958f3e3c4cc0e71f1fe6f054cd3fb28b9efb62b4f8f3fbe6d50d90f5c6eba"
+)]
+#[case::length_1(
+    &["-l", "1"],
+    "01"
+)]
+#[case::length_2(
+    &["-l", "2"],
+    "03"
+)]
+#[case::length_3(
+    &["-l", "3"],
+    "07"
+)]
+#[case::length_4(
+    &["-l", "4"],
+    "0f"
+)]
+#[case::length_5(
+    &["-l", "5"],
+    "0f"
+)]
+#[case::length_6(
+    &["-l", "6"],
+    "2f"
+)]
+#[case::length_7(
+    &["-l", "7"],
+    "2f"
+)]
+#[case::length_8(
+    &["-l", "8"],
+    "2f"
+)]
+fn test_shake256(#[case] args: &[&str], #[case] expected: &str) {
+    new_ucmd!()
+        .arg("-a")
+        .arg("shake256")
+        .args(args)
+        .pipe_in("xxx")
+        .succeeds()
+        .stdout_only(format!("SHAKE256 (-) = {expected}\n"));
 }

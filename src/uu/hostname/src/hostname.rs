@@ -5,6 +5,7 @@
 
 // spell-checker:ignore hashset Addrs addrs
 
+use std::io::{Write, stdout};
 #[cfg(not(any(target_os = "freebsd", target_os = "openbsd")))]
 use std::net::ToSocketAddrs;
 use std::str;
@@ -164,7 +165,7 @@ fn display_hostname(matches: &ArgMatches) -> UResult<()> {
         }
         let len = output.len();
         if len > 0 {
-            println!("{}", &output[0..len - 1]);
+            writeln!(stdout(), "{}", &output[0..len - 1])?;
         }
 
         Ok(())
@@ -173,17 +174,17 @@ fn display_hostname(matches: &ArgMatches) -> UResult<()> {
             let mut it = hostname.char_indices().filter(|&ci| ci.1 == '.');
             if let Some(ci) = it.next() {
                 if matches.get_flag(OPT_SHORT) {
-                    println!("{}", &hostname[0..ci.0]);
+                    writeln!(stdout(), "{}", &hostname[0..ci.0])?;
                 } else {
-                    println!("{}", &hostname[ci.0 + 1..]);
+                    writeln!(stdout(), "{}", &hostname[ci.0 + 1..])?;
                 }
             } else if matches.get_flag(OPT_SHORT) {
-                println!("{hostname}");
+                writeln!(stdout(), "{hostname}")?;
             }
             return Ok(());
         }
 
-        println!("{hostname}");
+        writeln!(stdout(), "{hostname}")?;
 
         Ok(())
     }

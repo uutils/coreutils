@@ -257,8 +257,8 @@ impl Formatter<&ExtendedBigDecimal> for Float {
 
         let mut alignment = self.alignment;
 
-        let s = match abs {
-            ExtendedBigDecimal::BigDecimal(bd) => match self.variant {
+        let s = if let ExtendedBigDecimal::BigDecimal(bd) = abs {
+            match self.variant {
                 FloatVariant::Decimal => {
                     format_float_decimal(&bd, self.precision, self.force_decimal)
                 }
@@ -271,14 +271,13 @@ impl Formatter<&ExtendedBigDecimal> for Float {
                 FloatVariant::Hexadecimal => {
                     format_float_hexadecimal(&bd, self.precision, self.case, self.force_decimal)
                 }
-            },
-            _ => {
-                // Pad non-finite numbers with spaces, not zeros.
-                if alignment == NumberAlignment::RightZero {
-                    alignment = NumberAlignment::RightSpace;
-                }
-                format_float_non_finite(&abs, self.case)
             }
+        } else {
+            // Pad non-finite numbers with spaces, not zeros.
+            if alignment == NumberAlignment::RightZero {
+                alignment = NumberAlignment::RightSpace;
+            }
+            format_float_non_finite(&abs, self.case)
         };
         let sign_indicator = get_sign_indicator(self.positive_sign, negative);
 
@@ -426,7 +425,7 @@ fn format_float_scientific(
         return if force_decimal == ForceDecimal::Yes && precision == 0 {
             format!("0.{exp_char}+00")
         } else {
-            format!("{:.*}{exp_char}+00", precision, 0.0)
+            format!("{:.precision$}{exp_char}+00", 0.0)
         };
     }
 
@@ -1128,11 +1127,11 @@ mod test {
                 ForceDecimal::No,
             )
         };
-        assert_eq!(f(0.1171875), "0.117188");
-        assert_eq!(f(0.01171875), "0.0117188");
-        assert_eq!(f(0.001171875), "0.00117187");
-        assert_eq!(f(0.0001171875), "0.000117187");
-        assert_eq!(f(0.001171875001), "0.00117188");
+        assert_eq!(f(0.117_187_5), "0.117188");
+        assert_eq!(f(0.011_718_75), "0.0117188");
+        assert_eq!(f(0.001_171_875), "0.00117187");
+        assert_eq!(f(0.000_117_187_5), "0.000117187");
+        assert_eq!(f(0.001_171_875_001), "0.00117188");
     }
 
     #[test]
@@ -1149,7 +1148,7 @@ mod test {
         assert_eq!(f(0.001), "0.001");
         assert_eq!(f(0.0001), "0.0001");
         assert_eq!(f(0.00001), "1e-05");
-        assert_eq!(f(0.000001), "1e-06");
+        assert_eq!(f(0.000_001), "1e-06");
     }
 
     /// Wrapper function to get a string out of Format.fmt()
