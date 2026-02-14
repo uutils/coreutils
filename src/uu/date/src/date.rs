@@ -315,16 +315,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     if let Some(date) = settings.set_to {
-        // All set time functions expect UTC datetimes.
-        let date = if settings.utc {
-            date.datetime().to_zoned(TimeZone::UTC).map_err(|e| {
-                USimpleError::new(1, translate!("date-error-invalid-date", "error" => e))
-            })?
-        } else {
-            date
-        };
-
-        return set_system_datetime(date);
+        return set_system_datetime(convert_for_set(date, settings.utc));
     }
 
     // Iterate over all dates - whether it's a single date or a file.
@@ -857,6 +848,15 @@ fn set_system_datetime(_date: Zoned) -> UResult<()> {
     unimplemented!("setting date not implemented (unsupported target)");
 }
 
+/// Convert a parsed date for the system clock.
+fn convert_for_set(date: Zoned, utc: bool) -> Zoned {
+    if utc {
+        date.timestamp().to_zoned(TimeZone::UTC)
+    } else {
+        date
+    }
+}
+
 #[cfg(target_os = "macos")]
 fn set_system_datetime(_date: Zoned) -> UResult<()> {
     Err(USimpleError::new(
@@ -951,6 +951,15 @@ mod tests {
         assert_eq!(parse_military_timezone_with_offset(""), None); // Empty
         assert_eq!(parse_military_timezone_with_offset("m999"), None); // Too long
         assert_eq!(parse_military_timezone_with_offset("9m"), None); // Starts with digit
+    }
+
+    #[test]
+    fn test_utc_conversion_preserves_offset() {
+        let now = Zoned::now();
+
+        let date = parse_date("Sat 20 Mar 2021 14:53:01 AWST", &now).unwrap();
+        let utc = convert_for_set(date, true);
+        assert_eq!((utc.hour(), utc.minute(), utc.second()), (6, 53, 1)); // AWST(+08:00) -> -8h
     }
 
     #[test]
