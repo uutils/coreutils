@@ -1785,22 +1785,8 @@ pub(crate) fn copy_attributes(
             let permissions = {
                 let mut perms = permissions;
                 if ownership_failed {
-                    #[cfg(not(any(
-                        target_os = "android",
-                        target_os = "macos",
-                        target_os = "freebsd",
-                        target_os = "redox",
-                    )))]
-                    let mask = libc::S_ISUID | libc::S_ISGID;
-
-                    #[cfg(any(
-                        target_os = "android",
-                        target_os = "macos",
-                        target_os = "freebsd",
-                        target_os = "redox",
-                    ))]
-                    let mask = (libc::S_ISUID | libc::S_ISGID) as u32;
-
+                    #[allow(clippy::unnecessary_cast)]
+                    let mask = (libc::S_ISUID | libc::S_ISGID | libc::S_ISVTX) as u32;
                     perms.set_mode(perms.mode() & !mask);
                 }
                 perms

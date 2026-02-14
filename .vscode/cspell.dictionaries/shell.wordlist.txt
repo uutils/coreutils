@@ -12,6 +12,7 @@ mksh
 mountinfo
 mountpoint
 mtab
+newgrp
 nullglob
 
 # * Signals
