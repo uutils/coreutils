@@ -819,6 +819,7 @@ jobs:
       id: dep_vars
       shell: bash
       run: |
+        redoxer toolchain ||:
         ## Dependent VARs setup
         outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         # * determine sub-crate utility list
