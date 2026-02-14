@@ -52,6 +52,115 @@ fn test_invalid_short_option() {
 }
 
 #[test]
+fn test_large_year_absolute_date() {
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("TZ", "UTC0")
+        .arg("-d")
+        .arg("18978-01-01")
+        .succeeds()
+        .stdout_is("Thu Jan  1 00:00:00 UTC 18978\n");
+}
+
+#[test]
+fn test_large_year_epoch_format() {
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("TZ", "UTC0")
+        .arg("-d")
+        .arg("10000-01-01")
+        .arg("+%s")
+        .succeeds()
+        .stdout_is("253402300800\n");
+}
+
+#[test]
+fn test_large_year_upper_bound() {
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("TZ", "UTC0")
+        .arg("-d")
+        .arg("2147485547-12-31")
+        .arg("+%F")
+        .succeeds()
+        .stdout_is("2147485547-12-31\n");
+
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("TZ", "UTC0")
+        .arg("-d")
+        .arg("2147485548-01-01")
+        .fails()
+        .stderr_contains("invalid date");
+}
+
+#[test]
+fn test_large_year_with_explicit_offset_converts_to_output_timezone() {
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("TZ", "UTC0")
+        .arg("-d")
+        .arg("10000-12-31 12:34:56 -0530")
+        .arg("+%Y-%m-%d %H:%M:%S %:z")
+        .succeeds()
+        .stdout_is("10000-12-31 18:04:56 +00:00\n");
+}
+
+#[test]
+fn test_large_year_supports_r_and_c_formats() {
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("TZ", "UTC0")
+        .arg("-d")
+        .arg("10000-12-31 12:34:56 -0530")
+        .arg("+%r")
+        .succeeds()
+        .stdout_is("06:04:56 PM\n");
+
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("TZ", "UTC0")
+        .arg("-d")
+        .arg("10000-01-01")
+        .arg("+%c")
+        .succeeds()
+        .stdout_is("Sat Jan  1 00:00:00 10000\n");
+}
+
+#[test]
+fn test_large_year_iana_timezone_rule_uses_dst_in_far_future() {
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("TZ", "UTC0")
+        .arg("-d")
+        .arg(r#"TZ="America/New_York" 10000-07-01 00:00"#)
+        .arg("+%Y-%m-%d %H:%M:%S %:z %Z")
+        .succeeds()
+        .stdout_is("10000-07-01 04:00:00 +00:00 UTC\n");
+
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("TZ", "America/New_York")
+        .arg("-d")
+        .arg("10000-07-01 00:00")
+        .arg("+%Y-%m-%d %H:%M:%S %:z %Z")
+        .succeeds()
+        .stdout_is("10000-07-01 00:00:00 -04:00 EDT\n");
+}
+
+#[test]
+fn test_large_year_week_format_specifiers() {
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("TZ", "UTC0")
+        .arg("-d")
+        .arg("10000-01-01")
+        .arg("+%U %W %V %G %g")
+        .succeeds()
+        .stdout_is("00 00 52 9999 99\n");
+}
+
+#[test]
 fn test_format_option_not_to_capture_other_valid_arguments() {
     new_ucmd!()
         .arg("+%Y%m%d%H%M%S")
