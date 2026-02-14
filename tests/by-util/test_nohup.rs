@@ -3,7 +3,10 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore winsize Openpty openpty xpixel ypixel ptyprocess
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::thread::sleep;
+use uutests::at_and_ts;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
@@ -148,7 +151,6 @@ fn test_nohup_appends_to_existing_file() {
 ))]
 fn test_nohup_fallback_to_home() {
     use std::fs;
-    use std::os::unix::fs::PermissionsExt;
 
     // Skip test when running as root (permissions bypassed via CAP_DAC_OVERRIDE)
     // This is common in Docker/Podman containers but won't happen in CI
@@ -248,96 +250,39 @@ fn test_nohup_stderr_to_stdout() {
     assert!(content.contains("stderr message"));
 }
 
-// Test nohup.out has 0600 permissions
 #[test]
-#[cfg(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "freebsd",
-    target_os = "openbsd",
-    target_vendor = "apple"
-))]
+#[cfg(unix)]
 fn test_nohup_output_permissions() {
-    use std::os::unix::fs::PermissionsExt;
+    if uucore::process::geteuid() == 0 {
+        return;
+    }
 
-    let ts = TestScenario::new(util_name!());
-    let at = &ts.fixtures;
+    let (at, ts) = at_and_ts!();
 
+    // CWD nohup.out should be 0600
     ts.ucmd()
         .terminal_simulation(true)
         .args(&["echo", "perms"])
         .succeeds();
 
-    sleep(std::time::Duration::from_millis(10));
+    assert_eq!(at.metadata("nohup.out").permissions().mode() & 0o777, 0o600);
 
-    let metadata = std::fs::metadata(at.plus("nohup.out")).unwrap();
-    let mode = metadata.permissions().mode();
-
-    assert_eq!(
-        mode & 0o777,
-        0o600,
-        "nohup.out should have 0600 permissions"
-    );
-}
-
-// Test that the fallback nohup.out (in $HOME) also has 0600 permissions
-#[test]
-#[cfg(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "freebsd",
-    target_os = "openbsd"
-))]
-fn test_nohup_fallback_output_permissions() {
-    use std::fs;
-    use std::os::unix::fs::PermissionsExt;
-
-    // Skip if root
-    if unsafe { libc::geteuid() } == 0 {
-        println!("Skipping test when running as root");
-        return;
-    }
-
-    let ts = TestScenario::new(util_name!());
-    let at = &ts.fixtures;
-
-    // Create a fake HOME directory
+    // $HOME fallback nohup.out should also be 0600
     at.mkdir("home");
-    let home_dir_str = at.plus_as_string("home");
-
-    // Create a read-only directory
     at.mkdir("readonly_dir");
-    let readonly_path = at.plus("readonly_dir");
+    at.set_mode("readonly_dir", 0o555);
 
-    // Make directory read-only
-    let mut perms = fs::metadata(&readonly_path).unwrap().permissions();
-    perms.set_mode(0o555);
-    fs::set_permissions(&readonly_path, perms).unwrap();
-
-    // Run nohup inside the read-only dir
-    // This forces it to fail writing to CWD and fall back to custom HOME
     ts.ucmd()
-        .env("HOME", &home_dir_str)
-        .current_dir(&readonly_path)
+        .env("HOME", &at.plus_as_string("home"))
+        .current_dir(at.plus("readonly_dir"))
         .terminal_simulation(true)
         .arg("true")
         .run();
 
-    // Restore permissions so the test runner can delete the folder later!
-    let mut perms = fs::metadata(&readonly_path).unwrap().permissions();
-    perms.set_mode(0o755);
-    fs::set_permissions(&readonly_path, perms).unwrap();
-
-    sleep(std::time::Duration::from_millis(50));
-
-    // Verify the file exists in HOME and has 0600 permissions
-    let home_nohup = at.plus("home/nohup.out");
-    let metadata = fs::metadata(home_nohup).expect("nohup.out should have been created in HOME");
-    let mode = metadata.permissions().mode();
+    at.set_mode("readonly_dir", 0o755);
 
     assert_eq!(
-        mode & 0o777,
-        0o600,
-        "Fallback nohup.out should have 0600 permissions"
+        at.metadata("home/nohup.out").permissions().mode() & 0o777,
+        0o600
     );
 }
