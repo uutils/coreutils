@@ -31,6 +31,7 @@ jobs:
           uu_base64,
           uu_cksum,
           uu_cp,
+          uu_csplit,
           uu_cut,
           uu_dd,
           uu_df,
