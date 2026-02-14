@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker:ignore fstatat openat dirfd
+// spell-checker:ignore dedupe dirfd fiemap fstatat openat reflinks
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::PossibleValue};
 use glob::Pattern;
@@ -20,27 +20,35 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::mpsc;
 use std::thread;
+
+use clap::{Arg, ArgAction, ArgMatches, Command, builder::PossibleValue};
+use glob::Pattern;
 use thiserror::Error;
+#[cfg(windows)]
+use windows_sys::Win32::{
+    Foundation::HANDLE,
+    Storage::FileSystem::{
+        FILE_ID_128, FILE_ID_INFO, FILE_STANDARD_INFO, FileIdInfo, FileStandardInfo,
+        GetFileInformationByHandleEx,
+    },
+};
+
 use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::fsext::{MetadataTimeField, metadata_get_time};
 use uucore::line_ending::LineEnding;
-#[cfg(all(unix, not(target_os = "redox")))]
-use uucore::safe_traversal::DirFd;
-use uucore::translate;
-
 use uucore::parser::parse_glob;
 use uucore::parser::parse_size::{ParseSizeError, parse_size_non_zero_u64, parse_size_u64};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
+#[cfg(all(unix, not(target_os = "redox")))]
+use uucore::safe_traversal::DirFd;
 use uucore::time::{FormatSystemTimeFallback, format, format_system_time};
+use uucore::translate;
 use uucore::{format_usage, show, show_error, show_warning};
-#[cfg(windows)]
-use windows_sys::Win32::Foundation::HANDLE;
-#[cfg(windows)]
-use windows_sys::Win32::Storage::FileSystem::{
-    FILE_ID_128, FILE_ID_INFO, FILE_STANDARD_INFO, FileIdInfo, FileStandardInfo,
-    GetFileInformationByHandleEx,
-};
+
+pub mod fiemap;
+#[cfg(target_os = "linux")]
+use crate::fiemap::{FIEMAP_EXTENT_ENCODED, FIEMAP_EXTENT_SHARED, walk_fiemap_extents};
 
 mod options {
     pub const HELP: &str = "help";
@@ -73,12 +81,15 @@ mod options {
     pub const FILE: &str = "FILE";
 }
 
+const POSIX_BLOCK_SIZE: u64 = 512;
+
 struct TraversalOptions {
     all: bool,
     separate_dirs: bool,
     one_file_system: bool,
     dereference: Deref,
     count_links: bool,
+    dedupe_reflinks: bool,
     verbose: bool,
     excludes: Vec<Pattern>,
 }
@@ -115,6 +126,13 @@ enum SizeFormat {
 struct FileInfo {
     file_id: u128,
     dev_id: u64,
+}
+
+#[derive(PartialEq, Eq, Hash, Clone, Copy)]
+struct SharedExtentKey {
+    dev_id: u64,
+    physical: u64,
+    length: u64,
 }
 
 struct Stat {
@@ -171,9 +189,10 @@ impl Stat {
 
         // Create file info from the safe metadata
         let file_info = safe_metadata.file_info();
+        #[allow(clippy::unnecessary_cast)]
         let file_info_option = Some(FileInfo {
             file_id: file_info.inode() as u128,
-            dev_id: file_info.device(),
+            dev_id: file_info.device() as u64,
         });
 
         let blocks = safe_metadata.blocks();
@@ -274,13 +293,66 @@ fn get_file_info(path: &Path, _metadata: &Metadata) -> Option<FileInfo> {
     result
 }
 
+#[cfg(target_os = "linux")]
+fn adjust_blocks_for_reflinks(
+    path: &Path,
+    dev_id: u64,
+    blocks: u64,
+    shared_extents: &mut HashSet<SharedExtentKey>,
+) -> u64 {
+    if blocks == 0 {
+        return blocks;
+    }
+
+    let Ok(file) = File::open(path) else {
+        return blocks;
+    };
+
+    let mut dedup_bytes = 0_u64;
+
+    if walk_fiemap_extents(&file, 0, |extent| {
+        if (extent.fe_flags & FIEMAP_EXTENT_SHARED) != 0
+            && (extent.fe_flags & FIEMAP_EXTENT_ENCODED) == 0
+            && extent.fe_physical != 0
+        {
+            let key = SharedExtentKey {
+                dev_id,
+                physical: extent.fe_physical,
+                length: extent.fe_length,
+            };
+
+            if !shared_extents.insert(key) {
+                dedup_bytes = dedup_bytes.saturating_add(extent.fe_length);
+            }
+        }
+
+        true
+    })
+    .is_err()
+    {
+        return blocks;
+    }
+
+    let dedup_blocks = dedup_bytes / POSIX_BLOCK_SIZE;
+    blocks.saturating_sub(dedup_blocks)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn adjust_blocks_for_reflinks(
+    _path: &Path,
+    _dev_id: u64,
+    blocks: u64,
+    _shared_extents: &mut HashSet<SharedExtentKey>,
+) -> u64 {
+    blocks
+}
+
 fn block_size_from_env() -> Option<u64> {
     for env_var in ["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
         if let Ok(env_size) = env::var(env_var) {
             return parse_size_non_zero_u64(&env_size).ok();
         }
     }
-
     None
 }
 
@@ -291,7 +363,7 @@ fn read_block_size(s: Option<&str>) -> UResult<u64> {
     } else if let Some(bytes) = block_size_from_env() {
         Ok(bytes)
     } else if env::var("POSIXLY_CORRECT").is_ok() {
-        Ok(512)
+        Ok(POSIX_BLOCK_SIZE)
     } else {
         Ok(1024)
     }
@@ -305,6 +377,7 @@ fn safe_du(
     options: &TraversalOptions,
     depth: usize,
     seen_inodes: &mut HashSet<FileInfo>,
+    shared_extents: &mut HashSet<SharedExtentKey>,
     print_tx: &mpsc::Sender<UResult<StatPrintInfo>>,
     parent_fd: Option<&DirFd>,
     initial_stat: Option<std::io::Result<Stat>>,
@@ -317,9 +390,10 @@ fn safe_du(
             Ok(safe_metadata) => {
                 // Create Stat from safe metadata
                 let file_info = safe_metadata.file_info();
+                #[allow(clippy::unnecessary_cast)]
                 let file_info_option = Some(FileInfo {
                     file_id: file_info.inode() as u128,
-                    dev_id: file_info.device(),
+                    dev_id: file_info.device() as u64,
                 });
                 let blocks = safe_metadata.blocks();
 
@@ -401,6 +475,11 @@ fn safe_du(
         }
     };
     if !my_stat.metadata.is_dir() {
+        if options.dedupe_reflinks {
+            let dev_id = my_stat.inode.map_or(0, |inode| inode.dev_id);
+            my_stat.blocks =
+                adjust_blocks_for_reflinks(&my_stat.path, dev_id, my_stat.blocks, shared_extents);
+        }
         return Ok(my_stat);
     }
 
@@ -449,6 +528,8 @@ fn safe_du(
         const S_IFMT: u32 = 0o170_000;
         const S_IFDIR: u32 = 0o040_000;
         const S_IFLNK: u32 = 0o120_000;
+        const S_IFREG: u32 = 0o100_000;
+
         #[allow(clippy::unnecessary_cast)]
         let is_symlink = (lstat.st_mode as u32 & S_IFMT) == S_IFLNK;
 
@@ -463,6 +544,8 @@ fn safe_du(
 
         #[allow(clippy::unnecessary_cast)]
         let is_dir = (lstat.st_mode as u32 & S_IFMT) == S_IFDIR;
+        #[allow(clippy::unnecessary_cast)]
+        let is_regular = (lstat.st_mode as u32 & S_IFMT) == S_IFREG;
         let entry_stat = lstat;
 
         #[allow(clippy::unnecessary_cast)]
@@ -473,7 +556,7 @@ fn safe_du(
 
         // For safe traversal, we need to handle stats differently
         // We can't use std::fs::Metadata since that requires the full path
-        let this_stat = if is_dir {
+        let mut this_stat = if is_dir {
             // For directories, recurse using safe_du
             Stat {
                 path: entry_path.clone(),
@@ -523,6 +606,15 @@ fn safe_du(
             seen_inodes.insert(inode);
         }
 
+        #[allow(clippy::unnecessary_cast)]
+        if options.dedupe_reflinks && is_regular {
+            let dev_id = this_stat
+                .inode
+                .map_or(entry_stat.st_dev as u64, |inode| inode.dev_id);
+            this_stat.blocks =
+                adjust_blocks_for_reflinks(&entry_path, dev_id, this_stat.blocks, shared_extents);
+        }
+
         // Process directories recursively
         if is_dir {
             if options.one_file_system {
@@ -538,6 +630,7 @@ fn safe_du(
                 options,
                 depth + 1,
                 seen_inodes,
+                shared_extents,
                 print_tx,
                 Some(&dir_fd),
                 None,
@@ -572,12 +665,13 @@ fn safe_du(
 // Only used on non-Linux platforms
 // Regular traversal using std::fs
 // Used on non-Linux platforms and as fallback for symlinks on Linux
-#[allow(clippy::cognitive_complexity)]
+#[allow(clippy::cognitive_complexity, clippy::too_many_arguments)]
 fn du_regular(
     mut my_stat: Stat,
     options: &TraversalOptions,
     depth: usize,
     seen_inodes: &mut HashSet<FileInfo>,
+    shared_extents: &mut HashSet<SharedExtentKey>,
     print_tx: &mpsc::Sender<UResult<StatPrintInfo>>,
     ancestors: Option<&mut HashSet<FileInfo>>,
     symlink_depth: Option<usize>,
@@ -587,6 +681,15 @@ fn du_regular(
     let symlink_depth = symlink_depth.unwrap_or(0);
     // Maximum symlink depth to prevent infinite loops
     const MAX_SYMLINK_DEPTH: usize = 40;
+
+    if !my_stat.metadata.is_dir() {
+        if options.dedupe_reflinks {
+            let dev_id = my_stat.inode.map_or(0, |inode| inode.dev_id);
+            my_stat.blocks =
+                adjust_blocks_for_reflinks(&my_stat.path, dev_id, my_stat.blocks, shared_extents);
+        }
+        return Ok(my_stat);
+    }
 
     // Add current directory to ancestors if it's a directory
     let my_inode = if my_stat.metadata.is_dir() {
@@ -638,7 +741,7 @@ fn du_regular(
                     }
 
                     match Stat::new(&entry_path, Some(&entry), options) {
-                        Ok(this_stat) => {
+                        Ok(mut this_stat) => {
                             // Check if symlink with -L points to an ancestor (cycle detection)
                             if is_symlink
                                 && options.dereference == Deref::All
@@ -698,6 +801,7 @@ fn du_regular(
                                     options,
                                     depth + 1,
                                     seen_inodes,
+                                    shared_extents,
                                     print_tx,
                                     Some(ancestors),
                                     Some(current_symlink_depth),
@@ -713,9 +817,20 @@ fn du_regular(
                                     depth: depth + 1,
                                 }))?;
                             } else {
+                                if options.dedupe_reflinks {
+                                    let dev_id = this_stat.inode.map_or(0, |inode| inode.dev_id);
+                                    this_stat.blocks = adjust_blocks_for_reflinks(
+                                        &this_stat.path,
+                                        dev_id,
+                                        this_stat.blocks,
+                                        shared_extents,
+                                    );
+                                }
+
                                 my_stat.size += this_stat.size;
                                 my_stat.blocks += this_stat.blocks;
                                 my_stat.inodes += 1;
+
                                 if options.all {
                                     print_tx.send(Ok(StatPrintInfo {
                                         stat: this_stat,
@@ -821,9 +936,10 @@ impl StatPrinter {
         } else if self.apparent_size {
             stat.size
         } else {
-            // The st_blocks field indicates the number of blocks allocated to the file, 512-byte units.
+            // The st_blocks field indicates the number of blocks allocated to the file,
+            // in POSIX_BLOCK_SIZE-byte units.
             // See: http://linux.die.net/man/2/stat
-            stat.blocks * 512
+            stat.blocks * POSIX_BLOCK_SIZE
         }
     }
 
@@ -1073,6 +1189,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let size_format = parse_size_format(&matches)?;
 
+    let inodes = matches.get_flag(options::INODES);
+    let apparent_size =
+        matches.get_flag(options::APPARENT_SIZE) || matches.get_flag(options::BYTES);
+
     let traversal_options = TraversalOptions {
         all: matches.get_flag(options::ALL),
         separate_dirs: matches.get_flag(options::SEPARATE_DIRS),
@@ -1086,6 +1206,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             Deref::None
         },
         count_links,
+        dedupe_reflinks: !count_links && !apparent_size && !inodes,
         verbose: matches.get_flag(options::VERBOSE),
         excludes: build_exclude_patterns(&matches)?,
     };
@@ -1101,7 +1222,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         size_format,
         summarize,
         total: matches.get_flag(options::TOTAL),
-        inodes: matches.get_flag(options::INODES),
+        inodes,
         threshold: matches
             .get_one::<String>(options::THRESHOLD)
             .map(|s| {
@@ -1110,16 +1231,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 })
             })
             .transpose()?,
-        apparent_size: matches.get_flag(options::APPARENT_SIZE) || matches.get_flag(options::BYTES),
+        apparent_size,
         time,
         time_format,
         line_ending: LineEnding::from_zero_flag(matches.get_flag(options::NULL)),
         total_text: translate!("du-total"),
     };
 
-    if stat_printer.inodes
-        && (matches.get_flag(options::APPARENT_SIZE) || matches.get_flag(options::BYTES))
-    {
+    if inodes && apparent_size {
         show_warning!(
             "{}",
             translate!("du-warning-apparent-size-ineffective-with-inodes")
@@ -1132,6 +1251,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // Check existence of path provided in argument
     let mut seen_inodes: HashSet<FileInfo> = HashSet::default();
+    let mut seen_shared_extents: HashSet<SharedExtentKey> = HashSet::default();
 
     'loop_file: for path in files {
         // Skip if we don't want to ignore anything
@@ -1177,6 +1297,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     &traversal_options,
                     0,
                     &mut seen_inodes,
+                    &mut seen_shared_extents,
                     &print_tx,
                     None,
                     Some(stat),
@@ -1206,6 +1327,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     &traversal_options,
                     0,
                     &mut seen_inodes,
+                    &mut seen_shared_extents,
                     &print_tx,
                     None,
                     None,
