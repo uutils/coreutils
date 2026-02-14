@@ -809,8 +809,21 @@ struct WeekFields {
 }
 
 fn compute_week_fields(date: &parse_datetime::ExtendedDateTime) -> Result<WeekFields, String> {
-    let jan1 = parse_datetime::ExtendedDateTime::new(date.year, 1, 1, 0, 0, 0, 0, 0)
-        .map_err(str::to_string)?;
+    let jan1 = parse_datetime::ExtendedDateTime::new(
+        parse_datetime::DateParts {
+            year: date.year,
+            month: 1,
+            day: 1,
+        },
+        parse_datetime::TimeParts {
+            hour: 0,
+            minute: 0,
+            second: 0,
+            nanosecond: 0,
+        },
+        0,
+    )
+    .map_err(str::to_string)?;
     let yday0 = i32::from(date.day_of_year()) - 1;
     let jan1_sunday0 = i32::from(jan1.weekday_sunday0());
     let jan1_monday0 = (jan1_sunday0 + 6).rem_euclid(7);
