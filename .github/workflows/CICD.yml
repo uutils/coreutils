@@ -229,6 +229,7 @@ jobs:
       shell: bash
       run: |
         redoxer toolchain ||:
+        find ~/.redoxer -name "x86_64-unknown-redox-gcc"
         ## Dependent VARs setup
         outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         # * determine sub-crate utility list
