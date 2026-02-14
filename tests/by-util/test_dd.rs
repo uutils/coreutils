@@ -1298,6 +1298,25 @@ fn test_final_stats_three_char_limit() {
 }
 
 #[test]
+fn test_final_stats_mb_suffix() {
+    // Exercise the suffix selection loop in to_magnitude_and_suffix through
+    // actual dd output, ensuring MB/MiB suffixes render without panic.
+    let result = new_ucmd!()
+        .args(&["bs=1000", "count=1000"])
+        .pipe_in("0".repeat(1_000_000))
+        .succeeds();
+    let s = result.stderr_str();
+    assert!(
+        s.contains("kB") || s.contains("MB"),
+        "expected SI suffix in output: {s}"
+    );
+    assert!(
+        s.contains("KiB") || s.contains("MiB"),
+        "expected IEC suffix in output: {s}"
+    );
+}
+
+#[test]
 fn test_invalid_number_arg_gnu_compatibility() {
     let commands = vec!["bs", "cbs", "count", "ibs", "obs", "seek", "skip"];
 

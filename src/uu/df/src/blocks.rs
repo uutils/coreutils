@@ -88,7 +88,7 @@ pub(crate) fn to_magnitude_and_suffix(
     let suffixes = suffix_type.suffixes();
     let mut i = 0;
 
-    while bases[i + 1] - bases[i] < n && i < suffixes.len() {
+    while i < suffixes.len() - 1 && bases[i + 1] - bases[i] < n {
         i += 1;
     }
 
