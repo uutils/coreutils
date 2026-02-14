@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 use clap::{Arg, ArgAction, Command, value_parser};
+use nix::libc;
 use nix::sys::stat::Mode;
 use nix::unistd::mkfifo;
 use uucore::display::Quotable;

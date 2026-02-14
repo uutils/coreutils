@@ -201,6 +201,12 @@ pub fn get_umask() -> u32 {
 /// directories with exact permissions, bypassing umask. The guard ensures
 /// the original umask is restored even if a panic occurs.
 ///
+/// # Thread Safety
+///
+/// Note: umask is process-wide, so this guard is not thread-safe.
+/// Concurrent use from multiple threads will cause race conditions.
+/// In tests, use a mutex to serialize access when testing umask-related functionality.
+///
 /// # Example
 ///
 /// ```no_run
@@ -247,6 +253,17 @@ mod tests {
 
     use super::parse;
     use super::parse_chmod;
+
+    #[cfg(unix)]
+    use std::sync::Mutex;
+
+    /// Mutex to serialize umask-related tests.
+    ///
+    /// umask is process-global, so parallel tests that manipulate it can
+    /// interfere with each other. This mutex ensures only one test accesses
+    /// umask at a time.
+    #[cfg(unix)]
+    static UMASK_TEST_MUTEX: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_chmod_symbolic_modes() {
@@ -387,6 +404,9 @@ mod tests {
     fn test_umask_guard_basic() {
         use super::{UmaskGuard, get_umask};
 
+        // Acquire mutex to prevent concurrent umask tests
+        let _lock = UMASK_TEST_MUTEX.lock().unwrap();
+
         // Save original umask
         let original = get_umask();
 
@@ -404,6 +424,9 @@ mod tests {
     #[cfg(unix)]
     fn test_umask_guard_nested() {
         use super::{UmaskGuard, get_umask};
+
+        // Acquire mutex to prevent concurrent umask tests
+        let _lock = UMASK_TEST_MUTEX.lock().unwrap();
 
         let original = get_umask();
 
@@ -428,6 +451,9 @@ mod tests {
     fn test_umask_guard_panic_safety() {
         use super::{UmaskGuard, get_umask};
         use std::panic::{AssertUnwindSafe, catch_unwind};
+
+        // Acquire mutex to prevent concurrent umask tests
+        let _lock = UMASK_TEST_MUTEX.lock().unwrap();
 
         let original = get_umask();
 
