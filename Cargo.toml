@@ -401,7 +401,7 @@ blake2b_simd = "1.0.2"
 blake3 = "1.5.1"
 sm3 = "0.4.2"
 crc-fast = "1.5.0"
-digest = "0.10.7"
+digest = "0.11.0"
 
 # Fluent dependencies
 fluent = "0.17.0"
