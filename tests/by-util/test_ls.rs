@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo timefile
-// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons
+// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons NOFILE
 #![allow(
     clippy::similar_names,
     clippy::too_many_lines,
@@ -13,6 +13,8 @@
 #[cfg(all(unix, feature = "chmod"))]
 use nix::unistd::{close, dup};
 use regex::Regex;
+#[cfg(unix)]
+use rlimit::Resource;
 #[cfg(not(target_os = "openbsd"))]
 use std::collections::HashMap;
 #[cfg(target_os = "linux")]
@@ -7083,4 +7085,25 @@ fn test_ls_proc_self_fd_no_errors() {
         .arg("/proc/self/fd")
         .succeeds()
         .stderr_does_not_contain("cannot access");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_ls_recursive_no_fd_leak() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let deep_path: String = (1..=30)
+        .map(|i| i.to_string())
+        .collect::<Vec<_>>()
+        .join("/");
+    at.mkdir_all(&deep_path);
+
+    scene
+        .ucmd()
+        .arg("-R")
+        .arg("1")
+        .limit(Resource::NOFILE, 20, 20)
+        .succeeds()
+        .stderr_is("");
 }
