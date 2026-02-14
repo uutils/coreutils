@@ -120,27 +120,27 @@ fn test_install_ancestors_mode_directories() {
 }
 
 #[test]
-fn test_install_remove_impermissible_dst_file() {
-    let src_file = "/dev/null";
-    let dst_file = "/dev/full";
+#[cfg(target_os = "linux")]
+fn test_install_cannot_remove_destination() {
+    if geteuid() == 0 {
+        return;
+    }
     new_ucmd!()
-        .args(&[src_file, dst_file])
+        .args(&["/dev/null", "/dev/full"])
         .fails()
-        .stderr_only(format!(
-            "install: failed to remove existing file '{dst_file}': Permission denied\n"
-        ));
+        .stderr_only("install: cannot remove '/dev/full': Permission denied\n");
 }
 
 #[test]
-fn test_install_remove_inaccessible_dst_file() {
-    let src_file = "/dev/null";
-    let dst_file = "/root/file";
+#[cfg(target_os = "linux")]
+fn test_install_cannot_create_destination() {
+    if geteuid() == 0 {
+        return;
+    }
     new_ucmd!()
-        .args(&[src_file, dst_file])
+        .args(&["/dev/null", "/root/file"])
         .fails()
-        .stderr_only(format!(
-            "install: cannot stat '{dst_file}': Permission denied\n"
-        ));
+        .stderr_only("install: cannot create regular file '/root/file': Permission denied\n");
 }
 
 #[test]

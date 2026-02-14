@@ -48,8 +48,9 @@ install-error-mutually-exclusive-compare-preserve = Options --compare and --pres
 install-error-mutually-exclusive-compare-strip = Options --compare and --strip are mutually exclusive
 install-error-missing-file-operand = missing file operand
 install-error-missing-destination-operand = missing destination file operand after { $path }
-install-error-failed-to-remove = failed to remove existing file { $path }: { $error }
-install-error-cannot-stat = cannot stat { $path }: { $error }
+install-error-failed-to-access = failed to access { $path }
+install-error-failed-to-remove = cannot remove { $path }
+install-error-cannot-create-file = cannot create regular file { $path }
 
 # Warning messages
 install-warning-compare-ignored = the --compare (-C) option is ignored when you specify a mode with non-permission bits
