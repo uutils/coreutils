@@ -2713,4 +2713,21 @@ fn test_locale_complex_utf8_sorting() {
         .stdout_is("apple\nApple\nbanana\nBanana\nzebra\nZebra\n");
 }
 
+#[test]
+fn test_locale_utf8_with_key_field() {
+    // Regression test for issue #10909
+    // Sort should not panic when using -k flag with UTF-8 locale
+    // The bug occurred when rayon worker threads tried to access an uninitialized collator
+    let input = "a b 5433 down data path1 path2 path3 path4 path5
+c d 5435 down data path1 path2 path3 path4 path5
+e f 5436 down data path1 path2 path3 path4 path5\n";
+
+    new_ucmd!()
+        .env("LANG", "en_US.utf8")
+        .arg("-k3")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(input);
+}
+
 /* spell-checker: enable */

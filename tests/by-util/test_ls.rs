@@ -5208,6 +5208,51 @@ fn test_ls_dired_recursive() {
 }
 
 #[test]
+fn test_ls_dired_subdired_multiple_dirs_non_recursive() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("dir1");
+    at.mkdir("dir2");
+    at.touch("dir1/a");
+    at.touch("dir2/b");
+
+    let result = scene
+        .ucmd()
+        .arg("--dired")
+        .arg("dir1")
+        .arg("dir2")
+        .succeeds();
+
+    let output = result.stdout_str().to_string();
+    let subdired_line = output
+        .lines()
+        .find(|&line| line.starts_with("//SUBDIRED//"))
+        .unwrap();
+    let positions: Vec<usize> = subdired_line
+        .split_whitespace()
+        .skip(1)
+        .map(|s| s.parse().unwrap())
+        .collect();
+
+    assert_eq!(positions.len() % 2, 0); // Ensure there's an even number of positions
+
+    let dirnames: Vec<String> = positions
+        .chunks(2)
+        .map(|chunk| {
+            let start_pos = chunk[0];
+            let end_pos = chunk[1];
+            String::from_utf8(output.as_bytes()[start_pos..end_pos].to_vec())
+                .unwrap()
+                .trim()
+                .to_string()
+        })
+        .collect();
+
+    assert_eq!(dirnames, vec!["dir1", "dir2"]);
+}
+
+#[test]
 fn test_ls_dired_outputs_parent_offset() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -5334,6 +5379,53 @@ fn test_ls_dired_simple() {
         String::from_utf8(result.stdout_str().as_bytes()[start_pos..end_pos].to_vec()).unwrap();
 
     assert_eq!(filename, "a1");
+}
+
+#[test]
+fn test_ls_dired_symlink_name_only() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("d");
+    at.touch("d/target");
+    at.relative_symlink_file("target", "d/link");
+
+    let result = scene
+        .ucmd()
+        .arg("--dired")
+        .arg("-l")
+        .arg("--color=never")
+        .arg("d")
+        .succeeds();
+
+    let output = result.stdout_str().to_string();
+    assert!(output.contains("link -> target"));
+
+    let dired_line = output
+        .lines()
+        .find(|&line| line.starts_with("//DIRED//"))
+        .unwrap();
+    let positions: Vec<usize> = dired_line
+        .split_whitespace()
+        .skip(1)
+        .map(|s| s.parse().unwrap())
+        .collect();
+
+    assert_eq!(positions.len() % 2, 0);
+
+    let filenames: Vec<String> = positions
+        .chunks(2)
+        .map(|chunk| {
+            let start_pos = chunk[0];
+            let end_pos = chunk[1];
+            String::from_utf8(output.as_bytes()[start_pos..end_pos].to_vec())
+                .unwrap()
+                .trim()
+                .to_string()
+        })
+        .collect();
+
+    assert_eq!(filenames, vec!["link", "target"]);
 }
 
 #[test]
