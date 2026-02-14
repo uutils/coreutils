@@ -147,12 +147,14 @@ pub struct Passwd {
     /// AKA passwd.pw_dir
     pub user_dir: Option<String>,
     /// AKA passwd.pw_passwd
+    #[expect(clippy::struct_field_names)]
     pub user_passwd: Option<String>,
     /// AKA passwd.pw_class
     #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
     pub user_access_class: Option<String>,
     /// AKA passwd.pw_change
     #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+    #[expect(clippy::struct_field_names)]
     pub passwd_change_time: time_t,
     /// AKA passwd.pw_expire
     #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
