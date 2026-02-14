@@ -1035,7 +1035,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let max_depth = parse_depth(
         matches
             .get_one::<String>(options::MAX_DEPTH)
-            .map(|s| s.as_str()),
+            .map(String::as_str),
         summarize,
     )?;
 

@@ -184,7 +184,7 @@ struct Options {
 impl Options {
     fn new(matches: &ArgMatches) -> Result<Self, ParseError> {
         let (remaining_mode, tabstops) = match matches.get_many::<String>(options::TABS) {
-            Some(s) => tabstops_parse(&s.map(|s| s.as_str()).collect::<Vec<_>>().join(","))?,
+            Some(s) => tabstops_parse(&s.map(String::as_str).collect::<Vec<_>>().join(","))?,
             None => (RemainingMode::None, vec![DEFAULT_TABSTOP]),
         };
 

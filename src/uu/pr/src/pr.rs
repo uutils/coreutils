@@ -387,7 +387,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut files = matches
         .get_many::<String>(options::FILES)
-        .map(|v| v.map(|s| s.as_str()).collect::<Vec<_>>())
+        .map(|v| v.map(String::as_str).collect::<Vec<_>>())
         .unwrap_or_default()
         .clone();
     if files.is_empty() {

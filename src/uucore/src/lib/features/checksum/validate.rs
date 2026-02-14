@@ -1045,7 +1045,7 @@ mod tests {
                         line_info
                             .algo_bit_len
                             .map(|m| m.to_string().as_bytes().to_owned()),
-                        bits.map(|b| b.to_owned()),
+                        bits.map(ToOwned::to_owned),
                         "failed for {}",
                         String::from_utf8_lossy(filename)
                     );

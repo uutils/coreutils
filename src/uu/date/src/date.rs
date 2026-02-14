@@ -746,7 +746,7 @@ fn build_tz_abbrev_map() -> HashMap<String, String> {
 /// Uses lazy-loaded cache with preferred mappings for disambiguation.
 fn tz_abbrev_to_iana(abbrev: &str) -> Option<&str> {
     let cache = TZ_ABBREV_CACHE.get_or_init(build_tz_abbrev_map);
-    cache.get(abbrev).map(|s| s.as_str())
+    cache.get(abbrev).map(String::as_str)
 }
 
 /// Attempts to parse a date string that contains a timezone abbreviation (e.g. "EST").

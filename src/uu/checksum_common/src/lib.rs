@@ -5,6 +5,7 @@
 
 // spell-checker:ignore (ToDO) algo
 
+use std::borrow::Borrow;
 use std::ffi::OsString;
 
 use clap::builder::ValueParser;
@@ -159,7 +160,7 @@ pub fn checksum_main(
     let files = matches
         .get_many::<OsString>(options::FILE)
         .unwrap()
-        .map(|s| s.as_os_str());
+        .map(Borrow::borrow);
 
     if check {
         // cksum does not support '--check'ing legacy algorithms

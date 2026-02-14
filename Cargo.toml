@@ -655,7 +655,6 @@ missing_errors_doc = "allow"                 # 1572
 missing_panics_doc = "allow"                 # 946
 must_use_candidate = "allow"                 # 322
 match_same_arms = "allow"                    # 204
-redundant_closure_for_method_calls = "allow" # 125
 cast_possible_truncation = "allow"           # 122
 too_many_lines = "allow"                     # 101
 cast_possible_wrap = "allow"                 # 78

@@ -187,7 +187,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let commands = match matches.get_many::<String>(options::COMMAND) {
-        Some(v) => v.map(|s| s.as_str()).collect(),
+        Some(v) => v.map(String::as_str).collect(),
         None => vec![],
     };
 

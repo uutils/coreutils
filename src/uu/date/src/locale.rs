@@ -188,7 +188,7 @@ mod tests {
                 if ptr.is_null() {
                     None
                 } else {
-                    CStr::from_ptr(ptr).to_str().ok().map(|s| s.to_string())
+                    CStr::from_ptr(ptr).to_str().ok().map(ToString::to_string)
                 }
             };
 

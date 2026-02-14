@@ -257,7 +257,7 @@ impl<'a> NativeStr<'a> {
         let n_prefix = to_native_int_representation(prefix);
         let result = self.match_cow(
             |b| b.strip_prefix(&*n_prefix).ok_or(()),
-            |o| o.strip_prefix(&*n_prefix).map(|x| x.to_vec()).ok_or(()),
+            |o| o.strip_prefix(&*n_prefix).map(ToOwned::to_owned).ok_or(()),
         );
         result.ok()
     }
@@ -266,7 +266,7 @@ impl<'a> NativeStr<'a> {
         let n_prefix = to_native_int_representation(prefix);
         let result = self.match_cow_native(
             |b| b.strip_prefix(&*n_prefix).ok_or(()),
-            |o| o.strip_prefix(&*n_prefix).map(|x| x.to_vec()).ok_or(()),
+            |o| o.strip_prefix(&*n_prefix).map(ToOwned::to_owned).ok_or(()),
         );
         result.ok()
     }
