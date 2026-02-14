@@ -19,7 +19,7 @@ use uucore::mode;
 use uucore::perms::{TraverseSymlinks, configure_symlink_and_recursion};
 
 #[cfg(all(unix, not(target_os = "redox")))]
-use uucore::safe_traversal::DirFd;
+use uucore::safe_traversal::{DirFd, SymlinkBehavior};
 use uucore::{format_usage, show, show_error};
 
 use uucore::translate;
@@ -473,7 +473,7 @@ impl Chmoder {
 
         // If the path is a directory (or we should follow symlinks), recurse into it using safe traversal
         if (!file_path.is_symlink() || should_follow_symlink) && file_path.is_dir() {
-            match DirFd::open(file_path) {
+            match DirFd::open(file_path, SymlinkBehavior::Follow) {
                 Ok(dir_fd) => {
                     r = self.safe_traverse_dir(&dir_fd, file_path).and(r);
                 }
@@ -502,7 +502,7 @@ impl Chmoder {
         for entry_name in entries {
             let entry_path = dir_path.join(&entry_name);
 
-            let dir_meta = dir_fd.metadata_at(&entry_name, should_follow_symlink);
+            let dir_meta = dir_fd.metadata_at(&entry_name, should_follow_symlink.into());
             let Ok(meta) = dir_meta else {
                 // Handle permission denied with proper file path context
                 let e = dir_meta.unwrap_err();
@@ -527,7 +527,7 @@ impl Chmoder {
 
                 // Recurse into subdirectories using the existing directory fd
                 if meta.is_dir() {
-                    match dir_fd.open_subdir(&entry_name) {
+                    match dir_fd.open_subdir(&entry_name, SymlinkBehavior::Follow) {
                         Ok(child_dir_fd) => {
                             r = self.safe_traverse_dir(&child_dir_fd, &entry_path).and(r);
                         }
@@ -591,7 +591,7 @@ impl Chmoder {
 
         // Use safe traversal to change the mode
         let follow_symlinks = self.dereference;
-        if let Err(_e) = dir_fd.chmod_at(entry_name, new_mode, follow_symlinks) {
+        if let Err(_e) = dir_fd.chmod_at(entry_name, new_mode, follow_symlinks.into()) {
             if self.verbose {
                 println!(
                     "failed to change mode of {} to {new_mode:o}",
