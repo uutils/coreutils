@@ -13,4 +13,3 @@ unexpand-error-invalid-character = tab size contains invalid character(s): { $ch
 unexpand-error-tab-size-cannot-be-zero = tab size cannot be 0
 unexpand-error-tab-size-too-large = tab stop value is too large
 unexpand-error-tab-sizes-must-be-ascending = tab sizes must be ascending
-unexpand-error-is-directory = { $path }: Is a directory

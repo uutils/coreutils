@@ -13,4 +13,3 @@ unexpand-error-invalid-character = la taille de tabulation contient des caractè
 unexpand-error-tab-size-cannot-be-zero = la taille de tabulation ne peut pas être 0
 unexpand-error-tab-size-too-large = la valeur d'arrêt de tabulation est trop grande
 unexpand-error-tab-sizes-must-be-ascending = les tailles de tabulation doivent être croissantes
-unexpand-error-is-directory = { $path } : Est un répertoire

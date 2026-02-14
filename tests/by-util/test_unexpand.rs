@@ -259,8 +259,8 @@ fn test_is_directory() {
     at.mkdir(dir_name);
 
     ucmd.arg(dir_name)
-        .fails()
-        .stderr_contains(format!("unexpand: {dir_name}: Is a directory"));
+        .fails_with_code(1)
+        .stderr_is(format!("unexpand: {dir_name}: Is a directory\n"));
 }
 
 #[test]

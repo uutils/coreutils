@@ -234,7 +234,7 @@ fn test_directory() {
     s.fixtures.mkdir("test_directory");
     s.ucmd()
         .args(&["test_directory"])
-        .fails()
+        .fails_with_code(1)
         .stderr_is("cat: test_directory: Is a directory\n");
 }
 

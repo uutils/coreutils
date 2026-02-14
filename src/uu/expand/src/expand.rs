@@ -15,7 +15,7 @@ use std::str::from_utf8;
 use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
+use uucore::error::{FromIo, UError, UResult, set_exit_code};
 use uucore::translate;
 use uucore::{format_usage, show};
 
@@ -296,12 +296,6 @@ fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read + 'static>>> {
         Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))
     } else {
         let path_ref = Path::new(path);
-        if path_ref.is_dir() {
-            return Err(USimpleError::new(
-                1,
-                translate!("expand-error-is-directory", "file" => path.maybe_quote()),
-            ));
-        }
         file_buf = File::open(path_ref).map_err_context(|| path.maybe_quote().to_string())?;
         Ok(BufReader::new(Box::new(file_buf) as Box<dyn Read>))
     }

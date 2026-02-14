@@ -14,5 +14,4 @@ expand-error-specifier-only-allowed-with-last = le spécificateur { $specifier }
 expand-error-tab-size-cannot-be-zero = la taille de tabulation ne peut pas être 0
 expand-error-tab-size-too-large = l'arrêt de tabulation est trop grand { $size }
 expand-error-tab-sizes-must-be-ascending = les tailles de tabulation doivent être croissantes
-expand-error-is-directory = { $file } : Est un répertoire
 expand-error-failed-to-write-output = échec de l'écriture de la sortie

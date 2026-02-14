@@ -424,28 +424,28 @@ fn test_is_dir() {
     scene
         .ucmd()
         .args(&[".", "."])
-        .fails()
+        .fails_with_code(1)
         .stderr_only("comm: .: Is a directory\n");
 
     at.mkdir("dir");
     scene
         .ucmd()
         .args(&["dir", "."])
-        .fails()
+        .fails_with_code(1)
         .stderr_only("comm: dir: Is a directory\n");
 
     at.touch("file");
     scene
         .ucmd()
         .args(&[".", "file"])
-        .fails()
+        .fails_with_code(1)
         .stderr_only("comm: .: Is a directory\n");
 
     at.touch("file");
     scene
         .ucmd()
         .args(&["file", "."])
-        .fails()
+        .fails_with_code(1)
         .stderr_only("comm: .: Is a directory\n");
 }
 

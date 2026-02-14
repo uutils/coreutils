@@ -10,11 +10,10 @@ use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Stdout, Write, stdin, stdout};
 use std::num::IntErrorKind;
-use std::path::Path;
 use std::str::from_utf8;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
+use uucore::error::{FromIo, UError, UResult, set_exit_code};
 use uucore::translate;
 use uucore::{format_usage, show};
 
@@ -281,13 +280,7 @@ pub fn uu_app() -> Command {
 
 fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read + 'static>>> {
     let file_buf;
-    let filename = Path::new(path);
-    if filename.is_dir() {
-        Err(Box::new(USimpleError {
-            code: 1,
-            message: translate!("unexpand-error-is-directory", "path" => filename.maybe_quote()),
-        }))
-    } else if path == "-" {
+    if path == "-" {
         Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))
     } else {
         file_buf = File::open(path).map_err_context(|| path.maybe_quote().to_string())?;
