@@ -39,6 +39,7 @@ jobs:
           uu_fold,
           uu_join,
           uu_ls,
+          uu_chmod,
           uu_mv,
           uu_nl,
           uu_numfmt,
