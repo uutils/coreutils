@@ -120,6 +120,30 @@ fn test_install_ancestors_mode_directories() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_install_cannot_remove_destination() {
+    if geteuid() == 0 {
+        return;
+    }
+    new_ucmd!()
+        .args(&["/dev/null", "/dev/full"])
+        .fails()
+        .stderr_only("install: cannot remove '/dev/full': Permission denied\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_install_cannot_create_destination() {
+    if geteuid() == 0 {
+        return;
+    }
+    new_ucmd!()
+        .args(&["/dev/null", "/root/file"])
+        .fails()
+        .stderr_only("install: cannot create regular file '/root/file': Permission denied\n");
+}
+
+#[test]
 fn test_install_ancestors_mode_directories_with_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     let ancestor1 = "ancestor1";

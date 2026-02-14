@@ -678,7 +678,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
             return copy_files_into_dir(sources, &target, b);
         }
 
-        if target.is_file() || is_new_file_path(&target) {
+        if (target.exists() && !target.is_dir()) || is_new_file_path(&target) {
             copy(source, &target, b)
         } else {
             Err(InstallError::InvalidTarget(target).into())
@@ -820,6 +820,12 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
         }
     }
 
+    if let Err(e) = to.try_exists() {
+        return Err(e.map_err_context(
+            || translate!("install-error-failed-to-access", "path" => to.quote()),
+        ));
+    }
+
     if to.is_dir() && !from.is_dir() {
         return Err(InstallError::OverrideDirectoryFailed(
             to.to_path_buf().clone(),
@@ -833,10 +839,9 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
     // appears at this path between the remove and create, it will fail safely
     if let Err(e) = fs::remove_file(to) {
         if e.kind() != std::io::ErrorKind::NotFound {
-            show_error!(
-                "{}",
-                translate!("install-error-failed-to-remove", "path" => to.quote(), "error" => format!("{e:?}"))
-            );
+            return Err(e.map_err_context(
+                || translate!("install-error-failed-to-remove", "path" => to.quote()),
+            ));
         }
     }
 
@@ -846,7 +851,8 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
         .write(true)
         .create_new(true)
         .mode(0o600)
-        .open(to)?;
+        .open(to)
+        .map_err_context(|| translate!("install-error-cannot-create-file", "path" => to.quote()))?;
 
     copy_stream(&mut handle, &mut dest).map_err(|err| {
         InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err.to_string())
