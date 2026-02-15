@@ -7671,3 +7671,21 @@ fn test_cp_gnu_preserve_mode() {
 
     assert_eq!(d1_mode, d3_mode);
 }
+
+#[test]
+#[cfg(unix)]
+fn test_cp_preserve_strip_setuid_on_chown_fail() {
+    if uucore::process::geteuid() == 0 {
+        return;
+    }
+
+    let source = "/usr/bin/newgrp";
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("-p").arg(source).arg("dest").succeeds();
+
+    let mode = at.metadata("dest").mode();
+    #[allow(clippy::unnecessary_cast)]
+    let special = (libc::S_ISUID | libc::S_ISGID | libc::S_ISVTX) as u32;
+    assert_eq!(mode & special, 0);
+}

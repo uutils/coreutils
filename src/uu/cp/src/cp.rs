@@ -1652,7 +1652,7 @@ impl OverwriteMode {
 /// Note: ENOTSUP/EOPNOTSUPP errors are silently ignored when not required, as per GNU cp
 /// documentation: "Try to preserve SELinux security context and extended attributes (xattr),
 /// but ignore any failure to do that and print no corresponding diagnostic."
-fn handle_preserve<F: Fn() -> CopyResult<()>>(p: Preserve, f: F) -> CopyResult<()> {
+fn handle_preserve<F: FnMut() -> CopyResult<()>>(p: Preserve, mut f: F) -> CopyResult<()> {
     match p {
         Preserve::No { .. } => {}
         Preserve::Yes { required } => {
@@ -1722,6 +1722,8 @@ pub(crate) fn copy_attributes(
     let context = &*format!("{} -> {}", source.quote(), dest.quote());
     let source_metadata =
         fs::symlink_metadata(source).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+    #[cfg(unix)]
+    let mut ownership_failed = false;
 
     let mode_explicitly_disabled = matches!(attributes.mode, Preserve::No { explicit: true });
 
@@ -1765,6 +1767,7 @@ pub(crate) fn copy_attributes(
         // and will fall back to changing only the gid if possible.
         if try_chown(Some(dest_uid)).is_err() {
             let _ = try_chown(None);
+            ownership_failed = true;
         }
         Ok(())
     })?;
@@ -1776,7 +1779,20 @@ pub(crate) fn copy_attributes(
         // do nothing, since every symbolic link has the same
         // permissions.
         if !dest.is_symlink() {
-            fs::set_permissions(dest, source_metadata.permissions())
+            let permissions = source_metadata.permissions();
+
+            #[cfg(unix)]
+            let permissions = {
+                let mut perms = permissions;
+                if ownership_failed {
+                    #[allow(clippy::unnecessary_cast)]
+                    let mask = (libc::S_ISUID | libc::S_ISGID | libc::S_ISVTX) as u32;
+                    perms.set_mode(perms.mode() & !mask);
+                }
+                perms
+            };
+
+            fs::set_permissions(dest, permissions)
                 .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
             // FIXME: Implement this for windows as well
             #[cfg(feature = "feat_acl")]
