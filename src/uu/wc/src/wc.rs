@@ -388,7 +388,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let settings = Settings::new(&matches);
     let inputs = Inputs::new(&matches)?;
 
-    wc(&inputs, &settings)
+    let is_posixly_correct = env::var_os("POSIXLY_CORRECT").is_some();
+
+    wc(&inputs, &settings, is_posixly_correct)
 }
 
 pub fn uu_app() -> Command {
@@ -469,6 +471,7 @@ pub fn uu_app() -> Command {
 fn word_count_from_reader<T: WordCountable>(
     mut reader: T,
     settings: &Settings,
+    is_posixly_correct: bool,
 ) -> (WordCount, Option<io::Error>) {
     match (
         settings.show_bytes,
@@ -520,51 +523,87 @@ fn word_count_from_reader<T: WordCountable>(
         }
         // show_words
         (_, false, false, false, true) => {
-            word_count_from_reader_specialized::<_, false, false, false, true>(reader)
+            word_count_from_reader_specialized::<_, false, false, false, true>(
+                reader,
+                is_posixly_correct,
+            )
         }
         // show_max_line_length
         (_, false, false, true, false) => {
-            word_count_from_reader_specialized::<_, false, false, true, false>(reader)
+            word_count_from_reader_specialized::<_, false, false, true, false>(
+                reader,
+                is_posixly_correct,
+            )
         }
         // show_max_line_length, show_words
         (_, false, false, true, true) => {
-            word_count_from_reader_specialized::<_, false, false, true, true>(reader)
+            word_count_from_reader_specialized::<_, false, false, true, true>(
+                reader,
+                is_posixly_correct,
+            )
         }
         // show_lines, show_words
         (_, false, true, false, true) => {
-            word_count_from_reader_specialized::<_, false, true, false, true>(reader)
+            word_count_from_reader_specialized::<_, false, true, false, true>(
+                reader,
+                is_posixly_correct,
+            )
         }
         // show_lines, show_max_line_length
         (_, false, true, true, false) => {
-            word_count_from_reader_specialized::<_, false, true, true, false>(reader)
+            word_count_from_reader_specialized::<_, false, true, true, false>(
+                reader,
+                is_posixly_correct,
+            )
         }
         // show_lines, show_max_line_length, show_words
         (_, false, true, true, true) => {
-            word_count_from_reader_specialized::<_, false, true, true, true>(reader)
+            word_count_from_reader_specialized::<_, false, true, true, true>(
+                reader,
+                is_posixly_correct,
+            )
         }
         // show_chars, show_words
         (_, true, false, false, true) => {
-            word_count_from_reader_specialized::<_, true, false, false, true>(reader)
+            word_count_from_reader_specialized::<_, true, false, false, true>(
+                reader,
+                is_posixly_correct,
+            )
         }
         // show_chars, show_max_line_length
         (_, true, false, true, false) => {
-            word_count_from_reader_specialized::<_, true, false, true, false>(reader)
+            word_count_from_reader_specialized::<_, true, false, true, false>(
+                reader,
+                is_posixly_correct,
+            )
         }
         // show_chars, show_max_line_length, show_words
         (_, true, false, true, true) => {
-            word_count_from_reader_specialized::<_, true, false, true, true>(reader)
+            word_count_from_reader_specialized::<_, true, false, true, true>(
+                reader,
+                is_posixly_correct,
+            )
         }
         // show_chars, show_lines, show_words
         (_, true, true, false, true) => {
-            word_count_from_reader_specialized::<_, true, true, false, true>(reader)
+            word_count_from_reader_specialized::<_, true, true, false, true>(
+                reader,
+                is_posixly_correct,
+            )
         }
         // show_chars, show_lines, show_max_line_length
         (_, true, true, true, false) => {
-            word_count_from_reader_specialized::<_, true, true, true, false>(reader)
+            word_count_from_reader_specialized::<_, true, true, true, false>(
+                reader,
+                is_posixly_correct,
+            )
         }
         // show_chars, show_lines, show_max_line_length, show_words
         (_, true, true, true, true) => {
-            word_count_from_reader_specialized::<_, true, true, true, true>(reader)
+            word_count_from_reader_specialized::<_, true, true, true, true>(
+                reader,
+                is_posixly_correct,
+            )
         }
     }
 }
@@ -579,11 +618,11 @@ fn process_chunk<
     text: &str,
     current_len: &mut usize,
     in_word: &mut bool,
-    posixly_correct: bool,
+    is_posixly_correct: bool,
 ) {
     for ch in text.chars() {
         if SHOW_WORDS {
-            let is_space = if posixly_correct {
+            let is_space = if is_posixly_correct {
                 matches!(ch, '\t'..='\r' | ' ')
             } else {
                 ch.is_whitespace()
@@ -650,12 +689,12 @@ fn word_count_from_reader_specialized<
     const SHOW_WORDS: bool,
 >(
     reader: T,
+    is_posixly_correct: bool,
 ) -> (WordCount, Option<io::Error>) {
     let mut total = WordCount::default();
     let mut reader = BufReadDecoder::new(reader.buffered());
     let mut in_word = false;
     let mut current_len = 0;
-    let posixly_correct = env::var_os("POSIXLY_CORRECT").is_some();
     while let Some(chunk) = reader.next_strict() {
         match chunk {
             Ok(text) => {
@@ -664,7 +703,7 @@ fn word_count_from_reader_specialized<
                     text,
                     &mut current_len,
                     &mut in_word,
-                    posixly_correct,
+                    is_posixly_correct,
                 );
             }
             Err(e) => {
@@ -692,11 +731,15 @@ enum CountResult {
 ///
 /// Therefore, the reading implementations always return a total and sometimes
 /// return an error: ([`WordCount`], `Option<io::Error>`).
-fn word_count_from_input(input: &Input<'_>, settings: &Settings) -> CountResult {
+fn word_count_from_input(
+    input: &Input<'_>,
+    settings: &Settings,
+    is_posixly_correct: bool,
+) -> CountResult {
     let (total, maybe_err) = match input {
-        Input::Stdin(_) => word_count_from_reader(io::stdin().lock(), settings),
+        Input::Stdin(_) => word_count_from_reader(io::stdin().lock(), settings, is_posixly_correct),
         Input::Path(path) => match File::open(path) {
-            Ok(f) => word_count_from_reader(f, settings),
+            Ok(f) => word_count_from_reader(f, settings, is_posixly_correct),
             Err(err) => return CountResult::Failure(err),
         },
     };
@@ -901,7 +944,7 @@ pub(crate) fn wc_simd_allowed(policy: &SimdPolicy) -> bool {
     policy.iter_features().any(is_simd_runtime_feature)
 }
 
-fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
+fn wc(inputs: &Inputs, settings: &Settings, is_posixly_correct: bool) -> UResult<()> {
     let mut total_word_count = WordCount::default();
     let mut num_inputs: usize = 0;
 
@@ -970,17 +1013,18 @@ fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
         };
 
         // Store any I/O error from reading to print AFTER stats (matches GNU wc behavior)
-        let (word_count, deferred_error) = match word_count_from_input(&input, settings) {
-            CountResult::Success(word_count) => (word_count, None),
-            CountResult::Interrupted(word_count, err) => (
-                word_count,
-                Some(err.map_err_context(|| input.path_display())),
-            ),
-            CountResult::Failure(err) => {
-                show!(err.map_err_context(|| input.path_display()));
-                continue;
-            }
-        };
+        let (word_count, deferred_error) =
+            match word_count_from_input(&input, settings, is_posixly_correct) {
+                CountResult::Success(word_count) => (word_count, None),
+                CountResult::Interrupted(word_count, err) => (
+                    word_count,
+                    Some(err.map_err_context(|| input.path_display())),
+                ),
+                CountResult::Failure(err) => {
+                    show!(err.map_err_context(|| input.path_display()));
+                    continue;
+                }
+            };
         total_word_count += word_count;
         if are_stats_visible {
             let maybe_title = input.to_title();
