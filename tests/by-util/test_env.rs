@@ -924,7 +924,7 @@ fn test_env_arg_ignore_signal_valid_signals() {
     }
     {
         let mut target = Target::new(&["int", "usr2"]);
-        target.send_signal(Signal::SIGUSR1);
+        target.send_signal(Signal::SIGTERM);
         assert!(!target.is_alive());
     }
 }
