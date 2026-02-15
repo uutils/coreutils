@@ -838,7 +838,7 @@ fn tz_abbrev_to_iana(abbrev: &str) -> Option<&str> {
 /// If an abbreviation is found and the date is parsable, returns `Some(Zoned)`.
 /// Returns `None` if no abbreviation is detected or if parsing fails, indicating
 /// that standard parsing should be attempted.
-fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S) -> Option<Zoned> {
+fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S, now: &Zoned) -> Option<Zoned> {
     let s = date_str.as_ref();
 
     // Look for timezone abbreviation at the end of the string
@@ -855,7 +855,9 @@ fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S) -> Option<Zoned> {
                     // Parse the date part (everything before the TZ abbreviation)
                     let date_part = s.trim_end_matches(last_word).trim();
                     // Parse in the target timezone so "10:30 EDT" means 10:30 in EDT
-                    if let Ok(parsed) = parse_datetime::parse_datetime(date_part) {
+                    if let Ok(parsed) =
+                        parse_datetime::parse_datetime_at_date(now.clone(), date_part)
+                    {
                         let dt = parsed.datetime();
                         if let Ok(zoned) = dt.to_zoned(tz) {
                             return Some(zoned);
@@ -908,7 +910,7 @@ fn parse_date<S: AsRef<str> + Clone>(
     }
 
     // First, try to parse any timezone abbreviations
-    if let Some(zoned) = try_parse_with_abbreviation(input_str) {
+    if let Some(zoned) = try_parse_with_abbreviation(input_str, now) {
         if dbg_opts.debug {
             eprintln!(
                 "date: parsed date part: (Y-M-D) {}",
@@ -1107,6 +1109,14 @@ mod tests {
         assert_eq!(parse_military_timezone_with_offset(""), None); // Empty
         assert_eq!(parse_military_timezone_with_offset("m999"), None); // Too long
         assert_eq!(parse_military_timezone_with_offset("9m"), None); // Starts with digit
+    }
+
+    #[test]
+    fn test_abbreviation_resolves_relative_date_against_now() {
+        let now = "2025-03-15T20:00:00+00:00[UTC]".parse::<Zoned>().unwrap();
+        let result =
+            parse_date("yesterday 10:00 GMT", &now, DebugOptions::new(false, false)).unwrap();
+        assert_eq!(result.date(), jiff::civil::date(2025, 3, 14));
     }
 
     #[test]
