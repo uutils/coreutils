@@ -72,7 +72,7 @@ pub unsafe extern "C" fn utmpxname(_file: *const libc::c_char) -> libc::c_int {
     0
 }
 
-use crate::{LazyLock, libc}; // import macros from `../../macros.rs`
+use crate::libc; // import macros from `../../macros.rs`
 
 // In case the c_char array doesn't end with NULL
 macro_rules! chars2string {
@@ -380,7 +380,7 @@ impl Utmpx {
 // I believe the only technical memory unsafety that could happen is a data
 // race while copying the data out of the pointer returned by getutxent(), but
 // ordinary race conditions are also very much possible.
-static LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+static LOCK: Mutex<()> = Mutex::new(());
 
 /// Iterator of login records
 pub struct UtmpxIter {
