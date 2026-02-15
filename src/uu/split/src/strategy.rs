@@ -10,7 +10,7 @@ use clap::{ArgMatches, parser::ValueSource};
 use thiserror::Error;
 use uucore::{
     display::Quotable,
-    parser::parse_size::{ParseSizeError, parse_size_u64, parse_size_u64_max},
+    parser::parse_size::{ParseSizeError, parse_size_u64},
     translate,
 };
 
@@ -225,7 +225,7 @@ impl Strategy {
             error: fn(ParseSizeError) -> StrategyError,
         ) -> Result<Strategy, StrategyError> {
             let s = matches.get_one::<String>(option).unwrap();
-            let n = parse_size_u64_max(s).map_err(error)?;
+            let n = parse_size_u64(s).map_err(error)?;
             if n > 0 {
                 Ok(strategy(n))
             } else {
@@ -244,7 +244,7 @@ impl Strategy {
             matches.value_source(OPT_NUMBER) == Some(ValueSource::CommandLine),
         ) {
             (Some(v), false, false, false, false) => {
-                let v = parse_size_u64_max(v).map_err(|_| {
+                let v = parse_size_u64(v).map_err(|_| {
                     StrategyError::Lines(ParseSizeError::ParseFailure(v.to_string()))
                 })?;
                 if v > 0 {
