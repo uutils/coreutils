@@ -2714,6 +2714,26 @@ fn test_locale_complex_utf8_sorting() {
 }
 
 #[test]
+fn test_locale_posix_sort_debug_message() {
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .arg("--debug")
+        .pipe_in("a\nA\nb\nB\n")
+        .succeeds()
+        .stderr_contains("text ordering performed using simple byte comparison");
+}
+
+#[test]
+fn test_locale_utf8_sort_debug_message() {
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("--debug")
+        .pipe_in("a\nA\nb\nB\n")
+        .succeeds()
+        .stderr_contains("text ordering performed using ‘en_US.UTF-8’ sorting rules");
+}
+
+#[test]
 fn test_locale_utf8_with_key_field() {
     // Regression test for issue #10909
     // Sort should not panic when using -k flag with UTF-8 locale

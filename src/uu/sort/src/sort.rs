@@ -1797,7 +1797,17 @@ fn emit_debug_warnings(
         show_error!("{}", translate!("sort-warning-failed-to-set-locale"));
     }
 
-    show_error!("{}", translate!("sort-warning-simple-byte-comparison"));
+    let (locale, encoding) = i18n::get_collating_locale();
+
+    if matches!(encoding, i18n::UEncoding::Utf8) {
+        let locale_as_posix = format!("{}.UTF-8", locale.to_string().replace('-', "_"));
+        show_error!(
+            "{}",
+            translate!("sort-warning-sort-rule", "locale" => locale_as_posix)
+        );
+    } else {
+        show_error!("{}", translate!("sort-warning-simple-byte-comparison"));
+    }
 
     for (idx, selector) in settings.selectors.iter().enumerate() {
         let key_index = idx + 1;
