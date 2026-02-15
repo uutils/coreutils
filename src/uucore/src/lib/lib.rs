@@ -5,7 +5,7 @@
 //! library ~ (core/bundler file)
 // #![deny(missing_docs)] //TODO: enable this
 //
-// spell-checker:ignore sigaction SIGBUS SIGSEGV extendedbigdecimal myutil logind
+// spell-checker:ignore sigaction SIGBUS SIGSEGV extendedbigdecimal mimalloc myutil logind
 
 // * feature-gated external crates (re-shared as public internal modules)
 #[cfg(feature = "libc")]
@@ -179,6 +179,18 @@ pub fn get_canonical_util_name(util_name: &str) -> &str {
     }
 }
 
+/// Align performance for allocation on musl with glibc
+/// We cannot use this for multi-call binary yet...
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+pub use mimalloc;
+#[macro_export]
+macro_rules! custom_alloc {
+    () => {
+        #[cfg(any(target_os = "windows", target_os = "linux"))]
+        #[global_allocator]
+        static GLOBAL: $crate::mimalloc::MiMalloc = $crate::mimalloc::MiMalloc;
+    };
+}
 /// Execute utility code for `util`.
 ///
 /// This macro expands to a main function that invokes the `uumain` function in `util`

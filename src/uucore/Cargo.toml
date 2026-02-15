@@ -1,4 +1,4 @@
-# spell-checker:ignore (features) bigdecimal zerocopy extendedbigdecimal tzdb zoneinfo logind
+# spell-checker:ignore (features) bigdecimal mimalloc zerocopy extendedbigdecimal tzdb zoneinfo logind
 
 [package]
 name = "uucore"
@@ -91,6 +91,11 @@ fluent-syntax = { workspace = true }
 unic-langid = { workspace = true }
 fluent-bundle = { workspace = true }
 thiserror = { workspace = true }
+
+[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
+mimalloc = { version = "0.1.48", default-features = false, features = [
+  "override",
+] }
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true, features = [
