@@ -63,6 +63,14 @@ fn failure_code() -> i32 {
     }
 }
 
+fn open_nohup_file(path: impl AsRef<Path>) -> std::io::Result<File> {
+    OpenOptions::new()
+        .create(true)
+        .append(true)
+        .mode(0o600)
+        .open(path)
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result_with_exit_code(
@@ -137,11 +145,7 @@ fn replace_fds() -> UResult<()> {
 fn find_stdout() -> UResult<File> {
     let internal_failure_code = failure_code();
 
-    match OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(Path::new(NOHUP_OUT))
-    {
+    match open_nohup_file(NOHUP_OUT) {
         Ok(t) => {
             show_error!(
                 "{}",
@@ -156,7 +160,7 @@ fn find_stdout() -> UResult<File> {
             let mut homeout = PathBuf::from(home);
             homeout.push(NOHUP_OUT);
             let homeout_str = homeout.to_str().unwrap();
-            match OpenOptions::new().create(true).append(true).open(&homeout) {
+            match open_nohup_file(&homeout) {
                 Ok(t) => {
                     show_error!(
                         "{}",
