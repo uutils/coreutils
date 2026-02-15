@@ -5,6 +5,7 @@
 
 // spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres AWST ACST AEST foobarbaz
 
+mod format_modifiers;
 mod locale;
 
 use clap::{Arg, ArgAction, Command};
@@ -14,7 +15,7 @@ use jiff::{Timestamp, Zoned};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Write};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use uucore::display::Quotable;
@@ -57,6 +58,25 @@ struct Settings {
     format: Format,
     date_source: DateSource,
     set_to: Option<Zoned>,
+    debug: bool,
+}
+
+/// Options for parsing dates
+#[derive(Clone, Copy)]
+struct DebugOptions {
+    /// Enable debug output
+    debug: bool,
+    /// Warn when midnight is used without explicit time specification
+    warn_midnight: bool,
+}
+
+impl DebugOptions {
+    fn new(debug: bool, warn_midnight: bool) -> Self {
+        Self {
+            debug,
+            warn_midnight,
+        }
+    }
 }
 
 /// Various ways of displaying the date
@@ -131,6 +151,40 @@ enum DayDelta {
     Previous,
     /// The date advances to the next day.
     Next,
+}
+
+/// Escape invalid UTF-8 bytes in GNU-compatible octal notation.
+///
+/// Converts bytes to a string with printable ASCII characters preserved
+/// and non-printable/invalid UTF-8 bytes escaped as `\NNN` octal sequences.
+///
+/// This matches GNU date's behavior for invalid input.
+///
+/// # Arguments
+/// * `bytes` - The byte sequence to escape
+///
+/// # Returns
+/// A string with invalid bytes escaped in octal notation
+///
+/// # Example
+/// ```ignore
+/// let invalid = b"\xb0";
+/// assert_eq!(escape_invalid_bytes(invalid), "\\260");
+/// ```
+fn escape_invalid_bytes(bytes: &[u8]) -> String {
+    let escaped = bytes
+        .iter()
+        .flat_map(|&b| {
+            // Preserve printable ASCII except backslash
+            if (0x20..0x7f).contains(&b) && b != b'\\' {
+                vec![b]
+            } else {
+                // Escape as octal: \NNN
+                format!("\\{b:03o}").into_bytes()
+            }
+        })
+        .collect::<Vec<u8>>();
+    String::from_utf8_lossy(&escaped).into_owned()
 }
 
 /// Strip parenthesized comments from a date string.
@@ -270,6 +324,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let utc = matches.get_flag(OPT_UNIVERSAL);
+    let debug_mode = matches.get_flag(OPT_DEBUG);
 
     // Get the current time, either in the local time zone or UTC.
     let now = if utc {
@@ -278,7 +333,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Zoned::now()
     };
 
-    let date_source = if let Some(date) = matches.get_one::<String>(OPT_DATE) {
+    let date_source = if let Some(date_os) = matches.get_one::<std::ffi::OsString>(OPT_DATE) {
+        // Convert OsString to String, handling invalid UTF-8 with GNU-compatible error
+        let date = date_os.to_str().ok_or_else(|| {
+            let bytes = date_os.as_encoded_bytes();
+            let escaped_str = escape_invalid_bytes(bytes);
+            USimpleError::new(1, format!("invalid date '{escaped_str}'"))
+        })?;
         DateSource::Human(date.into())
     } else if let Some(file) = matches.get_one::<String>(OPT_FILE) {
         match file.as_ref() {
@@ -295,7 +356,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let set_to = match matches
         .get_one::<String>(OPT_SET)
-        .map(|s| parse_date(s, &now))
+        .map(|s| parse_date(s, &now, DebugOptions::new(debug_mode, true)))
     {
         None => None,
         Some(Err((input, _err))) => {
@@ -312,6 +373,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         format,
         date_source,
         set_to,
+        debug: debug_mode,
     };
 
     if let Some(date) = settings.set_to {
@@ -363,7 +425,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 } else {
                     format!("{date_part} 00:00 {offset}")
                 };
-                parse_date(composed, &now)
+                if settings.debug {
+                    eprintln!("date: warning: using midnight as starting time: 00:00:00");
+                }
+                parse_date(composed, &now, DebugOptions::new(settings.debug, false))
             } else if let Some((total_hours, day_delta)) = military_tz_with_offset {
                 // Military timezone with optional hour offset
                 // Convert to UTC time: midnight + military_tz_offset + additional_hours
@@ -383,7 +448,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     DayDelta::Previous => format_date_with_epoch_fallback(now.yesterday()),
                 };
                 let composed = format!("{date_part} {total_hours:02}:00:00 +00:00");
-                parse_date(composed, &now)
+                parse_date(composed, &now, DebugOptions::new(settings.debug, false))
             } else if is_pure_digits {
                 // Derive HH and MM from the input
                 let (hh_opt, mm_opt) = if input.len() <= 2 {
@@ -409,23 +474,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     } else {
                         format!("{date_part} {hh:02}:{mm:02} {offset}")
                     };
-                    parse_date(composed, &now)
+                    parse_date(composed, &now, DebugOptions::new(settings.debug, false))
                 } else {
                     // Fallback on parse failure of digits
-                    parse_date(input, &now)
+                    parse_date(input, &now, DebugOptions::new(settings.debug, true))
                 }
             } else {
-                parse_date(input, &now)
+                parse_date(input, &now, DebugOptions::new(settings.debug, true))
             };
 
             let iter = std::iter::once(date);
             Box::new(iter)
         }
-        DateSource::Stdin => {
-            let lines = BufReader::new(std::io::stdin()).lines();
-            let iter = lines.map_while(Result::ok).map(|s| parse_date(s, &now));
-            Box::new(iter)
-        }
+        DateSource::Stdin => parse_dates_from_reader(
+            std::io::stdin(),
+            &now,
+            DebugOptions::new(settings.debug, true),
+        ),
         DateSource::File(ref path) => {
             if path.is_dir() {
                 return Err(USimpleError::new(
@@ -435,9 +500,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
             let file =
                 File::open(path).map_err_context(|| path.as_os_str().maybe_quote().to_string())?;
-            let lines = BufReader::new(file).lines();
-            let iter = lines.map_while(Result::ok).map(|s| parse_date(s, &now));
-            Box::new(iter)
+            parse_dates_from_reader(file, &now, DebugOptions::new(settings.debug, true))
         }
         DateSource::FileMtime(ref path) => {
             let metadata = std::fs::metadata(path)
@@ -528,6 +591,7 @@ pub fn uu_app() -> Command {
                 .value_name("STRING")
                 .allow_hyphen_values(true)
                 .overrides_with(OPT_DATE)
+                .value_parser(clap::value_parser!(std::ffi::OsString))
                 .help(translate!("date-help-date")),
         )
         .arg(
@@ -630,15 +694,25 @@ fn format_date_with_locale_aware_months(
     format_string: &str,
     config: &Config<PosixCustom>,
     skip_localization: bool,
-) -> Result<String, jiff::Error> {
-    let broken_down = BrokenDownTime::from(date);
-
-    if !should_use_icu_locale() || skip_localization {
-        return broken_down.to_string_with_config(config, format_string);
+) -> Result<String, String> {
+    // First check if format string has GNU modifiers (width/flags) and format if present
+    // This optimization combines detection and formatting in a single pass
+    if let Some(result) =
+        format_modifiers::format_with_modifiers_if_present(date, format_string, config)
+    {
+        return result.map_err(|e| e.to_string());
     }
 
-    let fmt = localize_format_string(format_string, date.date());
-    broken_down.to_string_with_config(config, &fmt)
+    let broken_down = BrokenDownTime::from(date);
+
+    let result = if !should_use_icu_locale() || skip_localization {
+        broken_down.to_string_with_config(config, format_string)
+    } else {
+        let fmt = localize_format_string(format_string, date.date());
+        broken_down.to_string_with_config(config, &fmt)
+    };
+
+    result.map_err(|e| e.to_string())
 }
 
 /// Return the appropriate format string for the given settings.
@@ -788,6 +862,23 @@ fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S) -> Option<Zoned> {
 
 /// Parse a `String` into a `DateTime`.
 /// If it fails, return a tuple of the `String` along with its `ParseError`.
+/// Helper function to parse dates from a line-based reader (stdin or file)
+///
+/// Takes any `Read` source, reads it line by line, and parses each line as a date.
+/// Returns a boxed iterator over the parse results.
+fn parse_dates_from_reader<R: Read + 'static>(
+    reader: R,
+    now: &Zoned,
+    dbg_opts: DebugOptions,
+) -> Box<dyn Iterator<Item = Result<Zoned, (String, parse_datetime::ParseDateTimeError)>> + '_> {
+    let lines = BufReader::new(reader).lines();
+    Box::new(
+        lines
+            .map_while(Result::ok)
+            .map(move |s| parse_date(s, now, dbg_opts)),
+    )
+}
+
 ///
 /// **Update for parse_datetime 0.13:**
 /// - parse_datetime 0.11: returned `chrono::DateTime` → required conversion to `jiff::Zoned`
@@ -798,17 +889,64 @@ fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S) -> Option<Zoned> {
 fn parse_date<S: AsRef<str> + Clone>(
     s: S,
     now: &Zoned,
+    dbg_opts: DebugOptions,
 ) -> Result<Zoned, (String, parse_datetime::ParseDateTimeError)> {
+    let input_str = s.as_ref();
+
+    if dbg_opts.debug {
+        eprintln!("date: input string: {input_str}");
+    }
+
     // First, try to parse any timezone abbreviations
-    if let Some(zoned) = try_parse_with_abbreviation(s.as_ref()) {
+    if let Some(zoned) = try_parse_with_abbreviation(input_str) {
+        if dbg_opts.debug {
+            eprintln!(
+                "date: parsed date part: (Y-M-D) {}",
+                strtime::format("%Y-%m-%d", &zoned).unwrap_or_default()
+            );
+            eprintln!(
+                "date: parsed time part: {}",
+                strtime::format("%H:%M:%S", &zoned).unwrap_or_default()
+            );
+            let tz_display = zoned.time_zone().iana_name().unwrap_or("system default");
+            eprintln!("date: input timezone: {tz_display}");
+        }
         return Ok(zoned);
     }
 
-    match parse_datetime::parse_datetime_at_date(now.clone(), s.as_ref()) {
+    match parse_datetime::parse_datetime_at_date(now.clone(), input_str) {
         // Convert to system timezone for display
         // (parse_datetime 0.13 returns Zoned in the input's timezone)
-        Ok(date) => Ok(date.timestamp().to_zoned(now.time_zone().clone())),
-        Err(e) => Err((s.as_ref().into(), e)),
+        Ok(date) => {
+            let result = date.timestamp().to_zoned(now.time_zone().clone());
+            if dbg_opts.debug {
+                // Show final parsed date and time
+                eprintln!(
+                    "date: parsed date part: (Y-M-D) {}",
+                    strtime::format("%Y-%m-%d", &result).unwrap_or_default()
+                );
+                eprintln!(
+                    "date: parsed time part: {}",
+                    strtime::format("%H:%M:%S", &result).unwrap_or_default()
+                );
+
+                // Show timezone information
+                eprintln!("date: input timezone: system default");
+
+                // Check if time component was specified, if not warn about midnight usage
+                // Only warn for date-only inputs (no time specified), but not for epoch formats (@N)
+                // or inputs that explicitly specify a time (containing ':')
+                if dbg_opts.warn_midnight && !input_str.contains(':') && !input_str.contains('@') {
+                    // Input likely didn't specify a time, so midnight was assumed
+                    let time_str = strtime::format("%H:%M:%S", &result).unwrap_or_default();
+                    if time_str == "00:00:00" {
+                        eprintln!("date: warning: using midnight as starting time: 00:00:00");
+                    }
+                }
+            }
+            Ok(result)
+        }
+        Err(e) => Err((input_str.into(), e)),
     }
 }
 
@@ -965,7 +1103,12 @@ mod tests {
     fn test_utc_conversion_preserves_offset() {
         let now = Zoned::now();
 
-        let date = parse_date("Sat 20 Mar 2021 14:53:01 AWST", &now).unwrap();
+        let date = parse_date(
+            "Sat 20 Mar 2021 14:53:01 AWST",
+            &now,
+            DebugOptions::new(false, false),
+        )
+        .unwrap();
         let utc = convert_for_set(date, true);
         assert_eq!((utc.hour(), utc.minute(), utc.second()), (6, 53, 1)); // AWST(+08:00) -> -8h
     }
