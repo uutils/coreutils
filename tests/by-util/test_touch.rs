@@ -1055,6 +1055,7 @@ fn test_touch_non_utf8_paths() {
 
 #[test]
 #[cfg(all(unix, not(target_os = "openbsd")))]
+// No /dev/full in OpenBSD https://man.openbsd.org/MAKEDEV.8
 fn test_touch_dev_full() {
     let (_, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["/dev/full"]).succeeds().no_output();
