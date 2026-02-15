@@ -360,6 +360,3 @@ sed -i 's/echo "changing security context/echo "chcon: changing security context
 # * the selinux crate is handling errors
 # * the test says "maybe we should not fail when no context available"
 sed -i -e "s|returns_ 1||g" tests/cp/no-ctx.sh
-
-# Disable date-debug test - not interesting to implement it
-sed -i '1a exit 0' tests/date/date-debug.sh
