@@ -21,6 +21,7 @@ use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
+use uucore::fs::create_file_restrictive_perm;
 use uucore::translate;
 
 #[derive(Debug, PartialEq)]
@@ -774,7 +775,7 @@ fn write_traditional_output(
         BufWriter::new(if output_filename == OsStr::new("-") {
             Box::new(stdout())
         } else {
-            let file = File::create(output_filename)
+            let file = create_file_restrictive_perm(output_filename, true)
                 .map_err_context(|| output_filename.quote().to_string())?;
             Box::new(file)
         });

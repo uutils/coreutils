@@ -20,7 +20,7 @@ path = "src/uniq.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["parser"] }
+uucore = { workspace = true, features = ["parser", "fs"] }
 fluent = { workspace = true }
 
 [dev-dependencies]

@@ -12,6 +12,7 @@ use std::{
     fs::{File, remove_file},
     io::{BufRead, BufWriter, Write},
 };
+use uucore::fs::create_file_restrictive_perm;
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use regex::Regex;
@@ -270,7 +271,7 @@ impl SplitWriter<'_> {
     /// The creation of the split file may fail with some [`io::Error`].
     fn new_writer(&mut self) -> io::Result<()> {
         let file_name = self.options.split_name.get(self.counter);
-        let file = File::create(file_name)?;
+        let file = create_file_restrictive_perm(file_name, true)?;
         self.current_writer = Some(BufWriter::new(file));
         self.counter += 1;
         self.size = 0;

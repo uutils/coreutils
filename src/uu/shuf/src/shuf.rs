@@ -11,6 +11,7 @@ use std::io::{self, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::ops::RangeInclusive;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use uucore::fs::create_file_restrictive_perm;
 
 use clap::{Arg, ArgAction, Command, builder::ValueParser};
 use rand::rngs::ThreadRng;
@@ -128,7 +129,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         match options.output {
             None => Box::new(stdout()) as Box<dyn OsWrite>,
             Some(ref s) => {
-                let file = File::create(s).map_err_context(
+                let file = create_file_restrictive_perm(s, true).map_err_context(
                     || translate!("shuf-error-failed-to-open-for-writing", "file" => s.quote()),
                 )?;
                 Box::new(file) as Box<dyn OsWrite>

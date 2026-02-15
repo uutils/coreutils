@@ -21,7 +21,7 @@ path = "src/ptx.rs"
 [dependencies]
 clap = { workspace = true }
 regex = { workspace = true }
-uucore = { workspace = true }
+uucore = { workspace = true, features = ["fs"] }
 thiserror = { workspace = true }
 fluent = { workspace = true }
 
