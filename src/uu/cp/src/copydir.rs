@@ -574,7 +574,13 @@ pub(crate) fn copy_directory(
         let dest = target.join(root.file_name().unwrap());
         for (x, y) in aligned_ancestors(root, dest.as_path()) {
             if let Ok(src) = canonicalize(x, MissingHandling::Normal, ResolveMode::Physical) {
-                copy_attributes(&src, y, &options.attributes, false, options.set_selinux_context)?;
+                copy_attributes(
+                    &src,
+                    y,
+                    &options.attributes,
+                    false,
+                    options.set_selinux_context,
+                )?;
 
                 #[cfg(all(feature = "selinux", target_os = "linux"))]
                 if options.set_selinux_context {

@@ -1565,7 +1565,13 @@ fn copy_source(
         if options.parents {
             for (x, y) in aligned_ancestors(source, dest.as_path()) {
                 if let Ok(src) = canonicalize(x, MissingHandling::Normal, ResolveMode::Physical) {
-                    copy_attributes(&src, y, &options.attributes, false, options.set_selinux_context)?;
+                    copy_attributes(
+                        &src,
+                        y,
+                        &options.attributes,
+                        false,
+                        options.set_selinux_context,
+                    )?;
                 }
             }
         }
