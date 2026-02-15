@@ -640,7 +640,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 // Let caller handle help/version
                 return Err(map_clap_errors(clap_error));
             }
-            // Use ErrorFormatter directly to handle error
+
+            // For ArgumentConflict and InvalidValue errors, use our custom error mapping
+            // to match GNU test expectations
+            if matches!(
+                clap_error.kind(),
+                ErrorKind::ArgumentConflict | ErrorKind::InvalidValue
+            ) {
+                return Err(map_clap_errors(clap_error));
+            }
+
+            // Use ErrorFormatter directly to handle other errors
             let formatter = uucore::clap_localization::ErrorFormatter::new(uucore::util_name());
             formatter.print_error_and_exit_with_callback(&clap_error, 1, || {});
         }
