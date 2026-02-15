@@ -11,6 +11,8 @@ use std::fmt::Write as FmtWrite;
 #[cfg(unix)]
 use std::process::Command;
 use std::time::Duration;
+#[cfg(unix)]
+use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -1664,6 +1666,34 @@ fn test_files0_from_zero_length() {
         .pipe_in("g\0\0b\0\0")
         .fails_with_code(2)
         .stderr_only("sort: -:2: invalid zero-length file name\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_files0_from_non_utf8_filename() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("file1.txt");
+    at.append("file1.txt", "zebra\n");
+    at.touch("file2.txt");
+    at.append("file2.txt", "apple\n");
+
+    // Create a file with non-UTF-8 bytes in filename
+    // spell-checker:ignore fffile
+    let non_utf8_name = OsStr::from_bytes(b"\xff\xff_file3.txt");
+    let full_path = at.plus(non_utf8_name);
+    std::fs::write(&full_path, "banana\n").unwrap();
+
+    // Create files0-from input containing the non-UTF-8 filename bytes
+    let mut files0_input = Vec::new();
+    files0_input.extend_from_slice(b"file1.txt\0");
+    files0_input.extend_from_slice(b"\xff\xff_file3.txt\0");
+    files0_input.extend_from_slice(b"file2.txt\0");
+
+    ucmd.args(&["--files0-from", "-"])
+        .pipe_in(files0_input)
+        .succeeds()
+        .stdout_is("apple\nbanana\nzebra\n");
 }
 
 #[test]
