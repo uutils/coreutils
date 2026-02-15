@@ -32,6 +32,13 @@ cfg_langinfo! {
 
     #[cfg(test)]
     use std::sync::Mutex;
+
+    /// glibc's `_DATE_FMT` has been stable for the last 12 years
+    /// being added upstream to libc TODO: update to libc
+    #[cfg(target_os = "linux")]
+    const DATE_FMT: libc::nl_item = 0x2006c;
+    #[cfg(not(target_os = "linux"))]
+    const DATE_FMT: libc::nl_item = libc::D_T_FMT;
 }
 
 cfg_langinfo! {
@@ -76,7 +83,7 @@ cfg_langinfo! {
             libc::setlocale(libc::LC_TIME, c"".as_ptr());
 
             // Get the date/time format string
-            let d_t_fmt_ptr = libc::nl_langinfo(libc::D_T_FMT);
+            let d_t_fmt_ptr = libc::nl_langinfo(DATE_FMT);
             if d_t_fmt_ptr.is_null() {
                 return None;
             }
