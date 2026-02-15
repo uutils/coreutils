@@ -38,7 +38,7 @@ jobs:
     name: Run GNU tests (native)
     runs-on: ubuntu-24.04
     steps:
-    #### Get the code, setup cache
+    #### Get the code
     - name: Checkout code (uutils)
       uses: actions/checkout@v6
       with:
@@ -49,15 +49,6 @@ jobs:
         workspaces: "./uutils -> target"
     - name: Checkout code (GNU coreutils)
       run: (mkdir -p gnu && cd gnu && bash ../uutils/util/fetch-gnu.sh)
-    - name: Restore files for faster configure and skipping make
-      uses: actions/cache@v5
-      id: cache-config-gnu
-      with:
-        path: |
-          gnu/config.cache
-          gnu/src/getlimits
-        key: ${{ runner.os }}-gnu-config-${{ hashFiles('gnu/NEWS') }}-${{ hashFiles('uutils/util/build-gnu.sh') }} # use build-gnu.sh for extremely safe caching
-
     #### Build environment setup
     - name: Install dependencies
       shell: bash
@@ -101,15 +92,6 @@ jobs:
         ## Build binaries
         cd 'uutils'
         env PROFILE=release-small bash util/build-gnu.sh
-
-    - name: Save files for faster configure and skipping make
-      uses: actions/cache/save@v5
-      if: always() && steps.cache-config-gnu.outputs.cache-hit != 'true'
-      with:
-        path: |
-          gnu/config.cache
-          gnu/src/getlimits
-        key: ${{ runner.os }}-gnu-config-${{ hashFiles('gnu/NEWS') }}-${{ hashFiles('uutils/util/build-gnu.sh') }}
 
     ### Run tests as user
     - name: Run GNU tests
@@ -198,7 +180,7 @@ jobs:
     name: Run GNU tests (SELinux)
     runs-on: ubuntu-24.04
     steps:
-    #### Get the code, setup cache
+    #### Get the code
     - name: Checkout code (uutils)
       uses: actions/checkout@v6
       with:
