@@ -1125,6 +1125,29 @@ fn test_date_tz_abbreviation_with_day_of_week() {
 }
 
 #[test]
+fn test_date_tz_abbreviation_with_relative_date() {
+    // Verify that "yesterday" in "-u -d yesterday 10:00 GMT" is resolved
+    // relative to UTC, not the local TZ.
+    let expected = new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-u")
+        .arg("-d")
+        .arg("yesterday 10:00 GMT")
+        .arg("+%F %T %Z")
+        .succeeds()
+        .stdout_str()
+        .to_string();
+    new_ucmd!()
+        .env("TZ", "Australia/Sydney")
+        .arg("-u")
+        .arg("-d")
+        .arg("yesterday 10:00 GMT")
+        .arg("+%F %T %Z")
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
 fn test_date_tz_abbreviation_unknown() {
     // Test that unknown timezone abbreviations fall back gracefully
     // XYZ is not a valid timezone abbreviation
