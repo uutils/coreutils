@@ -635,8 +635,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
 
             let dir_exists = if to_create.exists() {
                 fs::symlink_metadata(to_create)
-                    .map(|m| m.is_dir() && !m.file_type().is_symlink())
-                    .unwrap_or(false)
+                    .is_ok_and(|m| m.is_dir() && !m.file_type().is_symlink())
             } else {
                 false
             };
