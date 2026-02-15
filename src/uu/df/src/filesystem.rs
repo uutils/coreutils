@@ -167,7 +167,7 @@ impl Filesystem {
             mount_info.mount_dir.clone()
         };
         #[cfg(unix)]
-        let usage = FsUsage::new(statfs(&stat_path).ok()?);
+        let usage = FsUsage::new(&statfs(&stat_path).ok()?);
         #[cfg(windows)]
         let usage = FsUsage::new(Path::new(&stat_path)).ok()?;
         Some(Self {
@@ -256,7 +256,7 @@ impl Filesystem {
             dummy: false,
         };
 
-        let usage = FsUsage::new(stat_result);
+        let usage = FsUsage::new(&stat_result);
 
         Ok(Self {
             file: Some(file),

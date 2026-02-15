@@ -677,14 +677,10 @@ should_panic_without_expect = "allow"        # 2
 doc_markdown = "allow"
 unused_self = "allow"
 enum_glob_use = "allow"
-unnested_or_patterns = "allow"
+
+# TODO: uucore/src/lib/features/fsxattr.rs apply_xattrs() - consider using iterator
 implicit_hasher = "allow"
 struct_field_names = "allow"
-doc_link_with_quotes = "allow"
-format_push_string = "allow"
-flat_map_option = "allow"
-from_iter_instead_of_collect = "allow"
-large_types_passed_by_value = "allow"
 
 [workspace.metadata.cargo-shear]
 ignored = ["clap", "fluent", "libstdbuf"]

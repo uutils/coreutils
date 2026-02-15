@@ -3597,7 +3597,7 @@ fn get_security_context<'a>(
 
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
     if config.selinux_supported {
-        match selinux::SecurityContext::of_path(path, must_dereference, false) {
+        return match selinux::SecurityContext::of_path(path, must_dereference, false) {
             Err(_r) => {
                 // TODO: show the actual reason why it failed
                 show_warning!(
@@ -3607,9 +3607,9 @@ fn get_security_context<'a>(
                         "path" => path.quote().to_string()
                     )
                 );
-                return Cow::Borrowed(SUBSTITUTE_STRING);
+                Cow::Borrowed(SUBSTITUTE_STRING)
             }
-            Ok(None) => return Cow::Borrowed(SUBSTITUTE_STRING),
+            Ok(None) => Cow::Borrowed(SUBSTITUTE_STRING),
             Ok(Some(context)) => {
                 let context = context.as_bytes();
 
@@ -3628,9 +3628,9 @@ fn get_security_context<'a>(
                     String::from_utf8_lossy(context).to_string()
                 });
 
-                return Cow::Owned(res);
+                Cow::Owned(res)
             }
-        }
+        };
     }
 
     #[cfg(all(feature = "smack", target_os = "linux"))]

@@ -515,7 +515,10 @@ mod tests {
         assert!(boot_time > 0, "Boot time should be positive");
 
         // Boot time should be after 2000-01-01 (946684800 seconds since epoch)
-        assert!(boot_time > 946684800, "Boot time should be after year 2000");
+        assert!(
+            boot_time > 946_684_800,
+            "Boot time should be after year 2000"
+        );
 
         // Boot time should be before current time
         let now = Timestamp::now().as_second();
