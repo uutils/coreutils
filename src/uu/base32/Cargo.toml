@@ -20,7 +20,7 @@ path = "src/base32.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["encoding"] }
+uucore = { workspace = true, features = ["encoding", "custom_allocator"] }
 fluent = { workspace = true }
 
 [[bin]]

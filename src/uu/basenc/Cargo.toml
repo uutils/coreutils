@@ -20,7 +20,7 @@ path = "src/basenc.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["encoding"] }
+uucore = { workspace = true, features = ["encoding", "custom_allocator"] }
 uu_base32 = { workspace = true }
 fluent = { workspace = true }
 

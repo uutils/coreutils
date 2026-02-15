@@ -26,6 +26,7 @@ libc = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = [
   "backup-control",
+  "custom_allocator",
   "fs",
   "fsxattr",
   "update-control",

@@ -105,6 +105,11 @@ nix = { workspace = true, features = [
 walkdir = { workspace = true, optional = true }
 xattr = { workspace = true, optional = true }
 
+[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
+mimalloc = { version = "0.1.48", default-features = false, optional = true, features = [
+  "override",
+] }
+
 [dev-dependencies]
 tempfile = { workspace = true }
 
@@ -127,6 +132,7 @@ windows-sys = { workspace = true, optional = true, default-features = false, fea
 utmp-classic = { workspace = true, optional = true }
 
 [features]
+custom_allocator = ["dep:mimalloc"]
 default = ["signals"]
 # * non-default features
 backup-control = []

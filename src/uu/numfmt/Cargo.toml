@@ -20,7 +20,7 @@ path = "src/numfmt.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["parser", "ranges"] }
+uucore = { workspace = true, features = ["parser", "ranges", "custom_allocator"] }
 thiserror = { workspace = true }
 fluent = { workspace = true }
 
