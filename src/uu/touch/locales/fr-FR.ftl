@@ -20,6 +20,7 @@ touch-error-setting-times-of = définition des temps de { $filename }
 touch-error-setting-times-no-such-file = définition des temps de { $filename } : Aucun fichier ou répertoire de ce type
 touch-error-cannot-touch = impossible de toucher { $filename }
 touch-error-no-such-file-or-directory = Aucun fichier ou répertoire de ce type
+touch-error-not-a-regular-file = pas un fichier ordinaire
 touch-error-failed-to-get-attributes = échec d'obtention des attributs de { $path }
 touch-error-setting-times-of-path = définition des temps de { $path }
 touch-error-invalid-date-ts-format = format de date ts invalide { $date }

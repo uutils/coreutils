@@ -19,6 +19,7 @@ touch-error-setting-times-of = setting times of { $filename }
 touch-error-setting-times-no-such-file = setting times of { $filename }: No such file or directory
 touch-error-cannot-touch = cannot touch { $filename }
 touch-error-no-such-file-or-directory = No such file or directory
+touch-error-not-a-regular-file = not a regular file
 touch-error-failed-to-get-attributes = failed to get attributes of { $path }
 touch-error-setting-times-of-path = setting times of { $path }
 touch-error-invalid-date-ts-format = invalid date ts format { $date }
