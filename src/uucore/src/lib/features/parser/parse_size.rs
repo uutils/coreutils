@@ -6,6 +6,14 @@
 
 //! Parser for sizes in SI or IEC units (multiples of 1000 or 1024 bytes).
 
+// SI unit constants for byte parsing (powers of 1024)
+pub const KILO: usize = 1024;
+pub const MEGA: usize = 1024 * 1024;
+pub const GIGA: usize = 1024 * 1024 * 1024;
+pub const TERA: usize = 1024 * 1024 * 1024 * 1024;
+pub const PETA: usize = 1024 * 1024 * 1024 * 1024 * 1024;
+pub const EXA: usize = 1024 * 1024 * 1024 * 1024 * 1024 * 1024;
+
 use std::error::Error;
 use std::fmt;
 use std::num::{IntErrorKind, ParseIntError};

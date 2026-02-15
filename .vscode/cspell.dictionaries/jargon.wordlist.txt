@@ -243,3 +243,7 @@ Hijri
 Nowruz
 charmap
 hijri
+
+TERA
+GIGA
+PETA
