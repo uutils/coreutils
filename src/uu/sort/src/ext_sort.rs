@@ -11,7 +11,7 @@
 
 use std::cmp::Ordering;
 use std::fs::File;
-use std::io::Write;
+use std::io::{Write, stderr};
 use std::path::PathBuf;
 use std::{
     io::Read,
@@ -68,7 +68,8 @@ pub fn ext_sort(
             }
             Err(err) => {
                 // Print the error and disable compression
-                eprintln!(
+                let _ = writeln!(
+                    stderr(),
                     "sort: could not run compress program '{prog}': {}",
                     strip_errno(&err)
                 );
