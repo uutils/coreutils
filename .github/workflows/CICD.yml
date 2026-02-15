@@ -1264,7 +1264,7 @@ jobs:
         for f in $(util/show-utils.sh ${CARGO_FEATURES_OPTION})
         do
           echo "Building and testing $f"
-          cargo test -p "uu_$f" -p coreutils --features=$f --no-default-features
+          cargo test -p "uu_$f" --features=$f --no-default-features
         done
 
   test_selinux:
