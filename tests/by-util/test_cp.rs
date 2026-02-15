@@ -1800,6 +1800,105 @@ fn test_cp_preserve_xattr() {
     }
 }
 
+// -p preserves mode, ownership, and timestamps, but not xattrs
+// xattrs require explicit --preserve=xattr or -a
+#[test]
+#[cfg(all(
+    unix,
+    not(any(target_os = "android", target_os = "macos", target_os = "openbsd"))
+))]
+fn test_cp_preserve_default_no_xattr() {
+    use std::process::Command;
+    use uutests::util::compare_xattrs;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let source_file = "source_with_xattr";
+    let dest_file_p = "dest_with_p_flag";
+    let dest_file_explicit = "dest_with_explicit_xattr";
+
+    at.touch(source_file);
+
+    // set xattr on source
+    let xattr_key = "user.test_preserve";
+    let xattr_value = "test_value";
+    match Command::new("setfattr")
+        .args([
+            "-n",
+            xattr_key,
+            "-v",
+            xattr_value,
+            &at.plus_as_string(source_file),
+        ])
+        .status()
+        .map(|status| status.code())
+    {
+        Ok(Some(0)) => {}
+        Ok(_) => {
+            println!("test skipped: setfattr failed");
+            return;
+        }
+        Err(e) => {
+            println!("test skipped: setfattr failed with {e}");
+            return;
+        }
+    }
+
+    // verify xattr was set
+    let getfattr_output = Command::new("getfattr")
+        .args([&at.plus_as_string(source_file)])
+        .output()
+        .expect("failed to run getfattr");
+
+    assert!(
+        getfattr_output.status.success(),
+        "getfattr failed: {}",
+        String::from_utf8_lossy(&getfattr_output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&getfattr_output.stdout);
+    assert!(
+        stdout.contains(xattr_key),
+        "xattr not found on source: {xattr_key}"
+    );
+
+    // -p should not preserve xattrs
+    ucmd.args(&[
+        "-p",
+        &at.plus_as_string(source_file),
+        &at.plus_as_string(dest_file_p),
+    ])
+    .succeeds()
+    .no_output();
+
+    // xattrs should not be copied
+    assert!(
+        !compare_xattrs(&at.plus(source_file), &at.plus(dest_file_p)),
+        "cp -p incorrectly preserved xattrs"
+    );
+
+    // mode, ownership, and timestamps should be preserved
+    let metadata_src = at.metadata(source_file);
+    let metadata_dst = at.metadata(dest_file_p);
+    assert_metadata_eq!(metadata_src, metadata_dst);
+
+    // --preserve=xattr should explicitly preserve xattrs
+    new_ucmd!()
+        .args(&[
+            "--preserve=xattr",
+            &at.plus_as_string(source_file),
+            &at.plus_as_string(dest_file_explicit),
+        ])
+        .succeeds()
+        .no_output();
+
+    // xattrs should be copied
+    assert!(
+        compare_xattrs(&at.plus(source_file), &at.plus(dest_file_explicit)),
+        "cp --preserve=xattr did not preserve xattrs"
+    );
+}
+
 #[test]
 #[cfg(all(target_os = "linux", not(feature = "feat_selinux")))]
 fn test_cp_preserve_all_context_fails_on_non_selinux() {
