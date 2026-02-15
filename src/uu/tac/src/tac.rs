@@ -10,13 +10,14 @@ mod error;
 use clap::{Arg, ArgAction, Command};
 use memchr::memmem;
 use memmap2::Mmap;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::io::{BufWriter, Read, Write, stdin, stdout};
 use std::{
     fs::{File, read},
     io::copy,
     path::Path,
 };
+use uucore::error::USimpleError;
 #[cfg(unix)]
 use uucore::error::set_exit_code;
 use uucore::error::{UError, UResult};
@@ -40,10 +41,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let before = matches.get_flag(options::BEFORE);
     let regex = matches.get_flag(options::REGEX);
     let raw_separator = matches
-        .get_one::<String>(options::SEPARATOR)
-        .map_or("\n", |s| s.as_str());
+        .get_one::<OsString>(options::SEPARATOR)
+        .map_or(OsStr::new("\n"), |s| s.as_os_str());
+
     let separator = if raw_separator.is_empty() {
-        "\0"
+        OsStr::new("\0")
     } else {
         raw_separator
     };
@@ -82,6 +84,7 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .long(options::SEPARATOR)
                 .help(translate!("tac-help-separator"))
+                .value_parser(clap::value_parser!(OsString))
                 .value_name("STRING"),
         )
         .arg(
@@ -183,7 +186,7 @@ fn buffer_tac_regex(
 /// If `before` is `true`, then this function assumes that the
 /// `separator` appears at the beginning of each line, as in
 /// `"/abc/def"`.
-fn buffer_tac(data: &[u8], before: bool, separator: &str) -> std::io::Result<()> {
+fn buffer_tac(data: &[u8], before: bool, separator: &OsStr) -> std::io::Result<()> {
     let out = stdout();
     let mut out = BufWriter::new(out.lock());
 
@@ -206,7 +209,7 @@ fn buffer_tac(data: &[u8], before: bool, separator: &str) -> std::io::Result<()>
     // The `before` flag controls whether the line separator appears at
     // the end of the line (as in "abc\ndef\n") or at the beginning of
     // the line (as in "/abc/def").
-    for i in memmem::rfind_iter(data, separator) {
+    for i in memmem::rfind_iter(data, separator.as_encoded_bytes()) {
         if before {
             out.write_all(&data[i..following_line_start])?;
             following_line_start = i;
@@ -309,9 +312,12 @@ fn translate_regex_flavor(regex: &str) -> String {
 }
 
 #[allow(clippy::cognitive_complexity)]
-fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &str) -> UResult<()> {
+fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &OsStr) -> UResult<()> {
     // Compile the regular expression pattern if it is provided.
     let maybe_pattern = if regex {
+        let Some(separator) = separator.to_str() else {
+            return Err(USimpleError::new(1, "non-UTF-8 separator is not supported"));
+        };
         match regex::bytes::RegexBuilder::new(&translate_regex_flavor(separator))
             .multi_line(true)
             .build()
