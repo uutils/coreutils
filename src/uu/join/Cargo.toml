@@ -25,6 +25,9 @@ memchr = { workspace = true }
 thiserror = { workspace = true }
 fluent = { workspace = true }
 
+[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
+mimalloc.workspace = true
+
 [[bin]]
 name = "join"
 path = "src/main.rs"

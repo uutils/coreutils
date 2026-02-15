@@ -33,6 +33,9 @@ rustc-hash = { workspace = true }
 thiserror = { workspace = true }
 fluent = { workspace = true }
 
+[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
+mimalloc.workspace = true
+
 [target.'cfg(all(unix, not(target_os = "redox")))'.dependencies]
 uucore = { workspace = true, features = ["safe-traversal"] }
 

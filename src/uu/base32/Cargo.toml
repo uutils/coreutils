@@ -23,6 +23,9 @@ clap = { workspace = true }
 uucore = { workspace = true, features = ["encoding"] }
 fluent = { workspace = true }
 
+[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
+mimalloc.workspace = true
+
 [[bin]]
 name = "base32"
 path = "src/main.rs"

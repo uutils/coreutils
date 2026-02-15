@@ -25,6 +25,9 @@ unicode-width = { workspace = true }
 thiserror = { workspace = true }
 fluent = { workspace = true }
 
+[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
+mimalloc.workspace = true
+
 [dev-dependencies]
 divan = { workspace = true }
 tempfile = { workspace = true }
