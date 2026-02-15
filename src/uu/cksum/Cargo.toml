@@ -29,6 +29,9 @@ uucore = { workspace = true, features = [
 uu_checksum_common = { workspace = true }
 fluent = { workspace = true }
 
+[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
+mimalloc.workspace = true
+
 [dev-dependencies]
 divan = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }

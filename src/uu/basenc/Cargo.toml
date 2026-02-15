@@ -24,6 +24,9 @@ uucore = { workspace = true, features = ["encoding"] }
 uu_base32 = { workspace = true }
 fluent = { workspace = true }
 
+[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
+mimalloc.workspace = true
+
 [[bin]]
 name = "basenc"
 path = "src/main.rs"

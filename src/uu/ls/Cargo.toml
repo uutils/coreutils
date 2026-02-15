@@ -46,6 +46,9 @@ uucore = { workspace = true, features = [
 uutils_term_grid = { workspace = true }
 fluent = { workspace = true }
 
+[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
+mimalloc.workspace = true
+
 [[bin]]
 name = "ls"
 path = "src/main.rs"

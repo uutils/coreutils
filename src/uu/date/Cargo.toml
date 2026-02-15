@@ -51,6 +51,9 @@ windows-sys = { workspace = true, features = [
   "Win32_System_SystemInformation",
 ] }
 
+[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
+mimalloc.workspace = true
+
 [[bin]]
 name = "date"
 path = "src/main.rs"

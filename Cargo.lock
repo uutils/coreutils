@@ -3172,6 +3172,7 @@ version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
+ "mimalloc",
  "uu_checksum_common",
  "uucore",
 ]
@@ -3182,6 +3183,7 @@ version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
+ "mimalloc",
  "uucore",
 ]
 
@@ -3192,6 +3194,7 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
+ "mimalloc",
  "tempfile",
  "uu_base32",
  "uucore",
@@ -3212,6 +3215,7 @@ version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
+ "mimalloc",
  "uu_base32",
  "uucore",
 ]
@@ -3298,6 +3302,7 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
+ "mimalloc",
  "uu_checksum_common",
  "uucore",
 ]
@@ -3322,6 +3327,7 @@ dependencies = [
  "fluent",
  "indicatif",
  "libc",
+ "mimalloc",
  "selinux",
  "tempfile",
  "thiserror 2.0.18",
@@ -3365,6 +3371,7 @@ dependencies = [
  "icu_locale",
  "jiff",
  "jiff-icu",
+ "mimalloc",
  "nix",
  "parse_datetime",
  "tempfile",
@@ -3394,6 +3401,7 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
+ "mimalloc",
  "tempfile",
  "thiserror 2.0.18",
  "unicode-width 0.2.2",
@@ -3435,6 +3443,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "glob",
+ "mimalloc",
  "rustc-hash",
  "tempfile",
  "thiserror 2.0.18",
@@ -3496,6 +3505,7 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
+ "mimalloc",
  "num-bigint",
  "num-prime",
  "num-traits",
@@ -3608,6 +3618,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "memchr",
+ "mimalloc",
  "tempfile",
  "thiserror 2.0.18",
  "uucore",
@@ -3663,6 +3674,7 @@ dependencies = [
  "glob",
  "hostname",
  "lscolors",
+ "mimalloc",
  "rustc-hash",
  "selinux",
  "tempfile",
@@ -3678,6 +3690,7 @@ version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
+ "mimalloc",
  "uu_checksum_common",
  "uucore",
 ]
@@ -3744,6 +3757,7 @@ dependencies = [
  "fs_extra",
  "indicatif",
  "libc",
+ "mimalloc",
  "tempfile",
  "thiserror 2.0.18",
  "uucore",
@@ -3924,6 +3938,7 @@ dependencies = [
  "fluent",
  "indicatif",
  "libc",
+ "mimalloc",
  "tempfile",
  "thiserror 2.0.18",
  "uucore",
@@ -3960,6 +3975,7 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
+ "mimalloc",
  "num-bigint",
  "num-traits",
  "thiserror 2.0.18",
@@ -3972,6 +3988,7 @@ version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
+ "mimalloc",
  "uu_checksum_common",
  "uucore",
 ]
@@ -3982,6 +3999,7 @@ version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
+ "mimalloc",
  "uu_checksum_common",
  "uucore",
 ]
@@ -3992,6 +4010,7 @@ version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
+ "mimalloc",
  "uu_checksum_common",
  "uucore",
 ]
@@ -4002,6 +4021,7 @@ version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
+ "mimalloc",
  "uu_checksum_common",
  "uucore",
 ]
@@ -4012,6 +4032,7 @@ version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
+ "mimalloc",
  "uu_checksum_common",
  "uucore",
 ]
@@ -4261,6 +4282,7 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
+ "mimalloc",
  "nix",
  "rustc-hash",
  "string-interner",
@@ -4358,6 +4380,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "libc",
+ "mimalloc",
  "nix",
  "tempfile",
  "thiserror 2.0.18",
@@ -4428,7 +4451,6 @@ dependencies = [
  "libc",
  "md-5",
  "memchr",
- "mimalloc",
  "nix",
  "num-traits",
  "os_display",

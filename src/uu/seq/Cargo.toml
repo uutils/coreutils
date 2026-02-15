@@ -35,6 +35,9 @@ uucore = { workspace = true, features = [
 ] }
 fluent = { workspace = true }
 
+[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
+mimalloc.workspace = true
+
 [[bin]]
 name = "seq"
 path = "src/main.rs"
