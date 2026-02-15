@@ -4,7 +4,14 @@
 // file that was distributed with this source code.
 // spell-checker:disable
 
+#[expect(clippy::match_same_arms)]
+mod embedded_locales {
+    // Include embedded locale files as fallback
+    include!(concat!(env!("OUT_DIR"), "/embedded_locales.rs"));
+}
+
 use crate::error::UError;
+use crate::locale::embedded_locales::get_embedded_locale;
 
 use fluent::{FluentArgs, FluentBundle, FluentResource};
 use fluent_syntax::parser::ParserError;
@@ -58,9 +65,6 @@ impl UError for LocalizationError {
 }
 
 pub const DEFAULT_LOCALE: &str = "en-US";
-
-// Include embedded locale files as fallback
-include!(concat!(env!("OUT_DIR"), "/embedded_locales.rs"));
 
 // A struct to handle localization with optional English fallback
 struct Localizer {
