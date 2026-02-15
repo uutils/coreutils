@@ -1058,7 +1058,11 @@ fn test_touch_non_utf8_paths() {
 // No /dev/full in OpenBSD https://man.openbsd.org/MAKEDEV.8
 fn test_touch_dev_full() {
     let (_, mut ucmd) = at_and_ucmd!();
+    #[cfg(not(target_os = "android"))]
     ucmd.args(&["/dev/full"]).succeeds().no_output();
+    #[cfg(target_os = "android")]
+    // Android permissions prevent accessing /dev/full
+    ucmd.args(&["/dev/full"]).fails();
 }
 
 #[test]
