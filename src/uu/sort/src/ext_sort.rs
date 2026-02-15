@@ -24,7 +24,6 @@ use uucore::error::{UResult, strip_errno};
 
 use crate::Output;
 use crate::chunks::RecycledChunk;
-use crate::merge::ClosedTmpFile;
 use crate::merge::WriteableCompressedTmpFile;
 use crate::merge::WriteablePlainTmpFile;
 use crate::merge::WriteableTmpFile;
@@ -133,7 +132,7 @@ fn reader_writer<
     match read_result {
         ReadResult::WroteChunksToFile { tmp_files } => {
             merge::merge_with_file_limit::<_, _, Tmp>(
-                tmp_files.into_iter().map(|c| c.reopen()),
+                tmp_files.into_iter().map(merge::ClosedTmpFile::reopen),
                 settings,
                 output,
                 tmp_dir,

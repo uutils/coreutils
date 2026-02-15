@@ -140,7 +140,7 @@ else
 
     # Handle generated factor tests
     t_first=00
-    t_max=37
+    t_max=40
     seq=$(
         i=${t_first}
         while test "${i}" -le "${t_max}"; do
@@ -149,8 +149,8 @@ else
         done
        )
     for i in ${seq}; do
-        echo "strip t${i}.sh from Makefile"
-        sed -i -e "s/\$(tf)\/t${i}.sh//g" Makefile
+        echo "strip t${i}.sh from Makefile and tests/local.mk"
+        sed -i -e "s/\$(tf)\/t${i}.sh//g" Makefile tests/local.mk
     done
 
     # Remove tests checking for --version & --help
@@ -158,6 +158,11 @@ else
     sed -i '/tests\/help\/help-version.sh/ D' Makefile
     touch gnu-built
 fi
+
+# Keep Makefile.in newer than the local.mk files we just modified,
+# and Makefile newer than Makefile.in, so make won't re-run
+# automake or config.status and undo our edits.
+touch Makefile.in Makefile
 
 grep -rl 'path_prepend_' tests/* | xargs -r "${SED}" -i 's| path_prepend_ ./src||'
 # path_prepend_ sets $abs_path_dir_: set it manually instead.

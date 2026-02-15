@@ -269,7 +269,7 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
 
     if let Some(field) = options
         .get_one::<String>(options::TIME_STYLE)
-        .map(|s| s.to_owned())
+        .map(ToOwned::to_owned)
         .or_else(|| std::env::var("TIME_STYLE").ok())
     {
         //If both FULL_TIME and TIME_STYLE are present
@@ -1958,7 +1958,7 @@ impl PathData {
         } else {
             dir_entry
                 .as_ref()
-                .map(|inner| inner.file_name())
+                .map(DirEntry::file_name)
                 .unwrap_or_default()
         };
 
@@ -2053,7 +2053,7 @@ impl PathData {
 
     fn file_type(&self) -> Option<&FileType> {
         self.ft
-            .get_or_init(|| self.metadata().map(|md| md.file_type()))
+            .get_or_init(|| self.metadata().map(Metadata::file_type))
             .as_ref()
     }
 
@@ -2064,7 +2064,7 @@ impl PathData {
 
     #[cfg(unix)]
     fn is_executable_file(&self) -> bool {
-        self.file_type().is_some_and(|f| f.is_file())
+        self.file_type().is_some_and(FileType::is_file)
             && self.metadata().is_some_and(file_is_executable)
     }
 
@@ -2336,7 +2336,7 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
             )
         }),
         Sort::Size => {
-            entries.sort_by_key(|k| Reverse(k.metadata().map_or(0, |md| md.len())));
+            entries.sort_by_key(|k| Reverse(k.metadata().map_or(0, Metadata::len)));
         }
         // The default sort in GNU ls is case insensitive
         Sort::Name => entries.sort_by(|a, b| a.display_name().cmp(b.display_name())),
@@ -2509,7 +2509,7 @@ fn enter_directory(
         for e in entries
             .iter()
             .skip(if config.files == Files::All { 2 } else { 0 })
-            .filter(|p| p.file_type().is_some_and(|ft| ft.is_dir()))
+            .filter(|p| p.file_type().is_some_and(FileType::is_dir))
         {
             match fs::read_dir(e.path()) {
                 Err(err) => {
@@ -3416,7 +3416,7 @@ fn display_item_name(
     let dired_name_len = if config.dired { name.len() } else { 0 };
 
     if config.format == Format::Long
-        && path.file_type().is_some_and(|ft| ft.is_symlink())
+        && path.file_type().is_some_and(FileType::is_symlink)
         && !path.must_dereference
     {
         match path.path().read_link() {
@@ -3442,7 +3442,7 @@ fn display_item_name(
                             let target_data = PathData::new(
                                 resolved_target,
                                 None,
-                                target_path.file_name().map(|s| s.to_os_string()),
+                                target_path.file_name().map(OsStr::to_os_string),
                                 config,
                                 false,
                             );

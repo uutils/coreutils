@@ -203,11 +203,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let reference = matches.get_one::<OsString>(options::sources::REFERENCE);
     let date = matches
         .get_one::<String>(options::sources::DATE)
-        .map(|date| date.to_owned());
+        .map(ToOwned::to_owned);
 
     let mut timestamp = matches
         .get_one::<String>(options::sources::TIMESTAMP)
-        .map(|t| t.to_owned());
+        .map(ToOwned::to_owned);
 
     if is_first_filename_timestamp(reference, date.as_deref(), timestamp.as_deref(), &filenames) {
         let first_file = filenames[0].to_str().unwrap();

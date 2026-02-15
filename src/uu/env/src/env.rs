@@ -892,16 +892,20 @@ fn apply_removal_of_all_env_vars(opts: &Options<'_>) {
 fn make_options(matches: &clap::ArgMatches) -> UResult<Options<'_>> {
     let ignore_env = matches.get_flag("ignore-environment");
     let line_ending = LineEnding::from_zero_flag(matches.get_flag("null"));
-    let running_directory = matches.get_one::<OsString>("chdir").map(|s| s.as_os_str());
+    let running_directory = matches
+        .get_one::<OsString>("chdir")
+        .map(OsString::as_os_str);
     let files = match matches.get_many::<OsString>("file") {
-        Some(v) => v.map(|s| s.as_os_str()).collect(),
+        Some(v) => v.map(OsString::as_os_str).collect(),
         None => Vec::with_capacity(0),
     };
     let unsets = match matches.get_many::<OsString>("unset") {
-        Some(v) => v.map(|s| s.as_os_str()).collect(),
+        Some(v) => v.map(OsString::as_os_str).collect(),
         None => Vec::with_capacity(0),
     };
-    let argv0 = matches.get_one::<OsString>("argv0").map(|s| s.as_os_str());
+    let argv0 = matches
+        .get_one::<OsString>("argv0")
+        .map(OsString::as_os_str);
 
     #[cfg(unix)]
     let ignore_signal = build_signal_request(matches, options::IGNORE_SIGNAL)?;

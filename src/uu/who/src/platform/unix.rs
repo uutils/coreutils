@@ -207,7 +207,7 @@ impl Who {
         };
         if self.short_list {
             let users = utmpx::Utmpx::iter_all_records_from(f)
-                .filter(|ut| ut.is_user_process())
+                .filter(UtmpxRecord::is_user_process)
                 .map(|ut| ut.user())
                 .collect::<Vec<_>>();
             println!("{}", users.join(" "));
