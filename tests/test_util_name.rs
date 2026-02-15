@@ -45,7 +45,7 @@ fn execution_phrase_double() {
     assert!(
         String::from_utf8(output.stderr)
             .unwrap()
-            .contains(&"Usage: ls".to_string())
+            .contains(&"Usage: ls".to_owned())
     );
 }
 

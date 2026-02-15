@@ -32,7 +32,7 @@ fn test_id_no_specified_user() {
     let ts = TestScenario::new(util_name!());
     let result = ts.ucmd().run();
     let exp_result = unwrap_or_return!(expected_result(&ts, &[]));
-    let mut exp_stdout = exp_result.stdout_str().to_string();
+    let mut exp_stdout = exp_result.stdout_str().to_owned();
 
     #[cfg(not(feature = "feat_selinux"))]
     {

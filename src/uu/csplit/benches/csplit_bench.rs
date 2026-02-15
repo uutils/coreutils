@@ -18,7 +18,7 @@ fn csplit_line_number(bencher: Bencher) {
         .with_inputs(|| {
             let output_dir = TempDir::new().unwrap();
             let prefix = output_dir.path().join("xx");
-            (output_dir, prefix.to_str().unwrap().to_string())
+            (output_dir, prefix.to_str().unwrap().to_owned())
         })
         .bench_values(|(output_dir, prefix)| {
             black_box(run_util_function(
@@ -54,7 +54,7 @@ fn csplit_regex_pattern(bencher: Bencher) {
         .with_inputs(|| {
             let output_dir = TempDir::new().unwrap();
             let prefix = output_dir.path().join("xx");
-            (output_dir, prefix.to_str().unwrap().to_string())
+            (output_dir, prefix.to_str().unwrap().to_owned())
         })
         .bench_values(|(output_dir, prefix)| {
             black_box(run_util_function(

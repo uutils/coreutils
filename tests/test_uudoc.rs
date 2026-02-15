@@ -56,7 +56,7 @@ fn get_doc_file_from_output(output: &str) -> (String, String) {
         .unwrap()
         .strip_suffix("'")
         .unwrap()
-        .to_string();
+        .to_owned();
     let content = std::fs::read_to_string(&correct_path_test);
     let content = match content {
         Ok(content) => content,

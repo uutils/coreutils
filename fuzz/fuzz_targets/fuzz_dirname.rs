@@ -23,9 +23,9 @@ fn generate_dirname_args() -> Vec<String> {
     // 20% chance to include -z/--zero flag
     if rng.random_bool(0.2) {
         if rng.random_bool(0.5) {
-            args.push("-z".to_string());
+            args.push("-z".to_owned());
         } else {
-            args.push("--zero".to_string());
+            args.push("--zero".to_owned());
         }
     }
 
@@ -77,11 +77,11 @@ fn generate_path() -> String {
         }
 
         // Root path
-        2 => "/".to_string(),
+        2 => "/".to_owned(),
 
         // Absolute paths
         3 => {
-            let mut path = "/".to_string();
+            let mut path = "/".to_owned();
             let components = rng.random_range(1..=4);
             for _ in 0..components {
                 path.push_str(&generate_random_string(rng.random_range(1..=8)));
@@ -97,7 +97,7 @@ fn generate_path() -> String {
         // Paths ending with "/." (specific case from issue #8924)
         4 => {
             let base = if rng.random_bool(0.3) {
-                "/".to_string()
+                "/".to_owned()
             } else {
                 format!("/{}", generate_random_string(rng.random_range(1..=10)))
             };
@@ -132,7 +132,7 @@ fn generate_path() -> String {
         }
 
         // Empty string (edge case)
-        8 => "".to_string(),
+        8 => "".to_owned(),
 
         // Issue #8924 specific cases: paths like "foo//."
         9 => {

@@ -203,7 +203,7 @@ impl<'a> Options<'a> {
             // Per POSIX, stdin is used for TTY operations when no device is specified.
             // This matches GNU coreutils behavior: if stdin is not a TTY,
             // tcgetattr will fail with "Inappropriate ioctl for device".
-            None => (Device::Stdin(stdin()), "standard input".to_string()),
+            None => (Device::Stdin(stdin()), "standard input".to_owned()),
         };
         Ok(Self {
             all: matches.get_flag(options::ALL),
@@ -1065,7 +1065,7 @@ fn string_to_control_char(s: &str) -> Result<u8, ControlCharMappingError> {
 
     if let Some(val) = ascii_num {
         if val > 255 {
-            return Err(ControlCharMappingError::IntOutOfRange(s.to_string()));
+            return Err(ControlCharMappingError::IntOutOfRange(s.to_owned()));
         }
         return Ok(val as u8);
     }
@@ -1081,7 +1081,7 @@ fn string_to_control_char(s: &str) -> Result<u8, ControlCharMappingError> {
             Ok((c.to_ascii_uppercase() as u8).wrapping_sub(b'@'))
         }
         (Some(c), None) => Ok(c as u8),
-        (Some(_), Some(_)) => Err(ControlCharMappingError::MultipleChars(s.to_string())),
+        (Some(_), Some(_)) => Err(ControlCharMappingError::MultipleChars(s.to_owned())),
         _ => unreachable!("No arguments provided: must have been caught earlier"),
     }
 }

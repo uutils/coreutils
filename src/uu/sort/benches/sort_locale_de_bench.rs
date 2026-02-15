@@ -19,7 +19,7 @@ fn sort_german_de_locale(bencher: Bencher) {
     let data = text_data::generate_german_locale_data(50_000);
     let file_path = setup_test_file(&data);
     let output_file = NamedTempFile::new().unwrap();
-    let output_path = output_file.path().to_str().unwrap().to_string();
+    let output_path = output_file.path().to_str().unwrap().to_owned();
 
     bencher.bench(|| {
         black_box(run_util_function(

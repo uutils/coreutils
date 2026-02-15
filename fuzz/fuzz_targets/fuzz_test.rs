@@ -47,71 +47,71 @@ fn generate_random_path(rng: &mut dyn rand::RngCore) -> &'static str {
 fn generate_test_args() -> Vec<TestArg> {
     vec![
         TestArg {
-            arg: "-z".to_string(),
+            arg: "-z".to_owned(),
             arg_type: ArgType::STRING,
         },
         TestArg {
-            arg: "-n".to_string(),
+            arg: "-n".to_owned(),
             arg_type: ArgType::STRING,
         },
         TestArg {
-            arg: "=".to_string(),
+            arg: "=".to_owned(),
             arg_type: ArgType::STRINGSTRING,
         },
         TestArg {
-            arg: "!=".to_string(),
+            arg: "!=".to_owned(),
             arg_type: ArgType::STRINGSTRING,
         },
         TestArg {
-            arg: ">".to_string(),
+            arg: ">".to_owned(),
             arg_type: ArgType::STRINGSTRING,
         },
         TestArg {
-            arg: "<".to_string(),
+            arg: "<".to_owned(),
             arg_type: ArgType::STRINGSTRING,
         },
         TestArg {
-            arg: "-eq".to_string(),
+            arg: "-eq".to_owned(),
             arg_type: ArgType::INTEGERINTEGER,
         },
         TestArg {
-            arg: "-ne".to_string(),
+            arg: "-ne".to_owned(),
             arg_type: ArgType::INTEGERINTEGER,
         },
         TestArg {
-            arg: "-gt".to_string(),
+            arg: "-gt".to_owned(),
             arg_type: ArgType::INTEGERINTEGER,
         },
         TestArg {
-            arg: "-ge".to_string(),
+            arg: "-ge".to_owned(),
             arg_type: ArgType::INTEGERINTEGER,
         },
         TestArg {
-            arg: "-lt".to_string(),
+            arg: "-lt".to_owned(),
             arg_type: ArgType::INTEGERINTEGER,
         },
         TestArg {
-            arg: "-le".to_string(),
+            arg: "-le".to_owned(),
             arg_type: ArgType::INTEGERINTEGER,
         },
         TestArg {
-            arg: "-f".to_string(),
+            arg: "-f".to_owned(),
             arg_type: ArgType::FILE,
         },
         TestArg {
-            arg: "-d".to_string(),
+            arg: "-d".to_owned(),
             arg_type: ArgType::FILE,
         },
         TestArg {
-            arg: "-e".to_string(),
+            arg: "-e".to_owned(),
             arg_type: ArgType::FILE,
         },
         TestArg {
-            arg: "-ef".to_string(),
+            arg: "-ef".to_owned(),
             arg_type: ArgType::FILEFILE,
         },
         TestArg {
-            arg: "-nt".to_string(),
+            arg: "-nt".to_owned(),
             arg_type: ArgType::FILEFILE,
         },
     ]

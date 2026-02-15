@@ -247,7 +247,7 @@ impl Filesystem {
 
         let mount_info = MountInfo {
             dev_id: String::new(),
-            dev_name: "-".to_string(),
+            dev_name: "-".to_owned(),
             fs_type,
             mount_dir: mount_dir.into_os_string(),
             mount_option: String::new(),

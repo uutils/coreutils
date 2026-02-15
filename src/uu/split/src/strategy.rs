@@ -122,56 +122,56 @@ impl NumberType {
         match (parts.next(), parts.next(), parts.next(), parts.next()) {
             (Some(n_str), None, None, None) => {
                 let num_chunks = parse_size_u64(n_str)
-                    .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
+                    .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_owned()))?;
                 if num_chunks > 0 {
                     Ok(Self::Bytes(num_chunks))
                 } else {
-                    Err(NumberTypeError::NumberOfChunks(s.to_string()))
+                    Err(NumberTypeError::NumberOfChunks(s.to_owned()))
                 }
             }
             (Some(k_str), Some(n_str), None, None)
                 if !k_str.starts_with('l') && !k_str.starts_with('r') =>
             {
                 let num_chunks = parse_size_u64(n_str)
-                    .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
+                    .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_owned()))?;
                 let chunk_number = parse_size_u64(k_str)
-                    .map_err(|_| NumberTypeError::ChunkNumber(k_str.to_string()))?;
+                    .map_err(|_| NumberTypeError::ChunkNumber(k_str.to_owned()))?;
                 if is_invalid_chunk(chunk_number, num_chunks) {
-                    return Err(NumberTypeError::ChunkNumber(k_str.to_string()));
+                    return Err(NumberTypeError::ChunkNumber(k_str.to_owned()));
                 }
                 Ok(Self::KthBytes(chunk_number, num_chunks))
             }
             (Some("l"), Some(n_str), None, None) => {
                 let num_chunks = parse_size_u64(n_str)
-                    .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
+                    .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_owned()))?;
                 Ok(Self::Lines(num_chunks))
             }
             (Some("l"), Some(k_str), Some(n_str), None) => {
                 let num_chunks = parse_size_u64(n_str)
-                    .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
+                    .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_owned()))?;
                 let chunk_number = parse_size_u64(k_str)
-                    .map_err(|_| NumberTypeError::ChunkNumber(k_str.to_string()))?;
+                    .map_err(|_| NumberTypeError::ChunkNumber(k_str.to_owned()))?;
                 if is_invalid_chunk(chunk_number, num_chunks) {
-                    return Err(NumberTypeError::ChunkNumber(k_str.to_string()));
+                    return Err(NumberTypeError::ChunkNumber(k_str.to_owned()));
                 }
                 Ok(Self::KthLines(chunk_number, num_chunks))
             }
             (Some("r"), Some(n_str), None, None) => {
                 let num_chunks = parse_size_u64(n_str)
-                    .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
+                    .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_owned()))?;
                 Ok(Self::RoundRobin(num_chunks))
             }
             (Some("r"), Some(k_str), Some(n_str), None) => {
                 let num_chunks = parse_size_u64(n_str)
-                    .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
+                    .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_owned()))?;
                 let chunk_number = parse_size_u64(k_str)
-                    .map_err(|_| NumberTypeError::ChunkNumber(k_str.to_string()))?;
+                    .map_err(|_| NumberTypeError::ChunkNumber(k_str.to_owned()))?;
                 if is_invalid_chunk(chunk_number, num_chunks) {
-                    return Err(NumberTypeError::ChunkNumber(k_str.to_string()));
+                    return Err(NumberTypeError::ChunkNumber(k_str.to_owned()));
                 }
                 Ok(Self::KthRoundRobin(chunk_number, num_chunks))
             }
-            _ => Err(NumberTypeError::NumberOfChunks(s.to_string())),
+            _ => Err(NumberTypeError::NumberOfChunks(s.to_owned())),
         }
     }
 }
@@ -245,7 +245,7 @@ impl Strategy {
         ) {
             (Some(v), false, false, false, false) => {
                 let v = parse_size_u64_max(v).map_err(|_| {
-                    StrategyError::Lines(ParseSizeError::ParseFailure(v.to_string()))
+                    StrategyError::Lines(ParseSizeError::ParseFailure(v.to_owned()))
                 })?;
                 if v > 0 {
                     Ok(Self::Lines(v))
@@ -306,31 +306,31 @@ mod tests {
     fn test_number_type_from_error() {
         assert_eq!(
             NumberType::from("xyz").unwrap_err(),
-            NumberTypeError::NumberOfChunks("xyz".to_string())
+            NumberTypeError::NumberOfChunks("xyz".to_owned())
         );
         assert_eq!(
             NumberType::from("l/xyz").unwrap_err(),
-            NumberTypeError::NumberOfChunks("xyz".to_string())
+            NumberTypeError::NumberOfChunks("xyz".to_owned())
         );
         assert_eq!(
             NumberType::from("l/123/xyz").unwrap_err(),
-            NumberTypeError::NumberOfChunks("xyz".to_string())
+            NumberTypeError::NumberOfChunks("xyz".to_owned())
         );
         assert_eq!(
             NumberType::from("l/abc/456").unwrap_err(),
-            NumberTypeError::ChunkNumber("abc".to_string())
+            NumberTypeError::ChunkNumber("abc".to_owned())
         );
         assert_eq!(
             NumberType::from("l/456/123").unwrap_err(),
-            NumberTypeError::ChunkNumber("456".to_string())
+            NumberTypeError::ChunkNumber("456".to_owned())
         );
         assert_eq!(
             NumberType::from("r/456/123").unwrap_err(),
-            NumberTypeError::ChunkNumber("456".to_string())
+            NumberTypeError::ChunkNumber("456".to_owned())
         );
         assert_eq!(
             NumberType::from("456/123").unwrap_err(),
-            NumberTypeError::ChunkNumber("456".to_string())
+            NumberTypeError::ChunkNumber("456".to_owned())
         );
         // In GNU split, the number of chunks get precedence:
         //
@@ -339,19 +339,19 @@ mod tests {
         //
         assert_eq!(
             NumberType::from("l/abc/xyz").unwrap_err(),
-            NumberTypeError::NumberOfChunks("xyz".to_string())
+            NumberTypeError::NumberOfChunks("xyz".to_owned())
         );
         assert_eq!(
             NumberType::from("r/xyz").unwrap_err(),
-            NumberTypeError::NumberOfChunks("xyz".to_string())
+            NumberTypeError::NumberOfChunks("xyz".to_owned())
         );
         assert_eq!(
             NumberType::from("r/123/xyz").unwrap_err(),
-            NumberTypeError::NumberOfChunks("xyz".to_string())
+            NumberTypeError::NumberOfChunks("xyz".to_owned())
         );
         assert_eq!(
             NumberType::from("r/abc/456").unwrap_err(),
-            NumberTypeError::ChunkNumber("abc".to_string())
+            NumberTypeError::ChunkNumber("abc".to_owned())
         );
         // In GNU split, the number of chunks get precedence:
         //
@@ -360,7 +360,7 @@ mod tests {
         //
         assert_eq!(
             NumberType::from("r/abc/xyz").unwrap_err(),
-            NumberTypeError::NumberOfChunks("xyz".to_string())
+            NumberTypeError::NumberOfChunks("xyz".to_owned())
         );
     }
 

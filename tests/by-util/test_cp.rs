@@ -2069,7 +2069,7 @@ fn test_cp_no_preserve_mode() {
 
     let metadata_b = std::fs::metadata(at.subdir.join("b")).unwrap();
     let permission_b = uufs::display_permissions(&metadata_b, false);
-    assert_eq!(permission_b, "rw-------".to_string());
+    assert_eq!(permission_b, "rw-------".to_owned());
 }
 
 #[test]
@@ -3168,7 +3168,7 @@ fn test_cp_fifo() {
 
     let metadata = std::fs::metadata(at.subdir.join("fifo2")).unwrap();
     let permission = uucore::fs::display_permissions(&metadata, true);
-    assert_eq!(permission, "prwx-wx--x".to_string());
+    assert_eq!(permission, "prwx-wx--x".to_owned());
 }
 
 #[test]
@@ -3189,7 +3189,7 @@ fn test_cp_socket() {
     let metadata = std::fs::metadata(at.subdir.join("socket2")).unwrap();
     let permission = uucore::fs::display_permissions(&metadata, true);
     assert!(metadata.file_type().is_socket());
-    assert_eq!(permission, "srwx-wx--x".to_string());
+    assert_eq!(permission, "srwx-wx--x".to_owned());
 }
 
 #[cfg(all(unix, not(target_vendor = "apple")))]
@@ -6743,7 +6743,7 @@ fn test_cp_preserve_selinux_admin_context() {
         .split_whitespace()
         .nth(1)
         .unwrap_or_default()
-        .to_string();
+        .to_owned();
 
     assert!(
         !default_context.is_empty(),

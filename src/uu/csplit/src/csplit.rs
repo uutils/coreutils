@@ -366,7 +366,7 @@ impl SplitWriter<'_> {
         input_iter.rewind_buffer();
         input_iter.set_size_of_buffer(1);
 
-        let mut ret = Err(CsplitError::LineOutOfRange(pattern_as_str.to_string()));
+        let mut ret = Err(CsplitError::LineOutOfRange(pattern_as_str.to_owned()));
         while let Some((ln, line)) = input_iter.next() {
             let line = line?;
             match n.cmp(&(&ln + 1)) {
@@ -457,7 +457,7 @@ impl SplitWriter<'_> {
                             self.writeln(&line?)?;
                         } else {
                             self.finish_split()?;
-                            return Err(CsplitError::LineOutOfRange(pattern_as_str.to_string()));
+                            return Err(CsplitError::LineOutOfRange(pattern_as_str.to_owned()));
                         }
                         offset -= 1;
                     }
@@ -504,7 +504,7 @@ impl SplitWriter<'_> {
 
                     self.finish_split()?;
                     if input_iter.buffer_len() < offset_usize {
-                        return Err(CsplitError::LineOutOfRange(pattern_as_str.to_string()));
+                        return Err(CsplitError::LineOutOfRange(pattern_as_str.to_owned()));
                     }
                     return Ok(());
                 }
@@ -519,7 +519,7 @@ impl SplitWriter<'_> {
         }
 
         self.finish_split()?;
-        Err(CsplitError::MatchNotFound(pattern_as_str.to_string()))
+        Err(CsplitError::MatchNotFound(pattern_as_str.to_owned()))
     }
 }
 

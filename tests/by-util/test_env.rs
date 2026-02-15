@@ -589,7 +589,7 @@ fn test_gnu_e20() {
         String::from(r#"-SA="B\_C=D" "#) + env_bin.escape_default().to_string().as_str() + "",
     ];
 
-    let mut output = "A=B C=D\n".to_string();
+    let mut output = "A=B C=D\n".to_owned();
 
     // Workaround for the test to pass when coverage is being run.
     // If enabled, the binary called by env_bin will most probably be

@@ -1006,8 +1006,8 @@ fn test_format_with_precision_and_to_arg() {
         new_ucmd!()
             .args(&[
                 format!("--format={format}"),
-                "9991239123".to_string(),
-                "--to=si".to_string(),
+                "9991239123".to_owned(),
+                "--to=si".to_owned(),
             ])
             .succeeds()
             .stdout_is(format!("{expected}\n"));

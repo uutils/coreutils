@@ -645,7 +645,7 @@ fn format_float_hexadecimal(
     let (first_digit, remaining_digits) = digits.split_at(1);
     let exponent = exp2 + (4 * max_precision) as i64;
 
-    let mut remaining_digits = remaining_digits.to_string();
+    let mut remaining_digits = remaining_digits.to_owned();
     if precision.is_none() {
         // Trim trailing zeros
         strip_fractional_zeroes(&mut remaining_digits);

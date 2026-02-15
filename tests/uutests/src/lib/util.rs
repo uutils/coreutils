@@ -314,7 +314,7 @@ impl CmdResult {
             panic!(
                 "Expected process to be terminated by the '{value}' signal, but exit status is: '{}'",
                 self.try_exit_status()
-                    .map_or("Not available".to_string(), |e| e.to_string())
+                    .map_or("Not available".to_owned(), |e| e.to_string())
             )
         });
 
@@ -344,7 +344,7 @@ impl CmdResult {
             panic!(
                 "Expected process to be terminated by the '{name}' signal, but exit status is: '{}'",
                 self.try_exit_status()
-                    .map_or("Not available".to_string(), |e| e.to_string())
+                    .map_or("Not available".to_owned(), |e| e.to_string())
             )
         });
 
@@ -1406,7 +1406,7 @@ impl TestScenario {
     #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
     pub fn mount_temp_fs(&mut self, mount_point: &str) -> core::result::Result<(), String> {
         if self.tmp_fs_mountpoint.is_some() {
-            return Err("already mounted".to_string());
+            return Err("already mounted".to_owned());
         }
         let cmd_result = self
             .cmd("mount")
@@ -1420,7 +1420,7 @@ impl TestScenario {
         if !cmd_result.succeeded() {
             return Err(format!("mount failed: {}", cmd_result.stderr_str()));
         }
-        self.tmp_fs_mountpoint = Some(mount_point.to_string());
+        self.tmp_fs_mountpoint = Some(mount_point.to_owned());
         Ok(())
     }
 
@@ -1917,7 +1917,7 @@ impl UCommand {
                 captured_stdout = Self::spawn_reader_thread(
                     captured_stdout,
                     po_master,
-                    "stdout_reader".to_string(),
+                    "stdout_reader".to_owned(),
                 );
                 command.stdout(po_slave);
             }
@@ -1930,7 +1930,7 @@ impl UCommand {
                 captured_stderr = Self::spawn_reader_thread(
                     captured_stderr,
                     pe_master,
-                    "stderr_reader".to_string(),
+                    "stderr_reader".to_owned(),
                 );
                 command.stderr(pe_slave);
             }
@@ -2513,7 +2513,7 @@ impl UChild {
 
             let (sender, receiver) = mpsc::channel();
             let handle = thread::Builder::new()
-                .name("wait_with_output".to_string())
+                .name("wait_with_output".to_owned())
                 .spawn(move || sender.send(child.wait_with_output()))
                 .unwrap();
 
@@ -2766,7 +2766,7 @@ impl UChild {
         let mut writer = self.take_stdin_as_writer();
 
         let join_handle = thread::Builder::new()
-            .name("pipe_in".to_string())
+            .name("pipe_in".to_owned())
             .spawn(
                 move || match writer.write_all(&content).and_then(|()| writer.flush()) {
                     Err(error) if !ignore_stdin_write_error => Err(io::Error::other(format!(
@@ -2882,7 +2882,7 @@ pub fn whoami() -> String {
         .or_else(|_| env::var("USERNAME"))
         .unwrap_or_else(|e| {
             println!("{UUTILS_WARNING}: {e}, using \"nobody\" instead");
-            "nobody".to_string()
+            "nobody".to_owned()
         })
 }
 
@@ -3054,7 +3054,7 @@ pub fn gnu_cmd_result(
 
     let (stdout, stderr): (String, String) = if cfg!(target_os = "linux") {
         (
-            result.stdout_str().to_string(),
+            result.stdout_str().to_owned(),
             result.stderr_str_lossy().to_string(),
         )
     } else {
@@ -3068,7 +3068,7 @@ pub fn gnu_cmd_result(
     };
 
     Ok(CmdResult::new(
-        ts.bin_path.as_os_str().to_str().unwrap().to_string(),
+        ts.bin_path.as_os_str().to_str().unwrap().to_owned(),
         Some(ts.util_name.clone()),
         Some(result.tmpd()),
         result.exit_status,
@@ -3174,9 +3174,9 @@ pub fn run_ucmd_as_root_with_stdin_stdout(
             Ok(output)
                 if String::from_utf8_lossy(&output.stderr).eq("sudo: a password is required\n") =>
             {
-                Err("Cannot run non-interactive sudo".to_string())
+                Err("Cannot run non-interactive sudo".to_owned())
             }
-            Ok(_output) => Err("\"sudo whoami\" didn't return \"root\"".to_string()),
+            Ok(_output) => Err("\"sudo whoami\" didn't return \"root\"".to_owned()),
             Err(e) => Err(format!("{UUTILS_WARNING}: {e}")),
         }
     }
@@ -3446,7 +3446,7 @@ mod tests {
             check_coreutil_version("no test name", VERSION_MIN),
             Err("uutils-tests-warning: 'no test name' \
             No such file or directory (os error 2)"
-                .to_string())
+                .to_owned())
         );
     }
 

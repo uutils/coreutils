@@ -103,7 +103,7 @@ pub enum CpError {
 // Manual impl for &str
 impl From<&'static str> for CpError {
     fn from(s: &'static str) -> Self {
-        Self::Error(s.to_string())
+        Self::Error(s.to_owned())
     }
 }
 
@@ -1022,7 +1022,7 @@ impl Options {
                 && matches.value_source(not_implemented_opt)
                     == Some(clap::parser::ValueSource::CommandLine)
             {
-                return Err(CpError::NotImplemented(not_implemented_opt.to_string()));
+                return Err(CpError::NotImplemented(not_implemented_opt.to_owned()));
             }
         }
 

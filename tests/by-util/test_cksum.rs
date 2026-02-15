@@ -2212,7 +2212,7 @@ mod gnu_cksum_base64 {
 
     fn output_format(algo: &str, digest: &str) -> String {
         if ["sysv", "bsd", "crc", "crc32b"].contains(&algo) {
-            digest.to_string()
+            digest.to_owned()
         } else {
             format!("{} (f) = {digest}", algo.to_uppercase()).replace("BLAKE2B", "BLAKE2b")
         }

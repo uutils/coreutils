@@ -63,7 +63,7 @@ pub fn get_smack_label_for_self() -> Result<String, SmackError> {
         .read_to_string(&mut label)
         .map_err(SmackError::LabelRetrievalFailure)?;
 
-    Ok(label.trim().to_string())
+    Ok(label.trim().to_owned())
 }
 
 /// Sets the SMACK label for the current process.
@@ -74,7 +74,7 @@ pub fn set_smack_label_for_self(label: &str) -> Result<(), SmackError> {
 
     fs::File::create("/proc/self/attr/current")
         .and_then(|mut f| f.write_all(label.as_bytes()))
-        .map_err(|e| SmackError::LabelSetFailure(label.to_string(), e))
+        .map_err(|e| SmackError::LabelSetFailure(label.to_owned(), e))
 }
 
 /// Gets the SMACK label for a filesystem path via xattr.
@@ -84,7 +84,7 @@ pub fn get_smack_label_for_path(path: &Path) -> Result<String, SmackError> {
     }
 
     match xattr::get(path, "security.SMACK64") {
-        Ok(Some(value)) => Ok(String::from_utf8_lossy(&value).trim().to_string()),
+        Ok(Some(value)) => Ok(String::from_utf8_lossy(&value).trim().to_owned()),
         Ok(None) => Err(SmackError::LabelRetrievalFailure(io::Error::new(
             io::ErrorKind::NotFound,
             translate!("smack-error-no-label-set"),
@@ -100,7 +100,7 @@ pub fn set_smack_label_for_path(path: &Path, label: &str) -> Result<(), SmackErr
     }
 
     xattr::set(path, "security.SMACK64", label.as_bytes())
-        .map_err(|e| SmackError::LabelSetFailure(label.to_string(), e))
+        .map_err(|e| SmackError::LabelSetFailure(label.to_owned(), e))
 }
 
 /// Sets SMACK label for a new path, calling cleanup on failure.

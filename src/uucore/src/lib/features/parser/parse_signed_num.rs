@@ -79,7 +79,7 @@ pub fn parse_signed_num_max(src: &str) -> Result<SignedNum, ParseSizeError> {
 
     // Empty string after stripping sign is an error
     if size_string.is_empty() {
-        return Err(ParseSizeError::ParseFailure(src.to_string()));
+        return Err(ParseSizeError::ParseFailure(src.to_owned()));
     }
 
     // Remove leading zeros so size is interpreted as decimal, not octal
@@ -106,13 +106,13 @@ pub fn parse_signed_num(src: &str) -> Result<SignedNum, ParseSizeError> {
 
     // Empty string after stripping sign is an error
     if size_string.is_empty() {
-        return Err(ParseSizeError::ParseFailure(src.to_string()));
+        return Err(ParseSizeError::ParseFailure(src.to_owned()));
     }
 
     // Use parse_size_u64 but on failure, create our own error with the raw string
     // (without quotes) so callers can format it as needed
     let value = parse_size_u64(size_string)
-        .map_err(|_| ParseSizeError::ParseFailure(size_string.to_string()))?;
+        .map_err(|_| ParseSizeError::ParseFailure(size_string.to_owned()))?;
 
     Ok(SignedNum { value, sign })
 }

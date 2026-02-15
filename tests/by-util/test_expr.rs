@@ -607,7 +607,7 @@ fn test_long_input() {
     #[cfg(windows)]
     const RESULT: &str = "845650\n";
 
-    let mut args: Vec<String> = vec!["1".to_string()];
+    let mut args: Vec<String> = vec!["1".to_owned()];
 
     for i in 2..=MAX_NUMBER {
         args.push('+'.to_string());

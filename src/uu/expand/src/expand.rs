@@ -122,9 +122,9 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
 
                             if is_specifier_already_used {
                                 let specifier = if remaining_mode == RemainingMode::Slash {
-                                    "/".to_string()
+                                    "/".to_owned()
                                 } else {
-                                    "+".to_string()
+                                    "+".to_owned()
                                 };
                                 return Err(ParseError::SpecifierOnlyAllowedWithLastValue(
                                     specifier,
@@ -139,17 +139,17 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
                         }
                         Err(e) => {
                             if *e.kind() == IntErrorKind::PosOverflow {
-                                return Err(ParseError::TabSizeTooLarge(s.to_string()));
+                                return Err(ParseError::TabSizeTooLarge(s.to_owned()));
                             }
 
                             let s = s.trim_start_matches(char::is_numeric);
                             return if s.starts_with('/') || s.starts_with('+') {
                                 Err(ParseError::SpecifierNotAtStartOfNumber(
                                     s[0..1].to_string(),
-                                    s.to_string(),
+                                    s.to_owned(),
                                 ))
                             } else {
-                                Err(ParseError::InvalidCharacter(s.to_string()))
+                                Err(ParseError::InvalidCharacter(s.to_owned()))
                             };
                         }
                     }

@@ -236,7 +236,7 @@ impl fmt::Display for QuotingStyle {
                 always_quote,
                 show_control,
             } => {
-                let mut style = "shell".to_string();
+                let mut style = "shell".to_owned();
                 if escape {
                     style.push_str("-escape");
                 }

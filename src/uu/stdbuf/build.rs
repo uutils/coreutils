@@ -56,7 +56,7 @@ fn main() {
     }
 
     let out_dir = env::var("OUT_DIR").expect("OUT_DIR not set");
-    let target = env::var("TARGET").unwrap_or_else(|_| "unknown".to_string());
+    let target = env::var("TARGET").unwrap_or_else(|_| "unknown".to_owned());
 
     // Check if we're building from the repository (where src/libstdbuf exists)
     // or from crates.io (where it doesn't)
@@ -79,7 +79,7 @@ fn main() {
     fs::create_dir_all(&build_dir).expect("Failed to create build directory");
 
     // Get the cargo executable
-    let cargo = env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
+    let cargo = env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned());
 
     // This manual cargo call ensures that libstdbuf is built before stdbuf.rs is compiled, which is necessary
     // for include_bytes!(..."/libstdbuf.so") to work.
@@ -92,7 +92,7 @@ fn main() {
         .args(["build", "--target-dir", build_dir.to_str().unwrap()]);
 
     // Get the current profile
-    let profile = env::var("PROFILE").unwrap_or_else(|_| "debug".to_string());
+    let profile = env::var("PROFILE").unwrap_or_else(|_| "debug".to_owned());
 
     // Pass the release flag if we're in release mode
     if profile == "release" || profile == "bench" {

@@ -266,7 +266,7 @@ fn test_check_b2sum_strict_check() {
 
     at.write("ck", &checksums.join(""));
 
-    let output = "f: OK\n".to_string().repeat(checksums.len());
+    let output = "f: OK\n".to_owned().repeat(checksums.len());
 
     scene
         .ccmd("b2sum")

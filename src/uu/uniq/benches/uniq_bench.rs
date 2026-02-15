@@ -81,7 +81,7 @@ fn uniq_case_insensitive(bencher: Bencher, num_lines: usize) {
         let variation = match i % 4 {
             0 => word.to_lowercase(),
             1 => word.to_uppercase(),
-            2 => word.to_string(),
+            2 => word.to_owned(),
             _ => {
                 // Mixed case
                 word.chars()

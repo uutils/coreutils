@@ -538,7 +538,7 @@ impl<'a> Pager<'a> {
             self.cumulative_line_sizes
                 .push(last_pos + bytes_read as u64);
             // Remove trailing whitespace
-            line = line.trim_end().to_string();
+            line = line.trim_end().to_owned();
             // Store the line (using mem::take to avoid clone)
             self.lines.push(std::mem::take(&mut line));
         }
@@ -849,11 +849,11 @@ impl<'a> Pager<'a> {
                 .copied()
                 .unwrap_or_default();
             if file_size == 0 {
-                " (END)".to_string()
+                " (END)".to_owned()
             } else {
                 let percentage = (position as f64 / file_size as f64 * 100.0).round() as u16;
                 if percentage >= 100 {
-                    " (END)".to_string()
+                    " (END)".to_owned()
                 } else {
                     format!(" ({percentage}%)")
                 }
@@ -953,7 +953,7 @@ mod tests {
     impl TestPagerBuilder {
         fn new(content: &str) -> Self {
             Self {
-                content: content.to_string(),
+                content: content.to_owned(),
                 ..Default::default()
             }
         }

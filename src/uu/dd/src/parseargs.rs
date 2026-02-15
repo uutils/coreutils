@@ -249,7 +249,7 @@ impl Parser {
         if skip > i64::MAX as u64 {
             return Err(ParseError::InvalidNumberWithErrMsg(
                 format!("{skip}"),
-                "Value too large for defined data type".to_string(),
+                "Value too large for defined data type".to_owned(),
             ));
         }
 
@@ -261,7 +261,7 @@ impl Parser {
         if seek > i64::MAX as u64 {
             return Err(ParseError::InvalidNumberWithErrMsg(
                 format!("{seek}"),
-                "Value too large for defined data type".to_string(),
+                "Value too large for defined data type".to_owned(),
             ));
         }
 
@@ -286,7 +286,7 @@ impl Parser {
 
     fn parse_operand(&mut self, operand: &str) -> Result<(), ParseError> {
         match operand.split_once('=') {
-            None => return Err(ParseError::UnrecognizedOperand(operand.to_string())),
+            None => return Err(ParseError::UnrecognizedOperand(operand.to_owned())),
             Some((k, v)) => match k {
                 "bs" => self.bs = Some(Self::parse_bytes(k, v)?),
                 "cbs" => self.cbs = Some(Self::parse_bytes(k, v)?),
@@ -296,15 +296,15 @@ impl Parser {
                 }
                 "count" => self.count = Some(Self::parse_n(v)?),
                 "ibs" => self.ibs = Some(Self::parse_bytes(k, v)?),
-                "if" => self.infile = Some(v.to_string()),
+                "if" => self.infile = Some(v.to_owned()),
                 "iflag" => self.parse_input_flags(v)?,
                 "obs" => self.obs = Some(Self::parse_bytes(k, v)?),
-                "of" => self.outfile = Some(v.to_string()),
+                "of" => self.outfile = Some(v.to_owned()),
                 "oflag" => self.parse_output_flags(v)?,
                 "seek" | "oseek" => self.seek = Self::parse_n(v)?,
                 "skip" | "iseek" => self.skip = Self::parse_n(v)?,
                 "status" => self.status = Some(Self::parse_status_level(v)?),
-                _ => return Err(ParseError::UnrecognizedOperand(operand.to_string())),
+                _ => return Err(ParseError::UnrecognizedOperand(operand.to_owned())),
             },
         }
         Ok(())
@@ -322,7 +322,7 @@ impl Parser {
     fn parse_bytes(arg: &str, val: &str) -> Result<usize, ParseError> {
         parse_bytes_with_opt_multiplier(val)?
             .try_into()
-            .map_err(|_| ParseError::BsOutOfRange(arg.to_string()))
+            .map_err(|_| ParseError::BsOutOfRange(arg.to_owned()))
     }
 
     fn parse_status_level(val: &str) -> Result<StatusLevel, ParseError> {
@@ -330,7 +330,7 @@ impl Parser {
             "none" => Ok(StatusLevel::None),
             "noxfer" => Ok(StatusLevel::Noxfer),
             "progress" => Ok(StatusLevel::Progress),
-            _ => Err(ParseError::StatusLevelNotRecognized(val.to_string())),
+            _ => Err(ParseError::StatusLevelNotRecognized(val.to_owned())),
         }
     }
 
@@ -340,7 +340,7 @@ impl Parser {
         for f in val.split(',') {
             match f {
                 // Common flags
-                "cio" => return Err(ParseError::Unimplemented(f.to_string())),
+                "cio" => return Err(ParseError::Unimplemented(f.to_owned())),
                 "direct" => linux_only!(f, i.direct = true),
                 "directory" => linux_only!(f, i.directory = true),
                 "dsync" => linux_only!(f, i.dsync = true),
@@ -350,9 +350,9 @@ impl Parser {
                 "noatime" => linux_only!(f, i.noatime = true),
                 "noctty" => linux_only!(f, i.noctty = true),
                 "nofollow" => linux_only!(f, i.nofollow = true),
-                "nolinks" => return Err(ParseError::Unimplemented(f.to_string())),
-                "binary" => return Err(ParseError::Unimplemented(f.to_string())),
-                "text" => return Err(ParseError::Unimplemented(f.to_string())),
+                "nolinks" => return Err(ParseError::Unimplemented(f.to_owned())),
+                "binary" => return Err(ParseError::Unimplemented(f.to_owned())),
+                "text" => return Err(ParseError::Unimplemented(f.to_owned())),
 
                 // Input-only flags
                 "fullblock" => i.fullblock = true,
@@ -360,7 +360,7 @@ impl Parser {
                 "skip_bytes" => i.skip_bytes = true,
                 // GNU silently ignores oflags given as iflag.
                 "append" | "seek_bytes" => {}
-                _ => return Err(ParseError::FlagNoMatch(f.to_string())),
+                _ => return Err(ParseError::FlagNoMatch(f.to_owned())),
             }
         }
         Ok(())
@@ -372,7 +372,7 @@ impl Parser {
         for f in val.split(',') {
             match f {
                 // Common flags
-                "cio" => return Err(ParseError::Unimplemented(val.to_string())),
+                "cio" => return Err(ParseError::Unimplemented(val.to_owned())),
                 "direct" => linux_only!(f, o.direct = true),
                 "directory" => linux_only!(f, o.directory = true),
                 "dsync" => linux_only!(f, o.dsync = true),
@@ -382,16 +382,16 @@ impl Parser {
                 "noatime" => linux_only!(f, o.noatime = true),
                 "noctty" => linux_only!(f, o.noctty = true),
                 "nofollow" => linux_only!(f, o.nofollow = true),
-                "nolinks" => return Err(ParseError::Unimplemented(f.to_string())),
-                "binary" => return Err(ParseError::Unimplemented(f.to_string())),
-                "text" => return Err(ParseError::Unimplemented(f.to_string())),
+                "nolinks" => return Err(ParseError::Unimplemented(f.to_owned())),
+                "binary" => return Err(ParseError::Unimplemented(f.to_owned())),
+                "text" => return Err(ParseError::Unimplemented(f.to_owned())),
 
                 // Output-only flags
                 "append" => o.append = true,
                 "seek_bytes" => o.seek_bytes = true,
                 // GNU silently ignores iflags given as oflag.
                 "fullblock" | "count_bytes" | "skip_bytes" => {}
-                _ => return Err(ParseError::FlagNoMatch(f.to_string())),
+                _ => return Err(ParseError::FlagNoMatch(f.to_owned())),
             }
         }
         Ok(())
@@ -426,7 +426,7 @@ impl Parser {
                 "notrunc" => c.notrunc = true,
                 "fdatasync" => c.fdatasync = true,
                 "fsync" => c.fsync = true,
-                _ => return Err(ParseError::ConvFlagNoMatch(f.to_string())),
+                _ => return Err(ParseError::ConvFlagNoMatch(f.to_owned())),
             }
         }
         Ok(())
@@ -450,7 +450,7 @@ fn show_zero_multiplier_warning() {
 fn parse_bytes_only(s: &str, i: usize) -> Result<u64, ParseError> {
     s[..i]
         .parse()
-        .map_err(|_| ParseError::MultiplierStringParseFailure(s.to_string()))
+        .map_err(|_| ParseError::MultiplierStringParseFailure(s.to_owned()))
 }
 
 /// Parse a number of bytes from the given string, assuming no `'x'` characters.
@@ -490,15 +490,15 @@ fn parse_bytes_no_x(full: &str, s: &str) -> Result<u64, ParseError> {
         (None, None, None) => match parser.parse_u64(s) {
             Ok(n) => (n, 1),
             Err(ParseSizeError::SizeTooBig(_)) => (u64::MAX, 1),
-            Err(_) => return Err(ParseError::InvalidNumber(full.to_string())),
+            Err(_) => return Err(ParseError::InvalidNumber(full.to_owned())),
         },
         (Some(i), None, None) => (parse_bytes_only(s, i)?, 1),
         (None, Some(i), None) => (parse_bytes_only(s, i)?, 2),
         (None, None, Some(i)) => (parse_bytes_only(s, i)?, 512),
-        _ => return Err(ParseError::MultiplierStringParseFailure(full.to_string())),
+        _ => return Err(ParseError::MultiplierStringParseFailure(full.to_owned())),
     };
     num.checked_mul(multiplier)
-        .ok_or_else(|| ParseError::MultiplierStringOverflow(full.to_string()))
+        .ok_or_else(|| ParseError::MultiplierStringOverflow(full.to_owned()))
 }
 
 /// Parse byte and multiplier like 512, 5KiB, or 1G.
@@ -531,7 +531,7 @@ pub fn parse_bytes_with_opt_multiplier(s: &str) -> Result<u64, ParseError> {
             let num = parse_bytes_no_x(s, part)?;
             total = total
                 .checked_mul(num)
-                .ok_or_else(|| ParseError::InvalidNumber(s.to_string()))?;
+                .ok_or_else(|| ParseError::InvalidNumber(s.to_owned()))?;
         }
         Ok(total)
     }

@@ -1096,7 +1096,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let time_format = if time.is_some() {
         parse_time_style(matches.get_one::<String>("time-style"))?
     } else {
-        format::LONG_ISO.to_string()
+        format::LONG_ISO.to_owned()
     };
 
     let stat_printer = StatPrinter {
@@ -1257,7 +1257,7 @@ fn parse_time_style(s: Option<&String>) -> UResult<String> {
                     };
                     match s {
                         "locale" => None,
-                        _ => Some(s.to_string()),
+                        _ => Some(s.to_owned()),
                     }
                 }
                 Err(_) => None,
@@ -1266,15 +1266,15 @@ fn parse_time_style(s: Option<&String>) -> UResult<String> {
     };
     match s {
         Some(s) => match s.as_ref() {
-            "full-iso" => Ok(format::FULL_ISO.to_string()),
-            "long-iso" => Ok(format::LONG_ISO.to_string()),
-            "iso" => Ok(format::ISO.to_string()),
+            "full-iso" => Ok(format::FULL_ISO.to_owned()),
+            "long-iso" => Ok(format::LONG_ISO.to_owned()),
+            "iso" => Ok(format::ISO.to_owned()),
             _ => match s.chars().next().unwrap() {
                 '+' => Ok(s[1..].to_string()),
                 _ => Err(DuError::InvalidTimeStyleArg(s).into()),
             },
         },
-        None => Ok(format::LONG_ISO.to_string()),
+        None => Ok(format::LONG_ISO.to_owned()),
     }
 }
 
@@ -1520,7 +1520,7 @@ impl FromStr for Threshold {
             // Threshold of '-0' excludes everything besides 0 sized entries
             // GNU's du treats '-0' as an invalid argument
             if size == 0 {
-                return Err(ParseSizeError::ParseFailure(s.to_string()));
+                return Err(ParseSizeError::ParseFailure(s.to_owned()));
             }
             Ok(Self::Upper(size))
         } else {
@@ -1561,7 +1561,7 @@ mod test_du {
 
     #[test]
     fn test_read_block_size() {
-        let test_data = [Some("1024".to_string()), Some("K".to_string()), None];
+        let test_data = [Some("1024".to_owned()), Some("K".to_owned()), None];
         for it in &test_data {
             assert!(matches!(read_block_size(it.as_deref()), Ok(1024)));
         }

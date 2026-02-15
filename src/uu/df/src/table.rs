@@ -337,7 +337,7 @@ impl<'a> RowFormatter<'a> {
     /// If `None`, return the string `"-"` instead.
     fn percentage(fraction: Option<f64>) -> Cell {
         let s = match fraction {
-            None => "-".to_string(),
+            None => "-".to_owned(),
             Some(x) => format!("{:.0}%", (100.0 * x).ceil()),
         };
         Cell::from_ascii_string(s)
@@ -609,8 +609,8 @@ mod tests {
         fn default() -> Self {
             Self {
                 file: Some("/path/to/file".into()),
-                fs_device: "my_device".to_string(),
-                fs_type: "my_type".to_string(),
+                fs_device: "my_device".to_owned(),
+                fs_type: "my_type".to_owned(),
                 fs_mount: "my_mount".into(),
 
                 bytes: BytesCell::new(100, &BlockSize::Bytes(1)),
@@ -776,7 +776,7 @@ mod tests {
             ..Default::default()
         };
         let row = Row {
-            fs_device: "my_device".to_string(),
+            fs_device: "my_device".to_owned(),
             fs_mount: "my_mount".into(),
 
             bytes: BytesCell::new(100, &BlockSize::Bytes(1)),
@@ -802,8 +802,8 @@ mod tests {
             ..Default::default()
         };
         let row = Row {
-            fs_device: "my_device".to_string(),
-            fs_type: "my_type".to_string(),
+            fs_device: "my_device".to_owned(),
+            fs_type: "my_type".to_owned(),
             fs_mount: "my_mount".into(),
 
             bytes: BytesCell::new(100, &BlockSize::Bytes(1)),
@@ -829,7 +829,7 @@ mod tests {
             ..Default::default()
         };
         let row = Row {
-            fs_device: "my_device".to_string(),
+            fs_device: "my_device".to_owned(),
             fs_mount: "my_mount".into(),
 
             inodes: 10,
@@ -872,8 +872,8 @@ mod tests {
             ..Default::default()
         };
         let row = Row {
-            fs_device: "my_device".to_string(),
-            fs_type: "my_type".to_string(),
+            fs_device: "my_device".to_owned(),
+            fs_type: "my_type".to_owned(),
             fs_mount: "my_mount".into(),
 
             bytes: BytesCell::new(40000, &BlockSize::default()),
@@ -907,8 +907,8 @@ mod tests {
             ..Default::default()
         };
         let row = Row {
-            fs_device: "my_device".to_string(),
-            fs_type: "my_type".to_string(),
+            fs_device: "my_device".to_owned(),
+            fs_type: "my_type".to_owned(),
             fs_mount: "my_mount".into(),
 
             bytes: BytesCell::new(4096, &BlockSize::default()),
@@ -992,11 +992,11 @@ mod tests {
         let d = crate::Filesystem {
             file: None,
             mount_info: crate::MountInfo {
-                dev_id: "28".to_string(),
-                dev_name: "none".to_string(),
-                fs_type: "9p".to_string(),
+                dev_id: "28".to_owned(),
+                dev_name: "none".to_owned(),
+                fs_type: "9p".to_owned(),
                 mount_dir: "/usr/lib/wsl/drivers".into(),
-                mount_option: "ro,nosuid,nodev,noatime".to_string(),
+                mount_option: "ro,nosuid,nodev,noatime".to_owned(),
                 mount_root: "/".into(),
                 remote: false,
                 dummy: false,
@@ -1023,11 +1023,11 @@ mod tests {
         let d1 = crate::Filesystem {
             file: None,
             mount_info: crate::MountInfo {
-                dev_id: "28".to_string(),
-                dev_name: "none".to_string(),
-                fs_type: "9p".to_string(),
+                dev_id: "28".to_owned(),
+                dev_name: "none".to_owned(),
+                fs_type: "9p".to_owned(),
                 mount_dir: "/usr/lib/wsl/drivers".into(),
-                mount_option: "ro,nosuid,nodev,noatime".to_string(),
+                mount_option: "ro,nosuid,nodev,noatime".to_owned(),
                 mount_root: "/".into(),
                 remote: false,
                 dummy: false,
@@ -1094,11 +1094,11 @@ mod tests {
         let d1 = crate::Filesystem {
             file: None,
             mount_info: crate::MountInfo {
-                dev_id: "28".to_string(),
-                dev_name: "none".to_string(),
-                fs_type: "9p".to_string(),
+                dev_id: "28".to_owned(),
+                dev_name: "none".to_owned(),
+                fs_type: "9p".to_owned(),
                 mount_dir: bad_unicode_os_str,
-                mount_option: "ro,nosuid,nodev,noatime".to_string(),
+                mount_option: "ro,nosuid,nodev,noatime".to_owned(),
                 mount_root: "/".into(),
                 remote: false,
                 dummy: false,

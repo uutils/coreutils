@@ -374,7 +374,7 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
 
 #[cfg(test)]
 pub fn parse_format_flags_str(args_str: &[&'static str]) -> Result<Vec<FormatterItemInfo>, String> {
-    let args: Vec<String> = args_str.iter().map(|s| (*s).to_string()).collect();
+    let args: Vec<String> = args_str.iter().map(|s| (*s).to_owned()).collect();
     parse_format_flags(&args).map(|v| {
         // tests using this function assume add_ascii_dump is not set
         v.into_iter()
@@ -472,7 +472,7 @@ fn test_long_format_a() {
 #[test]
 fn test_long_format_cz() {
     assert_eq!(
-        parse_format_flags(&["od".to_string(), "--format=cz".to_string()]).unwrap(),
+        parse_format_flags(&["od".to_owned(), "--format=cz".to_owned()]).unwrap(),
         vec![ParsedFormatterItemInfo::new(FORMAT_ITEM_C, true)]
     );
 }
@@ -561,20 +561,20 @@ fn test_format_next_arg_invalid() {
 fn test_mixed_formats() {
     assert_eq!(
         parse_format_flags(&[
-            "od".to_string(),
-            "--skip-bytes=2".to_string(),
-            "-vItu1z".to_string(),
-            "-N".to_string(),
-            "1000".to_string(),
-            "-xt".to_string(),
-            "acdx1".to_string(),
-            "--format=u2c".to_string(),
-            "--format".to_string(),
-            "f".to_string(),
-            "-xAx".to_string(),
-            "--".to_string(),
-            "-h".to_string(),
-            "--format=f8".to_string(),
+            "od".to_owned(),
+            "--skip-bytes=2".to_owned(),
+            "-vItu1z".to_owned(),
+            "-N".to_owned(),
+            "1000".to_owned(),
+            "-xt".to_owned(),
+            "acdx1".to_owned(),
+            "--format=u2c".to_owned(),
+            "--format".to_owned(),
+            "f".to_owned(),
+            "-xAx".to_owned(),
+            "--".to_owned(),
+            "-h".to_owned(),
+            "--format=f8".to_owned(),
         ])
         .unwrap(),
         vec![

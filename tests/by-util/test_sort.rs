@@ -1721,7 +1721,7 @@ fn test_human_numeric_blank_thousands_sep_locale() {
         if sep.is_empty() || sep.len() != 1 || !sep.chars().all(char::is_whitespace) {
             return None;
         }
-        Some(sep.to_string())
+        Some(sep.to_owned())
     }
 
     let candidates = ["sv_SE.UTF-8", "sv_SE"];
@@ -1729,7 +1729,7 @@ fn test_human_numeric_blank_thousands_sep_locale() {
     let mut thousands_sep = None;
     for candidate in candidates {
         if let Some(sep) = thousands_sep_for(candidate) {
-            selected_locale = Some(candidate.to_string());
+            selected_locale = Some(candidate.to_owned());
             thousands_sep = Some(sep);
             break;
         }
@@ -2172,9 +2172,9 @@ fn test_debug_key_annotations_locale() {
                     .lines()
                     .map(|line| {
                         if line.starts_with("^^ ") {
-                            "^ no match for key".to_string()
+                            "^ no match for key".to_owned()
                         } else {
-                            line.to_string()
+                            line.to_owned()
                         }
                     })
                     .collect::<Vec<_>>()

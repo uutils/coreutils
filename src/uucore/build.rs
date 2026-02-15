@@ -94,7 +94,7 @@ fn detect_target_utility() -> Option<String> {
     if let Ok(pkg_name) = env::var("CARGO_PKG_NAME") {
         if let Some(util_name) = pkg_name.strip_prefix("uu_") {
             println!("cargo:warning=Auto-detected utility name: {util_name}");
-            return Some(util_name.to_string());
+            return Some(util_name.to_owned());
         }
     }
 
@@ -104,7 +104,7 @@ fn detect_target_utility() -> Option<String> {
         if let Ok(content) = fs::read_to_string(&config_path) {
             let util_name = content.trim();
             if !util_name.is_empty() && util_name != "multicall" {
-                return Some(util_name.to_string());
+                return Some(util_name.to_owned());
             }
         }
     }
@@ -115,7 +115,7 @@ fn detect_target_utility() -> Option<String> {
         if let Ok(content) = fs::read_to_string(&config_path) {
             let util_name = content.trim();
             if !util_name.is_empty() && util_name != "multicall" {
-                return Some(util_name.to_string());
+                return Some(util_name.to_owned());
             }
         }
     }
@@ -188,7 +188,7 @@ fn embed_all_utility_locales(
         let entry = entry?;
         if entry.file_type()?.is_dir() {
             if let Some(dir_name) = entry.file_name().to_str() {
-                util_dirs.push(dir_name.to_string());
+                util_dirs.push(dir_name.to_owned());
             }
         }
     }
@@ -282,7 +282,7 @@ fn get_locales_to_embed() -> (String, Option<String>) {
             None
         }
     });
-    ("en-US".to_string(), system_locale)
+    ("en-US".to_owned(), system_locale)
 }
 
 /// Helper function to iterate over the locales to embed.

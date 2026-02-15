@@ -63,7 +63,7 @@ pub fn parse_number_of_bytes(s: &str) -> Result<u64, ParseSizeError> {
                 Some('P') => 1000 * 1000 * 1000 * 1000 * 1000,
                 #[cfg(target_pointer_width = "64")]
                 Some('E') => 1000 * 1000 * 1000 * 1000 * 1000 * 1000,
-                _ => return Err(ParseSizeError::ParseFailure(s.to_string())),
+                _ => return Err(ParseSizeError::ParseFailure(s.to_owned())),
             }
         }
         _ => {}
@@ -75,7 +75,7 @@ pub fn parse_number_of_bytes(s: &str) -> Result<u64, ParseSizeError> {
     };
     factor
         .checked_mul(multiply)
-        .ok_or_else(|| ParseSizeError::SizeTooBig(s.to_string()))
+        .ok_or_else(|| ParseSizeError::SizeTooBig(s.to_owned()))
 }
 
 #[test]

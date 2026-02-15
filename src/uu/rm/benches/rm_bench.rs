@@ -22,7 +22,7 @@ fn rm_single_file(bencher: Bencher) {
                         .join(format!("f{i}"))
                         .to_str()
                         .unwrap()
-                        .to_string()
+                        .to_owned()
                 })
                 .collect();
             (temp_dir, paths)
@@ -49,7 +49,7 @@ fn rm_multiple_files(bencher: Bencher) {
                         .join(format!("f{i}"))
                         .to_str()
                         .unwrap()
-                        .to_string()
+                        .to_owned()
                 })
                 .collect();
             (temp_dir, paths)
@@ -71,7 +71,7 @@ fn rm_recursive_tree(bencher: Bencher) {
             std::fs::create_dir(&test_dir).unwrap();
             // Increase depth and width for longer benchmark
             fs_tree::create_balanced_tree(&test_dir, 5, 5, 10);
-            (temp_dir, test_dir.to_str().unwrap().to_string())
+            (temp_dir, test_dir.to_str().unwrap().to_owned())
         })
         .bench_values(|(temp_dir, path)| {
             black_box(run_util_function(uumain, &["-r", &path]));
@@ -93,7 +93,7 @@ fn rm_force_files(bencher: Bencher) {
                         .join(format!("f{i}"))
                         .to_str()
                         .unwrap()
-                        .to_string()
+                        .to_owned()
                 })
                 .collect();
             (temp_dir, paths)

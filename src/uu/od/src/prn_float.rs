@@ -43,7 +43,7 @@ pub static FORMAT_ITEM_BF16: FormatterItemInfo = FormatterItemInfo {
 /// - Leave the exponent part (e/E...) untouched.
 fn trim_float_repr(raw: &str) -> String {
     // Drop padding added by `format!` width specification
-    let mut s = raw.trim_start().to_string();
+    let mut s = raw.trim_start().to_owned();
 
     // Keep NaN/Inf representations as-is
     let lower = s.to_ascii_lowercase();

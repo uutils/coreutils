@@ -191,7 +191,7 @@ impl std::str::FromStr for QuotingStyle {
             "shell-escape-always" => Ok(Self::ShellEscapeAlways),
             // The others aren't exposed to the user
             _ => Err(StatError::InvalidQuotingStyle {
-                style: s.to_string(),
+                style: s.to_owned(),
             }),
         }
     }
@@ -447,7 +447,7 @@ fn quote_file_name(file_name: &str, quoting_style: &QuotingStyle) -> String {
             let quote = if file_name.contains('\'') { '"' } else { '\'' };
             format!("{quote}{file_name}{quote}")
         }
-        QuotingStyle::Quote => file_name.to_string(),
+        QuotingStyle::Quote => file_name.to_owned(),
     }
 }
 
@@ -510,7 +510,7 @@ fn process_token_filesystem(t: &Token, meta: &StatFs, display_name: &str) {
                 // maximum length of filenames
                 'l' => OutputType::Unsigned(meta.namelen()),
                 // file name
-                'n' => OutputType::Str(display_name.to_string()),
+                'n' => OutputType::Str(display_name.to_owned()),
                 // block size (for faster transfers)
                 's' => OutputType::Unsigned(meta.io_size()),
                 // fundamental block size (for block counts)
@@ -1115,7 +1115,7 @@ impl Stater {
                         None => OutputType::Str(String::new()),
                     },
                     // file name
-                    'n' => OutputType::Str(display_name.to_string()),
+                    'n' => OutputType::Str(display_name.to_owned()),
                     // quoted file name with dereference if symbolic link
                     'N' => {
                         let file_name =
@@ -1416,7 +1416,7 @@ fn pretty_time(meta: &Metadata, md_time_field: MetadataTimeField) -> String {
             return String::from_utf8(tmp).unwrap();
         }
     }
-    "-".to_string()
+    "-".to_owned()
 }
 
 #[cfg(test)]

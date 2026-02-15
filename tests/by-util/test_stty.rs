@@ -1272,8 +1272,8 @@ fn test_saved_state_invalid_formats() {
 
     // Cannot test single value since it would be interpreted as baud rate
     let invalid_states = vec![
-        "500:5:4bf".to_string(),                        // fewer than expected parts
-        "500:5:4bf:8a3b".to_string(),                   // only 4 parts
+        "500:5:4bf".to_owned(),                         // fewer than expected parts
+        "500:5:4bf:8a3b".to_owned(),                    // only 4 parts
         format!("500:5:{}:8a3b:{}", cc_zeros, "extra"), // too many parts
         format!("500::4bf:8a3b:{}", cc_zeros),          // empty hex value in flags
         format!("500:5:4bf:8a3b:{}", cc_with_empty),    // empty hex value in cc
@@ -1605,7 +1605,7 @@ fn test_stty_uses_stdin() {
         .succeeds()
         .stdout_str()
         .trim()
-        .to_string();
+        .to_owned();
     assert!(saved.contains(':'), "Expected colon-separated saved state");
 
     let stdin = File::open(&path).unwrap();

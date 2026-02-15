@@ -10,7 +10,7 @@ fn main() {
     // Make sure we're building position-independent code for use with LD_PRELOAD
     println!("cargo:rustc-link-arg=-fPIC");
 
-    let target = env::var("TARGET").unwrap_or_else(|_| "unknown".to_string());
+    let target = env::var("TARGET").unwrap_or_else(|_| "unknown".to_owned());
     // Ensure the library doesn't have any undefined symbols (-z flag not supported on macOS and Cygwin)
     if !target.contains("apple-darwin") && !target.contains("cygwin") {
         println!("cargo:rustc-link-arg=-z");

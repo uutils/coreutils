@@ -104,7 +104,7 @@ impl Column {
                 let mut columns = vec![];
                 for name in names {
                     if seen.contains(&name) {
-                        return Err(ColumnError::MultipleColumns(name.to_string()));
+                        return Err(ColumnError::MultipleColumns(name.to_owned()));
                     }
                     seen.push(name);
                     // Unwrapping here should not panic because the

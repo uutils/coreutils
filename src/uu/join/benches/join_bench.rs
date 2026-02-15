@@ -23,8 +23,8 @@ fn create_join_files(temp_dir: &TempDir, num_lines: usize) -> (String, String) {
     }
 
     (
-        file1_path.to_str().unwrap().to_string(),
-        file2_path.to_str().unwrap().to_string(),
+        file1_path.to_str().unwrap().to_owned(),
+        file2_path.to_str().unwrap().to_owned(),
     )
 }
 
@@ -54,8 +54,8 @@ fn create_partial_overlap_files(
     }
 
     (
-        file1_path.to_str().unwrap().to_string(),
-        file2_path.to_str().unwrap().to_string(),
+        file1_path.to_str().unwrap().to_owned(),
+        file2_path.to_str().unwrap().to_owned(),
     )
 }
 
@@ -146,8 +146,8 @@ fn create_unicode_join_files(temp_dir: &TempDir, num_lines: usize) -> (String, S
     }
 
     (
-        file1_path.to_str().unwrap().to_string(),
-        file2_path.to_str().unwrap().to_string(),
+        file1_path.to_str().unwrap().to_owned(),
+        file2_path.to_str().unwrap().to_owned(),
     )
 }
 

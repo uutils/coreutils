@@ -832,7 +832,7 @@ pub fn configure_symlink_and_recursion(
             if dereference == Some(true) {
                 return Err(USimpleError::new(
                     1,
-                    "-R --dereference requires -H or -L".to_string(),
+                    "-R --dereference requires -H or -L".to_owned(),
                 ));
             }
             dereference = Some(false);

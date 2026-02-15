@@ -842,7 +842,7 @@ mod tests {
     fn has_indicator_style_detects_raw_codes() {
         let colors = LsColors::empty();
         let mut indicator_codes = HashMap::new();
-        indicator_codes.insert(Indicator::Directory, "01;34".to_string());
+        indicator_codes.insert(Indicator::Directory, "01;34".to_owned());
         let manager = style_manager(&colors, indicator_codes);
         assert!(manager.has_indicator_style(Indicator::Directory));
     }

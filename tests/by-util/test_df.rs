@@ -563,7 +563,7 @@ fn test_default_block_size() {
         .arg("--output=size")
         .succeeds()
         .stdout_str_lossy();
-    let header = output.lines().next().unwrap().trim().to_string();
+    let header = output.lines().next().unwrap().trim().to_owned();
 
     assert_eq!(header, "1K-blocks");
 
@@ -572,7 +572,7 @@ fn test_default_block_size() {
         .env("POSIXLY_CORRECT", "1")
         .succeeds()
         .stdout_str_lossy();
-    let header = output.lines().next().unwrap().trim().to_string();
+    let header = output.lines().next().unwrap().trim().to_owned();
 
     assert_eq!(header, "512B-blocks");
 }
@@ -583,12 +583,12 @@ fn test_default_block_size_in_posix_portability_mode() {
         s.lines()
             .next()
             .unwrap()
-            .to_string()
+            .to_owned()
             .split_whitespace()
             .nth(1)
             .unwrap()
             .trim()
-            .to_string()
+            .to_owned()
     }
 
     let output = new_ucmd!().arg("-P").succeeds().stdout_str_lossy();
@@ -609,7 +609,7 @@ fn test_block_size_1024() {
             .args(&["-B", &format!("{block_size}"), "--output=size"])
             .succeeds()
             .stdout_str_lossy();
-        output.lines().next().unwrap().trim().to_string()
+        output.lines().next().unwrap().trim().to_owned()
     }
 
     assert_eq!(get_header(1024), "1K-blocks");
@@ -633,7 +633,7 @@ fn test_block_size_with_suffix() {
             .args(&["-B", block_size, "--output=size"])
             .succeeds()
             .stdout_str_lossy();
-        output.lines().next().unwrap().trim().to_string()
+        output.lines().next().unwrap().trim().to_owned()
     }
 
     assert_eq!(get_header("K"), "1K-blocks");
@@ -657,7 +657,7 @@ fn test_df_binary_block_size() {
             .args(&["-B", block_size, "--output=size"])
             .succeeds()
             .stdout_str_lossy();
-        output.lines().next().unwrap().trim().to_string()
+        output.lines().next().unwrap().trim().to_owned()
     }
 
     let test_cases = [
@@ -685,7 +685,7 @@ fn test_df_binary_env_block_size() {
             .args(&["--output=size"])
             .succeeds()
             .stdout_str_lossy();
-        output.lines().next().unwrap().trim().to_string()
+        output.lines().next().unwrap().trim().to_owned()
     }
 
     let binary_header = get_header("DF_BLOCK_SIZE", "0b10000000000");
@@ -708,12 +708,12 @@ fn test_block_size_in_posix_portability_mode() {
             .lines()
             .next()
             .unwrap()
-            .to_string()
+            .to_owned()
             .split_whitespace()
             .nth(1)
             .unwrap()
             .trim()
-            .to_string()
+            .to_owned()
     }
 
     assert_eq!(get_header("1024"), "1024-blocks");
@@ -731,7 +731,7 @@ fn test_block_size_from_env() {
             .env(env_var, env_value)
             .succeeds()
             .stdout_str_lossy();
-        output.lines().next().unwrap().trim().to_string()
+        output.lines().next().unwrap().trim().to_owned()
     }
 
     assert_eq!(get_header("DF_BLOCK_SIZE", "111"), "111B-blocks");
@@ -747,7 +747,7 @@ fn test_block_size_from_env_zero() {
             .env(env_var, env_value)
             .succeeds()
             .stdout_str_lossy();
-        output.lines().next().unwrap().trim().to_string()
+        output.lines().next().unwrap().trim().to_owned()
     }
 
     let default_block_size_header = "1K-blocks";
@@ -768,7 +768,7 @@ fn test_block_size_from_env_precedences() {
             .env(k2, v2)
             .succeeds()
             .stdout_str_lossy();
-        output.lines().next().unwrap().trim().to_string()
+        output.lines().next().unwrap().trim().to_owned()
     }
 
     let df_block_size = ("DF_BLOCK_SIZE", "111");
@@ -787,7 +787,7 @@ fn test_precedence_of_block_size_arg_over_env() {
         .env("DF_BLOCK_SIZE", "111")
         .succeeds()
         .stdout_str_lossy();
-    let header = output.lines().next().unwrap().trim().to_string();
+    let header = output.lines().next().unwrap().trim().to_owned();
 
     assert_eq!(header, "999B-blocks");
 }
@@ -801,7 +801,7 @@ fn test_invalid_block_size_from_env() {
         .env("DF_BLOCK_SIZE", "invalid")
         .succeeds()
         .stdout_str_lossy();
-    let header = output.lines().next().unwrap().trim().to_string();
+    let header = output.lines().next().unwrap().trim().to_owned();
 
     assert_eq!(header, default_block_size_header);
 
@@ -811,7 +811,7 @@ fn test_invalid_block_size_from_env() {
         .env("BLOCK_SIZE", "222")
         .succeeds()
         .stdout_str_lossy();
-    let header = output.lines().next().unwrap().trim().to_string();
+    let header = output.lines().next().unwrap().trim().to_owned();
 
     assert_eq!(header, default_block_size_header);
 
@@ -821,7 +821,7 @@ fn test_invalid_block_size_from_env() {
         .env("BLOCK_SIZE", "222")
         .succeeds()
         .stdout_str_lossy();
-    let header = output.lines().next().unwrap().trim().to_string();
+    let header = output.lines().next().unwrap().trim().to_owned();
 
     assert_eq!(header, default_block_size_header);
 }
@@ -841,12 +841,12 @@ fn test_ignore_block_size_from_env_in_posix_portability_mode() {
         .lines()
         .next()
         .unwrap()
-        .to_string()
+        .to_owned()
         .split_whitespace()
         .nth(1)
         .unwrap()
         .trim()
-        .to_string();
+        .to_owned();
 
     assert_eq!(header, default_block_size_header);
 }

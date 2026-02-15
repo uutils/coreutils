@@ -40,16 +40,16 @@ fn generate_cksum_args() -> Vec<String> {
     ];
 
     if rng.random_bool(0.3) {
-        args.push("-a".to_string());
-        args.push(digests[rng.random_range(0..digests.len())].to_string());
+        args.push("-a".to_owned());
+        args.push(digests[rng.random_range(0..digests.len())].to_owned());
     }
 
     if rng.random_bool(0.2) {
-        args.push(digest_opts[rng.random_range(0..digest_opts.len())].to_string());
+        args.push(digest_opts[rng.random_range(0..digest_opts.len())].to_owned());
     }
 
     if rng.random_bool(0.15) {
-        args.push("-l".to_string());
+        args.push("-l".to_owned());
         args.push(rng.random_range(8..513).to_string());
     }
 
@@ -58,7 +58,7 @@ fn generate_cksum_args() -> Vec<String> {
             args.push(format!("file_{}", generate_random_string(5)));
         }
     } else {
-        args.push("-c".to_string());
+        args.push("-c".to_owned());
     }
 
     if rng.random_bool(0.25) {
@@ -68,8 +68,8 @@ fn generate_cksum_args() -> Vec<String> {
     }
 
     if args.is_empty() || !args.iter().any(|arg| arg.starts_with("file_")) {
-        args.push("-a".to_string());
-        args.push(digests[rng.random_range(0..digests.len())].to_string());
+        args.push("-a".to_owned());
+        args.push(digests[rng.random_range(0..digests.len())].to_owned());
 
         if let Ok(file_path) = generate_random_file() {
             args.push(file_path);
@@ -98,7 +98,7 @@ fn generate_checksum_file(
     let mut checksum_file = File::create(&checksum_file_path)?;
     checksum_file.write_all(&output.stdout)?;
 
-    Ok(checksum_file_path.to_str().unwrap().to_string())
+    Ok(checksum_file_path.to_str().unwrap().to_owned())
 }
 
 fn select_random_digest_opts<'a>(

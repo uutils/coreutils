@@ -205,7 +205,7 @@ impl ProcessInformation {
             .inner_status
             .lines()
             .filter_map(|it| it.split_once(':'))
-            .map(|it| (it.0.to_string(), it.1.trim_start().to_string()))
+            .map(|it| (it.0.to_owned(), it.1.trim_start().to_owned()))
             .collect::<HashMap<_, _>>();
 
         let result = Rc::new(result);

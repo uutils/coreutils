@@ -225,9 +225,9 @@ fn install_signal_handlers(term_signal: usize) {
 fn report_if_verbose(signal: usize, cmd: &str, verbose: bool) {
     if verbose {
         let s = if signal == 0 {
-            "0".to_string()
+            "0".to_owned()
         } else {
-            signal_name_by_value(signal).unwrap().to_string()
+            signal_name_by_value(signal).unwrap().to_owned()
         };
         let mut stderr = std::io::stderr();
         let _ = writeln!(
