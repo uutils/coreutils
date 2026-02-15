@@ -1,4 +1,4 @@
-# spell-checker:ignore (features) bigdecimal zerocopy extendedbigdecimal tzdb zoneinfo logind
+# spell-checker:ignore (features) bigdecimal zerocopy extendedbigdecimal tzdb zoneinfo logind mimalloc
 
 [package]
 name = "uucore"
@@ -105,6 +105,11 @@ nix = { workspace = true, features = [
 ] }
 walkdir = { workspace = true, optional = true }
 xattr = { workspace = true, optional = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+mimalloc = { version = "0.1.48", default-features = false, features = [
+  "override",
+] }
 
 [dev-dependencies]
 tempfile = { workspace = true }
