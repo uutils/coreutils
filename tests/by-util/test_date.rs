@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker: ignore: AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado
+// spell-checker: ignore: AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado febr
 
 use std::cmp::Ordering;
 
@@ -2053,6 +2053,29 @@ fn test_locale_month_names() {
         check_date(loc, "2026-01-15", "+%B", jan);
         check_date(loc, "2026-06-15", "+%B", jun);
         check_date(loc, "2026-12-15", "+%B", dec);
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_locale_abbreviated_month_names() {
+    // %b abbreviated month names: Feb, Jun, Dec for each locale
+    // This test ensures we don't get double periods in locales like Hungarian
+    // where ICU returns "febr." but the format string also adds a period after %b
+    for (loc, feb, jun, dec) in [
+        ("fr_FR.UTF-8", "févr", "juin", "déc"),
+        ("de_DE.UTF-8", "Feb", "Jun", "Dez"),
+        ("es_ES.UTF-8", "feb", "jun", "dic"),
+        ("it_IT.UTF-8", "feb", "giu", "dic"),
+        ("pt_BR.UTF-8", "fev", "jun", "dez"),
+        ("ja_JP.UTF-8", "2月", "6月", "12月"),
+        ("zh_CN.UTF-8", "2月", "6月", "12月"),
+        // Hungarian locale - the fix ensures no double periods
+        ("hu_HU.UTF-8", "febr", "jún", "dec"),
+    ] {
+        check_date(loc, "2026-02-12", "+%b", feb);
+        check_date(loc, "2026-06-14", "+%b", jun);
+        check_date(loc, "2026-12-09", "+%b", dec);
     }
 }
 
