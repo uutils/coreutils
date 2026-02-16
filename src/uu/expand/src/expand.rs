@@ -16,8 +16,7 @@ use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
-use uucore::translate;
-use uucore::{format_usage, show};
+use uucore::{format_usage, show, translate};
 
 pub mod options {
     pub static TABS: &str = "tabs";
@@ -25,8 +24,6 @@ pub mod options {
     pub static NO_UTF8: &str = "no-utf8";
     pub static FILES: &str = "FILES";
 }
-
-static LONG_HELP: &str = "";
 
 static DEFAULT_TABSTOP: usize = 8;
 
@@ -254,7 +251,6 @@ pub fn uu_app() -> Command {
         Command::new(uucore::util_name())
             .version(uucore::crate_version!())
             .about(translate!("expand-about"))
-            .after_help(LONG_HELP)
             .override_usage(format_usage(&translate!("expand-usage"))),
     )
     .infer_long_args(true)
