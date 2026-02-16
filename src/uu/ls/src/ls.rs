@@ -3527,11 +3527,11 @@ fn create_hyperlink(name: &OsStr, path: &PathData) -> OsString {
     // Get bytes for URL encoding in a cross-platform way
     let absolute_path_bytes = os_str_as_bytes_lossy(absolute_path.as_os_str());
 
-    // Create a set of safe ASCII bytes that don't need encoding
+    // a set of safe ASCII bytes that don't need encoding
     #[cfg(not(target_os = "windows"))]
-    let unencoded_bytes: FxHashSet<u8> = "_-.~/".bytes().collect();
+    let unencoded_bytes = b"_-.~/";
     #[cfg(target_os = "windows")]
-    let unencoded_bytes: FxHashSet<u8> = "_-.~/\\:".bytes().collect();
+    let unencoded_bytes = b"_-.~/\\:";
 
     // Encode at byte level to properly handle UTF-8 sequences and preserve invalid UTF-8
     let full_encoded_path: String = absolute_path_bytes
