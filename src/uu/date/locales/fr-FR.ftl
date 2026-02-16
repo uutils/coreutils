@@ -101,3 +101,6 @@ date-error-setting-date-not-supported-redox = la définition de la date n'est pa
 date-error-cannot-set-date = impossible de définir la date
 date-error-extra-operand = opérande supplémentaire '{$operand}'
 date-error-write = erreur d'écriture: {$error}
+date-error-format-missing-plus = l'argument {$arg} ne commence pas par un '+';
+  lorsque vous utilisez une option pour spécifier une ou plusieurs dates, toute option non spécifiée
+  L'argument doit être une chaîne de format commençant par '+'
