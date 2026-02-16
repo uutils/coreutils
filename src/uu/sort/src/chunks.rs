@@ -23,6 +23,7 @@ use crate::{
     GeneralBigDecimalParseResult, GlobalSettings, Line, SortMode, numeric_str_cmp::NumInfo,
 };
 
+const ALLOC_CHUNK_SIZE: usize = 64 * 1024;
 const MAX_TOKEN_BUFFER_BYTES: usize = 4 * 1024 * 1024;
 const MAX_TOKEN_BUFFER_ELEMS: usize = MAX_TOKEN_BUFFER_BYTES / size_of::<Range<usize>>();
 
@@ -180,7 +181,13 @@ pub fn read<T: Read>(
         mut buffer,
     } = recycled_chunk;
     if buffer.len() < carry_over.len() {
-        buffer.resize(carry_over.len() + 10 * 1024, 0);
+        // keep cost of 0 fill minimal
+        // but avoid cost of allocation by reserving huge size too
+        buffer.resize(carry_over.len(), 0);
+        let new_len = (carry_over.len() * 2)
+            .max(ALLOC_CHUNK_SIZE)
+            .min(carry_over.len() + 16 * 1024 * 1024);
+        buffer.reserve(new_len - buffer.len());
     }
     buffer[..carry_over.len()].copy_from_slice(carry_over);
     let (read, should_continue) = read_to_buffer(
@@ -252,9 +259,6 @@ fn parse_lines<'a>(
     assert!(line_data.parsed_floats.is_empty());
     assert!(line_data.line_num_floats.is_empty());
     token_buffer.clear();
-    if token_buffer.capacity() > MAX_TOKEN_BUFFER_ELEMS {
-        token_buffer.shrink_to(MAX_TOKEN_BUFFER_ELEMS);
-    }
     const SMALL_CHUNK_BYTES: usize = 64 * 1024;
     let mut estimated = (*line_count_hint).max(1);
     let mut exact_line_count = None;
@@ -267,8 +271,8 @@ fn parse_lines<'a>(
         exact_line_count = Some(count);
         estimated = count;
     } else if estimated == 1 {
-        const LINE_LEN_HINT: usize = 32;
-        estimated = (read.len() / LINE_LEN_HINT).max(1);
+        const LINE_LEN_HINT: usize = 128;
+        estimated = (read.len() / LINE_LEN_HINT).clamp(1, 1024);
     }
     lines.reserve(estimated);
     if settings.precomputed.selections_per_line > 0 {
@@ -349,12 +353,9 @@ fn read_to_buffer<T: Read>(
                         if max_buffer_size > buffer.len() {
                             // we can grow the buffer
                             let prev_len = buffer.len();
-                            let target = if buffer.len() < max_buffer_size / 2 {
-                                buffer.len().saturating_mul(2)
-                            } else {
-                                max_buffer_size
-                            };
-                            buffer.resize(target.min(max_buffer_size), 0);
+                            let grow_by = (max_buffer_size - prev_len).min(ALLOC_CHUNK_SIZE);
+                            buffer.reserve(grow_by);
+                            buffer.resize(prev_len + ALLOC_CHUNK_SIZE, 0);
                             read_target = &mut buffer[prev_len..];
                             continue;
                         }
@@ -374,8 +375,9 @@ fn read_to_buffer<T: Read>(
 
                     // We need to read more lines
                     let len = buffer.len();
-                    let grow_by = (len / 2).max(1024 * 1024);
-                    buffer.resize(len + grow_by, 0);
+                    let grow_by = len.clamp(ALLOC_CHUNK_SIZE, 16 * 1024 * 1024);
+                    buffer.reserve(grow_by);
+                    buffer.resize(len + ALLOC_CHUNK_SIZE, 0);
                     read_target = &mut buffer[len..];
                 } else {
                     // This file has been fully read.
