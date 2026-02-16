@@ -406,11 +406,11 @@ Your first contribution is complete when:
 
 ## Your Progress
 
-### First Fix: Issue #10279 - true/false Usage output ⏳ IN PROGRESS
+### First Fix: Issue #10279 - true/false Usage output ✅ PUSHED
 
 **Issue:** https://github.com/uutils/coreutils/issues/10279
 **Branch:** `fix-true-false-usage`
-**Status:** Code complete, ready to push
+**Status:** Code pushed, create PR now!
 
 **What was fixed:**
 - Modified `src/uu/true/src/true.rs` to show "Usage:" first in help output
@@ -439,6 +439,25 @@ Returns true, a successful exit status.
 - [ ] Integration tests pass
 
 **Next Steps:**
-1. Push branch to GitHub: `git push -u origin fix-true-false-usage`
-2. Create PR on GitHub
-3. Wait for maintainer review
+1. ✅ Push branch to GitHub
+2. 🔄 **Create PR now:** https://github.com/jorgitin02/coreutils/pull/new/fix-true-false-usage
+3. ⏳ Wait for maintainer review
+
+**PR Title:** `true/false: fix help output to start with Usage (matching GNU)`
+
+**PR Body:**
+```
+Fixes #10279
+
+This PR fixes the --help output for `true` and `false` commands to start with "Usage:" line, matching GNU coreutils behavior.
+
+Changes:
+- Modified help template in both true.rs and false.rs
+- Changed from "{about}...Usage:" to "Usage:...{about}" format
+- Both commands now show "Usage: true/false" as the first line
+
+Testing:
+- cargo build passes
+- cargo fmt passes
+- cargo clippy passes
+```
