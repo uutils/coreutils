@@ -2216,9 +2216,9 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         out: BufWriter::new(stdout()),
         style_manager: config.color.as_ref().map(StyleManager::new),
         #[cfg(unix)]
-        uid_cache: FxHashMap::default(),
+        uid_cache: FxHashMap::with_capacity_and_hasher(64, Default::default()),
         #[cfg(unix)]
-        gid_cache: FxHashMap::default(),
+        gid_cache: FxHashMap::with_capacity_and_hasher(64, Default::default()),
         // Time range for which to use the "recent" format. Anything from 0.5 year in the past to now
         // (files with modification time in the future use "old" format).
         // According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
@@ -2306,7 +2306,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
                 dired::add_dir_name(&mut dired, dir_len);
             }
         }
-        let mut listed_ancestors = FxHashSet::default();
+        let mut listed_ancestors = FxHashSet::with_capacity_and_hasher(64, Default::default());
         listed_ancestors.insert(FileInformation::from_path(
             path_data.path(),
             path_data.must_dereference,
@@ -3527,11 +3527,11 @@ fn create_hyperlink(name: &OsStr, path: &PathData) -> OsString {
     // Get bytes for URL encoding in a cross-platform way
     let absolute_path_bytes = os_str_as_bytes_lossy(absolute_path.as_os_str());
 
-    // Create a set of safe ASCII bytes that don't need encoding
+    // a set of safe ASCII bytes that don't need encoding
     #[cfg(not(target_os = "windows"))]
-    let unencoded_bytes: std::collections::HashSet<u8> = "_-.~/".bytes().collect();
+    let unencoded_bytes = b"_-.~/";
     #[cfg(target_os = "windows")]
-    let unencoded_bytes: std::collections::HashSet<u8> = "_-.~/\\:".bytes().collect();
+    let unencoded_bytes = b"_-.~/\\:";
 
     // Encode at byte level to properly handle UTF-8 sequences and preserve invalid UTF-8
     let full_encoded_path: String = absolute_path_bytes
