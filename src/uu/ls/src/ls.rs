@@ -269,7 +269,7 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
 
     if let Some(field) = options
         .get_one::<String>(options::TIME_STYLE)
-        .map(|s| s.to_owned())
+        .map(ToOwned::to_owned)
         .or_else(|| std::env::var("TIME_STYLE").ok())
     {
         //If both FULL_TIME and TIME_STYLE are present
@@ -408,6 +408,11 @@ struct PaddingCollection {
     #[cfg(unix)]
     minor: usize,
     block_size: usize,
+}
+
+struct DisplayItemName {
+    displayed: OsString,
+    dired_name_len: usize,
 }
 
 /// Extracts the format to display the information based on the options provided.
@@ -1953,7 +1958,7 @@ impl PathData {
         } else {
             dir_entry
                 .as_ref()
-                .map(|inner| inner.file_name())
+                .map(DirEntry::file_name)
                 .unwrap_or_default()
         };
 
@@ -2048,7 +2053,7 @@ impl PathData {
 
     fn file_type(&self) -> Option<&FileType> {
         self.ft
-            .get_or_init(|| self.metadata().map(|md| md.file_type()))
+            .get_or_init(|| self.metadata().map(Metadata::file_type))
             .as_ref()
     }
 
@@ -2059,7 +2064,7 @@ impl PathData {
 
     #[cfg(unix)]
     fn is_executable_file(&self) -> bool {
-        self.file_type().is_some_and(|f| f.is_file())
+        self.file_type().is_some_and(FileType::is_file)
             && self.metadata().is_some_and(file_is_executable)
     }
 
@@ -2281,24 +2286,24 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
 
         // Print dir heading - name... 'total' comes after error display
         if initial_locs_len > 1 || config.recursive {
-            if pos.eq(&0usize) && files.is_empty() {
-                if config.dired {
-                    dired::indent(&mut state.out)?;
-                }
-                show_dir_name(path_data, &mut state.out, config)?;
+            let needs_blank_line = !(pos.eq(&0usize) && files.is_empty());
+            if needs_blank_line {
                 writeln!(state.out)?;
                 if config.dired {
-                    // First directory displayed
-                    let dir_len = path_data.display_name().len();
-                    // add the //SUBDIRED// coordinates
-                    dired::calculate_subdired(&mut dired, dir_len);
-                    // Add the padding for the dir name
-                    dired::add_dir_name(&mut dired, dir_len);
+                    dired.padding += 1;
                 }
-            } else {
-                writeln!(state.out)?;
-                show_dir_name(path_data, &mut state.out, config)?;
-                writeln!(state.out)?;
+            }
+            if config.dired {
+                dired::indent(&mut state.out)?;
+            }
+            show_dir_name(path_data, &mut state.out, config)?;
+            writeln!(state.out)?;
+            if config.dired {
+                let dir_len = path_data.display_name().len();
+                // add the //SUBDIRED// coordinates
+                dired::calculate_subdired(&mut dired, dir_len);
+                // Add the padding for the dir name
+                dired::add_dir_name(&mut dired, dir_len);
             }
         }
         let mut listed_ancestors = FxHashSet::default();
@@ -2331,7 +2336,7 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
             )
         }),
         Sort::Size => {
-            entries.sort_by_key(|k| Reverse(k.metadata().map_or(0, |md| md.len())));
+            entries.sort_by_key(|k| Reverse(k.metadata().map_or(0, Metadata::len)));
         }
         // The default sort in GNU ls is case insensitive
         Sort::Name => entries.sort_by(|a, b| a.display_name().cmp(b.display_name())),
@@ -2496,10 +2501,15 @@ fn enter_directory(
     display_items(&entries, config, state, dired)?;
 
     if config.recursive {
+        // release the open fd before recursing to not run out of resources
+        for entry in &entries {
+            entry.de.take();
+        }
+        drop(read_dir);
         for e in entries
             .iter()
             .skip(if config.files == Files::All { 2 } else { 0 })
-            .filter(|p| p.file_type().is_some_and(|ft| ft.is_dir()))
+            .filter(|p| p.file_type().is_some_and(FileType::is_dir))
         {
             match fs::read_dir(e.path()) {
                 Err(err) => {
@@ -2520,8 +2530,8 @@ fn enter_directory(
                         if config.dired {
                             // We already injected the first dir
                             // Continue with the others
-                            // 2 = \n + \n
-                            dired.padding = 2;
+                            // blank line between directory sections
+                            dired.padding += 1;
                             dired::indent(&mut state.out)?;
                             let dir_name_size = e.path().as_os_str().len();
                             dired::calculate_subdired(dired, dir_name_size);
@@ -2744,7 +2754,7 @@ fn display_items(
                 LazyCell::new(Box::new(|| 0)),
             );
 
-            names_vec.push(cell);
+            names_vec.push(cell.displayed);
         }
 
         let mut names = names_vec.into_iter();
@@ -2908,6 +2918,21 @@ fn display_grid(
     Ok(())
 }
 
+fn calculate_line_len(output_len: usize, item_len: usize, line_ending: LineEnding) -> usize {
+    output_len + item_len + line_ending.to_string().len()
+}
+
+fn update_dired_for_item(
+    dired: &mut DiredOutput,
+    output_display_len: usize,
+    displayed_len: usize,
+    dired_name_len: usize,
+    line_ending: LineEnding,
+) {
+    let line_len = calculate_line_len(output_display_len, displayed_len, line_ending);
+    dired::calculate_and_update_positions(dired, output_display_len, dired_name_len, line_len);
+}
+
 /// This writes to the [`BufWriter`] `state.out` a single string of the output of `ls -l`.
 ///
 /// It writes the following keys, in order:
@@ -3028,7 +3053,7 @@ fn display_item_long(
         display_date(md, config, state, &mut output_display)?;
         output_display.extend(b" ");
 
-        let item_name = display_item_name(
+        let item_display = display_item_name(
             item,
             config,
             None,
@@ -3039,22 +3064,32 @@ fn display_item_long(
             })),
         );
 
-        let displayed_item = if quoted && !os_str_starts_with(&item_name, b"'") {
+        let needs_space = quoted && !os_str_starts_with(&item_display.displayed, b"'");
+
+        if config.dired {
+            let mut dired_name_len = item_display.dired_name_len;
+            if needs_space {
+                dired_name_len += 1;
+            }
+            let displayed_len = item_display.displayed.len() + usize::from(needs_space);
+            update_dired_for_item(
+                dired,
+                output_display.len(),
+                displayed_len,
+                dired_name_len,
+                config.line_ending,
+            );
+        }
+
+        let item_name = item_display.displayed;
+        let displayed_item = if needs_space {
             let mut ret: OsString = " ".into();
-            ret.push(item_name);
+            ret.push(&item_name);
             ret
         } else {
             item_name
         };
 
-        if config.dired {
-            let (start, end) = dired::calculate_dired(
-                &dired.dired_positions,
-                output_display.len(),
-                displayed_item.len(),
-            );
-            dired::update_positions(dired, start, end);
-        }
         write_os_str(&mut output_display, &displayed_item)?;
         output_display.extend(config.line_ending.to_string().as_bytes());
     } else {
@@ -3146,12 +3181,15 @@ fn display_item_long(
         output_display.extend(b" ");
 
         if config.dired {
-            dired::calculate_and_update_positions(
+            update_dired_for_item(
                 dired,
                 output_display.len(),
-                displayed_item.to_string_lossy().trim().len(),
+                displayed_item.displayed.len(),
+                displayed_item.dired_name_len,
+                config.line_ending,
             );
         }
+        let displayed_item = displayed_item.displayed;
         write_os_str(&mut output_display, &displayed_item)?;
         output_display.extend(config.line_ending.to_string().as_bytes());
     }
@@ -3324,7 +3362,7 @@ fn display_item_name(
     more_info: Option<String>,
     state: &mut ListState,
     current_column: LazyCell<usize, Box<dyn FnOnce() -> usize + '_>>,
-) -> OsString {
+) -> DisplayItemName {
     // This is our return value. We start by `&path.display_name` and modify it along the way.
     let mut name = escape_name_with_locale(path.display_name(), config);
 
@@ -3375,8 +3413,10 @@ fn display_item_name(
         }
     }
 
+    let dired_name_len = if config.dired { name.len() } else { 0 };
+
     if config.format == Format::Long
-        && path.file_type().is_some_and(|ft| ft.is_symlink())
+        && path.file_type().is_some_and(FileType::is_symlink)
         && !path.must_dereference
     {
         match path.path().read_link() {
@@ -3402,7 +3442,7 @@ fn display_item_name(
                             let target_data = PathData::new(
                                 resolved_target,
                                 None,
-                                target_path.file_name().map(|s| s.to_os_string()),
+                                target_path.file_name().map(OsStr::to_os_string),
                                 config,
                                 false,
                             );
@@ -3472,7 +3512,10 @@ fn display_item_name(
         }
     }
 
-    name
+    DisplayItemName {
+        displayed: name,
+        dired_name_len,
+    }
 }
 
 fn create_hyperlink(name: &OsStr, path: &PathData) -> OsString {

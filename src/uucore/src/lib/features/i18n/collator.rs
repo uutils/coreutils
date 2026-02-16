@@ -80,9 +80,9 @@ pub fn locale_cmp(left: &[u8], right: &[u8]) -> Ordering {
     if get_collating_locale().0 == DEFAULT_LOCALE {
         left.cmp(right)
     } else {
+        // Fall back to byte comparison if collator is not available
         COLLATOR
             .get()
-            .expect("Collator was not initialized")
-            .compare_utf8(left, right)
+            .map_or_else(|| left.cmp(right), |c| c.compare_utf8(left, right))
     }
 }

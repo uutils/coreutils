@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fieldsets prefs
+// spell-checker:ignore fieldsets prefs febr
 
 //! Locale-aware datetime formatting utilities using ICU and jiff-icu
 
@@ -68,11 +68,11 @@ pub enum CalendarType {
 }
 
 /// Transform a strftime format string to use locale-specific calendar values
-pub fn localize_format_string(format: &str, date: &JiffDate) -> String {
+pub fn localize_format_string(format: &str, date: JiffDate) -> String {
     const PERCENT_PLACEHOLDER: &str = "\x00\x00";
 
     let (locale, _) = get_time_locale();
-    let iso_date = Date::<Iso>::convert_from(*date);
+    let iso_date = Date::<Iso>::convert_from(date);
 
     let mut fmt = format.replace("%%", PERCENT_PLACEHOLDER);
 
@@ -111,7 +111,13 @@ pub fn localize_format_string(format: &str, date: &JiffDate) -> String {
     }
     if fmt.contains("%b") || fmt.contains("%h") {
         if let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::M::medium()) {
+            // ICU's medium format may include trailing periods (e.g., "febr." for Hungarian),
+            // which when combined with locale format strings that also add periods after
+            // %b (e.g., "%Y. %b. %d") results in double periods ("febr..").
+            // The standard C/POSIX locale via nl_langinfo returns abbreviations
+            // WITHOUT trailing periods, so we strip them here for consistency.
             let month_abbrev = f.format(&iso_date).to_string();
+            let month_abbrev = month_abbrev.trim_end_matches('.').to_string();
             fmt = fmt
                 .replace("%b", &month_abbrev)
                 .replace("%h", &month_abbrev);

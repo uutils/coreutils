@@ -150,7 +150,7 @@ where
         where
             U: Zero,
         {
-            v.unwrap_or_else(|e| e.extract())
+            v.unwrap_or_else(ExtendedParserError::extract)
         }
 
         match self {
@@ -556,7 +556,7 @@ pub(crate) fn parse(
         ebd_result
     } else {
         Err(ExtendedParserError::PartialMatch(
-            ebd_result.unwrap_or_else(|e| e.extract()),
+            ebd_result.unwrap_or_else(ExtendedParserError::extract),
             rest.to_string(),
         ))
     }

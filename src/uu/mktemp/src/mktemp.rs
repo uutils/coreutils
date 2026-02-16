@@ -132,7 +132,7 @@ impl Options {
             }
             Some(template) => {
                 let tmpdir = if env::var(TMPDIR_ENV_VAR).is_ok() && matches.get_flag(OPT_T) {
-                    env::var_os(TMPDIR_ENV_VAR).map(|t| t.into())
+                    env::var_os(TMPDIR_ENV_VAR).map(Into::into)
                 } else if tmpdir.is_some() {
                     tmpdir
                 } else if matches.get_flag(OPT_T) || matches.contains_id(OPT_TMPDIR) {

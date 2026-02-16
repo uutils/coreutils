@@ -43,7 +43,7 @@ use std::io::Error as IOError;
 use std::io::ErrorKind;
 use std::io::Result as IOResult;
 use std::ptr;
-use std::sync::{LazyLock, Mutex};
+use std::sync::Mutex;
 
 unsafe extern "C" {
     /// From: `<https://man7.org/linux/man-pages/man3/getgrouplist.3.html>`
@@ -279,7 +279,7 @@ pub trait Locate<K> {
 // to, so we must copy all the data we want before releasing the lock.
 // (Technically we must also ensure that the raw functions aren't being called
 // anywhere else in the program.)
-static PW_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+static PW_LOCK: Mutex<()> = Mutex::new(());
 
 macro_rules! f {
     ($fnam:ident, $fid:ident, $t:ident, $st:ident) => {
@@ -354,6 +354,11 @@ pub fn gid2grp(id: gid_t) -> IOResult<String> {
 #[inline]
 pub fn usr2uid(name: &str) -> IOResult<uid_t> {
     Passwd::locate(name).map(|p| p.uid)
+}
+
+#[inline]
+pub fn usr2gid(name: &str) -> IOResult<gid_t> {
+    Passwd::locate(name).map(|p| p.gid)
 }
 
 #[inline]

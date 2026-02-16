@@ -492,7 +492,7 @@ mod tests {
     use super::*;
     // Required to instantiate mutex in shared context
     use clap::Command;
-    use std::sync::{LazyLock, Mutex};
+    use std::sync::Mutex;
 
     // The mutex is required here as by default all tests are run as separate
     // threads under the same parent process. As environment variables are
@@ -500,7 +500,7 @@ mod tests {
     // occur if no precautions are taken. Thus we have all tests that rely on
     // environment variables lock this empty mutex to ensure they don't access
     // it concurrently.
-    static TEST_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+    static TEST_MUTEX: Mutex<()> = Mutex::new(());
 
     // Environment variable for "VERSION_CONTROL"
     static ENV_VERSION_CONTROL: &str = "VERSION_CONTROL";

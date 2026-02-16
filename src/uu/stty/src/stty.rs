@@ -212,7 +212,7 @@ impl<'a> Options<'a> {
             device_name,
             settings: matches
                 .get_many::<String>(options::SETTINGS)
-                .map(|v| v.map(|s| s.as_ref()).collect()),
+                .map(|v| v.map(AsRef::as_ref).collect()),
         })
     }
 }
@@ -713,7 +713,7 @@ fn parse_baud_with_rounding(normalized: &str) -> Option<u32> {
 
         // Validate all remaining chars are digits
         let rest: Vec<_> = chars.collect();
-        if !rest.iter().all(|c| c.is_ascii_digit()) {
+        if !rest.iter().all(char::is_ascii_digit) {
             return None;
         }
 
