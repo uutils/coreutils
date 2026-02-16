@@ -26,6 +26,7 @@ selinux = { workspace = true, optional = true }
 uucore = { workspace = true, features = [
   "backup-control",
   "buf-copy",
+  "custom_allocator",
   "entries",
   "fs",
   "fsxattr",

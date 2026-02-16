@@ -24,6 +24,7 @@ clap = { workspace = true }
 fluent = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = [
+  "custom_allocator",
   "hardware",
   "parser",
   "pipes",

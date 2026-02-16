@@ -419,8 +419,11 @@ pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
         // No locales directory found, use embedded English with common strings directly
         let default_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
             .expect("Default locale should always be valid");
-        let english_bundle = create_english_bundle_from_embedded(&default_locale, p)?;
-        let localizer = Localizer::new(english_bundle);
+        // --release is english, but faster with mimalloc
+        let mut bundle = FluentBundle::new(vec![default_locale]);
+        let res = FluentResource::try_new(String::new()).unwrap();
+        bundle.add_resource(res).unwrap();
+        let localizer = Localizer::new(bundle);
 
         LOCALIZER.with(|lock| {
             lock.set(localizer)

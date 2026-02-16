@@ -8,6 +8,13 @@
 // spell-checker:ignore sigaction SIGBUS SIGSEGV extendedbigdecimal myutil logind
 
 // * feature-gated external crates (re-shared as public internal modules)
+#[cfg(all(
+    any(target_os = "windows", target_os = "linux"),
+    feature = "custom_allocator",
+))]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 #[cfg(feature = "libc")]
 pub extern crate libc;
 #[cfg(all(feature = "windows-sys", target_os = "windows"))]

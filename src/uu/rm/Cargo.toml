@@ -21,7 +21,7 @@ path = "src/rm.rs"
 [dependencies]
 thiserror = { workspace = true }
 clap = { workspace = true }
-uucore = { workspace = true, features = ["fs", "parser"] }
+uucore = { workspace = true, features = ["fs", "parser", "custom_allocator"] }
 fluent = { workspace = true }
 indicatif = { workspace = true }
 

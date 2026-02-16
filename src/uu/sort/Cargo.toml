@@ -37,6 +37,7 @@ self_cell = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = [
+  "custom_allocator",
   "fs",
   "parser-size",
   "version-cmp",

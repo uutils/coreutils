@@ -31,6 +31,7 @@ selinux = { workspace = true, optional = true }
 terminal_size = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = [
+  "custom_allocator",
   "colors",
   "entries",
   "format",

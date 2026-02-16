@@ -21,7 +21,8 @@ num-traits = { workspace = true } # used in src/numerics.rs, which is included b
 [dependencies]
 clap = { workspace = true }
 num-traits = { workspace = true }
-uucore = { workspace = true }
+uucore = { workspace = true, features = [
+  "custom_allocator"]}
 num-bigint = { workspace = true }
 num-prime = { workspace = true }
 fluent = { workspace = true }

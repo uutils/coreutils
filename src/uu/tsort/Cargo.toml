@@ -24,7 +24,8 @@ clap = { workspace = true }
 fluent = { workspace = true }
 string-interner = { workspace = true }
 thiserror = { workspace = true }
-uucore = { workspace = true }
+uucore = { workspace = true, features = [
+  "custom_allocator"]}
 rustc-hash = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
