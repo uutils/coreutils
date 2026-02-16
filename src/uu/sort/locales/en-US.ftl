@@ -63,6 +63,7 @@ sort-failed-to-set-up-signal-handler = failed to set up signal handler: {$error}
 # Warning messages
 sort-warning-failed-to-set-locale = failed to set locale
 sort-warning-simple-byte-comparison = text ordering performed using simple byte comparison
+sort-warning-sort-rule = text ordering performed using ‘{$locale}’ sorting rules
 sort-warning-key-zero-width = key {$key} has zero width and will be ignored
 sort-warning-key-numeric-spans-fields = key {$key} is numeric and spans multiple fields
 sort-warning-leading-blanks-significant = leading blanks are significant in key {$key}; consider also specifying 'b'

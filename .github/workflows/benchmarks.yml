@@ -52,7 +52,8 @@ jobs:
           uu_uniq,
           uu_wc,
           uu_factor,
-          uu_date
+          uu_date,
+          uu_csplit
         ]
     steps:
       - uses: actions/checkout@v6
@@ -69,8 +70,6 @@ jobs:
       - name: Install locales
         shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y locales
           sudo locale-gen fr_FR.UTF-8
           sudo update-locale
 

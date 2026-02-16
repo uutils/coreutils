@@ -53,7 +53,7 @@ impl UNameOutput {
         ]
         .into_iter()
         .flatten()
-        .map(|name| name.as_os_str())
+        .map(OsString::as_os_str)
         .collect::<Vec<_>>()
         .join(OsStr::new(" "))
     }

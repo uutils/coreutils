@@ -30,7 +30,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 translate!("sleep-error-missing-operand", "program" => uucore::execution_phrase()),
             )
         })?
-        .map(|s| s.as_str())
+        .map(String::as_str)
         .collect::<Vec<_>>();
 
     sleep(&numbers)
@@ -65,7 +65,7 @@ fn sleep(args: &[&str]) -> UResult<()> {
                 None
             }
         })
-        .fold(Duration::ZERO, |acc, n| acc.saturating_add(n));
+        .fold(Duration::ZERO, Duration::saturating_add);
 
     if arg_error {
         return Err(UUsageError::new(1, ""));

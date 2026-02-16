@@ -1506,7 +1506,7 @@ impl GlobalOptionFlags {
     fn from_matches(matches: &ArgMatches) -> Self {
         let sort_value = matches
             .get_one::<String>(options::modes::SORT)
-            .map(|s| s.as_str());
+            .map(String::as_str);
         Self {
             keys_specified: matches.contains_id(options::KEY),
             ignore_leading_blanks: matches.get_flag(options::IGNORE_LEADING_BLANKS),
@@ -1537,7 +1537,7 @@ fn parse_usize_or_max(num: &str) -> Option<usize> {
 }
 
 fn parse_legacy_part(spec: &str) -> Option<LegacyKeyPart> {
-    let idx = spec.chars().take_while(|c| c.is_ascii_digit()).count();
+    let idx = spec.chars().take_while(char::is_ascii_digit).count();
     if idx == 0 {
         return None;
     }
@@ -1547,7 +1547,7 @@ fn parse_legacy_part(spec: &str) -> Option<LegacyKeyPart> {
     let mut rest = &spec[idx..];
 
     if let Some(stripped) = rest.strip_prefix('.') {
-        let char_idx = stripped.chars().take_while(|c| c.is_ascii_digit()).count();
+        let char_idx = stripped.chars().take_while(char::is_ascii_digit).count();
         if char_idx == 0 {
             return None;
         }
@@ -1797,7 +1797,17 @@ fn emit_debug_warnings(
         show_error!("{}", translate!("sort-warning-failed-to-set-locale"));
     }
 
-    show_error!("{}", translate!("sort-warning-simple-byte-comparison"));
+    let (locale, encoding) = i18n::get_collating_locale();
+
+    if matches!(encoding, i18n::UEncoding::Utf8) {
+        let locale_as_posix = format!("{}.UTF-8", locale.to_string().replace('-', "_"));
+        show_error!(
+            "{}",
+            translate!("sort-warning-sort-rule", "locale" => locale_as_posix)
+        );
+    } else {
+        show_error!("{}", translate!("sort-warning-simple-byte-comparison"));
+    }
 
     for (idx, selector) in settings.selectors.iter().enumerate() {
         let key_index = idx + 1;
@@ -2000,7 +2010,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut files: Vec<OsString> = if matches.contains_id(options::FILES0_FROM) {
         let files0_from: PathBuf = matches
             .get_one::<OsString>(options::FILES0_FROM)
-            .map(|v| v.into())
+            .map(Into::into)
             .unwrap_or_default();
 
         // Cannot combine FILES with FILES0_FROM
@@ -2190,7 +2200,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         || matches!(
             matches
                 .get_one::<String>(options::check::CHECK)
-                .map(|s| s.as_str()),
+                .map(String::as_str),
             Some(options::check::SILENT | options::check::QUIET)
         )
     {
@@ -2816,7 +2826,7 @@ fn get_leading_gen(inp: &[u8], decimal_pt: u8) -> Range<usize> {
             if let Some(&(_, &next_char)) = char_indices.peek() {
                 if (next_char == b'+' || next_char == b'-')
                     && matches!(
-                        char_indices.peek_nth(2),
+                        char_indices.peek_nth(1),
                         Some((_, c)) if c.is_ascii_digit()
                     )
                 {
@@ -2978,7 +2988,7 @@ enum Month {
 fn month_parse(line: &[u8]) -> Month {
     let line = line.trim_ascii_start();
 
-    match line.get(..3).map(|x| x.to_ascii_uppercase()).as_deref() {
+    match line.get(..3).map(<[u8]>::to_ascii_uppercase).as_deref() {
         Some(b"JAN") => Month::January,
         Some(b"FEB") => Month::February,
         Some(b"MAR") => Month::March,

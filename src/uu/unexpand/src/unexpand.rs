@@ -165,7 +165,7 @@ impl Options {
                 increment_size: None,
                 extend_size: None,
             },
-            Some(s) => parse_tabstops(&s.map(|s| s.as_str()).collect::<Vec<_>>().join(","))?,
+            Some(s) => parse_tabstops(&s.map(String::as_str).collect::<Vec<_>>().join(","))?,
         };
 
         let aflag = (matches.get_flag(options::ALL) || matches.contains_id(options::TABS))
