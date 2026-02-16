@@ -227,7 +227,7 @@ fn write_untagged_checksum(
     filename: &OsStr,
     sum: &String,
     reading_mode: ReadingMode,
-    stdout: &mut dyn Write,
+    writer: &mut dyn Write,
 ) -> io::Result<()> {
     let (escaped_filename, prefix) = if options.line_ending == LineEnding::Nul {
         (filename.to_string_lossy().to_string(), "")
@@ -236,10 +236,10 @@ fn write_untagged_checksum(
     };
 
     // Print checksum and reading mode flag
-    write!(stdout, "{prefix}{sum} {}", reading_mode.as_char())?;
+    write!(writer, "{prefix}{sum} {}", reading_mode.as_char())?;
 
     // Print filename
-    stdout.write_all(escaped_filename.as_bytes())?;
+    writer.write_all(escaped_filename.as_bytes())?;
     Ok(())
 }
 
