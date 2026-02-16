@@ -40,9 +40,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
+    // Custom help template that puts Usage first (matching GNU coreutils)
+    // The default template shows about first, but GNU true/false show Usage first
+    let usage_label = uucore::locale::translate!("common-usage");
+    let help_template = format!(
+        "{usage_label}: {{usage}}\n\n{about}\n\n{{all-args}}",
+        about = translate!("false-about")
+    );
+
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(help_template)
         .about(translate!("false-about"))
         // We provide our own help and version options, to ensure maximum compatibility with GNU.
         .disable_help_flag(true)
