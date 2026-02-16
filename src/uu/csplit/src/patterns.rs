@@ -71,21 +71,18 @@ impl Iterator for ExecutePatternIter {
     type Item = (Option<usize>, usize);
 
     fn next(&mut self) -> Option<(Option<usize>, usize)> {
-        match self.max {
+        if let Some(m) = self.max {
             // iterate until m is reached
-            Some(m) => {
-                if self.cur == m {
-                    None
-                } else {
-                    self.cur += 1;
-                    Some((self.max, self.cur))
-                }
-            }
-            // no limit, just increment a counter
-            None => {
+            if self.cur == m {
+                None
+            } else {
                 self.cur += 1;
-                Some((None, self.cur))
+                Some((self.max, self.cur))
             }
+        } else {
+            // no limit, just increment a counter
+            self.cur += 1;
+            Some((None, self.cur))
         }
     }
 }
@@ -196,7 +193,7 @@ mod tests {
     fn up_to_line_pattern() {
         let input: Vec<String> = vec!["24", "42", "{*}", "50", "{4}"]
             .into_iter()
-            .map(|v| v.to_string())
+            .map(ToOwned::to_owned)
             .collect();
         let patterns = get_patterns(input.as_slice()).unwrap();
         assert_eq!(patterns.len(), 3);
@@ -228,7 +225,7 @@ mod tests {
             "/test6.*end$/-3",
         ]
         .into_iter()
-        .map(|v| v.to_string())
+        .map(ToString::to_string)
         .collect();
         let patterns = get_patterns(input.as_slice()).unwrap();
         assert_eq!(patterns.len(), 6);
@@ -290,7 +287,7 @@ mod tests {
             "%test6.*end$%-3",
         ]
         .into_iter()
-        .map(|v| v.to_string())
+        .map(ToString::to_string)
         .collect();
         let patterns = get_patterns(input.as_slice()).unwrap();
         assert_eq!(patterns.len(), 6);

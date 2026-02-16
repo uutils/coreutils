@@ -24,7 +24,6 @@ use uucore::error::{UResult, strip_errno};
 
 use crate::Output;
 use crate::chunks::RecycledChunk;
-use crate::merge::ClosedTmpFile;
 use crate::merge::WriteableCompressedTmpFile;
 use crate::merge::WriteablePlainTmpFile;
 use crate::merge::WriteableTmpFile;
@@ -70,8 +69,7 @@ pub fn ext_sort(
             Err(err) => {
                 // Print the error and disable compression
                 eprintln!(
-                    "sort: could not run compress program '{}': {}",
-                    prog,
+                    "sort: could not run compress program '{prog}': {}",
                     strip_errno(&err)
                 );
                 effective_settings.compress_prog = None;
@@ -134,7 +132,7 @@ fn reader_writer<
     match read_result {
         ReadResult::WroteChunksToFile { tmp_files } => {
             merge::merge_with_file_limit::<_, _, Tmp>(
-                tmp_files.into_iter().map(|c| c.reopen()),
+                tmp_files.into_iter().map(merge::ClosedTmpFile::reopen),
                 settings,
                 output,
                 tmp_dir,

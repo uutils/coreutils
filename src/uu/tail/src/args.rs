@@ -13,7 +13,7 @@ use std::ffi::OsString;
 use std::io::IsTerminal;
 use std::time::Duration;
 use uucore::error::{UResult, USimpleError, UUsageError};
-use uucore::parser::parse_signed_num::{SignPrefix, parse_signed_num};
+use uucore::parser::parse_signed_num::{SignPrefix, parse_signed_num_max};
 use uucore::parser::parse_size::ParseSizeError;
 use uucore::parser::parse_time;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
@@ -38,6 +38,7 @@ pub mod options {
     pub const MAX_UNCHANGED_STATS: &str = "max-unchanged-stats";
     pub const ARG_FILES: &str = "files";
     pub const PRESUME_INPUT_PIPE: &str = "-presume-input-pipe"; // NOTE: three hyphens is correct
+    pub const DEBUG: &str = "debug";
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -78,7 +79,7 @@ impl FilterMode {
                 Err(e) => {
                     return Err(USimpleError::new(
                         1,
-                        translate!("tail-error-invalid-number-of-bytes", "arg" => format!("'{e}'")),
+                        translate!("tail-error-invalid-number-of-bytes", "arg" => e.to_string()),
                     ));
                 }
             }
@@ -139,6 +140,7 @@ pub struct Settings {
     pub use_polling: bool,
     pub verbose: bool,
     pub presume_input_pipe: bool,
+    pub debug: bool,
     /// `FILE(s)` positional arguments
     pub inputs: Vec<Input>,
 }
@@ -155,6 +157,7 @@ impl Default for Settings {
             use_polling: Default::default(),
             verbose: Default::default(),
             presume_input_pipe: Default::default(),
+            debug: Default::default(),
             inputs: Vec::default(),
         }
     }
@@ -193,7 +196,7 @@ impl Settings {
             follow_retry,
             matches
                 .get_one::<String>(options::FOLLOW)
-                .map(|s| s.as_str()),
+                .map(String::as_str),
         ) {
             // -F and --follow if -F is specified after --follow. We don't need to care about the
             // value of --follow.
@@ -223,6 +226,7 @@ impl Settings {
             mode: FilterMode::from(matches)?,
             verbose: matches.get_flag(options::verbosity::VERBOSE),
             presume_input_pipe: matches.get_flag(options::PRESUME_INPUT_PIPE),
+            debug: matches.get_flag(options::DEBUG),
             ..Default::default()
         };
 
@@ -283,11 +287,11 @@ impl Settings {
     }
 
     pub fn has_only_stdin(&self) -> bool {
-        self.inputs.iter().all(|input| input.is_stdin())
+        self.inputs.iter().all(Input::is_stdin)
     }
 
     pub fn has_stdin(&self) -> bool {
-        self.inputs.iter().any(|input| input.is_stdin())
+        self.inputs.iter().any(Input::is_stdin)
     }
 
     pub fn num_inputs(&self) -> usize {
@@ -340,7 +344,7 @@ impl Settings {
     /// process.
     pub fn verify(&self) -> VerificationResult {
         // Mimic GNU's tail for `tail -F`
-        if self.inputs.iter().any(|i| i.is_stdin()) && self.follow == Some(FollowMode::Name) {
+        if self.inputs.iter().any(Input::is_stdin) && self.follow == Some(FollowMode::Name) {
             return VerificationResult::CannotFollowStdinByName;
         }
 
@@ -366,12 +370,6 @@ pub fn parse_obsolete(arg: &OsString, input: Option<&OsString>) -> UResult<Optio
             Err(USimpleError::new(
                 1,
                 match e {
-                    parse::ParseError::OutOfRange => {
-                        translate!("tail-error-invalid-number-out-of-range", "arg" => arg.quote())
-                    }
-                    parse::ParseError::Overflow => {
-                        translate!("tail-error-invalid-number-overflow", "arg" => arg.quote())
-                    }
                     // this ensures compatibility to GNU's error message (as tested in misc/tail)
                     parse::ParseError::Context => {
                         translate!(
@@ -389,7 +387,7 @@ pub fn parse_obsolete(arg: &OsString, input: Option<&OsString>) -> UResult<Optio
 }
 
 fn parse_num(src: &str) -> Result<Signum, ParseSizeError> {
-    let result = parse_signed_num(src)?;
+    let result = parse_signed_num_max(src)?;
     // tail: '+' means "starting from line/byte N", default/'-' means "last N"
     let is_plus = result.sign == Some(SignPrefix::Plus);
 
@@ -547,6 +545,12 @@ pub fn uu_app() -> Command {
                 .short('F')
                 .help(translate!("tail-help-follow-retry"))
                 .overrides_with(options::FOLLOW_RETRY)
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::DEBUG)
+                .long(options::DEBUG)
+                .help(translate!("tail-help-debug"))
                 .action(ArgAction::SetTrue),
         )
         .arg(

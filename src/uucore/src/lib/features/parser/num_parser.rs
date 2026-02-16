@@ -35,7 +35,7 @@ enum Base {
 
 impl Base {
     /// Return the digit value of a character in the given base
-    fn digit(&self, c: char) -> Option<u64> {
+    fn digit(self, c: char) -> Option<u64> {
         fn from_decimal(c: char) -> u64 {
             u64::from(c) - u64::from('0')
         }
@@ -53,7 +53,7 @@ impl Base {
 
     /// Greedily parse as many digits as possible from the string
     /// Returns parsed digits (if any), and the rest of the string.
-    fn parse_digits<'a>(&self, str: &'a str) -> (Option<BigUint>, &'a str) {
+    fn parse_digits(self, str: &str) -> (Option<BigUint>, &str) {
         let (digits, _, rest) = self.parse_digits_count(str, None);
         (digits, rest)
     }
@@ -61,11 +61,11 @@ impl Base {
     /// Greedily parse as many digits as possible from the string, adding to already parsed digits.
     /// This is meant to be used (directly) for the part after a decimal point.
     /// Returns parsed digits (if any), the number of parsed digits, and the rest of the string.
-    fn parse_digits_count<'a>(
-        &self,
-        str: &'a str,
+    fn parse_digits_count(
+        self,
+        str: &str,
         digits: Option<BigUint>,
-    ) -> (Option<BigUint>, i64, &'a str) {
+    ) -> (Option<BigUint>, i64, &str) {
         let mut digits: Option<BigUint> = digits;
         let mut count: i64 = 0;
         let mut rest = str;
@@ -77,9 +77,9 @@ impl Base {
         let mut mul_tmp: u64 = 1;
         while let Some(d) = rest.chars().next().and_then(|c| self.digit(c)) {
             (digits_tmp, count_tmp, mul_tmp) = (
-                digits_tmp * *self as u64 + d,
+                digits_tmp * self as u64 + d,
                 count_tmp + 1,
-                mul_tmp * *self as u64,
+                mul_tmp * self as u64,
             );
             rest = &rest[1..];
             // In base 16, we parse 4 bits at a time, so we can parse 16 digits at most in a u64.
@@ -150,7 +150,7 @@ where
         where
             U: Zero,
         {
-            v.unwrap_or_else(|e| e.extract())
+            v.unwrap_or_else(ExtendedParserError::extract)
         }
 
         match self {
@@ -556,7 +556,7 @@ pub(crate) fn parse(
         ebd_result
     } else {
         Err(ExtendedParserError::PartialMatch(
-            ebd_result.unwrap_or_else(|e| e.extract()),
+            ebd_result.unwrap_or_else(ExtendedParserError::extract),
             rest.to_string(),
         ))
     }
@@ -583,7 +583,7 @@ mod tests {
             u64::extended_parse("-9223372036854775808") // i64::MIN
         );
         assert_eq!(
-            Ok(1123372036854675616),
+            Ok(1_123_372_036_854_675_616),
             u64::extended_parse("-17323372036854876000") // 2*i64::MIN
         );
         assert_eq!(Ok(1), u64::extended_parse("-18446744073709551615")); // -u64::MAX
@@ -679,10 +679,10 @@ mod tests {
         assert_eq!(Ok(123.15), f64::extended_parse("0123.15"));
         assert_eq!(Ok(123.15), f64::extended_parse("+0123.15"));
         assert_eq!(Ok(-123.15), f64::extended_parse("-0123.15"));
-        assert_eq!(Ok(12315000.0), f64::extended_parse("123.15e5"));
-        assert_eq!(Ok(-12315000.0), f64::extended_parse("-123.15e5"));
-        assert_eq!(Ok(12315000.0), f64::extended_parse("123.15E+5"));
-        assert_eq!(Ok(0.0012315), f64::extended_parse("123.15E-5"));
+        assert_eq!(Ok(12_315_000.0), f64::extended_parse("123.15e5"));
+        assert_eq!(Ok(-12_315_000.0), f64::extended_parse("-123.15e5"));
+        assert_eq!(Ok(12_315_000.0), f64::extended_parse("123.15E+5"));
+        assert_eq!(Ok(0.001_231_5), f64::extended_parse("123.15E-5"));
         assert_eq!(
             Ok(0.15),
             f64::extended_parse(".150000000000000000000000000231313")
@@ -933,7 +933,7 @@ mod tests {
 
         // We cannot really check that 'e' is not a valid exponent indicator for hex floats...
         // but we can check that the number still gets parsed properly: 0x0.8e5 is 0x8e5 / 16**3
-        assert_eq!(Ok(0.555908203125), f64::extended_parse("0x0.8e5"));
+        assert_eq!(Ok(0.555_908_203_125), f64::extended_parse("0x0.8e5"));
 
         assert_eq!(
             f64::extended_parse("0x0.1p"),

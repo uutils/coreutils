@@ -28,6 +28,8 @@ mod numberparse;
 use crate::error::SeqError;
 use crate::number::PreciseNumber;
 
+#[cfg(unix)]
+use uucore::signals;
 use uucore::translate;
 
 const OPT_SEPARATOR: &str = "separator";
@@ -113,7 +115,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .cloned()
             .unwrap_or_else(|| OsString::from("\n")),
         equal_width: matches.get_flag(OPT_EQUAL_WIDTH),
-        format: matches.get_one::<String>(OPT_FORMAT).map(|s| s.as_str()),
+        format: matches.get_one::<String>(OPT_FORMAT).map(String::as_str),
     };
 
     if options.equal_width && options.format.is_some() {
@@ -152,52 +154,51 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // If a format was passed on the command line, use that.
     // If not, use some default format based on parameters precision.
-    let (format, padding, fast_allowed) = match options.format {
-        Some(str) => (
+    let (format, padding, fast_allowed) = if let Some(str) = options.format {
+        (
             Format::<num_format::Float, &ExtendedBigDecimal>::parse(str)?,
             0,
             false,
-        ),
-        None => {
-            let precision = select_precision(&first, &increment, &last);
+        )
+    } else {
+        let precision = select_precision(&first, &increment, &last);
 
-            let padding = if options.equal_width {
-                let precision_value = precision.unwrap_or(0);
-                first
-                    .num_integral_digits
-                    .max(increment.num_integral_digits)
-                    .max(last.num_integral_digits)
-                    + if precision_value > 0 {
-                        precision_value + 1
-                    } else {
-                        0
-                    }
-            } else {
-                0
-            };
+        let padding = if options.equal_width {
+            let precision_value = precision.unwrap_or(0);
+            first
+                .num_integral_digits
+                .max(increment.num_integral_digits)
+                .max(last.num_integral_digits)
+                + if precision_value > 0 {
+                    precision_value + 1
+                } else {
+                    0
+                }
+        } else {
+            0
+        };
 
-            let formatter = match precision {
-                // format with precision: decimal floats and integers
-                Some(precision) => num_format::Float {
-                    variant: FloatVariant::Decimal,
-                    width: padding,
-                    alignment: num_format::NumberAlignment::RightZero,
-                    precision: Some(precision),
-                    ..Default::default()
-                },
-                // format without precision: hexadecimal floats
-                None => num_format::Float {
-                    variant: FloatVariant::Shortest,
-                    ..Default::default()
-                },
-            };
-            // Allow fast printing if precision is 0 (integer inputs), `print_seq` will do further checks.
-            (
-                Format::from_formatter(formatter),
-                padding,
-                precision == Some(0),
-            )
-        }
+        let formatter = match precision {
+            // format with precision: decimal floats and integers
+            Some(precision) => num_format::Float {
+                variant: FloatVariant::Decimal,
+                width: padding,
+                alignment: num_format::NumberAlignment::RightZero,
+                precision: Some(precision),
+                ..Default::default()
+            },
+            // format without precision: hexadecimal floats
+            None => num_format::Float {
+                variant: FloatVariant::Shortest,
+                ..Default::default()
+            },
+        };
+        // Allow fast printing if precision is 0 (integer inputs), `print_seq` will do further checks.
+        (
+            Format::from_formatter(formatter),
+            padding,
+            precision == Some(0),
+        )
     };
 
     let result = print_seq(
@@ -213,8 +214,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => {
             // GNU seq prints the Broken pipe message but still exits with status 0
+            // unless SIGPIPE was explicitly ignored, in which case it should fail.
             let err = err.map_err_context(|| "write error".into());
             uucore::show_error!("{err}");
+            #[cfg(unix)]
+            if signals::sigpipe_was_ignored() {
+                uucore::error::set_exit_code(1);
+            }
             Ok(())
         }
         Err(err) => Err(err.map_err_context(|| "write error".into())),
@@ -267,7 +273,7 @@ pub fn uu_app() -> Command {
 }
 
 /// Integer print, default format, positive increment: fast code path
-/// that avoids reformating digit at all iterations.
+/// that avoids reformatting digit at all iterations.
 fn fast_print_seq(
     mut stdout: impl Write,
     first: &BigUint,

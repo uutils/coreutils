@@ -6,6 +6,7 @@
 // spell-checker:ignore (paths) wtmp
 
 use std::ffi::OsString;
+use std::io::{Write, stdout};
 use std::path::Path;
 
 use clap::builder::ValueParser;
@@ -66,14 +67,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let filename = maybe_file.unwrap_or(utmpx::DEFAULT_FILE.as_ref());
 
         users = Utmpx::iter_all_records_from(filename)
-            .filter(|ut| ut.is_user_process())
+            .filter(utmpx::UtmpxRecord::is_user_process)
             .map(|ut| ut.user())
             .collect::<Vec<_>>();
     };
 
     if !users.is_empty() {
         users.sort();
-        println!("{}", users.join(" "));
+        writeln!(stdout().lock(), "{}", users.join(" "))?;
     }
 
     Ok(())

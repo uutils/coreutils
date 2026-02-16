@@ -3,12 +3,10 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker:ignore bincode serde utmp runlevel testusr testx boottime
+// spell-checker:ignore utmp runlevel testusr testx boottime
 #![allow(clippy::cast_possible_wrap, clippy::unreadable_literal)]
 
-use uutests::at_and_ucmd;
-use uutests::util::TestScenario;
-use uutests::{new_ucmd, util_name};
+use uutests::{at_and_ucmd, new_ucmd};
 
 use regex::Regex;
 
@@ -25,6 +23,21 @@ fn test_uptime() {
         .stdout_contains(" up ");
 
     // Don't check for users as it doesn't show in some CI
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_write_error_handling() {
+    use std::fs::File;
+
+    let dev_full =
+        File::create("/dev/full").expect("Failed to open /dev/full - test must run on Linux");
+
+    new_ucmd!()
+        .set_stdout(dev_full)
+        .fails()
+        .code_is(1)
+        .stderr_contains("No space left on device");
 }
 
 /// Checks for files without utmpx records for which boot time cannot be calculated
@@ -47,6 +60,8 @@ fn test_uptime_for_file_without_utmpx_records() {
 #[test]
 #[cfg(all(unix, feature = "cp"))]
 fn test_uptime_with_fifo() {
+    use uutests::{util::TestScenario, util_name};
+
     // This test can go on forever in the CI in some cases, might need aborting
     // Sometimes writing to the pipe is broken
     let ts = TestScenario::new(util_name!());
@@ -95,9 +110,6 @@ fn test_uptime_with_non_existent_file() {
 )]
 #[allow(clippy::too_many_lines, clippy::items_after_statements)]
 fn test_uptime_with_file_containing_valid_boot_time_utmpx_record() {
-    use bincode::{config, serde::encode_to_vec};
-    use serde::Serialize;
-    use serde_big_array::BigArray;
     use std::fs::File;
     use std::{io::Write, path::PathBuf};
 
@@ -133,21 +145,18 @@ fn test_uptime_with_file_containing_valid_boot_time_utmpx_record() {
         const RUN_LVL: i32 = 1;
         const USER_PROCESS: i32 = 7;
 
-        #[derive(Serialize)]
         #[repr(C)]
         pub struct TimeVal {
             pub tv_sec: i32,
             pub tv_usec: i32,
         }
 
-        #[derive(Serialize)]
         #[repr(C)]
         pub struct ExitStatus {
             e_termination: i16,
             e_exit: i16,
         }
 
-        #[derive(Serialize)]
         #[repr(C, align(4))]
         pub struct Utmp {
             pub ut_type: i32,
@@ -156,7 +165,6 @@ fn test_uptime_with_file_containing_valid_boot_time_utmpx_record() {
             pub ut_id: [i8; 4],
 
             pub ut_user: [i8; 32],
-            #[serde(with = "BigArray")]
             pub ut_host: [i8; 256],
             pub ut_exit: ExitStatus,
             pub ut_session: i32,
@@ -224,10 +232,35 @@ fn test_uptime_with_file_containing_valid_boot_time_utmpx_record() {
             glibc_reserved: [0; 20],
         };
 
-        let config = config::legacy();
-        let mut buf = encode_to_vec(utmp, config).unwrap();
-        buf.append(&mut encode_to_vec(utmp1, config).unwrap());
-        buf.append(&mut encode_to_vec(utmp2, config).unwrap());
+        fn serialize_i8_arr(buf: &mut Vec<u8>, arr: &[i8]) {
+            for b in arr {
+                buf.push(*b as u8);
+            }
+        }
+
+        fn serialize(utmp: &Utmp) -> Vec<u8> {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(&utmp.ut_type.to_ne_bytes());
+            buf.extend_from_slice(&utmp.ut_pid.to_ne_bytes());
+            serialize_i8_arr(&mut buf, &utmp.ut_line);
+            serialize_i8_arr(&mut buf, &utmp.ut_id);
+            serialize_i8_arr(&mut buf, &utmp.ut_user);
+            serialize_i8_arr(&mut buf, &utmp.ut_host);
+            buf.extend_from_slice(&utmp.ut_exit.e_termination.to_ne_bytes());
+            buf.extend_from_slice(&utmp.ut_exit.e_exit.to_ne_bytes());
+            buf.extend_from_slice(&utmp.ut_session.to_ne_bytes());
+            buf.extend_from_slice(&utmp.ut_tv.tv_sec.to_ne_bytes());
+            buf.extend_from_slice(&utmp.ut_tv.tv_usec.to_ne_bytes());
+            for v in &utmp.ut_addr_v6 {
+                buf.extend_from_slice(&v.to_ne_bytes());
+            }
+            serialize_i8_arr(&mut buf, &utmp.glibc_reserved);
+            buf
+        }
+
+        let mut buf = serialize(&utmp);
+        buf.append(&mut serialize(&utmp1));
+        buf.append(&mut serialize(&utmp2));
         let mut f = File::create(path).unwrap();
         f.write_all(&buf).unwrap();
     }
@@ -268,6 +301,15 @@ fn test_uptime_since() {
     let re = Regex::new(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}").unwrap();
 
     new_ucmd!().arg("--since").succeeds().stdout_matches(&re);
+}
+
+#[test]
+fn test_uptime_pretty_print() {
+    new_ucmd!()
+        .arg("-p")
+        .succeeds()
+        .stdout_contains("up")
+        .stdout_contains("minute");
 }
 
 /// Test uptime reliability on macOS with sysctl kern.boottime fallback.

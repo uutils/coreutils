@@ -38,6 +38,7 @@ getrandom
 globset
 indicatif
 itertools
+itoa
 iuse
 langid
 lscolors
@@ -182,6 +183,7 @@ LINESIZE
 NAMESIZE
 RTLD_NEXT
     RTLD
+SIGABRT
 SIGINT
 SIGKILL
 SIGSTOP

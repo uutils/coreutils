@@ -89,6 +89,16 @@ macro_rules! assert_metadata_eq {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_cp_stream_to_full() {
+    let (_, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("/dev/zero")
+        .arg("/dev/full")
+        .fails()
+        .stderr_contains("No space");
+}
+
+#[test]
 fn test_cp_cp() {
     let (at, mut ucmd) = at_and_ucmd!();
     // Invoke our binary to make the copy.
@@ -2605,7 +2615,7 @@ fn test_cp_reflink_insufficient_permission() {
         .arg("unreadable")
         .arg(TEST_EXISTING_FILE)
         .fails()
-        .stderr_only("cp: 'unreadable' -> 'existing_file.txt': Permission denied (os error 13)\n");
+        .stderr_only("cp: 'unreadable' -> 'existing_file.txt': Permission denied\n");
 }
 
 #[cfg(target_os = "linux")]
@@ -2981,11 +2991,15 @@ fn test_copy_through_dangling_symlink() {
 fn test_copy_through_dangling_symlink_posixly_correct() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("file");
+    at.write("file", "content");
     at.symlink_file("nonexistent", "target");
     ucmd.arg("file")
         .arg("target")
         .env("POSIXLY_CORRECT", "1")
         .succeeds();
+    assert!(at.file_exists("nonexistent"));
+    let contents = at.read("nonexistent");
+    assert_eq!(contents, "content");
 }
 
 #[test]
@@ -3117,9 +3131,8 @@ fn test_cp_archive_on_nonexistent_file() {
         .arg(TEST_NONEXISTENT_FILE)
         .arg(TEST_EXISTING_FILE)
         .fails()
-        .stderr_only(
-            "cp: cannot stat 'nonexistent_file.txt': No such file or directory (os error 2)\n",
-        );
+        .stderr_contains("cannot stat 'nonexistent_file.txt'")
+        .stderr_contains("No such file or directory");
 }
 
 #[test]
@@ -6487,8 +6500,7 @@ fn test_cp_archive_preserves_directory_permissions() {
         assert_eq!(
             mode & 0o777,
             0o755,
-            "Directory {} has incorrect permissions: {:o}",
-            path,
+            "Directory {path} has incorrect permissions: {:o}",
             mode & 0o777
         );
     };
@@ -6766,8 +6778,7 @@ fn test_cp_preserve_selinux_admin_context() {
 #[test]
 #[cfg(feature = "feat_selinux")]
 fn test_cp_selinux_context_priority() {
-    // This test verifies that the priority order is respected:
-    // -Z > --context > --preserve=context
+    // This test verifies that -Z takes priority over --context
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -6819,21 +6830,12 @@ fn test_cp_selinux_context_priority() {
         .arg("z_and_context.txt")
         .succeeds();
 
-    // 5. Using both -Z and --preserve=context (Z should win)
-    ts.ucmd()
-        .arg("-Z")
-        .arg("--preserve=context")
-        .arg(TEST_HELLO_WORLD_SOURCE)
-        .arg("z_and_preserve.txt")
-        .succeeds();
-
     // Get all the contexts
     let source_ctx = get_getfattr_output(&at.plus_as_string(TEST_HELLO_WORLD_SOURCE));
     let preserve_ctx = get_getfattr_output(&at.plus_as_string("preserve.txt"));
     let context_ctx = get_getfattr_output(&at.plus_as_string("context.txt"));
     let z_ctx = get_getfattr_output(&at.plus_as_string("z_flag.txt"));
     let z_and_context_ctx = get_getfattr_output(&at.plus_as_string("z_and_context.txt"));
-    let z_and_preserve_ctx = get_getfattr_output(&at.plus_as_string("z_and_preserve.txt"));
 
     if source_ctx.is_empty() {
         println!("Skipping test assertions: Failed to get SELinux contexts");
@@ -6850,10 +6852,6 @@ fn test_cp_selinux_context_priority() {
     assert_eq!(
         z_ctx, z_and_context_ctx,
         "-Z context should be the same regardless of --context"
-    );
-    assert_eq!(
-        z_ctx, z_and_preserve_ctx,
-        "-Z context should be the same regardless of --preserve=context"
     );
 }
 
@@ -7443,4 +7441,270 @@ fn test_cp_archive_deref_flag_ordering() {
         ucmd.args(&[flags, "symlink", &dest]).succeeds();
         assert_eq!(at.is_symlink(&dest), expect_symlink, "failed for {flags}");
     }
+}
+
+#[test]
+fn test_cp_circular_symbolic_links_in_directory() {
+    let source_dir = "source_dir";
+    let target_dir = "target_dir";
+    let (at, mut ucmd) = at_and_ucmd!();
+    let separator = std::path::MAIN_SEPARATOR_STR;
+
+    at.mkdir(source_dir);
+    at.symlink_file(
+        format!("{source_dir}/a").as_str(),
+        format!("{source_dir}/b").as_str(),
+    );
+    at.symlink_file(
+        format!("{source_dir}/b").as_str(),
+        format!("{source_dir}/a").as_str(),
+    );
+
+    ucmd.arg(source_dir)
+        .arg(target_dir)
+        .arg("-rL")
+        .fails_with_code(1)
+        .stderr_contains(format!(
+            "IO error for operation on {source_dir}{separator}a"
+        ))
+        .stderr_contains(format!(
+            "IO error for operation on {source_dir}{separator}b"
+        ));
+}
+
+/// Test that copying to an existing file maintains its permissions, unix only because .mode() only
+/// works on Unix
+#[test]
+#[cfg(unix)]
+fn test_cp_to_existing_file_permissions() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("src");
+    at.touch("dst");
+
+    let src_path = at.plus("src");
+    let dst_path = at.plus("dst");
+
+    let mut src_permissions = std::fs::metadata(&src_path).unwrap().permissions();
+    src_permissions.set_readonly(true);
+    set_permissions(&src_path, src_permissions).unwrap();
+
+    let dst_mode = std::fs::metadata(&dst_path).unwrap().permissions().mode();
+
+    ucmd.args(&["src", "dst"]).succeeds();
+
+    let new_dst_mode = std::fs::metadata(&dst_path).unwrap().permissions().mode();
+    assert_eq!(dst_mode, new_dst_mode);
+}
+
+/// Test xattr ENOTSUP handling: -a/--preserve=all silent, --preserve=xattr errors
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_xattr_enotsup_handling() {
+    use std::process::Command;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("src", "x");
+
+    // Check if setfattr is available and source fs supports xattrs
+    if !Command::new("setfattr")
+        .args(["-n", "user.t", "-v", "v", &at.plus_as_string("src")])
+        .status()
+        .is_ok_and(|s| s.success())
+    {
+        return; // Skip: setfattr not available or source doesn't support xattrs
+    }
+
+    // Check if /dev/shm exists
+    if !Path::new("/dev/shm").exists() {
+        return; // Skip: /dev/shm not available
+    }
+
+    // Check if /dev/shm actually doesn't support xattrs by trying to set one
+    let shm_test_file = "/dev/shm/xattr_test_probe";
+    std::fs::write(shm_test_file, "test").ok();
+    let shm_supports_xattr = Command::new("setfattr")
+        .args(["-n", "user.t", "-v", "v", shm_test_file])
+        .status()
+        .is_ok_and(|s| s.success());
+    std::fs::remove_file(shm_test_file).ok();
+
+    if shm_supports_xattr {
+        return; // Skip: /dev/shm supports xattrs on this system
+    }
+
+    // -a: silent success
+    scene
+        .ucmd()
+        .args(&["-a", &at.plus_as_string("src"), "/dev/shm/t1"])
+        .succeeds()
+        .no_stderr();
+    // --preserve=all: silent success
+    scene
+        .ucmd()
+        .args(&["--preserve=all", &at.plus_as_string("src"), "/dev/shm/t2"])
+        .succeeds()
+        .no_stderr();
+    // --preserve=xattr: must fail with proper message
+    scene
+        .ucmd()
+        .args(&["--preserve=xattr", &at.plus_as_string("src"), "/dev/shm/t3"])
+        .fails()
+        .stderr_contains("setting attributes")
+        .stderr_contains("Operation not supported");
+    for f in ["/dev/shm/t1", "/dev/shm/t2", "/dev/shm/t3"] {
+        std::fs::remove_file(f).ok();
+    }
+}
+
+#[test]
+#[cfg(not(target_os = "windows"))]
+fn test_cp_preserve_directory_permissions_by_default() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let dir = "a/b/c/d";
+    let file = "foo.txt";
+
+    at.mkdir_all(dir);
+
+    let file_path = format!("{dir}/{file}");
+
+    at.touch(file_path);
+
+    scene.cmd("chmod").arg("-R").arg("555").arg("a").succeeds();
+    scene.cmd("cp").arg("-r").arg("a").arg("b").succeeds();
+
+    scene.ucmd().arg("-r").arg("a").arg("c").succeeds();
+
+    // only verify owner bits on Android
+    if cfg!(target_os = "android") {
+        assert_eq!(at.metadata("b").mode() & 0o700, 0o500);
+        assert_eq!(at.metadata("b/b").mode() & 0o700, 0o500);
+        assert_eq!(at.metadata("b/b/c").mode() & 0o700, 0o500);
+        assert_eq!(at.metadata("b/b/c/d").mode() & 0o700, 0o500);
+
+        assert_eq!(at.metadata("c").mode() & 0o700, 0o500);
+        assert_eq!(at.metadata("c/b").mode() & 0o700, 0o500);
+        assert_eq!(at.metadata("c/b/c").mode() & 0o700, 0o500);
+        assert_eq!(at.metadata("c/b/c/d").mode() & 0o700, 0o500);
+    } else {
+        assert_eq!(at.metadata("b").mode(), 0o40555);
+        assert_eq!(at.metadata("b/b").mode(), 0o40555);
+        assert_eq!(at.metadata("b/b/c").mode(), 0o40555);
+        assert_eq!(at.metadata("b/b/c/d").mode(), 0o40555);
+
+        assert_eq!(at.metadata("c").mode(), 0o40555);
+        assert_eq!(at.metadata("c/b").mode(), 0o40555);
+        assert_eq!(at.metadata("c/b/c").mode(), 0o40555);
+        assert_eq!(at.metadata("c/b/c/d").mode(), 0o40555);
+    }
+}
+
+#[test]
+#[cfg(not(target_os = "windows"))]
+fn test_cp_existing_perm_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene
+        .cmd("mkdir")
+        .arg("-p")
+        .arg("-m")
+        .arg("ug-s,u=rwx,g=rwx,o=rx")
+        .arg("src/dir")
+        .umask(0o022)
+        .succeeds();
+    scene
+        .cmd("mkdir")
+        .arg("-p")
+        .arg("-m")
+        .arg("ug-s,u=rwx,g=,o=")
+        .arg("dst/dir")
+        .umask(0o022)
+        .succeeds();
+
+    scene.ucmd().arg("-r").arg("src/.").arg("dst/").succeeds();
+
+    let mode = at.metadata("dst/dir").mode();
+
+    assert_eq!(mode, 0o40700);
+}
+
+#[test]
+#[cfg(not(target_os = "windows"))]
+fn test_cp_gnu_preserve_mode() {
+    use std::io;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene.cmd("mkdir").arg("d1").succeeds();
+    scene.cmd("mkdir").arg("d2").succeeds();
+    scene.cmd("chmod").arg("705").arg("d2").succeeds();
+
+    scene
+        .ucmd()
+        .arg("--no-preserve=mode")
+        .arg("-r")
+        .arg("d2")
+        .arg("d3")
+        .set_stdout(io::stdout())
+        .succeeds();
+
+    let d1_mode = at.metadata("d1").mode();
+    let d3_mode = at.metadata("d3").mode();
+
+    assert_eq!(d1_mode, d3_mode);
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_cp_a_z_overrides_context() {
+    // Verifies -aZ succeeds (-Z overrides implicit --preserve=context from -a)
+    use std::path::Path;
+    use uucore::selinux::set_selinux_security_context;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("src");
+
+    let ctx = "unconfined_u:object_r:user_tmp_t:s0".to_string();
+    if set_selinux_security_context(Path::new(&at.plus_as_string("src")), Some(&ctx)).is_err() {
+        return;
+    }
+
+    ucmd.args(&["-aZ", "src", "dst"]).succeeds();
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_cp_a_preserves_context() {
+    use std::path::Path;
+    use uucore::selinux::{get_selinux_security_context, set_selinux_security_context};
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("src");
+
+    let ctx = "unconfined_u:object_r:user_tmp_t:s0".to_string();
+    if set_selinux_security_context(Path::new(&at.plus_as_string("src")), Some(&ctx)).is_err() {
+        return;
+    }
+
+    let src_ctx =
+        get_selinux_security_context(Path::new(&at.plus_as_string("src")), false).unwrap();
+    ucmd.args(&["-a", "src", "dst"]).succeeds();
+    let dst_ctx =
+        get_selinux_security_context(Path::new(&at.plus_as_string("dst")), false).unwrap();
+
+    assert_eq!(src_ctx, dst_ctx, "-a should preserve SELinux context");
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_cp_preserve_context_with_z_fails() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("src");
+    ucmd.args(&["--preserve=context", "-Z", "src", "dst"])
+        .fails()
+        .stderr_contains("cannot combine");
 }

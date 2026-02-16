@@ -6,7 +6,7 @@ name: GnuTests
 # spell-checker:ignore (options) Ccodegen Coverflow Cpanic Zpanic
 # spell-checker:ignore (people) Dawid Dziurla * dawidd dtolnay
 # spell-checker:ignore (vars) FILESET SUBDIRS XPASS
-# spell-checker:ignore userns
+# spell-checker:ignore userns nodocs
 
 # * note: to run a single test => `REPO/util/run-gnu-test.sh PATH/TO/TEST/SCRIPT`
 
@@ -31,36 +31,24 @@ env:
   TEST_STTY_FULL_SUMMARY_FILE: 'gnu-stty-full-result.json'
   TEST_SELINUX_FULL_SUMMARY_FILE: 'selinux-gnu-full-result.json'
   TEST_SELINUX_ROOT_FULL_SUMMARY_FILE: 'selinux-root-gnu-full-result.json'
-  TEST_SMACK_FULL_SUMMARY_FILE: 'smack-gnu-full-result.json'
+  TEST_QEMU_FULL_SUMMARY_FILE: 'qemu-gnu-full-result.json'
 
 jobs:
   native:
     name: Run GNU tests (native)
     runs-on: ubuntu-24.04
     steps:
-    #### Get the code, setup cache
+    #### Get the code
     - name: Checkout code (uutils)
       uses: actions/checkout@v6
       with:
         path: 'uutils'
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: stable
     - uses: Swatinem/rust-cache@v2
       with:
         workspaces: "./uutils -> target"
     - name: Checkout code (GNU coreutils)
       run: (mkdir -p gnu && cd gnu && bash ../uutils/util/fetch-gnu.sh)
-    - name: Restore files for faster configure and skipping make
-      uses: actions/cache@v5
-      id: cache-config-gnu
-      with:
-        path: |
-          gnu/config.cache
-          gnu/src/getlimits
-        key: ${{ runner.os }}-gnu-config-${{ hashFiles('gnu/NEWS') }}-${{ hashFiles('uutils/util/build-gnu.sh') }} # use build-gnu.sh for extremely safe caching
-
     #### Build environment setup
     - name: Install dependencies
       shell: bash
@@ -104,15 +92,6 @@ jobs:
         ## Build binaries
         cd 'uutils'
         env PROFILE=release-small bash util/build-gnu.sh
-
-    - name: Save files for faster configure and skipping make
-      uses: actions/cache/save@v5
-      if: always() && steps.cache-config-gnu.outputs.cache-hit != 'true'
-      with:
-        path: |
-          gnu/config.cache
-          gnu/src/getlimits
-        key: ${{ runner.os }}-gnu-config-${{ hashFiles('gnu/NEWS') }}-${{ hashFiles('uutils/util/build-gnu.sh') }}
 
     ### Run tests as user
     - name: Run GNU tests
@@ -201,18 +180,12 @@ jobs:
     name: Run GNU tests (SELinux)
     runs-on: ubuntu-24.04
     steps:
-    #### Get the code, setup cache
+    #### Get the code
     - name: Checkout code (uutils)
       uses: actions/checkout@v6
       with:
         path: 'uutils'
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: stable
-    - uses: Swatinem/rust-cache@v2
-      with:
-        workspaces: "./uutils -> target"
     - name: Checkout code (GNU coreutils)
       run: (mkdir -p gnu && cd gnu && bash ../uutils/util/fetch-gnu.sh)
 
@@ -233,20 +206,10 @@ jobs:
         lima ls -laZ /etc/selinux
         lima sudo sestatus
 
-        # Ensure we're running in enforcing mode
-        lima sudo setenforce 1
-        lima getenforce
-
-        # Create test files with SELinux contexts for testing
-        lima sudo mkdir -p /var/test_selinux
-        lima sudo touch /var/test_selinux/test_file
-        lima sudo chcon -t etc_t /var/test_selinux/test_file
-        lima ls -Z /var/test_selinux/test_file  # Verify context
     - name: Install dependencies in VM
       run: |
-        lima sudo dnf -y update
-        lima sudo dnf -y install autoconf bison gperf gcc gdb jq libacl-devel libattr-devel libcap-devel libselinux-devel attr rustup clang-devel automake patch quilt
-        lima rustup-init -y --default-toolchain stable
+        lima sudo dnf -y install --nodocs autoconf bison gperf gcc gdb jq libacl-devel libattr-devel libcap-devel libselinux-devel attr rustup clang-devel automake patch quilt
+        lima rustup-init -y --profile=minimal --default-toolchain stable
     - name: Copy the sources to VM
       run: |
         rsync -a -e ssh . lima-default:~/work/
@@ -267,8 +230,16 @@ jobs:
         lima bash -c "cd ~/work/uutils/ && echo 'Found SELinux tests:'; wc -l selinux-tests.txt"
     - name: Run GNU SELinux tests
       run: |
+        # Ensure we're running in enforcing mode
         lima sudo setenforce 1
         lima getenforce
+
+        # Create test files with SELinux contexts for testing
+        lima sudo mkdir -p /var/test_selinux
+        lima sudo touch /var/test_selinux/test_file
+        lima sudo chcon -t etc_t /var/test_selinux/test_file
+        lima ls -Z /var/test_selinux/test_file  # Verify context
+
         lima cat /proc/filesystems
         lima bash -c "cd ~/work/uutils/ && bash util/run-gnu-test.sh \$(cat selinux-tests.txt)"
     - name: Extract testing info from individual logs into JSON
@@ -317,8 +288,8 @@ jobs:
           gnu/tests-selinux/*.log
           gnu/tests-selinux/*/*.log.gz
 
-  smack:
-    name: Run GNU tests (SMACK)
+  qemu:
+    name: Run GNU tests (SMACK/ROOTFS)
     runs-on: ubuntu-24.04
     steps:
     - name: Checkout code (uutils)
@@ -326,9 +297,6 @@ jobs:
       with:
         path: 'uutils'
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: stable
     - uses: Swatinem/rust-cache@v2
       with:
         workspaces: "./uutils -> target"
@@ -338,30 +306,30 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y qemu-system-x86 zstd cpio
-    - name: Run GNU SMACK tests
+    - name: Run GNU SMACK/ROOTFS tests
       run: |
         cd uutils
-        bash util/run-gnu-tests-smack-ci.sh "$GITHUB_WORKSPACE/gnu" "$GITHUB_WORKSPACE/gnu/tests-smack"
+        bash util/run-gnu-tests-smack-ci.sh "$GITHUB_WORKSPACE/gnu" "$GITHUB_WORKSPACE/gnu/tests-qemu"
     - name: Extract testing info into JSON
       run: |
-        python3 uutils/util/gnu-json-result.py gnu/tests-smack > ${{ env.TEST_SMACK_FULL_SUMMARY_FILE }}
-    - name: Upload SMACK json results
+        python3 uutils/util/gnu-json-result.py gnu/tests-qemu > ${{ env.TEST_QEMU_FULL_SUMMARY_FILE }}
+    - name: Upload SMACK/ROOTFS json results
       uses: actions/upload-artifact@v6
       with:
-        name: smack-gnu-full-result
-        path: ${{ env.TEST_SMACK_FULL_SUMMARY_FILE }}
-    - name: Compress SMACK test logs
-      run: gzip gnu/tests-smack/*/*.log 2>/dev/null || true
-    - name: Upload SMACK test logs
+        name: qemu-gnu-full-result
+        path: ${{ env.TEST_QEMU_FULL_SUMMARY_FILE }}
+    - name: Compress SMACK/ROOTFS test logs
+      run: gzip gnu/tests-qemu/*/*.log 2>/dev/null || true
+    - name: Upload SMACK/ROOTFS test logs
       uses: actions/upload-artifact@v6
       with:
-        name: smack-test-logs
+        name: qemu-test-logs
         path: |
-          gnu/tests-smack/*.log
-          gnu/tests-smack/*/*.log.gz
+          gnu/tests-qemu/*.log
+          gnu/tests-qemu/*/*.log.gz
 
   aggregate:
-    needs: [native, selinux, smack]
+    needs: [native, selinux, qemu]
     permissions:
       actions: read  # for dawidd6/action-download-artifact to query and download artifacts
       contents: read  # for actions/checkout to fetch code
@@ -386,7 +354,7 @@ jobs:
         path: 'uutils'
         persist-credentials: false
     - name: Retrieve reference artifacts
-      uses: dawidd6/action-download-artifact@v12
+      uses: dawidd6/action-download-artifact@v14
       # ref: <https://github.com/dawidd6/action-download-artifact>
       continue-on-error: true ## don't break the build for missing reference artifacts (may be expired or just not generated yet)
       with:
@@ -426,10 +394,10 @@ jobs:
         name: selinux-root-gnu-full-result
         path: results
         merge-multiple: true
-    - name: Download smack json results
+    - name: Download SMACK/ROOTFS json results
       uses: actions/download-artifact@v7
       with:
-        name: smack-gnu-full-result
+        name: qemu-gnu-full-result
         path: results
         merge-multiple: true
     - name: Extract/summarize testing info

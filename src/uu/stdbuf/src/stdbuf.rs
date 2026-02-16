@@ -7,12 +7,14 @@
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process;
 use tempfile::TempDir;
 use tempfile::tempdir;
 use thiserror::Error;
-use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::parser::parse_size::parse_size_u64;
 use uucore::translate;
@@ -88,11 +90,19 @@ enum ProgramOptionsError {
     target_os = "openbsd",
     target_os = "dragonfly"
 ))]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "fn sig must match on all platforms"
+)]
 fn preload_strings() -> UResult<(&'static str, &'static str)> {
     Ok(("LD_PRELOAD", "so"))
 }
 
 #[cfg(target_vendor = "apple")]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "fn sig must match on all platforms"
+)]
 fn preload_strings() -> UResult<(&'static str, &'static str)> {
     Ok(("DYLD_LIBRARY_PATH", "dylib"))
 }
@@ -169,13 +179,34 @@ fn get_preload_env(_tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
     // Use the directory provided at compile time via LIBSTDBUF_DIR environment variable
     // This will fail to compile if LIBSTDBUF_DIR is not set, which is the desired behavior
     const LIBSTDBUF_DIR: &str = env!("LIBSTDBUF_DIR");
+
+    // Search paths in order:
+    // 1. Directory where stdbuf is located (program_path)
+    // 2. Compile-time directory from LIBSTDBUF_DIR
+    let mut search_paths: Vec<PathBuf> = Vec::new();
+
+    // First, try to get the directory where stdbuf is running from
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            search_paths.push(exe_dir.to_path_buf());
+        }
+    }
+
+    // Add the compile-time directory as fallback
+    search_paths.push(PathBuf::from(LIBSTDBUF_DIR));
+
+    // Search for libstdbuf in each path
+    for base_path in search_paths {
+        let path_buf = base_path.join("libstdbuf").with_extension(extension);
+        if path_buf.exists() {
+            return Ok((preload.to_owned(), path_buf));
+        }
+    }
+
+    // If not found in any path, report error
     let path_buf = PathBuf::from(LIBSTDBUF_DIR)
         .join("libstdbuf")
         .with_extension(extension);
-    if path_buf.exists() {
-        return Ok((preload.to_owned(), path_buf));
-    }
-
     Err(USimpleError::new(
         1,
         translate!("stdbuf-error-external-libstdbuf-not-found", "path" => path_buf.display()),
@@ -208,55 +239,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     set_command_env(&mut command, "_STDBUF_E", &options.stderr);
     command.args(command_params);
 
-    let mut process = match command.spawn() {
-        Ok(p) => p,
-        Err(e) => {
-            return match e.kind() {
-                std::io::ErrorKind::PermissionDenied => Err(USimpleError::new(
-                    126,
-                    translate!("stdbuf-error-permission-denied"),
-                )),
-                std::io::ErrorKind::NotFound => Err(USimpleError::new(
-                    127,
-                    translate!("stdbuf-error-no-such-file"),
-                )),
-                _ => Err(USimpleError::new(
-                    1,
-                    translate!("stdbuf-error-failed-to-execute", "error" => e),
-                )),
-            };
-        }
-    };
-
-    let status = process.wait().map_err_context(String::new)?;
-    match status.code() {
-        Some(i) => {
-            if i == 0 {
-                Ok(())
-            } else {
-                Err(i.into())
-            }
-        }
-        None => {
-            #[cfg(unix)]
-            {
-                use std::os::unix::process::ExitStatusExt;
-                let signal_msg = status
-                    .signal()
-                    .map_or_else(|| "unknown".to_string(), |s| s.to_string());
-                Err(USimpleError::new(
-                    1,
-                    translate!("stdbuf-error-killed-by-signal", "signal" => signal_msg),
-                ))
-            }
-            #[cfg(not(unix))]
-            {
-                Err(USimpleError::new(
-                    1,
-                    "process terminated abnormally".to_string(),
-                ))
-            }
-        }
+    // Replace the current process with the target program (no fork) using exec.
+    let e = command.exec();
+    // exec() only returns if there was an error
+    match e.kind() {
+        std::io::ErrorKind::PermissionDenied => Err(USimpleError::new(
+            126,
+            translate!("stdbuf-error-permission-denied"),
+        )),
+        std::io::ErrorKind::NotFound => Err(USimpleError::new(
+            127,
+            translate!("stdbuf-error-no-such-file"),
+        )),
+        _ => Err(USimpleError::new(
+            1,
+            translate!("stdbuf-error-failed-to-execute", "error" => e),
+        )),
     }
 }
 
