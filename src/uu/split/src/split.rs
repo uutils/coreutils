@@ -962,12 +962,19 @@ trait ManageOutFiles {
 
 impl ManageOutFiles for OutFiles {
     fn init(num_files: u64, settings: &Settings, is_writer_optional: bool) -> UResult<Self> {
+        const MAX_FILES_CAP: u64 = 100;
+
         // This object is responsible for creating the filename for each chunk
         let mut filename_iterator: FilenameIterator<'_> =
             FilenameIterator::new(&settings.prefix, &settings.suffix)
                 .map_err(|e| io::Error::other(format!("{e}")))?;
         let mut out_files: Self = Self::new();
-        for _ in 0..num_files {
+        // Cap the number of files to prevent hangs when num_files is extremely
+        // large (e.g., u64::MAX from overflow). The FilenameIterator with
+        // auto-widening suffixes never returns None, so we need this cap.
+        // Files are created upfront during init, so a large cap would hang.
+        let max_files = num_files.min(MAX_FILES_CAP);
+        for _ in 0..max_files {
             let filename = filename_iterator.next().ok_or_else(|| {
                 USimpleError::new(1, translate!("split-error-output-file-suffixes-exhausted"))
             })?;
@@ -1102,6 +1109,8 @@ fn n_chunks_by_byte<R>(
 where
     R: BufRead,
 {
+    const MAX_BYTE_CHUNKS: u64 = 100;
+
     // Get the size of the input in bytes
     let initial_buf = &mut Vec::new();
     let mut num_bytes = get_input_size(&settings.input, reader, initial_buf, settings.io_blksize)?;
@@ -1124,10 +1133,19 @@ where
     //   then behave as if the number of chunks was set to the number of
     //   bytes in the file. This ensures that we don't write empty
     //   files. Otherwise, just write the `num_chunks - num_bytes` empty files.
-    let num_chunks = if kth_chunk.is_none() && settings.elide_empty_files && num_chunks > num_bytes
-    {
-        num_bytes
+    //
+    // Clamp num_chunks to handle overflow values gracefully.
+    // Large values are clamped to avoid performance issues.
+    // This must match MAX_FILES_CAP in OutFiles::init.
+    let num_chunks = if kth_chunk.is_none() {
+        // For N chunks mode, clamp to reasonable limits
+        if settings.elide_empty_files && num_chunks > num_bytes {
+            num_bytes
+        } else {
+            num_chunks.min(MAX_BYTE_CHUNKS)
+        }
     } else {
+        // For Kth chunk mode, use the requested value directly
         num_chunks
     };
 
@@ -1245,6 +1263,8 @@ fn n_chunks_by_line<R>(
 where
     R: BufRead,
 {
+    const MAX_LINE_CHUNKS: u64 = 100;
+
     // Get the size of the input in bytes and compute the number
     // of bytes per chunk.
     let initial_buf = &mut Vec::new();
@@ -1261,6 +1281,14 @@ where
     if num_bytes == 0 && (kth_chunk.is_some() || settings.elide_empty_files) {
         return Ok(());
     }
+
+    // Clamp num_chunks to handle overflow values gracefully.
+    // This must match MAX_FILES_CAP in OutFiles::init.
+    let num_chunks = if kth_chunk.is_none() {
+        num_chunks.min(MAX_LINE_CHUNKS)
+    } else {
+        num_chunks
+    };
 
     // In Kth chunk of N mode - we will write to stdout instead of to a file.
     let mut stdout_writer = io::stdout().lock();
@@ -1376,6 +1404,15 @@ fn n_chunks_by_line_round_robin<R>(
 where
     R: BufRead,
 {
+    // Clamp num_chunks to handle overflow values gracefully.
+    // This must match MAX_FILES_CAP in OutFiles::init.
+    const MAX_RR_CHUNKS: u64 = 100;
+    let num_chunks = if kth_chunk.is_none() {
+        num_chunks.min(MAX_RR_CHUNKS)
+    } else {
+        num_chunks
+    };
+
     // In Kth chunk of N mode - we will write to stdout instead of to a file.
     let mut stdout_writer = io::stdout().lock();
     // In N chunks mode - we will write to `num_chunks` files
