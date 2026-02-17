@@ -146,7 +146,8 @@ fn format_with_modifiers(
         if !flags.is_empty() || !width_str.is_empty() {
             // Apply modifiers to the formatted value
             let width: usize = width_str.parse().unwrap_or(0);
-            let modified = apply_modifiers(&formatted, flags, width, spec);
+            let explicit_width = !width_str.is_empty();
+            let modified = apply_modifiers(&formatted, flags, width, spec, explicit_width);
             result.push_str(&modified);
         } else {
             // No modifiers, use formatted value as-is
@@ -172,6 +173,47 @@ fn is_text_specifier(specifier: &str) -> bool {
         specifier.chars().last(),
         Some('A' | 'a' | 'B' | 'b' | 'h' | 'Z' | 'p' | 'P')
     )
+}
+
+/// Returns the default width for a specifier.
+/// This is used when a flag like `_` is used without an explicit width.
+fn get_default_width(specifier: &str) -> usize {
+    match specifier.chars().last() {
+        // Day of month: 2 digits (01-31)
+        Some('d') | Some('e') => 2,
+        // Month: 2 digits (01-12)
+        Some('m') => 2,
+        // Hour: 2 digits (00-23)
+        Some('H') | Some('k') => 2,
+        // Hour (12-hour): 2 digits (01-12)
+        Some('I') | Some('l') => 2,
+        // Minute: 2 digits (00-59)
+        Some('M') => 2,
+        // Second: 2 digits (00-60)
+        Some('S') => 2,
+        // Year (2-digit): 2 digits
+        Some('y') => 2,
+        // Day of year: 3 digits (001-366)
+        Some('j') => 3,
+        // Week number: 2 digits (00-53)
+        Some('U') | Some('W') | Some('V') => 2,
+        // Day of week: 1 digit (0-6 or 1-7)
+        Some('w') | Some('u') => 1,
+        // Century and year: 4 digits
+        Some('C') | Some('Y') | Some('G') => 4,
+        // ISO week year (2-digit): 2 digits
+        Some('g') => 2,
+        // Epoch seconds: typically 10 digits (but variable)
+        Some('s') => 0,
+        // Nanoseconds: 9 digits
+        Some('N') => 9,
+        // Quarter: 1 digit
+        Some('q') => 1,
+        // Timezone offset: varies
+        Some('z') => 0,
+        // Text specifiers have no default width
+        _ => 0,
+    }
 }
 
 /// Strip default padding (leading zeros or leading spaces) from a value,
@@ -203,7 +245,16 @@ fn strip_default_padding(value: &str) -> String {
 /// which determines the default padding character (space for text, zero for numeric).
 /// Flags are processed in order so that when conflicting flags appear,
 /// the last one takes precedence (e.g., `_+` means `+` wins for padding).
-fn apply_modifiers(value: &str, flags: &str, width: usize, specifier: &str) -> String {
+///
+/// The `explicit_width` parameter indicates whether a width was explicitly
+/// specified in the format string (true) or if width is 0 (false).
+fn apply_modifiers(
+    value: &str,
+    flags: &str,
+    width: usize,
+    specifier: &str,
+    explicit_width: bool,
+) -> String {
     let mut result = value.to_string();
 
     // Determine default pad character based on specifier type
@@ -219,6 +270,7 @@ fn apply_modifiers(value: &str, flags: &str, width: usize, specifier: &str) -> S
     let mut uppercase = false;
     let mut swap_case = false;
     let mut force_sign = false;
+    let mut underscore_flag = false;
 
     for flag in flags.chars() {
         match flag {
@@ -228,6 +280,7 @@ fn apply_modifiers(value: &str, flags: &str, width: usize, specifier: &str) -> S
             '_' => {
                 no_pad = false;
                 pad_char = ' ';
+                underscore_flag = true;
             }
             '0' => {
                 no_pad = false;
@@ -271,8 +324,15 @@ fn apply_modifiers(value: &str, flags: &str, width: usize, specifier: &str) -> S
         return strip_default_padding(&result);
     }
 
+    // Handle underscore flag without explicit width: use default width
+    let effective_width = if underscore_flag && !explicit_width {
+        get_default_width(specifier)
+    } else {
+        width
+    };
+
     // Handle width smaller than result: strip default padding to fit
-    if width > 0 && width < result.len() {
+    if effective_width > 0 && effective_width < result.len() {
         return strip_default_padding(&result);
     }
 
@@ -286,15 +346,22 @@ fn apply_modifiers(value: &str, flags: &str, width: usize, specifier: &str) -> S
     }
 
     // Apply force sign for numeric values
+    // GNU behavior: + only adds sign if:
+    // 1. An explicit width is provided, OR
+    // 2. The value exceeds the default width for that specifier (e.g., year > 4 digits)
     if force_sign && !result.starts_with('+') && !result.starts_with('-') {
         if result.chars().next().is_some_and(|c| c.is_ascii_digit()) {
-            result.insert(0, '+');
+            let default_w = get_default_width(specifier);
+            // Add sign only if explicit width provided OR result exceeds default width
+            if explicit_width || (default_w > 0 && result.len() > default_w) {
+                result.insert(0, '+');
+            }
         }
     }
 
     // Apply width padding
-    if width > result.len() {
-        let padding = width - result.len();
+    if effective_width > result.len() {
+        let padding = effective_width - result.len();
         let has_sign = result.starts_with('+') || result.starts_with('-');
 
         if pad_char == '0' && has_sign {
@@ -488,82 +555,108 @@ mod tests {
     #[test]
     fn test_apply_modifiers_basic() {
         // No modifiers (numeric specifier)
-        assert_eq!(apply_modifiers("1999", "", 0, "Y"), "1999");
+        assert_eq!(apply_modifiers("1999", "", 0, "Y", false), "1999");
         // Zero padding
-        assert_eq!(apply_modifiers("1999", "0", 10, "Y"), "0000001999");
+        assert_eq!(apply_modifiers("1999", "0", 10, "Y", true), "0000001999");
         // Space padding (strips leading zeros)
-        assert_eq!(apply_modifiers("06", "_", 5, "m"), "    6");
+        assert_eq!(apply_modifiers("06", "_", 5, "m", true), "    6");
         // No-pad (strips leading zeros, width ignored)
-        assert_eq!(apply_modifiers("01", "-", 5, "d"), "1");
+        assert_eq!(apply_modifiers("01", "-", 5, "d", true), "1");
         // Uppercase
-        assert_eq!(apply_modifiers("june", "^", 0, "B"), "JUNE");
+        assert_eq!(apply_modifiers("june", "^", 0, "B", false), "JUNE");
         // Swap case: all uppercase → lowercase
-        assert_eq!(apply_modifiers("UTC", "#", 0, "Z"), "utc");
+        assert_eq!(apply_modifiers("UTC", "#", 0, "Z", false), "utc");
         // Swap case: mixed case → uppercase
-        assert_eq!(apply_modifiers("June", "#", 0, "B"), "JUNE");
+        assert_eq!(apply_modifiers("June", "#", 0, "B", false), "JUNE");
     }
 
     #[test]
     fn test_apply_modifiers_signs() {
-        // Force sign
-        assert_eq!(apply_modifiers("1970", "+", 6, "Y"), "+01970");
+        // Force sign with explicit width
+        assert_eq!(apply_modifiers("1970", "+", 6, "Y", true), "+01970");
+        // Force sign without explicit width: should NOT add sign for 4-digit year
+        assert_eq!(apply_modifiers("1999", "+", 0, "Y", false), "1999");
+        // Force sign without explicit width: SHOULD add sign for year > 4 digits
+        assert_eq!(apply_modifiers("12345", "+", 0, "Y", false), "+12345");
         // Negative with zero padding: sign first, then zeros
-        assert_eq!(apply_modifiers("-22", "0", 5, "s"), "-0022");
+        assert_eq!(apply_modifiers("-22", "0", 5, "s", true), "-0022");
         // Negative with space padding: spaces first, then sign
-        assert_eq!(apply_modifiers("-22", "_", 5, "s"), "  -22");
+        assert_eq!(apply_modifiers("-22", "_", 5, "s", true), "  -22");
         // Force sign (_+): + is last, overrides _ → zero pad with sign
-        assert_eq!(apply_modifiers("5", "_+", 5, "s"), "+0005");
+        assert_eq!(apply_modifiers("5", "_+", 5, "s", true), "+0005");
         // No-pad + uppercase: no padding applied
-        assert_eq!(apply_modifiers("june", "-^", 10, "B"), "JUNE");
+        assert_eq!(apply_modifiers("june", "-^", 10, "B", true), "JUNE");
     }
 
     #[test]
     fn test_case_flag_precedence() {
         // Test that ^ (uppercase) overrides # (swap case)
-        assert_eq!(apply_modifiers("June", "^#", 0, "B"), "JUNE");
-        assert_eq!(apply_modifiers("June", "#^", 0, "B"), "JUNE");
+        assert_eq!(apply_modifiers("June", "^#", 0, "B", false), "JUNE");
+        assert_eq!(apply_modifiers("June", "#^", 0, "B", false), "JUNE");
         // Test # alone (swap case)
-        assert_eq!(apply_modifiers("June", "#", 0, "B"), "JUNE");
-        assert_eq!(apply_modifiers("JUNE", "#", 0, "B"), "june");
+        assert_eq!(apply_modifiers("June", "#", 0, "B", false), "JUNE");
+        assert_eq!(apply_modifiers("JUNE", "#", 0, "B", false), "june");
     }
 
     #[test]
     fn test_apply_modifiers_text_specifiers() {
         // Text specifiers default to space padding
-        assert_eq!(apply_modifiers("June", "", 10, "B"), "      June");
-        assert_eq!(apply_modifiers("Mon", "", 10, "a"), "       Mon");
+        assert_eq!(apply_modifiers("June", "", 10, "B", true), "      June");
+        assert_eq!(apply_modifiers("Mon", "", 10, "a", true), "       Mon");
         // Numeric specifiers default to zero padding
-        assert_eq!(apply_modifiers("6", "", 10, "m"), "0000000006");
+        assert_eq!(apply_modifiers("6", "", 10, "m", true), "0000000006");
     }
 
     #[test]
     fn test_apply_modifiers_width_smaller_than_result() {
         // Width smaller than result strips default padding
-        assert_eq!(apply_modifiers("01", "", 1, "d"), "1");
-        assert_eq!(apply_modifiers("06", "", 1, "m"), "6");
+        assert_eq!(apply_modifiers("01", "", 1, "d", true), "1");
+        assert_eq!(apply_modifiers("06", "", 1, "m", true), "6");
     }
 
     #[test]
     fn test_apply_modifiers_parametrized() {
         let test_cases = vec![
-            ("1", "0", 3, "Y", "001"),
-            ("1", "_", 3, "d", "  1"),
-            ("1", "-", 3, "d", "1"),       // no-pad: width ignored
-            ("abc", "^", 5, "B", "  ABC"), // text specifier: space pad
-            ("5", "+", 4, "s", "+005"),
-            ("5", "_+", 4, "s", "+005"), // + is last: zero pad with sign
-            ("-3", "0", 5, "s", "-0003"),
-            ("05", "_", 3, "d", "  5"),
-            ("09", "-", 4, "d", "9"),         // no-pad: width ignored
-            ("1970", "_+", 6, "Y", "+01970"), // + is last: zero pad with sign
+            ("1", "0", 3, "Y", true, "001"),
+            ("1", "_", 3, "d", true, "  1"),
+            ("1", "-", 3, "d", true, "1"), // no-pad: width ignored
+            ("abc", "^", 5, "B", true, "  ABC"), // text specifier: space pad
+            ("5", "+", 4, "s", true, "+005"),
+            ("5", "_+", 4, "s", true, "+005"), // + is last: zero pad with sign
+            ("-3", "0", 5, "s", true, "-0003"),
+            ("05", "_", 3, "d", true, "  5"),
+            ("09", "-", 4, "d", true, "9"), // no-pad: width ignored
+            ("1970", "_+", 6, "Y", true, "+01970"), // + is last: zero pad with sign
         ];
 
-        for (value, flags, width, spec, expected) in test_cases {
+        for (value, flags, width, spec, explicit_width, expected) in test_cases {
             assert_eq!(
-                apply_modifiers(value, flags, width, spec),
+                apply_modifiers(value, flags, width, spec, explicit_width),
                 expected,
-                "value='{value}', flags='{flags}', width={width}, spec='{spec}'",
+                "value='{value}', flags='{flags}', width={width}, spec='{spec}', explicit_width={explicit_width}",
             );
         }
+    }
+
+    #[test]
+    fn test_underscore_flag_without_width() {
+        // %_m should pad month to default width 2 with spaces
+        assert_eq!(apply_modifiers("6", "_", 0, "m", false), " 6");
+        // %_d should pad day to default width 2 with spaces
+        assert_eq!(apply_modifiers("1", "_", 0, "d", false), " 1");
+        // %_H should pad hour to default width 2 with spaces
+        assert_eq!(apply_modifiers("5", "_", 0, "H", false), " 5");
+        // %_Y should pad year to default width 4 with spaces
+        assert_eq!(apply_modifiers("1999", "_", 0, "Y", false), "1999"); // already at default width
+    }
+
+    #[test]
+    fn test_plus_flag_without_width() {
+        // %+Y without width should NOT add sign for 4-digit year
+        assert_eq!(apply_modifiers("1999", "+", 0, "Y", false), "1999");
+        // %+Y without width SHOULD add sign for year > 4 digits
+        assert_eq!(apply_modifiers("12345", "+", 0, "Y", false), "+12345");
+        // %+Y with explicit width should add sign
+        assert_eq!(apply_modifiers("1999", "+", 6, "Y", true), "+01999");
     }
 }
