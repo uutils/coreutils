@@ -3643,6 +3643,7 @@ name = "uu_ls"
 version = "0.6.0"
 dependencies = [
  "ansi-width",
+ "cfg_aliases",
  "clap",
  "codspeed-divan-compat",
  "fluent",
