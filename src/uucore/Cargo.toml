@@ -106,16 +106,14 @@ nix = { workspace = true, features = [
 walkdir = { workspace = true, optional = true }
 xattr = { workspace = true, optional = true }
 
-[target.'cfg(target_os = "linux")'.dependencies]
-mimalloc = { version = "0.1.48", default-features = false, features = [
-  "override",
-] }
-
 [dev-dependencies]
 tempfile = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 procfs = { workspace = true, optional = true }
+mimalloc = { version = "0.1.48", default-features = false, features = [
+  "override",
+] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 wild = "2.2.1"
