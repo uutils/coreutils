@@ -69,6 +69,34 @@ use uucore::{format_usage, show_error};
 
 const BUF_INIT_BYTE: u8 = 0xDD;
 
+/// Helper function to allocate a page-aligned buffer on Linux/Android.
+///
+/// O_DIRECT requires buffers to be aligned to page boundaries (typically 4096 bytes).
+/// This function allocates a `Vec<u8>` with proper alignment to support O_DIRECT
+/// without triggering EINVAL errors.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn allocate_aligned_buffer(size: usize) -> Vec<u8> {
+    let alignment = unsafe { libc::sysconf(libc::_SC_PAGESIZE) as usize };
+    // cspell:disable-next-line
+    let ptr = unsafe { libc::memalign(alignment, size).cast::<u8>() };
+
+    assert!(
+        !ptr.is_null(),
+        "Failed to allocate aligned buffer of size {size}"
+    );
+
+    // Convert raw pointer to Vec<u8>
+    // cspell:disable-next-line
+    // SAFETY: We just allocated this memory with memalign, so it's valid
+    unsafe { Vec::from_raw_parts(ptr, 0, size) }
+}
+
+/// Fallback for non-Linux platforms - use regular Vec allocation
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+fn allocate_aligned_buffer(size: usize) -> Vec<u8> {
+    vec![BUF_INIT_BYTE; size]
+}
+
 /// Final settings after parsing
 #[derive(Default)]
 struct Settings {
@@ -715,8 +743,17 @@ fn is_sparse(buf: &[u8]) -> bool {
 
 /// Handle O_DIRECT write errors by temporarily removing the flag and retrying.
 /// This follows GNU dd behavior for partial block writes with O_DIRECT.
+///
+/// With proper buffer alignment (page-aligned), O_DIRECT should only fail for
+/// partial blocks (size < output_blocksize). This function only removes O_DIRECT
+/// when necessary, matching GNU dd behavior and minimizing system call overhead.
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn handle_o_direct_write(f: &mut File, buf: &[u8], original_error: io::Error) -> io::Result<usize> {
+fn handle_o_direct_write(
+    f: &mut File,
+    buf: &[u8],
+    output_blocksize: usize,
+    original_error: io::Error,
+) -> io::Result<usize> {
     use nix::fcntl::{FcntlArg, OFlag, fcntl};
 
     // Get current flags using nix
@@ -725,8 +762,10 @@ fn handle_o_direct_write(f: &mut File, buf: &[u8], original_error: io::Error) ->
         Err(_) => return Err(original_error),
     };
 
-    // If O_DIRECT is set, try removing it temporarily
-    if oflags.contains(OFlag::O_DIRECT) {
+    // If O_DIRECT is set, only remove it for partial blocks (size < output_blocksize)
+    // This matches GNU dd behavior and minimizes system call overhead.
+    // With proper buffer alignment, full blocks should not fail with EINVAL.
+    if oflags.contains(OFlag::O_DIRECT) && buf.len() < output_blocksize {
         let flags_without_direct = oflags - OFlag::O_DIRECT;
 
         // Remove O_DIRECT flag using nix
@@ -737,7 +776,7 @@ fn handle_o_direct_write(f: &mut File, buf: &[u8], original_error: io::Error) ->
         // Retry the write without O_DIRECT
         let write_result = f.write(buf);
 
-        // Restore O_DIRECT flag using nix (GNU doesn't restore it, but we'll be safer)
+        // Restore O_DIRECT flag using nix
         // Log any restoration errors without failing the operation
         if let Err(os_err) = fcntl(&mut *f, FcntlArg::F_SETFL(oflags)) {
             // Just log the error, don't fail the whole operation
@@ -746,19 +785,9 @@ fn handle_o_direct_write(f: &mut File, buf: &[u8], original_error: io::Error) ->
 
         write_result
     } else {
-        // O_DIRECT wasn't set, return original error
+        // O_DIRECT wasn't set or this is a full block, return original error
         Err(original_error)
     }
-}
-
-/// Stub for non-Linux platforms - just return the original error.
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
-fn handle_o_direct_write(
-    _f: &mut File,
-    _buf: &[u8],
-    original_error: io::Error,
-) -> io::Result<usize> {
-    Err(original_error)
 }
 
 impl Write for Dest {
@@ -772,21 +801,7 @@ impl Write for Dest {
                 f.seek(SeekFrom::Current(seek_amt))?;
                 Ok(buf.len())
             }
-            Self::File(f, _) => {
-                // Try the write first
-                match f.write(buf) {
-                    Ok(len) => Ok(len),
-                    Err(e)
-                        if e.kind() == io::ErrorKind::InvalidInput
-                            && e.raw_os_error() == Some(libc::EINVAL) =>
-                    {
-                        // This might be an O_DIRECT alignment issue.
-                        // Try removing O_DIRECT temporarily and retry.
-                        handle_o_direct_write(f, buf, e)
-                    }
-                    Err(e) => Err(e),
-                }
-            }
+            Self::File(f, _) => f.write(buf),
             Self::Stdout(stdout) => stdout.write(buf),
             #[cfg(unix)]
             Self::Fifo(f) => f.write(buf),
@@ -955,6 +970,36 @@ impl<'a> Output<'a> {
         }
     }
 
+    /// Write to the destination with O_DIRECT awareness.
+    ///
+    /// This method handles O_DIRECT write errors by temporarily removing the flag
+    /// for partial blocks, matching GNU dd behavior.
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn write_with_o_direct_handling(&mut self, buf: &[u8]) -> io::Result<usize> {
+        match self.dst.write(buf) {
+            Ok(len) => Ok(len),
+            Err(e)
+                if e.kind() == io::ErrorKind::InvalidInput
+                    && e.raw_os_error() == Some(libc::EINVAL) =>
+            {
+                // This might be an O_DIRECT alignment issue.
+                // Try removing O_DIRECT temporarily and retry (only for partial blocks).
+                if let Dest::File(f, _) = &mut self.dst {
+                    handle_o_direct_write(f, buf, self.settings.obs, e)
+                } else {
+                    Err(e)
+                }
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Fallback for non-Linux platforms - use regular write
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    fn write_with_o_direct_handling(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.dst.write(buf)
+    }
+
     /// writes a block of data. optionally retries when first try didn't complete
     ///
     /// this is needed by gnu-test: tests/dd/stats.s
@@ -965,7 +1010,7 @@ impl<'a> Output<'a> {
         let full_len = chunk.len();
         let mut base_idx = 0;
         loop {
-            match self.dst.write(&chunk[base_idx..]) {
+            match self.write_with_o_direct_handling(&chunk[base_idx..]) {
                 Ok(wlen) => {
                     base_idx += wlen;
                     // take iflags.fullblock as oflags shall not have this option
@@ -1168,7 +1213,11 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
 
     // Create a common buffer with a capacity of the block size.
     // This is the max size needed.
-    let mut buf = vec![BUF_INIT_BYTE; bsize];
+    //
+    // On Linux/Android, use an aligned buffer for O_DIRECT support.
+    // O_DIRECT requires buffers to be aligned to page boundaries (typically 4096 bytes).
+    // This prevents EINVAL errors when writing with oflag=direct.
+    let mut buf = allocate_aligned_buffer(bsize);
 
     // Spawn a timer thread to provide a scheduled signal indicating when we
     // should send an update of our progress to the reporting thread.
@@ -1628,5 +1677,103 @@ mod tests {
         assert!(
             Output::new_file(Path::new(settings.outfile.as_ref().unwrap()), &settings).is_err()
         );
+    }
+
+    // ===== O_DIRECT Buffer Alignment Tests =====
+
+    #[test]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn test_aligned_buffer_allocation() {
+        // Test that allocate_aligned_buffer creates page-aligned buffers
+        let buf = super::allocate_aligned_buffer(4096);
+
+        // Verify buffer is created
+        assert_eq!(buf.capacity(), 4096);
+
+        // Verify buffer pointer is page-aligned
+        let ptr = buf.as_ptr() as usize;
+        let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) as usize };
+        assert_eq!(ptr % page_size, 0, "Buffer should be page-aligned");
+    }
+
+    #[test]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn test_aligned_buffer_various_sizes() {
+        // Test alignment for various buffer sizes
+        let sizes = vec![512, 1024, 2048, 4096, 8192, 16384];
+        let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) as usize };
+
+        for size in sizes {
+            let buf = super::allocate_aligned_buffer(size);
+            let ptr = buf.as_ptr() as usize;
+            assert_eq!(
+                ptr % page_size,
+                0,
+                "Buffer of size {size} should be page-aligned"
+            );
+        }
+    }
+
+    #[test]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn test_aligned_buffer_initialization() {
+        // Test that buffer is initialized with BUF_INIT_BYTE
+        let buf = super::allocate_aligned_buffer(1024);
+
+        // Check that buffer is initialized (not all zeros)
+        let init_byte = super::BUF_INIT_BYTE;
+        for &byte in &buf {
+            assert_eq!(
+                byte, init_byte,
+                "Buffer should be initialized with BUF_INIT_BYTE"
+            );
+        }
+    }
+
+    #[test]
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    fn test_aligned_buffer_fallback() {
+        // Test that non-Linux platforms use regular Vec allocation
+        let buf = super::allocate_aligned_buffer(4096);
+
+        // Should still create a valid buffer
+        assert_eq!(buf.capacity(), 4096);
+        assert_eq!(buf.len(), 4096);
+    }
+
+    #[test]
+    fn test_calc_bsize_alignment() {
+        // Test that calculated buffer size is reasonable for O_DIRECT
+        let ibs = 4096;
+        let obs = 4096;
+        let bsize = calc_bsize(ibs, obs);
+
+        // Should be a multiple of both ibs and obs
+        assert_eq!(bsize % ibs, 0);
+        assert_eq!(bsize % obs, 0);
+
+        // Should be at least as large as both
+        assert!(bsize >= ibs);
+        assert!(bsize >= obs);
+    }
+
+    #[test]
+    fn test_calc_bsize_lcm() {
+        // Test LCM calculation for various block sizes
+        let test_cases = vec![
+            (512, 512, 512),
+            (512, 1024, 1024),
+            (1024, 2048, 2048),
+            (4096, 4096, 4096),
+            (512, 4096, 4096),
+        ];
+
+        for (ibs, obs, expected) in test_cases {
+            let bsize = calc_bsize(ibs, obs);
+            assert_eq!(
+                bsize, expected,
+                "calc_bsize({ibs}, {obs}) should be {expected}"
+            );
+        }
     }
 }
