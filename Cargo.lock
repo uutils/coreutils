@@ -3726,6 +3726,7 @@ dependencies = [
 name = "uu_install"
 version = "0.10.0"
 dependencies = [
+ "cfg_aliases",
  "clap",
  "file_diff",
  "filetime",
