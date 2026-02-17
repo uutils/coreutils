@@ -332,7 +332,7 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
             }
 
             // Apply SMACK context if requested
-            #[cfg(all(feature = "smack", target_os = "linux"))]
+            #[cfg(smack)]
             if config.set_security_context {
                 uucore::smack::set_smack_label_and_cleanup(path, config.context, |p| {
                     std::fs::remove_dir(p)
