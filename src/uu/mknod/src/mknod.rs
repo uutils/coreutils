@@ -57,11 +57,11 @@ struct Config {
     dev: u64,
 
     /// Set security context (SELinux/SMACK).
-    #[cfg(any(feature = "selinux", smack))]
+    #[cfg(any(selinux, smack))]
     set_security_context: bool,
 
     /// Specific security context (SELinux/SMACK).
-    #[cfg(any(feature = "selinux", smack))]
+    #[cfg(any(selinux, smack))]
     context: Option<String>,
 }
 
@@ -96,7 +96,7 @@ fn mknod(file_name: &str, config: Config) -> i32 {
     }
 
     // Apply SELinux context if requested
-    #[cfg(feature = "selinux")]
+    #[cfg(selinux)]
     if config.set_security_context {
         if let Err(e) = uucore::selinux::set_selinux_security_context(
             std::path::Path::new(file_name),
@@ -146,9 +146,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .expect("Missing argument 'NAME'");
 
     // Extract the security context related flags and options
-    #[cfg(any(feature = "selinux", smack))]
+    #[cfg(any(selinux, smack))]
     let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
-    #[cfg(any(feature = "selinux", smack))]
+    #[cfg(any(selinux, smack))]
     let context = matches.get_one::<String>(options::CONTEXT).cloned();
 
     let dev = match (
@@ -177,9 +177,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         file_type: file_type.clone(),
         use_umask,
         dev,
-        #[cfg(any(feature = "selinux", smack))]
+        #[cfg(any(selinux, smack))]
         set_security_context: set_security_context || context.is_some(),
-        #[cfg(any(feature = "selinux", smack))]
+        #[cfg(any(selinux, smack))]
         context,
     };
 
