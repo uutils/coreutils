@@ -333,7 +333,7 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
             }
 
             // Apply SELinux context if requested
-            #[cfg(feature = "selinux")]
+            #[cfg(selinux)]
             if config.set_security_context && uucore::selinux::is_selinux_enabled() {
                 if let Err(e) = uucore::selinux::set_selinux_security_context(path, config.context)
                 {
