@@ -362,9 +362,8 @@ fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> 
                 // with default regexp, keyword must start at first alphabetic char.
                 if filter.word_regex == Config::default().context_regex {
                     let matched = &line[beg..end];
-                    if let Some((off, _)) = matched.char_indices().find(|(_, c)| c.is_alphabetic())
-                    {
-                        beg += off;
+                    if let Some(pos) = matched.find(|c: char| c.is_alphabetic()) {
+                        beg += pos;
                     } else {
                         continue;
                     }
