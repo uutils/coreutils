@@ -156,7 +156,7 @@ fn write_legacy_checksum(
     filename: &OsStr,
     sum: &DigestOutput,
     size: usize,
-    stdout: &mut dyn Write,
+    writer: &mut dyn Write,
 ) -> io::Result<()> {
     debug_assert!(options.algo_kind.is_legacy());
     debug_assert!(matches!(sum, DigestOutput::U16(_) | DigestOutput::Crc(_)));
@@ -171,7 +171,7 @@ fn write_legacy_checksum(
     match (options.algo_kind, sum) {
         (SizedAlgoKind::Sysv, DigestOutput::U16(sum)) => {
             write!(
-                stdout,
+                writer,
                 "{prefix}{sum} {}",
                 size.div_ceil(options.algo_kind.bitlen()),
             )?;
@@ -180,21 +180,21 @@ fn write_legacy_checksum(
             // The BSD checksum output is 5 digit integer
             let bsd_width = 5;
             write!(
-                stdout,
+                writer,
                 "{prefix}{sum:0bsd_width$} {:bsd_width$}",
                 size.div_ceil(options.algo_kind.bitlen()),
             )?;
         }
         (SizedAlgoKind::Crc | SizedAlgoKind::Crc32b, DigestOutput::Crc(sum)) => {
-            write!(stdout, "{prefix}{sum} {size}")?;
+            write!(writer, "{prefix}{sum} {size}")?;
         }
         (algo, output) => unreachable!("Bug: Invalid legacy checksum ({algo:?}, {output:?})"),
     }
 
     // Print the filename after a space if not stdin
     if escaped_filename != "-" {
-        write!(stdout, " ")?;
-        stdout.write_all(escaped_filename.as_bytes())?;
+        write!(writer, " ")?;
+        writer.write_all(escaped_filename.as_bytes())?;
     }
     Ok(())
 }
@@ -203,7 +203,7 @@ fn write_tagged_checksum(
     options: &ChecksumComputeOptions,
     filename: &OsStr,
     sum: &String,
-    stdout: &mut dyn Write,
+    writer: &mut dyn Write,
 ) -> io::Result<()> {
     let (escaped_filename, prefix) = if options.line_ending == LineEnding::Nul {
         (filename.to_string_lossy().to_string(), "")
@@ -212,13 +212,13 @@ fn write_tagged_checksum(
     };
 
     // Print algo name and opening parenthesis.
-    write!(stdout, "{prefix}{} (", options.algo_kind.to_tag())?;
+    write!(writer, "{prefix}{} (", options.algo_kind.to_tag())?;
 
     // Print filename
-    stdout.write_all(escaped_filename.as_bytes())?;
+    writer.write_all(escaped_filename.as_bytes())?;
 
     // Print closing parenthesis and sum
-    write!(stdout, ") = {sum}")?;
+    write!(writer, ") = {sum}")?;
     Ok(())
 }
 
