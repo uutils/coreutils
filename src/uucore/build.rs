@@ -14,6 +14,7 @@ use cfg_aliases::cfg_aliases;
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     cfg_aliases! {
+        selinux: { all(feature = "feat_selinux", any(target_os = "android", target_os = "linux")) },
         systemd_logind: { all(feature = "feat_systemd_logind", target_os = "linux") },
     }
 
