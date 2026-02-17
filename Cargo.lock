@@ -4169,6 +4169,7 @@ dependencies = [
 name = "uu_stat"
 version = "0.8.0"
 dependencies = [
+ "cfg_aliases",
  "clap",
  "fluent",
  "thiserror 2.0.18",
