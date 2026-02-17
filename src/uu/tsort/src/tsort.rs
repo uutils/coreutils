@@ -236,7 +236,8 @@ impl Graph {
         Self {
             name_sym,
             interner,
-            nodes: FxHashMap::default(),
+            // avoid cost of resize
+            nodes: FxHashMap::with_capacity_and_hasher(128, rustc_hash::FxBuildHasher),
         }
     }
 
@@ -358,7 +359,7 @@ impl Graph {
         let mut nodes: Vec<_> = self.nodes.keys().copied().collect();
         nodes.sort_unstable_by(|a, b| self.get_node_name(*a).cmp(self.get_node_name(*b)));
 
-        let mut visited = FxHashMap::default();
+        let mut visited = FxHashMap::with_capacity_and_hasher(128, rustc_hash::FxBuildHasher);
         let mut stack = Vec::with_capacity(self.nodes.len());
         for &node in &nodes {
             if self.dfs(node, &mut visited, &mut stack) {
