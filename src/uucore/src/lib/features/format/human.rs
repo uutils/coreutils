@@ -59,18 +59,27 @@ pub fn human_readable(size: u64, sfmt: SizeFormat) -> String {
 /// - `'\0'` for C/POSIX locale (no separator)
 /// - The locale's grouping separator character (e.g., ',' for en_US, '\u{202f}' for fr_FR)
 pub fn get_thousands_separator() -> char {
-    use crate::i18n::decimal::locale_grouping_separator;
-    use crate::i18n::get_numeric_locale;
+    #[cfg(feature = "i18n-decimal")]
+    {
+        use crate::i18n::decimal::locale_grouping_separator;
+        use crate::i18n::get_numeric_locale;
 
-    // Check if this is C/POSIX locale (no thousands separator)
-    let (locale, _) = get_numeric_locale();
-    if locale.to_string() == "und" {
-        return '\0';
+        // Check if this is C/POSIX locale (no thousands separator)
+        let (locale, _) = get_numeric_locale();
+        if locale.to_string() == "und" {
+            return '\0';
+        }
+
+        // Get the grouping separator from ICU (cached via OnceLock)
+        let sep = locale_grouping_separator();
+        sep.chars().next().unwrap_or(',')
     }
 
-    // Get the grouping separator from ICU (cached via OnceLock)
-    let sep = locale_grouping_separator();
-    sep.chars().next().unwrap_or(',')
+    #[cfg(not(feature = "i18n-decimal"))]
+    {
+        // Fallback when i18n-decimal is not enabled: use comma
+        ','
+    }
 }
 
 /// Format a number with thousands separators based on LC_NUMERIC locale.
