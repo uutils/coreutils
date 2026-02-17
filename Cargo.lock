@@ -3565,6 +3565,7 @@ dependencies = [
 name = "uu_id"
 version = "0.6.0"
 dependencies = [
+ "cfg_aliases",
  "clap",
  "fluent",
  "selinux",
