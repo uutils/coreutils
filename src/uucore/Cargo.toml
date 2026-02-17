@@ -108,7 +108,7 @@ xattr = { workspace = true, optional = true }
 [dev-dependencies]
 tempfile = { workspace = true }
 
-[target.'cfg(target_os = "linux")'.dependencies]
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 procfs = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
@@ -167,7 +167,7 @@ mode = ["libc"]
 perms = ["entries", "libc", "walkdir"]
 buf-copy = []
 parser-num = ["extendedbigdecimal", "num-traits"]
-parser-size = ["parser-num", "procfs"]
+parser-size = ["parser-num", "procfs", "libc", "windows-sys"]
 parser-glob = ["glob"]
 parser = ["parser-num", "parser-size", "parser-glob"]
 pipes = []

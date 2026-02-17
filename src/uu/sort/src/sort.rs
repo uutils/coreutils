@@ -339,9 +339,9 @@ impl GlobalSettings {
         let size = Parser::default()
             .with_allow_list(&[
                 "b", "k", "K", "m", "M", "g", "G", "t", "T", "P", "E", "Z", "Y", "R", "Q", "%",
-            ])
-            .with_default_unit("K")
-            .with_b_byte_count(true)
+            ])?
+            .with_default_unit("K")?
+            .with_b_byte_count(true)?
             .parse(input.trim())?;
 
         usize::try_from(size).map_err(|_| {
@@ -3080,6 +3080,9 @@ fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String
         }
         ParseSizeError::SizeTooBig(_) => {
             translate!("sort-option-arg-too-large", "option" => option, "arg" => s.quote())
+        }
+        ParseSizeError::BuilderConfig(e) => {
+            translate!("sort-error-builder-config", "option" => option, "error" => e)
         }
     }
 }

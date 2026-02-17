@@ -821,5 +821,8 @@ fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String
         ParseSizeError::SizeTooBig(_) => {
             translate!("od-error-argument-too-large", "option" => option, "value" => s.quote())
         }
+        ParseSizeError::BuilderConfig(e) => {
+            translate!("od-error-builder-config", "option" => option, "error" => e)
+        }
     }
 }

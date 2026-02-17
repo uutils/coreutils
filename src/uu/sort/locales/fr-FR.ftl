@@ -53,6 +53,7 @@ sort-failed-fetch-rlimit = Échec de récupération de rlimit
 sort-invalid-suffix-in-option-arg = suffixe invalide dans l'argument --{$option} {$arg}
 sort-invalid-option-arg = argument --{$option} invalide {$arg}
 sort-option-arg-too-large = argument --{$option} {$arg} trop grand
+sort-error-builder-config = configuration invalide pour {$option}: {$error}
 sort-error-disorder = {$file}:{$line_number}: désordre : {$line}
 sort-error-buffer-size-too-big = La taille du tampon {$size} ne rentre pas dans l'espace d'adressage
 sort-error-no-match-for-key = ^ aucune correspondance pour la clé
