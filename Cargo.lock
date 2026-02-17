@@ -4501,6 +4501,7 @@ dependencies = [
  "blake2b_simd",
  "blake3",
  "bstr",
+ "cfg_aliases",
  "clap",
  "crc-fast",
  "data-encoding",
