@@ -4244,6 +4244,7 @@ dependencies = [
 name = "uu_stat"
 version = "0.10.0"
 dependencies = [
+ "cfg_aliases",
  "clap",
  "fluent",
  "rustix",

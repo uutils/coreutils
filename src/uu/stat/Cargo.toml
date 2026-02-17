@@ -30,6 +30,9 @@ uucore = { workspace = true, features = [
 thiserror = { workspace = true }
 fluent = { workspace = true }
 
+[build-dependencies]
+cfg_aliases = { workspace = true }
+
 [features]
 selinux = ["uucore/selinux"]
 
