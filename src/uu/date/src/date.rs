@@ -12,8 +12,8 @@ use clap::{Arg, ArgAction, Command};
 use jiff::fmt::strtime::{self, BrokenDownTime, Config, PosixCustom};
 use jiff::tz::{TimeZone, TimeZoneDatabase};
 use jiff::{Timestamp, Zoned};
+use rustc_hash::FxHashMap;
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::path::PathBuf;
@@ -787,12 +787,13 @@ static PREFERRED_TZ_MAPPINGS: &[(&str, &str)] = &[
 ];
 
 /// Lazy-loaded timezone abbreviation lookup map built from IANA database.
-static TZ_ABBREV_CACHE: OnceLock<HashMap<String, String>> = OnceLock::new();
+static TZ_ABBREV_CACHE: OnceLock<FxHashMap<String, String>> = OnceLock::new();
 
 /// Build timezone abbreviation lookup map from IANA database.
 /// Uses preferred mappings for disambiguation, then searches all timezones.
-fn build_tz_abbrev_map() -> HashMap<String, String> {
-    let mut map = HashMap::new();
+fn build_tz_abbrev_map() -> FxHashMap<String, String> {
+    // todo: optimiza initial size from actual data
+    let mut map = FxHashMap::with_capacity_and_hasher(1024, Default::default());
 
     // First, add preferred mappings (these take precedence)
     for (abbrev, iana) in PREFERRED_TZ_MAPPINGS {
