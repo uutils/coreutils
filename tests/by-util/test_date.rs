@@ -36,6 +36,18 @@ fn test_extra_operands() {
 }
 
 #[test]
+fn test_bad_format_option_missing_leading_plus_after_d_flag() {
+    let bad_arguments = vec!["q", "a", "test", "%Y-%m-%d"];
+
+    for bad_argument in bad_arguments {
+        new_ucmd!()
+            .args(&["--date", "1996-01-31", bad_argument])
+            .fails_with_code(1)
+            .stderr_contains(format!("the argument {bad_argument} lacks a leading '+';\nwhen using an option to specify date(s), any non-option\nargument must be a format string beginning with '+'"), );
+    }
+}
+
+#[test]
 fn test_invalid_long_option() {
     new_ucmd!()
         .arg("--fB")
