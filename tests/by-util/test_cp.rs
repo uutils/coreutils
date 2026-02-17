@@ -6500,8 +6500,7 @@ fn test_cp_archive_preserves_directory_permissions() {
         assert_eq!(
             mode & 0o777,
             0o755,
-            "Directory {} has incorrect permissions: {:o}",
-            path,
+            "Directory {path} has incorrect permissions: {:o}",
             mode & 0o777
         );
     };
@@ -6779,8 +6778,7 @@ fn test_cp_preserve_selinux_admin_context() {
 #[test]
 #[cfg(feature = "feat_selinux")]
 fn test_cp_selinux_context_priority() {
-    // This test verifies that the priority order is respected:
-    // -Z > --context > --preserve=context
+    // This test verifies that -Z takes priority over --context
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -6832,21 +6830,12 @@ fn test_cp_selinux_context_priority() {
         .arg("z_and_context.txt")
         .succeeds();
 
-    // 5. Using both -Z and --preserve=context (Z should win)
-    ts.ucmd()
-        .arg("-Z")
-        .arg("--preserve=context")
-        .arg(TEST_HELLO_WORLD_SOURCE)
-        .arg("z_and_preserve.txt")
-        .succeeds();
-
     // Get all the contexts
     let source_ctx = get_getfattr_output(&at.plus_as_string(TEST_HELLO_WORLD_SOURCE));
     let preserve_ctx = get_getfattr_output(&at.plus_as_string("preserve.txt"));
     let context_ctx = get_getfattr_output(&at.plus_as_string("context.txt"));
     let z_ctx = get_getfattr_output(&at.plus_as_string("z_flag.txt"));
     let z_and_context_ctx = get_getfattr_output(&at.plus_as_string("z_and_context.txt"));
-    let z_and_preserve_ctx = get_getfattr_output(&at.plus_as_string("z_and_preserve.txt"));
 
     if source_ctx.is_empty() {
         println!("Skipping test assertions: Failed to get SELinux contexts");
@@ -6863,10 +6852,6 @@ fn test_cp_selinux_context_priority() {
     assert_eq!(
         z_ctx, z_and_context_ctx,
         "-Z context should be the same regardless of --context"
-    );
-    assert_eq!(
-        z_ctx, z_and_preserve_ctx,
-        "-Z context should be the same regardless of --preserve=context"
     );
 }
 
@@ -7502,7 +7487,7 @@ fn test_cp_to_existing_file_permissions() {
 
     let mut src_permissions = std::fs::metadata(&src_path).unwrap().permissions();
     src_permissions.set_readonly(true);
-    std::fs::set_permissions(&src_path, src_permissions).unwrap();
+    set_permissions(&src_path, src_permissions).unwrap();
 
     let dst_mode = std::fs::metadata(&dst_path).unwrap().permissions().mode();
 
@@ -7531,7 +7516,7 @@ fn test_cp_xattr_enotsup_handling() {
     }
 
     // Check if /dev/shm exists
-    if !std::path::Path::new("/dev/shm").exists() {
+    if !Path::new("/dev/shm").exists() {
         return; // Skip: /dev/shm not available
     }
 
@@ -7570,4 +7555,156 @@ fn test_cp_xattr_enotsup_handling() {
     for f in ["/dev/shm/t1", "/dev/shm/t2", "/dev/shm/t3"] {
         std::fs::remove_file(f).ok();
     }
+}
+
+#[test]
+#[cfg(not(target_os = "windows"))]
+fn test_cp_preserve_directory_permissions_by_default() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let dir = "a/b/c/d";
+    let file = "foo.txt";
+
+    at.mkdir_all(dir);
+
+    let file_path = format!("{dir}/{file}");
+
+    at.touch(file_path);
+
+    scene.cmd("chmod").arg("-R").arg("555").arg("a").succeeds();
+    scene.cmd("cp").arg("-r").arg("a").arg("b").succeeds();
+
+    scene.ucmd().arg("-r").arg("a").arg("c").succeeds();
+
+    // only verify owner bits on Android
+    if cfg!(target_os = "android") {
+        assert_eq!(at.metadata("b").mode() & 0o700, 0o500);
+        assert_eq!(at.metadata("b/b").mode() & 0o700, 0o500);
+        assert_eq!(at.metadata("b/b/c").mode() & 0o700, 0o500);
+        assert_eq!(at.metadata("b/b/c/d").mode() & 0o700, 0o500);
+
+        assert_eq!(at.metadata("c").mode() & 0o700, 0o500);
+        assert_eq!(at.metadata("c/b").mode() & 0o700, 0o500);
+        assert_eq!(at.metadata("c/b/c").mode() & 0o700, 0o500);
+        assert_eq!(at.metadata("c/b/c/d").mode() & 0o700, 0o500);
+    } else {
+        assert_eq!(at.metadata("b").mode(), 0o40555);
+        assert_eq!(at.metadata("b/b").mode(), 0o40555);
+        assert_eq!(at.metadata("b/b/c").mode(), 0o40555);
+        assert_eq!(at.metadata("b/b/c/d").mode(), 0o40555);
+
+        assert_eq!(at.metadata("c").mode(), 0o40555);
+        assert_eq!(at.metadata("c/b").mode(), 0o40555);
+        assert_eq!(at.metadata("c/b/c").mode(), 0o40555);
+        assert_eq!(at.metadata("c/b/c/d").mode(), 0o40555);
+    }
+}
+
+#[test]
+#[cfg(not(target_os = "windows"))]
+fn test_cp_existing_perm_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene
+        .cmd("mkdir")
+        .arg("-p")
+        .arg("-m")
+        .arg("ug-s,u=rwx,g=rwx,o=rx")
+        .arg("src/dir")
+        .umask(0o022)
+        .succeeds();
+    scene
+        .cmd("mkdir")
+        .arg("-p")
+        .arg("-m")
+        .arg("ug-s,u=rwx,g=,o=")
+        .arg("dst/dir")
+        .umask(0o022)
+        .succeeds();
+
+    scene.ucmd().arg("-r").arg("src/.").arg("dst/").succeeds();
+
+    let mode = at.metadata("dst/dir").mode();
+
+    assert_eq!(mode, 0o40700);
+}
+
+#[test]
+#[cfg(not(target_os = "windows"))]
+fn test_cp_gnu_preserve_mode() {
+    use std::io;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene.cmd("mkdir").arg("d1").succeeds();
+    scene.cmd("mkdir").arg("d2").succeeds();
+    scene.cmd("chmod").arg("705").arg("d2").succeeds();
+
+    scene
+        .ucmd()
+        .arg("--no-preserve=mode")
+        .arg("-r")
+        .arg("d2")
+        .arg("d3")
+        .set_stdout(io::stdout())
+        .succeeds();
+
+    let d1_mode = at.metadata("d1").mode();
+    let d3_mode = at.metadata("d3").mode();
+
+    assert_eq!(d1_mode, d3_mode);
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_cp_a_z_overrides_context() {
+    // Verifies -aZ succeeds (-Z overrides implicit --preserve=context from -a)
+    use std::path::Path;
+    use uucore::selinux::set_selinux_security_context;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("src");
+
+    let ctx = "unconfined_u:object_r:user_tmp_t:s0".to_string();
+    if set_selinux_security_context(Path::new(&at.plus_as_string("src")), Some(&ctx)).is_err() {
+        return;
+    }
+
+    ucmd.args(&["-aZ", "src", "dst"]).succeeds();
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_cp_a_preserves_context() {
+    use std::path::Path;
+    use uucore::selinux::{get_selinux_security_context, set_selinux_security_context};
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("src");
+
+    let ctx = "unconfined_u:object_r:user_tmp_t:s0".to_string();
+    if set_selinux_security_context(Path::new(&at.plus_as_string("src")), Some(&ctx)).is_err() {
+        return;
+    }
+
+    let src_ctx =
+        get_selinux_security_context(Path::new(&at.plus_as_string("src")), false).unwrap();
+    ucmd.args(&["-a", "src", "dst"]).succeeds();
+    let dst_ctx =
+        get_selinux_security_context(Path::new(&at.plus_as_string("dst")), false).unwrap();
+
+    assert_eq!(src_ctx, dst_ctx, "-a should preserve SELinux context");
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_cp_preserve_context_with_z_fails() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("src");
+    ucmd.args(&["--preserve=context", "-Z", "src", "dst"])
+        .fails()
+        .stderr_contains("cannot combine");
 }

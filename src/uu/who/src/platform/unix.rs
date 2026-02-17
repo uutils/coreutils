@@ -207,7 +207,7 @@ impl Who {
         };
         if self.short_list {
             let users = utmpx::Utmpx::iter_all_records_from(f)
-                .filter(|ut| ut.is_user_process())
+                .filter(UtmpxRecord::is_user_process)
                 .map(|ut| ut.user())
                 .collect::<Vec<_>>();
             println!("{}", users.join(" "));
@@ -354,23 +354,20 @@ impl Who {
         p.push(ut.tty_device().as_str());
         let mesg;
         let last_change;
-        match p.metadata() {
-            Ok(meta) => {
-                #[cfg(all(
-                    not(target_os = "android"),
-                    not(target_os = "freebsd"),
-                    not(target_vendor = "apple")
-                ))]
-                let iwgrp = S_IWGRP;
-                #[cfg(any(target_os = "android", target_os = "freebsd", target_vendor = "apple"))]
-                let iwgrp = S_IWGRP as u32;
-                mesg = if meta.mode() & iwgrp == 0 { '-' } else { '+' };
-                last_change = meta.atime();
-            }
-            _ => {
-                mesg = '?';
-                last_change = 0;
-            }
+        if let Ok(meta) = p.metadata() {
+            #[cfg(all(
+                not(target_os = "android"),
+                not(target_os = "freebsd"),
+                not(target_vendor = "apple")
+            ))]
+            let iwgrp = S_IWGRP;
+            #[cfg(any(target_os = "android", target_os = "freebsd", target_vendor = "apple"))]
+            let iwgrp = S_IWGRP as u32;
+            mesg = if meta.mode() & iwgrp == 0 { '-' } else { '+' };
+            last_change = meta.atime();
+        } else {
+            mesg = '?';
+            last_change = 0;
         }
 
         let idle = if last_change == 0 {

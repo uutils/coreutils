@@ -83,10 +83,13 @@ pr-help-indent =
 pr-help-join-lines =
   fusionner les lignes complètes, désactive la troncature de ligne -W, aucun
                   alignement de colonne, --sep-string[=CHAÎNE] définit les séparateurs
+pr-help-expand-tabs = convertir les CHARs d'entrée (TABs) en largeur de tabulation WIDTH (8)
 pr-help-help = Afficher les informations d'aide
 
 # Texte d'en-tête de page
 pr-page = Page
+
+pr-try-help-message = Essayez 'pr --help' pour plus d'informations.
 
 # Messages d'erreur
 pr-error-reading-input = pr : La lecture depuis l'entrée {$file} a donné une erreur
@@ -97,3 +100,4 @@ pr-error-no-such-file = pr : impossible d'ouvrir {$file}, Aucun fichier ou répe
 pr-error-column-merge-conflict = impossible de spécifier le nombre de colonnes lors de l'impression en parallèle
 pr-error-across-merge-conflict = impossible de spécifier à la fois l'impression transversale et l'impression en parallèle
 pr-error-invalid-pages-range = argument --pages invalide '{$start}:{$end}'
+pr-error-invalid-expand-tab-argument = Caractères supplémentaires ou nombre invalide dans l'argument de '-e': '{$arg}'

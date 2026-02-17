@@ -59,7 +59,7 @@ fn mv_multiple_to_dir(bencher: Bencher) {
             (temp_dir, args)
         })
         .bench_values(|(temp_dir, args)| {
-            let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+            let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
             black_box(run_util_function(uumain, &arg_refs));
             drop(temp_dir);
         });

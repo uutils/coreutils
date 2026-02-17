@@ -93,7 +93,7 @@ impl MultifileReader<'_> {
                                 io::ErrorKind::PermissionDenied => "Permission denied",
                                 _ => "I/O error",
                             };
-                            show_error!("{}: {}", fname.maybe_quote().external(true), error_msg);
+                            show_error!("{}: {error_msg}", fname.maybe_quote().external(true));
                             self.any_err = true;
                         }
                     }

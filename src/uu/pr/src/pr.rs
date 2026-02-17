@@ -10,7 +10,8 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use itertools::Itertools;
 use regex::Regex;
 use std::fs::metadata;
-use std::io::{Read, Write, stdin, stdout};
+use std::io::{Read, Write, stderr, stdin, stdout};
+use std::str::Utf8Error;
 use std::string::FromUtf8Error;
 use std::time::SystemTime;
 use thiserror::Error;
@@ -57,6 +58,7 @@ mod options {
     pub const JOIN_LINES: &str = "join-lines";
     pub const HELP: &str = "help";
     pub const FILES: &str = "files";
+    pub const EXPAND_TABS: &str = "expand-tabs";
 }
 
 struct OutputOptions {
@@ -79,6 +81,7 @@ struct OutputOptions {
     join_lines: bool,
     col_sep_for_printing: String,
     line_width: Option<usize>,
+    expand_tabs: Option<ExpandTabsOptions>,
 }
 
 /// One line of an input file, annotated with file, page, and line number.
@@ -96,10 +99,24 @@ impl FileLine {
         page_number: usize,
         line_number: usize,
         buf: &[u8],
-    ) -> Result<Self, FromUtf8Error> {
+        options: &OutputOptions,
+    ) -> Result<Self, PrError> {
         // TODO Don't read bytes to String just to directly write them
         // out again anyway.
-        let line_content = String::from_utf8(buf.to_vec())?;
+        let line_content = if let Some(expand_tabs) = &options.expand_tabs {
+            // Anticipate a few expandable chars to reduce reallocations
+            let mut line_content =
+                String::with_capacity(buf.len() + buf.len() / 20 * expand_tabs.width as usize);
+            // validate utf correctness
+            let s = std::str::from_utf8(buf)?;
+            for b in s.as_bytes() {
+                apply_expand_tab(&mut line_content, *b, expand_tabs);
+            }
+            line_content
+        } else {
+            String::from_utf8(buf.to_vec())?
+        };
+
         Ok(Self {
             file_id,
             page_number,
@@ -123,6 +140,21 @@ struct NumberingMode {
     first_number: usize,
 }
 
+#[derive(Debug)]
+struct ExpandTabsOptions {
+    input_char: char,
+    width: i32,
+}
+
+impl Default for ExpandTabsOptions {
+    fn default() -> Self {
+        Self {
+            width: 8,
+            input_char: TAB,
+        }
+    }
+}
+
 impl Default for NumberingMode {
     fn default() -> Self {
         Self {
@@ -143,6 +175,14 @@ impl From<std::io::Error> for PrError {
 
 impl From<FromUtf8Error> for PrError {
     fn from(err: FromUtf8Error) -> Self {
+        Self::EncounteredErrors {
+            msg: err.to_string(),
+        }
+    }
+}
+
+impl From<Utf8Error> for PrError {
+    fn from(err: Utf8Error) -> Self {
         Self::EncounteredErrors {
             msg: err.to_string(),
         }
@@ -326,6 +366,14 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath),
         )
+        .arg(
+            Arg::new(options::EXPAND_TABS)
+                .long(options::EXPAND_TABS)
+                .short('e')
+                .num_args(1)
+                .value_name("[CHAR][WIDTH]")
+                .help(translate!("pr-help-expand-tabs")),
+        )
 }
 
 #[uucore::main]
@@ -339,7 +387,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut files = matches
         .get_many::<String>(options::FILES)
-        .map(|v| v.map(|s| s.as_str()).collect::<Vec<_>>())
+        .map(|v| v.map(String::as_str).collect::<Vec<_>>())
         .unwrap_or_default()
         .clone();
     if files.is_empty() {
@@ -390,6 +438,7 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
     let column_page_option = Regex::new(r"^[-+]\d+.*").unwrap();
     let num_regex = Regex::new(r"^[^-]\d*$").unwrap();
     let n_regex = Regex::new(r"^-n\s*$").unwrap();
+    let e_regex = Regex::new(r"^-e").unwrap();
     let mut arguments = args.to_owned();
     let num_option = args.iter().find_position(|x| n_regex.is_match(x.trim()));
     if let Some((pos, _value)) = num_option {
@@ -402,6 +451,17 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
         }
     }
 
+    // To ensure not to accidentally delete the next argument after a short flag for -e we insert
+    // the default values for the -e flag is '-e' is present without direct arguments.
+    let expand_tabs_option = arguments
+        .iter()
+        .find_position(|x| e_regex.is_match(x.trim()));
+    if let Some((pos, value)) = expand_tabs_option {
+        if value.trim().len() <= 2 {
+            arguments[pos] = "-e\t8".to_string();
+        }
+    }
+
     arguments
         .into_iter()
         .filter(|i| !column_page_option.is_match(i))
@@ -410,7 +470,7 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
 
 fn print_error(matches: &ArgMatches, err: &PrError) {
     if !matches.get_flag(options::NO_FILE_WARNINGS) {
-        eprintln!("{err}");
+        let _ = writeln!(stderr(), "{err}");
     }
 }
 
@@ -522,6 +582,26 @@ fn build_options(
                 None
             }
         });
+
+    let expand_tabs = matches
+        .get_one::<String>(options::EXPAND_TABS)
+        .map(|s| {
+            s.chars().next().map_or(Ok(ExpandTabsOptions::default()), |c| {
+                if c.is_ascii_digit() {
+                    s
+                        .parse()
+                        .map_err(|_e| PrError::EncounteredErrors { msg: format!("{}\n{}", translate!("pr-error-invalid-expand-tab-argument", "arg" => s), translate!("pr-try-help-message")) })
+                        .map(|width| ExpandTabsOptions{input_char: TAB, width})
+                } else if s.len() > 1 {
+                    s[1..]
+                        .parse()
+                        .map_err(|_e| PrError::EncounteredErrors { msg: format!("{}\n{}", translate!("pr-error-invalid-expand-tab-argument", "arg" => &s[1..]), translate!("pr-try-help-message")) })
+                        .map(|width| ExpandTabsOptions{input_char: c, width})
+                } else {
+                    Ok(ExpandTabsOptions{input_char: c, width: 8})
+                }
+            })
+        }).transpose()?;
 
     let double_space = matches.get_flag(options::DOUBLE_SPACE);
 
@@ -759,6 +839,7 @@ fn build_options(
         join_lines,
         col_sep_for_printing,
         line_width,
+        expand_tabs,
     })
 }
 
@@ -773,6 +854,27 @@ fn read_to_end(path: &str) -> Result<Vec<u8>, std::io::Error> {
         Ok(buf)
     } else {
         std::fs::read(path)
+    }
+}
+
+fn apply_expand_tab(chunk: &mut String, byte: u8, expand_options: &ExpandTabsOptions) {
+    if byte == expand_options.input_char as u8 {
+        // If the byte encountered is the input char we use width to calculate
+        // the amount of spaces needed (if no input char given we stored '\t'
+        // in our struct)
+        let spaces_needed =
+            expand_options.width as usize - (chunk.len() % expand_options.width as usize);
+        chunk.extend(std::iter::repeat_n(' ', spaces_needed));
+    } else if byte == TAB as u8 {
+        // If a byte got passed to the -e flag (eg -ea1)  which is not '\t' GNU
+        // still expands it but does not use an optionally given width parameter
+        // but does the '\t' expansion with the default value (8)
+        let spaces_needed = 8 - (chunk.len() % 8);
+        chunk.extend(std::iter::repeat_n(' ', spaces_needed));
+    } else {
+        // This arm means the byte is neither '\t' nor the bytes to be
+        // expanded
+        chunk.push(byte as char);
     }
 }
 
@@ -805,7 +907,7 @@ fn get_pages(
     options: &OutputOptions,
     file_id: usize,
     buf: &[u8],
-) -> Result<Vec<(usize, Vec<FileLine>)>, FromUtf8Error> {
+) -> Result<Vec<(usize, Vec<FileLine>)>, PrError> {
     let start_page = options.start_page;
     let end_page = options.end_page;
     let lines_needed_per_page = lines_to_read_for_page(options);
@@ -840,7 +942,8 @@ fn get_pages(
                 // If the file has the pattern `\n\f`, don't treat the
                 // `\f` as its own line; instead ignore the empty line.
             } else {
-                let file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i])?;
+                let file_line =
+                    FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i], options)?;
                 page.push(file_line);
             }
 
@@ -865,7 +968,8 @@ fn get_pages(
                 // If the file has the pattern `\f\n`, don't treat the
                 // `\n` as its own line; instead ignore the empty line.
             } else {
-                let file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i])?;
+                let file_line =
+                    FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i], options)?;
                 page.push(file_line);
                 line_num += 1;
             }
@@ -887,7 +991,7 @@ fn get_pages(
 
     // Consider all trailing bytes as the last line.
     if prev < buf.len() {
-        let file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..])?;
+        let file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..], options)?;
         page.push(file_line);
     }
 
@@ -989,7 +1093,7 @@ fn print_page(
     lines: &[FileLine],
     options: &OutputOptions,
     page: usize,
-) -> Result<usize, std::io::Error> {
+) -> Result<(), std::io::Error> {
     let line_separator = options.line_separator.as_bytes();
     let page_separator = options.page_separator_char.as_bytes();
 
@@ -1004,7 +1108,7 @@ fn print_page(
         out.write_all(line_separator)?;
     }
 
-    let lines_written = write_columns(lines, options, &mut out)?;
+    write_columns(lines, options, &mut out)?;
 
     for (index, x) in trailer_content.iter().enumerate() {
         out.write_all(x.as_bytes())?;
@@ -1014,7 +1118,75 @@ fn print_page(
     }
     out.write_all(page_separator)?;
     out.flush()?;
-    Ok(lines_written)
+    Ok(())
+}
+
+/// Group the lines of the input file in columns read left-to-right.
+fn to_table_across(
+    content_lines_per_page: usize,
+    columns: usize,
+    lines: &[FileLine],
+) -> Vec<Vec<Option<&FileLine>>> {
+    (0..content_lines_per_page)
+        .map(|i| (0..columns).map(|j| lines.get(i * columns + j)).collect())
+        .collect()
+}
+
+/// Group the lines of the input files in columns, one column per file.
+fn to_table_merged(
+    content_lines_per_page: usize,
+    columns: usize,
+    filled_lines: Vec<Option<&FileLine>>,
+) -> Vec<Vec<Option<&FileLine>>> {
+    (0..content_lines_per_page)
+        .map(|i| {
+            (0..columns)
+                .map(|j| {
+                    *filled_lines
+                        .get(content_lines_per_page * j + i)
+                        .unwrap_or(&None)
+                })
+                .collect()
+        })
+        .collect()
+}
+
+/// Group lines of the file in columns, going top-to-bottom then left-to-right.
+///
+/// This function should be applied when there are more lines than the
+/// total number of cells in the table.
+fn to_table(
+    content_lines_per_page: usize,
+    columns: usize,
+    lines: &[FileLine],
+) -> Vec<Vec<Option<&FileLine>>> {
+    (0..content_lines_per_page)
+        .map(|i| {
+            (0..columns)
+                .map(|j| lines.get(content_lines_per_page * j + i))
+                .collect()
+        })
+        .collect()
+}
+
+/// Group lines of the file in columns, going top-to-bottom then left-to-right.
+///
+/// This function should be applied when there are fewer lines than the
+/// total number of cells in the table.
+fn to_table_short_file(
+    content_lines_per_page: usize,
+    columns: usize,
+    lines: &[FileLine],
+) -> Vec<Vec<Option<&FileLine>>> {
+    let num_rows = lines.len() / columns;
+    let mut table: Vec<Vec<_>> = (0..num_rows)
+        .map(|i| (0..columns).map(|j| lines.get(num_rows * j + i)).collect())
+        .collect();
+    // Fill the rest with Nones.
+    for _ in num_rows..content_lines_per_page {
+        table.push(vec![None; columns]);
+    }
+    table
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -1022,7 +1194,7 @@ fn write_columns(
     lines: &[FileLine],
     options: &OutputOptions,
     out: &mut impl Write,
-) -> Result<usize, std::io::Error> {
+) -> Result<(), std::io::Error> {
     let line_separator = options.content_line_separator.as_bytes();
 
     let content_lines_per_page = if options.double_space {
@@ -1035,7 +1207,6 @@ fn write_columns(
         .merge_files_print
         .unwrap_or_else(|| get_columns(options));
     let line_width = options.line_width;
-    let mut lines_printed = 0;
     let feed_line_present = options.form_feed_used;
     let mut not_found_break = false;
 
@@ -1044,7 +1215,7 @@ fn write_columns(
         .as_ref()
         .is_some_and(|i| i.across_mode);
 
-    let mut filled_lines = Vec::new();
+    let mut filled_lines: Vec<Option<&FileLine>> = Vec::new();
     if options.merge_files_print.is_some() {
         let mut offset = 0;
         for col in 0..columns {
@@ -1064,23 +1235,19 @@ fn write_columns(
         }
     }
 
-    let table: Vec<Vec<_>> = (0..content_lines_per_page)
-        .map(move |a| {
-            (0..columns)
-                .map(|i| {
-                    if across_mode {
-                        lines.get(a * columns + i)
-                    } else if options.merge_files_print.is_some() {
-                        *filled_lines
-                            .get(content_lines_per_page * i + a)
-                            .unwrap_or(&None)
-                    } else {
-                        lines.get(content_lines_per_page * i + a)
-                    }
-                })
-                .collect()
-        })
-        .collect();
+    // Group the flat list of lines into a 2-dimensional table of
+    // cells, where each row will be printed as a single line in the
+    // output.
+    let merge = options.merge_files_print.is_some();
+    let table = if !merge && (lines.len() < (content_lines_per_page * columns)) {
+        to_table_short_file(content_lines_per_page, columns, lines)
+    } else if across_mode {
+        to_table_across(content_lines_per_page, columns, lines)
+    } else if merge {
+        to_table_merged(content_lines_per_page, columns, filled_lines)
+    } else {
+        to_table(content_lines_per_page, columns, lines)
+    };
 
     let blank_line = FileLine::default();
     for row in table {
@@ -1101,7 +1268,6 @@ fn write_columns(
                     get_line_for_printing(options, file_line, columns, i, line_width, indexes)
                         .as_bytes(),
                 )?;
-                lines_printed += 1;
             }
         }
         if not_found_break && feed_line_present {
@@ -1110,7 +1276,7 @@ fn write_columns(
         out.write_all(line_separator)?;
     }
 
-    Ok(lines_printed)
+    Ok(())
 }
 
 fn get_line_for_printing(
@@ -1202,11 +1368,8 @@ fn header_content(options: &OutputOptions, page: usize) -> Vec<String> {
         let padding_after_filename = space_for_filename - filename_len - padding_before_filename;
 
         format!(
-            "{date_part}{:width1$}{filename}{:width2$}{page_part}",
-            "",
-            "",
-            width1 = padding_before_filename,
-            width2 = padding_after_filename
+            "{date_part}{:padding_before_filename$}{filename}{:padding_after_filename$}{page_part}",
+            "", ""
         )
     } else {
         // If content is too long, just use single spaces

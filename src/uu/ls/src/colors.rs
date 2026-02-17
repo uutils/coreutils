@@ -376,7 +376,7 @@ impl<'a> StyleManager<'a> {
         } else if file_type.is_dir() {
             self.indicator_for_directory(path)
         } else {
-            self.indicator_for_special_file(file_type)
+            self.indicator_for_special_file(*file_type)
         }
     }
 
@@ -388,7 +388,7 @@ impl<'a> StyleManager<'a> {
 
         if target_missing {
             let orphan_raw = self.indicator_codes.get(&Indicator::OrphanedSymbolicLink);
-            let orphan_raw_is_empty = orphan_raw.is_some_and(|value| value.is_empty());
+            let orphan_raw_is_empty = orphan_raw.is_some_and(String::is_empty);
             if orphan_enabled && (!orphan_raw_is_empty || self.ln_color_from_target) {
                 return Some(Indicator::OrphanedSymbolicLink);
             }
@@ -478,7 +478,7 @@ impl<'a> StyleManager<'a> {
     }
 
     #[cfg(unix)]
-    fn indicator_for_special_file(&self, file_type: &std::fs::FileType) -> Option<Indicator> {
+    fn indicator_for_special_file(&self, file_type: fs::FileType) -> Option<Indicator> {
         if file_type.is_fifo() && self.has_indicator_style(Indicator::FIFO) {
             return Some(Indicator::FIFO);
         }
@@ -495,7 +495,7 @@ impl<'a> StyleManager<'a> {
     }
 
     #[cfg(not(unix))]
-    fn indicator_for_special_file(&self, _file_type: &std::fs::FileType) -> Option<Indicator> {
+    fn indicator_for_special_file(&self, _file_type: fs::FileType) -> Option<Indicator> {
         None
     }
 
@@ -541,7 +541,7 @@ pub(crate) fn color_name(
         }
     }
 
-    if target_symlink.is_none() && path.file_type().is_some_and(|ft| ft.is_symlink()) {
+    if target_symlink.is_none() && path.file_type().is_some_and(fs::FileType::is_symlink) {
         if let Some(colored) = style_manager.color_symlink_name(path, name.clone(), wrap) {
             return colored;
         }

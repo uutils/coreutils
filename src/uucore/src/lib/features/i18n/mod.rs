@@ -7,8 +7,12 @@ use std::sync::OnceLock;
 
 use icu_locale::{Locale, locale};
 
+#[cfg(feature = "i18n-charmap")]
+pub mod charmap;
 #[cfg(feature = "i18n-collator")]
 pub mod collator;
+#[cfg(feature = "i18n-datetime")]
+pub mod datetime;
 #[cfg(feature = "i18n-decimal")]
 pub mod decimal;
 
@@ -31,7 +35,7 @@ const DEFAULT_LOCALE: Locale = locale!("und");
 /// 3. LANG
 ///
 /// Or fallback on Posix locale, with ASCII encoding.
-fn get_locale_from_env(locale_name: &str) -> (Locale, UEncoding) {
+pub fn get_locale_from_env(locale_name: &str) -> (Locale, UEncoding) {
     let locale_var = ["LC_ALL", locale_name, "LANG"]
         .iter()
         .find_map(|&key| std::env::var(key).ok());
@@ -55,10 +59,10 @@ fn get_locale_from_env(locale_name: &str) -> (Locale, UEncoding) {
             // locale. Treat the special case of the given locale being "C"
             // which becomes the default locale.
             let encoding = if (locale != DEFAULT_LOCALE || bcp47 == "C")
-                && split
-                    .next()
-                    .is_some_and(|enc| enc.to_lowercase() == "utf-8")
-            {
+                && split.next().is_some_and(|enc| {
+                    let lower = enc.to_lowercase();
+                    lower == "utf-8" || lower == "utf8"
+                }) {
                 UEncoding::Utf8
             } else {
                 UEncoding::Ascii
@@ -71,7 +75,7 @@ fn get_locale_from_env(locale_name: &str) -> (Locale, UEncoding) {
 }
 
 /// Get the collating locale from the environment
-fn get_collating_locale() -> &'static (Locale, UEncoding) {
+pub fn get_collating_locale() -> &'static (Locale, UEncoding) {
     static COLLATING_LOCALE: OnceLock<(Locale, UEncoding)> = OnceLock::new();
 
     COLLATING_LOCALE.get_or_init(|| get_locale_from_env("LC_COLLATE"))

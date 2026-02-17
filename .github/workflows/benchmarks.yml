@@ -1,6 +1,7 @@
 name: Benchmarks
 
-# spell-checker:ignore codspeed dtolnay Swatinem sccache
+# spell-checker:ignore (people) dtolnay Swatinem taiki-e
+# spell-checker:ignore (misc) codspeed sccache
 
 on:
   pull_request:
@@ -20,9 +21,13 @@ jobs:
   benchmarks:
     name: Run ${{ matrix.type }} benchmarks for ${{ matrix.package }} (CodSpeed)
     runs-on: ubuntu-latest
+    env:
+      RUSTC_WRAPPER: sccache
+      CARGO_INCREMENTAL: 0
+      SCCACHE_GHA_ENABLED: "true"
     strategy:
       matrix:
-        type: [performance, memory]
+        type: [simulation, memory]
         package: [
           uu_base64,
           uu_cksum,
@@ -48,7 +53,8 @@ jobs:
           uu_uniq,
           uu_wc,
           uu_factor,
-          uu_date
+          uu_date,
+          uu_csplit
         ]
     steps:
       - uses: actions/checkout@v6
@@ -62,26 +68,29 @@ jobs:
       - name: Run sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.9
 
-      - name: Install cargo-codspeed
+      - name: Install locales
         shell: bash
-        run: cargo install cargo-codspeed --locked
+        run: |
+          sudo locale-gen fr_FR.UTF-8
+          sudo update-locale
+
+      - name: Install tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-codspeed
 
       - name: Build benchmarks for ${{ matrix.package }} (${{ matrix.type }})
         shell: bash
         run: |
           echo "Building ${{ matrix.type }} benchmarks for ${{ matrix.package }}"
-          if [ "${{ matrix.type }}" = "memory" ]; then
-            cargo codspeed build -m analysis -p ${{ matrix.package }}
-          else
-            cargo codspeed build -p ${{ matrix.package }}
-          fi
+          cargo codspeed build -m ${{ matrix.type }} -p ${{ matrix.package }}
 
       - name: Run ${{ matrix.type }} benchmarks for ${{ matrix.package }}
         uses: CodSpeedHQ/action@v4
         env:
           CODSPEED_LOG: debug
         with:
-          mode: ${{ matrix.type == 'memory' && 'memory' || 'simulation' }}
+          mode: ${{ matrix.type }}
           run: |
             echo "Running ${{ matrix.type }} benchmarks for ${{ matrix.package }}"
             cargo codspeed run -p ${{ matrix.package }} > /dev/null

@@ -1181,3 +1181,71 @@ fn test_unit_separator() {
         new_ucmd!().args(args).succeeds().stdout_only(expected);
     }
 }
+
+#[test]
+fn test_debug_warnings() {
+    new_ucmd!()
+        .args(&["--debug", "4096"])
+        .succeeds()
+        .stdout_is("4096\n")
+        .stderr_is("numfmt: no conversion option specified\n");
+
+    new_ucmd!()
+        .args(&["--debug", "--padding=10", "4096"])
+        .succeeds()
+        .stdout_only("      4096\n");
+
+    new_ucmd!()
+        .args(&["--debug", "--header", "--to=iec", "4096"])
+        .succeeds()
+        .stdout_is("4.0K\n")
+        .stderr_is("numfmt: --header ignored with command-line input\n");
+}
+
+#[test]
+fn test_empty_delimiter_success() {
+    for (args, expected) in [
+        // Single space between number and suffix is allowed by default
+        (&["-d", "", "--from=si", "4.0 K"][..], "4000\n"),
+        // Trailing spaces without suffix are allowed
+        (&["-d", "", "--from=si", "4  "], "4\n"),
+        (&["-d", "", "--from=auto", "2 "], "2\n"),
+        (&["-d", "", "--from=auto", "2  "], "2\n"),
+        // Trailing space after suffix is allowed
+        (&["-d", "", "--from=auto", "2K "], "2000\n"),
+        // Explicit --unit-separator=" " allows single space
+        (
+            &["-d", "", "--from=si", "--unit-separator= ", "1 K"],
+            "1000\n",
+        ),
+        (
+            &["-d", "", "--from=iec", "--unit-separator= ", "2 M"],
+            "2097152\n",
+        ),
+    ] {
+        new_ucmd!().args(args).succeeds().stdout_only(expected);
+    }
+}
+
+#[test]
+fn test_empty_delimiter_multi_char_unit_separator() {
+    // Two-space unit separator allows two spaces between number and suffix
+    new_ucmd!()
+        .args(&["-d", "", "--from=si", "--unit-separator=  "])
+        .pipe_in("1  K\n2  M\n3  G\n")
+        .succeeds()
+        .stdout_only("1000\n2000000\n3000000000\n");
+}
+
+#[test]
+fn test_empty_delimiter_whitespace_rejection() {
+    new_ucmd!()
+        .args(&["-d", "", "--from=auto", "2  K"])
+        .fails_with_code(2)
+        .stderr_contains("invalid suffix in input");
+
+    new_ucmd!()
+        .args(&["-d", "", "--from=si", "--unit-separator=", "1 K"])
+        .fails_with_code(2)
+        .stderr_contains("invalid suffix in input");
+}

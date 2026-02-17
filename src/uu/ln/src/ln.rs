@@ -6,6 +6,7 @@
 // spell-checker:ignore (ToDO) srcpath targetpath EEXIST
 
 use clap::{Arg, ArgAction, Command};
+use std::io::{Write, stdout};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
 use uucore::fs::{make_path_relative_to, paths_refer_to_same_file};
@@ -318,27 +319,22 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
                 }
             }
             target_dir.to_path_buf()
-        } else {
-            match srcpath.as_os_str().to_str() {
-                Some(name) => {
-                    match Path::new(name).file_name() {
-                        Some(basename) => target_dir.join(basename),
-                        // This can be None only for "." or "..". Trying
-                        // to create a link with such name will fail with
-                        // EEXIST, which agrees with the behavior of GNU
-                        // coreutils.
-                        None => target_dir.join(name),
-                    }
-                }
-                None => {
-                    show_error!(
-                        "{}",
-                        translate!("ln-error-cannot-stat", "path" => srcpath.quote())
-                    );
-                    all_successful = false;
-                    continue;
-                }
+        } else if let Some(name) = srcpath.as_os_str().to_str() {
+            match Path::new(name).file_name() {
+                Some(basename) => target_dir.join(basename),
+                // This can be None only for "." or "..". Trying
+                // to create a link with such name will fail with
+                // EEXIST, which agrees with the behavior of GNU
+                // coreutils.
+                None => target_dir.join(name),
             }
+        } else {
+            show_error!(
+                "{}",
+                translate!("ln-error-cannot-stat", "path" => srcpath.quote())
+            );
+            all_successful = false;
+            continue;
         };
 
         if linked_destinations.contains(&targetpath) {
@@ -451,10 +447,15 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
     }
 
     if settings.verbose {
-        print!("{} -> {}", dst.quote(), source.quote());
+        let mut out = stdout();
+        write!(out, "{} -> {}", dst.quote(), source.quote())?;
         match backup_path {
-            Some(path) => println!(" ({})", translate!("ln-backup", "backup" => path.quote())),
-            None => println!(),
+            Some(path) => writeln!(
+                out,
+                " ({})",
+                translate!("ln-backup", "backup" => path.quote())
+            )?,
+            None => writeln!(out)?,
         }
     }
     Ok(())

@@ -6,7 +6,7 @@ name: GnuTests
 # spell-checker:ignore (options) Ccodegen Coverflow Cpanic Zpanic
 # spell-checker:ignore (people) Dawid Dziurla * dawidd dtolnay
 # spell-checker:ignore (vars) FILESET SUBDIRS XPASS
-# spell-checker:ignore userns
+# spell-checker:ignore userns nodocs
 
 # * note: to run a single test => `REPO/util/run-gnu-test.sh PATH/TO/TEST/SCRIPT`
 
@@ -38,29 +38,17 @@ jobs:
     name: Run GNU tests (native)
     runs-on: ubuntu-24.04
     steps:
-    #### Get the code, setup cache
+    #### Get the code
     - name: Checkout code (uutils)
       uses: actions/checkout@v6
       with:
         path: 'uutils'
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: stable
     - uses: Swatinem/rust-cache@v2
       with:
         workspaces: "./uutils -> target"
     - name: Checkout code (GNU coreutils)
       run: (mkdir -p gnu && cd gnu && bash ../uutils/util/fetch-gnu.sh)
-    - name: Restore files for faster configure and skipping make
-      uses: actions/cache@v5
-      id: cache-config-gnu
-      with:
-        path: |
-          gnu/config.cache
-          gnu/src/getlimits
-        key: ${{ runner.os }}-gnu-config-${{ hashFiles('gnu/NEWS') }}-${{ hashFiles('uutils/util/build-gnu.sh') }} # use build-gnu.sh for extremely safe caching
-
     #### Build environment setup
     - name: Install dependencies
       shell: bash
@@ -104,15 +92,6 @@ jobs:
         ## Build binaries
         cd 'uutils'
         env PROFILE=release-small bash util/build-gnu.sh
-
-    - name: Save files for faster configure and skipping make
-      uses: actions/cache/save@v5
-      if: always() && steps.cache-config-gnu.outputs.cache-hit != 'true'
-      with:
-        path: |
-          gnu/config.cache
-          gnu/src/getlimits
-        key: ${{ runner.os }}-gnu-config-${{ hashFiles('gnu/NEWS') }}-${{ hashFiles('uutils/util/build-gnu.sh') }}
 
     ### Run tests as user
     - name: Run GNU tests
@@ -201,18 +180,12 @@ jobs:
     name: Run GNU tests (SELinux)
     runs-on: ubuntu-24.04
     steps:
-    #### Get the code, setup cache
+    #### Get the code
     - name: Checkout code (uutils)
       uses: actions/checkout@v6
       with:
         path: 'uutils'
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: stable
-    - uses: Swatinem/rust-cache@v2
-      with:
-        workspaces: "./uutils -> target"
     - name: Checkout code (GNU coreutils)
       run: (mkdir -p gnu && cd gnu && bash ../uutils/util/fetch-gnu.sh)
 
@@ -235,8 +208,7 @@ jobs:
 
     - name: Install dependencies in VM
       run: |
-        lima sudo dnf -y update
-        lima sudo dnf -y install autoconf bison gperf gcc gdb jq libacl-devel libattr-devel libcap-devel libselinux-devel attr rustup clang-devel automake patch quilt
+        lima sudo dnf -y install --nodocs autoconf bison gperf gcc gdb jq libacl-devel libattr-devel libcap-devel libselinux-devel attr rustup clang-devel automake patch quilt
         lima rustup-init -y --profile=minimal --default-toolchain stable
     - name: Copy the sources to VM
       run: |
@@ -325,9 +297,6 @@ jobs:
       with:
         path: 'uutils'
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: stable
     - uses: Swatinem/rust-cache@v2
       with:
         workspaces: "./uutils -> target"
@@ -385,7 +354,7 @@ jobs:
         path: 'uutils'
         persist-credentials: false
     - name: Retrieve reference artifacts
-      uses: dawidd6/action-download-artifact@v12
+      uses: dawidd6/action-download-artifact@v14
       # ref: <https://github.com/dawidd6/action-download-artifact>
       continue-on-error: true ## don't break the build for missing reference artifacts (may be expired or just not generated yet)
       with:
