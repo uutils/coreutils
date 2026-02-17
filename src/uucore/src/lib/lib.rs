@@ -125,7 +125,7 @@ pub use crate::features::fsxattr;
 #[cfg(selinux)]
 pub use crate::features::selinux;
 
-#[cfg(all(target_os = "linux", feature = "smack"))]
+#[cfg(smack)]
 pub use crate::features::smack;
 
 //## core functions
