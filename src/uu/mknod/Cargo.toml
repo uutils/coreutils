@@ -20,6 +20,9 @@ path = "src/mknod.rs"
 test = false
 doctest = false
 
+[build-dependencies]
+cfg_aliases.workspace = true
+
 [dependencies]
 clap = { workspace = true }
 uucore = { workspace = true, features = ["mode", "fs"] }
