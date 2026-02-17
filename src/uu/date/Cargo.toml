@@ -41,6 +41,7 @@ jiff = { workspace = true, features = [
 ] }
 parse_datetime = { workspace = true }
 regex = { workspace = true }
+ahash = { workspace = true }
 uucore = { workspace = true, features = ["parser", "i18n-datetime"] }
 
 [target.'cfg(unix)'.dependencies]

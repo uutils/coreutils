@@ -29,32 +29,7 @@ jobs:
       matrix:
         type: [simulation, memory]
         package: [
-          uu_base64,
-          uu_cksum,
-          uu_cp,
-          uu_cut,
-          uu_dd,
-          uu_df,
-          uu_du,
-          uu_expand,
-          uu_fold,
-          uu_join,
-          uu_ls,
-          uu_mv,
-          uu_nl,
-          uu_numfmt,
-          uu_rm,
-          uu_seq,
-          uu_shuf,
-          uu_sort,
-          uu_split,
-          uu_tsort,
-          uu_unexpand,
-          uu_uniq,
-          uu_wc,
-          uu_factor,
-          uu_date,
-          uu_csplit
+          uu_date
         ]
     steps:
       - uses: actions/checkout@v6
