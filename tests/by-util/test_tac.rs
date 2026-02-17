@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore axxbxx bxxaxx axxx axxxx xxaxx xxax xxxxa axyz zyax zyxa bbaaa aaabc bcdddd cddddaaabc xyzabc abcxyzabc nbbaaa
+// spell-checker:ignore axxbxx bxxaxx axxx axxxx xxaxx xxax xxxxa axyz zyax zyxa bbaaa aaabc bcdddd cddddaaabc xyzabc abcxyzabc nbbaaa EISDIR
 #[cfg(target_os = "linux")]
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -86,13 +86,10 @@ fn test_invalid_input() {
     #[cfg(not(windows))]
     let not_found_err = "failed to open 'b' for reading: No such file or directory";
     #[cfg(windows)]
-    let not_found_err = "failed to open 'b' for reading: The system cannot find the file specified.";
+    let not_found_err =
+        "failed to open 'b' for reading: The system cannot find the file specified.";
 
-    scene
-        .ucmd()
-        .arg("b")
-        .fails()
-        .stderr_contains(not_found_err);
+    scene.ucmd().arg("b").fails().stderr_contains(not_found_err);
 
     at.mkdir("a");
     // On Unix, File::open succeeds on directories but read_to_end fails with EISDIR.
