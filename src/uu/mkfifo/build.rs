@@ -7,6 +7,7 @@ use cfg_aliases::cfg_aliases;
 
 pub fn main() {
     cfg_aliases! {
+        selinux: { all(feature = "feat_selinux", any(target_os = "android", target_os = "linux")) },
         smack: { all(feature = "feat_smack", target_os = "linux") },
     }
 }
