@@ -3489,6 +3489,7 @@ name = "uu_false"
 version = "0.6.0"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
  "uucore",
 ]
@@ -4223,6 +4224,7 @@ name = "uu_true"
 version = "0.6.0"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
  "uucore",
 ]

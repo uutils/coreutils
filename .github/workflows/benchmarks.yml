@@ -54,7 +54,9 @@ jobs:
           uu_wc,
           uu_factor,
           uu_date,
-          uu_csplit
+          uu_csplit,
+          uu_true,
+          uu_false
         ]
     steps:
       - uses: actions/checkout@v6
