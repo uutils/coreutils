@@ -300,6 +300,11 @@ fn test_gnu_mode_dumb_format() {
     new_ucmd!().pipe_in("a b").succeeds().stdout_only(
         "                                       a b\n                                   a   b\n",
     );
+
+    new_ucmd!()
+        .pipe_in("2a")
+        .succeeds()
+        .stdout_only(format!("{}2   a\n", " ".repeat(35)));
 }
 
 #[test]

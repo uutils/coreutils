@@ -356,19 +356,20 @@ fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> 
             };
             // match words with given regex
             for mat in reg.find_iter(line) {
-                // GNU-compatible default behavior: ignore non-alphabetic starts
-                // when no explicit word-regexp was provided.
+                let (mut beg, end) = (mat.start(), mat.end());
+
+                // GNU-compatible default behavior:
+                // with default regexp, keyword must start at first alphabetic char.
                 if filter.word_regex == Config::default().context_regex {
-                    if !&line[mat.start()..mat.end()]
-                        .chars()
-                        .next()
-                        .is_some_and(char::is_alphabetic)
+                    let matched = &line[beg..end];
+                    if let Some((off, _)) = matched.char_indices().find(|(_, c)| c.is_alphabetic())
                     {
+                        beg += off;
+                    } else {
                         continue;
                     }
                 }
 
-                let (beg, end) = (mat.start(), mat.end());
                 if config.input_ref && ((beg, end) == (ref_beg, ref_end)) {
                     continue;
                 }
