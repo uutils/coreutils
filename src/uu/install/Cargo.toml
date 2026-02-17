@@ -28,6 +28,9 @@ uucore = { workspace = true, default-features = true, features = [
   "process",
 ] }
 
+[build-dependencies]
+cfg_aliases = { workspace = true }
+
 [target.'cfg(all(unix, not(any(target_os = "aix", target_os = "hurd", target_os = "redox"))))'.dependencies]
 uucore = { workspace = true, features = ["safe-traversal"] }
 
