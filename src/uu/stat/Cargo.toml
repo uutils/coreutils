@@ -30,6 +30,9 @@ uucore = { workspace = true, features = [
   "i18n-common",
 ] }
 
+[build-dependencies]
+cfg_aliases = { workspace = true }
+
 [features]
 selinux = ["uucore/selinux"]
 
