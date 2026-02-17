@@ -3787,6 +3787,7 @@ dependencies = [
 name = "uu_mkfifo"
 version = "0.8.0"
 dependencies = [
+ "cfg_aliases",
  "clap",
  "fluent",
  "nix",
