@@ -3847,6 +3847,7 @@ dependencies = [
 name = "uu_mknod"
 version = "0.10.0"
 dependencies = [
+ "cfg_aliases",
  "clap",
  "fluent",
  "nix",

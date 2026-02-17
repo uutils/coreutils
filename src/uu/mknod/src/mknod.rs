@@ -58,23 +58,17 @@ struct Config {
     dev: u64,
 
     /// Set security context (SELinux/SMACK).
-    #[cfg(any(
-        all(feature = "selinux", any(target_os = "android", target_os = "linux")),
-        all(feature = "smack", target_os = "linux"),
-    ))]
+    #[cfg(any(selinux, smack))]
     set_security_context: bool,
 
     /// Specific security context (SELinux/SMACK).
-    #[cfg(any(
-        all(feature = "selinux", any(target_os = "android", target_os = "linux")),
-        all(feature = "smack", target_os = "linux"),
-    ))]
+    #[cfg(any(selinux, smack))]
     context: Option<String>,
 }
 
 fn mknod(file_name: &str, config: Config) -> i32 {
     // Label the node at creation, as GNU does; relabelling after leaves a window.
-    #[cfg(all(feature = "selinux", any(target_os = "android", target_os = "linux")))]
+    #[cfg(selinux)]
     let _selinux_guard = if config.set_security_context {
         let mode = config.file_type.as_sflag().bits() | config.mode.bits();
         match uucore::selinux::FsCreateContext::new(
@@ -123,7 +117,7 @@ fn mknod(file_name: &str, config: Config) -> i32 {
     }
 
     // Apply SMACK context if requested
-    #[cfg(all(feature = "smack", target_os = "linux"))]
+    #[cfg(smack)]
     if config.set_security_context
         && let Err(e) =
             uucore::smack::set_smack_label_and_cleanup(file_name, config.context.as_ref(), |p| {
@@ -158,15 +152,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .expect("Missing argument 'NAME'");
 
     // Extract the security context related flags and options
-    #[cfg(any(
-        all(feature = "selinux", any(target_os = "android", target_os = "linux")),
-        all(feature = "smack", target_os = "linux"),
-    ))]
+    #[cfg(any(selinux, smack))]
     let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
-    #[cfg(any(
-        all(feature = "selinux", any(target_os = "android", target_os = "linux")),
-        all(feature = "smack", target_os = "linux"),
-    ))]
+    #[cfg(any(selinux, smack))]
     let context = matches.get_one::<String>(options::CONTEXT).cloned();
 
     let dev = match (
@@ -195,15 +183,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         file_type: file_type.clone(),
         use_umask,
         dev,
-        #[cfg(any(
-            all(feature = "selinux", any(target_os = "android", target_os = "linux")),
-            all(feature = "smack", target_os = "linux"),
-        ))]
+        #[cfg(any(selinux, smack))]
         set_security_context: set_security_context || context.is_some(),
-        #[cfg(any(
-            all(feature = "selinux", any(target_os = "android", target_os = "linux")),
-            all(feature = "smack", target_os = "linux"),
-        ))]
+        #[cfg(any(selinux, smack))]
         context,
     };
 

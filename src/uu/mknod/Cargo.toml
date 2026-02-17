@@ -23,6 +23,9 @@ uucore = { workspace = true, features = ["mode", "fs"] }
 fluent = { workspace = true }
 nix = { workspace = true }
 
+[build-dependencies]
+cfg_aliases = { workspace = true }
+
 [features]
 selinux = ["uucore/selinux"]
 smack = ["uucore/smack"]
