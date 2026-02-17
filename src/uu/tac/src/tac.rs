@@ -12,14 +12,12 @@ use memchr::memmem;
 use memmap2::Mmap;
 use std::ffi::OsString;
 use std::io::{BufWriter, Read, Write, stdin, stdout};
-use std::{
-    fs::File,
-    io::copy,
-    path::Path,
-};
+use std::{fs::File, io::copy, path::Path};
+#[cfg(unix)]
+use uucore::error::UError;
+use uucore::error::UResult;
 #[cfg(unix)]
 use uucore::error::set_exit_code;
-use uucore::error::{UError, UResult};
 use uucore::{format_usage, show};
 
 use crate::error::TacError;
