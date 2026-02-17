@@ -377,7 +377,7 @@ pub struct Config {
     context: bool,
     #[cfg(selinux)]
     selinux_supported: bool,
-    #[cfg(all(feature = "smack", target_os = "linux"))]
+    #[cfg(smack)]
     smack_supported: bool,
     group_directories_first: bool,
     line_ending: LineEnding,
@@ -1239,7 +1239,7 @@ impl Config {
             context,
             #[cfg(selinux)]
             selinux_supported: uucore::selinux::is_selinux_enabled(),
-            #[cfg(all(feature = "smack", target_os = "linux"))]
+            #[cfg(smack)]
             smack_supported: uucore::smack::is_smack_enabled(),
             group_directories_first: options.get_flag(options::GROUP_DIRECTORIES_FIRST),
             line_ending: LineEnding::from_zero_flag(options.get_flag(options::ZERO)),
@@ -3633,7 +3633,7 @@ fn get_security_context<'a>(
         }
     }
 
-    #[cfg(all(feature = "smack", target_os = "linux"))]
+    #[cfg(smack)]
     if config.smack_supported {
         // For SMACK, use the path to get the label
         // If must_dereference is true, we follow the symlink
