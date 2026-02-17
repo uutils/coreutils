@@ -83,7 +83,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
 
         // Apply SMACK context if requested
-        #[cfg(feature = "smack")]
+        #[cfg(smack)]
         {
             let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
             let context = matches.get_one::<String>(options::CONTEXT);
