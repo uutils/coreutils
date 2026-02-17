@@ -4494,6 +4494,7 @@ dependencies = [
  "blake2b_simd",
  "blake3",
  "bstr",
+ "cfg_aliases",
  "clap",
  "codspeed-divan-compat",
  "crc-fast",
