@@ -300,6 +300,11 @@ fn test_gnu_mode_dumb_format() {
     new_ucmd!().pipe_in("a b").succeeds().stdout_only(
         "                                       a b\n                                   a   b\n",
     );
+
+    new_ucmd!()
+        .pipe_in("2a")
+        .succeeds()
+        .stdout_only(format!("{}2   a\n", " ".repeat(35)));
 }
 
 #[test]
@@ -328,6 +333,15 @@ fn test_unicode_padding_alignment() {
         .pipe_in(input)
         .succeeds()
         .stdout_only("        a\n        é\n");
+}
+
+#[test]
+fn test_gnu_compat_numeric_token_with_emoji_produces_no_index() {
+    // GNU ptx produces no output for this input in default mode.
+    new_ucmd!()
+        .pipe_in("012345678901234567890123456789🛠\n")
+        .succeeds()
+        .no_output();
 }
 
 #[test]
