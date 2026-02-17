@@ -9,7 +9,7 @@ mod mode;
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use rustix::process::{getegid, geteuid};
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 use selinux::SecurityContext;
 use std::collections::HashSet;
 use std::ffi::OsString;
@@ -28,7 +28,7 @@ use uucore::fs::{are_files_identical, dir_strip_dot_for_creation};
 use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
 #[cfg(all(unix, not(target_os = "redox")))]
 use uucore::safe_traversal::{DirFd, SymlinkBehavior, create_dir_all_safe};
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 use uucore::selinux::{
     SeLinuxError, contexts_differ, get_selinux_security_context, is_selinux_enabled,
     selinux_error_description, set_selinux_security_context,
@@ -137,7 +137,7 @@ enum InstallError {
     #[error("{}", translate!("install-error-extra-operand", "operand" => .0.quote(), "usage" => .1))]
     ExtraOperand(OsString, String),
 
-    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+    #[cfg(selinux)]
     #[error("{}", .0)]
     SelinuxContextFailed(String),
 
@@ -456,9 +456,9 @@ fn behavior(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Beh
         None
     };
 
-    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+    #[cfg(selinux)]
     let selinux_enabled = is_selinux_enabled();
-    #[cfg(not(all(feature = "selinux", any(target_os = "linux", target_os = "android"))))]
+    #[cfg(not(selinux))]
     let selinux_enabled = false;
 
     let mut context = matches.get_one::<String>(OPT_CONTEXT).cloned();
@@ -533,7 +533,7 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
             }
 
             // Set SELinux context for all created directories if needed
-            #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+            #[cfg(selinux)]
             if should_set_selinux_context(b) {
                 let context = get_context_for_selinux(b);
                 set_selinux_context_for_directories_install(path_to_create.as_path(), context);
@@ -559,7 +559,7 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
         }
 
         // Set SELinux context for directory if needed
-        #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+        #[cfg(selinux)]
         if b.privileged {
             if b.default_context {
                 show_if_err!(set_selinux_default_context(path));
@@ -751,10 +751,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                             }
 
                             // Set SELinux context for all created directories if needed
-                            #[cfg(all(
-                                feature = "selinux",
-                                any(target_os = "linux", target_os = "android")
-                            ))]
+                            #[cfg(selinux)]
                             if should_set_selinux_context(b) {
                                 let context = get_context_for_selinux(b);
                                 set_selinux_context_for_directories_install(to_create, context);
@@ -1207,7 +1204,7 @@ fn finalize_installed_file(
         preserve_timestamps(from, to)?;
     }
 
-    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+    #[cfg(selinux)]
     if b.privileged {
         if b.preserve_context {
             uucore::selinux::preserve_security_context(from, to)
@@ -1262,7 +1259,7 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
     finalize_installed_file(from, to, b, backup_path)
 }
 
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn get_context_for_selinux(b: &Behavior) -> Option<&String> {
     if b.default_context {
         None
@@ -1271,7 +1268,7 @@ fn get_context_for_selinux(b: &Behavior) -> Option<&String> {
     }
 }
 
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn should_set_selinux_context(b: &Behavior) -> bool {
     b.privileged && (b.context.is_some() || b.default_context)
 }
@@ -1373,7 +1370,7 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
     }
 
     if b.privileged {
-        #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+        #[cfg(selinux)]
         if b.preserve_context && contexts_differ(from, to) {
             return true;
         }
@@ -1415,7 +1412,7 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
 /// # Returns
 ///
 /// Returns `Ok(())` if the context was successfully set, or a `SeLinuxError` if the operation failed.
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 pub fn set_selinux_default_context(path: &Path) -> Result<(), SeLinuxError> {
     if !is_selinux_enabled() {
         return Err(SeLinuxError::SELinuxNotEnabled);
@@ -1455,7 +1452,7 @@ pub fn set_selinux_default_context(path: &Path) -> Result<(), SeLinuxError> {
 /// * `Ok(Some(String))` - The default context string if successfully determined
 /// * `Ok(None)` - No default context could be determined
 /// * `Err(SeLinuxError)` - An error occurred while determining the context
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn get_default_context_for_path(path: &Path) -> Result<Option<String>, SeLinuxError> {
     if !is_selinux_enabled() {
         return Err(SeLinuxError::SELinuxNotEnabled);
@@ -1496,7 +1493,7 @@ fn get_default_context_for_path(path: &Path) -> Result<Option<String>, SeLinuxEr
 /// This is a heuristic function that attempts to generate an appropriate
 /// context for a file based on its parent directory's context and file type.
 /// The goal is to mimic what `restorecon` would do based on `SELinux` policy.
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn derive_context_from_parent(parent_context: &str) -> String {
     // Parse the parent context (format: user:role:type:level)
     let parts: Vec<&str> = parent_context.split(':').collect();
@@ -1528,7 +1525,7 @@ fn derive_context_from_parent(parent_context: &str) -> String {
 ///
 /// Traverses from the given starting path up to existing parent directories.
 /// Returns a vector of paths in reverse order (from parent to child).
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn collect_paths_for_context_setting(starting_path: &Path) -> Vec<&Path> {
     let mut paths: Vec<&Path> = starting_path
         .ancestors()
@@ -1571,7 +1568,7 @@ fn collect_paths_for_context_setting(starting_path: &Path) -> Vec<&Path> {
 /// // let context = String::from("user_u:object_r:tmp_t:s0");
 /// // set_selinux_context_for_directories(Path::new("/tmp/new/deep/dir"), Some(&context));
 /// ```
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 fn set_selinux_context_for_directories(target_path: &Path, context: Option<&String>) {
     for path in collect_paths_for_context_setting(target_path) {
         show_if_err!(set_selinux_security_context(path, context));
@@ -1587,7 +1584,7 @@ fn set_selinux_context_for_directories(target_path: &Path, context: Option<&Stri
 ///
 /// * `target_path` - The target path (typically the deepest directory in a hierarchy)
 /// * `context` - Optional `SELinux` context string to set. If None, uses install's default derivation.
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 pub fn set_selinux_context_for_directories_install(target_path: &Path, context: Option<&String>) {
     if context.is_some() {
         // Use the standard function for explicit contexts
@@ -1602,10 +1599,10 @@ pub fn set_selinux_context_for_directories_install(target_path: &Path, context: 
 
 #[cfg(test)]
 mod tests {
-    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+    #[cfg(selinux)]
     use super::derive_context_from_parent;
 
-    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+    #[cfg(selinux)]
     #[test]
     fn test_derive_context_from_parent() {
         // Test cases: (input_context, file_type, expected_output, description)

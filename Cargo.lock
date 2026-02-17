@@ -3574,6 +3574,7 @@ dependencies = [
 name = "uu_install"
 version = "0.13.0"
 dependencies = [
+ "cfg_aliases",
  "clap",
  "fluent",
  "rustix",
