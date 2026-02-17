@@ -1590,7 +1590,7 @@ fn get_security_context<'a>(
         }
     }
 
-    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+    #[cfg(selinux)]
     if config.selinux_supported {
         use uucore::show_warning;
 
@@ -1632,7 +1632,7 @@ fn get_security_context<'a>(
         }
     }
 
-    #[cfg(all(feature = "smack", target_os = "linux"))]
+    #[cfg(smack)]
     if config.smack_supported {
         // For SMACK, use the path to get the label
         // If must_dereference is true, we follow the symlink

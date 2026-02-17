@@ -20,6 +20,9 @@ workspace = true
 path = "src/ls.rs"
 doctest = false
 
+[build-dependencies]
+cfg_aliases.workspace = true
+
 [dependencies]
 ansi-width = { workspace = true }
 clap = { workspace = true, features = ["env"] }
