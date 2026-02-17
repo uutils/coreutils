@@ -102,8 +102,6 @@ pub fn get_thousands_separator() -> char {
 /// // assert_eq!(format_with_thousands_separator(1234567), "1.234.567");
 /// ```
 pub fn format_with_thousands_separator(number: u64) -> String {
-    const GROUPING_SIZE: usize = 3;
-
     let separator = get_thousands_separator();
 
     // C/POSIX locale has no thousands separator
@@ -111,25 +109,55 @@ pub fn format_with_thousands_separator(number: u64) -> String {
         return number.to_string();
     }
 
+    // Get locale-aware grouping sizes (primary, secondary)
+    // Most locales: (3, 3), Indian locales: (3, 2)
+    let (primary, secondary) = get_locale_grouping_sizes();
+
     let num_str = number.to_string();
     let len = num_str.len();
 
-    // Numbers less than 1000 don't need separators
-    if len <= GROUPING_SIZE {
-        return num_str;
+    // Calculate positions where separators should be inserted
+    let mut sep_positions = Vec::new();
+    let mut pos = len;
+
+    // First group uses primary size
+    if pos > primary as usize {
+        pos -= primary as usize;
+        sep_positions.push(pos);
     }
 
-    let mut result = String::with_capacity(len + (len - 1) / GROUPING_SIZE);
+    // Subsequent groups use secondary size
+    while pos > secondary as usize {
+        pos -= secondary as usize;
+        sep_positions.push(pos);
+    }
+
+    // Build result with separators
+    let mut result = String::with_capacity(len + sep_positions.len());
 
     for (i, ch) in num_str.chars().enumerate() {
-        #[allow(unknown_lints, clippy::manual_is_multiple_of)]
-        if i > 0 && (len - i) % GROUPING_SIZE == 0 {
+        if sep_positions.contains(&i) {
             result.push(separator);
         }
         result.push(ch);
     }
 
     result
+}
+
+/// Get locale-aware grouping sizes.
+/// Returns (primary, secondary) group sizes.
+/// Most locales return (3, 3), Indian locales return (3, 2).
+#[cfg(feature = "i18n-decimal")]
+fn get_locale_grouping_sizes() -> (u8, u8) {
+    use crate::i18n::decimal::locale_grouping_sizes;
+    *locale_grouping_sizes()
+}
+
+#[cfg(not(feature = "i18n-decimal"))]
+fn get_locale_grouping_sizes() -> (u8, u8) {
+    // Default to groups of 3 when i18n-decimal is not enabled
+    (3, 3)
 }
 
 #[cfg(test)]
