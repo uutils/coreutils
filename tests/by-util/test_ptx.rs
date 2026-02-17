@@ -336,8 +336,7 @@ fn test_gnu_compat_numeric_token_with_emoji_produces_no_index() {
     new_ucmd!()
         .pipe_in("012345678901234567890123456789🛠\n")
         .succeeds()
-        .stdout_only("")
-        .no_stderr();
+        .no_output();
 }
 
 #[test]
