@@ -671,13 +671,6 @@ jobs:
         # staging directory
         STAGING='_staging'
         outputs STAGING
-        # determine EXE suffix
-        unset EXE_suffix
-        case '${{ matrix.job.target }}' in
-         *-pc-windows-*) EXE_suffix=".exe" ;;
-         *wasm-*) EXE_suffix=".wasm" ;;
-        esac;
-        outputs EXE_suffix
         # parse commit reference info
         echo GITHUB_REF=${GITHUB_REF}
         echo GITHUB_SHA=${GITHUB_SHA}
@@ -867,21 +860,29 @@ jobs:
         ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }} -p coreutils
       env:
         RUST_BACKTRACE: "1"
-    - name: Build
+    - name: Build coreutils
       shell: bash
-      if: matrix.job.skip-publish != true && matrix.job.check-only != true
+      if: matrix.job.skip-publish != true && matrix.job.check-only != true && matrix.job.target != 'x86_64-pc-windows-msvc'
       run: |
         ## Build
         ${{ steps.vars.outputs.CARGO_CMD }} ${{ steps.vars.outputs.CARGO_CMD_OPTIONS }} build --release --config=profile.release.strip=true \
         --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.vars.outputs.CARGO_DEFAULT_FEATURES_OPTION }}
+    # We don't want to have many duplicated long jobs at here
+    # So we build individual binaries for few platforms until we deduplicate many release build for Linux 
+    - name: Build individual binaries
+      if: matrix.job.skip-tests != true && matrix.job.target == 'x86_64-pc-windows-msvc'
+      shell: bash
+      run: |
+        ${{ steps.vars.outputs.CARGO_CMD }} ${{ steps.vars.outputs.CARGO_CMD_OPTIONS }} build --release --config=profile.release.strip=true \
+        --target=${{ matrix.job.target }} ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
     - name: Package
       if: matrix.job.skip-publish != true && matrix.job.check-only != true
       shell: bash
       run: |
         ## Package artifact(s)
-        # binaries
-        cp 'target/${{ matrix.job.target }}/release/${{ env.PROJECT_NAME }}'* '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/'
-        cp 'target/${{ matrix.job.target }}/release/uudoc${{ steps.vars.outputs.EXE_suffix }}' '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/' || :
+        find target/${{ matrix.job.target }}/release -maxdepth 1 -type f \
+          \( -name "*.wasm" -o -name "*.exe" -o -perm -u+x \) \
+          -exec ln -v {} "${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/" \;
         # README and LICENSE
         # * spell-checker:ignore EADME ICENSE
         (shopt -s nullglob; for f in [R]"EADME"{,.*}; do cp $f '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/' ; done)
