@@ -3815,6 +3815,7 @@ dependencies = [
 name = "uu_mv"
 version = "0.8.0"
 dependencies = [
+ "cfg_aliases",
  "clap",
  "codspeed-divan-compat",
  "fluent",

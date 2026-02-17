@@ -47,7 +47,7 @@ use uucore::fs::{
 };
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
 use uucore::fsxattr;
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 use uucore::selinux::set_selinux_security_context;
 use uucore::translate;
 use uucore::update_control;
@@ -771,7 +771,7 @@ fn rename(
         rename_with_fallback(from, to, display_manager, opts.verbose, None, None)?;
     }
 
-    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+    #[cfg(selinux)]
     if let Some(ref context) = opts.context {
         set_selinux_security_context(to, Some(context))
             .map_err(|e| io::Error::other(e.to_string()))?;
