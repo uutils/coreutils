@@ -34,6 +34,7 @@ PREFIX ?= /usr/local
 DESTDIR ?=
 BINDIR ?= $(PREFIX)/bin
 DATAROOTDIR ?= $(PREFIX)/share
+LOCALEDIR ?= $(DATAROOTDIR)/coreutils/locales
 LIBSTDBUF_DIR ?= $(PREFIX)/libexec/$(PROG_PREFIX)coreutils
 # Export variable so that it is used during the build
 export LIBSTDBUF_DIR
@@ -269,16 +270,23 @@ INSTALLEES_WITH_EXTRA_LOCALE = \
 	$(INSTALLEES) \
 	$(if $(findstring sum, $(INSTALLEES)),checksum_common, )
 install-locales:
+	@mkdir -p "$(DESTDIR)$(LOCALEDIR)/uucore/"; \
+	for locale_file in "$(BASEDIR)"/src/uucore/locales/*.ftl; do \
+		if [ "$$(basename "$$locale_file")" != "en-US.ftl" ]; then \
+			$(INSTALL) -v -m 644 "$$locale_file" "$(DESTDIR)$(LOCALEDIR)/uucore/"; \
+		fi; \
+	done;
 	@for prog in $(INSTALLEES_WITH_EXTRA_LOCALE); do \
 		if [ -d "$(BASEDIR)/src/uu/$$prog/locales" ]; then \
-			mkdir -p "$(DESTDIR)$(DATAROOTDIR)/locales/$$prog"; \
+			mkdir -p "$(DESTDIR)$(LOCALEDIR)/$$prog"; \
 			for locale_file in "$(BASEDIR)"/src/uu/$$prog/locales/*.ftl; do \
 				if [ "$$(basename "$$locale_file")" != "en-US.ftl" ]; then \
-					$(INSTALL) -m 644 "$$locale_file" "$(DESTDIR)$(DATAROOTDIR)/locales/$$prog/"; \
+					$(INSTALL) -v -m 644 "$$locale_file" "$(DESTDIR)$(LOCALEDIR)/$$prog/"; \
 				fi; \
 			done; \
 		fi; \
 	done
+
 else
 locales:
 install-locales:
