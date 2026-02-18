@@ -5,6 +5,10 @@
 
 // spell-checker:ignore mangen tldr
 
+mod uutils_map {
+    include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
+}
+
 use std::{
     collections::HashMap,
     ffi::OsString,
@@ -21,10 +25,10 @@ use fluent_syntax::parser;
 use textwrap::{fill, indent, termwidth};
 use zip::ZipArchive;
 
+use crate::uutils_map::UtilityMap;
+use crate::uutils_map::util_map;
 use coreutils::validation;
 use uucore::Args;
-
-include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
 
 /// Print usage information for uudoc
 fn usage<T: Args>(utils: &UtilityMap<T>) {
