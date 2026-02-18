@@ -997,10 +997,10 @@ fn apply_saved_state(termios: &mut Termios, state: &[u32]) {
     }
 
     // Apply the four flag groups, done (as _) for MacOS size compatibility
-    termios.input_flags = InputFlags::from_bits_truncate(state[0] as _);
-    termios.output_flags = OutputFlags::from_bits_truncate(state[1] as _);
-    termios.control_flags = ControlFlags::from_bits_truncate(state[2] as _);
-    termios.local_flags = LocalFlags::from_bits_truncate(state[3] as _);
+    termios.input_flags = InputFlags::from_bits_retain(state[0] as _);
+    termios.output_flags = OutputFlags::from_bits_retain(state[1] as _);
+    termios.control_flags = ControlFlags::from_bits_retain(state[2] as _);
+    termios.local_flags = LocalFlags::from_bits_retain(state[3] as _);
 
     // Apply control characters if present (stored as u32 but used as u8)
     for (i, &cc_val) in state.iter().skip(4).enumerate() {
