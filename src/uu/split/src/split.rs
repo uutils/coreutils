@@ -48,6 +48,9 @@ static OPT_IO_BLKSIZE: &str = "-io-blksize";
 static ARG_INPUT: &str = "input";
 static ARG_PREFIX: &str = "prefix";
 
+// 128 KiB
+const COPY_BUFFER_SIZE: usize = 128 * 1024;
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (args, obs_lines) = handle_obsolete(args);
@@ -1065,6 +1068,15 @@ impl ManageOutFiles for OutFiles {
     }
 }
 
+fn copy_exact<R: Read, W: Write>(
+    reader: &mut R,
+    writer: &mut W,
+    num_bytes: u64,
+) -> io::Result<u64> {
+    let mut buf_reader = BufReader::with_capacity(COPY_BUFFER_SIZE, reader.take(num_bytes));
+    io::copy(&mut buf_reader, writer)
+}
+
 /// Split a file or STDIN into a specific number of chunks by byte.
 ///
 /// When file size cannot be evenly divided into the number of chunks of the same size,
@@ -1156,49 +1168,34 @@ where
         out_files = OutFiles::init(num_chunks, settings, false)?;
     }
 
-    let buf = &mut Vec::new();
     for i in 1_u64..=num_chunks {
         let chunk_size = chunk_size_base + (chunk_size_reminder > i - 1) as u64;
-        buf.clear();
         if num_bytes > 0 {
-            // Read `chunk_size` bytes from the reader into `buf`
+            // Read `chunk_size` bytes from the reader
             // except the last.
             //
             // The last chunk gets all remaining bytes so that if the number
             // of bytes in the input file was not evenly divisible by
             // `num_chunks`, we don't leave any bytes behind.
-            let limit = {
-                if i == num_chunks {
-                    num_bytes
-                } else {
-                    chunk_size
-                }
+            let limit = if i == num_chunks {
+                num_bytes
+            } else {
+                chunk_size
             };
 
-            let n_bytes_read = reader.by_ref().take(limit).read_to_end(buf);
-
-            match n_bytes_read {
-                Ok(n_bytes) => {
-                    num_bytes -= n_bytes as u64;
-                }
-                Err(error) => {
-                    return Err(USimpleError::new(
-                        1,
-                        translate!("split-error-cannot-read-from-input", "input" => settings.input.maybe_quote(), "error" => error),
-                    ));
-                }
-            }
-
-            if let Some(chunk_number) = kth_chunk {
-                if i == chunk_number {
-                    stdout_writer.write_all(buf)?;
+            let n_bytes = match kth_chunk {
+                Some(chunk_number) if i == chunk_number => {
+                    copy_exact(&mut reader, &mut stdout_writer, limit)?;
                     break;
                 }
-            } else {
-                let idx = (i - 1) as usize;
-                let writer = out_files.get_writer(idx, settings)?;
-                writer.write_all(buf)?;
-            }
+                Some(_) => copy_exact(&mut reader, &mut io::sink(), limit)?,
+                None => {
+                    let idx = (i - 1) as usize;
+                    let writer = out_files.get_writer(idx, settings)?;
+                    copy_exact(&mut reader, writer, limit)?
+                }
+            };
+            num_bytes -= n_bytes;
         } else {
             break;
         }
