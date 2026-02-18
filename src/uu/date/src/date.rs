@@ -14,7 +14,6 @@ use jiff::tz::{TimeZone, TimeZoneDatabase};
 use jiff::{Timestamp, Zoned};
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
@@ -22,8 +21,6 @@ use std::path::PathBuf;
 use std::sync::OnceLock;
 use uucore::display::Quotable;
 use uucore::error::FromIo;
-#[cfg(unix)]
-use uucore::error::UUsageError;
 use uucore::error::{UResult, USimpleError};
 #[cfg(feature = "i18n-datetime")]
 use uucore::i18n::datetime::{localize_format_string, should_use_icu_locale};
@@ -128,8 +125,6 @@ struct CustomFormat {
 
 enum CustomFormatError {
     MissingPlus(String),
-    #[cfg(unix)]
-    InvalidUtf8,
 }
 
 enum Iso8601Format {
@@ -371,13 +366,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 return Err(USimpleError::new(
                     1,
                     translate!("date-error-format-missing-plus", "arg" => raw),
-                ));
-            }
-            #[cfg(unix)]
-            Err(CustomFormatError::InvalidUtf8) => {
-                return Err(UUsageError::new(
-                    1,
-                    "invalid UTF-8 was detected in one or more arguments",
                 ));
             }
         };
@@ -748,7 +736,6 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(OPT_FORMAT)
                 .num_args(0..)
-                .trailing_var_arg(true)
                 .value_parser(clap::builder::ValueParser::os_string()),
         )
 }
@@ -757,16 +744,14 @@ pub fn uu_app() -> Command {
 ///
 /// - Requires the leading '+' and returns `MissingPlus` otherwise.
 /// - On Unix, treats the payload as raw bytes: if UTF-8, use as-is; if not,
-///   then either error under UTF-8 locales or decode in a byte-preserving way.
+///   decode in a byte-preserving way.
 /// - On non-Unix, falls back to a lossy string conversion and strips the '+'.
 fn parse_custom_format(raw: &OsStr) -> Result<CustomFormat, CustomFormatError> {
     #[cfg(unix)]
     {
         let bytes = raw.as_bytes();
         if bytes.first() != Some(&b'+') {
-            return Err(CustomFormatError::MissingPlus(
-                raw.to_string_lossy().into_owned(),
-            ));
+            return Err(CustomFormatError::MissingPlus(escape_invalid_bytes(bytes)));
         }
         let payload = &bytes[1..];
         if let Ok(utf8) = std::str::from_utf8(payload) {
@@ -774,9 +759,6 @@ fn parse_custom_format(raw: &OsStr) -> Result<CustomFormat, CustomFormatError> {
                 format: utf8.to_string(),
                 output_encoding: OutputEncoding::Utf8,
             });
-        }
-        if locale_output_encoding() == OutputEncoding::Utf8 {
-            return Err(CustomFormatError::InvalidUtf8);
         }
         Ok(CustomFormat {
             format: decode_byte_preserving(payload),
@@ -795,27 +777,6 @@ fn parse_custom_format(raw: &OsStr) -> Result<CustomFormat, CustomFormatError> {
             output_encoding: OutputEncoding::Utf8,
         })
     }
-}
-
-#[cfg(unix)]
-/// Determine whether the active locale expects UTF-8 output.
-fn locale_output_encoding() -> OutputEncoding {
-    let locale_var = ["LC_ALL", "LC_TIME", "LANG"]
-        .iter()
-        .find_map(|key| env::var(key).ok());
-
-    if let Some(locale) = locale_var {
-        let mut split = locale.split(&['.', '@']);
-        let _ = split.next();
-        if let Some(encoding) = split.next() {
-            let encoding = encoding.to_ascii_lowercase();
-            if encoding == "utf-8" || encoding == "utf8" {
-                return OutputEncoding::Utf8;
-            }
-        }
-    }
-
-    OutputEncoding::BytePreserving
 }
 
 #[cfg(unix)]

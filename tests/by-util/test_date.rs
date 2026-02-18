@@ -433,6 +433,33 @@ fn test_date_format_non_utf8_locale_bytes() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_date_format_utf8_locale_bytes() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg(OsStr::from_bytes(b"+\xC2"))
+        .succeeds()
+        .stdout_is_bytes(b"\xC2\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_bad_format_option_missing_leading_plus_after_d_flag_invalid_utf8() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    new_ucmd!()
+        .arg("--date")
+        .arg("now")
+        .arg(OsStr::from_bytes(b"\xB0"))
+        .fails_with_code(1)
+        .stderr_contains("the argument \\260 lacks a leading '+';");
+}
+
+#[test]
 #[cfg(all(unix, not(target_os = "macos")))]
 fn test_date_set_valid() {
     if geteuid() == 0 {
