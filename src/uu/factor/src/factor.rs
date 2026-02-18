@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore funcs
+// spell-checker:ignore funcs biguint modpow unfactored
 // NOTE:
 //   For BigUint > u128, this implementation attempts factorization using Miller-Rabin,
 //   an improved Pollard-rho, and p-1.
@@ -18,7 +18,7 @@ use std::io::{self, Write, stdin, stdout};
 
 use clap::{Arg, ArgAction, Command};
 use num_bigint::BigUint;
-use num_traits::{FromPrimitive, One, Zero};
+use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, set_exit_code};
 use uucore::translate;
@@ -76,7 +76,7 @@ fn write_factors_str(
     let success = factor_biguint_recursive(&x_big, &mut factors);
 
     if !success {
-        // 完全分解できなかった場合のみ exit code=1
+        // Only set exit code=1 when complete factorization could not be achieved
         set_exit_code(1);
     }
 
@@ -141,59 +141,74 @@ fn collect_biguint_factors(factors: &[BigUint]) -> BTreeMap<BigUint, usize> {
     map
 }
 
-fn is_probable_prime(n: &BigUint) -> bool {
-    if *n < BigUint::from_u32(2).unwrap() {
+fn is_even(value: &BigUint) -> bool {
+    (value & BigUint::one()).is_zero()
+}
+
+fn is_probable_prime(candidate: &BigUint) -> bool {
+    if *candidate < BigUint::from_u32(2).unwrap() {
         return false;
     }
-    if *n == BigUint::from_u32(2).unwrap() || *n == BigUint::from_u32(3).unwrap() {
+    if *candidate == BigUint::from_u32(2).unwrap() || *candidate == BigUint::from_u32(3).unwrap() {
         return true;
     }
-    // even check: n % 2 == 0
-    if (&*n & BigUint::from_u32(1).unwrap()).is_zero() {
+    // even check: candidate % 2 == 0
+    if is_even(candidate) {
         return false;
     }
 
     let one = BigUint::one();
     let two = BigUint::from_u32(2).unwrap();
 
-    // n - 1 = d * 2^s
-    let mut d = n - &one;
-    let mut s = 0u32;
-    // while d is even
-    while (&d & BigUint::from_u32(1).unwrap()).is_zero() {
-        d >>= 1;
-        s += 1;
+    // candidate - 1 = odd_component * 2^power_of_two
+    let mut odd_component = candidate - &one;
+    let mut power_of_two = 0u32;
+    // while odd_component is even
+    while is_even(&odd_component) {
+        odd_component >>= 1;
+        power_of_two += 1;
     }
 
     let bases_32: [u64; 3] = [2, 7, 61];
     let bases_64: [u64; 12] = [
-        2, 325, 9375, 28178, 450775, 9780504, 1795265022, 3, 5, 7, 11, 13,
+        2,
+        325,
+        9375,
+        28178,
+        450_775,
+        9_780_504,
+        1_795_265_022,
+        3,
+        5,
+        7,
+        11,
+        13,
     ];
 
-    let bases: Vec<u64> = if n.bits() <= 32 {
+    let bases: Vec<u64> = if candidate.bits() <= 32 {
         bases_32.to_vec()
-    } else if n.bits() <= 64 {
+    } else if candidate.bits() <= 64 {
         bases_64.to_vec()
     } else {
         vec![2, 3, 5, 7, 11, 13, 17, 19, 23]
     };
 
-    'outer: for &a_u64 in &bases {
-        if BigUint::from(a_u64) >= *n {
+    'outer: for &base_value in &bases {
+        if BigUint::from(base_value) >= *candidate {
             continue;
         }
-        let a = BigUint::from(a_u64);
-        let mut x = a.modpow(&d, n);
-        if x == one || x == n - &one {
+        let base = BigUint::from(base_value);
+        let mut witness = base.modpow(&odd_component, candidate);
+        if witness == one || witness == candidate - &one {
             continue 'outer;
         }
 
-        for _ in 1..s {
-            x = x.modpow(&two, n);
-            if x == n - &one {
+        for _ in 1..power_of_two {
+            witness = witness.modpow(&two, candidate);
+            if witness == candidate - &one {
                 continue 'outer;
             }
-            if x == one {
+            if witness == one {
                 return false;
             }
         }
@@ -228,8 +243,8 @@ fn small_trial_division(n: &BigUint) -> Option<BigUint> {
     None
 }
 
-//// Simplified Pollard p-1 method (Stage 1 only).
-//// Effective when p-1 (for a prime divisor p of n) is smooth with small prime factors.
+/// Simplified Pollard p-1 method (Stage 1 only).
+/// Effective when p-1 (for a prime divisor p of n) is smooth with small prime factors.
 fn pollard_p_minus_1(n: &BigUint) -> Option<BigUint> {
     // Stage 1 only (simplified).
     // Best-effort: we do not spend too long here; give up quickly if it does not help.
@@ -240,7 +255,7 @@ fn pollard_p_minus_1(n: &BigUint) -> Option<BigUint> {
         return None;
     }
 
-    if (n & &one).is_zero() {
+    if is_even(n) {
         return Some(two);
     }
 
@@ -270,7 +285,7 @@ fn pollard_p_minus_1(n: &BigUint) -> Option<BigUint> {
             return Some(g);
         }
 
-        // a^(M) を段階的に構成（指数を 2^k で伸ばす近似）
+        // Construct a^(M) step by step (approximating by extending the exponent with 2^k)
         let mut e = 2u64;
         while e <= b1 {
             a = a.modpow(&BigUint::from_u64(e).unwrap(), n);
@@ -289,120 +304,131 @@ fn pollard_p_minus_1(n: &BigUint) -> Option<BigUint> {
     None
 }
 
-//// Improved Pollard-rho (Brent variant with batched gcd).
-//// Not equivalent to GNU factor, but aims for better convergence and performance
-//// than a naive implementation.
-fn pollard_rho(n: &BigUint) -> Option<BigUint> {
+/// Improved Pollard-rho (Brent variant with batched gcd).
+/// Not equivalent to GNU factor, but aims for better convergence and performance
+/// than a naive implementation.
+fn pollard_rho(composite: &BigUint) -> Option<BigUint> {
     // NOTE:
     //  - This implementation is inspired by the approach in GNU factor but simplified.
     //  - For large inputs we avoid running too long; we cap the iterations so that
     //    we do not spend many seconds on hopeless cases.
     //  - If factorization fails, we return "Factorization incomplete"-style results.
     let one = BigUint::one();
+    let two = BigUint::from_u32(2).unwrap();
 
     // For small n we expect earlier code paths to have handled the input.
-    if *n <= BigUint::from_u32(3).unwrap() {
+    if *composite <= BigUint::from_u32(3).unwrap() {
         return None;
     }
 
-    // If n is even, return 2 immediately.
-    if (n & &one).is_zero() {
-        return Some(BigUint::from_u32(2).unwrap());
+    // If composite is even, return 2 immediately.
+    if is_even(composite) {
+        return Some(two);
     }
 
     // Use a deterministic LCG to generate parameter sequences.
+    const LCG_MULTIPLIER: u128 = 6_364_136_223_846_793_005;
+    const LCG_INCREMENT: u128 = 1_442_695_040_888_963_407;
+
     fn lcg_next(x: &mut u128) {
-        *x = x
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
+        *x = x.wrapping_mul(LCG_MULTIPLIER).wrapping_add(LCG_INCREMENT);
     }
 
-    let bits = n.bits() as u64;
+    let bits = composite.bits();
 
     // Search parameters: choose bounds based on bit length.
     // Avoid overly large limits; when exhausted, treat as failure to find a factor.
     let max_tries: u64 = 16;
-    let max_iter: u64 = (bits * bits).min(200_000).max(10_000);
+    let max_iter: u64 = (bits * bits).clamp(10_000, 200_000);
 
-    let mut seed: u128 = 0x9e3779b97f4a7c15;
+    const LCG_DEFAULT_SEED: u128 = 0x9e37_79b9_7f4a_7c15;
+    let mut seed: u128 = LCG_DEFAULT_SEED;
 
     for _try in 0..max_tries {
         lcg_next(&mut seed);
-        let mut x = BigUint::from(seed % (u128::MAX / 2 + 1));
+        let mut x_state = BigUint::from(seed % (u128::MAX / 2 + 1));
         lcg_next(&mut seed);
-        let mut c = BigUint::from(seed % (u128::MAX / 2 + 1));
-        if c.is_zero() {
-            c = BigUint::from(1u32);
+        let mut constant = BigUint::from(seed % (u128::MAX / 2 + 1));
+        if constant.is_zero() {
+            constant = BigUint::from(1u32);
         }
-        x %= n;
-        c %= n;
+        x_state %= composite;
+        constant %= composite;
 
-        let mut y = x.clone();
-        let mut g = one.clone();
-        let mut q = one.clone();
+        let mut y_state = x_state.clone();
+        let mut current_gcd = one.clone();
+        let mut product = one.clone();
 
         let mut iter: u64 = 0;
-        let m: u64 = 128;
+        let batch_size: u64 = 128;
 
-        while g == one && iter < max_iter {
+        while current_gcd == one && iter < max_iter {
             // Brent variant: use batched gcd.
-            let mut k = 0;
-            let x_saved = x.clone();
-            while k < m && iter < max_iter {
-                // f(z) = z^2 + c mod n (implemented via multiplication + mod, not modpow).
-                y = (&y * &y + &c) % n;
-                let diff = if &x > &y { &x - &y } else { &y - &x };
+            let mut batch_iter = 0;
+            let x_saved = x_state.clone();
+            while batch_iter < batch_size && iter < max_iter {
+                // f(z) = z^2 + c mod composite.
+                y_state = (&y_state * &y_state + &constant) % composite;
+                let diff = if x_state > y_state {
+                    &x_state - &y_state
+                } else {
+                    &y_state - &x_state
+                };
                 if !diff.is_zero() {
-                    q = (q * diff) % n;
+                    product = (product * diff) % composite;
                 }
-                k += 1;
+                batch_iter += 1;
                 iter += 1;
             }
-            g = gcd_biguint(&q, n);
-            x = x_saved;
+            current_gcd = gcd_biguint(&product, composite);
+            x_state = x_saved;
 
-            if g == one {
-                // Update x to advance the sequence.
-                x = y.clone();
+            if current_gcd == one {
+                // Update x_state to advance the sequence.
+                x_state.clone_from(&y_state);
             }
         }
 
-        if g == one {
+        if current_gcd == one {
             continue;
         }
-        if &g == n {
+        if &current_gcd == composite {
             // Fallback: step-by-step gcd.
-            let mut z = x.clone();
+            let mut z_state = x_state.clone();
             loop {
-                z = (&z * &z + &c) % n;
-                let diff = if &z > &y { &z - &y } else { &y - &z };
-                g = gcd_biguint(&diff, n);
-                if g > one || z == y {
+                z_state = (&z_state * &z_state + &constant) % composite;
+                let diff = if z_state > y_state {
+                    &z_state - &y_state
+                } else {
+                    &y_state - &z_state
+                };
+                current_gcd = gcd_biguint(&diff, composite);
+                if current_gcd > one || z_state == y_state {
                     break;
                 }
             }
         }
 
-        if g > one && &g < n {
-            return Some(g);
+        if current_gcd > one && &current_gcd < composite {
+            return Some(current_gcd);
         }
     }
 
     None
 }
 
-//// Recursively factor n and append factors (primes or unfactored composites) to `factors`.
-//// Returns true if full factorization succeeded, false otherwise.
-fn gcd_biguint(a: &BigUint, b: &BigUint) -> BigUint {
+/// Recursively factor n and append factors (primes or unfactored composites) to `factors`.
+/// Returns true if full factorization succeeded, false otherwise.
+fn gcd_biguint(lhs: &BigUint, rhs: &BigUint) -> BigUint {
     // Standard Euclidean algorithm using owned BigUint values to avoid lifetime issues.
-    let mut x = a.clone();
-    let mut y = b.clone();
-    while !y.is_zero() {
-        let r = &x % &y;
-        x = y;
-        y = r;
+    let mut dividend = lhs.clone();
+    let mut divisor = rhs.clone();
+    while !divisor.is_zero() {
+        let remainder = &dividend % &divisor;
+        dividend = divisor;
+        divisor = remainder;
     }
-    x
+    dividend
 }
 
 fn factor_biguint_recursive(n: &BigUint, factors: &mut Vec<BigUint>) -> bool {
@@ -427,7 +453,7 @@ fn factor_biguint_recursive(n: &BigUint, factors: &mut Vec<BigUint>) -> bool {
 
     // If n is small enough, use num_prime's factorize128 for speed.
     if n.bits() <= 128 {
-        if let Ok(x128) = n.to_string().parse::<u128>() {
+        if let Some(x128) = n.to_u128() {
             let pf = num_prime::nt_funcs::factorize128(x128);
             if !pf.is_empty() {
                 for (p, e) in pf {
