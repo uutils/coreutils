@@ -908,7 +908,7 @@ fn test_mkdir_parent_mode_with_explicit_mode() {
 
 /// Test that nested directories inherit the setgid bit with mkdir -p.
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(not(windows))]
 fn test_mkdir_parent_inherits_setgid() {
     let (at, mut ucmd) = at_and_ucmd!();
 
