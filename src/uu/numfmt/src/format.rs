@@ -213,7 +213,7 @@ fn apply_grouping(num: &str, grouping_sep: &str, decimal_sep: char) -> String {
         out.push(sign);
     }
     for (i, ch) in digits_chars.iter().enumerate() {
-        if i > 0 && (len - i) % 3 == 0 {
+        if i > 0 && (len - i).is_multiple_of(3) {
             out.push_str(grouping_sep);
         }
         out.push(*ch);
