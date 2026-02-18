@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (ToDO) hdsf ghead gtail ACDBK hexdigit
+// spell-checker:ignore (ToDO) hdsf ghead gtail ACDBK hexdigit memsize physmem
 
 //! Parser for sizes in SI or IEC units (multiples of 1000 or 1024 bytes).
 
@@ -18,7 +18,7 @@ use procfs::{Current, Meminfo};
 enum SystemError {
     IOError,
     ParseError,
-    #[cfg(not(target_os = "linux"))]
+    #[allow(dead_code)]
     NotFound,
 }
 
@@ -77,10 +77,114 @@ pub fn available_memory_bytes() -> Option<u128> {
     None
 }
 
-/// Get the total number of bytes of physical memory.
+/// Helper function for BSD-based systems to query physical memory via sysctl.
 ///
-/// TODO Implement this for non-Linux systems.
-#[cfg(not(target_os = "linux"))]
+/// # Arguments
+///
+/// * `hw_constant` - The platform-specific HW constant (e.g., `HW_MEMSIZE`, `HW_PHYSMEM`)
+/// * `sysctl_name` - The sysctl parameter name for subprocess fallback (e.g., "hw.memsize")
+///
+/// # Returns
+///
+/// The total physical memory in bytes, or an error if the query fails.
+#[cfg(any(
+    target_os = "macos",
+    target_os = "freebsd",
+    target_os = "openbsd",
+    target_os = "netbsd"
+))]
+fn bsd_sysctl_memory(hw_constant: libc::c_int, sysctl_name: &str) -> Result<u128, SystemError> {
+    use nix::libc;
+    use std::mem;
+    use std::ptr;
+
+    // Try native sysctl syscall first (more reliable in restricted environments)
+    let mut size: u64 = 0;
+    let mut len = mem::size_of::<u64>();
+    let mut mib = [libc::CTL_HW, hw_constant];
+
+    let result = unsafe {
+        libc::sysctl(
+            mib.as_mut_ptr(),
+            2,
+            ptr::from_mut(&mut size).cast::<libc::c_void>(),
+            &raw mut len,
+            ptr::null_mut(),
+            0,
+        )
+    };
+
+    if result == 0 {
+        return Ok(size as u128);
+    }
+
+    // Fallback to subprocess if native call fails
+    // Configure stdin/stdout/stderr to prevent file descriptor inheritance issues
+    let output = std::process::Command::new("sysctl")
+        .arg("-n")
+        .arg(sysctl_name)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .output()?;
+
+    let mem_str = String::from_utf8_lossy(&output.stdout);
+    let mem_bytes: u128 = mem_str.trim().parse()?;
+    Ok(mem_bytes)
+}
+
+/// Get the total number of bytes of physical memory on macOS.
+///
+/// Uses native `sysctl` syscall to query `hw.memsize`, with subprocess fallback.
+#[cfg(target_os = "macos")]
+fn total_physical_memory() -> Result<u128, SystemError> {
+    use nix::libc;
+    bsd_sysctl_memory(libc::HW_MEMSIZE, "hw.memsize")
+}
+
+/// Get the total number of bytes of physical memory on FreeBSD.
+///
+/// Uses native `sysctl` syscall to query `hw.physmem`, with subprocess fallback.
+#[cfg(target_os = "freebsd")]
+fn total_physical_memory() -> Result<u128, SystemError> {
+    use nix::libc;
+    // HW_PHYSMEM constant (not always exported by libc)
+    const HW_PHYSMEM: libc::c_int = 5;
+    bsd_sysctl_memory(HW_PHYSMEM, "hw.physmem")
+}
+
+/// Get the total number of bytes of physical memory on OpenBSD.
+///
+/// Uses native `sysctl` syscall to query `hw.physmem`, with subprocess fallback.
+#[cfg(target_os = "openbsd")]
+fn total_physical_memory() -> Result<u128, SystemError> {
+    use nix::libc;
+    // HW_PHYSMEM constant (not always exported by libc)
+    const HW_PHYSMEM: libc::c_int = 19;
+    bsd_sysctl_memory(HW_PHYSMEM, "hw.physmem")
+}
+
+/// Get the total number of bytes of physical memory on NetBSD.
+///
+/// Uses native `sysctl` syscall to query `hw.physmem64`, with subprocess fallback.
+#[cfg(target_os = "netbsd")]
+fn total_physical_memory() -> Result<u128, SystemError> {
+    use nix::libc;
+    // HW_PHYSMEM64 constant (not always exported by libc)
+    const HW_PHYSMEM64: libc::c_int = 9;
+    bsd_sysctl_memory(HW_PHYSMEM64, "hw.physmem64")
+}
+
+/// Get the total number of bytes of physical memory (fallback for unsupported platforms).
+///
+/// Returns an error for platforms where we haven't implemented memory detection yet.
+#[cfg(not(any(
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "freebsd",
+    target_os = "openbsd",
+    target_os = "netbsd"
+)))]
 fn total_physical_memory() -> Result<u128, SystemError> {
     Err(SystemError::NotFound)
 }
