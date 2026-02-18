@@ -11,7 +11,7 @@ license.workspace = true
 [dependencies]
 console = "0.16.0"
 libc = "0.2.153"
-rand = { version = "0.9.0", features = ["small_rng"] }
+rand = { version = "0.10.0", features = ["small_rng"] }
 similar = "2.5.0"
 uucore = { version = "0.6.0", path = "../../src/uucore", features = ["parser"] }
 tempfile = "3.15.0"
