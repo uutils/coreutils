@@ -1713,28 +1713,28 @@ fn test_ls_long_formats() {
     // Zero or one "." for indicating a file with security context
 
     // Regex for three names, so all of author, group and owner
-    let re_three = Regex::new(r"[xrw-]{9}[.+]? \d ([-0-9_a-z.A-Z]+ ){3}0").unwrap();
+    let re_three = Regex::new(r"[xrw-]{9}[.+ ]? \d ([-0-9_a-z.A-Z]+ ){3}0").unwrap();
 
     #[cfg(unix)]
-    let re_three_num = Regex::new(r"[xrw-]{9}[.+]? \d (\d+ ){3}0").unwrap();
+    let re_three_num = Regex::new(r"[xrw-]{9}[.+ ]? \d (\d+ ){3}0").unwrap();
 
     // Regex for two names, either:
     // - group and owner
     // - author and owner
     // - author and group
-    let re_two = Regex::new(r"[xrw-]{9}[.+]? \d ([-0-9_a-z.A-Z]+ ){2}0").unwrap();
+    let re_two = Regex::new(r"[xrw-]{9}[.+ ]? \d ([-0-9_a-z.A-Z]+ ){2}0").unwrap();
 
     #[cfg(unix)]
-    let re_two_num = Regex::new(r"[xrw-]{9}[.+]? \d (\d+ ){2}0").unwrap();
+    let re_two_num = Regex::new(r"[xrw-]{9}[.+ ]? \d (\d+ ){2}0").unwrap();
 
     // Regex for one name: author, group or owner
-    let re_one = Regex::new(r"[xrw-]{9}[.+]? \d [-0-9_a-z.A-Z]+ 0").unwrap();
+    let re_one = Regex::new(r"[xrw-]{9}[.+ ]? \d [-0-9_a-z.A-Z]+ 0").unwrap();
 
     #[cfg(unix)]
-    let re_one_num = Regex::new(r"[xrw-]{9}[.+]? \d \d+ 0").unwrap();
+    let re_one_num = Regex::new(r"[xrw-]{9}[.+ ]? \d \d+ 0").unwrap();
 
     // Regex for no names
-    let re_zero = Regex::new(r"[xrw-]{9}[.+]? \d 0").unwrap();
+    let re_zero = Regex::new(r"[xrw-]{9}[.+ ]? \d 0").unwrap();
 
     scene
         .ucmd()
