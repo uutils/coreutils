@@ -6,7 +6,7 @@
 use divan::{Bencher, black_box};
 use tempfile::TempDir;
 use uu_du::uumain;
-use uucore::benchmark::{fs_tree, run_util_function};
+use uucore::benchmark::{fs_tree, get_bench_args, run_util_function};
 
 /// Helper to run du with given arguments on a directory
 fn bench_du_with_args(bencher: Bencher, temp_dir: &TempDir, args: &[&str]) {
@@ -64,14 +64,11 @@ fn du_wide_tree(bencher: Bencher, (total_files, total_dirs): (usize, usize)) {
     bencher
         .with_inputs(|| {
             let temp_dir = TempDir::new().unwrap();
-            fs_tree::create_wide_tree(temp_dir.path(), total_files, total_dirs);
-            temp_dir
+            let temp_path = temp_dir.path();
+            fs_tree::create_wide_tree(temp_path, total_files, total_dirs);
+            get_bench_args(&[&temp_path])
         })
-        .bench_values(|temp_dir| {
-            let temp_path_str = temp_dir.path().to_str().unwrap();
-            let args = vec![temp_path_str];
-            black_box(run_util_function(uumain, &args));
-        });
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark du -a on wide directory structures
@@ -80,14 +77,11 @@ fn du_all_wide_tree(bencher: Bencher, (total_files, total_dirs): (usize, usize))
     bencher
         .with_inputs(|| {
             let temp_dir = TempDir::new().unwrap();
-            fs_tree::create_wide_tree(temp_dir.path(), total_files, total_dirs);
-            temp_dir
+            let temp_path = temp_dir.path();
+            fs_tree::create_wide_tree(temp_path, total_files, total_dirs);
+            get_bench_args(&[&"-a", &temp_path])
         })
-        .bench_values(|temp_dir| {
-            let temp_path_str = temp_dir.path().to_str().unwrap();
-            let args = vec![temp_path_str, "-a"];
-            black_box(run_util_function(uumain, &args));
-        });
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark du on deep directory structures
@@ -96,14 +90,11 @@ fn du_deep_tree(bencher: Bencher, (depth, files_per_level): (usize, usize)) {
     bencher
         .with_inputs(|| {
             let temp_dir = TempDir::new().unwrap();
-            fs_tree::create_deep_tree(temp_dir.path(), depth, files_per_level);
-            temp_dir
+            let temp_path = temp_dir.path();
+            fs_tree::create_deep_tree(temp_path, depth, files_per_level);
+            get_bench_args(&[&temp_path])
         })
-        .bench_values(|temp_dir| {
-            let temp_path_str = temp_dir.path().to_str().unwrap();
-            let args = vec![temp_path_str];
-            black_box(run_util_function(uumain, &args));
-        });
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark du -s (summarize) on balanced tree

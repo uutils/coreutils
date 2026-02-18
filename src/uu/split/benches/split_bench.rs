@@ -6,7 +6,7 @@
 use divan::{Bencher, black_box};
 use tempfile::TempDir;
 use uu_split::uumain;
-use uucore::benchmark::{run_util_function, setup_test_file, text_data};
+use uucore::benchmark::{get_bench_args, setup_test_file, text_data};
 
 /// Benchmark splitting by line count
 #[divan::bench]
@@ -18,13 +18,11 @@ fn split_lines(bencher: Bencher) {
         .with_inputs(|| {
             let output_dir = TempDir::new().unwrap();
             let prefix = output_dir.path().join("x");
-            (output_dir, prefix.to_str().unwrap().to_string())
+            let args = get_bench_args(&[&"-l", &"1000", &file_path, &prefix]);
+            (output_dir, args)
         })
-        .bench_values(|(output_dir, prefix)| {
-            black_box(run_util_function(
-                uumain,
-                &["-l", "1000", file_path.to_str().unwrap(), &prefix],
-            ));
+        .bench_values(|(output_dir, args)| {
+            black_box(uumain(args));
             drop(output_dir);
         });
 }
@@ -39,13 +37,11 @@ fn split_bytes(bencher: Bencher) {
         .with_inputs(|| {
             let output_dir = TempDir::new().unwrap();
             let prefix = output_dir.path().join("x");
-            (output_dir, prefix.to_str().unwrap().to_string())
+            let args = get_bench_args(&[&"-b", &"100K", &file_path, &prefix]);
+            (output_dir, args)
         })
-        .bench_values(|(output_dir, prefix)| {
-            black_box(run_util_function(
-                uumain,
-                &["-b", "100K", file_path.to_str().unwrap(), &prefix],
-            ));
+        .bench_values(|(output_dir, args)| {
+            black_box(uumain(args));
             drop(output_dir);
         });
 }
@@ -60,13 +56,11 @@ fn split_number_chunks(bencher: Bencher) {
         .with_inputs(|| {
             let output_dir = TempDir::new().unwrap();
             let prefix = output_dir.path().join("x");
-            (output_dir, prefix.to_str().unwrap().to_string())
+            let args = get_bench_args(&[&"-n", &"10", &file_path, &prefix]);
+            (output_dir, args)
         })
-        .bench_values(|(output_dir, prefix)| {
-            black_box(run_util_function(
-                uumain,
-                &["-n", "10", file_path.to_str().unwrap(), &prefix],
-            ));
+        .bench_values(|(output_dir, args)| {
+            black_box(uumain(args));
             drop(output_dir);
         });
 }
@@ -81,13 +75,11 @@ fn split_numeric_suffix(bencher: Bencher) {
         .with_inputs(|| {
             let output_dir = TempDir::new().unwrap();
             let prefix = output_dir.path().join("x");
-            (output_dir, prefix.to_str().unwrap().to_string())
+            let args = get_bench_args(&[&"-d", &"-l", &"500", &file_path, &prefix]);
+            (output_dir, args)
         })
-        .bench_values(|(output_dir, prefix)| {
-            black_box(run_util_function(
-                uumain,
-                &["-d", "-l", "500", file_path.to_str().unwrap(), &prefix],
-            ));
+        .bench_values(|(output_dir, args)| {
+            black_box(uumain(args));
             drop(output_dir);
         });
 }

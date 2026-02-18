@@ -11,7 +11,7 @@
 use divan::{Bencher, black_box};
 use tempfile::NamedTempFile;
 use uu_sort::uumain;
-use uucore::benchmark::{run_util_function, setup_test_file, text_data};
+use uucore::benchmark::{get_bench_args, setup_test_file, text_data};
 
 /// Benchmark ASCII-only data sorting with C locale (byte comparison)
 #[divan::bench]
@@ -19,14 +19,11 @@ fn sort_ascii_c_locale(bencher: Bencher) {
     let data = text_data::generate_ascii_data_simple(100_000);
     let file_path = setup_test_file(&data);
     let output_file = NamedTempFile::new().unwrap();
-    let output_path = output_file.path().to_str().unwrap().to_string();
+    let output_path = output_file.path();
 
-    bencher.bench(|| {
-        black_box(run_util_function(
-            uumain,
-            &["-o", &output_path, file_path.to_str().unwrap()],
-        ));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&"-o", &output_path, &file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark mixed ASCII/Unicode data with C locale (byte comparison)
@@ -35,14 +32,11 @@ fn sort_mixed_c_locale(bencher: Bencher) {
     let data = text_data::generate_mixed_locale_data(50_000);
     let file_path = setup_test_file(&data);
     let output_file = NamedTempFile::new().unwrap();
-    let output_path = output_file.path().to_str().unwrap().to_string();
+    let output_path = output_file.path();
 
-    bencher.bench(|| {
-        black_box(run_util_function(
-            uumain,
-            &["-o", &output_path, file_path.to_str().unwrap()],
-        ));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&"-o", &output_path, &file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 /// Benchmark German locale-specific data with C locale (byte comparison)
@@ -51,14 +45,11 @@ fn sort_german_c_locale(bencher: Bencher) {
     let data = text_data::generate_german_locale_data(50_000);
     let file_path = setup_test_file(&data);
     let output_file = NamedTempFile::new().unwrap();
-    let output_path = output_file.path().to_str().unwrap().to_string();
+    let output_path = output_file.path();
 
-    bencher.bench(|| {
-        black_box(run_util_function(
-            uumain,
-            &["-o", &output_path, file_path.to_str().unwrap()],
-        ));
-    });
+    bencher
+        .with_inputs(|| get_bench_args(&[&"-o", &output_path, &file_path]))
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 fn main() {

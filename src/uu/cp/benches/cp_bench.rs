@@ -8,7 +8,7 @@ use std::fs;
 use std::path::Path;
 use tempfile::TempDir;
 use uu_cp::uumain;
-use uucore::benchmark::{binary_data, fs_tree, fs_utils, run_util_function};
+use uucore::benchmark::{binary_data, fs_tree, fs_utils, get_bench_args, run_util_function};
 
 fn bench_cp_directory<F>(bencher: Bencher, args: &[&str], setup_source: F)
 where
@@ -87,20 +87,14 @@ fn cp_large_file(bencher: Bencher, size_mb: usize) {
             let temp_dir = TempDir::new().unwrap();
             let source = temp_dir.path().join("source.bin");
             binary_data::create_file(&source, size_mb, b'x');
-            (temp_dir, source)
+            // Use unique destination name to avoid filesystem allocation variance
+            let dest = temp_dir
+                .path()
+                .join(format!("dest_{}.bin", (&raw const temp_dir).addr()));
+            get_bench_args(&[&source, &dest])
         })
         .counter(divan::counter::BytesCount::new(size_mb * 1024 * 1024))
-        .bench_values(|(temp_dir, source)| {
-            // Use unique destination name to avoid filesystem allocation variance
-            let dest = temp_dir.path().join(format!(
-                "dest_{}.bin",
-                std::ptr::addr_of!(temp_dir) as usize
-            ));
-            let source_str = source.to_str().unwrap();
-            let dest_str = dest.to_str().unwrap();
-
-            black_box(run_util_function(uumain, &[source_str, dest_str]));
-        });
+        .bench_values(|args| black_box(uumain(args)));
 }
 
 fn main() {
