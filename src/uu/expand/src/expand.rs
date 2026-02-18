@@ -421,8 +421,12 @@ fn expand_buf(
     use self::CharType::{Backspace, Other, Tab};
 
     // Fast path: if there are no tabs, backspaces, and (in UTF-8 mode or no carriage returns),
-    // we can write the buffer directly without character-by-character processing
-    if !buf.contains(&b'\t') && !buf.contains(&b'\x08') && (options.utf8 || !buf.contains(&b'\r')) {
+    // we can write the buffer directly without character-by-character processing.
+    // Single pass with early exit instead of up to 3 separate .contains() scans.
+    let needs_processing = buf
+        .iter()
+        .any(|&b| b == b'\t' || b == b'\x08' || (!options.utf8 && b == b'\r'));
+    if !needs_processing {
         output.write_all(buf)?;
         if let Some(n) = buf.iter().rposition(|&b| b == b'\n') {
             *col = buf.len() - n - 1;
