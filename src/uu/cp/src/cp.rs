@@ -4,8 +4,9 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (ToDO) copydir ficlone fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO
 
+use ahash::AHashMap;
+use ahash::AHashSet;
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
 use std::fmt::Display;
 use std::fs::{self, Metadata, OpenOptions, Permissions};
@@ -1378,8 +1379,8 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
     verify_target_type(target, target_type)?;
 
     let mut non_fatal_errors = false;
-    let mut seen_sources = HashSet::with_capacity(sources.len());
-    let mut symlinked_files = HashSet::new();
+    let mut seen_sources = AHashSet::with_capacity(sources.len());
+    let mut symlinked_files = AHashSet::default();
 
     // to remember the copied files for further usage.
     // the FileInformation implemented the Hash trait by using
@@ -1388,11 +1389,12 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
     // the combination of a file's inode number and device number is unique throughout all the file systems.
     //
     // key is the source file's information and the value is the destination filepath.
-    let mut copied_files: HashMap<FileInformation, PathBuf> = HashMap::with_capacity(sources.len());
+    let mut copied_files: AHashMap<FileInformation, PathBuf> =
+        AHashMap::with_capacity(sources.len());
     // remember the copied destinations for further usage.
     // we can't use copied_files as it is because the key is the source file's information.
-    let mut copied_destinations: HashSet<PathBuf> = HashSet::with_capacity(sources.len());
-    let mut created_parent_dirs: HashSet<PathBuf> = HashSet::new();
+    let mut copied_destinations: AHashSet<PathBuf> = AHashSet::with_capacity(sources.len());
+    let mut created_parent_dirs: AHashSet<PathBuf> = AHashSet::default();
 
     let progress_bar = if options.progress_bar {
         let pb = ProgressBar::new(disk_usage(sources, options.recursive)?)
@@ -1529,10 +1531,10 @@ fn copy_source(
     target: &Path,
     target_type: TargetType,
     options: &Options,
-    symlinked_files: &mut HashSet<FileInformation>,
-    copied_destinations: &HashSet<PathBuf>,
-    copied_files: &mut HashMap<FileInformation, PathBuf>,
-    created_parent_dirs: &mut HashSet<PathBuf>,
+    symlinked_files: &mut AHashSet<FileInformation>,
+    copied_destinations: &AHashSet<PathBuf>,
+    copied_files: &mut AHashMap<FileInformation, PathBuf>,
+    created_parent_dirs: &mut AHashSet<PathBuf>,
 ) -> CopyResult<()> {
     let source_path = Path::new(&source);
     if source_path.is_dir() && (options.dereference || !source_path.is_symlink()) {
@@ -1894,7 +1896,7 @@ pub(crate) fn copy_attributes(
 fn symlink_file(
     source: &Path,
     dest: &Path,
-    symlinked_files: &mut HashSet<FileInformation>,
+    symlinked_files: &mut AHashSet<FileInformation>,
 ) -> CopyResult<()> {
     #[cfg(not(windows))]
     {
@@ -1999,7 +2001,7 @@ fn handle_existing_dest(
     dest: &Path,
     options: &Options,
     source_in_command_line: bool,
-    copied_files: &HashMap<FileInformation, PathBuf>,
+    copied_files: &AHashMap<FileInformation, PathBuf>,
 ) -> CopyResult<()> {
     // Disallow copying a file to itself, unless `--force` and
     // `--backup` are both specified.
@@ -2054,7 +2056,7 @@ fn delete_dest_if_needed_and_allowed(
     dest: &Path,
     options: &Options,
     source_in_command_line: bool,
-    copied_files: &HashMap<FileInformation, PathBuf>,
+    copied_files: &AHashMap<FileInformation, PathBuf>,
 ) -> CopyResult<()> {
     let delete_dest = match options.overwrite {
         OverwriteMode::Clobber(cl) | OverwriteMode::Interactive(cl) => {
@@ -2225,11 +2227,11 @@ fn handle_copy_mode(
     options: &Options,
     context: &str,
     source_metadata: &Metadata,
-    symlinked_files: &mut HashSet<FileInformation>,
+    symlinked_files: &mut AHashSet<FileInformation>,
     source_in_command_line: bool,
     source_is_fifo: bool,
     source_is_socket: bool,
-    created_parent_dirs: &mut HashSet<PathBuf>,
+    created_parent_dirs: &mut AHashSet<PathBuf>,
     #[cfg(unix)] source_is_stream: bool,
 ) -> CopyResult<PerformedAction> {
     let source_is_symlink = source_metadata.is_symlink();
@@ -2423,10 +2425,10 @@ fn copy_file(
     source: &Path,
     dest: &Path,
     options: &Options,
-    symlinked_files: &mut HashSet<FileInformation>,
-    copied_destinations: &HashSet<PathBuf>,
-    copied_files: &mut HashMap<FileInformation, PathBuf>,
-    created_parent_dirs: &mut HashSet<PathBuf>,
+    symlinked_files: &mut AHashSet<FileInformation>,
+    copied_destinations: &AHashSet<PathBuf>,
+    copied_files: &mut AHashMap<FileInformation, PathBuf>,
+    created_parent_dirs: &mut AHashSet<PathBuf>,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
     let source_is_symlink = source.is_symlink();
@@ -2750,8 +2752,8 @@ fn copy_helper(
     source_is_symlink: bool,
     source_is_fifo: bool,
     source_is_socket: bool,
-    symlinked_files: &mut HashSet<FileInformation>,
-    created_parent_dirs: &mut HashSet<PathBuf>,
+    symlinked_files: &mut AHashSet<FileInformation>,
+    created_parent_dirs: &mut AHashSet<PathBuf>,
     #[cfg(unix)] source_is_stream: bool,
 ) -> CopyResult<()> {
     if options.parents {
@@ -2819,7 +2821,7 @@ fn copy_socket(dest: &Path, overwrite: OverwriteMode, debug: bool) -> CopyResult
 fn copy_link(
     source: &Path,
     dest: &Path,
-    symlinked_files: &mut HashSet<FileInformation>,
+    symlinked_files: &mut AHashSet<FileInformation>,
     options: &Options,
 ) -> CopyResult<()> {
     // Here, we will copy the symlink itself (actually, just recreate it)

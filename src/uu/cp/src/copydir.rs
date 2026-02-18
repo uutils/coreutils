@@ -6,9 +6,10 @@
 //! Recursively copy the contents of a directory.
 //!
 //! See the [`copy_directory`] function for more information.
+use ahash::AHashMap;
+use ahash::AHashSet;
 #[cfg(windows)]
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
 use std::convert::identity;
 use std::env;
 use std::fs::{self, exists};
@@ -261,11 +262,11 @@ fn copy_direntry(
     entry_is_symlink: bool,
     entry_is_dir_no_follow: bool,
     options: &Options,
-    symlinked_files: &mut HashSet<FileInformation>,
+    symlinked_files: &mut AHashSet<FileInformation>,
     preserve_hard_links: bool,
-    copied_destinations: &HashSet<PathBuf>,
-    copied_files: &mut HashMap<FileInformation, PathBuf>,
-    created_parent_dirs: &mut HashSet<PathBuf>,
+    copied_destinations: &AHashSet<PathBuf>,
+    copied_files: &mut AHashMap<FileInformation, PathBuf>,
+    created_parent_dirs: &mut AHashSet<PathBuf>,
 ) -> CopyResult<bool> {
     let source_is_symlink = entry_is_symlink;
     let source_is_dir = if source_is_symlink && !options.dereference {
@@ -358,10 +359,10 @@ pub(crate) fn copy_directory(
     root: &Path,
     target: &Path,
     options: &Options,
-    symlinked_files: &mut HashSet<FileInformation>,
-    copied_destinations: &HashSet<PathBuf>,
-    copied_files: &mut HashMap<FileInformation, PathBuf>,
-    created_parent_dirs: &mut HashSet<PathBuf>,
+    symlinked_files: &mut AHashSet<FileInformation>,
+    copied_destinations: &AHashSet<PathBuf>,
+    copied_files: &mut AHashMap<FileInformation, PathBuf>,
+    created_parent_dirs: &mut AHashSet<PathBuf>,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
     // if no-dereference is enabled and this is a symlink, copy it as a file
