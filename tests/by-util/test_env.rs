@@ -1876,7 +1876,7 @@ fn test_simulation_of_terminal_pty_write_in_data_and_sends_eot_automatically() {
 fn test_env_french() {
     new_ucmd!()
         .arg("--verbo")
-        .env("LANG", "fr_FR")
+        .env("LC_ALL", "fr_FR")
         .fails()
         .stderr_contains("erreur : argument inattendu");
 }

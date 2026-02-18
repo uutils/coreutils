@@ -483,7 +483,7 @@ mod tests {
     #[test]
     fn test_format_nusers() {
         unsafe {
-            std::env::set_var("LANG", "en_US.UTF-8");
+            std::env::set_var("LC_ALL", "en_US.UTF-8");
         }
         let _ = locale::setup_localization("uptime");
         assert_eq!("0 users", format_nusers(0));

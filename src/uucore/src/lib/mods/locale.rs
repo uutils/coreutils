@@ -1253,11 +1253,17 @@ invalid-syntax = This is { $missing
 
     #[test]
     fn test_detect_system_locale_no_lang_env() {
+        // Save current LC_ALL value
+        let original_lc_all = env::var("LC_ALL").ok();
+        // Save current LC_MESSAGES value
+        let original_lc_messages = env::var("LC_MESSAGES").ok();
         // Save current LANG value
         let original_lang = env::var("LANG").ok();
 
-        // Remove LANG environment variable
+        // Remove LC_ALL environment variable
         unsafe {
+            env::remove_var("LC_ALL");
+            env::remove_var("LC_MESSAGES");
             env::remove_var("LANG");
         }
 
@@ -1265,6 +1271,22 @@ invalid-syntax = This is { $missing
         assert!(result.is_ok());
         assert_eq!(result.unwrap().to_string(), "en-US");
 
+        // Restore original LC_ALL value
+        if let Some(val) = original_lc_all {
+            unsafe {
+                env::set_var("LC_ALL", val);
+            }
+        } else {
+            {} // Was already unset
+        }
+        // Restore original LC_MESSAGES value
+        if let Some(val) = original_lc_messages {
+            unsafe {
+                env::set_var("LC_MESSAGES", val);
+            }
+        } else {
+            {} // Was already unset
+        }
         // Restore original LANG value
         if let Some(val) = original_lang {
             unsafe {
@@ -1278,10 +1300,10 @@ invalid-syntax = This is { $missing
     #[test]
     fn test_setup_localization_success() {
         std::thread::spawn(|| {
-            // Save current LANG value
-            let original_lang = env::var("LANG").ok();
+            // Save current LC_ALL value
+            let original_lang = env::var("LC_ALL").ok();
             unsafe {
-                env::set_var("LANG", "en-US.UTF-8"); // Use English since we have embedded resources for "test"
+                env::set_var("LC_ALL", "en-US.UTF-8"); // Use English since we have embedded resources for "test"
             }
 
             let result = setup_localization("test");
@@ -1292,14 +1314,14 @@ invalid-syntax = This is { $missing
             // Since we're using embedded resources, we should get the expected message
             assert!(!message.is_empty());
 
-            // Restore original LANG value
+            // Restore original LC_ALL value
             if let Some(val) = original_lang {
                 unsafe {
-                    env::set_var("LANG", val);
+                    env::set_var("LC_ALL", val);
                 }
             } else {
                 unsafe {
-                    env::remove_var("LANG");
+                    env::remove_var("LC_ALL");
                 }
             }
         })
@@ -1310,10 +1332,10 @@ invalid-syntax = This is { $missing
     #[test]
     fn test_setup_localization_falls_back_to_english() {
         std::thread::spawn(|| {
-            // Save current LANG value
-            let original_lang = env::var("LANG").ok();
+            // Save current LC_ALL value
+            let original_lang = env::var("LC_ALL").ok();
             unsafe {
-                env::set_var("LANG", "de-DE.UTF-8"); // German file doesn't exist, should fallback
+                env::set_var("LC_ALL", "de-DE.UTF-8"); // German file doesn't exist, should fallback
             }
 
             let result = setup_localization("test");
@@ -1323,14 +1345,14 @@ invalid-syntax = This is { $missing
             let message = get_message("test-about");
             assert!(!message.is_empty()); // Should get something, not just the key
 
-            // Restore original LANG value
+            // Restore original LC_ALL value
             if let Some(val) = original_lang {
                 unsafe {
-                    env::set_var("LANG", val);
+                    env::set_var("LC_ALL", val);
                 }
             } else {
                 unsafe {
-                    env::remove_var("LANG");
+                    env::remove_var("LC_ALL");
                 }
             }
         })
@@ -1343,7 +1365,7 @@ invalid-syntax = This is { $missing
         std::thread::spawn(|| {
             // Force English locale for this test
             unsafe {
-                env::set_var("LANG", "en-US");
+                env::set_var("LC_ALL", "en-US");
             }
 
             // Test with a utility name that has embedded locales
