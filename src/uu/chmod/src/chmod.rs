@@ -684,6 +684,17 @@ impl Chmoder {
         while !frames.is_empty() {
             let index = frames.len() - 1;
             let Some(entry_name) = frames[index].entries.next() else {
+                // Usually the physical parent is also the logical parent. Reuse
+                // it after checking its identity, avoiding a root-to-leaf reopen
+                // on every ascent in deep trees. Symlinks and renames may make
+                // the two parents differ; in that case use the verified chain.
+                if index > 1 && frames[index - 1].fd.is_none()
+                    && let Some(fd) = &frames[index].fd
+                    && let Ok(parent) = fd.open_subdir(std::ffi::OsStr::new(".."), SymlinkBehavior::NoFollow)
+                    && FileInformation::from_file(&parent).ok().as_ref() == Some(&frames[index - 1].info)
+                {
+                    frames[index - 1].fd = Some(parent);
+                }
                 ancestors.remove(&frames.pop().unwrap().info);
                 if index != 0 {
                     dir_path.pop();
