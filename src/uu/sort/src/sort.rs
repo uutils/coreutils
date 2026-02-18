@@ -41,7 +41,6 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::Utf8Error;
-use std::thread;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, strip_errno};
@@ -288,8 +287,6 @@ pub struct GlobalSettings {
     merge_batch_size: usize,
     numeric_locale: NumericLocaleSettings,
     precomputed: Precomputed,
-    pipeline_depth: usize,
-    pipeline_depth_is_explicit: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -437,8 +434,18 @@ impl GlobalSettings {
 
     fn can_use_filtered_view(&self) -> bool {
         self.mode == SortMode::Default
-            && self.selectors.is_empty()
-            && (self.ignore_case || self.dictionary_order || self.ignore_non_printing)
+            && !self.ignore_leading_blanks
+            && (self.dictionary_order || self.ignore_non_printing)
+            && self.selectors.len() == 1
+            && {
+                let selector = &self.selectors[0];
+                !selector.needs_selection
+                    && matches!(selector.settings.mode, SortMode::Default)
+                    && selector.settings.ignore_case == self.ignore_case
+                    && selector.settings.dictionary_order == self.dictionary_order
+                    && selector.settings.ignore_non_printing == self.ignore_non_printing
+                    && !selector.settings.ignore_blanks
+            }
     }
 }
 
@@ -469,8 +476,6 @@ impl Default for GlobalSettings {
             merge_batch_size: default_merge_batch_size(),
             numeric_locale: NumericLocaleSettings::default(),
             precomputed: Precomputed::default(),
-            pipeline_depth: default_pipeline_depth(),
-            pipeline_depth_is_explicit: false,
         }
     }
 }
@@ -648,7 +653,8 @@ impl<'a> Line<'a> {
             || settings.precomputed.selections_per_line > 0
             || settings.precomputed.num_infos_per_line > 0
             || settings.precomputed.floats_per_line > 0
-            || settings.mode == SortMode::Numeric;
+            || settings.mode == SortMode::Numeric
+            || settings.precomputed.needs_filtered_view;
         if !needs_line_data {
             return Self { line, index };
         }
@@ -1776,26 +1782,6 @@ fn default_merge_batch_size() -> usize {
     }
 }
 
-const MIN_PIPELINE_DEPTH: usize = 2;
-const MAX_PIPELINE_DEPTH: usize = 8;
-
-fn default_pipeline_depth() -> usize {
-    thread::available_parallelism()
-        .map(|n| n.get().clamp(MIN_PIPELINE_DEPTH, MAX_PIPELINE_DEPTH))
-        .unwrap_or(MIN_PIPELINE_DEPTH)
-}
-
-fn pipeline_depth_from_parallel_arg(arg: Option<&String>) -> usize {
-    if let Some(raw) = arg {
-        if let Ok(parsed) = raw.parse::<usize>() {
-            if parsed > 0 {
-                return parsed.clamp(MIN_PIPELINE_DEPTH, MAX_PIPELINE_DEPTH);
-            }
-        }
-    }
-    default_pipeline_depth()
-}
-
 fn locale_failed_to_set() -> bool {
     matches!(env::var("LC_ALL").ok().as_deref(), Some("missing"))
 }
@@ -2144,8 +2130,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     settings.dictionary_order = dictionary_order;
     settings.ignore_non_printing = ignore_non_printing;
     settings.ignore_case = ignore_case;
-    let parallel_override = matches.contains_id(options::PARALLEL);
-    if parallel_override {
+    if matches.contains_id(options::PARALLEL) {
         // "0" is default - threads = num of cores
         settings.threads = matches
             .get_one::<String>(options::PARALLEL)
@@ -2158,10 +2143,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .num_threads(num_threads)
             .build_global();
     }
-
-    settings.pipeline_depth =
-        pipeline_depth_from_parallel_arg(matches.get_one::<String>(options::PARALLEL));
-    settings.pipeline_depth_is_explicit = parallel_override;
 
     if let Some(size_str) = matches.get_one::<String>(options::BUF_SIZE) {
         settings.buffer_size = GlobalSettings::parse_byte_count(size_str).map_err(|e| {
@@ -3274,5 +3255,41 @@ mod tests {
         for input in &invalid_input {
             assert!(GlobalSettings::parse_byte_count(input).is_err());
         }
+    }
+
+    fn push_default_selector(settings: &mut GlobalSettings) {
+        let key_settings = KeySettings::from(&*settings);
+        settings.selectors.push(
+            FieldSelector::new(
+                KeyPosition {
+                    field: 1,
+                    char: 1,
+                    ignore_blanks: key_settings.ignore_blanks,
+                },
+                None,
+                key_settings,
+            )
+            .unwrap(),
+        );
+    }
+
+    #[test]
+    fn test_can_use_filtered_view_with_default_selector() {
+        let mut settings = GlobalSettings {
+            dictionary_order: true,
+            ..GlobalSettings::default()
+        };
+        push_default_selector(&mut settings);
+        assert!(settings.can_use_filtered_view());
+    }
+
+    #[test]
+    fn test_can_use_filtered_view_ignores_case_only_mode() {
+        let mut settings = GlobalSettings {
+            ignore_case: true,
+            ..GlobalSettings::default()
+        };
+        push_default_selector(&mut settings);
+        assert!(!settings.can_use_filtered_view());
     }
 }

@@ -38,42 +38,6 @@ use crate::{Line, print_sorted};
 // Note: update `test_sort::test_start_buffer` if this size is changed
 const START_BUFFER_SIZE: usize = 8_000;
 
-const BUFFER_CAP_LIMIT: usize = 512 * 1024 * 1024;
-const BUFFER_MIN_WITHOUT_USER: usize = 8 * 1024 * 1024;
-const PIPELINE_DEPTH_CHUNK: usize = 4 * 1024 * 1024;
-const MIN_DYNAMIC_PIPELINE_DEPTH: usize = 2;
-const MAX_DYNAMIC_PIPELINE_DEPTH: usize = 8;
-
-struct ReaderWriterConfig {
-    buffer_size: usize,
-}
-
-fn normalized_buffer_size(settings: &GlobalSettings) -> usize {
-    let mut buffer_size = if settings.buffer_size <= BUFFER_CAP_LIMIT {
-        settings.buffer_size
-    } else {
-        settings.buffer_size / 2
-    };
-    if !settings.buffer_size_is_explicit {
-        buffer_size = buffer_size.max(BUFFER_MIN_WITHOUT_USER);
-    }
-    buffer_size
-}
-
-fn tuned_pipeline_depth(settings: &GlobalSettings, buffer_size: usize) -> usize {
-    let base = settings
-        .pipeline_depth
-        .clamp(MIN_DYNAMIC_PIPELINE_DEPTH, MAX_DYNAMIC_PIPELINE_DEPTH);
-    if settings.pipeline_depth_is_explicit {
-        base
-    } else {
-        let size_based = buffer_size
-            .div_ceil(PIPELINE_DEPTH_CHUNK)
-            .clamp(MIN_DYNAMIC_PIPELINE_DEPTH, MAX_DYNAMIC_PIPELINE_DEPTH);
-        base.max(size_based).min(MAX_DYNAMIC_PIPELINE_DEPTH)
-    }
-}
-
 /// Sort files by using auxiliary files for storing intermediate chunks (if needed), and output the result.
 pub fn ext_sort(
     files: &mut impl Iterator<Item = UResult<Box<dyn Read + Send>>>,
@@ -81,11 +45,8 @@ pub fn ext_sort(
     output: Output,
     tmp_dir: &mut TmpDirWrapper,
 ) -> UResult<()> {
-    let buffer_size = normalized_buffer_size(settings);
-    let pipeline_depth = tuned_pipeline_depth(settings, buffer_size);
-    let config = ReaderWriterConfig { buffer_size };
-    let (sorted_sender, sorted_receiver) = std::sync::mpsc::sync_channel(pipeline_depth);
-    let (recycled_sender, recycled_receiver) = std::sync::mpsc::sync_channel(pipeline_depth);
+    let (sorted_sender, sorted_receiver) = std::sync::mpsc::sync_channel(1);
+    let (recycled_sender, recycled_receiver) = std::sync::mpsc::sync_channel(1);
     thread::spawn({
         let settings = settings.clone();
         move || sorter(&recycled_receiver, &sorted_sender, &settings)
@@ -124,7 +85,6 @@ pub fn ext_sort(
             recycled_sender,
             output,
             tmp_dir,
-            &config,
         )
     } else {
         reader_writer::<_, WriteablePlainTmpFile>(
@@ -134,7 +94,6 @@ pub fn ext_sort(
             recycled_sender,
             output,
             tmp_dir,
-            &config,
         )
     }
 }
@@ -149,12 +108,26 @@ fn reader_writer<
     sender: SyncSender<Chunk>,
     output: Output,
     tmp_dir: &mut TmpDirWrapper,
-    config: &ReaderWriterConfig,
 ) -> UResult<()> {
     let separator = settings.line_ending.into();
 
+    // Cap oversized buffer requests to avoid unnecessary allocations and give the automatic
+    // heuristic room to grow when the user does not provide an explicit value.
+    let mut buffer_size = match settings.buffer_size {
+        size if size <= 512 * 1024 * 1024 => size,
+        size => size / 2,
+    };
+    if !settings.buffer_size_is_explicit {
+        buffer_size = buffer_size.max(8 * 1024 * 1024);
+    }
     let read_result: ReadResult<Tmp> = read_write_loop(
-        files, tmp_dir, separator, config, settings, receiver, sender,
+        files,
+        tmp_dir,
+        separator,
+        buffer_size,
+        settings,
+        receiver,
+        sender,
     )?;
     match read_result {
         ReadResult::WroteChunksToFile { tmp_files } => {
@@ -239,7 +212,7 @@ fn read_write_loop<I: WriteableTmpFile>(
     mut files: impl Iterator<Item = UResult<Box<dyn Read + Send>>>,
     tmp_dir: &mut TmpDirWrapper,
     separator: u8,
-    config: &ReaderWriterConfig,
+    buffer_size: usize,
     settings: &GlobalSettings,
     receiver: &Receiver<Chunk>,
     sender: SyncSender<Chunk>,
@@ -251,12 +224,12 @@ fn read_write_loop<I: WriteableTmpFile>(
     for _ in 0..2 {
         let should_continue = chunks::read(
             &sender,
-            RecycledChunk::new(if START_BUFFER_SIZE < config.buffer_size {
+            RecycledChunk::new(if START_BUFFER_SIZE < buffer_size {
                 START_BUFFER_SIZE
             } else {
-                config.buffer_size
+                buffer_size
             }),
-            Some(config.buffer_size),
+            Some(buffer_size),
             &mut carry_over,
             &mut file,
             &mut files,
