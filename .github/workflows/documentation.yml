@@ -69,12 +69,10 @@ jobs:
             exit 1
           fi
 
-          if ! grep -q "v(uutils coreutils) $VERSION" docs/src/utils/ls.md; then
+          if ! grep -q "$VERSION" docs/src/utils/ls.md; then
             echo "Version '$VERSION' not found in docs/src/utils/ls.md"
-            echo "Found version info:"
-            grep "v(uutils coreutils)" docs/src/utils/ls.md || echo "No version info found"
             echo "Full version section:"
-            grep -A2 -B2 "version" docs/src/utils/ls.md || echo "No version section found"
+            grep -C 2 "version" docs/src/utils/ls.md || echo "No version section found"
             exit 1
           fi
 

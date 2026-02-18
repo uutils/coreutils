@@ -432,11 +432,17 @@ impl MDWriter<'_, '_> {
     /// # Panics
     /// Panics if the version is not found.
     fn version(&mut self) -> io::Result<()> {
-        writeln!(
-            self.w,
-            "<div class=\"version\">v{}</div>",
-            self.command.render_version().split_once(' ').unwrap().1
-        )
+        let full_version_string = self.command.render_version();
+
+        // The version string format often includes command name and metadata,
+        // like "b2sum (uutils coreutils) 0.3.0". We reliably extract the
+        // version number, which is expected to be the last item.
+        let version_only = full_version_string
+            .split_whitespace()
+            .last()
+            .unwrap_or(&full_version_string); // Fallback to full string if parsing fails
+
+        writeln!(self.w, "<div class=\"version\">{version_only}</div>")
     }
 
     /// # Errors
