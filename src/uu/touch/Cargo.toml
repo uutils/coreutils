@@ -28,6 +28,12 @@ thiserror = { workspace = true }
 uucore = { workspace = true, features = ["libc", "parser"] }
 fluent = { workspace = true }
 
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true, features = ["fs"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { workspace = true, features = [
   "Win32_Storage_FileSystem",
