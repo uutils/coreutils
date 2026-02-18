@@ -274,14 +274,20 @@ fn embed_static_utility_locales(
 /// It always includes "en-US" to ensure that a fallback is available if the
 /// system locale's translation file is missing or if `LANG` is not set.
 fn get_locales_to_embed() -> (String, Option<String>) {
-    let system_locale = env::var("LANG").ok().and_then(|lang| {
-        let locale = lang.split('.').next()?.replace('_', "-");
-        if locale != "en-US" && !locale.is_empty() {
-            Some(locale)
-        } else {
-            None
-        }
-    });
+    // Invalidate an empty string env var
+    let locale_var = |name| env::var(name).ok().filter(|v| !v.is_empty());
+
+    let system_locale = locale_var("LC_ALL")
+        .or_else(|| locale_var("LC_MESSAGES"))
+        .or_else(|| locale_var("LANG"))
+        .and_then(|lang| {
+            let locale = lang.split('.').next()?.replace('_', "-");
+            if locale != "en-US" && !locale.is_empty() {
+                Some(locale)
+            } else {
+                None
+            }
+        });
     ("en-US".to_string(), system_locale)
 }
 
