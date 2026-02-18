@@ -1012,6 +1012,15 @@ fn test_wc_chars_c_locale() {
         .pipe_in(vietnamese_text)
         .succeeds()
         .stdout_is("      7       7\n");
+
+    // Test with -w to trigger wc.rs path (word_count_from_reader_specialized)
+    // Order: words, chars, bytes
+    new_ucmd!()
+        .args(&["-cmw"])
+        .env("LC_ALL", "C")
+        .pipe_in(vietnamese_text)
+        .succeeds()
+        .stdout_is("      1       7       7\n");
 }
 
 #[test]
@@ -1036,6 +1045,15 @@ fn test_wc_chars_utf8_locale() {
         .pipe_in(vietnamese_text)
         .succeeds()
         .stdout_is("      5       7\n");
+
+    // Test with -w to trigger wc.rs path (word_count_from_reader_specialized)
+    // Order: words, chars, bytes
+    new_ucmd!()
+        .args(&["-cmw"])
+        .env("LC_ALL", "vi_VN.UTF-8")
+        .pipe_in(vietnamese_text)
+        .succeeds()
+        .stdout_is("      1       5       7\n");
 }
 
 #[test]
@@ -1052,6 +1070,17 @@ fn test_wc_chars_default_locale() {
         .pipe_in(vietnamese_text)
         .succeeds()
         .stdout_is("7\n");
+
+    // Test with -w to trigger wc.rs path (word_count_from_reader_specialized)
+    // Order: words, chars
+    new_ucmd!()
+        .args(&["-mw"])
+        .env("LC_ALL", "")
+        .env("LC_CTYPE", "")
+        .env("LANG", "")
+        .pipe_in(vietnamese_text)
+        .succeeds()
+        .stdout_is("      1       7\n");
 }
 
 #[test]
