@@ -11,7 +11,7 @@ use rustc_hash::FxHashSet as HashSet;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, DirEntry, File, Metadata};
-use std::io::{BufRead, BufReader, stdout};
+use std::io::{BufRead, BufReader, BufWriter, Write, stdout};
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
 #[cfg(windows)]
@@ -21,7 +21,7 @@ use std::str::FromStr;
 use std::sync::mpsc;
 use std::thread;
 use thiserror::Error;
-use uucore::display::{Quotable, print_verbatim};
+use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::fsext::{MetadataTimeField, metadata_get_time};
 use uucore::line_ending::LineEnding;
@@ -95,6 +95,7 @@ struct StatPrinter {
     line_ending: LineEnding,
     summarize: bool,
     total_text: String,
+    writer: BufWriter<std::io::Stdout>, // 64KiB buffer for efficient output
 }
 
 #[derive(PartialEq, Clone)]
@@ -830,7 +831,7 @@ impl StatPrinter {
         }
     }
 
-    fn print_stats(&self, rx: &mpsc::Receiver<UResult<StatPrintInfo>>) -> UResult<()> {
+    fn print_stats(&mut self, rx: &mpsc::Receiver<UResult<StatPrintInfo>>) -> UResult<()> {
         let mut grand_total = 0;
         loop {
             let received = rx.recv();
@@ -862,8 +863,13 @@ impl StatPrinter {
         }
 
         if self.total {
-            print!("{}\t{}", self.convert_size(grand_total), self.total_text);
-            print!("{}", self.line_ending);
+            write!(
+                self.writer,
+                "{}\t{}",
+                self.convert_size(grand_total),
+                self.total_text
+            )?;
+            write!(self.writer, "{}", self.line_ending)?;
         }
 
         Ok(())
@@ -890,27 +896,34 @@ impl StatPrinter {
         }
     }
 
-    fn print_stat(&self, stat: &Stat, size: u64) -> UResult<()> {
-        print!("{}\t", self.convert_size(size));
+    fn print_stat(&mut self, stat: &Stat, size: u64) -> UResult<()> {
+        write!(self.writer, "{}\t", self.convert_size(size))?;
 
         if let Some(md_time) = &self.time {
             if let Some(time) = metadata_get_time(&stat.metadata, *md_time) {
                 format_system_time(
-                    &mut stdout(),
+                    &mut self.writer,
                     time,
                     &self.time_format,
                     FormatSystemTimeFallback::IntegerError,
                 )?;
-                print!("\t");
+                write!(self.writer, "\t")?;
             } else {
-                print!("???\t");
+                write!(self.writer, "???\t")?;
             }
         }
 
-        print_verbatim(&stat.path).unwrap();
-        print!("{}", self.line_ending);
+        self.writer
+            .write_all(stat.path.as_os_str().as_encoded_bytes())?;
+        write!(self.writer, "{}", self.line_ending)?;
 
         Ok(())
+    }
+}
+
+impl Drop for StatPrinter {
+    fn drop(&mut self) {
+        let _ = self.writer.flush();
     }
 }
 
@@ -1099,7 +1112,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         format::LONG_ISO.to_string()
     };
 
-    let stat_printer = StatPrinter {
+    let mut stat_printer = StatPrinter {
         max_depth,
         size_format,
         summarize,
@@ -1118,6 +1131,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         time_format,
         line_ending: LineEnding::from_zero_flag(matches.get_flag(options::NULL)),
         total_text: translate!("du-total"),
+        writer: BufWriter::with_capacity(65536, stdout()), // 64KiB buffer
     };
 
     if stat_printer.inodes
