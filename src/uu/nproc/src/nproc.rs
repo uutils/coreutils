@@ -68,7 +68,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 // If OMP_NUM_THREADS=0, rejects the value
                 match threads.split_terminator(',').next() {
                     None => available_parallelism(),
-                    Some(s) => match s.parse() {
+                    Some(s) => match s.trim().parse() {
                         Ok(0) | Err(_) => available_parallelism(),
                         Ok(n) => n,
                     },

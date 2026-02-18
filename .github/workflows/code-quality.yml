@@ -1,6 +1,6 @@
 name: Code Quality
 
-# spell-checker:ignore (people) reactivecircus Swatinem dtolnay juliangruber pell taplo
+# spell-checker:ignore (people) dtolnay juliangruber pell reactivecircus Swatinem taiki-e taplo
 # spell-checker:ignore (misc) TERMUX noaudio pkill swiftshader esac sccache pcoreutils shopt subshell dequote libsystemd
 
 on:
@@ -35,11 +35,6 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: stable
-        components: rustfmt
-    - uses: Swatinem/rust-cache@v2
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -74,6 +69,7 @@ jobs:
     env:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
+      CARGO_INCREMENTAL: 0
     strategy:
       fail-fast: false
       matrix:
@@ -147,6 +143,12 @@ jobs:
           CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo -n "-puu_${u} "; done;)"
           S=$(cargo clippy --all-targets $extra --tests --benches -pcoreutils ${CARGO_UTILITY_LIST_OPTIONS} -- -D warnings 2>&1) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+(.*):([0-9]+):([0-9]+).*$/::${fault_type} file=\2,line=\3,col=\4::${fault_prefix}: \`cargo clippy\`: \1 (file:'\2', line:\3)/p;" -e '}' ; fault=true ; }
           if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
+    - name: "cargo clippy on fuzz dir"
+      if: runner.os != 'Windows'
+      shell: bash
+      run: |
+        cd fuzz
+        cargo clippy --workspace --all-targets --all-features -- -D warnings
 
   style_spellcheck:
     name: Style/spelling
@@ -198,8 +200,13 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Install taplo-cli
+        uses: taiki-e/install-action@v2
+        with:
+          tool: taplo-cli
+
       - name: Check
-        run: npx --yes @taplo/cli fmt --check
+        run: taplo fmt --check --diff
 
   python:
     name: Style/Python

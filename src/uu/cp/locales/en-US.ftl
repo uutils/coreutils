@@ -85,12 +85,14 @@ cp-error-selinux-not-enabled = SELinux was not enabled during the compile time!
 cp-error-selinux-set-context = failed to set the security context of { $path }: { $error }
 cp-error-selinux-get-context = failed to get security context of { $path }
 cp-error-selinux-error = SELinux error: { $error }
+cp-error-selinux-context-conflict = cannot combine --context (-Z) with --preserve=context
 cp-error-cannot-create-fifo = cannot create fifo { $path }: File exists
 cp-error-invalid-attribute = invalid attribute { $value }
 cp-error-failed-to-create-whole-tree = failed to create whole tree
 cp-error-failed-to-create-directory = Failed to create directory: { $error }
 cp-error-backup-format = cp: { $error }
   Try '{ $exec } --help' for more information.
+cp-error-setting-attributes = setting attributes for { $path }
 
 # Debug enum strings
 cp-debug-enum-no = no

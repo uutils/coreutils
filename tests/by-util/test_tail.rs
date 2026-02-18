@@ -233,6 +233,28 @@ fn test_nc_0_wo_follow2() {
         .no_output();
 }
 
+#[test]
+#[cfg(not(target_os = "windows"))]
+fn test_n0_with_follow() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let test_file = "test.txt";
+    // Create file with multiple lines
+    at.write(test_file, "line1\nline2\nline3\n");
+
+    let mut child = ucmd.arg("-n0").arg("-f").arg(test_file).run_no_wait();
+    child.make_assertion_with_delay(500).is_alive();
+
+    // Append a new line
+    at.append(test_file, "new\n");
+
+    // Should only print the newly appended line
+    child
+        .make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
+        .with_current_output()
+        .stdout_only("new\n");
+    child.kill();
+}
+
 // TODO: Add similar test for windows
 #[test]
 #[cfg(unix)]
@@ -1123,6 +1145,16 @@ fn test_obsolete_syntax_small_file() {
         .pipe_in("a\nb\nc\nd\ne\n")
         .succeeds()
         .stdout_is("a\nb\nc\nd\ne\n");
+}
+
+/// Test for obsolete syntax `tail -0 FILE`: print nothing and exit cleanly.
+#[test]
+fn test_obsolete_syntax_zero_lines_file() {
+    new_ucmd!()
+        .args(&["-0", "foobar.txt"])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
 }
 
 /// Test for reading all lines, specified by `tail -n +0`.
@@ -2710,12 +2742,12 @@ fn test_fifo() {
     not(target_os = "openbsd")
 ))]
 fn test_fifo_with_pid() {
-    use std::process::Command;
+    use std::process::{Command, Stdio};
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkfifo("FIFO");
 
-    let mut dummy = Command::new("sh").spawn().unwrap();
+    let mut dummy = Command::new("sh").stdin(Stdio::null()).spawn().unwrap();
     let pid = dummy.id();
 
     let mut child = ucmd
@@ -5017,7 +5049,7 @@ fn test_child_when_run_with_stderr_to_stdout() {
 fn test_failed_write_is_reported() {
     new_ucmd!()
         .pipe_in("hello")
-        .set_stdout(std::fs::File::create("/dev/full").unwrap())
+        .set_stdout(File::create("/dev/full").unwrap())
         .fails()
         .stderr_is("tail: No space left on device\n");
 }
@@ -5038,6 +5070,22 @@ fn tail_n_lines_with_emoji() {
         .pipe_in("a\n💐\n")
         .succeeds()
         .stdout_only("💐\n");
+}
+
+#[test]
+fn test_tail_bytes_exceeds_file_size() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    // Should be > 4096 bytes (block size can vary):
+    at.write("test_file.txt", &"x".repeat(5000));
+
+    ts.ucmd()
+        .arg("-c")
+        .arg("1048576")
+        .arg("test_file.txt")
+        .succeeds()
+        .stdout_only("x".repeat(5000));
 }
 
 #[test]
@@ -5100,4 +5148,40 @@ fn test_debug_flag_with_inotify() {
         .make_assertion()
         .with_all_output()
         .stderr_contains("tail: using notification mode");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_follow_dangling_symlink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.symlink_file("target", "link");
+    let mut p = ucmd
+        .args(&["-s.1", "--max-unchanged-stats=1", "-F", "link"])
+        .run_no_wait();
+    p.delay(500);
+    at.write("target", "X\n");
+    p.delay(500);
+    p.kill().make_assertion().with_all_output().stdout_is("X\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_follow_symlink_target_change() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("t1", "A\n");
+    at.symlink_file("t1", "link");
+    let mut p = ucmd
+        .args(&["-s.1", "--max-unchanged-stats=1", "-F", "link"])
+        .run_no_wait();
+    p.delay(500);
+    at.remove("link");
+    at.symlink_file("t2", "link");
+    p.delay(500);
+    at.write("t2", "B\n");
+    p.delay(500);
+    p.kill()
+        .make_assertion()
+        .with_all_output()
+        .stdout_contains("A\n")
+        .stdout_contains("B\n");
 }

@@ -38,6 +38,7 @@ getrandom
 globset
 indicatif
 itertools
+itoa
 iuse
 langid
 lscolors

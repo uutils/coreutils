@@ -69,6 +69,7 @@ sort-help-numeric = compare selon la valeur numérique de la chaîne
 sort-help-general-numeric = compare selon la valeur numérique générale de la chaîne
 sort-help-version-sort = Trie par numéro de version SemVer, par ex. 1.12.2 > 1.1.2
 sort-help-random = mélange dans un ordre aléatoire
+sort-help-random-source = utilise FICHIER comme source de données aléatoires
 sort-help-dictionary-order = considère seulement les espaces et les caractères alphanumériques
 sort-help-merge = fusionne les fichiers déjà triés ; ne trie pas
 sort-help-check = vérifie l'entrée triée ; ne trie pas
