@@ -37,7 +37,7 @@ use uucore::{
 };
 
 use crate::{
-    count_fast::{count_bytes_chars_and_lines_fast, count_bytes_fast},
+    count_fast::{count_bytes_chars_and_lines_fast, count_bytes_fast, is_c_or_posix_locale},
     countable::WordCountable,
     word_count::WordCount,
 };
@@ -578,6 +578,7 @@ fn process_chunk<
     current_len: &mut usize,
     in_word: &mut bool,
     is_posixly_correct: bool,
+    chars_are_bytes: bool,
 ) {
     for ch in text.chars() {
         if SHOW_WORDS {
@@ -613,11 +614,16 @@ fn process_chunk<
         if SHOW_LINES && ch == '\n' {
             total.lines += 1;
         }
-        if SHOW_CHARS {
+        if SHOW_CHARS && !chars_are_bytes {
             total.chars += 1;
         }
     }
     total.bytes += text.len();
+
+    // In C/POSIX locale, chars count equals bytes count
+    if SHOW_CHARS && chars_are_bytes {
+        total.chars += text.len();
+    }
 
     total.max_line_length = max(*current_len, total.max_line_length);
 }
@@ -654,6 +660,7 @@ fn word_count_from_reader_specialized<
     let mut in_word = false;
     let mut current_len = 0;
     let is_posixly_correct = *IS_POSIXLY_CORRECT;
+    let chars_are_bytes = SHOW_CHARS && is_c_or_posix_locale();
     while let Some(chunk) = reader.next_strict() {
         match chunk {
             Ok(text) => {
@@ -663,6 +670,7 @@ fn word_count_from_reader_specialized<
                     &mut current_len,
                     &mut in_word,
                     is_posixly_correct,
+                    chars_are_bytes,
                 );
             }
             Err(e) => {
