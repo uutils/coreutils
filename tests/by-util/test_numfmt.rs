@@ -1106,6 +1106,32 @@ fn test_format_grouping_conflicts_with_to_option() {
 }
 
 #[test]
+fn test_grouping_in_c_locale_no_change() {
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .args(&["--grouping", "10000"])
+        .succeeds()
+        .stdout_is("10000\n");
+}
+
+#[test]
+fn test_grouping_with_to_option_fails() {
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .args(&["--grouping", "--to=si", "1000"])
+        .fails_with_code(1)
+        .stderr_contains("grouping cannot be combined with --to");
+}
+
+#[test]
+fn test_grouping_with_format_option_fails() {
+    new_ucmd!()
+        .args(&["--grouping", "--format=%f", "1000"])
+        .fails_with_code(1)
+        .stderr_contains("--grouping cannot be combined with --format");
+}
+
+#[test]
 fn test_zero_terminated_command_line_args() {
     new_ucmd!()
         .args(&["--zero-terminated", "--to=si", "1000"])
