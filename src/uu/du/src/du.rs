@@ -7,7 +7,7 @@
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::PossibleValue};
 use glob::Pattern;
-use rustc_hash::FxHashSet as HashSet;
+use rustc_hash::FxHashSet;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, DirEntry, File, Metadata};
@@ -304,7 +304,7 @@ fn safe_du(
     path: &Path,
     options: &TraversalOptions,
     depth: usize,
-    seen_inodes: &mut HashSet<FileInfo>,
+    seen_inodes: &mut FxHashSet<FileInfo>,
     print_tx: &mpsc::Sender<UResult<StatPrintInfo>>,
     parent_fd: Option<&DirFd>,
     initial_stat: Option<std::io::Result<Stat>>,
@@ -580,12 +580,12 @@ fn du_regular(
     mut my_stat: Stat,
     options: &TraversalOptions,
     depth: usize,
-    seen_inodes: &mut HashSet<FileInfo>,
+    seen_inodes: &mut FxHashSet<FileInfo>,
     print_tx: &mpsc::Sender<UResult<StatPrintInfo>>,
-    ancestors: Option<&mut HashSet<FileInfo>>,
+    ancestors: Option<&mut FxHashSet<FileInfo>>,
     symlink_depth: Option<usize>,
 ) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
-    let mut default_ancestors = HashSet::default();
+    let mut default_ancestors = FxHashSet::default();
     let ancestors = ancestors.unwrap_or(&mut default_ancestors);
     let symlink_depth = symlink_depth.unwrap_or(0);
     // Maximum symlink depth to prevent infinite loops
@@ -786,17 +786,23 @@ fn file_as_vec(filename: impl AsRef<Path>) -> Vec<String> {
 /// Given the `--exclude-from` and/or `--exclude` arguments, returns the globset lists
 /// to ignore the files
 fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
-    let exclude_from_iterator = matches
-        .get_many::<String>(options::EXCLUDE_FROM)
+    let exclude_from_args = matches.get_many::<String>(options::EXCLUDE_FROM);
+    let exclude_args = matches.get_many::<String>(options::EXCLUDE);
+
+    let exclude_from_iterator = exclude_from_args
+        .clone()
         .unwrap_or_default()
         .flat_map(file_as_vec);
 
-    let excludes_iterator = matches
-        .get_many::<String>(options::EXCLUDE)
-        .unwrap_or_default()
-        .cloned();
+    let excludes_iterator = exclude_args.clone().unwrap_or_default().cloned();
 
-    let mut exclude_patterns = Vec::new();
+    // Using clap to avoid allocation might high cost
+    let exclude_sum = exclude_args.map_or(0, |v| v.len())
+        + exclude_from_args
+            .unwrap_or_default()
+            .map(|f| file_as_vec(f).len())
+            .sum::<usize>();
+    let mut exclude_patterns = Vec::with_capacity(exclude_sum);
     for f in excludes_iterator.chain(exclude_from_iterator) {
         if matches.get_flag(options::VERBOSE) {
             println!(
@@ -940,7 +946,7 @@ fn read_files_from(file_name: &OsStr) -> Result<Vec<PathBuf>, std::io::Error> {
         }
     };
 
-    let mut paths = Vec::new();
+    let mut paths = Vec::with_capacity(4);
 
     for (i, line) in reader.split(b'\0').enumerate() {
         let path = line?;
@@ -1059,7 +1065,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             files.collect()
         } else {
             // Deduplicate while preserving order
-            let mut seen = HashSet::default();
+            let mut seen =
+                FxHashSet::with_capacity_and_hasher(files.len(), rustc_hash::FxBuildHasher);
             files
                 .filter(|path| seen.insert(path.clone()))
                 .collect::<Vec<_>>()
@@ -1134,7 +1141,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let printing_thread = thread::spawn(move || stat_printer.print_stats(&rx));
 
     // Check existence of path provided in argument
-    let mut seen_inodes: HashSet<FileInfo> = HashSet::default();
+    // initial capacity might not optimal. But avoid reallocation anyway.
+    let mut seen_inodes: FxHashSet<FileInfo> =
+        FxHashSet::with_capacity_and_hasher(1024, rustc_hash::FxBuildHasher);
 
     'loop_file: for path in files {
         // Skip if we don't want to ignore anything
