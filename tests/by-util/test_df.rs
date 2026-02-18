@@ -16,7 +16,7 @@ use std::collections::HashSet;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 #[cfg(target_os = "linux")]
-use uutests::util::{run_in_rootless_unshare, TestScenario};
+use uutests::util::{TestScenario, run_in_rootless_unshare};
 
 #[test]
 fn test_invalid_arg() {

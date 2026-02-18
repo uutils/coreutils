@@ -13,11 +13,11 @@ use std::path::Path;
 #[cfg(feature = "feat_selinux")]
 use uucore::selinux::get_getfattr_output;
 use uutests::new_ucmd;
-#[cfg(target_os = "linux")]
-use uutests::util::run_in_rootless_unshare_with_env;
 #[cfg(unix)]
 use uutests::util::TerminalSimulation;
 use uutests::util::TestScenario;
+#[cfg(target_os = "linux")]
+use uutests::util::run_in_rootless_unshare_with_env;
 use uutests::{at_and_ucmd, util_name};
 
 #[test]
