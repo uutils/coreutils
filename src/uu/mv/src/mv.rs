@@ -803,6 +803,72 @@ fn is_fifo(_filetype: fs::FileType) -> bool {
     false
 }
 
+#[cfg(unix)]
+/// Best-effort ownership preservation for `to` using `from_meta`.
+///
+/// On Unix, this tries to set `uid`/`gid` on `to`. If `follow_symlinks` is
+/// true it uses `chown`, otherwise it uses `lchown` so the link itself (not its
+/// target) is updated. `chown`/`lchown` failures are non-fatal; permission
+/// errors are ignored, and other failures emit a warning because ownership
+/// preservation is optional.
+fn try_preserve_ownership(from_meta: &fs::Metadata, to: &Path, follow_symlinks: bool) {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt as _;
+    use std::os::unix::fs::MetadataExt as _;
+
+    let uid = from_meta.uid() as libc::uid_t;
+    let gid = from_meta.gid() as libc::gid_t;
+
+    let Ok(to_cstr) = CString::new(to.as_os_str().as_bytes()) else {
+        return;
+    };
+
+    let result = unsafe {
+        if follow_symlinks {
+            libc::chown(to_cstr.as_ptr(), uid, gid)
+        } else {
+            libc::lchown(to_cstr.as_ptr(), uid, gid)
+        }
+    };
+    if result != 0 {
+        let err = io::Error::last_os_error();
+        if err.kind() != io::ErrorKind::PermissionDenied {
+            eprintln!(
+                "mv: warning: failed to preserve ownership for {}: {err}",
+                to.quote()
+            );
+        }
+    }
+}
+
+#[cfg(unix)]
+/// Best-effort permission preservation for `to` using `from_meta`.
+///
+/// Only the mode bits are applied (`chmod` does not accept file type bits).
+/// Failures are non-fatal; permission errors are ignored, and other failures
+/// emit a warning because this is optional.
+fn try_preserve_permissions(from_meta: &fs::Metadata, to: &Path) {
+    use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _};
+
+    // Keep mode bits only (file type bits are not allowed in chmod).
+    let mode = from_meta.mode() & 0o7777;
+    if let Err(err) = fs::set_permissions(to, fs::Permissions::from_mode(mode)) {
+        if err.kind() != io::ErrorKind::PermissionDenied {
+            eprintln!(
+                "mv: warning: failed to preserve permissions for {}: {err}",
+                to.quote()
+            );
+        }
+    }
+}
+
+#[cfg(unix)]
+fn try_preserve_ownership_and_permissions(from_meta: &fs::Metadata, to: &Path) {
+    // `chown` can clear setuid/setgid bits, so restore the mode afterwards.
+    try_preserve_ownership(from_meta, to, true);
+    try_preserve_permissions(from_meta, to);
+}
+
 /// A wrapper around `fs::rename`, so that if it fails, we try falling back on
 /// copying and removing.
 fn rename_with_fallback(
@@ -879,10 +945,14 @@ fn rename_with_fallback(
 /// Replace the destination with a new pipe with the same name as the source.
 #[cfg(unix)]
 fn rename_fifo_fallback(from: &Path, to: &Path) -> io::Result<()> {
+    let from_meta = from.symlink_metadata()?;
     if to.try_exists()? {
         fs::remove_file(to)?;
     }
-    make_fifo(to).and_then(|_| fs::remove_file(from))
+    make_fifo(to).and_then(|_| {
+        try_preserve_ownership_and_permissions(&from_meta, to);
+        fs::remove_file(from)
+    })
 }
 
 #[cfg(not(unix))]
@@ -896,19 +966,28 @@ fn rename_fifo_fallback(_from: &Path, _to: &Path) -> io::Result<()> {
 
 /// Move the given symlink to the given destination. On Windows, dangling
 /// symlinks return an error.
-#[cfg(unix)]
 fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
+    copy_symlink(from, to)?;
+    fs::remove_file(from)
+}
+
+/// Copy the given symlink to the given destination without dereferencing.
+/// On Windows, dangling symlinks return an error.
+#[cfg(unix)]
+fn copy_symlink(from: &Path, to: &Path) -> io::Result<()> {
+    let from_meta = from.symlink_metadata()?;
     let path_symlink_points_to = fs::read_link(from)?;
     unix::fs::symlink(path_symlink_points_to, to)?;
     #[cfg(not(any(target_os = "macos", target_os = "redox")))]
     {
         let _ = copy_xattrs_if_supported(from, to);
     }
-    fs::remove_file(from)
+    try_preserve_ownership(&from_meta, to, false);
+    Ok(())
 }
 
 #[cfg(windows)]
-fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
+fn copy_symlink(from: &Path, to: &Path) -> io::Result<()> {
     let path_symlink_points_to = fs::read_link(from)?;
     if path_symlink_points_to.exists() {
         if path_symlink_points_to.is_dir() {
@@ -916,7 +995,7 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
         } else {
             windows::fs::symlink_file(&path_symlink_points_to, to)?;
         }
-        fs::remove_file(from)
+        Ok(())
     } else {
         Err(io::Error::new(
             io::ErrorKind::NotFound,
@@ -926,8 +1005,8 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
 }
 
 #[cfg(not(any(windows, unix)))]
-fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
-    let path_symlink_points_to = fs::read_link(from)?;
+fn copy_symlink(from: &Path, to: &Path) -> io::Result<()> {
+    let _ = (from, to);
     Err(io::Error::new(
         io::ErrorKind::Other,
         translate!("mv-error-no-symlink-support"),
@@ -942,6 +1021,9 @@ fn rename_dir_fallback(
     #[cfg(unix)] hardlink_tracker: Option<&mut HardlinkTracker>,
     #[cfg(unix)] hardlink_scanner: Option<&HardlinkGroupScanner>,
 ) -> io::Result<()> {
+    #[cfg(unix)]
+    let from_meta = from.symlink_metadata()?;
+
     // We remove the destination directory if it exists to match the
     // behavior of `fs::rename`. As far as I can tell, `fs_extra`'s
     // `move_dir` would otherwise behave differently.
@@ -986,6 +1068,9 @@ fn rename_dir_fallback(
     fsxattr::apply_xattrs(to, xattrs)?;
 
     result?;
+
+    #[cfg(unix)]
+    try_preserve_ownership_and_permissions(&from_meta, to);
 
     // Remove the source directory after successful copy
     fs::remove_dir_all(from)?;
@@ -1050,7 +1135,26 @@ fn copy_dir_contents_recursive(
             pb.set_message(from_path.to_string_lossy().to_string());
         }
 
-        if from_path.is_dir() {
+        let entry_type = entry.file_type()?;
+
+        if entry_type.is_symlink() {
+            copy_symlink(&from_path, &to_path)?;
+
+            // Print verbose message for symlink
+            if verbose {
+                let message = translate!(
+                    "mv-verbose-renamed",
+                    "from" => from_path.quote(),
+                    "to" => to_path.quote()
+                );
+                match display_manager {
+                    Some(pb) => pb.suspend(|| {
+                        println!("{message}");
+                    }),
+                    None => println!("{message}"),
+                }
+            }
+        } else if entry_type.is_dir() {
             // Recursively copy subdirectory
             fs::create_dir_all(&to_path)?;
 
@@ -1076,6 +1180,11 @@ fn copy_dir_contents_recursive(
                 progress_bar,
                 display_manager,
             )?;
+
+            #[cfg(unix)]
+            if let Ok(from_meta) = fs::symlink_metadata(&from_path) {
+                try_preserve_ownership_and_permissions(&from_meta, &to_path);
+            }
         } else {
             // Copy file with or without hardlink support based on platform
             #[cfg(unix)]
@@ -1091,7 +1200,7 @@ fn copy_dir_contents_recursive(
             {
                 if from_path.is_symlink() {
                     // Copy a symlink file (no-follow).
-                    rename_symlink_fallback(&from_path, &to_path)?;
+                    copy_symlink(&from_path, &to_path)?;
                 } else {
                     // Copy a regular file.
                     fs::copy(&from_path, &to_path)?;
@@ -1127,6 +1236,8 @@ fn copy_file_with_hardlinks_helper(
     hardlink_tracker: &mut HardlinkTracker,
     hardlink_scanner: &HardlinkGroupScanner,
 ) -> io::Result<()> {
+    let from_meta = from.symlink_metadata()?;
+
     // Check if this file should be a hardlink to an already-copied file
     use crate::hardlink::HardlinkOptions;
     let hardlink_options = HardlinkOptions::default();
@@ -1138,10 +1249,10 @@ fn copy_file_with_hardlinks_helper(
         return Ok(());
     }
 
-    if from.is_symlink() {
+    if from_meta.file_type().is_symlink() {
         // Copy a symlink file (no-follow).
-        rename_symlink_fallback(from, to)?;
-    } else if is_fifo(from.symlink_metadata()?.file_type()) {
+        copy_symlink(from, to)?;
+    } else if is_fifo(from_meta.file_type()) {
         make_fifo(to)?;
     } else {
         // Copy a regular file.
@@ -1153,6 +1264,8 @@ fn copy_file_with_hardlinks_helper(
         }
     }
 
+    try_preserve_ownership_and_permissions(&from_meta, to);
+
     Ok(())
 }
 
@@ -1162,6 +1275,9 @@ fn rename_file_fallback(
     #[cfg(unix)] hardlink_tracker: Option<&mut HardlinkTracker>,
     #[cfg(unix)] hardlink_scanner: Option<&HardlinkGroupScanner>,
 ) -> io::Result<()> {
+    #[cfg(unix)]
+    let from_meta = from.symlink_metadata()?;
+
     // Remove existing target file if it exists
     if to.is_symlink() {
         fs::remove_file(to).map_err(|err| {
@@ -1198,6 +1314,11 @@ fn rename_file_fallback(
     #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
     {
         let _ = copy_xattrs_if_supported(from, to);
+    }
+
+    #[cfg(unix)]
+    {
+        try_preserve_ownership_and_permissions(&from_meta, to);
     }
 
     fs::remove_file(from)
