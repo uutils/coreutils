@@ -22,8 +22,9 @@ use uucore::error::{UResult, USimpleError};
 use crate::{
     GeneralBigDecimalParseResult, GlobalSettings, Line, SortMode, numeric_str_cmp::NumInfo,
 };
+use uucore::parser::parse_size::MEGA;
 
-const MAX_TOKEN_BUFFER_BYTES: usize = 4 * 1024 * 1024;
+const MAX_TOKEN_BUFFER_BYTES: usize = (4 * MEGA) as usize;
 const MAX_TOKEN_BUFFER_ELEMS: usize = MAX_TOKEN_BUFFER_BYTES / size_of::<Range<usize>>();
 
 self_cell!(
@@ -374,7 +375,7 @@ fn read_to_buffer<T: Read>(
 
                     // We need to read more lines
                     let len = buffer.len();
-                    let grow_by = (len / 2).max(1024 * 1024);
+                    let grow_by = (len / 2).max(MEGA as usize);
                     buffer.resize(len + grow_by, 0);
                     read_target = &mut buffer[len..];
                 } else {

@@ -6,6 +6,15 @@
 
 //! Parser for sizes in SI or IEC units (multiples of 1000 or 1024 bytes).
 
+// SI unit constants for byte parsing (powers of 1024)
+// Using u64 to avoid overflow on 32-bit platforms
+pub const KILO: u64 = 1024;
+pub const MEGA: u64 = 1024 * 1024;
+pub const GIGA: u64 = 1024 * 1024 * 1024;
+pub const TERA: u64 = 1024 * 1024 * 1024 * 1024;
+pub const PETA: u64 = 1024 * 1024 * 1024 * 1024 * 1024;
+pub const EXA: u64 = 1024 * 1024 * 1024 * 1024 * 1024 * 1024;
+
 use std::error::Error;
 use std::fmt;
 use std::num::{IntErrorKind, ParseIntError};
