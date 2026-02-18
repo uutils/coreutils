@@ -381,6 +381,8 @@ mod tests {
     #[test]
     fn get_locales_to_embed_no_lang() {
         unsafe {
+            env::remove_var("LC_ALL");
+            env::remove_var("LC_MESSAGES");
             env::remove_var("LANG");
         }
         let (en_locale, system_locale) = get_locales_to_embed();
@@ -388,56 +390,60 @@ mod tests {
         assert_eq!(system_locale, None);
 
         unsafe {
+            env::set_var("LC_ALL", "");
+            env::set_var("LC_MESSAGES", "");
             env::set_var("LANG", "");
         }
         let (en_locale, system_locale) = get_locales_to_embed();
         assert_eq!(en_locale, "en-US");
         assert_eq!(system_locale, None);
         unsafe {
+            env::remove_var("LC_ALL");
+            env::remove_var("LC_MESSAGES");
             env::remove_var("LANG");
         }
 
         unsafe {
-            env::set_var("LANG", "en_US.UTF-8");
+            env::set_var("LC_ALL", "en_US.UTF-8");
         }
         let (en_locale, system_locale) = get_locales_to_embed();
         assert_eq!(en_locale, "en-US");
         assert_eq!(system_locale, None);
         unsafe {
-            env::remove_var("LANG");
+            env::remove_var("LC_ALL");
         }
     }
 
     #[test]
     fn get_locales_to_embed_with_lang() {
         unsafe {
-            env::set_var("LANG", "fr_FR.UTF-8");
+            env::set_var("LC_ALL", "fr_FR.UTF-8");
         }
         let (en_locale, system_locale) = get_locales_to_embed();
         assert_eq!(en_locale, "en-US");
         assert_eq!(system_locale, Some("fr-FR".to_string()));
         unsafe {
-            env::remove_var("LANG");
+            env::remove_var("LC_ALL");
         }
 
         unsafe {
-            env::set_var("LANG", "zh_CN.UTF-8");
+            env::set_var("LC_ALL", "zh_CN.UTF-8");
         }
         let (en_locale, system_locale) = get_locales_to_embed();
         assert_eq!(en_locale, "en-US");
         assert_eq!(system_locale, Some("zh-CN".to_string()));
         unsafe {
-            env::remove_var("LANG");
+            env::remove_var("LC_ALL");
         }
 
         unsafe {
-            env::set_var("LANG", "de");
+            env::set_var("LC_ALL", "de");
         }
         let (en_locale, system_locale) = get_locales_to_embed();
         assert_eq!(en_locale, "en-US");
         assert_eq!(system_locale, Some("de".to_string()));
         unsafe {
-            env::remove_var("LANG");
+            env::remove_var("LC_ALL");
         }
     }
 
@@ -445,57 +451,57 @@ mod tests {
     fn get_locales_to_embed_invalid_lang() {
         // invalid locale format
         unsafe {
-            env::set_var("LANG", "invalid");
+            env::set_var("LC_ALL", "invalid");
         }
         let (en_locale, system_locale) = get_locales_to_embed();
         assert_eq!(en_locale, "en-US");
         assert_eq!(system_locale, Some("invalid".to_string()));
         unsafe {
-            env::remove_var("LANG");
+            env::remove_var("LC_ALL");
         }
 
         // numeric values
         unsafe {
-            env::set_var("LANG", "123");
+            env::set_var("LC_ALL", "123");
         }
         let (en_locale, system_locale) = get_locales_to_embed();
         assert_eq!(en_locale, "en-US");
         assert_eq!(system_locale, Some("123".to_string()));
         unsafe {
-            env::remove_var("LANG");
+            env::remove_var("LC_ALL");
         }
 
         // special characters
         unsafe {
-            env::set_var("LANG", "@@@@");
+            env::set_var("LC_ALL", "@@@@");
         }
         let (en_locale, system_locale) = get_locales_to_embed();
         assert_eq!(en_locale, "en-US");
         assert_eq!(system_locale, Some("@@@@".to_string()));
         unsafe {
-            env::remove_var("LANG");
+            env::remove_var("LC_ALL");
         }
 
         // malformed locale (no country code but with encoding)
         unsafe {
-            env::set_var("LANG", "en.UTF-8");
+            env::set_var("LC_ALL", "en.UTF-8");
         }
         let (en_locale, system_locale) = get_locales_to_embed();
         assert_eq!(en_locale, "en-US");
         assert_eq!(system_locale, Some("en".to_string()));
         unsafe {
-            env::remove_var("LANG");
+            env::remove_var("LC_ALL");
         }
 
         // valid format but unusual locale
         unsafe {
-            env::set_var("LANG", "XX_YY.UTF-8");
+            env::set_var("LC_ALL", "XX_YY.UTF-8");
         }
         let (en_locale, system_locale) = get_locales_to_embed();
         assert_eq!(en_locale, "en-US");
         assert_eq!(system_locale, Some("XX-YY".to_string()));
         unsafe {
-            env::remove_var("LANG");
+            env::remove_var("LC_ALL");
         }
     }
 

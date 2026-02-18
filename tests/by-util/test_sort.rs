@@ -1835,9 +1835,8 @@ fn test_g_float_hex() {
 #[test]
 fn test_french_translations() {
     // Test that French translations work for clap error messages
-    // Set LANG to French and test with an invalid argument
+    // Set LC_ALL to French and test with an invalid argument
     let result = new_ucmd!()
-        .env("LANG", "fr_FR.UTF-8")
         .env("LC_ALL", "fr_FR.UTF-8")
         .arg("--invalid-arg")
         .fails();
@@ -1857,7 +1856,6 @@ fn test_argument_suggestion() {
 
     for (locale, expected_strings) in test_cases {
         let result = new_ucmd!()
-            .env("LANG", locale)
             .env("LC_ALL", locale)
             .arg("--revrse") // Typo
             .fails();
@@ -1892,7 +1890,6 @@ fn test_clap_localization_unknown_argument() {
 
     for (locale, expected_strings) in test_cases {
         let result = new_ucmd!()
-            .env("LANG", locale)
             .env("LC_ALL", locale)
             .arg("--unknown-option")
             .fails();
@@ -1909,7 +1906,6 @@ fn test_clap_localization_unknown_argument() {
 fn test_clap_localization_help_message() {
     // Test help message in English
     let result_en = new_ucmd!()
-        .env("LANG", "en_US.UTF-8")
         .env("LC_ALL", "en_US.UTF-8")
         .arg("--help")
         .succeeds();
@@ -1920,7 +1916,6 @@ fn test_clap_localization_help_message() {
 
     // Test help message in French
     let result_fr = new_ucmd!()
-        .env("LANG", "fr_FR.UTF-8")
         .env("LC_ALL", "fr_FR.UTF-8")
         .arg("--help")
         .succeeds();
@@ -1955,7 +1950,6 @@ fn test_clap_localization_invalid_value() {
 
     for (locale, expected_message) in test_cases {
         let result = new_ucmd!()
-            .env("LANG", locale)
             .env("LC_ALL", locale)
             .arg("-k")
             .arg("invalid")
@@ -1973,7 +1967,6 @@ fn test_help_colors_enabled() {
 
     for (locale, usage_word) in test_cases {
         let result = new_ucmd!()
-            .env("LANG", locale)
             .env("LC_ALL", locale)
             .env("CLICOLOR_FORCE", "1")
             .arg("--help")
@@ -1998,7 +1991,6 @@ fn test_help_colors_disabled() {
 
     for (locale, usage_word) in test_cases {
         let result = new_ucmd!()
-            .env("LANG", locale)
             .env("LC_ALL", locale)
             .env("NO_COLOR", "1")
             .arg("--help")
@@ -2025,7 +2017,6 @@ fn test_error_colors_enabled() {
 
     for (locale, error_word, tip_word) in test_cases {
         let result = new_ucmd!()
-            .env("LANG", locale)
             .env("LC_ALL", locale)
             .env("CLICOLOR_FORCE", "1")
             .arg("--numerc") // Typo to trigger suggestion for --numeric-sort
@@ -2061,7 +2052,6 @@ fn test_error_colors_disabled() {
 
     for (locale, error_word, tip_word) in test_cases {
         let result = new_ucmd!()
-            .env("LANG", locale)
             .env("LC_ALL", locale)
             .env("NO_COLOR", "1")
             .arg("--numerc") // Typo to trigger suggestion for --numeric-sort
@@ -2089,7 +2079,6 @@ fn test_argument_suggestion_colors_enabled() {
 
     for (locale, _tip_word, suggestion) in test_cases {
         let result = new_ucmd!()
-            .env("LANG", locale)
             .env("LC_ALL", locale)
             .env("CLICOLOR_FORCE", "1")
             .arg("--revrse") // Typo to trigger suggestion
@@ -2535,7 +2524,7 @@ fn test_color_environment_variables() {
 
     for (env_vars, should_have_colors, description) in test_env_vars {
         let mut cmd = new_ucmd!();
-        cmd.env("LANG", "en_US.UTF-8");
+        cmd.env("LC_ALL", "en_US.UTF-8");
 
         for (key, value) in env_vars {
             cmd.env(key, value);
@@ -2743,7 +2732,7 @@ c d 5435 down data path1 path2 path3 path4 path5
 e f 5436 down data path1 path2 path3 path4 path5\n";
 
     new_ucmd!()
-        .env("LANG", "en_US.utf8")
+        .env("LC_ALL", "en_US.utf8")
         .arg("-k3")
         .pipe_in(input)
         .succeeds()

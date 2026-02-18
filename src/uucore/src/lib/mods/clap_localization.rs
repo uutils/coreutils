@@ -676,10 +676,10 @@ mod tests {
         use crate::locale::{get_message, setup_localization};
         use std::env;
 
-        let original_lang = env::var("LANG").unwrap_or_default();
+        let original_lang = env::var("LC_ALL").unwrap_or_default();
 
         unsafe {
-            env::set_var("LANG", "fr_FR.UTF-8");
+            env::set_var("LC_ALL", "fr_FR.UTF-8");
         }
 
         if setup_localization("test").is_ok() {
@@ -690,9 +690,9 @@ mod tests {
 
         unsafe {
             if original_lang.is_empty() {
-                env::remove_var("LANG");
+                env::remove_var("LC_ALL");
             } else {
-                env::set_var("LANG", original_lang);
+                env::set_var("LC_ALL", original_lang);
             }
         }
     }
