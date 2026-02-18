@@ -49,6 +49,39 @@ enum ChmodError {
 
 impl UError for ChmodError {}
 
+// Keep a small window of directory descriptors, rather than one per ancestor.
+// The operand's descriptor remains open as the anchor for reopening evicted frames.
+#[cfg(not(target_os = "redox"))]
+const MAX_CACHED_DIR_FDS: usize = 16;
+
+#[cfg(not(target_os = "redox"))]
+struct TraversalFrame {
+    name: OsString,
+    info: FileInformation,
+    entries: std::vec::IntoIter<OsString>,
+    fd: Option<DirFd>,
+}
+
+#[cfg(not(target_os = "redox"))]
+fn reopen_directory(
+    root_fd: &DirFd,
+    frames: &[TraversalFrame],
+    symlink_behavior: SymlinkBehavior,
+) -> std::io::Result<DirFd> {
+    let anchor = frames.iter().rposition(|frame| frame.fd.is_some()).unwrap_or(0);
+    let anchor_fd = frames[anchor].fd.as_ref().unwrap_or(root_fd);
+    let mut fd = anchor_fd.open_subdir(std::ffi::OsStr::new("."), SymlinkBehavior::NoFollow)?;
+    for frame in &frames[anchor + 1..] {
+        fd = fd.open_subdir(&frame.name, symlink_behavior)?;
+        // A rename or replacement must not redirect a suspended traversal into
+        // another directory, even when -L permits following symbolic links.
+        if FileInformation::from_file(&fd)? != frame.info {
+            return Err(std::io::Error::other("directory changed during traversal"));
+        }
+    }
+    Ok(fd)
+}
+
 mod options {
     pub const HELP: &str = "help";
     pub const CHANGES: &str = "changes";
@@ -629,142 +662,128 @@ impl Chmoder {
     #[cfg(not(target_os = "redox"))]
     fn safe_traverse_dir(
         &self,
-        dir_fd: &DirFd,
-        dir_path: &Path,
+        root_fd: &DirFd,
+        root_path: &Path,
         ancestors: &mut HashSet<FileInformation>,
     ) -> UResult<()> {
         let mut r = Ok(());
-
-        // Cycle detection: identify this directory by (dev, ino) via the already-open
-        // fd. Using the fd is TOCTOU-safe (no path re-resolution through symlinks) and
-        // avoids a redundant path walk. If it's already on the current path, it's a cycle.
-        let dir_info = FileInformation::from_file(dir_fd).ok();
-        if dir_info
-            .as_ref()
-            .is_some_and(|info| !ancestors.insert(info.clone()))
-        {
-            return r; // cycle: this directory is already an ancestor
+        let root_info = FileInformation::from_file(root_fd)?;
+        let entries = root_fd.read_dir()?;
+        if !ancestors.insert(root_info.clone()) {
+            return r;
         }
+        let mut frames = vec![TraversalFrame {
+            name: OsString::new(),
+            info: root_info,
+            entries: entries.into_iter(),
+            fd: None,
+        }];
+        let mut dir_path = root_path.to_path_buf();
+        let follow = self.traverse_symlinks == TraverseSymlinks::All;
 
-        let entries = dir_fd.read_dir()?;
-
-        // Determine if we should follow symlinks (doesn't depend on entry_name)
-        let should_follow_symlink = self.traverse_symlinks == TraverseSymlinks::All;
-
-        for entry_name in entries {
-            let entry_path = dir_path.join(&entry_name);
-
-            let dir_meta = dir_fd.metadata_at(&entry_name, should_follow_symlink.into());
-            let Ok(meta) = dir_meta else {
-                // Handle permission denied with proper file path context
-                let e = dir_meta.unwrap_err();
-                let error = if e.kind() == std::io::ErrorKind::PermissionDenied {
-                    ChmodError::PermissionDenied(entry_path).into()
-                } else {
-                    e.into()
-                };
-                r = r.and(Err(error));
+        while !frames.is_empty() {
+            let index = frames.len() - 1;
+            let Some(entry_name) = frames[index].entries.next() else {
+                ancestors.remove(&frames.pop().unwrap().info);
+                if index != 0 {
+                    dir_path.pop();
+                }
                 continue;
             };
+            let entry_path = dir_path.join(&entry_name);
 
-            if entry_path.is_symlink() {
-                r = self
-                    .handle_symlink_during_safe_recursion(
-                        &entry_path,
-                        dir_fd,
-                        &entry_name,
-                        ancestors,
-                    )
-                    .and(r);
-            } else {
-                // For regular files and directories, chmod them.
-                // Always use NoFollow: we already confirmed via stat that the entry
-                // is not a symlink, so this prevents TOCTOU races where an attacker
-                // replaces the entry with a symlink between stat and chmod.
-                r = self
-                    .safe_chmod_file(
-                        &entry_path,
-                        dir_fd,
-                        &entry_name,
-                        meta.mode() & 0o7777,
-                        SymlinkBehavior::NoFollow,
-                    )
-                    .and(r);
-
-                // Recurse into subdirectories using the existing directory fd.
-                // Open with NoFollow unless `-L` was requested: this prevents a
-                // TOCTOU where an attacker swaps the just-stat'd directory for a
-                // symlink before the open and redirects the descent off-tree.
-                if meta.is_dir() {
-                    match dir_fd.open_subdir(&entry_name, should_follow_symlink.into()) {
-                        Ok(child_dir_fd) => {
-                            r = self
-                                .safe_traverse_dir(&child_dir_fd, &entry_path, ancestors)
-                                .and(r);
-                        }
-                        Err(err) => {
-                            let error = if err.kind() == std::io::ErrorKind::PermissionDenied {
-                                ChmodError::PermissionDenied(entry_path).into()
-                            } else {
-                                err.into()
-                            };
-                            r = r.and(Err(error));
-                        }
+            if index != 0 && frames[index].fd.is_none() {
+                match reopen_directory(root_fd, &frames, follow.into()) {
+                    Ok(fd) => frames[index].fd = Some(fd),
+                    Err(err) => {
+                        r = r.and(Err(err.into()));
+                        // Discard this frame, but continue with its parent's siblings.
+                        ancestors.remove(&frames.pop().unwrap().info);
+                        dir_path.pop();
+                        continue;
                     }
                 }
             }
-        }
-
-        // Backtrack so sibling subtrees that legitimately reach the same directory
-        // (e.g. two symlinks to one dir) are not mistaken for cycles.
-        if let Some(info) = dir_info {
-            ancestors.remove(&info);
-        }
-
-        r
-    }
-
-    #[cfg(not(target_os = "redox"))]
-    fn handle_symlink_during_safe_recursion(
-        &self,
-        path: &Path,
-        dir_fd: &DirFd,
-        entry_name: &std::ffi::OsStr,
-        ancestors: &mut HashSet<FileInformation>,
-    ) -> UResult<()> {
-        // During recursion, determine behavior based on traversal mode
-        match self.traverse_symlinks {
-            TraverseSymlinks::All => {
-                // Follow all symlinks during recursion.
-                // NOTE: This path-based stat + Follow is only reachable when the user
-                // explicitly specifies -L (--dereference). In that case the user has
-                // consciously opted in to following symlinks, so a path-based stat
-                // followed by Follow is the intended behavior and not a TOCTOU concern.
-                // Check if the symlink target is a directory, but handle dangling symlinks gracefully
-                match fs::metadata(path) {
-                    Ok(meta) if meta.is_dir() => self.walk_dir_with_context(path, false, ancestors),
-                    Ok(meta) => {
-                        // It's a file symlink, chmod it using safe traversal
-                        self.safe_chmod_file(
-                            path,
-                            dir_fd,
-                            entry_name,
-                            meta.mode() & 0o7777,
-                            self.dereference.into(),
-                        )
-                    }
+            let dir_fd = frames[index].fd.as_ref().unwrap_or(root_fd);
+            let metadata = dir_fd.metadata_at(&entry_name, SymlinkBehavior::NoFollow);
+            let meta = match metadata {
+                Ok(meta) => meta,
+                Err(err) => {
+                    r = r.and(Err(if err.kind() == std::io::ErrorKind::PermissionDenied {
+                        ChmodError::PermissionDenied(entry_path).into()
+                    } else {
+                        err.into()
+                    }));
+                    continue;
+                }
+            };
+            let is_symlink = meta.file_type().is_symlink();
+            if is_symlink && !follow {
+                r = self.chmod_file_internal(&entry_path, false).and(r);
+                continue;
+            }
+            let meta = if is_symlink {
+                match dir_fd.metadata_at(&entry_name, SymlinkBehavior::Follow) {
+                    Ok(meta) => meta,
                     Err(_) => {
-                        // Dangling symlink, chmod it without dereferencing
-                        self.chmod_file_internal(path, false)
+                        r = self.chmod_file_internal(&entry_path, false).and(r);
+                        continue;
+                    }
+                }
+            } else {
+                meta
+            };
+            if meta.is_dir() && self.descends_into_root(&entry_path) {
+                show!(ChmodError::PreserveRootSameAs(entry_path));
+                continue;
+            }
+            r = self.safe_chmod_file(
+                &entry_path,
+                dir_fd,
+                &entry_name,
+                meta.mode() & 0o7777,
+                if is_symlink { self.dereference.into() } else { SymlinkBehavior::NoFollow },
+            ).and(r);
+
+            if meta.is_dir() {
+                let child = (|| -> std::io::Result<_> {
+                    let fd = dir_fd.open_subdir(&entry_name, follow.into())?;
+                    let info = FileInformation::from_file(&fd)?;
+                    if ancestors.contains(&info) {
+                        return Ok(None);
+                    }
+                    let entries = fd.read_dir()?;
+                    Ok(Some(TraversalFrame {
+                        name: entry_name,
+                        info,
+                        entries: entries.into_iter(),
+                        fd: Some(fd),
+                    }))
+                })();
+                match child {
+                    Ok(Some(frame)) => {
+                        ancestors.insert(frame.info.clone());
+                        frames.push(frame);
+                        dir_path = entry_path;
+                        // Retain only the most recent ancestors. Evicted frames
+                        // store names and identities, not descriptors or full paths.
+                        if frames.len() > MAX_CACHED_DIR_FDS + 1 {
+                            let evict = frames.len() - MAX_CACHED_DIR_FDS - 1;
+                            frames[evict].fd = None;
+                        }
+                    }
+                    Ok(None) => {}
+                    Err(err) => {
+                        r = r.and(Err(if err.kind() == std::io::ErrorKind::PermissionDenied {
+                            ChmodError::PermissionDenied(entry_path).into()
+                        } else {
+                            err.into()
+                        }));
                     }
                 }
             }
-            TraverseSymlinks::First | TraverseSymlinks::None => {
-                // Don't follow symlinks encountered during recursion
-                // For these symlinks, don't dereference them even if dereference is normally true
-                self.chmod_file_internal(path, false)
-            }
         }
+        r
     }
 
     #[cfg(not(target_os = "redox"))]
