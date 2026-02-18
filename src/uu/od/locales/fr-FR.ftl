@@ -59,6 +59,7 @@ od-error-parse-failed = échec de l'analyse
 od-error-invalid-suffix = suffixe invalide dans l'argument {$option} {$value}
 od-error-invalid-argument = argument {$option} invalide {$value}
 od-error-argument-too-large = argument {$option} {$value} trop grand
+od-error-builder-config = configuration invalide pour {$option}: {$error}
 od-error-skip-past-end = tentative d'ignorer au-delà de la fin de l'entrée
 
 # Messages d'aide
