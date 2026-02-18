@@ -87,3 +87,11 @@ fn test_stdout_fail() {
     let status = proc.wait().unwrap();
     assert_eq!(status.code(), Some(3));
 }
+
+#[test]
+#[cfg(unix)]
+fn test_version_pipe_no_stderr() {
+    let mut child = new_ucmd!().arg("--version").run_no_wait();
+    child.close_stdout();
+    child.wait().unwrap().no_stderr();
+}

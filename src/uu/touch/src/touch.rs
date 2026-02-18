@@ -203,11 +203,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let reference = matches.get_one::<OsString>(options::sources::REFERENCE);
     let date = matches
         .get_one::<String>(options::sources::DATE)
-        .map(|date| date.to_owned());
+        .map(ToOwned::to_owned);
 
     let mut timestamp = matches
         .get_one::<String>(options::sources::TIMESTAMP)
-        .map(|t| t.to_owned());
+        .map(ToOwned::to_owned);
 
     if is_first_filename_timestamp(reference, date.as_deref(), timestamp.as_deref(), &filenames) {
         let first_file = filenames[0].to_str().unwrap();
@@ -702,7 +702,7 @@ fn prepend_century(s: &str) -> UResult<String> {
 /// then cc is 20 for years in the range 0 … 68, and 19 for years in 69 … 99.
 /// in order to be compatible with GNU `touch`.
 fn parse_timestamp(s: &str) -> UResult<FileTime> {
-    use format::*;
+    use format::{YYYYMMDDHHMM, YYYYMMDDHHMM_DOT_SS};
 
     let current_year = || Timestamp::now().to_zoned(TimeZone::system()).year();
 
@@ -760,6 +760,7 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
 ///
 /// On Windows, uses `GetFinalPathNameByHandleW` to attempt to get the path
 /// from the stdout handle.
+#[cfg_attr(not(windows), expect(clippy::unnecessary_wraps))]
 fn pathbuf_from_stdout() -> Result<PathBuf, TouchError> {
     #[cfg(all(unix, not(target_os = "android")))]
     {

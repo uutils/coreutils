@@ -45,6 +45,7 @@ selinux-error-file-open-failure = failed to open the file: { $error }
 selinux-error-context-retrieval-failure = failed to retrieve the security context: { $error }
 selinux-error-context-set-failure = failed to set default file creation context to '{ $context }': { $error }
 selinux-error-context-conversion-failure = failed to set default file creation context to '{ $context }': { $error }
+selinux-error-operation-not-supported = operation not supported
 
 # SMACK error messages
 smack-error-not-enabled = SMACK is not enabled on this system

@@ -63,6 +63,7 @@ sort-failed-to-set-up-signal-handler = failed to set up signal handler: {$error}
 # Warning messages
 sort-warning-failed-to-set-locale = failed to set locale
 sort-warning-simple-byte-comparison = text ordering performed using simple byte comparison
+sort-warning-sort-rule = text ordering performed using ‘{$locale}’ sorting rules
 sort-warning-key-zero-width = key {$key} has zero width and will be ignored
 sort-warning-key-numeric-spans-fields = key {$key} is numeric and spans multiple fields
 sort-warning-leading-blanks-significant = leading blanks are significant in key {$key}; consider also specifying 'b'
@@ -85,6 +86,7 @@ sort-help-numeric = compare according to string numerical value
 sort-help-general-numeric = compare according to string general numerical value
 sort-help-version-sort = Sort by SemVer version number, eg 1.12.2 > 1.1.2
 sort-help-random = shuffle in random order
+sort-help-random-source = use FILE as a source of random data
 sort-help-dictionary-order = consider only blanks and alphanumeric characters
 sort-help-merge = merge already sorted files; do not sort
 sort-help-check = check for sorted input; do not sort

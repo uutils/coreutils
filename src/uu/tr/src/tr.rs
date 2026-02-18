@@ -31,13 +31,6 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    // When we receive a SIGPIPE signal, we want to terminate the process so
-    // that we don't print any error messages to stderr. Rust ignores SIGPIPE
-    // (see https://github.com/rust-lang/rust/issues/62569), so we restore it's
-    // default action here.
-    #[cfg(not(target_os = "windows"))]
-    let _ = uucore::signals::enable_pipe_errors();
-
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let delete_flag = matches.get_flag(options::DELETE);
@@ -109,7 +102,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // According to the man page: translating only happens if deleting or if a second set is given
     let translating = !delete_flag && sets.len() > 1;
-    let mut sets_iter = sets.iter().map(|c| c.as_os_str());
+    let mut sets_iter = sets.iter().map(OsString::as_os_str);
     let (set1, set2) = Sequence::solve_set_characters(
         os_str_as_bytes(sets_iter.next().unwrap_or_default())?,
         os_str_as_bytes(sets_iter.next().unwrap_or_default())?,

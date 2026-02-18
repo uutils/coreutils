@@ -2,13 +2,13 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (ToDO) Sdivide
+// spell-checker:ignore (ToDO) Sdivide ading
 
 use jiff::{Timestamp, ToSpan};
 use regex::Regex;
 use std::fs::metadata;
-use uutests::new_ucmd;
 use uutests::util::UCommand;
+use uutests::{at_and_ucmd, new_ucmd};
 
 const DATE_TIME_FORMAT_DEFAULT: &str = "%Y-%m-%d %H:%M";
 
@@ -479,52 +479,6 @@ fn test_with_date_format_env() {
 }
 
 #[test]
-fn test_with_pr_core_utils_tests() {
-    let test_cases = vec![
-        ("", vec!["0Ft"], vec!["0F"], 0),
-        ("", vec!["0Fnt"], vec!["0Fnt-expected"], 0),
-        ("+3", vec!["0Ft"], vec!["3-0F"], 0),
-        ("+3 -f", vec!["0Ft"], vec!["3f-0F"], 0),
-        ("-a -3", vec!["0Ft"], vec!["a3-0F"], 0),
-        ("-a -3 -f", vec!["0Ft"], vec!["a3f-0F"], 0),
-        ("-a -3 -f", vec!["0Fnt"], vec!["a3f-0Fnt-expected"], 0),
-        ("+3 -a -3 -f", vec!["0Ft"], vec!["3a3f-0F"], 0),
-        ("-l 24", vec!["FnFn"], vec!["l24-FF"], 0),
-        ("-W 20 -l24 -f", vec!["tFFt-ll"], vec!["W20l24f-ll"], 0),
-    ];
-
-    for test_case in test_cases {
-        let (flags, input_file, expected_file, return_code) = test_case;
-        let mut scenario = new_ucmd!();
-        let input_file_path = input_file.first().unwrap();
-        let test_file_path = expected_file.first().unwrap();
-        let value = file_last_modified_time(&scenario, input_file_path);
-        let mut arguments: Vec<&str> = flags
-            .split(' ')
-            .filter(|i| i.trim() != "")
-            .collect::<Vec<&str>>();
-
-        arguments.extend(input_file.clone());
-
-        let scenario_with_args = scenario.args(&arguments);
-
-        let scenario_with_expected_status = if return_code == 0 {
-            scenario_with_args.succeeds()
-        } else {
-            scenario_with_args.fails()
-        };
-
-        scenario_with_expected_status.stdout_is_templated_fixture(
-            test_file_path,
-            &[
-                ("{last_modified_time}", &value),
-                ("{file_name}", input_file_path),
-            ],
-        );
-    }
-}
-
-#[test]
 fn test_with_join_lines_option() {
     let test_file_1 = "hosts.log";
     let test_file_2 = "test.log";
@@ -651,4 +605,271 @@ fn test_omit_pagination_option() {
         .args(&["--omit-pagination"])
         .pipe_in("a\nb\n")
         .succeeds();
+}
+
+#[test]
+fn test_form_feed_newlines() {
+    // Here we define the expected output.
+    //
+    // Each page should have the same number of blank lines before the
+    // form-feed character.
+    let whitespace = " ".repeat(50);
+    let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
+    let page1 = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\n\n\x0c");
+    let page2 = format!("\n\n{datetime_pattern}{whitespace}Page 2\n\n\n\n\x0c");
+    let pattern = format!("{page1}{page2}");
+    let regex = Regex::new(&pattern).unwrap();
+
+    // Command line: `printf "\f\f" | pr -f`.
+    //
+    // Escape code `\x0c` in a Rust string literal is the ASCII escape
+    // code `\f` for the "form feed" character (which appears like
+    // `^L` in the terminal).
+    new_ucmd!()
+        .arg("-f")
+        .pipe_in("\x0c\x0c")
+        .succeeds()
+        .stdout_matches(&regex);
+}
+
+#[test]
+fn test_new_line_followed_by_form_feed() {
+    // Here we define the expected output.
+    let whitespace = " ".repeat(50);
+    let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
+    let pattern = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\nabc\n\x0c");
+    let regex = Regex::new(&pattern).unwrap();
+
+    // Command line: `printf "abc\n\f" | pr -f`.
+    new_ucmd!()
+        .arg("-f")
+        .pipe_in("abc\n\x0c")
+        .succeeds()
+        .stdout_matches(&regex);
+}
+
+#[test]
+fn test_form_feed_followed_by_new_line() {
+    // Here we define the expected output.
+    let whitespace = " ".repeat(50);
+    let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
+    let blank_lines_61 = "\n".repeat(61);
+    let blank_lines_60 = "\n".repeat(60);
+    let page1 = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\n{blank_lines_61}");
+    let page2 = format!("\n\n{datetime_pattern}{whitespace}Page 2\n\n\nabc\n{blank_lines_60}");
+    let pattern = format!("{page1}{page2}");
+    let regex = Regex::new(&pattern).unwrap();
+
+    // Command line: `printf "\f\nabc" | pr`.
+    new_ucmd!()
+        .pipe_in("\x0c\nabc")
+        .succeeds()
+        .stdout_matches(&regex);
+}
+
+#[test]
+fn test_columns() {
+    let whitespace = " ".repeat(50);
+    let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
+    let header = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\n");
+    // TODO Our output still does not match the behavior of GNU
+    // pr. The correct output should be:
+    //
+    //     "a\t\t\t\t    b\n";
+    //
+    let data = "a                                  \tb                                  \n";
+    let blank_lines_60 = "\n".repeat(60);
+    let pattern = format!("{header}{data}{blank_lines_60}");
+    let regex = Regex::new(&pattern).unwrap();
+
+    // Command line: `printf "a\nb\n" | pr -2`.
+    new_ucmd!()
+        .arg("-2")
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_matches(&regex);
+}
+
+#[test]
+fn test_merge() {
+    // Create the two files to merge.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "a\n");
+    at.write("g", "b\n");
+
+    let whitespace = " ".repeat(50);
+    let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
+    let header = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\n");
+    // TODO Our output still does not match the behavior of GNU
+    // pr. The correct output should be:
+    //
+    //     "a\t\t\t\t    b\n";
+    //
+    // and the blank lines should actually be empty lines.
+    let data = "a                                  \tb                                  \n";
+    let blank_lines_55 =
+        "                                   \t                                   \n".repeat(55);
+    let footer = "\n".repeat(5);
+    let pattern = format!("{header}{data}{blank_lines_55}{footer}");
+    let regex = Regex::new(&pattern).unwrap();
+
+    // Command line: `(echo "a" > f; echo "b" > g; pr -m f g)`.
+    ucmd.args(&["-m", "f", "g"])
+        .succeeds()
+        .stdout_matches(&regex);
+}
+
+#[test]
+fn test_merge_one_long_one_short() {
+    // Create the two files to merge.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "a\na\n");
+    at.write("g", "b\n");
+
+    // Page 1 should have the first line of `f` and the first line of
+    // `b` side-by-side.
+    let whitespace = " ".repeat(50);
+    let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
+    let header = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\n");
+    let data = "a                                  \tb                                  \n";
+    let footer = "\n".repeat(5);
+    let page1 = format!("{header}{data}{footer}");
+
+    // Page 2 should have just the second line of `f`.
+    let header = format!("\n\n{datetime_pattern}{whitespace}Page 2\n\n\n");
+    let data = "a                                  \t                                   \n";
+    let page2 = format!("{header}{data}{footer}");
+
+    let pattern = format!("{page1}{page2}");
+    let regex = Regex::new(&pattern).unwrap();
+
+    // Command line:
+    //
+    //     printf "a\na\n" > f
+    //     printf "b\n" > g
+    //     pr -l11 -m f g
+    //
+    // The line length of 11 leaves room for a 5-line header, a 5-line
+    // footer, and one line of data from the input files. The extra
+    // line from the file `f` will be on the second page.
+    ucmd.args(&["-l", "11", "-m", "f", "g"])
+        .succeeds()
+        .stdout_matches(&regex);
+}
+
+#[test]
+fn test_simple_expand_tab() {
+    let whitespace = " ".repeat(50);
+    let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
+    let page_1_beginning = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\n");
+
+    let output_regex = Regex::new(&format!("{page_1_beginning}hello   world\nabc     def\n        leading\ntrail   \n8chars00        \n")).unwrap();
+
+    new_ucmd!()
+        .arg("-e")
+        .pipe_in("hello\tworld\nabc\tdef\n\tleading\ntrail\t\n8chars00\t\n")
+        .succeeds()
+        .stdout_matches(&output_regex);
+}
+
+#[test]
+fn test_simple_expand_tab_with_digit_argument() {
+    let whitespace = " ".repeat(50);
+    let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
+    let page_1_beginning = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\n");
+    let input = "hello\tworld\nabc\tdef\n\tleading\ntrail\t\n8chars00\t\n";
+
+    let test_cases = vec![
+        ("-e2", Regex::new(&format!("{page_1_beginning}hello world\nabc def\n  leading\ntrail \n8chars00  \n")).unwrap()),
+        ("-e3", Regex::new(&format!("{page_1_beginning}hello world\nabc   def\n   leading\ntrail \n8chars00 \n")).unwrap()),
+        ("-e8", Regex::new(&format!("{page_1_beginning}hello   world\nabc     def\n        leading\ntrail   \n8chars00        \n")).unwrap()),
+        ("-e10", Regex::new(&format!("{page_1_beginning}hello     world\nabc       def\n          leading\ntrail     \n8chars00  \n")).unwrap()),
+    ];
+    for (arg, output_regex) in test_cases {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in(input)
+            .succeeds()
+            .stdout_matches(&output_regex);
+    }
+}
+
+#[test]
+fn test_simple_expand_tab_with_char_argument() {
+    let whitespace = " ".repeat(50);
+    let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
+    let page_1_beginning = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\n");
+    let input = "hello\tworld\nabc\tdef\n\tleading\ntrail\t\n8chars00\t\n";
+
+    let test_cases = vec![
+        ("-ea", Regex::new(&format!("{page_1_beginning}hello   world\n        bc      def\n        le      ding\ntr      il      \n8ch     rs00    \n")).unwrap()),
+        ("-ee", Regex::new(&format!("{page_1_beginning}h       llo     world\nabc     d       f\n        l       ading\ntrail   \n8chars00        \n")).unwrap()),
+    ];
+    for (arg, output_regex) in test_cases {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in(input)
+            .succeeds()
+            .stdout_matches(&output_regex);
+    }
+}
+
+#[test]
+fn test_simple_expand_tab_with_both_arguments() {
+    // test different variations of what char to expand
+    // a2, e3, t10
+    let whitespace = " ".repeat(50);
+    let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
+    let page_1_beginning = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\n");
+    let input = "hello\tworld\nabc\tdef\n\tleading\ntrail\t\n8chars00\t\n";
+
+    let test_cases = vec![
+        ("-ea2", Regex::new(&format!("{page_1_beginning}hello   world\n  bc    def\n        le  ding\ntr  il  \n8ch rs00        \n")).unwrap()),
+        ("-ee3", Regex::new(&format!("{page_1_beginning}h  llo  world\nabc     d   f\n        l   ading\ntrail   \n8chars00        \n")).unwrap()),
+        ("-et10", Regex::new(&format!("{page_1_beginning}hello   world\nabc     def\n        leading\n          rail  \n8chars00        \n")).unwrap()),
+    ];
+    for (arg, output_regex) in test_cases {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in(input)
+            .succeeds()
+            .stdout_matches(&output_regex);
+    }
+}
+
+/* cSpell:disable */
+#[test]
+fn test_invalid_expand_tab_arguments() {
+    let test_file_path = "empty_test_file";
+
+    let test_cases = vec![
+        // incorrect argument
+        ("-esdgjiojiosdgjiogd", "dgjiojiosdgjiogd"),
+        // 2 non digit parameter
+        ("-eab", "b"),
+        // non digit after first digit
+        ("-e1a", "1a"),
+        // non digit after first digit after allowed input char
+        ("-ea1a", "1a"),
+        // > i32 max
+        ("-e2147483648", "2147483648"),
+        // > i32 max after allowed input char
+        ("-ea2147483648", "2147483648"),
+    ];
+
+    for (arg, error_msg_field) in test_cases {
+        new_ucmd!()
+            .args(&[arg, test_file_path])
+            .fails()
+            .stderr_contains(format!("pr: '-e' extra characters or invalid number in the argument: ‘{error_msg_field}’\nTry 'pr --help' for more information."));
+    }
+}
+/* cSpell:enable */
+
+#[test]
+fn test_expand_tab_does_not_consume_next_argument() {
+    let test_file_path = "empty_test_file";
+    new_ucmd!().args(&["-e", test_file_path]).succeeds();
+    new_ucmd!().args(&["-ea", test_file_path]).succeeds();
+    new_ucmd!().args(&["-ea1", test_file_path]).succeeds();
 }

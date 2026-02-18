@@ -8,7 +8,8 @@
 use clap::{Arg, ArgAction, Command};
 use libc::PRIO_PROCESS;
 use std::ffi::OsString;
-use std::io::{Error, ErrorKind, Write};
+use std::io::{Error, ErrorKind, Write, stdout};
+use std::num::IntErrorKind;
 use std::os::unix::process::CommandExt;
 use std::process;
 
@@ -22,6 +23,8 @@ pub mod options {
     pub static ADJUSTMENT: &str = "adjustment";
     pub static COMMAND: &str = "COMMAND";
 }
+
+const NICE_BOUND_NO_OVERFLOW: i32 = 50;
 
 fn is_prefix_of(maybe_prefix: &str, target: &str, min_match: usize) -> bool {
     if maybe_prefix.len() < min_match || maybe_prefix.len() > target.len() {
@@ -116,31 +119,32 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     }
 
-    let adjustment = match matches.get_one::<String>(options::ADJUSTMENT) {
-        Some(nstr) => {
-            if !matches.contains_id(options::COMMAND) {
-                return Err(UUsageError::new(
-                    125,
-                    translate!("nice-error-command-required-with-adjustment"),
-                ));
-            }
-            match nstr.parse::<i32>() {
-                Ok(num) => num,
-                Err(e) => {
+    let adjustment = if let Some(nstr) = matches.get_one::<String>(options::ADJUSTMENT) {
+        if !matches.contains_id(options::COMMAND) {
+            return Err(UUsageError::new(
+                125,
+                translate!("nice-error-command-required-with-adjustment"),
+            ));
+        }
+        match nstr.parse::<i32>() {
+            Ok(num) => num,
+            Err(e) => match e.kind() {
+                IntErrorKind::PosOverflow => NICE_BOUND_NO_OVERFLOW,
+                IntErrorKind::NegOverflow => -NICE_BOUND_NO_OVERFLOW,
+                _ => {
                     return Err(USimpleError::new(
                         125,
                         translate!("nice-error-invalid-number", "value" => nstr.clone(), "error" => e),
                     ));
                 }
-            }
+            },
         }
-        None => {
-            if !matches.contains_id(options::COMMAND) {
-                println!("{niceness}");
-                return Ok(());
-            }
-            10_i32
+    } else {
+        if !matches.contains_id(options::COMMAND) {
+            writeln!(stdout(), "{niceness}")?;
+            return Ok(());
         }
+        10_i32
     };
 
     niceness += adjustment;

@@ -153,27 +153,24 @@ fn cut_fields_explicit_out_delim<R: Read, W: Write, M: Matcher>(
                     print_delim = true;
                 }
 
-                match delim_search.next() {
+                if let Some((first, last)) = delim_search.next() {
                     // print the current field up to the next field delim
-                    Some((first, last)) => {
-                        let segment = &line[low_idx..first];
+                    let segment = &line[low_idx..first];
 
-                        out.write_all(segment)?;
+                    out.write_all(segment)?;
 
-                        low_idx = last;
-                        fields_pos = high + 1;
+                    low_idx = last;
+                    fields_pos = high + 1;
+                } else {
+                    // this is the last field in the line, so print the rest
+                    let segment = &line[low_idx..];
+
+                    out.write_all(segment)?;
+
+                    if line[line.len() - 1] == newline_char {
+                        return Ok(true);
                     }
-                    None => {
-                        // this is the last field in the line, so print the rest
-                        let segment = &line[low_idx..];
-
-                        out.write_all(segment)?;
-
-                        if line[line.len() - 1] == newline_char {
-                            return Ok(true);
-                        }
-                        break;
-                    }
+                    break;
                 }
             }
         }
@@ -227,26 +224,23 @@ fn cut_fields_implicit_out_delim<R: Read, W: Write, M: Matcher>(
                 }
             }
 
-            match delim_search.nth(high - low) {
-                Some((first, _)) => {
-                    let segment = &line[low_idx..first];
+            if let Some((first, _)) = delim_search.nth(high - low) {
+                let segment = &line[low_idx..first];
 
-                    out.write_all(segment)?;
+                out.write_all(segment)?;
 
-                    print_delim = true;
-                    low_idx = first;
-                    fields_pos = high + 1;
+                print_delim = true;
+                low_idx = first;
+                fields_pos = high + 1;
+            } else {
+                let segment = &line[low_idx..line.len()];
+
+                out.write_all(segment)?;
+
+                if line[line.len() - 1] == newline_char {
+                    return Ok(true);
                 }
-                None => {
-                    let segment = &line[low_idx..line.len()];
-
-                    out.write_all(segment)?;
-
-                    if line[line.len() - 1] == newline_char {
-                        return Ok(true);
-                    }
-                    break;
-                }
+                break;
             }
         }
         out.write_all(&[newline_char])?;
@@ -270,7 +264,7 @@ fn cut_fields_newline_char_delim<R: Read, W: Write>(
 ) -> UResult<()> {
     let buf_in = BufReader::new(reader);
 
-    let segments: Vec<_> = buf_in.split(newline_char).filter_map(|x| x.ok()).collect();
+    let segments: Vec<_> = buf_in.split(newline_char).filter_map(Result::ok).collect();
     let mut print_delim = false;
 
     for &Range { low, high } in ranges {

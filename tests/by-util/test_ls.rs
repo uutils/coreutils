@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo timefile
-// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry
+// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons NOFILE
 #![allow(
     clippy::similar_names,
     clippy::too_many_lines,
@@ -13,6 +13,8 @@
 #[cfg(all(unix, feature = "chmod"))]
 use nix::unistd::{close, dup};
 use regex::Regex;
+#[cfg(unix)]
+use rlimit::Resource;
 #[cfg(not(target_os = "openbsd"))]
 use std::collections::HashMap;
 #[cfg(target_os = "linux")]
@@ -4785,8 +4787,8 @@ fn test_ls_selinux_context_indicator() {
         // The 11th character (0-indexed position 10) should be "." for SELinux context
         assert_eq!(
             chars[10], '.',
-            "Expected '.' indicator for SELinux context in position 11, got '{}' in line: {}",
-            chars[10], first_line
+            "Expected '.' indicator for SELinux context in position 11, got '{}' in line: {first_line}",
+            chars[10],
         );
     }
 
@@ -4949,6 +4951,36 @@ fn test_dereference_symlink_file_color() {
     ucmd.args(&["-L", "--color", "dir1"])
         .succeeds()
         .stdout_is(out_exp);
+}
+
+/// Symlink chain target should be colored by final target type, not as symlink (#8934).
+#[test]
+fn test_symlink_chain_target_color() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    at.relative_symlink_file("file", "link1");
+    at.relative_symlink_file("link1", "link2");
+    let out = ucmd
+        .args(&["-l", "--color=always", "link2"])
+        .succeeds()
+        .stdout_move_str();
+    let target = out.split("->").nth(1).unwrap();
+    assert!(!target.contains("36m")); // 36m = cyan (symlink color)
+}
+
+/// Symlink target should be colored by extension (e.g., .tar.gz shows as archive color).
+#[test]
+fn test_symlink_target_extension_color() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("archive.tar.gz");
+    at.relative_symlink_file("archive.tar.gz", "link");
+    let out = ucmd
+        .env("LS_COLORS", "*.tar.gz=31")
+        .args(&["-l", "--color=always", "link"])
+        .succeeds()
+        .stdout_move_str();
+    let target = out.split("->").nth(1).unwrap();
+    assert!(target.contains("31m")); // 31 = red (our configured archive color)
 }
 
 #[test]
@@ -5176,6 +5208,51 @@ fn test_ls_dired_recursive() {
 }
 
 #[test]
+fn test_ls_dired_subdired_multiple_dirs_non_recursive() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("dir1");
+    at.mkdir("dir2");
+    at.touch("dir1/a");
+    at.touch("dir2/b");
+
+    let result = scene
+        .ucmd()
+        .arg("--dired")
+        .arg("dir1")
+        .arg("dir2")
+        .succeeds();
+
+    let output = result.stdout_str().to_string();
+    let subdired_line = output
+        .lines()
+        .find(|&line| line.starts_with("//SUBDIRED//"))
+        .unwrap();
+    let positions: Vec<usize> = subdired_line
+        .split_whitespace()
+        .skip(1)
+        .map(|s| s.parse().unwrap())
+        .collect();
+
+    assert_eq!(positions.len() % 2, 0); // Ensure there's an even number of positions
+
+    let dirnames: Vec<String> = positions
+        .chunks(2)
+        .map(|chunk| {
+            let start_pos = chunk[0];
+            let end_pos = chunk[1];
+            String::from_utf8(output.as_bytes()[start_pos..end_pos].to_vec())
+                .unwrap()
+                .trim()
+                .to_string()
+        })
+        .collect();
+
+    assert_eq!(dirnames, vec!["dir1", "dir2"]);
+}
+
+#[test]
 fn test_ls_dired_outputs_parent_offset() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -5302,6 +5379,53 @@ fn test_ls_dired_simple() {
         String::from_utf8(result.stdout_str().as_bytes()[start_pos..end_pos].to_vec()).unwrap();
 
     assert_eq!(filename, "a1");
+}
+
+#[test]
+fn test_ls_dired_symlink_name_only() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("d");
+    at.touch("d/target");
+    at.relative_symlink_file("target", "d/link");
+
+    let result = scene
+        .ucmd()
+        .arg("--dired")
+        .arg("-l")
+        .arg("--color=never")
+        .arg("d")
+        .succeeds();
+
+    let output = result.stdout_str().to_string();
+    assert!(output.contains("link -> target"));
+
+    let dired_line = output
+        .lines()
+        .find(|&line| line.starts_with("//DIRED//"))
+        .unwrap();
+    let positions: Vec<usize> = dired_line
+        .split_whitespace()
+        .skip(1)
+        .map(|s| s.parse().unwrap())
+        .collect();
+
+    assert_eq!(positions.len() % 2, 0);
+
+    let filenames: Vec<String> = positions
+        .chunks(2)
+        .map(|chunk| {
+            let start_pos = chunk[0];
+            let end_pos = chunk[1];
+            String::from_utf8(output.as_bytes()[start_pos..end_pos].to_vec())
+                .unwrap()
+                .trim()
+                .to_string()
+        })
+        .collect();
+
+    assert_eq!(filenames, vec!["link", "target"]);
 }
 
 #[test]
@@ -5671,19 +5795,15 @@ fn test_ls_hyperlink() {
 
     let result = scene.ucmd().arg("--hyperlink").succeeds();
     assert!(result.stdout_str().contains("\x1b]8;;file://"));
-    assert!(
-        result
-            .stdout_str()
-            .contains(&format!("{path}{separator}{file}\x07{file}\x1b]8;;\x07"))
-    );
+    assert!(result.stdout_str().contains(&format!(
+        "{path}{separator}{file}\x1b\\{file}\x1b]8;;\x1b\\"
+    )));
 
     let result = scene.ucmd().arg("--hyperlink=always").succeeds();
     assert!(result.stdout_str().contains("\x1b]8;;file://"));
-    assert!(
-        result
-            .stdout_str()
-            .contains(&format!("{path}{separator}{file}\x07{file}\x1b]8;;\x07"))
-    );
+    assert!(result.stdout_str().contains(&format!(
+        "{path}{separator}{file}\x1b\\{file}\x1b]8;;\x1b\\"
+    )));
 
     for argument in [
         "--hyperlink=never",
@@ -5718,23 +5838,23 @@ fn test_ls_hyperlink_encode_link() {
         assert!(
             result
                 .stdout_str()
-                .contains("back%5cslash\x07back\\slash\x1b]8;;\x07")
+                .contains("back%5cslash\x1b\\back\\slash\x1b]8;;\x1b\\")
         );
         assert!(
             result
                 .stdout_str()
-                .contains("ques%3ftion\x07ques?tion\x1b]8;;\x07")
+                .contains("ques%3ftion\x1b\\ques?tion\x1b]8;;\x1b\\")
         );
     }
     assert!(
         result
             .stdout_str()
-            .contains("encoded%253Fquestion\x07encoded%3Fquestion\x1b]8;;\x07")
+            .contains("encoded%253Fquestion\x1b\\encoded%3Fquestion\x1b]8;;\x1b\\")
     );
     assert!(
         result
             .stdout_str()
-            .contains("sp%20ace\x07sp ace\x1b]8;;\x07")
+            .contains("sp%20ace\x1b\\sp ace\x1b]8;;\x1b\\")
     );
 }
 // spell-checker: enable
@@ -5766,7 +5886,9 @@ fn test_ls_hyperlink_dirs() {
             .lines()
             .next()
             .unwrap()
-            .contains(&format!("{path}{separator}{dir_a}\x07{dir_a}\x1b]8;;\x07:"))
+            .contains(&format!(
+                "{path}{separator}{dir_a}\x1b\\{dir_a}\x1b]8;;\x1b\\:"
+            ))
     );
     assert_eq!(result.stdout_str().lines().nth(1).unwrap(), "");
     assert!(
@@ -5775,7 +5897,9 @@ fn test_ls_hyperlink_dirs() {
             .lines()
             .nth(2)
             .unwrap()
-            .contains(&format!("{path}{separator}{dir_b}\x07{dir_b}\x1b]8;;\x07:"))
+            .contains(&format!(
+                "{path}{separator}{dir_b}\x1b\\{dir_b}\x1b]8;;\x1b\\:"
+            ))
     );
 }
 
@@ -5807,19 +5931,93 @@ fn test_ls_hyperlink_recursive_dirs() {
     let mut lines = result.stdout_str().lines();
     assert_hyperlink!(
         lines.next(),
-        &format!("{path}{separator}{dir_a}\x07{dir_a}\x1b]8;;\x07:")
+        &format!("{path}{separator}{dir_a}\x1b\\{dir_a}\x1b]8;;\x1b\\:")
     );
     assert_hyperlink!(
         lines.next(),
-        &format!("{path}{separator}{dir_a}{separator}{dir_b}\x07{dir_b}\x1b]8;;\x07")
+        &format!("{path}{separator}{dir_a}{separator}{dir_b}\x1b\\{dir_b}\x1b]8;;\x1b\\")
     );
     assert!(matches!(lines.next(), Some(l) if l.is_empty()));
     assert_hyperlink!(
         lines.next(),
         &format!(
-            "{path}{separator}{dir_a}{separator}{dir_b}\x07{dir_a}{separator}{dir_b}\x1b]8;;\x07:"
+            "{path}{separator}{dir_a}{separator}{dir_b}\x1b\\{dir_a}{separator}{dir_b}\x1b]8;;\x1b\\:"
         )
     );
+}
+
+#[test]
+fn test_ls_hyperlink_symlink_target_handling() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("target_dir");
+    at.touch("target_file.txt");
+    at.symlink_file("target_file.txt", "link_to_file");
+    at.symlink_dir("target_dir", "link_to_dir");
+    at.symlink_file("nonexistent", "link_to_missing");
+
+    let result = scene
+        .ucmd()
+        .args(&["-l", "--hyperlink", "--color"])
+        .succeeds();
+    let output = result.stdout_str();
+
+    assert!(output.contains("\x1b]8;;file://"));
+    assert!(!output.contains('\x07'));
+    assert!(output.contains("\x1b\\"));
+
+    let file_link_line = output
+        .lines()
+        .find(|line| line.contains("link_to_file"))
+        .unwrap();
+    assert!(file_link_line.contains(" -> "));
+    let target_part = file_link_line.split(" -> ").nth(1).unwrap();
+    assert!(!target_part.contains("\x1b["));
+    assert!(!target_part.ends_with("\x1b[K"));
+
+    let dir_link_line = output
+        .lines()
+        .find(|line| line.contains("link_to_dir"))
+        .unwrap();
+    assert!(dir_link_line.contains(" -> "));
+    let target_part = dir_link_line.split(" -> ").nth(1).unwrap();
+    assert!(target_part.contains("\x1b["));
+
+    let missing_link_line = output
+        .lines()
+        .find(|line| line.contains("link_to_missing"))
+        .unwrap();
+    assert!(missing_link_line.contains(" -> "));
+    let missing_target_part = missing_link_line.split(" -> ").nth(1).unwrap();
+    assert!(missing_target_part.contains("\x1b["));
+}
+
+#[test]
+fn test_ls_hyperlink_utf8_encoding() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("café.txt");
+    #[cfg(not(target_os = "windows"))]
+    at.touch("file:with:colons.txt");
+    #[cfg(target_os = "windows")]
+    at.touch("file-with-colons.txt");
+    at.touch("file with spaces.txt");
+
+    let result = scene.ucmd().args(&["--hyperlink"]).succeeds();
+    let output = result.stdout_str();
+
+    assert!(output.contains("caf%c3%a9.txt"));
+    #[cfg(not(target_os = "windows"))]
+    assert!(output.contains("file%3awith%3acolons.txt"));
+    #[cfg(target_os = "windows")]
+    assert!(output.contains("file-with-colons.txt"));
+    assert!(output.contains("file%20with%20spaces.txt"));
+
+    let hyperlink_count = output.matches("\x1b]8;;file://").count();
+    let terminator_count = output.matches("\x1b\\").count();
+    assert_eq!(terminator_count, hyperlink_count * 2);
 }
 
 #[test]
@@ -6887,4 +7085,25 @@ fn test_ls_proc_self_fd_no_errors() {
         .arg("/proc/self/fd")
         .succeeds()
         .stderr_does_not_contain("cannot access");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_ls_recursive_no_fd_leak() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let deep_path: String = (1..=30)
+        .map(|i| i.to_string())
+        .collect::<Vec<_>>()
+        .join("/");
+    at.mkdir_all(&deep_path);
+
+    scene
+        .ucmd()
+        .arg("-R")
+        .arg("1")
+        .limit(Resource::NOFILE, 20, 20)
+        .succeeds()
+        .stderr_is("");
 }

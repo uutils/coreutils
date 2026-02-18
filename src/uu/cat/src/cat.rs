@@ -19,7 +19,7 @@ use std::os::fd::AsFd;
 use std::os::unix::fs::FileTypeExt;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{UIoError, UResult};
+use uucore::error::{UIoError, UResult, strip_errno};
 use uucore::translate;
 use uucore::{fast_inc::fast_inc_one, format_usage};
 
@@ -82,7 +82,7 @@ impl LineNumber {
 #[derive(Error, Debug)]
 enum CatError {
     /// Wrapper around `io::Error`
-    #[error("{0}")]
+    #[error("{}", strip_errno(.0))]
     Io(#[from] io::Error),
     /// Wrapper around `io::Error` for stdout writes
     #[error("{0}")]
@@ -226,13 +226,6 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    // When we receive a SIGPIPE signal, we want to terminate the process so
-    // that we don't print any error messages to stderr. Rust ignores SIGPIPE
-    // (see https://github.com/rust-lang/rust/issues/62569), so we restore it's
-    // default action here.
-    #[cfg(not(target_os = "windows"))]
-    let _ = uucore::signals::enable_pipe_errors();
-
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let number_mode = if matches.get_flag(options::NUMBER_NONBLANK) {
@@ -530,7 +523,7 @@ fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
                         .inspect_err(handle_broken_pipe),
                 )?;
             }
-            Err(e) if e.kind() == ErrorKind::Interrupted => continue,
+            Err(e) if e.kind() == ErrorKind::Interrupted => {}
             Err(e) => return Err(e.into()),
         }
     }

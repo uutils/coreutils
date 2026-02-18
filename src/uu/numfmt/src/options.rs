@@ -8,6 +8,7 @@ use crate::units::Unit;
 use uucore::ranges::Range;
 use uucore::translate;
 
+pub const DEBUG: &str = "debug";
 pub const DELIMITER: &str = "delimiter";
 pub const FIELD: &str = "field";
 pub const FIELD_DEFAULT: &str = "1";
@@ -54,9 +55,11 @@ pub struct NumfmtOptions {
     pub round: RoundMethod,
     pub suffix: Option<String>,
     pub unit_separator: String,
+    pub max_whitespace: usize,
     pub format: FormatOptions,
     pub invalid: InvalidModes,
     pub zero_terminated: bool,
+    pub debug: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -69,7 +72,7 @@ pub enum RoundMethod {
 }
 
 impl RoundMethod {
-    pub fn round(&self, f: f64) -> f64 {
+    pub fn round(self, f: f64) -> f64 {
         match self {
             Self::Up => f.ceil(),
             Self::Down => f.floor(),

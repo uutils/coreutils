@@ -21,6 +21,11 @@ mod options {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 2)?;
 
+    // Disable SIGPIPE so we can handle broken pipe errors gracefully
+    // and exit with code 3 instead of being killed by the signal.
+    #[cfg(unix)]
+    let _ = uucore::signals::disable_pipe_errors();
+
     let silent = matches.get_flag(options::SILENT);
 
     // If silent, we don't need the name, only whether or not stdin is a tty.
@@ -36,12 +41,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let name = nix::unistd::ttyname(std::io::stdin());
 
-    let write_result = match name {
-        Ok(name) => stdout.write_all_os(name.as_os_str()),
-        Err(_) => {
-            set_exit_code(1);
-            writeln!(stdout, "{}", translate!("tty-not-a-tty"))
-        }
+    let write_result = if let Ok(name) = name {
+        stdout.write_all_os(name.as_os_str())
+    } else {
+        set_exit_code(1);
+        writeln!(stdout, "{}", translate!("tty-not-a-tty"))
     };
 
     if write_result.is_err() || stdout.flush().is_err() {

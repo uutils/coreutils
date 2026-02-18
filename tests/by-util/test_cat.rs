@@ -32,7 +32,7 @@ fn test_cat_broken_pipe_nonzero_and_message() {
         // Close the read end to simulate a broken pipe on stdout
         let read_end = File::from_raw_fd(fds[0]);
         // Explicitly drop the read-end so writers see EPIPE instead of blocking on a full pipe
-        std::mem::drop(read_end);
+        drop(read_end);
         let write_end = File::from_raw_fd(fds[1]);
 
         let content = (0..10000).map(|_| "x").collect::<String>();
@@ -607,7 +607,7 @@ fn test_dev_full_show_all() {
 #[cfg(target_os = "linux")]
 fn test_write_fast_fallthrough_uses_flush() {
     const PROC_INIT_CMDLINE: &str = "/proc/1/cmdline";
-    let cmdline = std::fs::read_to_string(PROC_INIT_CMDLINE).unwrap();
+    let cmdline = read_to_string(PROC_INIT_CMDLINE).unwrap();
 
     new_ucmd!()
         .args(&[PROC_INIT_CMDLINE, "alpha.txt"])
@@ -877,6 +877,22 @@ fn test_write_error_handling() {
         .fails()
         .code_is(1)
         .stderr_contains("No space left on device");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_version_help_dev_full() {
+    use std::fs::OpenOptions;
+
+    for option in ["--version", "--help"] {
+        let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+
+        new_ucmd!()
+            .arg(option)
+            .set_stdout(dev_full)
+            .fails()
+            .stderr_contains("No space left on device");
+    }
 }
 
 #[test]
