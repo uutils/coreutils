@@ -3439,6 +3439,7 @@ dependencies = [
 name = "uu_cp"
 version = "0.10.0"
 dependencies = [
+ "cfg_aliases",
  "clap",
  "codspeed-divan-compat",
  "filetime",
