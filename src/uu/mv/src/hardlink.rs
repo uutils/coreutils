@@ -204,18 +204,23 @@ impl HardlinkGroupScanner {
     fn scan_single_path(&mut self, path: &Path) -> io::Result<()> {
         use std::os::unix::fs::MetadataExt;
 
-        if path.is_dir() {
+        let metadata = path.symlink_metadata()?;
+        let file_type = metadata.file_type();
+
+        if file_type.is_symlink() {
+            // Hardlink preservation does not apply to symlinks.
+            return Ok(());
+        }
+
+        if file_type.is_dir() {
             // Recursively scan directory contents
             self.scan_directory_recursive(path)?;
-        } else {
-            let metadata = path.metadata()?;
-            if metadata.nlink() > 1 {
-                let key = (metadata.dev(), metadata.ino());
-                self.hardlink_groups
-                    .entry(key)
-                    .or_default()
-                    .push(path.to_path_buf());
-            }
+        } else if metadata.nlink() > 1 {
+            let key = (metadata.dev(), metadata.ino());
+            self.hardlink_groups
+                .entry(key)
+                .or_default()
+                .push(path.to_path_buf());
         }
         Ok(())
     }
@@ -229,14 +234,19 @@ impl HardlinkGroupScanner {
             let entry = entry?;
             let path = entry.path();
 
-            if path.is_dir() {
+            let metadata = path.symlink_metadata()?;
+            let file_type = metadata.file_type();
+
+            if file_type.is_symlink() {
+                // Skip symlinks to avoid following targets (including dangling links).
+                continue;
+            }
+
+            if file_type.is_dir() {
                 self.scan_directory_recursive(&path)?;
-            } else {
-                let metadata = path.metadata()?;
-                if metadata.nlink() > 1 {
-                    let key = (metadata.dev(), metadata.ino());
-                    self.hardlink_groups.entry(key).or_default().push(path);
-                }
+            } else if metadata.nlink() > 1 {
+                let key = (metadata.dev(), metadata.ino());
+                self.hardlink_groups.entry(key).or_default().push(path);
             }
         }
         Ok(())

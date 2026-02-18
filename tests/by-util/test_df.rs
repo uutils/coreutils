@@ -16,7 +16,7 @@ use std::collections::HashSet;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 #[cfg(target_os = "linux")]
-use uutests::util::TestScenario;
+use uutests::util::{TestScenario, run_in_rootless_unshare};
 
 #[test]
 fn test_invalid_arg() {
@@ -1098,26 +1098,12 @@ fn test_df_hides_binfmt_misc_by_default() {
 /// Returns (success, stdout, stderr).
 #[cfg(target_os = "linux")]
 fn run_df_with_masked_proc(args: &str) -> Option<(bool, String, String)> {
-    use std::process::Command;
-
-    // Check if user namespaces are available
-    if !Command::new("unshare")
-        .args(["-rm", "true"])
-        .status()
-        .is_ok_and(|s| s.success())
-    {
-        return None;
-    }
-
     let df_path = TestScenario::new("df").bin_path.clone();
-    let output = Command::new("unshare")
-        .args(["-rm", "sh", "-c"])
-        .arg(format!(
-            "mount -t tmpfs tmpfs /proc && {} df {args}",
-            df_path.display()
-        ))
-        .output()
-        .ok()?;
+    let script = format!(
+        "mount -t tmpfs tmpfs /proc && {} df {args}",
+        df_path.display()
+    );
+    let output = run_in_rootless_unshare(&script)?;
 
     Some((
         output.status.success(),
