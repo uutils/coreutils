@@ -156,6 +156,10 @@ else
     # Remove tests checking for --version & --help
     # Not really interesting for us and logs are too big
     sed -i '/tests\/help\/help-version.sh/ D' Makefile
+    # Remove usage_vs_refs: it checks that --help options match GNU's texi docs.
+    # uutils has intentionally different options (e.g., clap adds -V for --version)
+    # so this test will never pass.
+    sed -i '/tests\/misc\/usage_vs_refs.sh/ D' Makefile
     touch gnu-built
 fi
 
