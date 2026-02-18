@@ -779,7 +779,9 @@ fn test_files0_stops_after_stdout_write_error() {
         .to_string();
 
     assert_eq!(
-        stderr.matches("failed to print result for /dev/null").count(),
+        stderr
+            .matches("failed to print result for /dev/null")
+            .count(),
         1,
         "wc should stop after the first stdout write error: {stderr:?}"
     );
