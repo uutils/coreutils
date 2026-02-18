@@ -1515,6 +1515,51 @@ fn test_retry6() {
 }
 
 #[test]
+#[cfg(not(target_os = "windows"))] // Fails on Windows: ReadDirectoryChangesW behavior differs from Unix inotify/kqueue
+fn test_follow_descriptor_untracked_file_in_watched_dir() {
+    // Regression test for PR #9630
+    // Ensure that --follow=descriptor (without --retry) doesn't crash when a new
+    // untracked file is created in a watched directory.
+    // This can happen because inotify/kqueue watches entire directories, not just specific files.
+    //
+    // Note: Excluded on Windows because the test fails - appended content is not detected
+    // (expects "initial\nappended\n" but gets only "initial\n"). This is due to differences
+    // in how Windows' ReadDirectoryChangesW handles file watching compared to Unix systems.
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    // Create a directory with an initial tracked file
+    at.mkdir("watched_dir");
+    at.write("watched_dir/tracked.txt", "initial\n");
+
+    let mut p = ts
+        .ucmd()
+        .arg("--follow=descriptor")
+        .arg("watched_dir/tracked.txt")
+        .run_no_wait();
+
+    let delay = 1000;
+    p.make_assertion_with_delay(delay).is_alive();
+
+    // Create a new untracked file in the same directory
+    // This generates a file system event that reaches handle_event()
+    at.write("watched_dir/untracked.txt", "should be ignored\n");
+    p.delay(delay);
+
+    // Append to the tracked file to verify tail still works correctly
+    at.append("watched_dir/tracked.txt", "appended\n");
+    p.delay(delay);
+
+    // Verify: No crash, correct output for tracked file only, no error messages
+    p.kill()
+        .make_assertion()
+        .with_all_output()
+        .stdout_is("initial\nappended\n")
+        .no_stderr();
+}
+
+#[test]
 #[cfg(all(
     not(target_vendor = "apple"),
     not(target_os = "windows"),
