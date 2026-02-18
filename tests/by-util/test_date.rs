@@ -420,6 +420,19 @@ fn test_date_format_literal() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_date_format_non_utf8_locale_bytes() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    new_ucmd!()
+        .env("LC_ALL", "en_US.ISO-8859-1")
+        .arg(OsStr::from_bytes(b"+\xC2"))
+        .succeeds()
+        .stdout_is_bytes(b"\xC2\n");
+}
+
+#[test]
 #[cfg(all(unix, not(target_os = "macos")))]
 fn test_date_set_valid() {
     if geteuid() == 0 {
