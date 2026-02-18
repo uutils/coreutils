@@ -616,16 +616,16 @@ fn remove_dir_recursive(
     {
         if let Some(s) = path.to_str() {
             if s.len() > 1000 {
-                match fs::remove_dir_all(path) {
-                    Ok(_) => return false,
+                return match fs::remove_dir_all(path) {
+                    Ok(_) => false,
                     Err(e) => {
                         let e = e.map_err_context(
                             || translate!("rm-error-cannot-remove", "file" => path.quote()),
                         );
                         show_error!("{e}");
-                        return true;
+                        true
                     }
-                }
+                };
             }
         }
 
