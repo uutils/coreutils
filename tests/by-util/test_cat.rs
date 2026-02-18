@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore NOFILE nonewline cmdline
+// spell-checker:ignore NOFILE nonewline cmdline ENOSPC
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rlimit::Resource;
@@ -223,9 +223,39 @@ fn test_piped_to_dev_full() {
                 .pipe_in_fixture("alpha.txt")
                 .ignore_stdin_write_error()
                 .fails()
-                .stderr_contains("No space left on device");
+                .stderr_contains("write error: No space left on device");
         }
     }
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+fn test_piped_to_dev_full_from_dev_stdin() {
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+
+    new_ucmd!()
+        .arg("/dev/stdin")
+        .set_stdout(dev_full)
+        .pipe_in("1")
+        .ignore_stdin_write_error()
+        .fails()
+        .stderr_contains("write error: No space left on device")
+        .stderr_does_not_contain("ENOSPC");
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+fn test_piped_to_dev_full_from_dev_stdin_with_numbering() {
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+
+    new_ucmd!()
+        .args(&["-n", "/dev/stdin"])
+        .set_stdout(dev_full)
+        .pipe_in("1")
+        .ignore_stdin_write_error()
+        .fails()
+        .stderr_contains("write error: No space left on device")
+        .stderr_does_not_contain("ENOSPC");
 }
 
 #[test]
