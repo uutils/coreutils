@@ -3,7 +3,10 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore winsize Openpty openpty xpixel ypixel ptyprocess
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::thread::sleep;
+use uutests::at_and_ts;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
@@ -148,7 +151,6 @@ fn test_nohup_appends_to_existing_file() {
 ))]
 fn test_nohup_fallback_to_home() {
     use std::fs;
-    use std::os::unix::fs::PermissionsExt;
 
     // Skip test when running as root (permissions bypassed via CAP_DAC_OVERRIDE)
     // This is common in Docker/Podman containers but won't happen in CI
@@ -246,4 +248,41 @@ fn test_nohup_stderr_to_stdout() {
     let content = std::fs::read_to_string(at.plus_as_string("nohup.out")).unwrap();
     assert!(content.contains("stdout message"));
     assert!(content.contains("stderr message"));
+}
+
+#[test]
+#[cfg(unix)]
+fn test_nohup_output_permissions() {
+    if uucore::process::geteuid() == 0 {
+        return;
+    }
+
+    let (at, ts) = at_and_ts!();
+
+    // CWD nohup.out should be 0600
+    ts.ucmd()
+        .terminal_simulation(true)
+        .args(&["echo", "perms"])
+        .succeeds();
+
+    assert_eq!(at.metadata("nohup.out").permissions().mode() & 0o777, 0o600);
+
+    // $HOME fallback nohup.out should also be 0600
+    at.mkdir("home");
+    at.mkdir("readonly_dir");
+    at.set_mode("readonly_dir", 0o555);
+
+    ts.ucmd()
+        .env("HOME", &at.plus_as_string("home"))
+        .current_dir(at.plus("readonly_dir"))
+        .terminal_simulation(true)
+        .arg("true")
+        .run();
+
+    at.set_mode("readonly_dir", 0o755);
+
+    assert_eq!(
+        at.metadata("home/nohup.out").permissions().mode() & 0o777,
+        0o600
+    );
 }
