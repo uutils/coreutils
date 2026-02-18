@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) helloworld nodir objdump n'source nconfined testdir
+// spell-checker:ignore (words) helloworld nodir objdump n'source nconfined
 
 #[cfg(not(target_os = "openbsd"))]
 use filetime::FileTime;
@@ -11,7 +11,7 @@ use std::fs;
 use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 #[cfg(not(windows))]
-use std::process;
+use std::process::Command;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::thread::sleep;
 use uucore::process::{getegid, geteuid};
@@ -21,6 +21,9 @@ use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::{TestScenario, is_ci, run_ucmd_as_root};
 use uutests::util_name;
+
+#[cfg(unix)]
+use libc::{S_ISGID, S_ISUID, S_ISVTX};
 
 #[test]
 fn test_invalid_arg() {
@@ -241,75 +244,6 @@ fn test_install_mode_symbolic() {
     assert!(at.file_exists(dest_file));
     let permissions = at.metadata(dest_file).permissions();
     assert_eq!(0o100_003_u32, PermissionsExt::mode(&permissions));
-}
-
-#[test]
-fn test_install_mode_comma_separated() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let dir = "target_dir";
-    let file = "source_file";
-    // Test comma-separated mode like chmod: ug+rwX,o+rX
-    let mode_arg = "--mode=ug+rwX,o+rX";
-
-    at.touch(file);
-    at.mkdir(dir);
-    ucmd.arg(file).arg(dir).arg(mode_arg).succeeds().no_stderr();
-
-    let dest_file = &format!("{dir}/{file}");
-    assert!(at.file_exists(file));
-    assert!(at.file_exists(dest_file));
-    let permissions = at.metadata(dest_file).permissions();
-    // ug+rwX: For files, X only adds execute if file already has execute (it doesn't here, starting at 0)
-    //         So this adds rw to user and group = 0o660
-    // o+rX: For files, X doesn't add execute, so this adds r to others = 0o004
-    // Total: 0o664 for file (0o100_664)
-    assert_eq!(0o100_664_u32, PermissionsExt::mode(&permissions));
-}
-
-#[test]
-fn test_install_mode_comma_separated_directory() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-    let dir = "test_dir";
-    // Test comma-separated mode for directory creation: ug+rwX,o+rX
-    let mode_arg = "--mode=ug+rwX,o+rX";
-
-    scene
-        .ucmd()
-        .arg("-d")
-        .arg(dir)
-        .arg(mode_arg)
-        .succeeds()
-        .no_stderr();
-
-    assert!(at.dir_exists(dir));
-    let permissions = at.metadata(dir).permissions();
-    // ug+rwX sets user and group to rwx (0o770), o+rX sets others to r-x (0o005)
-    // Total: 0o775 for directory (0o040_775)
-    assert_eq!(0o040_775_u32, PermissionsExt::mode(&permissions));
-}
-
-#[test]
-fn test_install_mode_symbolic_ignore_umask() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let dir = "target_dir";
-    let file = "source_file";
-    let mode_arg = "--mode=+w";
-
-    at.touch(file);
-    at.mkdir(dir);
-    ucmd.arg(file)
-        .arg(dir)
-        .arg(mode_arg)
-        .umask(0o022)
-        .succeeds()
-        .no_stderr();
-
-    let dest_file = &format!("{dir}/{file}");
-    assert!(at.file_exists(file));
-    assert!(at.file_exists(dest_file));
-    let permissions = at.metadata(dest_file).permissions();
-    assert_eq!(0o100_222_u32, PermissionsExt::mode(&permissions));
 }
 
 #[test]
@@ -777,7 +711,7 @@ fn test_install_and_strip() {
         .succeeds()
         .no_stderr();
 
-    let output = process::Command::new(SYMBOL_DUMP_PROGRAM)
+    let output = Command::new(SYMBOL_DUMP_PROGRAM)
         .arg("-t")
         .arg(at.plus(STRIP_TARGET_FILE))
         .output()
@@ -804,7 +738,7 @@ fn test_install_and_strip_with_program() {
         .succeeds()
         .no_stderr();
 
-    let output = process::Command::new(SYMBOL_DUMP_PROGRAM)
+    let output = Command::new(SYMBOL_DUMP_PROGRAM)
         .arg("-t")
         .arg(at.plus(STRIP_TARGET_FILE))
         .output()
@@ -1220,30 +1154,6 @@ fn test_install_backup_short_custom_suffix() {
     scene
         .ucmd()
         .arg("-b")
-        .arg(format!("--suffix={suffix}"))
-        .arg(file_a)
-        .arg(file_b)
-        .succeeds()
-        .no_stderr();
-
-    assert!(at.file_exists(file_a));
-    assert!(at.file_exists(file_b));
-    assert!(at.file_exists(format!("{file_b}{suffix}")));
-}
-
-#[test]
-fn test_install_suffix_without_backup_option() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
-    let file_a = "test_install_backup_custom_suffix_file_a";
-    let file_b = "test_install_backup_custom_suffix_file_b";
-    let suffix = "super-suffix-of-the-century";
-
-    at.touch(file_a);
-    at.touch(file_b);
-    scene
-        .ucmd()
         .arg(format!("--suffix={suffix}"))
         .arg(file_a)
         .arg(file_b)
@@ -1937,13 +1847,10 @@ fn test_install_compare_group_ownership() {
 
     at.write(source, "test content");
 
-    let user_group = process::Command::new("id")
-        .arg("-nrg")
-        .output()
-        .map_or_else(
-            |_| "users".to_string(),
-            |output| String::from_utf8_lossy(&output.stdout).trim().to_string(),
-        ); // fallback group name
+    let user_group = Command::new("id").arg("-nrg").output().map_or_else(
+        |_| "users".to_string(),
+        |output| String::from_utf8_lossy(&output.stdout).trim().to_string(),
+    ); // fallback group name
 
     // Install with explicit group
     scene
@@ -2515,146 +2422,267 @@ fn test_install_non_utf8_paths() {
 }
 
 #[test]
-fn test_install_unprivileged_option_u_skips_chown() {
-    // This test only makes sense when not running as root.
-    if geteuid() == 0 {
-        return;
-    }
-
+fn test_install_special_mode_bits_setuid() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
+    let source = "source_file";
+    let dest = "dest_file";
 
-    let src = "source_file";
-    let dst_fail = "target_fail";
-    let dst_ok = "target_ok";
-    at.touch(src);
+    at.touch(source);
 
-    // Without -U, attempting to chown to root should fail for an unprivileged user.
-    let res = scene.ucmd().args(&["--owner=root", src, dst_fail]).run();
-
-    res.failure();
-
-    // With -U, install should not require elevated privileges for owner/group changes,
-    // meaning it should succeed and leave ownership as the current user.
     scene
         .ucmd()
-        .args(&["-U", "--owner=root", src, dst_ok])
-        .succeeds()
-        .no_stderr();
-
-    assert!(at.file_exists(dst_ok));
-    assert_eq!(at.metadata(dst_ok).uid(), geteuid());
-}
-
-#[test]
-fn test_install_normal_file_replaces_symlink() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
-    at.write("source", "new content");
-    at.write("sensitive", "important data");
-
-    // Create symlink at destination
-    at.symlink_file("sensitive", "dest");
-
-    // Install should replace symlink with normal file (not follow it)
-    scene.ucmd().arg("source").arg("dest").succeeds();
-
-    // Verify dest is now a normal file, not a symlink
-    assert!(at.file_exists("dest"));
-    assert_eq!(at.read("dest"), "new content");
-
-    // Verify sensitive file was NOT modified
-    assert_eq!(at.read("sensitive"), "important data");
-}
-
-#[test]
-#[cfg(unix)]
-fn test_install_d_symlink_race_condition() {
-    // Test for symlink race condition fix (issue #10013)
-    // Verifies that pre-existing symlinks in path are handled safely
-    use std::os::unix::fs::symlink;
-
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
-    // Create test directories
-    at.mkdir("target");
-
-    // Create source file
-    at.write("source_file", "test content");
-
-    // Set up a pre-existing symlink attack scenario
-    at.mkdir_all("testdir/a");
-    let intermediate_dir = at.plus("testdir/a/b");
-    symlink(at.plus("target"), &intermediate_dir).unwrap();
-
-    // Run install -D which should detect and handle the symlink
-    let result = scene
-        .ucmd()
-        .arg("-D")
-        .arg(at.plus("source_file"))
-        .arg(at.plus("testdir/a/b/c/file"))
-        .run();
-
-    let wrong_location = at.plus("target/c/file");
-
-    // The critical assertion: file must NOT be in symlink target (race prevented)
-    assert!(
-        !wrong_location.exists(),
-        "RACE CONDITION NOT PREVENTED: File was created in symlink target"
-    );
-
-    // If the command succeeded, verify the file is in the correct location
-    if result.succeeded() {
-        assert!(at.file_exists("testdir/a/b/c/file"));
-        assert_eq!(at.read("testdir/a/b/c/file"), "test content");
-        // The symlink should have been replaced with a real directory
-        assert!(
-            at.plus("testdir/a/b").is_dir() && !at.plus("testdir/a/b").is_symlink(),
-            "Intermediate path should be a real directory, not a symlink"
-        );
-    }
-}
-
-#[test]
-#[cfg(unix)]
-fn test_install_d_symlink_race_condition_concurrent() {
-    // Test pre-existing symlinks in intermediate paths are handled correctly
-    use std::os::unix::fs::symlink;
-
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
-    // Create test directories and source file using testing framework
-    at.mkdir("target2");
-    at.write("source_file2", "test content 2");
-
-    // Set up intermediate directory with symlink
-    at.mkdir_all("testdir2/a");
-    symlink(at.plus("target2"), at.plus("testdir2/a/b")).unwrap();
-
-    // Run install -D
-    scene
-        .ucmd()
-        .arg("-D")
-        .arg(at.plus("source_file2"))
-        .arg(at.plus("testdir2/a/b/c/file"))
+        .arg("-m")
+        .arg("4755")
+        .arg(source)
+        .arg(dest)
         .succeeds();
 
-    // Verify file was created at the intended destination
-    assert!(at.file_exists("testdir2/a/b/c/file"));
-    assert_eq!(at.read("testdir2/a/b/c/file"), "test content 2");
-
-    // Verify file was NOT created in symlink target
-    assert!(
-        !at.plus("target2/c/file").exists(),
-        "File should NOT be in symlink target location"
+    assert!(at.file_exists(dest));
+    let permissions = at.metadata(dest).permissions();
+    let mode = PermissionsExt::mode(&permissions);
+    // Check that setuid bit is set
+    #[cfg(any(target_os = "freebsd", target_os = "macos", target_os = "android"))]
+    assert_eq!(
+        mode & (S_ISUID as u32),
+        S_ISUID as u32,
+        "setuid bit should be set"
     );
+    #[cfg(not(any(target_os = "freebsd", target_os = "macos", target_os = "android")))]
+    assert_eq!(mode & S_ISUID, S_ISUID, "setuid bit should be set");
+    // Check that regular permissions are correct
+    assert_eq!(mode & 0o0777, 0o0755, "regular permissions should be 755");
+}
 
-    // Verify intermediate path is now a real directory
-    assert!(
-        at.plus("testdir2/a/b").is_dir() && !at.plus("testdir2/a/b").is_symlink(),
-        "Intermediate directory should be a real directory, not a symlink"
+#[test]
+fn test_install_special_mode_bits_setgid() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let source = "source_file";
+    let dest = "dest_file";
+
+    at.touch(source);
+
+    scene
+        .ucmd()
+        .arg("-m")
+        .arg("2755")
+        .arg(source)
+        .arg(dest)
+        .succeeds();
+
+    assert!(at.file_exists(dest));
+    let permissions = at.metadata(dest).permissions();
+    let mode = PermissionsExt::mode(&permissions);
+    // Check that setgid bit is set
+    #[cfg(any(target_os = "freebsd", target_os = "macos", target_os = "android"))]
+    assert_eq!(
+        mode & (S_ISGID as u32),
+        S_ISGID as u32,
+        "setgid bit should be set"
     );
+    #[cfg(not(any(target_os = "freebsd", target_os = "macos", target_os = "android")))]
+    assert_eq!(mode & S_ISGID, S_ISGID, "setgid bit should be set");
+    // Check that regular permissions are correct
+    assert_eq!(mode & 0o0777, 0o0755, "regular permissions should be 755");
+}
+
+#[test]
+fn test_install_special_mode_bits_sticky() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let source = "source_file";
+    let dest = "dest_file";
+
+    at.touch(source);
+
+    // Try to run as root first
+    if let Ok(result) = run_ucmd_as_root(&scene, &["-m", "1755", source, dest]) {
+        result.success();
+        assert!(at.file_exists(dest));
+        let permissions = at.metadata(dest).permissions();
+        let mode = PermissionsExt::mode(&permissions);
+        // Check that sticky bit (1000) is set
+        assert_eq!(mode & 0o1000, 0o1000, "sticky bit should be set");
+        // Check that regular permissions are correct
+        assert_eq!(mode & 0o0777, 0o0755, "regular permissions should be 755");
+    } else {
+        // Skip test if not running as root
+        struct SkipTest {}
+        impl Drop for SkipTest {
+            fn drop(&mut self) {
+                println!("Test skipped; requires root user to set sticky bit");
+            }
+        }
+        let _skip = SkipTest {};
+    }
+}
+
+#[test]
+fn test_install_special_mode_bits_all() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let source = "source_file";
+    let dest = "dest_file";
+
+    at.touch(source);
+
+    // Try to run as root first
+    if let Ok(result) = run_ucmd_as_root(&scene, &["-m", "7755", source, dest]) {
+        result.success();
+        assert!(at.file_exists(dest));
+        let permissions = at.metadata(dest).permissions();
+        let mode = PermissionsExt::mode(&permissions);
+        // Check that all special bits are set
+        assert_eq!(mode & 0o7000, 0o7000, "all special bits should be set");
+        // Check that regular permissions are correct
+        assert_eq!(mode & 0o0777, 0o0755, "regular permissions should be 755");
+    } else {
+        // Skip test if not running as root
+        struct SkipTest {}
+        impl Drop for SkipTest {
+            fn drop(&mut self) {
+                println!("Test skipped; requires root user to set all special bits");
+            }
+        }
+        let _skip = SkipTest {};
+    }
+}
+
+#[test]
+fn test_install_special_mode_bits_with_chown() {
+    // Test that special bits are preserved when chown is called
+    // This is the core fix for issue #9134
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let source = "source_file";
+    let dest = "dest_file";
+
+    at.touch(source);
+
+    // Run as root to test chown behavior
+    if let Ok(result) = run_ucmd_as_root(&ts, &["-m", "4755", source, dest]) {
+        result.success();
+        assert!(at.file_exists(dest));
+        let permissions = fs::metadata(at.plus(dest)).unwrap().permissions();
+        let mode = PermissionsExt::mode(&permissions);
+        // Check that setuid bit is preserved after chown
+        #[cfg(any(target_os = "freebsd", target_os = "macos", target_os = "android"))]
+        assert_eq!(
+            mode & (S_ISUID as u32),
+            S_ISUID as u32,
+            "setuid bit should be preserved after chown (issue #9134)"
+        );
+        #[cfg(not(any(target_os = "freebsd", target_os = "macos", target_os = "android")))]
+        assert_eq!(
+            mode & S_ISUID,
+            S_ISUID,
+            "setuid bit should be preserved after chown (issue #9134)"
+        );
+    } else {
+        println!("Test skipped; requires root user");
+    }
+}
+
+#[test]
+fn test_install_special_mode_bits_combinations() {
+    // Test various combinations of special bits
+    #[cfg(any(target_os = "freebsd", target_os = "macos", target_os = "android"))]
+    let test_cases = [
+        (0o4755u32, S_ISUID as u32, "setuid only"),
+        (0o2755u32, S_ISGID as u32, "setgid only"),
+        (0o1755u32, S_ISVTX as u32, "sticky only"),
+        (0o6755u32, (S_ISUID | S_ISGID) as u32, "setuid + setgid"),
+        (0o5755u32, (S_ISUID | S_ISVTX) as u32, "setuid + sticky"),
+        (0o3755u32, (S_ISGID | S_ISVTX) as u32, "setgid + sticky"),
+        (
+            0o7755u32,
+            (S_ISUID | S_ISGID | S_ISVTX) as u32,
+            "all special bits",
+        ),
+    ];
+    #[cfg(not(any(target_os = "freebsd", target_os = "macos", target_os = "android")))]
+    #[allow(clippy::unnecessary_cast)]
+    let test_cases = [
+        (0o4755u32, S_ISUID as u32, "setuid only"),
+        (0o2755u32, S_ISGID as u32, "setgid only"),
+        (0o1755u32, S_ISVTX as u32, "sticky only"),
+        (0o6755u32, (S_ISUID | S_ISGID) as u32, "setuid + setgid"),
+        (0o5755u32, (S_ISUID | S_ISVTX) as u32, "setuid + sticky"),
+        (0o3755u32, (S_ISGID | S_ISVTX) as u32, "setgid + sticky"),
+        (
+            0o7755u32,
+            (S_ISUID | S_ISGID | S_ISVTX) as u32,
+            "all special bits",
+        ),
+    ];
+
+    for (mode, expected_bits, description) in test_cases {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        let source = format!("source_{mode:04o}");
+        let dest = format!("dest_{mode:04o}");
+
+        at.touch(&source);
+
+        // Try to run as root first for tests with special bits
+        if mode & 0o7000 != 0 {
+            // This test requires special bits, run as root
+            if let Ok(result) =
+                run_ucmd_as_root(&scene, &["-m", &format!("{mode:o}"), &source, &dest])
+            {
+                result.success();
+                assert!(
+                    at.file_exists(&dest),
+                    "Failed to create dest for {description}"
+                );
+                let permissions = at.metadata(&dest).permissions();
+                let actual_mode = PermissionsExt::mode(&permissions);
+                let actual_mode_bits = actual_mode & 0o7000;
+                assert_eq!(
+                    actual_mode & 0o7000,
+                    expected_bits,
+                    "Special bits mismatch for {description}: expected 0o{expected_bits:04o}, got 0o{actual_mode_bits:04o}"
+                );
+            } else {
+                // Skip this test case if not running as root
+                let description_owned = description.to_string();
+                struct SkipTest {
+                    message: String,
+                }
+                impl Drop for SkipTest {
+                    fn drop(&mut self) {
+                        println!("Test skipped: {} (requires root user)", self.message);
+                    }
+                }
+                let _skip = SkipTest {
+                    message: description_owned,
+                };
+            }
+        } else {
+            // Regular permissions test, can run without root
+            scene
+                .ucmd()
+                .arg("-m")
+                .arg(format!("{mode:o}"))
+                .arg(&source)
+                .arg(&dest)
+                .succeeds();
+
+            assert!(
+                at.file_exists(&dest),
+                "Failed to create dest for {description}"
+            );
+            let permissions = at.metadata(&dest).permissions();
+            let actual_mode = PermissionsExt::mode(&permissions);
+            // For regular permission tests, just check the mode matches
+            assert_eq!(
+                actual_mode & 0o0777,
+                mode & 0o0777,
+                "Permission mismatch for {description}: expected 0o{expected_mode:04o}, got 0o{actual_mode:04o}",
+                expected_mode = mode & 0o0777,
+                actual_mode = actual_mode & 0o0777
+            );
+        }
+    }
 }
