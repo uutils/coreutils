@@ -36,6 +36,7 @@ jiff = { workspace = true, optional = true, features = [
   "tzdb-zoneinfo",
   "tzdb-concatenated",
 ] }
+rustc-hash = { workspace = true }
 time = { workspace = true, optional = true, features = [
   "formatting",
   "local-offset",
