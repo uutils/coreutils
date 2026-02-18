@@ -43,6 +43,9 @@ pub struct ReverseChunks<'a> {
 
     /// The index of the next block to read.
     block_idx: usize,
+
+    /// The buffer to read each block into.
+    buf: Vec<u8>,
 }
 
 impl<'a> ReverseChunks<'a> {
@@ -60,6 +63,7 @@ impl<'a> ReverseChunks<'a> {
             size,
             max_blocks_to_read,
             block_idx,
+            buf: vec![0; BLOCK_SIZE as usize],
         }
     }
 }
@@ -84,7 +88,12 @@ impl Iterator for ReverseChunks<'_> {
 
         // Seek backwards by the next chunk, read the full chunk into
         // `buf`, and then seek back to the start of the chunk again.
-        let mut buf = vec![0; BLOCK_SIZE as usize];
+        let buf = &mut self.buf;
+        // Zero out the buffer to avoid returning old data in case
+        // of partial reads.
+        if self.block_idx > 0 {
+            buf.fill(0);
+        }
         let pos = self
             .file
             .seek(SeekFrom::Current(-(block_size as i64)))
@@ -286,19 +295,21 @@ impl BytesChunkBuffer {
     /// chunks.fill(&mut reader).unwrap();
     /// ```
     pub fn fill(&mut self, reader: &mut impl BufRead) -> UResult<()> {
-        let mut chunk = Box::new(BytesChunk::new());
+        let mut chunk_opt = Some(Box::new(BytesChunk::new()));
 
         // fill chunks with all bytes from reader and reuse already instantiated chunks if possible
-        while chunk.fill(reader)?.is_some() {
+        while chunk_opt.as_mut().unwrap().fill(reader)?.is_some() {
+            let chunk = chunk_opt.take().unwrap();
             self.bytes += chunk.bytes as u64;
-            self.chunks.push_back(chunk.clone());
+            self.chunks.push_back(chunk);
 
             let first = &self.chunks[0];
             if self.bytes - first.bytes as u64 > self.num_print {
-                chunk = self.chunks.pop_front().unwrap();
-                self.bytes -= chunk.bytes as u64;
+                let old_front = self.chunks.pop_front().unwrap();
+                self.bytes -= old_front.bytes as u64;
+                chunk_opt = Some(old_front);
             } else {
-                *chunk = BytesChunk::new();
+                chunk_opt = Some(Box::new(BytesChunk::new()));
             }
         }
 
@@ -563,19 +574,21 @@ impl LinesChunkBuffer {
     /// over these chunks. If there are no chunks, for example because the piped stdin contained no
     /// lines, or `num_print = 0` then `iterator.next` will return None.
     pub fn fill(&mut self, reader: &mut impl BufRead) -> UResult<()> {
-        let mut chunk = Box::new(LinesChunk::new(self.delimiter));
+        let mut chunk_opt = Some(Box::new(LinesChunk::new(self.delimiter)));
 
-        while chunk.fill(reader)?.is_some() {
+        while chunk_opt.as_mut().unwrap().fill(reader)?.is_some() {
+            let chunk = chunk_opt.take().unwrap();
+
             self.lines += chunk.lines as u64;
-            self.chunks.push_back(chunk.clone());
+            self.chunks.push_back(chunk);
 
             let first = &self.chunks[0];
             if self.lines - first.lines as u64 > self.num_print {
-                chunk = self.chunks.pop_front().unwrap();
-
-                self.lines -= chunk.lines as u64;
+                let old_front = self.chunks.pop_front().unwrap();
+                self.lines -= old_front.lines as u64;
+                chunk_opt = Some(old_front);
             } else {
-                *chunk = LinesChunk::new(self.delimiter);
+                chunk_opt = Some(Box::new(LinesChunk::new(self.delimiter)));
             }
         }
 
