@@ -1239,35 +1239,6 @@ jobs:
         flags: coverage,${{ matrix.job.os }}
         fail_ci_if_error: false
 
-  test_separately:
-    # duplicated with other CI, but has better appearance
-    name: Separate Builds (individual and coreutils)
-    runs-on: ${{ matrix.job.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - { os: ubuntu-latest  , features: feat_os_unix }
-          - { os: macos-latest   , features: feat_os_macos }
-          - { os: windows-latest , features: feat_os_windows }
-    steps:
-    - uses: actions/checkout@v6
-      with:
-        persist-credentials: false
-    - name: Avoid no space left on device
-      run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android &
-    - uses: dtolnay/rust-toolchain@stable
-    - uses: Swatinem/rust-cache@v2
-    - name: build and test all programs individually
-      shell: bash
-      run: |
-        CARGO_FEATURES_OPTION='--features=${{ matrix.job.features }}' ;
-        for f in $(util/show-utils.sh ${CARGO_FEATURES_OPTION})
-        do
-          echo "Building and testing $f"
-          cargo test -p "uu_$f" -p coreutils --features=$f --no-default-features
-        done
-
   test_selinux:
     name: Build/SELinux
     needs: [ min_version, deps ]
