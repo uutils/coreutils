@@ -172,6 +172,24 @@ impl DirFd {
         Ok(Self { fd })
     }
 
+    /// Duplicate this directory descriptor
+    pub fn try_clone(&self) -> io::Result<Self> {
+        let fd = nix::unistd::dup(&self.fd).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+        Ok(Self { fd })
+    }
+
+    /// Open a nested subdirectory by traversing each component relative to this directory.
+    pub fn open_subdir_chain<'a, I>(&self, components: I) -> io::Result<Self>
+    where
+        I: IntoIterator<Item = &'a OsStr>,
+    {
+        let mut current = self.try_clone()?;
+        for component in components {
+            current = current.open_subdir(component, SymlinkBehavior::Follow)?;
+        }
+        Ok(current)
+    }
+
     /// Get raw stat data for a file relative to this directory
     pub fn stat_at(&self, name: &OsStr, symlink_behavior: SymlinkBehavior) -> io::Result<FileStat> {
         let name_cstr =
@@ -830,6 +848,34 @@ mod tests {
 
         let result = parent_fd.open_subdir(OsStr::new("nonexistent"), SymlinkBehavior::Follow);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_dirfd_open_subdir_chain() {
+        let temp_dir = TempDir::new().unwrap();
+        let nested = temp_dir.path().join("a").join("b");
+        fs::create_dir_all(&nested).unwrap();
+
+        let root_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+        let chain = [OsStr::new("a"), OsStr::new("b")];
+        let nested_fd = root_fd.open_subdir_chain(chain).unwrap();
+        let stat = nested_fd.fstat().unwrap();
+
+        assert_eq!(stat.st_mode & libc::S_IFMT, libc::S_IFDIR);
+    }
+
+    #[test]
+    fn test_dirfd_open_subdir_chain_empty() {
+        let temp_dir = TempDir::new().unwrap();
+        let root_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+        let same_fd = root_fd
+            .open_subdir_chain(std::iter::empty::<&OsStr>())
+            .unwrap();
+
+        let stat1 = root_fd.fstat().unwrap();
+        let stat2 = same_fd.fstat().unwrap();
+        assert_eq!(stat1.st_ino, stat2.st_ino);
+        assert_eq!(stat1.st_dev, stat2.st_dev);
     }
 
     #[test]
