@@ -4187,6 +4187,7 @@ name = "uu_timeout"
 version = "0.6.0"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
  "libc",
  "nix",

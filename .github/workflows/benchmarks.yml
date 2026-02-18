@@ -48,6 +48,7 @@ jobs:
           uu_shuf,
           uu_sort,
           uu_split,
+          uu_timeout,
           uu_tsort,
           uu_unexpand,
           uu_uniq,
