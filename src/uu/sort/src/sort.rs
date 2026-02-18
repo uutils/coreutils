@@ -2024,26 +2024,34 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let reader = open_with_open_failed_error(&files0_from)?;
         let buf_reader = BufReader::new(reader);
         for (line_num, line) in buf_reader.split(b'\0').flatten().enumerate() {
-            let f = std::str::from_utf8(&line)
-                .expect("Could not parse string from zero terminated input.");
-            match f {
-                STDIN_FILE => {
-                    return Err(SortError::MinusInStdIn.into());
+            // Handle filenames as raw bytes to support non-UTF-8 paths
+            #[cfg(unix)]
+            let filename = {
+                use std::os::unix::ffi::OsStrExt;
+                OsStr::from_bytes(&line).to_owned()
+            };
+            #[cfg(not(unix))]
+            let filename = {
+                // On non-Unix systems, convert to UTF-8 with replacement chars
+                match std::str::from_utf8(&line) {
+                    Ok(s) => OsString::from(s),
+                    Err(_) => OsString::from(String::from_utf8_lossy(&line).into_owned()),
                 }
-                "" => {
-                    return Err(SortError::ZeroLengthFileName {
-                        file: files0_from,
-                        line_num: line_num + 1,
-                    }
-                    .into());
+            };
+
+            // Check for special cases using bytes comparison
+            if line == b"-" {
+                return Err(SortError::MinusInStdIn.into());
+            }
+            if line.is_empty() {
+                return Err(SortError::ZeroLengthFileName {
+                    file: files0_from,
+                    line_num: line_num + 1,
                 }
-                _ => {}
+                .into());
             }
 
-            files.push(OsString::from(
-                std::str::from_utf8(&line)
-                    .expect("Could not parse string from zero terminated input."),
-            ));
+            files.push(filename);
         }
         if files.is_empty() {
             return Err(SortError::EmptyInputFile { file: files0_from }.into());
