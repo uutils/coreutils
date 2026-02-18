@@ -23,6 +23,7 @@ clap = { workspace = true }
 fs_extra = { workspace = true }
 indicatif = { workspace = true }
 libc = { workspace = true }
+rustc-hash = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = [
   "backup-control",

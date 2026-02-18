@@ -1960,6 +1960,7 @@ dependencies = [
  "num-traits",
  "os_display",
  "procfs",
+ "rustc-hash",
  "sha1",
  "sha2",
  "sha3",
