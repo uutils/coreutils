@@ -2613,3 +2613,157 @@ fn test_date_debug_current_time() {
     // No parsing happens for "now", so no debug output
     assert_eq!(stderr, "");
 }
+
+#[test]
+fn test_date_iso8601_12hour_time() {
+    // Test ISO-8601 dates with 12-hour time format (issue #9253)
+    // The parse_datetime crate's combined parser only accepts 24-hour time,
+    // so we normalize by converting dashes to slashes to force separate parsing
+
+    // Test basic am/pm with ISO-8601 date
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-01-01 12:00am")
+        .arg("+%Y-%m-%d %H:%M")
+        .succeeds()
+        .stdout_is("2025-01-01 00:00\n");
+
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-01-01 12:00pm")
+        .arg("+%Y-%m-%d %H:%M")
+        .succeeds()
+        .stdout_is("2025-01-01 12:00\n");
+
+    // Test with seconds
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-01-01 12:00:30am")
+        .arg("+%Y-%m-%d %H:%M:%S")
+        .succeeds()
+        .stdout_is("2025-01-01 00:00:30\n");
+
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-01-01 12:00:30pm")
+        .arg("+%Y-%m-%d %H:%M:%S")
+        .succeeds()
+        .stdout_is("2025-01-01 12:00:30\n");
+
+    // Test case variations
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-01-01 12:00AM")
+        .arg("+%Y-%m-%d %H:%M")
+        .succeeds()
+        .stdout_is("2025-01-01 00:00\n");
+
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-01-01 12:00PM")
+        .arg("+%Y-%m-%d %H:%M")
+        .succeeds()
+        .stdout_is("2025-01-01 12:00\n");
+
+    // Test with a.m./p.m. format
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-01-01 12:00 a.m.")
+        .arg("+%Y-%m-%d %H:%M")
+        .succeeds()
+        .stdout_is("2025-01-01 00:00\n");
+
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-01-01 12:00 p.m.")
+        .arg("+%Y-%m-%d %H:%M")
+        .succeeds()
+        .stdout_is("2025-01-01 12:00\n");
+
+    // Test various hours
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-01-01 1:30am")
+        .arg("+%Y-%m-%d %H:%M")
+        .succeeds()
+        .stdout_is("2025-01-01 01:30\n");
+
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-01-01 11:59pm")
+        .arg("+%Y-%m-%d %H:%M")
+        .succeeds()
+        .stdout_is("2025-01-01 23:59\n");
+}
+
+#[test]
+fn test_date_iso8601_12hour_time_edge_cases() {
+    // Test edge cases for ISO-8601 12-hour time (issue #9253)
+
+    // Noon edge case
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-01-01 12:00pm")
+        .arg("+%H:%M")
+        .succeeds()
+        .stdout_is("12:00\n");
+
+    // Midnight edge case
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-01-01 12:00am")
+        .arg("+%H:%M")
+        .succeeds()
+        .stdout_is("00:00\n");
+
+    // Single digit hour
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-01-01 1:05am")
+        .arg("+%H:%M")
+        .succeeds()
+        .stdout_is("01:05\n");
+
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-01-01 1:05pm")
+        .arg("+%H:%M")
+        .succeeds()
+        .stdout_is("13:05\n");
+
+    // 11:59pm edge case (end of day)
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-01-01 11:59pm")
+        .arg("+%H:%M")
+        .succeeds()
+        .stdout_is("23:59\n");
+}
+
+#[test]
+fn test_date_iso8601_12hour_time_non_iso() {
+    // Ensure non-ISO-8601 dates with 12-hour time still work
+    // (these should not be affected by the normalization)
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("Jan 1 2025 12:00pm")
+        .arg("+%Y-%m-%d %H:%M")
+        .succeeds()
+        .stdout_is("2025-01-01 12:00\n");
+}
