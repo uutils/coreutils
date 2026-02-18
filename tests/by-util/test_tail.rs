@@ -574,6 +574,39 @@ fn test_follow_non_utf8_bytes() {
     child.kill();
 }
 
+
+#[test]
+#[cfg(unix)]
+fn test_permission_denied_is_not_reported_as_not_found() {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+
+    if unsafe { libc::geteuid() } == 0 {
+        return;
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("noexec");
+    let mut f = at.make_file("noexec/file");
+    use std::io::Write;
+    writeln!(f, "secret").unwrap();
+    f.flush().unwrap();
+
+    let dir = at.plus("noexec");
+    fs::set_permissions(&dir, fs::Permissions::from_mode(0o000)).unwrap();
+
+    let result = ucmd.arg("noexec/file").run();
+
+    fs::set_permissions(&dir, fs::Permissions::from_mode(0o700)).unwrap();
+
+    // Asserts that the result is incorrect. 
+    result.failure();
+    let err = result.stderr_str();
+    assert!(err.contains("Permission denied"))
+}
+
+
 #[test]
 #[cfg(not(target_os = "windows"))] // FIXME: test times out
 fn test_follow_multiple() {
