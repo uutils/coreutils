@@ -51,7 +51,7 @@ impl SuffixType {
             Self::Si => (SI_BASES, SI_SUFFIXES),
         };
         let mut i = 0;
-        while bases[i + 1] - bases[i] < n && i < suffixes.len() {
+        while i < suffixes.len() - 1 && bases[i + 1] - bases[i] < n {
             i += 1;
         }
         (bases[i], suffixes[i])
