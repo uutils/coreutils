@@ -25,7 +25,7 @@ clap = { workspace = true }
 jiff = { workspace = true }
 parse_datetime = { workspace = true }
 thiserror = { workspace = true }
-uucore = { workspace = true, features = ["libc", "parser"] }
+uucore = { workspace = true, features = ["libc", "parser", "fs"] }
 fluent = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
