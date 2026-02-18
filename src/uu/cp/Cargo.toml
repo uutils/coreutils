@@ -18,6 +18,9 @@ workspace = true
 path = "src/cp.rs"
 doctest = false
 
+[build-dependencies]
+cfg_aliases.workspace = true
+
 [dependencies]
 clap = { workspace = true }
 filetime = { workspace = true }
