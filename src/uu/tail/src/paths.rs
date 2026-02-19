@@ -284,14 +284,16 @@ mod tests {
         // This test ensures that calling resolve() on stdin doesn't panic
         // even when stdin is not available or is a pipe
         let input = Input::default(); // Creates stdin input
-        let _result = input.resolve();
+        let result = input.resolve();
         // On macOS, this should always be None
         // On Linux, this should be None for pipes/special files
         // We just verify it doesn't panic
         #[cfg(target_os = "macos")]
-        assert_eq!(_result, None);
+        assert_eq!(result, None);
         // On non-macOS, the result depends on what stdin actually is
         // but it should not panic regardless
+        #[cfg(not(target_os = "macos"))]
+        let _ = result;
     }
 
     #[test]
