@@ -484,8 +484,9 @@ fn test_dev_zero_write_error_dev_full() {
 #[cfg(target_os = "linux")]
 fn test_dev_zero_closed_pipe() {
     new_ucmd!()
+        .env("RUST_SIGPIPE", "default")
         .arg("/dev/zero")
         .set_stdout(make_broken_pipe())
-        .succeeds()
+        .fails()
         .no_stderr();
 }

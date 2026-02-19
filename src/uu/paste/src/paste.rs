@@ -379,18 +379,24 @@ enum InputSource {
 
 impl InputSource {
     fn read(&mut self, buf: &mut [u8]) -> UResult<usize> {
-        let us = match self {
-            Self::File(bu) => bu.read(buf)?,
-            Self::StandardInput(rc) => rc
-                .try_borrow()
-                .map_err(|bo| {
-                    USimpleError::new(1, translate!("paste-error-stdin-borrow", "error" => bo))
-                })?
-                .lock()
-                .read(buf)?,
-        };
+        loop {
+            let read_result = match self {
+                Self::File(bu) => bu.read(buf),
+                Self::StandardInput(rc) => rc
+                    .try_borrow()
+                    .map_err(|bo| {
+                        USimpleError::new(1, translate!("paste-error-stdin-borrow", "error" => bo))
+                    })?
+                    .lock()
+                    .read(buf),
+            };
 
-        Ok(us)
+            match read_result {
+                Ok(us) => return Ok(us),
+                Err(err) if err.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(err) => return Err(err.into()),
+            }
+        }
     }
 
     fn read_until(&mut self, byte: u8, buf: &mut Vec<u8>) -> UResult<usize> {
