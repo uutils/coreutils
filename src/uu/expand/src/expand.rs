@@ -91,7 +91,7 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
         return Ok((RemainingMode::None, vec![DEFAULT_TABSTOP]));
     }
 
-    let mut nums = vec![];
+    let mut nums = Vec::with_capacity(DEFAULT_TABSTOP);
     let mut remaining_mode = RemainingMode::None;
     let mut is_specifier_already_used = false;
     for word in s.split(is_space_or_comma) {
