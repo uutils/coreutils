@@ -446,3 +446,46 @@ fn test_paste_non_utf8_paths() {
         .succeeds()
         .stdout_is("line1\tcol1\nline2\tcol2\n");
 }
+
+#[cfg(target_os = "linux")]
+fn make_broken_pipe() -> std::fs::File {
+    use std::os::unix::io::FromRawFd;
+
+    let mut fds: [libc::c_int; 2] = [0, 0];
+    assert_eq!(
+        unsafe { libc::pipe(fds.as_mut_ptr()) },
+        0,
+        "Failed to create pipe"
+    );
+
+    // Drop the read end so writes fail with EPIPE.
+    let _ = unsafe { std::fs::File::from_raw_fd(fds[0]) };
+
+    unsafe { std::fs::File::from_raw_fd(fds[1]) }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_dev_zero_write_error_dev_full() {
+    use std::fs::File;
+
+    let dev_full =
+        File::create("/dev/full").expect("Failed to open /dev/full - test must run on Linux");
+
+    new_ucmd!()
+        .arg("/dev/zero")
+        .set_stdout(dev_full)
+        .fails()
+        .code_is(1)
+        .stderr_contains("No space left on device");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_dev_zero_closed_pipe() {
+    new_ucmd!()
+        .arg("/dev/zero")
+        .set_stdout(make_broken_pipe())
+        .succeeds()
+        .no_stderr();
+}

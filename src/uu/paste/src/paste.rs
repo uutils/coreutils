@@ -7,7 +7,7 @@ use clap::{Arg, ArgAction, Command};
 use std::cell::{OnceCell, RefCell};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Stdin, Write, stdin, stdout};
+use std::io::{stdin, stdout, BufRead, BufReader, Read, Stdin, Write};
 use std::iter::Cycle;
 use std::path::Path;
 use std::rc::Rc;
@@ -111,12 +111,23 @@ fn paste(
         input_source_vec.push(input_source);
     }
 
-    let mut stdout = stdout().lock();
-
     let line_ending_byte = u8::from(line_ending);
-    let line_ending_byte_array_ref = &[line_ending_byte];
-
     let input_source_vec_len = input_source_vec.len();
+
+    if !serial && input_source_vec_len == 1 {
+        // With a single input source (no -s), `paste` output is identical to input,
+        // except that a missing final line ending must be added.
+        // Stream directly to avoid unbounded line buffering on inputs like /dev/zero.
+        return paste_single_input_source(
+            input_source_vec
+                .pop()
+                .expect("input_source_vec_len was checked to be exactly one"),
+            line_ending_byte,
+        );
+    }
+
+    let mut stdout = stdout().lock();
+    let line_ending_byte_array_ref = &[line_ending_byte];
 
     let mut delimiter_state = DelimiterState::new(&unescaped_and_encoded_delimiters);
 
@@ -182,6 +193,32 @@ fn paste(
             // https://pubs.opengroup.org/onlinepubs/9799919799/utilities/paste.html
             delimiter_state.reset_to_first_delimiter();
         }
+    }
+
+    Ok(())
+}
+
+fn paste_single_input_source(mut input_source: InputSource, line_ending_byte: u8) -> UResult<()> {
+    let mut stdout = stdout().lock();
+    let mut buffer = [0_u8; 8 * 1024];
+    let mut has_data = false;
+    let mut last_byte = line_ending_byte;
+
+    loop {
+        let bytes_read = input_source.read(&mut buffer)?;
+
+        if bytes_read == 0 {
+            break;
+        }
+
+        has_data = true;
+        last_byte = buffer[bytes_read - 1];
+
+        stdout.write_all(&buffer[..bytes_read])?;
+    }
+
+    if has_data && last_byte != line_ending_byte {
+        stdout.write_all(&[line_ending_byte])?;
     }
 
     Ok(())
@@ -341,6 +378,21 @@ enum InputSource {
 }
 
 impl InputSource {
+    fn read(&mut self, buf: &mut [u8]) -> UResult<usize> {
+        let us = match self {
+            Self::File(bu) => bu.read(buf)?,
+            Self::StandardInput(rc) => rc
+                .try_borrow()
+                .map_err(|bo| {
+                    USimpleError::new(1, translate!("paste-error-stdin-borrow", "error" => bo))
+                })?
+                .lock()
+                .read(buf)?,
+        };
+
+        Ok(us)
+    }
+
     fn read_until(&mut self, byte: u8, buf: &mut Vec<u8>) -> UResult<usize> {
         let us = match self {
             Self::File(bu) => bu.read_until(byte, buf)?,
