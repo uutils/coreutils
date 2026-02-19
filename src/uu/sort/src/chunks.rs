@@ -23,7 +23,7 @@ use crate::{
     GeneralBigDecimalParseResult, GlobalSettings, Line, SortMode, numeric_str_cmp::NumInfo,
 };
 
-const ALLOC_CHUNK_SIZE: usize = 4 * 1024;
+const ALLOC_CHUNK_SIZE: usize = 16000;
 const MAX_TOKEN_BUFFER_BYTES: usize = 4 * 1024 * 1024;
 const MAX_TOKEN_BUFFER_ELEMS: usize = MAX_TOKEN_BUFFER_BYTES / size_of::<Range<usize>>();
 
