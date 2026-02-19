@@ -783,7 +783,13 @@ static PREFERRED_TZ_MAPPINGS: &[(&str, &str)] = &[
     ("ACDT", "Australia/Adelaide"), // Australian Central Daylight Time
     ("AEST", "Australia/Sydney"),   // Australian Eastern Standard Time
     ("AEDT", "Australia/Sydney"),   // Australian Eastern Daylight Time
-                                    /* spell-checker: enable */
+    // Not ambigious but not resolvable by IANA database but resolved in GNU
+    ("MET", "CET"),   // Middle European Time (Same as CET)
+    ("MEST", "CEST"), // Middle European Summer Time (Same as CEST)
+    ("MEZ", "CET"),   // German MET abbreviation
+    ("MESZ", "CEST"), // German MEST abbreviation
+    ("KST", "Asia/Seoul"), // Korean Standard Time
+                      /* spell-checker: enable */
 ];
 
 /// Lazy-loaded timezone abbreviation lookup map built from IANA database.
