@@ -310,13 +310,14 @@ fn test_recursive_reporting() {
 // TODO Enable and modify this for freebsd when xattr processing for freebsd is enabled.
 #[cfg(target_os = "linux")]
 fn test_mkdir_acl() {
-    use std::{collections::HashMap, ffi::OsString};
+    use rustc_hash::FxHashMap;
+    use std::ffi::OsString;
 
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.mkdir("a");
 
-    let mut map: HashMap<OsString, Vec<u8>> = HashMap::new();
+    let mut map: FxHashMap<OsString, Vec<u8>> = FxHashMap::default();
     // posix_acl entries are in the form of
     // struct posix_acl_entry{
     //  tag: u16,

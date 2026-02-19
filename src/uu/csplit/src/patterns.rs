@@ -95,18 +95,18 @@ impl Iterator for ExecutePatternIter {
 /// due to, e.g.,:
 /// - an invalid regular expression;
 /// - an invalid number for, e.g., the offset.
-pub fn get_patterns(args: &[String]) -> Result<Vec<Pattern>, CsplitError> {
+pub fn get_patterns(args: &[&str]) -> Result<Vec<Pattern>, CsplitError> {
     let patterns = extract_patterns(args)?;
     validate_line_numbers(&patterns)?;
     Ok(patterns)
 }
 
-fn extract_patterns(args: &[String]) -> Result<Vec<Pattern>, CsplitError> {
+fn extract_patterns(args: &[&str]) -> Result<Vec<Pattern>, CsplitError> {
     let mut patterns = Vec::with_capacity(args.len());
     let to_match_reg =
         Regex::new(r"^(/(?P<UPTO>.+)/|%(?P<SKIPTO>.+)%)(?P<OFFSET>[\+-]?[0-9]+)?$").unwrap();
     let execute_ntimes_reg = Regex::new(r"^\{(?P<TIMES>[0-9]+)|\*\}$").unwrap();
-    let mut iter = args.iter().peekable();
+    let mut iter = args.iter().copied().peekable();
 
     while let Some(arg) = iter.next() {
         // get the number of times a pattern is repeated, which is at least once plus whatever is
@@ -185,17 +185,14 @@ mod tests {
 
     #[test]
     fn bad_pattern() {
-        let input = vec!["bad".to_string()];
-        assert!(get_patterns(input.as_slice()).is_err());
+        let input = ["bad"];
+        assert!(get_patterns(&input).is_err());
     }
 
     #[test]
     fn up_to_line_pattern() {
-        let input: Vec<String> = vec!["24", "42", "{*}", "50", "{4}"]
-            .into_iter()
-            .map(ToOwned::to_owned)
-            .collect();
-        let patterns = get_patterns(input.as_slice()).unwrap();
+        let input = ["24", "42", "{*}", "50", "{4}"];
+        let patterns = get_patterns(&input).unwrap();
         assert_eq!(patterns.len(), 3);
         match patterns.first() {
             Some(Pattern::UpToLine(24, ExecutePattern::Times(1))) => (),
@@ -214,7 +211,7 @@ mod tests {
     #[test]
     #[allow(clippy::cognitive_complexity)]
     fn up_to_match_pattern() {
-        let input: Vec<String> = vec![
+        let input = [
             "/test1.*end$/",
             "/test2.*end$/",
             "{*}",
@@ -223,11 +220,8 @@ mod tests {
             "/test4.*end$/3",
             "/test5.*end$/+3",
             "/test6.*end$/-3",
-        ]
-        .into_iter()
-        .map(ToString::to_string)
-        .collect();
-        let patterns = get_patterns(input.as_slice()).unwrap();
+        ];
+        let patterns = get_patterns(&input).unwrap();
         assert_eq!(patterns.len(), 6);
         match patterns.first() {
             Some(Pattern::UpToMatch(reg, 0, ExecutePattern::Times(1))) => {
@@ -276,7 +270,7 @@ mod tests {
     #[test]
     #[allow(clippy::cognitive_complexity)]
     fn skip_to_match_pattern() {
-        let input: Vec<String> = vec![
+        let input = [
             "%test1.*end$%",
             "%test2.*end$%",
             "{*}",
@@ -285,11 +279,8 @@ mod tests {
             "%test4.*end$%3",
             "%test5.*end$%+3",
             "%test6.*end$%-3",
-        ]
-        .into_iter()
-        .map(ToString::to_string)
-        .collect();
-        let patterns = get_patterns(input.as_slice()).unwrap();
+        ];
+        let patterns = get_patterns(&input).unwrap();
         assert_eq!(patterns.len(), 6);
         match patterns.first() {
             Some(Pattern::SkipToMatch(reg, 0, ExecutePattern::Times(1))) => {
@@ -346,8 +337,8 @@ mod tests {
 
     #[test]
     fn line_number_smaller_than_previous() {
-        let input: Vec<String> = vec!["10".to_string(), "5".to_string()];
-        match get_patterns(input.as_slice()) {
+        let input = ["10", "5"];
+        match get_patterns(&input) {
             Err(CsplitError::LineNumberSmallerThanPrevious(5, 10)) => (),
             _ => panic!("expected LineNumberSmallerThanPrevious error"),
         }
@@ -355,8 +346,8 @@ mod tests {
 
     #[test]
     fn line_number_smaller_than_previous_separate() {
-        let input: Vec<String> = vec!["10".to_string(), "/20/".to_string(), "5".to_string()];
-        match get_patterns(input.as_slice()) {
+        let input = ["10", "/20/", "5"];
+        match get_patterns(&input) {
             Err(CsplitError::LineNumberSmallerThanPrevious(5, 10)) => (),
             _ => panic!("expected LineNumberSmallerThanPrevious error"),
         }
@@ -364,8 +355,8 @@ mod tests {
 
     #[test]
     fn line_number_zero_separate() {
-        let input: Vec<String> = vec!["10".to_string(), "/20/".to_string(), "0".to_string()];
-        match get_patterns(input.as_slice()) {
+        let input = ["10", "/20/", "0"];
+        match get_patterns(&input) {
             Err(CsplitError::LineNumberIsZero) => (),
             _ => panic!("expected LineNumberIsZero error"),
         }

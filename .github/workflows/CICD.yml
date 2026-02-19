@@ -1116,26 +1116,22 @@ jobs:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
       CARGO_INCREMENTAL: 0
+      RUSTC_BOOTSTRAP: 1
     strategy:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest  , features: unix, toolchain: nightly }
+          - { os: ubuntu-latest  , features: unix }
           # FIXME: Re-enable macos code coverage
-          # - { os: macos-latest   , features: macos, toolchain: nightly }
+          # - { os: macos-latest   , features: macos }
           # FIXME: Re-enable Code Coverage on windows, which currently fails due to "profiler_builtins". See #6686.
-          # - { os: windows-latest , features: windows, toolchain: nightly-x86_64-pc-windows-gnu }
+          # - { os: windows-latest , features: windows, toolchain: stable-x86_64-pc-windows-gnu }
     steps:
     - uses: actions/checkout@v6
-    - uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: ${{ matrix.job.toolchain }}
-        components: rustfmt
     - uses: taiki-e/install-action@v2
       with:
         tool: nextest,grcov@0.8.24
     - uses: Swatinem/rust-cache@v2
-
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
 
@@ -1148,9 +1144,6 @@ jobs:
       run: |
         ## VARs setup
         outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
-
-        # toolchain
-        TOOLCHAIN="nightly" ## default to "nightly" toolchain (required for certain required unstable compiler flags) ## !maint: refactor when stable channel has needed support
 
         # * specify gnu-type TOOLCHAIN for windows; `grcov` requires gnu-style code coverage data files
         case ${{ matrix.job.os }} in windows-*) TOOLCHAIN="$TOOLCHAIN-x86_64-pc-windows-gnu" ;; esac;
