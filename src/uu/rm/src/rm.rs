@@ -267,21 +267,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     if options.interactive == InteractiveMode::Once && (options.recursive || files.len() > 3) {
-        let msg: String = format!(
-            "remove {} {}{}",
-            files.len(),
-            if files.len() > 1 {
-                "arguments"
-            } else {
-                "argument"
-            },
-            if options.recursive {
-                " recursively?"
-            } else {
-                "?"
-            }
-        );
-        if !prompt_yes!("{msg}") {
+        let prompt_key = if options.recursive {
+            "rm-prompt-remove-arguments-recursive"
+        } else {
+            "rm-prompt-remove-arguments"
+        };
+        let msg = translate!(prompt_key, "count" => files.len());
+        if !prompt_yes!("{}", msg) {
             return Ok(());
         }
     }
@@ -842,21 +834,29 @@ fn prompt_file(path: &Path, options: &Options) -> bool {
     if options.interactive == InteractiveMode::Never {
         return true;
     }
-
     let Ok(metadata) = fs::symlink_metadata(path) else {
         return true;
     };
 
     if metadata.is_symlink() {
         return options.interactive != InteractiveMode::Always
-            || prompt_yes!("remove symbolic link {}?", path.quote());
+            || prompt_yes!(
+                "{}",
+                translate!("rm-prompt-remove-symbolic-link", "file" => path.quote())
+            );
     }
 
     if options.interactive == InteractiveMode::Always && is_writable_metadata(&metadata) {
         return if metadata.len() == 0 {
-            prompt_yes!("remove regular empty file {}?", path.quote())
+            prompt_yes!(
+                "{}",
+                translate!("rm-prompt-remove-regular-empty-file", "file" => path.quote())
+            )
         } else {
-            prompt_yes!("remove file {}?", path.quote())
+            prompt_yes!(
+                "{}",
+                translate!("rm-prompt-remove-file", "file" => path.quote())
+            )
         };
     }
 
@@ -869,10 +869,19 @@ fn prompt_file_permission_readonly(path: &Path, options: &Options, metadata: &Me
         (false, InteractiveMode::PromptProtected) => true,
         _ if is_writable_metadata(metadata) => true,
         _ if metadata.len() == 0 => prompt_yes!(
-            "remove write-protected regular empty file {}?",
-            path.quote()
+            "{}",
+            translate!(
+                "rm-prompt-remove-write-protected-regular-empty-file",
+                "file" => path.quote()
+            )
         ),
-        _ => prompt_yes!("remove write-protected regular file {}?", path.quote()),
+        _ => prompt_yes!(
+            "{}",
+            translate!(
+                "rm-prompt-remove-write-protected-regular-file",
+                "file" => path.quote()
+            )
+        ),
     }
 }
 
@@ -907,15 +916,30 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
         (false, _, _, InteractiveMode::PromptProtected) => true,
         (false, false, false, InteractiveMode::Never) => true, // Don't prompt when interactive is never
         (_, false, false, _) => prompt_yes!(
-            "attempt removal of inaccessible directory {}?",
-            path.quote()
+            "{}",
+            translate!(
+                "rm-prompt-attempt-remove-inaccessible-directory",
+                "path" => path.quote()
+            )
         ),
         (_, false, true, InteractiveMode::Always) => prompt_yes!(
-            "attempt removal of inaccessible directory {}?",
-            path.quote()
+            "{}",
+            translate!(
+                "rm-prompt-attempt-remove-inaccessible-directory",
+                "path" => path.quote()
+            )
         ),
-        (_, true, false, _) => prompt_yes!("remove write-protected directory {}?", path.quote()),
-        (_, _, _, InteractiveMode::Always) => prompt_yes!("remove directory {}?", path.quote()),
+        (_, true, false, _) => prompt_yes!(
+            "{}",
+            translate!(
+                "rm-prompt-remove-write-protected-directory",
+                "path" => path.quote()
+            )
+        ),
+        (_, _, _, InteractiveMode::Always) => prompt_yes!(
+            "{}",
+            translate!("rm-prompt-remove-directory", "path" => path.quote())
+        ),
         (_, _, _, _) => true,
     }
 }
@@ -929,8 +953,19 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
     let stdin_ok = options.__presume_input_tty.unwrap_or(false) || stdin().is_terminal();
     match (stdin_ok, not_user_writable, options.interactive) {
         (false, _, InteractiveMode::PromptProtected) => true,
-        (_, true, _) => prompt_yes!("remove write-protected directory {}?", path.quote()),
-        (_, _, InteractiveMode::Always) => prompt_yes!("remove directory {}?", path.quote()),
+        (_, true, _) => prompt_yes!(
+            "{}",
+            translate!(
+                "rm-prompt-remove-write-protected-directory",
+                "path" => path.quote()
+            )
+        ),
+        (_, _, InteractiveMode::Always) => {
+            prompt_yes!(
+                "{}",
+                translate!("rm-prompt-remove-directory", "path" => path.quote())
+            )
+        }
         (_, _, _) => true,
     }
 }
@@ -940,7 +975,10 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
 #[cfg(not(unix))]
 fn handle_writable_directory(path: &Path, options: &Options, _metadata: &Metadata) -> bool {
     if options.interactive == InteractiveMode::Always {
-        prompt_yes!("remove directory {}?", path.quote())
+        prompt_yes!(
+            "{}",
+            translate!("rm-prompt-remove-directory", "path" => path.quote())
+        )
     } else {
         true
     }
@@ -981,7 +1019,10 @@ fn clean_trailing_slashes(path: &Path) -> &Path {
 }
 
 fn prompt_descend(path: &Path) -> bool {
-    prompt_yes!("descend into directory {}?", path.quote())
+    prompt_yes!(
+        "{}",
+        translate!("rm-prompt-descend-into-directory", "path" => path.quote())
+    )
 }
 
 #[cfg(not(windows))]
