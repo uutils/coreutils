@@ -13,7 +13,7 @@ use uucore::translate;
 
 use crate::{
     CopyDebug, CopyResult, CpError, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode,
-    is_stream,
+    context_for, is_stream,
 };
 
 /// Copies `source` to `dest` for systems without copy-on-write
@@ -22,7 +22,6 @@ pub(crate) fn copy_on_write(
     dest: &Path,
     reflink_mode: ReflinkMode,
     sparse_mode: SparseMode,
-    context: &str,
     source_is_stream: bool,
 ) -> CopyResult<CopyDebug> {
     if reflink_mode != ReflinkMode::Never {
@@ -58,12 +57,12 @@ pub(crate) fn copy_on_write(
 
         buf_copy::copy_stream(&mut src_file, &mut dst_file)
             .map_err(|_| std::io::Error::from(std::io::ErrorKind::Other))
-            .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+            .map_err(|e| CpError::IoErrContext(e, context_for(source, dest)))?;
 
         return Ok(copy_debug);
     }
 
-    fs::copy(source, dest).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+    fs::copy(source, dest).map_err(|e| CpError::IoErrContext(e, context_for(source, dest)))?;
 
     Ok(copy_debug)
 }

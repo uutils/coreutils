@@ -9,6 +9,7 @@ use uucore::translate;
 
 use crate::{
     CopyDebug, CopyResult, CpError, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode,
+    context_for,
 };
 
 /// Copies `source` to `dest` for systems without copy-on-write
@@ -17,7 +18,6 @@ pub(crate) fn copy_on_write(
     dest: &Path,
     reflink_mode: ReflinkMode,
     sparse_mode: SparseMode,
-    context: &str,
 ) -> CopyResult<CopyDebug> {
     if reflink_mode != ReflinkMode::Never {
         return Err(translate!("cp-error-reflink-not-supported")
@@ -34,7 +34,7 @@ pub(crate) fn copy_on_write(
         reflink: OffloadReflinkDebug::Unsupported,
         sparse_detection: SparseDebug::Unsupported,
     };
-    fs::copy(source, dest).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+    fs::copy(source, dest).map_err(|e| CpError::IoErrContext(e, context_for(source, dest)))?;
 
     Ok(copy_debug)
 }
