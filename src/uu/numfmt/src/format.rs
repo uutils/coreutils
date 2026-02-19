@@ -8,7 +8,8 @@ use uucore::translate;
 
 use crate::options::{NumfmtOptions, RoundMethod, TransformOptions};
 use crate::units::{DisplayableSuffix, IEC_BASES, RawSuffix, Result, SI_BASES, Suffix, Unit};
-
+// size of spare to avoid cost of reallocation
+const ALLOC_SPARE: usize = 32;
 /// Iterate over a line's fields, where each field is a contiguous sequence of
 /// non-whitespace, optionally prefixed with one or more characters of leading
 /// whitespace. Fields are returned as tuples of `(prefix, field)`.
@@ -469,7 +470,7 @@ fn split_bytes<'a>(input: &'a [u8], delim: &'a [u8]) -> impl Iterator<Item = &'a
 
 pub fn format_and_print_delimited(input: &[u8], options: &NumfmtOptions) -> Result<()> {
     let delimiter = options.delimiter.as_ref().unwrap();
-    let mut output: Vec<u8> = Vec::new();
+    let mut output: Vec<u8> = Vec::with_capacity(input.len() + ALLOC_SPARE);
     let eol = if options.zero_terminated {
         b'\0'
     } else {
@@ -503,7 +504,7 @@ pub fn format_and_print_delimited(input: &[u8], options: &NumfmtOptions) -> Resu
     Ok(())
 }
 pub fn format_and_print_whitespace(s: &str, options: &NumfmtOptions) -> Result<()> {
-    let mut output = String::new();
+    let mut output = String::with_capacity(s.len() + ALLOC_SPARE);
 
     for (n, (prefix, field)) in (1..).zip(WhitespaceSplitter { s: Some(s) }) {
         let field_selected = uucore::ranges::contain(&options.fields, n);
