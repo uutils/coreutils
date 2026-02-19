@@ -6,7 +6,6 @@
 //! Recursively copy the contents of a directory.
 //!
 //! See the [`copy_directory`] function for more information.
-#[cfg(windows)]
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::convert::identity;
@@ -24,7 +23,7 @@ use uucore::fs::{
 use uucore::show;
 use uucore::translate;
 use uucore::uio_error;
-use walkdir::{DirEntry, WalkDir};
+use walkdir::WalkDir;
 
 #[cfg(all(feature = "selinux", target_os = "linux"))]
 use crate::set_selinux_context;
@@ -44,7 +43,7 @@ struct DirNeedingPermissions {
 }
 
 /// Ensure a Windows path starts with a `\\?`.
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 fn adjust_canonicalization(p: &Path) -> Cow<'_, Path> {
     // In some cases, \\? can be missing on some Windows paths.  Add it at the
     // beginning unless the path is prefixed with a device namespace.
@@ -64,39 +63,6 @@ fn adjust_canonicalization(p: &Path) -> Cow<'_, Path> {
     } else {
         Path::new(VERBATIM_PREFIX).join(p).into()
     }
-}
-
-/// Get a descendant path relative to the given parent directory.
-///
-/// If `root_parent` is `None`, then this just returns the `path`
-/// itself. Otherwise, this function strips the parent prefix from the
-/// given `path`, leaving only the portion of the path relative to the
-/// parent.
-fn get_local_to_root_parent(
-    path: &Path,
-    root_parent: Option<&Path>,
-) -> Result<PathBuf, StripPrefixError> {
-    match root_parent {
-        Some(parent) => {
-            // On Windows, some paths are starting with \\?
-            // but not always, so, make sure that we are consistent for strip_prefix
-            // See https://docs.microsoft.com/en-us/windows/win32/fileio/naming-a-file for more info
-            #[cfg(windows)]
-            let (path, parent) = (
-                adjust_canonicalization(path),
-                adjust_canonicalization(parent),
-            );
-            let path = path.strip_prefix(parent)?;
-            Ok(path.to_path_buf())
-        }
-        None => Ok(path.to_path_buf()),
-    }
-}
-
-/// Given an iterator, return all its items except the last.
-fn skip_last<T>(mut iter: impl Iterator<Item = T>) -> impl Iterator<Item = T> {
-    let last = iter.next();
-    iter.scan(last, Option::replace)
 }
 
 /// Paths that are invariant throughout the traversal when copying a directory.
@@ -120,10 +86,10 @@ struct Context<'a> {
 impl<'a> Context<'a> {
     fn new(root: &'a Path, target: &'a Path) -> io::Result<Self> {
         let current_dir = env::current_dir()?;
-        let root_path = current_dir.join(root);
+        let mut root_path = current_dir.join(root);
         let target_is_file = target.is_file();
         let root_parent = if target.exists() && !root.to_str().unwrap().ends_with("/.") {
-            root_path.parent().map(ToOwned::to_owned)
+            root_path.pop().then_some(root_path)
         } else if root == Path::new(".") && target.is_dir() {
             // Special case: when copying current directory (.) to an existing directory,
             // we don't want to use the parent path as root_parent because we want to
@@ -178,12 +144,12 @@ impl<'a> Context<'a> {
 ///     }
 /// ];
 /// ```
-struct Entry {
+struct Entry<'a> {
     /// The absolute path to file or directory to copy.
     source_absolute: PathBuf,
 
     /// The relative path to file or directory to copy.
-    source_relative: PathBuf,
+    source_relative: &'a Path,
 
     /// The path to the destination, relative to the target.
     local_to_target: PathBuf,
@@ -192,24 +158,44 @@ struct Entry {
     target_is_file: bool,
 }
 
-impl Entry {
-    fn new<A: AsRef<Path>>(
+impl<'a> Entry<'a> {
+    fn new(
         context: &Context,
-        source: A,
+        source: &'a Path,
         no_target_dir: bool,
     ) -> Result<Self, StripPrefixError> {
-        let source = source.as_ref();
-        let source_relative = source.to_path_buf();
-        let source_absolute = context.current_dir.join(&source_relative);
-        let mut descendant =
-            get_local_to_root_parent(&source_absolute, context.root_parent.as_deref())?;
+        let source_relative = source;
+        let source_absolute = context.current_dir.join(source_relative);
+
+        // Get a descendant path relative to the given parent directory.
+        // On Windows, some paths are starting with \\?
+        // but not always, so, make sure that we are consistent for strip_prefix
+        // See https://docs.microsoft.com/en-us/windows/win32/fileio/naming-a-file for more info
+        #[cfg(windows)]
+        let (path, parent) = (
+            adjust_canonicalization(&source_absolute),
+            context
+                .root_parent
+                .as_deref()
+                .map(|p| adjust_canonicalization(p)),
+        );
+        #[cfg(not(windows))]
+        let (path, parent) = (
+            Cow::from(&source_absolute),
+            context.root_parent.as_deref().map(Cow::from),
+        );
+        let mut descendant = match parent {
+            Some(parent) => path.strip_prefix(parent)?,
+            None => &path,
+        };
+
         if no_target_dir {
             let source_is_dir = source.is_dir();
             if path_ends_with_terminator(context.target)
                 && source_is_dir
                 && !exists(context.target).is_ok_and(identity)
             {
-                if let Err(e) = fs::create_dir_all(context.target) {
+                if let Err(e) = fs::create_dir(context.target) {
                     eprintln!(
                         "{}",
                         translate!("cp-error-failed-to-create-directory", "error" => e)
@@ -221,7 +207,7 @@ impl Entry {
                 .next_back()
                 .and_then(|stripped| descendant.strip_prefix(stripped).ok())
             {
-                descendant = stripped.to_path_buf();
+                descendant = stripped;
             }
         } else if context.root == Path::new(".") && context.target.is_dir() {
             // Special case: when copying current directory (.) to an existing directory,
@@ -231,7 +217,7 @@ impl Entry {
             // to dest_dir/file.txt, not dest_dir/source_dir/file.txt.
             if let Some(current_dir_name) = context.current_dir.file_name() {
                 if let Ok(stripped) = descendant.strip_prefix(current_dir_name) {
-                    descendant = stripped.to_path_buf();
+                    descendant = stripped;
                 }
             }
         }
@@ -287,7 +273,7 @@ fn copy_direntry(
             if options.verbose {
                 println!(
                     "{}",
-                    context_for(&entry.source_relative, &entry.local_to_target)
+                    context_for(entry.source_relative, &entry.local_to_target)
                 );
             }
             Ok(true)
@@ -298,7 +284,7 @@ fn copy_direntry(
     if !source_is_dir {
         if let Err(err) = copy_file(
             progress_bar,
-            &entry.source_relative,
+            entry.source_relative,
             entry.local_to_target.as_path(),
             options,
             symlinked_files,
@@ -399,7 +385,7 @@ pub(crate) fn copy_directory(
     // a -> d/a
     // a/b -> d/a/b
     //
-    let tmp = if options.parents {
+    let target = if options.parents {
         if let Some(parent) = root.parent() {
             let new_target = target.join(parent);
             build_dir(&new_target, true)?;
@@ -414,30 +400,25 @@ pub(crate) fn copy_directory(
                     println!("{} -> {}", x.display(), y.display());
                 }
             }
-
-            new_target
+            Cow::from(new_target)
         } else {
-            target.to_path_buf()
+            Cow::from(target)
         }
     } else {
-        target.to_path_buf()
+        Cow::from(target)
     };
-    let target = tmp.as_path();
 
     let preserve_hard_links = options.preserve_hard_links();
 
     // Collect some paths here that are invariant during the traversal
     // of the given directory, like the current working directory and
     // the target directory.
-    let context = match Context::new(root, target) {
+    let context = match Context::new(root, &target) {
         Ok(c) => c,
         Err(e) => {
             return Err(translate!("cp-error-failed-get-current-dir", "error" => e).into());
         }
     };
-
-    // The directory we were in during the previous iteration
-    let mut last_iter: Option<DirEntry> = None;
 
     // Keep track of all directories we've created that need permission fixes
     let mut dirs_needing_permissions: Vec<DirNeedingPermissions> = Vec::new();
@@ -480,13 +461,6 @@ pub(crate) fn copy_directory(
                 // to prevent other users from accessing them before they're done.
                 // We thus need to fix the permissions of each directory we copy
                 // once it's contents are ready.
-                // This "fixup" is implemented here in a memory-efficient manner.
-                //
-                // We detect iterations where we "walk up" the directory tree,
-                // and fix permissions on all the directories we exited.
-                // (Note that there can be more than one! We might step out of
-                // `./a/b/c` into `./a/`, in which case we'll need to fix the
-                // permissions of both `./a/b/c` and `./a/b`, in that order.)
                 let is_dir_for_permissions =
                     entry_is_dir_no_follow || (options.dereference && direntry_path.is_dir());
                 if is_dir_for_permissions {
@@ -505,51 +479,10 @@ pub(crate) fn copy_directory(
                     }
                     // Add this directory to our list for permission fixing later
                     dirs_needing_permissions.push(DirNeedingPermissions {
-                        source: entry.source_absolute.clone(),
-                        dest: entry.local_to_target.clone(),
+                        source: entry.source_absolute,
+                        dest: entry.local_to_target,
                         was_created: created,
                     });
-
-                    // If true, last_iter is not a parent of this iter.
-                    // The means we just exited a directory.
-                    let went_up = if let Some(last_iter) = &last_iter {
-                        last_iter.path().strip_prefix(direntry_path).is_ok()
-                    } else {
-                        false
-                    };
-
-                    if went_up {
-                        // Compute the "difference" between `last_iter` and `direntry`.
-                        // For example, if...
-                        // - last_iter = `a/b/c/d`
-                        // - direntry = `a/b`
-                        // then diff = `c/d`
-                        //
-                        // All the unwraps() here are unreachable.
-                        let last_iter = last_iter.as_ref().unwrap();
-                        let diff = last_iter.path().strip_prefix(direntry_path).unwrap();
-
-                        // Fix permissions for every entry in `diff`, inside-out.
-                        // We skip the last directory (which will be `.`) because
-                        // its permissions will be fixed when we walk _out_ of it.
-                        // (at this point, we might not be done copying `.`!)
-                        for p in skip_last(diff.ancestors()) {
-                            let src = direntry_path.join(p);
-                            let entry = Entry::new(&context, &src, options.no_target_dir)?;
-
-                            copy_attributes(
-                                &entry.source_absolute,
-                                &entry.local_to_target,
-                                &options.attributes,
-                                false,
-                                options.set_selinux_context,
-                                #[cfg(unix)]
-                                orig_umask,
-                            )?;
-                        }
-                    }
-
-                    last_iter = Some(direntry);
                 }
             }
 
@@ -587,7 +520,7 @@ pub(crate) fn copy_directory(
                     &src,
                     y,
                     &options.attributes,
-                    false,
+                    true,
                     options.set_selinux_context,
                     #[cfg(unix)]
                     orig_umask,

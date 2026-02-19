@@ -1784,9 +1784,8 @@ pub(crate) fn copy_attributes(
     skip_selinux_xattr: bool,
     #[cfg(unix)] orig_umask: u32,
 ) -> CopyResult<()> {
-    let context = &*format!("{} -> {}", source.quote(), dest.quote());
-    let source_metadata =
-        fs::symlink_metadata(source).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+    let source_metadata = fs::symlink_metadata(source)
+        .map_err(|e| CpError::IoErrContext(e, context_for(source, dest)))?;
 
     // Ownership must be changed first to avoid interfering with mode change.
     #[cfg(unix)]
@@ -1800,7 +1799,7 @@ pub(crate) fn copy_attributes(
         let dest_gid = source_metadata.gid();
         let meta = &dest
             .symlink_metadata()
-            .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+            .map_err(|e| CpError::IoErrContext(e, context_for(source, dest)))?;
 
         let try_chown = {
             |uid| {
@@ -1822,6 +1821,30 @@ pub(crate) fn copy_attributes(
         if try_chown(Some(dest_uid)).is_err() {
             let _ = try_chown(None);
         }
+        Ok(())
+    })?;
+
+    // before mode change since newly created dir/file are not read-only.
+    handle_preserve(attributes.xattr, || -> CopyResult<()> {
+        #[cfg(all(unix, not(target_os = "android")))]
+        {
+            copy_extended_attrs(source, dest, skip_selinux_xattr)?;
+        }
+        #[cfg(not(all(unix, not(target_os = "android"))))]
+        #[allow(unused_variables)]
+        {
+            // The documentation for GNU cp states:
+            //
+            // > Try to preserve SELinux security context and
+            // > extended attributes (xattr), but ignore any failure
+            // > to do that and print no corresponding diagnostic.
+            //
+            // so we simply do nothing here.
+            //
+            // TODO Silently ignore failures in the `#[cfg(unix)]`
+            // block instead of terminating immediately on errors.
+        }
+
         Ok(())
     })?;
 
@@ -1855,7 +1878,7 @@ pub(crate) fn copy_attributes(
             let permissions = Some(source_metadata.permissions());
             if let Some(permissions) = permissions {
                 fs::set_permissions(dest, permissions)
-                    .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+                    .map_err(|e| CpError::IoErrContext(e, context_for(source, dest)))?;
             }
             // FIXME: Implement this for windows as well
             #[cfg(feature = "feat_acl")]
@@ -1895,29 +1918,6 @@ pub(crate) fn copy_attributes(
                 translate!("cp-error-selinux-get-context", "path" => source.quote()),
             ));
         }
-        Ok(())
-    })?;
-
-    handle_preserve(attributes.xattr, || -> CopyResult<()> {
-        #[cfg(all(unix, not(target_os = "android")))]
-        {
-            copy_extended_attrs(source, dest, skip_selinux_xattr)?;
-        }
-        #[cfg(not(all(unix, not(target_os = "android"))))]
-        #[allow(unused_variables)]
-        {
-            // The documentation for GNU cp states:
-            //
-            // > Try to preserve SELinux security context and
-            // > extended attributes (xattr), but ignore any failure
-            // > to do that and print no corresponding diagnostic.
-            //
-            // so we simply do nothing here.
-            //
-            // TODO Silently ignore failures in the `#[cfg(unix)]`
-            // block instead of terminating immediately on errors.
-        }
-
         Ok(())
     })?;
 
@@ -2256,7 +2256,6 @@ fn handle_copy_mode(
     source: &Path,
     dest: &Path,
     options: &Options,
-    context: &str,
     source_metadata: &Metadata,
     symlinked_files: &mut HashSet<FileInformation>,
     source_in_command_line: bool,
@@ -2299,7 +2298,6 @@ fn handle_copy_mode(
                 source,
                 dest,
                 options,
-                context,
                 source_is_symlink,
                 source_is_fifo,
                 source_is_socket,
@@ -2323,7 +2321,6 @@ fn handle_copy_mode(
                             source,
                             dest,
                             options,
-                            context,
                             source_is_symlink,
                             source_is_fifo,
                             source_is_socket,
@@ -2360,7 +2357,6 @@ fn handle_copy_mode(
                             source,
                             dest,
                             options,
-                            context,
                             source_is_symlink,
                             source_is_fifo,
                             source_is_socket,
@@ -2376,7 +2372,6 @@ fn handle_copy_mode(
                     source,
                     dest,
                     options,
-                    context,
                     source_is_symlink,
                     source_is_fifo,
                     source_is_socket,
@@ -2407,7 +2402,6 @@ fn calculate_dest_permissions(
     dest: &Path,
     source_metadata: &Metadata,
     options: &Options,
-    context: &str,
     #[cfg(unix)] orig_umask: u32,
 ) -> Permissions {
     #[cfg(unix)]
@@ -2582,10 +2576,6 @@ fn copy_file(
         }
     }
 
-    // Calculate the context upfront before canonicalizing the path
-    let context = context_for(source, dest);
-    let context = context.as_str();
-
     let source_metadata = {
         let result = if options.dereference(source_in_command_line) {
             fs::metadata(source)
@@ -2608,7 +2598,6 @@ fn copy_file(
         dest,
         &source_metadata,
         options,
-        context,
         #[cfg(unix)]
         orig_umask,
     );
@@ -2628,7 +2617,6 @@ fn copy_file(
         source,
         dest,
         options,
-        context,
         &source_metadata,
         symlinked_files,
         source_in_command_line,
@@ -2783,7 +2771,6 @@ fn copy_helper(
     source: &Path,
     dest: &Path,
     options: &Options,
-    context: &str,
     source_is_symlink: bool,
     source_is_fifo: bool,
     source_is_socket: bool,
@@ -2816,7 +2803,6 @@ fn copy_helper(
             dest,
             options.reflink_mode,
             options.sparse_mode,
-            context,
             #[cfg(unix)]
             source_is_stream,
         )?;
