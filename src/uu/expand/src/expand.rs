@@ -157,7 +157,7 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
     // If no numbers could be parsed (for example, if `s` were "+,+,+"),
     // then just use the default tabstops.
     if nums.is_empty() {
-        nums = vec![DEFAULT_TABSTOP];
+        nums.push(DEFAULT_TABSTOP);
     }
 
     if nums.len() < 2 {
