@@ -7,7 +7,7 @@ use clap::{Arg, ArgAction, Command};
 use std::cell::{OnceCell, RefCell};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{stdin, stdout, BufRead, BufReader, Read, Stdin, Write};
+use std::io::{BufRead, BufReader, Read, Stdin, Write, stdin, stdout};
 use std::iter::Cycle;
 use std::path::Path;
 use std::rc::Rc;
