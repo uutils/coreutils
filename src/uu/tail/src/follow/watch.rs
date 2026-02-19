@@ -167,14 +167,11 @@ impl Observer {
         update_last: bool,
     ) -> UResult<()> {
         if self.follow.is_some() {
-            #[cfg(unix)]
             let path = if path.is_relative() && !path.is_stdin() {
                 std::env::current_dir()?.join(path)
             } else {
                 path.to_owned()
             };
-            #[cfg(not(unix))]
-            let path = path.to_owned();
 
             let metadata = path.metadata().ok();
             self.files.insert(

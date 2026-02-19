@@ -150,7 +150,7 @@ fn test_stdin_redirect_file_follow() {
 
     let (at, mut ucmd) = at_and_ucmd!();
 
-    at.write("f", "foo");
+    at.write("f", "foo\n");
 
     let mut p = ucmd
         .arg("-f")
@@ -158,10 +158,13 @@ fn test_stdin_redirect_file_follow() {
         .run_no_wait();
 
     p.make_assertion_with_delay(500).is_alive();
-    p.kill()
-        .make_assertion()
-        .with_all_output()
-        .stdout_only("foo");
+    at.append("f", "bar\n");
+
+    p.make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
+        .with_current_output()
+        .stdout_only("foo\nbar\n");
+
+    p.kill().make_assertion().with_all_output().stdout_only("foo\nbar\n");
 }
 
 #[test]

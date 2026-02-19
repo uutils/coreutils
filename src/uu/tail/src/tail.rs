@@ -308,9 +308,6 @@ fn tail_stdin(
 
             observer.set_stdin_is_tailable(true);
             observer.set_stdin_key(path.clone());
-            if settings.follow.is_some() {
-                observer.add_path(path, input.display_name.as_str(), None, true)?;
-            }
             return Ok(());
         }
 
