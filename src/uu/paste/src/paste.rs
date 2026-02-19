@@ -393,7 +393,7 @@ impl InputSource {
 
             match read_result {
                 Ok(us) => return Ok(us),
-                Err(err) if err.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(err) if err.kind() == std::io::ErrorKind::Interrupted => {}
                 Err(err) => return Err(err.into()),
             }
         }
