@@ -574,7 +574,6 @@ fn test_follow_non_utf8_bytes() {
     child.kill();
 }
 
-
 #[test]
 #[cfg(unix)]
 fn test_permission_denied_is_not_reported_as_not_found() {
@@ -600,12 +599,11 @@ fn test_permission_denied_is_not_reported_as_not_found() {
 
     fs::set_permissions(&dir, fs::Permissions::from_mode(0o700)).unwrap();
 
-    // Asserts that the result is incorrect. 
+    // Asserts that the result is incorrect.
     result.failure();
     let err = result.stderr_str();
     assert!(err.contains("Permission denied"))
 }
-
 
 #[test]
 #[cfg(not(target_os = "windows"))] // FIXME: test times out
