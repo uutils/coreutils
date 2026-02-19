@@ -164,7 +164,10 @@ fn test_stdin_redirect_file_follow() {
         .with_current_output()
         .stdout_only("foo\nbar\n");
 
-    p.kill().make_assertion().with_all_output().stdout_only("foo\nbar\n");
+    p.kill()
+        .make_assertion()
+        .with_all_output()
+        .stdout_only("foo\nbar\n");
 }
 
 #[test]
