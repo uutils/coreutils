@@ -1366,8 +1366,9 @@ fn read_helper(i: &mut Input, buf: &mut Vec<u8>, bsize: usize) -> io::Result<Rea
     // ------------------------------------------------------------------
     // Read
     // Resize the buffer to the bsize. Any garbage data in the buffer is overwritten or truncated, so there is no need to fill with BUF_INIT_BYTE first.
-    buf.resize(bsize, BUF_INIT_BYTE);
-
+    if buf.len() < bsize {
+        buf.resize(bsize, 0);
+    }
     let mut rstat = match i.settings.iconv.sync {
         Some(ch) => i.fill_blocks(buf, ch)?,
         _ => i.fill_consecutive(buf)?,
