@@ -602,7 +602,7 @@ fn test_permission_denied_is_not_reported_as_not_found() {
     // Asserts that the result is incorrect.
     result.failure();
     let err = result.stderr_str();
-    assert!(err.contains("Permission denied"))
+    assert!(err.contains("Permission denied"));
 }
 
 #[test]
