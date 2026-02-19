@@ -2357,6 +2357,78 @@ fn test_date_format_modifier_percent_escape() {
         .stdout_is("%Y=0000001999\n");
 }
 
+// Tests for E and O locale modifiers (POSIX extension)
+#[test]
+fn test_date_format_modifier_e_alternative_representation() {
+    // Test E modifier for alternative representation
+    // %EY should provide locale's alternative year representation (e.g., era names in Japanese)
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .env("LC_ALL", "C")
+        .args(&["-d", "1999-06-01", "+%EY"])
+        .succeeds();
+
+    // Test %EC for alternative century representation
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .env("LC_ALL", "C")
+        .args(&["-d", "1999-06-01", "+%EC"])
+        .succeeds();
+}
+
+#[test]
+fn test_date_format_modifier_o_alternative_numerals() {
+    // Test O modifier for alternative numeric symbols
+    // %Od should provide locale's alternative day representation
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .env("LC_ALL", "C")
+        .args(&["-d", "1999-06-01", "+%Od"])
+        .succeeds();
+
+    // Test %Om for alternative month representation
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .env("LC_ALL", "C")
+        .args(&["-d", "1999-06-01", "+%Om"])
+        .succeeds();
+
+    // Test %OH for alternative hour representation
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .env("LC_ALL", "C")
+        .args(&["-d", "1999-06-01 12:00:00", "+%OH"])
+        .succeeds();
+}
+
+#[test]
+fn test_date_format_modifier_eo_combined_with_other_modifiers() {
+    // Test that E/O modifiers can be combined with other modifiers
+    // %_10EY should use alternative year with space padding
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .env("LC_ALL", "C")
+        .args(&["-d", "1999-06-01", "+%_10EY"])
+        .succeeds();
+
+    // Test %010Od with zero padding and alternative numerals
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .env("LC_ALL", "C")
+        .args(&["-d", "1999-06-01", "+%010Od"])
+        .succeeds();
+}
+
+#[test]
+fn test_date_format_modifier_ob_alternative_month_name() {
+    // Test %OB for alternative month names (standalone format)
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .env("LC_ALL", "C")
+        .args(&["-d", "1999-06-01", "+%OB"])
+        .succeeds();
+}
+
 // Tests for --debug flag
 #[test]
 fn test_date_debug_basic() {

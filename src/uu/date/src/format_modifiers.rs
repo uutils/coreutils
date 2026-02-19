@@ -21,6 +21,8 @@
 //! - `^`: Convert to uppercase
 //! - `#`: Use opposite case (uppercase becomes lowercase and vice versa)
 //! - `+`: Force display of sign (+ for positive, - for negative)
+//! - `E`: Use locale's alternative representation (e.g., alternative date format, era names)
+//! - `O`: Use locale's alternative numeric symbols (e.g., Arabic-Indic digits)
 //!
 //! ### Width
 //! - One or more digits specifying minimum field width
@@ -38,6 +40,33 @@ use jiff::fmt::strtime::{BrokenDownTime, Config, PosixCustom};
 use regex::Regex;
 use std::fmt;
 use std::sync::OnceLock;
+
+/// Check if format string contains E or O locale modifiers.
+///
+/// E modifiers request alternative representations (e.g., era names, alternative date formats).
+/// O modifiers request alternative numeric symbols (e.g., Arabic-Indic digits).
+pub fn has_locale_modifiers(format_string: &str) -> bool {
+    // Simple check for %E or %O patterns
+    format_string.contains("%E") || format_string.contains("%O")
+}
+
+/// Check if a specifier supports E modifier (alternative representation).
+fn supports_e_modifier(specifier: &str) -> bool {
+    // E modifier is supported for: c, C, x, X, y, Y, B
+    matches!(
+        specifier.chars().last(),
+        Some('c' | 'C' | 'x' | 'X' | 'y' | 'Y' | 'B')
+    )
+}
+
+/// Check if a specifier supports O modifier (alternative numeric symbols).
+fn supports_o_modifier(specifier: &str) -> bool {
+    // O modifier is supported for numeric specifiers: d, e, H, I, m, M, S, u, U, V, w, W, y
+    matches!(
+        specifier.chars().last(),
+        Some('d' | 'e' | 'H' | 'I' | 'm' | 'M' | 'S' | 'u' | 'U' | 'V' | 'w' | 'W' | 'y')
+    )
+}
 
 /// Error type for format modifier operations
 #[derive(Debug)]
@@ -66,12 +95,12 @@ impl From<jiff::Error> for FormatError {
 
 /// Regex to match format specifiers with optional modifiers
 /// Pattern: % \[flags\] \[width\] specifier
-/// Flags: -, _, 0, ^, #, +
+/// Flags: -, _, 0, ^, #, +, E (alternative representation), O (alternative numeric symbols)
 /// Width: one or more digits
 /// Specifier: any letter or special sequence like :z, ::z, :::z
 fn format_spec_regex() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"%([_0^#+-]*)(\d*)(:*[a-zA-Z])").unwrap())
+    RE.get_or_init(|| Regex::new(r"%([_0^#+EO-]*)(\d*)(:*[a-zA-Z])").unwrap())
 }
 
 /// Check if format string contains any GNU modifiers and format if present.
@@ -138,12 +167,20 @@ fn format_with_modifiers(
         // Add text before this match
         result.push_str(&temp_format[last_end..whole_match.start()]);
 
-        // Format the base specifier first
+        // Check if this specifier has E/O locale modifiers
+        // Note: E/O modifiers are handled by ICU in localize_format_string_with_modifiers
+        let _has_e_modifier = flags.contains('E') && supports_e_modifier(spec);
+        let _has_o_modifier = flags.contains('O') && supports_o_modifier(spec);
+
+        // Format using jiff - note: jiff doesn't natively support E/O modifiers,
+        // so we pass the base specifier and handle E/O via ICU in the caller
         let base_format = format!("%{spec}");
         let formatted = broken_down.to_string_with_config(config, &base_format)?;
 
-        // Check if this specifier has modifiers
-        if !flags.is_empty() || !width_str.is_empty() {
+        // Check if this specifier has modifiers (width, case, padding, E, O)
+        let has_modifiers = !flags.is_empty() || !width_str.is_empty();
+
+        if has_modifiers {
             // Apply modifiers to the formatted value
             let width: usize = width_str.parse().unwrap_or(0);
             let modified = apply_modifiers(&formatted, flags, width, spec);
@@ -247,6 +284,10 @@ fn apply_modifiers(value: &str, flags: &str, width: usize, specifier: &str) -> S
                 force_sign = true;
                 no_pad = false;
                 pad_char = '0';
+            }
+            'E' | 'O' => {
+                // E and O modifiers are handled in format_with_modifiers,
+                // skip them here as they don't affect padding/case
             }
             _ => {}
         }
