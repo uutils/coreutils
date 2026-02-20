@@ -407,7 +407,7 @@ dependencies = [
  "getrandom 0.2.17",
  "glob",
  "libc",
- "nix",
+ "nix 0.30.1",
  "serde",
  "serde_json",
  "statrs",
@@ -553,7 +553,7 @@ dependencies = [
  "itertools 0.14.0",
  "jiff",
  "libc",
- "nix",
+ "nix 0.31.1",
  "num-prime",
  "phf",
  "phf_codegen",
@@ -815,12 +815,12 @@ checksum = "52560adf09603e58c9a7ee1fe1dcb95a16927b17c127f0ac02d6e768a0e25bc1"
 
 [[package]]
 name = "ctrlc"
-version = "3.5.1"
+version = "3.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "73736a89c4aff73035ba2ed2e565061954da00d4970fc9ac25dcc85a2a20d790"
+checksum = "e0b1fab2ae45819af2d0731d60f2afe17227ebb1a1538a236da84c93e9a60162"
 dependencies = [
  "dispatch2",
- "nix",
+ "nix 0.31.1",
  "windows-sys 0.61.2",
 ]
 
@@ -1923,6 +1923,18 @@ name = "nix"
 version = "0.30.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "74523f3a35e05aba87a1d978330aef40f67b0304ac79c1c00b294c9830543db6"
+dependencies = [
+ "bitflags 2.10.0",
+ "cfg-if",
+ "cfg_aliases",
+ "libc",
+]
+
+[[package]]
+name = "nix"
+version = "0.31.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "225e7cfe711e0ba79a68baeddb2982723e4235247aefce1482f2f16c27865b66"
 dependencies = [
  "bitflags 2.10.0",
  "cfg-if",
@@ -3205,7 +3217,7 @@ dependencies = [
  "clap",
  "fluent",
  "memchr",
- "nix",
+ "nix 0.31.1",
  "tempfile",
  "thiserror 2.0.18",
  "uucore",
@@ -3347,7 +3359,7 @@ dependencies = [
  "icu_locale",
  "jiff",
  "jiff-icu",
- "nix",
+ "nix 0.31.1",
  "parse_datetime",
  "regex",
  "tempfile",
@@ -3364,7 +3376,7 @@ dependencies = [
  "fluent",
  "gcd",
  "libc",
- "nix",
+ "nix 0.31.1",
  "tempfile",
  "thiserror 2.0.18",
  "uucore",
@@ -3440,7 +3452,7 @@ version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
- "nix",
+ "nix 0.31.1",
  "rust-ini",
  "thiserror 2.0.18",
  "uucore",
@@ -3602,7 +3614,7 @@ version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
- "nix",
+ "nix 0.31.1",
  "uucore",
 ]
 
@@ -3680,7 +3692,7 @@ version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
- "nix",
+ "nix 0.31.1",
  "uucore",
 ]
 
@@ -3741,7 +3753,7 @@ dependencies = [
  "clap",
  "fluent",
  "libc",
- "nix",
+ "nix 0.31.1",
  "uucore",
 ]
 
@@ -4049,7 +4061,7 @@ dependencies = [
  "fluent",
  "itertools 0.14.0",
  "memchr",
- "nix",
+ "nix 0.31.1",
  "rand 0.9.2",
  "rayon",
  "self_cell",
@@ -4108,7 +4120,7 @@ dependencies = [
  "cfg_aliases",
  "clap",
  "fluent",
- "nix",
+ "nix 0.31.1",
  "uucore",
 ]
 
@@ -4127,7 +4139,7 @@ version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
- "nix",
+ "nix 0.31.1",
  "uucore",
  "windows-sys 0.61.2",
 ]
@@ -4155,7 +4167,7 @@ dependencies = [
  "fluent",
  "libc",
  "memchr",
- "nix",
+ "nix 0.31.1",
  "notify",
  "rstest",
  "same-file",
@@ -4191,7 +4203,7 @@ dependencies = [
  "clap",
  "fluent",
  "libc",
- "nix",
+ "nix 0.31.1",
  "uucore",
 ]
 
@@ -4245,7 +4257,7 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
- "nix",
+ "nix 0.31.1",
  "rustc-hash",
  "string-interner",
  "thiserror 2.0.18",
@@ -4258,7 +4270,7 @@ version = "0.6.0"
 dependencies = [
  "clap",
  "fluent",
- "nix",
+ "nix 0.31.1",
  "uucore",
 ]
 
@@ -4342,7 +4354,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "libc",
- "nix",
+ "nix 0.31.1",
  "tempfile",
  "thiserror 2.0.18",
  "unicode-width 0.2.2",
@@ -4412,7 +4424,7 @@ dependencies = [
  "libc",
  "md-5",
  "memchr",
- "nix",
+ "nix 0.31.1",
  "num-traits",
  "os_display",
  "procfs",
@@ -4461,7 +4473,7 @@ version = "0.6.0"
 dependencies = [
  "ctor",
  "libc",
- "nix",
+ "nix 0.31.1",
  "pretty_assertions",
  "rand 0.9.2",
  "regex",
