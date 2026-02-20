@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) NEWROOT Userspec pstatus chdir
+// spell-checker:ignore (ToDO) NEWROOT Userspec pstatus chdir setresgid setresuid
 mod error;
 
 use crate::error::ChrootError;
@@ -307,6 +307,25 @@ fn supplemental_gids(uid: libc::uid_t) -> Vec<libc::gid_t> {
 }
 
 /// Set the supplemental group IDs for this process.
+/// Drop privileges securely using setres* functions with verification.
+fn drop_privileges<T>(
+    target_id: T,
+    setres_fn: fn(T, T, T) -> Result<(), nix::Error>,
+    verify_fn: fn(T) -> Result<(), nix::Error>,
+    error_msg: &str,
+) -> std::io::Result<()>
+where
+    T: Copy + From<u32>,
+{
+    setres_fn(target_id, target_id, target_id).map_err(|e| Error::from_raw_os_error(e as i32))?;
+
+    if verify_fn(T::from(0)).is_ok() {
+        return Err(Error::other(error_msg));
+    }
+
+    Ok(())
+}
+
 fn set_supplemental_gids(gids: &[libc::gid_t]) -> std::io::Result<()> {
     #[cfg(any(
         target_vendor = "apple",
@@ -323,48 +342,6 @@ fn set_supplemental_gids(gids: &[libc::gid_t]) -> std::io::Result<()> {
     } else {
         Err(Error::last_os_error())
     }
-}
-
-/// Set the group ID of this process using secure privilege dropping.
-fn set_gid(gid: libc::gid_t) -> std::io::Result<()> {
-    let target_gid = Gid::from_raw(gid);
-
-    // Use setresgid to permanently drop group privileges
-    // This sets real GID, effective GID, and saved set-group-ID all to the same value
-    setresgid(target_gid, target_gid, target_gid)
-        .map_err(|e| Error::from_raw_os_error(e as i32))?;
-
-    // Verify that privilege drop succeeded by attempting to regain root privileges
-    // This should fail if privileges were properly dropped
-    if setgid(Gid::from_raw(0)).is_ok() {
-        return Err(Error::new(
-            ErrorKind::Other,
-            "Failed to permanently drop group privileges",
-        ));
-    }
-
-    Ok(())
-}
-
-/// Set the user ID of this process using secure privilege dropping.
-fn set_uid(uid: libc::uid_t) -> std::io::Result<()> {
-    let target_uid = Uid::from_raw(uid);
-
-    // Use setresuid to permanently drop user privileges
-    // This sets real UID, effective UID, and saved set-user-ID all to the same value
-    setresuid(target_uid, target_uid, target_uid)
-        .map_err(|e| Error::from_raw_os_error(e as i32))?;
-
-    // Verify that privilege drop succeeded by attempting to regain root privileges
-    // This should fail if privileges were properly dropped
-    if setuid(Uid::from_raw(0)).is_ok() {
-        return Err(Error::new(
-            ErrorKind::Other,
-            "Failed to permanently drop user privileges",
-        ));
-    }
-
-    Ok(())
 }
 
 /// What to do when the `--groups` argument is missing.
@@ -427,22 +404,52 @@ fn set_context(options: &Options) -> UResult<()> {
             let gid = usr2gid(user).map_err(|_| ChrootError::NoGroupSpecified(uid))?;
             let strategy = Strategy::FromUID(uid, false);
             set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
-            set_gid(gid).map_err(|e| ChrootError::SetGidFailed(user.to_owned(), e))?;
-            set_uid(uid).map_err(|e| ChrootError::SetUserFailed(user.to_owned(), e))?;
+            drop_privileges(
+                Gid::from_raw(gid),
+                setresgid,
+                setgid,
+                "Failed to permanently drop group privileges",
+            )
+            .map_err(|e| ChrootError::SetGidFailed(user.to_owned(), e))?;
+            drop_privileges(
+                Uid::from_raw(uid),
+                setresuid,
+                setuid,
+                "Failed to permanently drop user privileges",
+            )
+            .map_err(|e| ChrootError::SetUserFailed(user.to_owned(), e))?;
         }
         Some(UserSpec::GroupOnly(group)) => {
             let gid = name_to_gid(group)?;
             let strategy = Strategy::Nothing;
             set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
-            set_gid(gid).map_err(|e| ChrootError::SetGidFailed(group.to_owned(), e))?;
+            drop_privileges(
+                Gid::from_raw(gid),
+                setresgid,
+                setgid,
+                "Failed to permanently drop group privileges",
+            )
+            .map_err(|e| ChrootError::SetGidFailed(group.to_owned(), e))?;
         }
         Some(UserSpec::UserAndGroup(user, group)) => {
             let uid = name_to_uid(user)?;
             let gid = name_to_gid(group)?;
             let strategy = Strategy::FromUID(uid, true);
             set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
-            set_gid(gid).map_err(|e| ChrootError::SetGidFailed(group.to_owned(), e))?;
-            set_uid(uid).map_err(|e| ChrootError::SetUserFailed(user.to_owned(), e))?;
+            drop_privileges(
+                Gid::from_raw(gid),
+                setresgid,
+                setgid,
+                "Failed to permanently drop group privileges",
+            )
+            .map_err(|e| ChrootError::SetGidFailed(group.to_owned(), e))?;
+            drop_privileges(
+                Uid::from_raw(uid),
+                setresuid,
+                setuid,
+                "Failed to permanently drop user privileges",
+            )
+            .map_err(|e| ChrootError::SetUserFailed(user.to_owned(), e))?;
         }
     }
     Ok(())
