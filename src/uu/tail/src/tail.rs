@@ -244,26 +244,17 @@ fn tail_stdin(
     input: &Input,
     observer: &mut Observer,
 ) -> UResult<()> {
-    // on macOS, resolve() will always return None for stdin,
-    // we need to detect if stdin is a directory ourselves.
-    // fstat-ing certain descriptors under /dev/fd fails with
-    // bad file descriptor or might not catch directory cases
-    // e.g. see the differences between running ls -l /dev/stdin /dev/fd/0
-    // on macOS and Linux.
-    #[cfg(target_os = "macos")]
-    {
-        if let Ok(mut stdin_handle) = Handle::stdin() {
-            if let Ok(meta) = stdin_handle.as_file_mut().metadata() {
-                if meta.file_type().is_dir() {
-                    set_exit_code(1);
-                    show_error!(
-                        "{}",
-                        translate!("tail-error-cannot-open-no-such-file", "file" => input.display_name.clone(), "error" => translate!("tail-no-such-file-or-directory"))
-                    );
-                    return Ok(());
-                }
-            }
-        }
+    // Check if stdin is a directory before proceeding
+    // This handles cases where stdin is redirected from a directory: tail < dir
+    if uucore::fs::is_stdin_directory(&stdin()) {
+        set_exit_code(1);
+        header_printer.print_input(input);
+        let err_msg = translate!("tail-is-a-directory");
+        show_error!(
+            "{}",
+            translate!("tail-error-reading-file", "file" => translate!("tail-stdin-header"), "error" => err_msg)
+        );
+        return Ok(());
     }
 
     // Check if stdin was closed before Rust reopened it as /dev/null
