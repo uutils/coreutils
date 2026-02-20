@@ -207,7 +207,7 @@ impl Who {
         };
         if self.short_list {
             let users = utmpx::Utmpx::iter_all_records_from(f)
-                .filter(UtmpxRecord::is_user_process)
+                .filter(|ut| ut.is_user_process() && ut.pid_is_alive())
                 .map(|ut| ut.user())
                 .collect::<Vec<_>>();
             println!("{}", users.join(" "));
@@ -226,7 +226,7 @@ impl Who {
 
             for ut in records {
                 if !self.my_line_only || cur_tty == ut.tty_device() {
-                    if self.need_users && ut.is_user_process() {
+                    if self.need_users && ut.is_user_process() && ut.pid_is_alive() {
                         self.print_user(&ut)?;
                     } else {
                         match ut.record_type() {
