@@ -8,7 +8,8 @@ use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::vec_of_size;
 
-// spell-checker:ignore (flags) lwmcL clmwL ; (path) bogusfile emptyfile manyemptylines moby notrailingnewline onelongemptyline onelongword weirdchars ioerrdir
+// spell-checker:ignore (flags) lwmcL clmwL ; (path) bogusfile emptyfile manyemptylines moby notrailingnewline onelongemptyline onelongword weirdchars ioerrdir CTYPE
+// spell-checker:ignore (Vietnamese) Tiếng Việt chào
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
@@ -61,8 +62,10 @@ fn test_stdin_explicit() {
 
 #[test]
 fn test_utf8() {
+    // Requires UTF-8 locale for character counting
     new_ucmd!()
         .args(&["-lwmcL"])
+        .env("LC_ALL", "en_US.UTF-8")
         .pipe_in_fixture("UTF_8_test.txt")
         .succeeds()
         .stdout_is("    303    2178   22457   23025      79\n");
@@ -88,8 +91,10 @@ fn test_utf8_line_length_words() {
 
 #[test]
 fn test_utf8_line_length_chars() {
+    // Requires UTF-8 locale for character counting
     new_ucmd!()
         .arg("-Lm")
+        .env("LC_ALL", "en_US.UTF-8")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .succeeds()
         .stdout_is("    442      48\n");
@@ -97,8 +102,10 @@ fn test_utf8_line_length_chars() {
 
 #[test]
 fn test_utf8_line_length_chars_words() {
+    // Requires UTF-8 locale for character counting
     new_ucmd!()
         .arg("-Lmw")
+        .env("LC_ALL", "en_US.UTF-8")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .succeeds()
         .stdout_is("     89     442      48\n");
@@ -106,8 +113,10 @@ fn test_utf8_line_length_chars_words() {
 
 #[test]
 fn test_utf8_chars() {
+    // Requires UTF-8 locale for character counting
     new_ucmd!()
         .arg("-m")
+        .env("LC_ALL", "en_US.UTF-8")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .succeeds()
         .stdout_is("442\n");
@@ -115,8 +124,10 @@ fn test_utf8_chars() {
 
 #[test]
 fn test_utf8_bytes_chars() {
+    // Requires UTF-8 locale for character counting
     new_ucmd!()
         .arg("-cm")
+        .env("LC_ALL", "en_US.UTF-8")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .succeeds()
         .stdout_is("    442     513\n");
@@ -133,8 +144,10 @@ fn test_utf8_bytes_lines() {
 
 #[test]
 fn test_utf8_bytes_chars_lines() {
+    // Requires UTF-8 locale for character counting
     new_ucmd!()
         .arg("-cml")
+        .env("LC_ALL", "en_US.UTF-8")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .succeeds()
         .stdout_is("     25     442     513\n");
@@ -142,8 +155,10 @@ fn test_utf8_bytes_chars_lines() {
 
 #[test]
 fn test_utf8_chars_words() {
+    // Requires UTF-8 locale for character counting
     new_ucmd!()
         .arg("-mw")
+        .env("LC_ALL", "en_US.UTF-8")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .succeeds()
         .stdout_is("     89     442\n");
@@ -169,8 +184,10 @@ fn test_utf8_line_length_lines_words() {
 
 #[test]
 fn test_utf8_lines_chars() {
+    // Requires UTF-8 locale for character counting
     new_ucmd!()
         .arg("-ml")
+        .env("LC_ALL", "en_US.UTF-8")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .succeeds()
         .stdout_is("     25     442\n");
@@ -178,8 +195,10 @@ fn test_utf8_lines_chars() {
 
 #[test]
 fn test_utf8_lines_words_chars() {
+    // Requires UTF-8 locale for character counting
     new_ucmd!()
         .arg("-mlw")
+        .env("LC_ALL", "en_US.UTF-8")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .succeeds()
         .stdout_is("     25      89     442\n");
@@ -187,8 +206,10 @@ fn test_utf8_lines_words_chars() {
 
 #[test]
 fn test_utf8_line_length_lines_chars() {
+    // Requires UTF-8 locale for character counting
     new_ucmd!()
         .arg("-Llm")
+        .env("LC_ALL", "en_US.UTF-8")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .succeeds()
         .stdout_is("     25     442      48\n");
@@ -196,8 +217,10 @@ fn test_utf8_line_length_lines_chars() {
 
 #[test]
 fn test_utf8_all() {
+    // Requires UTF-8 locale for character counting
     new_ucmd!()
         .arg("-lwmcL")
+        .env("LC_ALL", "en_US.UTF-8")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .succeeds()
         .stdout_is("     25      89     442     513      48\n");
@@ -944,4 +967,166 @@ fn test_posixly_correct_whitespace() {
         .pipe_in(input)
         .succeeds()
         .stdout_is("1\n");
+}
+
+#[test]
+fn test_wc_chars_c_locale() {
+    // In C/POSIX locale, wc -m should count bytes, not UTF-8 characters
+    // Vietnamese "Tiếng Việt" uses diacritics (2 bytes per char in UTF-8)
+    // "Tiếng" = 5 chars, 7 bytes ("ế" is 2 bytes)
+    let vietnamese_text = "Tiếng";
+
+    // With LC_ALL=C, chars should equal bytes (7)
+    new_ucmd!()
+        .arg("-m")
+        .env("LC_ALL", "C")
+        .pipe_in(vietnamese_text)
+        .succeeds()
+        .stdout_is("7\n");
+
+    // Same with LC_ALL=POSIX
+    new_ucmd!()
+        .arg("-m")
+        .env("LC_ALL", "POSIX")
+        .pipe_in(vietnamese_text)
+        .succeeds()
+        .stdout_is("7\n");
+
+    // Test combined with bytes flag - should show same count
+    new_ucmd!()
+        .args(&["-cm"])
+        .env("LC_ALL", "C")
+        .pipe_in(vietnamese_text)
+        .succeeds()
+        .stdout_is("      7       7\n");
+
+    // Test with -w to trigger wc.rs path (word_count_from_reader_specialized)
+    // Order: words, chars, bytes
+    new_ucmd!()
+        .args(&["-cmw"])
+        .env("LC_ALL", "C")
+        .pipe_in(vietnamese_text)
+        .succeeds()
+        .stdout_is("      1       7       7\n");
+}
+
+#[test]
+fn test_wc_chars_utf8_locale() {
+    // In UTF-8 locale, wc -m should count UTF-8 characters
+    // Vietnamese "Tiếng" is 7 bytes in UTF-8 but 5 characters ("ế" is 2 bytes)
+    let vietnamese_text = "Tiếng";
+
+    // With vi_VN.UTF-8 locale, chars should be 5 (not 7)
+    new_ucmd!()
+        .arg("-m")
+        .env("LC_ALL", "vi_VN.UTF-8")
+        .pipe_in(vietnamese_text)
+        .succeeds()
+        .stdout_is("5\n");
+
+    // Test combined with bytes flag - should show different counts
+    // Order is: chars, bytes (since show_chars comes before show_bytes in print_stats)
+    new_ucmd!()
+        .args(&["-cm"])
+        .env("LC_ALL", "vi_VN.UTF-8")
+        .pipe_in(vietnamese_text)
+        .succeeds()
+        .stdout_is("      5       7\n");
+
+    // Test with -w to trigger wc.rs path (word_count_from_reader_specialized)
+    // Order: words, chars, bytes
+    new_ucmd!()
+        .args(&["-cmw"])
+        .env("LC_ALL", "vi_VN.UTF-8")
+        .pipe_in(vietnamese_text)
+        .succeeds()
+        .stdout_is("      1       5       7\n");
+}
+
+#[test]
+fn test_wc_chars_default_locale() {
+    // When no locale is set (empty LC_ALL), it defaults to POSIX (chars == bytes)
+    // This ensures backward compatibility
+    let vietnamese_text = "Tiếng";
+
+    new_ucmd!()
+        .arg("-m")
+        .env("LC_ALL", "")
+        .env("LC_CTYPE", "")
+        .env("LANG", "")
+        .pipe_in(vietnamese_text)
+        .succeeds()
+        .stdout_is("7\n");
+
+    // Test with -w to trigger wc.rs path (word_count_from_reader_specialized)
+    // Order: words, chars
+    new_ucmd!()
+        .args(&["-mw"])
+        .env("LC_ALL", "")
+        .env("LC_CTYPE", "")
+        .env("LANG", "")
+        .pipe_in(vietnamese_text)
+        .succeeds()
+        .stdout_is("      1       7\n");
+}
+
+#[test]
+fn test_wc_multibyte_c_locale() {
+    // Issue #9712 and #5831: Test various multibyte characters in C locale
+    // All should be counted as bytes
+
+    // Vietnamese text with multiple diacritics: "Tiếng Việt"
+    // 10 chars, 14 bytes ("ế" and "ệ" are 2 bytes each)
+    new_ucmd!()
+        .args(&["-cm"])
+        .env("LC_ALL", "C")
+        .pipe_in("Tiếng Việt")
+        .succeeds()
+        .stdout_is("     14      14\n");
+
+    // Single Vietnamese character "ệ" = 1 char, 3 bytes in UTF-8 (e1 bb 87)
+    new_ucmd!()
+        .args(&["-cm"])
+        .env("LC_ALL", "C")
+        .pipe_in("ệ")
+        .succeeds()
+        .stdout_is("      3       3\n");
+
+    // Mixed ASCII and Vietnamese: "Xin chào" = 8 chars, 9 bytes ("à" is 2 bytes)
+    new_ucmd!()
+        .args(&["-cm"])
+        .env("LC_ALL", "C")
+        .pipe_in("Xin chào")
+        .succeeds()
+        .stdout_is("      9       9\n");
+}
+
+#[test]
+fn test_wc_multibyte_utf8_locale() {
+    // In UTF-8 locale, multibyte characters should be counted correctly
+    // Order is: chars, bytes (since show_chars comes before show_bytes in print_stats)
+
+    // Vietnamese "Tiếng Việt": 10 chars, 14 bytes ("ế" and "ệ" are 2 bytes each)
+    new_ucmd!()
+        .args(&["-cm"])
+        .env("LC_ALL", "vi_VN.UTF-8")
+        .pipe_in("Tiếng Việt")
+        .succeeds()
+        .stdout_is("     10      14\n");
+
+    // Single Vietnamese character "ệ" = 1 char, 3 bytes in UTF-8 (e1 bb 87)
+    new_ucmd!()
+        .args(&["-cm"])
+        .env("LC_ALL", "vi_VN.UTF-8")
+        .pipe_in("ệ")
+        .succeeds()
+        .stdout_is("      1       3\n");
+
+    // Mixed ASCII and Vietnamese "Xin chào": 8 chars, 9 bytes ("à" is 2 bytes)
+    new_ucmd!()
+        .args(&["-cm"])
+        .env("LC_ALL", "vi_VN.UTF-8")
+        .pipe_in("Xin chào")
+        .succeeds()
+        .stdout_is("      8       9\n");
 }
