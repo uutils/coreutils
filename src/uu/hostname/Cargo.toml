@@ -39,3 +39,12 @@ path = "src/main.rs"
 
 [package.metadata.cargo-udeps.ignore]
 normal = ["uucore_procs"]
+
+[[bench]]
+name = "hostname_bench"
+harness = false
+
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }

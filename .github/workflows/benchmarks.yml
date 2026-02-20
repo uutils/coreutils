@@ -38,6 +38,7 @@ jobs:
           uu_du,
           uu_expand,
           uu_fold,
+          uu_hostname,
           uu_join,
           uu_ls,
           uu_mv,
