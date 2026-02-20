@@ -28,6 +28,16 @@ fn test_help() {
 }
 
 #[test]
+fn test_help_starts_with_usage() {
+    let result = new_ucmd!().arg("--help").fails();
+    assert!(
+        result.stdout_str().starts_with("Usage: false"),
+        "unexpected --help output:\n{}",
+        result.stdout_str()
+    );
+}
+
+#[test]
 fn test_short_options() {
     for option in ["-h", "-V"] {
         new_ucmd!().arg(option).fails().no_output();
