@@ -214,7 +214,7 @@ fn sort_unique_locale(bencher: Bencher, num_lines: usize) {
     });
 }
 
-/// Benchmark sorting with very long lines exceeding START_BUFFER_SIZE (8000 bytes)
+/// Benchmark sorting with very long lines exceeding `DEFAULT_BUF_SIZE` (8192 bytes)
 #[divan::bench(args = [10_000])]
 fn sort_long_line(bencher: Bencher, line_size: usize) {
     // Create files with very long lines to test buffer handling
