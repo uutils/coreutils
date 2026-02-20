@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (API) nodename osname sysname (options) mnrsv mnrsvo
+// spell-checker:ignore (API) nodename osname sysname (options) mnrsv mnrsvo armv kdump ppc64le mipsel mips64el riscv
 
 use std::ffi::{OsStr, OsString};
 
@@ -26,6 +26,40 @@ pub mod options {
     pub static PROCESSOR: &str = "processor";
     pub static HARDWARE_PLATFORM: &str = "hardware-platform";
     pub static OS: &str = "operating-system";
+}
+
+/// Map machine architecture string to processor type.
+///
+/// This provides GNU coreutils-compatible processor type mappings from machine
+/// architecture strings. Previously returned "unknown" causing regressions in
+/// packages like kdump-tools.
+///
+/// Mapping table:
+/// - arm64, aarch64 → "arm"
+/// - x86_64, amd64 → "x86_64"
+/// - i386, i486, i586, i686 → "i386"
+/// - ppc, ppc64, ppc64le → "powerpc"
+/// - riscv32, riscv64 → "riscv"
+/// - arm, armv7l, armv8l → "arm"
+/// - (other) → "unknown"
+fn map_processor(machine: &str) -> String {
+    match machine {
+        // ARM architectures
+        "arm64" | "aarch64" => "arm".to_string(),
+        "arm" | "armv7l" | "armv8l" | "armv7" | "armv8" => "arm".to_string(),
+        // x86 architectures
+        "x86_64" | "amd64" => "x86_64".to_string(),
+        "i386" | "i486" | "i586" | "i686" => "i386".to_string(),
+        // PowerPC architectures (matches GNU coreutils on Apple)
+        "ppc" | "ppc64" | "ppc64le" | "ppc32" => "powerpc".to_string(),
+        // RISC-V architectures
+        "riscv32" | "riscv64" => "riscv".to_string(),
+        // SPARC
+        "sparc" | "sparc64" => "sparc".to_string(),
+        // MIPS
+        "mips" | "mipsel" | "mips64" | "mips64el" => "mips".to_string(),
+        _ => "unknown".to_string(),
+    }
 }
 
 pub struct UNameOutput {
@@ -84,9 +118,9 @@ impl UNameOutput {
 
         let os = (opts.os || opts.all).then(|| uname.osname().to_owned());
 
-        // This option is unsupported on modern Linux systems
-        // See: https://lists.gnu.org/archive/html/bug-coreutils/2005-09/msg00063.html
-        let processor = opts.processor.then(|| translate!("uname-unknown").into());
+        let processor = opts
+            .processor
+            .then(|| map_processor(&uname.machine().to_string_lossy()).into());
 
         // This option is unsupported on modern Linux systems
         // See: https://lists.gnu.org/archive/html/bug-coreutils/2005-09/msg00063.html

@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+// spell-checker:ignore armv mipsel
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 
@@ -28,7 +29,35 @@ fn test_uname_name() {
 #[test]
 fn test_uname_processor() {
     let result = new_ucmd!().arg("-p").succeeds();
-    assert_eq!(result.stdout_str().trim_end(), "unknown");
+    let processor = result.stdout_str().trim();
+
+    // Verify it's non-empty
+    assert!(!processor.is_empty());
+
+    let machine = new_ucmd!().arg("-m").succeeds().stdout_move_str();
+    let machine = machine.trim();
+
+    // The processor (-p) should be a mapped version of the machine (-m)
+    // following the logic in src/uu/uname/src/uname.rs
+    let expected = match machine {
+        // ARM architectures
+        "arm64" | "aarch64" => "arm",
+        "arm" | "armv7l" | "armv8l" | "armv7" | "armv8" => "arm",
+        // x86 architectures
+        "x86_64" | "amd64" => "x86_64",
+        "i386" | "i486" | "i586" | "i686" => "i386",
+        // PowerPC architectures
+        "ppc" | "ppc64" | "ppc64le" | "ppc32" => "powerpc",
+        // RISC-V architectures
+        "riscv32" | "riscv64" => "riscv",
+        // SPARC
+        "sparc" | "sparc64" => "sparc",
+        // MIPS
+        "mips" | "mipsel" | "mips64" | "mips64el" => "mips",
+        _ => "unknown",
+    };
+
+    assert_eq!(processor, expected);
 }
 
 #[test]
