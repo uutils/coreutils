@@ -181,15 +181,14 @@ pub fn read<T: Read>(
         mut buffer,
     } = recycled_chunk;
     if buffer.len() < carry_over.len() {
-        // keep cost of 0 fill minimal
-        // but avoid cost of allocation by reserving huge size too
-        buffer.resize(carry_over.len(), 0);
+        // avoid cost of allocation by reserving
         let new_len = (carry_over.len() * 2)
             .max(ALLOC_CHUNK_SIZE)
             .min(carry_over.len() + 16 * 1024 * 1024);
         buffer.reserve(new_len - buffer.len());
     }
-    buffer[..carry_over.len()].copy_from_slice(carry_over);
+    buffer.clear();
+    buffer.extend_from_slice(&carry_over);
     let (read, should_continue) = read_to_buffer(
         file,
         next_files,

@@ -5,9 +5,14 @@
 //! library ~ (core/bundler file)
 // #![deny(missing_docs)] //TODO: enable this
 //
-// spell-checker:ignore sigaction SIGBUS SIGSEGV extendedbigdecimal myutil logind
+// spell-checker:ignore sigaction SIGBUS SIGSEGV extendedbigdecimal mimalloc myutil logind
 
 // * feature-gated external crates (re-shared as public internal modules)
+// Align performance with glibc
+#[cfg(target_os = "linux")]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 #[cfg(feature = "libc")]
 pub extern crate libc;
 #[cfg(all(feature = "windows-sys", target_os = "windows"))]

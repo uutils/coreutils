@@ -1,4 +1,4 @@
-# spell-checker:ignore (features) bigdecimal zerocopy extendedbigdecimal tzdb zoneinfo logind
+# spell-checker:ignore (features) bigdecimal zerocopy extendedbigdecimal tzdb zoneinfo logind mimalloc
 
 [package]
 name = "uucore"
@@ -111,6 +111,9 @@ tempfile = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 procfs = { workspace = true, optional = true }
+mimalloc = { version = "0.1.48", default-features = false, features = [
+  "override",
+] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 wild = "2.2.1"

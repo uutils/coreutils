@@ -272,7 +272,8 @@ fn split_seps(data: &[u8], sep: u8) -> Vec<&[u8]> {
     // If data is empty (and does not even contain a single 'sep'
     // to indicate the presence of an empty element), then behave
     // as if the input contained no elements at all.
-    let mut elements: Vec<&[u8]> = data.split(|&b| b == sep).collect();
+    let mut elements = Vec::with_capacity(data.len() / 10);
+    elements.extend(data.split(|&b| b == sep));
     if elements.last().is_some_and(|e| e.is_empty()) {
         elements.pop();
     }
