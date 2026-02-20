@@ -8,6 +8,7 @@ mod error;
 
 use crate::error::ChrootError;
 use clap::{Arg, ArgAction, Command};
+use nix::unistd::{Gid, Uid, setgid, setresgid, setresuid, setuid};
 use std::ffi::CString;
 use std::io::{Error, ErrorKind};
 use std::os::unix::prelude::OsStrExt;
@@ -17,7 +18,7 @@ use std::process;
 use uucore::entries::{Locate, Passwd, grp2gid, usr2gid, usr2uid};
 use uucore::error::{UResult, UUsageError};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
-use uucore::libc::{self, chroot, setgid, setgroups, setuid};
+use uucore::libc::{self, chroot, setgroups};
 use uucore::{format_usage, show};
 
 use uucore::translate;
@@ -324,24 +325,46 @@ fn set_supplemental_gids(gids: &[libc::gid_t]) -> std::io::Result<()> {
     }
 }
 
-/// Set the group ID of this process.
+/// Set the group ID of this process using secure privilege dropping.
 fn set_gid(gid: libc::gid_t) -> std::io::Result<()> {
-    let err = unsafe { setgid(gid) };
-    if err == 0 {
-        Ok(())
-    } else {
-        Err(Error::last_os_error())
+    let target_gid = Gid::from_raw(gid);
+
+    // Use setresgid to permanently drop group privileges
+    // This sets real GID, effective GID, and saved set-group-ID all to the same value
+    setresgid(target_gid, target_gid, target_gid)
+        .map_err(|e| Error::from_raw_os_error(e as i32))?;
+
+    // Verify that privilege drop succeeded by attempting to regain root privileges
+    // This should fail if privileges were properly dropped
+    if setgid(Gid::from_raw(0)).is_ok() {
+        return Err(Error::new(
+            ErrorKind::Other,
+            "Failed to permanently drop group privileges",
+        ));
     }
+
+    Ok(())
 }
 
-/// Set the user ID of this process.
+/// Set the user ID of this process using secure privilege dropping.
 fn set_uid(uid: libc::uid_t) -> std::io::Result<()> {
-    let err = unsafe { setuid(uid) };
-    if err == 0 {
-        Ok(())
-    } else {
-        Err(Error::last_os_error())
+    let target_uid = Uid::from_raw(uid);
+
+    // Use setresuid to permanently drop user privileges
+    // This sets real UID, effective UID, and saved set-user-ID all to the same value
+    setresuid(target_uid, target_uid, target_uid)
+        .map_err(|e| Error::from_raw_os_error(e as i32))?;
+
+    // Verify that privilege drop succeeded by attempting to regain root privileges
+    // This should fail if privileges were properly dropped
+    if setuid(Uid::from_raw(0)).is_ok() {
+        return Err(Error::new(
+            ErrorKind::Other,
+            "Failed to permanently drop user privileges",
+        ));
     }
+
+    Ok(())
 }
 
 /// What to do when the `--groups` argument is missing.
