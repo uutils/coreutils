@@ -659,4 +659,36 @@ mod tests {
         // %+Y with explicit width should add sign
         assert_eq!(apply_modifiers("1999", "+", 6, "Y", true), "+01999");
     }
+
+    #[test]
+    fn test_zero_flag_on_space_padded_specifiers() {
+        // GNU date: %0e should override space-padding with zero-padding
+        // Verified: `date -d "2024-06-05" "+%0e"` → "05"
+        let date = make_test_date(1999, 6, 5, 5);
+        let config = get_config();
+
+        // %0e: day-of-month (normally space-padded) with 0 flag → zero-padded
+        let result = format_with_modifiers(&date, "%0e", &config).unwrap();
+        assert_eq!(result, "05", "GNU: %0e should produce '05', not ' 5'");
+
+        // %0k: hour (normally space-padded) with 0 flag → zero-padded
+        let result = format_with_modifiers(&date, "%0k", &config).unwrap();
+        assert_eq!(result, "05", "GNU: %0k should produce '05', not ' 5'");
+    }
+
+    #[test]
+    fn test_underscore_century_default_width() {
+        // GNU date: %C default width is 2, not 4
+        // Verified: `date -d "2024-06-15" "+%_C"` → "20" (no extra padding)
+        let date = make_test_date(1999, 6, 1, 0);
+        let config = get_config();
+
+        // %_C: century with underscore flag, no explicit width
+        // Default width for %C should be 2 (century is 00-99)
+        let result = format_with_modifiers(&date, "%_C", &config).unwrap();
+        assert_eq!(
+            result, "19",
+            "GNU: %_C should produce '19', not '  19' (default width is 2, not 4)"
+        );
+    }
 }
