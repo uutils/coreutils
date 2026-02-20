@@ -140,8 +140,6 @@ fn test_stdin_redirect_file() {
 }
 
 #[test]
-// FIXME: the -f test fails with: Assertion failed. Expected 'tail' to be running but exited with status=exit status: 0
-#[ignore = "disabled until fixed"]
 #[cfg(not(target_vendor = "apple"))] // FIXME: for currently not working platforms
 fn test_stdin_redirect_file_follow() {
     // $ echo foo > f
@@ -152,7 +150,7 @@ fn test_stdin_redirect_file_follow() {
 
     let (at, mut ucmd) = at_and_ucmd!();
 
-    at.write("f", "foo");
+    at.write("f", "foo\n");
 
     let mut p = ucmd
         .arg("-f")
@@ -160,10 +158,16 @@ fn test_stdin_redirect_file_follow() {
         .run_no_wait();
 
     p.make_assertion_with_delay(500).is_alive();
+    at.append("f", "bar\n");
+
+    p.make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
+        .with_current_output()
+        .stdout_only("foo\nbar\n");
+
     p.kill()
         .make_assertion()
         .with_all_output()
-        .stdout_only("foo");
+        .stdout_only("foo\nbar\n");
 }
 
 #[test]
