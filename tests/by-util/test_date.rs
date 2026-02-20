@@ -2636,3 +2636,20 @@ fn test_date_debug_current_time() {
     // No parsing happens for "now", so no debug output
     assert_eq!(stderr, "");
 }
+
+#[test]
+fn test_date_tz_abbreviation_german_timezones() {
+    let de_zones = vec![
+        ("MEZ", "2026-02-20 14:12:01 MEZ"), // German MET abbreviation // spell-checker:disable-line
+        ("MESZ", "2026-02-20 11:59:01 MESZ"), // German MEST abbreviation // spell-checker:disable-line
+    ];
+
+    for (_, d) in de_zones {
+        new_ucmd!()
+            .arg("-d")
+            .arg(d)
+            .arg("+%Y-%m-%d %H:%M:%S")
+            .succeeds()
+            .no_stderr();
+    }
+}
