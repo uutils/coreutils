@@ -23,7 +23,7 @@ use bigdecimal::BigDecimal;
 use chunks::LineData;
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use custom_str_cmp::custom_str_cmp;
+use custom_str_cmp::{append_filtered_line_to, custom_str_cmp};
 use ext_sort::ext_sort;
 use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
 use rand::{Rng, rng};
@@ -324,6 +324,7 @@ struct Precomputed {
     selections_per_line: usize,
     fast_lexicographic: bool,
     fast_ascii_insensitive: bool,
+    needs_filtered_view: bool,
     tokenize_blank_thousands_sep: bool,
     tokenize_allow_unit_after_blank: bool,
 }
@@ -387,6 +388,7 @@ impl GlobalSettings {
         self.precomputed.fast_lexicographic =
             !disable_fast_lexicographic && self.can_use_fast_lexicographic();
         self.precomputed.fast_ascii_insensitive = self.can_use_fast_ascii_insensitive();
+        self.precomputed.needs_filtered_view = self.can_use_filtered_view();
     }
 
     /// Returns true when the fast lexicographic path can be used safely.
@@ -426,6 +428,22 @@ impl GlobalSettings {
                     && selector.settings.ignore_case
                     && !selector.settings.dictionary_order
                     && !selector.settings.ignore_non_printing
+                    && !selector.settings.ignore_blanks
+            }
+    }
+
+    fn can_use_filtered_view(&self) -> bool {
+        self.mode == SortMode::Default
+            && !self.ignore_leading_blanks
+            && (self.dictionary_order || self.ignore_non_printing)
+            && self.selectors.len() == 1
+            && {
+                let selector = &self.selectors[0];
+                !selector.needs_selection
+                    && matches!(selector.settings.mode, SortMode::Default)
+                    && selector.settings.ignore_case == self.ignore_case
+                    && selector.settings.dictionary_order == self.dictionary_order
+                    && selector.settings.ignore_non_printing == self.ignore_non_printing
                     && !selector.settings.ignore_blanks
             }
     }
@@ -635,7 +653,8 @@ impl<'a> Line<'a> {
             || settings.precomputed.selections_per_line > 0
             || settings.precomputed.num_infos_per_line > 0
             || settings.precomputed.floats_per_line > 0
-            || settings.mode == SortMode::Numeric;
+            || settings.mode == SortMode::Numeric
+            || settings.precomputed.needs_filtered_view;
         if !needs_line_data {
             return Self { line, index };
         }
@@ -674,6 +693,17 @@ impl<'a> Line<'a> {
                     }
                 }
             }
+        }
+        if settings.precomputed.needs_filtered_view {
+            let start = line_data.filtered_lines_data.len();
+            let len = append_filtered_line_to(
+                line,
+                settings.ignore_non_printing,
+                settings.dictionary_order,
+                settings.ignore_case,
+                &mut line_data.filtered_lines_data,
+            );
+            line_data.filtered_line_ranges.push((start, len));
         }
         Self { line, index }
     }
@@ -2617,6 +2647,19 @@ fn compare_by<'a>(
         }
     }
 
+    if global_settings.precomputed.needs_filtered_view {
+        let a_filtered = a_line_data.filtered_line(a.index);
+        let b_filtered = b_line_data.filtered_line(b.index);
+        let cmp = a_filtered.cmp(b_filtered);
+        if cmp != Ordering::Equal || a.line == b.line {
+            return if global_settings.reverse {
+                cmp.reverse()
+            } else {
+                cmp
+            };
+        }
+    }
+
     let mut selection_index = 0;
     let mut num_info_index = 0;
     let mut parsed_float_index = 0;
@@ -3211,5 +3254,41 @@ mod tests {
         for input in &invalid_input {
             assert!(GlobalSettings::parse_byte_count(input).is_err());
         }
+    }
+
+    fn push_default_selector(settings: &mut GlobalSettings) {
+        let key_settings = KeySettings::from(&*settings);
+        settings.selectors.push(
+            FieldSelector::new(
+                KeyPosition {
+                    field: 1,
+                    char: 1,
+                    ignore_blanks: key_settings.ignore_blanks,
+                },
+                None,
+                key_settings,
+            )
+            .unwrap(),
+        );
+    }
+
+    #[test]
+    fn test_can_use_filtered_view_with_default_selector() {
+        let mut settings = GlobalSettings {
+            dictionary_order: true,
+            ..GlobalSettings::default()
+        };
+        push_default_selector(&mut settings);
+        assert!(settings.can_use_filtered_view());
+    }
+
+    #[test]
+    fn test_can_use_filtered_view_ignores_case_only_mode() {
+        let mut settings = GlobalSettings {
+            ignore_case: true,
+            ..GlobalSettings::default()
+        };
+        push_default_selector(&mut settings);
+        assert!(!settings.can_use_filtered_view());
     }
 }

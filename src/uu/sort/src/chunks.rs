@@ -53,6 +53,15 @@ pub struct LineData<'a> {
     pub num_infos: Vec<NumInfo>,
     pub parsed_floats: Vec<GeneralBigDecimalParseResult>,
     pub line_num_floats: Vec<Option<f64>>,
+    pub filtered_lines_data: Vec<u8>,
+    pub filtered_line_ranges: Vec<(usize, usize)>,
+}
+
+impl LineData<'_> {
+    pub fn filtered_line(&self, index: usize) -> &[u8] {
+        let (start, len) = self.filtered_line_ranges[index];
+        &self.filtered_lines_data[start..start + len]
+    }
 }
 
 impl Chunk {
@@ -64,6 +73,8 @@ impl Chunk {
             contents.line_data.num_infos.clear();
             contents.line_data.parsed_floats.clear();
             contents.line_data.line_num_floats.clear();
+            contents.line_data.filtered_lines_data.clear();
+            contents.line_data.filtered_line_ranges.clear();
             contents.token_buffer.clear();
             let lines = unsafe {
                 // SAFETY: It is safe to (temporarily) transmute to a vector of lines with a longer lifetime,
@@ -87,6 +98,8 @@ impl Chunk {
                 std::mem::take(&mut contents.line_data.num_infos),
                 std::mem::take(&mut contents.line_data.parsed_floats),
                 std::mem::take(&mut contents.line_data.line_num_floats),
+                std::mem::take(&mut contents.line_data.filtered_lines_data),
+                std::mem::take(&mut contents.line_data.filtered_line_ranges),
                 std::mem::take(&mut contents.token_buffer),
                 contents.line_count_hint,
             )
@@ -97,8 +110,10 @@ impl Chunk {
             num_infos: recycled_contents.2,
             parsed_floats: recycled_contents.3,
             line_num_floats: recycled_contents.4,
-            token_buffer: recycled_contents.5,
-            line_count_hint: recycled_contents.6,
+            filtered_lines_data: recycled_contents.5,
+            filtered_line_ranges: recycled_contents.6,
+            token_buffer: recycled_contents.7,
+            line_count_hint: recycled_contents.8,
             buffer: self.into_owner(),
         }
     }
@@ -118,6 +133,8 @@ pub struct RecycledChunk {
     num_infos: Vec<NumInfo>,
     parsed_floats: Vec<GeneralBigDecimalParseResult>,
     line_num_floats: Vec<Option<f64>>,
+    filtered_lines_data: Vec<u8>,
+    filtered_line_ranges: Vec<(usize, usize)>,
     token_buffer: Vec<Range<usize>>,
     line_count_hint: usize,
     buffer: Vec<u8>,
@@ -131,6 +148,8 @@ impl RecycledChunk {
             num_infos: Vec::new(),
             parsed_floats: Vec::new(),
             line_num_floats: Vec::new(),
+            filtered_lines_data: Vec::new(),
+            filtered_line_ranges: Vec::new(),
             token_buffer: Vec::new(),
             line_count_hint: 0,
             buffer: vec![0; capacity],
@@ -176,6 +195,8 @@ pub fn read<T: Read>(
         num_infos,
         parsed_floats,
         line_num_floats,
+        filtered_lines_data,
+        filtered_line_ranges,
         mut token_buffer,
         mut line_count_hint,
         mut buffer,
@@ -219,6 +240,8 @@ pub fn read<T: Read>(
                 num_infos,
                 parsed_floats,
                 line_num_floats,
+                filtered_lines_data,
+                filtered_line_ranges,
             };
             parse_lines(
                 read,
