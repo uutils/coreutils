@@ -2,7 +2,10 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore powf
+
+use std::io::Write as _;
 use uucore::display::Quotable;
 use uucore::translate;
 
@@ -468,20 +471,15 @@ fn split_bytes<'a>(input: &'a [u8], delim: &'a [u8]) -> impl Iterator<Item = &'a
 }
 
 pub fn format_and_print_delimited(input: &[u8], options: &NumfmtOptions) -> Result<()> {
-    let delimiter = options.delimiter.as_ref().unwrap();
-    let mut output: Vec<u8> = Vec::new();
-    let eol = if options.zero_terminated {
-        b'\0'
-    } else {
-        b'\n'
-    };
+    let delimiter = options.delimiter.as_deref().unwrap();
+    let mut stdout = std::io::stdout().lock();
 
     for (n, field) in (1..).zip(split_bytes(input, delimiter)) {
         let field_selected = uucore::ranges::contain(&options.fields, n);
 
         // add delimiter before second and subsequent fields
         if n > 1 {
-            output.extend_from_slice(delimiter);
+            stdout.write_all(delimiter).unwrap();
         }
 
         if field_selected {
@@ -490,20 +488,24 @@ pub fn format_and_print_delimited(input: &[u8], options: &NumfmtOptions) -> Resu
                 .map_err(|_| translate!("numfmt-error-invalid-number", "input" => String::from_utf8_lossy(field).into_owned().quote()))?
                 .trim_start();
             let formatted = format_string(field_str, options, None)?;
-            output.extend_from_slice(formatted.as_bytes());
+            stdout.write_all(formatted.as_bytes()).unwrap();
         } else {
             // add unselected field without conversion
-            output.extend_from_slice(field);
+            stdout.write_all(field).unwrap();
         }
     }
 
-    output.push(eol);
-    std::io::Write::write_all(&mut std::io::stdout(), &output).map_err(|e| e.to_string())?;
+    let eol = if options.zero_terminated {
+        b"\0"
+    } else {
+        b"\n"
+    };
+    stdout.write_all(eol).unwrap();
 
     Ok(())
 }
 pub fn format_and_print_whitespace(s: &str, options: &NumfmtOptions) -> Result<()> {
-    let mut output = String::new();
+    let mut stdout = std::io::stdout().lock();
 
     for (n, (prefix, field)) in (1..).zip(WhitespaceSplitter { s: Some(s) }) {
         let field_selected = uucore::ranges::contain(&options.fields, n);
@@ -513,7 +515,7 @@ pub fn format_and_print_whitespace(s: &str, options: &NumfmtOptions) -> Result<(
 
             // add delimiter before second and subsequent fields
             let prefix = if n > 1 {
-                output.push(' ');
+                stdout.write_all(b" ").unwrap();
                 &prefix[1..]
             } else {
                 prefix
@@ -525,24 +527,28 @@ pub fn format_and_print_whitespace(s: &str, options: &NumfmtOptions) -> Result<(
                 None
             };
 
-            output.push_str(&format_string(field, options, implicit_padding)?);
+            let formatted = format_string(field, options, implicit_padding)?;
+            stdout.write_all(formatted.as_bytes()).unwrap();
         } else {
             // the -z option converts an initial \n into a space
             let prefix = if options.zero_terminated && prefix.starts_with('\n') {
-                output.push(' ');
+                stdout.write_all(b" ").unwrap();
                 &prefix[1..]
             } else {
                 prefix
             };
             // add unselected field without conversion
-            output.push_str(prefix);
-            output.push_str(field);
+            stdout.write_all(prefix.as_bytes()).unwrap();
+            stdout.write_all(field.as_bytes()).unwrap();
         }
     }
 
-    let eol = if options.zero_terminated { '\0' } else { '\n' };
-    output.push(eol);
-    print!("{output}");
+    let eol = if options.zero_terminated {
+        b"\0"
+    } else {
+        b"\n"
+    };
+    stdout.write_all(eol).unwrap();
 
     Ok(())
 }
