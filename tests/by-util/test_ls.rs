@@ -107,7 +107,6 @@ fn test_localized_possible_values() {
 
     for (locale, expected_strings) in test_cases {
         let result = new_ucmd!()
-            .env("LANG", locale)
             .env("LC_ALL", locale)
             .arg("--color=invalid_test_value")
             .fails();

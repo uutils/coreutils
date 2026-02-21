@@ -846,7 +846,7 @@ mod tests {
     #[test]
     fn test_get_pathbuf_from_stdout_fails_if_stdout_is_not_a_file() {
         unsafe {
-            env::set_var("LANG", "C");
+            env::set_var("LC_ALL", "C");
         }
         let _ = locale::setup_localization("touch");
         // We can trigger an error by not setting stdout to anything (will

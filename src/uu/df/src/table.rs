@@ -582,7 +582,7 @@ mod tests {
 
     fn init() {
         unsafe {
-            std::env::set_var("LANG", "C");
+            std::env::set_var("LC_ALL", "C");
         }
         let _ = setup_localization("df");
     }

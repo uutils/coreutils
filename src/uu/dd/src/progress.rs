@@ -520,7 +520,7 @@ mod tests {
     use super::{ProgUpdate, ReadStat, WriteStat};
     fn init() {
         unsafe {
-            env::set_var("LANG", "C");
+            env::set_var("LC_ALL", "C");
         }
         let _ = setup_localization("dd");
     }
