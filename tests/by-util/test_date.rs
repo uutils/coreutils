@@ -2507,6 +2507,16 @@ fn test_date_format_modifier_edge_cases() {
     }
 }
 
+#[test]
+fn test_date_format_modifier_huge_width_fails_without_abort() {
+    let format = format!("+%{}c", usize::MAX);
+    new_ucmd!()
+        .arg(&format)
+        .fails()
+        .code_is(1)
+        .stderr_contains("field width too large");
+}
+
 // Tests for --debug flag
 #[test]
 fn test_date_debug_basic() {
