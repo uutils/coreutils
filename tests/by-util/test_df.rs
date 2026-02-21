@@ -1152,3 +1152,54 @@ fn test_df_masked_proc_fallback() {
         }
     }
 }
+
+#[test]
+#[cfg(target_os = "windows")]
+fn test_windows_avail_column_not_zero() {
+    // Regression test for issue #7461: Avail column should not be 0 on Windows
+    let output = new_ucmd!()
+        .args(&["--output=source,avail"])
+        .succeeds()
+        .stdout_str_lossy();
+
+    let lines: Vec<&str> = output.lines().skip(1).collect();
+    assert!(!lines.is_empty(), "Should have at least one filesystem");
+
+    // At least one filesystem should have non-zero avail (not all are 0)
+    let has_non_zero = lines.iter().any(|line| {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() >= 2 {
+            parts[1].parse::<u64>().map(|v| v > 0).unwrap_or(false)
+        } else {
+            false
+        }
+    });
+
+    assert!(
+        has_non_zero,
+        "At least one filesystem should have non-zero available space. Got output:\n{output}"
+    );
+}
+
+/// Test that df --total includes a total row in output.
+/// Verifies basic functionality of --total flag.
+#[test]
+#[cfg(not(target_os = "freebsd"))]
+fn test_total_row_exists() {
+    // Get df output with totals
+    let output = new_ucmd!()
+        .args(&["--total", "-P", "--block-size=512"])
+        .succeeds()
+        .stdout_str_lossy();
+
+    // Just verify that a total row exists in the output
+    // The exact calculation verification is environment-dependent
+    let has_total_row = output
+        .lines()
+        .any(|line| line.split_whitespace().next() == Some("total"));
+
+    assert!(
+        has_total_row,
+        "Output should contain a 'total' row. Got:\n{output}"
+    );
+}
