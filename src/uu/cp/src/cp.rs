@@ -1691,7 +1691,7 @@ impl OverwriteMode {
 /// Note: ENOTSUP/EOPNOTSUPP errors are silently ignored when not required, as per GNU cp
 /// documentation: "Try to preserve SELinux security context and extended attributes (xattr),
 /// but ignore any failure to do that and print no corresponding diagnostic."
-fn handle_preserve<F: Fn() -> CopyResult<()>>(p: Preserve, f: F) -> CopyResult<()> {
+fn handle_preserve<F: FnMut() -> CopyResult<()>>(p: Preserve, mut f: F) -> CopyResult<()> {
     match p {
         Preserve::No { .. } => {}
         Preserve::Yes { required } => {
@@ -1787,6 +1787,8 @@ pub(crate) fn copy_attributes(
     let source_metadata = fs::symlink_metadata(source)
         .map_err(|e| CpError::IoErrContext(e, context_for(source, dest)))?;
 
+    let mut failed_to_set_ownership = false;
+
     // Ownership must be changed first to avoid interfering with mode change.
     #[cfg(unix)]
     handle_preserve(attributes.ownership, || -> CopyResult<()> {
@@ -1819,6 +1821,7 @@ pub(crate) fn copy_attributes(
         // gnu compatibility: cp doesn't report an error if it fails to set the ownership,
         // and will fall back to changing only the gid if possible.
         if try_chown(Some(dest_uid)).is_err() {
+            failed_to_set_ownership = true;
             let _ = try_chown(None);
         }
         Ok(())
@@ -1870,6 +1873,7 @@ pub(crate) fn copy_attributes(
                 attributes.mode,
                 dest.is_dir(),
                 was_created,
+                failed_to_set_ownership,
                 source_metadata.permissions().mode(),
                 orig_umask,
             )
@@ -2410,6 +2414,7 @@ fn calculate_dest_permissions(
             options.attributes.mode,
             false,
             dest_metadata.is_none(),
+            false,
             source_metadata.permissions().mode(),
             orig_umask,
         )
@@ -2716,51 +2721,52 @@ fn is_stream(metadata: &Metadata) -> bool {
 }
 
 #[cfg(unix)]
+#[allow(clippy::unnecessary_cast)]
 /// Calculate the final permissions mode.
-///
-/// If the dir/file was not created, then returns `None` except when preserving mode in which case
-/// the source mode is returned.
-///
-/// Otherwise, see [`handle_created_mode`].
 fn handle_mode(
     mode: Preserve,
     is_dir: bool,
     was_created: bool,
+    failed_to_set_ownership: bool,
     source_mode: u32,
     umask: u32,
 ) -> Option<u32> {
-    if was_created {
-        Some(handle_created_mode(mode, is_dir, source_mode, umask))
-    } else {
-        match mode {
-            Preserve::Yes { required: true } => Some(source_mode),
-            _ => None,
+    match (was_created, mode) {
+        // If preserving mode, return Some source_mode.
+        (_, Preserve::Yes { .. }) => {
+            use libc::{S_ISGID, S_ISUID};
+            const UID_GID_MASK: u32 = !(S_ISGID | S_ISUID) as u32;
+
+            Some(if failed_to_set_ownership {
+                // "Additionally, the -p option explicitly requires that all set-user-ID and
+                // set-group-ID permissions be discarded if any of the owner or group IDs cannot be
+                // set. This is to keep users from unintentionally giving away special privilege
+                // when copying programs."
+                source_mode & UID_GID_MASK
+            } else {
+                source_mode
+            })
         }
-    }
-}
+        // If was not created (destination existed), return None
+        (false, _) => None,
+        // If was created (destination did not exist), return Some
+        // If no preserving mode, return 0o777(dir)/0o666(file) & !umask.
+        // If default, return source_mode & 0o777 & !umask.
+        (true, Preserve::No { explicit }) => {
+            use libc::{
+                S_IRGRP, S_IROTH, S_IRUSR, S_IRWXG, S_IRWXO, S_IRWXU, S_IWGRP, S_IWOTH, S_IWUSR,
+            };
+            const MODE_RW_UGO: u32 =
+                (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
+            const S_IRWXUGO: u32 = (S_IRWXU | S_IRWXG | S_IRWXO) as u32;
 
-#[cfg(unix)]
-#[inline]
-/// Calculate the final permissions mode when the dir/file is newly created.
-///
-/// If no preserving mode, return 0o777(dir)/0o666(file) & !umask.
-/// If default, return source_mode & 0o777 & !umask.
-/// If preserving mode, return source_mode & 0o777.
-fn handle_created_mode(mode: Preserve, is_dir: bool, source_mode: u32, umask: u32) -> u32 {
-    use libc::{S_IRGRP, S_IROTH, S_IRUSR, S_IRWXG, S_IRWXO, S_IRWXU, S_IWGRP, S_IWOTH, S_IWUSR};
-    #[allow(clippy::unnecessary_cast)]
-    const MODE_RW_UGO: u32 = (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
-    #[allow(clippy::unnecessary_cast)]
-    const S_IRWXUGO: u32 = (S_IRWXU | S_IRWXG | S_IRWXO) as u32;
-
-    if let Preserve::No { explicit } = mode {
-        (if explicit {
-            if is_dir { S_IRWXUGO } else { MODE_RW_UGO }
-        } else {
-            source_mode & S_IRWXUGO
-        }) & !umask
-    } else {
-        source_mode & S_IRWXUGO
+            let mode = if explicit {
+                if is_dir { S_IRWXUGO } else { MODE_RW_UGO }
+            } else {
+                source_mode & S_IRWXUGO
+            };
+            Some(mode & !umask)
+        }
     }
 }
 
