@@ -4,9 +4,13 @@
 # Generic words
 common-error = error
 common-tip = tip
-common-usage = Usage
 common-help = help
 common-version = version
+common-usage = Usage
+common-arguments = Arguments
+common-options = Options
+common-subcommands = Subcommands
+common-default = Default
 
 # Common clap error messages
 clap-error-unexpected-argument = { $error_word }: unexpected argument '{ $arg }' found

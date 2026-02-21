@@ -4,9 +4,13 @@
 # Mots génériques
 common-error = erreur
 common-tip = conseil
-common-usage = Utilisation
 common-help = aide
 common-version = version
+common-usage = Utilisation
+common-arguments = Arguments
+common-options = Options
+common-subcommands = Sous-commandes
+common-default = Défaut
 
 # Messages d'erreur clap communs
 clap-error-unexpected-argument = { $error_word } : argument inattendu '{ $arg }' trouvé

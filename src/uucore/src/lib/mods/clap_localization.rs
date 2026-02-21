@@ -14,8 +14,9 @@
 use crate::error::{UResult, USimpleError};
 use crate::locale::translate;
 
+use clap::builder::{IntoResettable, Resettable, StyledStr};
 use clap::error::{ContextKind, ErrorKind};
-use clap::{ArgMatches, Command, Error};
+use clap::{Arg, ArgAction, ArgMatches, Command, Error};
 
 use std::error::Error as StdError;
 use std::ffi::OsString;
@@ -521,6 +522,176 @@ pub fn configure_localized_command(mut cmd: Command) -> Command {
         colors_enabled,
     ));
     cmd
+}
+
+/// Create a fully localized help template with automatic color control
+/// This ensures color detection consistency between clap and our template
+/// It also ensures that every part of the template is localized
+fn fully_localized_help_template(util_name: &str, cmd: &Command) -> clap::builder::StyledStr {
+    use std::fmt::Write;
+    use std::io::IsTerminal;
+
+    // Determine if colors should be enabled
+    let colors_enabled = if std::env::var("NO_COLOR").is_ok() {
+        false
+    } else if std::env::var("CLICOLOR_FORCE").is_ok() || std::env::var("FORCE_COLOR").is_ok() {
+        true
+    } else {
+        IsTerminal::is_terminal(&std::io::stdout())
+            && std::env::var("TERM").unwrap_or_default() != "dumb"
+    };
+
+    // Ensure localization is initialized for this utility
+    let _ = crate::locale::setup_localization(util_name);
+
+    // Manually check that a section is empty or not
+    let has_options = cmd.get_opts().next().is_some();
+    let has_positionals = cmd.get_positionals().next().is_some();
+    let has_subcommands = cmd.get_subcommands().next().is_some();
+
+    // Fallback to previous template if no options found because
+    // the function was called too early in uu_app()
+    // It should always have 2 options minimum (--help ands --version)
+    if !has_options {
+        return crate::localized_help_template_with_colors(util_name, colors_enabled);
+    }
+
+    // Get the localized "Usage" label
+    let usage_label = translate!("common-usage");
+    let arguments_label = translate!("common-arguments");
+    let options_label = translate!("common-options");
+    let subcommands_label = translate!("common-subcommands");
+
+    // Create a styled template
+    let mut template = clap::builder::StyledStr::new();
+
+    // Add the basic template parts
+    writeln!(template, "{{before-help}}{{about-with-newline}}").unwrap();
+
+    // Add styled usage header (bold + underline like clap's default)
+    if colors_enabled {
+        write!(template, "\x1b[1m\x1b[4m{usage_label}:\x1b[0m {{usage}}").unwrap();
+    } else {
+        write!(template, "{usage_label}: {{usage}}\n\n").unwrap();
+    }
+
+    // Arguments (positionals) section
+    if has_positionals {
+        if colors_enabled {
+            write!(
+                template,
+                "\n\n\x1b[1m\x1b[4m{arguments_label}:\x1b[0m\n{{positionals}}"
+            )
+            .unwrap();
+        } else {
+            write!(template, "{arguments_label}:\n{{positionals}}").unwrap();
+        }
+    }
+
+    // Options section
+    if has_options {
+        if colors_enabled {
+            write!(
+                template,
+                "\n\n\x1b[1m\x1b[4m{options_label}:\x1b[0m\n{{options}}"
+            )
+            .unwrap();
+        } else {
+            write!(template, "\n\n{options_label}:\n{{options}}").unwrap();
+        }
+    }
+
+    // Subcommands section
+    if has_subcommands {
+        if colors_enabled {
+            write!(
+                template,
+                "\n\n\x1b[1m\x1b[4m{subcommands_label}:\x1b[0m\n{{subcommands}}end"
+            )
+            .unwrap();
+        } else {
+            write!(template, "\n\n{subcommands_label}:\n{{subcommands}}").unwrap();
+        }
+    }
+
+    // Add the rest
+    write!(template, "{{after-help}}").unwrap();
+
+    template
+}
+
+pub trait CommandHelpLocalization {
+    /// Replaces default --help and --version with localized versions
+    fn localized_help_and_version(self) -> Self;
+    /// Applies localized help template based on Command structure
+    fn localized_help_template(self, util_name: &str) -> Self;
+}
+
+impl CommandHelpLocalization for Command {
+    fn localized_help_and_version(self) -> Self {
+        self.disable_help_flag(true)
+            .disable_version_flag(true)
+            .arg(
+                Arg::new("help")
+                    .long("help")
+                    .action(ArgAction::Help)
+                    .help(translate!("help-flag-help"))
+                    .global(true),
+            )
+            .arg(
+                Arg::new("version")
+                    .long("version")
+                    .action(ArgAction::Version)
+                    .help(translate!("help-flag-version"))
+                    .global(true),
+            )
+    }
+
+    fn localized_help_template(self, util_name: &str) -> Self {
+        let template = fully_localized_help_template(util_name, &self);
+        self.help_template(template)
+    }
+}
+
+pub trait ArgHelpLocalization {
+    /// Add translation of "default" keyword for options with defaults.
+    /// Also support options without defaults with the same output as normal .help()
+    fn help_with_localized_default(self, description: impl IntoResettable<StyledStr>) -> Self;
+}
+
+impl ArgHelpLocalization for Arg {
+    fn help_with_localized_default(self, description: impl IntoResettable<StyledStr>) -> Self {
+        use std::fmt::Write;
+
+        let mut template = clap::builder::StyledStr::new();
+        let mut has_description = false;
+
+        // Manually extract the Option from Resettable because ".into_option()" is private
+        if let Resettable::Value(description_str) = description.into_resettable() {
+            write!(template, "{description_str}").unwrap();
+            has_description = true;
+        }
+
+        let defaults: Vec<String> = self
+            .get_default_values()
+            .iter()
+            .filter_map(|v| v.to_str().map(String::from))
+            .map(|s| format!("\"{s}\""))
+            .collect();
+        if defaults.is_empty() {
+            self.help(template)
+        } else {
+            if has_description {
+                write!(template, " ").unwrap();
+            }
+
+            let default_label = translate!("common-default");
+            let defaults_str = defaults.join(" ");
+            write!(template, "[{default_label}: {defaults_str}]").unwrap();
+            // Only hide default value if replaced otherwise clap throw an error
+            self.hide_default_value(true).help(template)
+        }
+    }
 }
 
 /* spell-checker: disable */
