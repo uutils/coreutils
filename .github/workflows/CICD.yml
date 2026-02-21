@@ -265,6 +265,8 @@ jobs:
   build_makefile:
     name: Build/Makefile
     needs: [ min_version, deps ]
+    permissions:
+      contents: write # Publish individual binaries
     runs-on: ${{ matrix.job.os }}
     env:
       SCCACHE_GHA_ENABLED: "true"
@@ -338,6 +340,8 @@ jobs:
         ! test -f /tmp/usr/local/share/zsh/site-functions/_uu-install
         ! test -f /tmp/usr/local/share/bash-completion/completions/uu-head.bash
         ! test -f /tmp/usr/local/share/fish/vendor_completions.d/uu-cat.fish
+        # don't publish them
+        make uninstall PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n
       env:
         RUST_BACKTRACE: "1"
     - name: "`make install`"
@@ -372,10 +376,10 @@ jobs:
       shell: bash
       run: |
         set -x
-        DESTDIR=/tmp/ make PROFILE=release MULTICALL=n install
+        make DESTDIR=/tmp/individual PROFILE=release MULTICALL=n install
         # Check that *sum are present
         for s in {md5,b2,sha1,sha224,sha256,sha384,sha512}sum
-          do test -e /tmp/usr/local/bin/${s}
+          do test -e /tmp/individual/usr/local/bin/${s}
         done
     - name: "`make install MULTICALL=y LN=ln -svf`"
       shell: bash
@@ -386,6 +390,100 @@ jobs:
         for s in {md5,b2,sha1,sha224,sha256,sha384,sha512}sum
           do test $(readlink /tmp/usr/local/bin/${s}) = coreutils
         done
+    - name: Package
+      shell: bash
+      run: |
+        mv target/release/deps/libstdbuf.so -t /tmp/individual/usr/local/bin
+        strip -s /tmp/individual/usr/local/bin/*
+        ZSTD_CLEVEL=19 tar --zstd -caf individual-x86_64-unknown-linux-gnu.tar.zst -C /tmp/individual/usr/local bin
+    - name: Publish
+      uses: softprops/action-gh-release@v2
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      with:
+        tag_name: latest-commit
+        draft: false
+        prerelease: true
+        files: |
+          individual-x86_64-unknown-linux-gnu.tar.zst
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Compute uutil release sizes
+      shell: bash
+      run: |
+        ## Compute uutil release sizes
+        DATE=$(date --rfc-email)
+        find /tmp/individual/usr/local/bin -type f -printf '%f\0' | sort -z |
+          while IFS= read -r -d '' name; do
+            size=$(du -s /tmp/individual/usr/local/bin/$name | awk '{print $1}')
+            echo "\"$name\""
+            echo "$size"
+          done | \
+            jq -n \
+                --arg date "$DATE" \
+                --arg sha "$GITHUB_SHA" \
+                'reduce inputs as $name ({}; . + { ($name): input }) | { ($date): {sha: $sha, sizes: map_values(.)} }' > individual-size-result.json
+        SIZE=$(cat individual-size-result.json | jq '[.[] | .sizes | .[]] | reduce .[] as $num (0; . + $num)')
+        SIZE_MULTI=$(du -s /tmp/usr/local/bin/coreutils | awk '{print $1}')
+        jq -n \
+              --arg date "$DATE" \
+              --arg sha "$GITHUB_SHA" \
+              --arg size "$SIZE" \
+              --arg multisize "$SIZE_MULTI" \
+              '{($date): { sha: $sha, size: $size, multisize: $multisize, }}' > size-result.json
+    - name: Download the previous individual size result
+      uses: dawidd6/action-download-artifact@v14
+      with:
+        workflow: CICD.yml
+        name: individual-size-result
+        repo: uutils/coreutils
+        path: dl
+    - name: Download the previous size result
+      uses: dawidd6/action-download-artifact@v14
+      with:
+        workflow: CICD.yml
+        name: size-result
+        repo: uutils/coreutils
+        path: dl
+    - name: Check uutil release sizes
+      shell: bash
+      run: |
+        check() {
+          # Warn if the size increases by more than 5%
+          threshold='1.05'
+
+          if [[ "$2" -eq 0 || "$3" -eq 0 ]]; then
+              echo "::warning file=$4::Invalid size for $1. Sizes cannot be 0."
+              return
+          fi
+
+          ratio=$(jq -n "$2 / $3")
+          echo "$1: size=$2, previous_size=$3, ratio=$ratio, threshold=$threshold"
+          if [[ "$(jq -n "$ratio > $threshold")" == 'true' ]]; then
+            echo "::warning file=$4::Size of $1 increases by more than 5%"
+          fi
+        }
+        ## Check individual size result
+        while read -r name previous_size; do
+          size=$(cat individual-size-result.json | jq -r ".[] | .sizes | .\"$name\"")
+          check "\`$name\` binary" "$size" "$previous_size" 'individual-size-result.json'
+        done < <(cat dl/individual-size-result.json | jq -r '.[] | .sizes | to_entries[] | "\(.key) \(.value)"')
+        ## Check size result
+        size=$(cat size-result.json | jq -r '.[] | .size')
+        previous_size=$(cat dl/size-result.json | jq -r '.[] | .size')
+        check 'multiple binaries' "$size" "$previous_size" 'size-result.json'
+        multisize=$(cat size-result.json | jq -r '.[] | .multisize')
+        previous_multisize=$(cat dl/size-result.json | jq -r '.[] | .multisize')
+        check 'multicall binary' "$multisize" "$previous_multisize" 'size-result.json'
+    - name: Upload the individual size result
+      uses: actions/upload-artifact@v6
+      with:
+        name: individual-size-result
+        path: individual-size-result.json
+    - name: Upload the size result
+      uses: actions/upload-artifact@v6
+      with:
+        name: size-result
+        path: size-result.json
     - name: "`make UTILS=XXX`"
       shell: bash
       run: |
@@ -477,130 +575,6 @@ jobs:
         disable_search: true
         flags: nightly,${{ matrix.job.os }}
         fail_ci_if_error: false
-
-  compute_size:
-    name: Binary sizes
-    needs: [ min_version, deps ]
-    runs-on: ${{ matrix.job.os }}
-    permissions:
-      contents: write
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
-      CARGO_INCREMENTAL: 0
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - { os: ubuntu-latest , features: feat_os_unix }
-    steps:
-    - uses: actions/checkout@v6
-      with:
-        persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.9
-    - name: "`make install PROFILE=release`"
-      shell: bash
-      run: |
-        export CARGO_TARGET_DIR=cargo-target RUSTFLAGS="${RUSTFLAGS} -C strip=symbols" PROFILE=release MANPAGES=n COMPLETIONS=n LOCALES=n
-        mkdir -p "${CARGO_TARGET_DIR}" && sudo mount -t tmpfs -o noatime,size=16G tmpfs "${CARGO_TARGET_DIR}"
-        make install DESTDIR=target/size-release/
-        make install COMPLETIONS=n MULTICALL=y LN="ln -vf" DESTDIR=target/size-multi-release/
-        ZSTD_CLEVEL=19 tar --zstd -caf individual-x86_64-unknown-linux-gnu.tar.zst -C target/size-release/usr/local bin
-    - name: Publish
-      uses: softprops/action-gh-release@v2
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-      with:
-        tag_name: latest-commit
-        draft: false
-        prerelease: true
-        files: |
-          individual-x86_64-unknown-linux-gnu.tar.zst
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    - name: Test for hardlinks
-      shell: bash
-      run: |
-        [ $(stat -c %i target/size-multi-release/usr/local/bin/cp) = $(stat -c %i target/size-multi-release/usr/local/bin/coreutils) ]
-    - name: Compute uutil release sizes
-      shell: bash
-      run: |
-        ## Compute uutil release sizes
-        DATE=$(date --rfc-email)
-        find target/size-release/usr/local/bin -type f -printf '%f\0' | sort -z |
-          while IFS= read -r -d '' name; do
-            size=$(du -s target/size-release/usr/local/bin/$name | awk '{print $1}')
-            echo "\"$name\""
-            echo "$size"
-          done | \
-            jq -n \
-                --arg date "$DATE" \
-                --arg sha "$GITHUB_SHA" \
-                'reduce inputs as $name ({}; . + { ($name): input }) | { ($date): {sha: $sha, sizes: map_values(.)} }' > individual-size-result.json
-        SIZE=$(cat individual-size-result.json | jq '[.[] | .sizes | .[]] | reduce .[] as $num (0; . + $num)')
-        SIZE_MULTI=$(du -s target/size-multi-release/usr/local/bin/coreutils | awk '{print $1}')
-        jq -n \
-              --arg date "$DATE" \
-              --arg sha "$GITHUB_SHA" \
-              --arg size "$SIZE" \
-              --arg multisize "$SIZE_MULTI" \
-              '{($date): { sha: $sha, size: $size, multisize: $multisize, }}' > size-result.json
-    - name: Download the previous individual size result
-      uses: dawidd6/action-download-artifact@v15
-      with:
-        workflow: CICD.yml
-        name: individual-size-result
-        repo: uutils/coreutils
-        path: dl
-    - name: Download the previous size result
-      uses: dawidd6/action-download-artifact@v15
-      with:
-        workflow: CICD.yml
-        name: size-result
-        repo: uutils/coreutils
-        path: dl
-    - name: Check uutil release sizes
-      shell: bash
-      run: |
-        check() {
-          # Warn if the size increases by more than 5%
-          threshold='1.05'
-
-          if [[ "$2" -eq 0 || "$3" -eq 0 ]]; then
-              echo "::warning file=$4::Invalid size for $1. Sizes cannot be 0."
-              return
-          fi
-
-          ratio=$(jq -n "$2 / $3")
-          echo "$1: size=$2, previous_size=$3, ratio=$ratio, threshold=$threshold"
-          if [[ "$(jq -n "$ratio > $threshold")" == 'true' ]]; then
-            echo "::warning file=$4::Size of $1 increases by more than 5%"
-          fi
-        }
-        ## Check individual size result
-        while read -r name previous_size; do
-          size=$(cat individual-size-result.json | jq -r ".[] | .sizes | .\"$name\"")
-          check "\`$name\` binary" "$size" "$previous_size" 'individual-size-result.json'
-        done < <(cat dl/individual-size-result.json | jq -r '.[] | .sizes | to_entries[] | "\(.key) \(.value)"')
-        ## Check size result
-        size=$(cat size-result.json | jq -r '.[] | .size')
-        previous_size=$(cat dl/size-result.json | jq -r '.[] | .size')
-        check 'multiple binaries' "$size" "$previous_size" 'size-result.json'
-        multisize=$(cat size-result.json | jq -r '.[] | .multisize')
-        previous_multisize=$(cat dl/size-result.json | jq -r '.[] | .multisize')
-        check 'multicall binary' "$multisize" "$previous_multisize" 'size-result.json'
-    - name: Upload the individual size result
-      uses: actions/upload-artifact@v6
-      with:
-        name: individual-size-result
-        path: individual-size-result.json
-    - name: Upload the size result
-      uses: actions/upload-artifact@v6
-      with:
-        name: size-result
-        path: size-result.json
 
   build:
     permissions:
