@@ -210,9 +210,12 @@ macro_rules! bin {
             // execute utility code
             let code = $util::uumain(uucore::args_os());
             // (defensively) flush stdout for utility prior to exit; see <https://github.com/rust-lang/rust/issues/23818>
-            if let Err(e) = std::io::stdout().flush() {
-                eprintln!("Error flushing stdout: {e}");
-            }
+            // If flush fails, exit with code 1 to match GNU behavior
+            let code = match std::io::stdout().flush() {
+                Ok(()) => code,
+                Err(_) if code == 0 => 1,
+                Err(_) => code,
+            };
 
             std::process::exit(code);
         }
