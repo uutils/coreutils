@@ -60,6 +60,46 @@ fn gen_coreutils_app<T: Args>(util_map: &UtilityMap<T>) -> Command {
     command
 }
 
+/// Render a command's man page to a writer, formatting TLDR examples into
+/// their own section
+fn render_command_manpage(
+    out: &mut impl Write,
+    command: Command,
+    tldr_examples: Option<&str>,
+) -> io::Result<()> {
+    let has_arguments = command.get_arguments().any(|arg| !arg.is_hide_set());
+    let has_subcommands = command
+        .get_subcommands()
+        .any(|subcommand| !subcommand.is_hide_set());
+    let has_extra = command.get_after_long_help().is_some() || command.get_after_help().is_some();
+    let has_version = command.get_version().is_some();
+    let has_author = command.get_author().is_some();
+    let man = Man::new(command);
+    man.render_title(out)?;
+    man.render_name_section(out)?;
+    man.render_synopsis_section(out)?;
+    man.render_description_section(out)?;
+    if has_arguments {
+        man.render_options_section(out)?;
+    }
+    if has_subcommands {
+        man.render_subcommands_section(out)?;
+    }
+    if let Some(tldr_examples) = tldr_examples {
+        write!(out, ".SH EXAMPLES FROM TLDR.SH\n{tldr_examples}\n")?;
+    }
+    if has_extra {
+        man.render_extra_section(out)?;
+    }
+    if has_version {
+        man.render_version_section(out)?;
+    }
+    if has_author {
+        man.render_authors_section(out)?;
+    }
+    Ok(())
+}
+
 /// Generate the manpage for the utility in the first parameter
 fn gen_manpage<T: Args>(
     tldr: &mut Option<ZipArchive<File>>,
@@ -85,19 +125,14 @@ fn gen_manpage<T: Args>(
         validation::setup_localization_or_exit(utility);
         let mut cmd = util_map.get(utility).unwrap().1();
         cmd.set_bin_name(utility.clone());
-        let mut cmd = cmd.display_name(utility);
-        if let Some(zip) = tldr {
-            if let Ok(examples) = write_zip_examples(zip, utility, false) {
-                cmd = cmd.after_help(examples);
-            }
-        }
-        cmd
+        cmd.display_name(utility)
     };
-
-    let man = Man::new(command);
-    man.render(&mut io::stdout())
+    let tldr_examples = tldr
+        .as_mut()
+        .and_then(|zip| write_zip_examples(zip, utility, false).ok());
+    render_command_manpage(&mut io::stdout(), command, tldr_examples.as_deref())
         .expect("Man page generation failed");
-    io::stdout().flush().unwrap();
+    io::stdout().flush().expect("Failed to flush stdout");
     process::exit(0);
 }
 
@@ -566,7 +601,7 @@ fn get_zip_content(archive: &mut ZipArchive<impl Read + Seek>, name: &str) -> Op
 /// Extract examples for tldr.zip. The file docs/tldr.zip must exists
 ///
 /// ```sh
-/// curl https://tldr.sh/assets/tldr.zip -o docs/tldr.zip
+/// curl -L https://github.com/tldr-pages/tldr/releases/latest/download/tldr.zip -o docs/tldr.zip
 /// ```
 ///
 /// # Errors
@@ -600,9 +635,11 @@ fn write_zip_examples(
 fn format_examples(content: String, output_markdown: bool) -> Result<String, std::fmt::Error> {
     use std::fmt::Write;
     let mut s = String::new();
-    writeln!(s)?;
-    writeln!(s, "## Examples")?;
-    writeln!(s)?;
+    if output_markdown {
+        writeln!(s)?;
+        writeln!(s, "## Examples")?;
+        writeln!(s)?;
+    }
     for line in content.lines().skip_while(|l| !l.starts_with('-')) {
         if let Some(l) = line.strip_prefix("- ") {
             writeln!(s, "{l}")?;
@@ -610,7 +647,11 @@ fn format_examples(content: String, output_markdown: bool) -> Result<String, std
             if output_markdown {
                 writeln!(s, "```shell\n{}\n```", line.trim_matches('`'))?;
             } else {
-                writeln!(s, "{}", line.trim_matches('`'))?;
+                writeln!(
+                    s,
+                    ".RS\n.nf\n.eo\n{}\n.ec\n.fi\n.RE",
+                    line.trim_matches('`')
+                )?;
             }
         } else if line.is_empty() {
             writeln!(s)?;
@@ -620,14 +661,28 @@ fn format_examples(content: String, output_markdown: bool) -> Result<String, std
         }
     }
     writeln!(s)?;
-    writeln!(
-        s,
-        "> The examples are provided by the [tldr-pages project](https://tldr.sh) under the [CC BY 4.0 License](https://github.com/tldr-pages/tldr/blob/main/LICENSE.md)."
-    )?;
-    writeln!(s, ">")?;
-    writeln!(
-        s,
-        "> Please note that, as uutils is a work in progress, some examples might fail."
-    )?;
+    if output_markdown {
+        writeln!(
+            s,
+            "> The examples are provided by the [tldr-pages project](https://tldr.sh) under the [CC BY 4.0 License](https://github.com/tldr-pages/tldr/blob/main/LICENSE.md)."
+        )?;
+        writeln!(s, ">")?;
+        writeln!(
+            s,
+            "> Please note that, as uutils is a work in progress, some examples might fail."
+        )?;
+    } else {
+        writeln!(s, ".B")?;
+        writeln!(
+            s,
+            "The examples are provided by the tldr-pages project (https://tldr.sh) under the CC BY 4.0 License (https://github.com/tldr-pages/tldr/blob/main/LICENSE.md)."
+        )?;
+        writeln!(s)?;
+        writeln!(s, ".B")?;
+        writeln!(
+            s,
+            "Please note that, as uutils is a work in progress, some examples might fail."
+        )?;
+    }
     Ok(s)
 }
