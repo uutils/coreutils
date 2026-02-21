@@ -320,7 +320,7 @@ fn apply_modifiers(
                 .try_reserve(target_len)
                 .map_err(|_| width_too_large_error())?;
             padded.push(sign);
-            padded.extend(std::iter::repeat('0').take(padding));
+            padded.extend(std::iter::repeat_n('0', padding));
             padded.push_str(rest);
             result = padded;
         } else {
@@ -333,7 +333,7 @@ fn apply_modifiers(
             padded
                 .try_reserve(target_len)
                 .map_err(|_| width_too_large_error())?;
-            padded.extend(std::iter::repeat(pad_char).take(padding));
+            padded.extend(std::iter::repeat_n(pad_char, padding));
             padded.push_str(&result);
             result = padded;
         }
