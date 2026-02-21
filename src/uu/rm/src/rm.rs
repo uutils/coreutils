@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (path) eacces inacc rm-r4 unlinkat fstatat rootlink
+// spell-checker:ignore (path) eacces inacc rm-r4 unlinkat fstatat rootlink dotdot
 
 use clap::builder::{PossibleValue, ValueParser};
 use clap::{Arg, ArgAction, Command, parser::ValueSource};
@@ -876,21 +876,256 @@ fn prompt_file_permission_readonly(path: &Path, options: &Options, metadata: &Me
     }
 }
 
-/// Checks if the path is referring to current or parent directory , if it is referring to current or any parent directory in the file tree e.g  '/../..' , '../..'
+/// Checks if the path is referring to current or parent directory.
+///
+/// Extracts the last component (basename) first, then checks if it is
+/// "." or ".." (with optional trailing slash).
+///
+/// Examples:
+/// - "." -> true
+/// - "./" -> true
+/// - ".." -> true
+/// - "../" -> true
+/// - "foo/." -> true
+/// - "foo/.." -> true
+/// - "foo/bar" -> false
 fn path_is_current_or_parent_directory(path: &Path) -> bool {
-    let path_str = os_str_as_bytes(path.as_os_str());
-    let dir_separator = MAIN_SEPARATOR as u8;
-    if let Ok(path_bytes) = path_str {
-        return path_bytes == ([b'.'])
-            || path_bytes == ([b'.', dir_separator])
-            || path_bytes == ([b'.', b'.'])
-            || path_bytes == ([b'.', b'.', dir_separator])
-            || path_bytes.ends_with(&[dir_separator, b'.'])
-            || path_bytes.ends_with(&[dir_separator, b'.', b'.'])
-            || path_bytes.ends_with(&[dir_separator, b'.', dir_separator])
-            || path_bytes.ends_with(&[dir_separator, b'.', b'.', dir_separator]);
+    // Use the path as bytes to check the last component
+    // This avoids Path::file_name() which normalizes "." and ".."
+    let Ok(path_bytes) = os_str_as_bytes(path.as_os_str()) else {
+        return false;
+    };
+
+    if path_bytes.is_empty() {
+        return false;
     }
+
+    let main_sep = MAIN_SEPARATOR as u8;
+    // On Windows, also check for forward slash as paths like "./" may use it
+    #[cfg(windows)]
+    let alt_sep: u8 = b'/';
+    #[cfg(not(windows))]
+    let alt_sep: Option<u8> = None;
+
+    /// Helper to check if a byte is a path separator
+    #[cfg(windows)]
+    fn is_sep(b: u8, main_sep: u8, alt_sep: u8) -> bool {
+        b == main_sep || b == alt_sep
+    }
+    #[cfg(not(windows))]
+    fn is_sep(b: u8, main_sep: u8, _alt_sep: Option<u8>) -> bool {
+        b == main_sep
+    }
+
+    // Find the last separator (if any)
+    let mut last_sep_idx = None;
+    for (i, &b) in path_bytes.iter().enumerate() {
+        if is_sep(b, main_sep, alt_sep) {
+            last_sep_idx = Some(i);
+        }
+    }
+
+    // Get the last component
+    let last_component = match last_sep_idx {
+        Some(idx) if idx + 1 < path_bytes.len() => &path_bytes[idx + 1..],
+        Some(idx) => {
+            // Path ends with separator, check the component before it
+            // For "./" or "../", we need to look at what's before the last /
+            let before_last = &path_bytes[..idx];
+            // Find the separator before this one
+            let mut prev_sep_idx = None;
+            for (i, &b) in before_last.iter().enumerate() {
+                if is_sep(b, main_sep, alt_sep) {
+                    prev_sep_idx = Some(i);
+                }
+            }
+            let component_before = match prev_sep_idx {
+                Some(prev_idx) if prev_idx + 1 < before_last.len() => &before_last[prev_idx + 1..],
+                Some(_) => before_last,
+                None => before_last,
+            };
+            return is_dot_or_dotdot_bytes(component_before, main_sep, alt_sep);
+        }
+        None => path_bytes, // No separator, whole path is the component
+    };
+
+    // Check if last component is "." or ".."
+    is_dot_or_dotdot_bytes(last_component, main_sep, alt_sep)
+}
+
+/// Check if a byte slice is "." or ".." (with optional trailing slashes).
+///
+/// This is equivalent to GNU's dot_or_dotdot() function.
+#[cfg(windows)]
+fn is_dot_or_dotdot_bytes(name: &[u8], main_sep: u8, alt_sep: u8) -> bool {
+    if name.is_empty() {
+        return false;
+    }
+
+    // Must start with '.'
+    if name[0] != b'.' {
+        return false;
+    }
+
+    let len = name.len();
+
+    if len == 1 {
+        // Just "."
+        return true;
+    }
+
+    if len == 2 {
+        // Could be ".." or "./"
+        if name[1] == b'.' {
+            return true; // ".."
+        }
+        if name[1] == main_sep || name[1] == alt_sep {
+            return true; // "./"
+        }
+        return false;
+    }
+
+    // len > 2
+    // Check for ".." followed by slashes: "../", ".././", etc.
+    if name[1] == b'.' {
+        // Starts with "..", check rest are slashes
+        return name[2..].iter().all(|&b| b == main_sep || b == alt_sep);
+    }
+
+    if name[1] == main_sep || name[1] == alt_sep {
+        // Starts with "./", check rest are slashes
+        return name[2..].iter().all(|&b| b == main_sep || b == alt_sep);
+    }
+
     false
+}
+
+/// Check if a byte slice is "." or ".." (with optional trailing slashes).
+///
+/// This is equivalent to GNU's dot_or_dotdot() function.
+#[cfg(not(windows))]
+fn is_dot_or_dotdot_bytes(name: &[u8], sep: u8, _alt_sep: Option<u8>) -> bool {
+    if name.is_empty() {
+        return false;
+    }
+
+    // Must start with '.'
+    if name[0] != b'.' {
+        return false;
+    }
+
+    let len = name.len();
+
+    if len == 1 {
+        // Just "."
+        return true;
+    }
+
+    if len == 2 {
+        // Could be ".." or "./"
+        if name[1] == b'.' {
+            return true; // ".."
+        }
+        if name[1] == sep {
+            return true; // "./"
+        }
+        return false;
+    }
+
+    // len > 2
+    // Check for ".." followed by slashes: "../", ".././", etc.
+    if name[1] == b'.' {
+        // Starts with "..", check rest are slashes
+        return name[2..].iter().all(|&b| b == sep);
+    }
+
+    if name[1] == sep {
+        // Starts with "./", check rest are slashes
+        return name[2..].iter().all(|&b| b == sep);
+    }
+
+    false
+}
+
+#[cfg(test)]
+mod path_tests {
+    use super::*;
+    use std::path::Path;
+
+    #[cfg(not(windows))]
+    #[test]
+    fn test_is_dot_or_dotdot_bytes() {
+        let sep = b'/';
+
+        // Single dot
+        assert!(is_dot_or_dotdot_bytes(b".", sep, None));
+        assert!(is_dot_or_dotdot_bytes(b"./", sep, None));
+        assert!(is_dot_or_dotdot_bytes(b".//", sep, None));
+
+        // Double dot
+        assert!(is_dot_or_dotdot_bytes(b"..", sep, None));
+        assert!(is_dot_or_dotdot_bytes(b"../", sep, None));
+        assert!(is_dot_or_dotdot_bytes(b"..//", sep, None));
+
+        // Not dot or dotdot
+        assert!(!is_dot_or_dotdot_bytes(b"...", sep, None));
+        assert!(!is_dot_or_dotdot_bytes(b".hidden", sep, None));
+        assert!(!is_dot_or_dotdot_bytes(b"..hidden", sep, None));
+        assert!(!is_dot_or_dotdot_bytes(b"file", sep, None));
+        assert!(!is_dot_or_dotdot_bytes(b"", sep, None));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_is_dot_or_dotdot_bytes() {
+        let main_sep = b'\\';
+        let alt_sep = b'/';
+
+        // Single dot
+        assert!(is_dot_or_dotdot_bytes(b".", main_sep, alt_sep));
+        assert!(is_dot_or_dotdot_bytes(b"./", main_sep, alt_sep));
+        assert!(is_dot_or_dotdot_bytes(b".//", main_sep, alt_sep));
+
+        // Double dot
+        assert!(is_dot_or_dotdot_bytes(b"..", main_sep, alt_sep));
+        assert!(is_dot_or_dotdot_bytes(b"../", main_sep, alt_sep));
+        assert!(is_dot_or_dotdot_bytes(b"..//", main_sep, alt_sep));
+
+        // Not dot or dotdot
+        assert!(!is_dot_or_dotdot_bytes(b"...", main_sep, alt_sep));
+        assert!(!is_dot_or_dotdot_bytes(b".hidden", main_sep, alt_sep));
+        assert!(!is_dot_or_dotdot_bytes(b"..hidden", main_sep, alt_sep));
+        assert!(!is_dot_or_dotdot_bytes(b"file", main_sep, alt_sep));
+        assert!(!is_dot_or_dotdot_bytes(b"", main_sep, alt_sep));
+    }
+
+    #[test]
+    fn test_path_is_current_or_parent_directory() {
+        // Current directory
+        assert!(path_is_current_or_parent_directory(Path::new(".")));
+        assert!(path_is_current_or_parent_directory(Path::new("./")));
+        assert!(path_is_current_or_parent_directory(Path::new(".//")));
+
+        // Parent directory
+        assert!(path_is_current_or_parent_directory(Path::new("..")));
+        assert!(path_is_current_or_parent_directory(Path::new("../")));
+        assert!(path_is_current_or_parent_directory(Path::new("..//")));
+
+        // Nested paths ending in dot/dotdot
+        assert!(path_is_current_or_parent_directory(Path::new("d/.")));
+        assert!(path_is_current_or_parent_directory(Path::new("d/./")));
+        assert!(path_is_current_or_parent_directory(Path::new("d/..")));
+        assert!(path_is_current_or_parent_directory(Path::new("d/../")));
+        assert!(path_is_current_or_parent_directory(Path::new("a/b/.")));
+        assert!(path_is_current_or_parent_directory(Path::new("a/b/..")));
+
+        // Not current/parent directory
+        assert!(!path_is_current_or_parent_directory(Path::new("file")));
+        assert!(!path_is_current_or_parent_directory(Path::new(".hidden")));
+        assert!(!path_is_current_or_parent_directory(Path::new("..hidden")));
+        assert!(!path_is_current_or_parent_directory(Path::new("dir/file")));
+        assert!(!path_is_current_or_parent_directory(Path::new("...")));
+    }
 }
 
 // For directories finding if they are writable or not is a hassle. In Unix we can use the built-in rust crate to check mode bits. But other os don't have something similar afaik
