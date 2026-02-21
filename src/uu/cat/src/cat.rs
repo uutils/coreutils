@@ -26,6 +26,7 @@ use uucore::{fast_inc::fast_inc_one, format_usage};
 /// Linux splice support
 #[cfg(any(target_os = "linux", target_os = "android"))]
 mod splice;
+const FILE_SPLICE_SIZE_THRESHOLD: u64 = 1024 * 16; // 16KB
 
 // Allocate 32 digits for the line number.
 // An estimate is that we can print about 1e8 lines/seconds, so 32 digits
@@ -218,54 +219,79 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    let args: Vec<OsString> = args.collect();
+    let mut files: Vec<OsString>;
+    let options;
 
-    let number_mode = if matches.get_flag(options::NUMBER_NONBLANK) {
-        NumberingMode::NonEmpty
-    } else if matches.get_flag(options::NUMBER) {
-        NumberingMode::All
+    if args.len() > 1
+        && args
+            .iter()
+            .skip(1)
+            .all(|a| !a.to_string_lossy().starts_with('-') || a == "-")
+    {
+        // No options, just files.
+        // Skip clap parsing
+        files = args.into_iter().skip(1).collect();
+        if files.is_empty() {
+            files.push(OsString::from("-"));
+        }
+        options = OutputOptions {
+            show_ends: false,
+            number: NumberingMode::None,
+            show_nonprint: false,
+            show_tabs: false,
+            squeeze_blank: false,
+        };
     } else {
-        NumberingMode::None
-    };
+        let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
-    let show_nonprint = [
-        options::SHOW_ALL.to_owned(),
-        options::SHOW_NONPRINTING_ENDS.to_owned(),
-        options::SHOW_NONPRINTING_TABS.to_owned(),
-        options::SHOW_NONPRINTING.to_owned(),
-    ]
-    .iter()
-    .any(|v| matches.get_flag(v));
+        let number_mode = if matches.get_flag(options::NUMBER_NONBLANK) {
+            NumberingMode::NonEmpty
+        } else if matches.get_flag(options::NUMBER) {
+            NumberingMode::All
+        } else {
+            NumberingMode::None
+        };
 
-    let show_ends = [
-        options::SHOW_ENDS.to_owned(),
-        options::SHOW_ALL.to_owned(),
-        options::SHOW_NONPRINTING_ENDS.to_owned(),
-    ]
-    .iter()
-    .any(|v| matches.get_flag(v));
+        let show_nonprint = [
+            options::SHOW_ALL.to_owned(),
+            options::SHOW_NONPRINTING_ENDS.to_owned(),
+            options::SHOW_NONPRINTING_TABS.to_owned(),
+            options::SHOW_NONPRINTING.to_owned(),
+        ]
+        .iter()
+        .any(|v| matches.get_flag(v));
 
-    let show_tabs = [
-        options::SHOW_ALL.to_owned(),
-        options::SHOW_TABS.to_owned(),
-        options::SHOW_NONPRINTING_TABS.to_owned(),
-    ]
-    .iter()
-    .any(|v| matches.get_flag(v));
+        let show_ends = [
+            options::SHOW_ENDS.to_owned(),
+            options::SHOW_ALL.to_owned(),
+            options::SHOW_NONPRINTING_ENDS.to_owned(),
+        ]
+        .iter()
+        .any(|v| matches.get_flag(v));
 
-    let squeeze_blank = matches.get_flag(options::SQUEEZE_BLANK);
-    let files: Vec<OsString> = match matches.get_many::<OsString>(options::FILE) {
-        Some(v) => v.cloned().collect(),
-        None => vec![OsString::from("-")],
-    };
+        let show_tabs = [
+            options::SHOW_ALL.to_owned(),
+            options::SHOW_TABS.to_owned(),
+            options::SHOW_NONPRINTING_TABS.to_owned(),
+        ]
+        .iter()
+        .any(|v| matches.get_flag(v));
 
-    let options = OutputOptions {
-        show_ends,
-        number: number_mode,
-        show_nonprint,
-        show_tabs,
-        squeeze_blank,
-    };
+        let squeeze_blank = matches.get_flag(options::SQUEEZE_BLANK);
+        files = match matches.get_many::<OsString>(options::FILE) {
+            Some(v) => v.cloned().collect(),
+            None => vec![OsString::from("-")],
+        };
+
+        options = OutputOptions {
+            show_ends,
+            number: number_mode,
+            show_nonprint,
+            show_tabs,
+            squeeze_blank,
+        };
+    }
     cat_files(&files, &options)
 }
 
@@ -359,9 +385,10 @@ fn cat_handle<R: FdReadable>(
     handle: &mut InputHandle<R>,
     options: &OutputOptions,
     state: &mut OutputState,
+    skip_splice: bool,
 ) -> CatResult<()> {
     if options.can_write_fast() {
-        write_fast(handle)
+        write_fast(handle, skip_splice)
     } else {
         write_lines(handle, options, state)
     }
@@ -378,7 +405,7 @@ fn cat_path(path: &OsString, options: &OutputOptions, state: &mut OutputState) -
                 reader: stdin,
                 is_interactive: io::stdin().is_terminal(),
             };
-            cat_handle(&mut handle, options, state)
+            cat_handle(&mut handle, options, state, false)
         }
         InputType::Directory => Err(CatError::IsDirectory),
         #[cfg(unix)]
@@ -388,11 +415,20 @@ fn cat_path(path: &OsString, options: &OutputOptions, state: &mut OutputState) -
             if is_unsafe_overwrite(&file, &io::stdout()) {
                 return Err(CatError::OutputIsInput);
             }
+
+            // Skip splice if file is small enough
+            let metadata = file.metadata();
+            let skip_splice = if let Ok(metadata) = metadata {
+                metadata.len() <= FILE_SPLICE_SIZE_THRESHOLD
+            } else {
+                false
+            };
+
             let mut handle = InputHandle {
                 reader: file,
                 is_interactive: false,
             };
-            cat_handle(&mut handle, options, state)
+            cat_handle(&mut handle, options, state, skip_splice)
         }
     }
 }
@@ -474,14 +510,15 @@ fn get_input_type(path: &OsString) -> CatResult<InputType> {
 
 /// Writes handle to stdout with no configuration. This allows a
 /// simple memory copy.
-fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
+#[allow(unused_variables)]
+fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>, skip_splice: bool) -> CatResult<()> {
     let stdout = io::stdout();
     let mut stdout_lock = stdout.lock();
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         // If we're on Linux or Android, try to use the splice() system call
         // for faster writing. If it works, we're done.
-        if !splice::write_fast_using_splice(handle, &stdout_lock)? {
+        if !skip_splice && !splice::write_fast_using_splice(handle, &stdout_lock)? {
             return Ok(());
         }
     }
