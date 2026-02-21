@@ -175,6 +175,16 @@ fn is_text_specifier(specifier: &str) -> bool {
     )
 }
 
+/// Returns true if the specifier defaults to space padding.
+/// This includes text specifiers and numeric specifiers like %e and %k
+/// that use blank-padding by default in GNU date.
+fn is_space_padded_specifier(specifier: &str) -> bool {
+    matches!(
+        specifier.chars().last(),
+        Some('A' | 'a' | 'B' | 'b' | 'h' | 'Z' | 'p' | 'P' | 'e' | 'k' | 'l')
+    )
+}
+
 /// Returns the default width for a specifier.
 /// This is used when a flag like `_` is used without an explicit width.
 fn get_default_width(specifier: &str) -> usize {
@@ -199,8 +209,10 @@ fn get_default_width(specifier: &str) -> usize {
         Some('U') | Some('W') | Some('V') => 2,
         // Day of week: 1 digit (0-6 or 1-7)
         Some('w') | Some('u') => 1,
-        // Century and year: 4 digits
-        Some('C') | Some('Y') | Some('G') => 4,
+        // Century: 2 digits (00-99)
+        Some('C') => 2,
+        // Full year: 4 digits
+        Some('Y') | Some('G') => 4,
         // ISO week year (2-digit): 2 digits
         Some('g') => 2,
         // Epoch seconds: typically 10 digits (but variable)
@@ -258,7 +270,10 @@ fn apply_modifiers(
     let mut result = value.to_string();
 
     // Determine default pad character based on specifier type
-    let default_pad = if is_text_specifier(specifier) {
+    // Determine default pad character based on specifier type.
+    // Text specifiers (month names, etc.) and numeric specifiers like %e, %k, %l
+    // default to space padding; other numeric specifiers default to zero padding.
+    let default_pad = if is_space_padded_specifier(specifier) {
         ' '
     } else {
         '0'
@@ -324,8 +339,10 @@ fn apply_modifiers(
         return strip_default_padding(&result);
     }
 
-    // Handle underscore flag without explicit width: use default width
-    let effective_width = if underscore_flag && !explicit_width {
+    // Handle padding flag without explicit width: use default width
+    // This applies when _ or 0 flag overrides the default padding character
+    // and no explicit width is specified (e.g., %_m, %0e)
+    let effective_width = if !explicit_width && (underscore_flag || pad_char != default_pad) {
         get_default_width(specifier)
     } else {
         width
@@ -336,13 +353,15 @@ fn apply_modifiers(
         return strip_default_padding(&result);
     }
 
-    // Strip leading zeros when switching to space padding on numeric fields
-    if pad_char == ' '
-        && !is_text_specifier(specifier)
-        && result.starts_with('0')
-        && result.len() >= 2
-    {
-        result = strip_default_padding(&result);
+    // Strip default padding when switching pad characters on numeric fields
+    if !is_text_specifier(specifier) && result.len() >= 2 {
+        if pad_char == ' ' && result.starts_with('0') {
+            // Switching to space padding: strip leading zeros
+            result = strip_default_padding(&result);
+        } else if pad_char == '0' && result.starts_with(' ') {
+            // Switching to zero padding: strip leading spaces
+            result = strip_default_padding(&result);
+        }
     }
 
     // Apply force sign for numeric values
