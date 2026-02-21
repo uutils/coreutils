@@ -1050,12 +1050,11 @@ jobs:
       shell: bash
       run: |
         sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
-    - name: Build coreutils as multiple binaries
+    - name: Build coreutils
       shell: bash
       run: |
-        ## Build individual uutil binaries
         set -v
-        make
+        make MULTICALL=y && (cd target/debug && for binary in $(./coreutils --list);do ln -sf coreutils ${binary};done)
     - name: Run toybox src
       shell: bash
       run: |
