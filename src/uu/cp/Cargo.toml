@@ -1,3 +1,5 @@
+# spell-checker:ignore ahash
+
 [package]
 name = "uu_cp"
 description = "cp ~ (uutils) copy SOURCE to DESTINATION"
@@ -19,6 +21,7 @@ workspace = true
 path = "src/cp.rs"
 
 [dependencies]
+ahash = { workspace = true }
 clap = { workspace = true }
 filetime = { workspace = true }
 libc = { workspace = true }
