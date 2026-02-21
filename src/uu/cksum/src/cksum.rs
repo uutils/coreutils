@@ -5,7 +5,6 @@
 
 // spell-checker:ignore (ToDO) fname, algo, bitlen
 
-use std::ffi::OsStr;
 use std::io::{Write, stderr};
 
 use clap::Command;
@@ -42,48 +41,6 @@ fn print_cpu_debug_info() {
     if cfg!(target_arch = "aarch64") {
         print_feature("vmull", features.has_vmull());
     }
-}
-
-/// cksum has a bunch of legacy behavior. We handle this in this function to
-/// make sure they are self contained and "easier" to understand.
-///
-/// Returns a pair of boolean. The first one indicates if we should use tagged
-/// output format, the second one indicates if we should use the binary flag in
-/// the untagged case.
-fn handle_tag_text_binary_flags<S: AsRef<OsStr>>(
-    args: impl Iterator<Item = S>,
-) -> UResult<(bool, bool)> {
-    let mut tag = true;
-    let mut binary = false;
-    let mut text = false;
-
-    // --binary, --tag and --untagged are tight together: none of them
-    // conflicts with each other but --tag will reset "binary" and "text" and
-    // set "tag".
-
-    for arg in args {
-        let arg = arg.as_ref();
-        if arg == "-b" || arg == "--binary" {
-            text = false;
-            binary = true;
-        } else if arg == "--text" {
-            text = true;
-            binary = false;
-        } else if arg == "--tag" {
-            tag = true;
-            binary = false;
-            text = false;
-        } else if arg == "--untagged" {
-            tag = false;
-        }
-    }
-
-    // Specifying --text without ever mentioning --untagged fails.
-    if text && tag {
-        return Err(ChecksumError::TextWithoutUntagged.into());
-    }
-
-    Ok((tag, binary))
 }
 
 /// Sanitize the `--length` argument depending on `--algorithm` and `--length`.
@@ -134,8 +91,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(String::as_str);
 
     let length = maybe_sanitize_length(algo_cli, input_length)?;
+    let tag = !matches.get_flag(options::UNTAGGED);
+    let binary = matches.get_flag(options::BINARY);
+    let text = matches.get_flag(options::TEXT);
 
-    let (tag, binary) = handle_tag_text_binary_flags(std::env::args_os())?;
+    //Specifying --text without ever mentioning --untagged fails.
+    if text && tag {
+        return Err(ChecksumError::TextWithoutUntagged.into());
+    }
 
     let output_format = OutputFormat::from_cksum(
         algo_cli.unwrap_or(AlgoKind::Crc),

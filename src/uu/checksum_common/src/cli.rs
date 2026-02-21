@@ -131,6 +131,7 @@ impl ChecksumCommand for Command {
                 .long(options::BINARY)
                 .short('b')
                 .hide(true)
+                .overrides_with(options::TEXT)
                 .action(ArgAction::SetTrue),
         )
     }
@@ -169,6 +170,7 @@ impl ChecksumCommand for Command {
             Arg::new(options::UNTAGGED)
                 .long(options::UNTAGGED)
                 .help(translate!("ck-common-help-untagged"))
+                .overrides_with(options::TAG)
                 .action(ArgAction::SetTrue),
         )
     }
