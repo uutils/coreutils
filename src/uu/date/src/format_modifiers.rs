@@ -44,8 +44,7 @@ use std::sync::OnceLock;
 pub enum FormatError {
     /// Error from the underlying jiff library
     JiffError(jiff::Error),
-    /// Custom error message (reserved for future use)
-    #[allow(dead_code)]
+    /// Custom error message
     Custom(String),
 }
 
@@ -62,6 +61,12 @@ impl From<jiff::Error> for FormatError {
     fn from(e: jiff::Error) -> Self {
         Self::JiffError(e)
     }
+}
+
+const ERR_FIELD_WIDTH_TOO_LARGE: &str = "field width too large";
+
+fn width_too_large_error() -> FormatError {
+    FormatError::Custom(ERR_FIELD_WIDTH_TOO_LARGE.to_string())
 }
 
 /// Regex to match format specifiers with optional modifiers
@@ -146,7 +151,7 @@ fn format_with_modifiers(
         if !flags.is_empty() || !width_str.is_empty() {
             // Apply modifiers to the formatted value
             let width: usize = width_str.parse().unwrap_or(0);
-            let modified = apply_modifiers(&formatted, flags, width, spec);
+            let modified = apply_modifiers(&formatted, flags, width, spec)?;
             result.push_str(&modified);
         } else {
             // No modifiers, use formatted value as-is
@@ -203,7 +208,12 @@ fn strip_default_padding(value: &str) -> String {
 /// which determines the default padding character (space for text, zero for numeric).
 /// Flags are processed in order so that when conflicting flags appear,
 /// the last one takes precedence (e.g., `_+` means `+` wins for padding).
-fn apply_modifiers(value: &str, flags: &str, width: usize, specifier: &str) -> String {
+fn apply_modifiers(
+    value: &str,
+    flags: &str,
+    width: usize,
+    specifier: &str,
+) -> Result<String, FormatError> {
     let mut result = value.to_string();
 
     // Determine default pad character based on specifier type
@@ -268,12 +278,12 @@ fn apply_modifiers(value: &str, flags: &str, width: usize, specifier: &str) -> S
 
     // If no_pad flag is active, suppress all padding and return
     if no_pad {
-        return strip_default_padding(&result);
+        return Ok(strip_default_padding(&result));
     }
 
     // Handle width smaller than result: strip default padding to fit
     if width > 0 && width < result.len() {
-        return strip_default_padding(&result);
+        return Ok(strip_default_padding(&result));
     }
 
     // Strip leading zeros when switching to space padding on numeric fields
@@ -301,14 +311,35 @@ fn apply_modifiers(value: &str, flags: &str, width: usize, specifier: &str) -> S
             // Zero padding: sign first, then zeros (e.g., "-0022")
             let sign = result.chars().next().unwrap();
             let rest = &result[1..];
-            result = format!("{sign}{}{rest}", "0".repeat(padding));
+            let target_len = result
+                .len()
+                .checked_add(padding)
+                .ok_or_else(width_too_large_error)?;
+            let mut padded = String::new();
+            padded
+                .try_reserve(target_len)
+                .map_err(|_| width_too_large_error())?;
+            padded.push(sign);
+            padded.extend(std::iter::repeat_n('0', padding));
+            padded.push_str(rest);
+            result = padded;
         } else {
             // Default: pad on the left (e.g., "  -22" or "  1999")
-            result = format!("{}{result}", pad_char.to_string().repeat(padding));
+            let target_len = result
+                .len()
+                .checked_add(padding)
+                .ok_or_else(width_too_large_error)?;
+            let mut padded = String::new();
+            padded
+                .try_reserve(target_len)
+                .map_err(|_| width_too_large_error())?;
+            padded.extend(std::iter::repeat_n(pad_char, padding));
+            padded.push_str(&result);
+            result = padded;
         }
     }
 
-    result
+    Ok(result)
 }
 
 #[cfg(test)]
@@ -488,59 +519,59 @@ mod tests {
     #[test]
     fn test_apply_modifiers_basic() {
         // No modifiers (numeric specifier)
-        assert_eq!(apply_modifiers("1999", "", 0, "Y"), "1999");
+        assert_eq!(apply_modifiers("1999", "", 0, "Y").unwrap(), "1999");
         // Zero padding
-        assert_eq!(apply_modifiers("1999", "0", 10, "Y"), "0000001999");
+        assert_eq!(apply_modifiers("1999", "0", 10, "Y").unwrap(), "0000001999");
         // Space padding (strips leading zeros)
-        assert_eq!(apply_modifiers("06", "_", 5, "m"), "    6");
+        assert_eq!(apply_modifiers("06", "_", 5, "m").unwrap(), "    6");
         // No-pad (strips leading zeros, width ignored)
-        assert_eq!(apply_modifiers("01", "-", 5, "d"), "1");
+        assert_eq!(apply_modifiers("01", "-", 5, "d").unwrap(), "1");
         // Uppercase
-        assert_eq!(apply_modifiers("june", "^", 0, "B"), "JUNE");
+        assert_eq!(apply_modifiers("june", "^", 0, "B").unwrap(), "JUNE");
         // Swap case: all uppercase → lowercase
-        assert_eq!(apply_modifiers("UTC", "#", 0, "Z"), "utc");
+        assert_eq!(apply_modifiers("UTC", "#", 0, "Z").unwrap(), "utc");
         // Swap case: mixed case → uppercase
-        assert_eq!(apply_modifiers("June", "#", 0, "B"), "JUNE");
+        assert_eq!(apply_modifiers("June", "#", 0, "B").unwrap(), "JUNE");
     }
 
     #[test]
     fn test_apply_modifiers_signs() {
         // Force sign
-        assert_eq!(apply_modifiers("1970", "+", 6, "Y"), "+01970");
+        assert_eq!(apply_modifiers("1970", "+", 6, "Y").unwrap(), "+01970");
         // Negative with zero padding: sign first, then zeros
-        assert_eq!(apply_modifiers("-22", "0", 5, "s"), "-0022");
+        assert_eq!(apply_modifiers("-22", "0", 5, "s").unwrap(), "-0022");
         // Negative with space padding: spaces first, then sign
-        assert_eq!(apply_modifiers("-22", "_", 5, "s"), "  -22");
+        assert_eq!(apply_modifiers("-22", "_", 5, "s").unwrap(), "  -22");
         // Force sign (_+): + is last, overrides _ → zero pad with sign
-        assert_eq!(apply_modifiers("5", "_+", 5, "s"), "+0005");
+        assert_eq!(apply_modifiers("5", "_+", 5, "s").unwrap(), "+0005");
         // No-pad + uppercase: no padding applied
-        assert_eq!(apply_modifiers("june", "-^", 10, "B"), "JUNE");
+        assert_eq!(apply_modifiers("june", "-^", 10, "B").unwrap(), "JUNE");
     }
 
     #[test]
     fn test_case_flag_precedence() {
         // Test that ^ (uppercase) overrides # (swap case)
-        assert_eq!(apply_modifiers("June", "^#", 0, "B"), "JUNE");
-        assert_eq!(apply_modifiers("June", "#^", 0, "B"), "JUNE");
+        assert_eq!(apply_modifiers("June", "^#", 0, "B").unwrap(), "JUNE");
+        assert_eq!(apply_modifiers("June", "#^", 0, "B").unwrap(), "JUNE");
         // Test # alone (swap case)
-        assert_eq!(apply_modifiers("June", "#", 0, "B"), "JUNE");
-        assert_eq!(apply_modifiers("JUNE", "#", 0, "B"), "june");
+        assert_eq!(apply_modifiers("June", "#", 0, "B").unwrap(), "JUNE");
+        assert_eq!(apply_modifiers("JUNE", "#", 0, "B").unwrap(), "june");
     }
 
     #[test]
     fn test_apply_modifiers_text_specifiers() {
         // Text specifiers default to space padding
-        assert_eq!(apply_modifiers("June", "", 10, "B"), "      June");
-        assert_eq!(apply_modifiers("Mon", "", 10, "a"), "       Mon");
+        assert_eq!(apply_modifiers("June", "", 10, "B").unwrap(), "      June");
+        assert_eq!(apply_modifiers("Mon", "", 10, "a").unwrap(), "       Mon");
         // Numeric specifiers default to zero padding
-        assert_eq!(apply_modifiers("6", "", 10, "m"), "0000000006");
+        assert_eq!(apply_modifiers("6", "", 10, "m").unwrap(), "0000000006");
     }
 
     #[test]
     fn test_apply_modifiers_width_smaller_than_result() {
         // Width smaller than result strips default padding
-        assert_eq!(apply_modifiers("01", "", 1, "d"), "1");
-        assert_eq!(apply_modifiers("06", "", 1, "m"), "6");
+        assert_eq!(apply_modifiers("01", "", 1, "d").unwrap(), "1");
+        assert_eq!(apply_modifiers("06", "", 1, "m").unwrap(), "6");
     }
 
     #[test]
@@ -560,10 +591,19 @@ mod tests {
 
         for (value, flags, width, spec, expected) in test_cases {
             assert_eq!(
-                apply_modifiers(value, flags, width, spec),
+                apply_modifiers(value, flags, width, spec).unwrap(),
                 expected,
                 "value='{value}', flags='{flags}', width={width}, spec='{spec}'",
             );
         }
+    }
+
+    #[test]
+    fn test_apply_modifiers_width_too_large() {
+        let err = apply_modifiers("x", "", usize::MAX, "c").unwrap_err();
+        assert!(matches!(
+            err,
+            FormatError::Custom(message) if message == ERR_FIELD_WIDTH_TOO_LARGE
+        ));
     }
 }
