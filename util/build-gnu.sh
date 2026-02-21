@@ -97,6 +97,7 @@ else
     for binary in $("${UU_BUILD_DIR}"/coreutils --list)
         do [ -e "${UU_BUILD_DIR}/${binary}" ] || ln -vf "${UU_BUILD_DIR}/coreutils" "${UU_BUILD_DIR}/${binary}"
     done
+    ln -vf "${UU_BUILD_DIR}"/deps/libstdbuf.* -t "${UU_BUILD_DIR}"
 fi
 [ -e "${UU_BUILD_DIR}/ginstall" ] || ln -vf "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests use ginstall
 ##
