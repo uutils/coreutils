@@ -15,7 +15,7 @@ use num_traits::FromPrimitive;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
 use uucore::translate;
-use uucore::{format_usage, show_error, show_warning};
+use uucore::{show_error, show_warning};
 
 mod options {
     pub static EXPONENTS: &str = "exponents";
@@ -148,7 +148,7 @@ fn write_result_big_uint(
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    let matches = uucore::clap_localization::parse_deferred(uu_app_base, args)?;
 
     // If matches find --exponents flag than variable print_exponents is true and p^e output format will be used.
     let print_exponents = matches.get_flag(options::EXPONENTS);
@@ -188,11 +188,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
+    uucore::clap_localization::localize_command(uu_app_base())
+}
+
+fn uu_app_base() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
-        .about(translate!("factor-about"))
-        .override_usage(format_usage(&translate!("factor-usage")))
         .infer_long_args(true)
         .disable_help_flag(true)
         .args_override_self(true)
@@ -201,13 +202,11 @@ pub fn uu_app() -> Command {
             Arg::new(options::EXPONENTS)
                 .short('h')
                 .long(options::EXPONENTS)
-                .help(translate!("factor-help-exponents"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
-                .help(translate!("factor-help-help"))
                 .action(ArgAction::Help),
         )
 }

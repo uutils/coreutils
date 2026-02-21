@@ -21,7 +21,6 @@ use rand::{
 
 use uucore::display::{OsWrite, Quotable};
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
-use uucore::format_usage;
 use uucore::translate;
 
 mod compat_random_source;
@@ -68,7 +67,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    let matches = uucore::clap_localization::parse_deferred(uu_app_base, args)?;
 
     let mode = if matches.get_flag(options::ECHO) {
         Mode::Echo(
@@ -172,17 +171,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
+    uucore::clap_localization::localize_command(uu_app_base())
+}
+
+fn uu_app_base() -> Command {
     Command::new(uucore::util_name())
-        .about(translate!("shuf-about"))
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
-        .override_usage(format_usage(&translate!("shuf-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::ECHO)
                 .short('e')
                 .long(options::ECHO)
-                .help(translate!("shuf-help-echo"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::ECHO)
                 .conflicts_with(options::INPUT_RANGE),
@@ -192,7 +191,6 @@ pub fn uu_app() -> Command {
                 .short('i')
                 .long(options::INPUT_RANGE)
                 .value_name("LO-HI")
-                .help(translate!("shuf-help-input-range"))
                 .value_parser(parse_range)
                 .conflicts_with(options::FILE_OR_ARGS),
         )
@@ -202,7 +200,6 @@ pub fn uu_app() -> Command {
                 .long(options::HEAD_COUNT)
                 .value_name("COUNT")
                 .action(ArgAction::Append)
-                .help(translate!("shuf-help-head-count"))
                 .value_parser(u64::from_str),
         )
         .arg(
@@ -210,7 +207,6 @@ pub fn uu_app() -> Command {
                 .short('o')
                 .long(options::OUTPUT)
                 .value_name("FILE")
-                .help(translate!("shuf-help-output"))
                 .value_parser(ValueParser::path_buf())
                 .value_hint(clap::ValueHint::FilePath),
         )
@@ -218,7 +214,6 @@ pub fn uu_app() -> Command {
             Arg::new(options::RANDOM_SEED)
                 .long(options::RANDOM_SEED)
                 .value_name("STRING")
-                .help(translate!("shuf-help-random-seed"))
                 .value_parser(ValueParser::string())
                 .value_hint(clap::ValueHint::Other)
                 .conflicts_with(options::RANDOM_SOURCE),
@@ -227,7 +222,6 @@ pub fn uu_app() -> Command {
             Arg::new(options::RANDOM_SOURCE)
                 .long(options::RANDOM_SOURCE)
                 .value_name("FILE")
-                .help(translate!("shuf-help-random-source"))
                 .value_parser(ValueParser::path_buf())
                 .value_hint(clap::ValueHint::FilePath),
         )
@@ -235,7 +229,6 @@ pub fn uu_app() -> Command {
             Arg::new(options::REPEAT)
                 .short('r')
                 .long(options::REPEAT)
-                .help(translate!("shuf-help-repeat"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::REPEAT),
         )
@@ -243,7 +236,6 @@ pub fn uu_app() -> Command {
             Arg::new(options::ZERO_TERMINATED)
                 .short('z')
                 .long(options::ZERO_TERMINATED)
-                .help(translate!("shuf-help-zero-terminated"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::ZERO_TERMINATED),
         )
