@@ -15,6 +15,17 @@ split-after-help = Output fixed-size pieces of INPUT to PREFIXaa, PREFIXab, ...;
   - r/N like 'l' but use round robin distribution
   - r/K/N likewise but only output Kth of N to stdout
 
+# Variable names
+split-var-name-size = SIZE
+split-var-name-number = NUMBER
+split-var-name-chunks = CHUNKS
+split-var-name-suffix = SUFFIX
+split-var-name-command = COMMAND
+split-var-name-from = FROM
+split-var-name-sep = SEP
+split-var-name-input = INPUT
+split-var-name-prefix = PREFIX
+
 # Error messages
 split-error-suffix-not-parsable = invalid suffix length: { $value }
 split-error-suffix-contains-separator = invalid suffix { $value }, contains directory separator
