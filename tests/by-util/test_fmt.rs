@@ -8,6 +8,8 @@
 use std::os::unix::ffi::OsStringExt;
 use uutests::new_ucmd;
 
+const FMT_TEST_LINE_LIMIT: usize = 1024 * 1024;
+
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
@@ -412,4 +414,56 @@ fn test_fmt_invalid_utf8() {
         .pipe_in(input)
         .succeeds()
         .stdout_is_bytes(b"=\xA0=\n");
+}
+
+#[test]
+fn test_fmt_split_only_line_limit_boundary_no_extra_blank() {
+    let mut input = vec![b'a'; FMT_TEST_LINE_LIMIT];
+    input.extend_from_slice(b"\nb\n");
+
+    let result = new_ucmd!().arg("-s").pipe_in(input).succeeds();
+    let mut lines = result.stdout_str().lines();
+
+    assert_eq!(
+        lines.next().map(|line| line.len()),
+        Some(FMT_TEST_LINE_LIMIT)
+    );
+    assert_eq!(lines.next(), Some("b"));
+    assert_eq!(lines.next(), None);
+}
+
+#[test]
+fn test_fmt_split_only_multiple_line_limit_chunks_no_extra_blank() {
+    let mut input = vec![b'a'; 2 * FMT_TEST_LINE_LIMIT];
+    input.extend_from_slice(b"\nb\n");
+
+    let result = new_ucmd!().arg("-s").pipe_in(input).succeeds();
+    let mut lines = result.stdout_str().lines();
+
+    assert_eq!(
+        lines.next().map(|line| line.len()),
+        Some(FMT_TEST_LINE_LIMIT)
+    );
+    assert_eq!(
+        lines.next().map(|line| line.len()),
+        Some(FMT_TEST_LINE_LIMIT)
+    );
+    assert_eq!(lines.next(), Some("b"));
+    assert_eq!(lines.next(), None);
+}
+
+#[test]
+fn test_fmt_default_mode_line_limit_boundary_no_extra_blank() {
+    let mut input = vec![b'a'; FMT_TEST_LINE_LIMIT];
+    input.extend_from_slice(b"\nb\n");
+
+    let result = new_ucmd!().pipe_in(input).succeeds();
+    let mut lines = result.stdout_str().lines();
+
+    assert_eq!(
+        lines.next().map(|line| line.len()),
+        Some(FMT_TEST_LINE_LIMIT)
+    );
+    assert_eq!(lines.next(), Some("b"));
+    assert_eq!(lines.next(), None);
 }
