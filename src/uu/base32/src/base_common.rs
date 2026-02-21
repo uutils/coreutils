@@ -28,8 +28,9 @@ pub const BASE_CMD_PARSE_ERROR: i32 = 1;
 ///
 /// This default is only used if no "-w"/"--wrap" argument is passed
 pub const WRAP_DEFAULT: usize = 76;
-// Fixed to 8 KiB (equivalent to std::io::DEFAULT_BUF_SIZE on most targets)
-pub const DEFAULT_BUFFER_SIZE: usize = 8 * 1024;
+
+// Fixed to 8 KiB (equivalent to `std::sys::io::DEFAULT_BUF_SIZE` on most targets)
+pub const DEFAULT_BUF_SIZE: usize = 8 * 1024;
 
 pub struct Config {
     pub decode: bool,
@@ -151,15 +152,12 @@ pub fn get_input(config: &Config) -> UResult<Box<dyn BufRead>> {
         Some(path_buf) => {
             let file =
                 File::open(path_buf).map_err_context(|| path_buf.maybe_quote().to_string())?;
-            Ok(Box::new(BufReader::with_capacity(
-                DEFAULT_BUFFER_SIZE,
-                file,
-            )))
+            Ok(Box::new(BufReader::with_capacity(DEFAULT_BUF_SIZE, file)))
         }
         None => {
             // Stdin is already buffered by the OS; wrap once more to reduce syscalls per read.
             Ok(Box::new(BufReader::with_capacity(
-                DEFAULT_BUFFER_SIZE,
+                DEFAULT_BUF_SIZE,
                 io::stdin(),
             )))
         }
