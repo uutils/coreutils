@@ -236,6 +236,87 @@ fn test_null_separator() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_non_utf8_separator() {
+    use std::os::unix::ffi::OsStringExt;
+    new_ucmd!()
+        .arg("-s")
+        .arg(std::ffi::OsString::from_vec(b"\xe9".to_vec()))
+        .pipe_in(b"1\xe92".to_vec())
+        .succeeds()
+        .no_stderr()
+        .stdout_is_bytes(b"21\xe9");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_non_utf8_regex_separator() {
+    use std::os::unix::ffi::OsStringExt;
+
+    new_ucmd!()
+        .args(&["-r", "-s"])
+        .arg(std::ffi::OsString::from_vec(b"\xe9".to_vec()))
+        .pipe_in(b"a.b.\xe9c.d?".to_vec())
+        .succeeds()
+        .no_stderr()
+        .stdout_is_bytes(b"c.d?a.b.\xe9");
+
+    new_ucmd!()
+        .args(&["-r", "-s"])
+        .arg(std::ffi::OsString::from_vec(b"[.\xe9?]".to_vec()))
+        .pipe_in(b"a.b.\xe9c.d?".to_vec())
+        .succeeds()
+        .no_stderr()
+        .stdout_is_bytes(b"d?\xe9c.b.a.");
+
+    new_ucmd!()
+        .args(&["-r", "-s"])
+        .arg(std::ffi::OsString::from_vec(b"[.?]\xe9".to_vec()))
+        .pipe_in(b"a.b\xe9c.d?")
+        .succeeds()
+        .no_stderr()
+        .stdout_is_bytes(b"a.b\xe9c.d?");
+
+    new_ucmd!()
+        .args(&["-r", "-s"])
+        .arg(std::ffi::OsString::from_vec(b"[.?]\xe9".to_vec()))
+        .pipe_in(b"a.b[.?]\xe9c.d?")
+        .succeeds()
+        .no_stderr()
+        .stdout_is_bytes(b"a.b[.?]\xe9c.d?");
+
+    new_ucmd!()
+        .args(&["-r", "-s"])
+        .arg(std::ffi::OsString::from_vec(b"[.?]\xe9".to_vec()))
+        .pipe_in(b"a.\xe9b")
+        .succeeds()
+        .no_stderr()
+        .stdout_is_bytes(b"ba.\xe9");
+}
+
+#[test]
+fn test_regex_bare_anchors() {
+    new_ucmd!()
+        .args(&["-r", "-s", "^"])
+        .pipe_in("a\nb\nc\n")
+        .succeeds()
+        .no_stderr()
+        .stdout_is_bytes(b"c\nb\na\n");
+
+    new_ucmd!()
+        .args(&["-r", "-s", "$"])
+        .pipe_in("a\nb\nc\n")
+        .succeeds()
+        .stdout_is_bytes(b"\n\nc\nba");
+
+    new_ucmd!()
+        .args(&["-r", "-s", "^$"])
+        .pipe_in("a\nb\nc\n")
+        .succeeds()
+        .stdout_is_bytes(b"a\nb\nc\n");
+}
+
+#[test]
 fn test_regex() {
     new_ucmd!()
         .args(&["-r", "-s", "[xyz]+"])
