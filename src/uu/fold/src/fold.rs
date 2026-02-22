@@ -204,7 +204,7 @@ fn fold_file_bytewise<T: Read, W: Write>(
 
         if line == [NL] {
             output.write_all(&[NL])?;
-            line.truncate(0);
+            line.clear();
             continue;
         }
 
@@ -249,7 +249,7 @@ fn fold_file_bytewise<T: Read, W: Write>(
             }
         }
 
-        line.truncate(0);
+        line.clear();
     }
 
     Ok(())
