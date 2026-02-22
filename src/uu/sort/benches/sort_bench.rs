@@ -215,9 +215,9 @@ fn sort_unique_locale(bencher: Bencher, num_lines: usize) {
 }
 
 /// Benchmark sorting with very long lines exceeding START_BUFFER_SIZE (8000 bytes)
-#[divan::bench(args = [16_000])]
+#[divan::bench(args = [10_000])]
 fn sort_long_line(bencher: Bencher, line_size: usize) {
-    // Create files with very long lines (16KB) to test buffer handling
+    // Create files with very long lines to test buffer handling
     let mut data_a = vec![b'b'; line_size];
     data_a.push(b'\n');
 
