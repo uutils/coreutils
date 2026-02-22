@@ -587,10 +587,7 @@ fn test_permission_denied_is_not_reported_as_not_found() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.mkdir("noexec");
-    let mut f = at.make_file("noexec/file");
-    use std::io::Write;
-    writeln!(f, "secret").unwrap();
-    f.flush().unwrap();
+    at.touch("noexec/file");
 
     let dir = at.plus("noexec");
     fs::set_permissions(&dir, fs::Permissions::from_mode(0o000)).unwrap();
