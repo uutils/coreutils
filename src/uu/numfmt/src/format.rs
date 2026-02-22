@@ -144,16 +144,17 @@ fn detailed_error_message(s: &str, unit: Unit) -> Option<String> {
     None
 }
 
-fn parse_suffix(s: &str, unit: Unit) -> Result<(f64, Option<Suffix>)> {
-    if s.is_empty() {
+fn parse_suffix(s: &str, unit: Unit, max_whitespace: usize) -> Result<(f64, Option<Suffix>)> {
+    let trimmed = s.trim_end();
+    if trimmed.is_empty() {
         return Err(translate!("numfmt-error-invalid-number-empty"));
     }
 
-    let with_i = s.ends_with('i');
+    let with_i = trimmed.ends_with('i');
     if with_i && ![Unit::Auto, Unit::Iec(true)].contains(&unit) {
         return Err(translate!("numfmt-error-invalid-suffix", "input" => s.quote()));
     }
-    let mut iter = s.chars();
+    let mut iter = trimmed.chars();
     if with_i {
         iter.next_back();
     }
@@ -181,7 +182,18 @@ fn parse_suffix(s: &str, unit: Unit) -> Result<(f64, Option<Suffix>)> {
         Some((_, true)) => 2,
     };
 
-    let number = s[..s.len() - suffix_len]
+    let number_part = &trimmed[..trimmed.len() - suffix_len];
+    let number_trimmed = number_part.trim_end();
+
+    // Validate whitespace between number and suffix
+    if suffix.is_some() {
+        let whitespace = number_part.len() - number_trimmed.len();
+        if whitespace > max_whitespace {
+            return Err(translate!("numfmt-error-invalid-suffix", "input" => s.quote()));
+        }
+    }
+
+    let number = number_trimmed
         .parse::<f64>()
         .map_err(|_| translate!("numfmt-error-invalid-number", "input" => s.quote()))?;
 
@@ -238,8 +250,8 @@ fn remove_suffix(i: f64, s: Option<Suffix>, u: Unit) -> Result<f64> {
     }
 }
 
-fn transform_from(s: &str, opts: &TransformOptions) -> Result<f64> {
-    let (i, suffix) = parse_suffix(s, opts.from)
+fn transform_from(s: &str, opts: &TransformOptions, max_whitespace: usize) -> Result<f64> {
+    let (i, suffix) = parse_suffix(s, opts.from, max_whitespace)
         .map_err(|original| detailed_error_message(s, opts.from).unwrap_or(original))?;
     let i = i * (opts.from_unit as f64);
 
@@ -395,7 +407,11 @@ fn format_string(
     };
 
     let number = transform_to(
-        transform_from(source_without_suffix, &options.transform)?,
+        transform_from(
+            source_without_suffix,
+            &options.transform,
+            options.max_whitespace,
+        )?,
         &options.transform,
         options.round,
         precision,
@@ -438,6 +454,9 @@ fn split_bytes<'a>(input: &'a [u8], delim: &'a [u8]) -> impl Iterator<Item = &'a
     let mut remainder = Some(input);
     std::iter::from_fn(move || {
         let input = remainder.take()?;
+        if delim.is_empty() {
+            return Some(input);
+        }
         match input.windows(delim.len()).position(|w| w == delim) {
             Some(pos) => {
                 remainder = Some(&input[pos + delim.len()..]);
@@ -567,7 +586,7 @@ mod tests {
 
     #[test]
     fn test_parse_suffix_q_r_k() {
-        let result = parse_suffix("1Q", Unit::Auto);
+        let result = parse_suffix("1Q", Unit::Auto, 1);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
         assert_eq!(number, 1.0);
@@ -576,7 +595,7 @@ mod tests {
         assert_eq!(raw_suffix as i32, RawSuffix::Q as i32);
         assert!(!with_i);
 
-        let result = parse_suffix("2R", Unit::Auto);
+        let result = parse_suffix("2R", Unit::Auto, 1);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
         assert_eq!(number, 2.0);
@@ -585,7 +604,7 @@ mod tests {
         assert_eq!(raw_suffix as i32, RawSuffix::R as i32);
         assert!(!with_i);
 
-        let result = parse_suffix("3k", Unit::Auto);
+        let result = parse_suffix("3k", Unit::Auto, 1);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
         assert_eq!(number, 3.0);
@@ -594,7 +613,7 @@ mod tests {
         assert_eq!(raw_suffix as i32, RawSuffix::K as i32);
         assert!(!with_i);
 
-        let result = parse_suffix("4Qi", Unit::Auto);
+        let result = parse_suffix("4Qi", Unit::Auto, 1);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
         assert_eq!(number, 4.0);
@@ -603,7 +622,7 @@ mod tests {
         assert_eq!(raw_suffix as i32, RawSuffix::Q as i32);
         assert!(with_i);
 
-        let result = parse_suffix("5Ri", Unit::Auto);
+        let result = parse_suffix("5Ri", Unit::Auto, 1);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
         assert_eq!(number, 5.0);
@@ -615,13 +634,13 @@ mod tests {
 
     #[test]
     fn test_parse_suffix_error_messages() {
-        let result = parse_suffix("foo", Unit::Auto);
+        let result = parse_suffix("foo", Unit::Auto, 1);
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert!(error.contains("numfmt-error-invalid-number") || error.contains("invalid number"));
         assert!(!error.contains("invalid suffix"));
 
-        let result = parse_suffix("World", Unit::Auto);
+        let result = parse_suffix("World", Unit::Auto, 1);
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert!(error.contains("numfmt-error-invalid-number") || error.contains("invalid number"));

@@ -143,7 +143,7 @@ fn handle_obsolete(args: &mut Vec<String>) -> Option<usize> {
         let slice = args[1].as_str();
         if let Some(signal) = slice.strip_prefix('-') {
             // With '-', a signal name must start with an uppercase char
-            if signal.chars().next().is_some_and(|c| c.is_lowercase()) {
+            if signal.chars().next().is_some_and(char::is_lowercase) {
                 return None;
             }
             // Check if it is a valid signal

@@ -10,7 +10,7 @@ use std::env;
 use std::ffi::OsString;
 use std::fmt::Write as _;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write, stdout};
 use std::path::Path;
 
 use clap::{Arg, ArgAction, Command};
@@ -122,7 +122,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let files = matches
         .get_many::<OsString>(options::FILE)
-        .map_or(vec![], |file_values| file_values.collect());
+        .map_or(vec![], Iterator::collect);
 
     // clap provides .conflicts_with / .conflicts_with_all, but we want to
     // manually handle conflicts so we can match the output of GNU coreutils
@@ -150,7 +150,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             ));
         }
 
-        println!("{}", generate_dircolors_config());
+        writeln!(stdout(), "{}", generate_dircolors_config())?;
         return Ok(());
     }
 
@@ -178,13 +178,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let result;
     if files.is_empty() {
-        println!("{}", generate_ls_colors(&out_format, ":"));
+        writeln!(stdout(), "{}", generate_ls_colors(&out_format, ":"))?;
         return Ok(());
         /*
         // Check if data is being piped into the program
         if std::io::stdin().is_terminal() {
             // No data piped, use default behavior
-            println!("{}", generate_ls_colors(&out_format, ":"));
+            writeln!(stdout(), "{}", generate_ls_colors(&out_format, ":"))?;
             return Ok(());
         } else {
             // Data is piped, process the input from stdin
@@ -230,7 +230,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     match result {
         Ok(s) => {
-            println!("{s}");
+            writeln!(stdout(), "{s}")?;
             Ok(())
         }
         Err(s) => Err(USimpleError::new(1, s)),
@@ -364,8 +364,7 @@ where
     let mut state = ParseState::Global;
     let mut saw_colorterm_match = false;
 
-    for (num, line) in user_input.into_iter().enumerate() {
-        let num = num + 1;
+    for (num, line) in (1..).zip(user_input.into_iter()) {
         let line = line.borrow().purify();
         if line.is_empty() {
             continue;

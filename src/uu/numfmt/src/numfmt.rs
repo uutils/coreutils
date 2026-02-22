@@ -261,6 +261,15 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         .cloned()
         .unwrap_or_default();
 
+    // Max whitespace between number and suffix: length of separator if provided, default one
+    let max_whitespace = if args.contains_id(UNIT_SEPARATOR)
+        && args.value_source(UNIT_SEPARATOR) == Some(ValueSource::CommandLine)
+    {
+        unit_separator.len()
+    } else {
+        1
+    };
+
     let invalid = InvalidModes::from_str(args.get_one::<String>(INVALID).unwrap()).unwrap();
 
     let zero_terminated = args.get_flag(ZERO_TERMINATED);
@@ -276,6 +285,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         round,
         suffix,
         unit_separator,
+        max_whitespace,
         format,
         invalid,
         zero_terminated,
@@ -502,6 +512,7 @@ mod tests {
             round: RoundMethod::Nearest,
             suffix: None,
             unit_separator: String::new(),
+            max_whitespace: 1,
             format: FormatOptions::default(),
             invalid: InvalidModes::Abort,
             zero_terminated: false,

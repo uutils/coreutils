@@ -174,6 +174,42 @@ fn test_round_up() {
 }
 
 #[test]
+fn test_round_up_file_smaller_than_size() {
+    let expected = 4096;
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut file = at.make_file(FILE2);
+    file.write_all(b"1234567890").unwrap();
+    ucmd.args(&["--size", "%4K", FILE2]).succeeds();
+    file.seek(SeekFrom::End(0)).unwrap();
+    let actual = file.stream_position().unwrap();
+    assert_eq!(expected, actual);
+}
+
+#[test]
+fn test_round_up_unaligned() {
+    let expected = 16;
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut file = at.make_file(FILE2);
+    file.write_all(b"1234567890123").unwrap();
+    ucmd.args(&["--size", "%8", FILE2]).succeeds();
+    file.seek(SeekFrom::End(0)).unwrap();
+    let actual = file.stream_position().unwrap();
+    assert_eq!(expected, actual);
+}
+
+#[test]
+fn test_round_up_already_aligned() {
+    let expected = 8;
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut file = at.make_file(FILE2);
+    file.write_all(b"12345678").unwrap();
+    ucmd.args(&["--size", "%4", FILE2]).succeeds();
+    file.seek(SeekFrom::End(0)).unwrap();
+    let actual = file.stream_position().unwrap();
+    assert_eq!(expected, actual);
+}
+
+#[test]
 fn test_size_and_reference() {
     let expected = 15;
     let (at, mut ucmd) = at_and_ucmd!();

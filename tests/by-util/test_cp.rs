@@ -6778,8 +6778,7 @@ fn test_cp_preserve_selinux_admin_context() {
 #[test]
 #[cfg(feature = "feat_selinux")]
 fn test_cp_selinux_context_priority() {
-    // This test verifies that the priority order is respected:
-    // -Z > --context > --preserve=context
+    // This test verifies that -Z takes priority over --context
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -6831,21 +6830,12 @@ fn test_cp_selinux_context_priority() {
         .arg("z_and_context.txt")
         .succeeds();
 
-    // 5. Using both -Z and --preserve=context (Z should win)
-    ts.ucmd()
-        .arg("-Z")
-        .arg("--preserve=context")
-        .arg(TEST_HELLO_WORLD_SOURCE)
-        .arg("z_and_preserve.txt")
-        .succeeds();
-
     // Get all the contexts
     let source_ctx = get_getfattr_output(&at.plus_as_string(TEST_HELLO_WORLD_SOURCE));
     let preserve_ctx = get_getfattr_output(&at.plus_as_string("preserve.txt"));
     let context_ctx = get_getfattr_output(&at.plus_as_string("context.txt"));
     let z_ctx = get_getfattr_output(&at.plus_as_string("z_flag.txt"));
     let z_and_context_ctx = get_getfattr_output(&at.plus_as_string("z_and_context.txt"));
-    let z_and_preserve_ctx = get_getfattr_output(&at.plus_as_string("z_and_preserve.txt"));
 
     if source_ctx.is_empty() {
         println!("Skipping test assertions: Failed to get SELinux contexts");
@@ -6862,10 +6852,6 @@ fn test_cp_selinux_context_priority() {
     assert_eq!(
         z_ctx, z_and_context_ctx,
         "-Z context should be the same regardless of --context"
-    );
-    assert_eq!(
-        z_ctx, z_and_preserve_ctx,
-        "-Z context should be the same regardless of --preserve=context"
     );
 }
 
@@ -7670,4 +7656,55 @@ fn test_cp_gnu_preserve_mode() {
     let d3_mode = at.metadata("d3").mode();
 
     assert_eq!(d1_mode, d3_mode);
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_cp_a_z_overrides_context() {
+    // Verifies -aZ succeeds (-Z overrides implicit --preserve=context from -a)
+    use std::path::Path;
+    use uucore::selinux::set_selinux_security_context;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("src");
+
+    let ctx = "unconfined_u:object_r:user_tmp_t:s0".to_string();
+    if set_selinux_security_context(Path::new(&at.plus_as_string("src")), Some(&ctx)).is_err() {
+        return;
+    }
+
+    ucmd.args(&["-aZ", "src", "dst"]).succeeds();
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_cp_a_preserves_context() {
+    use std::path::Path;
+    use uucore::selinux::{get_selinux_security_context, set_selinux_security_context};
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("src");
+
+    let ctx = "unconfined_u:object_r:user_tmp_t:s0".to_string();
+    if set_selinux_security_context(Path::new(&at.plus_as_string("src")), Some(&ctx)).is_err() {
+        return;
+    }
+
+    let src_ctx =
+        get_selinux_security_context(Path::new(&at.plus_as_string("src")), false).unwrap();
+    ucmd.args(&["-a", "src", "dst"]).succeeds();
+    let dst_ctx =
+        get_selinux_security_context(Path::new(&at.plus_as_string("dst")), false).unwrap();
+
+    assert_eq!(src_ctx, dst_ctx, "-a should preserve SELinux context");
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_cp_preserve_context_with_z_fails() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("src");
+    ucmd.args(&["--preserve=context", "-Z", "src", "dst"])
+        .fails()
+        .stderr_contains("cannot combine");
 }

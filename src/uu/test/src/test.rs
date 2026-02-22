@@ -183,13 +183,13 @@ fn integers(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
     // Parse the two inputs
     let a: i128 = a
         .to_str()
-        .map(|s| s.trim())
+        .map(str::trim)
         .and_then(|s| s.parse().ok())
         .ok_or_else(|| ParseError::InvalidInteger(a.quote().to_string()))?;
 
     let b: i128 = b
         .to_str()
-        .map(|s| s.trim())
+        .map(str::trim)
         .and_then(|s| s.parse().ok())
         .ok_or_else(|| ParseError::InvalidInteger(b.quote().to_string()))?;
 
@@ -231,7 +231,7 @@ fn files(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
 
 fn isatty(fd: &OsStr) -> ParseResult<bool> {
     fd.to_str()
-        .map(|s| s.trim())
+        .map(str::trim)
         .and_then(|s| s.parse().ok())
         .ok_or_else(|| ParseError::InvalidInteger(fd.quote().to_string()))
         .map(|i| unsafe { libc::isatty(i) == 1 })

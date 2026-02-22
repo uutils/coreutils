@@ -14,7 +14,7 @@ use std::os::unix::prelude::OsStrExt;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
-use uucore::entries::{Locate, Passwd, grp2gid, usr2uid};
+use uucore::entries::{Locate, Passwd, grp2gid, usr2gid, usr2uid};
 use uucore::error::{UResult, UUsageError};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 use uucore::libc::{self, chroot, setgid, setgroups, setuid};
@@ -187,7 +187,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let commands = match matches.get_many::<String>(options::COMMAND) {
-        Some(v) => v.map(|s| s.as_str()).collect(),
+        Some(v) => v.map(String::as_str).collect(),
         None => vec![],
     };
 
@@ -401,7 +401,7 @@ fn set_context(options: &Options) -> UResult<()> {
         }
         Some(UserSpec::UserOnly(user)) => {
             let uid = name_to_uid(user)?;
-            let gid = uid as libc::gid_t;
+            let gid = usr2gid(user).map_err(|_| ChrootError::NoGroupSpecified(uid))?;
             let strategy = Strategy::FromUID(uid, false);
             set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
             set_gid(gid).map_err(|e| ChrootError::SetGidFailed(user.to_owned(), e))?;

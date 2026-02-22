@@ -19,6 +19,7 @@ use uucore::{entries, format_usage, show_error, show_warning};
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::borrow::Cow;
+use std::cell::OnceCell;
 use std::ffi::{OsStr, OsString};
 use std::fs::{FileType, Metadata};
 use std::io::Write;
@@ -306,7 +307,8 @@ struct Stater {
     show_fs: bool,
     from_user: bool,
     files: Vec<OsString>,
-    mount_list: Option<Vec<OsString>>,
+    mount_list: OnceCell<Option<Vec<OsString>>>,
+    mount_list_needed: bool,
     default_tokens: Vec<Token>,
     default_dev_tokens: Vec<Token>,
 }
@@ -964,30 +966,44 @@ impl Stater {
 
         // mount points aren't displayed when showing filesystem information, or
         // whenever the format string does not request the mount point.
-        let mount_list = if show_fs
-            || !default_tokens
+        let mount_list_needed = !show_fs
+            && default_tokens
                 .iter()
-                .any(|tok| matches!(tok, Token::Directive { format: 'm', .. }))
-        {
-            None
-        } else {
-            Some(Self::populate_mount_list()?)
-        };
+                .any(|tok| matches!(tok, Token::Directive { format: 'm', .. }));
 
         Ok(Self {
             follow: matches.get_flag(options::DEREFERENCE),
             show_fs,
             from_user: !format_str.is_empty(),
             files,
+            mount_list: OnceCell::new(),
+            mount_list_needed,
             default_tokens,
             default_dev_tokens,
-            mount_list,
         })
     }
 
     fn find_mount_point<P: AsRef<Path>>(&self, p: P) -> Option<&OsString> {
+        if !self.mount_list_needed {
+            return None;
+        }
+
+        let mount_list = self.mount_list.get_or_init(|| {
+            match Self::populate_mount_list() {
+                Ok(list) => Some(list),
+                Err(e) => {
+                    // Show warning like GNU does when mount information cannot be read
+                    show_warning!(
+                        "{}",
+                        translate!("stat-error-cannot-read-filesystem", "error" => e.to_string())
+                    );
+                    None
+                }
+            }
+        });
+
         let path = p.as_ref().canonicalize().ok()?;
-        self.mount_list
+        mount_list
             .as_ref()?
             .iter()
             .find(|root| path.starts_with(root))
@@ -1017,8 +1033,10 @@ impl Stater {
         file: &OsString,
         file_type: FileType,
         from_user: bool,
-        #[cfg(feature = "selinux")] follow_symbolic_links: bool,
-        #[cfg(not(feature = "selinux"))] _: bool,
+        #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+        follow_symbolic_links: bool,
+        #[cfg(not(all(feature = "selinux", any(target_os = "linux", target_os = "android"))))]
+        _: bool,
     ) -> Result<(), i32> {
         match *t {
             Token::Byte(byte) => write_raw_byte(byte),

@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) helloworld nodir objdump n'source nconfined
+// spell-checker:ignore (words) helloworld nodir objdump n'source nconfined testdir
 
 #[cfg(not(target_os = "openbsd"))]
 use filetime::FileTime;
@@ -764,6 +764,7 @@ fn strip_source_file() -> &'static str {
 
 #[test]
 #[cfg(not(windows))]
+#[cfg(not(target_os = "android"))] // missing strip binary
 // FIXME test runs in a timeout with macos-latest on x86_64 in the CI
 #[cfg(not(all(target_os = "macos", target_arch = "x86_64")))]
 fn test_install_and_strip() {
@@ -789,6 +790,7 @@ fn test_install_and_strip() {
 
 #[test]
 #[cfg(not(windows))]
+#[cfg(not(target_os = "android"))] // missing strip binary
 // FIXME test runs in a timeout with macos-latest on x86_64 in the CI
 #[cfg(not(all(target_os = "macos", target_arch = "x86_64")))]
 fn test_install_and_strip_with_program() {
@@ -2566,4 +2568,95 @@ fn test_install_normal_file_replaces_symlink() {
 
     // Verify sensitive file was NOT modified
     assert_eq!(at.read("sensitive"), "important data");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_install_d_symlink_race_condition() {
+    // Test for symlink race condition fix (issue #10013)
+    // Verifies that pre-existing symlinks in path are handled safely
+    use std::os::unix::fs::symlink;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create test directories
+    at.mkdir("target");
+
+    // Create source file
+    at.write("source_file", "test content");
+
+    // Set up a pre-existing symlink attack scenario
+    at.mkdir_all("testdir/a");
+    let intermediate_dir = at.plus("testdir/a/b");
+    symlink(at.plus("target"), &intermediate_dir).unwrap();
+
+    // Run install -D which should detect and handle the symlink
+    let result = scene
+        .ucmd()
+        .arg("-D")
+        .arg(at.plus("source_file"))
+        .arg(at.plus("testdir/a/b/c/file"))
+        .run();
+
+    let wrong_location = at.plus("target/c/file");
+
+    // The critical assertion: file must NOT be in symlink target (race prevented)
+    assert!(
+        !wrong_location.exists(),
+        "RACE CONDITION NOT PREVENTED: File was created in symlink target"
+    );
+
+    // If the command succeeded, verify the file is in the correct location
+    if result.succeeded() {
+        assert!(at.file_exists("testdir/a/b/c/file"));
+        assert_eq!(at.read("testdir/a/b/c/file"), "test content");
+        // The symlink should have been replaced with a real directory
+        assert!(
+            at.plus("testdir/a/b").is_dir() && !at.plus("testdir/a/b").is_symlink(),
+            "Intermediate path should be a real directory, not a symlink"
+        );
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_install_d_symlink_race_condition_concurrent() {
+    // Test pre-existing symlinks in intermediate paths are handled correctly
+    use std::os::unix::fs::symlink;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create test directories and source file using testing framework
+    at.mkdir("target2");
+    at.write("source_file2", "test content 2");
+
+    // Set up intermediate directory with symlink
+    at.mkdir_all("testdir2/a");
+    symlink(at.plus("target2"), at.plus("testdir2/a/b")).unwrap();
+
+    // Run install -D
+    scene
+        .ucmd()
+        .arg("-D")
+        .arg(at.plus("source_file2"))
+        .arg(at.plus("testdir2/a/b/c/file"))
+        .succeeds();
+
+    // Verify file was created at the intended destination
+    assert!(at.file_exists("testdir2/a/b/c/file"));
+    assert_eq!(at.read("testdir2/a/b/c/file"), "test content 2");
+
+    // Verify file was NOT created in symlink target
+    assert!(
+        !at.plus("target2/c/file").exists(),
+        "File should NOT be in symlink target location"
+    );
+
+    // Verify intermediate path is now a real directory
+    assert!(
+        at.plus("testdir2/a/b").is_dir() && !at.plus("testdir2/a/b").is_symlink(),
+        "Intermediate directory should be a real directory, not a symlink"
+    );
 }

@@ -19,12 +19,12 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let matches = uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 2)?;
+
     // Disable SIGPIPE so we can handle broken pipe errors gracefully
     // and exit with code 3 instead of being killed by the signal.
     #[cfg(unix)]
     let _ = uucore::signals::disable_pipe_errors();
-
-    let matches = uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 2)?;
 
     let silent = matches.get_flag(options::SILENT);
 

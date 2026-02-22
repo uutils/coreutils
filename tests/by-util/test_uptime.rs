@@ -25,6 +25,21 @@ fn test_uptime() {
     // Don't check for users as it doesn't show in some CI
 }
 
+#[test]
+#[cfg(target_os = "linux")]
+fn test_write_error_handling() {
+    use std::fs::File;
+
+    let dev_full =
+        File::create("/dev/full").expect("Failed to open /dev/full - test must run on Linux");
+
+    new_ucmd!()
+        .set_stdout(dev_full)
+        .fails()
+        .code_is(1)
+        .stderr_contains("No space left on device");
+}
+
 /// Checks for files without utmpx records for which boot time cannot be calculated
 #[test]
 #[cfg(not(any(target_os = "openbsd", target_os = "freebsd")))]

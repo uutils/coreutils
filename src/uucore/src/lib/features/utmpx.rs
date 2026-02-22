@@ -72,7 +72,7 @@ pub unsafe extern "C" fn utmpxname(_file: *const libc::c_char) -> libc::c_int {
     0
 }
 
-use crate::{LazyLock, libc}; // import macros from `../../macros.rs`
+use crate::libc; // import macros from `../../macros.rs`
 
 // In case the c_char array doesn't end with NULL
 macro_rules! chars2string {
@@ -239,8 +239,8 @@ impl Utmpx {
         let ts_nanos: i128 = (1_000_000_000_i64 * self.inner.ut_tv.tv_sec as i64
             + 1_000_i64 * self.inner.ut_tv.tv_usec as i64)
             .into();
-        let local_offset =
-            time::OffsetDateTime::now_local().map_or_else(|_| time::UtcOffset::UTC, |v| v.offset());
+        let local_offset = time::OffsetDateTime::now_local()
+            .map_or_else(|_| time::UtcOffset::UTC, time::OffsetDateTime::offset);
         time::OffsetDateTime::from_unix_timestamp_nanos(ts_nanos)
             .unwrap()
             .to_offset(local_offset)
@@ -380,7 +380,7 @@ impl Utmpx {
 // I believe the only technical memory unsafety that could happen is a data
 // race while copying the data out of the pointer returned by getutxent(), but
 // ordinary race conditions are also very much possible.
-static LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+static LOCK: Mutex<()> = Mutex::new(());
 
 /// Iterator of login records
 pub struct UtmpxIter {
@@ -396,7 +396,9 @@ pub struct UtmpxIter {
 impl UtmpxIter {
     fn new() -> Self {
         // PoisonErrors can safely be ignored
-        let guard = LOCK.lock().unwrap_or_else(|err| err.into_inner());
+        let guard = LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         Self {
             guard,
             phantom: PhantomData,
@@ -408,7 +410,9 @@ impl UtmpxIter {
     #[cfg(feature = "feat_systemd_logind")]
     fn new_systemd() -> Self {
         // PoisonErrors can safely be ignored
-        let guard = LOCK.lock().unwrap_or_else(|err| err.into_inner());
+        let guard = LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let systemd_iter = match systemd_logind::SystemdUtmpxIter::new() {
             Ok(iter) => iter,
             Err(_) => {

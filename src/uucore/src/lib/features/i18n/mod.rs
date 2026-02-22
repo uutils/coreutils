@@ -59,10 +59,10 @@ pub fn get_locale_from_env(locale_name: &str) -> (Locale, UEncoding) {
             // locale. Treat the special case of the given locale being "C"
             // which becomes the default locale.
             let encoding = if (locale != DEFAULT_LOCALE || bcp47 == "C")
-                && split
-                    .next()
-                    .is_some_and(|enc| enc.to_lowercase() == "utf-8")
-            {
+                && split.next().is_some_and(|enc| {
+                    let lower = enc.to_lowercase();
+                    lower == "utf-8" || lower == "utf8"
+                }) {
                 UEncoding::Utf8
             } else {
                 UEncoding::Ascii
@@ -75,7 +75,7 @@ pub fn get_locale_from_env(locale_name: &str) -> (Locale, UEncoding) {
 }
 
 /// Get the collating locale from the environment
-fn get_collating_locale() -> &'static (Locale, UEncoding) {
+pub fn get_collating_locale() -> &'static (Locale, UEncoding) {
     static COLLATING_LOCALE: OnceLock<(Locale, UEncoding)> = OnceLock::new();
 
     COLLATING_LOCALE.get_or_init(|| get_locale_from_env("LC_COLLATE"))

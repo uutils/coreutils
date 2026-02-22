@@ -2444,6 +2444,34 @@ mod inter_partition_copying {
             "nested content"
         );
     }
+
+    #[test]
+    #[cfg(unix)]
+    pub(crate) fn test_mv_dir_with_fifo_across_partitions() {
+        use std::os::unix::fs::FileTypeExt;
+        use tempfile::TempDir;
+        use uutests::util::TestScenario;
+
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        at.mkdir("dir");
+        at.mkfifo("dir/fifo");
+
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+
+        scene
+            .ucmd()
+            .arg("dir")
+            .arg(other_fs_tempdir.path().to_str().unwrap())
+            .succeeds()
+            .no_output();
+
+        assert!(!at.dir_exists("dir"));
+        let moved_fifo = other_fs_tempdir.path().join("dir/fifo");
+        assert!(moved_fifo.symlink_metadata().unwrap().file_type().is_fifo());
+    }
 }
 
 #[test]
