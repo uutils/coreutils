@@ -18,6 +18,9 @@ workspace = true
 [lib]
 path = "src/id.rs"
 
+[build-dependencies]
+cfg_aliases.workspace = true
+
 [dependencies]
 clap = { workspace = true }
 uucore = { workspace = true, features = ["entries", "process"] }
