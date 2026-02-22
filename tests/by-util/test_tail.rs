@@ -592,14 +592,11 @@ fn test_permission_denied_is_not_reported_as_not_found() {
     let dir = at.plus("noexec");
     fs::set_permissions(&dir, fs::Permissions::from_mode(0o000)).unwrap();
 
-    let result = ucmd.arg("noexec/file").run();
+    ucmd.arg("noexec/file")
+        .fails()
+        .stderr_contains("Permission denied");
 
     fs::set_permissions(&dir, fs::Permissions::from_mode(0o700)).unwrap();
-
-    // Asserts that the result is incorrect.
-    result.failure();
-    let err = result.stderr_str();
-    assert!(err.contains("Permission denied"));
 }
 
 #[test]
