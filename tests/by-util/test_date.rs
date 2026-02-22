@@ -1119,6 +1119,63 @@ fn test_date_tz_abbreviation_dst_handling() {
 }
 
 #[test]
+fn test_date_tz_abbreviation_fixed_offset_outside_season() {
+    // Abbreviations encode a fixed UTC offset regardless of the date.
+    // Using a DST abbreviation outside its season should still use the
+    // fixed offset the abbreviation implies, not the zone's current offset.
+
+    // EDT (UTC-4) used in winter (New York observes EST in January)
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-u")
+        .arg("-d")
+        .arg("2026-01-15 10:00 EDT")
+        .arg("+%F %T %Z")
+        .succeeds()
+        .stdout_is("2026-01-15 14:00:00 UTC\n");
+
+    // PST (UTC-8) used in summer (Los Angeles observes PDT in June)
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-u")
+        .arg("-d")
+        .arg("2026-06-15 10:00 PST")
+        .arg("+%F %T %Z")
+        .succeeds()
+        .stdout_is("2026-06-15 18:00:00 UTC\n");
+
+    // PDT (UTC-7) used in winter
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-u")
+        .arg("-d")
+        .arg("2026-01-15 10:00 PDT")
+        .arg("+%F %T %Z")
+        .succeeds()
+        .stdout_is("2026-01-15 17:00:00 UTC\n");
+
+    // CDT (UTC-5) used in winter
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-u")
+        .arg("-d")
+        .arg("2026-01-15 10:00 CDT")
+        .arg("+%F %T %Z")
+        .succeeds()
+        .stdout_is("2026-01-15 15:00:00 UTC\n");
+
+    // MDT (UTC-6) used in winter
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-u")
+        .arg("-d")
+        .arg("2026-01-15 10:00 MDT")
+        .arg("+%F %T %Z")
+        .succeeds()
+        .stdout_is("2026-01-15 16:00:00 UTC\n");
+}
+
+#[test]
 fn test_date_tz_abbreviation_with_day_of_week() {
     // Test timezone abbreviations with full date format including day of week
     new_ucmd!()
