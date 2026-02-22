@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 use crate::errors::NumfmtError;
-use crate::format::{format_and_print_delimited, format_and_print_whitespace};
+use crate::format::{write_formatted_with_delimiter, write_formatted_with_whitespace};
 use crate::options::{
     DEBUG, DELIMITER, FIELD, FIELD_DEFAULT, FORMAT, FROM, FROM_DEFAULT, FROM_UNIT,
     FROM_UNIT_DEFAULT, FormatOptions, HEADER, HEADER_DEFAULT, INVALID, InvalidModes, NUMBER,
@@ -14,7 +14,7 @@ use crate::options::{
 use crate::units::{Result, Unit};
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, parser::ValueSource};
 use std::ffi::OsString;
-use std::io::{BufRead, Error, Write, stderr};
+use std::io::{BufRead, Error, Write as _, stderr};
 use std::result::Result as StdResult;
 use std::str::FromStr;
 
@@ -32,8 +32,9 @@ pub mod options;
 mod units;
 
 fn handle_args<'a>(args: impl Iterator<Item = &'a [u8]>, options: &NumfmtOptions) -> UResult<()> {
+    let mut stdout = std::io::stdout().lock();
     for l in args {
-        format_and_handle_validation(l, options)?;
+        write_line(&mut stdout, l, options)?;
     }
     Ok(())
 }
@@ -51,33 +52,32 @@ fn handle_buffer_iterator(
     options: &NumfmtOptions,
     terminator: u8,
 ) -> UResult<()> {
+    let mut stdout = std::io::stdout().lock();
     for (idx, line_result) in iter.enumerate() {
         match line_result {
             Ok(line) if idx < options.header => {
-                std::io::stdout().write_all(&line)?;
-                std::io::stdout().write_all(&[terminator])?;
+                stdout.write_all(&line)?;
+                stdout.write_all(&[terminator])?;
                 Ok(())
             }
-            Ok(line) => format_and_handle_validation(&line, options),
+            Ok(line) => write_line(&mut stdout, &line, options),
             Err(err) => return Err(Box::new(NumfmtError::IoError(err.to_string()))),
         }?;
     }
     Ok(())
 }
 
-fn format_and_handle_validation(input_line: &[u8], options: &NumfmtOptions) -> UResult<()> {
-    let eol = if options.zero_terminated {
-        b'\0'
-    } else {
-        b'\n'
-    };
-
+fn write_line<W: std::io::Write>(
+    writer: &mut W,
+    input_line: &[u8],
+    options: &NumfmtOptions,
+) -> UResult<()> {
     let handled_line = if options.delimiter.is_some() {
-        format_and_print_delimited(input_line, options)
+        write_formatted_with_delimiter(writer, input_line, options)
     } else {
         // Whitespace mode requires valid UTF-8
         match std::str::from_utf8(input_line) {
-            Ok(s) => format_and_print_whitespace(s, options),
+            Ok(s) => write_formatted_with_whitespace(writer, s, options),
             Err(_) => Err(translate!("numfmt-error-invalid-input")),
         }
     };
@@ -95,8 +95,14 @@ fn format_and_handle_validation(input_line: &[u8], options: &NumfmtOptions) -> U
             }
             InvalidModes::Ignore => {}
         }
-        std::io::stdout().write_all(input_line)?;
-        std::io::stdout().write_all(&[eol])?;
+        writer.write_all(input_line)?;
+
+        let eol = if options.zero_terminated {
+            b"\0"
+        } else {
+            b"\n"
+        };
+        writer.write_all(eol)?;
     }
 
     Ok(())
