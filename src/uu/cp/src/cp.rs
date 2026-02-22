@@ -827,7 +827,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let (sources, target) = parse_path_args(paths, &options)?;
 
-    if let Err(error) = copy(&sources, &target, &options) {
+    // GNU's implementation is able to create directories and files even when umask is set to 0o777.
+    // We follow it here by setting it to permit all user modes, and passing the original down
+    // functions such that it is used when creating new dir/file and not preserving mode.
+    #[cfg(unix)]
+    let orig_umask = unsafe { libc::umask(!libc::S_IRWXU) as u32 };
+
+    if let Err(error) = copy(
+        &sources,
+        &target,
+        &options,
+        #[cfg(unix)]
+        orig_umask,
+    ) {
         if let CpError::NotAllFilesCopied = error {
             // Error::NotAllFilesCopied is non-fatal, but the error
             // code should still be EXIT_ERR as does GNU cp
@@ -836,6 +848,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             show_error!("{error}");
         }
         set_exit_code(EXIT_ERR);
+    }
+
+    #[cfg(unix)]
+    #[allow(clippy::unnecessary_cast)]
+    unsafe {
+        libc::umask(orig_umask as libc::mode_t);
     }
 
     Ok(())
@@ -1251,20 +1269,6 @@ impl Options {
         }
     }
 
-    #[cfg(unix)]
-    fn preserve_mode(&self) -> (bool, bool) {
-        match self.attributes.mode {
-            Preserve::No { explicit } => {
-                if explicit {
-                    (false, true)
-                } else {
-                    (false, false)
-                }
-            }
-            Preserve::Yes { .. } => (true, false),
-        }
-    }
-
     /// Whether to force overwriting the destination file.
     fn force(&self) -> bool {
         matches!(self.overwrite, OverwriteMode::Clobber(ClobberMode::Force))
@@ -1373,7 +1377,12 @@ fn show_error_if_needed(error: &CpError) {
 /// was encountered.
 ///
 /// Behavior is determined by the `options` parameter, see [`Options`] for details.
-pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult<()> {
+pub fn copy(
+    sources: &[PathBuf],
+    target: &Path,
+    options: &Options,
+    #[cfg(unix)] orig_umask: u32,
+) -> CopyResult<()> {
     let target_type = TargetType::determine(sources, target);
     verify_target_type(target, target_type)?;
 
@@ -1458,6 +1467,8 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
                 &copied_destinations,
                 &mut copied_files,
                 &mut created_parent_dirs,
+                #[cfg(unix)]
+                orig_umask,
             ) {
                 show_error_if_needed(&error);
                 if !matches!(error, CpError::Skipped(false)) {
@@ -1533,6 +1544,7 @@ fn copy_source(
     copied_destinations: &HashSet<PathBuf>,
     copied_files: &mut HashMap<FileInformation, PathBuf>,
     created_parent_dirs: &mut HashSet<PathBuf>,
+    #[cfg(unix)] orig_umask: u32,
 ) -> CopyResult<()> {
     let source_path = Path::new(&source);
     if source_path.is_dir() && (options.dereference || !source_path.is_symlink()) {
@@ -1547,6 +1559,8 @@ fn copy_source(
             copied_files,
             created_parent_dirs,
             true,
+            #[cfg(unix)]
+            orig_umask,
         )
     } else {
         // Copy as file
@@ -1561,6 +1575,8 @@ fn copy_source(
             copied_files,
             created_parent_dirs,
             true,
+            #[cfg(unix)]
+            orig_umask,
         );
         if options.parents {
             for (x, y) in aligned_ancestors(source, dest.as_path()) {
@@ -1569,8 +1585,10 @@ fn copy_source(
                         &src,
                         y,
                         &options.attributes,
-                        false,
+                        true,
                         options.set_selinux_context,
+                        #[cfg(unix)]
+                        orig_umask,
                     )?;
                 }
             }
@@ -1673,7 +1691,7 @@ impl OverwriteMode {
 /// Note: ENOTSUP/EOPNOTSUPP errors are silently ignored when not required, as per GNU cp
 /// documentation: "Try to preserve SELinux security context and extended attributes (xattr),
 /// but ignore any failure to do that and print no corresponding diagnostic."
-fn handle_preserve<F: Fn() -> CopyResult<()>>(p: Preserve, f: F) -> CopyResult<()> {
+fn handle_preserve<F: FnMut() -> CopyResult<()>>(p: Preserve, mut f: F) -> CopyResult<()> {
     match p {
         Preserve::No { .. } => {}
         Preserve::Yes { required } => {
@@ -1762,21 +1780,14 @@ pub(crate) fn copy_attributes(
     source: &Path,
     dest: &Path,
     attributes: &Attributes,
-    dest_is_freshly_created_dir: bool,
+    was_created: bool,
     skip_selinux_xattr: bool,
+    #[cfg(unix)] orig_umask: u32,
 ) -> CopyResult<()> {
-    let context = &*format!("{} -> {}", source.quote(), dest.quote());
-    let source_metadata =
-        fs::symlink_metadata(source).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+    let source_metadata = fs::symlink_metadata(source)
+        .map_err(|e| CpError::IoErrContext(e, context_for(source, dest)))?;
 
-    let mode_explicitly_disabled = matches!(attributes.mode, Preserve::No { explicit: true });
-
-    // preserve is true by default if the destination is created by us and it's a directory
-    let mode = if !mode_explicitly_disabled && dest_is_freshly_created_dir {
-        Preserve::Yes { required: false }
-    } else {
-        attributes.mode
-    };
+    let mut failed_to_set_ownership = false;
 
     // Ownership must be changed first to avoid interfering with mode change.
     #[cfg(unix)]
@@ -1790,7 +1801,7 @@ pub(crate) fn copy_attributes(
         let dest_gid = source_metadata.gid();
         let meta = &dest
             .symlink_metadata()
-            .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+            .map_err(|e| CpError::IoErrContext(e, context_for(source, dest)))?;
 
         let try_chown = {
             |uid| {
@@ -1810,10 +1821,45 @@ pub(crate) fn copy_attributes(
         // gnu compatibility: cp doesn't report an error if it fails to set the ownership,
         // and will fall back to changing only the gid if possible.
         if try_chown(Some(dest_uid)).is_err() {
+            failed_to_set_ownership = true;
             let _ = try_chown(None);
         }
         Ok(())
     })?;
+
+    // before mode change since newly created dir/file are not read-only.
+    handle_preserve(attributes.xattr, || -> CopyResult<()> {
+        #[cfg(all(unix, not(target_os = "android")))]
+        {
+            copy_extended_attrs(source, dest, skip_selinux_xattr)?;
+        }
+        #[cfg(not(all(unix, not(target_os = "android"))))]
+        #[allow(unused_variables)]
+        {
+            // The documentation for GNU cp states:
+            //
+            // > Try to preserve SELinux security context and
+            // > extended attributes (xattr), but ignore any failure
+            // > to do that and print no corresponding diagnostic.
+            //
+            // so we simply do nothing here.
+            //
+            // TODO Silently ignore failures in the `#[cfg(unix)]`
+            // block instead of terminating immediately on errors.
+        }
+
+        Ok(())
+    })?;
+
+    // always try to set permission to the correct one if newly created
+    #[cfg(unix)]
+    let mode = if was_created {
+        Preserve::Yes { required: true }
+    } else {
+        attributes.mode
+    };
+    #[cfg(not(unix))]
+    let mode = attributes.mode;
 
     handle_preserve(mode, || -> CopyResult<()> {
         // The `chmod()` system call that underlies the
@@ -1822,8 +1868,22 @@ pub(crate) fn copy_attributes(
         // do nothing, since every symbolic link has the same
         // permissions.
         if !dest.is_symlink() {
-            fs::set_permissions(dest, source_metadata.permissions())
-                .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+            #[cfg(unix)]
+            let permissions = handle_mode(
+                attributes.mode,
+                dest.is_dir(),
+                was_created,
+                failed_to_set_ownership,
+                source_metadata.permissions().mode(),
+                orig_umask,
+            )
+            .map(Permissions::from_mode);
+            #[cfg(not(unix))]
+            let permissions = Some(source_metadata.permissions());
+            if let Some(permissions) = permissions {
+                fs::set_permissions(dest, permissions)
+                    .map_err(|e| CpError::IoErrContext(e, context_for(source, dest)))?;
+            }
             // FIXME: Implement this for windows as well
             #[cfg(feature = "feat_acl")]
             exacl::getfacl(source, None)
@@ -1862,29 +1922,6 @@ pub(crate) fn copy_attributes(
                 translate!("cp-error-selinux-get-context", "path" => source.quote()),
             ));
         }
-        Ok(())
-    })?;
-
-    handle_preserve(attributes.xattr, || -> CopyResult<()> {
-        #[cfg(all(unix, not(target_os = "android")))]
-        {
-            copy_extended_attrs(source, dest, skip_selinux_xattr)?;
-        }
-        #[cfg(not(all(unix, not(target_os = "android"))))]
-        #[allow(unused_variables)]
-        {
-            // The documentation for GNU cp states:
-            //
-            // > Try to preserve SELinux security context and
-            // > extended attributes (xattr), but ignore any failure
-            // > to do that and print no corresponding diagnostic.
-            //
-            // so we simply do nothing here.
-            //
-            // TODO Silently ignore failures in the `#[cfg(unix)]`
-            // block instead of terminating immediately on errors.
-        }
-
         Ok(())
     })?;
 
@@ -2223,7 +2260,6 @@ fn handle_copy_mode(
     source: &Path,
     dest: &Path,
     options: &Options,
-    context: &str,
     source_metadata: &Metadata,
     symlinked_files: &mut HashSet<FileInformation>,
     source_in_command_line: bool,
@@ -2266,7 +2302,6 @@ fn handle_copy_mode(
                 source,
                 dest,
                 options,
-                context,
                 source_is_symlink,
                 source_is_fifo,
                 source_is_socket,
@@ -2290,7 +2325,6 @@ fn handle_copy_mode(
                             source,
                             dest,
                             options,
-                            context,
                             source_is_symlink,
                             source_is_fifo,
                             source_is_socket,
@@ -2327,7 +2361,6 @@ fn handle_copy_mode(
                             source,
                             dest,
                             options,
-                            context,
                             source_is_symlink,
                             source_is_fifo,
                             source_is_socket,
@@ -2343,7 +2376,6 @@ fn handle_copy_mode(
                     source,
                     dest,
                     options,
-                    context,
                     source_is_symlink,
                     source_is_fifo,
                     source_is_socket,
@@ -2368,40 +2400,35 @@ fn handle_copy_mode(
 }
 
 /// Calculates the permissions for the destination file in a copy operation.
-///
-/// If the destination file already exists, its current permissions are returned.
-/// If the destination file does not exist, the source file's permissions are used,
-/// with the `no-preserve` option and the umask taken into account on Unix platforms.
-/// # Returns
-///
-/// * `Ok(Permissions)` - The calculated permissions for the destination file.
-/// * `Err(CopyError)` - An error occurred while getting the metadata of the destination file.
-///
-// Allow unused variables for Windows (on options)
 #[allow(unused_variables)]
 fn calculate_dest_permissions(
     dest_metadata: Option<&Metadata>,
     dest: &Path,
     source_metadata: &Metadata,
     options: &Options,
-    context: &str,
+    #[cfg(unix)] orig_umask: u32,
 ) -> Permissions {
-    if let Some(metadata) = dest_metadata {
-        metadata.permissions()
-    } else {
-        #[cfg(unix)]
-        {
-            let mut permissions = source_metadata.permissions();
-            let mode = handle_no_preserve_mode(options, permissions.mode());
+    #[cfg(unix)]
+    {
+        handle_mode(
+            options.attributes.mode,
+            false,
+            dest_metadata.is_none(),
+            false,
+            source_metadata.permissions().mode(),
+            orig_umask,
+        )
+        .map_or_else(
+            || dest_metadata.unwrap().permissions(), // existing destination and not preserving mode
+            Permissions::from_mode,
+        )
+    }
 
-            // Apply umask
-            use uucore::mode::get_umask;
-            let mode = mode & !get_umask();
-            permissions.set_mode(mode);
-            permissions
-        }
-        #[cfg(not(unix))]
-        {
+    #[cfg(not(unix))]
+    {
+        if let Some(metadata) = dest_metadata {
+            metadata.permissions()
+        } else {
             source_metadata.permissions()
         }
     }
@@ -2428,6 +2455,7 @@ fn copy_file(
     copied_files: &mut HashMap<FileInformation, PathBuf>,
     created_parent_dirs: &mut HashSet<PathBuf>,
     source_in_command_line: bool,
+    #[cfg(unix)] orig_umask: u32,
 ) -> CopyResult<()> {
     let source_is_symlink = source.is_symlink();
     let initial_dest_metadata = dest.symlink_metadata().ok();
@@ -2553,10 +2581,6 @@ fn copy_file(
         }
     }
 
-    // Calculate the context upfront before canonicalizing the path
-    let context = context_for(source, dest);
-    let context = context.as_str();
-
     let source_metadata = {
         let result = if options.dereference(source_in_command_line) {
             fs::metadata(source)
@@ -2579,7 +2603,8 @@ fn copy_file(
         dest,
         &source_metadata,
         options,
-        context,
+        #[cfg(unix)]
+        orig_umask,
     );
 
     #[cfg(unix)]
@@ -2597,7 +2622,6 @@ fn copy_file(
         source,
         dest,
         options,
-        context,
         &source_metadata,
         symlinked_files,
         source_in_command_line,
@@ -2636,6 +2660,8 @@ fn copy_file(
             &options.attributes,
             false,
             options.set_selinux_context,
+            #[cfg(unix)]
+            orig_umask,
         )
     } else if source_is_stream && !source.exists() {
         // Some stream files may not exist after we have copied it,
@@ -2650,6 +2676,8 @@ fn copy_file(
             &options.attributes,
             false,
             options.set_selinux_context,
+            #[cfg(unix)]
+            orig_umask,
         )
     };
 
@@ -2693,50 +2721,53 @@ fn is_stream(metadata: &Metadata) -> bool {
 }
 
 #[cfg(unix)]
-fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
-    let (is_preserve_mode, is_explicit_no_preserve_mode) = options.preserve_mode();
-    if !is_preserve_mode {
-        use libc::{
-            S_IRGRP, S_IROTH, S_IRUSR, S_IRWXG, S_IRWXO, S_IRWXU, S_IWGRP, S_IWOTH, S_IWUSR,
-        };
+#[allow(clippy::unnecessary_cast)]
+/// Calculate the final permissions mode.
+fn handle_mode(
+    mode: Preserve,
+    is_dir: bool,
+    was_created: bool,
+    failed_to_set_ownership: bool,
+    source_mode: u32,
+    umask: u32,
+) -> Option<u32> {
+    match (was_created, mode) {
+        // If preserving mode, return Some source_mode.
+        (_, Preserve::Yes { .. }) => {
+            use libc::{S_ISGID, S_ISUID};
+            const UID_GID_MASK: u32 = !(S_ISGID | S_ISUID) as u32;
 
-        #[cfg(not(any(
-            target_os = "android",
-            target_os = "macos",
-            target_os = "freebsd",
-            target_os = "redox",
-        )))]
-        {
-            const MODE_RW_UGO: u32 = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
-            const S_IRWXUGO: u32 = S_IRWXU | S_IRWXG | S_IRWXO;
-            return if is_explicit_no_preserve_mode {
-                MODE_RW_UGO
+            Some(if failed_to_set_ownership {
+                // "Additionally, the -p option explicitly requires that all set-user-ID and
+                // set-group-ID permissions be discarded if any of the owner or group IDs cannot be
+                // set. This is to keep users from unintentionally giving away special privilege
+                // when copying programs."
+                source_mode & UID_GID_MASK
             } else {
-                org_mode & S_IRWXUGO
-            };
+                source_mode
+            })
         }
-
-        #[cfg(any(
-            target_os = "android",
-            target_os = "macos",
-            target_os = "freebsd",
-            target_os = "redox",
-        ))]
-        {
-            #[allow(clippy::unnecessary_cast)]
+        // If was not created (destination existed), return None
+        (false, _) => None,
+        // If was created (destination did not exist), return Some
+        // If no preserving mode, return 0o777(dir)/0o666(file) & !umask.
+        // If default, return source_mode & 0o777 & !umask.
+        (true, Preserve::No { explicit }) => {
+            use libc::{
+                S_IRGRP, S_IROTH, S_IRUSR, S_IRWXG, S_IRWXO, S_IRWXU, S_IWGRP, S_IWOTH, S_IWUSR,
+            };
             const MODE_RW_UGO: u32 =
                 (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
-            #[allow(clippy::unnecessary_cast)]
             const S_IRWXUGO: u32 = (S_IRWXU | S_IRWXG | S_IRWXO) as u32;
-            return if is_explicit_no_preserve_mode {
-                MODE_RW_UGO
+
+            let mode = if explicit {
+                if is_dir { S_IRWXUGO } else { MODE_RW_UGO }
             } else {
-                org_mode & S_IRWXUGO
+                source_mode & S_IRWXUGO
             };
+            Some(mode & !umask)
         }
     }
-
-    org_mode
 }
 
 /// Copy the file from `source` to `dest` either using the normal `fs::copy` or a
@@ -2746,7 +2777,6 @@ fn copy_helper(
     source: &Path,
     dest: &Path,
     options: &Options,
-    context: &str,
     source_is_symlink: bool,
     source_is_fifo: bool,
     source_is_socket: bool,
@@ -2779,7 +2809,6 @@ fn copy_helper(
             dest,
             options.reflink_mode,
             options.sparse_mode,
-            context,
             #[cfg(unix)]
             source_is_stream,
         )?;
@@ -2836,6 +2865,8 @@ fn copy_link(
         &options.attributes,
         false,
         options.set_selinux_context,
+        #[cfg(unix)]
+        0,
     )
 }
 
