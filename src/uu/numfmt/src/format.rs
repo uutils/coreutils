@@ -2,7 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore powf
+
 use uucore::display::Quotable;
 use uucore::translate;
 
@@ -467,21 +469,19 @@ fn split_bytes<'a>(input: &'a [u8], delim: &'a [u8]) -> impl Iterator<Item = &'a
     })
 }
 
-pub fn format_and_print_delimited(input: &[u8], options: &NumfmtOptions) -> Result<()> {
-    let delimiter = options.delimiter.as_ref().unwrap();
-    let mut output: Vec<u8> = Vec::new();
-    let eol = if options.zero_terminated {
-        b'\0'
-    } else {
-        b'\n'
-    };
+pub fn write_formatted_with_delimiter<W: std::io::Write>(
+    writer: &mut W,
+    input: &[u8],
+    options: &NumfmtOptions,
+) -> Result<()> {
+    let delimiter = options.delimiter.as_deref().unwrap();
 
     for (n, field) in (1..).zip(split_bytes(input, delimiter)) {
         let field_selected = uucore::ranges::contain(&options.fields, n);
 
         // add delimiter before second and subsequent fields
         if n > 1 {
-            output.extend_from_slice(delimiter);
+            writer.write_all(delimiter).unwrap();
         }
 
         if field_selected {
@@ -490,21 +490,28 @@ pub fn format_and_print_delimited(input: &[u8], options: &NumfmtOptions) -> Resu
                 .map_err(|_| translate!("numfmt-error-invalid-number", "input" => String::from_utf8_lossy(field).into_owned().quote()))?
                 .trim_start();
             let formatted = format_string(field_str, options, None)?;
-            output.extend_from_slice(formatted.as_bytes());
+            writer.write_all(formatted.as_bytes()).unwrap();
         } else {
             // add unselected field without conversion
-            output.extend_from_slice(field);
+            writer.write_all(field).unwrap();
         }
     }
 
-    output.push(eol);
-    std::io::Write::write_all(&mut std::io::stdout(), &output).map_err(|e| e.to_string())?;
+    let eol = if options.zero_terminated {
+        b"\0"
+    } else {
+        b"\n"
+    };
+    writer.write_all(eol).unwrap();
 
     Ok(())
 }
-pub fn format_and_print_whitespace(s: &str, options: &NumfmtOptions) -> Result<()> {
-    let mut output = String::new();
 
+pub fn write_formatted_with_whitespace<W: std::io::Write>(
+    writer: &mut W,
+    s: &str,
+    options: &NumfmtOptions,
+) -> Result<()> {
     for (n, (prefix, field)) in (1..).zip(WhitespaceSplitter { s: Some(s) }) {
         let field_selected = uucore::ranges::contain(&options.fields, n);
 
@@ -513,7 +520,7 @@ pub fn format_and_print_whitespace(s: &str, options: &NumfmtOptions) -> Result<(
 
             // add delimiter before second and subsequent fields
             let prefix = if n > 1 {
-                output.push(' ');
+                writer.write_all(b" ").unwrap();
                 &prefix[1..]
             } else {
                 prefix
@@ -525,24 +532,28 @@ pub fn format_and_print_whitespace(s: &str, options: &NumfmtOptions) -> Result<(
                 None
             };
 
-            output.push_str(&format_string(field, options, implicit_padding)?);
+            let formatted = format_string(field, options, implicit_padding)?;
+            writer.write_all(formatted.as_bytes()).unwrap();
         } else {
             // the -z option converts an initial \n into a space
             let prefix = if options.zero_terminated && prefix.starts_with('\n') {
-                output.push(' ');
+                writer.write_all(b" ").unwrap();
                 &prefix[1..]
             } else {
                 prefix
             };
             // add unselected field without conversion
-            output.push_str(prefix);
-            output.push_str(field);
+            writer.write_all(prefix.as_bytes()).unwrap();
+            writer.write_all(field.as_bytes()).unwrap();
         }
     }
 
-    let eol = if options.zero_terminated { '\0' } else { '\n' };
-    output.push(eol);
-    print!("{output}");
+    let eol = if options.zero_terminated {
+        b"\0"
+    } else {
+        b"\n"
+    };
+    writer.write_all(eol).unwrap();
 
     Ok(())
 }
