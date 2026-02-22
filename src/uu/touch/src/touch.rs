@@ -17,7 +17,7 @@ use jiff::tz::TimeZone;
 use jiff::{Timestamp, ToSpan, Zoned};
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
-use std::fs::{self, File};
+use std::fs;
 use std::io::{Error, ErrorKind};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -476,7 +476,13 @@ fn touch_file(
             return Ok(());
         }
 
-        if let Err(e) = File::create(path) {
+        // Create empty file without truncation for inotify compatibility
+        // Use create_new to avoid O_TRUNC behavior that interferes with inotify
+        if let Err(e) = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)
+        {
             // we need to check if the path is the path to a directory (ends with a separator)
             // we can't use File::create to create a directory
             // we cannot use path.is_dir() because it calls fs::metadata which we already called

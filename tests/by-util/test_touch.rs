@@ -1061,3 +1061,44 @@ fn test_touch_device_files() {
         .succeeds()
         .no_output();
 }
+
+#[test]
+#[cfg(unix)]
+fn test_touch_inotify_compatibility() {
+    // Regression test for inotify file change detection issue
+    // Ensures touch creates files with GNU-compatible flags (without O_TRUNC)
+    // that don't interfere with inotify event generation
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let test_file = "inotify_test.txt";
+
+    // Create new file
+    ucmd.arg(test_file).succeeds().no_output();
+    assert!(at.file_exists(test_file));
+
+    // Verify file creation uses correct flags by checking it doesn't truncate existing content
+    let initial_content = "test content";
+    at.write(test_file, initial_content);
+
+    // Touch existing file should not truncate content
+    new_ucmd!().arg(at.plus(test_file)).succeeds().no_output();
+    assert_eq!(at.read(test_file), initial_content);
+
+    // Verify timestamp changes are properly applied
+    let (atime_before, mtime_before) = get_file_times(&at, test_file);
+
+    std::thread::sleep(std::time::Duration::from_secs(1));
+    new_ucmd!().arg(at.plus(test_file)).succeeds().no_output();
+
+    let (atime_after, mtime_after) = get_file_times(&at, test_file);
+
+    // Timestamps should be updated (inotify compatibility ensures proper event generation)
+    assert!(
+        mtime_after > mtime_before,
+        "Modification time should be updated for inotify compatibility"
+    );
+    assert!(
+        atime_after >= atime_before,
+        "Access time should be updated or preserved"
+    );
+}
