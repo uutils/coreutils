@@ -481,11 +481,9 @@ fn test_date_set_mac_unavailable() {
         .arg("2020-03-11 21:45:00+08:00")
         .fails();
     result.no_stdout();
-    assert!(
-        result
-            .stderr_str()
-            .starts_with("date: setting the date is not supported by macOS")
-    );
+    assert!(result
+        .stderr_str()
+        .starts_with("date: setting the date is not supported by macOS"));
 }
 
 #[test]
@@ -2332,6 +2330,22 @@ fn test_date_format_modifier_percent_escape() {
         .args(&["-d", "1999-06-01", "+%%Y=%10Y"])
         .succeeds()
         .stdout_is("%Y=0000001999\n");
+}
+
+#[test]
+fn test_date_format_modifier_extreme_width() {
+    // Regression test for issue #11044
+    // Extremely large width values should not cause panic
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .args(&["-d", "1999-06-01", "+%9223372036854775807Y"])
+        .succeeds();
+
+    // Also test with other specifiers
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .args(&["-d", "1999-06-01", "+%9999999999999999999m"])
+        .succeeds();
 }
 
 // Tests for --debug flag

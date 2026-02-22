@@ -33,11 +33,15 @@
 //! - `%^B`: Month name in uppercase (JUNE)
 //! - `%+4C`: Century with sign, padded to 4 characters (+019)
 
-use jiff::Zoned;
 use jiff::fmt::strtime::{BrokenDownTime, Config, PosixCustom};
+use jiff::Zoned;
 use regex::Regex;
 use std::fmt;
 use std::sync::OnceLock;
+
+/// Maximum allowed width for format modifiers to prevent memory exhaustion
+/// This is an arbitrary reasonable limit - GNU date doesn't document a specific limit
+const MAX_WIDTH: usize = 1024;
 
 /// Error type for format modifier operations
 #[derive(Debug)]
@@ -145,7 +149,9 @@ fn format_with_modifiers(
         // Check if this specifier has modifiers
         if !flags.is_empty() || !width_str.is_empty() {
             // Apply modifiers to the formatted value
+            // Cap width at MAX_WIDTH to prevent memory exhaustion from extreme values
             let width: usize = width_str.parse().unwrap_or(0);
+            let width = width.min(MAX_WIDTH);
             let modified = apply_modifiers(&formatted, flags, width, spec);
             result.push_str(&modified);
         } else {
@@ -565,5 +571,21 @@ mod tests {
                 "value='{value}', flags='{flags}', width={width}, spec='{spec}'",
             );
         }
+    }
+
+    #[test]
+    fn test_extreme_width_no_panic() {
+        // Regression test for issue #11044
+        // Extremely large width values should not cause panic
+        let date = make_test_date(1999, 6, 1, 0);
+        let config = get_config();
+
+        // This should succeed without panicking
+        let result = format_with_modifiers(&date, "%9223372036854775807Y", &config);
+        assert!(result.is_ok());
+
+        // Result should be capped at MAX_WIDTH
+        let result_str = result.unwrap();
+        assert!(result_str.len() <= MAX_WIDTH);
     }
 }
