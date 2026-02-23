@@ -33,12 +33,13 @@
 //! - `%^B`: Month name in uppercase (JUNE)
 //! - `%+4C`: Century with sign, padded to 4 characters (+019)
 
+use fluent::FluentArgs;
 use jiff::Zoned;
 use jiff::fmt::strtime::{BrokenDownTime, Config, PosixCustom};
 use regex::Regex;
 use std::fmt;
 use std::sync::OnceLock;
-use uucore::translate;
+use uucore::locale::get_message_with_args;
 
 /// Error type for format modifier operations
 #[derive(Debug)]
@@ -46,22 +47,23 @@ pub enum FormatError {
     /// Error from the underlying jiff library
     JiffError(jiff::Error),
     /// Field width calculation overflowed or required allocation failed
-    FieldWidthTooLarge { width: usize, specifier: String },
+    FieldWidthTooLarge { width: String, specifier: String },
 }
 
 impl fmt::Display for FormatError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::JiffError(e) => write!(f, "{e}"),
-            Self::FieldWidthTooLarge { width, specifier } => write!(
-                f,
-                "{}",
-                translate!(
-                    "date-error-format-modifier-width-too-large",
-                    "width" => width,
-                    "specifier" => specifier
+            Self::FieldWidthTooLarge { width, specifier } => {
+                let mut args = FluentArgs::new();
+                args.set("width", width.clone());
+                args.set("specifier", specifier.clone());
+                write!(
+                    f,
+                    "{}",
+                    get_message_with_args("date-error-format-modifier-width-too-large", args)
                 )
-            ),
+            }
         }
     }
 }
@@ -153,7 +155,16 @@ fn format_with_modifiers(
         // Check if this specifier has modifiers
         if !flags.is_empty() || !width_str.is_empty() {
             // Apply modifiers to the formatted value
-            let width: usize = width_str.parse().unwrap_or(0);
+            let width = if width_str.is_empty() {
+                0
+            } else {
+                width_str
+                    .parse()
+                    .map_err(|_| FormatError::FieldWidthTooLarge {
+                        width: width_str.to_string(),
+                        specifier: spec.to_string(),
+                    })?
+            };
             let explicit_width = !width_str.is_empty();
             let modified = apply_modifiers(&formatted, flags, width, spec, explicit_width)?;
             result.push_str(&modified);
@@ -397,7 +408,7 @@ fn apply_modifiers(
             let rest = &result[1..];
             let target_len = result.len().checked_add(padding).ok_or_else(|| {
                 FormatError::FieldWidthTooLarge {
-                    width,
+                    width: width.to_string(),
                     specifier: specifier.to_string(),
                 }
             })?;
@@ -405,7 +416,7 @@ fn apply_modifiers(
             padded
                 .try_reserve(target_len)
                 .map_err(|_| FormatError::FieldWidthTooLarge {
-                    width,
+                    width: width.to_string(),
                     specifier: specifier.to_string(),
                 })?;
             padded.push(sign);
@@ -416,7 +427,7 @@ fn apply_modifiers(
             // Default: pad on the left (e.g., "  -22" or "  1999")
             let target_len = result.len().checked_add(padding).ok_or_else(|| {
                 FormatError::FieldWidthTooLarge {
-                    width,
+                    width: width.to_string(),
                     specifier: specifier.to_string(),
                 }
             })?;
@@ -424,7 +435,7 @@ fn apply_modifiers(
             padded
                 .try_reserve(target_len)
                 .map_err(|_| FormatError::FieldWidthTooLarge {
-                    width,
+                    width: width.to_string(),
                     specifier: specifier.to_string(),
                 })?;
             padded.extend(std::iter::repeat_n(pad_char, padding));
@@ -789,7 +800,7 @@ mod tests {
         assert!(matches!(
             err,
             FormatError::FieldWidthTooLarge { width, specifier }
-            if width == usize::MAX && specifier == "c"
+            if width == usize::MAX.to_string() && specifier == "c"
         ));
     }
 }
