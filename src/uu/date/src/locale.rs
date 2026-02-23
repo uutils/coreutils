@@ -30,12 +30,61 @@ macro_rules! cfg_langinfo {
     };
 }
 
-cfg_langinfo! {
+// The POSIX `nl_langinfo` items used by `%x`, `%X` and `%r` (`D_FMT`, `T_FMT`,
+// `T_FMT_AMPM`) are standard, so they are available on far more targets than
+// glibc's `_DATE_FMT` extension: everywhere `nl_langinfo` itself exists, which
+// is every unix except Android, Cygwin and Redox. `cfg_nl_langinfo!(else ...)`
+// gates the fallbacks for the remaining targets and is the exact inverse of the
+// plain form, so no target can compile both or neither.
+macro_rules! cfg_nl_langinfo {
+    (else $($item:item)*) => {
+        $(
+            #[cfg(not(all(
+                unix,
+                not(target_os = "android"),
+                not(target_os = "cygwin"),
+                not(target_os = "redox")
+            )))]
+            $item
+        )*
+    };
+    ($($item:item)*) => {
+        $(
+            #[cfg(all(
+                unix,
+                not(target_os = "android"),
+                not(target_os = "cygwin"),
+                not(target_os = "redox")
+            ))]
+            $item
+        )*
+    };
+}
+
+cfg_nl_langinfo! {
     use core::ffi::CStr;
-    use std::sync::OnceLock;
 
     #[cfg(test)]
     use std::sync::Mutex;
+
+    /// `D_FMT` — locale date format (used by `%x`)
+    const D_FMT_ITEM: libc::nl_item = libc::D_FMT;
+    /// `T_FMT` — locale time format (used by `%X`)
+    const T_FMT_ITEM: libc::nl_item = libc::T_FMT;
+    /// `T_FMT_AMPM` — locale 12-hour time format (used by `%r`)
+    const T_FMT_AMPM_ITEM: libc::nl_item = libc::T_FMT_AMPM;
+
+    /// Mutex to serialize setlocale() calls during tests.
+    ///
+    /// setlocale() is process-global, so parallel tests that call it can
+    /// interfere with each other. This mutex ensures only one test accesses
+    /// locale functions at a time.
+    #[cfg(test)]
+    static LOCALE_MUTEX: Mutex<()> = Mutex::new(());
+}
+
+cfg_langinfo! {
+    use std::sync::OnceLock;
 
     /// glibc's `_DATE_FMT` has been stable for the last 12 years
     /// being added upstream to libc TODO: update to libc
@@ -45,14 +94,6 @@ cfg_langinfo! {
 cfg_langinfo! {
     /// Cached locale date/time format string
     static DEFAULT_FORMAT_CACHE: OnceLock<&'static [u8]> = OnceLock::new();
-
-    /// Mutex to serialize setlocale() calls during tests.
-    ///
-    /// setlocale() is process-global, so parallel tests that call it can
-    /// interfere with each other. This mutex ensures only one test accesses
-    /// locale functions at a time.
-    #[cfg(test)]
-    static LOCALE_MUTEX: Mutex<()> = Mutex::new(());
 
     /// Returns the default date format string for the current locale.
     ///
@@ -98,6 +139,66 @@ cfg_langinfo! { else
     /// On platforms without `_DATE_FMT`, fall back to the POSIX format
     pub fn get_locale_default_format() -> &'static [u8] {
         POSIX_DEFAULT_FORMAT
+    }
+}
+
+cfg_nl_langinfo! {
+    /// Reads a `nl_langinfo` item for the environment's `LC_TIME` locale.
+    fn query_nl_langinfo(item: libc::nl_item) -> Option<String> {
+        // In tests, acquire mutex to prevent race conditions with setlocale()
+        // which is process-global and not thread-safe
+        #[cfg(test)]
+        let _lock = LOCALE_MUTEX.lock().unwrap();
+
+        unsafe {
+            // Set locale from environment variables
+            libc::setlocale(libc::LC_TIME, c"".as_ptr());
+
+            let ptr = libc::nl_langinfo(item);
+            if ptr.is_null() {
+                return None;
+            }
+
+            let s = CStr::from_ptr(ptr).to_str().ok()?;
+            if s.is_empty() {
+                return None;
+            }
+
+            Some(s.to_string())
+        }
+    }
+
+    /// Returns the locale date format (`D_FMT`) used by `%x`.
+    pub fn get_locale_date_format() -> Option<String> {
+        query_nl_langinfo(D_FMT_ITEM)
+    }
+
+    /// Returns the locale time format (`T_FMT`) used by `%X`.
+    pub fn get_locale_time_format() -> Option<String> {
+        query_nl_langinfo(T_FMT_ITEM)
+    }
+
+    /// Returns the locale 12-hour time format (`T_FMT_AMPM`) used by `%r`.
+    /// Falls back to `%I:%M:%S %p` if the locale leaves it empty.
+    pub fn get_locale_time_ampm_format() -> Option<String> {
+        query_nl_langinfo(T_FMT_AMPM_ITEM).or_else(|| Some("%I:%M:%S %p".to_string()))
+    }
+}
+
+cfg_nl_langinfo! { else
+    /// Fallback for platforms without `nl_langinfo`.
+    pub fn get_locale_date_format() -> Option<String> {
+        None
+    }
+
+    /// Fallback for platforms without `nl_langinfo`.
+    pub fn get_locale_time_format() -> Option<String> {
+        None
+    }
+
+    /// Fallback for platforms without `nl_langinfo`.
+    pub fn get_locale_time_ampm_format() -> Option<String> {
+        None
     }
 }
 
