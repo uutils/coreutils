@@ -12,6 +12,23 @@ fn test_normal() {
 }
 
 #[test]
+fn test_output_format() {
+    // Output must be exactly 8 lowercase hex digits followed by a newline.
+    // The stricter anchored regex catches outputs like "00000000garbage"
+    // that the existing test_normal regex would incorrectly accept.
+    let re = Regex::new(r"^[0-9a-f]{8}\n$").unwrap();
+    new_ucmd!().succeeds().stdout_matches(&re);
+}
+
+#[test]
+fn test_help() {
+    new_ucmd!()
+        .arg("--help")
+        .succeeds()
+        .stdout_contains("Print the numeric identifier");
+}
+
+#[test]
 fn test_invalid_flag() {
     new_ucmd!()
         .arg("--invalid-argument")
