@@ -8,7 +8,7 @@ mod error;
 
 use crate::error::ChrootError;
 use clap::{Arg, ArgAction, Command};
-use std::ffi::CString;
+use std::ffi::{CString, OsStr};
 use std::io::{Error, ErrorKind};
 use std::os::unix::prelude::OsStrExt;
 use std::os::unix::process::CommandExt;
@@ -159,9 +159,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches =
         uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 125)?;
 
-    let default_shell: &'static str = "/bin/sh";
-    let default_option: &'static str = "-i";
-    let user_shell = std::env::var("SHELL");
+    let default_shell: &'static OsStr = OsStr::new("/bin/sh");
+    let default_option: &'static OsStr = OsStr::new("-i");
+    let user_shell = std::env::var_os("SHELL");
 
     let options = Options::from(&matches)?;
 
@@ -186,22 +186,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Err(ChrootError::NoSuchDirectory(options.newroot).into());
     }
 
-    let commands = match matches.get_many::<String>(options::COMMAND) {
-        Some(v) => v.map(String::as_str).collect(),
-        None => vec![],
-    };
+    let commands: Vec<&OsStr> = matches
+        .get_many::<String>(options::COMMAND)
+        .map_or_else(Vec::new, |v| v.map(OsStr::new).collect());
 
     // TODO: refactor the args and command matching
     // See: https://github.com/uutils/coreutils/pull/2365#discussion_r647849967
-    let command: Vec<&str> = match commands.len() {
-        0 => {
-            let shell: &str = match user_shell {
-                Err(_) => default_shell,
-                Ok(ref s) => s.as_ref(),
-            };
-            vec![shell, default_option]
-        }
-        _ => commands,
+    let command = if commands.is_empty() {
+        vec![
+            user_shell.as_deref().unwrap_or(default_shell),
+            default_option,
+        ]
+    } else {
+        commands
     };
 
     assert!(!command.is_empty());
