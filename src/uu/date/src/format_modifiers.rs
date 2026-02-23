@@ -38,21 +38,30 @@ use jiff::fmt::strtime::{BrokenDownTime, Config, PosixCustom};
 use regex::Regex;
 use std::fmt;
 use std::sync::OnceLock;
+use uucore::translate;
 
 /// Error type for format modifier operations
 #[derive(Debug)]
 pub enum FormatError {
     /// Error from the underlying jiff library
     JiffError(jiff::Error),
-    /// Custom error message
-    Custom(String),
+    /// Field width calculation overflowed or required allocation failed
+    FieldWidthTooLarge { width: usize, specifier: String },
 }
 
 impl fmt::Display for FormatError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::JiffError(e) => write!(f, "{e}"),
-            Self::Custom(s) => write!(f, "{s}"),
+            Self::FieldWidthTooLarge { width, specifier } => write!(
+                f,
+                "{}",
+                translate!(
+                    "date-error-format-modifier-width-too-large",
+                    "width" => width,
+                    "specifier" => specifier
+                )
+            ),
         }
     }
 }
@@ -61,12 +70,6 @@ impl From<jiff::Error> for FormatError {
     fn from(e: jiff::Error) -> Self {
         Self::JiffError(e)
     }
-}
-
-const ERR_FIELD_WIDTH_TOO_LARGE: &str = "field width too large";
-
-fn width_too_large_error() -> FormatError {
-    FormatError::Custom(ERR_FIELD_WIDTH_TOO_LARGE.to_string())
 }
 
 /// Regex to match format specifiers with optional modifiers
@@ -392,28 +395,38 @@ fn apply_modifiers(
             // Zero padding: sign first, then zeros (e.g., "-0022")
             let sign = result.chars().next().unwrap();
             let rest = &result[1..];
-            let target_len = result
-                .len()
-                .checked_add(padding)
-                .ok_or_else(width_too_large_error)?;
+            let target_len = result.len().checked_add(padding).ok_or_else(|| {
+                FormatError::FieldWidthTooLarge {
+                    width,
+                    specifier: specifier.to_string(),
+                }
+            })?;
             let mut padded = String::new();
             padded
                 .try_reserve(target_len)
-                .map_err(|_| width_too_large_error())?;
+                .map_err(|_| FormatError::FieldWidthTooLarge {
+                    width,
+                    specifier: specifier.to_string(),
+                })?;
             padded.push(sign);
             padded.extend(std::iter::repeat_n('0', padding));
             padded.push_str(rest);
             result = padded;
         } else {
             // Default: pad on the left (e.g., "  -22" or "  1999")
-            let target_len = result
-                .len()
-                .checked_add(padding)
-                .ok_or_else(width_too_large_error)?;
+            let target_len = result.len().checked_add(padding).ok_or_else(|| {
+                FormatError::FieldWidthTooLarge {
+                    width,
+                    specifier: specifier.to_string(),
+                }
+            })?;
             let mut padded = String::new();
             padded
                 .try_reserve(target_len)
-                .map_err(|_| width_too_large_error())?;
+                .map_err(|_| FormatError::FieldWidthTooLarge {
+                    width,
+                    specifier: specifier.to_string(),
+                })?;
             padded.extend(std::iter::repeat_n(pad_char, padding));
             padded.push_str(&result);
             result = padded;
@@ -775,7 +788,8 @@ mod tests {
         let err = apply_modifiers("x", "", usize::MAX, "c", true).unwrap_err();
         assert!(matches!(
             err,
-            FormatError::Custom(message) if message == ERR_FIELD_WIDTH_TOO_LARGE
+            FormatError::FieldWidthTooLarge { width, specifier }
+            if width == usize::MAX && specifier == "c"
         ));
     }
 }
