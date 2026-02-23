@@ -972,5 +972,4 @@ mod tests {
         assert_eq!(actual_atime, atime);
         assert_eq!(actual_mtime, mtime);
     }
-
 }
