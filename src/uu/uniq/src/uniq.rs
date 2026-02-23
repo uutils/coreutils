@@ -186,6 +186,17 @@ impl Uniq {
         }
     }
 
+    fn is_c_locale() -> bool {
+        for key in ["LC_ALL", "LC_CTYPE", "LANG"] {
+            if let Ok(v) = std::env::var(key) {
+                if !v.is_empty() {
+                    return v == "C" || v == "POSIX";
+                }
+            }
+        }
+        true
+    }
+
     fn key_end_index(&self, line: &[u8], key_start: usize) -> usize {
         let remainder = &line[key_start..];
         match self.slice_stop {
@@ -194,10 +205,15 @@ impl Uniq {
                 if remainder.is_empty() {
                     return key_start;
                 }
-                if let Ok(valid) = std::str::from_utf8(remainder) {
+                if Self::is_c_locale() {
+                    // for C or POSIX we count bytes
+                    key_start + remainder.len().min(limit)
+                } else if let Ok(valid) = std::str::from_utf8(remainder) {
+                    // for UTF-8 we count characters
                     let prefix_len = Self::char_prefix_len(valid, limit);
                     key_start + prefix_len
                 } else {
+                    // for invalid UTF-8 we count bytes
                     key_start + remainder.len().min(limit)
                 }
             }
