@@ -180,7 +180,7 @@ pub fn read<T: Read>(
         mut buffer,
     } = recycled_chunk;
     if buffer.len() < carry_over.len() {
-        buffer.resize(carry_over.len() + 10 * 1024, 0);
+        buffer.resize(carry_over.len() + 8 * 1024, 0);
     }
     buffer[..carry_over.len()].copy_from_slice(carry_over);
     let (read, should_continue) = read_to_buffer(
