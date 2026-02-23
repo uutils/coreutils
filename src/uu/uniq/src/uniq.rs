@@ -188,7 +188,7 @@ impl Uniq {
 
     fn is_c_locale() -> bool {
         for key in ["LC_ALL", "LC_CTYPE", "LANG"] {
-            if let Ok(v) = std::env::var(key) {
+            if let Some(v) = std::env::var_os(key) {
                 if !v.is_empty() {
                     return v == "C" || v == "POSIX";
                 }
