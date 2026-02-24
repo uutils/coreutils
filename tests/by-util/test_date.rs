@@ -2414,6 +2414,19 @@ fn test_date_format_modifier_percent_escape() {
         .stdout_is("%Y=0000001999\n");
 }
 
+#[test]
+fn test_date_format_modifier_huge_width_fails_without_abort() {
+    // GNU date also exits with failure for extreme width values.
+    let formats = [format!("+%{}c", usize::MAX), "+%184467440737095516160c".to_string()];
+
+    for format in formats {
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .args(&["-d", "1999-06-01", format.as_str()])
+            .fails();
+    }
+}
+
 // Tests for --debug flag
 #[test]
 fn test_date_debug_basic() {
