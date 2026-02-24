@@ -160,10 +160,12 @@ fn format_with_modifiers(
             let width = if width_str.is_empty() {
                 0
             } else {
-                width_str.parse().map_err(|_| FormatError::FieldWidthTooLarge {
-                    width: width_str.to_string(),
-                    specifier: spec.to_string(),
-                })?
+                width_str
+                    .parse()
+                    .map_err(|_| FormatError::FieldWidthTooLarge {
+                        width: width_str.to_string(),
+                        specifier: spec.to_string(),
+                    })?
             };
             let modified = apply_modifiers(&formatted, flags, width, spec)?;
             result.push_str(&modified);
@@ -325,40 +327,38 @@ fn apply_modifiers(
             // Zero padding: sign first, then zeros (e.g., "-0022")
             let sign = result.chars().next().unwrap();
             let rest = &result[1..];
-            let target_len = result
-                .len()
-                .checked_add(padding)
-                .ok_or_else(|| FormatError::FieldWidthTooLarge {
-                    width: width.to_string(),
-                    specifier: specifier.to_string(),
-                })?;
-            let mut padded = String::new();
-            padded.try_reserve(target_len).map_err(|_| {
+            let target_len = result.len().checked_add(padding).ok_or_else(|| {
                 FormatError::FieldWidthTooLarge {
                     width: width.to_string(),
                     specifier: specifier.to_string(),
                 }
             })?;
+            let mut padded = String::new();
+            padded
+                .try_reserve(target_len)
+                .map_err(|_| FormatError::FieldWidthTooLarge {
+                    width: width.to_string(),
+                    specifier: specifier.to_string(),
+                })?;
             padded.push(sign);
             padded.extend(std::iter::repeat_n('0', padding));
             padded.push_str(rest);
             result = padded;
         } else {
             // Default: pad on the left (e.g., "  -22" or "  1999")
-            let target_len = result
-                .len()
-                .checked_add(padding)
-                .ok_or_else(|| FormatError::FieldWidthTooLarge {
-                    width: width.to_string(),
-                    specifier: specifier.to_string(),
-                })?;
-            let mut padded = String::new();
-            padded.try_reserve(target_len).map_err(|_| {
+            let target_len = result.len().checked_add(padding).ok_or_else(|| {
                 FormatError::FieldWidthTooLarge {
                     width: width.to_string(),
                     specifier: specifier.to_string(),
                 }
             })?;
+            let mut padded = String::new();
+            padded
+                .try_reserve(target_len)
+                .map_err(|_| FormatError::FieldWidthTooLarge {
+                    width: width.to_string(),
+                    specifier: specifier.to_string(),
+                })?;
             padded.extend(std::iter::repeat_n(pad_char, padding));
             padded.push_str(&result);
             result = padded;

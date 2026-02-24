@@ -2417,7 +2417,10 @@ fn test_date_format_modifier_percent_escape() {
 #[test]
 fn test_date_format_modifier_huge_width_fails_without_abort() {
     // GNU date also exits with failure for extreme width values.
-    let formats = [format!("+%{}c", usize::MAX), "+%184467440737095516160c".to_string()];
+    let formats = [
+        format!("+%{}c", usize::MAX),
+        "+%184467440737095516160c".to_string(),
+    ];
 
     for format in formats {
         new_ucmd!()
