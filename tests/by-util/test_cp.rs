@@ -7708,3 +7708,22 @@ fn test_cp_preserve_context_with_z_fails() {
         .fails()
         .stderr_contains("cannot combine");
 }
+
+#[test]
+#[cfg(all(unix, not(target_os = "macos")))]
+fn test_cp_recursive_non_utf8_source() {
+    use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir(OsStr::from_bytes(b"dir\x80"));
+    at.mkdir("dir2");
+    at.touch(OsStr::from_bytes(b"dir\x80/a"));
+
+    ucmd.arg("-r")
+        .arg(OsStr::from_bytes(b"dir\x80/."))
+        .arg("dir2")
+        .succeeds()
+        .no_output();
+
+    assert!(at.plus("dir2").join("a").exists());
+}
