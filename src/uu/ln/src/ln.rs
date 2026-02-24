@@ -383,12 +383,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
     };
 
     if dst.is_symlink() || dst.exists() {
-        backup_path = match settings.backup {
-            BackupMode::None => None,
-            BackupMode::Simple => Some(simple_backup_path(dst, &settings.suffix)),
-            BackupMode::Numbered => Some(numbered_backup_path(dst)),
-            BackupMode::Existing => Some(existing_backup_path(dst, &settings.suffix)),
-        };
+        backup_path = backup_control::get_backup_path(settings.backup, dst, &settings.suffix);
         if settings.backup == BackupMode::Existing && !settings.symbolic {
             // when ln --backup f f, it should detect that it is the same file
             if paths_refer_to_same_file(src, dst, true) {
@@ -461,31 +456,6 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
         }
     }
     Ok(())
-}
-
-fn simple_backup_path(path: &Path, suffix: &OsString) -> PathBuf {
-    let mut file_name = path.file_name().unwrap_or_default().to_os_string();
-    file_name.push(suffix);
-    path.with_file_name(file_name)
-}
-
-fn numbered_backup_path(path: &Path) -> PathBuf {
-    let mut i: u64 = 1;
-    loop {
-        let new_path = simple_backup_path(path, &OsString::from(format!(".~{i}~")));
-        if !new_path.exists() {
-            return new_path;
-        }
-        i += 1;
-    }
-}
-
-fn existing_backup_path(path: &Path, suffix: &OsString) -> PathBuf {
-    let test_path = simple_backup_path(path, &OsString::from(".~1~"));
-    if test_path.exists() {
-        return numbered_backup_path(path);
-    }
-    simple_backup_path(path, suffix)
 }
 
 #[cfg(windows)]
