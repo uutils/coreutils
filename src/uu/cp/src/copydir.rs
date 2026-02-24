@@ -122,7 +122,7 @@ impl<'a> Context<'a> {
         let current_dir = env::current_dir()?;
         let root_path = current_dir.join(root);
         let target_is_file = target.is_file();
-        let root_parent = if target.exists() && !root.to_str().unwrap().ends_with("/.") {
+        let root_parent = if target.exists() && !root.as_os_str().as_encoded_bytes().ends_with(b"/.") {
             root_path.parent().map(ToOwned::to_owned)
         } else if root == Path::new(".") && target.is_dir() {
             // Special case: when copying current directory (.) to an existing directory,
