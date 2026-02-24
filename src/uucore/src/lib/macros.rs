@@ -194,3 +194,18 @@ macro_rules! show_warning_caps(
         let _ = writeln!(error, $($args)+);
     })
 );
+
+/// Write to stdout, returning an error if stdout was closed at startup.
+#[macro_export]
+macro_rules! writeln_stdout(
+    ($($args:tt)*) => ({
+        #[cfg(unix)]
+        if $crate::signals::stdout_was_closed() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                "write error: Bad file descriptor",
+            ).into());
+        }
+        writeln!(std::io::stdout(), $($args)*)
+    })
+);

@@ -9,4 +9,4 @@ tac-error-invalid-regex = invalid regular expression: { $error }
 tac-error-invalid-directory-argument = { $argument }: read error: Is a directory
 tac-error-file-not-found = failed to open { $filename } for reading: No such file or directory
 tac-error-read-error = failed to read from { $filename }: { $error }
-tac-error-write-error = failed to write to stdout: { $error }
+tac-error-write-error = write error: { $error }
