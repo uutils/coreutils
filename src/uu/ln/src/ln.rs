@@ -163,6 +163,7 @@ pub fn uu_app() -> Command {
                 .short('f')
                 .long(options::FORCE)
                 .help(translate!("ln-help-force"))
+                .overrides_with(options::INTERACTIVE)
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -170,6 +171,7 @@ pub fn uu_app() -> Command {
                 .short('i')
                 .long(options::INTERACTIVE)
                 .help(translate!("ln-help-interactive"))
+                .overrides_with(options::FORCE)
                 .action(ArgAction::SetTrue),
         )
         .arg(
