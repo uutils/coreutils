@@ -197,21 +197,13 @@ fn handle_permission_denied(
     // When we can't open a subdirectory due to permission denied,
     // try to remove it directly (it might be empty).
     // This matches GNU rm behavior with -f flag.
-    if let Err(remove_err) = dir_fd.unlink_at(entry_name, true) {
-        // Failed to remove - show appropriate error
-        if remove_err.kind() == std::io::ErrorKind::PermissionDenied {
-            // Permission denied errors are always shown, even with force
-            show_permission_denied_error(entry_path);
-            return true;
-        } else if !options.force {
-            let remove_err = remove_err.map_err_context(
-                || translate!("rm-error-cannot-remove", "file" => entry_path.quote()),
-            );
-            show_error!("{remove_err}");
-            return true;
-        }
-        // With force mode, suppress non-permission errors
-        return !options.force;
+    if let Err(_remove_err) = dir_fd.unlink_at(entry_name, true) {
+        // The directory is not empty (or another error) and we can't read it
+        // to remove its contents. Report the original permission denied error.
+        // This matches GNU rm behavior — the real problem is we lack
+        // permission to traverse the directory.
+        show_permission_denied_error(entry_path);
+        return true;
     }
     // Successfully removed empty directory
     verbose_removed_directory(entry_path, options);

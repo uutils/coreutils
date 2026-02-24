@@ -207,41 +207,37 @@ pub enum OutputFormat {
 }
 
 struct FormattedUptime {
-    up_days: i64,
-    up_hours: i64,
-    up_mins: i64,
+    days: i64,
+    hours: i64,
+    mins: i64,
 }
 
 impl FormattedUptime {
-    fn new(up_secs: i64) -> Self {
-        let up_days = up_secs / 86400;
-        let up_hours = (up_secs - (up_days * 86400)) / 3600;
-        let up_mins = (up_secs - (up_days * 86400) - (up_hours * 3600)) / 60;
+    fn new(seconds: i64) -> Self {
+        let days = seconds / 86400;
+        let hours = (seconds - (days * 86400)) / 3600;
+        let mins = (seconds - (days * 86400) - (hours * 3600)) / 60;
 
-        Self {
-            up_days,
-            up_hours,
-            up_mins,
-        }
+        Self { days, hours, mins }
     }
 
     fn get_human_readable_uptime(&self) -> String {
         translate!(
         "uptime-format",
-        "days" => self.up_days,
-        "time" => format!("{:02}:{:02}", self.up_hours, self.up_mins))
+        "days" => self.days,
+        "time" => format!("{:02}:{:02}", self.hours, self.mins))
     }
 
     fn get_pretty_print_uptime(&self) -> String {
         let mut parts = Vec::new();
-        if self.up_days > 0 {
-            parts.push(translate!("uptime-format-pretty-day", "day" => self.up_days));
+        if self.days > 0 {
+            parts.push(translate!("uptime-format-pretty-day", "day" => self.days));
         }
-        if self.up_hours > 0 {
-            parts.push(translate!("uptime-format-pretty-hour", "hour" => self.up_hours));
+        if self.hours > 0 {
+            parts.push(translate!("uptime-format-pretty-hour", "hour" => self.hours));
         }
-        if self.up_mins > 0 || parts.is_empty() {
-            parts.push(translate!("uptime-format-pretty-min", "min" => self.up_mins));
+        if self.mins > 0 || parts.is_empty() {
+            parts.push(translate!("uptime-format-pretty-min", "min" => self.mins));
         }
         parts.join(", ")
     }
@@ -279,13 +275,13 @@ pub fn get_formatted_uptime(
     boot_time: Option<time_t>,
     output_format: OutputFormat,
 ) -> UResult<String> {
-    let up_secs = get_uptime(boot_time)?;
+    let uptime = get_uptime(boot_time)?;
 
-    if up_secs < 0 {
+    if uptime < 0 {
         Err(UptimeError::SystemUptime)?;
     }
 
-    let formatted_uptime = FormattedUptime::new(up_secs);
+    let formatted_uptime = FormattedUptime::new(uptime);
 
     match output_format {
         OutputFormat::HumanReadable => Ok(formatted_uptime.get_human_readable_uptime()),
@@ -515,7 +511,10 @@ mod tests {
         assert!(boot_time > 0, "Boot time should be positive");
 
         // Boot time should be after 2000-01-01 (946684800 seconds since epoch)
-        assert!(boot_time > 946684800, "Boot time should be after year 2000");
+        assert!(
+            boot_time > 946_684_800,
+            "Boot time should be after year 2000"
+        );
 
         // Boot time should be before current time
         let now = Timestamp::now().as_second();
