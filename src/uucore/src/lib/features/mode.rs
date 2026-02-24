@@ -182,7 +182,7 @@ pub fn get_umask() -> u32 {
 
         let mask = umask(Mode::empty());
         let _ = umask(mask);
-        return mask.bits() as u32;
+        mask.bits() as u32
     }
 
     #[cfg(not(unix))]
@@ -191,7 +191,7 @@ pub fn get_umask() -> u32 {
         // possible but it can't violate Rust's guarantees.
         let mask = unsafe { umask(0) };
         unsafe { umask(mask) };
-        return mask as u32;
+        mask as u32
     }
 }
 
