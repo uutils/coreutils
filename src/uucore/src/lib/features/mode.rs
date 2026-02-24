@@ -7,6 +7,7 @@
 
 // spell-checker:ignore (vars) fperm srwx
 
+#[cfg(not(unix))]
 use libc::umask;
 
 pub fn parse_numeric(fperm: u32, mut mode: &str, considering_dir: bool) -> Result<u32, String> {
@@ -175,24 +176,23 @@ pub fn get_umask() -> u32 {
     // some other thread is affected.
     // On modern Linux kernels the current umask could instead be read
     // from /proc/self/status. But that's a lot of work.
-    // SAFETY: umask always succeeds and doesn't operate on memory. Races are
-    // possible but it can't violate Rust's guarantees.
-    let mask = unsafe { umask(0) };
-    unsafe { umask(mask) };
-    #[cfg(all(
-        not(target_os = "freebsd"),
-        not(target_vendor = "apple"),
-        not(target_os = "android"),
-        not(target_os = "redox")
-    ))]
-    return mask;
-    #[cfg(any(
-        target_os = "freebsd",
-        target_vendor = "apple",
-        target_os = "android",
-        target_os = "redox"
-    ))]
-    return mask as u32;
+    #[cfg(unix)]
+    {
+        use nix::sys::stat::{Mode, umask};
+
+        let mask = umask(Mode::empty());
+        let _ = umask(mask);
+        return mask.bits() as u32;
+    }
+
+    #[cfg(not(unix))]
+    {
+        // SAFETY: umask always succeeds and doesn't operate on memory. Races are
+        // possible but it can't violate Rust's guarantees.
+        let mask = unsafe { umask(0) };
+        unsafe { umask(mask) };
+        return mask as u32;
+    }
 }
 
 #[cfg(test)]
