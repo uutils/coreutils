@@ -326,7 +326,14 @@ fn copy_direntry(
                 // TODO What other kinds of errors, if any, should
                 // cause us to continue walking the directory?
                 match err {
-                    CpError::IoErrContext(e, _) if e.kind() == io::ErrorKind::PermissionDenied => {
+                    CpError::IoErrContext(e, _)
+                        if e.kind() == io::ErrorKind::PermissionDenied
+                            && !source_is_symlink
+                            && matches!(
+                                fs::File::open(&entry.source_relative),
+                                Err(read_err) if read_err.kind() == io::ErrorKind::PermissionDenied
+                            ) =>
+                    {
                         show!(uio_error!(
                             e,
                             "{}",
@@ -335,6 +342,11 @@ fn copy_direntry(
                                 "source" => entry.source_relative.quote()
                             ),
                         ));
+                    }
+                    CpError::IoErrContext(e, context)
+                        if e.kind() == io::ErrorKind::PermissionDenied =>
+                    {
+                        show!(CpError::IoErrContext(e, context));
                     }
                     e => return Err(e),
                 }

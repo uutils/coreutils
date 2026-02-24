@@ -3700,6 +3700,31 @@ fn test_copy_dir_preserve_permissions_inaccessible_file() {
     assert_metadata_eq!(metadata1, metadata2);
 }
 
+/// Test for preserving destination-side context when recursive copy fails due to unwritable
+/// destination file.
+#[cfg(all(
+    not(windows),
+    not(target_os = "android"),
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
+))]
+#[test]
+fn test_copy_dir_permission_denied_on_destination_reports_destination() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("src");
+    at.touch("src/foo");
+    at.set_mode("src/foo", 0o440);
+
+    at.mkdir_all("dst/src");
+    at.touch("dst/src/foo");
+    at.set_mode("dst/src/foo", 0o440);
+
+    ucmd.args(&["-R", "src", "dst"])
+        .fails_with_code(1)
+        .stderr_contains("cp: 'src/foo' -> 'dst/src/foo':")
+        .stderr_contains("Permission denied");
+}
+
 /// Test that copying file to itself with backup fails.
 #[test]
 fn test_same_file_backup() {
