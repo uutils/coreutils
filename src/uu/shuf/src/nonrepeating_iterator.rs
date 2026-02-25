@@ -60,6 +60,7 @@ impl<'a> NonrepeatingIterator<'a> {
     }
 
     fn produce(&mut self) -> UResult<u64> {
+        const SHRINK_CAPACITY: usize = 16 * 1024 / 8;
         match &mut self.values {
             Values::Full(items) => {
                 let this_idx = items.len() - 1;
@@ -71,7 +72,7 @@ impl<'a> NonrepeatingIterator<'a> {
                 items.swap(this_idx, other_idx);
 
                 let val = items.pop().unwrap();
-                if items.len().is_power_of_two() && items.len() >= 512 {
+                if items.len().is_power_of_two() && items.capacity() > SHRINK_CAPACITY {
                     items.shrink_to_fit();
                 }
                 Ok(val)
