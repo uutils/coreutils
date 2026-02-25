@@ -387,10 +387,12 @@ fn next_char_info(uflag: bool, buf: &[u8], byte: usize) -> (CharType, usize, usi
     let (ctype, cwidth, nbytes) = if uflag {
         let nbytes = char::from(buf[byte]).len_utf8();
 
-        if byte + nbytes > buf.len() {
-            // make sure we don't overrun the buffer because of invalid UTF-8
-            (CharType::Other, 1, 1)
-        } else if let Ok(t) = from_utf8(&buf[byte..byte + nbytes]) {
+        let Some(slice) = buf.get(byte..byte + nbytes) else {
+            // don't overrun buffer because of invalid UTF-8
+            return (CharType::Other, 1, 1);
+        };
+
+        if let Ok(t) = from_utf8(slice) {
             // Now that we think it's UTF-8, figure out what kind of char it is
             match t.chars().next() {
                 Some(' ') => (CharType::Space, 0, 1),

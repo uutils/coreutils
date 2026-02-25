@@ -365,12 +365,12 @@ fn classify_char(buf: &[u8], byte: usize, utf8: bool) -> (CharType, usize, usize
     if utf8 {
         let nbytes = char::from(buf[byte]).len_utf8();
 
-        if byte + nbytes > buf.len() {
+        let Some(slice) = buf.get(byte..byte + nbytes) else {
             // don't overrun buffer because of invalid UTF-8
             return (Other, 1, 1);
-        }
+        };
 
-        if let Ok(t) = from_utf8(&buf[byte..byte + nbytes]) {
+        if let Ok(t) = from_utf8(slice) {
             match t.chars().next() {
                 Some('\t') => (Tab, 0, 1),
                 Some('\x08') => (Backspace, 0, 1),
