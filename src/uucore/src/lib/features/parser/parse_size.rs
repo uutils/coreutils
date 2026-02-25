@@ -10,7 +10,7 @@ use std::error::Error;
 use std::fmt;
 use std::num::{IntErrorKind, ParseIntError};
 
-use crate::display::Quotable;
+use crate::display::Quotable as _;
 #[cfg(target_os = "linux")]
 use procfs::{Current, Meminfo};
 

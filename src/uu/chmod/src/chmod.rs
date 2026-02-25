@@ -8,10 +8,10 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs;
-use std::os::unix::fs::{MetadataExt, PermissionsExt};
+use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
-use uucore::display::Quotable;
+use uucore::display::Quotable as _;
 use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::fs::display_permissions_unix;
 use uucore::libc::mode_t;

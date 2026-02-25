@@ -52,7 +52,7 @@ use std::{
     ops::ControlFlow,
 };
 
-use os_display::Quotable;
+use os_display::Quotable as _;
 
 #[derive(Debug)]
 pub enum FormatError {

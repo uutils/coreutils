@@ -30,7 +30,7 @@ use crate::show_warning;
 
 use std::ffi::OsStr;
 #[cfg(unix)]
-use std::os::unix::ffi::OsStrExt;
+use std::os::unix::ffi::OsStrExt as _;
 #[cfg(windows)]
 use std::os::windows::ffi::OsStrExt;
 #[cfg(windows)]
@@ -76,7 +76,7 @@ use std::{borrow::Cow, ffi::OsString};
 
 use std::fs::Metadata;
 #[cfg(unix)]
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::MetadataExt as _;
 #[cfg(unix)]
 use std::time::Duration;
 
@@ -416,7 +416,7 @@ fn is_remote_filesystem(dev_name: &str, fs_type: &str) -> bool {
 
 #[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
 fn mount_dev_id(mount_dir: &OsStr) -> String {
-    use std::os::unix::fs::MetadataExt;
+    use std::os::unix::fs::MetadataExt as _;
 
     if let Ok(stat) = std::fs::metadata(mount_dir) {
         // Why do we cast this to i32?

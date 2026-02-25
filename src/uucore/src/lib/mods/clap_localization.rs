@@ -17,7 +17,7 @@ use crate::locale::translate;
 use clap::error::{ContextKind, ErrorKind};
 use clap::{ArgMatches, Command, Error};
 
-use std::error::Error as StdError;
+use std::error::Error as _;
 use std::ffi::OsString;
 
 /// Color enum for consistent styling

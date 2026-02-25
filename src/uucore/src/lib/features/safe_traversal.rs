@@ -12,13 +12,13 @@
 // spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod mkdirat CREAT WRONLY ELOOP ENOTDIR
 
 #[cfg(test)]
-use std::os::unix::ffi::OsStringExt;
+use std::os::unix::ffi::OsStringExt as _;
 
 use std::ffi::{CString, OsStr, OsString};
 use std::fs;
 use std::io;
-use std::os::unix::ffi::OsStrExt;
-use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd, IntoRawFd, OwnedFd, RawFd};
+use std::os::unix::ffi::OsStrExt as _;
+use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd as _, IntoRawFd as _, OwnedFd, RawFd};
 use std::path::{Path, PathBuf};
 
 use nix::dir::Dir;
@@ -26,7 +26,7 @@ use nix::fcntl::{OFlag, openat};
 use nix::libc;
 use nix::sys::stat::{FchmodatFlags, FileStat, Mode, fchmodat, fstatat};
 use nix::unistd::{Gid, Uid, UnlinkatFlags, fchown, fchownat, unlinkat};
-use os_display::Quotable;
+use os_display::Quotable as _;
 
 use crate::translate;
 
@@ -778,7 +778,7 @@ mod tests {
     use super::*;
     use std::fs;
     use std::os::unix::fs::symlink;
-    use std::os::unix::io::IntoRawFd;
+    use std::os::unix::io::IntoRawFd as _;
     use tempfile::TempDir;
 
     #[test]
@@ -1083,7 +1083,7 @@ mod tests {
         let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
 
         let mut file = dir_fd.open_file_at(OsStr::new("new_file.txt")).unwrap();
-        use std::io::Write;
+        use std::io::Write as _;
         file.write_all(b"test content").unwrap();
 
         let content = fs::read_to_string(temp_dir.path().join("new_file.txt")).unwrap();
@@ -1098,7 +1098,7 @@ mod tests {
 
         let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
         let mut file = dir_fd.open_file_at(OsStr::new("existing.txt")).unwrap();
-        use std::io::Write;
+        use std::io::Write as _;
         file.write_all(b"new").unwrap();
         drop(file);
 

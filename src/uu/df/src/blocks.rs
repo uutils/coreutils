@@ -8,7 +8,7 @@ use clap::ArgMatches;
 use std::{env, fmt};
 
 use uucore::{
-    display::Quotable,
+    display::Quotable as _,
     parser::parse_size::{ParseSizeError, parse_size_non_zero_u64, parse_size_u64},
 };
 

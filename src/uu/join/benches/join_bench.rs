@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 use divan::{Bencher, black_box};
-use std::{fs::File, io::Write};
+use std::{fs::File, io::Write as _};
 use tempfile::TempDir;
 use uu_join::uumain;
 use uucore::benchmark::run_util_function;

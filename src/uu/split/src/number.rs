@@ -15,7 +15,7 @@
 //! [radix]: https://en.wikipedia.org/wiki/Radix
 //! [positional notation]: https://en.wikipedia.org/wiki/Positional_notation
 use std::error::Error;
-use std::fmt::{self, Display, Formatter, Write};
+use std::fmt::{self, Display, Formatter, Write as _};
 use uucore::translate;
 
 /// An overflow due to incrementing a number beyond its representable limit.

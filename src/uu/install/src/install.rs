@@ -16,15 +16,15 @@ use std::ffi::OsString;
 use std::fmt::Debug;
 use std::fs::{self, metadata};
 use std::fs::{File, OpenOptions};
-use std::io::{Write, stdout};
+use std::io::{Write as _, stdout};
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 use std::process;
 use thiserror::Error;
 use uucore::backup_control::{self, BackupMode};
 use uucore::buf_copy::copy_stream;
-use uucore::display::Quotable;
+use uucore::display::Quotable as _;
 use uucore::entries::{grp2gid, usr2uid};
-use uucore::error::{FromIo, UError, UResult, UUsageError};
+use uucore::error::{FromIo as _, UError, UResult, UUsageError};
 use uucore::fs::dir_strip_dot_for_creation;
 use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
 use uucore::process::{getegid, geteuid};
@@ -39,9 +39,9 @@ use uucore::translate;
 use uucore::{format_usage, show, show_error, show_if_err};
 
 #[cfg(unix)]
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::MetadataExt as _;
 #[cfg(unix)]
-use std::os::unix::prelude::OsStrExt;
+use std::os::unix::prelude::OsStrExt as _;
 
 const DEFAULT_MODE: u32 = 0o755;
 const DEFAULT_STRIP_PROGRAM: &str = "strip";
@@ -945,7 +945,7 @@ fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsS
 /// Returns an empty Result or an error in case of failure.
 ///
 fn copy_file(from: &Path, to: &Path) -> UResult<()> {
-    use std::os::unix::fs::OpenOptionsExt;
+    use std::os::unix::fs::OpenOptionsExt as _;
     if let Ok(to_abs) = to.canonicalize() {
         if from.canonicalize()? == to_abs {
             return Err(InstallError::SameFile(from.to_path_buf(), to.to_path_buf()).into());
@@ -1172,7 +1172,7 @@ fn should_set_selinux_context(b: &Behavior) -> bool {
 /// Check if a file needs to be copied due to ownership differences when no explicit group is specified.
 /// Returns true if the destination file's ownership would differ from what it should be after installation.
 fn needs_copy_for_ownership(to: &Path, to_meta: &fs::Metadata) -> bool {
-    use std::os::unix::fs::MetadataExt;
+    use std::os::unix::fs::MetadataExt as _;
 
     // Check if the destination file's owner differs from the effective user ID
     if to_meta.uid() != geteuid() {

@@ -6,11 +6,11 @@
 // spell-checker:ignore (ToDO) kqueue Signum
 
 use crate::paths::Input;
-use crate::{Quotable, parse, platform};
+use crate::{Quotable as _, parse, platform};
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use same_file::Handle;
 use std::ffi::OsString;
-use std::io::IsTerminal;
+use std::io::IsTerminal as _;
 use std::time::Duration;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::parser::parse_signed_num::{SignPrefix, parse_signed_num_max};

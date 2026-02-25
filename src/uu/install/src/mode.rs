@@ -12,8 +12,8 @@ use uucore::translate;
 ///
 #[cfg(any(unix, target_os = "redox"))]
 pub fn chmod(path: &Path, mode: u32) -> Result<(), ()> {
-    use std::os::unix::fs::PermissionsExt;
-    use uucore::{display::Quotable, show_error};
+    use std::os::unix::fs::PermissionsExt as _;
+    use uucore::{display::Quotable as _, show_error};
     fs::set_permissions(path, fs::Permissions::from_mode(mode)).map_err(|err| {
         show_error!(
             "{}",

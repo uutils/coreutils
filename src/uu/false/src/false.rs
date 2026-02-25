@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 use clap::{Arg, ArgAction, Command};
-use std::{ffi::OsString, io::Write};
+use std::{ffi::OsString, io::Write as _};
 use uucore::error::{UResult, set_exit_code};
 
 use uucore::translate;

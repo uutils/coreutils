@@ -36,7 +36,7 @@
 ///
 use crate::Config;
 use std::fmt;
-use std::io::{BufWriter, Stdout, Write};
+use std::io::{BufWriter, Stdout, Write as _};
 use uucore::error::UResult;
 
 #[derive(Debug, Clone, PartialEq)]

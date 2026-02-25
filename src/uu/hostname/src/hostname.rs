@@ -5,9 +5,9 @@
 
 // spell-checker:ignore hashset Addrs addrs
 
-use std::io::{Write, stdout};
+use std::io::{Write as _, stdout};
 #[cfg(not(any(target_os = "freebsd", target_os = "openbsd")))]
-use std::net::ToSocketAddrs;
+use std::net::ToSocketAddrs as _;
 use std::str;
 use std::{collections::hash_set::HashSet, ffi::OsString};
 
@@ -19,7 +19,7 @@ use dns_lookup::lookup_host;
 use uucore::translate;
 
 use uucore::{
-    error::{FromIo, UResult},
+    error::{FromIo as _, UResult},
     format_usage,
 };
 

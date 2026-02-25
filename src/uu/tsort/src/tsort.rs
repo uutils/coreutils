@@ -14,7 +14,7 @@ use std::io::{self, BufRead, BufReader};
 use string_interner::StringInterner;
 use string_interner::backend::BucketBackend;
 use thiserror::Error;
-use uucore::display::Quotable;
+use uucore::display::Quotable as _;
 use uucore::error::{UError, UResult, USimpleError};
 use uucore::{format_usage, show, translate};
 

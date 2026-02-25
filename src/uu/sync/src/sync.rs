@@ -13,7 +13,7 @@ use nix::fcntl::{OFlag, open};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::sys::stat::Mode;
 use std::path::Path;
-use uucore::display::Quotable;
+use uucore::display::Quotable as _;
 use uucore::error::{UResult, USimpleError, get_exit_code, set_exit_code};
 use uucore::format_usage;
 use uucore::show_error;

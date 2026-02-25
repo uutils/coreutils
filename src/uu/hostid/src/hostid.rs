@@ -7,7 +7,7 @@
 
 use clap::Command;
 use libc::{c_long, gethostid};
-use std::io::{Write, stdout};
+use std::io::{Write as _, stdout};
 use uucore::{error::UResult, format_usage};
 
 use uucore::translate;

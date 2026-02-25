@@ -9,7 +9,7 @@
 //! including test data generation and binary execution helpers.
 
 use std::fs::File;
-use std::io::{BufWriter, Write};
+use std::io::{BufWriter, Write as _};
 use std::path::{Path, PathBuf};
 
 use itertools::Itertools as _;
@@ -295,7 +295,7 @@ pub mod text_data {
 /// Binary data generation utilities for benchmarking
 pub mod binary_data {
     use std::fs::File;
-    use std::io::Write;
+    use std::io::Write as _;
     use std::path::Path;
 
     /// Create a binary file filled with a repeated pattern
@@ -335,7 +335,7 @@ pub mod fs_utils {
 /// Filesystem tree generation utilities for benchmarking
 pub mod fs_tree {
     use std::fs::{self, File};
-    use std::io::Write;
+    use std::io::Write as _;
     use std::path::Path;
 
     /// Create a balanced directory tree for benchmarking
@@ -430,7 +430,7 @@ pub mod fs_tree {
                 // Set permissions only on Unix platforms
                 #[cfg(unix)]
                 {
-                    use std::os::unix::fs::PermissionsExt;
+                    use std::os::unix::fs::PermissionsExt as _;
                     let perms = fs::Permissions::from_mode(match (i + j) % 4 {
                         0 => 0o644,
                         1 => 0o755,

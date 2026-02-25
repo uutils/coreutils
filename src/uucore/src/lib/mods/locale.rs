@@ -11,10 +11,10 @@ use fluent_syntax::parser::ParserError;
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
+use std::str::FromStr as _;
 use std::sync::OnceLock;
 
-use os_display::Quotable;
+use os_display::Quotable as _;
 use thiserror::Error;
 use unic_langid::LanguageIdentifier;
 

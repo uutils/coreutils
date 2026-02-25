@@ -8,9 +8,9 @@
 use crate::text;
 use std::ffi::OsStr;
 use std::fs::{File, Metadata};
-use std::io::{Seek, SeekFrom};
+use std::io::{Seek as _, SeekFrom};
 #[cfg(unix)]
-use std::os::unix::fs::{FileTypeExt, MetadataExt};
+use std::os::unix::fs::{FileTypeExt as _, MetadataExt as _};
 use std::path::{Path, PathBuf};
 use uucore::error::UResult;
 use uucore::translate;

@@ -8,9 +8,9 @@
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
-use std::io::{Write, stdout};
+use std::io::{Write as _, stdout};
 use std::path::PathBuf;
-use uucore::display::Quotable;
+use uucore::display::Quotable as _;
 use uucore::error::{UResult, UUsageError};
 use uucore::format_usage;
 use uucore::line_ending::LineEnding;

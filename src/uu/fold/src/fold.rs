@@ -7,11 +7,11 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{BufRead as _, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::path::Path;
 use unicode_width::UnicodeWidthChar;
-use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::display::Quotable as _;
+use uucore::error::{FromIo as _, UResult, USimpleError};
 use uucore::format_usage;
 use uucore::translate;
 

@@ -7,7 +7,7 @@
 
 use crate::unicode_table;
 use nom::{
-    IResult, Parser,
+    IResult, Parser as _,
     branch::alt,
     bytes::complete::{tag, take, take_till, take_until},
     character::complete::one_of,
@@ -21,7 +21,7 @@ use std::{
     fmt::{Debug, Display},
     io::{BufRead, Write},
 };
-use uucore::error::{FromIo, UError, UResult};
+use uucore::error::{FromIo as _, UError, UResult};
 use uucore::translate;
 
 use uucore::show_warning;

@@ -19,7 +19,7 @@ use std::{
     thread,
 };
 
-use itertools::Itertools;
+use itertools::Itertools as _;
 use uucore::error::{UResult, strip_errno};
 
 use crate::Output;

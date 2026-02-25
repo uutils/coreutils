@@ -136,7 +136,7 @@ where
 mod tests {
     use std::ffi::OsStr;
 
-    use clap::{Command, builder::PossibleValue, builder::TypedValueParser, error::ErrorKind};
+    use clap::{Command, builder::PossibleValue, builder::TypedValueParser as _, error::ErrorKind};
 
     use super::ShortcutValueParser;
 
@@ -196,7 +196,7 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn test_parse_ref_with_invalid_utf8() {
-        use std::os::unix::prelude::OsStrExt;
+        use std::os::unix::prelude::OsStrExt as _;
 
         let parser = ShortcutValueParser::new(["abcd"]);
         let cmd = Command::new("cmd");

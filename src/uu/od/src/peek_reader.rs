@@ -8,7 +8,7 @@
 //! Contains the trait `PeekRead` and type `PeekReader` implementing it.
 
 use std::io;
-use std::io::{Read, Write};
+use std::io::{Read, Write as _};
 
 use crate::multifile_reader::HasError;
 
@@ -119,7 +119,7 @@ impl<R: HasError> HasError for PeekReader<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::{Cursor, Read};
+    use std::io::{Cursor, Read as _};
 
     #[test]
     fn test_read_normal() {

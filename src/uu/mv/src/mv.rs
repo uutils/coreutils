@@ -20,11 +20,11 @@ use rustc_hash::FxHashSet;
 use std::env;
 use std::ffi::OsString;
 use std::fs;
-use std::io::{self, IsTerminal};
+use std::io::{self, IsTerminal as _};
 #[cfg(unix)]
 use std::os::unix;
 #[cfg(unix)]
-use std::os::unix::fs::{FileTypeExt, PermissionsExt};
+use std::os::unix::fs::{FileTypeExt as _, PermissionsExt as _};
 #[cfg(windows)]
 use std::os::windows;
 use std::path::{Path, PathBuf, absolute};
@@ -35,8 +35,8 @@ use crate::hardlink::{
     with_optional_hardlink_context,
 };
 use uucore::backup_control::{self, source_is_target_backup};
-use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError, UUsageError, set_exit_code};
+use uucore::display::Quotable as _;
+use uucore::error::{FromIo as _, UResult, USimpleError, UUsageError, set_exit_code};
 #[cfg(unix)]
 use uucore::fs::display_permissions_unix;
 #[cfg(unix)]

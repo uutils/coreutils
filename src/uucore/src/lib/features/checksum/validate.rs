@@ -12,12 +12,12 @@ use std::fmt::Display;
 use std::fs::File;
 use std::io::{self, BufReader, Read, Write, stderr, stdin};
 
-use os_display::Quotable;
+use os_display::Quotable as _;
 
 use crate::checksum::{
     AlgoKind, ChecksumError, ReadingMode, SizedAlgoKind, digest_reader, unescape_filename,
 };
-use crate::error::{FromIo, UError, UIoError, UResult, USimpleError};
+use crate::error::{FromIo as _, UError, UIoError, UResult, USimpleError};
 use crate::quoting_style::{QuotingStyle, locale_aware_escape_name};
 use crate::sum::DigestOutput;
 use crate::{

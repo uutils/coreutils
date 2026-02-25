@@ -7,9 +7,9 @@ use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
 use std::env;
 use std::ffi::{OsStr, OsString};
-use std::io::{StdoutLock, Write, stdout};
+use std::io::{StdoutLock, Write as _, stdout};
 use uucore::error::UResult;
-use uucore::format::{FormatChar, OctalParsing, parse_escape_only};
+use uucore::format::{FormatChar as _, OctalParsing, parse_escape_only};
 use uucore::{format_usage, os_str_as_bytes};
 
 use uucore::translate;

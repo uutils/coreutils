@@ -9,15 +9,15 @@ mod status;
 
 use crate::status::ExitStatus;
 use clap::{Arg, ArgAction, Command};
-use std::io::{ErrorKind, Write};
-use std::os::unix::process::ExitStatusExt;
+use std::io::{ErrorKind, Write as _};
+use std::os::unix::process::ExitStatusExt as _;
 use std::process::{self, Child, Stdio};
 use std::sync::atomic::{self, AtomicBool};
 use std::time::Duration;
-use uucore::display::Quotable;
+use uucore::display::Quotable as _;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::parser::parse_time;
-use uucore::process::ChildExt;
+use uucore::process::ChildExt as _;
 use uucore::translate;
 
 use uucore::{
@@ -28,7 +28,7 @@ use uucore::{
 use nix::sys::signal::{SigHandler, Signal, kill};
 use nix::unistd::{Pid, getpid, setpgid};
 #[cfg(unix)]
-use std::os::unix::process::CommandExt;
+use std::os::unix::process::CommandExt as _;
 
 pub mod options {
     pub static FOREGROUND: &str = "foreground";
