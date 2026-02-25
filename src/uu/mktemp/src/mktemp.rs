@@ -7,8 +7,8 @@
 
 use clap::builder::{TypedValueParser, ValueParserFactory};
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use uucore::display::{Quotable, println_verbatim};
-use uucore::error::{FromIo, UError, UResult, UUsageError};
+use uucore::display::{Quotable as _, println_verbatim};
+use uucore::error::{FromIo as _, UError, UResult, UUsageError};
 use uucore::format_usage;
 use uucore::translate;
 
@@ -21,9 +21,9 @@ use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 #[cfg(unix)]
 use std::fs;
 #[cfg(unix)]
-use std::os::unix::prelude::PermissionsExt;
+use std::os::unix::prelude::PermissionsExt as _;
 
-use rand::Rng;
+use rand::Rng as _;
 use tempfile::Builder;
 use thiserror::Error;
 

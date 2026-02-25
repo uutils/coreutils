@@ -8,8 +8,8 @@ use clap::{Arg, Command};
 use std::ffi::OsString;
 use std::fs::hard_link;
 use std::path::Path;
-use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult};
+use uucore::display::Quotable as _;
+use uucore::error::{FromIo as _, UResult};
 use uucore::format_usage;
 use uucore::translate;
 

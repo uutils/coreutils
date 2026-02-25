@@ -42,7 +42,7 @@ use clap::ArgMatches;
 use std::ffi::{OsStr, OsString};
 use std::path::is_separator;
 use thiserror::Error;
-use uucore::display::Quotable;
+use uucore::display::Quotable as _;
 use uucore::error::{UResult, USimpleError};
 use uucore::translate;
 

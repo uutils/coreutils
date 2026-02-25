@@ -5,14 +5,14 @@
 
 // spell-checker:ignore (ToDO) delim sourcefiles
 
-use bstr::io::BufReadExt;
+use bstr::io::BufReadExt as _;
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, IsTerminal, Read, Write, stdin, stdout};
+use std::io::{BufRead as _, BufReader, BufWriter, IsTerminal as _, Read, Write, stdin, stdout};
 use std::path::Path;
-use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
+use uucore::display::Quotable as _;
+use uucore::error::{FromIo as _, UResult, USimpleError, set_exit_code};
 use uucore::line_ending::LineEnding;
 use uucore::os_str_as_bytes;
 

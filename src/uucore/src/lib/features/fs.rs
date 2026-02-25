@@ -29,7 +29,7 @@ use std::io::{Error, ErrorKind, Result as IOResult};
 #[cfg(unix)]
 use std::os::fd::AsFd;
 #[cfg(unix)]
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::MetadataExt as _;
 use std::path::{Component, MAIN_SEPARATOR, Path, PathBuf};
 #[cfg(target_os = "windows")]
 use winapi_util::AsHandleRef;
@@ -701,7 +701,7 @@ pub fn are_hardlinks_or_one_way_symlink_to_same_file(source: &Path, target: &Pat
 /// * `path` - A reference to the path to be checked.
 #[cfg(unix)]
 pub fn path_ends_with_terminator(path: &Path) -> bool {
-    use std::os::unix::prelude::OsStrExt;
+    use std::os::unix::prelude::OsStrExt as _;
     path.as_os_str()
         .as_bytes()
         .last()
@@ -750,7 +750,7 @@ pub fn is_stdin_directory(stdin: &Stdin) -> bool {
 pub mod sane_blksize {
 
     #[cfg(not(target_os = "windows"))]
-    use std::os::unix::fs::MetadataExt;
+    use std::os::unix::fs::MetadataExt as _;
     use std::{fs::metadata, path::Path};
 
     pub const DEFAULT: u64 = 512;
@@ -872,11 +872,11 @@ mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
     #[cfg(unix)]
-    use std::io::Write;
+    use std::io::Write as _;
     #[cfg(unix)]
     use std::os::unix;
     #[cfg(unix)]
-    use std::os::unix::fs::FileTypeExt;
+    use std::os::unix::fs::FileTypeExt as _;
     #[cfg(unix)]
     use tempfile::{NamedTempFile, tempdir};
 

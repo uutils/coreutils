@@ -12,7 +12,7 @@ use crate::{
     quoting_style::{QuotingStyle, locale_aware_escape_name},
     show_error, show_warning,
 };
-use os_display::Quotable;
+use os_display::Quotable as _;
 use std::{
     ffi::{OsStr, OsString},
     num::NonZero,

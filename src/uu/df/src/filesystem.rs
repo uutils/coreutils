@@ -15,10 +15,10 @@ use std::path::PathBuf;
 use std::{ffi::OsString, path::Path};
 
 #[cfg(unix)]
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::MetadataExt as _;
 
 #[cfg(unix)]
-use uucore::fsext::{FsMeta, pretty_fstype, statfs};
+use uucore::fsext::{FsMeta as _, pretty_fstype, statfs};
 use uucore::fsext::{FsUsage, MountInfo};
 
 /// Summary representation of a filesystem.

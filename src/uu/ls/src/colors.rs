@@ -10,7 +10,7 @@ use std::env;
 use std::ffi::OsString;
 use std::fs::{self, Metadata};
 #[cfg(unix)]
-use std::os::unix::fs::{FileTypeExt, MetadataExt};
+use std::os::unix::fs::{FileTypeExt as _, MetadataExt as _};
 
 /// ANSI CSI (Control Sequence Introducer)
 const ANSI_CSI: &str = "\x1b[";

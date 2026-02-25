@@ -11,14 +11,14 @@ use clap::{
 };
 use std::{
     ffi::{OsStr, OsString},
-    io::{Write, stdout},
+    io::{Write as _, stdout},
     path::{Path, PathBuf},
 };
 use uucore::fs::make_path_relative_to;
 use uucore::translate;
 use uucore::{
-    display::{Quotable, print_verbatim},
-    error::{FromIo, UResult},
+    display::{Quotable as _, print_verbatim},
+    error::{FromIo as _, UResult},
     format_usage,
     fs::{MissingHandling, ResolveMode, canonicalize},
     line_ending::LineEnding,

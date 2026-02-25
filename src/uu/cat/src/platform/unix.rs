@@ -63,7 +63,7 @@ fn is_appending<F: AsFd>(file: &F) -> bool {
 mod tests {
     use crate::platform::unix::{is_appending, is_unsafe_overwrite};
     use std::fs::OpenOptions;
-    use std::io::{Seek, SeekFrom, Write};
+    use std::io::{Seek as _, SeekFrom, Write as _};
     use tempfile::NamedTempFile;
 
     #[test]

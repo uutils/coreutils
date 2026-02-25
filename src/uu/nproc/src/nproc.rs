@@ -6,9 +6,9 @@
 // spell-checker:ignore (ToDO) NPROCESSORS nprocs numstr sysconf
 
 use clap::{Arg, ArgAction, Command};
-use std::io::{Write, stdout};
+use std::io::{Write as _, stdout};
 use std::{env, thread};
-use uucore::display::Quotable;
+use uucore::display::Quotable as _;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
 use uucore::translate;

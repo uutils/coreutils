@@ -17,11 +17,11 @@ use std::env;
 use std::ffi::OsString;
 use std::fs::{File, metadata};
 use std::io;
-use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write, stdin};
+use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Read, Seek as _, SeekFrom, Write, stdin};
 use std::path::Path;
 use thiserror::Error;
-use uucore::display::Quotable;
-use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError};
+use uucore::display::Quotable as _;
+use uucore::error::{FromIo as _, UIoError, UResult, USimpleError, UUsageError};
 use uucore::translate;
 
 use uucore::parser::parse_size::parse_size_u64;

@@ -12,7 +12,7 @@ use rustc_hash::FxHashSet;
 use std::borrow::Cow;
 use std::cell::RefCell;
 #[cfg(unix)]
-use std::os::unix::fs::{FileTypeExt, MetadataExt};
+use std::os::unix::fs::{FileTypeExt as _, MetadataExt as _};
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::{
@@ -21,7 +21,7 @@ use std::{
     ffi::{OsStr, OsString},
     fmt::Write as _,
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
-    io::{BufWriter, ErrorKind, IsTerminal, Stdout, Write, stdout},
+    io::{BufWriter, ErrorKind, IsTerminal as _, Stdout, Write, stdout},
     iter,
     num::IntErrorKind,
     ops::RangeInclusive,
@@ -59,7 +59,7 @@ use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 ))]
 use uucore::libc::{dev_t, major, minor};
 use uucore::{
-    display::Quotable,
+    display::Quotable as _,
     error::{UError, UResult, set_exit_code},
     format::human::{SizeFormat, human_readable},
     format_usage,

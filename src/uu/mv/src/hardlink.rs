@@ -13,7 +13,7 @@ use rustc_hash::FxHashMap;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use uucore::display::Quotable;
+use uucore::display::Quotable as _;
 
 /// Tracks hardlinks during cross-partition moves to preserve them
 #[derive(Debug, Default)]
@@ -119,7 +119,7 @@ impl HardlinkTracker {
         scanner: &HardlinkGroupScanner,
         options: &HardlinkOptions,
     ) -> Option<PathBuf> {
-        use std::os::unix::fs::MetadataExt;
+        use std::os::unix::fs::MetadataExt as _;
 
         let metadata = match source.metadata() {
             Ok(meta) => meta,
@@ -202,7 +202,7 @@ impl HardlinkGroupScanner {
 
     /// Scan a single path (file or directory)
     fn scan_single_path(&mut self, path: &Path) -> io::Result<()> {
-        use std::os::unix::fs::MetadataExt;
+        use std::os::unix::fs::MetadataExt as _;
 
         if path.is_dir() {
             // Recursively scan directory contents
@@ -222,7 +222,7 @@ impl HardlinkGroupScanner {
 
     /// Recursively scan a directory for hardlinked files
     fn scan_directory_recursive(&mut self, dir: &Path) -> io::Result<()> {
-        use std::os::unix::fs::MetadataExt;
+        use std::os::unix::fs::MetadataExt as _;
 
         let entries = std::fs::read_dir(dir)?;
         for entry in entries {

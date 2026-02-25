@@ -31,17 +31,17 @@ use std::collections::VecDeque;
 use std::ffi::CString;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, File, OpenOptions, hard_link, remove_file};
-use std::io::{self, BufWriter, Read, Result, Write};
+use std::io::{self, BufWriter, Read as _, Result, Write};
 #[cfg(unix)]
 use std::os::fd::OwnedFd;
 #[cfg(unix)]
-use std::os::unix::fs::{PermissionsExt, symlink as symlink_dir, symlink as symlink_file};
+use std::os::unix::fs::{PermissionsExt as _, symlink as symlink_dir, symlink as symlink_file};
 #[cfg(unix)]
 use std::os::unix::net::UnixListener;
 #[cfg(unix)]
-use std::os::unix::process::CommandExt;
+use std::os::unix::process::CommandExt as _;
 #[cfg(unix)]
-use std::os::unix::process::ExitStatusExt;
+use std::os::unix::process::ExitStatusExt as _;
 #[cfg(windows)]
 use std::os::windows::fs::{symlink_dir, symlink_file};
 #[cfg(windows)]

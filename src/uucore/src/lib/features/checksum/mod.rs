@@ -9,7 +9,7 @@ use std::ffi::OsStr;
 use std::io::{self, Read};
 use std::num::IntErrorKind;
 
-use os_display::Quotable;
+use os_display::Quotable as _;
 use thiserror::Error;
 
 use crate::error::{UError, UResult};

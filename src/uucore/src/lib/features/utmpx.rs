@@ -36,7 +36,7 @@ pub extern crate time;
 use std::ffi::CString;
 use std::io::Result as IOResult;
 use std::marker::PhantomData;
-use std::os::unix::ffi::OsStrExt;
+use std::os::unix::ffi::OsStrExt as _;
 use std::path::Path;
 use std::ptr;
 use std::sync::{Mutex, MutexGuard};

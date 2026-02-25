@@ -8,10 +8,10 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{ErrorKind, Read, Write, stdin, stdout};
+use std::io::{ErrorKind, Read, Write as _, stdin, stdout};
 use std::path::Path;
-use uucore::display::{OsWrite, Quotable};
-use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::display::{OsWrite as _, Quotable as _};
+use uucore::error::{FromIo as _, UResult, USimpleError};
 use uucore::translate;
 
 use uucore::{format_usage, show};

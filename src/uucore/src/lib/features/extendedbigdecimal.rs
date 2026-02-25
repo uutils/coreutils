@@ -26,8 +26,8 @@ use std::ops::Neg;
 
 use bigdecimal::BigDecimal;
 use bigdecimal::num_bigint::BigUint;
-use num_traits::FromPrimitive;
-use num_traits::Signed;
+use num_traits::FromPrimitive as _;
+use num_traits::Signed as _;
 use num_traits::Zero;
 
 #[derive(Debug, Clone)]
@@ -261,7 +261,7 @@ impl Neg for ExtendedBigDecimal {
 mod tests {
 
     use bigdecimal::BigDecimal;
-    use num_traits::Zero;
+    use num_traits::Zero as _;
 
     use crate::extendedbigdecimal::ExtendedBigDecimal;
 

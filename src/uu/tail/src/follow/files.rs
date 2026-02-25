@@ -7,12 +7,12 @@
 
 use crate::args::Settings;
 use crate::chunks::BytesChunkBuffer;
-use crate::paths::{HeaderPrinter, PathExtTail};
+use crate::paths::{HeaderPrinter, PathExtTail as _};
 use crate::text;
 use std::collections::HashMap;
 use std::collections::hash_map::Keys;
 use std::fs::{File, Metadata};
-use std::io::{BufRead, BufReader, BufWriter, Write, stdout};
+use std::io::{BufRead, BufReader, BufWriter, Write as _, stdout};
 use std::path::{Path, PathBuf};
 use uucore::error::UResult;
 

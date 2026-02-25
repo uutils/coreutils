@@ -8,7 +8,7 @@
 use std::{cell::Cell, collections::BTreeMap};
 
 use num_bigint::BigInt;
-use num_traits::ToPrimitive;
+use num_traits::ToPrimitive as _;
 use onig::{Regex, RegexOptions, Syntax};
 
 use crate::{

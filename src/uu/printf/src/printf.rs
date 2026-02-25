@@ -6,7 +6,7 @@ use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::io::stdout;
 use std::ops::ControlFlow;
-use uucore::display::Quotable;
+use uucore::display::Quotable as _;
 use uucore::error::{UResult, UUsageError};
 use uucore::format::{FormatArgument, FormatArguments, FormatItem, parse_spec_and_escape};
 use uucore::translate;

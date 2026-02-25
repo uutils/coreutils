@@ -16,7 +16,7 @@ use std::sync::mpsc;
 use std::time::Duration;
 use uucore::{
     error::{UResult, set_exit_code},
-    format::num_format::{FloatVariant, Formatter},
+    format::num_format::{FloatVariant, Formatter as _},
     locale::setup_localization,
     translate,
 };

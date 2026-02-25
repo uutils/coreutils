@@ -25,8 +25,8 @@ mod prn_float;
 mod prn_int;
 
 use std::cmp;
-use std::fmt::Write;
-use std::io::{BufReader, Read, Write as IoWrite};
+use std::fmt::Write as _;
+use std::io::{BufReader, Read as _, Write as IoWrite};
 
 use crate::byteorder_io::ByteOrder;
 use crate::formatter_item_info::FormatWriter;
@@ -42,7 +42,7 @@ use crate::peek_reader::{PeekRead, PeekReader};
 use crate::prn_char::format_ascii_dump;
 use clap::ArgAction;
 use clap::{Arg, ArgMatches, Command, parser::ValueSource};
-use uucore::display::Quotable;
+use uucore::display::Quotable as _;
 use uucore::error::{UResult, USimpleError};
 use uucore::translate;
 

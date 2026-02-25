@@ -11,8 +11,8 @@ use bigdecimal::{
     BigDecimal,
     num_bigint::{BigInt, BigUint, Sign},
 };
-use num_traits::Signed;
-use num_traits::ToPrimitive;
+use num_traits::Signed as _;
+use num_traits::ToPrimitive as _;
 use num_traits::Zero;
 
 use crate::extendedbigdecimal::ExtendedBigDecimal;
@@ -564,13 +564,13 @@ pub(crate) fn parse(
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
+    use std::str::FromStr as _;
 
     use bigdecimal::BigDecimal;
 
     use crate::extendedbigdecimal::ExtendedBigDecimal;
 
-    use super::{ExtendedParser, ExtendedParserError};
+    use super::{ExtendedParser as _, ExtendedParserError};
 
     #[test]
     fn test_decimal_u64() {

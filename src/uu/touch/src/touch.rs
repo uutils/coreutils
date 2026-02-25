@@ -14,15 +14,15 @@ use filetime::{FileTime, set_file_times, set_symlink_file_times};
 use jiff::civil::Time;
 use jiff::fmt::strtime;
 use jiff::tz::TimeZone;
-use jiff::{Timestamp, ToSpan, Zoned};
+use jiff::{Timestamp, ToSpan as _, Zoned};
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, File};
 use std::io::{Error, ErrorKind};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
-use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::display::Quotable as _;
+use uucore::error::{FromIo as _, UResult, USimpleError};
 #[cfg(target_os = "linux")]
 use uucore::libc;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
