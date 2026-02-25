@@ -3555,9 +3555,11 @@ name = "uu_hostname"
 version = "0.6.0"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "dns-lookup",
  "fluent",
  "hostname",
+ "tempfile",
  "uucore",
  "windows-sys 0.61.2",
 ]

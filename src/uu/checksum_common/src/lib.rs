@@ -79,7 +79,7 @@ pub fn standalone_with_length_main(
     let tag = matches.get_flag(options::TAG);
     let format = OutputFormat::from_standalone(text, tag);
 
-    checksum_main(algo, length, matches, format?)
+    checksum_main(algo, length, matches, format)
 }
 
 /// Entrypoint for standalone checksums *NOT* accepting the `--length` argument
@@ -91,7 +91,7 @@ pub fn standalone_main(algo: AlgoKind, cmd: Command, args: impl uucore::Args) ->
     let tag = matches.get_flag(options::TAG);
     let format = OutputFormat::from_standalone(text, tag);
 
-    checksum_main(algo, None, matches, format?)
+    checksum_main(algo, None, matches, format)
 }
 
 /// Base command processing for all the checksum executables.
