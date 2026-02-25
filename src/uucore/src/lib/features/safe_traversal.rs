@@ -24,7 +24,7 @@ use std::path::{Path, PathBuf};
 use nix::dir::Dir;
 use nix::fcntl::{OFlag, openat};
 use nix::libc;
-use nix::sys::stat::{FchmodatFlags, FileStat, Mode, fchmodat, fstatat};
+use nix::sys::stat::{FchmodatFlags, FileStat, Mode, fchmodat, fstatat, mkdirat};
 use nix::unistd::{Gid, Uid, UnlinkatFlags, fchown, fchownat, unlinkat};
 use os_display::Quotable;
 
@@ -323,12 +323,10 @@ impl DirFd {
     pub fn mkdir_at(&self, name: &OsStr, mode: u32) -> io::Result<()> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
-        let mode = mode as libc::mode_t;
-        let fd = self.fd.as_raw_fd();
+        let mode = Mode::from_bits_truncate(mode as libc::mode_t);
 
-        let result = unsafe { libc::mkdirat(fd, name_cstr.as_ptr(), mode) };
-        if result == -1 {
-            let err = io::Error::last_os_error();
+        if let Err(e) = mkdirat(self.fd.as_fd(), name_cstr.as_c_str(), mode) {
+            let err = io::Error::from_raw_os_error(e as i32);
             return Err(SafeTraversalError::OpenFailed {
                 path: name.into(),
                 source: err,
