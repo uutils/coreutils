@@ -362,39 +362,29 @@ enum CharType {
 fn classify_char(buf: &[u8], byte: usize, utf8: bool) -> (CharType, usize, usize) {
     use self::CharType::{Backspace, Other, Tab};
 
-    if utf8 {
-        let nbytes = char::from(buf[byte]).len_utf8();
+    let b = buf[byte];
+    if b.is_ascii() {
+        return match b {
+            b'\t' => (Tab, 0, 1),
+            b'\x08' => (Backspace, 0, 1),
+            _ => (Other, 1, 1),
+        };
+    }
 
+    if utf8 {
+        let nbytes = char::from(b).len_utf8();
         let Some(slice) = buf.get(byte..byte + nbytes) else {
             // don't overrun buffer because of invalid UTF-8
             return (Other, 1, 1);
         };
 
         if let Ok(t) = from_utf8(slice) {
-            match t.chars().next() {
-                Some('\t') => (Tab, 0, 1),
-                Some('\x08') => (Backspace, 0, 1),
-                Some(c) => (Other, UnicodeWidthChar::width(c).unwrap_or(0), nbytes),
-                None => {
-                    // no valid char at start of t, so take 1 byte
-                    (Other, 1, 1)
-                }
+            if let Some(c) = t.chars().next() {
+                return (Other, UnicodeWidthChar::width(c).unwrap_or(0), nbytes);
             }
-        } else {
-            (Other, 1, 1) // implicit assumption: non-UTF-8 char is 1 col wide
         }
-    } else {
-        (
-            match buf.get(byte) {
-                // always take exactly 1 byte in strict ASCII mode
-                Some(0x09) => Tab,
-                Some(0x08) => Backspace,
-                _ => Other,
-            },
-            0,
-            1,
-        )
     }
+    (Other, 1, 1) // implicit assumption: non-UTF-8 char is 1 col wide
 }
 
 /// Write spaces for a tab expansion.

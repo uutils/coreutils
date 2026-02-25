@@ -605,9 +605,6 @@ required-features = ["uudoc"]
 lto = true
 panic = "abort"
 codegen-units = 1
-# FIXME: https://github.com/uutils/coreutils/issues/10654
-[profile.release.package.uu_expand]
-codegen-units = 16
 
 # A release-like profile that is as small as possible.
 [profile.release-small]
