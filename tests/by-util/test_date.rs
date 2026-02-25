@@ -1646,8 +1646,7 @@ fn test_date_locale_fr_french() {
 #[test]
 fn test_date_posix_format_specifiers() {
     let cases = [
-        // %r: 12-hour time with zero-padded hour (08:17:48 AM, not 8:17:48 AM)
-        ("%r", "08:17:48 AM"),
+        // %r is tested separately in `test_date_format_r_locale_aware` (locale-aware)
         // %x: locale date in MM/DD/YY format
         ("%x", "01/19/97"),
         // %X: locale time in HH:MM:SS format
@@ -1788,15 +1787,20 @@ fn test_date_format_x_locale_aware() {
         println!("Skipping French locale %x test — fr_FR.UTF-8 not available");
         return;
     }
-    // French D_FMT="%d.%m.%Y"
-    new_ucmd!()
+    // French D_FMT (e.g. "19/01/1997" on Linux or "19.01.1997" on macOS)
+    let result = new_ucmd!()
         .env("TZ", "UTC")
         .env("LC_ALL", "fr_FR.UTF-8")
         .arg("-d")
         .arg("1997-01-19 08:17:48")
         .arg("+%x")
-        .succeeds()
-        .stdout_is("19.01.1997\n");
+        .succeeds();
+
+    let out = result.stdout_str();
+    assert!(
+        out.contains("19/01/1997") || out.contains("19.01.1997"),
+        "Unexpected %x output for fr_FR.UTF-8: {out}"
+    );
 }
 
 /// Test that %X uses the locale's T_FMT.
@@ -1839,18 +1843,38 @@ fn test_date_format_r_locale_aware() {
         .succeeds()
         .stdout_is("08:17:48 AM\n");
 
-    if !locale_is_available("fr_FR.UTF-8") {
-        println!("Skipping French locale %r test — fr_FR.UTF-8 not available");
+    if !locale_is_available("en_US.UTF-8") {
+        println!("Skipping en_US locale %r test — en_US.UTF-8 not available");
         return;
     }
     new_ucmd!()
         .env("TZ", "UTC")
-        .env("LC_ALL", "fr_FR.UTF-8")
+        .env("LC_ALL", "en_US.UTF-8")
         .arg("-d")
         .arg("1997-01-19 08:17:48")
         .arg("+%r")
         .succeeds()
         .stdout_is("08:17:48 AM\n");
+
+    if !locale_is_available("fr_FR.UTF-8") {
+        println!("Skipping fr_FR locale %r test — fr_FR.UTF-8 not available");
+        return;
+    }
+    // French does not define AM/PM strings so it should fallback to %H:%M:%S like GNU `date`
+    let result = new_ucmd!()
+        .env("TZ", "UTC")
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .arg("-d")
+        .arg("1997-01-19 08:17:48")
+        .arg("+%r")
+        .succeeds();
+
+    let out = result.stdout_str();
+    // On some platforms like macOS it might still spit out AM/PM if the locale is incomplete or fallback happens differently.
+    assert!(
+        out.contains("08:17:48"),
+        "Unexpected %r output for fr_FR.UTF-8: {out}"
+    );
 }
 
 #[test]

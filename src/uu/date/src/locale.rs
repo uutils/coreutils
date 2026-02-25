@@ -157,10 +157,10 @@ cfg_langinfo! {
     }
 
     /// Returns the locale 12-hour time format (`T_FMT_AMPM`) used by `%r`.
-    /// Falls back to `%I:%M:%S %p` if the locale leaves it empty.
+    /// Falls back to `%H:%M:%S` if the locale leaves it empty (like fr_FR).
     pub fn get_locale_time_ampm_format() -> Option<String> {
         query_nl_langinfo(T_FMT_AMPM_ITEM)
-            .or_else(|| Some("%I:%M:%S %p".to_string()))
+            .or_else(|| Some("%H:%M:%S".to_string()))
     }
 }
 
