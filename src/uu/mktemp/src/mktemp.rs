@@ -131,8 +131,10 @@ impl Options {
                 (tmpdir, OsString::from(template))
             }
             Some(template) => {
-                let tmpdir = if env::var(TMPDIR_ENV_VAR).is_ok() && matches.get_flag(OPT_T) {
-                    env::var_os(TMPDIR_ENV_VAR).map(Into::into)
+                let tmpdir = if let Some(tmpdir) = env::var_os(TMPDIR_ENV_VAR)
+                    && matches.get_flag(OPT_T)
+                {
+                    Some(PathBuf::from(tmpdir))
                 } else if tmpdir.is_some() {
                     tmpdir
                 } else if matches.get_flag(OPT_T) || matches.contains_id(OPT_TMPDIR) {
@@ -390,7 +392,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // application logic.
     let options = Options::from(&matches);
 
-    if env::var("POSIXLY_CORRECT").is_ok() {
+    if env::var_os("POSIXLY_CORRECT").is_some() {
         // If POSIXLY_CORRECT was set, template MUST be the last argument.
         if matches.contains_id(ARG_TEMPLATE) {
             // Template argument was provided, check if was the last one.
