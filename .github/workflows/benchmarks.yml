@@ -68,6 +68,7 @@ jobs:
 
       - name: Run sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.9
+        continue-on-error: true
 
       - name: Install locales
         shell: bash

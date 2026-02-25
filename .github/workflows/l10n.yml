@@ -45,6 +45,7 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
+      continue-on-error: true
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -140,6 +141,7 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
+      continue-on-error: true
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -311,6 +313,7 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
+      continue-on-error: true
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -427,6 +430,7 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
+      continue-on-error: true
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -579,6 +583,7 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
+      continue-on-error: true
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -913,6 +918,7 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
+      continue-on-error: true
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -1145,6 +1151,7 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
+      continue-on-error: true
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -1269,6 +1276,7 @@ jobs:
         key: cargo-install-locale-embedding
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
+      continue-on-error: true
     - name: Install prerequisites
       run: |
         sudo apt-get -y update
