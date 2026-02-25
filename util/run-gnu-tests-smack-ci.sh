@@ -18,7 +18,8 @@ mkdir -p "$QEMU_DIR"/{rootfs/{bin,lib64,proc,sys,dev,tmp,etc,gnu},kernel}
 # Download Arch Linux kernel (has SMACK built-in)
 if [ ! -f /tmp/arch-vmlinuz ]; then
     echo "Downloading Arch Linux kernel..."
-    curl -sL -o /tmp/arch-kernel.pkg.tar.zst "https://archlinux.org/packages/core/x86_64/linux/download/"
+    curl -sL --retry 5 --retry-delay 2 --retry-all-errors \
+        -o /tmp/arch-kernel.pkg.tar.zst "https://archlinux.org/packages/core/x86_64/linux/download/"
     zstd -d /tmp/arch-kernel.pkg.tar.zst -o /tmp/arch-kernel.pkg.tar 2>/dev/null || unzstd /tmp/arch-kernel.pkg.tar.zst -o /tmp/arch-kernel.pkg.tar
     VMLINUZ_PATH=$(tar -tf /tmp/arch-kernel.pkg.tar | grep 'vmlinuz$' | head -1)
     tar -xf /tmp/arch-kernel.pkg.tar -C /tmp "$VMLINUZ_PATH"

@@ -1602,6 +1602,16 @@ fn fails_on_directory() {
 }
 
 #[test]
+fn test_large_number() {
+    // fixed with num-prime 0.5.0
+    // https://github.com/uutils/num-prime/issues/23
+    new_ucmd!()
+        .arg("4611686018427387896")
+        .succeeds()
+        .stdout_is("4611686018427387896: 2 2 2 179951 3203431780337\n");
+}
+
+#[test]
 fn succeeds_with_numbers_larger_than_u64() {
     new_ucmd!()
         .arg("158909489063877810457")
