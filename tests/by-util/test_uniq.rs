@@ -1176,9 +1176,21 @@ fn test_stdin_w1_multibyte() {
     let input = "à\ná\n";
     new_ucmd!()
         .args(&["-w1"])
+        .env("LC_ALL", "en_US.UTF-8")
         .pipe_in(input)
         .succeeds()
         .stdout_is("à\ná\n");
+}
+
+#[test]
+fn test_c_locale_counts_bytes() {
+    let input = "가나다라마\n가나다바사\n";
+    new_ucmd!()
+        .args(&["-w", "4"])
+        .env("LC_ALL", "C")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("가나다라마\n");
 }
 
 #[cfg(target_os = "linux")]

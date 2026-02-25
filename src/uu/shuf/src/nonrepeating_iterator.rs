@@ -1,6 +1,9 @@
-// hijack HashMap for performance
-type HashMap<K, V> = std::collections::HashMap<K, V, rustc_hash::FxBuildHasher>;
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
+use rustc_hash::FxHashMap;
 use std::ops::RangeInclusive;
 
 use uucore::error::UResult;
@@ -42,12 +45,17 @@ pub(crate) struct NonrepeatingIterator<'a> {
 
 enum Values {
     Full(Vec<u64>),
-    Sparse(RangeInclusive<u64>, HashMap<u64, u64>),
+    Sparse(RangeInclusive<u64>, FxHashMap<u64, u64>),
 }
 
 impl<'a> NonrepeatingIterator<'a> {
     pub(crate) fn new(range: RangeInclusive<u64>, rng: &'a mut WrappedRng) -> Self {
-        let values = Values::Sparse(range, HashMap::default());
+        const MAX_CAPACITY: usize = 128; // todo: optimize this
+        let capacity = (range.size_hint().0).min(MAX_CAPACITY);
+        let values = Values::Sparse(
+            range,
+            FxHashMap::with_capacity_and_hasher(capacity, rustc_hash::FxBuildHasher),
+        );
         NonrepeatingIterator { rng, values }
     }
 
@@ -96,8 +104,7 @@ impl Iterator for NonrepeatingIterator<'_> {
             Values::Full(_) => (),
             Values::Sparse(range, _) if range.is_empty() => return None,
             Values::Sparse(range, items) => {
-                let range_len = range.size_hint().0 as u64;
-                if items.len() as u64 >= range_len / 8 {
+                if items.len() >= items.capacity() {
                     self.values = Values::Full(hashmap_to_vec(range.clone(), items));
                 }
             }
@@ -107,7 +114,7 @@ impl Iterator for NonrepeatingIterator<'_> {
     }
 }
 
-fn hashmap_to_vec(range: RangeInclusive<u64>, map: &HashMap<u64, u64>) -> Vec<u64> {
+fn hashmap_to_vec(range: RangeInclusive<u64>, map: &FxHashMap<u64, u64>) -> Vec<u64> {
     let lookup = |idx| *map.get(&idx).unwrap_or(&idx);
     range.rev().map(lookup).collect()
 }

@@ -1809,8 +1809,7 @@ fn emit_debug_warnings(
         show_error!("{}", translate!("sort-warning-simple-byte-comparison"));
     }
 
-    for (idx, selector) in settings.selectors.iter().enumerate() {
-        let key_index = idx + 1;
+    for (key_index, selector) in (1..).zip(settings.selectors.iter()) {
         if let Some(legacy) = legacy_warnings
             .iter()
             .find(|warning| warning.key_index == Some(key_index))

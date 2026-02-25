@@ -988,6 +988,7 @@ fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
             if let Err(err) = print_stats(settings, &word_count, maybe_title_str, number_width) {
                 let title = maybe_title_str.unwrap_or(OsStr::new("<stdin>"));
                 show!(err.map_err_context(|| translate!("wc-error-failed-to-print-result", "title" => title.to_string_lossy())));
+                return Ok(());
             }
         }
         // Print deferred error after stats to match GNU wc output order
