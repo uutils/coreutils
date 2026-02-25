@@ -1,6 +1,7 @@
 name: Benchmarks
 
-# spell-checker:ignore codspeed dtolnay Swatinem sccache
+# spell-checker:ignore (people) dtolnay Swatinem taiki-e
+# spell-checker:ignore (misc) codspeed sccache
 
 on:
   pull_request:
@@ -37,6 +38,7 @@ jobs:
           uu_du,
           uu_expand,
           uu_fold,
+          uu_hostname,
           uu_join,
           uu_ls,
           uu_mv,
@@ -52,7 +54,8 @@ jobs:
           uu_uniq,
           uu_wc,
           uu_factor,
-          uu_date
+          uu_date,
+          uu_csplit
         ]
     steps:
       - uses: actions/checkout@v6
@@ -69,14 +72,13 @@ jobs:
       - name: Install locales
         shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y locales
           sudo locale-gen fr_FR.UTF-8
           sudo update-locale
 
-      - name: Install cargo-codspeed
-        shell: bash
-        run: cargo install cargo-codspeed --locked
+      - name: Install tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-codspeed
 
       - name: Build benchmarks for ${{ matrix.package }} (${{ matrix.type }})
         shell: bash

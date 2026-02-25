@@ -1823,6 +1823,12 @@ impl UCommand {
         }
 
         command.env_clear();
+
+        // Preserve PATH
+        if let Some(path) = env::var_os("PATH") {
+            command.env("PATH", path);
+        }
+
         if cfg!(windows) {
             // spell-checker:ignore (dll) rsaenh
             // %SYSTEMROOT% is required on Windows to initialize crypto provider

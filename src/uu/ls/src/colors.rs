@@ -388,7 +388,7 @@ impl<'a> StyleManager<'a> {
 
         if target_missing {
             let orphan_raw = self.indicator_codes.get(&Indicator::OrphanedSymbolicLink);
-            let orphan_raw_is_empty = orphan_raw.is_some_and(|value| value.is_empty());
+            let orphan_raw_is_empty = orphan_raw.is_some_and(String::is_empty);
             if orphan_enabled && (!orphan_raw_is_empty || self.ln_color_from_target) {
                 return Some(Indicator::OrphanedSymbolicLink);
             }
@@ -541,7 +541,7 @@ pub(crate) fn color_name(
         }
     }
 
-    if target_symlink.is_none() && path.file_type().is_some_and(|ft| ft.is_symlink()) {
+    if target_symlink.is_none() && path.file_type().is_some_and(fs::FileType::is_symlink) {
         if let Some(colored) = style_manager.color_symlink_name(path, name.clone(), wrap) {
             return colored;
         }

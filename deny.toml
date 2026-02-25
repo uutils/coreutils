@@ -88,7 +88,7 @@ skip = [
   { name = "itertools", version = "0.13.0" },
   # ordered-multimap
   { name = "hashbrown", version = "0.14.5" },
-  # lru (via num-prime)
+  # string-interner
   { name = "hashbrown", version = "0.15.5" },
   # cexpr (via bindgen)
   { name = "nom", version = "7.1.3" },
@@ -104,6 +104,8 @@ skip = [
   { name = "zerocopy", version = "0.7.35" },
   # zerocopy
   { name = "zerocopy-derive", version = "0.7.35" },
+  # hashbrown
+  { name = "foldhash", version = "0.1.5" },
 ]
 # spell-checker: enable
 

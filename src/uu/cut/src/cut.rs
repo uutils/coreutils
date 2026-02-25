@@ -264,7 +264,7 @@ fn cut_fields_newline_char_delim<R: Read, W: Write>(
 ) -> UResult<()> {
     let buf_in = BufReader::new(reader);
 
-    let segments: Vec<_> = buf_in.split(newline_char).filter_map(|x| x.ok()).collect();
+    let segments: Vec<_> = buf_in.split(newline_char).filter_map(Result::ok).collect();
     let mut print_delim = false;
 
     for &Range { low, high } in ranges {

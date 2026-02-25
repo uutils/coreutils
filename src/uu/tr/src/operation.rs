@@ -304,19 +304,17 @@ impl Sequence {
             return Err(BadSequence::ComplementMoreThanOneUniqueInSet2);
         }
 
-        if set2_solved.len() < set1_solved.len()
-            && !truncate_set1_flag
-            && matches!(
+        if set2_solved.len() < set1_solved.len() {
+            if truncate_set1_flag {
+                set1_solved.truncate(set2_solved.len());
+            } else if matches!(
                 set2.last().copied(),
                 Some(Self::Class(Class::Upper | Class::Lower))
-            )
-        {
-            return Err(BadSequence::Set1LongerSet2EndsInClass);
+            ) {
+                return Err(BadSequence::Set1LongerSet2EndsInClass);
+            }
         }
-        //Truncation is done dead last. It has no influence on the other conversion steps
-        if truncate_set1_flag {
-            set1_solved.truncate(set2_solved.len());
-        }
+
         Ok((set1_solved, set2_solved))
     }
 }

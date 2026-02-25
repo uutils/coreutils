@@ -8,6 +8,8 @@ linker = "x86_64-unknown-redox-gcc"
 linker = "aarch64-linux-gnu-gcc"
 [target.riscv64gc-unknown-linux-musl]
 rustflags = ["-C", "target-feature=+crt-static"]
+[target.'cfg(target_env = "msvc")']
+rustflags = ["-C", "target-feature=+crt-static"]
 
 [env]
 # See feat_external_libstdbuf in src/uu/stdbuf/Cargo.toml

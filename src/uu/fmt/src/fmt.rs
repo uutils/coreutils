@@ -288,7 +288,7 @@ fn extract_files(matches: &ArgMatches) -> UResult<Vec<OsString>> {
         })
         .collect();
 
-    if files.as_ref().is_ok_and(|f| f.is_empty()) {
+    if files.as_ref().is_ok_and(Vec::is_empty) {
         Ok(vec![OsString::from("-")])
     } else {
         files

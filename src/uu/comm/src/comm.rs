@@ -310,7 +310,9 @@ fn comm(
         .map_err_context(|| translate!("comm-error-write"))?;
     }
 
-    writer.flush().ok();
+    writer
+        .flush()
+        .map_err_context(|| translate!("comm-error-write"))?;
 
     if should_check_order && (checker1.has_error || checker2.has_error) {
         // Print the input error message once at the end

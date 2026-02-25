@@ -90,13 +90,14 @@ cd -
 export CARGOFLAGS # tell to make
 if [ "${SELINUX_ENABLED}" = 1 ];then
     # Build few utils for SELinux for faster build. MULTICALL=y fails...
-    make UTILS="cat chcon chmod cp cut dd echo env groups id install ln ls mkdir mkfifo mknod mktemp mv printf rm rmdir runcon seq stat test touch tr true uname wc whoami"
+    make UTILS="cat chcon chmod cp cut dd echo env groups id install ln ls mkdir mkfifo mknod mktemp mv printf realpath rm rmdir runcon seq stat test touch tr true uname wc whoami"
 else
     # Use MULTICALL=y for faster build
     make MULTICALL=y SKIP_UTILS=more
     for binary in $("${UU_BUILD_DIR}"/coreutils --list)
         do [ -e "${UU_BUILD_DIR}/${binary}" ] || ln -vf "${UU_BUILD_DIR}/coreutils" "${UU_BUILD_DIR}/${binary}"
     done
+    ln -vf "${UU_BUILD_DIR}"/deps/libstdbuf.* -t "${UU_BUILD_DIR}"
 fi
 [ -e "${UU_BUILD_DIR}/ginstall" ] || ln -vf "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests use ginstall
 ##
@@ -140,7 +141,7 @@ else
 
     # Handle generated factor tests
     t_first=00
-    t_max=37
+    t_max=40
     seq=$(
         i=${t_first}
         while test "${i}" -le "${t_max}"; do
@@ -149,8 +150,8 @@ else
         done
        )
     for i in ${seq}; do
-        echo "strip t${i}.sh from Makefile"
-        sed -i -e "s/\$(tf)\/t${i}.sh//g" Makefile
+        echo "strip t${i}.sh from Makefile and tests/local.mk"
+        sed -i -e "s/\$(tf)\/t${i}.sh//g" Makefile tests/local.mk
     done
 
     # Remove tests checking for --version & --help
@@ -158,6 +159,16 @@ else
     sed -i '/tests\/help\/help-version.sh/ D' Makefile
     touch gnu-built
 fi
+
+# Keep Makefile.in newer than the local.mk files we just modified,
+# and Makefile newer than Makefile.in, so make won't re-run
+# automake or config.status and undo our edits.
+touch Makefile.in Makefile
+
+# Patch the Makefile PATH to point to uutils build dir instead of GNU src/
+sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
+# Prevent make check from rebuilding the GNU binaries over the uutils ones
+sed -i 's/^check-am: all-am/check-am:/' Makefile
 
 grep -rl 'path_prepend_' tests/* | xargs -r "${SED}" -i 's| path_prepend_ ./src||'
 # path_prepend_ sets $abs_path_dir_: set it manually instead.
@@ -298,9 +309,6 @@ sed -i -e "s|-: No such file or directory|cannot access '-': No such file or dir
 sed -i '1s/^/exit 0  # Skip test - uutils du uses safe traversal that prevents this race condition\n/' tests/du/move-dir-while-traversing.sh
 
 awk 'BEGIN {count=0} /compare exp out2/ && count < 6 {sub(/compare exp out2/, "grep -q \"cannot be used with\" out2"); count++} 1' tests/df/df-output.sh > tests/df/df-output.sh.tmp && mv tests/df/df-output.sh.tmp tests/df/df-output.sh
-
-# with ls --dired, in case of error, we have a slightly different error position
-sed -i -e "s|44 45|48 49|" tests/ls/stat-failed.sh
 
 # small difference in the error message
 sed -i -e "s/ls: invalid argument 'XX' for 'time style'/ls: invalid --time-style argument 'XX'/" \

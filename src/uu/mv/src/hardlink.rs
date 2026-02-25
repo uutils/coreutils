@@ -9,7 +9,7 @@
 //! This module provides functionality to preserve hardlink relationships
 //! when moving files across different filesystems/partitions.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -19,14 +19,14 @@ use uucore::display::Quotable;
 #[derive(Debug, Default)]
 pub struct HardlinkTracker {
     /// Maps (device, inode) -> destination path for the first occurrence
-    inode_map: HashMap<(u64, u64), PathBuf>,
+    inode_map: FxHashMap<(u64, u64), PathBuf>,
 }
 
 /// Pre-scans files to identify hardlink groups with optimized memory usage
 #[derive(Debug, Default)]
 pub struct HardlinkGroupScanner {
     /// Maps (device, inode) -> list of source paths that are hardlinked together
-    hardlink_groups: HashMap<(u64, u64), Vec<PathBuf>>,
+    hardlink_groups: FxHashMap<(u64, u64), Vec<PathBuf>>,
     /// List of source files/directories being moved (for destination mapping)
     source_files: Vec<PathBuf>,
     /// Whether scanning has been performed
@@ -265,7 +265,7 @@ impl HardlinkGroupScanner {
     #[cfg(unix)]
     pub fn stats(&self) -> ScannerStats {
         let total_groups = self.hardlink_groups.len();
-        let total_files = self.hardlink_groups.values().map(|group| group.len()).sum();
+        let total_files = self.hardlink_groups.values().map(Vec::len).sum();
 
         ScannerStats {
             total_groups,

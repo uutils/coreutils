@@ -15,8 +15,8 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-use std::collections::HashMap;
-use std::collections::HashSet;
+use rustc_hash::FxHashMap;
+use rustc_hash::FxHashSet;
 use std::env;
 use std::ffi::OsString;
 use std::fs;
@@ -47,7 +47,7 @@ use uucore::fs::{
 };
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
 use uucore::fsxattr;
-#[cfg(feature = "selinux")]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::set_selinux_security_context;
 use uucore::translate;
 use uucore::update_control;
@@ -360,7 +360,7 @@ fn parse_paths(files: &[OsString], opts: &Options) -> Vec<PathBuf> {
             .map(|p| p.components().as_path().to_owned())
             .collect::<Vec<PathBuf>>()
     } else {
-        paths.map(|p| p.to_owned()).collect::<Vec<PathBuf>>()
+        paths.map(ToOwned::to_owned).collect::<Vec<PathBuf>>()
     }
 }
 
@@ -575,7 +575,8 @@ pub fn mv(files: &[OsString], opts: &Options) -> UResult<()> {
 #[allow(clippy::cognitive_complexity)]
 fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) -> UResult<()> {
     // remember the moved destinations for further usage
-    let mut moved_destinations: HashSet<PathBuf> = HashSet::with_capacity(files.len());
+    let mut moved_destinations: FxHashSet<PathBuf> =
+        FxHashSet::with_capacity_and_hasher(files.len(), rustc_hash::FxBuildHasher);
     // Create hardlink tracking context
     #[cfg(unix)]
     let (mut hardlink_tracker, hardlink_scanner) = {
@@ -770,7 +771,7 @@ fn rename(
         rename_with_fallback(from, to, display_manager, opts.verbose, None, None)?;
     }
 
-    #[cfg(feature = "selinux")]
+    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
     if let Some(ref context) = opts.context {
         set_selinux_security_context(to, Some(context))
             .map_err(|e| io::Error::other(e.to_string()))?;
@@ -967,7 +968,7 @@ fn rename_dir_fallback(
     };
 
     #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-    let xattrs = fsxattr::retrieve_xattrs(from).unwrap_or_else(|_| HashMap::new());
+    let xattrs = fsxattr::retrieve_xattrs(from).unwrap_or_else(|_| FxHashMap::default());
 
     // Use directory copying (with or without hardlink support)
     let result = copy_dir_contents(
@@ -1141,6 +1142,8 @@ fn copy_file_with_hardlinks_helper(
     if from.is_symlink() {
         // Copy a symlink file (no-follow).
         rename_symlink_fallback(from, to)?;
+    } else if is_fifo(from.symlink_metadata()?.file_type()) {
+        make_fifo(to)?;
     } else {
         // Copy a regular file.
         fs::copy(from, to)?;

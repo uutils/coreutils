@@ -10,7 +10,7 @@ use jiff::tz::TimeZone;
 use jiff::{Timestamp, ToSpan};
 #[cfg(unix)]
 use std::ffi::OsString;
-use std::io;
+use std::io::{self, Write, stdout};
 use thiserror::Error;
 use uucore::error::{UError, UResult};
 use uucore::format_usage;
@@ -144,24 +144,24 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
 
         if bytes[bytes.len() - 1] != b'x' {
             show_error!("{}", translate!("uptime-error-couldnt-get-boot-time"));
-            print_time();
-            print!("{}", translate!("uptime-output-unknown-uptime"));
-            print_nusers(Some(0));
-            print_loadavg();
+            print_time()?;
+            write!(stdout(), "{}", translate!("uptime-output-unknown-uptime"))?;
+            print_nusers(Some(0))?;
+            print_loadavg()?;
             set_exit_code(1);
             return Ok(());
         }
     }
 
     if non_fatal_error {
-        print_time();
-        print!("{}", translate!("uptime-output-unknown-uptime"));
-        print_nusers(Some(0));
-        print_loadavg();
+        print_time()?;
+        write!(stdout(), "{}", translate!("uptime-output-unknown-uptime"))?;
+        print_nusers(Some(0))?;
+        print_loadavg()?;
         return Ok(());
     }
 
-    print_time();
+    print_time()?;
     let user_count;
 
     #[cfg(not(target_os = "openbsd"))]
@@ -173,7 +173,7 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
             show_error!("{}", translate!("uptime-error-couldnt-get-boot-time"));
             set_exit_code(1);
 
-            print!("{}", translate!("uptime-output-unknown-uptime"));
+            write!(stdout(), "{}", translate!("uptime-output-unknown-uptime"))?;
         }
         user_count = count;
     }
@@ -187,14 +187,14 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
             show_error!("{}", translate!("uptime-error-couldnt-get-boot-time"));
             set_exit_code(1);
 
-            print!("{}", translate!("uptime-output-unknown-uptime"));
+            write!(stdout(), "{}", translate!("uptime-output-unknown-uptime"))?;
         }
         user_count =
             uucore::uptime::get_nusers(file_path.to_str().expect("invalid utmp path file"));
     }
 
-    print_nusers(Some(user_count));
-    print_loadavg();
+    print_nusers(Some(user_count))?;
+    print_loadavg()?;
 
     Ok(())
 }
@@ -210,27 +210,27 @@ fn uptime_since() -> UResult<()> {
     let uptime = get_uptime(None)?;
 
     let since_date = (Timestamp::now() - uptime.seconds()).to_zoned(TimeZone::system());
-    println!("{}", since_date.strftime("%Y-%m-%d %H:%M:%S"));
+    writeln!(stdout(), "{}", since_date.strftime("%Y-%m-%d %H:%M:%S"))?;
 
     Ok(())
 }
 
 /// Default uptime behaviour i.e. when no file argument is given.
 fn default_uptime() -> UResult<()> {
-    print_time();
+    print_time()?;
     print_uptime(None)?;
-    print_nusers(None);
-    print_loadavg();
+    print_nusers(None)?;
+    print_loadavg()?;
 
     Ok(())
 }
 
 #[inline]
-fn print_loadavg() {
-    match get_formatted_loadavg() {
-        Err(_) => {}
-        Ok(s) => println!("{s}"),
+fn print_loadavg() -> UResult<()> {
+    if let Ok(s) = get_formatted_loadavg() {
+        writeln!(stdout(), "{s}")?;
     }
+    Ok(())
 }
 
 #[cfg(unix)]
@@ -259,8 +259,9 @@ fn process_utmpx(file: Option<&OsString>) -> (Option<time_t>, usize) {
     (boot_time, nusers)
 }
 
-fn print_nusers(nusers: Option<usize>) {
-    print!(
+fn print_nusers(nusers: Option<usize>) -> UResult<()> {
+    write!(
+        stdout(),
         "{},  ",
         match nusers {
             None => {
@@ -270,18 +271,21 @@ fn print_nusers(nusers: Option<usize>) {
                 format_nusers(nusers)
             }
         }
-    );
+    )?;
+
+    Ok(())
 }
 
-fn print_time() {
-    print!(" {}  ", get_formatted_time());
+fn print_time() -> UResult<()> {
+    write!(stdout(), " {}  ", get_formatted_time())?;
+    Ok(())
 }
 
 fn print_uptime(boot_time: Option<time_t>) -> UResult<()> {
     let localized_text = translate!("uptime-output-up-text");
     let uptime_message = get_formatted_uptime(boot_time, OutputFormat::HumanReadable)?;
 
-    print!("{localized_text}  {uptime_message},  ");
+    write!(stdout(), "{localized_text}  {uptime_message},  ")?;
     Ok(())
 }
 
@@ -289,6 +293,6 @@ fn pretty_print_uptime() -> UResult<()> {
     let localized_text = translate!("uptime-output-up-text");
     let uptime_message = get_formatted_uptime(None, OutputFormat::PrettyPrint)?;
 
-    println!("{localized_text} {uptime_message}");
+    writeln!(stdout(), "{localized_text} {uptime_message}")?;
     Ok(())
 }

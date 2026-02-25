@@ -8,13 +8,13 @@ mod error;
 
 use crate::error::ChrootError;
 use clap::{Arg, ArgAction, Command};
-use std::ffi::CString;
+use std::ffi::{CString, OsStr};
 use std::io::{Error, ErrorKind};
 use std::os::unix::prelude::OsStrExt;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
-use uucore::entries::{Locate, Passwd, grp2gid, usr2uid};
+use uucore::entries::{Locate, Passwd, grp2gid, usr2gid, usr2uid};
 use uucore::error::{UResult, UUsageError};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 use uucore::libc::{self, chroot, setgid, setgroups, setuid};
@@ -159,9 +159,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches =
         uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 125)?;
 
-    let default_shell: &'static str = "/bin/sh";
-    let default_option: &'static str = "-i";
-    let user_shell = std::env::var("SHELL");
+    let default_shell: &'static OsStr = OsStr::new("/bin/sh");
+    let default_option: &'static OsStr = OsStr::new("-i");
+    let user_shell = std::env::var_os("SHELL");
 
     let options = Options::from(&matches)?;
 
@@ -186,22 +186,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Err(ChrootError::NoSuchDirectory(options.newroot).into());
     }
 
-    let commands = match matches.get_many::<String>(options::COMMAND) {
-        Some(v) => v.map(|s| s.as_str()).collect(),
-        None => vec![],
-    };
+    let commands: Vec<&OsStr> = matches
+        .get_many::<String>(options::COMMAND)
+        .map_or_else(Vec::new, |v| v.map(OsStr::new).collect());
 
     // TODO: refactor the args and command matching
     // See: https://github.com/uutils/coreutils/pull/2365#discussion_r647849967
-    let command: Vec<&str> = match commands.len() {
-        0 => {
-            let shell: &str = match user_shell {
-                Err(_) => default_shell,
-                Ok(ref s) => s.as_ref(),
-            };
-            vec![shell, default_option]
-        }
-        _ => commands,
+    let command = if commands.is_empty() {
+        vec![
+            user_shell.as_deref().unwrap_or(default_shell),
+            default_option,
+        ]
+    } else {
+        commands
     };
 
     assert!(!command.is_empty());
@@ -401,7 +398,7 @@ fn set_context(options: &Options) -> UResult<()> {
         }
         Some(UserSpec::UserOnly(user)) => {
             let uid = name_to_uid(user)?;
-            let gid = uid as libc::gid_t;
+            let gid = usr2gid(user).map_err(|_| ChrootError::NoGroupSpecified(uid))?;
             let strategy = Strategy::FromUID(uid, false);
             set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
             set_gid(gid).map_err(|e| ChrootError::SetGidFailed(user.to_owned(), e))?;

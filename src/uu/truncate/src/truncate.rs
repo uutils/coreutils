@@ -363,5 +363,31 @@ mod tests {
         assert_eq!(TruncateMode::RoundUp(8).to_size(10), Some(16));
         assert_eq!(TruncateMode::RoundUp(8).to_size(16), Some(16));
         assert_eq!(TruncateMode::RoundDown(0).to_size(123), None);
+        assert_eq!(TruncateMode::RoundUp(0).to_size(123), None);
+    }
+
+    #[test]
+    fn test_round_up_when_file_smaller_than_size() {
+        // fsize < size: must round up to size itself
+        assert_eq!(
+            TruncateMode::RoundUp(131_072).to_size(24_696),
+            Some(131_072)
+        );
+        assert_eq!(TruncateMode::RoundUp(4096).to_size(1), Some(4096));
+        assert_eq!(TruncateMode::RoundUp(100).to_size(50), Some(100));
+    }
+
+    #[test]
+    fn test_round_up_already_aligned() {
+        assert_eq!(TruncateMode::RoundUp(4096).to_size(0), Some(0));
+        assert_eq!(TruncateMode::RoundUp(4096).to_size(4096), Some(4096));
+        assert_eq!(TruncateMode::RoundUp(4096).to_size(8192), Some(8192));
+    }
+
+    #[test]
+    fn test_round_up_not_aligned() {
+        // fsize > size but not a multiple: must round up to next multiple
+        assert_eq!(TruncateMode::RoundUp(4096).to_size(5000), Some(8192));
+        assert_eq!(TruncateMode::RoundUp(8).to_size(13), Some(16));
     }
 }

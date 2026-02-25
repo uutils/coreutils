@@ -478,8 +478,17 @@ fn test_non_printing_chars() {
 }
 
 #[test]
-fn test_exponents_positive_general_fixed() {
+fn test_exponents_general() {
     test_helper("exponents_general", &["-g"]);
+}
+
+#[test]
+fn test_exponents_positive_general() {
+    new_ucmd!()
+        .pipe_in("1\n2e3\n1e-5")
+        .arg("-g")
+        .succeeds()
+        .stdout_only("1e-5\n1\n2e3\n");
 }
 
 #[test]
@@ -1709,7 +1718,7 @@ fn test_human_numeric_blank_thousands_sep_locale() {
         }
         let sep = String::from_utf8_lossy(&output.stdout);
         let sep = sep.trim_end_matches(&['\n', '\r'][..]);
-        if sep.is_empty() || sep.len() != 1 || !sep.chars().all(|c| c.is_whitespace()) {
+        if sep.is_empty() || sep.len() != 1 || !sep.chars().all(char::is_whitespace) {
             return None;
         }
         Some(sep.to_string())
@@ -2702,6 +2711,43 @@ fn test_locale_complex_utf8_sorting() {
         .pipe_in(input)
         .succeeds()
         .stdout_is("apple\nApple\nbanana\nBanana\nzebra\nZebra\n");
+}
+
+#[test]
+fn test_locale_posix_sort_debug_message() {
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .arg("--debug")
+        .pipe_in("a\nA\nb\nB\n")
+        .succeeds()
+        .stderr_contains("text ordering performed using simple byte comparison");
+}
+
+#[test]
+fn test_locale_utf8_sort_debug_message() {
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("--debug")
+        .pipe_in("a\nA\nb\nB\n")
+        .succeeds()
+        .stderr_contains("text ordering performed using ‘en_US.UTF-8’ sorting rules");
+}
+
+#[test]
+fn test_locale_utf8_with_key_field() {
+    // Regression test for issue #10909
+    // Sort should not panic when using -k flag with UTF-8 locale
+    // The bug occurred when rayon worker threads tried to access an uninitialized collator
+    let input = "a b 5433 down data path1 path2 path3 path4 path5
+c d 5435 down data path1 path2 path3 path4 path5
+e f 5436 down data path1 path2 path3 path4 path5\n";
+
+    new_ucmd!()
+        .env("LANG", "en_US.utf8")
+        .arg("-k3")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(input);
 }
 
 /* spell-checker: enable */

@@ -26,7 +26,7 @@ use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::fsext::{MetadataTimeField, metadata_get_time};
 use uucore::line_ending::LineEnding;
 #[cfg(all(unix, not(target_os = "redox")))]
-use uucore::safe_traversal::DirFd;
+use uucore::safe_traversal::{DirFd, SymlinkBehavior};
 use uucore::translate;
 
 use uucore::parser::parse_glob;
@@ -313,7 +313,7 @@ fn safe_du(
     let mut my_stat = if let Some(parent_fd) = parent_fd {
         // We have a parent fd, this is a subdirectory - use openat
         let dir_name = path.file_name().unwrap_or(path.as_os_str());
-        match parent_fd.metadata_at(dir_name, false) {
+        match parent_fd.metadata_at(dir_name, SymlinkBehavior::NoFollow) {
             Ok(safe_metadata) => {
                 // Create Stat from safe metadata
                 let file_info = safe_metadata.file_info();
@@ -368,7 +368,7 @@ fn safe_du(
             Ok(s) => s,
             Err(_e) => {
                 // Try using our new DirFd method for the root directory
-                match DirFd::open(path) {
+                match DirFd::open(path, SymlinkBehavior::Follow) {
                     Ok(dir_fd) => match Stat::new_from_dirfd(&dir_fd, path) {
                         Ok(s) => s,
                         Err(e) => {
@@ -406,8 +406,11 @@ fn safe_du(
 
     // Open the directory using DirFd
     let open_result = match parent_fd {
-        Some(parent) => parent.open_subdir(path.file_name().unwrap_or(path.as_os_str())),
-        None => DirFd::open(path),
+        Some(parent) => parent.open_subdir(
+            path.file_name().unwrap_or(path.as_os_str()),
+            SymlinkBehavior::Follow,
+        ),
+        None => DirFd::open(path, SymlinkBehavior::Follow),
     };
 
     let dir_fd = match open_result {
@@ -432,12 +435,11 @@ fn safe_du(
     };
 
     'file_loop: for entry_name in entries {
-        let entry_path = path.join(&entry_name);
-
         // First get the lstat (without following symlinks) to check if it's a symlink
-        let lstat = match dir_fd.stat_at(&entry_name, false) {
+        let lstat = match dir_fd.stat_at(&entry_name, SymlinkBehavior::NoFollow) {
             Ok(stat) => stat,
             Err(e) => {
+                let entry_path = path.join(&entry_name);
                 print_tx.send(Err(e.map_err_context(
                     || translate!("du-error-cannot-access", "path" => entry_path.quote()),
                 )))?;
@@ -476,7 +478,7 @@ fn safe_du(
         let this_stat = if is_dir {
             // For directories, recurse using safe_du
             Stat {
-                path: entry_path.clone(),
+                path: path.join(&entry_name),
                 size: 0,
                 #[allow(clippy::unnecessary_cast)]
                 blocks: entry_stat.st_blocks as u64,
@@ -489,7 +491,7 @@ fn safe_du(
         } else {
             // For files
             Stat {
-                path: entry_path.clone(),
+                path: path.join(&entry_name),
                 #[allow(clippy::unnecessary_cast)]
                 size: entry_stat.st_size as u64,
                 #[allow(clippy::unnecessary_cast)]
@@ -534,7 +536,7 @@ fn safe_du(
             }
 
             let this_stat = safe_du(
-                &entry_path,
+                &this_stat.path,
                 options,
                 depth + 1,
                 seen_inodes,
@@ -1032,7 +1034,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let max_depth = parse_depth(
         matches
             .get_one::<String>(options::MAX_DEPTH)
-            .map(|s| s.as_str()),
+            .map(String::as_str),
         summarize,
     )?;
 

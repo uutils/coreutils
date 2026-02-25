@@ -1012,13 +1012,13 @@ fn test_reset_binary() {
 
     scene
         .ucmd()
-        .arg("--binary") // should disappear because of the following option
+        .arg("--binary")
         .arg("--tag")
         .arg("--untagged")
         .arg("--algorithm=md5")
         .arg(at.subdir.join("f"))
         .succeeds()
-        .stdout_contains("d41d8cd98f00b204e9800998ecf8427e  ");
+        .stdout_contains("d41d8cd98f00b204e9800998ecf8427e *");
 }
 
 #[test]
@@ -1040,7 +1040,6 @@ fn test_reset_binary_but_set() {
         .stdout_contains("d41d8cd98f00b204e9800998ecf8427e *");
 }
 
-/// Test legacy behaviors with --tag, --untagged, --binary and --text
 mod output_format {
     use super::*;
 
@@ -1049,13 +1048,11 @@ mod output_format {
         let (at, mut ucmd) = at_and_ucmd!();
         at.touch("f");
 
-        ucmd.arg("--text") // should disappear because of the following option
+        ucmd.arg("--text")
             .arg("--tag")
             .args(&["-a", "md5"])
             .arg(at.subdir.join("f"))
-            .succeeds()
-            // Tagged output is used
-            .stdout_contains("f) = d41d8cd98f00b204e9800998ecf8427e");
+            .fails();
     }
 
     #[test]
@@ -1181,7 +1178,7 @@ fn test_binary_file() {
         .arg("--untagged")
         .arg("lorem_ipsum.txt")
         .succeeds()
-        .stdout_is("cd724690f7dc61775dfac400a71f2caa  lorem_ipsum.txt\n");
+        .stdout_is("cd724690f7dc61775dfac400a71f2caa *lorem_ipsum.txt\n");
 }
 
 #[test]
@@ -1229,9 +1226,7 @@ fn test_conflicting_options() {
         .arg("md5")
         .fails_with_code(1)
         .no_stdout()
-        .stderr_contains(
-            "cksum: the --binary and --text options are meaningless when verifying checksums",
-        );
+        .stderr_contains("cksum: the --tag option is meaningless when verifying checksums");
 }
 
 #[test]
