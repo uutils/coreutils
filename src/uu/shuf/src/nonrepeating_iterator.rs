@@ -50,7 +50,7 @@ enum Values {
 
 impl<'a> NonrepeatingIterator<'a> {
     pub(crate) fn new(range: RangeInclusive<u64>, rng: &'a mut WrappedRng) -> Self {
-        const MAX_CAPACITY: usize = 128; // todo: optimize this
+        const MAX_CAPACITY: usize = 1024;
         let capacity = (range.size_hint().0).min(MAX_CAPACITY);
         let values = Values::Sparse(
             range,
