@@ -18,7 +18,9 @@ use std::ffi::{CString, OsStr, OsString};
 use std::fs;
 use std::io;
 use std::os::unix::ffi::OsStrExt as _;
-use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd as _, IntoRawFd as _, OwnedFd, RawFd};
+use std::os::unix::io::{
+    AsFd, AsRawFd, BorrowedFd, FromRawFd as _, IntoRawFd as _, OwnedFd, RawFd,
+};
 use std::path::{Path, PathBuf};
 
 use nix::dir::Dir;

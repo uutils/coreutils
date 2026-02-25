@@ -8,7 +8,9 @@
 use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::fs::{File, metadata};
-use std::io::{self, BufRead as _, BufReader, BufWriter, Read as _, StdinLock, Write, stderr, stdin};
+use std::io::{
+    self, BufRead as _, BufReader, BufWriter, Read as _, StdinLock, Write, stderr, stdin,
+};
 use std::path::Path;
 use uucore::display::Quotable as _;
 use uucore::error::{FromIo as _, UResult, USimpleError};

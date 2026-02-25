@@ -30,7 +30,9 @@ use paths::{FileExtTail as _, HeaderPrinter, Input, InputKind};
 use same_file::Handle;
 use std::cmp::Ordering;
 use std::fs::File;
-use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Seek as _, SeekFrom, Write as _, stdin, stdout};
+use std::io::{
+    self, BufReader, BufWriter, ErrorKind, Read, Seek as _, SeekFrom, Write as _, stdin, stdout,
+};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo as _, UResult, USimpleError, set_exit_code};
