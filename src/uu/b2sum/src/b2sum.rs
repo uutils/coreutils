@@ -7,7 +7,7 @@
 
 use clap::Command;
 
-use uu_checksum_common::{standalone_checksum_app_with_length, standalone_with_length_main};
+use uu_checksum_common::{standalone_checksum_app_with_length, standalone_main};
 
 use uucore::checksum::{AlgoKind, calculate_blake2b_length_str};
 use uucore::error::UResult;
@@ -15,11 +15,11 @@ use uucore::translate;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    standalone_with_length_main(
+    standalone_main::<true>(
         AlgoKind::Blake2b,
         uu_app(),
         args,
-        calculate_blake2b_length_str,
+        Some(calculate_blake2b_length_str),
     )
 }
 

@@ -39,7 +39,7 @@ macro_rules! declare_standalone {
     ($bin:literal, $kind:expr) => {
         #[::uucore::main]
         pub fn uumain(args: impl ::uucore::Args) -> ::uucore::error::UResult<()> {
-            ::uu_checksum_common::standalone_main($kind, uu_app(), args)
+            ::uu_checksum_common::standalone_main::<false>($kind, uu_app(), args, None)
         }
 
         #[inline]
@@ -52,46 +52,42 @@ macro_rules! declare_standalone {
     };
 }
 
-/// Entrypoint for standalone checksums accepting the `--length` argument
+/// Entrypoint for standalone checksums
 ///
 /// Note: Ideally, we wouldn't require a `cmd` to be passed to the function,
 /// but for localization purposes, the standalone binaries must declare their
 /// command (with about and usage) themselves, otherwise calling --help from
 /// the multicall binary results in an unformatted output.
-pub fn standalone_with_length_main(
+#[allow(clippy::type_complexity)]
+pub fn standalone_main<const WITH_LENGTH: bool>(
     algo: AlgoKind,
     cmd: Command,
     args: impl uucore::Args,
-    validate_len: fn(&str) -> UResult<Option<usize>>,
+    validate_len: Option<fn(&str) -> UResult<Option<usize>>>,
 ) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(cmd, args)?;
     let algo = Some(algo);
-
-    let length = matches
-        .get_one::<String>(options::LENGTH)
-        .map(String::as_str)
-        .map(validate_len)
-        .transpose()?
-        .flatten();
-
-    //todo: deduplicate matches.get_flag
     let text = !matches.get_flag(options::BINARY);
     let tag = matches.get_flag(options::TAG);
     let format = OutputFormat::from_standalone(text, tag);
+
+    //accept the `--length` argument
+    let length = if WITH_LENGTH {
+        if let Some(v_fn) = validate_len {
+            matches
+                .get_one::<String>(options::LENGTH)
+                .map(String::as_str)
+                .map(v_fn)
+                .transpose()?
+                .flatten()
+        } else {
+            None
+        }
+    } else {
+        None
+    };
 
     checksum_main(algo, length, matches, format?)
-}
-
-/// Entrypoint for standalone checksums *NOT* accepting the `--length` argument
-pub fn standalone_main(algo: AlgoKind, cmd: Command, args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(cmd, args)?;
-    let algo = Some(algo);
-    //todo: deduplicate matches.get_flag
-    let text = !matches.get_flag(options::BINARY);
-    let tag = matches.get_flag(options::TAG);
-    let format = OutputFormat::from_standalone(text, tag);
-
-    checksum_main(algo, None, matches, format?)
 }
 
 /// Base command processing for all the checksum executables.
