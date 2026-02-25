@@ -1788,19 +1788,20 @@ fn test_date_format_x_locale_aware() {
         return;
     }
     // French D_FMT (e.g. "19/01/1997" on Linux or "19.01.1997" on macOS)
-    let result = new_ucmd!()
+    let expected = if cfg!(target_os = "macos") {
+        "19.01.1997\n"
+    } else {
+        "19/01/1997\n"
+    };
+
+    new_ucmd!()
         .env("TZ", "UTC")
         .env("LC_ALL", "fr_FR.UTF-8")
         .arg("-d")
         .arg("1997-01-19 08:17:48")
         .arg("+%x")
-        .succeeds();
-
-    let out = result.stdout_str();
-    assert!(
-        out.contains("19/01/1997") || out.contains("19.01.1997"),
-        "Unexpected %x output for fr_FR.UTF-8: {out}"
-    );
+        .succeeds()
+        .stdout_is(expected);
 }
 
 /// Test that %X uses the locale's T_FMT.
@@ -1860,21 +1861,23 @@ fn test_date_format_r_locale_aware() {
         println!("Skipping fr_FR locale %r test — fr_FR.UTF-8 not available");
         return;
     }
-    // French does not define AM/PM strings so it should fallback to %H:%M:%S like GNU `date`
-    let result = new_ucmd!()
+    // French does not define AM/PM strings so it should fallback to %H:%M:%S like GNU `date` on Linux.
+    // However, on macOS, `nl_langinfo(T_FMT_AMPM)` for fr_FR.UTF-8 returns "%I:%M:%S %p",
+    // so it formatting outputs "08:17:48 AM"
+    let expected = if cfg!(target_os = "macos") {
+        "08:17:48 AM\n"
+    } else {
+        "08:17:48\n"
+    };
+
+    new_ucmd!()
         .env("TZ", "UTC")
         .env("LC_ALL", "fr_FR.UTF-8")
         .arg("-d")
         .arg("1997-01-19 08:17:48")
         .arg("+%r")
-        .succeeds();
-
-    let out = result.stdout_str();
-    // On some platforms like macOS it might still spit out AM/PM if the locale is incomplete or fallback happens differently.
-    assert!(
-        out.contains("08:17:48"),
-        "Unexpected %r output for fr_FR.UTF-8: {out}"
-    );
+        .succeeds()
+        .stdout_is(expected);
 }
 
 #[test]

@@ -720,9 +720,8 @@ fn expand_locale_specifiers(format: &str) -> Cow<'_, str> {
         }
     }
     if s.contains("%r") {
-        if let Some(ampm) = locale::get_locale_time_ampm_format() {
-            s = s.replace("%r", &ampm);
-        }
+        let ampm = locale::get_locale_time_ampm_format();
+        s = s.replace("%r", &ampm);
     }
 
     Cow::Owned(s.replace(PLACEHOLDER, "%%"))

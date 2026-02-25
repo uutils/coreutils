@@ -157,10 +157,14 @@ cfg_langinfo! {
     }
 
     /// Returns the locale 12-hour time format (`T_FMT_AMPM`) used by `%r`.
-    /// Falls back to `%H:%M:%S` if the locale leaves it empty (like fr_FR).
-    pub fn get_locale_time_ampm_format() -> Option<String> {
-        query_nl_langinfo(T_FMT_AMPM_ITEM)
-            .or_else(|| Some("%H:%M:%S".to_string()))
+    /// GNU date falls back to `%I:%M:%S %p` if it's completely undefined.
+    /// However, if a locale explicitly defines it as empty (like French), it uses `%H:%M:%S`.
+    pub fn get_locale_time_ampm_format() -> String {
+        let fmt = query_nl_langinfo(T_FMT_AMPM_ITEM);
+        match fmt.as_deref() {
+            Some("") | None => "%I:%M:%S %p".to_string(),
+            Some(s) => s.to_string(),
+        }
     }
 }
 
@@ -212,8 +216,8 @@ pub fn get_locale_time_format() -> Option<String> {
     target_os = "openbsd",
     target_os = "dragonfly"
 )))]
-pub fn get_locale_time_ampm_format() -> Option<String> {
-    None
+pub fn get_locale_time_ampm_format() -> String {
+    "%I:%M:%S %p".to_string()
 }
 
 #[cfg(test)]
