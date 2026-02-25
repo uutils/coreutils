@@ -104,7 +104,7 @@ impl Iterator for NonrepeatingIterator<'_> {
             Values::Full(_) => (),
             Values::Sparse(range, _) if range.is_empty() => return None,
             Values::Sparse(range, items) => {
-                if items.len() as u64 >= items.capacity() as u64 {
+                if items.len() >= items.capacity() {
                     self.values = Values::Full(hashmap_to_vec(range.clone(), items));
                 }
             }
