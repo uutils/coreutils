@@ -546,14 +546,14 @@ jobs:
               --arg multisize "$SIZE_MULTI" \
               '{($date): { sha: $sha, size: $size, multisize: $multisize, }}' > size-result.json
     - name: Download the previous individual size result
-      uses: dawidd6/action-download-artifact@v15
+      uses: dawidd6/action-download-artifact@v16
       with:
         workflow: CICD.yml
         name: individual-size-result
         repo: uutils/coreutils
         path: dl
     - name: Download the previous size result
-      uses: dawidd6/action-download-artifact@v15
+      uses: dawidd6/action-download-artifact@v16
       with:
         workflow: CICD.yml
         name: size-result
