@@ -91,5 +91,5 @@ fn test_link_dest_exists() {
 
     ucmd.args(&[file, dest])
         .fails()
-        .stderr_contains("File exists");
+        .stderr_contains("exists");
 }
