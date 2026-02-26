@@ -384,45 +384,28 @@ enum CharType {
 }
 
 fn next_char_info(uflag: bool, buf: &[u8], byte: usize) -> (CharType, usize, usize) {
-    let (ctype, cwidth, nbytes) = if uflag {
-        let nbytes = char::from(buf[byte]).len_utf8();
-
-        let Some(slice) = buf.get(byte..byte + nbytes) else {
-            // don't overrun buffer because of invalid UTF-8
-            return (CharType::Other, 1, 1);
+    use CharType::{Backspace, Other, Space, Tab};
+    let b = buf[byte];
+    if b.is_ascii() {
+        return match b {
+            b' ' => (Space, 0, 1),
+            b'\t' => (Tab, 0, 1),
+            b'\x08' => (Backspace, 0, 1),
+            _ => (Other, 1, 1),
         };
+    }
 
-        if let Ok(t) = from_utf8(slice) {
-            // Now that we think it's UTF-8, figure out what kind of char it is
-            match t.chars().next() {
-                Some(' ') => (CharType::Space, 0, 1),
-                Some('\t') => (CharType::Tab, 0, 1),
-                Some('\x08') => (CharType::Backspace, 0, 1),
-                Some(_) => (CharType::Other, nbytes, nbytes),
-                None => {
-                    // invalid char snuck past the utf8_validation_iterator somehow???
-                    (CharType::Other, 1, 1)
-                }
-            }
-        } else {
-            // otherwise, it's not valid
-            (CharType::Other, 1, 1) // implicit assumption: non-UTF8 char has display width 1
+    if uflag {
+        let nbytes = char::from(b).len_utf8();
+        // don't overrun the buffer because of invalid UTF-8
+        if buf
+            .get(byte..byte + nbytes)
+            .is_some_and(|s| from_utf8(s).is_ok())
+        {
+            return (Other, nbytes, nbytes);
         }
-    } else {
-        (
-            match buf[byte] {
-                // always take exactly 1 byte in strict ASCII mode
-                0x20 => CharType::Space,
-                0x09 => CharType::Tab,
-                0x08 => CharType::Backspace,
-                _ => CharType::Other,
-            },
-            1,
-            1,
-        )
-    };
-
-    (ctype, cwidth, nbytes)
+    }
+    (Other, 1, 1)
 }
 
 // This struct is used to store the current state of printing the input buf.
