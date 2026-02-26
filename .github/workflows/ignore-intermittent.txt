@@ -1,4 +1,6 @@
+tests/cut/bounded-memory
 tests/date/date-locale-hour
+tests/date/resolution
 tests/pr/bounded-memory
 tests/tail/inotify-dir-recreate
 tests/tail/overlay-headers
