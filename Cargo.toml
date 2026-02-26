@@ -308,7 +308,7 @@ homepage = "https://github.com/uutils/coreutils"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 license = "MIT"
 readme = "README.package.md"
-version = "0.6.0"
+version = "0.7.0"
 
 [workspace.dependencies]
 ahash = "0.8.12"
@@ -409,12 +409,12 @@ fluent-bundle = "0.16.0"
 unic-langid = "0.9.6"
 fluent-syntax = "0.12.0"
 
-uucore = { version = "0.6.0", package = "uucore", path = "src/uucore" }
-uucore_procs = { version = "0.6.0", package = "uucore_procs", path = "src/uucore_procs" }
-uu_ls = { version = "0.6.0", path = "src/uu/ls" }
-uu_base32 = { version = "0.6.0", path = "src/uu/base32" }
-uu_checksum_common = { version = "0.6.0", path = "src/uu/checksum_common" }
-uutests = { version = "0.6.0", package = "uutests", path = "tests/uutests" }
+uucore = { package = "uucore", path = "src/uucore" }
+uucore_procs = { package = "uucore_procs", path = "src/uucore_procs" }
+uu_ls = { path = "src/uu/ls" }
+uu_base32 = { path = "src/uu/base32" }
+uu_checksum_common = { path = "src/uu/checksum_common" }
+uutests = { package = "uutests", path = "tests/uutests" }
 
 [dependencies]
 clap_complete = { workspace = true, optional = true }
@@ -430,115 +430,115 @@ zip = { workspace = true, optional = true }
 
 
 # * uutils
-uu_test = { optional = true, version = "0.6.0", package = "uu_test", path = "src/uu/test" }
+uu_test = { optional = true, package = "uu_test", path = "src/uu/test" }
 #
-arch = { optional = true, version = "0.6.0", package = "uu_arch", path = "src/uu/arch" }
-base32 = { optional = true, version = "0.6.0", package = "uu_base32", path = "src/uu/base32" }
-base64 = { optional = true, version = "0.6.0", package = "uu_base64", path = "src/uu/base64" }
-basename = { optional = true, version = "0.6.0", package = "uu_basename", path = "src/uu/basename" }
-basenc = { optional = true, version = "0.6.0", package = "uu_basenc", path = "src/uu/basenc" }
-cat = { optional = true, version = "0.6.0", package = "uu_cat", path = "src/uu/cat" }
-chcon = { optional = true, version = "0.6.0", package = "uu_chcon", path = "src/uu/chcon" }
-chgrp = { optional = true, version = "0.6.0", package = "uu_chgrp", path = "src/uu/chgrp" }
-chmod = { optional = true, version = "0.6.0", package = "uu_chmod", path = "src/uu/chmod" }
-chown = { optional = true, version = "0.6.0", package = "uu_chown", path = "src/uu/chown" }
-chroot = { optional = true, version = "0.6.0", package = "uu_chroot", path = "src/uu/chroot" }
-cksum = { optional = true, version = "0.6.0", package = "uu_cksum", path = "src/uu/cksum" }
-b2sum = { optional = true, version = "0.6.0", package = "uu_b2sum", path = "src/uu/b2sum" }
-md5sum = { optional = true, version = "0.6.0", package = "uu_md5sum", path = "src/uu/md5sum" }
-sha1sum = { optional = true, version = "0.6.0", package = "uu_sha1sum", path = "src/uu/sha1sum" }
-sha224sum = { optional = true, version = "0.6.0", package = "uu_sha224sum", path = "src/uu/sha224sum" }
-sha256sum = { optional = true, version = "0.6.0", package = "uu_sha256sum", path = "src/uu/sha256sum" }
-sha384sum = { optional = true, version = "0.6.0", package = "uu_sha384sum", path = "src/uu/sha384sum" }
-sha512sum = { optional = true, version = "0.6.0", package = "uu_sha512sum", path = "src/uu/sha512sum" }
-comm = { optional = true, version = "0.6.0", package = "uu_comm", path = "src/uu/comm" }
-cp = { optional = true, version = "0.6.0", package = "uu_cp", path = "src/uu/cp" }
-csplit = { optional = true, version = "0.6.0", package = "uu_csplit", path = "src/uu/csplit" }
-cut = { optional = true, version = "0.6.0", package = "uu_cut", path = "src/uu/cut" }
-date = { optional = true, version = "0.6.0", package = "uu_date", path = "src/uu/date" }
-dd = { optional = true, version = "0.6.0", package = "uu_dd", path = "src/uu/dd" }
-df = { optional = true, version = "0.6.0", package = "uu_df", path = "src/uu/df" }
-dir = { optional = true, version = "0.6.0", package = "uu_dir", path = "src/uu/dir" }
-dircolors = { optional = true, version = "0.6.0", package = "uu_dircolors", path = "src/uu/dircolors" }
-dirname = { optional = true, version = "0.6.0", package = "uu_dirname", path = "src/uu/dirname" }
-du = { optional = true, version = "0.6.0", package = "uu_du", path = "src/uu/du" }
-echo = { optional = true, version = "0.6.0", package = "uu_echo", path = "src/uu/echo" }
-env = { optional = true, version = "0.6.0", package = "uu_env", path = "src/uu/env" }
-expand = { optional = true, version = "0.6.0", package = "uu_expand", path = "src/uu/expand" }
-expr = { optional = true, version = "0.6.0", package = "uu_expr", path = "src/uu/expr" }
-factor = { optional = true, version = "0.6.0", package = "uu_factor", path = "src/uu/factor" }
-false = { optional = true, version = "0.6.0", package = "uu_false", path = "src/uu/false" }
-fmt = { optional = true, version = "0.6.0", package = "uu_fmt", path = "src/uu/fmt" }
-fold = { optional = true, version = "0.6.0", package = "uu_fold", path = "src/uu/fold" }
-groups = { optional = true, version = "0.6.0", package = "uu_groups", path = "src/uu/groups" }
-head = { optional = true, version = "0.6.0", package = "uu_head", path = "src/uu/head" }
-hostid = { optional = true, version = "0.6.0", package = "uu_hostid", path = "src/uu/hostid" }
-hostname = { optional = true, version = "0.6.0", package = "uu_hostname", path = "src/uu/hostname" }
-id = { optional = true, version = "0.6.0", package = "uu_id", path = "src/uu/id" }
-install = { optional = true, version = "0.6.0", package = "uu_install", path = "src/uu/install" }
-join = { optional = true, version = "0.6.0", package = "uu_join", path = "src/uu/join" }
-kill = { optional = true, version = "0.6.0", package = "uu_kill", path = "src/uu/kill" }
-link = { optional = true, version = "0.6.0", package = "uu_link", path = "src/uu/link" }
-ln = { optional = true, version = "0.6.0", package = "uu_ln", path = "src/uu/ln" }
-ls = { optional = true, version = "0.6.0", package = "uu_ls", path = "src/uu/ls" }
-logname = { optional = true, version = "0.6.0", package = "uu_logname", path = "src/uu/logname" }
-mkdir = { optional = true, version = "0.6.0", package = "uu_mkdir", path = "src/uu/mkdir" }
-mkfifo = { optional = true, version = "0.6.0", package = "uu_mkfifo", path = "src/uu/mkfifo" }
-mknod = { optional = true, version = "0.6.0", package = "uu_mknod", path = "src/uu/mknod" }
-mktemp = { optional = true, version = "0.6.0", package = "uu_mktemp", path = "src/uu/mktemp" }
-more = { optional = true, version = "0.6.0", package = "uu_more", path = "src/uu/more" }
-mv = { optional = true, version = "0.6.0", package = "uu_mv", path = "src/uu/mv" }
-nice = { optional = true, version = "0.6.0", package = "uu_nice", path = "src/uu/nice" }
-nl = { optional = true, version = "0.6.0", package = "uu_nl", path = "src/uu/nl" }
-nohup = { optional = true, version = "0.6.0", package = "uu_nohup", path = "src/uu/nohup" }
-nproc = { optional = true, version = "0.6.0", package = "uu_nproc", path = "src/uu/nproc" }
-numfmt = { optional = true, version = "0.6.0", package = "uu_numfmt", path = "src/uu/numfmt" }
-od = { optional = true, version = "0.6.0", package = "uu_od", path = "src/uu/od" }
-paste = { optional = true, version = "0.6.0", package = "uu_paste", path = "src/uu/paste" }
-pathchk = { optional = true, version = "0.6.0", package = "uu_pathchk", path = "src/uu/pathchk" }
-pinky = { optional = true, version = "0.6.0", package = "uu_pinky", path = "src/uu/pinky" }
-pr = { optional = true, version = "0.6.0", package = "uu_pr", path = "src/uu/pr" }
-printenv = { optional = true, version = "0.6.0", package = "uu_printenv", path = "src/uu/printenv" }
-printf = { optional = true, version = "0.6.0", package = "uu_printf", path = "src/uu/printf" }
-ptx = { optional = true, version = "0.6.0", package = "uu_ptx", path = "src/uu/ptx" }
-pwd = { optional = true, version = "0.6.0", package = "uu_pwd", path = "src/uu/pwd" }
-readlink = { optional = true, version = "0.6.0", package = "uu_readlink", path = "src/uu/readlink" }
-realpath = { optional = true, version = "0.6.0", package = "uu_realpath", path = "src/uu/realpath" }
-rm = { optional = true, version = "0.6.0", package = "uu_rm", path = "src/uu/rm" }
-rmdir = { optional = true, version = "0.6.0", package = "uu_rmdir", path = "src/uu/rmdir" }
-runcon = { optional = true, version = "0.6.0", package = "uu_runcon", path = "src/uu/runcon" }
-seq = { optional = true, version = "0.6.0", package = "uu_seq", path = "src/uu/seq" }
-shred = { optional = true, version = "0.6.0", package = "uu_shred", path = "src/uu/shred" }
-shuf = { optional = true, version = "0.6.0", package = "uu_shuf", path = "src/uu/shuf" }
-sleep = { optional = true, version = "0.6.0", package = "uu_sleep", path = "src/uu/sleep" }
-sort = { optional = true, version = "0.6.0", package = "uu_sort", path = "src/uu/sort" }
-split = { optional = true, version = "0.6.0", package = "uu_split", path = "src/uu/split" }
-stat = { optional = true, version = "0.6.0", package = "uu_stat", path = "src/uu/stat" }
-stdbuf = { optional = true, version = "0.6.0", package = "uu_stdbuf", path = "src/uu/stdbuf" }
-stty = { optional = true, version = "0.6.0", package = "uu_stty", path = "src/uu/stty" }
-sum = { optional = true, version = "0.6.0", package = "uu_sum", path = "src/uu/sum" }
-sync = { optional = true, version = "0.6.0", package = "uu_sync", path = "src/uu/sync" }
-tac = { optional = true, version = "0.6.0", package = "uu_tac", path = "src/uu/tac" }
-tail = { optional = true, version = "0.6.0", package = "uu_tail", path = "src/uu/tail" }
-tee = { optional = true, version = "0.6.0", package = "uu_tee", path = "src/uu/tee" }
-timeout = { optional = true, version = "0.6.0", package = "uu_timeout", path = "src/uu/timeout" }
-touch = { optional = true, version = "0.6.0", package = "uu_touch", path = "src/uu/touch" }
-tr = { optional = true, version = "0.6.0", package = "uu_tr", path = "src/uu/tr" }
-true = { optional = true, version = "0.6.0", package = "uu_true", path = "src/uu/true" }
-truncate = { optional = true, version = "0.6.0", package = "uu_truncate", path = "src/uu/truncate" }
-tsort = { optional = true, version = "0.6.0", package = "uu_tsort", path = "src/uu/tsort" }
-tty = { optional = true, version = "0.6.0", package = "uu_tty", path = "src/uu/tty" }
-uname = { optional = true, version = "0.6.0", package = "uu_uname", path = "src/uu/uname" }
-unexpand = { optional = true, version = "0.6.0", package = "uu_unexpand", path = "src/uu/unexpand" }
-uniq = { optional = true, version = "0.6.0", package = "uu_uniq", path = "src/uu/uniq" }
-unlink = { optional = true, version = "0.6.0", package = "uu_unlink", path = "src/uu/unlink" }
-uptime = { optional = true, version = "0.6.0", package = "uu_uptime", path = "src/uu/uptime" }
-users = { optional = true, version = "0.6.0", package = "uu_users", path = "src/uu/users" }
-vdir = { optional = true, version = "0.6.0", package = "uu_vdir", path = "src/uu/vdir" }
-wc = { optional = true, version = "0.6.0", package = "uu_wc", path = "src/uu/wc" }
-who = { optional = true, version = "0.6.0", package = "uu_who", path = "src/uu/who" }
-whoami = { optional = true, version = "0.6.0", package = "uu_whoami", path = "src/uu/whoami" }
-yes = { optional = true, version = "0.6.0", package = "uu_yes", path = "src/uu/yes" }
+arch = { optional = true, package = "uu_arch", path = "src/uu/arch" }
+base32 = { optional = true, package = "uu_base32", path = "src/uu/base32" }
+base64 = { optional = true, package = "uu_base64", path = "src/uu/base64" }
+basename = { optional = true, package = "uu_basename", path = "src/uu/basename" }
+basenc = { optional = true, package = "uu_basenc", path = "src/uu/basenc" }
+cat = { optional = true, package = "uu_cat", path = "src/uu/cat" }
+chcon = { optional = true, package = "uu_chcon", path = "src/uu/chcon" }
+chgrp = { optional = true, package = "uu_chgrp", path = "src/uu/chgrp" }
+chmod = { optional = true, package = "uu_chmod", path = "src/uu/chmod" }
+chown = { optional = true, package = "uu_chown", path = "src/uu/chown" }
+chroot = { optional = true, package = "uu_chroot", path = "src/uu/chroot" }
+cksum = { optional = true, package = "uu_cksum", path = "src/uu/cksum" }
+b2sum = { optional = true, package = "uu_b2sum", path = "src/uu/b2sum" }
+md5sum = { optional = true, package = "uu_md5sum", path = "src/uu/md5sum" }
+sha1sum = { optional = true, package = "uu_sha1sum", path = "src/uu/sha1sum" }
+sha224sum = { optional = true, package = "uu_sha224sum", path = "src/uu/sha224sum" }
+sha256sum = { optional = true, package = "uu_sha256sum", path = "src/uu/sha256sum" }
+sha384sum = { optional = true, package = "uu_sha384sum", path = "src/uu/sha384sum" }
+sha512sum = { optional = true, package = "uu_sha512sum", path = "src/uu/sha512sum" }
+comm = { optional = true, package = "uu_comm", path = "src/uu/comm" }
+cp = { optional = true, package = "uu_cp", path = "src/uu/cp" }
+csplit = { optional = true, package = "uu_csplit", path = "src/uu/csplit" }
+cut = { optional = true, package = "uu_cut", path = "src/uu/cut" }
+date = { optional = true, package = "uu_date", path = "src/uu/date" }
+dd = { optional = true, package = "uu_dd", path = "src/uu/dd" }
+df = { optional = true, package = "uu_df", path = "src/uu/df" }
+dir = { optional = true, package = "uu_dir", path = "src/uu/dir" }
+dircolors = { optional = true, package = "uu_dircolors", path = "src/uu/dircolors" }
+dirname = { optional = true, package = "uu_dirname", path = "src/uu/dirname" }
+du = { optional = true, package = "uu_du", path = "src/uu/du" }
+echo = { optional = true, package = "uu_echo", path = "src/uu/echo" }
+env = { optional = true, package = "uu_env", path = "src/uu/env" }
+expand = { optional = true, package = "uu_expand", path = "src/uu/expand" }
+expr = { optional = true, package = "uu_expr", path = "src/uu/expr" }
+factor = { optional = true, package = "uu_factor", path = "src/uu/factor" }
+false = { optional = true, package = "uu_false", path = "src/uu/false" }
+fmt = { optional = true, package = "uu_fmt", path = "src/uu/fmt" }
+fold = { optional = true, package = "uu_fold", path = "src/uu/fold" }
+groups = { optional = true, package = "uu_groups", path = "src/uu/groups" }
+head = { optional = true, package = "uu_head", path = "src/uu/head" }
+hostid = { optional = true, package = "uu_hostid", path = "src/uu/hostid" }
+hostname = { optional = true, package = "uu_hostname", path = "src/uu/hostname" }
+id = { optional = true, package = "uu_id", path = "src/uu/id" }
+install = { optional = true, package = "uu_install", path = "src/uu/install" }
+join = { optional = true, package = "uu_join", path = "src/uu/join" }
+kill = { optional = true, package = "uu_kill", path = "src/uu/kill" }
+link = { optional = true, package = "uu_link", path = "src/uu/link" }
+ln = { optional = true, package = "uu_ln", path = "src/uu/ln" }
+ls = { optional = true, package = "uu_ls", path = "src/uu/ls" }
+logname = { optional = true, package = "uu_logname", path = "src/uu/logname" }
+mkdir = { optional = true, package = "uu_mkdir", path = "src/uu/mkdir" }
+mkfifo = { optional = true, package = "uu_mkfifo", path = "src/uu/mkfifo" }
+mknod = { optional = true, package = "uu_mknod", path = "src/uu/mknod" }
+mktemp = { optional = true, package = "uu_mktemp", path = "src/uu/mktemp" }
+more = { optional = true, package = "uu_more", path = "src/uu/more" }
+mv = { optional = true, package = "uu_mv", path = "src/uu/mv" }
+nice = { optional = true, package = "uu_nice", path = "src/uu/nice" }
+nl = { optional = true, package = "uu_nl", path = "src/uu/nl" }
+nohup = { optional = true, package = "uu_nohup", path = "src/uu/nohup" }
+nproc = { optional = true, package = "uu_nproc", path = "src/uu/nproc" }
+numfmt = { optional = true, package = "uu_numfmt", path = "src/uu/numfmt" }
+od = { optional = true, package = "uu_od", path = "src/uu/od" }
+paste = { optional = true, package = "uu_paste", path = "src/uu/paste" }
+pathchk = { optional = true, package = "uu_pathchk", path = "src/uu/pathchk" }
+pinky = { optional = true, package = "uu_pinky", path = "src/uu/pinky" }
+pr = { optional = true, package = "uu_pr", path = "src/uu/pr" }
+printenv = { optional = true, package = "uu_printenv", path = "src/uu/printenv" }
+printf = { optional = true, package = "uu_printf", path = "src/uu/printf" }
+ptx = { optional = true, package = "uu_ptx", path = "src/uu/ptx" }
+pwd = { optional = true, package = "uu_pwd", path = "src/uu/pwd" }
+readlink = { optional = true, package = "uu_readlink", path = "src/uu/readlink" }
+realpath = { optional = true, package = "uu_realpath", path = "src/uu/realpath" }
+rm = { optional = true, package = "uu_rm", path = "src/uu/rm" }
+rmdir = { optional = true, package = "uu_rmdir", path = "src/uu/rmdir" }
+runcon = { optional = true, package = "uu_runcon", path = "src/uu/runcon" }
+seq = { optional = true, package = "uu_seq", path = "src/uu/seq" }
+shred = { optional = true, package = "uu_shred", path = "src/uu/shred" }
+shuf = { optional = true, package = "uu_shuf", path = "src/uu/shuf" }
+sleep = { optional = true, package = "uu_sleep", path = "src/uu/sleep" }
+sort = { optional = true, package = "uu_sort", path = "src/uu/sort" }
+split = { optional = true, package = "uu_split", path = "src/uu/split" }
+stat = { optional = true, package = "uu_stat", path = "src/uu/stat" }
+stdbuf = { optional = true, package = "uu_stdbuf", path = "src/uu/stdbuf" }
+stty = { optional = true, package = "uu_stty", path = "src/uu/stty" }
+sum = { optional = true, package = "uu_sum", path = "src/uu/sum" }
+sync = { optional = true, package = "uu_sync", path = "src/uu/sync" }
+tac = { optional = true, package = "uu_tac", path = "src/uu/tac" }
+tail = { optional = true, package = "uu_tail", path = "src/uu/tail" }
+tee = { optional = true, package = "uu_tee", path = "src/uu/tee" }
+timeout = { optional = true, package = "uu_timeout", path = "src/uu/timeout" }
+touch = { optional = true, package = "uu_touch", path = "src/uu/touch" }
+tr = { optional = true, package = "uu_tr", path = "src/uu/tr" }
+true = { optional = true, package = "uu_true", path = "src/uu/true" }
+truncate = { optional = true, package = "uu_truncate", path = "src/uu/truncate" }
+tsort = { optional = true, package = "uu_tsort", path = "src/uu/tsort" }
+tty = { optional = true, package = "uu_tty", path = "src/uu/tty" }
+uname = { optional = true, package = "uu_uname", path = "src/uu/uname" }
+unexpand = { optional = true, package = "uu_unexpand", path = "src/uu/unexpand" }
+uniq = { optional = true, package = "uu_uniq", path = "src/uu/uniq" }
+unlink = { optional = true, package = "uu_unlink", path = "src/uu/unlink" }
+uptime = { optional = true, package = "uu_uptime", path = "src/uu/uptime" }
+users = { optional = true, package = "uu_users", path = "src/uu/users" }
+vdir = { optional = true, package = "uu_vdir", path = "src/uu/vdir" }
+wc = { optional = true, package = "uu_wc", path = "src/uu/wc" }
+who = { optional = true, package = "uu_who", path = "src/uu/who" }
+whoami = { optional = true, package = "uu_whoami", path = "src/uu/whoami" }
+yes = { optional = true, package = "uu_yes", path = "src/uu/yes" }
 
 # this breaks clippy linting with: "tests/by-util/test_factor_benches.rs: No such file or directory (os error 2)"
 # factor_benches = { optional = true, version = "0.0.0", package = "uu_factor_benches", path = "tests/benches/factor" }

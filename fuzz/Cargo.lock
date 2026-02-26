@@ -1746,7 +1746,7 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "uu_checksum_common"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1755,7 +1755,7 @@ dependencies = [
 
 [[package]]
 name = "uu_cksum"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1765,7 +1765,7 @@ dependencies = [
 
 [[package]]
 name = "uu_cut"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "bstr",
  "clap",
@@ -1776,7 +1776,7 @@ dependencies = [
 
 [[package]]
 name = "uu_date"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1793,7 +1793,7 @@ dependencies = [
 
 [[package]]
 name = "uu_dirname"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1802,7 +1802,7 @@ dependencies = [
 
 [[package]]
 name = "uu_echo"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1811,7 +1811,7 @@ dependencies = [
 
 [[package]]
 name = "uu_env"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1823,7 +1823,7 @@ dependencies = [
 
 [[package]]
 name = "uu_expr"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1836,7 +1836,7 @@ dependencies = [
 
 [[package]]
 name = "uu_printf"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1845,7 +1845,7 @@ dependencies = [
 
 [[package]]
 name = "uu_seq"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "bigdecimal",
  "clap",
@@ -1858,7 +1858,7 @@ dependencies = [
 
 [[package]]
 name = "uu_sort"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "ahash",
  "bigdecimal",
@@ -1880,7 +1880,7 @@ dependencies = [
 
 [[package]]
 name = "uu_split"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1891,7 +1891,7 @@ dependencies = [
 
 [[package]]
 name = "uu_test"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1902,7 +1902,7 @@ dependencies = [
 
 [[package]]
 name = "uu_tr"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "bytecount",
  "clap",
@@ -1913,7 +1913,7 @@ dependencies = [
 
 [[package]]
 name = "uu_wc"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "bytecount",
  "clap",
@@ -1927,7 +1927,7 @@ dependencies = [
 
 [[package]]
 name = "uucore"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "base64-simd",
  "bigdecimal",
@@ -2001,7 +2001,7 @@ dependencies = [
 
 [[package]]
 name = "uucore_procs"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2009,7 +2009,7 @@ dependencies = [
 
 [[package]]
 name = "uufuzz"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "console",
  "libc",
