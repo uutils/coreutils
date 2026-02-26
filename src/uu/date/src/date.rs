@@ -22,7 +22,9 @@ use uucore::display::Quotable;
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
 #[cfg(feature = "i18n-datetime")]
-use uucore::i18n::datetime::{localize_format_string, should_use_icu_locale};
+use uucore::i18n::datetime::{
+    localize_format_string, localize_format_string_with_modifiers, should_use_icu_locale,
+};
 use uucore::translate;
 use uucore::{format_usage, show};
 #[cfg(windows)]
@@ -705,15 +707,35 @@ fn format_date_with_locale_aware_months(
     config: &Config<PosixCustom>,
     skip_localization: bool,
 ) -> Result<String, String> {
-    // First check if format string has GNU modifiers (width/flags) and format if present
+    let broken_down = BrokenDownTime::from(date);
+
+    // First check if format string has E/O locale modifiers
+    // These require ICU-based localization for proper handling
+    #[cfg(feature = "i18n-datetime")]
+    if format_modifiers::has_locale_modifiers(format_string) && !skip_localization {
+        // For E/O modifiers, process them using ICU, then apply other modifiers
+        let (fmt, has_eo) = localize_format_string_with_modifiers(format_string, date.date());
+        if has_eo {
+            // Check if there are remaining GNU modifiers after E/O processing
+            if let Some(result) =
+                format_modifiers::format_with_modifiers_if_present(date, &fmt, config)
+            {
+                return result.map_err(|e| e.to_string());
+            }
+            // No remaining modifiers, just format
+            return broken_down
+                .to_string_with_config(config, &fmt)
+                .map_err(|e| e.to_string());
+        }
+    }
+
+    // Check if format string has GNU modifiers (width/flags) and format if present
     // This optimization combines detection and formatting in a single pass
     if let Some(result) =
         format_modifiers::format_with_modifiers_if_present(date, format_string, config)
     {
         return result.map_err(|e| e.to_string());
     }
-
-    let broken_down = BrokenDownTime::from(date);
 
     let result = if !should_use_icu_locale() || skip_localization {
         broken_down.to_string_with_config(config, format_string)
