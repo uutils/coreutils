@@ -349,8 +349,7 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
         PathCondition::Executable => std::path::Path::new(path)
             .extension()
             .and_then(|e| e.to_str())
-            .map(|e| matches!(e, "exe" | "bat" | "cmd" | "com"))
-            .unwrap_or(false),
+            .is_some_and(|e| matches!(e, "exe" | "bat" | "cmd" | "com")),
     }
 }
 
