@@ -18,7 +18,7 @@ use uucore::translate;
 
 use crate::{
     CopyDebug, CopyResult, CpError, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode,
-    is_stream,
+    context_for, is_stream,
 };
 
 /// The fallback behavior for [`clone`] on failed system call.
@@ -262,7 +262,6 @@ pub(crate) fn copy_on_write(
     dest: &Path,
     reflink_mode: ReflinkMode,
     sparse_mode: SparseMode,
-    context: &str,
     source_is_stream: bool,
 ) -> CopyResult<CopyDebug> {
     let mut copy_debug = CopyDebug {
@@ -392,7 +391,7 @@ pub(crate) fn copy_on_write(
             return Err(translate!("cp-error-reflink-always-sparse-auto").into());
         }
     };
-    result.map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+    result.map_err(|e| CpError::IoErrContext(e, context_for(source, dest)))?;
     Ok(copy_debug)
 }
 

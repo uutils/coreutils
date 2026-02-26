@@ -3071,7 +3071,9 @@ fn test_cp_dangling_symlink_inside_directory() {
 }
 
 /// Test for copying a dangling symbolic link and its permissions.
-#[cfg(not(any(target_os = "freebsd", target_os = "openbsd")))] // FIXME: fix this test for FreeBSD/OpenBSD
+// FIXME: fix this test for FreeBSD/OpenBSD
+// FIXME: macos use umask permission mode
+#[cfg(not(any(target_os = "freebsd", target_os = "openbsd", target_os = "macos")))]
 #[test]
 fn test_copy_through_dangling_symlink_no_dereference_permissions() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -3091,9 +3093,9 @@ fn test_copy_through_dangling_symlink_no_dereference_permissions() {
         .no_stdout();
     assert!(at.symlink_exists("d2"), "symlink wasn't created");
 
-    // `-p` means `--preserve=mode,ownership,timestamps`
-    #[cfg(all(unix, not(target_os = "freebsd"), not(target_os = "openbsd")))]
+    #[cfg(unix)]
     {
+        // `-p` means `--preserve=mode,ownership,timestamps`
         let metadata1 = at.symlink_metadata("dangle");
         let metadata2 = at.symlink_metadata("d2");
         assert_metadata_eq!(metadata1, metadata2);
@@ -7707,4 +7709,370 @@ fn test_cp_preserve_context_with_z_fails() {
     ucmd.args(&["--preserve=context", "-Z", "src", "dst"])
         .fails()
         .stderr_contains("cannot combine");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_existing_no_preserve_file() {
+    use std::io;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene.cmd("touch").arg("f1").succeeds();
+    scene.cmd("touch").arg("f2").succeeds();
+    scene.cmd("chmod").arg("770").arg("f1").succeeds();
+    scene.cmd("chmod").arg("666").arg("f2").succeeds();
+    let f2_mode = at.metadata("f2").mode();
+
+    scene
+        .ucmd()
+        // umask should have no effect
+        .umask(0o700)
+        .arg("--no-preserve=mode")
+        .arg("f1")
+        .arg("f2")
+        .set_stdout(io::stdout())
+        .succeeds();
+
+    let f2_new_mode = at.metadata("f2").mode();
+
+    assert_eq!(f2_mode, f2_new_mode);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_existing_no_preserve_dir() {
+    use std::io;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene.cmd("mkdir").arg("d1").succeeds();
+    scene.cmd("mkdir").arg("d2").succeeds();
+    scene.cmd("chmod").arg("770").arg("d1").succeeds();
+    scene.cmd("chmod").arg("707").arg("d2").succeeds();
+    let d2_mode = at.metadata("d2").mode();
+
+    scene
+        .ucmd()
+        // umask should have no effect
+        .umask(0o700)
+        .arg("--no-preserve=mode")
+        .arg("-r")
+        .arg("d1/.")
+        .arg("d2")
+        .set_stdout(io::stdout())
+        .succeeds();
+
+    let d2_new_mode = at.metadata("d2").mode();
+
+    assert_eq!(d2_mode, d2_new_mode);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_existing_default_file() {
+    use std::io;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene.cmd("touch").arg("f1").succeeds();
+    scene.cmd("touch").arg("f2").succeeds();
+    scene.cmd("chmod").arg("770").arg("f1").succeeds();
+    scene.cmd("chmod").arg("666").arg("f2").succeeds();
+    let f2_mode = at.metadata("f2").mode();
+
+    scene
+        .ucmd()
+        // umask should have no effect
+        .umask(0o700)
+        .arg("f1")
+        .arg("f2")
+        .set_stdout(io::stdout())
+        .succeeds();
+
+    let f2_new_mode = at.metadata("f2").mode();
+
+    assert_eq!(f2_mode, f2_new_mode);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_existing_default_dir() {
+    use std::io;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene.cmd("mkdir").arg("d1").succeeds();
+    scene.cmd("mkdir").arg("d2").succeeds();
+    scene.cmd("chmod").arg("770").arg("d1").succeeds();
+    scene.cmd("chmod").arg("707").arg("d2").succeeds();
+    let d2_mode = at.metadata("d2").mode();
+
+    scene
+        .ucmd()
+        // umask should have no effect
+        .umask(0o700)
+        .arg("-r")
+        .arg("d1/.")
+        .arg("d2")
+        .set_stdout(io::stdout())
+        .succeeds();
+
+    let d2_new_mode = at.metadata("d2").mode();
+
+    assert_eq!(d2_mode, d2_new_mode);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_existing_preserve_file() {
+    use std::io;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene.cmd("touch").arg("f1").succeeds();
+    scene.cmd("touch").arg("f2").succeeds();
+    scene.cmd("chmod").arg("770").arg("f1").succeeds();
+    scene.cmd("chmod").arg("666").arg("f2").succeeds();
+    let f1_mode = at.metadata("f1").mode();
+
+    scene
+        .ucmd()
+        // umask should have no effect
+        .umask(0o700)
+        .arg("--preserve=mode")
+        .arg("f1")
+        .arg("f2")
+        .set_stdout(io::stdout())
+        .succeeds();
+
+    let f2_mode = at.metadata("f2").mode();
+
+    assert_eq!(f1_mode, f2_mode);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_existing_preserve_dir() {
+    use std::io;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene.cmd("mkdir").arg("d1").succeeds();
+    scene.cmd("mkdir").arg("d2").succeeds();
+    scene.cmd("chmod").arg("770").arg("d1").succeeds();
+    scene.cmd("chmod").arg("707").arg("d2").succeeds();
+    let d1_mode = at.metadata("d1").mode();
+
+    scene
+        .ucmd()
+        // umask should have no effect
+        .umask(0o700)
+        .arg("--preserve=mode")
+        .arg("-r")
+        .arg("d1/.")
+        .arg("d2")
+        .set_stdout(io::stdout())
+        .succeeds();
+
+    let d2_mode = at.metadata("d2").mode();
+
+    assert_eq!(d1_mode, d2_mode);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_not_existing_no_preserve_file() {
+    use std::io;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene.cmd("touch").arg("f1").succeeds();
+    scene.cmd("chmod").arg("770").arg("f1").succeeds();
+
+    scene
+        .ucmd()
+        .umask(0o700)
+        .arg("--no-preserve=mode")
+        .arg("f1")
+        .arg("f2")
+        .set_stdout(io::stdout())
+        .succeeds();
+
+    let f2_mode = at.metadata("f2").mode();
+
+    assert_eq!(0o666 & !0o700, f2_mode & 0o777);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_not_existing_no_preserve_dir() {
+    use std::io;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene.cmd("mkdir").arg("d1").succeeds();
+    scene.cmd("chmod").arg("770").arg("d1").succeeds();
+
+    scene
+        .ucmd()
+        .umask(0o700)
+        .arg("--no-preserve=mode")
+        .arg("-r")
+        .arg("d1")
+        .arg("d2")
+        .set_stdout(io::stdout())
+        .succeeds();
+
+    let d2_mode = at.metadata("d2").mode();
+
+    assert_eq!(!0o700 & 0o777, d2_mode & 0o777);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_not_existing_default_file() {
+    use std::io;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene.cmd("touch").arg("f1").succeeds();
+    scene.cmd("chmod").arg("770").arg("f1").succeeds();
+
+    scene
+        .ucmd()
+        .umask(0o700)
+        .arg("f1")
+        .arg("f2")
+        .set_stdout(io::stdout())
+        .succeeds();
+
+    let f2_mode = at.metadata("f2").mode();
+
+    assert_eq!(!0o700 & 0o770, f2_mode & 0o777);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_not_existing_default_dir() {
+    use std::io;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene.cmd("mkdir").arg("d1").succeeds();
+    scene.cmd("chmod").arg("770").arg("d1").succeeds();
+
+    scene
+        .ucmd()
+        .umask(0o700)
+        .arg("-r")
+        .arg("d1")
+        .arg("d2")
+        .set_stdout(io::stdout())
+        .succeeds();
+
+    let d2_mode = at.metadata("d2").mode();
+
+    assert_eq!(!0o700 & 0o770, d2_mode & 0o777);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_not_existing_preserve_file() {
+    use std::io;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene.cmd("touch").arg("f1").succeeds();
+    scene.cmd("chmod").arg("770").arg("f1").succeeds();
+    let f1_mode = at.metadata("f1").mode();
+
+    scene
+        .ucmd()
+        // umask should have no effect
+        .umask(0o700)
+        .arg("--preserve=mode")
+        .arg("f1")
+        .arg("f2")
+        .set_stdout(io::stdout())
+        .succeeds();
+
+    let f2_mode = at.metadata("f2").mode();
+
+    assert_eq!(f1_mode, f2_mode);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_not_existing_preserve_dir() {
+    use std::io;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene.cmd("mkdir").arg("d1").succeeds();
+    scene.cmd("chmod").arg("770").arg("d1").succeeds();
+    let d1_mode = at.metadata("d1").mode();
+
+    scene
+        .ucmd()
+        // umask should have no effect
+        .umask(0o700)
+        .arg("--preserve=mode")
+        .arg("-r")
+        .arg("d1")
+        .arg("d2")
+        .set_stdout(io::stdout())
+        .succeeds();
+
+    let d2_mode = at.metadata("d2").mode();
+
+    assert_eq!(d1_mode, d2_mode);
+}
+
+#[test]
+#[cfg(unix)]
+// adapted from GNU tests/cp/cp-parents
+fn test_cp_not_existing_no_preserve_file_parents() {
+    use std::io;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene.cmd("mkdir").arg("d1").succeeds();
+    scene.cmd("mkdir").arg("d1/d2").succeeds();
+    scene.cmd("touch").arg("d1/d2/f").succeeds();
+    scene.cmd("chmod").arg("770").arg("d1").succeeds();
+    scene.cmd("chmod").arg("700").arg("d1/d2").succeeds();
+    scene.cmd("chmod").arg("775").arg("d1/d2/f").succeeds();
+    scene.cmd("mkdir").arg("d3").succeeds();
+
+    scene
+        .ucmd()
+        .umask(0o022)
+        .arg("--no-preserve=mode")
+        .arg("--parents")
+        .arg("d1/d2/f")
+        .arg("d3")
+        .set_stdout(io::stdout())
+        .succeeds();
+
+    let d1_mode = at.metadata("d3/d1").mode();
+    let d2_mode = at.metadata("d3/d1/d2").mode();
+    let f_mode = at.metadata("d3/d1/d2/f").mode();
+
+    assert_eq!(!0o022 & 0o777, d1_mode & 0o777);
+    assert_eq!(!0o022 & 0o777, d2_mode & 0o777);
+    assert_eq!(!0o022 & 0o666, f_mode & 0o777);
 }
