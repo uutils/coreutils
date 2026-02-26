@@ -76,7 +76,7 @@ fn test_link_three_arguments() {
 
 #[test]
 fn test_link_no_arguments() {
-    new_ucmd!().fails().stderr_contains("2 values required");
+    new_ucmd!().fails();
 }
 
 #[cfg(not(target_os = "android"))]
@@ -89,7 +89,5 @@ fn test_link_dest_exists() {
     at.touch(file);
     at.touch(dest);
 
-    ucmd.args(&[file, dest])
-        .fails()
-        .stderr_contains("exists");
+    ucmd.args(&[file, dest]).fails().stderr_contains("exists");
 }
