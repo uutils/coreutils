@@ -604,7 +604,7 @@ required-features = ["uudoc"]
 [profile.release]
 lto = true
 panic = "abort"
-codegen-units = 1
+codegen-units = 2
 
 # A release-like profile that is as small as possible.
 [profile.release-small]
