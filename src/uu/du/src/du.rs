@@ -615,13 +615,11 @@ fn du_regular(
             match f {
                 Ok(entry) => {
                     let entry_path = entry.path();
+                    let file_name_os = entry.file_name();
 
                     // Check if this is a symlink when using -L
                     let mut current_symlink_depth = symlink_depth;
-                    let is_symlink = match entry.file_type() {
-                        Ok(ft) => ft.is_symlink(),
-                        Err(_) => false,
-                    };
+                    let is_symlink = entry.file_type().map(|ft| ft.is_symlink()).unwrap_or(false);
 
                     if is_symlink && options.dereference == Deref::All {
                         // Increment symlink depth
@@ -655,13 +653,13 @@ fn du_regular(
                             }
 
                             // We have an exclude list
+                            let path_lossy = this_stat.path.to_string_lossy();
+                            let name_lossy = file_name_os.to_string_lossy();
                             for pattern in &options.excludes {
                                 // Look at all patterns with both short and long paths
                                 // if we have 'du foo' but search to exclude 'foo/bar'
                                 // we need the full path
-                                if pattern.matches(&this_stat.path.to_string_lossy())
-                                    || pattern.matches(&entry.file_name().into_string().unwrap())
-                                {
+                                if pattern.matches(&path_lossy) || pattern.matches(&name_lossy) {
                                     // if the directory is ignored, leave early
                                     if options.verbose {
                                         println!(
