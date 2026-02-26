@@ -89,5 +89,7 @@ fn test_link_dest_exists() {
     at.touch(file);
     at.touch(dest);
 
-    ucmd.args(&[file, dest]).fails().stderr_contains("File exists");
+    ucmd.args(&[file, dest])
+        .fails()
+        .stderr_contains("File exists");
 }
