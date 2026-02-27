@@ -482,7 +482,7 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
         return Err(USimpleError::new(1, translate!("tail-no-files-remaining")));
     }
 
-    let mut process = platform::ProcessChecker::new(observer.pid);
+    let process = platform::ProcessChecker::new(observer.pid);
 
     let mut timeout_counter = 0;
 
