@@ -118,7 +118,6 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
-      continue-on-error: true
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -180,7 +179,6 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
-      continue-on-error: true
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -287,7 +285,6 @@ jobs:
     # Test build on the system missing libselinux (don't install libselinux1-dev at here)
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
-      continue-on-error: true
     - name: "`make build`"
         # Also check that target/CACHEDIR.TAG is created on a fresh checkout
       shell: bash
@@ -424,7 +421,6 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
-      continue-on-error: true
     - name: Test
       run: cargo nextest run --hide-progress-bar --profile ci --features ${{ matrix.job.features }}
       env:
@@ -465,7 +461,6 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
-      continue-on-error: true
     - name: Test
       run: cargo nextest run --hide-progress-bar --profile ci --features ${{ matrix.job.features }}
       env:
@@ -504,7 +499,6 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
-      continue-on-error: true
     - name: "`make install PROFILE=release`"
       shell: bash
       run: |
@@ -659,7 +653,6 @@ jobs:
         key: "${{ matrix.job.os }}_${{ matrix.job.target }}"
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
-      continue-on-error: true
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -964,7 +957,6 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
-      continue-on-error: true
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -1052,7 +1044,6 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
-      continue-on-error: true
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -1141,7 +1132,6 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
-      continue-on-error: true
 
     # - name: Reattach HEAD ## may be needed for accurate code coverage info
     #   run: git checkout ${{ github.head_ref }}
