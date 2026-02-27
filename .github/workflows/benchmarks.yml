@@ -22,9 +22,7 @@ jobs:
     name: Run ${{ matrix.type }} benchmarks for ${{ matrix.package }} (CodSpeed)
     runs-on: ubuntu-latest
     env:
-      RUSTC_WRAPPER: sccache
       CARGO_INCREMENTAL: 0
-      SCCACHE_GHA_ENABLED: "true"
     strategy:
       matrix:
         type: [simulation, memory]
@@ -67,8 +65,14 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Run sccache-cache
+        id: sccache-setup
         uses: mozilla-actions/sccache-action@v0.0.9
         continue-on-error: true
+      - name: Export sccache
+        if: steps.sccache-setup.outcome == 'success'
+        run: |
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
 
       - name: Install locales
         shell: bash

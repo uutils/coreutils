@@ -26,8 +26,6 @@ jobs:
     name: L10n/Build and Test
     runs-on: ${{ matrix.job.os }}
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
       CARGO_INCREMENTAL: 0
     strategy:
       fail-fast: false
@@ -44,8 +42,14 @@ jobs:
     - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
+      id: sccache-setup
       uses: mozilla-actions/sccache-action@v0.0.9
       continue-on-error: true
+    - name: Export sccache
+      if: steps.sccache-setup.outcome == 'success'
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -130,8 +134,6 @@ jobs:
     name: L10n/Clap Error Localization Test
     runs-on: ubuntu-latest
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
       CARGO_INCREMENTAL: 0
     steps:
     - uses: actions/checkout@v6
@@ -140,8 +142,14 @@ jobs:
     - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
+      id: sccache-setup
       uses: mozilla-actions/sccache-action@v0.0.9
       continue-on-error: true
+    - name: Export sccache
+      if: steps.sccache-setup.outcome == 'success'
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -302,8 +310,6 @@ jobs:
     name: L10n/French Integration Test
     runs-on: ubuntu-latest
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
       CARGO_INCREMENTAL: 0
     steps:
     - uses: actions/checkout@v6
@@ -312,8 +318,14 @@ jobs:
     - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
+      id: sccache-setup
       uses: mozilla-actions/sccache-action@v0.0.9
       continue-on-error: true
+    - name: Export sccache
+      if: steps.sccache-setup.outcome == 'success'
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -413,8 +425,6 @@ jobs:
     name: L10n/Multi-call Binary Install Test
     runs-on: ${{ matrix.job.os }}
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
       CARGO_INCREMENTAL: 0
     strategy:
       fail-fast: false
@@ -429,8 +439,14 @@ jobs:
     - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
+      id: sccache-setup
       uses: mozilla-actions/sccache-action@v0.0.9
       continue-on-error: true
+    - name: Export sccache
+      if: steps.sccache-setup.outcome == 'success'
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -566,8 +582,6 @@ jobs:
     name: L10n/Installation Test (Make & Cargo)
     runs-on: ${{ matrix.job.os }}
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
       CARGO_INCREMENTAL: 0
     strategy:
       fail-fast: false
@@ -582,8 +596,14 @@ jobs:
     - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
+      id: sccache-setup
       uses: mozilla-actions/sccache-action@v0.0.9
       continue-on-error: true
+    - name: Export sccache
+      if: steps.sccache-setup.outcome == 'success'
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -907,8 +927,6 @@ jobs:
     name: L10n/Locale Support Verification
     runs-on: ubuntu-latest
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
       CARGO_INCREMENTAL: 0
     steps:
     - uses: actions/checkout@v6
@@ -917,8 +935,14 @@ jobs:
     - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
+      id: sccache-setup
       uses: mozilla-actions/sccache-action@v0.0.9
       continue-on-error: true
+    - name: Export sccache
+      if: steps.sccache-setup.outcome == 'success'
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -1140,8 +1164,6 @@ jobs:
     name: L10n/Embedded Locale Regression Test
     runs-on: ubuntu-latest
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
       CARGO_INCREMENTAL: 0
     steps:
     - uses: actions/checkout@v6
@@ -1150,8 +1172,14 @@ jobs:
     - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
+      id: sccache-setup
       uses: mozilla-actions/sccache-action@v0.0.9
       continue-on-error: true
+    - name: Export sccache
+      if: steps.sccache-setup.outcome == 'success'
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -1263,8 +1291,6 @@ jobs:
     name: L10n/Locale Embedding - Cargo Install
     runs-on: ubuntu-latest
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
       CARGO_INCREMENTAL: 0
     steps:
     - uses: actions/checkout@v6
@@ -1275,8 +1301,14 @@ jobs:
       with:
         key: cargo-install-locale-embedding
     - name: Run sccache-cache
+      id: sccache-setup
       uses: mozilla-actions/sccache-action@v0.0.9
       continue-on-error: true
+    - name: Export sccache
+      if: steps.sccache-setup.outcome == 'success'
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
     - name: Install prerequisites
       run: |
         sudo apt-get -y update

@@ -94,8 +94,6 @@ jobs:
     name: Documentation/warnings
     runs-on: ${{ matrix.job.os }}
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
       CARGO_INCREMENTAL: 0
     strategy:
       fail-fast: false
@@ -117,8 +115,14 @@ jobs:
         components: clippy
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
+      id: sccache-setup
       uses: mozilla-actions/sccache-action@v0.0.9
       continue-on-error: true
+    - name: Export sccache
+      if: steps.sccache-setup.outcome == 'success'
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -161,8 +165,6 @@ jobs:
     name: MinRustV # Minimum supported rust version (aka, MinSRV or MSRV)
     runs-on: ${{ matrix.job.os }}
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
       CARGO_INCREMENTAL: 0
     strategy:
       matrix:
@@ -179,8 +181,14 @@ jobs:
     - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
+      id: sccache-setup
       uses: mozilla-actions/sccache-action@v0.0.9
       continue-on-error: true
+    - name: Export sccache
+      if: steps.sccache-setup.outcome == 'success'
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -267,8 +275,6 @@ jobs:
     needs: [ min_version, deps ]
     runs-on: ${{ matrix.job.os }}
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
       CARGO_INCREMENTAL: 0
     strategy:
       fail-fast: false
@@ -286,8 +292,14 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     # Test build on the system missing libselinux (don't install libselinux1-dev at here)
     - name: Run sccache-cache
+      id: sccache-setup
       uses: mozilla-actions/sccache-action@v0.0.9
       continue-on-error: true
+    - name: Export sccache
+      if: steps.sccache-setup.outcome == 'success'
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
     - name: "`make build`"
         # Also check that target/CACHEDIR.TAG is created on a fresh checkout
       shell: bash
@@ -405,8 +417,6 @@ jobs:
     runs-on: ${{ matrix.job.os }}
     timeout-minutes: 90
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
       CARGO_INCREMENTAL: 0
     strategy:
       fail-fast: false
@@ -423,8 +433,14 @@ jobs:
     - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
+      id: sccache-setup
       uses: mozilla-actions/sccache-action@v0.0.9
       continue-on-error: true
+    - name: Export sccache
+      if: steps.sccache-setup.outcome == 'success'
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
     - name: Test
       run: cargo nextest run --hide-progress-bar --profile ci --features ${{ matrix.job.features }}
       env:
@@ -446,8 +462,6 @@ jobs:
     runs-on: ${{ matrix.job.os }}
     timeout-minutes: 90
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
       CARGO_INCREMENTAL: 0
     strategy:
       fail-fast: false
@@ -464,8 +478,14 @@ jobs:
     - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
+      id: sccache-setup
       uses: mozilla-actions/sccache-action@v0.0.9
       continue-on-error: true
+    - name: Export sccache
+      if: steps.sccache-setup.outcome == 'success'
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
     - name: Test
       run: cargo nextest run --hide-progress-bar --profile ci --features ${{ matrix.job.features }}
       env:
@@ -488,8 +508,6 @@ jobs:
     permissions:
       contents: write
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
       CARGO_INCREMENTAL: 0
     strategy:
       fail-fast: false
@@ -503,8 +521,14 @@ jobs:
     - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
+      id: sccache-setup
       uses: mozilla-actions/sccache-action@v0.0.9
       continue-on-error: true
+    - name: Export sccache
+      if: steps.sccache-setup.outcome == 'success'
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
     - name: "`make install PROFILE=release`"
       shell: bash
       run: |
@@ -616,8 +640,6 @@ jobs:
     timeout-minutes: 90
     env:
       DOCKER_OPTS: '--volume /etc/passwd:/etc/passwd --volume /etc/group:/etc/group'
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
       CARGO_INCREMENTAL: 0
     strategy:
       fail-fast: false
@@ -658,8 +680,14 @@ jobs:
       with:
         key: "${{ matrix.job.os }}_${{ matrix.job.target }}"
     - name: Run sccache-cache
+      id: sccache-setup
       uses: mozilla-actions/sccache-action@v0.0.9
       continue-on-error: true
+    - name: Export sccache
+      if: steps.sccache-setup.outcome == 'success'
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -943,8 +971,6 @@ jobs:
     needs: [ min_version, deps ]
     runs-on: ${{ matrix.job.os }}
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
       CARGO_INCREMENTAL: 0
     strategy:
       fail-fast: false
@@ -963,8 +989,14 @@ jobs:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
+      id: sccache-setup
       uses: mozilla-actions/sccache-action@v0.0.9
       continue-on-error: true
+    - name: Export sccache
+      if: steps.sccache-setup.outcome == 'success'
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -1026,8 +1058,6 @@ jobs:
     needs: [ min_version, deps ]
     runs-on: ${{ matrix.job.os }}
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
       CARGO_INCREMENTAL: 0
     strategy:
       fail-fast: false
@@ -1051,8 +1081,14 @@ jobs:
         toolchain: ${{ env.RUST_MIN_SRV }}
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
+      id: sccache-setup
       uses: mozilla-actions/sccache-action@v0.0.9
       continue-on-error: true
+    - name: Export sccache
+      if: steps.sccache-setup.outcome == 'success'
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -1120,8 +1156,6 @@ jobs:
     runs-on: ${{ matrix.job.os }}
     timeout-minutes: 90
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
       CARGO_INCREMENTAL: 0
       RUSTC_BOOTSTRAP: 1
     strategy:
@@ -1140,8 +1174,14 @@ jobs:
         tool: nextest,grcov@0.8.24
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
+      id: sccache-setup
       uses: mozilla-actions/sccache-action@v0.0.9
       continue-on-error: true
+    - name: Export sccache
+      if: steps.sccache-setup.outcome == 'success'
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
 
     # - name: Reattach HEAD ## may be needed for accurate code coverage info
     #   run: git checkout ${{ github.head_ref }}
