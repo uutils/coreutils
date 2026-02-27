@@ -71,6 +71,24 @@ fn cut_fields_custom_delim(bencher: Bencher) {
     });
 }
 
+/// Benchmark cutting fields with newline delimiter
+#[divan::bench]
+fn cut_fields_newline_delim(bencher: Bencher) {
+    let mut data = Vec::new();
+    for i in 0..100_000 {
+        let line = format!("field_content_number_{i}\n");
+        data.extend_from_slice(line.as_bytes());
+    }
+    let file_path = setup_test_file(&data);
+
+    bencher.bench(|| {
+        black_box(run_util_function(
+            uumain,
+            &["-d", "\n", "-f", "1,3,5", file_path.to_str().unwrap()],
+        ));
+    });
+}
+
 fn main() {
     divan::main();
 }
