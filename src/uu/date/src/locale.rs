@@ -162,7 +162,7 @@ cfg_langinfo! {
     pub fn get_locale_time_ampm_format() -> String {
         let fmt = query_nl_langinfo(T_FMT_AMPM_ITEM);
         match fmt.as_deref() {
-            Some("") | None => "%I:%M:%S %p".to_string(),
+            Some("") | None => "%H:%M:%S".to_string(),
             Some(s) => s.to_string(),
         }
     }
