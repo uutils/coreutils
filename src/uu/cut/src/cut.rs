@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) delim sourcefiles
+// spell-checker:ignore (ToDO) delim sourcefiles undelimited
 
 use bstr::io::BufReadExt;
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
@@ -254,35 +254,132 @@ fn cut_fields_implicit_out_delim<R: Read, W: Write, M: Matcher>(
     Ok(())
 }
 
-/// The input delimiter is identical to `newline_char`
+/// Streams and filters fields where the record terminator and
+/// field delimiter are the same character (specified by `newline_char`)
 fn cut_fields_newline_char_delim<R: Read, W: Write>(
     reader: R,
     out: &mut W,
     ranges: &[Range],
+    only_delimited: bool,
     newline_char: u8,
     out_delim: &[u8],
 ) -> UResult<()> {
-    let buf_in = BufReader::new(reader);
+    let mut reader = BufReader::new(reader);
+    let mut line = Vec::new();
 
-    let segments: Vec<_> = buf_in.split(newline_char).filter_map(Result::ok).collect();
-    let mut print_delim = false;
+    // We start at 1 because 'cut' field indexing is 1-based
+    let mut current_field_idx = 1;
+    let mut first_field_printed = false;
+    let mut has_data = false;
+    let mut suppressed = false;
 
-    for &Range { low, high } in ranges {
-        for i in low..=high {
-            // "- 1" is necessary because fields start from 1 whereas a Vec starts from 0
-            if let Some(segment) = segments.get(i - 1) {
-                if print_delim {
-                    out.write_all(out_delim)?;
-                } else {
-                    print_delim = true;
+    let mut range_idx = 0;
+
+    loop {
+        line.clear();
+
+        let is_selected = range_idx < ranges.len() && current_field_idx >= ranges[range_idx].low;
+        let needs_data = is_selected || current_field_idx == 1;
+
+        let mut has_processed_data = false;
+
+        if needs_data {
+            // Standard read: copies bytes into `line`
+            loop {
+                let buf = reader.fill_buf()?;
+                if buf.is_empty() {
+                    break;
                 }
-                out.write_all(segment.as_slice())?;
-            } else {
+
+                has_processed_data = true;
+
+                if let Some(pos) = memchr::memchr(newline_char, buf) {
+                    let amt = pos + 1;
+                    line.extend_from_slice(&buf[..amt]);
+                    reader.consume(amt);
+
+                    break;
+                }
+                let len = buf.len();
+                line.extend_from_slice(buf);
+                reader.consume(len);
+            }
+        } else {
+            // Zero-allocation skip: scans the buffer and advances the cursor without copying
+            loop {
+                let buf = reader.fill_buf()?;
+                if buf.is_empty() {
+                    break; // EOF
+                }
+
+                has_processed_data = true;
+
+                if let Some(pos) = memchr::memchr(newline_char, buf) {
+                    let bytes_to_consume = pos + 1;
+                    reader.consume(bytes_to_consume);
+                    break;
+                }
+
+                let len = buf.len();
+                reader.consume(len);
+            }
+        }
+
+        if !has_processed_data {
+            break;
+        }
+        has_data = true;
+
+        // To comply with -s when the stream consists of only a single field.
+        if current_field_idx == 1 {
+            let is_eof_next = reader.fill_buf()?.is_empty();
+
+            if is_eof_next && line.last() != Some(&newline_char) {
+                if only_delimited {
+                    suppressed = true;
+                } else {
+                    // GNU cut prints the whole line if no delimiter is found.
+                    out.write_all(&line)?;
+                }
                 break;
             }
         }
+
+        if range_idx < ranges.len() && current_field_idx > ranges[range_idx].high {
+            range_idx += 1;
+
+            // EARLY EXIT: If we've exhausted all ranges, stop reading the stream entirely.
+            if range_idx == ranges.len() {
+                break;
+            }
+        }
+
+        // Check if the current field falls inside the current active range
+        let is_selected = range_idx < ranges.len() && current_field_idx >= ranges[range_idx].low;
+
+        if is_selected {
+            if first_field_printed {
+                out.write_all(out_delim)?;
+            }
+
+            let has_newline = line.last() == Some(&newline_char);
+            let content = if has_newline {
+                &line[..line.len() - 1]
+            } else {
+                &line[..]
+            };
+
+            out.write_all(content)?;
+            first_field_printed = true;
+        }
+
+        current_field_idx += 1;
     }
-    out.write_all(&[newline_char])?;
+
+    if has_data && !suppressed {
+        out.write_all(&[newline_char])?;
+    }
+
     Ok(())
 }
 
@@ -297,7 +394,14 @@ fn cut_fields<R: Read, W: Write>(
     match field_opts.delimiter {
         Delimiter::Slice(delim) if delim == [newline_char] => {
             let out_delim = opts.out_delimiter.unwrap_or(delim);
-            cut_fields_newline_char_delim(reader, out, ranges, newline_char, out_delim)
+            cut_fields_newline_char_delim(
+                reader,
+                out,
+                ranges,
+                field_opts.only_delimited,
+                newline_char,
+                out_delim,
+            )
         }
         Delimiter::Slice(delim) => {
             let matcher = ExactMatcher::new(delim);

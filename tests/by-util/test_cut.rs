@@ -302,6 +302,205 @@ fn test_newline_as_delimiter_with_output_delimiter() {
 }
 
 #[test]
+fn test_newline_as_delimiter_no_delimiter_suppressed() {
+    for param in ["-s", "--only-delimited", "--only-del"] {
+        new_ucmd!()
+            .args(&["-d", "\n", param, "-f", "1"])
+            .pipe_in("abc")
+            .succeeds()
+            .no_output();
+    }
+}
+
+#[test]
+fn test_newline_as_delimiter_found_not_suppressed() {
+    // Has an internal \n delimiter, so -s shouldn't suppress it
+    for param in ["-s", "--only-delimited", "--only-del"] {
+        new_ucmd!()
+            .args(&["-d", "\n", param, "-f", "1"])
+            .pipe_in("abc\ndef\n")
+            .succeeds()
+            .stdout_only("abc\n");
+    }
+}
+
+#[test]
+fn test_newline_as_delimiter_multiple_fields() {
+    // Check field selection when \n is the delimiter
+    new_ucmd!()
+        .args(&["-d", "\n", "-f", "2"])
+        .pipe_in("abc\ndef\n")
+        .succeeds()
+        .stdout_only("def\n");
+}
+
+#[test]
+fn test_newline_as_delimiter_double_newline() {
+    // Field 2 is the empty space between newlines
+    new_ucmd!()
+        .args(&["-d", "\n", "-s", "-f", "2"])
+        .pipe_in("abc\n\n")
+        .succeeds()
+        .stdout_only("\n");
+
+    // Requesting both fields
+    new_ucmd!()
+        .args(&["-d", "\n", "-s", "-f", "1,2"])
+        .pipe_in("abc\n\n")
+        .succeeds()
+        .stdout_only("abc\n\n");
+}
+
+#[test]
+fn test_newline_as_delimiter_only_newlines() {
+    // Extracting empty fields from a string of just newlines
+    new_ucmd!()
+        .args(&["-d", "\n", "-s", "-f", "1"])
+        .pipe_in("\n\n")
+        .succeeds()
+        .stdout_only("\n");
+
+    new_ucmd!()
+        .args(&["-d", "\n", "-s", "-f", "2"])
+        .pipe_in("\n\n")
+        .succeeds()
+        .stdout_only("\n");
+
+    new_ucmd!()
+        .args(&["-d", "\n", "-s", "-f", "1,2"])
+        .pipe_in("\n\n")
+        .succeeds()
+        .stdout_only("\n\n");
+}
+
+#[test]
+fn test_newline_as_delimiter_last_field_no_newline() {
+    // The last chunk is Field 2 even without a final newline
+    new_ucmd!()
+        .args(&["-d", "\n", "-f", "2"])
+        .pipe_in("abc\ndef")
+        .succeeds()
+        .stdout_only("def\n");
+}
+
+#[test]
+fn test_newline_as_delimiter_complement() {
+    // Select everything except the second line
+    new_ucmd!()
+        .args(&["-d", "\n", "-f", "2", "--complement"])
+        .pipe_in("line1\nline2\nline3\n")
+        .succeeds()
+        .stdout_only("line1\nline3\n");
+}
+
+#[test]
+fn test_newline_as_delimiter_out_of_bounds() {
+    // GNU cut: print an empty string + terminator for missing fields
+    new_ucmd!()
+        .args(&["-d", "\n", "-f", "3"])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_only("\n");
+
+    // GNU cut avoids trailing delimiters for out-of-bounds fields when delimiter is \n
+    new_ucmd!()
+        .args(&["-d", "\n", "-f", "1,3"])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_only("a\n");
+}
+
+#[test]
+fn test_newline_as_delimiter_no_delimiter_prints_all() {
+    // GNU cut: If no delimiter is found, the entire line (the whole file)
+    // is printed regardless of the field requested, unless -s is used.
+    new_ucmd!()
+        .args(&["-d", "\n", "-f", "2"])
+        .pipe_in("a")
+        .succeeds()
+        .stdout_only("a\n");
+}
+
+#[test]
+fn test_newline_as_delimiter_empty_input() {
+    new_ucmd!()
+        .args(&["-d", "\n", "-f", "1"])
+        .pipe_in("")
+        .succeeds()
+        .no_output();
+}
+
+#[test]
+fn test_newline_as_delimiter_s_flag_no_newline_at_all() {
+    new_ucmd!()
+        .args(&["-d", "\n", "-s", "-f", "1"])
+        .pipe_in("abc")
+        .succeeds()
+        .no_output();
+}
+
+#[test]
+fn test_newline_as_delimiter_single_field_included() {
+    for param in ["-s", "--only-delimited", "--only-del"] {
+        new_ucmd!()
+            .args(&["-d", "\n", param, "-f", "1"])
+            .pipe_in("abc\n")
+            .succeeds()
+            .stdout_only("abc\n"); // GNU cut outputs the field + terminator
+    }
+}
+
+#[test]
+fn test_newline_as_delimiter_intervening_skipped_fields() {
+    // Selecting non-adjacent lines (Fields 1 and 3)
+    new_ucmd!()
+        .args(&["-d", "\n", "-f", "1,3"])
+        .pipe_in("line1\nline2\nline3\n")
+        .succeeds()
+        .stdout_only("line1\nline3\n");
+}
+
+#[test]
+fn test_newline_as_delimiter_multibyte_normalization() {
+    // Ensure multibyte records at EOF still get a normalized newline
+    new_ucmd!()
+        .args(&["-d", "\n", "-f", "2"])
+        .pipe_in("\n😼")
+        .succeeds()
+        .stdout_only("😼\n");
+}
+
+#[test]
+fn test_newline_as_delimiter_empty_first_record() {
+    // Select Field 2 when Field 1 is empty
+    new_ucmd!()
+        .args(&["-d", "\n", "-f", "2"])
+        .pipe_in("\nb")
+        .succeeds()
+        .stdout_only("b\n");
+}
+
+#[test]
+fn test_newline_as_delimiter_overlapping_unordered_ranges() {
+    // Request fields out of order and with overlapping ranges
+    new_ucmd!()
+        .args(&["-d", "\n", "-f", "2-3,1,2"])
+        .pipe_in("a\nb\nc\n")
+        .succeeds()
+        .stdout_only("a\nb\nc\n");
+}
+
+#[test]
+fn test_newline_as_delimiter_complement_last_record() {
+    // Test --complement on the final record
+    new_ucmd!()
+        .args(&["-d", "\n", "-f", "1", "--complement"])
+        .pipe_in("a\nb")
+        .succeeds()
+        .stdout_only("b\n");
+}
+
+#[test]
 fn test_multiple_delimiters() {
     new_ucmd!()
         .args(&["-f2", "-d:", "-d="])
