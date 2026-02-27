@@ -7,7 +7,7 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::{OpenOptions, metadata};
-use std::io::ErrorKind;
+use std::io::{ErrorKind, Seek, SeekFrom};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 use std::path::Path;
@@ -255,7 +255,13 @@ fn truncate(
                 _ => error.map_err_context(String::new),
             })?;
 
-            Some(reference_metadata.len())
+            // For normal files and symbolic links, the size returned by `stat` is correct.
+            if reference_metadata.is_file() || reference_metadata.is_symlink() {
+                Some(reference_metadata.len())
+            } else {
+                let mut reference_file = OpenOptions::new().read(true).open(reference_path)?;
+                Some(reference_file.seek(SeekFrom::End(0))?)
+            }
         }
         None => None,
     };
