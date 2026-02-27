@@ -76,7 +76,7 @@ fn write_line<W: std::io::Write>(
     let line = input_line
         .iter()
         .take_while(|&&b| b != b'\0')
-        .cloned()
+        .copied()
         .collect::<Vec<u8>>();
 
     let handled_line = if options.delimiter.is_some() {
