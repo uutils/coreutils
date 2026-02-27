@@ -1249,3 +1249,24 @@ fn test_empty_delimiter_whitespace_rejection() {
         .fails_with_code(2)
         .stderr_contains("invalid suffix in input");
 }
+
+#[test]
+fn test_null_byte_input() {
+    new_ucmd!()
+        .pipe_in("1000\x00")
+        .succeeds()
+        .stdout_is("1000\n");
+}
+
+#[test]
+fn test_null_byte_input_multiline() {
+    new_ucmd!()
+        .pipe_in("1000\x00\n2000\x00")
+        .succeeds()
+        .stdout_is("1000\n2000\n");
+
+    new_ucmd!()
+        .pipe_in("1000\x002000\n3000")
+        .succeeds()
+        .stdout_is("1000\n3000\n");
+}

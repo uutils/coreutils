@@ -72,11 +72,18 @@ fn write_line<W: std::io::Write>(
     input_line: &[u8],
     options: &NumfmtOptions,
 ) -> UResult<()> {
+    // Read lines only up to null byte (as GNU does)
+    let line = input_line
+        .iter()
+        .take_while(|&&b| b != b'\0')
+        .cloned()
+        .collect::<Vec<u8>>();
+
     let handled_line = if options.delimiter.is_some() {
-        write_formatted_with_delimiter(writer, input_line, options)
+        write_formatted_with_delimiter(writer, &line, options)
     } else {
         // Whitespace mode requires valid UTF-8
-        match std::str::from_utf8(input_line) {
+        match std::str::from_utf8(&line) {
             Ok(s) => write_formatted_with_whitespace(writer, s, options),
             Err(_) => Err(translate!("numfmt-error-invalid-input")),
         }
