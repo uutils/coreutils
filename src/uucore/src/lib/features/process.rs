@@ -10,6 +10,8 @@
 use libc::{gid_t, pid_t, uid_t};
 #[cfg(not(target_os = "redox"))]
 use nix::errno::Errno;
+use nix::sys::signal::{self as nix_signal, SigHandler, Signal};
+use nix::unistd::Pid;
 use std::io;
 use std::process::Child;
 use std::process::ExitStatus;
@@ -18,37 +20,35 @@ use std::sync::atomic::AtomicBool;
 use std::thread;
 use std::time::{Duration, Instant};
 
-// SAFETY: These functions always succeed and return simple integers.
-
 /// `geteuid()` returns the effective user ID of the calling process.
 pub fn geteuid() -> uid_t {
-    unsafe { libc::geteuid() }
+    nix::unistd::geteuid().as_raw()
 }
 
 /// `getpgrp()` returns the process group ID of the calling process.
-/// It is a trivial wrapper over libc::getpgrp to "hide" the unsafe
+/// It is a trivial wrapper over nix::unistd::getpgrp.
 pub fn getpgrp() -> pid_t {
-    unsafe { libc::getpgrp() }
+    nix::unistd::getpgrp().as_raw()
 }
 
 /// `getegid()` returns the effective group ID of the calling process.
 pub fn getegid() -> gid_t {
-    unsafe { libc::getegid() }
+    nix::unistd::getegid().as_raw()
 }
 
 /// `getgid()` returns the real group ID of the calling process.
 pub fn getgid() -> gid_t {
-    unsafe { libc::getgid() }
+    nix::unistd::getgid().as_raw()
 }
 
 /// `getuid()` returns the real user ID of the calling process.
 pub fn getuid() -> uid_t {
-    unsafe { libc::getuid() }
+    nix::unistd::getuid().as_raw()
 }
 
 /// `getpid()` returns the pid of the calling process.
 pub fn getpid() -> pid_t {
-    unsafe { libc::getpid() }
+    nix::unistd::getpid().as_raw()
 }
 
 /// `getsid()` returns the session ID of the process with process ID pid.
@@ -67,12 +67,12 @@ pub fn getpid() -> pid_t {
 /// so some system such as redox doesn't supported.
 #[cfg(not(target_os = "redox"))]
 pub fn getsid(pid: i32) -> Result<pid_t, Errno> {
-    let result = unsafe { libc::getsid(pid) };
-    if result == -1 {
-        Err(Errno::last())
+    let pid = if pid == 0 {
+        None
     } else {
-        Ok(result)
-    }
+        Some(Pid::from_raw(pid))
+    };
+    nix::unistd::getsid(pid).map(Pid::as_raw)
 }
 
 /// Missing methods for Child objects
@@ -97,11 +97,15 @@ pub trait ChildExt {
 
 impl ChildExt for Child {
     fn send_signal(&mut self, signal: usize) -> io::Result<()> {
-        if unsafe { libc::kill(self.id() as pid_t, signal as i32) } == 0 {
-            Ok(())
+        let pid = Pid::from_raw(self.id() as pid_t);
+        let result = if signal == 0 {
+            nix_signal::kill(pid, None)
         } else {
-            Err(io::Error::last_os_error())
-        }
+            let signal = Signal::try_from(signal as i32)
+                .map_err(|_| io::Error::from_raw_os_error(libc::EINVAL))?;
+            nix_signal::kill(pid, Some(signal))
+        };
+        result.map_err(|e| io::Error::from_raw_os_error(e as i32))
     }
 
     fn send_signal_group(&mut self, signal: usize) -> io::Result<()> {
@@ -114,24 +118,20 @@ impl ChildExt for Child {
         // Signal 0 is special - it just checks if process exists, doesn't send anything.
         // No need to manipulate signal handlers for it.
         if signal == 0 {
-            let result = unsafe { libc::kill(0, 0) };
-            return if result == 0 {
-                Ok(())
-            } else {
-                Err(io::Error::last_os_error())
-            };
+            return nix_signal::kill(Pid::from_raw(0), None)
+                .map_err(|e| io::Error::from_raw_os_error(e as i32));
         }
 
+        let signal = Signal::try_from(signal as i32)
+            .map_err(|_| io::Error::from_raw_os_error(libc::EINVAL))?;
+
         // Ignore the signal temporarily so we don't receive it ourselves.
-        let old_handler = unsafe { libc::signal(signal as i32, libc::SIG_IGN) };
-        let result = unsafe { libc::kill(0, signal as i32) };
+        let old_handler = unsafe { nix_signal::signal(signal, SigHandler::SigIgn) }
+            .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+        let result = nix_signal::kill(Pid::from_raw(0), Some(signal));
         // Restore the old handler
-        unsafe { libc::signal(signal as i32, old_handler) };
-        if result == 0 {
-            Ok(())
-        } else {
-            Err(io::Error::last_os_error())
-        }
+        let _ = unsafe { nix_signal::signal(signal, old_handler) };
+        result.map_err(|e| io::Error::from_raw_os_error(e as i32))
     }
 
     fn wait_or_timeout(
