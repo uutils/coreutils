@@ -13,9 +13,9 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use clap::{Arg, ArgAction, Command, builder::ValueParser};
-use rand::rngs::ThreadRng;
+use rand::rngs::StdRng;
 use rand::{
-    Rng,
+    Rng, SeedableRng as _,
     seq::{IndexedRandom, SliceRandom},
 };
 
@@ -141,17 +141,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Ok(());
     }
 
-    let mut rng = match options.random_source {
-        RandomSource::None => WrappedRng::Default(rand::rng()),
-        RandomSource::Seed(ref seed) => WrappedRng::Seed(SeededRng::new(seed)),
-        RandomSource::File(ref r) => {
-            let file = File::open(r).map_err_context(
-                || translate!("shuf-error-failed-to-open-random-source", "file" => r.quote()),
-            )?;
-            let file = BufReader::new(file);
-            WrappedRng::File(RandomSourceAdapter::new(file))
-        }
-    };
+    let mut rng = rng_from_random_source(&options.random_source, StdRng::try_from_os_rng)?;
 
     match mode {
         Mode::Echo(args) => {
@@ -277,6 +267,31 @@ fn split_seps(data: &[u8], sep: u8) -> Vec<&[u8]> {
         elements.pop();
     }
     elements
+}
+
+fn rng_from_random_source<E>(
+    random_source: &RandomSource,
+    init_default_rng: impl FnOnce() -> Result<StdRng, E>,
+) -> UResult<WrappedRng>
+where
+    E: Into<io::Error>,
+{
+    match random_source {
+        RandomSource::None => {
+            let default_rng = init_default_rng()
+                .map_err(Into::into)
+                .map_err_context(|| translate!("shuf-error-read-random-bytes"))?;
+            Ok(WrappedRng::Default(Box::new(default_rng)))
+        }
+        RandomSource::Seed(seed) => Ok(WrappedRng::Seed(SeededRng::new(seed))),
+        RandomSource::File(path) => {
+            let file = File::open(path).map_err_context(
+                || translate!("shuf-error-failed-to-open-random-source", "file" => path.quote()),
+            )?;
+            let file = BufReader::new(file);
+            Ok(WrappedRng::File(RandomSourceAdapter::new(file)))
+        }
+    }
 }
 
 trait Shufable {
@@ -442,7 +457,7 @@ fn parse_range(input_range: &str) -> Result<RangeInclusive<u64>, String> {
 }
 
 enum WrappedRng {
-    Default(ThreadRng),
+    Default(Box<StdRng>),
     Seed(SeededRng),
     File(RandomSourceAdapter<BufReader<File>>),
 }
@@ -495,5 +510,67 @@ mod test_split_seps {
     #[test]
     fn test_without_trailing() {
         assert_eq!(split_seps(b"a\nb\nc", b'\n'), &[b"a", b"b", b"c"]);
+    }
+}
+
+#[cfg(test)]
+mod test_rng_from_random_source {
+    use std::fs;
+    use std::io;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use rand::rngs::StdRng;
+
+    use super::{RandomSource, WrappedRng, rng_from_random_source};
+
+    fn random_source_path() -> PathBuf {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "uu-shuf-random-source-{}-{suffix}.bin",
+            std::process::id()
+        ))
+    }
+
+    #[test]
+    fn test_none_reports_entropy_error() {
+        let result = rng_from_random_source(&RandomSource::None, || {
+            Err(io::Error::from_raw_os_error(11))
+        });
+
+        assert!(
+            result.is_err(),
+            "expected random source initialization to fail"
+        );
+    }
+
+    #[test]
+    fn test_seed_does_not_initialize_default_rng() {
+        let rng = rng_from_random_source(
+            &RandomSource::Seed("seed".to_string()),
+            || -> Result<StdRng, io::Error> { panic!("default RNG initializer should not run") },
+        )
+        .unwrap();
+
+        assert!(matches!(rng, WrappedRng::Seed(_)));
+    }
+
+    #[test]
+    fn test_file_does_not_initialize_default_rng() {
+        let path = random_source_path();
+        fs::write(&path, [1_u8, 2, 3, 4]).unwrap();
+
+        let rng = rng_from_random_source(
+            &RandomSource::File(path.clone()),
+            || -> Result<StdRng, io::Error> { panic!("default RNG initializer should not run") },
+        )
+        .unwrap();
+
+        assert!(matches!(rng, WrappedRng::File(_)));
+        drop(rng);
+        fs::remove_file(path).unwrap();
     }
 }
