@@ -3306,6 +3306,7 @@ dependencies = [
  "fluent",
  "indicatif",
  "libc",
+ "nix",
  "selinux",
  "tempfile",
  "thiserror 2.0.18",
