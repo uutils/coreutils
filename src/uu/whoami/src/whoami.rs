@@ -29,6 +29,6 @@ pub fn uu_app() -> Command {
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("whoami-about"))
-        .override_usage(uucore::util_name())
+        .override_usage(translate!("whoami-usage"))
         .infer_long_args(true)
 }
