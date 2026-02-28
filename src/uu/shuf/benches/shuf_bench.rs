@@ -27,7 +27,10 @@ fn shuf_input_range(bencher: Bencher, range_size: usize) {
     let range_arg = format!("1-{range_size}");
 
     bencher.bench(|| {
-        black_box(run_util_function(uumain, &["-i", &range_arg]));
+        black_box(run_util_function(
+            uumain,
+            &["-i", "--random-seed=1", &range_arg],
+        ));
     });
 }
 
