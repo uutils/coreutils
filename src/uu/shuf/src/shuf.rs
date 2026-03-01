@@ -357,7 +357,7 @@ impl Shufable for RangeInclusive<u64> {
         amount: u64,
     ) -> UResult<impl Iterator<Item = UResult<Self::Item>>> {
         let amount = usize::try_from(amount).unwrap_or(usize::MAX);
-        Ok(NonrepeatingIterator::new(self.clone(), rng).take(amount))
+        Ok(NonrepeatingIterator::new(self.clone(), rng, Some(amount)).take(amount))
     }
 }
 
