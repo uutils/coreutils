@@ -33,7 +33,7 @@ fn test_from_si() {
         .args(&["--from=si"])
         .pipe_in("1000\n1.1M\n0.1G")
         .succeeds()
-        .stdout_is("1000\n1100000\n100000000\n");
+        .stdout_is("1000\n1100000\n100000000");
 }
 
 #[test]
@@ -42,7 +42,7 @@ fn test_from_iec() {
         .args(&["--from=iec"])
         .pipe_in("1024\n1.1M\n0.1G")
         .succeeds()
-        .stdout_is("1024\n1153434\n107374183\n");
+        .stdout_is("1024\n1153434\n107374183");
 }
 
 #[test]
@@ -51,7 +51,7 @@ fn test_from_iec_i() {
         .args(&["--from=iec-i"])
         .pipe_in("1.1Mi\n0.1Gi")
         .succeeds()
-        .stdout_is("1153434\n107374183\n");
+        .stdout_is("1153434\n107374183");
 }
 
 #[test]
@@ -84,7 +84,7 @@ fn test_from_auto() {
         .args(&["--from=auto"])
         .pipe_in("1K\n1Ki")
         .succeeds()
-        .stdout_is("1000\n1024\n");
+        .stdout_is("1000\n1024");
 }
 
 #[test]
@@ -93,7 +93,7 @@ fn test_to_si() {
         .args(&["--to=si"])
         .pipe_in("1000\n1100000\n100000000")
         .succeeds()
-        .stdout_is("1.0k\n1.1M\n100M\n");
+        .stdout_is("1.0k\n1.1M\n100M");
 }
 
 #[test]
@@ -102,7 +102,7 @@ fn test_to_iec() {
         .args(&["--to=iec"])
         .pipe_in("1024\n1153434\n107374182")
         .succeeds()
-        .stdout_is("1.0K\n1.2M\n103M\n");
+        .stdout_is("1.0K\n1.2M\n103M");
 }
 
 #[test]
@@ -111,7 +111,7 @@ fn test_to_iec_i() {
         .args(&["--to=iec-i"])
         .pipe_in("1024\n1153434\n107374182")
         .succeeds()
-        .stdout_is("1.0Ki\n1.2Mi\n103Mi\n");
+        .stdout_is("1.0Ki\n1.2Mi\n103Mi");
 }
 
 #[test]
@@ -128,7 +128,7 @@ fn test_padding() {
         .args(&["--from=si", "--padding=8"])
         .pipe_in("1K\n1.1M\n0.1G")
         .succeeds()
-        .stdout_is("    1000\n 1100000\n100000000\n");
+        .stdout_is("    1000\n 1100000\n100000000");
 }
 
 #[test]
@@ -137,7 +137,7 @@ fn test_negative_padding() {
         .args(&["--from=si", "--padding=-8"])
         .pipe_in("1K\n1.1M\n0.1G")
         .succeeds()
-        .stdout_is("1000    \n1100000 \n100000000\n");
+        .stdout_is("1000    \n1100000 \n100000000");
 }
 
 #[test]
@@ -146,7 +146,7 @@ fn test_header() {
         .args(&["--from=si", "--header=2"])
         .pipe_in("header\nheader2\n1K\n1.1M\n0.1G")
         .succeeds()
-        .stdout_is("header\nheader2\n1000\n1100000\n100000000\n");
+        .stdout_is("header\nheader2\n1000\n1100000\n100000000");
 }
 
 #[test]
@@ -155,7 +155,7 @@ fn test_header_default() {
         .args(&["--from=si", "--header"])
         .pipe_in("header\n1K\n1.1M\n0.1G")
         .succeeds()
-        .stdout_is("header\n1000\n1100000\n100000000\n");
+        .stdout_is("header\n1000\n1100000\n100000000");
 }
 
 #[test]
@@ -188,12 +188,12 @@ fn test_negative() {
         .args(&["--from=si"])
         .pipe_in("-1000\n-1.1M\n-0.1G")
         .succeeds()
-        .stdout_is("-1000\n-1100000\n-100000000\n");
+        .stdout_is("-1000\n-1100000\n-100000000");
     new_ucmd!()
         .args(&["--to=iec-i"])
         .pipe_in("-1024\n-1153434\n-107374182")
         .succeeds()
-        .stdout_is("-1.0Ki\n-1.2Mi\n-103Mi\n");
+        .stdout_is("-1.0Ki\n-1.2Mi\n-103Mi");
 }
 
 #[test]
@@ -201,7 +201,7 @@ fn test_negative_zero() {
     new_ucmd!()
         .pipe_in("-0\n-0.0")
         .succeeds()
-        .stdout_is("0\n0.0\n");
+        .stdout_is("0\n0.0");
 }
 
 #[test]
@@ -209,7 +209,7 @@ fn test_no_op() {
     new_ucmd!()
         .pipe_in("1024\n1234567")
         .succeeds()
-        .stdout_is("1024\n1234567\n");
+        .stdout_is("1024\n1234567");
 }
 
 #[test]
@@ -218,7 +218,7 @@ fn test_normalize() {
         .args(&["--from=si", "--to=si"])
         .pipe_in("10000000K\n0.001K")
         .succeeds()
-        .stdout_is("10G\n1\n");
+        .stdout_is("10G\n1");
 }
 
 #[test]
@@ -322,14 +322,14 @@ fn test_should_skip_leading_space_from_stdin() {
         .args(&["--from=auto"])
         .pipe_in(" 2Ki")
         .succeeds()
-        .stdout_is("2048\n");
+        .stdout_is("2048");
 
     // multi-line
     new_ucmd!()
         .args(&["--from=auto"])
         .pipe_in("\t1Ki\n  2K")
         .succeeds()
-        .stdout_is("1024\n2000\n");
+        .stdout_is("1024\n2000");
 }
 
 #[test]
@@ -338,7 +338,7 @@ fn test_should_convert_only_first_number_in_line() {
         .args(&["--from=auto"])
         .pipe_in("1Ki 2M 3G")
         .succeeds()
-        .stdout_is("1024 2M 3G\n");
+        .stdout_is("1024 2M 3G");
 }
 
 #[test]
@@ -347,13 +347,13 @@ fn test_leading_whitespace_should_imply_padding() {
         .args(&["--from=auto"])
         .pipe_in("   1K")
         .succeeds()
-        .stdout_is(" 1000\n");
+        .stdout_is(" 1000");
 
     new_ucmd!()
         .args(&["--from=auto"])
         .pipe_in("    202Ki")
         .succeeds()
-        .stdout_is("   206848\n");
+        .stdout_is("   206848");
 }
 
 #[test]
@@ -362,7 +362,7 @@ fn test_should_calculate_implicit_padding_per_line() {
         .args(&["--from=auto"])
         .pipe_in("   1Ki\n        2K")
         .succeeds()
-        .stdout_is("  1024\n      2000\n");
+        .stdout_is("  1024\n      2000");
 }
 
 #[test]
@@ -520,7 +520,7 @@ fn test_delimiter_only() {
         .args(&["-d", ","])
         .pipe_in("1234,56")
         .succeeds()
-        .stdout_only("1234,56\n");
+        .stdout_only("1234,56");
 }
 
 #[test]
@@ -529,7 +529,7 @@ fn test_line_is_field_with_no_delimiter() {
         .args(&["-d,", "--to=iec"])
         .pipe_in("123456")
         .succeeds()
-        .stdout_only("121K\n");
+        .stdout_only("121K");
 }
 
 #[test]
@@ -538,7 +538,7 @@ fn test_delimiter_to_si() {
         .args(&["-d=,", "--to=si"])
         .pipe_in("1234,56")
         .succeeds()
-        .stdout_only("1.3k,56\n");
+        .stdout_only("1.3k,56");
 }
 
 #[test]
@@ -547,7 +547,7 @@ fn test_delimiter_skips_leading_whitespace() {
         .args(&["-d=,", "--to=si"])
         .pipe_in("     \t               1234,56")
         .succeeds()
-        .stdout_only("1.3k,56\n");
+        .stdout_only("1.3k,56");
 }
 
 #[test]
@@ -556,7 +556,7 @@ fn test_delimiter_preserves_leading_whitespace_in_unselected_fields() {
         .args(&["-d=|", "--to=si"])
         .pipe_in("             1000|   2000")
         .succeeds()
-        .stdout_only("1.0k|   2000\n");
+        .stdout_only("1.0k|   2000");
 }
 
 #[test]
@@ -565,7 +565,7 @@ fn test_delimiter_from_si() {
         .args(&["-d=,", "--from=si"])
         .pipe_in("1.2K,56")
         .succeeds()
-        .stdout_only("1200,56\n");
+        .stdout_only("1200,56");
 }
 
 #[test]
@@ -583,7 +583,7 @@ fn test_delimiter_with_padding() {
         .args(&["-d=|", "--to=si", "--padding=5"])
         .pipe_in("1000|2000")
         .succeeds()
-        .stdout_only(" 1.0k|2000\n");
+        .stdout_only(" 1.0k|2000");
 }
 
 #[test]
@@ -592,7 +592,7 @@ fn test_delimiter_with_padding_and_fields() {
         .args(&["-d=|", "--to=si", "--padding=5", "--field=-"])
         .pipe_in("1000|2000")
         .succeeds()
-        .stdout_only(" 1.0k| 2.0k\n");
+        .stdout_only(" 1.0k| 2.0k");
 }
 
 #[test]
@@ -655,7 +655,7 @@ fn test_suffix_is_added_if_not_supplied() {
         .args(&["--suffix=TEST"])
         .pipe_in("1000")
         .succeeds()
-        .stdout_only("1000TEST\n");
+        .stdout_only("1000TEST");
 }
 
 #[test]
@@ -664,7 +664,7 @@ fn test_suffix_is_preserved() {
         .args(&["--suffix=TEST"])
         .pipe_in("1000TEST")
         .succeeds()
-        .stdout_only("1000TEST\n");
+        .stdout_only("1000TEST");
 }
 
 #[test]
@@ -673,7 +673,7 @@ fn test_suffix_is_only_applied_to_selected_field() {
         .args(&["--suffix=TEST", "--field=2"])
         .pipe_in("1000 2000 3000")
         .succeeds()
-        .stdout_only("1000 2000TEST 3000\n");
+        .stdout_only("1000 2000TEST 3000");
 }
 
 #[test]
@@ -682,7 +682,7 @@ fn test_transform_with_suffix_on_input() {
         .args(&["--suffix=b", "--to=si"])
         .pipe_in("2000b")
         .succeeds()
-        .stdout_only("2.0kb\n");
+        .stdout_only("2.0kb");
 }
 
 #[test]
@@ -691,7 +691,7 @@ fn test_transform_without_suffix_on_input() {
         .args(&["--suffix=b", "--to=si"])
         .pipe_in("2000")
         .succeeds()
-        .stdout_only("2.0kb\n");
+        .stdout_only("2.0kb");
 }
 
 #[test]
@@ -700,7 +700,7 @@ fn test_transform_with_suffix_and_delimiter() {
         .args(&["--suffix=b", "--to=si", "-d=|"])
         .pipe_in("1000b|2000|3000")
         .succeeds()
-        .stdout_only("1.0kb|2000|3000\n");
+        .stdout_only("1.0kb|2000|3000");
 }
 
 #[test]
@@ -709,7 +709,7 @@ fn test_suffix_with_padding() {
         .args(&["--suffix=pad", "--padding=12"])
         .pipe_in("1000 2000 3000")
         .succeeds()
-        .stdout_only("     1000pad 2000 3000\n");
+        .stdout_only("     1000pad 2000 3000");
 }
 
 #[test]
@@ -732,7 +732,7 @@ fn test_invalid_stdin_number_with_warn_returns_status_0() {
         .args(&["--invalid=warn"])
         .pipe_in("4Q")
         .succeeds()
-        .stdout_is("4Q\n")
+        .stdout_is("4Q")
         .stderr_is("numfmt: rejecting suffix in input: '4Q' (consider using --from)\n");
 }
 
@@ -742,7 +742,7 @@ fn test_invalid_stdin_number_with_ignore_returns_status_0() {
         .args(&["--invalid=ignore"])
         .pipe_in("4Q")
         .succeeds()
-        .stdout_only("4Q\n");
+        .stdout_only("4Q");
 }
 
 #[test]
@@ -760,7 +760,7 @@ fn test_invalid_stdin_number_with_fail_returns_status_2() {
         .args(&["--invalid=fail"])
         .pipe_in("4Q")
         .fails_with_code(2)
-        .stdout_is("4Q\n")
+        .stdout_is("4Q")
         .stderr_is("numfmt: rejecting suffix in input: '4Q' (consider using --from)\n");
 }
 
@@ -1126,7 +1126,7 @@ fn test_zero_terminated_command_line_args() {
 #[test]
 fn test_zero_terminated_input() {
     let values = vec![
-        ("1000", "1.0k\x00"),
+        ("1000", "1.0k"),
         ("1000\x00", "1.0k\x00"),
         ("1000\x002000\x00", "1.0k\x002.0k\x00"),
     ];
@@ -1253,9 +1253,11 @@ fn test_empty_delimiter_whitespace_rejection() {
 #[test]
 fn test_null_byte_input() {
     new_ucmd!()
-        .pipe_in("1000\x00")
+        .pipe_in("1000\x00\n")
         .succeeds()
         .stdout_is("1000\n");
+
+    new_ucmd!().pipe_in("1000\x00").succeeds().stdout_is("1000");
 }
 
 #[test]
@@ -1263,10 +1265,10 @@ fn test_null_byte_input_multiline() {
     new_ucmd!()
         .pipe_in("1000\x00\n2000\x00")
         .succeeds()
-        .stdout_is("1000\n2000\n");
+        .stdout_is("1000\n2000");
 
     new_ucmd!()
         .pipe_in("1000\x002000\n3000")
         .succeeds()
-        .stdout_is("1000\n3000\n");
+        .stdout_is("1000\n3000");
 }

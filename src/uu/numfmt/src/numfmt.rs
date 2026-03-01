@@ -14,8 +14,7 @@ use crate::options::{
 use crate::units::{Result, Unit};
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, parser::ValueSource};
 use std::ffi::OsString;
-use std::io::{BufRead, Error, Write as _, stderr};
-use std::result::Result as StdResult;
+use std::io::{BufRead, Write as _, stderr};
 use std::str::FromStr;
 
 use units::{IEC_BASES, SI_BASES};
@@ -33,37 +32,51 @@ mod units;
 
 fn handle_args<'a>(args: impl Iterator<Item = &'a [u8]>, options: &NumfmtOptions) -> UResult<()> {
     let mut stdout = std::io::stdout().lock();
+    let terminator = if options.zero_terminated { 0u8 } else { b'\n' };
     for l in args {
-        write_line(&mut stdout, l, options)?;
+        write_line(&mut stdout, l, options, Some(terminator))?;
     }
     Ok(())
 }
 
-fn handle_buffer<R>(input: R, options: &NumfmtOptions) -> UResult<()>
-where
-    R: BufRead,
-{
+fn handle_buffer<R: BufRead>(mut input: R, options: &NumfmtOptions) -> UResult<()> {
     let terminator = if options.zero_terminated { 0u8 } else { b'\n' };
-    handle_buffer_iterator(input.split(terminator), options, terminator)
-}
-
-fn handle_buffer_iterator(
-    iter: impl Iterator<Item = StdResult<Vec<u8>, Error>>,
-    options: &NumfmtOptions,
-    terminator: u8,
-) -> UResult<()> {
     let mut stdout = std::io::stdout().lock();
-    for (idx, line_result) in iter.enumerate() {
-        match line_result {
-            Ok(line) if idx < options.header => {
-                stdout.write_all(&line)?;
-                stdout.write_all(&[terminator])?;
-                Ok(())
+    let mut buf = Vec::new();
+    let mut idx = 0;
+
+    loop {
+        buf.clear();
+        let n = input
+            .read_until(terminator, &mut buf)
+            .map_err(|e| NumfmtError::IoError(e.to_string()))?;
+        if n == 0 {
+            break;
+        }
+
+        let has_terminator = buf.last() == Some(&terminator);
+        let line = if has_terminator {
+            &buf[..buf.len() - 1]
+        } else {
+            &buf[..]
+        };
+
+        // Emit the terminator only if the input line had one.
+        // i.e. if the last line of the input does not end with a newline, we should not add one.
+        let eol = has_terminator.then_some(terminator);
+
+        if idx < options.header {
+            stdout.write_all(line)?;
+            if let Some(t) = eol {
+                stdout.write_all(&[t])?;
             }
-            Ok(line) => write_line(&mut stdout, &line, options),
-            Err(err) => return Err(Box::new(NumfmtError::IoError(err.to_string()))),
-        }?;
+        } else {
+            write_line(&mut stdout, line, options, eol)?;
+        }
+
+        idx += 1;
     }
+
     Ok(())
 }
 
@@ -71,6 +84,7 @@ fn write_line<W: std::io::Write>(
     writer: &mut W,
     input_line: &[u8],
     options: &NumfmtOptions,
+    eol: Option<u8>,
 ) -> UResult<()> {
     // Read lines only up to null byte (as GNU does)
     let line = input_line
@@ -80,11 +94,11 @@ fn write_line<W: std::io::Write>(
         .collect::<Vec<u8>>();
 
     let handled_line = if options.delimiter.is_some() {
-        write_formatted_with_delimiter(writer, &line, options)
+        write_formatted_with_delimiter(writer, &line, options, eol)
     } else {
         // Whitespace mode requires valid UTF-8
         match std::str::from_utf8(&line) {
-            Ok(s) => write_formatted_with_whitespace(writer, s, options),
+            Ok(s) => write_formatted_with_whitespace(writer, s, options, eol),
             Err(_) => Err(translate!("numfmt-error-invalid-input")),
         }
     };
@@ -104,12 +118,9 @@ fn write_line<W: std::io::Write>(
         }
         writer.write_all(input_line)?;
 
-        let eol = if options.zero_terminated {
-            b"\0"
-        } else {
-            b"\n"
-        };
-        writer.write_all(eol)?;
+        if let Some(eol) = eol {
+            writer.write_all(&[eol])?;
+        }
     }
 
     Ok(())

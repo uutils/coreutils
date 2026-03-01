@@ -473,6 +473,7 @@ pub fn write_formatted_with_delimiter<W: std::io::Write>(
     writer: &mut W,
     input: &[u8],
     options: &NumfmtOptions,
+    eol: Option<u8>,
 ) -> Result<()> {
     let delimiter = options.delimiter.as_deref().unwrap();
 
@@ -497,12 +498,9 @@ pub fn write_formatted_with_delimiter<W: std::io::Write>(
         }
     }
 
-    let eol = if options.zero_terminated {
-        b"\0"
-    } else {
-        b"\n"
-    };
-    writer.write_all(eol).unwrap();
+    if let Some(eol) = eol {
+        writer.write_all(&[eol]).unwrap();
+    }
 
     Ok(())
 }
@@ -511,6 +509,7 @@ pub fn write_formatted_with_whitespace<W: std::io::Write>(
     writer: &mut W,
     s: &str,
     options: &NumfmtOptions,
+    eol: Option<u8>,
 ) -> Result<()> {
     for (n, (prefix, field)) in (1..).zip(WhitespaceSplitter { s: Some(s) }) {
         let field_selected = uucore::ranges::contain(&options.fields, n);
@@ -548,12 +547,9 @@ pub fn write_formatted_with_whitespace<W: std::io::Write>(
         }
     }
 
-    let eol = if options.zero_terminated {
-        b"\0"
-    } else {
-        b"\n"
-    };
-    writer.write_all(eol).unwrap();
+    if let Some(eol) = eol {
+        writer.write_all(&[eol]).unwrap();
+    }
 
     Ok(())
 }
