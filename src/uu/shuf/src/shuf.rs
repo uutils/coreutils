@@ -13,9 +13,9 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use clap::{Arg, ArgAction, Command, builder::ValueParser};
-use rand::rngs::ThreadRng;
 use rand::{
-    Rng,
+    RngExt as _,
+    rngs::ThreadRng,
     seq::{IndexedRandom, SliceRandom},
 };
 

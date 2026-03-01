@@ -27,7 +27,7 @@ use ext_sort::ext_sort;
 use foldhash::fast::FoldHasher;
 use foldhash::{HashMap, SharedSeed};
 use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
-use rand::{Rng, rng};
+use rand::{RngExt as _, rng};
 use rayon::prelude::*;
 use std::cmp::Ordering;
 use std::env;
