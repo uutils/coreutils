@@ -1043,3 +1043,25 @@ fn test_ln_backup_no_path_traversal() {
     assert!(at.file_exists("b~"));
     assert!(!at.plus("b~").is_symlink());
 }
+
+#[test]
+fn test_ln_no_dereference_symbolic() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("a");
+    at.symlink_dir("a", "b");
+    at.touch("x");
+    scene
+        .ucmd()
+        .args(&["-n", "x", "b"])
+        .fails()
+        .stderr_contains("Already exists");
+    assert!(!at.file_exists("a/x"));
+    #[cfg(not(target_os = "android"))]
+    {
+        scene.ucmd().args(&["-bn", "x", "b"]).succeeds();
+        assert!(!at.file_exists("a/x"));
+        assert!(at.file_exists("b"));
+        assert!(at.is_symlink("b~"));
+    }
+}
