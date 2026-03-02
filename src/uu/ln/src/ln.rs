@@ -438,23 +438,34 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
         }
     }
 
-    if settings.symbolic {
-        symlink(&source, dst)?;
-    } else {
-        let p = if settings.logical && source.is_symlink() {
-            fs::canonicalize(&source)
-                .map_err_context(|| translate!("ln-failed-to-access", "file" => source.quote()))?
+    let res = (|| -> UResult<()> {
+        if settings.symbolic {
+            Ok(symlink(&source, dst)?)
         } else {
-            source.to_path_buf()
-        };
-        if let Err(e) = fs::hard_link(&p, dst) {
-            if p.is_dir() {
-                return Err(LnError::FailedToCreateHardLinkDir(source.to_path_buf()).into());
+            let p = if settings.logical && source.is_symlink() {
+                fs::canonicalize(&source).map_err_context(
+                    || translate!("ln-failed-to-access", "file" => source.quote()),
+                )?
+            } else {
+                source.to_path_buf()
+            };
+            if let Err(e) = fs::hard_link(&p, dst) {
+                if p.is_dir() {
+                    return Err(LnError::FailedToCreateHardLinkDir(source.to_path_buf()).into());
+                }
+                return Err(e).map_err_context(|| {
+                    translate!("ln-failed-to-create-hard-link", "source" => source.quote(), "dest" => dst.quote())
+                });
             }
-            return Err(e).map_err_context(|| {
-                translate!("ln-failed-to-create-hard-link", "source" => source.quote(), "dest" => dst.quote())
-            });
+            Ok(())
         }
+    })();
+    if res.is_err() {
+        if let Some(ref p) = backup_path {
+            fs::rename(p, dst)
+                .map_err_context(|| translate!("ln-cannot-backup", "file" => dst.quote()))?;
+        }
+        res?;
     }
 
     if settings.verbose {
