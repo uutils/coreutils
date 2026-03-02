@@ -53,7 +53,7 @@ impl SymlinkBehavior {
 
 impl From<bool> for SymlinkBehavior {
     fn from(follow: bool) -> Self {
-         if follow { Self::Follow } else { Self::NoFollow }
+        if follow { Self::Follow } else { Self::NoFollow }
     }
 }
 
