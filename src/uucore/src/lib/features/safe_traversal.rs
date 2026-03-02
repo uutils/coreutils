@@ -22,10 +22,10 @@ use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd, IntoRawFd, OwnedFd
 use std::path::{Path, PathBuf};
 
 use nix::dir::Dir;
-use nix::fcntl::{OFlag, openat};
+use nix::fcntl::{openat, OFlag};
 use nix::libc;
-use nix::sys::stat::{FchmodatFlags, FileStat, Mode, fchmodat, fstatat, mkdirat};
-use nix::unistd::{Gid, Uid, UnlinkatFlags, fchown, fchownat, unlinkat};
+use nix::sys::stat::{fchmodat, fstatat, mkdirat, FchmodatFlags, FileStat, Mode};
+use nix::unistd::{fchown, fchownat, unlinkat, Gid, Uid, UnlinkatFlags};
 use os_display::Quotable;
 
 use crate::translate;
@@ -53,7 +53,11 @@ impl SymlinkBehavior {
 
 impl From<bool> for SymlinkBehavior {
     fn from(follow: bool) -> Self {
-        if follow { Self::Follow } else { Self::NoFollow }
+        if follow {
+            Self::Follow
+        } else {
+            Self::NoFollow
+        }
     }
 }
 
@@ -704,13 +708,21 @@ impl std::os::unix::fs::MetadataExt for Metadata {
     }
 
     fn atime_nsec(&self) -> i64 {
-        #[cfg(target_pointer_width = "32")]
+        #[cfg(target_os = "netbsd")]
         {
-            self.stat.st_atime_nsec.into()
+            self.stat.st_atimensec as i64
         }
-        #[cfg(not(target_pointer_width = "32"))]
+
+        #[cfg(not(target_os = "netbsd"))]
         {
-            self.stat.st_atime_nsec
+            #[cfg(target_pointer_width = "32")]
+            {
+                self.stat.st_atime_nsec.into()
+            }
+            #[cfg(not(target_pointer_width = "32"))]
+            {
+                self.stat.st_atime_nsec
+            }
         }
     }
 
@@ -726,13 +738,21 @@ impl std::os::unix::fs::MetadataExt for Metadata {
     }
 
     fn mtime_nsec(&self) -> i64 {
-        #[cfg(target_pointer_width = "32")]
+        #[cfg(target_os = "netbsd")]
         {
-            self.stat.st_mtime_nsec.into()
+            self.stat.st_mtimensec as i64
         }
-        #[cfg(not(target_pointer_width = "32"))]
+
+        #[cfg(not(target_os = "netbsd"))]
         {
-            self.stat.st_mtime_nsec
+            #[cfg(target_pointer_width = "32")]
+            {
+                self.stat.st_mtime_nsec.into()
+            }
+            #[cfg(not(target_pointer_width = "32"))]
+            {
+                self.stat.st_mtime_nsec
+            }
         }
     }
 
@@ -748,13 +768,21 @@ impl std::os::unix::fs::MetadataExt for Metadata {
     }
 
     fn ctime_nsec(&self) -> i64 {
-        #[cfg(target_pointer_width = "32")]
+        #[cfg(target_os = "netbsd")]
         {
-            self.stat.st_ctime_nsec.into()
+            self.stat.st_ctimensec as i64
         }
-        #[cfg(not(target_pointer_width = "32"))]
+
+        #[cfg(not(target_os = "netbsd"))]
         {
-            self.stat.st_ctime_nsec
+            #[cfg(target_pointer_width = "32")]
+            {
+                self.stat.st_ctime_nsec.into()
+            }
+            #[cfg(not(target_pointer_width = "32"))]
+            {
+                self.stat.st_ctime_nsec
+            }
         }
     }
 
