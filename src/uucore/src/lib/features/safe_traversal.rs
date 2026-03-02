@@ -22,10 +22,10 @@ use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd, IntoRawFd, OwnedFd
 use std::path::{Path, PathBuf};
 
 use nix::dir::Dir;
-use nix::fcntl::{openat, OFlag};
+use nix::fcntl::{OFlag, openat};
 use nix::libc;
-use nix::sys::stat::{fchmodat, fstatat, mkdirat, FchmodatFlags, FileStat, Mode};
-use nix::unistd::{fchown, fchownat, unlinkat, Gid, Uid, UnlinkatFlags};
+use nix::sys::stat::{FchmodatFlags, FileStat, Mode, fchmodat, fstatat, mkdirat};
+use nix::unistd::{Gid, Uid, UnlinkatFlags, fchown, fchownat, unlinkat};
 use os_display::Quotable;
 
 use crate::translate;
@@ -53,11 +53,7 @@ impl SymlinkBehavior {
 
 impl From<bool> for SymlinkBehavior {
     fn from(follow: bool) -> Self {
-        if follow {
-            Self::Follow
-        } else {
-            Self::NoFollow
-        }
+         if follow { Self::Follow } else { Self::NoFollow }
     }
 }
 
