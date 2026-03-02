@@ -294,30 +294,44 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
 
     let mut all_successful = true;
     for srcpath in files {
-        let targetpath = if settings.no_dereference
-            && matches!(settings.overwrite, OverwriteMode::Force)
-            && target_dir.is_symlink()
-        {
-            // In that case, we don't want to do link resolution
-            // We need to clean the target
-            if target_dir.is_file() {
-                if let Err(e) = fs::remove_file(target_dir) {
-                    show_error!(
-                        "{}",
-                        translate!("ln-error-could-not-update", "target" => target_dir.quote(), "error" => e)
-                    );
+        let targetpath = if settings.no_dereference && target_dir.is_symlink() {
+            let remove_target = || -> UResult<()> {
+                // In that case, we don't want to do link resolution
+                // We need to clean the target
+                if target_dir.is_file() {
+                    if let Err(e) = fs::remove_file(target_dir) {
+                        show_error!(
+                            "{}",
+                            translate!("ln-error-could-not-update", "target" => target_dir.quote(), "error" => e)
+                        );
+                    }
                 }
-            }
-            #[cfg(windows)]
-            if target_dir.is_dir() {
-                // Not sure why but on Windows, the symlink can be
-                // considered as a dir
-                // See test_ln::test_symlink_no_deref_dir
-                if let Err(e) = fs::remove_dir(target_dir) {
-                    show_error!(
+                #[cfg(windows)]
+                if target_dir.is_dir() {
+                    // Not sure why but on Windows, the symlink can be
+                    // considered as a dir
+                    // See test_ln::test_symlink_no_deref_dir
+                    if let Err(e) = fs::remove_dir(target_dir) {
+                        show_error!(
+                            "{}",
+                            translate!("ln-error-could-not-update", "target" => target_dir.quote(), "error" => e)
+                        );
+                    }
+                }
+                Ok(())
+            };
+            match settings.overwrite {
+                OverwriteMode::NoClobber => {}
+                OverwriteMode::Interactive => {
+                    if prompt_yes!(
                         "{}",
-                        translate!("ln-error-could-not-update", "target" => target_dir.quote(), "error" => e)
-                    );
+                        translate!("ln-prompt-replace", "file" => target_dir.quote())
+                    ) {
+                        remove_target()?;
+                    }
+                }
+                OverwriteMode::Force => {
+                    remove_target()?;
                 }
             }
             target_dir.to_path_buf()
