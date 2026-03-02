@@ -552,8 +552,8 @@ fn unexpand_file(
     options: &Options,
     lastcol: usize,
     tab_config: &TabConfig,
+    buf: &mut [u8],
 ) -> UResult<()> {
-    let mut buf = [0u8; 4096];
     let mut input = open(file)?;
     let mut print_state = PrintState {
         col: 0,
@@ -563,7 +563,7 @@ fn unexpand_file(
     };
 
     loop {
-        match input.read(&mut buf) {
+        match input.read(buf) {
             Ok(0) => break,
             Ok(n) => {
                 for line in buf[..n].split_inclusive(|b| *b == b'\n') {
@@ -582,6 +582,7 @@ fn unexpand_file(
 }
 
 fn unexpand(options: &Options) -> UResult<()> {
+    let mut buf = vec![0u8; 2048]; //use vec to avoid filling stack
     let mut output = BufWriter::new(stdout());
     let tab_config = &options.tab_config;
     let lastcol = if tab_config.tabstops.len() > 1
@@ -594,7 +595,7 @@ fn unexpand(options: &Options) -> UResult<()> {
     };
 
     for file in &options.files {
-        if let Err(e) = unexpand_file(file, &mut output, options, lastcol, tab_config) {
+        if let Err(e) = unexpand_file(file, &mut output, options, lastcol, tab_config, &mut buf) {
             show!(e);
             set_exit_code(1);
         }
