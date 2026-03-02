@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 use crate::errors::NumfmtError;
-use crate::format::{write_formatted_with_delimiter, write_formatted_with_whitespace};
+use crate::format::{escape_line, write_formatted_with_delimiter, write_formatted_with_whitespace};
 use crate::options::{
     DEBUG, DELIMITER, FIELD, FIELD_DEFAULT, FORMAT, FROM, FROM_DEFAULT, FROM_UNIT,
     FROM_UNIT_DEFAULT, FormatOptions, HEADER, HEADER_DEFAULT, INVALID, InvalidModes, NUMBER,
@@ -99,7 +99,9 @@ fn write_line<W: std::io::Write>(
         // Whitespace mode requires valid UTF-8
         match std::str::from_utf8(&line) {
             Ok(s) => write_formatted_with_whitespace(writer, s, options, eol),
-            Err(_) => Err(translate!("numfmt-error-invalid-input")),
+            Err(_) => Err(
+                translate!("numfmt-error-invalid-number", "input" => escape_line(&line).quote()),
+            ),
         }
     };
 

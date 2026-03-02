@@ -1272,3 +1272,13 @@ fn test_null_byte_input_multiline() {
         .succeeds()
         .stdout_is("1000\n3000");
 }
+
+#[test]
+fn test_invalid_utf8_input() {
+    // 0xFF is invalid UTF-8
+    new_ucmd!()
+        .pipe_in([b'1', b'0', b'\n', b'\xFF'])
+        .fails_with_code(2)
+        .stdout_is("10\n")
+        .stderr_is("numfmt: invalid number: '\\377'\n");
+}
