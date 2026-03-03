@@ -45,7 +45,7 @@ fn infallible_gid2grp(gid: u32) -> String {
     }
 }
 
-#[uucore::main(no_signals)]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 

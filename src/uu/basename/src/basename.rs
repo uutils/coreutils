@@ -24,7 +24,7 @@ pub mod options {
     pub static ZERO: &str = "zero";
 }
 
-#[uucore::main(no_signals)]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     //
     // Argument parsing

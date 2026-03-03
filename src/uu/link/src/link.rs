@@ -17,7 +17,7 @@ pub mod options {
     pub static FILES: &str = "FILES";
 }
 
-#[uucore::main(no_signals)]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
     let files: Vec<_> = matches

@@ -17,7 +17,7 @@ static OPT_NULL: &str = "null";
 
 static ARG_VARIABLES: &str = "variables";
 
-#[uucore::main(no_signals)]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 2)?;
 

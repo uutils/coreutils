@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Read, Stdout, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, BufWriter, Read, Stdout, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
@@ -552,7 +552,6 @@ fn unexpand_file(
     options: &Options,
     lastcol: usize,
     tab_config: &TabConfig,
-    buf: &mut [u8],
 ) -> UResult<()> {
     let mut input = open(file)?;
     let mut print_state = PrintState {
@@ -563,18 +562,21 @@ fn unexpand_file(
     };
 
     loop {
-        match input.read(buf) {
-            Ok(0) => break,
-            Ok(n) => {
-                for line in buf[..n].split_inclusive(|b| *b == b'\n') {
-                    unexpand_buf(line, output, options, lastcol, tab_config, &mut print_state)?;
-                    if let Some(b'\n') = line.last() {
-                        print_state.new_line();
-                    }
-                }
-            }
-            Err(e) => return Err(e.map_err_context(|| file.maybe_quote().to_string())),
+        let buf = input
+            .fill_buf()
+            .map_err_context(|| file.maybe_quote().to_string())?;
+        let buf_len = buf.len();
+        if buf_len == 0 {
+            break;
         }
+        for line in buf.split_inclusive(|b| *b == b'\n') {
+            unexpand_buf(line, output, options, lastcol, tab_config, &mut print_state)?;
+            if let Some(b'\n') = line.last() {
+                print_state.new_line();
+            }
+        }
+
+        input.consume(buf_len);
     }
     // write out anything remaining
     write_tabs(output, tab_config, &mut print_state, options.aflag)?;
@@ -582,7 +584,6 @@ fn unexpand_file(
 }
 
 fn unexpand(options: &Options) -> UResult<()> {
-    let mut buf = vec![0u8; 2048]; //use vec to avoid filling stack
     let mut output = BufWriter::new(stdout());
     let tab_config = &options.tab_config;
     let lastcol = if tab_config.tabstops.len() > 1
@@ -595,7 +596,7 @@ fn unexpand(options: &Options) -> UResult<()> {
     };
 
     for file in &options.files {
-        if let Err(e) = unexpand_file(file, &mut output, options, lastcol, tab_config, &mut buf) {
+        if let Err(e) = unexpand_file(file, &mut output, options, lastcol, tab_config) {
             show!(e);
             set_exit_code(1);
         }

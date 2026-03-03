@@ -16,7 +16,7 @@ use uucore::translate;
 
 static OPT_PATH: &str = "FILE";
 
-#[uucore::main(no_signals)]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
