@@ -452,18 +452,24 @@ fn format_string(
     ))
 }
 
-/// Encodes a byte slice as a string, representing non-UTF-8 bytes as octal escapes.
+/// Encodes a byte slice as a string, representing non-UTF-8 bytes and non-printable ASCII
+/// bytes as octal escapes. Valid UTF-8 multi-byte characters pass through unchanged.
 /// Used to safely format invalid input in error messages.
 pub(crate) fn escape_line(line: &[u8]) -> String {
-    line.iter()
-        .map(|&b| {
-            if b.is_ascii_graphic() || b.is_ascii_whitespace() {
-                (b as char).to_string()
+    let mut result = String::new();
+    for chunk in line.utf8_chunks() {
+        for c in chunk.valid().chars() {
+            if c.is_ascii() && !c.is_ascii_graphic() && !c.is_ascii_whitespace() {
+                result.push_str(&format!("\\{:03o}", c as u8));
             } else {
-                format!("\\{b:03o}")
+                result.push(c);
             }
-        })
-        .collect()
+        }
+        for &b in chunk.invalid() {
+            result.push_str(&format!("\\{b:03o}"));
+        }
+    }
+    result
 }
 
 fn split_bytes<'a>(input: &'a [u8], delim: &'a [u8]) -> impl Iterator<Item = &'a [u8]> {
