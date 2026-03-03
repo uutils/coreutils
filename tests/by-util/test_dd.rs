@@ -1887,6 +1887,117 @@ fn test_oflag_direct_partial_block() {
     at.remove(output_file);
 }
 
+// ===== O_DIRECT Buffer Alignment Integration Tests =====
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_o_direct_with_aligned_buffer_full_blocks() {
+    // Test O_DIRECT with full blocks (should not trigger O_DIRECT removal)
+    let (at, mut ucmd) = at_and_ucmd!();
+    let input_file = "test_input_full_blocks.bin";
+    let output_file = "test_output_full_blocks.bin";
+
+    // Create input file with multiple full blocks (16 * 4096 = 65536 bytes)
+    let block_size = 4096;
+    let num_blocks = 16;
+    let input_size = block_size * num_blocks;
+    let input_data: Vec<u8> = (0..input_size).map(|i| (i % 256) as u8).collect();
+    at.write_bytes(input_file, &input_data);
+
+    // Run dd with O_DIRECT
+    ucmd.args(&[
+        format!("if={}", at.plus(input_file).display()),
+        format!("of={}", at.plus(output_file).display()),
+        format!("bs={block_size}"),
+        "oflag=direct".to_string(),
+        "status=none".to_string(),
+    ])
+    .succeeds();
+
+    // Verify output matches input
+    let output_data = at.read_bytes(output_file);
+    assert_eq!(output_data.len(), input_size);
+    assert_eq!(output_data, input_data);
+
+    // Clean up
+    at.remove(input_file);
+    at.remove(output_file);
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_o_direct_with_partial_final_block() {
+    // Test O_DIRECT with partial final block (should trigger O_DIRECT removal only for final block)
+    let (at, mut ucmd) = at_and_ucmd!();
+    let input_file = "test_input_partial.bin";
+    let output_file = "test_output_partial.bin";
+
+    // Create input file with partial final block
+    let block_size = 4096;
+    let num_full_blocks = 8;
+    let partial_size = 2048; // Partial block
+    let input_size = (block_size * num_full_blocks) + partial_size;
+    let input_data: Vec<u8> = (0..input_size).map(|i| (i % 256) as u8).collect();
+    at.write_bytes(input_file, &input_data);
+
+    // Run dd with O_DIRECT
+    ucmd.args(&[
+        format!("if={}", at.plus(input_file).display()),
+        format!("of={}", at.plus(output_file).display()),
+        format!("bs={block_size}"),
+        "oflag=direct".to_string(),
+        "status=none".to_string(),
+    ])
+    .succeeds();
+
+    // Verify output matches input
+    let output_data = at.read_bytes(output_file);
+    assert_eq!(output_data.len(), input_size);
+    assert_eq!(output_data, input_data);
+
+    // Clean up
+    at.remove(input_file);
+    at.remove(output_file);
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_o_direct_various_block_sizes() {
+    // Test O_DIRECT with various block sizes
+    let ts = TestScenario::new(util_name!());
+    let block_sizes = vec![512, 1024, 2048, 4096, 8192];
+
+    for block_size in block_sizes {
+        let input_file = format!("test_input_bs_{block_size}.bin");
+        let output_file = format!("test_output_bs_{block_size}.bin");
+
+        // Create input file
+        let input_size = block_size * 4; // 4 full blocks
+        let input_data: Vec<u8> = (0..input_size).map(|i| (i % 256) as u8).collect();
+        ts.fixtures.write_bytes(&input_file, &input_data);
+
+        // Run dd with O_DIRECT
+        ts.ucmd()
+            .args(&[
+                format!("if={}", ts.fixtures.plus(&input_file).display()),
+                format!("of={}", ts.fixtures.plus(&output_file).display()),
+                format!("bs={block_size}"),
+                "oflag=direct".to_string(),
+                "status=none".to_string(),
+            ])
+            .succeeds();
+
+        // Verify output matches input
+        let output_data = ts.fixtures.read_bytes(&output_file);
+        assert_eq!(output_data.len(), input_size);
+        assert_eq!(output_data, input_data);
+
+        // Clean up
+        ts.fixtures.remove(&input_file);
+        ts.fixtures.remove(&output_file);
+    }
+}
+
 #[test]
 fn test_skip_overflow() {
     new_ucmd!()
