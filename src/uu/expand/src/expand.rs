@@ -479,13 +479,13 @@ fn expand_file(
     file: &OsString,
     output: &mut BufWriter<std::io::Stdout>,
     options: &Options,
+    buf: &mut [u8],
 ) -> UResult<()> {
-    let mut buf = [0u8; 4096];
     let mut input = open(file)?;
     let ts = options.tabstops.as_ref();
     let mut col = 0;
     loop {
-        match input.read(&mut buf) {
+        match input.read(buf) {
             Ok(0) => break,
             Ok(n) => {
                 expand_buf(&buf[..n], output, ts, options, &mut col)
@@ -499,9 +499,9 @@ fn expand_file(
 
 fn expand(options: &Options) -> UResult<()> {
     let mut output = BufWriter::new(stdout());
-
+    let mut buf = [0u8; 128];
     for file in &options.files {
-        if let Err(e) = expand_file(file, &mut output, options) {
+        if let Err(e) = expand_file(file, &mut output, options, &mut buf) {
             show!(e);
             set_exit_code(1);
         }
