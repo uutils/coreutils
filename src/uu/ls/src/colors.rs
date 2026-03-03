@@ -716,6 +716,8 @@ fn parse_funky_string(
     }
 }
 
+// current match list is much easier to read than nested or-patterns
+#[expect(clippy::unnested_or_patterns)]
 fn is_valid_ls_colors_prefix(label: [u8; 2]) -> bool {
     matches!(
         label,

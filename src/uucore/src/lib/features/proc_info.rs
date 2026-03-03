@@ -333,7 +333,7 @@ impl ProcessInformation {
                 .follow_links(false)
                 .into_iter()
                 .flatten()
-                .flat_map(|it| {
+                .filter_map(|it| {
                     it.path()
                         .file_name()
                         .and_then(|it| it.to_str())
@@ -470,10 +470,7 @@ mod tests {
             assert_eq!(pid_entry.tty(), Teletype::Unknown);
         } else {
             assert_eq!(result.len(), 1);
-            assert_eq!(
-                pid_entry.tty(),
-                Vec::from_iter(result.into_iter()).first().unwrap().clone()
-            );
+            assert_eq!(pid_entry.tty(), result.into_iter().next().unwrap());
         }
     }
 
