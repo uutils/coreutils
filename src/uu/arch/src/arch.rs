@@ -9,7 +9,7 @@ use std::io::{Write, stdout};
 use uucore::error::{UResult, USimpleError};
 use uucore::translate;
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
