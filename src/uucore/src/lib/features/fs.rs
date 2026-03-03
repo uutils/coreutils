@@ -867,6 +867,42 @@ pub fn makedev(maj: libc::c_uint, min: libc::c_uint) -> libc::dev_t {
     (min & 0xff) | ((maj & 0xfff) << 8) | ((min & !0xff) << 12) | ((maj & !0xfff) << 32)
 }
 
+/// Creates a new file for writing.
+///
+/// This function creates a file at the specified path with appropriate permissions
+/// for the platform (restricted to owner on Unix systems).
+///
+/// # Arguments
+/// * `path` - The path where the file should be created
+/// * `truncate` - Whether to truncate the file if it already exists
+///
+/// # Returns
+/// A `File` handle to the newly created file, or an `IOResult` if creation fails.
+pub fn create_file_restrictive_perm(path: impl AsRef<Path>, truncate: bool) -> IOResult<fs::File> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(truncate)
+            .mode(0o600)
+            .open(path)
+    }
+    #[cfg(not(unix))]
+    {
+        if truncate {
+            fs::File::create(path)
+        } else {
+            fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(false)
+                .open(path)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
@@ -1162,5 +1198,41 @@ mod tests {
         let path2 = path.clone();
         std::thread::spawn(move || assert!(fs::write(&path2, b"foo").is_ok()));
         assert_eq!(fs::read(&path).unwrap(), b"foo");
+    }
+
+    #[test]
+    fn test_create_file_restrictive_perm() {
+        #[cfg(unix)]
+        use std::os::unix::fs::PermissionsExt;
+
+        let tempdir = tempdir().unwrap();
+        let file_path = tempdir.path().join("test_file.txt");
+
+        // Test creating new file
+        let file1 = create_file_restrictive_perm(&file_path, true).unwrap();
+        drop(file1);
+
+        #[cfg(unix)]
+        {
+            let metadata = fs::metadata(&file_path).unwrap();
+            let mode = metadata.permissions().mode() & 0o777;
+            // File should have 0o600 permissions (owner read/write only)
+            assert_eq!(
+                mode, 0o600,
+                "File permissions should be 0o600, got {mode:#o}"
+            );
+        }
+
+        // Test truncate behavior
+        fs::write(&file_path, "original content").unwrap();
+        let file2 = create_file_restrictive_perm(&file_path, true).unwrap();
+        drop(file2);
+        assert_eq!(fs::read_to_string(&file_path).unwrap(), "");
+
+        // Test non-truncate behavior
+        fs::write(&file_path, "original content").unwrap();
+        let file3 = create_file_restrictive_perm(&file_path, false).unwrap();
+        drop(file3);
+        assert_eq!(fs::read_to_string(&file_path).unwrap(), "original content");
     }
 }

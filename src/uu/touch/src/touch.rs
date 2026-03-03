@@ -17,12 +17,13 @@ use jiff::tz::TimeZone;
 use jiff::{Timestamp, ToSpan, Zoned};
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
-use std::fs::{self, File};
+use std::fs;
 use std::io::{Error, ErrorKind};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::fs::create_file_restrictive_perm;
 #[cfg(target_os = "linux")]
 use uucore::libc;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
@@ -476,9 +477,9 @@ fn touch_file(
             return Ok(());
         }
 
-        if let Err(e) = File::create(path) {
+        if let Err(e) = create_file_restrictive_perm(path, true) {
             // we need to check if the path is the path to a directory (ends with a separator)
-            // we can't use File::create to create a directory
+            // we can't use create_file to create a directory
             // we cannot use path.is_dir() because it calls fs::metadata which we already called
             // when stable, we can change to use e.kind() == std::io::ErrorKind::IsADirectory
             let is_directory = if let Some(last_char) = path.to_string_lossy().chars().last() {
