@@ -1,4 +1,4 @@
-<!-- spell-checker:ignore hhhhp armv7 cccccccccccccccccccccccccccccccdp ccccccccccccccd ccccccccccccccdp fffffffp -->
+<!-- spell-checker:ignore hhhhp armv7 cccccccccccccccccccccccccccccccdp ccccccccccccccd ccccccccccccccdp fffffffp kdump ppc64le mipsel mips64el riscv powerpc sparc sysinfo armv -->
 
 # Extensions over GNU
 
@@ -205,3 +205,33 @@ With `-U`/`--no-utf8`, you can interpret input files as 8-bit ASCII rather than 
 ## `install`
 
 `install` offers FreeBSD's `-U` unprivileged option to not change the owner, the group, or the file flags of the destination.
+
+## `uname`
+
+GNU coreutils uses platform-specific mechanisms to determine processor type on modern
+systems (e.g., `sysinfo(SI_ARCHITECTURE)` on Solaris, `sysctl()` on BSD, compile-time
+architecture detection on macOS). On Linux systems without these mechanisms, it returns
+"unknown" for `uname -p`.
+
+uutils takes a different approach: it maps machine architecture strings (from `uname -m`)
+to processor types. This provides consistent, useful output on all platforms for packages
+that depend on processor type information (e.g., kdump-tools).
+
+**Current mappings:**
+
+| Machine (`uname -m`) | Processor (`uname -p`) |
+| -------------------- | ---------------------- |
+| arm64, aarch64, arm, armv7l, armv8l, armv7, armv8 | arm |
+| x86_64, amd64 | x86_64 |
+| i386, i486, i586, i686 | i386 |
+| ppc, ppc64, ppc64le, ppc32 | powerpc |
+| riscv32, riscv64 | riscv |
+| sparc, sparc64 | sparc |
+| mips, mipsel, mips64, mips64el | mips |
+| (other) | unknown |
+
+**Differences from GNU:**
+
+* uutils uses runtime string matching rather than compile-time detection (e.g., `__arm__`, `__x86_64__` macros on macOS)
+* uutils does not use `sysinfo(SI_ARCHITECTURE)` or `sysctl()` fallbacks available on some platforms
+* The mapping is based on `uname -m` output rather than platform-specific system calls
