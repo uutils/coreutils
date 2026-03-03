@@ -400,7 +400,52 @@ pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
     }
     let signal_name = signal_name_upcase.trim_start_matches("SIG");
 
-    ALL_SIGNALS.iter().position(|&s| s == signal_name)
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    return try_parse_sigrt(signal_name_or_value)
+        .or_else(|| ALL_SIGNALS.iter().position(|&s| s == signal_name));
+    #[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
+    return ALL_SIGNALS.iter().position(|&s| s == signal_name);
+}
+
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+/// Parses signals of the form RTMIN(+[0-9]\+)?|RTMAX(-[0-9]\+)?
+fn try_parse_sigrt(signal_name: &str) -> Option<usize> {
+    if crate::os::is_wsl() {
+        return None;
+    }
+    if let Some(rest) = signal_name.strip_prefix("RTMIN") {
+        if rest.is_empty() {
+            Some(libc::SIGRTMIN() as usize)
+        } else if let Some(rest) = rest.strip_prefix("+")
+            && let Ok(offset) = rest.parse::<usize>()
+        {
+            let value = libc::SIGRTMIN() as usize + offset;
+            if value <= libc::SIGRTMAX() as usize {
+                Some(value)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    } else if let Some(rest) = signal_name.strip_prefix("RTMAX") {
+        if rest.is_empty() {
+            Some(libc::SIGRTMAX() as usize)
+        } else if let Some(rest) = rest.strip_prefix("-")
+            && let Ok(offset) = rest.parse::<usize>()
+        {
+            let value = libc::SIGRTMAX() as usize - offset;
+            if value >= libc::SIGRTMIN() as usize {
+                Some(value)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    }
 }
 
 /// Returns true if the given number is a valid signal number.

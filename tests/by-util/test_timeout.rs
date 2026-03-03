@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore dont
+// spell-checker:ignore dont sigrt sigrtmin sigrtmax
 
 use rstest::rstest;
 use std::time::Duration;
@@ -285,4 +285,23 @@ fn test_foreground_signal0_kill_after() {
     new_ucmd!()
         .args(&["--foreground", "-s0", "-k.1", ".1", "sleep", "10"])
         .fails_with_code(137);
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+fn test_timeout_sigrt() {
+    if !uucore::os::is_wsl() {
+        new_ucmd!()
+            .args(&["-s", "SIGRTMIN", "0.1", "sleep", "2"])
+            .succeeds();
+        new_ucmd!()
+            .args(&["-s", "SIGRTMIN+1", "0.1", "sleep", "2"])
+            .succeeds();
+        new_ucmd!()
+            .args(&["-s", "SIGRTMAX", "0.1", "sleep", "2"])
+            .succeeds();
+        new_ucmd!()
+            .args(&["-s", "SIGRTMAX-1", "0.1", "sleep", "2"])
+            .succeeds();
+    }
 }
