@@ -657,7 +657,9 @@ impl FsUsage {
             //  Total number of free blocks.
             bfree: number_of_free_clusters as u64,
             //  Total number of free blocks available to non-privileged processes.
-            bavail: 0,
+            // Windows: 'bavail' should reflect free clusters available to non-privileged processes.
+            // See: https://github.com/uutils/coreutils/issues/7461
+            bavail: number_of_free_clusters as u64,
             bavail_top_bit_set: ((bytes_per_sector as u64) & (1u64.rotate_right(1))) != 0,
             // Total number of file nodes (inodes) on the file system.
             files: 0, // Not available on windows
