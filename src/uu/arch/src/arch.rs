@@ -26,5 +26,6 @@ pub fn uu_app() -> Command {
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("arch-about"))
         .after_help(translate!("arch-after-help"))
+        .override_usage(translate!("arch-usage"))
         .infer_long_args(true)
 }

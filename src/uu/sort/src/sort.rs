@@ -1752,8 +1752,15 @@ fn default_merge_batch_size() -> usize {
     }
 }
 
+#[cfg(not(unix))]
 fn locale_failed_to_set() -> bool {
     matches!(env::var("LC_ALL").ok().as_deref(), Some("missing"))
+}
+
+#[cfg(unix)]
+fn locale_failed_to_set() -> bool {
+    use nix::libc;
+    unsafe { libc::setlocale(libc::LC_COLLATE, c"".as_ptr()).is_null() }
 }
 
 fn key_zero_width(selector: &FieldSelector) -> bool {

@@ -67,8 +67,6 @@ jobs:
     name: Style/lint
     runs-on: ${{ matrix.job.os }}
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
       CARGO_INCREMENTAL: 0
     strategy:
       fail-fast: false
@@ -87,7 +85,14 @@ jobs:
         components: clippy
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
+      id: sccache-setup
       uses: mozilla-actions/sccache-action@v0.0.9
+      continue-on-error: true
+    - name: Export sccache
+      if: steps.sccache-setup.outcome == 'success'
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
     - name: Initialize workflow variables
       id: vars
       shell: bash

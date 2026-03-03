@@ -2414,6 +2414,126 @@ fn test_date_format_modifier_percent_escape() {
         .stdout_is("%Y=0000001999\n");
 }
 
+// Tests for format modifier edge cases (flags without explicit width)
+#[test]
+fn test_date_format_modifier_edge_cases() {
+    // Test cases: (date, format, expected_output, description)
+    let cases = vec![
+        // Underscore flag without explicit width (uses default width)
+        ("1999-06-01", "%_d", " 1", "%_d pads day to default width 2"),
+        (
+            "1999-06-15",
+            "%_m",
+            " 6",
+            "%_m pads month to default width 2",
+        ),
+        (
+            "1999-06-01 05:00:00",
+            "%_H",
+            " 5",
+            "%_H pads hour to default width 2",
+        ),
+        (
+            "1999-06-01",
+            "%_Y",
+            "1999",
+            "%_Y year already at default width 4",
+        ),
+        (
+            "1999-06-01",
+            "%_C",
+            "19",
+            "%_C century uses default width 2",
+        ),
+        ("2024-06-01", "%_C", "20", "%_C century for year 2024"),
+        (
+            "1999-01-01",
+            "%_j",
+            "  1",
+            "%_j pads day-of-year to default width 3",
+        ),
+        ("1999-04-10", "%_j", "100", "%_j day 100 already at width 3"),
+        // Zero flag on space-padded specifiers (overrides default padding)
+        (
+            "1999-06-05",
+            "%0e",
+            "05",
+            "%0e overrides space-padding with zero",
+        ),
+        (
+            "1999-06-01 05:00:00",
+            "%0k",
+            "05",
+            "%0k overrides space-padding with zero",
+        ),
+        (
+            "1999-06-01 05:00:00",
+            "%0l",
+            "05",
+            "%0l overrides space-padding with zero",
+        ),
+        // Zero flag without explicit width (uses default width)
+        (
+            "1999-06-01",
+            "%0d",
+            "01",
+            "%0d day with zero padding (default width 2)",
+        ),
+        (
+            "1999-06-15",
+            "%0m",
+            "06",
+            "%0m month with zero padding (default width 2)",
+        ),
+        (
+            "1999-01-01",
+            "%0j",
+            "001",
+            "%0j day-of-year with zero padding (default width 3)",
+        ),
+        // Space-padded specifiers default behavior (no modifier)
+        ("1999-06-05", "%e", " 5", "%e defaults to space padding"),
+        (
+            "1999-06-01 05:00:00",
+            "%k",
+            " 5",
+            "%k defaults to space padding",
+        ),
+        (
+            "1999-06-01 05:00:00",
+            "%l",
+            " 5",
+            "%l defaults to space padding",
+        ),
+        // Plus flag without explicit width
+        (
+            "1999-06-01",
+            "%+Y",
+            "1999",
+            "%+Y no sign for 4-digit year without width",
+        ),
+        (
+            "1999-06-01",
+            "%+6Y",
+            "+01999",
+            "%+6Y with explicit width adds sign",
+        ),
+    ];
+
+    for (date, format, expected, description) in cases {
+        let result = new_ucmd!()
+            .env("TZ", "UTC")
+            .args(&["-d", date, &format!("+{format}")])
+            .succeeds();
+        // stdout includes newline, expected is without newline
+        assert_eq!(
+            result.stdout_str(),
+            format!("{expected}\n"),
+            "{description}"
+        );
+    }
+}
+
 // Tests for --debug flag
 #[test]
 fn test_date_debug_basic() {

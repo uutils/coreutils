@@ -21,7 +21,7 @@ path = "src/stdbuf.rs"
 
 [dependencies]
 clap = { workspace = true }
-libstdbuf = { package = "uu_stdbuf_libstdbuf", version = "0.6.0", path = "src/libstdbuf" }
+libstdbuf = { package = "uu_stdbuf_libstdbuf", path = "src/libstdbuf" }
 tempfile = { workspace = true }
 uucore = { workspace = true, features = ["parser-size"] }
 thiserror = { workspace = true }

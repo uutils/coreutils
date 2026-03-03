@@ -341,12 +341,15 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
         PathCondition::Sticky => false,
         PathCondition::UserOwns => unimplemented!(),
         PathCondition::Fifo => false,
-        PathCondition::Readable => false, // TODO
+        PathCondition::Readable => true,
         PathCondition::Socket => false,
         PathCondition::NonEmpty => stat.len() > 0,
         PathCondition::UserIdFlag => false,
-        PathCondition::Writable => false,   // TODO
-        PathCondition::Executable => false, // TODO
+        PathCondition::Writable => !stat.permissions().readonly(),
+        PathCondition::Executable => std::path::Path::new(path)
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| matches!(e, "exe" | "bat" | "cmd" | "com")),
     }
 }
 

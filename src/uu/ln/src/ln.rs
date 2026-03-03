@@ -163,6 +163,7 @@ pub fn uu_app() -> Command {
                 .short('f')
                 .long(options::FORCE)
                 .help(translate!("ln-help-force"))
+                .overrides_with(options::INTERACTIVE)
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -170,6 +171,7 @@ pub fn uu_app() -> Command {
                 .short('i')
                 .long(options::INTERACTIVE)
                 .help(translate!("ln-help-interactive"))
+                .overrides_with(options::FORCE)
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -381,12 +383,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
     };
 
     if dst.is_symlink() || dst.exists() {
-        backup_path = match settings.backup {
-            BackupMode::None => None,
-            BackupMode::Simple => Some(simple_backup_path(dst, &settings.suffix)),
-            BackupMode::Numbered => Some(numbered_backup_path(dst)),
-            BackupMode::Existing => Some(existing_backup_path(dst, &settings.suffix)),
-        };
+        backup_path = backup_control::get_backup_path(settings.backup, dst, &settings.suffix);
         if settings.backup == BackupMode::Existing && !settings.symbolic {
             // when ln --backup f f, it should detect that it is the same file
             if paths_refer_to_same_file(src, dst, true) {
@@ -430,24 +427,20 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
     if settings.symbolic {
         symlink(&source, dst)?;
     } else {
-        // Cannot create hard link to a directory directly
-        // We can however create hard link to a symlink that points to a directory, so long as -L is not passed
-        if src.is_dir() && (!src.is_symlink() || settings.logical) {
-            return Err(LnError::FailedToCreateHardLinkDir(source.to_path_buf()).into());
-        }
-
         let p = if settings.logical && source.is_symlink() {
-            // if we want to have an hard link,
-            // source is a symlink and -L is passed
-            // we want to resolve the symlink to create the hardlink
             fs::canonicalize(&source)
                 .map_err_context(|| translate!("ln-failed-to-access", "file" => source.quote()))?
         } else {
             source.to_path_buf()
         };
-        fs::hard_link(p, dst).map_err_context(|| {
-            translate!("ln-failed-to-create-hard-link", "source" => source.quote(), "dest" => dst.quote())
-        })?;
+        if let Err(e) = fs::hard_link(&p, dst) {
+            if p.is_dir() {
+                return Err(LnError::FailedToCreateHardLinkDir(source.to_path_buf()).into());
+            }
+            return Err(e).map_err_context(|| {
+                translate!("ln-failed-to-create-hard-link", "source" => source.quote(), "dest" => dst.quote())
+            });
+        }
     }
 
     if settings.verbose {
@@ -463,31 +456,6 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
         }
     }
     Ok(())
-}
-
-fn simple_backup_path(path: &Path, suffix: &OsString) -> PathBuf {
-    let mut file_name = path.file_name().unwrap_or_default().to_os_string();
-    file_name.push(suffix);
-    path.with_file_name(file_name)
-}
-
-fn numbered_backup_path(path: &Path) -> PathBuf {
-    let mut i: u64 = 1;
-    loop {
-        let new_path = simple_backup_path(path, &OsString::from(format!(".~{i}~")));
-        if !new_path.exists() {
-            return new_path;
-        }
-        i += 1;
-    }
-}
-
-fn existing_backup_path(path: &Path, suffix: &OsString) -> PathBuf {
-    let test_path = simple_backup_path(path, &OsString::from(".~1~"));
-    if test_path.exists() {
-        return numbered_backup_path(path);
-    }
-    simple_backup_path(path, suffix)
 }
 
 #[cfg(windows)]

@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore axxbxx bxxaxx axxx axxxx xxaxx xxax xxxxa axyz zyax zyxa bbaaa aaabc bcdddd cddddaaabc xyzabc abcxyzabc nbbaaa
+// spell-checker:ignore axxbxx bxxaxx axxx axxxx xxaxx xxax xxxxa axyz zyax zyxa bbaaa aaabc bcdddd cddddaaabc xyzabc abcxyzabc nbbaaa EISDIR
 #[cfg(target_os = "linux")]
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -83,18 +83,23 @@ fn test_invalid_input() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    scene
-        .ucmd()
-        .arg("b")
-        .fails()
-        .stderr_contains("failed to open 'b' for reading: No such file or directory");
+    #[cfg(not(windows))]
+    let not_found_err = "failed to open 'b' for reading: No such file or directory";
+    #[cfg(windows)]
+    let not_found_err =
+        "failed to open 'b' for reading: The system cannot find the file specified.";
+
+    scene.ucmd().arg("b").fails().stderr_contains(not_found_err);
 
     at.mkdir("a");
-    scene
-        .ucmd()
-        .arg("a")
-        .fails()
-        .stderr_contains("a: read error: Is a directory");
+    // On Unix, File::open succeeds on directories but read_to_end fails with EISDIR.
+    // On Windows, File::open on a directory fails with "Access is denied".
+    #[cfg(not(windows))]
+    let dir_err = "a: read error: Is a directory";
+    #[cfg(windows)]
+    let dir_err = "failed to open 'a' for reading: Access is denied";
+
+    scene.ucmd().arg("a").fails().stderr_contains(dir_err);
 }
 
 #[test]
@@ -387,7 +392,7 @@ fn test_failed_write_is_reported() {
         .pipe_in("hello")
         .set_stdout(std::fs::File::create("/dev/full").unwrap())
         .fails()
-        .stderr_is("tac: failed to write to stdout: No space left on device (os error 28)\n");
+        .stderr_is("tac: failed to write to stdout: No space left on device\n");
 }
 
 #[cfg(target_os = "linux")]
