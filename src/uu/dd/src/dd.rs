@@ -566,8 +566,9 @@ impl Input<'_> {
                 rlen if rlen < target_len => {
                     bytes_total += rlen;
                     reads_partial += 1;
-                    let padding = vec![pad; target_len - rlen];
-                    buf.splice(base_idx + rlen..next_blk, padding.into_iter());
+                    buf[base_idx + rlen..next_blk].fill(pad);
+                    //let padding = vec![pad; target_len - rlen];
+                    //buf.splice(base_idx + rlen..next_blk, padding.into_iter());
                 }
                 rlen => {
                     bytes_total += rlen;
