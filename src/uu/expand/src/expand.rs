@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
@@ -479,29 +479,30 @@ fn expand_file(
     file: &OsString,
     output: &mut BufWriter<std::io::Stdout>,
     options: &Options,
-    buf: &mut [u8],
 ) -> UResult<()> {
     let mut input = open(file)?;
     let ts = options.tabstops.as_ref();
     let mut col = 0;
     loop {
-        match input.read(buf) {
-            Ok(0) => break,
-            Ok(n) => {
-                expand_buf(&buf[..n], output, ts, options, &mut col)
-                    .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
-            }
-            Err(e) => return Err(e.map_err_context(|| file.maybe_quote().to_string())),
+        let buf = input
+            .fill_buf()
+            .map_err_context(|| file.maybe_quote().to_string())?;
+        let buf_len = buf.len();
+        if buf_len == 0 {
+            break;
         }
+        expand_buf(buf, output, ts, options, &mut col)
+            .map_err_context(|| translate!("expand-error-failed-to-write-output"))?;
+        input.consume(buf_len);
     }
     Ok(())
 }
 
 fn expand(options: &Options) -> UResult<()> {
     let mut output = BufWriter::new(stdout());
-    let mut buf = [0u8; 128];
+
     for file in &options.files {
-        if let Err(e) = expand_file(file, &mut output, options, &mut buf) {
+        if let Err(e) = expand_file(file, &mut output, options) {
             show!(e);
             set_exit_code(1);
         }
