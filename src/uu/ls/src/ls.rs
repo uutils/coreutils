@@ -2587,7 +2587,7 @@ fn display_dir_entry_size(
     }
 }
 
-// A simple, performant, ExtendPad trait to add a string to a Vec<u8>, padding with spaces
+// A simple, performant, ExtendPad trait to append a string to a Vec<u8> or String, padding with spaces
 // on the left or right, without making additional copies, or using formatting functions.
 trait ExtendPad {
     fn extend_pad_left(&mut self, string: &str, count: usize);
@@ -2606,6 +2606,22 @@ impl ExtendPad for Vec<u8> {
         self.extend(string.as_bytes());
         if string.len() < count {
             self.extend(iter::repeat_n(b' ', count - string.len()));
+        }
+    }
+}
+
+impl ExtendPad for String {
+    fn extend_pad_left(&mut self, string: &str, count: usize) {
+        if string.len() < count {
+            self.extend(iter::repeat_n(' ', count - string.len()));
+        }
+        self.push_str(string);
+    }
+
+    fn extend_pad_right(&mut self, string: &str, count: usize) {
+        self.push_str(string);
+        if string.len() < count {
+            self.extend(iter::repeat_n(' ', count - string.len()));
         }
     }
 }
@@ -2648,26 +2664,28 @@ fn display_additional_leading_info(
     {
         if config.inode {
             let i = if let Some(md) = item.metadata() {
-                get_inode(md)
+                &get_inode(md)
             } else {
-                "?".to_owned()
+                "?"
             };
-            write!(result, "{} ", pad_left(&i, padding.inode)).unwrap();
+            result.extend_pad_left(i, padding.inode);
+            result.push(' ');
         }
     }
 
     if config.alloc_size {
         let s = if let Some(md) = item.metadata() {
-            display_size(get_block_size(md, config), config)
+            &display_size(get_block_size(md, config), config)
         } else {
-            "?".to_owned()
+            "?"
         };
         // extra space is insert to align the sizes, as needed for all formats, except for the comma format.
         if config.format == Format::Commas {
-            write!(result, "{s} ").unwrap();
+            result.push_str(s);
         } else {
-            write!(result, "{} ", pad_left(&s, padding.block_size)).unwrap();
+            result.extend_pad_left(s, padding.block_size);
         }
+        result.push(' ');
     }
 
     result
@@ -3406,7 +3424,7 @@ fn display_item_name(
         };
 
         if let Some(c) = char_opt {
-            name.push(OsStr::new(&c.to_string()));
+            name.write_char(c).unwrap();
         }
     }
 
@@ -3497,14 +3515,13 @@ fn display_item_name(
     // to get correct alignment from later calls to`display_grid()`.
     if config.context {
         if let Some(pad_count) = prefix_context {
-            let security_context = if matches!(config.format, Format::Commas) {
-                path.security_context(config).to_string()
-            } else {
-                pad_left(path.security_context(config), pad_count)
-            };
-
             let old_name = name;
-            name = format!("{security_context} ").into();
+            name = if matches!(config.format, Format::Commas) {
+                path.security_context(config).into()
+            } else {
+                pad_left(path.security_context(config), pad_count).into()
+            };
+            name.push(" ");
             name.push(old_name);
         }
     }
@@ -3530,17 +3547,15 @@ fn create_hyperlink(name: &OsStr, path: &PathData) -> OsString {
     #[cfg(target_os = "windows")]
     let unencoded_bytes: std::collections::HashSet<u8> = "_-.~/\\:".bytes().collect();
 
-    // Encode at byte level to properly handle UTF-8 sequences and preserve invalid UTF-8
-    let full_encoded_path: String = absolute_path_bytes
-        .iter()
-        .map(|&b: &u8| {
-            if b.is_ascii_alphanumeric() || unencoded_bytes.contains(&b) {
-                (b as char).to_string()
-            } else {
-                format!("%{b:02x}")
-            }
-        })
-        .collect();
+    // percentage encoding of path
+    let mut full_encoded_path = String::with_capacity(absolute_path_bytes.len() * 2);
+    for &b in absolute_path_bytes.iter() {
+        if b.is_ascii_alphanumeric() || unencoded_bytes.contains(&b) {
+            full_encoded_path.push(b as char);
+        } else {
+            let _ = write!(&mut full_encoded_path, "%{b:02x}");
+        }
+    }
 
     // OSC 8 hyperlink format: \x1b]8;;URL\x1b\\TEXT\x1b]8;;\x1b\\
     // \x1b = ESC, \x1b\\ = ESC backslash
