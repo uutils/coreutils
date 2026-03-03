@@ -7,7 +7,7 @@
 // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/sort.html
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 
-// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef GETFD localeconv
+// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef GETFD localeconv foldhash
 
 mod buffer_hint;
 mod check;
@@ -18,13 +18,14 @@ mod merge;
 mod numeric_str_cmp;
 mod tmp_dir;
 
-use ahash::AHashMap;
 use bigdecimal::BigDecimal;
 use chunks::LineData;
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
+use foldhash::fast::FoldHasher;
+use foldhash::{HashMap, SharedSeed};
 use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
 use rand::{Rng, rng};
 use rayon::prelude::*;
@@ -32,7 +33,7 @@ use std::cmp::Ordering;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{File, OpenOptions};
-use std::hash::{BuildHasher, Hash, Hasher};
+use std::hash::{Hash, Hasher};
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::{IntErrorKind, NonZero};
 use std::ops::Range;
@@ -1680,7 +1681,7 @@ fn index_legacy_warnings(processed_args: &[OsString], legacy_warnings: &mut [Leg
         return;
     }
 
-    let mut index_by_arg = AHashMap::default();
+    let mut index_by_arg = HashMap::default();
     for (warning_idx, warning) in legacy_warnings.iter().enumerate() {
         index_by_arg.insert(warning.arg_index, warning_idx);
     }
@@ -2925,7 +2926,7 @@ fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
     let mut buf = [0u8; BUF_LEN];
     let mut total = 0usize;
     // freeze seed for --random-source
-    let mut hasher = ahash::RandomState::with_seeds(1, 1, 1, 1).build_hasher();
+    let mut hasher = FoldHasher::with_seed(1, SharedSeed::global_fixed());
 
     loop {
         let n = reader
@@ -2951,7 +2952,7 @@ fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
 
     let first = hasher.finish();
     // freeze seed for --random-source
-    let mut second_hasher = ahash::RandomState::with_seeds(2, 2, 2, 2).build_hasher();
+    let mut second_hasher = FoldHasher::with_seed(2, SharedSeed::global_fixed());
     second_hasher.write(RANDOM_SOURCE_TAG);
     second_hasher.write_u64(first);
     let second = second_hasher.finish();
@@ -2964,7 +2965,9 @@ fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
 
 fn get_hash<T: Hash>(t: &T) -> u64 {
     // Is reproducibility of get_hash itself needed for --random-source ?
-    ahash::RandomState::with_seeds(0, 0, 0, 0).hash_one(t)
+    let mut s = FoldHasher::with_seed(0, SharedSeed::global_fixed());
+    t.hash(&mut s);
+    s.finish()
 }
 
 fn random_shuffle(a: &[u8], b: &[u8], salt: &[u8]) -> Ordering {
