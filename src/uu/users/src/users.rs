@@ -34,7 +34,7 @@ fn get_long_usage() -> String {
     translate!("users-long-usage", "default_path" => default_path)
 }
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 

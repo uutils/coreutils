@@ -22,7 +22,7 @@ fn get_userlogin() -> Option<String> {
     }
 }
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let _ = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 

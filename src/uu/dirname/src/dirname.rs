@@ -99,7 +99,7 @@ fn dirname_string_manipulation(path_bytes: &[u8]) -> Cow<'_, [u8]> {
     Cow::Borrowed(b".")
 }
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 

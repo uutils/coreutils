@@ -36,7 +36,7 @@ fn get_runlevel_help() -> String {
     return translate!("who-help-runlevel-non-linux");
 }
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 use platform::uumain;
 
 pub fn uu_app() -> Command {

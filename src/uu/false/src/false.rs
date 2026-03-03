@@ -8,7 +8,7 @@ use uucore::error::{UResult, set_exit_code};
 
 use uucore::translate;
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 // TODO: modify proc macro to allow no-result uumain
 #[expect(clippy::unnecessary_wraps, reason = "proc macro requires UResult")]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
