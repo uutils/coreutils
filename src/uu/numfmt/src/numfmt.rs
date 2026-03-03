@@ -7,9 +7,9 @@ use crate::errors::NumfmtError;
 use crate::format::{write_formatted_with_delimiter, write_formatted_with_whitespace};
 use crate::options::{
     DEBUG, DELIMITER, FIELD, FIELD_DEFAULT, FORMAT, FROM, FROM_DEFAULT, FROM_UNIT,
-    FROM_UNIT_DEFAULT, FormatOptions, HEADER, HEADER_DEFAULT, INVALID, InvalidModes, NUMBER,
-    NumfmtOptions, PADDING, ROUND, RoundMethod, SUFFIX, TO, TO_DEFAULT, TO_UNIT, TO_UNIT_DEFAULT,
-    TransformOptions, UNIT_SEPARATOR, ZERO_TERMINATED,
+    FROM_UNIT_DEFAULT, FormatOptions, GROUPING, HEADER, HEADER_DEFAULT, INVALID, InvalidModes,
+    NUMBER, NumfmtOptions, PADDING, ROUND, RoundMethod, SUFFIX, TO, TO_DEFAULT, TO_UNIT,
+    TO_UNIT_DEFAULT, TransformOptions, UNIT_SEPARATOR, ZERO_TERMINATED,
 };
 use crate::units::{Result, Unit};
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, parser::ValueSource};
@@ -252,10 +252,20 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         Range::from_list(fields)?
     };
 
-    let format = match args.get_one::<String>(FORMAT) {
+    let mut format = match args.get_one::<String>(FORMAT) {
         Some(s) => s.parse()?,
         None => FormatOptions::default(),
     };
+
+    let grouping_flag = args.get_flag(GROUPING);
+    if grouping_flag && args.value_source(FORMAT) == Some(ValueSource::CommandLine) {
+        return Err(translate!(
+            "numfmt-error-grouping-cannot-be-combined-with-format"
+        ));
+    }
+    if grouping_flag {
+        format.grouping = true;
+    }
 
     if format.grouping && to != Unit::None {
         return Err(translate!(
@@ -411,6 +421,12 @@ pub fn uu_app() -> Command {
                 .help(translate!("numfmt-help-format"))
                 .value_name("FORMAT")
                 .allow_hyphen_values(true),
+        )
+        .arg(
+            Arg::new(GROUPING)
+                .long(GROUPING)
+                .help(translate!("numfmt-help-grouping"))
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(FROM)
