@@ -1,4 +1,4 @@
-# spell-checker:ignore ahash bigdecimal
+# spell-checker:ignore bigdecimal foldhash
 
 [package]
 name = "uu_sort"
@@ -44,7 +44,7 @@ uucore = { workspace = true, features = [
   "i18n-collator",
 ] }
 fluent = { workspace = true }
-ahash = { workspace = true }
+foldhash = { workspace = true }
 
 [target.'cfg(not(target_os = "redox"))'.dependencies]
 ctrlc = { workspace = true }
