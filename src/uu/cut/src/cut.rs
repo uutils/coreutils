@@ -673,19 +673,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         },
     };
 
-    let files: Vec<OsString> = matches
+    let mode = mode_parse.map_err(|e| USimpleError::new(1, e))?;
+
+    let files = matches
         .get_many::<OsString>(options::FILE)
         .unwrap_or_default()
         .cloned()
         .collect();
 
-    match mode_parse {
-        Ok(mode) => {
-            cut_files(files, &mode);
-            Ok(())
-        }
-        Err(e) => Err(USimpleError::new(1, e)),
-    }
+    cut_files(files, &mode);
+
+    Ok(())
 }
 
 pub fn uu_app() -> Command {
