@@ -13,15 +13,6 @@ use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
 use uucore::translate;
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
-pub const _SC_NPROCESSORS_CONF: libc::c_int = 83;
-#[cfg(target_vendor = "apple")]
-pub const _SC_NPROCESSORS_CONF: libc::c_int = libc::_SC_NPROCESSORS_CONF;
-#[cfg(target_os = "freebsd")]
-pub const _SC_NPROCESSORS_CONF: libc::c_int = 57;
-#[cfg(target_os = "netbsd")]
-pub const _SC_NPROCESSORS_CONF: libc::c_int = 1001;
-
 static OPT_ALL: &str = "all";
 static OPT_IGNORE: &str = "ignore";
 
@@ -122,7 +113,7 @@ pub fn uu_app() -> Command {
     target_os = "netbsd"
 ))]
 fn num_cpus_all() -> usize {
-    let nprocs = unsafe { libc::sysconf(_SC_NPROCESSORS_CONF) };
+    let nprocs = unsafe { libc::sysconf(libc::_SC_NPROCESSORS_CONF) };
     if nprocs == 1 {
         // In some situation, /proc and /sys are not mounted, and sysconf returns 1.
         // However, we want to guarantee that `nproc --all` >= `nproc`.
