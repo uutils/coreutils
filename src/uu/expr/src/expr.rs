@@ -99,7 +99,7 @@ pub fn uu_app() -> Command {
         )
 }
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // For expr utility we do not want getopts.
     // The following usage should work without escaping hyphens: `expr -15 = 1 + 2 \* \( 3 - -4 \)`
