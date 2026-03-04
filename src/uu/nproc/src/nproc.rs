@@ -106,32 +106,19 @@ pub fn uu_app() -> Command {
         )
 }
 
-#[cfg(any(
-    target_os = "linux",
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "netbsd"
-))]
+#[cfg(unix)]
 fn num_cpus_all() -> usize {
-    let nprocs = unsafe { libc::sysconf(libc::_SC_NPROCESSORS_CONF) };
-    if nprocs == 1 {
-        // In some situation, /proc and /sys are not mounted, and sysconf returns 1.
-        // However, we want to guarantee that `nproc --all` >= `nproc`.
-        available_parallelism()
-    } else if nprocs > 0 {
-        nprocs as usize
-    } else {
-        1
-    }
+    // In some situation, /proc and /sys are not mounted, and sysconf returns 1.
+    // However, we want to guarantee that `nproc --all` >= `nproc`.
+    unsafe { libc::sysconf(libc::_SC_NPROCESSORS_CONF) }
+        .try_into()
+        .ok()
+        .filter(|&n: &isize| n > 1)
+        .map_or_else(available_parallelism, |n| n as usize)
 }
 
 // Other platforms (e.g., windows), available_parallelism() directly.
-#[cfg(not(any(
-    target_os = "linux",
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "netbsd"
-)))]
+#[cfg(not(unix))]
 fn num_cpus_all() -> usize {
     available_parallelism()
 }
@@ -139,8 +126,7 @@ fn num_cpus_all() -> usize {
 /// In some cases, [`thread::available_parallelism`]() may return an Err
 /// In this case, we will return 1 (like GNU)
 fn available_parallelism() -> usize {
-    match thread::available_parallelism() {
-        Ok(n) => n.get(),
-        Err(_) => 1,
-    }
+    thread::available_parallelism()
+        .map(std::num::NonZeroUsize::get)
+        .unwrap_or(1)
 }
