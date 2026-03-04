@@ -16,6 +16,8 @@ use jiff::fmt::strtime;
 use jiff::tz::TimeZone;
 use jiff::{Timestamp, ToSpan, Zoned};
 #[cfg(unix)]
+use nix::libc::O_NONBLOCK;
+#[cfg(unix)]
 use nix::sys::stat::futimens;
 #[cfg(unix)]
 use nix::sys::time::TimeSpec;
@@ -612,7 +614,7 @@ fn try_futimens_via_write_fd(path: &Path, atime: FileTime, mtime: FileTime) -> s
     let file = OpenOptions::new()
         .write(true)
         // Avoid blocking on special files (e.g. FIFOs) before we can inspect metadata.
-        .custom_flags(libc::O_NONBLOCK)
+        .custom_flags(O_NONBLOCK)
         .open(path)?;
 
     let atime_sec = atime.unix_seconds();
@@ -620,8 +622,14 @@ fn try_futimens_via_write_fd(path: &Path, atime: FileTime, mtime: FileTime) -> s
     let mtime_sec = mtime.unix_seconds();
     let mtime_nsec = i64::from(mtime.nanoseconds());
 
-    let atime_spec = TimeSpec::new(atime_sec, atime_nsec);
-    let mtime_spec = TimeSpec::new(mtime_sec, mtime_nsec);
+    let atime_spec = TimeSpec::new(
+        atime_sec.try_into().unwrap(),
+        atime_nsec.try_into().unwrap(),
+    );
+    let mtime_spec = TimeSpec::new(
+        mtime_sec.try_into().unwrap(),
+        mtime_nsec.try_into().unwrap(),
+    );
 
     futimens(&file, &atime_spec, &mtime_spec).map_err(Error::from)
 }
