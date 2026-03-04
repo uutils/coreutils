@@ -28,7 +28,8 @@ fn write_factors_str(
     w: &mut io::BufWriter<impl Write>,
     print_exponents: bool,
 ) -> UResult<()> {
-    let rx = num_str.trim().parse::<BigUint>();
+    let trimmed = num_str.trim_matches(|c: char| c.is_whitespace() || c == '\0');
+    let rx = trimmed.parse::<BigUint>();
     let Ok(x) = rx else {
         // return Ok(). it's non-fatal and we should try the next number.
         show_warning!("{}: {}", num_str.maybe_quote(), rx.unwrap_err());
