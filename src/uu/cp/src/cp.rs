@@ -16,7 +16,7 @@ use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::{fmt, io};
 #[cfg(all(unix, not(target_os = "android")))]
-use uucore::fsxattr::{copy_xattrs, copy_xattrs_skip_selinux};
+use uucore::fsxattr::{copy_xattrs_fd, copy_xattrs_skip_selinux};
 use uucore::translate;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, value_parser};
@@ -1713,6 +1713,8 @@ pub(crate) fn set_selinux_context(path: &Path, context: Option<&String>) -> Copy
 /// or if xattr copying fails.
 #[cfg(all(unix, not(target_os = "android")))]
 fn copy_extended_attrs(source: &Path, dest: &Path, skip_selinux: bool) -> CopyResult<()> {
+    use std::fs::File;
+    use uucore::fsxattr::copy_xattrs;
     let metadata = fs::symlink_metadata(dest)?;
 
     // Check if the destination file is currently read-only for the user.
@@ -1732,6 +1734,13 @@ fn copy_extended_attrs(source: &Path, dest: &Path, skip_selinux: bool) -> CopyRe
         // When -Z is used, skip copying security.selinux xattr so that
         // the default context can be set instead of preserving from source
         copy_xattrs_skip_selinux(source, dest)
+    } else if metadata.is_file() {
+        // Use file descriptor-based operations for regular files to avoid TOCTOU races.
+        // Directories cannot be opened with write mode for xattr operations
+        // Symlinks (especially dangling ones) cannot be opened via File::open
+        let source_file = File::open(source)?;
+        let dest_file = OpenOptions::new().write(true).open(dest)?;
+        copy_xattrs_fd(&source_file, &dest_file)
     } else {
         copy_xattrs(source, dest)
     };
