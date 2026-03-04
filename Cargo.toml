@@ -168,6 +168,61 @@ feat_Tier1 = [
   "whoami",
 ]
 ## (primary platforms) feature sets
+# "feat_wasm" == set of utilities which can be built for wasm target
+# We don't need to support all of wasm targets. So the ambiguous name is used at here
+# It is bit complex to deduplicate with other lists
+feat_wasm = [
+  "basename",
+  "base32",
+  "base64",
+  "basenc",
+  "cut",
+  "date",
+  "dircolors",
+  "dirname",
+  "echo",
+  "expand",
+  "factor",
+  "false",
+  "fmt",
+  "fold",
+  "join",
+  "link",
+  "nl",
+  "numfmt",
+  "od",
+  "paste",
+  "pr",
+  "printenv",
+  "printf",
+  "ptx",
+  "pwd",
+  "seq",
+  "shred",
+  "shuf",
+  "sleep",
+  "sum",
+  "tee",
+  "true",
+  "truncate",
+  "unexpand",
+  "uniq",
+  "unlink",
+  "wc",
+  "yes",
+  # cksum family
+  "cksum",
+  "b2sum",
+  "md5sum",
+  "sha1sum",
+  "sha224sum",
+  "sha256sum",
+  "sha384sum",
+  "sha512sum",
+  # useless?
+  "arch",
+  "uname",
+]
 # "feat_os_macos" == set of utilities which can be built/run on the MacOS platform
 feat_os_macos = [
   "feat_os_unix", ## == a modern/usual *nix platform
