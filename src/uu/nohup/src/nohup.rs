@@ -150,12 +150,12 @@ fn find_stdout() -> UResult<File> {
             Ok(t)
         }
         Err(e1) => {
-            let Some(home) = env::var_os("HOME") else {
+            let Ok(home) = env::var("HOME") else {
                 return Err(NohupError::OpenFailed(internal_failure_code, e1).into());
             };
             let mut homeout = PathBuf::from(home);
             homeout.push(NOHUP_OUT);
-            let homeout_str = homeout.to_string_lossy();
+            let homeout_str = homeout.to_str().unwrap();
             match OpenOptions::new().create(true).append(true).open(&homeout) {
                 Ok(t) => {
                     show_error!(
