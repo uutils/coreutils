@@ -9,9 +9,11 @@ use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::io::BufRead;
 use std::io::{self, Write, stdin, stdout};
+use std::iter::once;
 use std::str::FromStr;
 
 use clap::{Arg, ArgAction, Command};
+use memchr::memchr3_iter;
 use num_bigint::BigUint;
 use num_traits::FromPrimitive;
 use uucore::display::Quotable;
@@ -26,7 +28,10 @@ mod options {
 }
 
 const LF: u8 = b'\n';
+const CR: u8 = b'\r';
 const DELIM_SPACE: u8 = b' ';
+const DELIM_TAB: u8 = b'\t';
+const DELIM_NULL: u8 = b'\0';
 
 fn write_factors_str(
     num_str: &[u8],
@@ -217,8 +222,24 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         for line in lines {
             match line {
                 Ok(line) => {
-                    for number in line.split(|c| (*c as char).is_whitespace()) {
-                        write_factors_str(number, &mut w, print_exponents)?;
+                    // Ignore CR on Windows if present; disabled everywhere else for GNU compatibility.
+                    let le = if cfg!(windows) && line.last() == Some(&CR) {
+                        line.len() - 1
+                    } else {
+                        line.len()
+                    };
+
+                    // GNU factor treats numbers optionally as null-terminated due to its
+                    // implementation details. Here we also split the line with nulls and
+                    // ignore those chunks until another delimiter is found.
+                    let (mut display, mut prev) = (true, 0);
+                    for i in memchr3_iter(DELIM_SPACE, DELIM_TAB, DELIM_NULL, &line).chain(once(le))
+                    {
+                        let has_null = line.get(i) == Some(&DELIM_NULL);
+                        if display && (prev != i || has_null) {
+                            write_factors_str(&line[prev..i], &mut w, print_exponents)?;
+                        }
+                        (display, prev) = (!has_null, i + 1);
                     }
                 }
                 Err(e) => {

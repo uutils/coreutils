@@ -22,6 +22,7 @@ num-traits = { workspace = true } # used in src/numerics.rs, which is included b
 clap = { workspace = true }
 num-traits = { workspace = true }
 uucore = { workspace = true, features = ["quoting-style"] }
+memchr = { workspace = true }
 num-bigint = { workspace = true }
 num-prime = { workspace = true }
 fluent = { workspace = true }
