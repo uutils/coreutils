@@ -568,19 +568,16 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    // GNU's `cut` supports `-d=` to set the delimiter to `=`.
+    // GNU `cut` supports `-d=` to set the delimiter to `=`.
     // Clap parsing is limited in this situation, see:
     // https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242
-    let args: Vec<OsString> = args
-        .into_iter()
-        .map(|x| {
-            if x == "-d=" {
-                "--delimiter==".into()
-            } else {
-                x
-            }
-        })
-        .collect();
+    let args = args.into_iter().map(|x| {
+        if x == "-d=" {
+            "--delimiter==".into()
+        } else {
+            x
+        }
+    });
 
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
@@ -676,19 +673,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         },
     };
 
-    let files: Vec<OsString> = matches
+    let mode = mode_parse.map_err(|e| USimpleError::new(1, e))?;
+
+    let files = matches
         .get_many::<OsString>(options::FILE)
         .unwrap_or_default()
         .cloned()
         .collect();
 
-    match mode_parse {
-        Ok(mode) => {
-            cut_files(files, &mode);
-            Ok(())
-        }
-        Err(e) => Err(USimpleError::new(1, e)),
-    }
+    cut_files(files, &mode);
+
+    Ok(())
 }
 
 pub fn uu_app() -> Command {
