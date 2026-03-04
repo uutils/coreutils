@@ -11,7 +11,7 @@ use uucore::translate;
 
 mod platform;
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     uucore::clap_localization::handle_clap_result(uu_app(), args)?;
     let username = whoami()?;
@@ -29,6 +29,6 @@ pub fn uu_app() -> Command {
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("whoami-about"))
-        .override_usage(uucore::util_name())
+        .override_usage(translate!("whoami-usage"))
         .infer_long_args(true)
 }

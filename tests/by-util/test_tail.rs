@@ -575,6 +575,31 @@ fn test_follow_non_utf8_bytes() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_permission_denied_is_not_reported_as_not_found() {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+
+    if unsafe { libc::geteuid() } == 0 {
+        return;
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("noexec");
+    at.touch("noexec/file");
+
+    let dir = at.plus("noexec");
+    fs::set_permissions(&dir, fs::Permissions::from_mode(0o000)).unwrap();
+
+    ucmd.arg("noexec/file")
+        .fails()
+        .stderr_contains("Permission denied");
+
+    fs::set_permissions(&dir, fs::Permissions::from_mode(0o700)).unwrap();
+}
+
+#[test]
 #[cfg(not(target_os = "windows"))] // FIXME: test times out
 fn test_follow_multiple() {
     let (at, mut ucmd) = at_and_ucmd!();

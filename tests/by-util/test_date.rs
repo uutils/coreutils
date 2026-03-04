@@ -481,11 +481,9 @@ fn test_date_set_mac_unavailable() {
         .arg("2020-03-11 21:45:00+08:00")
         .fails();
     result.no_stdout();
-    assert!(
-        result
-            .stderr_str()
-            .starts_with("date: setting the date is not supported by macOS")
-    );
+    assert!(result
+        .stderr_str()
+        .starts_with("date: setting the date is not supported by macOS"));
 }
 
 #[test]
@@ -1116,6 +1114,63 @@ fn test_date_tz_abbreviation_dst_handling() {
         .arg("+%z")
         .succeeds()
         .no_stderr();
+}
+
+#[test]
+fn test_date_tz_abbreviation_fixed_offset_outside_season() {
+    // Abbreviations encode a fixed UTC offset regardless of the date.
+    // Using a DST abbreviation outside its season should still use the
+    // fixed offset the abbreviation implies, not the zone's current offset.
+
+    // EDT (UTC-4) used in winter (New York observes EST in January)
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-u")
+        .arg("-d")
+        .arg("2026-01-15 10:00 EDT")
+        .arg("+%F %T %Z")
+        .succeeds()
+        .stdout_is("2026-01-15 14:00:00 UTC\n");
+
+    // PST (UTC-8) used in summer (Los Angeles observes PDT in June)
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-u")
+        .arg("-d")
+        .arg("2026-06-15 10:00 PST")
+        .arg("+%F %T %Z")
+        .succeeds()
+        .stdout_is("2026-06-15 18:00:00 UTC\n");
+
+    // PDT (UTC-7) used in winter
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-u")
+        .arg("-d")
+        .arg("2026-01-15 10:00 PDT")
+        .arg("+%F %T %Z")
+        .succeeds()
+        .stdout_is("2026-01-15 17:00:00 UTC\n");
+
+    // CDT (UTC-5) used in winter
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-u")
+        .arg("-d")
+        .arg("2026-01-15 10:00 CDT")
+        .arg("+%F %T %Z")
+        .succeeds()
+        .stdout_is("2026-01-15 15:00:00 UTC\n");
+
+    // MDT (UTC-6) used in winter
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-u")
+        .arg("-d")
+        .arg("2026-01-15 10:00 MDT")
+        .arg("+%F %T %Z")
+        .succeeds()
+        .stdout_is("2026-01-15 16:00:00 UTC\n");
 }
 
 #[test]
@@ -2361,12 +2416,127 @@ fn test_date_format_modifier_percent_escape() {
 fn test_date_format_modifier_huge_width_fails_without_abort() {
     // GNU date also exits with failure for extremely large width.
     // Assert exit code only to avoid coupling to implementation-specific error text.
-    let formats = [
-        format!("+%{}c", usize::MAX),
-        "+%184467440737095516160c".into(),
+    let format = format!("+%{}c", usize::MAX);
+    new_ucmd!().arg(&format).fails().code_is(1);
+}
+
+// Tests for format modifier edge cases (flags without explicit width)
+#[test]
+fn test_date_format_modifier_edge_cases() {
+    // Test cases: (date, format, expected_output, description)
+    let cases = vec![
+        // Underscore flag without explicit width (uses default width)
+        ("1999-06-01", "%_d", " 1", "%_d pads day to default width 2"),
+        (
+            "1999-06-15",
+            "%_m",
+            " 6",
+            "%_m pads month to default width 2",
+        ),
+        (
+            "1999-06-01 05:00:00",
+            "%_H",
+            " 5",
+            "%_H pads hour to default width 2",
+        ),
+        (
+            "1999-06-01",
+            "%_Y",
+            "1999",
+            "%_Y year already at default width 4",
+        ),
+        (
+            "1999-06-01",
+            "%_C",
+            "19",
+            "%_C century uses default width 2",
+        ),
+        ("2024-06-01", "%_C", "20", "%_C century for year 2024"),
+        (
+            "1999-01-01",
+            "%_j",
+            "  1",
+            "%_j pads day-of-year to default width 3",
+        ),
+        ("1999-04-10", "%_j", "100", "%_j day 100 already at width 3"),
+        // Zero flag on space-padded specifiers (overrides default padding)
+        (
+            "1999-06-05",
+            "%0e",
+            "05",
+            "%0e overrides space-padding with zero",
+        ),
+        (
+            "1999-06-01 05:00:00",
+            "%0k",
+            "05",
+            "%0k overrides space-padding with zero",
+        ),
+        (
+            "1999-06-01 05:00:00",
+            "%0l",
+            "05",
+            "%0l overrides space-padding with zero",
+        ),
+        // Zero flag without explicit width (uses default width)
+        (
+            "1999-06-01",
+            "%0d",
+            "01",
+            "%0d day with zero padding (default width 2)",
+        ),
+        (
+            "1999-06-15",
+            "%0m",
+            "06",
+            "%0m month with zero padding (default width 2)",
+        ),
+        (
+            "1999-01-01",
+            "%0j",
+            "001",
+            "%0j day-of-year with zero padding (default width 3)",
+        ),
+        // Space-padded specifiers default behavior (no modifier)
+        ("1999-06-05", "%e", " 5", "%e defaults to space padding"),
+        (
+            "1999-06-01 05:00:00",
+            "%k",
+            " 5",
+            "%k defaults to space padding",
+        ),
+        (
+            "1999-06-01 05:00:00",
+            "%l",
+            " 5",
+            "%l defaults to space padding",
+        ),
+        // Plus flag without explicit width
+        (
+            "1999-06-01",
+            "%+Y",
+            "1999",
+            "%+Y no sign for 4-digit year without width",
+        ),
+        (
+            "1999-06-01",
+            "%+6Y",
+            "+01999",
+            "%+6Y with explicit width adds sign",
+        ),
     ];
-    for format in formats {
-        new_ucmd!().arg(&format).fails().code_is(1);
+
+    for (date, format, expected, description) in cases {
+        let result = new_ucmd!()
+            .env("TZ", "UTC")
+            .args(&["-d", date, &format!("+{format}")])
+            .succeeds();
+        // stdout includes newline, expected is without newline
+        assert_eq!(
+            result.stdout_str(),
+            format!("{expected}\n"),
+            "{description}"
+        );
     }
 }
 

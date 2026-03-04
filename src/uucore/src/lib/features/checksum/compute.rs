@@ -115,19 +115,18 @@ impl OutputFormat {
     ///
     /// Since standalone utils can't use the Raw or Legacy output format, it is
     /// decided only using the --tag, --binary and --text arguments.
-    #[allow(clippy::unnecessary_wraps)]
-    pub fn from_standalone(text: bool, tag: bool) -> UResult<Self> {
+    pub fn from_standalone(text: bool, tag: bool) -> Self {
         if tag {
-            Ok(Self::Tagged(DigestFormat::Hexadecimal))
+            Self::Tagged(DigestFormat::Hexadecimal)
         } else {
-            Ok(Self::Untagged(
+            Self::Untagged(
                 DigestFormat::Hexadecimal,
                 if text {
                     ReadingMode::Text
                 } else {
                     ReadingMode::Binary
                 },
-            ))
+            )
         }
     }
 }

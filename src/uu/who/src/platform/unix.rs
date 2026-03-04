@@ -161,12 +161,12 @@ fn idle_string<'a>(when: i64, boottime: i64) -> Cow<'a, str> {
 }
 
 fn time_string(ut: &UtmpxRecord) -> String {
-    let lc_time = std::env::var("LC_ALL")
-        .or_else(|_| std::env::var("LC_TIME"))
-        .or_else(|_| std::env::var("LANG"))
-        .unwrap_or_default();
-
-    let time_format: Vec<time::format_description::FormatItem> = if lc_time == "C" {
+    let time_format: Vec<time::format_description::FormatItem> = if ["LC_ALL", "LC_TIME", "LANG"]
+        .into_iter()
+        .find_map(std::env::var_os)
+        .as_deref()
+        == Some(std::ffi::OsStr::new("C"))
+    {
         // "%b %e %H:%M"
         time::format_description::parse("[month repr:short] [day padding:space] [hour]:[minute]")
             .unwrap()

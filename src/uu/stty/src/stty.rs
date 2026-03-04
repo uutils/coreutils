@@ -21,7 +21,11 @@ use crate::flags::COMBINATION_SETTINGS;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use nix::libc::{O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ, c_ushort};
 
-#[cfg(target_os = "linux")]
+#[cfg(all(
+    target_os = "linux",
+    not(target_arch = "powerpc"),
+    not(target_arch = "powerpc64")
+))]
 use nix::libc::{TCGETS2, termios2};
 
 use nix::sys::termios::{
@@ -626,20 +630,52 @@ fn print_terminal_size(
     // GNU linked against glibc 2.42 provides us baudrate 51 which panics cfgetospeed
     #[cfg(not(target_os = "linux"))]
     let speed = nix::sys::termios::cfgetospeed(termios);
-    #[cfg(target_os = "linux")]
+    #[cfg(all(
+        target_os = "linux",
+        not(target_arch = "powerpc"),
+        not(target_arch = "powerpc64")
+    ))]
     ioctl_read_bad!(tcgets2, TCGETS2, termios2);
-    #[cfg(target_os = "linux")]
+    #[cfg(all(
+        target_os = "linux",
+        not(target_arch = "powerpc"),
+        not(target_arch = "powerpc64")
+    ))]
     let speed = {
         let mut t2 = unsafe { std::mem::zeroed::<termios2>() };
         unsafe { tcgets2(opts.file.as_raw_fd(), &raw mut t2)? };
         t2.c_ospeed
     };
+    #[cfg(all(
+        target_os = "linux",
+        any(target_arch = "powerpc", target_arch = "powerpc64")
+    ))]
+    let speed = nix::sys::termios::cfgetospeed(termios);
 
     let mut printer = WrappedPrinter::new(window_size);
 
-    // BSDs and Linux use a u32 for the baud rate, so we can simply print it.
-    #[cfg(any(target_os = "linux", bsd))]
+    // BSDs and Linux (non-PowerPC) use a u32 for the baud rate, so we can simply print it.
+    #[cfg(all(
+        any(target_os = "linux", bsd),
+        not(target_arch = "powerpc"),
+        not(target_arch = "powerpc64")
+    ))]
     printer.print(&translate!("stty-output-speed", "speed" => speed));
+
+    // PowerPC uses BaudRate enum, need to convert to display format
+    #[cfg(all(
+        target_os = "linux",
+        any(target_arch = "powerpc", target_arch = "powerpc64")
+    ))]
+    {
+        // On PowerPC, find the corresponding baud rate string for display
+        let speed_str = BAUD_RATES
+            .iter()
+            .find(|(_, rate)| *rate == speed)
+            .map(|(text, _)| *text)
+            .unwrap_or("unknown");
+        printer.print(&translate!("stty-output-speed", "speed" => speed_str));
+    }
 
     // Other platforms need to use the baud rate enum, so printing the right value
     // becomes slightly more complicated.

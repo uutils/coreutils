@@ -36,7 +36,8 @@ use crate::{
 use crate::{Line, print_sorted};
 
 // Note: update `test_sort::test_start_buffer` if this size is changed
-const START_BUFFER_SIZE: usize = 8_000;
+// Fixed to 8 KiB (equivalent to `std::sys::io::DEFAULT_BUF_SIZE` on most targets)
+const DEFAULT_BUF_SIZE: usize = 8 * 1024;
 
 /// Sort files by using auxiliary files for storing intermediate chunks (if needed), and output the result.
 pub fn ext_sort(
@@ -224,11 +225,7 @@ fn read_write_loop<I: WriteableTmpFile>(
     for _ in 0..2 {
         let should_continue = chunks::read(
             &sender,
-            RecycledChunk::new(if START_BUFFER_SIZE < buffer_size {
-                START_BUFFER_SIZE
-            } else {
-                buffer_size
-            }),
+            RecycledChunk::new(buffer_size.min(DEFAULT_BUF_SIZE)),
             Some(buffer_size),
             &mut carry_over,
             &mut file,

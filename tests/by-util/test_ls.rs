@@ -7107,3 +7107,15 @@ fn test_ls_recursive_no_fd_leak() {
         .succeeds()
         .stderr_is("");
 }
+
+#[test]
+#[cfg(all(unix, not(target_os = "macos")))]
+fn test_ls_non_utf8_hidden() {
+    use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch(OsStr::from_bytes(b".hidden\x80"));
+
+    scene.ucmd().succeeds().stdout_does_not_contain(".hidden");
+}

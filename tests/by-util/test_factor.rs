@@ -55,6 +55,15 @@ fn test_repeated_exponents() {
 }
 
 #[test]
+fn test_trim_null_chars() {
+    new_ucmd!()
+        .pipe_in("42\0")
+        .succeeds()
+        .stdout_only("42: 2 3 7\n")
+        .no_stderr();
+}
+
+#[test]
 #[cfg(feature = "sort")]
 #[cfg(not(target_os = "android"))]
 fn test_parallel() {
@@ -1599,6 +1608,16 @@ const PRIMES50: &[u64] = &[
 #[test]
 fn fails_on_directory() {
     new_ucmd!().pipe_in(".").fails();
+}
+
+#[test]
+fn test_large_number() {
+    // fixed with num-prime 0.5.0
+    // https://github.com/uutils/num-prime/issues/23
+    new_ucmd!()
+        .arg("4611686018427387896")
+        .succeeds()
+        .stdout_is("4611686018427387896: 2 2 2 179951 3203431780337\n");
 }
 
 #[test]

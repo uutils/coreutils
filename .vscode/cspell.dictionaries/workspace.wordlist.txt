@@ -365,6 +365,8 @@ getcwd
 # * other
 weblate
 algs
+wasm
+wasip
 
 # * stty terminal flags
 brkint

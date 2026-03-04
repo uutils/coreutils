@@ -107,7 +107,7 @@ fn logical_path() -> io::Result<PathBuf> {
     }
 }
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
     // if POSIXLY_CORRECT is set, we want to a logical resolution.

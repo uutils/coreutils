@@ -121,7 +121,7 @@ struct State {
     user_specified: bool,
 }
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;

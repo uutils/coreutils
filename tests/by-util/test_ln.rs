@@ -112,6 +112,24 @@ fn test_symlink_overwrite_force() {
 }
 
 #[test]
+fn test_symlink_overwrite_force_overrides_interactive() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file_a = "test_symlink_overwrite_force_a";
+    let file_b = "test_symlink_overwrite_force_b";
+    let link = "test_symlink_overwrite_force_link";
+
+    // Create symlink
+    at.symlink_file(file_a, link);
+    assert!(at.is_symlink(link));
+    assert_eq!(at.resolve_link(link), file_a);
+
+    // Force overwrite of existing symlink
+    ucmd.args(&["-i", "-f", "-s", file_b, link]).succeeds();
+    assert!(at.is_symlink(link));
+    assert_eq!(at.resolve_link(link), file_b);
+}
+
+#[test]
 fn test_symlink_interactive() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -134,6 +152,38 @@ fn test_symlink_interactive() {
     scene
         .ucmd()
         .args(&["-i", "-s", file, link])
+        .pipe_in("Yesh") // spell-checker:disable-line
+        .succeeds()
+        .no_stdout();
+
+    assert!(at.file_exists(file));
+    assert!(at.is_symlink(link));
+    assert_eq!(at.resolve_link(link), file);
+}
+
+#[test]
+fn test_symlink_interactive_overrides_force() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let file = "test_symlink_interactive_file";
+    let link = "test_symlink_interactive_file_link";
+
+    at.touch(file);
+    at.touch(link);
+
+    scene
+        .ucmd()
+        .args(&["-f", "-i", "-s", file, link])
+        .pipe_in("n")
+        .fails()
+        .no_stdout();
+
+    assert!(at.file_exists(file));
+    assert!(!at.is_symlink(link));
+
+    scene
+        .ucmd()
+        .args(&["-f", "-i", "-s", file, link])
         .pipe_in("Yesh") // spell-checker:disable-line
         .succeeds()
         .no_stdout();
@@ -972,4 +1022,24 @@ fn test_ln_hard_link_dir() {
         .args(&["dir", "dir_link"])
         .fails()
         .stderr_contains("hard link not allowed for directory");
+}
+
+#[test]
+fn test_ln_backup_no_path_traversal() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("a");
+    at.touch("b");
+    at.mkdir("b_");
+
+    scene
+        .ucmd()
+        .args(&["-S", "_/../c", "-s", "a", "b"])
+        .succeeds();
+
+    assert!(!at.file_exists("c"));
+    assert!(at.plus("b").is_symlink());
+    assert!(at.file_exists("b~"));
+    assert!(!at.plus("b~").is_symlink());
 }

@@ -454,7 +454,6 @@ fn test_file_exists_and_is_regular() {
 }
 
 #[test]
-#[cfg(not(windows))] // FIXME: implement on Windows
 fn test_file_is_readable() {
     new_ucmd!().args(&["-r", "regular_file"]).succeeds();
 }
@@ -473,7 +472,6 @@ fn test_file_is_not_readable() {
 }
 
 #[test]
-#[cfg(not(windows))] // FIXME: implement on Windows
 fn test_file_is_writable() {
     new_ucmd!().args(&["-w", "regular_file"]).succeeds();
 }
@@ -517,7 +515,7 @@ fn test_file_is_not_executable() {
 }
 
 #[test]
-#[cfg(not(windows))] // FIXME: implement on Windows
+#[cfg(not(windows))]
 fn test_file_is_executable() {
     let scenario = TestScenario::new(util_name!());
     let mut chmod = scenario.cmd("chmod");
@@ -525,6 +523,27 @@ fn test_file_is_executable() {
     chmod.args(&["u+x", "regular_file"]).succeeds();
 
     scenario.ucmd().args(&["-x", "regular_file"]).succeeds();
+}
+
+#[test]
+#[cfg(windows)]
+fn test_file_is_not_writable_windows() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("readonly_file");
+    let mut perms = std::fs::metadata(at.plus("readonly_file"))
+        .unwrap()
+        .permissions();
+    perms.set_readonly(true);
+    std::fs::set_permissions(at.plus("readonly_file"), perms).unwrap();
+    ucmd.args(&["!", "-w", "readonly_file"]).succeeds();
+}
+
+#[test]
+#[cfg(windows)]
+fn test_file_is_executable_windows() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("program.exe");
+    ucmd.args(&["-x", "program.exe"]).succeeds();
 }
 
 #[test]
