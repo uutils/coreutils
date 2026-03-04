@@ -3469,6 +3469,7 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
+ "memchr",
  "num-bigint",
  "num-prime",
  "num-traits",
