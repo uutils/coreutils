@@ -328,6 +328,7 @@ ctrlc = { version = "3.4.7", features = ["termination"] }
 divan = { package = "codspeed-divan-compat", version = "4.0.5" }
 dns-lookup = { version = "3.0.0" }
 exacl = "0.12.0"
+fastrand = "2.3.0"
 file_diff = "1.0.0"
 filetime = "0.2.23"
 fs_extra = "1.3.0"

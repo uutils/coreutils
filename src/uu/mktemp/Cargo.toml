@@ -20,7 +20,7 @@ path = "src/mktemp.rs"
 
 [dependencies]
 clap = { workspace = true }
-rand = { workspace = true }
+fastrand = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true }

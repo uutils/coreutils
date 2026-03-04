@@ -8,6 +8,7 @@ advapi32-sys
 aho-corasick
 backtrace
 blake2b_simd
+fastrand
 
 # * uutils project
 uutils

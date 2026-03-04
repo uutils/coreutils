@@ -3704,8 +3704,8 @@ name = "uu_mktemp"
 version = "0.7.0"
 dependencies = [
  "clap",
+ "fastrand",
  "fluent",
- "rand 0.9.2",
  "tempfile",
  "thiserror 2.0.18",
  "uucore",
