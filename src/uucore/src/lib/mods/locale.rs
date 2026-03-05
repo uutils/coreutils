@@ -9,6 +9,7 @@ use crate::error::UError;
 use fluent::{FluentArgs, FluentBundle, FluentResource};
 use fluent_syntax::parser::ParserError;
 
+use std::cell::Cell;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -407,6 +408,14 @@ fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
 /// }
 /// ```
 pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
+    // Avoid duplicated and high-cost localizer setup
+    thread_local! {
+        static LOCALIZER_IS_SET: Cell<bool> = const { Cell::new(false) };
+    }
+    if LOCALIZER_IS_SET.with(Cell::get) {
+        return Ok(());
+    }
+
     let locale = detect_system_locale().unwrap_or_else(|_| {
         LanguageIdentifier::from_str(DEFAULT_LOCALE).expect("Default locale should always be valid")
     });
@@ -414,7 +423,7 @@ pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
     // Load common strings along with utility-specific strings
     if let Ok(locales_dir) = get_locales_dir(p) {
         // Load both utility-specific and common strings
-        init_localization(&locale, &locales_dir, p)
+        init_localization(&locale, &locales_dir, p)?;
     } else {
         // No locales directory found, use embedded English with common strings directly
         let default_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
@@ -426,8 +435,9 @@ pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
             lock.set(localizer)
                 .map_err(|_| LocalizationError::Bundle("Localizer already initialized".into()))
         })?;
-        Ok(())
     }
+    LOCALIZER_IS_SET.with(|f| f.set(true));
+    Ok(())
 }
 
 #[cfg(not(debug_assertions))]
