@@ -91,6 +91,10 @@ fluent = { workspace = true }
 fluent-syntax = { workspace = true }
 unic-langid = { workspace = true }
 thiserror = { workspace = true }
+[target.'cfg(any(target_os = "linux"))'.dependencies]
+mimalloc = { version = "0.1.48", default-features = false, features = [
+  "override",
+] }
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true, features = [
