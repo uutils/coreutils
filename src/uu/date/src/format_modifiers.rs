@@ -33,8 +33,8 @@
 //! - `%^B`: Month name in uppercase (JUNE)
 //! - `%+4C`: Century with sign, padded to 4 characters (+019)
 
-use jiff::fmt::strtime::{BrokenDownTime, Config, PosixCustom};
 use jiff::Zoned;
+use jiff::fmt::strtime::{BrokenDownTime, Config, PosixCustom};
 use regex::Regex;
 use std::fmt;
 use std::sync::OnceLock;
