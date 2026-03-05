@@ -7,7 +7,6 @@ use std::{ffi::OsString, io::Write};
 use uucore::translate;
 
 // uucore::main does not support no-result
-// also remove SIGPIPE overhead
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let args: Vec<OsString> = args.collect();
     if args.len() != 2 {
@@ -23,7 +22,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         return 1;
     };
 
-    if let Err(print_fail) = error {
+    if let Err(print_fail) = error
+        && print_fail.kind() != std::io::ErrorKind::BrokenPipe
+    {
         let _ = writeln!(std::io::stderr(), "{}: {print_fail}", uucore::util_name());
     }
     1
