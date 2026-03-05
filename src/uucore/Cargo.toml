@@ -22,6 +22,9 @@ workspace = true
 [lib]
 path = "src/lib/lib.rs"
 
+[build-dependencies]
+cfg_aliases.workspace = true
+
 [dependencies]
 bstr = { workspace = true, optional = true }
 clap = { workspace = true }

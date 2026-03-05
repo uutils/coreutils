@@ -18,6 +18,9 @@ workspace = true
 [lib]
 path = "src/install.rs"
 
+[build-dependencies]
+cfg_aliases.workspace = true
+
 [dependencies]
 clap = { workspace = true }
 filetime = { workspace = true }

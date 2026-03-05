@@ -20,6 +20,9 @@ workspace = true
 [lib]
 path = "src/ls.rs"
 
+[build-dependencies]
+cfg_aliases.workspace = true
+
 [dependencies]
 ansi-width = { workspace = true }
 clap = { workspace = true, features = ["env"] }
