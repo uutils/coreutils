@@ -39,7 +39,7 @@ fn execution_phrase_double() {
     let output = Command::new(&scenario.bin_path)
         .arg("ls")
         .arg("--some-invalid-arg")
-        .env("LANG", "en_US.UTF-8")
+        .env("LC_ALL", "en_US.UTF-8")
         .output()
         .unwrap();
     assert!(

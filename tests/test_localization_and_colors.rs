@@ -92,7 +92,7 @@ fn test_help_messages_have_colors() {
         let output = create_utility_command(utility)
             .arg("--help")
             .env("CLICOLOR_FORCE", "1")
-            .env("LANG", "en_US.UTF-8")
+            .env("LC_ALL", "en_US.UTF-8")
             .output();
 
         match output {
@@ -136,7 +136,7 @@ fn test_error_messages_have_colors() {
         let output = cmd
             .arg("--invalid-option-that-should-not-exist")
             .env("CLICOLOR_FORCE", "1")
-            .env("LANG", "en_US.UTF-8")
+            .env("LC_ALL", "en_US.UTF-8")
             .output();
 
         match output {
@@ -183,7 +183,6 @@ fn test_help_messages_french_translation() {
         let output = create_utility_command(utility)
             .arg("--help")
             .env("CLICOLOR_FORCE", "1")
-            .env("LANG", "fr_FR.UTF-8")
             .env("LC_ALL", "fr_FR.UTF-8")
             .output();
 
@@ -227,7 +226,6 @@ fn test_error_messages_french_translation() {
         let output = cmd
             .arg("--invalid-option-that-should-not-exist")
             .env("CLICOLOR_FORCE", "1")
-            .env("LANG", "fr_FR.UTF-8")
             .env("LC_ALL", "fr_FR.UTF-8")
             .output();
 
@@ -271,7 +269,6 @@ fn test_french_colored_error_messages() {
         let output = cmd
             .arg("--invalid-option-that-should-not-exist")
             .env("CLICOLOR_FORCE", "1")
-            .env("LANG", "fr_FR.UTF-8")
             .env("LC_ALL", "fr_FR.UTF-8")
             .output();
 
