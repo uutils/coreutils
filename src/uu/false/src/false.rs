@@ -29,6 +29,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     1
 }
 
+#[cold]
+#[inline(never)]
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
