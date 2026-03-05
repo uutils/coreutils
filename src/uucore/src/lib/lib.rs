@@ -5,9 +5,9 @@
 
 // spell-checker:ignore sigaction SIGBUS SIGSEGV extendedbigdecimal myutil logind
 
-//! library ~ (core/bundler file)
-
-// #![deny(missing_docs)] //TODO: enable this
+#[cfg(target_os = "linux")]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 // * feature-gated external crates (re-shared as public internal modules)
 #[cfg(feature = "libc")]
