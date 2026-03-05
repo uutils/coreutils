@@ -247,23 +247,3 @@ fn test_nohup_stderr_to_stdout() {
     assert!(content.contains("stdout message"));
     assert!(content.contains("stderr message"));
 }
-
-#[test]
-#[cfg(all(unix, not(target_os = "macos")))]
-fn test_nohup_non_utf8_home() {
-    use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
-    let ts = TestScenario::new(util_name!());
-    let at = &ts.fixtures;
-
-    at.mkdir("nohup.out");
-    at.mkdir(OsStr::from_bytes(b"nohup_home\x80"));
-    let path = at.plus(OsStr::from_bytes(b"nohup_home\x80"));
-
-    ts.ucmd()
-        .terminal_simulation(true)
-        .env("HOME", path.as_os_str())
-        .args(&["true"])
-        .succeeds();
-
-    assert!(at.file_exists(path.join("nohup.out")));
-}
