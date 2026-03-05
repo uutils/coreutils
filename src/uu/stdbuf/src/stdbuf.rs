@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) tempdir dyld dylib optgrps libstdbuf
+// spell-checker:ignore (ToDO) tempdir dyld dylib optgrps libstdbuf execfn
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
@@ -183,12 +183,24 @@ fn get_preload_env(_tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
     // Search paths in order:
     // 1. Directory where stdbuf is located (program_path)
     // 2. Compile-time directory from LIBSTDBUF_DIR
-    let mut search_paths: Vec<PathBuf> = Vec::new();
-
+    let mut search_paths: Vec<PathBuf> = Vec::with_capacity(2);
     // First, try to get the directory where stdbuf is running from
-    if let Ok(exe_path) = std::env::current_exe() {
-        if let Some(exe_dir) = exe_path.parent() {
+    // current_exe() depends on /proc at Linux...
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        let exe_path = rustix::param::linux_execfn().to_bytes();
+        if let Some(exe_dir) = std::path::Path::new(std::ffi::OsStr::from_bytes(exe_path)).parent()
+        {
             search_paths.push(exe_dir.to_path_buf());
+        }
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    {
+        if let Ok(exe_path) = std::env::current_exe() {
+            if let Some(exe_dir) = exe_path.parent() {
+                search_paths.push(exe_dir.to_path_buf());
+            }
         }
     }
 
