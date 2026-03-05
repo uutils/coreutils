@@ -4,17 +4,14 @@
 // file that was distributed with this source code.
 use clap::{Arg, ArgAction, Command};
 use std::{ffi::OsString, io::Write};
-use uucore::error::{UResult, set_exit_code};
-
 use uucore::translate;
 
-#[uucore::main(no_signals)]
-// TODO: modify proc macro to allow no-result uumain
-#[expect(clippy::unnecessary_wraps, reason = "proc macro requires UResult")]
-pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+// uucore::main does not support no-result
+// also remove SIGPIPE overhead
+pub fn uumain(args: impl uucore::Args) -> i32 {
     let args: Vec<OsString> = args.collect();
     if args.len() != 2 {
-        return Ok(());
+        return 0;
     }
 
     // args[0] is the name of the binary.
@@ -23,7 +20,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else if args[1] == "--version" {
         write!(std::io::stdout(), "{}", uu_app().render_version())
     } else {
-        Ok(())
+        return 0;
     };
 
     if let Err(print_fail) = error {
@@ -32,10 +29,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // Mirror GNU options. When failing to print warnings or version flags, then we exit
         // with FAIL. This avoids allocation some error information which may result in yet
         // other types of failure.
-        set_exit_code(1);
+        return 1;
     }
-
-    Ok(())
+    0
 }
 
 pub fn uu_app() -> Command {

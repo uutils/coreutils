@@ -4,23 +4,14 @@
 // file that was distributed with this source code.
 use clap::{Arg, ArgAction, Command};
 use std::{ffi::OsString, io::Write};
-use uucore::error::{UResult, set_exit_code};
-
 use uucore::translate;
 
-#[uucore::main(no_signals)]
-// TODO: modify proc macro to allow no-result uumain
-#[expect(clippy::unnecessary_wraps, reason = "proc macro requires UResult")]
-pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    // Mirror GNU options, always return `1`. In particular even the 'successful' cases of no-op,
-    // and the interrupted display of help and version should return `1`. Also, we return Ok in all
-    // paths to avoid the allocation of an error object, an operation that could, in theory, fail
-    // and unwind through the standard library allocation handling machinery.
-    set_exit_code(1);
-
+// uucore::main does not support no-result
+// also remove SIGPIPE overhead
+pub fn uumain(args: impl uucore::Args) -> i32 {
     let args: Vec<OsString> = args.collect();
     if args.len() != 2 {
-        return Ok(());
+        return 1;
     }
 
     // args[0] is the name of the binary.
@@ -29,14 +20,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else if args[1] == "--version" {
         write!(std::io::stdout(), "{}", uu_app().render_version())
     } else {
-        Ok(())
+        return 1;
     };
 
     if let Err(print_fail) = error {
         let _ = writeln!(std::io::stderr(), "{}: {print_fail}", uucore::util_name());
     }
-
-    Ok(())
+    1
 }
 
 pub fn uu_app() -> Command {
