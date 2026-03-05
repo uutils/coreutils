@@ -282,3 +282,39 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::Help),
         )
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::BigUint;
+    use crate::parse_num;
+
+    #[test]
+    fn test_correct_parsing() {
+        let zero = parse_num::<u64>(b"0").unwrap();
+        let u64_max = parse_num::<u64>(u64::MAX.to_string().as_bytes()).unwrap();
+        let u128_one = parse_num::<u128>((u64::MAX as u128 + 1).to_string().as_bytes()).unwrap();
+        let u128_max = parse_num::<u128>(u128::MAX.to_string().as_bytes()).unwrap();
+        let bigint = parse_num::<BigUint>(u128::MAX.to_string().as_bytes()).unwrap() + 1u64;
+        assert_eq!(
+            (
+                0,
+                u64::MAX,
+                (u64::MAX as u128 + 1),
+                u128::MAX,
+                BigUint::from(u128::MAX) + 1u64
+            ),
+            (zero, u64_max, u128_one, u128_max, bigint)
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_incorrect_parsing() {
+        parse_num::<u64>(b"abcd").unwrap();
+        parse_num::<u64>(b"12\x00\xFF\x1D").unwrap();
+        parse_num::<u128>(b"abcd").unwrap();
+        parse_num::<u128>(b"12\x00\xFF\x1D").unwrap();
+        parse_num::<BigUint>(b"abcd").unwrap();
+        parse_num::<BigUint>(b"12\x00\xFF\x1D").unwrap();
+    }
+}
