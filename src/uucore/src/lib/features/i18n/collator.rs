@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use std::{cmp::Ordering, sync::OnceLock};
+use std::{cell::RefCell, cmp::Ordering, collections::HashMap, sync::OnceLock};
 
 use icu_collator::{self, CollatorBorrowed};
 
@@ -14,6 +14,16 @@ pub use icu_collator::options::{
 };
 
 static COLLATOR: OnceLock<CollatorBorrowed> = OnceLock::new();
+
+// Simple comparison cache for repeated field values
+type ComparisonKey = (Vec<u8>, Vec<u8>);
+type ComparisonCache = RefCell<HashMap<ComparisonKey, Ordering>>;
+
+thread_local! {
+    static COMPARISON_CACHE: ComparisonCache = RefCell::new(HashMap::new());
+}
+
+const CACHE_SIZE_LIMIT: usize = 1000;
 
 /// Will initialize the collator if not already initialized.
 /// returns `true` if initialization happened
@@ -85,4 +95,77 @@ pub fn locale_cmp(left: &[u8], right: &[u8]) -> Ordering {
             .get()
             .map_or_else(|| left.cmp(right), |c| c.compare_utf8(left, right))
     }
+}
+
+/// Get a reference to the initialized collator for performance-critical paths
+#[inline]
+pub fn get_collator() -> &'static CollatorBorrowed<'static> {
+    COLLATOR.get().expect("Collator was not initialized")
+}
+
+/// Hybrid comparison: byte-first with caching and locale fallback
+#[inline]
+pub fn locale_cmp_unchecked(left: &[u8], right: &[u8]) -> Ordering {
+    // Fast path: try byte comparison first
+    let byte_cmp = left.cmp(right);
+
+    // If strings are identical by bytes, they're identical by locale too
+    if byte_cmp == Ordering::Equal {
+        return Ordering::Equal;
+    }
+
+    // If both are pure ASCII, byte comparison is sufficient for most locales
+    if left.is_ascii() && right.is_ascii() {
+        // For ASCII in en_US and similar locales, byte order equals collation order
+        // This covers the vast majority of cases
+        return byte_cmp;
+    }
+
+    // Check cache for repeated comparisons (common in join operations)
+    let cache_key = if left.len() + right.len() < 64 {
+        // Only cache small strings
+        Some((left.to_vec(), right.to_vec()))
+    } else {
+        None
+    };
+
+    if let Some(ref key) = cache_key {
+        if let Ok(Some(cached_result)) = COMPARISON_CACHE.try_with(|c| c.borrow().get(key).copied())
+        {
+            return cached_result;
+        }
+    }
+
+    // Compute result using ICU for non-ASCII data
+    let result = match (std::str::from_utf8(left), std::str::from_utf8(right)) {
+        (Ok(l), Ok(r)) => {
+            let l_ascii = l.is_ascii();
+            let r_ascii = r.is_ascii();
+
+            // If one is ASCII and other isn't, use ICU
+            if l_ascii != r_ascii {
+                get_collator().compare(l, r)
+            } else if !l_ascii {
+                // Both non-ASCII, use ICU
+                get_collator().compare(l, r)
+            } else {
+                // Both ASCII - byte comparison should be correct
+                byte_cmp
+            }
+        }
+        _ => byte_cmp, // Invalid UTF-8, use byte comparison
+    };
+
+    // Cache the result for future lookups
+    if let Some(key) = cache_key {
+        let _ = COMPARISON_CACHE.try_with(|c| {
+            let mut cache = c.borrow_mut();
+            if cache.len() >= CACHE_SIZE_LIMIT {
+                cache.clear(); // Simple eviction policy
+            }
+            cache.insert(key, result);
+        });
+    }
+
+    result
 }
