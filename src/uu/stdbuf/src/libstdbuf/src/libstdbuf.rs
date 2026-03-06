@@ -6,8 +6,8 @@
 
 use ctor::ctor;
 use libc::{_IOFBF, _IOLBF, _IONBF, FILE, c_char, c_int, fileno, size_t};
-use std::env;
-use std::ptr;
+use std::io::{Write, stderr};
+use std::{env, ptr};
 
 // This runs automatically when the library is loaded via LD_PRELOAD
 #[ctor]
@@ -192,7 +192,7 @@ fn set_buffer(stream: *mut FILE, value: &str) {
         "L" => (_IOLBF, 0_usize),
         input => {
             let Ok(buff_size) = input.parse::<usize>() else {
-                eprintln!("failed to allocate a {value} byte stdio buffer");
+                let _ = writeln!(stderr(), "failed to allocate a {value} byte stdio buffer");
                 std::process::exit(1);
             };
             (_IOFBF, buff_size as size_t)
@@ -205,9 +205,11 @@ fn set_buffer(stream: *mut FILE, value: &str) {
         res = libc::setvbuf(stream, buffer, mode, size);
     }
     if res != 0 {
-        eprintln!("could not set buffering of {} to mode {mode}", unsafe {
-            fileno(stream)
-        });
+        let _ = writeln!(
+            stderr(),
+            "could not set buffering of {} to mode {mode}",
+            unsafe { fileno(stream) }
+        );
     }
 }
 
