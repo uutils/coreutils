@@ -126,7 +126,9 @@ pub struct RecycledChunk {
 impl RecycledChunk {
     pub fn new(capacity: usize) -> Self {
         const PREDICTED_LINE_LEN: usize = 128;
-        let predicted_lines = (capacity / PREDICTED_LINE_LEN).clamp(1024, 32768);
+        const MIN_CAPACITY: usize = 1024;
+        const MAX_CAPACITY: usize = 32768;
+        let predicted_lines = (capacity / PREDICTED_LINE_LEN).min(MAX_CAPACITY);
         Self {
             lines: Vec::with_capacity(predicted_lines),
             selections: Vec::with_capacity(predicted_lines),
