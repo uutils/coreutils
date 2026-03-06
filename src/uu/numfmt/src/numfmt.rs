@@ -87,21 +87,19 @@ fn write_line<W: std::io::Write>(
     eol: Option<u8>,
 ) -> UResult<()> {
     // Read lines only up to null byte (as GNU does)
-    let line = input_line
-        .iter()
-        .take_while(|&&b| b != b'\0')
-        .copied()
-        .collect::<Vec<u8>>();
-
+    let line = match memchr::memchr(b'\0', input_line) {
+        Some(i) => &input_line[..i],
+        None => input_line,
+    };
     let handled_line = if options.delimiter.is_some() {
-        write_formatted_with_delimiter(writer, &line, options, eol)
+        write_formatted_with_delimiter(writer, line, options, eol)
     } else {
         // Whitespace mode requires valid UTF-8
-        match std::str::from_utf8(&line) {
+        match std::str::from_utf8(line) {
             Ok(s) => write_formatted_with_whitespace(writer, s, options, eol),
-            Err(_) => Err(
-                translate!("numfmt-error-invalid-number", "input" => escape_line(&line).quote()),
-            ),
+            Err(_) => {
+                Err(translate!("numfmt-error-invalid-number", "input" => escape_line(line).quote()))
+            }
         }
     };
 

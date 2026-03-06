@@ -3779,6 +3779,7 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
+ "memchr",
  "thiserror 2.0.18",
  "uucore",
 ]
