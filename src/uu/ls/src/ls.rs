@@ -2448,7 +2448,7 @@ fn enter_directory(
     arena: &bumpalo::Bump,
 ) -> UResult<()> {
     // Create vec of entries with initial dot files
-    let mut entries = bumpalo::collections::Vec::new_in(&arena);
+    let mut entries = bumpalo::collections::Vec::with_capacity_in(128, &arena);
     if config.files == Files::All {
         entries.push(PathData::new(
             path_data.path().to_path_buf(),
