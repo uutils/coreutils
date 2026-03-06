@@ -571,6 +571,28 @@ fn test_mount_point_combined_with_other_specifiers() {
     );
 }
 
+#[test]
+fn test_quote_file_name_with_newline() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let file_name = "nice\\n file";
+    let formatted_file_name = &format!("$'{file_name}'");
+    let expected_result = "{\"name\":\"\"$'nice\\n file'\"\"}\n";
+    at.touch(formatted_file_name);
+
+    let result = ts
+        .ucmd()
+        .args(&["-c", "{\"name\":\"%N\"}", formatted_file_name])
+        .succeeds()
+        .stdout_move_str();
+
+    assert_eq!(
+        result, expected_result,
+        "We are testing that \\n is handled correctly"
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn test_percent_escaping() {
