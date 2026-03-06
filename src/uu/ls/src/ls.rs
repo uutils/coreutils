@@ -2318,6 +2318,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
             &mut state,
             &mut listed_ancestors,
             &mut dired,
+            &bumpalo::Bump::new(),
         )?;
     }
     if config.dired && !config.hyperlink {
@@ -2443,9 +2444,9 @@ fn enter_directory(
     state: &mut ListState,
     listed_ancestors: &mut FxHashSet<FileInformation>,
     dired: &mut DiredOutput,
-) -> UResult<()> {
     // todo: reuse Vec and drop bumpalo
-    let arena = bumpalo::Bump::new();
+    arena: &bumpalo::Bump,
+) -> UResult<()> {
     // Create vec of entries with initial dot files
     let mut entries = bumpalo::collections::Vec::new_in(&arena);
     if config.files == Files::All {
@@ -2537,7 +2538,7 @@ fn enter_directory(
 
                         show_dir_name(e, &mut state.out, config)?;
                         writeln!(state.out)?;
-                        enter_directory(e, rd, config, state, listed_ancestors, dired)?;
+                        enter_directory(e, rd, config, state, listed_ancestors, dired, arena)?;
                         listed_ancestors
                             .remove(&FileInformation::from_path(e.path(), e.must_dereference)?);
                     } else {
