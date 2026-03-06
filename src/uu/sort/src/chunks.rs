@@ -125,7 +125,7 @@ pub struct RecycledChunk {
 
 impl RecycledChunk {
     pub fn new(capacity: usize) -> Self {
-        const PREDICTED_LINE_LEN: usize = 128;
+        const PREDICTED_LINE_LEN: usize = 256;
         const MIN_CAPACITY: usize = 1024;
         const MAX_CAPACITY: usize = 32768;
         let predicted_lines = (capacity / PREDICTED_LINE_LEN).min(MAX_CAPACITY);
