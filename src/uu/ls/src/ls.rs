@@ -2444,27 +2444,26 @@ fn enter_directory(
     listed_ancestors: &mut FxHashSet<FileInformation>,
     dired: &mut DiredOutput,
 ) -> UResult<()> {
+    // todo: reuse Vec and drop bumpalo
+    let arena = bumpalo::Bump::new();
     // Create vec of entries with initial dot files
-    let mut entries: Vec<PathData> = if config.files == Files::All {
-        vec![
-            PathData::new(
-                path_data.path().to_path_buf(),
-                None,
-                Some(".".into()),
-                config,
-                false,
-            ),
-            PathData::new(
-                path_data.path().join(".."),
-                None,
-                Some("..".into()),
-                config,
-                false,
-            ),
-        ]
-    } else {
-        vec![]
-    };
+    let mut entries = bumpalo::collections::Vec::new_in(&arena);
+    if config.files == Files::All {
+        entries.push(PathData::new(
+            path_data.path().to_path_buf(),
+            None,
+            Some(".".into()),
+            config,
+            false,
+        ));
+        entries.push(PathData::new(
+            path_data.path().join(".."),
+            None,
+            Some("..".into()),
+            config,
+            false,
+        ));
+    }
 
     // Convert those entries to the PathData struct
     for raw_entry in read_dir.by_ref() {
