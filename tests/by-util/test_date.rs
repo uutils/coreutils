@@ -2188,6 +2188,43 @@ fn test_locale_day_names() {
     }
 }
 
+// GNU test date-locale-hour: Default format should match locale
+#[test]
+#[cfg(unix)]
+fn test_date_locale_default_format_timezone_position() {
+    // Verify timezone appears after time, not between date and year
+    // Test with en_IE locale which should have timezone after time
+    let result = new_ucmd!()
+        .env("LC_ALL", "en_IE")
+        .env("TZ", "Europe/Brussels")
+        .arg("-d")
+        .arg("2025-10-11T13:00")
+        .run();
+
+    // Skip test if locale not available
+    if !result.succeeded() {
+        return;
+    }
+
+    let output = result.stdout_str().trim();
+
+    // Find positions of key components
+    let year_pos = output.find("2025").expect("Should contain year");
+    let time_pos = output.find("13:00").expect("Should contain time");
+    let tz_pos = output
+        .find("CEST")
+        .or_else(|| output.find("CET"))
+        .expect("Should contain timezone");
+
+    // Timezone should be near time, not between date and year
+    // Valid: "Oct 11 2025 13:00:00 CEST" or "Oct 11 13:00:00 CEST 2025"
+    // Invalid: "Oct 11 CEST 2025 13:00:00"
+    assert!(
+        tz_pos >= time_pos || tz_pos > year_pos,
+        "Timezone should appear after time or after year, not between them. Got: {output}"
+    );
+}
+
 #[test]
 fn test_percent_percent_not_replaced() {
     let cases = [
