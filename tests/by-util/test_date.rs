@@ -1646,8 +1646,7 @@ fn test_date_locale_fr_french() {
 #[test]
 fn test_date_posix_format_specifiers() {
     let cases = [
-        // %r: 12-hour time with zero-padded hour (08:17:48 AM, not 8:17:48 AM)
-        ("%r", "08:17:48 AM"),
+        // %r is tested separately in `test_date_format_r_locale_aware` (locale-aware)
         // %x: locale date in MM/DD/YY format
         ("%x", "01/19/97"),
         // %X: locale time in HH:MM:SS format
@@ -1760,13 +1759,21 @@ fn test_date_french_full_sentence() {
     }
 }
 
-/// Test that %x format specifier respects locale settings
-/// This is a regression test for locale-aware date formatting
+#[cfg(any(target_os = "linux", target_vendor = "apple"))]
+fn locale_is_available(locale: &str) -> bool {
+    use std::process::Command;
+    Command::new("locale")
+        .env("LC_ALL", locale)
+        .arg("charmap")
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "UTF-8")
+        .unwrap_or(false)
+}
+
+/// Test that %x uses the locale's D_FMT (e.g. French: "19.01.1997" not "01/19/97").
 #[test]
-#[ignore = "https://bugs.launchpad.net/ubuntu/+source/rust-coreutils/+bug/2137410"]
 #[cfg(any(target_os = "linux", target_vendor = "apple"))]
 fn test_date_format_x_locale_aware() {
-    // With C locale, %x should output MM/DD/YY (US format)
     new_ucmd!()
         .env("TZ", "UTC")
         .env("LC_ALL", "C")
@@ -1776,8 +1783,17 @@ fn test_date_format_x_locale_aware() {
         .succeeds()
         .stdout_is("01/19/97\n");
 
-    // With French locale, %x should output DD/MM/YYYY (European format)
-    // GNU date outputs: 19/01/1997
+    if !locale_is_available("fr_FR.UTF-8") {
+        println!("Skipping French locale %x test — fr_FR.UTF-8 not available");
+        return;
+    }
+    // French D_FMT (e.g. "19/01/1997" on Linux or "19.01.1997" on macOS)
+    let expected = if cfg!(target_os = "macos") {
+        "19.01.1997\n"
+    } else {
+        "19/01/1997\n"
+    };
+
     new_ucmd!()
         .env("TZ", "UTC")
         .env("LC_ALL", "fr_FR.UTF-8")
@@ -1785,7 +1801,83 @@ fn test_date_format_x_locale_aware() {
         .arg("1997-01-19 08:17:48")
         .arg("+%x")
         .succeeds()
-        .stdout_is("19/01/1997\n");
+        .stdout_is(expected);
+}
+
+/// Test that %X uses the locale's T_FMT.
+#[test]
+#[cfg(any(target_os = "linux", target_vendor = "apple"))]
+fn test_date_format_big_x_locale_aware() {
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .env("LC_ALL", "C")
+        .arg("-d")
+        .arg("1997-01-19 08:17:48")
+        .arg("+%X")
+        .succeeds()
+        .stdout_is("08:17:48\n");
+
+    if !locale_is_available("fr_FR.UTF-8") {
+        println!("Skipping French locale %X test — fr_FR.UTF-8 not available");
+        return;
+    }
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .arg("-d")
+        .arg("1997-01-19 08:17:48")
+        .arg("+%X")
+        .succeeds()
+        .stdout_is("08:17:48\n");
+}
+
+/// Test that %r uses the locale's T_FMT_AMPM.
+#[test]
+#[cfg(any(target_os = "linux", target_vendor = "apple"))]
+fn test_date_format_r_locale_aware() {
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .env("LC_ALL", "C")
+        .arg("-d")
+        .arg("1997-01-19 08:17:48")
+        .arg("+%r")
+        .succeeds()
+        .stdout_is("08:17:48 AM\n");
+
+    if !locale_is_available("en_US.UTF-8") {
+        println!("Skipping en_US locale %r test — en_US.UTF-8 not available");
+        return;
+    }
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("-d")
+        .arg("1997-01-19 08:17:48")
+        .arg("+%r")
+        .succeeds()
+        .stdout_is("08:17:48 AM\n");
+
+    if !locale_is_available("fr_FR.UTF-8") {
+        println!("Skipping fr_FR locale %r test — fr_FR.UTF-8 not available");
+        return;
+    }
+    // French does not define AM/PM strings so it should fallback to %H:%M:%S like GNU `date` on Linux.
+    // However, on macOS, `nl_langinfo(T_FMT_AMPM)` for fr_FR.UTF-8 returns "%I:%M:%S %p",
+    // so it formatting outputs "08:17:48 AM"
+    let expected = if cfg!(target_os = "macos") {
+        "08:17:48 AM\n"
+    } else {
+        "08:17:48\n"
+    };
+
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .arg("-d")
+        .arg("1997-01-19 08:17:48")
+        .arg("+%r")
+        .succeeds()
+        .stdout_is(expected);
 }
 
 #[test]
