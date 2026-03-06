@@ -48,7 +48,7 @@ fn write_factors_str(
         // use num_prime's factorize64 algorithm for u64 integers
         if x <= BigUint::from_u64(u64::MAX).unwrap() {
             let prime_factors = num_prime::nt_funcs::factorize64(x.clone().to_u64_digits()[0]);
-            write_result_u64(w, &x, prime_factors, print_exponents)
+            write_result(w, &x, prime_factors, print_exponents)
                 .map_err_context(|| translate!("factor-error-write-error"))?;
         }
         // use num_prime's factorize128 algorithm for u128 integers
@@ -59,7 +59,7 @@ fn write_factors_str(
                 return Ok(());
             };
             let prime_factors = num_prime::nt_funcs::factorize128(x);
-            write_result_u128(w, &x, prime_factors, print_exponents)
+            write_result(w, &x, prime_factors, print_exponents)
                 .map_err_context(|| translate!("factor-error-write-error"))?;
         }
         // use num_prime's fallible factorization for anything greater than u128::MAX
@@ -71,12 +71,12 @@ fn write_factors_str(
                     translate!("factor-error-factorization-incomplete"),
                 ));
             }
-            write_result_big_uint(w, &x, prime_factors, print_exponents)
+            write_result(w, &x, prime_factors, print_exponents)
                 .map_err_context(|| translate!("factor-error-write-error"))?;
         }
     } else {
         let empty_primes: BTreeMap<BigUint, usize> = BTreeMap::new();
-        write_result_big_uint(w, &x, empty_primes, print_exponents)
+        write_result(w, &x, empty_primes, print_exponents)
             .map_err_context(|| translate!("factor-error-write-error"))?;
     }
 
@@ -132,57 +132,11 @@ impl Display for NumError<'_> {
     }
 }
 
-/// Writing out the prime factors for u64 integers
-fn write_result_u64(
+/// Writing out the prime factors for integers
+fn write_result(
     w: &mut io::BufWriter<impl Write>,
-    x: &BigUint,
-    factorization: BTreeMap<u64, usize>,
-    print_exponents: bool,
-) -> io::Result<()> {
-    write!(w, "{x}:")?;
-    for (factor, n) in factorization {
-        if print_exponents {
-            if n > 1 {
-                write!(w, " {factor}^{n}")?;
-            } else {
-                write!(w, " {factor}")?;
-            }
-        } else {
-            w.write_all(format!(" {factor}").repeat(n).as_bytes())?;
-        }
-    }
-    writeln!(w)?;
-    w.flush()
-}
-
-/// Writing out the prime factors for u128 integers
-fn write_result_u128(
-    w: &mut io::BufWriter<impl Write>,
-    x: &u128,
-    factorization: BTreeMap<u128, usize>,
-    print_exponents: bool,
-) -> io::Result<()> {
-    write!(w, "{x}:")?;
-    for (factor, n) in factorization {
-        if print_exponents {
-            if n > 1 {
-                write!(w, " {factor}^{n}")?;
-            } else {
-                write!(w, " {factor}")?;
-            }
-        } else {
-            w.write_all(format!(" {factor}").repeat(n).as_bytes())?;
-        }
-    }
-    writeln!(w)?;
-    w.flush()
-}
-
-/// Writing out the prime factors for BigUint integers
-fn write_result_big_uint(
-    w: &mut io::BufWriter<impl Write>,
-    x: &BigUint,
-    factorization: BTreeMap<BigUint, usize>,
+    x: &impl Display,
+    factorization: BTreeMap<impl Display, usize>,
     print_exponents: bool,
 ) -> io::Result<()> {
     write!(w, "{x}:")?;
