@@ -125,13 +125,15 @@ pub struct RecycledChunk {
 
 impl RecycledChunk {
     pub fn new(capacity: usize) -> Self {
+        const PREDICTED_LINE_LEN: usize = 128;
+        let predicted_lines = (capacity / PREDICTED_LINE_LEN).clamp(1024, 32768);
         Self {
-            lines: Vec::new(),
-            selections: Vec::new(),
-            num_infos: Vec::new(),
-            parsed_floats: Vec::new(),
-            line_num_floats: Vec::new(),
-            token_buffer: Vec::new(),
+            lines: Vec::with_capacity(predicted_lines),
+            selections: Vec::with_capacity(predicted_lines),
+            num_infos: Vec::with_capacity(predicted_lines),
+            parsed_floats: Vec::with_capacity(predicted_lines),
+            line_num_floats: Vec::with_capacity(predicted_lines),
+            token_buffer: Vec::with_capacity(predicted_lines),
             line_count_hint: 0,
             buffer: vec![0; capacity],
         }
