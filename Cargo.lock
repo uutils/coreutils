@@ -4371,6 +4371,7 @@ dependencies = [
  "clap",
  "fluent",
  "itertools 0.14.0",
+ "libc",
  "uucore",
 ]
 
