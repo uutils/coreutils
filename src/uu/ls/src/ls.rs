@@ -1931,7 +1931,7 @@ struct PathData {
     ft: OnceCell<Option<FileType>>,
     // can be used to avoid reading the filetype. Can be also called d_type:
     // https://www.gnu.org/software/libc/manual/html_node/Directory-Entries.html
-    de: RefCell<Option<Box<DirEntry>>>,
+    de: RefCell<Option<DirEntry>>,
     security_context: OnceCell<Box<str>>,
     // Name of the file - will be empty for . or ..
     display_name: OsString,
@@ -1985,7 +1985,7 @@ impl PathData {
         let md: OnceCell<Option<Metadata>> = OnceCell::new();
         let security_context: OnceCell<Box<str>> = OnceCell::new();
 
-        let de: RefCell<Option<Box<DirEntry>>> = if let Some(de) = dir_entry {
+        let de: RefCell<Option<DirEntry>> = if let Some(de) = dir_entry {
             if must_dereference {
                 if let Ok(md_pb) = p_buf.metadata() {
                     md.get_or_init(|| Some(md_pb.clone()));
@@ -1997,7 +1997,7 @@ impl PathData {
                 ft.get_or_init(|| Some(ft_de));
             }
 
-            RefCell::new(Some(de.into()))
+            RefCell::new(Some(de))
         } else {
             RefCell::new(None)
         };
@@ -2018,7 +2018,7 @@ impl PathData {
         self.md
             .get_or_init(|| {
                 if !self.must_dereference {
-                    if let Some(dir_entry) = RefCell::take(&self.de).as_deref() {
+                    if let Some(dir_entry) = RefCell::take(&self.de) {
                         return dir_entry.metadata().ok();
                     }
                 }
@@ -2445,6 +2445,7 @@ fn enter_directory(
     dired: &mut DiredOutput,
 ) -> UResult<()> {
     // Create vec of entries with initial dot files
+    // todo: We should reuse buf with larger initial capacity for performance, buf it eats RAM since enter_directory is recursive...
     let mut entries: Vec<PathData> = if config.files == Files::All {
         vec![
             PathData::new(
