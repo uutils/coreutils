@@ -683,26 +683,32 @@ fn compute_and_check_digest_from_file(
 
     // Set binary to false because --binary is not supported with --check
 
-    let (calculated_checksum, _) =
-        match digest_reader(&mut digest, &mut file_reader, ReadingMode::Text) {
-            Ok(result) => result,
-            Err(err) => {
-                show!(err.map_err_context(|| {
-                    locale_aware_escape_name(&real_filename_to_check, QuotingStyle::SHELL_ESCAPE)
-                        .to_string_lossy()
-                        .to_string()
-                }));
+    let reading_mode = if cfg!(not(unix)) {
+        ReadingMode::Binary
+    } else {
+        ReadingMode::Text
+    };
 
-                write_file_report(
-                    io::stdout(),
-                    filename,
-                    FileChecksumResult::CantOpen,
-                    prefix,
-                    opts.verbose,
-                );
-                return Err(LineCheckError::CantOpenFile);
-            }
-        };
+    let (calculated_checksum, _) = match digest_reader(&mut digest, &mut file_reader, reading_mode)
+    {
+        Ok(result) => result,
+        Err(err) => {
+            show!(err.map_err_context(|| {
+                locale_aware_escape_name(&real_filename_to_check, QuotingStyle::SHELL_ESCAPE)
+                    .to_string_lossy()
+                    .to_string()
+            }));
+
+            write_file_report(
+                io::stdout(),
+                filename,
+                FileChecksumResult::CantOpen,
+                prefix,
+                opts.verbose,
+            );
+            return Err(LineCheckError::CantOpenFile);
+        }
+    };
 
     // Do the checksum validation
     let checksum_correct = match calculated_checksum {
