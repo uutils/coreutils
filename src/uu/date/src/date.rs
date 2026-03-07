@@ -756,6 +756,7 @@ fn make_format_string(settings: &Settings) -> &str {
 static FIXED_OFFSET_ABBREVIATIONS: &[(&str, i32)] = &[
     ("UTC", 0),
     ("GMT", 0),
+    ("MEST", 7200), // UTC+2 Middle European Summer Time
     // US timezones (GNU compatible)
     ("PST", -28800), // UTC-8
     ("PDT", -25200), // UTC-7
@@ -776,6 +777,8 @@ static FIXED_OFFSET_ABBREVIATIONS: &[(&str, i32)] = &[
     // German timezones
     ("MEZ", 3600),  // UTC+1
     ("MESZ", 7200), // UTC+2
+    // Asian timezones
+    ("KST", 32400), // UTC+9 Korean Standard Time
 ];
 /* spell-checker: enable */
 
