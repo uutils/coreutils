@@ -29,9 +29,9 @@ bigdecimal = { workspace = true }
 binary-heap-plus = { workspace = true }
 clap = { workspace = true }
 compare = { workspace = true }
+fastrand = { workspace = true }
 itertools = { workspace = true }
 memchr = { workspace = true }
-rand = { workspace = true }
 rayon = { workspace = true }
 self_cell = { workspace = true }
 tempfile = { workspace = true }
