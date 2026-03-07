@@ -73,15 +73,21 @@ fn get_canonical_util_name(util_name: &str) -> &str {
 }
 
 /// Gets the binary path from command line arguments
-/// # Panics
 /// Panics if the binary path cannot be determined
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn binary_path(args: &mut impl Iterator<Item = OsString>) -> PathBuf {
     match args.next() {
         Some(ref s) if !s.is_empty() => PathBuf::from(s),
         _ => std::env::current_exe().unwrap(),
     }
 }
-
+/// protect against env -a
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn binary_path(args: &mut impl Iterator<Item = OsString>) -> PathBuf {
+    let _ = args.next();
+    use std::os::unix::ffi::OsStrExt;
+    OsStr::from_bytes(rustix::param::linux_execfn().to_bytes()).into()
+}
 /// Extracts the binary name from a path
 pub fn name(binary_path: &Path) -> Option<&str> {
     binary_path.file_stem()?.to_str()
