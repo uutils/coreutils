@@ -3773,10 +3773,10 @@ fn test_when_argument_file_is_non_existent_unix_socket_address_then_error() {
         format!("tail: cannot open '{socket}' for reading: No such device or address\n");
     #[cfg(target_os = "freebsd")]
     let expected_stderr =
-        format!("tail: cannot open '{socket}' for reading: Operation not supported\n",);
+        format!("tail: cannot open '{socket}' for reading: Operation not supported\n");
     #[cfg(target_os = "macos")]
     let expected_stderr =
-        format!("tail: cannot open '{socket}' for reading: Operation not supported on socket\n",);
+        format!("tail: cannot open '{socket}' for reading: Operation not supported on socket\n");
 
     ts.ucmd()
         .arg(socket)

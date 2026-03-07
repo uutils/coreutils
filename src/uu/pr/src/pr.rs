@@ -1330,7 +1330,7 @@ fn get_formatted_line_number(opts: &OutputOptions, line_number: usize, index: us
         let width = num_opt.width;
         let separator = &num_opt.separator;
         if line_str.len() >= width {
-            format!("{:>width$}{separator}", &line_str[line_str.len() - width..],)
+            format!("{:>width$}{separator}", &line_str[line_str.len() - width..])
         } else {
             format!("{line_str:>width$}{separator}")
         }

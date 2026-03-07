@@ -203,7 +203,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .ok_or_else(|| {
             USimpleError::new(
                 1,
-                translate!("touch-error-missing-file-operand", "help_command" => uucore::execution_phrase().to_string(),),
+                translate!("touch-error-missing-file-operand", "help_command" => uucore::execution_phrase().to_string()),
             )
         })?
         .collect();
