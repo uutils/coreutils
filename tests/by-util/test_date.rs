@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker: ignore: AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado febr
+// spell-checker: ignore: AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado febr MEST KST
 
 use std::cmp::Ordering;
 
@@ -1173,6 +1173,16 @@ fn test_date_tz_abbreviation_fixed_offset_outside_season() {
         .arg("+%F %T %Z")
         .succeeds()
         .stdout_is("2026-01-15 16:00:00 UTC\n");
+
+    // MEST (UTC+2) used in winter
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-u")
+        .arg("-d")
+        .arg("2026-01-15 10:00 MEST")
+        .arg("+%F %T %Z")
+        .succeeds()
+        .stdout_is("2026-01-15 08:00:00 UTC\n");
 }
 
 #[test]
@@ -2812,4 +2822,17 @@ fn test_date_debug_current_time() {
     let stderr = result.stderr_str();
     // No parsing happens for "now", so no debug output
     assert_eq!(stderr, "");
+}
+
+#[test]
+fn test_korean_time_zone() {
+    // KST (UTC+9 korean standard time) used in winter
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-u")
+        .arg("-d")
+        .arg("2026-01-15 10:00 KST")
+        .arg("+%F %T %Z")
+        .succeeds()
+        .stdout_is("2026-01-15 01:00:00 UTC\n");
 }
