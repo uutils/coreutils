@@ -2414,6 +2414,14 @@ fn test_date_format_modifier_percent_escape() {
         .stdout_is("%Y=0000001999\n");
 }
 
+#[test]
+fn test_date_format_modifier_huge_width_fails_without_abort() {
+    // GNU date also exits with failure for extremely large width.
+    // Assert exit code only to avoid coupling to implementation-specific error text.
+    let format = format!("+%{}c", usize::MAX);
+    new_ucmd!().arg(&format).fails().code_is(1);
+}
+
 // Tests for format modifier edge cases (flags without explicit width)
 #[test]
 fn test_date_format_modifier_edge_cases() {

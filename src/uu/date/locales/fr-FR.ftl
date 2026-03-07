@@ -101,6 +101,7 @@ date-error-setting-date-not-supported-redox = la définition de la date n'est pa
 date-error-cannot-set-date = impossible de définir la date
 date-error-extra-operand = opérande supplémentaire '{$operand}'
 date-error-write = erreur d'écriture: {$error}
+date-error-format-modifier-width-too-large = la largeur du modificateur de format '{$width}' est trop grande pour le spécificateur '%{$specifier}'
 date-error-format-missing-plus = l'argument {$arg} ne commence pas par un signe '+';
  lorsqu'une option est utilisée pour spécifier une ou plusieurs dates, tout argument autre 
   qu'une option doit être une chaîne de format commençant par un signe '+'.
