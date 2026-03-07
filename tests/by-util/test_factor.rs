@@ -15,8 +15,11 @@ use uutests::new_ucmd;
 use std::fmt::Write;
 use std::time::{Duration, SystemTime};
 
-use rand::distr::{Distribution, Uniform};
-use rand::{Rng, SeedableRng, rngs::SmallRng};
+use rand::{
+    RngExt as _, SeedableRng,
+    distr::{Distribution, Uniform},
+    rngs::SmallRng,
+};
 
 const NUM_PRIMES: usize = 10000;
 const NUM_TESTS: usize = 100;
