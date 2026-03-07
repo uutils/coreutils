@@ -43,7 +43,7 @@ use uucore::display::{Quotable, print_all_env_vars};
 use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError};
 use uucore::line_ending::LineEnding;
 #[cfg(unix)]
-use uucore::signals::{ALL_SIGNALS, signal_by_name_or_value, signal_name_by_value};
+use uucore::signals::{signal_by_name_or_value, signal_name_by_value, signal_number_upper_bound};
 use uucore::translate;
 use uucore::{format_usage, show_warning};
 
@@ -216,7 +216,7 @@ impl SignalRequest {
             f(sig, true)?;
         }
         if self.apply_all {
-            for sig_value in 1..ALL_SIGNALS.len() {
+            for sig_value in 1..=signal_number_upper_bound() {
                 if self.signals.contains(&sig_value) {
                     continue;
                 }

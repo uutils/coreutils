@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore IAMNOTASIGNAL
+// spell-checker:ignore IAMNOTASIGNAL RTMAX RTMIN SIGRTMAX
 use regex::Regex;
 use std::os::unix::process::ExitStatusExt;
 use std::process::{Child, Command};
@@ -67,6 +67,16 @@ fn test_kill_list_all_signals() {
         .stdout_contains("EXIT");
 }
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_kill_list_contains_realtime_signals() {
+    new_ucmd!()
+        .arg("-l")
+        .succeeds()
+        .stdout_contains("RTMIN")
+        .stdout_contains("RTMAX");
+}
+
 #[test]
 fn test_kill_list_final_new_line() {
     let re = Regex::new("\\n$").unwrap();
@@ -83,6 +93,16 @@ fn test_kill_list_all_signals_as_table() {
         .stdout_contains("TERM")
         .stdout_contains("HUP")
         .stdout_contains("EXIT");
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_kill_table_contains_realtime_signals() {
+    new_ucmd!()
+        .arg("-t")
+        .succeeds()
+        .stdout_contains("RTMIN")
+        .stdout_contains("RTMAX");
 }
 
 #[test]
@@ -116,6 +136,16 @@ fn test_kill_list_one_signal_from_number() {
         .arg("9")
         .succeeds()
         .stdout_only("KILL\n");
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_kill_list_rtmax_from_name() {
+    new_ucmd!()
+        .arg("-l")
+        .arg("RTMAX")
+        .succeeds()
+        .stdout_only(format!("{}\n", libc::SIGRTMAX()));
 }
 
 #[test]
@@ -383,6 +413,50 @@ fn test_kill_with_list_lower_bits() {
 fn test_kill_with_list_lower_bits_unrecognized() {
     new_ucmd!().arg("-l").arg("111").fails();
     new_ucmd!().arg("-l").arg("384").fails();
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_kill_with_list_unnamed_signal_numbers() {
+    new_ucmd!()
+        .arg("-l")
+        .arg("32")
+        .succeeds()
+        .stdout_only("32\n");
+    new_ucmd!()
+        .arg("-l")
+        .arg("33")
+        .succeeds()
+        .stdout_only("33\n");
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_kill_with_list_all_signal_numbers_up_to_last_named_signal() {
+    let last_signal_name = new_ucmd!()
+        .arg("-l")
+        .succeeds()
+        .stdout_str()
+        .lines()
+        .last()
+        .unwrap()
+        .to_string();
+
+    let last_signal_number: usize = new_ucmd!()
+        .arg("-l")
+        .arg("--")
+        .arg(&last_signal_name)
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .parse()
+        .unwrap();
+
+    let args = std::iter::once(String::from("--"))
+        .chain((0..=last_signal_number).map(|signal| signal.to_string()))
+        .collect::<Vec<_>>();
+
+    new_ucmd!().arg("-l").args(&args).succeeds();
 }
 
 #[test]
