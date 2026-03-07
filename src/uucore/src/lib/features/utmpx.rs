@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker:ignore IDLEN logind
+// spell-checker:ignore IDLEN logind ESRCH
 
 //! Aims to provide platform-independent methods to obtain login records
 //!
@@ -268,6 +268,25 @@ impl Utmpx {
         !self.user().is_empty() && self.record_type() == USER_PROCESS
     }
 
+    /// Check if the process associated with this record is still alive.
+    ///
+    /// Uses `kill(pid, 0)` to test process existence, matching GNU coreutils
+    /// behavior (see issue #3219). Returns `true` if the PID is still running
+    /// or if we lack permission to signal it (EPERM).
+    pub fn pid_is_alive(&self) -> bool {
+        let pid = self.pid();
+        if pid <= 0 {
+            return false;
+        }
+        // kill(pid, 0) returns 0 if the process exists and we have permission.
+        // If it returns -1 with errno == EPERM, the process exists but we can't
+        // signal it. Any other error (ESRCH) means the process is gone.
+        unsafe {
+            libc::kill(pid, 0) == 0
+                || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+        }
+    }
+
     /// Canonicalize host name using DNS
     pub fn canon_host(&self) -> IOResult<String> {
         let host = self.host();
@@ -517,6 +536,18 @@ impl UtmpxRecord {
             Self::Traditional(utmpx) => utmpx.is_user_process(),
             #[cfg(feature = "feat_systemd_logind")]
             Self::Systemd(systemd) => systemd.is_user_process(),
+        }
+    }
+
+    /// Check if the process associated with this record is still alive.
+    ///
+    /// For systemd-logind records, always returns `true` since session
+    /// liveness is already managed by systemd.
+    pub fn pid_is_alive(&self) -> bool {
+        match self {
+            Self::Traditional(utmpx) => utmpx.pid_is_alive(),
+            #[cfg(feature = "feat_systemd_logind")]
+            Self::Systemd(_) => true,
         }
     }
 
