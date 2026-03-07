@@ -3,20 +3,19 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 use clap::{Arg, ArgAction, Command};
-use std::{ffi::OsString, io::Write};
+use std::io::Write;
 use uucore::translate;
 
 // uucore::main does not support no-result
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args: Vec<OsString> = args.collect();
-    if args.len() != 2 {
+pub fn uumain(mut args: impl uucore::Args) -> i32 {
+    // skip binary name
+    let (Some(flag), None) = (args.nth(1), args.next()) else {
         return 0;
-    }
+    };
 
-    // args[0] is the name of the binary.
-    let error = if args[1] == "--help" {
+    let error = if flag == "--help" {
         uu_app().print_help()
-    } else if args[1] == "--version" {
+    } else if flag == "--version" {
         write!(std::io::stdout(), "{}", uu_app().render_version())
     } else {
         return 0;
