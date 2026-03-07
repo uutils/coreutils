@@ -35,10 +35,10 @@ fn write_factors_str(
     w: &mut io::BufWriter<impl Write>,
     print_exponents: bool,
 ) -> UResult<()> {
-    let s = num_str.trim();
+    let trimmed = num_str.trim_matches(|c: char| c.is_whitespace() || c == '\0');
 
     // First, interpret as BigUint.
-    let rx_big = s.parse::<BigUint>();
+    let rx_big = trimmed.parse::<BigUint>();
     let Ok(x_big) = rx_big else {
         // Non-fatal error. Proceed to the next input number.
         show_warning!("{}: {}", num_str.maybe_quote(), rx_big.unwrap_err());
@@ -56,14 +56,14 @@ fn write_factors_str(
 
     // Try parsing directly into u64 / u128 and delegate to num_prime if successful.
     // This avoids unnecessary BigUint conversions and speeds up the common cases.
-    if let Ok(v) = s.parse::<u64>() {
+    if let Ok(v) = trimmed.parse::<u64>() {
         let prime_factors = num_prime::nt_funcs::factorize64(v);
         write_result_u64(w, &x_big, prime_factors, print_exponents)
             .map_err_context(|| translate!("factor-error-write-error"))?;
         return Ok(());
     }
 
-    if let Ok(v) = s.parse::<u128>() {
+    if let Ok(v) = trimmed.parse::<u128>() {
         let prime_factors = num_prime::nt_funcs::factorize128(v);
         write_result_u128(w, &v, prime_factors, print_exponents)
             .map_err_context(|| translate!("factor-error-write-error"))?;

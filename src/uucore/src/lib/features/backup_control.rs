@@ -89,6 +89,7 @@ use clap::ArgMatches;
 use std::{
     env,
     error::Error,
+    ffi::{OsStr, OsString},
     fmt::{Debug, Display},
     path::{Path, PathBuf},
 };
@@ -243,16 +244,21 @@ pub mod arguments {
 ///
 /// 1. From the '-S' or '--suffix' CLI argument, if present
 /// 2. From the "SIMPLE_BACKUP_SUFFIX" environment variable, if present
-/// 3. By using the default '~' if none of the others apply
+/// 3. By using the default '~' if none of the others apply, or if they contained slashes
 ///
 /// This function directly takes [`ArgMatches`] as argument and looks for
 /// the '-S' and '--suffix' arguments itself.
 pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
     let supplied_suffix = matches.get_one::<String>(arguments::OPT_SUFFIX);
-    if let Some(suffix) = supplied_suffix {
+    let suffix = if let Some(suffix) = supplied_suffix {
         String::from(suffix)
     } else {
         env::var("SIMPLE_BACKUP_SUFFIX").unwrap_or_else(|_| DEFAULT_BACKUP_SUFFIX.to_owned())
+    };
+    if suffix.contains('/') {
+        DEFAULT_BACKUP_SUFFIX.to_owned()
+    } else {
+        suffix
     }
 }
 
@@ -413,48 +419,42 @@ fn match_method(method: &str, origin: &str) -> UResult<BackupMode> {
     }
 }
 
-pub fn get_backup_path(
+pub fn get_backup_path<S: AsRef<OsStr>>(
     backup_mode: BackupMode,
     backup_path: &Path,
-    suffix: &str,
+    suffix: S,
 ) -> Option<PathBuf> {
     match backup_mode {
         BackupMode::None => None,
-        BackupMode::Simple => Some(simple_backup_path(backup_path, suffix)),
+        BackupMode::Simple => Some(simple_backup_path(backup_path, suffix.as_ref())),
         BackupMode::Numbered => Some(numbered_backup_path(backup_path)),
-        BackupMode::Existing => Some(existing_backup_path(backup_path, suffix)),
+        BackupMode::Existing => Some(existing_backup_path(backup_path, suffix.as_ref())),
     }
 }
 
-fn simple_backup_path(path: &Path, suffix: &str) -> PathBuf {
+fn simple_backup_path<S: AsRef<OsStr>>(path: &Path, suffix: S) -> PathBuf {
     let mut file_name = path.file_name().unwrap_or_default().to_os_string();
-    file_name.push(suffix);
+    file_name.push(suffix.as_ref());
     path.with_file_name(file_name)
 }
 
 fn numbered_backup_path(path: &Path) -> PathBuf {
-    let file_name = path.file_name().unwrap_or_default();
-    for i in 1_u64.. {
-        let mut numbered_file_name = file_name.to_os_string();
-        numbered_file_name.push(format!(".~{i}~"));
-        let path = path.with_file_name(numbered_file_name);
-        if !path.exists() {
-            return path;
+    let mut i: u64 = 1;
+    loop {
+        let new_path = simple_backup_path(path, OsString::from(format!(".~{i}~")));
+        if !new_path.exists() {
+            return new_path;
         }
+        i += 1;
     }
-    panic!("cannot create backup")
 }
 
-fn existing_backup_path(path: &Path, suffix: &str) -> PathBuf {
-    let file_name = path.file_name().unwrap_or_default();
-    let mut numbered_file_name = file_name.to_os_string();
-    numbered_file_name.push(".~1~");
-    let test_path = path.with_file_name(numbered_file_name);
+fn existing_backup_path<S: AsRef<OsStr>>(path: &Path, suffix: S) -> PathBuf {
+    let test_path = simple_backup_path(path, OsString::from(".~1~"));
     if test_path.exists() {
-        numbered_backup_path(path)
-    } else {
-        simple_backup_path(path, suffix)
+        return numbered_backup_path(path);
     }
+    simple_backup_path(path, suffix.as_ref())
 }
 
 /// Returns true if the source file is likely to be the simple backup file for the target file.
@@ -693,6 +693,16 @@ mod tests {
 
         let result = determine_backup_suffix(&matches);
         assert_eq!(result, "-v");
+    }
+
+    #[test]
+    fn test_suffix_rejects_path_traversal() {
+        let _dummy = TEST_MUTEX.lock().unwrap();
+        let matches =
+            make_app().get_matches_from(vec!["command", "-b", "--suffix", "_/../../dest"]);
+
+        let result = determine_backup_suffix(&matches);
+        assert_eq!(result, DEFAULT_BACKUP_SUFFIX);
     }
 
     #[test]

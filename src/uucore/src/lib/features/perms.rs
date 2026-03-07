@@ -830,10 +830,7 @@ pub fn configure_symlink_and_recursion(
     if recursive {
         if traverse_symlinks == TraverseSymlinks::None {
             if dereference == Some(true) {
-                return Err(USimpleError::new(
-                    1,
-                    "-R --dereference requires -H or -L".to_string(),
-                ));
+                return Err(USimpleError::new(1, "-R --dereference requires -H or -L"));
             }
             dereference = Some(false);
         }

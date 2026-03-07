@@ -55,6 +55,15 @@ fn test_repeated_exponents() {
 }
 
 #[test]
+fn test_trim_null_chars() {
+    new_ucmd!()
+        .pipe_in("42\0")
+        .succeeds()
+        .stdout_only("42: 2 3 7\n")
+        .no_stderr();
+}
+
+#[test]
 #[cfg(feature = "sort")]
 #[cfg(not(target_os = "android"))]
 fn test_parallel() {

@@ -657,7 +657,7 @@ jobs:
           - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: "feat_os_unix,uudoc"   , use-cross: no, workspace-tests: true }
           - { os: ubuntu-latest  , target: x86_64-unknown-linux-musl   , features: feat_os_unix_musl , use-cross: use-cross }
           - { os: ubuntu-latest  , target: x86_64-unknown-redox        , features: feat_os_unix_redox     , use-cross: redoxer , skip-tests: true , check-only: true }
-          - { os: ubuntu-latest  , target: wasm32-wasip1, default-features: false, features: "basenc,cksum", skip-tests: true }
+          - { os: ubuntu-latest  , target: wasm32-wasip1, default-features: false, features: feat_wasm, skip-tests: true }
           - { os: macos-latest   , target: aarch64-apple-darwin        , features: feat_os_macos, workspace-tests: true } # M1 CPU
           # PR #7964: chcon should not break build without the feature. cargo check is enough to detect it.
           - { os: macos-latest   , target: aarch64-apple-darwin        , workspace-tests: true, check-only: true } # M1 CPU
@@ -1093,12 +1093,11 @@ jobs:
       shell: bash
       run: |
         sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
-    - name: Build coreutils as multiple binaries
+    - name: Build coreutils
       shell: bash
       run: |
-        ## Build individual uutil binaries
         set -v
-        make
+        make MULTICALL=y && (cd target/debug && for binary in $(./coreutils --list);do ln -sf coreutils ${binary};done)
     - name: Run toybox src
       shell: bash
       run: |
@@ -1279,35 +1278,6 @@ jobs:
         disable_search: true
         flags: coverage,${{ matrix.job.os }}
         fail_ci_if_error: false
-
-  test_separately:
-    # duplicated with other CI, but has better appearance
-    name: Separate Builds (individual and coreutils)
-    runs-on: ${{ matrix.job.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - { os: ubuntu-latest  , features: feat_os_unix }
-          - { os: macos-latest   , features: feat_os_macos }
-          - { os: windows-latest , features: feat_os_windows }
-    steps:
-    - uses: actions/checkout@v6
-      with:
-        persist-credentials: false
-    - name: Avoid no space left on device
-      run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android &
-    - uses: dtolnay/rust-toolchain@stable
-    - uses: Swatinem/rust-cache@v2
-    - name: build and test all programs individually
-      shell: bash
-      run: |
-        CARGO_FEATURES_OPTION='--features=${{ matrix.job.features }}' ;
-        for f in $(util/show-utils.sh ${CARGO_FEATURES_OPTION})
-        do
-          echo "Building and testing $f"
-          cargo test -p "uu_$f" -p coreutils --features=$f --no-default-features
-        done
 
   test_selinux:
     name: Build/SELinux

@@ -10,6 +10,7 @@
 //
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
 // spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod mkdirat CREAT WRONLY ELOOP ENOTDIR
+// spell-checker:ignore atimensec mtimensec ctimensec
 
 #[cfg(test)]
 use std::os::unix::ffi::OsStringExt;
@@ -704,13 +705,21 @@ impl std::os::unix::fs::MetadataExt for Metadata {
     }
 
     fn atime_nsec(&self) -> i64 {
-        #[cfg(target_pointer_width = "32")]
+        #[cfg(target_os = "netbsd")]
         {
-            self.stat.st_atime_nsec.into()
+            self.stat.st_atimensec as i64
         }
-        #[cfg(not(target_pointer_width = "32"))]
+
+        #[cfg(not(target_os = "netbsd"))]
         {
-            self.stat.st_atime_nsec
+            #[cfg(target_pointer_width = "32")]
+            {
+                self.stat.st_atime_nsec.into()
+            }
+            #[cfg(not(target_pointer_width = "32"))]
+            {
+                self.stat.st_atime_nsec
+            }
         }
     }
 
@@ -726,13 +735,21 @@ impl std::os::unix::fs::MetadataExt for Metadata {
     }
 
     fn mtime_nsec(&self) -> i64 {
-        #[cfg(target_pointer_width = "32")]
+        #[cfg(target_os = "netbsd")]
         {
-            self.stat.st_mtime_nsec.into()
+            self.stat.st_mtimensec as i64
         }
-        #[cfg(not(target_pointer_width = "32"))]
+
+        #[cfg(not(target_os = "netbsd"))]
         {
-            self.stat.st_mtime_nsec
+            #[cfg(target_pointer_width = "32")]
+            {
+                self.stat.st_mtime_nsec.into()
+            }
+            #[cfg(not(target_pointer_width = "32"))]
+            {
+                self.stat.st_mtime_nsec
+            }
         }
     }
 
@@ -748,13 +765,21 @@ impl std::os::unix::fs::MetadataExt for Metadata {
     }
 
     fn ctime_nsec(&self) -> i64 {
-        #[cfg(target_pointer_width = "32")]
+        #[cfg(target_os = "netbsd")]
         {
-            self.stat.st_ctime_nsec.into()
+            self.stat.st_ctimensec as i64
         }
-        #[cfg(not(target_pointer_width = "32"))]
+
+        #[cfg(not(target_os = "netbsd"))]
         {
-            self.stat.st_ctime_nsec
+            #[cfg(target_pointer_width = "32")]
+            {
+                self.stat.st_ctime_nsec.into()
+            }
+            #[cfg(not(target_pointer_width = "32"))]
+            {
+                self.stat.st_ctime_nsec
+            }
         }
     }
 

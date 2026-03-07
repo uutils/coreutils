@@ -1023,3 +1023,23 @@ fn test_ln_hard_link_dir() {
         .fails()
         .stderr_contains("hard link not allowed for directory");
 }
+
+#[test]
+fn test_ln_backup_no_path_traversal() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("a");
+    at.touch("b");
+    at.mkdir("b_");
+
+    scene
+        .ucmd()
+        .args(&["-S", "_/../c", "-s", "a", "b"])
+        .succeeds();
+
+    assert!(!at.file_exists("c"));
+    assert!(at.plus("b").is_symlink());
+    assert!(at.file_exists("b~"));
+    assert!(!at.plus("b~").is_symlink());
+}
