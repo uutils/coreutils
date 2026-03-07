@@ -170,6 +170,8 @@ fn table() {
 }
 
 fn normalize_list_signal_value(signal_value: usize) -> Option<usize> {
+    // `kill -l` also accepts wait-status-like values and decodes the signal
+    // number from the low 8 bits.
     let lower_8_bits = signal_value & 0xff;
     if lower_8_bits <= signal_number_upper_bound() {
         return Some(lower_8_bits);
