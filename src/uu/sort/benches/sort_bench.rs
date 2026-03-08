@@ -225,19 +225,16 @@ fn sort_long_line(bencher: Bencher, line_size: usize) {
     data_b.push(b'\n');
 
     let file_a = setup_test_file(&data_a);
+    let path_a = file_a.to_str().unwrap();
     let file_b = setup_test_file(&data_b);
+    let path_b = file_b.to_str().unwrap();
     let output_file = NamedTempFile::new().unwrap();
     let output_path = output_file.path().to_str().unwrap();
 
     bencher.bench(|| {
         black_box(run_util_function(
             uumain,
-            &[
-                file_a.to_str().unwrap(),
-                file_b.to_str().unwrap(),
-                "-o",
-                output_path,
-            ],
+            &[path_a, path_b, "-o", output_path],
         ));
     });
 }
