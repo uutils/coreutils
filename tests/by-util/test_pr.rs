@@ -566,6 +566,26 @@ fn test_pr_char_device_dev_null() {
     new_ucmd!().arg("/dev/null").succeeds();
 }
 
+#[cfg(unix)]
+#[test]
+fn test_streaming_stdin_from_infinite_source() {
+    use std::fs::File;
+    use std::process::Stdio;
+    use std::time::Duration;
+
+    let mut cmd = new_ucmd!();
+    cmd.timeout(Duration::from_secs(5));
+
+    let mut child = cmd
+        .set_stdin(Stdio::from(File::open("/dev/zero").unwrap()))
+        .set_stdout(Stdio::piped())
+        .run_no_wait();
+
+    // `pr` should start writing promptly and terminate quietly on a closed pipe.
+    child.close_stdout();
+    child.wait().unwrap().fails_silently();
+}
+
 #[test]
 fn test_b_flag_backwards_compat() {
     // -b is a no-op for backwards compatibility (column-down is now the default)
