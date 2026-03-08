@@ -4,10 +4,21 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (ToDO) getreent reent IOFBF IOLBF IONBF setvbuf stderrp stdinp stdoutp
 
+#![feature(stdout_switchable_buffering)]
+
 use ctor::ctor;
 use libc::{_IOFBF, _IOLBF, _IONBF, FILE, c_char, c_int, fileno, size_t};
 use std::env;
+use std::io::{self, BufferMode};
 use std::ptr;
+
+fn value_to_buffer_mode(value: &str) -> BufferMode {
+    match value {
+        "0" => BufferMode::Immediate,
+        "L" => BufferMode::Line,
+        _ => BufferMode::Block,
+    }
+}
 
 // This runs automatically when the library is loaded via LD_PRELOAD
 #[ctor]
@@ -224,6 +235,9 @@ pub unsafe extern "C" fn __stdbuf() {
         set_buffer(unsafe { __stdbuf_get_stdin() }, &val);
     }
     if let Ok(val) = env::var("_STDBUF_O") {
+        io::stdout()
+            .lock()
+            .set_buffer_mode(value_to_buffer_mode(&val));
         set_buffer(unsafe { __stdbuf_get_stdout() }, &val);
     }
 }
