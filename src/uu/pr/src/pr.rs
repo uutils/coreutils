@@ -870,7 +870,7 @@ fn should_use_streaming_pr(path: &str, options: &OutputOptions) -> bool {
         return false;
     }
 
-    path == FILE_STDIN || metadata(path).is_ok_and(|meta| !meta.file_type().is_file())
+    path != FILE_STDIN && metadata(path).is_ok_and(|meta| !meta.file_type().is_file())
 }
 
 fn page_is_in_range(page: usize, options: &OutputOptions) -> bool {
@@ -897,18 +897,21 @@ fn write_stream_page_trailer(
 ) -> Result<(), std::io::Error> {
     let content_line_separator = options.content_line_separator.as_bytes();
     if !options.form_feed_used {
-        // `print_page`/`write_columns` emits at most `lines_needed_per_page - 1`
-        // blank-content separators for non-form-feed mode.
-        let lines_needed_per_page = lines_to_read_for_page(options).saturating_sub(1);
+        // `print_page`/`write_columns` emits blank-content separators until
+        // the page reaches `lines_needed_per_page`.
+        let lines_needed_per_page = lines_to_read_for_page(options);
         for _ in lines_in_page..lines_needed_per_page {
             out.write_all(content_line_separator)?;
         }
     }
 
     let line_separator = options.line_separator.as_bytes();
-    for line in trailer_content(options) {
+    let trailer = trailer_content(options);
+    for (index, line) in trailer.iter().enumerate() {
         out.write_all(line.as_bytes())?;
-        out.write_all(line_separator)?;
+        if index + 1 != trailer.len() {
+            out.write_all(line_separator)?;
+        }
     }
     out.write_all(options.page_separator_char.as_bytes())?;
     Ok(())

@@ -568,8 +568,7 @@ fn test_pr_char_device_dev_null() {
 
 #[cfg(unix)]
 #[test]
-fn test_streaming_stdin_from_infinite_source() {
-    use std::fs::File;
+fn test_streaming_char_device_from_infinite_source() {
     use std::process::Stdio;
     use std::time::Duration;
 
@@ -577,7 +576,7 @@ fn test_streaming_stdin_from_infinite_source() {
     cmd.timeout(Duration::from_secs(5));
 
     let mut child = cmd
-        .set_stdin(Stdio::from(File::open("/dev/zero").unwrap()))
+        .arg("/dev/zero")
         .set_stdout(Stdio::piped())
         .run_no_wait();
 
