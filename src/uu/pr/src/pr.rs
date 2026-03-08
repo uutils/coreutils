@@ -941,6 +941,34 @@ fn finish_stream_page(
     Ok(options.end_page.is_some_and(|end| *page > end))
 }
 
+fn validate_utf8_stream_chunk(utf8_tail: &mut Vec<u8>, chunk: &[u8]) -> Result<(), PrError> {
+    let mut combined;
+    let data = if utf8_tail.is_empty() {
+        chunk
+    } else {
+        combined = Vec::with_capacity(utf8_tail.len() + chunk.len());
+        combined.extend_from_slice(utf8_tail);
+        combined.extend_from_slice(chunk);
+        combined.as_slice()
+    };
+
+    match std::str::from_utf8(data) {
+        Ok(_) => {
+            utf8_tail.clear();
+            Ok(())
+        }
+        Err(err) => {
+            if err.error_len().is_some() {
+                return Err(err.into());
+            }
+
+            utf8_tail.clear();
+            utf8_tail.extend_from_slice(&data[err.valid_up_to()..]);
+            Ok(())
+        }
+    }
+}
+
 fn pr_stream_simple_with_reader<R: Read>(
     mut reader: R,
     options: &OutputOptions,
@@ -957,6 +985,7 @@ fn pr_stream_simple_with_reader<R: Read>(
     let mut lines_in_page = 0usize;
     let mut saw_non_delimiter_since_last = false;
     let mut last_delimiter: Option<u8> = None;
+    let mut utf8_tail = Vec::new();
 
     let mut buf = [0_u8; 8192];
     'read_loop: loop {
@@ -964,6 +993,7 @@ fn pr_stream_simple_with_reader<R: Read>(
         if n == 0 {
             break;
         }
+        validate_utf8_stream_chunk(&mut utf8_tail, &buf[..n])?;
 
         for &byte in &buf[..n] {
             if byte == NL {
@@ -1059,6 +1089,11 @@ fn pr_stream_simple_with_reader<R: Read>(
         }
     }
 
+    if !utf8_tail.is_empty() {
+        let err = std::str::from_utf8(&utf8_tail).unwrap_err();
+        return Err(err.into());
+    }
+
     if saw_non_delimiter_since_last {
         if !page_active {
             page_active = true;
@@ -1090,13 +1125,8 @@ fn pr_stream_simple_with_reader<R: Read>(
 }
 
 fn pr_stream_simple(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
-    if path == FILE_STDIN {
-        let stdin = stdin();
-        pr_stream_simple_with_reader(stdin.lock(), options)
-    } else {
-        let file = std::fs::File::open(path)?;
-        pr_stream_simple_with_reader(file, options)
-    }
+    let file = std::fs::File::open(path)?;
+    pr_stream_simple_with_reader(file, options)
 }
 
 fn apply_expand_tab(chunk: &mut String, byte: u8, expand_options: &ExpandTabsOptions) {

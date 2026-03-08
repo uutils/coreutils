@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (ToDO) Sdivide ading
+// spell-checker:ignore (ToDO) Sdivide ading IRWXU
 
 use jiff::{Timestamp, ToSpan};
 use regex::Regex;
@@ -583,6 +583,30 @@ fn test_streaming_char_device_from_infinite_source() {
     // `pr` should start writing promptly and terminate quietly on a closed pipe.
     child.close_stdout();
     child.wait().unwrap().fails_silently();
+}
+
+#[cfg(unix)]
+#[test]
+fn test_streaming_fifo_with_invalid_utf8_fails() {
+    use std::time::Duration;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let fifo_path = at.plus_as_string("fifo");
+
+    nix::unistd::mkfifo(fifo_path.as_str(), nix::sys::stat::Mode::S_IRWXU).unwrap();
+
+    let writer_path = at.plus("fifo");
+    let writer = std::thread::spawn(move || {
+        std::fs::write(writer_path, [0xFF_u8, b'\n']).unwrap();
+    });
+
+    ucmd.timeout(Duration::from_secs(5));
+    ucmd.arg("fifo")
+        .fails_with_code(1)
+        .stdout_is("")
+        .stderr_contains("invalid utf-8 sequence");
+
+    writer.join().unwrap();
 }
 
 #[test]
