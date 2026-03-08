@@ -7,6 +7,8 @@
 use jiff::{Timestamp, ToSpan};
 use regex::Regex;
 use std::fs::metadata;
+#[cfg(unix)]
+use uutests::at_and_ts;
 use uutests::util::UCommand;
 use uutests::{at_and_ucmd, new_ucmd};
 
@@ -43,6 +45,36 @@ fn valid_last_modified_template_vars(from: Timestamp) -> Vec<Vec<(String, String
         .into_iter()
         .map(|time| vec![("{last_modified_time}".to_string(), time)])
         .collect()
+}
+
+#[cfg(unix)]
+fn assert_file_and_fifo_outputs_match(args: &[&str], input: &[u8]) {
+    let (at, ts) = at_and_ts!();
+    at.write_bytes("input.txt", input);
+
+    let expected = ts
+        .ucmd()
+        .args(args)
+        .arg("input.txt")
+        .succeeds()
+        .stdout_move_bytes();
+
+    at.mkfifo("input.fifo");
+    let writer_path = at.plus("input.fifo");
+    let writer_input = input.to_vec();
+    let writer = std::thread::spawn(move || {
+        std::fs::write(writer_path, writer_input).unwrap();
+    });
+
+    let actual = ts
+        .ucmd()
+        .args(args)
+        .arg("input.fifo")
+        .succeeds()
+        .stdout_move_bytes();
+
+    writer.join().unwrap();
+    assert_eq!(actual, expected);
 }
 
 #[test]
@@ -607,6 +639,18 @@ fn test_streaming_fifo_with_invalid_utf8_fails() {
         .stderr_contains("invalid utf-8 sequence");
 
     writer.join().unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn test_streaming_fifo_falls_back_when_page_has_no_content_lines() {
+    assert_file_and_fifo_outputs_match(&["-h", "H", "-l", "10"], b"line1\nline2\nline3\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_streaming_fifo_falls_back_when_double_spacing_eliminates_content_lines() {
+    assert_file_and_fifo_outputs_match(&["-h", "H", "-d", "-l", "11"], b"line1\nline2\nline3\n");
 }
 
 #[test]
