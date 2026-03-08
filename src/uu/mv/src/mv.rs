@@ -618,6 +618,12 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
     } else {
         None
     };
+    // recycle buffer to avoid many allocations
+    // most filesystem restricts file names to 255 byte, but it is overkill
+    const COMMON_FILE_NAME_LEN: usize = 64;
+    let mut recycled_targetpath_buf =
+        PathBuf::with_capacity(target_dir.as_os_str().len() + COMMON_FILE_NAME_LEN);
+    recycled_targetpath_buf.push(target_dir);
 
     for sourcepath in files {
         if sourcepath.symlink_metadata().is_err() {
@@ -630,18 +636,22 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
             pb.set_message(msg);
         }
 
-        let targetpath = if let Some(name) = sourcepath.file_name() {
-            target_dir.join(name)
+        recycled_targetpath_buf.clear();
+        recycled_targetpath_buf.push(target_dir);
+        if let Some(name) = sourcepath.file_name() {
+            recycled_targetpath_buf.push(name);
         } else {
             show!(MvError::NoSuchFile(sourcepath.quote().to_string()));
             continue;
         };
 
-        if moved_destinations.contains(&targetpath) && options.backup != BackupMode::Numbered {
+        if moved_destinations.contains(&recycled_targetpath_buf)
+            && options.backup != BackupMode::Numbered
+        {
             // If the target file was already created in this mv call, do not overwrite
             show!(USimpleError::new(
                 1,
-                translate!("mv-error-will-not-overwrite-just-created", "target" => targetpath.quote(), "source" => sourcepath.quote()),
+                translate!("mv-error-will-not-overwrite-just-created", "target" => recycled_targetpath_buf.quote(), "source" => sourcepath.quote()),
             ));
             continue;
         }
@@ -660,7 +670,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
 
         match rename(
             sourcepath,
-            &targetpath,
+            &recycled_targetpath_buf,
             options,
             display_manager.as_ref(),
             hardlink_params.0,
@@ -669,7 +679,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
             Err(e) if e.to_string().is_empty() => set_exit_code(1),
             Err(e) => {
                 let e = e.map_err_context(|| {
-                    translate!("mv-error-cannot-move", "source" => sourcepath.quote(), "target" => targetpath.quote())
+                    translate!("mv-error-cannot-move", "source" => sourcepath.quote(), "target" => recycled_targetpath_buf.quote())
                 });
                 if let Some(ref pb) = display_manager {
                     pb.suspend(|| show!(e));
@@ -682,7 +692,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
         if let Some(ref pb) = count_progress {
             pb.inc(1);
         }
-        moved_destinations.insert(targetpath.clone());
+        moved_destinations.insert(recycled_targetpath_buf.clone());
     }
     Ok(())
 }
