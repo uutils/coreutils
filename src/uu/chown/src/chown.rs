@@ -239,7 +239,7 @@ mod test {
     #[test]
     fn test_parse_spec() {
         unsafe {
-            env::set_var("LANG", "C");
+            env::set_var("LC_ALL", "C");
         }
         let _ = locale::setup_localization("chown");
         assert!(matches!(parse_spec(":", ':'), Ok((None, None))));
