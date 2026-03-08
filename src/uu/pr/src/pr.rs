@@ -870,7 +870,9 @@ fn should_use_streaming_pr(path: &str, options: &OutputOptions) -> bool {
         return false;
     }
 
-    path != FILE_STDIN && metadata(path).is_ok_and(|meta| !meta.file_type().is_file())
+    path != FILE_STDIN
+        && lines_to_read_for_page(options) > 0
+        && metadata(path).is_ok_and(|meta| !meta.file_type().is_file())
 }
 
 fn page_is_in_range(page: usize, options: &OutputOptions) -> bool {
