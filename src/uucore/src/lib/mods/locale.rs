@@ -10,7 +10,8 @@ use fluent::{FluentArgs, FluentBundle, FluentResource};
 use fluent_syntax::parser::ParserError;
 
 use std::cell::Cell;
-use std::fs;
+use std::fs::{self, File};
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::OnceLock;
@@ -22,10 +23,7 @@ use unic_langid::LanguageIdentifier;
 #[derive(Error, Debug)]
 pub enum LocalizationError {
     #[error("I/O error loading '{path}': {source}")]
-    Io {
-        source: std::io::Error,
-        path: PathBuf,
-    },
+    Io { source: io::Error, path: PathBuf },
     #[error("Parse-locale error: {0}")]
     ParseLocale(String),
     #[error("Resource parse error at '{snippet}': {error:?}")]
@@ -42,8 +40,8 @@ pub enum LocalizationError {
     PathResolution(String),
 }
 
-impl From<std::io::Error> for LocalizationError {
-    fn from(error: std::io::Error) -> Self {
+impl From<io::Error> for LocalizationError {
+    fn from(error: io::Error) -> Self {
         Self::Io {
             source: error,
             path: PathBuf::from("<unknown>"),
@@ -59,6 +57,7 @@ impl UError for LocalizationError {
 }
 
 pub const DEFAULT_LOCALE: &str = "en-US";
+const MAX_LOCALE_FILE_SIZE: u64 = 256 * 1024;
 
 // Include embedded locale files as fallback
 include!(concat!(env!("OUT_DIR"), "/embedded_locales.rs"));
@@ -131,6 +130,56 @@ fn find_uucore_locales_dir(utility_locales_dir: &Path) -> Option<PathBuf> {
     uucore_locales.exists().then_some(uucore_locales)
 }
 
+fn localization_io_error(path: &Path, source: io::Error) -> LocalizationError {
+    LocalizationError::Io {
+        source,
+        path: path.to_path_buf(),
+    }
+}
+
+fn read_locale_file(locale_path: &Path) -> Result<String, LocalizationError> {
+    let metadata =
+        fs::metadata(locale_path).map_err(|source| localization_io_error(locale_path, source))?;
+    if !metadata.is_file() {
+        return Err(localization_io_error(
+            locale_path,
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "locale file must be a regular file",
+            ),
+        ));
+    }
+
+    if metadata.len() > MAX_LOCALE_FILE_SIZE {
+        return Err(localization_io_error(
+            locale_path,
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("locale file exceeds {MAX_LOCALE_FILE_SIZE} bytes"),
+            ),
+        ));
+    }
+
+    let mut content = String::new();
+    let bytes_read = File::open(locale_path)
+        .map_err(|source| localization_io_error(locale_path, source))?
+        .take(MAX_LOCALE_FILE_SIZE + 1)
+        .read_to_string(&mut content)
+        .map_err(|source| localization_io_error(locale_path, source))?;
+
+    if bytes_read as u64 > MAX_LOCALE_FILE_SIZE {
+        return Err(localization_io_error(
+            locale_path,
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("locale file exceeds {MAX_LOCALE_FILE_SIZE} bytes"),
+            ),
+        ));
+    }
+
+    Ok(content)
+}
+
 /// Create a bundle that combines common and utility-specific strings
 fn create_bundle(
     locale: &LanguageIdentifier,
@@ -145,8 +194,7 @@ fn create_bundle(
     let mut try_add_resource_from = |dir_opt: Option<PathBuf>| {
         if let Some(resource) = dir_opt
             .map(|dir| dir.join(format!("{locale}.ftl")))
-            .and_then(|locale_path| fs::read_to_string(locale_path).ok())
-            .and_then(|ftl| FluentResource::try_new(ftl).ok())
+            .and_then(|locale_path| read_locale_resource(&locale_path).ok())
         {
             bundle.add_resource_overriding(resource);
         }
@@ -239,6 +287,11 @@ fn parse_fluent_resource(content: &str) -> Result<FluentResource, LocalizationEr
             }
         },
     )
+}
+
+fn read_locale_resource(locale_path: &Path) -> Result<FluentResource, LocalizationError> {
+    let content = read_locale_file(locale_path)?;
+    parse_fluent_resource(&content)
 }
 
 /// Create a bundle from embedded English locale files with common uucore strings
@@ -599,10 +652,14 @@ mod tests {
 
         // Only load from the test directory - no common strings or utility-specific paths
         let locale_path = test_locales_dir.join(format!("{locale}.ftl"));
-        if let Ok(ftl_content) = fs::read_to_string(&locale_path) {
-            let resource = parse_fluent_resource(&ftl_content)?;
-            bundle.add_resource_overriding(resource);
-            return Ok(bundle);
+        match read_locale_resource(&locale_path) {
+            Ok(resource) => {
+                bundle.add_resource_overriding(resource);
+                return Ok(bundle);
+            }
+            Err(LocalizationError::Io { source, .. })
+                if source.kind() == io::ErrorKind::NotFound => {}
+            Err(err) => return Err(err),
         }
 
         Err(LocalizationError::LocalesDirNotFound(format!(
@@ -757,6 +814,79 @@ invalid-syntax = This is { $missing
             Err(other) => {
                 panic!("Expected ParseResource error, but got: {other:?}");
             }
+        }
+    }
+
+    #[test]
+    fn test_create_bundle_rejects_non_regular_locale_file() {
+        let temp_dir = create_test_locales_dir();
+        let locale = LanguageIdentifier::from_str("de-DE").unwrap();
+        fs::create_dir(temp_dir.path().join("de-DE.ftl")).unwrap();
+
+        let result = create_test_bundle(&locale, temp_dir.path());
+
+        match result {
+            Err(LocalizationError::Io { source, path }) => {
+                assert_eq!(source.kind(), io::ErrorKind::InvalidData);
+                assert_eq!(path, temp_dir.path().join("de-DE.ftl"));
+            }
+            _ => panic!("Expected Io error for non-regular file"),
+        }
+    }
+
+    #[test]
+    fn test_create_bundle_rejects_oversized_locale_file() {
+        let temp_dir = create_test_locales_dir();
+        let locale = LanguageIdentifier::from_str("it-IT").unwrap();
+        let oversized_message =
+            format!("greeting = {}\n", "x".repeat(MAX_LOCALE_FILE_SIZE as usize));
+        fs::write(temp_dir.path().join("it-IT.ftl"), oversized_message).unwrap();
+
+        let result = create_test_bundle(&locale, temp_dir.path());
+
+        match result {
+            Err(LocalizationError::Io { source, path }) => {
+                assert_eq!(source.kind(), io::ErrorKind::InvalidData);
+                assert_eq!(path, temp_dir.path().join("it-IT.ftl"));
+            }
+            _ => panic!("Expected Io error for oversized locale file"),
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_create_bundle_accepts_symlink_to_regular_locale_file() {
+        use std::os::unix::fs::symlink;
+
+        let temp_dir = create_test_locales_dir();
+        let locale = LanguageIdentifier::from_str("fr-CA").unwrap();
+        symlink(
+            temp_dir.path().join("fr-FR.ftl"),
+            temp_dir.path().join("fr-CA.ftl"),
+        )
+        .unwrap();
+
+        let bundle = create_test_bundle(&locale, temp_dir.path()).unwrap();
+        assert!(bundle.get_message("greeting").is_some());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_create_bundle_rejects_dev_zero_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let temp_dir = create_test_locales_dir();
+        let locale = LanguageIdentifier::from_str("nl-NL").unwrap();
+        symlink("/dev/zero", temp_dir.path().join("nl-NL.ftl")).unwrap();
+
+        let result = create_test_bundle(&locale, temp_dir.path());
+
+        match result {
+            Err(LocalizationError::Io { source, path }) => {
+                assert_eq!(source.kind(), io::ErrorKind::InvalidData);
+                assert_eq!(path, temp_dir.path().join("nl-NL.ftl"));
+            }
+            _ => panic!("Expected Io error for /dev/zero symlink"),
         }
     }
 
@@ -1206,7 +1336,7 @@ invalid-syntax = This is { $missing
 
     #[test]
     fn test_localization_error_from_io_error() {
-        let io_error = std::io::Error::new(std::io::ErrorKind::NotFound, "File not found");
+        let io_error = io::Error::new(io::ErrorKind::NotFound, "File not found");
         let loc_error = LocalizationError::from(io_error);
 
         match loc_error {
@@ -1368,7 +1498,7 @@ invalid-syntax = This is { $missing
     #[test]
     fn test_error_display() {
         let io_error = LocalizationError::Io {
-            source: std::io::Error::new(std::io::ErrorKind::NotFound, "File not found"),
+            source: io::Error::new(io::ErrorKind::NotFound, "File not found"),
             path: PathBuf::from("/test/path.ftl"),
         };
         let error_string = format!("{io_error}");
