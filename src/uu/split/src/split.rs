@@ -21,7 +21,9 @@ use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Wr
 use std::path::Path;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError};
+use uucore::error::{
+    FromIo, UIoError, UResult, USimpleError, UUsageError, set_exit_code, strip_errno,
+};
 use uucore::translate;
 
 use uucore::parser::parse_size::parse_size_u64;
@@ -565,11 +567,48 @@ fn ignorable_io_error(error: &io::Error, settings: &Settings) -> bool {
 /// If ignorable io error occurs, return number of bytes as if all bytes written
 /// Should not be used for Kth chunk number sub-strategies
 /// as those do not work with `--filter` option
-fn custom_write<T: Write>(bytes: &[u8], writer: &mut T, settings: &Settings) -> io::Result<usize> {
+///
+/// When `error_context` is None, acts as simple write wrapper
+/// When `error_context` is Some((filename, error_reported)), enables error reporting and immediate flushing
+fn custom_write<T: Write>(
+    bytes: &[u8],
+    writer: &mut T,
+    settings: &Settings,
+    error_context: Option<(&str, &mut bool)>,
+) -> io::Result<usize> {
     match writer.write(bytes) {
-        Ok(n) => Ok(n),
+        Ok(n) => {
+            // If error reporting is enabled, flush immediately to catch buffered I/O errors
+            if let Some((filename, error_reported)) = error_context {
+                match writer.flush() {
+                    Ok(()) => Ok(n),
+                    Err(e) if ignorable_io_error(&e, settings) => Ok(bytes.len()),
+                    Err(e) => {
+                        if !*error_reported {
+                            uucore::show_error!("{}: {}", filename, strip_errno(&e));
+                            set_exit_code(1);
+                            *error_reported = true;
+                        }
+                        Err(io::Error::other(""))
+                    }
+                }
+            } else {
+                Ok(n)
+            }
+        }
         Err(e) if ignorable_io_error(&e, settings) => Ok(bytes.len()),
-        Err(e) => Err(e),
+        Err(e) => {
+            if let Some((filename, error_reported)) = error_context {
+                if !*error_reported {
+                    uucore::show_error!("{}: {}", filename, strip_errno(&e));
+                    set_exit_code(1);
+                    *error_reported = true;
+                }
+                Err(io::Error::other(""))
+            } else {
+                Err(e)
+            }
+        }
     }
 }
 
@@ -713,6 +752,12 @@ struct ByteChunkWriter<'a> {
 
     /// Iterator that yields filenames for each chunk.
     filename_iterator: FilenameIterator<'a>,
+
+    /// Current filename being written to.
+    current_filename: String,
+
+    /// Whether an error has already been reported for the current file.
+    error_reported: bool,
 }
 
 impl<'a> ByteChunkWriter<'a> {
@@ -732,7 +777,25 @@ impl<'a> ByteChunkWriter<'a> {
             num_chunks_written: 0,
             inner,
             filename_iterator,
+            current_filename: filename,
+            error_reported: false,
         })
+    }
+}
+
+impl Drop for ByteChunkWriter<'_> {
+    fn drop(&mut self) {
+        // Ensure final flush to catch any buffered write errors, but only report if not already reported
+        if !self.error_reported {
+            if let Err(e) = self.inner.flush() {
+                uucore::show_error!(
+                    "split: {}: final flush failed: {}",
+                    self.current_filename,
+                    strip_errno(&e)
+                );
+                set_exit_code(1);
+            }
+        }
     }
 }
 
@@ -751,6 +814,13 @@ impl Write for ByteChunkWriter<'_> {
             }
 
             if self.num_bytes_remaining_in_current_chunk == 0 {
+                // Flush the current writer before switching to a new file to catch any delayed write errors
+                if let Err(e) = self.inner.flush() {
+                    uucore::show_error!("{}: {}", self.current_filename, strip_errno(&e));
+                    set_exit_code(1);
+                    return Err(io::Error::other(""));
+                }
+
                 // Increment the chunk number, reset the number of bytes remaining, and instantiate the new underlying writer.
                 self.num_chunks_written += 1;
                 self.num_bytes_remaining_in_current_chunk = self.chunk_size;
@@ -763,6 +833,8 @@ impl Write for ByteChunkWriter<'_> {
                     println!("creating file {}", filename.quote());
                 }
                 self.inner = self.settings.instantiate_current_writer(&filename, true)?;
+                self.current_filename = filename;
+                self.error_reported = false;
             }
 
             // If the capacity of this chunk is greater than the number of
@@ -771,7 +843,12 @@ impl Write for ByteChunkWriter<'_> {
             // the chunk number and repeat.
             let buf_len = buf.len();
             if (buf_len as u64) < self.num_bytes_remaining_in_current_chunk {
-                let num_bytes_written = custom_write(buf, &mut self.inner, self.settings)?;
+                let num_bytes_written = custom_write(
+                    buf,
+                    &mut self.inner,
+                    self.settings,
+                    Some((&self.current_filename, &mut self.error_reported)),
+                )?;
                 self.num_bytes_remaining_in_current_chunk -= num_bytes_written as u64;
                 return Ok(carryover_bytes_written + num_bytes_written);
             }
@@ -782,7 +859,12 @@ impl Write for ByteChunkWriter<'_> {
             // self.num_bytes_remaining_in_current_chunk is lower than
             // n, which is already usize.
             let i = self.num_bytes_remaining_in_current_chunk as usize;
-            let num_bytes_written = custom_write(&buf[..i], &mut self.inner, self.settings)?;
+            let num_bytes_written = custom_write(
+                &buf[..i],
+                &mut self.inner,
+                self.settings,
+                Some((&self.current_filename, &mut self.error_reported)),
+            )?;
             self.num_bytes_remaining_in_current_chunk -= num_bytes_written as u64;
 
             // It's possible that the underlying writer did not
@@ -799,7 +881,14 @@ impl Write for ByteChunkWriter<'_> {
         }
     }
     fn flush(&mut self) -> io::Result<()> {
-        self.inner.flush()
+        match self.inner.flush() {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                uucore::show_error!("{}: {}", self.current_filename, strip_errno(&e));
+                set_exit_code(1);
+                Err(io::Error::other(""))
+            }
+        }
     }
 }
 
@@ -891,7 +980,8 @@ impl Write for LineChunkWriter<'_> {
             // Write the line, starting from *after* the previous
             // separator character and ending *after* the current
             // separator character.
-            let num_bytes_written = custom_write(&buf[prev..=i], &mut self.inner, self.settings)?;
+            let num_bytes_written =
+                custom_write(&buf[prev..=i], &mut self.inner, self.settings, None)?;
             total_bytes_written += num_bytes_written;
             prev = i + 1;
             self.num_lines_remaining_in_current_chunk -= 1;
@@ -907,7 +997,7 @@ impl Write for LineChunkWriter<'_> {
                 self.num_lines_remaining_in_current_chunk = self.chunk_size;
             }
             let num_bytes_written =
-                custom_write(&buf[prev..buf.len()], &mut self.inner, self.settings)?;
+                custom_write(&buf[prev..buf.len()], &mut self.inner, self.settings, None)?;
             total_bytes_written += num_bytes_written;
         }
         Ok(total_bytes_written)
@@ -1606,7 +1696,15 @@ fn split(settings: &Settings) -> UResult<()> {
                     // allowable filenames, we use `ErrorKind::Other` to
                     // indicate that. A special error message needs to be
                     // printed in that case.
-                    ErrorKind::Other => Err(USimpleError::new(1, format!("{e}"))),
+                    ErrorKind::Other => {
+                        let error_msg = format!("{e}");
+                        if error_msg.is_empty() {
+                            // This is a handled error, return error to stop processing
+                            Err(USimpleError::new(1, ""))
+                        } else {
+                            Err(USimpleError::new(1, error_msg))
+                        }
+                    }
                     _ => Err(uio_error!(
                         e,
                         "{}",

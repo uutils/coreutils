@@ -143,19 +143,27 @@ pub fn instantiate_current_writer(
                         ErrorKind::IsADirectory => Error::other(
                             translate!("split-error-is-a-directory", "dir" => filename),
                         ),
-                        _ => Error::other(
+                        ErrorKind::PermissionDenied => Error::other(
                             translate!("split-error-unable-to-open-file", "file" => filename),
                         ),
+                        _ => Error::other(format!(
+                            "split: {filename}: {}",
+                            uucore::error::strip_errno(&e)
+                        )),
                     })?
             } else {
                 // re-open file that we previously created to append to it
                 std::fs::OpenOptions::new()
                     .append(true)
                     .open(Path::new(&filename))
-                    .map_err(|_| {
-                        Error::other(
+                    .map_err(|e| match e.kind() {
+                        ErrorKind::PermissionDenied => Error::other(
                             translate!("split-error-unable-to-reopen-file", "file" => filename),
-                        )
+                        ),
+                        _ => Error::other(format!(
+                            "split: {filename}: {}",
+                            uucore::error::strip_errno(&e)
+                        )),
                     })?
             };
             Ok(BufWriter::new(Box::new(file) as Box<dyn Write>))
