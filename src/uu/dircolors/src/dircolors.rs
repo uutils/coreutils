@@ -112,7 +112,7 @@ fn generate_ls_colors(fmt: &OutputFmt, sep: &str) -> String {
         }
         let (prefix, suffix) = get_colors_format_strings(fmt);
         let ls_colors = parts.join(sep);
-        format!("{prefix}{}:{ls_colors}:{suffix}", generate_type_output(fmt),)
+        format!("{prefix}{}:{ls_colors}:{suffix}", generate_type_output(fmt))
     }
 }
 
