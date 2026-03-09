@@ -16,6 +16,9 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
 
+#[cfg(unix)]
+uucore::init_startup_state_capture!();
+
 fn usage<T>(utils: &UtilityMap<T>, name: &str) {
     let display_list = utils.keys().copied().join(", ");
     let width = cmp::min(textwrap::termwidth(), 100) - 8; // (opinion/heuristic) max 100 chars wide with 4 character side indentions
@@ -51,6 +54,13 @@ Currently defined functions:
 
 #[allow(clippy::cognitive_complexity)]
 fn main() {
+    #[cfg(unix)]
+    if !uucore::signals::sigpipe_was_ignored() {
+        let _ = uucore::signals::enable_pipe_errors();
+    }
+
+    uucore::panic::mute_sigpipe_panic();
+
     let utils = util_map();
     let mut args = uucore::args_os();
 

@@ -189,12 +189,17 @@ pub fn get_canonical_util_name(util_name: &str) -> &str {
 #[macro_export]
 macro_rules! bin_inner {
     ($util:ident, $post:expr) => {
+        #[cfg(unix)]
+        uucore::init_startup_state_capture!();
+
         pub fn main() {
             use std::io::Write;
             use uucore::locale;
 
-            // Preserve inherited SIGPIPE settings (e.g., from env --default-signal=PIPE)
-            uucore::panic::preserve_inherited_sigpipe();
+            #[cfg(unix)]
+            if !uucore::signals::sigpipe_was_ignored() {
+                let _ = uucore::signals::enable_pipe_errors();
+            }
 
             // suppress extraneous error output for SIGPIPE failures/panics
             uucore::panic::mute_sigpipe_panic();
