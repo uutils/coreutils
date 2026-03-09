@@ -16,6 +16,9 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
 
+#[cfg(unix)]
+uucore::init_startup_state_capture!();
+
 fn usage<T>(utils: &UtilityMap<T>, name: &str) {
     println!("{name} {VERSION} (multi-call binary)\n");
     println!("Usage: {name} [function [arguments...]]");
@@ -40,6 +43,11 @@ fn usage<T>(utils: &UtilityMap<T>, name: &str) {
 
 #[allow(clippy::cognitive_complexity)]
 fn main() {
+    #[cfg(unix)]
+    if !uucore::signals::sigpipe_was_ignored() {
+        let _ = uucore::signals::enable_pipe_errors();
+    }
+
     uucore::panic::mute_sigpipe_panic();
 
     let utils = util_map();
