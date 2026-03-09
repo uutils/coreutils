@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore mangen tldr mandoc uppercasing uppercased manpages DESTDIR
+// spell-checker:ignore mangen tldr mandoc uppercasing uppercased manpages DESTDIR roff
 
 use std::{
     collections::HashMap,
@@ -140,34 +140,50 @@ fn gen_manpage<T: Args>(
         .get_matches_from(std::iter::once(OsString::from("manpage")).chain(args));
 
     let utility = matches.get_one::<String>("utility").unwrap();
-    let command = if utility == "coreutils" {
-        gen_coreutils_app(util_map)
+    let (command, raw_examples) = if utility == "coreutils" {
+        (gen_coreutils_app(util_map), None)
     } else {
         validation::setup_localization_or_exit(utility);
         let mut cmd = util_map.get(utility).unwrap().1();
         cmd.set_bin_name(utility.clone());
-        let mut cmd = cmd.display_name(utility);
-        if let Some(zip) = tldr {
-            if let Ok(examples) = write_zip_examples(zip, utility, false) {
-                cmd = cmd.after_help(examples);
-            }
-        }
-        cmd
+        let cmd = cmd.display_name(utility);
+        let raw = tldr.as_mut().and_then(|zip| {
+            get_zip_content(zip, &format!("pages/common/{utility}.md"))
+                .or_else(|| get_zip_content(zip, &format!("pages/linux/{utility}.md")))
+        });
+        (cmd, raw)
     };
 
-    // Generate the manpage to a buffer first so we can post-process it
     let mut buffer = Vec::new();
     let man = Man::new(command);
     man.render(&mut buffer).expect("Man page generation failed");
 
-    // Convert to string for processing
+    if let Some(content) = raw_examples {
+        use clap_mangen::roff::{Roff, bold, roman};
+        let mut roff = Roff::default();
+        roff.control("SH", ["EXAMPLES"]);
+        for line in content.lines().skip_while(|l| !l.starts_with('-')) {
+            if let Some(desc) = line.strip_prefix("- ") {
+                roff.text([roman(desc)]);
+            } else if line.starts_with('`') {
+                let cmd = strip_placeholders(line.trim_matches('`'));
+                roff.text([bold(cmd)]);
+            } else if line.is_empty() {
+                roff.control("PP", []);
+            }
+        }
+        roff.control("PP", []);
+        roff.text([roman(
+            "The examples are provided by the tldr-pages project <https://tldr.sh> under the CC BY 4.0 License. Please note that, as uutils is a work in progress, some examples might fail.",
+        )]);
+        roff.to_writer(&mut buffer).expect("Man page generation failed");
+    }
+
     let manpage = String::from_utf8(buffer).expect("Invalid UTF-8 in manpage");
 
-    // Post-process the manpage to fix mandoc lint issues
     let date = Zoned::now().strftime("%Y-%m-%d").to_string();
     let processed_manpage = post_process_manpage(manpage, &date);
 
-    // Write the processed manpage to stdout
     io::stdout()
         .write_all(processed_manpage.as_bytes())
         .unwrap();
@@ -672,21 +688,29 @@ fn write_zip_examples(
     }
 }
 
+/// Strip tldr placeholder markers `{{` and `}}` from a command line.
+fn strip_placeholders(s: &str) -> String {
+    s.replace("{{", "").replace("}}", "")
+}
+
 /// Format examples using std::fmt::Write
 fn format_examples(content: String, output_markdown: bool) -> Result<String, std::fmt::Error> {
     use std::fmt::Write;
     let mut s = String::new();
-    writeln!(s)?;
-    writeln!(s, "## Examples")?;
-    writeln!(s)?;
+    if output_markdown {
+        writeln!(s)?;
+        writeln!(s, "## Examples")?;
+        writeln!(s)?;
+    }
     for line in content.lines().skip_while(|l| !l.starts_with('-')) {
         if let Some(l) = line.strip_prefix("- ") {
             writeln!(s, "{l}")?;
         } else if line.starts_with('`') {
+            let cmd = strip_placeholders(line.trim_matches('`'));
             if output_markdown {
-                writeln!(s, "```shell\n{}\n```", line.trim_matches('`'))?;
+                writeln!(s, "```shell\n{cmd}\n```")?;
             } else {
-                writeln!(s, "{}", line.trim_matches('`'))?;
+                writeln!(s, "{cmd}")?;
             }
         } else if line.is_empty() {
             writeln!(s)?;
