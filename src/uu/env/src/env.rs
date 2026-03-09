@@ -40,7 +40,7 @@ use std::io::stderr;
 use std::os::unix::ffi::OsStrExt;
 
 use uucore::display::{Quotable, print_all_env_vars};
-use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError};
+use uucore::error::{ExitCode, UClapError, UError, UResult, USimpleError, UUsageError};
 use uucore::line_ending::LineEnding;
 #[cfg(unix)]
 use uucore::signals::{signal_by_name_or_value, signal_name_by_value, signal_number_upper_bound};
@@ -654,7 +654,9 @@ impl EnvAppData {
             Err(e) => {
                 match e.kind() {
                     clap::error::ErrorKind::DisplayHelp
-                    | clap::error::ErrorKind::DisplayVersion => return Err(e.into()),
+                    | clap::error::ErrorKind::DisplayVersion => {
+                        return Err(e.with_exit_code(125).into());
+                    }
                     _ => {
                         // Use ErrorFormatter directly to handle error with shebang message callback
                         let formatter =
