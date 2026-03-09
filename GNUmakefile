@@ -97,7 +97,7 @@ SELINUX_PROGS := \
 
 $(info Detected OS = $(OS))
 
-ifeq (,$(findstring MINGW,$(OS)))
+ifneq (,$(findstring MINGW,$(OS)))
 	PROGS += $(UNIX_PROGS)
 endif
 ifeq ($(SELINUX_ENABLED),1)
