@@ -11,15 +11,13 @@
 use libc::{
     S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK, S_IRGRP, S_IROTH,
     S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP, S_IWOTH, S_IWUSR, S_IXGRP, S_IXOTH, S_IXUSR,
-    mkfifo, mode_t,
+    mode_t,
 };
 #[cfg(all(unix, not(target_os = "redox")))]
 pub use libc::{major, makedev, minor};
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::env;
-#[cfg(unix)]
-use std::ffi::CString;
 use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::fs::read_dir;
@@ -820,9 +818,8 @@ pub fn get_filename(file: &Path) -> Option<&str> {
 
 /// Make a FIFO, also known as a named pipe.
 ///
-/// This is a safe wrapper for the unsafe [`libc::mkfifo`] function,
-/// which makes a [named
-/// pipe](https://en.wikipedia.org/wiki/Named_pipe) on Unix systems.
+/// This creates a [named pipe](https://en.wikipedia.org/wiki/Named_pipe) on
+/// Unix systems.
 ///
 /// # Errors
 ///
@@ -840,13 +837,8 @@ pub fn get_filename(file: &Path) -> Option<&str> {
 /// ```
 #[cfg(unix)]
 pub fn make_fifo(path: &Path) -> std::io::Result<()> {
-    let name = CString::new(path.to_str().unwrap()).unwrap();
-    let err = unsafe { mkfifo(name.as_ptr(), 0o666) };
-    if err == -1 {
-        Err(Error::from_raw_os_error(err))
-    } else {
-        Ok(())
-    }
+    nix::unistd::mkfifo(path, nix::sys::stat::Mode::from_bits_truncate(0o666))?;
+    Ok(())
 }
 
 // Redox's libc appears not to include the following utilities
