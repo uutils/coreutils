@@ -647,7 +647,11 @@ fn test_follow_name_multiple() {
             .arg(FOOBAR_2_TXT)
             .run_no_wait();
 
+        #[cfg(target_os = "linux")]
         let delay = 100;
+        // unstable on macOS
+        #[cfg(not(target_os = "linux"))]
+        let delay = 1000;
 
         child
             .make_assertion_with_delay(delay)
