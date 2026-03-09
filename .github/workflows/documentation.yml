@@ -128,4 +128,5 @@ jobs:
         run: |
           cargo run --bin uudoc --all-features -- manpage cp > /tmp/cp.1
           grep -q "\.SH EXAMPLES" /tmp/cp.1
-          grep -q "tldr-pages" /tmp/cp.1
+          grep -q "tldr.sh" /tmp/cp.1
+          ! grep -q "{{" /tmp/cp.1
