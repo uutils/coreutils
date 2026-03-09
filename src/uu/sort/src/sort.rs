@@ -1755,7 +1755,7 @@ fn default_merge_batch_size() -> usize {
 
 #[cfg(not(unix))]
 fn locale_failed_to_set() -> bool {
-    matches!(env::var("LC_ALL").ok().as_deref(), Some("missing"))
+    env::var_os("LC_ALL").as_deref() == Some(OsStr::new("missing"))
 }
 
 #[cfg(unix)]
