@@ -682,7 +682,7 @@ mod tests {
         use crate::locale::{get_message, setup_localization};
         use std::env;
 
-        let original_lang = env::var("LANG").unwrap_or_default();
+        let original_lang = env::var_os("LANG").unwrap_or_default();
 
         unsafe {
             env::set_var("LANG", "fr_FR.UTF-8");

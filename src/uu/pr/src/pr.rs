@@ -9,6 +9,7 @@
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use itertools::Itertools;
 use regex::Regex;
+use std::ffi::OsStr;
 use std::fs::metadata;
 use std::io::{Read, Write, stderr, stdin, stdout};
 use std::str::Utf8Error;
@@ -495,8 +496,8 @@ fn get_date_format(matches: &ArgMatches) -> String {
             // Replicate behavior from GNU manual.
             if std::env::var("POSIXLY_CORRECT").is_ok()
                 // TODO: This needs to be moved to uucore and handled by icu?
-                && (std::env::var("LC_TIME").unwrap_or_default() == "POSIX"
-                    || std::env::var("LC_ALL").unwrap_or_default() == "POSIX")
+                && (std::env::var_os("LC_TIME").as_deref() == Some(OsStr::new("POSIX"))
+                    || std::env::var_os("LC_ALL").as_deref() == Some(OsStr::new("POSIX")))
             {
                 "%b %e %H:%M %Y"
             } else {
