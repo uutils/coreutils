@@ -19,7 +19,10 @@ mod options {
 
 #[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 2)?;
+    // tty exits 2 on argument parse errors but 3 on write errors (consistent with its
+    // normal write-error behavior on line output failures).
+    let matches =
+        uucore::clap_localization::handle_clap_result_with_exit_codes(uu_app(), args, 2, 3)?;
 
     // Disable SIGPIPE so we can handle broken pipe errors gracefully
     // and exit with code 3 instead of being killed by the signal.
