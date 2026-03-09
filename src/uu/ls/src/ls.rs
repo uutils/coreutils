@@ -285,8 +285,8 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
                 // else just strip the prefix and continue (even "posix+FORMAT" is
                 // supported).
                 // TODO: This needs to be moved to uucore and handled by icu?
-                if std::env::var("LC_TIME").unwrap_or_default() == "POSIX"
-                    || std::env::var("LC_ALL").unwrap_or_default() == "POSIX"
+                if std::env::var_os("LC_TIME").as_deref() == Some(OsStr::new("POSIX"))
+                    || std::env::var_os("LC_ALL").as_deref() == Some(OsStr::new("POSIX"))
                 {
                     return ok(LOCALE_FORMAT);
                 }
