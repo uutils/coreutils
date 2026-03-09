@@ -14,6 +14,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use os_display::Quotable;
 use thiserror::Error;
@@ -114,6 +115,10 @@ static UTIL_FLUENT: OnceLock<FluentResource> = OnceLock::new();
 thread_local! {
     static LOCALIZER: OnceLock<Localizer> = const { OnceLock::new() };
 }
+// AtomicBool is faster that OnceLock to access even it is ugly...
+static PARSED_UUCORE: AtomicBool = AtomicBool::new(false);
+static PARSED_CHECKSUM: AtomicBool = AtomicBool::new(false);
+static PARSED_UTIL: AtomicBool = AtomicBool::new(false);
 
 /// Helper function to find the uucore locales directory from a utility's locales directory
 fn find_uucore_locales_dir(utility_locales_dir: &Path) -> Option<PathBuf> {
@@ -227,12 +232,11 @@ fn init_localization(
 fn parse_fluent_resource(
     content: &str,
     cache: &'static OnceLock<FluentResource>,
+    check_cache: &'static AtomicBool,
 ) -> Result<&'static FluentResource, LocalizationError> {
     // globa cache breaks unit tests
-    if cfg!(not(test)) {
-        if let Some(res) = cache.get() {
-            return Ok(res);
-        }
+    if cfg!(not(test)) && check_cache.load(Ordering::Relaxed) {
+        return Ok(cache.get().expect("Fluent shold be parsed"));
     }
 
     let resource = FluentResource::try_new(content.to_string()).map_err(
@@ -253,6 +257,7 @@ fn parse_fluent_resource(
             }
         },
     )?;
+    check_cache.store(true, Ordering::Relaxed);
     // globa cache breaks unit tests
     if cfg!(not(test)) {
         Ok(cache.get_or_init(|| resource))
@@ -278,14 +283,16 @@ fn create_english_bundle_from_embedded(
 
     // First, try to load common uucore strings
     if let Some(uucore_content) = get_embedded_locale("uucore/en-US.ftl") {
-        let uucore_resource = parse_fluent_resource(uucore_content, &UUCORE_FLUENT)?;
+        let uucore_resource =
+            parse_fluent_resource(uucore_content, &UUCORE_FLUENT, &PARSED_UUCORE)?;
         bundle.add_resource_overriding(uucore_resource);
     }
 
     // Checksum algorithms need locale messages from checksum_common
     if util_name.ends_with("sum") {
         if let Some(uucore_content) = get_embedded_locale("checksum_common/en-US.ftl") {
-            let uucore_resource = parse_fluent_resource(uucore_content, &CHECKSUM_FLUENT)?;
+            let uucore_resource =
+                parse_fluent_resource(uucore_content, &CHECKSUM_FLUENT, &PARSED_CHECKSUM)?;
             bundle.add_resource_overriding(uucore_resource);
         }
     }
@@ -293,7 +300,7 @@ fn create_english_bundle_from_embedded(
     // Then, try to load utility-specific strings
     let locale_key = format!("{util_name}/en-US.ftl");
     if let Some(ftl_content) = get_embedded_locale(&locale_key) {
-        let resource = parse_fluent_resource(ftl_content, &UTIL_FLUENT)?;
+        let resource = parse_fluent_resource(ftl_content, &UTIL_FLUENT, &PARSED_UTIL)?;
         bundle.add_resource_overriding(resource);
     }
 
@@ -622,7 +629,7 @@ mod tests {
         // Only load from the test directory - no common strings or utility-specific paths
         let locale_path = test_locales_dir.join(format!("{locale}.ftl"));
         if let Ok(ftl_content) = fs::read_to_string(&locale_path) {
-            let resource = parse_fluent_resource(&ftl_content, &UUCORE_FLUENT)?;
+            let resource = parse_fluent_resource(&ftl_content, &UUCORE_FLUENT, &PARSED_UUCORE)?;
             bundle.add_resource_overriding(resource);
             return Ok(bundle);
         }
