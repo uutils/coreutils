@@ -1073,3 +1073,16 @@ fn test_unary_op_as_literal_in_three_arg_form() {
     new_ucmd!().args(&["-f", "=", "a"]).fails_with_code(1);
     new_ucmd!().args(&["-f", "=", "a", "-o", "b"]).succeeds();
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_lbracket_help_dev_full_exit_code() {
+    use std::fs::OpenOptions;
+    use uutests::util::TestScenario;
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+    TestScenario::new("[")
+        .ucmd()
+        .arg("--help")
+        .set_stdout(dev_full)
+        .fails_with_code(2);
+}
