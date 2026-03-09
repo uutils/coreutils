@@ -27,7 +27,7 @@ is_already_published() {
 PROGS=$(ls -1d src/uu/*/)
 PARTIAL_ORDER=""
 for p in $PROGS; do
-    DEPENDENCIES=$(grep -oE "^uu_[a-z0-9]+" ${p}Cargo.toml)
+    DEPENDENCIES=$(grep -oE "^uu_[a-z0-9_]+" ${p}Cargo.toml)
 
     # Turn "src/uu/util/" into "util"
     p=${p#src/uu/}
