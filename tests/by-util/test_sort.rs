@@ -3886,3 +3886,13 @@ sort: invalid suffix in --buffer-size argument '8zz'
 }
 
 // spell-checker:enable
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_help_version_dev_full_exit_code() {
+    use std::fs::OpenOptions;
+    for arg in ["--help", "--version"] {
+        let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+        new_ucmd!().arg(arg).set_stdout(dev_full).fails_with_code(2);
+    }
+}
