@@ -55,7 +55,7 @@ pub struct NumfmtOptions {
     pub round: RoundMethod,
     pub suffix: Option<String>,
     pub unit_separator: String,
-    pub max_whitespace: usize,
+    pub explicit_unit_separator: bool,
     pub format: FormatOptions,
     pub invalid: InvalidModes,
     pub zero_terminated: bool,
