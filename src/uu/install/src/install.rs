@@ -65,7 +65,7 @@ pub struct Behavior {
     preserve_context: bool,
     context: Option<String>,
     default_context: bool,
-    unprivileged: bool,
+    privileged: bool,
 }
 
 #[derive(Error, Debug)]
@@ -428,7 +428,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
 
     let context = matches.get_one::<String>(OPT_CONTEXT).cloned();
     let default_context = matches.get_flag(OPT_DEFAULT_CONTEXT);
-    let unprivileged = matches.get_flag(OPT_UNPRIVILEGED);
+    let privileged = !matches.get_flag(OPT_UNPRIVILEGED);
 
     Ok(Behavior {
         main_function,
@@ -452,7 +452,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         preserve_context: matches.get_flag(OPT_PRESERVE_CONTEXT),
         context,
         default_context,
-        unprivileged,
+        privileged,
     })
 }
 
@@ -513,7 +513,7 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
                 continue;
             }
 
-            if !b.unprivileged {
+            if b.privileged {
                 show_if_err!(chown_optional_user_group(path, b));
 
                 // Set SELinux context for directory if needed
@@ -1044,7 +1044,7 @@ fn set_ownership_and_permissions(to: &Path, b: &Behavior) -> UResult<()> {
         return Err(InstallError::ChmodFailed(to.to_path_buf()).into());
     }
 
-    if !b.unprivileged {
+    if b.privileged {
         chown_optional_user_group(to, b)?;
     }
 
@@ -1097,7 +1097,7 @@ fn finalize_installed_file(
     }
 
     #[cfg(all(feature = "selinux", target_os = "linux"))]
-    if !b.unprivileged {
+    if b.privileged {
         if b.preserve_context {
             uucore::selinux::preserve_security_context(from, to)
                 .map_err(|e| InstallError::SelinuxContextFailed(e.to_string()))?;
@@ -1166,7 +1166,7 @@ fn get_context_for_selinux(b: &Behavior) -> Option<&String> {
 
 #[cfg(all(feature = "selinux", target_os = "linux"))]
 fn should_set_selinux_context(b: &Behavior) -> bool {
-    !b.unprivileged && (b.context.is_some() || b.default_context)
+    b.privileged && (b.context.is_some() || b.default_context)
 }
 
 /// Check if a file needs to be copied due to ownership differences when no explicit group is specified.
@@ -1259,7 +1259,7 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
         return true;
     }
 
-    if !b.unprivileged {
+    if b.privileged {
         #[cfg(all(feature = "selinux", target_os = "linux"))]
         if b.preserve_context && contexts_differ(from, to) {
             return true;
