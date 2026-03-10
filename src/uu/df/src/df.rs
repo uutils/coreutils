@@ -19,6 +19,8 @@ use uucore::translate;
 use uucore::{format_usage, show, show_warning};
 
 use clap::{Arg, ArgAction, ArgMatches, Command, parser::ValueSource};
+#[cfg(not(any(windows, target_os = "redox")))]
+use nix::unistd::sync as sync_filesystems;
 
 use std::ffi::OsString;
 use std::io::stdout;
@@ -301,12 +303,7 @@ fn get_all_filesystems(opt: &Options) -> UResult<Vec<Filesystem>> {
     // Run a sync call before any operation if so instructed.
     if opt.sync {
         #[cfg(not(any(windows, target_os = "redox")))]
-        unsafe {
-            #[cfg(not(target_os = "android"))]
-            uucore::libc::sync();
-            #[cfg(target_os = "android")]
-            uucore::libc::syscall(uucore::libc::SYS_sync);
-        }
+        sync_filesystems();
     }
 
     let mut mounts = vec![];
