@@ -303,7 +303,7 @@ fn get_all_filesystems(opt: &Options) -> UResult<Vec<Filesystem>> {
     // Run a sync call before any operation if so instructed.
     if opt.sync {
         #[cfg(not(any(windows, target_os = "redox")))]
-        sync_filesystems();
+        nix::unistd::sync();
     }
 
     let mut mounts = vec![];
