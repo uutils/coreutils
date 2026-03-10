@@ -11,59 +11,6 @@ use uucore::translate;
 use crate::options::{NumfmtOptions, RoundMethod, TransformOptions};
 use crate::units::{DisplayableSuffix, IEC_BASES, RawSuffix, Result, SI_BASES, Suffix, Unit};
 
-/// Iterate over a line's fields, where each field is a contiguous sequence of
-/// non-whitespace, optionally prefixed with one or more characters of leading
-/// whitespace. Fields are returned as tuples of `(prefix, field)`.
-///
-/// # Examples:
-///
-/// ```
-/// let mut fields = uu_numfmt::format::WhitespaceSplitter { s: Some("    1234 5") };
-///
-/// assert_eq!(Some(("    ", "1234")), fields.next());
-/// assert_eq!(Some((" ", "5")), fields.next());
-/// assert_eq!(None, fields.next());
-/// ```
-///
-/// Delimiters are included in the results; `prefix` will be empty only for
-/// the first field of the line (including the case where the input line is
-/// empty):
-///
-/// ```
-/// let mut fields = uu_numfmt::format::WhitespaceSplitter { s: Some("first second") };
-///
-/// assert_eq!(Some(("", "first")), fields.next());
-/// assert_eq!(Some((" ", "second")), fields.next());
-///
-/// let mut fields = uu_numfmt::format::WhitespaceSplitter { s: Some("") };
-///
-/// assert_eq!(Some(("", "")), fields.next());
-/// ```
-pub struct WhitespaceSplitter<'a> {
-    pub s: Option<&'a str>,
-}
-
-impl<'a> Iterator for WhitespaceSplitter<'a> {
-    type Item = (&'a str, &'a str);
-
-    /// Yield the next field in the input string as a tuple `(prefix, field)`.
-    fn next(&mut self) -> Option<Self::Item> {
-        let haystack = self.s?;
-
-        let (prefix, field) = haystack.split_at(
-            haystack
-                .find(|c: char| !c.is_whitespace())
-                .unwrap_or(haystack.len()),
-        );
-
-        let (field, rest) = field.split_at(field.find(char::is_whitespace).unwrap_or(field.len()));
-
-        self.s = if rest.is_empty() { None } else { Some(rest) };
-
-        Some((prefix, field))
-    }
-}
-
 fn find_numeric_beginning(s: &str) -> Option<&str> {
     let mut decimal_point_seen = false;
     if s.is_empty() {
@@ -130,6 +77,9 @@ fn detailed_error_message(s: &str, unit: Unit) -> Option<String> {
 
     if valid_part != s && valid_part.parse::<f64>().is_ok() {
         return match s.chars().nth(valid_part.len()) {
+            Some('+' | '-') => {
+                Some(translate!("numfmt-error-invalid-number", "input" => s.quote()))
+            }
             Some(v) if RawSuffix::try_from(&v).is_ok() => Some(
                 translate!("numfmt-error-rejecting-suffix", "number" => valid_part, "suffix" => s[valid_part.len()..]),
             ),
@@ -146,7 +96,12 @@ fn detailed_error_message(s: &str, unit: Unit) -> Option<String> {
     None
 }
 
-fn parse_suffix(s: &str, unit: Unit, max_whitespace: usize) -> Result<(f64, Option<Suffix>)> {
+fn parse_suffix(
+    s: &str,
+    unit: Unit,
+    unit_separator: &str,
+    explicit_unit_separator: bool,
+) -> Result<(f64, Option<Suffix>)> {
     let trimmed = s.trim_end();
     if trimmed.is_empty() {
         return Err(translate!("numfmt-error-invalid-number-empty"));
@@ -185,21 +140,114 @@ fn parse_suffix(s: &str, unit: Unit, max_whitespace: usize) -> Result<(f64, Opti
     };
 
     let number_part = &trimmed[..trimmed.len() - suffix_len];
-    let number_trimmed = number_part.trim_end();
 
-    // Validate whitespace between number and suffix
     if suffix.is_some() {
-        let whitespace = number_part.len() - number_trimmed.len();
-        if whitespace > max_whitespace {
-            return Err(translate!("numfmt-error-invalid-suffix", "input" => s.quote()));
-        }
+        let separator_len = if explicit_unit_separator {
+            if number_part.ends_with(unit_separator) {
+                unit_separator.len()
+            } else if unit_separator.is_empty() {
+                0
+            } else {
+                return Err(translate!("numfmt-error-invalid-suffix", "input" => s.quote()));
+            }
+        } else {
+            let number_trimmed = number_part.trim_end();
+            let whitespace = number_part.len() - number_trimmed.len();
+            if whitespace > 1 {
+                return Err(translate!("numfmt-error-invalid-suffix", "input" => s.quote()));
+            }
+            whitespace
+        };
+
+        let number = number_part[..number_part.len() - separator_len]
+            .parse::<f64>()
+            .map_err(|_| translate!("numfmt-error-invalid-number", "input" => s.quote()))?;
+
+        return Ok((number, suffix));
     }
 
-    let number = number_trimmed
+    let number = number_part
         .parse::<f64>()
         .map_err(|_| translate!("numfmt-error-invalid-number", "input" => s.quote()))?;
 
     Ok((number, suffix))
+}
+
+fn next_field_index(s: &str) -> usize {
+    s.find(char::is_whitespace).unwrap_or(s.len())
+}
+
+fn split_next_field<'a>(s: &'a str) -> (&'a str, &'a str, &'a str) {
+    let prefix_len = s.find(|c: char| !c.is_whitespace()).unwrap_or(s.len());
+    let prefix = &s[..prefix_len];
+    let field_start = prefix_len;
+    let field_len = next_field_index(&s[field_start..]);
+    let field_end = field_start + field_len;
+    let field = &s[field_start..field_end];
+    let rest = &s[field_end..];
+    (prefix, field, rest)
+}
+
+/// When an explicit whitespace unit separator is set (e.g. `--unit-separator=" "`),
+/// a suffix like "K" may appear as a separate whitespace-delimited field.  Detect
+/// this case so the caller can merge the suffix back into the preceding number field.
+fn split_mergeable_suffix<'a>(s: &'a str, options: &NumfmtOptions) -> Option<(&'a str, &'a str)> {
+    if !options.explicit_unit_separator
+        || options.unit_separator.is_empty()
+        || !options.unit_separator.chars().all(char::is_whitespace)
+    {
+        return None;
+    }
+
+    if !s.starts_with(&options.unit_separator) {
+        return None;
+    }
+
+    let (prefix, field, _) = split_next_field(s);
+    if prefix != options.unit_separator {
+        return None;
+    }
+
+    match field.len() {
+        1 => {
+            let _ = field.chars().next().filter(|c| RawSuffix::try_from(c).is_ok())?;
+        }
+        2 if field.ends_with('i') => {
+            let _ = field.chars().next().filter(|c| RawSuffix::try_from(c).is_ok())?;
+        }
+        _ => return None,
+    }
+
+    Some((prefix, field))
+}
+
+struct WhitespaceSplitter<'a, 'b> {
+    s: Option<&'a str>,
+    options: &'b NumfmtOptions,
+}
+
+impl<'a> Iterator for WhitespaceSplitter<'a, '_> {
+    type Item = (&'a str, &'a str);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let haystack = self.s?;
+        let (prefix, field, rest) = split_next_field(haystack);
+
+        if field.is_empty() {
+            self.s = None;
+            return Some((prefix, field));
+        }
+
+        if let Some((suffix_prefix, suffix_field)) = split_mergeable_suffix(rest, self.options) {
+            let merged_len = prefix.len() + field.len() + suffix_prefix.len() + suffix_field.len();
+            let merged_field = &haystack[prefix.len()..merged_len];
+            self.s = Some(&haystack[merged_len..]).filter(|rest| !rest.is_empty());
+            return Some((prefix, merged_field));
+        }
+
+        self.s = Some(rest).filter(|rest| !rest.is_empty());
+        Some((prefix, field))
+    }
 }
 
 /// Returns the implicit precision of a number, which is the count of digits after the dot. For
@@ -252,8 +300,13 @@ fn remove_suffix(i: f64, s: Option<Suffix>, u: Unit) -> Result<f64> {
     }
 }
 
-fn transform_from(s: &str, opts: &TransformOptions, max_whitespace: usize) -> Result<f64> {
-    let (i, suffix) = parse_suffix(s, opts.from, max_whitespace)
+fn transform_from(s: &str, opts: &TransformOptions, options: &NumfmtOptions) -> Result<f64> {
+    let (i, suffix) = parse_suffix(
+        s,
+        opts.from,
+        &options.unit_separator,
+        options.explicit_unit_separator,
+    )
         .map_err(|original| detailed_error_message(s, opts.from).unwrap_or(original))?;
     let i = i * (opts.from_unit as f64);
 
@@ -412,7 +465,7 @@ fn format_string(
         transform_from(
             source_without_suffix,
             &options.transform,
-            options.max_whitespace,
+            options,
         )?,
         &options.transform,
         options.round,
@@ -531,7 +584,10 @@ pub fn write_formatted_with_whitespace<W: std::io::Write>(
     options: &NumfmtOptions,
     eol: Option<u8>,
 ) -> Result<()> {
-    for (n, (prefix, field)) in (1..).zip(WhitespaceSplitter { s: Some(s) }) {
+    for (n, (prefix, field)) in (1..).zip(WhitespaceSplitter {
+        s: Some(s),
+        options,
+    }) {
         let field_selected = uucore::ranges::contain(&options.fields, n);
 
         if field_selected {
