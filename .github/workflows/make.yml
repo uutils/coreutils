@@ -250,12 +250,12 @@ jobs:
         previous_multisize=$(cat dl/size-result.json | jq -r '.[] | .multisize')
         check 'multicall binary' "$multisize" "$previous_multisize" 'size-result.json'
     - name: Upload the individual size result
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: individual-size-result
         path: individual-size-result.json
     - name: Upload the size result
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: size-result
         path: size-result.json
