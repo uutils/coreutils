@@ -596,7 +596,7 @@ fn split_bytes<'a>(input: &'a [u8], delim: &'a [u8]) -> impl Iterator<Item = &'a
     })
 }
 
-pub fn write_formatted_with_delimiter<W: std::io::Write>(
+pub fn write_formatted_with_delimiter<W: std::io::Write + ?Sized>(
     writer: &mut W,
     input: &[u8],
     options: &NumfmtOptions,
@@ -632,7 +632,7 @@ pub fn write_formatted_with_delimiter<W: std::io::Write>(
     Ok(())
 }
 
-pub fn write_formatted_with_whitespace<W: std::io::Write>(
+pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
     writer: &mut W,
     s: &str,
     options: &NumfmtOptions,

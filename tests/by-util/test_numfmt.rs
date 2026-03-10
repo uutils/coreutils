@@ -1254,6 +1254,15 @@ fn test_invalid_fail_with_fields_does_not_duplicate_output() {
 }
 
 #[test]
+fn test_abort_with_fields_preserves_partial_output() {
+    new_ucmd!()
+        .args(&["--field=3", "--from=auto", "Hello 40M World 90G"])
+        .fails_with_code(2)
+        .stdout_is("Hello 40M ")
+        .stderr_is("numfmt: invalid number: 'World'\n");
+}
+
+#[test]
 fn test_rejects_malformed_number_forms() {
     new_ucmd!()
         .args(&["--from=si", "12.K"])

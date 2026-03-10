@@ -20,6 +20,7 @@ use std::str::FromStr;
 use units::{IEC_BASES, SI_BASES};
 use uucore::display::Quotable;
 use uucore::error::UResult;
+use uucore::util_name;
 
 use uucore::i18n::decimal::locale_grouping_separator;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
@@ -46,15 +47,28 @@ fn format_and_write<W: std::io::Write>(
         Some(i) => &input_line[..i],
         None => input_line,
     };
+
+    // In non-abort modes we buffer the formatted output so that on error we
+    // can emit the original line instead.
+    let buffer_output = !matches!(options.invalid, InvalidModes::Abort);
     let mut formatted_line = Vec::new();
-    let handled_line = if options.delimiter.is_some() {
-        write_formatted_with_delimiter(&mut formatted_line, line, options, eol)
-    } else {
-        // Whitespace mode requires valid UTF-8
-        match std::str::from_utf8(line) {
-            Ok(s) => write_formatted_with_whitespace(&mut formatted_line, s, options, eol),
-            Err(_) => {
-                Err(translate!("numfmt-error-invalid-number", "input" => escape_line(line).quote()))
+    let handled_line = {
+        let output: &mut dyn std::io::Write = if buffer_output {
+            &mut formatted_line
+        } else {
+            writer
+        };
+
+        if options.delimiter.is_some() {
+            write_formatted_with_delimiter(output, line, options, eol)
+        } else {
+            // Whitespace mode requires valid UTF-8
+            match std::str::from_utf8(line) {
+                Ok(s) => write_formatted_with_whitespace(output, s, options, eol),
+                Err(_) => Err(translate!(
+                    "numfmt-error-invalid-number",
+                    "input" => escape_line(line).quote()
+                )),
             }
         }
     };
@@ -80,7 +94,9 @@ fn format_and_write<W: std::io::Write>(
         return Ok(true);
     }
 
-    writer.write_all(&formatted_line)?;
+    if buffer_output {
+        writer.write_all(&formatted_line)?;
+    }
     Ok(false)
 }
 
