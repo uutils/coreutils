@@ -1,6 +1,6 @@
 name: make
 
-# spell-checker:ignore (abbrev/names) CACHEDIR CICD taiki
+# spell-checker:ignore (abbrev/names) CACHEDIR taiki
 # spell-checker:ignore (env/flags) RUSTDOCFLAGS RUSTFLAGS CARGOFLAGS CLEVEL
 # spell-checker:ignore (jargon) deps softprops toolchain
 # spell-checker:ignore (people) dawidd dtolnay
@@ -208,14 +208,14 @@ jobs:
     - name: Download the previous individual size result
       uses: dawidd6/action-download-artifact@v16
       with:
-        workflow: CICD.yml
+        workflow: make.yml
         name: individual-size-result
         repo: uutils/coreutils
         path: dl
     - name: Download the previous size result
       uses: dawidd6/action-download-artifact@v16
       with:
-        workflow: CICD.yml
+        workflow: make.yml
         name: size-result
         repo: uutils/coreutils
         path: dl
