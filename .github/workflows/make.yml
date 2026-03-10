@@ -1,0 +1,454 @@
+name: make
+
+# spell-checker:ignore (abbrev/names) CACHEDIR CICD taiki
+# spell-checker:ignore (env/flags) RUSTDOCFLAGS RUSTFLAGS CARGOFLAGS CLEVEL
+# spell-checker:ignore (jargon) deps softprops toolchain
+# spell-checker:ignore (people) dawidd dtolnay
+# spell-checker:ignore (shell/tools) nextest sccache zstd
+# spell-checker:ignore (misc) aarch bindir busytest defconfig DESTDIR manpages multisize runtest Swatinem testsuite toybox uutils
+
+env:
+  PROJECT_NAME: coreutils
+  PROJECT_DESC: "Core universal (cross-platform) utilities"
+  PROJECT_AUTH: "uutils"
+  RUST_MIN_SRV: "1.88.0"
+  # * style job configuration
+  STYLE_FAIL_ON_FAULT: true ## (bool) fail the build if a style job contains a fault (error or warning); may be overridden on a per-job basis
+
+on:
+  pull_request:
+  push:
+    tags:
+      - '*'
+    branches:
+      - '*'
+
+permissions:
+  contents: read # to fetch code (actions/checkout)
+
+# End the current execution if there is a new changeset in the PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  build_makefile:
+    name: Build/Makefile and measure binary size
+    permissions:
+      contents: write # Publish individual binaries
+    runs-on: ${{ matrix.job.os }}
+    env:
+      CARGO_INCREMENTAL: 0
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: ubuntu-latest , features: feat_os_unix }
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        target: aarch64-unknown-linux-gnu
+    - uses: taiki-e/install-action@nextest
+    - uses: Swatinem/rust-cache@v2
+    # Test build on the system missing libselinux (don't install libselinux1-dev at here)
+    - name: Run sccache-cache
+      id: sccache-setup
+      uses: mozilla-actions/sccache-action@v0.0.9
+      continue-on-error: true
+    - name: Export sccache
+      if: steps.sccache-setup.outcome == 'success'
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+    - name: "`make build`"
+        # Also check that target/CACHEDIR.TAG is created on a fresh checkout
+      shell: bash
+      run: |
+        set -x
+        # Target directory must not exist to start with, otherwise cargo
+        # will not create target/CACHEDIR.TAG.
+        if [[ -d target ]]; then
+          mv -T target target.cache
+        fi
+        # Check that we don't cross-build uudoc
+        env CARGO_BUILD_TARGET=aarch64-unknown-linux-gnu make install-manpages PREFIX=/tmp/usr UTILS=true
+        # We don't build coreutils without MULTICALL=y
+        ! test -e target/debug/coreutils
+        # build (host)
+        make build
+        echo "Check that target directory will be ignored by backup tools"
+        test -f target/CACHEDIR.TAG
+        # Restore cache for target/release (we only did a debug build)
+        mv -t target/ target.cache/release 2>/dev/null || true
+    - name: "`make nextest`"
+      shell: bash
+      run: make nextest PROFILE=ci CARGOFLAGS="--hide-progress-bar"
+      env:
+        RUST_BACKTRACE: "1"
+    - name: Upload test results to Codecov
+      if: ${{ !cancelled() }}
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        report_type: test_results
+        files: target/nextest/ci/junit.xml
+        disable_search: true
+        flags: makefile,${{ matrix.job.os }}
+        fail_ci_if_error: false
+    - name: "`make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n`"
+      shell: bash
+      run: |
+        set -x
+        DESTDIR=/tmp/ make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n
+        # Check that utils are built with given profile
+        ./target/release-small/true
+        # Check that the progs have prefix
+        test -f /tmp/usr/local/bin/uu-tty
+        test -f /tmp/usr/local/libexec/uu-coreutils/libstdbuf.*
+        # Check that the manpage is not present
+        ! test -f /tmp/usr/local/share/man/man1/uu-whoami.1
+        # Check that the completion is not present
+        ! test -f /tmp/usr/local/share/zsh/site-functions/_uu-install
+        ! test -f /tmp/usr/local/share/bash-completion/completions/uu-head.bash
+        ! test -f /tmp/usr/local/share/fish/vendor_completions.d/uu-cat.fish
+        # don't publish binaries with uu-
+        make uninstall PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n
+      env:
+        RUST_BACKTRACE: "1"
+    - name: "`make install`"
+      shell: bash
+      run: |
+        set -x
+        DESTDIR=/tmp/ make PROFILE=release install
+        # Check that the utils are present
+        test -f /tmp/usr/local/bin/tty
+        # Check that the manpage is present
+        test -f /tmp/usr/local/share/man/man1/md5sum.1
+        # Check that the completion is present
+        test -f /tmp/usr/local/share/zsh/site-functions/_b2sum
+        test -f /tmp/usr/local/share/bash-completion/completions/head.bash
+        test -f /tmp/usr/local/share/fish/vendor_completions.d/cat.fish
+      env:
+        RUST_BACKTRACE: "1"
+    - name: "`make uninstall`"
+      shell: bash
+      run: |
+        set -x
+        DESTDIR=/tmp/ make uninstall
+        # Check that the utils are not present
+        ! test -f /tmp/usr/local/bin/tty
+        # Check that the manpage is not present
+        ! test -f /tmp/usr/local/share/man/man1/whoami.1
+        # Check that the completion is not present
+        ! test -f /tmp/usr/local/share/zsh/site-functions/_install
+        ! test -f /tmp/usr/local/share/bash-completion/completions/head.bash
+        ! test -f /tmp/usr/local/share/fish/vendor_completions.d/cat.fish
+    - name: "`make install MULTICALL=n`"
+      shell: bash
+      run: |
+        set -x
+        DESTDIR=/tmp/individual make PROFILE=release MULTICALL=n install
+        # Check that *sum are present
+        for s in {md5,b2,sha1,sha224,sha256,sha384,sha512}sum
+          do test -e /tmp/individual/usr/local/bin/${s}
+        done
+    - name: "`make install MULTICALL=y LN=ln -svf`"
+      shell: bash
+      run: |
+        set -x
+        DESTDIR=/tmp/ make PROFILE=release MULTICALL=y LN="ln -svf" install
+        # Check that symlinks of *sum are present
+        for s in {md5,b2,sha1,sha224,sha256,sha384,sha512}sum
+          do test $(readlink /tmp/usr/local/bin/${s}) = coreutils
+        done
+    - name: Package
+      shell: bash
+      run: |
+        # Check that libstdbuf is present too
+        mv target/release/deps/libstdbuf.so -t /tmp/individual/usr/local/bin
+        strip -s /tmp/individual/usr/local/bin/*
+        ZSTD_CLEVEL=19 tar --zstd -caf individual-x86_64-unknown-linux-gnu.tar.zst -C /tmp/individual/usr/local bin
+    - name: Publish
+      uses: softprops/action-gh-release@v2
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      with:
+        tag_name: latest-commit
+        draft: false
+        prerelease: true
+        files: |
+          individual-x86_64-unknown-linux-gnu.tar.zst
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Compute uutil release sizes
+      shell: bash
+      run: |
+        ## Compute uutil release sizes
+        DATE=$(date --rfc-email)
+        find /tmp/individual/usr/local/bin -type f -printf '%f\0' | sort -z |
+          while IFS= read -r -d '' name; do
+            size=$(du -s /tmp/individual/usr/local/bin/$name | awk '{print $1}')
+            echo "\"$name\""
+            echo "$size"
+          done | \
+            jq -n \
+                --arg date "$DATE" \
+                --arg sha "$GITHUB_SHA" \
+                'reduce inputs as $name ({}; . + { ($name): input }) | { ($date): {sha: $sha, sizes: map_values(.)} }' > individual-size-result.json
+        SIZE=$(cat individual-size-result.json | jq '[.[] | .sizes | .[]] | reduce .[] as $num (0; . + $num)')
+        SIZE_MULTI=$(du -s /tmp/usr/local/bin/coreutils | awk '{print $1}')
+        jq -n \
+              --arg date "$DATE" \
+              --arg sha "$GITHUB_SHA" \
+              --arg size "$SIZE" \
+              --arg multisize "$SIZE_MULTI" \
+              '{($date): { sha: $sha, size: $size, multisize: $multisize, }}' > size-result.json
+    - name: Download the previous individual size result
+      uses: dawidd6/action-download-artifact@v14
+      with:
+        workflow: CICD.yml
+        name: individual-size-result
+        repo: uutils/coreutils
+        path: dl
+    - name: Download the previous size result
+      uses: dawidd6/action-download-artifact@v14
+      with:
+        workflow: CICD.yml
+        name: size-result
+        repo: uutils/coreutils
+        path: dl
+    - name: Check uutil release sizes
+      shell: bash
+      run: |
+        check() {
+          # Warn if the size increases by more than 5%
+          threshold='1.05'
+
+          if [[ "$2" -eq 0 || "$3" -eq 0 ]]; then
+              echo "::warning file=$4::Invalid size for $1. Sizes cannot be 0."
+              return
+          fi
+
+          ratio=$(jq -n "$2 / $3")
+          echo "$1: size=$2, previous_size=$3, ratio=$ratio, threshold=$threshold"
+          if [[ "$(jq -n "$ratio > $threshold")" == 'true' ]]; then
+            echo "::warning file=$4::Size of $1 increases by more than 5%"
+          fi
+        }
+        ## Check individual size result
+        while read -r name previous_size; do
+          size=$(cat individual-size-result.json | jq -r ".[] | .sizes | .\"$name\"")
+          check "\`$name\` binary" "$size" "$previous_size" 'individual-size-result.json'
+        done < <(cat dl/individual-size-result.json | jq -r '.[] | .sizes | to_entries[] | "\(.key) \(.value)"')
+        ## Check size result
+        size=$(cat size-result.json | jq -r '.[] | .size')
+        previous_size=$(cat dl/size-result.json | jq -r '.[] | .size')
+        check 'multiple binaries' "$size" "$previous_size" 'size-result.json'
+        multisize=$(cat size-result.json | jq -r '.[] | .multisize')
+        previous_multisize=$(cat dl/size-result.json | jq -r '.[] | .multisize')
+        check 'multicall binary' "$multisize" "$previous_multisize" 'size-result.json'
+    - name: Upload the individual size result
+      uses: actions/upload-artifact@v6
+      with:
+        name: individual-size-result
+        path: individual-size-result.json
+    - name: Upload the size result
+      uses: actions/upload-artifact@v6
+      with:
+        name: size-result
+        path: size-result.json
+    - name: "`make UTILS=XXX`"
+      shell: bash
+      run: |
+        set -x
+        # Regression-test for https://github.com/uutils/coreutils/issues/8701
+        make UTILS="rm chmod chown chgrp mv du"
+        # Verifies that
+        # 1. there is no "error: none of the selected packages contains this
+        # feature: feat_external_libstdbuf"
+        # 2. the makefile doesn't try to install libstdbuf even though stdbuf is skipped
+        DESTDIR=/tmp/ make SKIP_UTILS="stdbuf" install
+
+  test_busybox:
+    name: Tests/BusyBox test suite
+    runs-on: ${{ matrix.job.os }}
+    env:
+      CARGO_INCREMENTAL: 0
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: ubuntu-latest }
+    steps:
+    - name: Initialize workflow variables
+      id: vars
+      shell: bash
+      run: |
+        ## VARs setup
+        echo "TEST_SUMMARY_FILE=busybox-result.json" >> $GITHUB_OUTPUT
+    - uses: actions/checkout@v6
+      with:
+        persist-credentials: false
+    - uses: Swatinem/rust-cache@v2
+    - name: Run sccache-cache
+      id: sccache-setup
+      uses: mozilla-actions/sccache-action@v0.0.9
+      continue-on-error: true
+    - name: Export sccache
+      if: steps.sccache-setup.outcome == 'success'
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
+        ## Install/setup prerequisites
+        make prepare-busytest
+    - name: Run BusyBox test suite
+      id: summary
+      shell: bash
+      run: |
+        ## Run BusyBox test suite
+        set -v
+        cp .busybox-config target/debug/.config
+        ## Run BusyBox test suite
+        bindir=$(pwd)/target/debug
+        cd tmp/busybox-*/testsuite
+        output=$(bindir=$bindir ./runtest 2>&1 || true)
+        printf "%s\n" "${output}"
+        FAIL=$(echo "$output" | grep "^FAIL:\s" | wc --lines)
+        PASS=$(echo "$output" | grep "^PASS:\s" | wc --lines)
+        SKIP=$(echo "$output" | grep "^SKIPPED:\s" | wc --lines)
+        TOTAL=`expr $FAIL + $PASS + $SKIP`
+        echo "FAIL $FAIL"
+        echo "SKIP $SKIP"
+        echo "PASS $PASS"
+        echo "TOTAL $TOTAL"
+        cd -
+        output="Busybox tests summary = TOTAL: $TOTAL / PASS: $PASS / FAIL: $FAIL / SKIP: $SKIP"
+        echo "${output}"
+        if [[ "$FAIL" -gt 0 || "$ERROR" -gt 0 ]]; then echo "::warning ::${output}" ; fi
+        jq -n \
+                --arg date "$(date --rfc-email)" \
+                --arg sha "$GITHUB_SHA" \
+                --arg total "$TOTAL" \
+                --arg pass "$PASS" \
+                --arg skip "$SKIP" \
+                --arg fail "$FAIL" \
+                '{($date): { sha: $sha, total: $total, pass: $pass, skip: $skip, fail: $fail, }}' > '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}'
+          HASH=$(sha1sum '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}' | cut --delim=" " -f 1)
+          echo "HASH=${HASH}" >> $GITHUB_OUTPUT
+    - name: Reserve SHA1/ID of 'test-summary'
+      uses: actions/upload-artifact@v7
+      with:
+        name: "${{ steps.summary.outputs.HASH }}"
+        path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
+    - name: Reserve test results summary
+      uses: actions/upload-artifact@v7
+      with:
+        name: busybox-test-summary
+        path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
+    - name: Upload json results
+      uses: actions/upload-artifact@v7
+      with:
+        name: busybox-result.json
+        path: ${{ steps.vars.outputs.TEST_SUMMARY_FILE }}
+
+  test_toybox:
+    name: Tests/Toybox test suite
+    runs-on: ${{ matrix.job.os }}
+    env:
+      CARGO_INCREMENTAL: 0
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: ubuntu-latest }
+    steps:
+    - name: Initialize workflow variables
+      id: vars
+      shell: bash
+      run: |
+        ## VARs setup
+        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
+        TEST_SUMMARY_FILE="toybox-result.json"
+        outputs TEST_SUMMARY_FILE
+    - uses: actions/checkout@v6
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ env.RUST_MIN_SRV }}
+    - uses: Swatinem/rust-cache@v2
+    - name: Run sccache-cache
+      id: sccache-setup
+      uses: mozilla-actions/sccache-action@v0.0.9
+      continue-on-error: true
+    - name: Export sccache
+      if: steps.sccache-setup.outcome == 'success'
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
+    - name: Build coreutils
+      shell: bash
+      run: |
+        set -v
+        make MULTICALL=y && (cd target/debug && for binary in $(./coreutils --list);do ln -sf coreutils ${binary};done)
+    - name: Run toybox src
+      shell: bash
+      run: |
+        make toybox-src
+    - name: Run Toybox test suite
+      id: summary
+      shell: bash
+      run: |
+        ## Run Toybox test suite
+        set -v
+        cd tmp/toybox-*/
+        make defconfig
+        make tests &> tmp.log || true
+        cat tmp.log
+        FAIL=$(grep "FAIL" tmp.log | wc --lines)
+        PASS=$(grep "PASS:"  tmp.log| wc --lines)
+        SKIP=$(grep " disabled$"  tmp.log| wc --lines)
+        TOTAL=`expr $FAIL + $PASS + $SKIP`
+        echo "FAIL $FAIL"
+        echo "SKIP $SKIP"
+        echo "PASS $PASS"
+        echo "TOTAL $TOTAL"
+        cd -
+        jq -n \
+                --arg date "$(date --rfc-email)" \
+                --arg sha "$GITHUB_SHA" \
+                --arg total "$TOTAL" \
+                --arg pass "$PASS" \
+                --arg skip "$SKIP" \
+                --arg fail "$FAIL" \
+                '{($date): { sha: $sha, total: $total, pass: $pass, skip: $skip, fail: $fail, }}' > '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}'
+        output="Toybox tests summary = TOTAL: $TOTAL / PASS: $PASS / FAIL: $FAIL / SKIP: $SKIP"
+        echo "${output}"
+        if [[ "$FAIL" -gt 0 || "$ERROR" -gt 0 ]]; then echo "::warning ::${output}" ; fi
+        HASH=$(sha1sum '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}' | cut --delim=" " -f 1)
+          echo "HASH=${HASH}" >> $GITHUB_OUTPUT
+    - name: Reserve SHA1/ID of 'test-summary'
+      uses: actions/upload-artifact@v7
+      with:
+        name: "${{ steps.summary.outputs.HASH }}"
+        path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
+    - name: Reserve test results summary
+      uses: actions/upload-artifact@v7
+      with:
+        name: toybox-test-summary
+        path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
+    - name: Upload json results
+      uses: actions/upload-artifact@v7
+      with:
+        name: toybox-result.json
+        path: ${{ steps.vars.outputs.TEST_SUMMARY_FILE }}
