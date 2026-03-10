@@ -631,26 +631,17 @@ fn print_terminal_size(
     #[cfg(not(target_os = "linux"))]
     let speed = nix::sys::termios::cfgetospeed(termios);
     #[cfg(target_os = "linux")]
-    #[cfg(all(
-        not(target_arch = "powerpc"),
-        not(target_arch = "powerpc64")
-    ))]
+    #[cfg(all(not(target_arch = "powerpc"), not(target_arch = "powerpc64")))]
     ioctl_read_bad!(tcgets2, TCGETS2, termios2);
     #[cfg(target_os = "linux")]
-    #[cfg(all(
-        not(target_arch = "powerpc"),
-        not(target_arch = "powerpc64")
-    ))]
+    #[cfg(all(not(target_arch = "powerpc"), not(target_arch = "powerpc64")))]
     let speed = {
         let mut t2 = unsafe { std::mem::zeroed::<termios2>() };
         unsafe { tcgets2(opts.file.as_raw_fd(), &raw mut t2)? };
         t2.c_ospeed
     };
     #[cfg(target_os = "linux")]
-    #[cfg(any(
-        target_arch = "powerpc",
-        target_arch = "powerpc64"
-    ))]
+    #[cfg(any(target_arch = "powerpc", target_arch = "powerpc64"))]
     let speed = nix::sys::termios::cfgetospeed(termios);
 
     let mut printer = WrappedPrinter::new(window_size);
