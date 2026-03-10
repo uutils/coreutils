@@ -1259,27 +1259,26 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
         return true;
     }
 
-    #[cfg(all(feature = "selinux", target_os = "linux"))]
-    if !b.unprivileged && b.preserve_context && contexts_differ(from, to) {
-        return true;
-    }
-
-    // TODO: if -P (#1809) and from/to contexts mismatch, return true.
-
-    // Check if the owner ID is specified and differs from the destination file's owner.
-    if let Some(owner_id) = b.owner_id {
-        if !b.unprivileged && owner_id != to_meta.uid() {
+    if !b.unprivileged {
+        #[cfg(all(feature = "selinux", target_os = "linux"))]
+        if b.preserve_context && contexts_differ(from, to) {
             return true;
         }
-    }
 
-    // Check if the group ID is specified and differs from the destination file's group.
-    if let Some(group_id) = b.group_id {
-        if !b.unprivileged && group_id != to_meta.gid() {
-            return true;
+        // TODO: if -P (#1809) and from/to contexts mismatch, return true.
+
+        // Check if the owner ID is specified and differs from the destination file's owner.
+        match b.owner_id {
+            Some(uid) if uid != to_meta.uid() => return true,
+            _ => {}
         }
-    } else if !b.unprivileged && needs_copy_for_ownership(to, &to_meta) {
-        return true;
+
+        // Check if the group ID is specified and differs from the destination file's group.
+        match b.group_id {
+            Some(gid) if gid != to_meta.gid() => return true,
+            None if needs_copy_for_ownership(to, &to_meta) => return true,
+            _ => {}
+        }
     }
 
     // Check if the contents of the source and destination files differ.
