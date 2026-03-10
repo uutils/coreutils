@@ -247,9 +247,7 @@ impl Uniq {
         if bytes_read == 0 {
             return Ok(false);
         }
-        if buffer.last().is_some_and(|last| *last == line_terminator) {
-            buffer.pop();
-        }
+        let _ = buffer.pop_if(|last| *last == line_terminator);
         Ok(true)
     }
 
