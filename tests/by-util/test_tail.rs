@@ -1721,14 +1721,14 @@ fn test_retry9() {
     );
     let expected_stdout = "foo\nbar\nfoo\nbar\n";
 
-    let delay = 100;
+    let delay = 400;
 
     at.mkdir(parent_dir);
     at.truncate(user_path, "foo\n");
     let mut p = ts
         .ucmd()
         .arg("-F")
-        .arg("-s.1")
+        .arg("-s.2")
         .arg("--max-unchanged-stats=1")
         .arg(user_path)
         .run_no_wait();
