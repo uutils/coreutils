@@ -7,9 +7,9 @@ use crate::errors::NumfmtError;
 use crate::format::{escape_line, write_formatted_with_delimiter, write_formatted_with_whitespace};
 use crate::options::{
     DEBUG, DELIMITER, FIELD, FIELD_DEFAULT, FORMAT, FROM, FROM_DEFAULT, FROM_UNIT,
-    FROM_UNIT_DEFAULT, FormatOptions, HEADER, HEADER_DEFAULT, INVALID, InvalidModes, NUMBER,
-    NumfmtOptions, PADDING, ROUND, RoundMethod, SUFFIX, TO, TO_DEFAULT, TO_UNIT, TO_UNIT_DEFAULT,
-    TransformOptions, UNIT_SEPARATOR, ZERO_TERMINATED,
+    FROM_UNIT_DEFAULT, FormatOptions, GROUPING, HEADER, HEADER_DEFAULT, INVALID, InvalidModes,
+    NUMBER, NumfmtOptions, PADDING, ROUND, RoundMethod, SUFFIX, TO, TO_DEFAULT, TO_UNIT,
+    TO_UNIT_DEFAULT, TransformOptions, UNIT_SEPARATOR, ZERO_TERMINATED,
 };
 use crate::units::{Result, Unit};
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, parser::ValueSource};
@@ -21,6 +21,7 @@ use units::{IEC_BASES, SI_BASES};
 use uucore::display::Quotable;
 use uucore::error::UResult;
 
+use uucore::i18n::decimal::locale_grouping_separator;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::ranges::Range;
 use uucore::{format_usage, os_str_as_bytes, show, translate};
@@ -30,73 +31,28 @@ pub mod format;
 pub mod options;
 mod units;
 
-fn handle_args<'a>(args: impl Iterator<Item = &'a [u8]>, options: &NumfmtOptions) -> UResult<()> {
-    let mut stdout = std::io::stdout().lock();
-    let terminator = if options.zero_terminated { 0u8 } else { b'\n' };
-    for l in args {
-        write_line(&mut stdout, l, options, Some(terminator))?;
-    }
-    Ok(())
-}
-
-fn handle_buffer<R: BufRead>(mut input: R, options: &NumfmtOptions) -> UResult<()> {
-    let terminator = if options.zero_terminated { 0u8 } else { b'\n' };
-    let mut stdout = std::io::stdout().lock();
-    let mut buf = Vec::new();
-    let mut idx = 0;
-
-    loop {
-        buf.clear();
-        let n = input
-            .read_until(terminator, &mut buf)
-            .map_err(|e| NumfmtError::IoError(e.to_string()))?;
-        if n == 0 {
-            break;
-        }
-
-        let has_terminator = buf.last() == Some(&terminator);
-        let line = if has_terminator {
-            &buf[..buf.len() - 1]
-        } else {
-            &buf[..]
-        };
-
-        // Emit the terminator only if the input line had one.
-        // i.e. if the last line of the input does not end with a newline, we should not add one.
-        let eol = has_terminator.then_some(terminator);
-
-        if idx < options.header {
-            stdout.write_all(line)?;
-            if let Some(t) = eol {
-                stdout.write_all(&[t])?;
-            }
-        } else {
-            write_line(&mut stdout, line, options, eol)?;
-        }
-
-        idx += 1;
-    }
-
-    Ok(())
-}
-
-fn write_line<W: std::io::Write>(
+/// Format a single line and write it, handling `--invalid` error modes.
+///
+/// Returns `true` if the line contained invalid input (only possible in
+/// non-abort modes).
+fn format_and_write<W: std::io::Write>(
     writer: &mut W,
     input_line: &[u8],
     options: &NumfmtOptions,
     eol: Option<u8>,
-) -> UResult<()> {
-    // Read lines only up to null byte (as GNU does)
+) -> UResult<bool> {
+    // GNU truncates at the first embedded null byte.
     let line = match memchr::memchr(b'\0', input_line) {
         Some(i) => &input_line[..i],
         None => input_line,
     };
+    let mut formatted_line = Vec::new();
     let handled_line = if options.delimiter.is_some() {
-        write_formatted_with_delimiter(writer, line, options, eol)
+        write_formatted_with_delimiter(&mut formatted_line, line, options, eol)
     } else {
         // Whitespace mode requires valid UTF-8
         match std::str::from_utf8(line) {
-            Ok(s) => write_formatted_with_whitespace(writer, s, options, eol),
+            Ok(s) => write_formatted_with_whitespace(&mut formatted_line, s, options, eol),
             Err(_) => {
                 Err(translate!("numfmt-error-invalid-number", "input" => escape_line(line).quote()))
             }
@@ -121,9 +77,11 @@ fn write_line<W: std::io::Write>(
         if let Some(eol) = eol {
             writer.write_all(&[eol])?;
         }
+        return Ok(true);
     }
 
-    Ok(())
+    writer.write_all(&formatted_line)?;
+    Ok(false)
 }
 
 fn parse_unit(s: &str) -> Result<Unit> {
@@ -252,12 +210,21 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         Range::from_list(fields)?
     };
 
+    let grouping = args.get_flag(GROUPING);
     let format = match args.get_one::<String>(FORMAT) {
         Some(s) => s.parse()?,
         None => FormatOptions::default(),
     };
 
-    if format.grouping && to != Unit::None {
+    if grouping && args.contains_id(FORMAT) {
+        return Err(translate!(
+            "numfmt-error-grouping-cannot-be-combined-with-format"
+        ));
+    }
+
+    let grouping = grouping || format.grouping;
+
+    if grouping && to != Unit::None {
         return Err(translate!(
             "numfmt-error-grouping-cannot-be-combined-with-to"
         ));
@@ -303,6 +270,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         round,
         suffix,
         unit_separator,
+        grouping,
         explicit_unit_separator,
         format,
         invalid,
@@ -314,15 +282,14 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
 fn print_debug_warnings(options: &NumfmtOptions, matches: &ArgMatches) {
     fn print_warning(msg_key: &str) {
         let _ = writeln!(stderr(), "numfmt: {}", translate!(msg_key));
-    }
-
-    // Warn if no conversion option is specified
-    // 2>/dev/full does not abort
-    if options.transform.from == Unit::None
-        && options.transform.to == Unit::None
-        && options.padding == 0
-    {
-        print_warning("numfmt-debug-no-conversion");
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    if options.grouping && locale_grouping_separator().is_empty() {
+        let _ = writeln!(
+            stderr(),
+            "{}: {}",
+            util_name(),
+            translate!("numfmt-debug-grouping-no-effect")
+        );
     }
 
     // Warn if --header is used with command-line input
@@ -333,7 +300,17 @@ fn print_debug_warnings(options: &NumfmtOptions, matches: &ArgMatches) {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    // GNU numfmt accepts both --debug and ---debug (triple dash); normalize for clap.
+    let normalized_args: Vec<OsString> = args
+        .map(|arg| {
+            if arg == "---debug" {
+                OsString::from("--debug")
+            } else {
+                arg
+            }
+        })
+        .collect();
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), normalized_args)?;
 
     let options = parse_options(&matches).map_err(NumfmtError::IllegalArgument)?;
 
@@ -346,19 +323,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .map(|s| os_str_as_bytes(s).map_err(|e| e.to_string()))
             .collect::<std::result::Result<Vec<_>, _>>()
             .map_err(NumfmtError::IllegalArgument)?;
-        handle_args(byte_args.into_iter(), &options)
-    } else {
-        let stdin = std::io::stdin();
-        let mut locked_stdin = stdin.lock();
-        handle_buffer(&mut locked_stdin, &options)
-    };
 
     match result {
         Err(e) => {
             std::io::stdout().flush().expect("error flushing stdout");
             Err(e)
         }
-        _ => Ok(()),
+        Ok(saw_invalid) => {
+            if options.debug && saw_invalid {
+                let _ = writeln!(
+                    stderr(),
+                    "{}: {}",
+                    util_name(),
+                    translate!("numfmt-debug-failed-to-convert")
+                );
+            }
+            Ok(())
+        }
     }
 }
 
@@ -375,6 +356,12 @@ pub fn uu_app() -> Command {
             Arg::new(DEBUG)
                 .long(DEBUG)
                 .help(translate!("numfmt-help-debug"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(GROUPING)
+                .long(GROUPING)
+                .help(translate!("numfmt-help-grouping"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -524,6 +511,7 @@ mod tests {
             round: RoundMethod::Nearest,
             suffix: None,
             unit_separator: String::new(),
+            grouping: false,
             explicit_unit_separator: false,
             format: FormatOptions::default(),
             invalid: InvalidModes::Abort,

@@ -42,6 +42,7 @@ numfmt-help-field = replace the numbers in these input fields; see FIELDS below
 numfmt-help-format = use printf style floating-point FORMAT; see FORMAT below for details
 numfmt-help-from = auto-scale input numbers to UNITs; see UNIT below
 numfmt-help-from-unit = specify the input unit size
+numfmt-help-grouping = use locale-defined grouping of digits, for example 1,000,000 (which means it has no effect in the C/POSIX locale)
 numfmt-help-to = auto-scale output numbers to UNITs; see UNIT below
 numfmt-help-to-unit = the output unit size
 numfmt-help-padding = pad the output to N characters; positive N will right-align; negative N will left-align; padding is ignored if the output is wider than N; the default is to automatically pad if a whitespace is found
@@ -57,6 +58,7 @@ numfmt-error-unsupported-unit = Unsupported unit is specified
 numfmt-error-invalid-unit-size = invalid unit size: { $size }
 numfmt-error-invalid-padding = invalid padding value { $value }
 numfmt-error-invalid-header = invalid header value { $value }
+numfmt-error-grouping-cannot-be-combined-with-format = --grouping cannot be combined with --format
 numfmt-error-grouping-cannot-be-combined-with-to = grouping cannot be combined with --to
 numfmt-error-delimiter-must-be-single-character = the delimiter must be a single character
 numfmt-error-invalid-number-empty = invalid number: ''
@@ -75,7 +77,3 @@ numfmt-error-invalid-format-width-overflow = invalid format '{ $format }' (width
 numfmt-error-invalid-precision = invalid precision in format '{ $format }'
 numfmt-error-format-too-many-percent = format '{ $format }' has too many % directives
 numfmt-error-unknown-invalid-mode = Unknown invalid mode: { $mode }
-
-# Debug messages
-numfmt-debug-no-conversion = no conversion option specified
-numfmt-debug-header-ignored = --header ignored with command-line input

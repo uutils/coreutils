@@ -1114,6 +1114,14 @@ fn test_format_grouping_conflicts_with_to_option() {
 }
 
 #[test]
+fn test_grouping_conflicts_with_format_option() {
+    new_ucmd!()
+        .args(&["--format=%f", "--grouping"])
+        .fails_with_code(1)
+        .stderr_contains("--grouping cannot be combined with --format");
+}
+
+#[test]
 fn test_zero_terminated_command_line_args() {
     new_ucmd!()
         .args(&["--zero-terminated", "--to=si", "1000"])
@@ -1208,6 +1216,59 @@ fn test_debug_warnings() {
         .succeeds()
         .stdout_is("4.0K\n")
         .stderr_is("numfmt: --header ignored with command-line input\n");
+
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .args(&["--debug", "--grouping", "--from=si", "4.0K"])
+        .succeeds()
+        .stdout_is("4000\n")
+        .stderr_is("numfmt: grouping has no effect in this locale\n");
+}
+
+#[test]
+fn test_debug_reports_failed_conversions_summary() {
+    new_ucmd!()
+        .args(&[
+            "--invalid=fail",
+            "--debug",
+            "--to=si",
+            "1000",
+            "Foo",
+            "3000",
+        ])
+        .fails_with_code(2)
+        .stdout_is("1.0k\nFoo\n3.0k\n")
+        .stderr_is(
+            "numfmt: invalid number: 'Foo'\nnumfmt: failed to convert some of the input numbers\n",
+        );
+}
+
+#[test]
+fn test_invalid_fail_with_fields_does_not_duplicate_output() {
+    new_ucmd!()
+        .args(&["--invalid=fail", "--field=2", "--from=si", "--to=iec"])
+        .pipe_in("A 1K x\nB Foo y\nC 3G z\n")
+        .fails_with_code(2)
+        .stdout_is("A 1000 x\nB Foo y\nC 2.8G z\n")
+        .stderr_is("numfmt: invalid number: 'Foo'\n");
+}
+
+#[test]
+fn test_rejects_malformed_number_forms() {
+    new_ucmd!()
+        .args(&["--from=si", "12.K"])
+        .fails_with_code(2)
+        .stderr_contains("invalid number: '12.K'");
+
+    new_ucmd!()
+        .args(&["--from=si", "--delimiter=,", "12.  2"])
+        .fails_with_code(2)
+        .stderr_contains("invalid number: '12.  2'");
+
+    new_ucmd!()
+        .arg("..1")
+        .fails_with_code(2)
+        .stderr_contains("invalid suffix in input: '..1'");
 }
 
 #[test]
