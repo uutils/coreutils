@@ -192,24 +192,6 @@ sed -i "s|--coreutils-prog=||g" tests/misc/coreutils.sh
 # Use the system coreutils where the test fails due to error in a util that is not the one being tested
 sed -i "s|grep '^#define HAVE_CAP 1' \$CONFIG_HEADER > /dev/null|true|"  tests/ls/capability.sh
 
-# Keep GNU numfmt coverage focused on the behavior we currently support.
-sed -i '/# uutils-numfmt-adjustments start/,/# uutils-numfmt-adjustments end/d' tests/numfmt/numfmt.pl
-sed -i '/push @Tests, @Locale_Tests if $locale ne '\''C'\'';/a\
-# uutils-numfmt-adjustments start\
-my %skip_uutils_numfmt_tests = map { $_ => 1 } qw(\
-  unit-sep-22-fail grp-1 grp-2 delim-7 field-1\
-  field-range-err-1 field-range-err-2 field-range-err-3 field-range-err-4\
-  field-range-err-6 field-range-err-7 field-range-err-8 field-range-err-9\
-  field-range-err-10 field-range-err-11 field-range-err-12 field-range-err-13\
-  strtod-6 strtod-6.1 leading-4 debug-2\
-  devdebug-1 devdebug-2 devdebug-3 devdebug-4 devdebug-5 devdebug-6\
-  devdebug-7 devdebug-9 devdebug-10 devdebug-11\
-  help-1 fmt-err-9 fmt-err-11 fmt-15\
-  ign-err-5 ign-err-m2.2 ign-err-m3.1\
-);\
-@Tests = grep { !$skip_uutils_numfmt_tests{$_->[0]} } @Tests;\
-# uutils-numfmt-adjustments end' tests/numfmt/numfmt.pl
-
 # our messages are better
 sed -i "s|cannot stat 'symlink': Permission denied|not writing through dangling symlink 'symlink'|" tests/cp/fail-perm.sh
 sed -i "s|cp: target directory 'symlink': Permission denied|cp: 'symlink' is not a directory|" tests/cp/fail-perm.sh
