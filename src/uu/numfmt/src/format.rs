@@ -6,6 +6,7 @@
 // spell-checker:ignore powf
 
 use uucore::display::Quotable;
+use uucore::i18n::decimal::locale_grouping_separator;
 use uucore::translate;
 
 use crate::options::{NumfmtOptions, RoundMethod, TransformOptions};
@@ -27,6 +28,9 @@ fn find_numeric_beginning(s: &str) -> Option<&str> {
         if c == '.' && !decimal_point_seen {
             decimal_point_seen = true;
             continue;
+        }
+        if idx > 0 && &s[..idx] == "." {
+            return Some(&s[..idx]);
         }
         if s[..idx].parse::<f64>().is_err() {
             return None;
@@ -75,6 +79,14 @@ fn detailed_error_message(s: &str, unit: Unit) -> Option<String> {
         .ok_or(translate!("numfmt-error-invalid-number", "input" => s.quote()))
         .ok()?;
 
+    if valid_part == "." {
+        return Some(translate!("numfmt-error-invalid-suffix", "input" => s.quote()));
+    }
+
+    if valid_part.ends_with('.') {
+        return Some(translate!("numfmt-error-invalid-number", "input" => s.quote()));
+    }
+
     if valid_part != s && valid_part.parse::<f64>().is_ok() {
         return match s.chars().nth(valid_part.len()) {
             Some('+' | '-') => {
@@ -94,6 +106,15 @@ fn detailed_error_message(s: &str, unit: Unit) -> Option<String> {
         );
     }
     None
+}
+
+fn parse_number_part(s: &str, input: &str) -> Result<f64> {
+    if s.ends_with('.') {
+        return Err(translate!("numfmt-error-invalid-number", "input" => input.quote()));
+    }
+
+    s.parse::<f64>()
+        .map_err(|_| translate!("numfmt-error-invalid-number", "input" => input.quote()))
 }
 
 fn parse_suffix(
@@ -159,18 +180,46 @@ fn parse_suffix(
             whitespace
         };
 
-        let number = number_part[..number_part.len() - separator_len]
-            .parse::<f64>()
-            .map_err(|_| translate!("numfmt-error-invalid-number", "input" => s.quote()))?;
+        let number = parse_number_part(&number_part[..number_part.len() - separator_len], s)?;
 
         return Ok((number, suffix));
     }
 
-    let number = number_part
-        .parse::<f64>()
-        .map_err(|_| translate!("numfmt-error-invalid-number", "input" => s.quote()))?;
+    let number = parse_number_part(number_part, s)?;
 
     Ok((number, suffix))
+}
+
+fn apply_grouping(s: &str) -> String {
+    let grouping_separator = locale_grouping_separator();
+    if grouping_separator.is_empty() {
+        return s.to_string();
+    }
+
+    let (sign, rest) = if let Some(rest) = s.strip_prefix('-') {
+        ("-", rest)
+    } else {
+        ("", s)
+    };
+    let (integer, fraction) = rest.split_once('.').map_or((rest, ""), |(i, f)| (i, f));
+    if integer.len() < 4 {
+        return s.to_string();
+    }
+
+    let mut grouped_rev = String::with_capacity(s.len() + (integer.len() / 3));
+    for (idx, ch) in integer.chars().rev().enumerate() {
+        if idx > 0 && idx % 3 == 0 {
+            grouped_rev.push_str(grouping_separator);
+        }
+        grouped_rev.push(ch);
+    }
+    let grouped_integer: String = grouped_rev.chars().rev().collect();
+
+    if fraction.is_empty() {
+        format!("{sign}{grouped_integer}")
+    } else {
+        format!("{sign}{grouped_integer}.{fraction}")
+    }
 }
 
 fn next_field_index(s: &str) -> usize {
@@ -210,10 +259,16 @@ fn split_mergeable_suffix<'a>(s: &'a str, options: &NumfmtOptions) -> Option<(&'
 
     match field.len() {
         1 => {
-            let _ = field.chars().next().filter(|c| RawSuffix::try_from(c).is_ok())?;
+            let _ = field
+                .chars()
+                .next()
+                .filter(|c| RawSuffix::try_from(c).is_ok())?;
         }
         2 if field.ends_with('i') => {
-            let _ = field.chars().next().filter(|c| RawSuffix::try_from(c).is_ok())?;
+            let _ = field
+                .chars()
+                .next()
+                .filter(|c| RawSuffix::try_from(c).is_ok())?;
         }
         _ => return None,
     }
@@ -307,7 +362,7 @@ fn transform_from(s: &str, opts: &TransformOptions, options: &NumfmtOptions) -> 
         &options.unit_separator,
         options.explicit_unit_separator,
     )
-        .map_err(|original| detailed_error_message(s, opts.from).unwrap_or(original))?;
+    .map_err(|original| detailed_error_message(s, opts.from).unwrap_or(original))?;
     let i = i * (opts.from_unit as f64);
 
     remove_suffix(i, suffix, opts.from).map(|n| {
@@ -462,11 +517,7 @@ fn format_string(
     };
 
     let number = transform_to(
-        transform_from(
-            source_without_suffix,
-            &options.transform,
-            options,
-        )?,
+        transform_from(source_without_suffix, &options.transform, options)?,
         &options.transform,
         options.round,
         precision,
@@ -474,9 +525,15 @@ fn format_string(
     )?;
 
     // bring back the suffix before applying padding
+    let grouped_number = if options.grouping {
+        apply_grouping(&number)
+    } else {
+        number
+    };
+
     let number_with_suffix = match &options.suffix {
-        Some(suffix) => format!("{number}{suffix}"),
-        None => number,
+        Some(suffix) => format!("{grouped_number}{suffix}"),
+        None => grouped_number,
     };
 
     let padding = options
@@ -669,7 +726,7 @@ mod tests {
 
     #[test]
     fn test_parse_suffix_q_r_k() {
-        let result = parse_suffix("1Q", Unit::Auto, 1);
+        let result = parse_suffix("1Q", Unit::Auto, "", false);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
         assert_eq!(number, 1.0);
@@ -678,7 +735,7 @@ mod tests {
         assert_eq!(raw_suffix as i32, RawSuffix::Q as i32);
         assert!(!with_i);
 
-        let result = parse_suffix("2R", Unit::Auto, 1);
+        let result = parse_suffix("2R", Unit::Auto, "", false);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
         assert_eq!(number, 2.0);
@@ -687,7 +744,7 @@ mod tests {
         assert_eq!(raw_suffix as i32, RawSuffix::R as i32);
         assert!(!with_i);
 
-        let result = parse_suffix("3k", Unit::Auto, 1);
+        let result = parse_suffix("3k", Unit::Auto, "", false);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
         assert_eq!(number, 3.0);
@@ -696,7 +753,7 @@ mod tests {
         assert_eq!(raw_suffix as i32, RawSuffix::K as i32);
         assert!(!with_i);
 
-        let result = parse_suffix("4Qi", Unit::Auto, 1);
+        let result = parse_suffix("4Qi", Unit::Auto, "", false);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
         assert_eq!(number, 4.0);
@@ -705,7 +762,7 @@ mod tests {
         assert_eq!(raw_suffix as i32, RawSuffix::Q as i32);
         assert!(with_i);
 
-        let result = parse_suffix("5Ri", Unit::Auto, 1);
+        let result = parse_suffix("5Ri", Unit::Auto, "", false);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
         assert_eq!(number, 5.0);
@@ -717,13 +774,13 @@ mod tests {
 
     #[test]
     fn test_parse_suffix_error_messages() {
-        let result = parse_suffix("foo", Unit::Auto, 1);
+        let result = parse_suffix("foo", Unit::Auto, "", false);
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert!(error.contains("numfmt-error-invalid-number") || error.contains("invalid number"));
         assert!(!error.contains("invalid suffix"));
 
-        let result = parse_suffix("World", Unit::Auto, 1);
+        let result = parse_suffix("World", Unit::Auto, "", false);
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert!(error.contains("numfmt-error-invalid-number") || error.contains("invalid number"));
