@@ -317,6 +317,14 @@ fn test_should_report_invalid_number_with_interior_junk() {
 }
 
 #[test]
+fn test_should_report_invalid_number_with_sign_after_decimal() {
+    new_ucmd!()
+        .args(&["--", "-0.-1"])
+        .fails_with_code(2)
+        .stderr_is("numfmt: invalid number: '-0.-1'\n");
+}
+
+#[test]
 fn test_should_skip_leading_space_from_stdin() {
     new_ucmd!()
         .args(&["--from=auto"])
@@ -1235,6 +1243,21 @@ fn test_empty_delimiter_multi_char_unit_separator() {
         .pipe_in("1  K\n2  M\n3  G\n")
         .succeeds()
         .stdout_only("1000\n2000000\n3000000000\n");
+}
+
+#[test]
+fn test_whitespace_mode_parses_custom_unit_separator_inputs() {
+    new_ucmd!()
+        .args(&["--from=iec", "--unit-separator=::"])
+        .pipe_in("4::K\n")
+        .succeeds()
+        .stdout_only("4096\n");
+
+    new_ucmd!()
+        .args(&["--from=iec", "--unit-separator=\u{a0}"])
+        .pipe_in("4\u{a0}K\n")
+        .succeeds()
+        .stdout_only("4096\n");
 }
 
 #[test]
