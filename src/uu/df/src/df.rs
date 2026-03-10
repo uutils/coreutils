@@ -19,8 +19,6 @@ use uucore::translate;
 use uucore::{format_usage, show, show_warning};
 
 use clap::{Arg, ArgAction, ArgMatches, Command, parser::ValueSource};
-#[cfg(not(any(windows, target_os = "redox")))]
-use nix::unistd::sync as sync_filesystems;
 
 use std::ffi::OsString;
 use std::io::stdout;
