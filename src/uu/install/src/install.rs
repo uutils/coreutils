@@ -389,12 +389,10 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
 
     // Check if compare is used with non-permission mode bits
     // TODO use a let chain once we have a MSRV of 1.88 or greater
-    if compare {
-        if let Some(mode) = specified_mode {
-            let non_permission_bits = 0o7000; // setuid, setgid, sticky bits
-            if mode & non_permission_bits != 0 {
-                show_error!("{}", translate!("install-warning-compare-ignored"));
-            }
+    if compare && let Some(mode) = specified_mode {
+        let non_permission_bits = 0o7000; // setuid, setgid, sticky bits
+        if mode & non_permission_bits != 0 {
+            show_error!("{}", translate!("install-warning-compare-ignored"));
         }
     }
 
@@ -646,13 +644,11 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                     if b.target_dir.is_none()
                         && sources.len() == 1
                         && !is_potential_directory_path(&target)
+                        && let Ok(dir_fd) = DirFd::open(to_create, SymlinkBehavior::NoFollow)
+                        && let Some(filename) = target.file_name()
                     {
-                        if let Ok(dir_fd) = DirFd::open(to_create, SymlinkBehavior::NoFollow) {
-                            if let Some(filename) = target.file_name() {
-                                target_parent_fd = Some(dir_fd);
-                                target_filename = Some(filename.to_os_string());
-                            }
-                        }
+                        target_parent_fd = Some(dir_fd);
+                        target_filename = Some(filename.to_os_string());
                     }
                 }
             } else {
@@ -681,11 +677,10 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                             if b.target_dir.is_none()
                                 && sources.len() == 1
                                 && !is_potential_directory_path(&target)
+                                && let Some(filename) = target.file_name()
                             {
-                                if let Some(filename) = target.file_name() {
-                                    target_parent_fd = Some(dir_fd);
-                                    target_filename = Some(filename.to_os_string());
-                                }
+                                target_parent_fd = Some(dir_fd);
+                                target_filename = Some(filename.to_os_string());
                             }
 
                             // Set SELinux context for all created directories if needed
@@ -761,13 +756,13 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
 
                 let backup_path = perform_backup(&target, b)?;
 
-                if let Err(e) = parent_fd.unlink_at(filename.as_os_str(), false) {
-                    if e.kind() != std::io::ErrorKind::NotFound {
-                        show_error!(
-                            "{}",
-                            translate!("install-error-failed-to-remove", "path" => target.quote(), "error" => format!("{e:?}"))
-                        );
-                    }
+                if let Err(e) = parent_fd.unlink_at(filename.as_os_str(), false)
+                    && e.kind() != std::io::ErrorKind::NotFound
+                {
+                    show_error!(
+                        "{}",
+                        translate!("install-error-failed-to-remove", "path" => target.quote(), "error" => format!("{e:?}"))
+                    );
                 }
 
                 copy_file_safe(source, parent_fd, filename.as_os_str())?;
@@ -946,10 +941,10 @@ fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsS
 ///
 fn copy_file(from: &Path, to: &Path) -> UResult<()> {
     use std::os::unix::fs::OpenOptionsExt;
-    if let Ok(to_abs) = to.canonicalize() {
-        if from.canonicalize()? == to_abs {
-            return Err(InstallError::SameFile(from.to_path_buf(), to.to_path_buf()).into());
-        }
+    if let Ok(to_abs) = to.canonicalize()
+        && from.canonicalize()? == to_abs
+    {
+        return Err(InstallError::SameFile(from.to_path_buf(), to.to_path_buf()).into());
     }
 
     if to.is_dir() && !from.is_dir() {
@@ -961,13 +956,13 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
     }
 
     // Remove existing file (create_new below provides TOCTOU protection)
-    if let Err(e) = fs::remove_file(to) {
-        if e.kind() != std::io::ErrorKind::NotFound {
-            show_error!(
-                "{}",
-                translate!("install-error-failed-to-remove", "path" => to.quote(), "error" => format!("{e:?}"))
-            );
-        }
+    if let Err(e) = fs::remove_file(to)
+        && e.kind() != std::io::ErrorKind::NotFound
+    {
+        show_error!(
+            "{}",
+            translate!("install-error-failed-to-remove", "path" => to.quote(), "error" => format!("{e:?}"))
+        );
     }
 
     let mut handle = File::open(from)?;
@@ -1223,10 +1218,10 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
     };
 
     // Check if the destination is a symlink (should always be replaced)
-    if let Ok(to_symlink_meta) = fs::symlink_metadata(to) {
-        if to_symlink_meta.file_type().is_symlink() {
-            return true;
-        }
+    if let Ok(to_symlink_meta) = fs::symlink_metadata(to)
+        && to_symlink_meta.file_type().is_symlink()
+    {
+        return true;
     }
 
     // Define special file mode bits (setuid, setgid, sticky).
