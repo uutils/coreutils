@@ -388,7 +388,6 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     }
 
     // Check if compare is used with non-permission mode bits
-    // TODO use a let chain once we have a MSRV of 1.88 or greater
     if compare && let Some(mode) = specified_mode {
         let non_permission_bits = 0o7000; // setuid, setgid, sticky bits
         if mode & non_permission_bits != 0 {
