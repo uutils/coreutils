@@ -395,9 +395,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
             break;
         }
 
-        if line.last().copied() == Some(b'\n') {
-            line.pop();
-        }
+        let _ = line.pop_if(|byte| *byte == b'\n');
 
         if line.is_empty() {
             stats.consecutive_empty_lines += 1;
