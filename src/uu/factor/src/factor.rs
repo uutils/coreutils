@@ -10,12 +10,12 @@ use std::fmt::Display;
 use std::io::BufRead;
 use std::io::{self, Write, stdin, stdout};
 use std::iter::once;
-use std::str::FromStr;
+use std::num::IntErrorKind;
 
 use clap::{Arg, ArgAction, Command};
 use memchr::memchr3_iter;
 use num_bigint::BigUint;
-use num_traits::FromPrimitive;
+use num_prime::nt_funcs::{factorize64, factorize128, factors};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
 use uucore::translate;
@@ -33,72 +33,77 @@ const DELIM_SPACE: u8 = b' ';
 const DELIM_TAB: u8 = b'\t';
 const DELIM_NULL: u8 = b'\0';
 
+#[derive(Debug, PartialEq, Eq)]
+enum Number {
+    U64(u64),
+    U128(u128),
+    BigUint(BigUint),
+}
+
 fn write_factors_str(
     num_str: &[u8],
     w: &mut io::BufWriter<impl Write>,
     print_exponents: bool,
 ) -> UResult<()> {
-    let parsed = parse_num::<BigUint>(num_str);
+    let parsed = parse_num(num_str);
     show_if_err!(&parsed);
     let Ok(x) = parsed else {
+        // return Ok(). it's non-fatal and we should try the next number.
         return Ok(());
     };
 
-    if x > BigUint::from_u32(1).unwrap() {
+    match x {
         // use num_prime's factorize64 algorithm for u64 integers
-        if x <= BigUint::from_u64(u64::MAX).unwrap() {
-            let prime_factors = num_prime::nt_funcs::factorize64(x.clone().to_u64_digits()[0]);
-            write_result(w, &x, prime_factors, print_exponents)
-                .map_err_context(|| translate!("factor-error-write-error"))?;
-        }
+        Number::U64(x) if x > 1 => write_result(w, &x, factorize64(x), print_exponents),
+        Number::U64(x) => write_result(w, &x, BTreeMap::<u64, usize>::new(), print_exponents),
         // use num_prime's factorize128 algorithm for u128 integers
-        else if x <= BigUint::from_u128(u128::MAX).unwrap() {
-            let parsed = parse_num::<u128>(num_str);
-            show_if_err!(&parsed);
-            let Ok(x) = parsed else {
-                return Ok(());
-            };
-            let prime_factors = num_prime::nt_funcs::factorize128(x);
-            write_result(w, &x, prime_factors, print_exponents)
-                .map_err_context(|| translate!("factor-error-write-error"))?;
-        }
+        Number::U128(x) => write_result(w, &x, factorize128(x), print_exponents),
         // use num_prime's fallible factorization for anything greater than u128::MAX
-        else {
-            let (prime_factors, remaining) = num_prime::nt_funcs::factors(x.clone(), None);
-            if let Some(_remaining) = remaining {
+        Number::BigUint(x) => {
+            let (prime_factors, remaining) = factors(x.clone(), None);
+            if remaining.is_some() {
                 return Err(USimpleError::new(
                     1,
                     translate!("factor-error-factorization-incomplete"),
                 ));
             }
             write_result(w, &x, prime_factors, print_exponents)
-                .map_err_context(|| translate!("factor-error-write-error"))?;
         }
-    } else {
-        let empty_primes: BTreeMap<BigUint, usize> = BTreeMap::new();
-        write_result(w, &x, empty_primes, print_exponents)
-            .map_err_context(|| translate!("factor-error-write-error"))?;
     }
-
-    Ok(())
+    .map_err_context(|| translate!("factor-error-write-error"))
 }
 
-fn parse_num<T: FromStr>(slice: &[u8]) -> UResult<T> {
-    str::from_utf8(slice)
-        .ok()
-        .and_then(|str| str.trim_matches(DELIM_SPACE as char).parse().ok())
-        .ok_or_else(|| {
-            let num = NumError(slice).to_string();
-            let num = if num.len() > slice.len() {
-                num.quote() // Force quoting if there are invalid characters.
-            } else {
-                num.maybe_quote()
-            };
-            USimpleError::new(
-                1,
-                format!("warning: {num}: {}", translate!("factor-error-invalid-int")),
-            )
-        })
+fn parse_num(slice: &[u8]) -> UResult<Number> {
+    let err_invalid = |s: &str, force_quoting| {
+        let num = if force_quoting {
+            s.quote() // Force quoting if there are invalid characters.
+        } else {
+            s.maybe_quote()
+        };
+        USimpleError::new(
+            1,
+            format!("warning: {num}: {}", translate!("factor-error-invalid-int")),
+        )
+    };
+    let num = str::from_utf8(slice).map_err(|_| err_invalid(&NumError(slice).to_string(), true))?;
+
+    match num.parse::<u64>() {
+        Ok(x) => return Ok(Number::U64(x)),
+        // If overflown, attempt a greater width
+        Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow) => {}
+        Err(_) => return Err(err_invalid(num, false)),
+    }
+
+    match num.parse::<u128>() {
+        Ok(x) => return Ok(Number::U128(x)),
+        // If overflown, attempt a greater width
+        Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow) => {}
+        Err(_) => return Err(err_invalid(num, false)),
+    }
+
+    num.parse::<BigUint>()
+        .map(Number::BigUint)
+        .map_err(|_| err_invalid(num, false))
 }
 
 /// This is a newtype wrapper over a potentially malformed UTF-8
@@ -168,7 +173,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if let Some(values) = matches.get_many::<String>(options::NUMBER) {
         for number in values {
-            write_factors_str(number.as_bytes(), &mut w, print_exponents)?;
+            write_factors_str(number.trim().as_bytes(), &mut w, print_exponents)?;
         }
     } else {
         let stdin = stdin();
@@ -239,23 +244,24 @@ pub fn uu_app() -> Command {
 
 #[cfg(test)]
 mod tests {
-    use crate::BigUint;
+    use crate::Number;
     use crate::parse_num;
 
     #[test]
     fn test_correct_parsing() {
-        let zero = parse_num::<u64>(b"0").unwrap();
-        let u64_max = parse_num::<u64>(u64::MAX.to_string().as_bytes()).unwrap();
-        let u128_one = parse_num::<u128>((u64::MAX as u128 + 1).to_string().as_bytes()).unwrap();
-        let u128_max = parse_num::<u128>(u128::MAX.to_string().as_bytes()).unwrap();
-        let bigint = parse_num::<BigUint>(u128::MAX.to_string().as_bytes()).unwrap() + 1u64;
+        const U128_MAX_ONE: &str = "340282366920938463463374607431768211456";
+        let zero = parse_num(b"0").unwrap();
+        let u64_max = parse_num(u64::MAX.to_string().as_bytes()).unwrap();
+        let u128_one = parse_num((u64::MAX as u128 + 1).to_string().as_bytes()).unwrap();
+        let u128_max = parse_num(u128::MAX.to_string().as_bytes()).unwrap();
+        let bigint = parse_num(U128_MAX_ONE.as_bytes()).unwrap();
         assert_eq!(
             (
-                0,
-                u64::MAX,
-                (u64::MAX as u128 + 1),
-                u128::MAX,
-                BigUint::from(u128::MAX) + 1u64
+                Number::U64(0),
+                Number::U64(u64::MAX),
+                Number::U128(u64::MAX as u128 + 1),
+                Number::U128(u128::MAX),
+                Number::BigUint(U128_MAX_ONE.parse().unwrap())
             ),
             (zero, u64_max, u128_one, u128_max, bigint)
         );
@@ -264,11 +270,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_incorrect_parsing() {
-        parse_num::<u64>(b"abcd").unwrap();
-        parse_num::<u64>(b"12\x00\xFF\x1D").unwrap();
-        parse_num::<u128>(b"abcd").unwrap();
-        parse_num::<u128>(b"12\x00\xFF\x1D").unwrap();
-        parse_num::<BigUint>(b"abcd").unwrap();
-        parse_num::<BigUint>(b"12\x00\xFF\x1D").unwrap();
+        parse_num(b"abcd").unwrap();
+        parse_num(b"12\x00\xFF\x1D").unwrap();
     }
 }
