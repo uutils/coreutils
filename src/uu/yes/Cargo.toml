@@ -19,9 +19,11 @@ workspace = true
 path = "src/yes.rs"
 
 [dependencies]
+aligned-vec = { workspace = true }
 clap = { workspace = true }
 itertools = { workspace = true }
 fluent = { workspace = true }
+rustix = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 uucore = { workspace = true, features = ["pipes", "signals"] }

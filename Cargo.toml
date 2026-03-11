@@ -372,6 +372,7 @@ version = "0.7.0"
 
 [workspace.dependencies]
 ansi-width = "0.1.0"
+aligned-vec = "0.6.4"
 bigdecimal = "0.4"
 binary-heap-plus = "0.5.0"
 bstr = "1.9.1"
@@ -434,6 +435,7 @@ rlimit = "0.11.0"
 rstest = "0.26.0"
 rustc-hash = "2.1.1"
 rust-ini = "0.21.0"
+rustix = { version = "1.1.4", features = ["fs", "param", "pipe"] }
 same-file = "1.0.6"
 self_cell = "1.0.4"
 selinux = "=0.6.0"
