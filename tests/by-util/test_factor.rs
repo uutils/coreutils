@@ -1669,3 +1669,19 @@ fn succeeds_with_numbers_larger_than_u256() {
                 269984665640564039457584007913129639936: 2^256\n",
         );
 }
+
+#[test]
+fn handles_non_unicode_data() {
+    let input = b"\0 \xFF\0\xFF\xAA\0\xAA\x44 a&#2\n6 9\x003\xC024\t2\t\t4\x000+4\xFF \xF7\xC1";
+    let expected_out = "6: 2 3\n9: 3 3\n2: 2\n4: 2 2\n";
+    let expected_err = r"factor: warning: '': invalid digit found in string
+factor: warning: '\377': invalid digit found in string
+factor: warning: 'a&#2': invalid digit found in string
+factor: warning: '\367\301': invalid digit found in string
+";
+    new_ucmd!()
+        .pipe_in(input)
+        .fails_with_code(1)
+        .stdout_is(expected_out)
+        .stderr_is(expected_err);
+}
