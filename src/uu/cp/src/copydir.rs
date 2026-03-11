@@ -230,10 +230,10 @@ impl Entry {
             // an extra level of nesting. For example, if we're in /home/user/source_dir
             // and copying . to /home/user/dest_dir, we want to copy source_dir/file.txt
             // to dest_dir/file.txt, not dest_dir/source_dir/file.txt.
-            if let Some(current_dir_name) = context.current_dir.file_name() {
-                if let Ok(stripped) = descendant.strip_prefix(current_dir_name) {
-                    descendant = stripped.to_path_buf();
-                }
+            if let Some(current_dir_name) = context.current_dir.file_name()
+                && let Ok(stripped) = descendant.strip_prefix(current_dir_name)
+            {
+                descendant = stripped.to_path_buf();
             }
         }
 
@@ -300,8 +300,8 @@ fn copy_direntry(
     }
 
     // If the source is not a directory, then we need to copy the file.
-    if !source_is_dir {
-        if let Err(err) = copy_file(
+    if !source_is_dir
+        && let Err(err) = copy_file(
             progress_bar,
             &entry.source_relative,
             entry.local_to_target.as_path(),
@@ -311,34 +311,34 @@ fn copy_direntry(
             copied_files,
             created_parent_dirs,
             false,
-        ) {
-            if preserve_hard_links {
-                if !source_is_symlink {
-                    return Err(err);
+        )
+    {
+        if preserve_hard_links {
+            if !source_is_symlink {
+                return Err(err);
+            }
+            // silent the error with a symlink
+            // In case we do --archive, we might copy the symlink
+            // before the file itself
+        } else {
+            // At this point, `path` is just a plain old file.
+            // Terminate this function immediately if there is any
+            // kind of error *except* a "permission denied" error.
+            //
+            // TODO What other kinds of errors, if any, should
+            // cause us to continue walking the directory?
+            match err {
+                CpError::IoErrContext(e, _) if e.kind() == io::ErrorKind::PermissionDenied => {
+                    show!(uio_error!(
+                        e,
+                        "{}",
+                        translate!(
+                            "cp-error-cannot-open-for-reading",
+                            "source" => entry.source_relative.quote()
+                        ),
+                    ));
                 }
-                // silent the error with a symlink
-                // In case we do --archive, we might copy the symlink
-                // before the file itself
-            } else {
-                // At this point, `path` is just a plain old file.
-                // Terminate this function immediately if there is any
-                // kind of error *except* a "permission denied" error.
-                //
-                // TODO What other kinds of errors, if any, should
-                // cause us to continue walking the directory?
-                match err {
-                    CpError::IoErrContext(e, _) if e.kind() == io::ErrorKind::PermissionDenied => {
-                        show!(uio_error!(
-                            e,
-                            "{}",
-                            translate!(
-                                "cp-error-cannot-open-for-reading",
-                                "source" => entry.source_relative.quote()
-                            ),
-                        ));
-                    }
-                    e => return Err(e),
-                }
+                e => return Err(e),
             }
         }
     }
