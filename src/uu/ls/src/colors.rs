@@ -4,8 +4,8 @@
 // file that was distributed with this source code.
 use super::PathData;
 use lscolors::{Indicator, LsColors, Style};
+use rustc_hash::FxHashMap;
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::env;
 use std::ffi::OsString;
 use std::fs::{self, Metadata};
@@ -45,7 +45,7 @@ pub(crate) struct StyleManager<'a> {
     pub(crate) initial_reset_is_done: bool,
     pub(crate) colors: &'a LsColors,
     /// raw indicator codes as specified in LS_COLORS (if available)
-    indicator_codes: HashMap<Indicator, String>,
+    indicator_codes: FxHashMap<Indicator, String>,
     /// whether ln=target is active
     ln_color_from_target: bool,
 }
@@ -388,7 +388,7 @@ impl<'a> StyleManager<'a> {
 
         if target_missing {
             let orphan_raw = self.indicator_codes.get(&Indicator::OrphanedSymbolicLink);
-            let orphan_raw_is_empty = orphan_raw.is_some_and(|value| value.is_empty());
+            let orphan_raw_is_empty = orphan_raw.is_some_and(String::is_empty);
             if orphan_enabled && (!orphan_raw_is_empty || self.ln_color_from_target) {
                 return Some(Indicator::OrphanedSymbolicLink);
             }
@@ -541,7 +541,7 @@ pub(crate) fn color_name(
         }
     }
 
-    if target_symlink.is_none() && path.file_type().is_some_and(|ft| ft.is_symlink()) {
+    if target_symlink.is_none() && path.file_type().is_some_and(fs::FileType::is_symlink) {
         if let Some(colored) = style_manager.color_symlink_name(path, name.clone(), wrap) {
             return colored;
         }
@@ -746,8 +746,8 @@ fn is_valid_ls_colors_prefix(label: [u8; 2]) -> bool {
     )
 }
 
-fn parse_indicator_codes() -> (HashMap<Indicator, String>, bool) {
-    let mut indicator_codes = HashMap::new();
+fn parse_indicator_codes() -> (FxHashMap<Indicator, String>, bool) {
+    let mut indicator_codes = FxHashMap::default();
     let mut ln_color_from_target = false;
 
     // LS_COLORS validity is checked before enabling color output, so parse
@@ -813,7 +813,7 @@ mod tests {
 
     fn style_manager(
         colors: &LsColors,
-        indicator_codes: HashMap<Indicator, String>,
+        indicator_codes: FxHashMap<Indicator, String>,
     ) -> StyleManager<'_> {
         StyleManager {
             current_style: None,
@@ -827,21 +827,21 @@ mod tests {
     #[test]
     fn has_indicator_style_ignores_fallback_styles() {
         let colors = LsColors::from_string("ex=00:fi=32");
-        let manager = style_manager(&colors, HashMap::new());
+        let manager = style_manager(&colors, FxHashMap::default());
         assert!(!manager.has_indicator_style(Indicator::ExecutableFile));
     }
 
     #[test]
     fn has_indicator_style_detects_explicit_styles() {
         let colors = LsColors::from_string("ex=01;32");
-        let manager = style_manager(&colors, HashMap::new());
+        let manager = style_manager(&colors, FxHashMap::default());
         assert!(manager.has_indicator_style(Indicator::ExecutableFile));
     }
 
     #[test]
     fn has_indicator_style_detects_raw_codes() {
         let colors = LsColors::empty();
-        let mut indicator_codes = HashMap::new();
+        let mut indicator_codes = FxHashMap::default();
         indicator_codes.insert(Indicator::Directory, "01;34".to_string());
         let manager = style_manager(&colors, indicator_codes);
         assert!(manager.has_indicator_style(Indicator::Directory));

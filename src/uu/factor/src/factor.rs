@@ -3,19 +3,23 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore funcs
+// spell-checker:ignore funcs newtype
 
 use std::collections::BTreeMap;
+use std::fmt::Display;
 use std::io::BufRead;
 use std::io::{self, Write, stdin, stdout};
+use std::iter::once;
+use std::str::FromStr;
 
 use clap::{Arg, ArgAction, Command};
+use memchr::memchr3_iter;
 use num_bigint::BigUint;
 use num_traits::FromPrimitive;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
 use uucore::translate;
-use uucore::{format_usage, show_error, show_warning};
+use uucore::{format_usage, show_error, show_if_err};
 
 mod options {
     pub static EXPONENTS: &str = "exponents";
@@ -23,16 +27,20 @@ mod options {
     pub static NUMBER: &str = "NUMBER";
 }
 
+const LF: u8 = b'\n';
+const CR: u8 = b'\r';
+const DELIM_SPACE: u8 = b' ';
+const DELIM_TAB: u8 = b'\t';
+const DELIM_NULL: u8 = b'\0';
+
 fn write_factors_str(
-    num_str: &str,
+    num_str: &[u8],
     w: &mut io::BufWriter<impl Write>,
     print_exponents: bool,
 ) -> UResult<()> {
-    let rx = num_str.trim().parse::<BigUint>();
-    let Ok(x) = rx else {
-        // return Ok(). it's non-fatal and we should try the next number.
-        show_warning!("{}: {}", num_str.maybe_quote(), rx.unwrap_err());
-        set_exit_code(1);
+    let parsed = parse_num::<BigUint>(num_str);
+    show_if_err!(&parsed);
+    let Ok(x) = parsed else {
         return Ok(());
     };
 
@@ -45,11 +53,9 @@ fn write_factors_str(
         }
         // use num_prime's factorize128 algorithm for u128 integers
         else if x <= BigUint::from_u128(u128::MAX).unwrap() {
-            let rx = num_str.trim().parse::<u128>();
-            let Ok(x) = rx else {
-                // return Ok(). it's non-fatal and we should try the next number.
-                show_warning!("{}: {}", num_str.maybe_quote(), rx.unwrap_err());
-                set_exit_code(1);
+            let parsed = parse_num::<u128>(num_str);
+            show_if_err!(&parsed);
+            let Ok(x) = parsed else {
                 return Ok(());
             };
             let prime_factors = num_prime::nt_funcs::factorize128(x);
@@ -75,6 +81,55 @@ fn write_factors_str(
     }
 
     Ok(())
+}
+
+fn parse_num<T: FromStr>(slice: &[u8]) -> UResult<T> {
+    str::from_utf8(slice)
+        .ok()
+        .and_then(|str| str.trim_matches(DELIM_SPACE as char).parse().ok())
+        .ok_or_else(|| {
+            let num = NumError(slice).to_string();
+            let num = if num.len() > slice.len() {
+                num.quote() // Force quoting if there are invalid characters.
+            } else {
+                num.maybe_quote()
+            };
+            USimpleError::new(
+                1,
+                format!("warning: {num}: {}", translate!("factor-error-invalid-int")),
+            )
+        })
+}
+
+/// This is a newtype wrapper over a potentially malformed UTF-8
+/// string of a number, which has an optimized [`Display`] impl
+/// matching GNU's formatting. This can be removed in favor of
+/// the C quoting in uucore once support for byte slices is added.
+#[repr(transparent)]
+struct NumError<'a>(&'a [u8]);
+
+impl Display for NumError<'_> {
+    /// This function formats the valid string segments and displays
+    /// the invalid ones as escaped octal, like GNU. For example, the
+    /// (escaped) string "\xFFabc\x1C" is formatted as "\377abc\034".
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match str::from_utf8(self.0) {
+            Ok(s) => write!(f, "{s}"),
+            Err(e) => {
+                let valid = e.valid_up_to();
+                let cont = valid + e.error_len().unwrap_or(1);
+                // SAFETY: `self.0` has been checked to contain valid
+                // UTF-8 sequences up to `valid`.
+                write!(f, "{}", unsafe {
+                    str::from_utf8_unchecked(&self.0[..valid])
+                })?;
+                for b in &self.0[valid..cont] {
+                    write!(f, "\\{b:03o}")?;
+                }
+                <Self as Display>::fmt(&Self(&self.0[cont..]), f)
+            }
+        }
+    }
 }
 
 /// Writing out the prime factors for u64 integers
@@ -159,16 +214,32 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if let Some(values) = matches.get_many::<String>(options::NUMBER) {
         for number in values {
-            write_factors_str(number, &mut w, print_exponents)?;
+            write_factors_str(number.as_bytes(), &mut w, print_exponents)?;
         }
     } else {
         let stdin = stdin();
-        let lines = stdin.lock().lines();
+        let lines = stdin.lock().split(LF);
         for line in lines {
             match line {
                 Ok(line) => {
-                    for number in line.split_whitespace() {
-                        write_factors_str(number, &mut w, print_exponents)?;
+                    // Ignore CR on Windows if present; disabled everywhere else for GNU compatibility.
+                    let le = if cfg!(windows) && line.last() == Some(&CR) {
+                        line.len() - 1
+                    } else {
+                        line.len()
+                    };
+
+                    // GNU factor treats numbers optionally as null-terminated due to its
+                    // implementation details. Here we also split the line with nulls and
+                    // ignore those chunks until another delimiter is found.
+                    let (mut display, mut prev) = (true, 0);
+                    for i in memchr3_iter(DELIM_SPACE, DELIM_TAB, DELIM_NULL, &line).chain(once(le))
+                    {
+                        let has_null = line.get(i) == Some(&DELIM_NULL);
+                        if display && (prev != i || has_null) {
+                            write_factors_str(&line[prev..i], &mut w, print_exponents)?;
+                        }
+                        (display, prev) = (!has_null, i + 1);
                     }
                 }
                 Err(e) => {
@@ -210,4 +281,40 @@ pub fn uu_app() -> Command {
                 .help(translate!("factor-help-help"))
                 .action(ArgAction::Help),
         )
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::BigUint;
+    use crate::parse_num;
+
+    #[test]
+    fn test_correct_parsing() {
+        let zero = parse_num::<u64>(b"0").unwrap();
+        let u64_max = parse_num::<u64>(u64::MAX.to_string().as_bytes()).unwrap();
+        let u128_one = parse_num::<u128>((u64::MAX as u128 + 1).to_string().as_bytes()).unwrap();
+        let u128_max = parse_num::<u128>(u128::MAX.to_string().as_bytes()).unwrap();
+        let bigint = parse_num::<BigUint>(u128::MAX.to_string().as_bytes()).unwrap() + 1u64;
+        assert_eq!(
+            (
+                0,
+                u64::MAX,
+                (u64::MAX as u128 + 1),
+                u128::MAX,
+                BigUint::from(u128::MAX) + 1u64
+            ),
+            (zero, u64_max, u128_one, u128_max, bigint)
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_incorrect_parsing() {
+        parse_num::<u64>(b"abcd").unwrap();
+        parse_num::<u64>(b"12\x00\xFF\x1D").unwrap();
+        parse_num::<u128>(b"abcd").unwrap();
+        parse_num::<u128>(b"12\x00\xFF\x1D").unwrap();
+        parse_num::<BigUint>(b"abcd").unwrap();
+        parse_num::<BigUint>(b"12\x00\xFF\x1D").unwrap();
+    }
 }

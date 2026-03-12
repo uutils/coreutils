@@ -1,7 +1,11 @@
+tests/cut/bounded-memory
+tests/date/date-locale-hour
+tests/date/resolution
+tests/pr/bounded-memory
 tests/tail/inotify-dir-recreate
 tests/tail/overlay-headers
 tests/timeout/timeout
-tests/rm/rm1
+tests/tail/symlink
 tests/shuf/shuf-reservoir
 tests/sort/sort-stale-thread-mem
 tests/tty/tty-eof

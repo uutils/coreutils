@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
     fs::File,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, OnceLock},
+    sync::{Arc, LazyLock, Mutex},
 };
 
 use tempfile::TempDir;
@@ -36,14 +36,10 @@ struct HandlerRegistration {
     path: Option<PathBuf>,
 }
 
-fn handler_state() -> Arc<Mutex<HandlerRegistration>> {
-    // Lazily create the global HandlerRegistration so all TmpDirWrapper instances and the
-    // SIGINT handler operate on the same lock/path snapshot.
-    static HANDLER_STATE: OnceLock<Arc<Mutex<HandlerRegistration>>> = OnceLock::new();
-    HANDLER_STATE
-        .get_or_init(|| Arc::new(Mutex::new(HandlerRegistration::default())))
-        .clone()
-}
+// Lazily create the global HandlerRegistration so all TmpDirWrapper instances and the
+// SIGINT handler operate on the same lock/path snapshot.
+static HANDLER_STATE: LazyLock<Arc<Mutex<HandlerRegistration>>> =
+    LazyLock::new(|| Arc::new(Mutex::new(HandlerRegistration::default())));
 
 fn should_install_signal_handler() -> bool {
     const CTRL_C_FDS: usize = 2;
@@ -57,7 +53,7 @@ fn should_install_signal_handler() -> bool {
 
 #[cfg(not(target_os = "redox"))]
 fn ensure_signal_handler_installed(state: Arc<Mutex<HandlerRegistration>>) -> UResult<()> {
-    // This shared state must originate from `handler_state()` so the handler always sees
+    // This shared state must originate from `HANDLER_STATE` so the handler always sees
     // the current lock/path pair and can clean up the active temp directory on SIGINT.
     // Install a shared SIGINT handler so the active temp directory is deleted when the user aborts.
     // Guard to ensure the SIGINT handler is registered once per process and reused.
@@ -133,7 +129,7 @@ impl TmpDirWrapper {
         );
 
         let path = self.temp_dir.as_ref().unwrap().path().to_owned();
-        let state = handler_state();
+        let state = HANDLER_STATE.clone();
         {
             let mut guard = state.lock().unwrap();
             guard.lock = Some(self.lock.clone());
@@ -169,7 +165,7 @@ impl TmpDirWrapper {
 
 impl Drop for TmpDirWrapper {
     fn drop(&mut self) {
-        let state = handler_state();
+        let state = HANDLER_STATE.clone();
         let mut guard = state.lock().unwrap();
 
         if guard

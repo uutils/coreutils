@@ -7,7 +7,7 @@
 // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/sort.html
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 
-// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef GETFD localeconv
+// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef GETFD localeconv foldhash
 
 mod buffer_hint;
 mod check;
@@ -18,21 +18,22 @@ mod merge;
 mod numeric_str_cmp;
 mod tmp_dir;
 
-use ahash::AHashMap;
 use bigdecimal::BigDecimal;
 use chunks::LineData;
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
+use foldhash::fast::FoldHasher;
+use foldhash::{HashMap, SharedSeed};
 use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
-use rand::{Rng, rng};
+use rand::{RngExt as _, rng};
 use rayon::prelude::*;
 use std::cmp::Ordering;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{File, OpenOptions};
-use std::hash::{BuildHasher, Hash, Hasher};
+use std::hash::{Hash, Hasher};
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::{IntErrorKind, NonZero};
 use std::ops::Range;
@@ -1506,7 +1507,7 @@ impl GlobalOptionFlags {
     fn from_matches(matches: &ArgMatches) -> Self {
         let sort_value = matches
             .get_one::<String>(options::modes::SORT)
-            .map(|s| s.as_str());
+            .map(String::as_str);
         Self {
             keys_specified: matches.contains_id(options::KEY),
             ignore_leading_blanks: matches.get_flag(options::IGNORE_LEADING_BLANKS),
@@ -1537,7 +1538,7 @@ fn parse_usize_or_max(num: &str) -> Option<usize> {
 }
 
 fn parse_legacy_part(spec: &str) -> Option<LegacyKeyPart> {
-    let idx = spec.chars().take_while(|c| c.is_ascii_digit()).count();
+    let idx = spec.chars().take_while(char::is_ascii_digit).count();
     if idx == 0 {
         return None;
     }
@@ -1547,7 +1548,7 @@ fn parse_legacy_part(spec: &str) -> Option<LegacyKeyPart> {
     let mut rest = &spec[idx..];
 
     if let Some(stripped) = rest.strip_prefix('.') {
-        let char_idx = stripped.chars().take_while(|c| c.is_ascii_digit()).count();
+        let char_idx = stripped.chars().take_while(char::is_ascii_digit).count();
         if char_idx == 0 {
             return None;
         }
@@ -1680,7 +1681,7 @@ fn index_legacy_warnings(processed_args: &[OsString], legacy_warnings: &mut [Leg
         return;
     }
 
-    let mut index_by_arg = AHashMap::default();
+    let mut index_by_arg = HashMap::default();
     for (warning_idx, warning) in legacy_warnings.iter().enumerate() {
         index_by_arg.insert(warning.arg_index, warning_idx);
     }
@@ -1752,8 +1753,15 @@ fn default_merge_batch_size() -> usize {
     }
 }
 
+#[cfg(not(unix))]
 fn locale_failed_to_set() -> bool {
-    matches!(env::var("LC_ALL").ok().as_deref(), Some("missing"))
+    env::var_os("LC_ALL").as_deref() == Some(OsStr::new("missing"))
+}
+
+#[cfg(unix)]
+fn locale_failed_to_set() -> bool {
+    use nix::libc;
+    unsafe { libc::setlocale(libc::LC_COLLATE, c"".as_ptr()).is_null() }
 }
 
 fn key_zero_width(selector: &FieldSelector) -> bool {
@@ -1797,10 +1805,19 @@ fn emit_debug_warnings(
         show_error!("{}", translate!("sort-warning-failed-to-set-locale"));
     }
 
-    show_error!("{}", translate!("sort-warning-simple-byte-comparison"));
+    let (locale, encoding) = i18n::get_collating_locale();
 
-    for (idx, selector) in settings.selectors.iter().enumerate() {
-        let key_index = idx + 1;
+    if matches!(encoding, i18n::UEncoding::Utf8) {
+        let locale_as_posix = format!("{}.UTF-8", locale.to_string().replace('-', "_"));
+        show_error!(
+            "{}",
+            translate!("sort-warning-sort-rule", "locale" => locale_as_posix)
+        );
+    } else {
+        show_error!("{}", translate!("sort-warning-simple-byte-comparison"));
+    }
+
+    for (key_index, selector) in (1..).zip(settings.selectors.iter()) {
         if let Some(legacy) = legacy_warnings
             .iter()
             .find(|warning| warning.key_index == Some(key_index))
@@ -2000,7 +2017,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut files: Vec<OsString> = if matches.contains_id(options::FILES0_FROM) {
         let files0_from: PathBuf = matches
             .get_one::<OsString>(options::FILES0_FROM)
-            .map(|v| v.into())
+            .map(Into::into)
             .unwrap_or_default();
 
         // Cannot combine FILES with FILES0_FROM
@@ -2190,7 +2207,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         || matches!(
             matches
                 .get_one::<String>(options::check::CHECK)
-                .map(|s| s.as_str()),
+                .map(String::as_str),
             Some(options::check::SILENT | options::check::QUIET)
         )
     {
@@ -2816,7 +2833,7 @@ fn get_leading_gen(inp: &[u8], decimal_pt: u8) -> Range<usize> {
             if let Some(&(_, &next_char)) = char_indices.peek() {
                 if (next_char == b'+' || next_char == b'-')
                     && matches!(
-                        char_indices.peek_nth(2),
+                        char_indices.peek_nth(1),
                         Some((_, c)) if c.is_ascii_digit()
                     )
                 {
@@ -2909,7 +2926,7 @@ fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
     let mut buf = [0u8; BUF_LEN];
     let mut total = 0usize;
     // freeze seed for --random-source
-    let mut hasher = ahash::RandomState::with_seeds(1, 1, 1, 1).build_hasher();
+    let mut hasher = FoldHasher::with_seed(1, SharedSeed::global_fixed());
 
     loop {
         let n = reader
@@ -2935,7 +2952,7 @@ fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
 
     let first = hasher.finish();
     // freeze seed for --random-source
-    let mut second_hasher = ahash::RandomState::with_seeds(2, 2, 2, 2).build_hasher();
+    let mut second_hasher = FoldHasher::with_seed(2, SharedSeed::global_fixed());
     second_hasher.write(RANDOM_SOURCE_TAG);
     second_hasher.write_u64(first);
     let second = second_hasher.finish();
@@ -2948,7 +2965,9 @@ fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
 
 fn get_hash<T: Hash>(t: &T) -> u64 {
     // Is reproducibility of get_hash itself needed for --random-source ?
-    ahash::RandomState::with_seeds(0, 0, 0, 0).hash_one(t)
+    let mut s = FoldHasher::with_seed(0, SharedSeed::global_fixed());
+    t.hash(&mut s);
+    s.finish()
 }
 
 fn random_shuffle(a: &[u8], b: &[u8], salt: &[u8]) -> Ordering {
@@ -2978,7 +2997,7 @@ enum Month {
 fn month_parse(line: &[u8]) -> Month {
     let line = line.trim_ascii_start();
 
-    match line.get(..3).map(|x| x.to_ascii_uppercase()).as_deref() {
+    match line.get(..3).map(<[u8]>::to_ascii_uppercase).as_deref() {
         Some(b"JAN") => Month::January,
         Some(b"FEB") => Month::February,
         Some(b"MAR") => Month::March,

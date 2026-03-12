@@ -34,7 +34,7 @@ fn get_long_usage() -> String {
     translate!("users-long-usage", "default_path" => default_path)
 }
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
@@ -67,7 +67,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let filename = maybe_file.unwrap_or(utmpx::DEFAULT_FILE.as_ref());
 
         users = Utmpx::iter_all_records_from(filename)
-            .filter(|ut| ut.is_user_process())
+            .filter(utmpx::UtmpxRecord::is_user_process)
             .map(|ut| ut.user())
             .collect::<Vec<_>>();
     };

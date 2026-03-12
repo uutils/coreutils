@@ -1,6 +1,7 @@
 name: Benchmarks
 
-# spell-checker:ignore codspeed dtolnay Swatinem sccache
+# spell-checker:ignore (people) dtolnay Swatinem taiki-e
+# spell-checker:ignore (misc) codspeed sccache
 
 on:
   pull_request:
@@ -21,9 +22,7 @@ jobs:
     name: Run ${{ matrix.type }} benchmarks for ${{ matrix.package }} (CodSpeed)
     runs-on: ubuntu-latest
     env:
-      RUSTC_WRAPPER: sccache
       CARGO_INCREMENTAL: 0
-      SCCACHE_GHA_ENABLED: "true"
     strategy:
       matrix:
         type: [simulation, memory]
@@ -37,6 +36,7 @@ jobs:
           uu_du,
           uu_expand,
           uu_fold,
+          uu_hostname,
           uu_join,
           uu_ls,
           uu_mv,
@@ -52,7 +52,10 @@ jobs:
           uu_uniq,
           uu_wc,
           uu_factor,
-          uu_date
+          uu_date,
+          uu_csplit,
+          uu_true,
+          uu_false
         ]
     steps:
       - uses: actions/checkout@v6
@@ -64,19 +67,25 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Run sccache-cache
+        id: sccache-setup
         uses: mozilla-actions/sccache-action@v0.0.9
+        continue-on-error: true
+      - name: Export sccache
+        if: steps.sccache-setup.outcome == 'success'
+        run: |
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
 
       - name: Install locales
         shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y locales
           sudo locale-gen fr_FR.UTF-8
           sudo update-locale
 
-      - name: Install cargo-codspeed
-        shell: bash
-        run: cargo install cargo-codspeed --locked
+      - name: Install tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-codspeed
 
       - name: Build benchmarks for ${{ matrix.package }} (${{ matrix.type }})
         shell: bash

@@ -15,8 +15,8 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-use std::collections::HashMap;
-use std::collections::HashSet;
+use rustc_hash::FxHashMap;
+use rustc_hash::FxHashSet;
 use std::env;
 use std::ffi::OsString;
 use std::fs;
@@ -47,7 +47,7 @@ use uucore::fs::{
 };
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
 use uucore::fsxattr;
-#[cfg(feature = "selinux")]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::set_selinux_security_context;
 use uucore::translate;
 use uucore::update_control;
@@ -360,7 +360,7 @@ fn parse_paths(files: &[OsString], opts: &Options) -> Vec<PathBuf> {
             .map(|p| p.components().as_path().to_owned())
             .collect::<Vec<PathBuf>>()
     } else {
-        paths.map(|p| p.to_owned()).collect::<Vec<PathBuf>>()
+        paths.map(ToOwned::to_owned).collect::<Vec<PathBuf>>()
     }
 }
 
@@ -575,7 +575,8 @@ pub fn mv(files: &[OsString], opts: &Options) -> UResult<()> {
 #[allow(clippy::cognitive_complexity)]
 fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) -> UResult<()> {
     // remember the moved destinations for further usage
-    let mut moved_destinations: HashSet<PathBuf> = HashSet::with_capacity(files.len());
+    let mut moved_destinations: FxHashSet<PathBuf> =
+        FxHashSet::with_capacity_and_hasher(files.len(), rustc_hash::FxBuildHasher);
     // Create hardlink tracking context
     #[cfg(unix)]
     let (mut hardlink_tracker, hardlink_scanner) = {
@@ -770,7 +771,7 @@ fn rename(
         rename_with_fallback(from, to, display_manager, opts.verbose, None, None)?;
     }
 
-    #[cfg(feature = "selinux")]
+    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
     if let Some(ref context) = opts.context {
         set_selinux_security_context(to, Some(context))
             .map_err(|e| io::Error::other(e.to_string()))?;
@@ -967,7 +968,7 @@ fn rename_dir_fallback(
     };
 
     #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-    let xattrs = fsxattr::retrieve_xattrs(from).unwrap_or_else(|_| HashMap::new());
+    let xattrs = fsxattr::retrieve_xattrs(from).unwrap_or_else(|_| FxHashMap::default());
 
     // Use directory copying (with or without hardlink support)
     let result = copy_dir_contents(
@@ -1038,6 +1039,20 @@ fn copy_dir_contents_recursive(
     progress_bar: Option<&ProgressBar>,
     display_manager: Option<&MultiProgress>,
 ) -> io::Result<()> {
+    // Helper closure to print verbose messages
+    let print_verbose = |from: &Path, to: &Path| {
+        if verbose {
+            let message =
+                translate!("mv-verbose-renamed", "from" => from.quote(), "to" => to.quote());
+            match display_manager {
+                Some(pb) => pb.suspend(|| {
+                    println!("{message}");
+                }),
+                None => println!("{message}"),
+            }
+        }
+    };
+
     let entries = fs::read_dir(from_dir)?;
 
     for entry in entries {
@@ -1050,20 +1065,29 @@ fn copy_dir_contents_recursive(
             pb.set_message(from_path.to_string_lossy().to_string());
         }
 
-        if from_path.is_dir() {
-            // Recursively copy subdirectory
+        if from_path.is_symlink() {
+            // Handle symlinks first, before checking is_dir() which follows symlinks.
+            // This prevents symlinks to directories from being expanded into full copies.
+            #[cfg(unix)]
+            {
+                copy_file_with_hardlinks_helper(
+                    &from_path,
+                    &to_path,
+                    hardlink_tracker,
+                    hardlink_scanner,
+                )?;
+            }
+            #[cfg(not(unix))]
+            {
+                rename_symlink_fallback(&from_path, &to_path)?;
+            }
+
+            print_verbose(&from_path, &to_path);
+        } else if from_path.is_dir() {
+            // Recursively copy subdirectory (only real directories, not symlinks)
             fs::create_dir_all(&to_path)?;
 
-            // Print verbose message for directory
-            if verbose {
-                let message = translate!("mv-verbose-renamed", "from" => from_path.quote(), "to" => to_path.quote());
-                match display_manager {
-                    Some(pb) => pb.suspend(|| {
-                        println!("{message}");
-                    }),
-                    None => println!("{message}"),
-                }
-            }
+            print_verbose(&from_path, &to_path);
 
             copy_dir_contents_recursive(
                 &from_path,
@@ -1089,25 +1113,11 @@ fn copy_dir_contents_recursive(
             }
             #[cfg(not(unix))]
             {
-                if from_path.is_symlink() {
-                    // Copy a symlink file (no-follow).
-                    rename_symlink_fallback(&from_path, &to_path)?;
-                } else {
-                    // Copy a regular file.
-                    fs::copy(&from_path, &to_path)?;
-                }
+                // Symlinks are already handled above, so this is always a regular file
+                fs::copy(&from_path, &to_path)?;
             }
 
-            // Print verbose message for file
-            if verbose {
-                let message = translate!("mv-verbose-renamed", "from" => from_path.quote(), "to" => to_path.quote());
-                match display_manager {
-                    Some(pb) => pb.suspend(|| {
-                        println!("{message}");
-                    }),
-                    None => println!("{message}"),
-                }
-            }
+            print_verbose(&from_path, &to_path);
         }
 
         if let Some(pb) = progress_bar {
@@ -1141,6 +1151,8 @@ fn copy_file_with_hardlinks_helper(
     if from.is_symlink() {
         // Copy a symlink file (no-follow).
         rename_symlink_fallback(from, to)?;
+    } else if is_fifo(from.symlink_metadata()?.file_type()) {
+        make_fifo(to)?;
     } else {
         // Copy a regular file.
         fs::copy(from, to)?;

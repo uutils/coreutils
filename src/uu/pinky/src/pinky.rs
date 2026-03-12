@@ -26,7 +26,7 @@ mod options {
     pub const HELP: &str = "help";
 }
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 use platform::uumain;
 
 pub fn uu_app() -> Command {

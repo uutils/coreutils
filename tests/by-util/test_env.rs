@@ -721,133 +721,102 @@ fn test_env_with_empty_executable_double_quotes() {
         .stderr_is("env: '': No such file or directory\n");
 }
 
+// Do not assume that coreutils uses argv0
 #[test]
-#[cfg(all(unix, feature = "dirname", feature = "echo"))]
+#[cfg(unix)]
 fn test_env_overwrite_arg0() {
     let ts = TestScenario::new(util_name!());
 
-    let bin = ts.bin_path.clone();
-
     ts.ucmd()
-        .args(&["--argv0", "echo"])
-        .arg(&bin)
-        .args(&["-n", "hello", "world!"])
+        .args(&["--argv0", "hijacked", "sh", "-c", "echo $0"])
         .succeeds()
-        .stdout_is("hello world!")
-        .stderr_is("");
-
-    ts.ucmd()
-        .args(&["-a", "dirname"])
-        .arg(bin)
-        .args(&["aa/bb/cc"])
-        .succeeds()
-        .stdout_is("aa/bb\n")
+        .stdout_is("hijacked\n")
         .stderr_is("");
 }
 
+// Do not assume that coreutils uses argv0
 #[test]
-#[cfg(all(unix, feature = "echo"))]
+#[cfg(unix)]
 fn test_env_arg_argv0_overwrite() {
     let ts = TestScenario::new(util_name!());
-
-    let bin = &ts.bin_path;
 
     // overwrite --argv0 by --argv0
     ts.ucmd()
         .args(&["--argv0", "dirname"])
-        .args(&["--argv0", "echo"])
-        .arg(bin)
-        .args(&["aa/bb/cc"])
+        .args(&["--argv0", "hijacked", "sh", "-c", "echo $0"])
         .succeeds()
-        .stdout_is("aa/bb/cc\n")
+        .stdout_is("hijacked\n")
         .stderr_is("");
 
     // overwrite -a by -a
     ts.ucmd()
         .args(&["-a", "dirname"])
-        .args(&["-a", "echo"])
-        .arg(bin)
-        .args(&["aa/bb/cc"])
+        .args(&["-a", "hijacked", "sh", "-c", "echo $0"])
         .succeeds()
-        .stdout_is("aa/bb/cc\n")
+        .stdout_is("hijacked\n")
         .stderr_is("");
 
     // overwrite --argv0 by -a
     ts.ucmd()
         .args(&["--argv0", "dirname"])
-        .args(&["-a", "echo"])
-        .arg(bin)
-        .args(&["aa/bb/cc"])
+        .args(&["-a", "hijacked", "sh", "-c", "echo $0"])
         .succeeds()
-        .stdout_is("aa/bb/cc\n")
+        .stdout_is("hijacked\n")
         .stderr_is("");
 
     // overwrite -a by --argv0
     ts.ucmd()
         .args(&["-a", "dirname"])
-        .args(&["--argv0", "echo"])
-        .arg(bin)
-        .args(&["aa/bb/cc"])
+        .args(&["--argv0", "hijacked", "sh", "-c", "echo $0"])
         .succeeds()
-        .stdout_is("aa/bb/cc\n")
+        .stdout_is("hijacked\n")
         .stderr_is("");
 }
 
+// Do not assume that coreutils uses argv0
 #[test]
-#[cfg(all(unix, feature = "echo"))]
+#[cfg(unix)]
 fn test_env_arg_argv0_overwrite_mixed_with_string_args() {
     let ts = TestScenario::new(util_name!());
-
-    let bin = &ts.bin_path;
 
     // string arg following normal
     ts.ucmd()
         .args(&["-S--argv0 dirname"])
-        .args(&["--argv0", "echo"])
-        .arg(bin)
-        .args(&["aa/bb/cc"])
+        .args(&["--argv0", "hijacked", "sh", "-c", "echo $0"])
         .succeeds()
-        .stdout_is("aa/bb/cc\n")
+        .stdout_is("hijacked\n")
         .stderr_is("");
 
     // normal following string arg
     ts.ucmd()
         .args(&["-a", "dirname"])
-        .args(&["-S-a echo"])
-        .arg(bin)
-        .args(&["aa/bb/cc"])
+        .args(&["-S-a hijacked sh -c 'echo $0'"])
         .succeeds()
-        .stdout_is("aa/bb/cc\n")
+        .stdout_is("hijacked\n")
         .stderr_is("");
 
     // one large string arg
     ts.ucmd()
-        .args(&["-S--argv0 dirname -a echo"])
-        .arg(bin)
-        .args(&["aa/bb/cc"])
+        .args(&["-S--argv0 dirname -a hijacked sh -c 'echo $0'"])
         .succeeds()
-        .stdout_is("aa/bb/cc\n")
+        .stdout_is("hijacked\n")
         .stderr_is("");
 
     // two string args
     ts.ucmd()
         .args(&["-S-a dirname"])
-        .args(&["-S--argv0 echo"])
-        .arg(bin)
-        .args(&["aa/bb/cc"])
+        .args(&["-S--argv0 hijacked sh -c 'echo $0'"])
         .succeeds()
-        .stdout_is("aa/bb/cc\n")
+        .stdout_is("hijacked\n")
         .stderr_is("");
 
     // three args: normal, string, normal
     ts.ucmd()
         .args(&["-a", "sleep"])
         .args(&["-S-a dirname"])
-        .args(&["-a", "echo"])
-        .arg(bin)
-        .args(&["aa/bb/cc"])
+        .args(&["-a", "hijacked", "sh", "-c", "echo $0"])
         .succeeds()
-        .stdout_is("aa/bb/cc\n")
+        .stdout_is("hijacked\n")
         .stderr_is("");
 }
 

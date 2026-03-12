@@ -4,8 +4,11 @@
 // file that was distributed with this source code.
 #![allow(clippy::naive_bytecount)]
 
-use rand::distr::{Distribution, Uniform};
-use rand::{Rng, rng};
+use rand::{
+    Rng, RngExt as _,
+    distr::{Distribution, Uniform},
+    rng,
+};
 
 /// Samples alphanumeric characters `[A-Za-z0-9]` including newline `\n`
 ///

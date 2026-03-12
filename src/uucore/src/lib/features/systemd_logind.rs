@@ -89,7 +89,7 @@ mod login {
 
         if result < 0 {
             return Err(
-                format!("sd_session_get_uid failed for session '{session_id}': {result}",).into(),
+                format!("sd_session_get_uid failed for session '{session_id}': {result}").into(),
             );
         }
 
@@ -123,7 +123,7 @@ mod login {
 
         if result < 0 {
             return Err(
-                format!("sd_session_get_tty failed for session '{session_id}': {result}",).into(),
+                format!("sd_session_get_tty failed for session '{session_id}': {result}").into(),
             );
         }
 
@@ -209,7 +209,7 @@ mod login {
 
         if result < 0 {
             return Err(
-                format!("sd_session_get_type failed for session '{session_id}': {result}",).into(),
+                format!("sd_session_get_type failed for session '{session_id}': {result}").into(),
             );
         }
 
@@ -237,7 +237,7 @@ mod login {
 
         if result < 0 {
             return Err(
-                format!("sd_session_get_seat failed for session '{session_id}': {result}",).into(),
+                format!("sd_session_get_seat failed for session '{session_id}': {result}").into(),
             );
         }
 
@@ -309,8 +309,8 @@ impl SystemdLoginRecord {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default();
         let ts_nanos: i128 = (duration.as_nanos()).try_into().unwrap_or(0);
-        let local_offset =
-            time::OffsetDateTime::now_local().map_or_else(|_| time::UtcOffset::UTC, |v| v.offset());
+        let local_offset = time::OffsetDateTime::now_local()
+            .map_or_else(|_| time::UtcOffset::UTC, time::OffsetDateTime::offset);
         time::OffsetDateTime::from_unix_timestamp_nanos(ts_nanos)
             .unwrap_or_else(|_| {
                 time::OffsetDateTime::now_local()

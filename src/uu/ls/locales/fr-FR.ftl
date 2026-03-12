@@ -1,9 +1,9 @@
-ls-about = Lister le contenu des répertoires.
-  Ignorer les fichiers et répertoires commençant par un '.' par défaut
-dir-about = Lister le contenu des répertoires.
-  Ignorer les fichiers et répertoires commençant par un '.' par défaut
-vdir-about = Lister le contenu des répertoires.
-  Ignorer les fichiers et répertoires commençant par un '.' par défaut
+ls-about = Liste le contenu des répertoires.
+  Ignore les fichiers et répertoires commençant par un '.' par défaut
+dir-about = Liste le contenu des répertoires.
+  Ignore les fichiers et répertoires commençant par un '.' par défaut
+vdir-about = Liste le contenu des répertoires.
+  Ignore les fichiers et répertoires commençant par un '.' par défaut
 
   Les arguments obligatoires pour les options longues le sont aussi pour les options courtes.
 ls-usage = ls [OPTION]... [FICHIER]...

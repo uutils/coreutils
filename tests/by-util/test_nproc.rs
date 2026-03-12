@@ -177,3 +177,15 @@ fn test_nproc_omp_limit() {
     let nproc: u8 = result.stdout_str().trim().parse().unwrap();
     assert_eq!(29, nproc);
 }
+
+#[test]
+fn test_nproc_omp_num_threads_with_whitespace() {
+    // OMP_NUM_THREADS with leading/trailing spaces should be trimmed and parsed correctly.
+    // Before the fix, " 42 " would fail to parse and fall back to available_parallelism().
+    let result = TestScenario::new(util_name!())
+        .ucmd()
+        .env("OMP_NUM_THREADS", " 42 ")
+        .succeeds();
+    let nproc: u8 = result.stdout_str().trim().parse().unwrap();
+    assert_eq!(nproc, 42);
+}

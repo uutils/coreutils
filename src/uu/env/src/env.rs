@@ -43,7 +43,7 @@ use uucore::display::{Quotable, print_all_env_vars};
 use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError};
 use uucore::line_ending::LineEnding;
 #[cfg(unix)]
-use uucore::signals::{ALL_SIGNALS, signal_by_name_or_value, signal_name_by_value};
+use uucore::signals::{signal_by_name_or_value, signal_name_by_value, signal_number_upper_bound};
 use uucore::translate;
 use uucore::{format_usage, show_warning};
 
@@ -216,7 +216,7 @@ impl SignalRequest {
             f(sig, true)?;
         }
         if self.apply_all {
-            for sig_value in 1..ALL_SIGNALS.len() {
+            for sig_value in 1..=signal_number_upper_bound() {
                 if self.signals.contains(&sig_value) {
                     continue;
                 }
@@ -892,16 +892,20 @@ fn apply_removal_of_all_env_vars(opts: &Options<'_>) {
 fn make_options(matches: &clap::ArgMatches) -> UResult<Options<'_>> {
     let ignore_env = matches.get_flag("ignore-environment");
     let line_ending = LineEnding::from_zero_flag(matches.get_flag("null"));
-    let running_directory = matches.get_one::<OsString>("chdir").map(|s| s.as_os_str());
+    let running_directory = matches
+        .get_one::<OsString>("chdir")
+        .map(OsString::as_os_str);
     let files = match matches.get_many::<OsString>("file") {
-        Some(v) => v.map(|s| s.as_os_str()).collect(),
+        Some(v) => v.map(OsString::as_os_str).collect(),
         None => Vec::with_capacity(0),
     };
     let unsets = match matches.get_many::<OsString>("unset") {
-        Some(v) => v.map(|s| s.as_os_str()).collect(),
+        Some(v) => v.map(OsString::as_os_str).collect(),
         None => Vec::with_capacity(0),
     };
-    let argv0 = matches.get_one::<OsString>("argv0").map(|s| s.as_os_str());
+    let argv0 = matches
+        .get_one::<OsString>("argv0")
+        .map(OsString::as_os_str);
 
     #[cfg(unix)]
     let ignore_signal = build_signal_request(matches, options::IGNORE_SIGNAL)?;

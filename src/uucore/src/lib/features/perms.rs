@@ -22,7 +22,7 @@ use std::ffi::OsString;
 use walkdir::WalkDir;
 
 #[cfg(target_os = "linux")]
-use crate::features::safe_traversal::DirFd;
+use crate::features::safe_traversal::{DirFd, SymlinkBehavior};
 
 use std::ffi::CString;
 use std::fs::Metadata;
@@ -311,7 +311,7 @@ impl ChownExecutor {
             #[cfg(target_os = "linux")]
             let chown_result = if path.is_dir() {
                 // For directories on Linux, use safe traversal from the start
-                match DirFd::open(path) {
+                match DirFd::open(path, SymlinkBehavior::Follow) {
                     Ok(dir_fd) => self
                         .safe_chown_dir(&dir_fd, path, &meta)
                         .map(|_| String::new()),
@@ -478,7 +478,7 @@ impl ChownExecutor {
             // Get metadata for the entry
             let follow = self.traverse_symlinks == TraverseSymlinks::All;
 
-            let meta = match dir_fd.metadata_at(&entry_name, follow) {
+            let meta = match dir_fd.metadata_at(&entry_name, follow.into()) {
                 Ok(m) => m,
                 Err(e) => {
                     *ret = 1;
@@ -506,7 +506,8 @@ impl ChownExecutor {
                 let chown_uid = self.dest_uid;
                 let chown_gid = self.dest_gid;
 
-                if let Err(e) = dir_fd.chown_at(&entry_name, chown_uid, chown_gid, follow_symlinks)
+                if let Err(e) =
+                    dir_fd.chown_at(&entry_name, chown_uid, chown_gid, follow_symlinks.into())
                 {
                     *ret = 1;
                     if self.verbosity.level != VerbosityLevel::Silent {
@@ -536,7 +537,7 @@ impl ChownExecutor {
 
             // Recurse into subdirectories
             if meta.is_dir() && (follow || !meta.file_type().is_symlink()) {
-                match dir_fd.open_subdir(&entry_name) {
+                match dir_fd.open_subdir(&entry_name, SymlinkBehavior::Follow) {
                     Ok(subdir_fd) => {
                         self.safe_traverse_dir(&subdir_fd, &entry_path, ret);
                     }
@@ -694,7 +695,7 @@ impl ChownExecutor {
     /// Try to open directory with error reporting
     #[cfg(target_os = "linux")]
     fn try_open_dir(&self, path: &Path) -> Option<DirFd> {
-        DirFd::open(path)
+        DirFd::open(path, SymlinkBehavior::Follow)
             .map_err(|e| {
                 if self.verbosity.level != VerbosityLevel::Silent {
                     show_error!("cannot access {}: {}", path.quote(), strip_errno(&e));
@@ -829,10 +830,7 @@ pub fn configure_symlink_and_recursion(
     if recursive {
         if traverse_symlinks == TraverseSymlinks::None {
             if dereference == Some(true) {
-                return Err(USimpleError::new(
-                    1,
-                    "-R --dereference requires -H or -L".to_string(),
-                ));
+                return Err(USimpleError::new(1, "-R --dereference requires -H or -L"));
             }
             dereference = Some(false);
         }

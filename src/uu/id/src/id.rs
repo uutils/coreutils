@@ -121,7 +121,7 @@ struct State {
     user_specified: bool,
 }
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
@@ -311,7 +311,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         let groups = entries::get_groups_gnu(Some(gid))?;
         let groups = if state.user_specified {
-            possible_pw.as_ref().map(|p| p.belongs_to()).unwrap()
+            possible_pw.as_ref().map(Passwd::belongs_to).unwrap()
         } else {
             groups.clone()
         };

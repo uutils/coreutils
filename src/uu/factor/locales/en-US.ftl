@@ -10,3 +10,4 @@ factor-help-help = Print help information.
 factor-error-factorization-incomplete = Factorization incomplete. Remainders exists.
 factor-error-write-error = write error
 factor-error-reading-input = error reading input: { $error }
+factor-error-invalid-int = invalid digit found in string

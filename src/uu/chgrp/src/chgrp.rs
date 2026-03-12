@@ -51,7 +51,7 @@ fn get_dest_gid(matches: &ArgMatches) -> UResult<(Option<u32>, String)> {
     } else {
         let group = matches
             .get_one::<String>(options::ARG_GROUP)
-            .map(|s| s.as_str())
+            .map(String::as_str)
             .unwrap_or_default();
         raw_group = group.to_string();
         if group.is_empty() {

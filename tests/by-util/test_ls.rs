@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo timefile
-// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons
+// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons NOFILE
 #![allow(
     clippy::similar_names,
     clippy::too_many_lines,
@@ -13,6 +13,8 @@
 #[cfg(all(unix, feature = "chmod"))]
 use nix::unistd::{close, dup};
 use regex::Regex;
+#[cfg(unix)]
+use rlimit::Resource;
 #[cfg(not(target_os = "openbsd"))]
 use std::collections::HashMap;
 #[cfg(target_os = "linux")]
@@ -5206,6 +5208,51 @@ fn test_ls_dired_recursive() {
 }
 
 #[test]
+fn test_ls_dired_subdired_multiple_dirs_non_recursive() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("dir1");
+    at.mkdir("dir2");
+    at.touch("dir1/a");
+    at.touch("dir2/b");
+
+    let result = scene
+        .ucmd()
+        .arg("--dired")
+        .arg("dir1")
+        .arg("dir2")
+        .succeeds();
+
+    let output = result.stdout_str().to_string();
+    let subdired_line = output
+        .lines()
+        .find(|&line| line.starts_with("//SUBDIRED//"))
+        .unwrap();
+    let positions: Vec<usize> = subdired_line
+        .split_whitespace()
+        .skip(1)
+        .map(|s| s.parse().unwrap())
+        .collect();
+
+    assert_eq!(positions.len() % 2, 0); // Ensure there's an even number of positions
+
+    let dirnames: Vec<String> = positions
+        .chunks(2)
+        .map(|chunk| {
+            let start_pos = chunk[0];
+            let end_pos = chunk[1];
+            String::from_utf8(output.as_bytes()[start_pos..end_pos].to_vec())
+                .unwrap()
+                .trim()
+                .to_string()
+        })
+        .collect();
+
+    assert_eq!(dirnames, vec!["dir1", "dir2"]);
+}
+
+#[test]
 fn test_ls_dired_outputs_parent_offset() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -5332,6 +5379,53 @@ fn test_ls_dired_simple() {
         String::from_utf8(result.stdout_str().as_bytes()[start_pos..end_pos].to_vec()).unwrap();
 
     assert_eq!(filename, "a1");
+}
+
+#[test]
+fn test_ls_dired_symlink_name_only() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("d");
+    at.touch("d/target");
+    at.relative_symlink_file("target", "d/link");
+
+    let result = scene
+        .ucmd()
+        .arg("--dired")
+        .arg("-l")
+        .arg("--color=never")
+        .arg("d")
+        .succeeds();
+
+    let output = result.stdout_str().to_string();
+    assert!(output.contains("link -> target"));
+
+    let dired_line = output
+        .lines()
+        .find(|&line| line.starts_with("//DIRED//"))
+        .unwrap();
+    let positions: Vec<usize> = dired_line
+        .split_whitespace()
+        .skip(1)
+        .map(|s| s.parse().unwrap())
+        .collect();
+
+    assert_eq!(positions.len() % 2, 0);
+
+    let filenames: Vec<String> = positions
+        .chunks(2)
+        .map(|chunk| {
+            let start_pos = chunk[0];
+            let end_pos = chunk[1];
+            String::from_utf8(output.as_bytes()[start_pos..end_pos].to_vec())
+                .unwrap()
+                .trim()
+                .to_string()
+        })
+        .collect();
+
+    assert_eq!(filenames, vec!["link", "target"]);
 }
 
 #[test]
@@ -6991,4 +7085,37 @@ fn test_ls_proc_self_fd_no_errors() {
         .arg("/proc/self/fd")
         .succeeds()
         .stderr_does_not_contain("cannot access");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_ls_recursive_no_fd_leak() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let deep_path: String = (1..=30)
+        .map(|i| i.to_string())
+        .collect::<Vec<_>>()
+        .join("/");
+    at.mkdir_all(&deep_path);
+
+    scene
+        .ucmd()
+        .arg("-R")
+        .arg("1")
+        .limit(Resource::NOFILE, 20, 20)
+        .succeeds()
+        .stderr_is("");
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "macos")))]
+fn test_ls_non_utf8_hidden() {
+    use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch(OsStr::from_bytes(b".hidden\x80"));
+
+    scene.ucmd().succeeds().stdout_does_not_contain(".hidden");
 }

@@ -41,7 +41,7 @@ pub fn uu_app() -> Command {
         .after_help(translate!("test-after-help"))
 }
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     let program = args.next().unwrap_or_else(|| OsString::from("test"));
     let binary_name = uucore::util_name();
@@ -183,13 +183,13 @@ fn integers(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
     // Parse the two inputs
     let a: i128 = a
         .to_str()
-        .map(|s| s.trim())
+        .map(str::trim)
         .and_then(|s| s.parse().ok())
         .ok_or_else(|| ParseError::InvalidInteger(a.quote().to_string()))?;
 
     let b: i128 = b
         .to_str()
-        .map(|s| s.trim())
+        .map(str::trim)
         .and_then(|s| s.parse().ok())
         .ok_or_else(|| ParseError::InvalidInteger(b.quote().to_string()))?;
 
@@ -231,7 +231,7 @@ fn files(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
 
 fn isatty(fd: &OsStr) -> ParseResult<bool> {
     fd.to_str()
-        .map(|s| s.trim())
+        .map(str::trim)
         .and_then(|s| s.parse().ok())
         .ok_or_else(|| ParseError::InvalidInteger(fd.quote().to_string()))
         .map(|i| unsafe { libc::isatty(i) == 1 })
@@ -341,12 +341,15 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
         PathCondition::Sticky => false,
         PathCondition::UserOwns => unimplemented!(),
         PathCondition::Fifo => false,
-        PathCondition::Readable => false, // TODO
+        PathCondition::Readable => true,
         PathCondition::Socket => false,
         PathCondition::NonEmpty => stat.len() > 0,
         PathCondition::UserIdFlag => false,
-        PathCondition::Writable => false,   // TODO
-        PathCondition::Executable => false, // TODO
+        PathCondition::Writable => !stat.permissions().readonly(),
+        PathCondition::Executable => std::path::Path::new(path)
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| matches!(e, "exe" | "bat" | "cmd" | "com")),
     }
 }
 

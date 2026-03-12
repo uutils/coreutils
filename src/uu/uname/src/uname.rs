@@ -53,7 +53,7 @@ impl UNameOutput {
         ]
         .into_iter()
         .flatten()
-        .map(|name| name.as_os_str())
+        .map(OsString::as_os_str)
         .collect::<Vec<_>>()
         .join(OsStr::new(" "))
     }
@@ -119,7 +119,7 @@ pub struct Options {
     pub os: bool,
 }
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 

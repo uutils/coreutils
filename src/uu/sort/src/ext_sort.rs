@@ -11,7 +11,7 @@
 
 use std::cmp::Ordering;
 use std::fs::File;
-use std::io::Write;
+use std::io::{Write, stderr};
 use std::path::PathBuf;
 use std::{
     io::Read,
@@ -24,7 +24,6 @@ use uucore::error::{UResult, strip_errno};
 
 use crate::Output;
 use crate::chunks::RecycledChunk;
-use crate::merge::ClosedTmpFile;
 use crate::merge::WriteableCompressedTmpFile;
 use crate::merge::WriteablePlainTmpFile;
 use crate::merge::WriteableTmpFile;
@@ -37,7 +36,8 @@ use crate::{
 use crate::{Line, print_sorted};
 
 // Note: update `test_sort::test_start_buffer` if this size is changed
-const START_BUFFER_SIZE: usize = 8_000;
+// Fixed to 8 KiB (equivalent to `std::sys::io::DEFAULT_BUF_SIZE` on most targets)
+const DEFAULT_BUF_SIZE: usize = 8 * 1024;
 
 /// Sort files by using auxiliary files for storing intermediate chunks (if needed), and output the result.
 pub fn ext_sort(
@@ -69,7 +69,8 @@ pub fn ext_sort(
             }
             Err(err) => {
                 // Print the error and disable compression
-                eprintln!(
+                let _ = writeln!(
+                    stderr(),
                     "sort: could not run compress program '{prog}': {}",
                     strip_errno(&err)
                 );
@@ -133,7 +134,7 @@ fn reader_writer<
     match read_result {
         ReadResult::WroteChunksToFile { tmp_files } => {
             merge::merge_with_file_limit::<_, _, Tmp>(
-                tmp_files.into_iter().map(|c| c.reopen()),
+                tmp_files.into_iter().map(merge::ClosedTmpFile::reopen),
                 settings,
                 output,
                 tmp_dir,
@@ -225,11 +226,7 @@ fn read_write_loop<I: WriteableTmpFile>(
     for _ in 0..2 {
         let should_continue = chunks::read(
             &sender,
-            RecycledChunk::new(if START_BUFFER_SIZE < buffer_size {
-                START_BUFFER_SIZE
-            } else {
-                buffer_size
-            }),
+            RecycledChunk::new(buffer_size.min(DEFAULT_BUF_SIZE)),
             Some(buffer_size),
             &mut carry_over,
             &mut file,

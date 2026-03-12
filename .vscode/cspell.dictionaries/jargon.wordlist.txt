@@ -116,6 +116,7 @@ noxfer
 ofile
 oflag
 oflags
+openat
 pdeathsig
 peekable
 performant
