@@ -19,7 +19,7 @@ use crate::checksum::{
 };
 use crate::error::{FromIo, UError, UIoError, UResult, USimpleError};
 use crate::quoting_style::{QuotingStyle, locale_aware_escape_name};
-use crate::sum::DigestOutput;
+use crate::sum::{self, DigestOutput};
 use crate::{
     os_str_as_bytes, os_str_from_bytes, read_os_string_lines, show, show_warning_caps, translate,
 };
@@ -643,6 +643,7 @@ fn identify_algo_name_and_length(
             AlgoKind::Sha2 | AlgoKind::Sha3 if [224, 256, 384, 512].contains(&bitlen) => {
                 Some(bitlen)
             }
+            AlgoKind::Shake128 | AlgoKind::Shake256 => Some(bitlen),
             // Either
             //  the algo based line is provided with a bit length
             //  with an algorithm that does not support it (only Blake2B does).
@@ -741,6 +742,9 @@ fn process_algo_based_line(
     // checksum with it.
     let digest_char_length_hint = match (algo_kind, algo_byte_len) {
         (AlgoKind::Blake2b, Some(byte_len)) => Some(byte_len),
+        (AlgoKind::Shake128 | AlgoKind::Shake256, Some(bit_len)) => Some(bit_len.div_ceil(8)),
+        (AlgoKind::Shake128, None) => Some(sum::Shake128::DEFAULT_BIT_SIZE.div_ceil(8)),
+        (AlgoKind::Shake256, None) => Some(sum::Shake256::DEFAULT_BIT_SIZE.div_ceil(8)),
         _ => None,
     };
 
