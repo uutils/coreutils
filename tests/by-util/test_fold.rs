@@ -894,11 +894,14 @@ fn test_bytewise_carriage_return_is_not_word_boundary() {
 fn test_bytewise_read_from_pseudo_device() {
     let mut child = new_ucmd!().arg("-b").arg("/dev/zero").run_no_wait();
 
-    let timeout = std::time::Duration::from_millis(100);
-    std::thread::sleep(timeout);
-    child.close_stdin();
-    assert!(child.stdout_all().contains("\x00\x0a"));
-    assert!(child.stderr_all().is_empty());
+    child.make_assertion_with_delay(100).is_alive();
+
+    child
+        .kill()
+        .make_assertion()
+        .with_all_output()
+        .stdout_contains_bytes(b"\x00\x0a")
+        .no_stderr();
 }
 
 #[test]
