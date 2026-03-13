@@ -1245,8 +1245,8 @@ fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S) -> Option<Zoned> {
                     // Parse the date part (everything before the TZ abbreviation)
                     let date_part = s.trim_end_matches(last_word).trim();
                     // Parse in the target timezone so "10:30 EDT" means 10:30 in EDT
-                    if let Ok(parsed) = parse_datetime::parse_datetime(date_part) {
-                        if let Some(in_range) = parsed.into_zoned() {
+                    if let Ok(parsed) = parse_datetime::parse_datetime_extended(date_part) {
+                        if let parse_datetime::ParsedDateTime::InRange(in_range) = parsed {
                             let dt = in_range.datetime();
                             if let Ok(zoned) = dt.to_zoned(tz) {
                                 return Some(zoned);
@@ -1265,14 +1265,8 @@ fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S) -> Option<Zoned> {
 /// Parse a `String` into a `DateTime`.
 /// If it fails, return a tuple of the `String` along with its `ParseError`.
 ///
-/// **Update for parse_datetime 0.14:**
-/// - parse_datetime 0.11: returned `chrono::DateTime` → required conversion to `jiff::Zoned`
-/// - parse_datetime 0.13: returned `jiff::Zoned` directly
-/// - parse_datetime 0.14: returns `ParsedDateTime` (`InRange` or `Extended`)
-///
-/// This change was necessary to fix issue #8754 (parsing large second values like
-/// "12345.123456789 seconds ago" which failed in 0.11 but works in 0.13), and
-/// to enable large-year GNU date compatibility via `Extended`.
+/// `parse_datetime` keeps its legacy `Zoned` API, while the additive
+/// `*_extended` entrypoints return `ParsedDateTime` for large-year support.
 fn parse_date<S: AsRef<str> + Clone>(
     s: S,
     now: &Zoned,
@@ -1282,7 +1276,7 @@ fn parse_date<S: AsRef<str> + Clone>(
         return Ok(ParsedDateValue::InRange(zoned));
     }
 
-    match parse_datetime::parse_datetime_at_date(now.clone(), s.as_ref()) {
+    match parse_datetime::parse_datetime_at_date_extended(now.clone(), s.as_ref()) {
         // Convert in-range results to the system timezone for display.
         Ok(parse_datetime::ParsedDateTime::InRange(date)) => Ok(ParsedDateValue::InRange(
             date.timestamp().to_zoned(now.time_zone().clone()),

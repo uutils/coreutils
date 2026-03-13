@@ -360,7 +360,7 @@ num-bigint = "0.4.4"
 num-prime = "0.4.4"
 num-traits = "0.2.19"
 onig = { version = "~6.5.1", default-features = false }
-parse_datetime = { git = "https://github.com/abhishekpradhan/parse_datetime", rev = "340cb39164e2cda1f3b630999bf0af62353fcee2" }
+parse_datetime = { git = "https://github.com/abhishekpradhan/parse_datetime", rev = "19832505ba9f0c4807e46fc533e31fa81d00bb39" }
 phf = "0.13.1"
 phf_codegen = "0.13.1"
 platform-info = "2.0.3"
