@@ -15,6 +15,17 @@ split-after-help = Sortir des morceaux de taille fixe d'ENTRÉE vers PREFIXEaa, 
   - r/N comme 'l' mais utiliser la distribution round robin
   - r/K/N pareillement mais ne sortir que le Kème de N vers stdout
 
+# Noms des variables
+split-var-name-size = TAILLE
+split-var-name-number = NOMBRE
+split-var-name-chunks = BLOCS
+split-var-name-suffix = SUFFIXE
+split-var-name-command = COMMANDE
+split-var-name-from = DEPART
+split-var-name-sep = SEP
+split-var-name-input = ENTREE
+split-var-name-prefix = PREFIXE
+
 # Messages d'erreur
 split-error-suffix-not-parsable = longueur de suffixe invalide : { $value }
 split-error-suffix-contains-separator = suffixe invalide { $value }, contient un séparateur de répertoire
