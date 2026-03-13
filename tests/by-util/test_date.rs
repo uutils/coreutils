@@ -1653,7 +1653,7 @@ fn test_date_locale_hu_hungarian() {
 
     // Check proper formatting (no double dots, day name, etc.) of entire output
     assert!(
-        stdout == format!("2025. dec. 14., vasárnap, 13:00:00 UTC\n"),
+        stdout == "2025. dec. 14., vasárnap, 13:00:00 UTC\n",
         "Incorrect Hungarian output format, got: {stdout}"
     );
 }
