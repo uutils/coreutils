@@ -8,7 +8,7 @@
 use libfuzzer_sys::fuzz_target;
 use uu_wc::uumain;
 
-use rand::Rng;
+use rand::RngExt;
 use std::ffi::OsString;
 
 use uufuzz::{
