@@ -440,20 +440,18 @@ fn cut_fields<R: Read, W: Write>(
     }
 }
 
-fn cut_files(mut filenames: Vec<OsString>, mode: &Mode) {
+fn cut_files<'a, I>(filenames: I, mode: &Mode)
+where
+    I: IntoIterator<Item = &'a OsString>,
+{
     let mut stdin_read = false;
-
-    if filenames.is_empty() {
-        filenames.push(OsString::from("-"));
-    }
-
     let mut out: Box<dyn Write> = if stdout().is_terminal() {
         Box::new(stdout())
     } else {
         Box::new(BufWriter::new(stdout())) as Box<dyn Write>
     };
 
-    for filename in &filenames {
+    for filename in filenames {
         if filename == "-" {
             if stdin_read {
                 continue;
@@ -674,12 +672,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let mode = mode_parse.map_err(|e| USimpleError::new(1, e))?;
-
-    let files = matches
-        .get_many::<OsString>(options::FILE)
-        .unwrap_or_default()
-        .cloned()
-        .collect();
+    #[allow(clippy::unwrap_used, reason = "clap provides '-' by default")]
+    let files = matches.get_many::<OsString>(options::FILE).unwrap();
 
     cut_files(files, &mode);
 
@@ -776,6 +770,7 @@ pub fn uu_app() -> Command {
                 .hide(true)
                 .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath)
+                .default_value("-")
                 .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
