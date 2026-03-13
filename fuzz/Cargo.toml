@@ -27,7 +27,7 @@ debug = true
 
 [dependencies]
 libfuzzer-sys = "0.4.7"
-rand = { version = "0.9.0", features = ["small_rng"] }
+rand = { version = "0.10.0", features = ["small_rng"] }
 uufuzz = { path = "uufuzz" }
 uucore = { path = "../src/uucore", features = ["parser"] }
 uu_date = { path = "../src/uu/date" }
