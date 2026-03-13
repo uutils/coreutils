@@ -8,7 +8,7 @@
 use libfuzzer_sys::fuzz_target;
 use uu_test::uumain;
 
-use rand::Rng;
+use rand::RngExt;
 use rand::prelude::IndexedRandom;
 use std::ffi::OsString;
 
@@ -35,7 +35,7 @@ struct TestArg {
     arg_type: ArgType,
 }
 
-fn generate_random_path(rng: &mut dyn rand::RngCore) -> &'static str {
+fn generate_random_path(rng: &mut dyn rand::Rng) -> &'static str {
     match rng.random_range(0..=3) {
         0 => "/dev/null",
         1 => "/dev/random",
