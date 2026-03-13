@@ -3795,6 +3795,27 @@ fn test_copy_dir_preserve_subdir_permissions() {
     assert_metadata_eq!(at.metadata("a1/a2"), at.metadata("b1/a2"));
 }
 
+/// cp should successfully copy a read-only source directory containing files.
+/// Regression test: build_dir previously created the destination with the source's
+/// read-only mode, causing EPERM when copying files into it.
+#[cfg(all(not(windows), not(target_os = "freebsd"), not(target_os = "openbsd")))]
+#[test]
+fn test_copy_dir_preserve_readonly_source_with_files() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("src");
+    at.write("src/file.txt", "hello");
+    at.set_mode("src", 0o0555);
+
+    ucmd.args(&["-p", "-r", "src", "dest"])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    assert!(at.dir_exists("dest"));
+    assert_eq!(at.read("dest/file.txt"), "hello");
+    assert_metadata_eq!(at.metadata("src"), at.metadata("dest"));
+}
+
 /// Test for preserving permissions when copying a directory, even in
 /// the face of an inaccessible file in that directory.
 #[cfg(all(not(windows), not(target_os = "freebsd"), not(target_os = "openbsd")))]
