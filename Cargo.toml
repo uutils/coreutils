@@ -440,7 +440,7 @@ time = { version = "0.3.36" }
 unicode-width = "0.2.0"
 unit-prefix = "0.5"
 utmp-classic = "0.1.6"
-uutils_term_grid = "0.7"
+uutils_term_grid = "0.8"
 walkdir = "2.5"
 winapi-util = "0.1.8"
 windows-sys = { version = "0.61.0", default-features = false }
