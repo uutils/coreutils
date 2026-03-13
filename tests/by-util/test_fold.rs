@@ -889,6 +889,18 @@ fn test_bytewise_carriage_return_is_not_word_boundary() {
         .succeeds()
         .stdout_is("fizz\rb\nuzz\rfi\nzzbuzz"); // spell-checker:disable-line
 }
+
+#[test]
+fn test_bytewise_read_from_pseudo_device() {
+    let mut child = new_ucmd!().arg("-b").arg("/dev/zero").run_no_wait();
+
+    let timeout = std::time::Duration::from_millis(100);
+    std::thread::sleep(timeout);
+    child.close_stdin();
+    assert!(child.stdout_all().contains("\x00\x0a"));
+    assert!(child.stderr_all().is_empty());
+}
+
 #[test]
 fn test_obsolete_syntax() {
     new_ucmd!()
