@@ -194,6 +194,8 @@ jobs:
       run: |
         cargo check -p uucore --no-default-features --lib --locked
         cargo check -p uucore --no-default-features --features fs --lib --locked
+    - name: Generate minimal lockfile
+      run: RUSTC_BOOTSTRAP=1 cargo update -Z direct-minimal-versions
     - name: Confirm MinSRV compatible '*/Cargo.lock'
       shell: bash
       run: |
