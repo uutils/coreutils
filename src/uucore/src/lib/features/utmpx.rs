@@ -164,7 +164,6 @@ mod ut {
 mod ut {
     pub static DEFAULT_FILE: &str = "/var/run/utmpx";
 
-    pub const ACCOUNTING: usize = 9;
     pub const SHUTDOWN_TIME: usize = 11;
 
     pub use libc::_UTX_HOSTSIZE as UT_HOSTSIZE;
