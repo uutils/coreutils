@@ -91,7 +91,7 @@ struct FileLine {
     file_id: usize,
     page_number: usize,
     line_number: usize,
-    line_content: String,
+    line_content: Vec<u8>,
 }
 
 impl FileLine {
@@ -101,29 +101,23 @@ impl FileLine {
         line_number: usize,
         buf: &[u8],
         options: &OutputOptions,
-    ) -> Result<Self, PrError> {
-        // TODO Don't read bytes to String just to directly write them
-        // out again anyway.
+    ) -> Self {
         let line_content = if let Some(expand_tabs) = &options.expand_tabs {
-            // Anticipate a few expandable chars to reduce reallocations
-            let mut line_content =
-                String::with_capacity(buf.len() + buf.len() / 20 * expand_tabs.width as usize);
-            // validate utf correctness
-            let s = std::str::from_utf8(buf)?;
-            for b in s.as_bytes() {
-                apply_expand_tab(&mut line_content, *b, expand_tabs);
+            let mut result = Vec::with_capacity(buf.len() + buf.len() / 20 * expand_tabs.width as usize);
+            for b in buf {
+                apply_expand_tab(&mut result, *b, expand_tabs);
             }
-            line_content
+            result
         } else {
-            String::from_utf8(buf.to_vec())?
+            buf.to_vec()
         };
 
-        Ok(Self {
+        Self {
             file_id,
             page_number,
             line_number,
             line_content,
-        })
+        }
     }
 }
 
@@ -858,24 +852,24 @@ fn read_to_end(path: &str) -> Result<Vec<u8>, std::io::Error> {
     }
 }
 
-fn apply_expand_tab(chunk: &mut String, byte: u8, expand_options: &ExpandTabsOptions) {
+fn apply_expand_tab(chunk: &mut Vec<u8>, byte: u8, expand_options: &ExpandTabsOptions) {
     if byte == expand_options.input_char as u8 {
         // If the byte encountered is the input char we use width to calculate
         // the amount of spaces needed (if no input char given we stored '\t'
         // in our struct)
         let spaces_needed =
             expand_options.width as usize - (chunk.len() % expand_options.width as usize);
-        chunk.extend(std::iter::repeat_n(' ', spaces_needed));
+        chunk.extend(std::iter::repeat_n(b' ', spaces_needed));
     } else if byte == TAB as u8 {
         // If a byte got passed to the -e flag (eg -ea1)  which is not '\t' GNU
         // still expands it but does not use an optionally given width parameter
         // but does the '\t' expansion with the default value (8)
         let spaces_needed = 8 - (chunk.len() % 8);
-        chunk.extend(std::iter::repeat_n(' ', spaces_needed));
+        chunk.extend(std::iter::repeat_n(b' ', spaces_needed));
     } else {
         // This arm means the byte is neither '\t' nor the bytes to be
         // expanded
-        chunk.push(byte as char);
+        chunk.push(byte);
     }
 }
 
@@ -885,7 +879,7 @@ fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
     // TODO Read incrementally.
     let buf = read_to_end(path)?;
 
-    let pages = get_pages(options, 0, &buf)?;
+    let pages = get_pages(options, 0, &buf);
 
     // Split the text into pages, and then print each line in each page.
     for page_with_page_number in pages {
@@ -908,7 +902,7 @@ fn get_pages(
     options: &OutputOptions,
     file_id: usize,
     buf: &[u8],
-) -> Result<Vec<(usize, Vec<FileLine>)>, PrError> {
+) -> Vec<(usize, Vec<FileLine>)> {
     let start_page = options.start_page;
     let end_page = options.end_page;
     let lines_needed_per_page = lines_to_read_for_page(options);
@@ -944,7 +938,7 @@ fn get_pages(
                 // `\f` as its own line; instead ignore the empty line.
             } else {
                 let file_line =
-                    FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i], options)?;
+                    FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i], options);
                 page.push(file_line);
             }
 
@@ -970,7 +964,7 @@ fn get_pages(
                 // `\n` as its own line; instead ignore the empty line.
             } else {
                 let file_line =
-                    FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i], options)?;
+                    FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i], options);
                 page.push(file_line);
                 line_num += 1;
             }
@@ -992,7 +986,7 @@ fn get_pages(
 
     // Consider all trailing bytes as the last line.
     if prev < buf.len() {
-        let file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..], options)?;
+        let file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..], options);
         page.push(file_line);
     }
 
@@ -1001,7 +995,7 @@ fn get_pages(
         pages.push((page_num, page.clone()));
     }
 
-    Ok(pages)
+    pages
 }
 
 /// Key used to group lines together according to their file and page number.
@@ -1056,7 +1050,7 @@ fn get_file_line_groups(
 
         // Split the text into pages and collect each line for
         // subsequent grouping.
-        for (_, mut page) in get_pages(options, file_id, &buf)? {
+        for (_, mut page) in get_pages(options, file_id, &buf) {
             all_lines.append(&mut page);
         }
     }
@@ -1291,7 +1285,8 @@ fn get_line_for_printing(
     let blank_line = String::new();
     let formatted_line_number = get_formatted_line_number(options, file_line.line_number, index);
 
-    let mut complete_line = format!("{formatted_line_number}{}", file_line.line_content);
+    let content = String::from_utf8_lossy(&file_line.line_content);
+    let mut complete_line = format!("{formatted_line_number}{content}");
 
     let offset_spaces = &options.offset_spaces;
 
