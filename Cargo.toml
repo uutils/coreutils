@@ -327,11 +327,11 @@ ansi-width = "0.1.0"
 # arrive without one running.
 ariadne = "0.6.0"
 base64-simd = "0.8"
-bigdecimal = "0.4"
+bigdecimal = "0.4.9"
 bstr = { version = "1.9.1", default-features = false, features = ["std"] }
 bytecount = "0.6.8"
 cfg_aliases = "0.2.2"
-clap = { version = "4.5", features = ["wrap_help", "cargo", "color"] }
+clap = { version = "4.6.6", features = ["wrap_help", "cargo", "color"] }
 clap_complete = "4.4"
 clap_mangen = "0.3.3"
 crossterm = { version = "0.29.0", default-features = false }
@@ -344,23 +344,23 @@ dns-lookup = { version = "4.0.0" }
 dunce = "1.0.4"
 filetime = "0.2.29"
 foldhash = "0.2.0"
-glob = "0.3.1"
+glob = "0.3.2"
 half = "2.4.1"
 hashbrown = '0.17.1'
 hex-literal = "1.0.0"
 hostname = "0.4"
-icu_calendar = { version = "2.0.0", default-features = false }
-icu_collator = { version = "2.0.0", default-features = false }
-icu_datetime = { version = "2.0.0", default-features = false }
-icu_decimal = { version = "2.0.0", default-features = false }
-icu_locale = { version = "2.0.0", default-features = false }
-icu_provider = { version = "2.0.0", default-features = false }
+icu_calendar = { version = "2.1.0", default-features = false }
+icu_collator = { version = "2.1.0", default-features = false }
+icu_datetime = { version = "2.1.0", default-features = false }
+icu_decimal = { version = "2.1.0", default-features = false }
+icu_locale = { version = "2.1.0", default-features = false }
+icu_provider = { version = "2.1.0", default-features = false }
 indicatif = "0.18.0"
 itertools = "0.15.0"
 itoa = "1.0.15"
 jiff = "0.2.18"
 jiff-icu = "0.2.2"
-jiff-tzdb = "0.1"
+jiff-tzdb = "0.1.4"
 libc = "0.2.186"
 lscolors = { version = "0.21.0", default-features = false, features = [
   "gnu_legacy",
@@ -370,7 +370,7 @@ memmap2 = "0.9.4"
 nix = { version = "0.31.3", default-features = false }
 nom = "8.0.0"
 notify = { version = "8.2.0", features = ["macos_kqueue"] }
-num-bigint = "0.4.4"
+num-bigint = "0.4.6"
 num-integer = "0.1.47"
 num-prime = "0.6.0"
 num-traits = "0.2.19"
@@ -385,32 +385,32 @@ phf = "0.14.0"
 phf_codegen = "0.14.0"
 platform-info = "2.0.3"
 pretty_assertions = "1.4.1"
-proc-macro2 = "1.0.81"
+proc-macro2 = "1.0.93"
 procfs = "0.18"
 rand = { version = "0.10.1", features = ["std_rng"] }
 rand_chacha = { version = "0.10.0" }
 rayon = "1.10"
-regex = "1.10.4"
+regex = "1.11.3"
 rstest = "0.27.0"
 rstest_reuse = "0.7.0"
 rustc-hash = "2.1.1"
 rustix = { version = "1.1.4", default-features = false }
-self_cell = "1.0.4"
+self_cell = "1.2.0"
 selinux = "0.6"
-tempfile = "3.15.0"
-terminal_size = "0.4.0"
+tempfile = "3.20.0"
+terminal_size = "0.4.4"
 textwrap = { version = "0.16.1", features = ["terminal_size"] }
 thiserror = "2.0.3"
 time = { version = "0.3.36" }
-quote = "1.0.36"
+quote = "1.0.38"
 unicode-width = "0.2.0"
 unindent = "0.2.3"
-unit-prefix = "0.5"
+unit-prefix = "0.5.1"
 utmp-classic = "0.1.6"
 uutils_term_grid = "0.8"
 walkdir = "2.5"
 wild = "2.2.1"
-windows-sys = { version = ">=0.60, <0.62", default-features = false }
+windows-sys = { version = ">=0.60.2, <0.62", default-features = false }
 xattr = { version = "1.3.1", default-features = false }
 z85 = "3.0.5"
 zip = { version = "8.0.0", default-features = false, features = ["deflate"] }
@@ -424,9 +424,9 @@ shake = "0.1.0"
 blake2b_simd = "1.0.2"
 blake3 = "1.5.1"
 sm3 = { version = "0.5.0", default-features = false, features = ["alloc"] }
-crc-fast = { version = "1.5.0", default-features = false }
+crc-fast = { version = "1.7.0", default-features = false }
 digest = "0.11.0"
-openssl = { version = "0.10" }
+openssl = { version = "0.10.72" }
 
 # Fluent dependencies
 fluent = "0.17.0"
