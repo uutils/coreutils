@@ -103,7 +103,8 @@ impl FileLine {
         options: &OutputOptions,
     ) -> Self {
         let line_content = if let Some(expand_tabs) = &options.expand_tabs {
-            let mut result = Vec::with_capacity(buf.len() + buf.len() / 20 * expand_tabs.width as usize);
+            let mut result =
+                Vec::with_capacity(buf.len() + buf.len() / 20 * expand_tabs.width as usize);
             for b in buf {
                 apply_expand_tab(&mut result, *b, expand_tabs);
             }
@@ -898,11 +899,7 @@ fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
 /// # Errors
 ///
 /// Returns an error if the bytes are not a valid UTF-8 string.
-fn get_pages(
-    options: &OutputOptions,
-    file_id: usize,
-    buf: &[u8],
-) -> Vec<(usize, Vec<FileLine>)> {
+fn get_pages(options: &OutputOptions, file_id: usize, buf: &[u8]) -> Vec<(usize, Vec<FileLine>)> {
     let start_page = options.start_page;
     let end_page = options.end_page;
     let lines_needed_per_page = lines_to_read_for_page(options);
