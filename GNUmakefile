@@ -79,17 +79,14 @@ LN ?= ln -sf
 
 # Possible programs
 PROGS := \
-	$(shell sed -n '/feat_Tier1 = \[/,/\]/p' Cargo.toml | sed '1d;2d' |tr -d '],"\n')\
-	$(shell sed -n '/feat_common_core = \[/,/\]/p' Cargo.toml | sed '1d' |tr -d '],"\n')
+	$(sed -n '/feat_Tier1 = \[/,/\]/{s/[,"]//g;/common_core/d;/^ /p}' Cargo.toml)\
+	$(shell sed -n '/feat_common_core = \[/,/\]/{s/[,"]//g;/^ /p}' Cargo.toml)
 
 UNIX_PROGS := \
-	$(shell sed -n '/feat_require_unix_core = \[/,/\]/p' Cargo.toml | sed '1d' |tr -d '],"\n') \
+	$(shell sed -n '/feat_require_unix_core = \[/,/\]/{s/[,"]//g;/^ /p}' Cargo.toml) \
+	$(shell sed -n '/feat_require_unix_utmpx = \[/,/\]/{s/[,"]//g;/^ /p}' Cargo.toml) \
 	hostid \
-	pinky \
-	stdbuf \
-	uptime \
-	users \
-	who
+	stdbuf
 
 SELINUX_PROGS := \
 	chcon \
