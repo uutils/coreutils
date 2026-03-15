@@ -131,7 +131,7 @@ fn test_delimiter_with_byte_and_char() {
         new_ucmd!()
             .args(&[conflicting_arg, COMPLEX_SEQUENCE.sequence, "-d="])
             .fails_with_code(1)
-            .stderr_is("cut: invalid input: The '--delimiter' ('-d') option only usable if printing a sequence of fields\n")
+            .stderr_is("cut: invalid input: The '--delimiter' ('-d') option can only be used when printing a sequence of fields\n")
 ;
     }
 }
