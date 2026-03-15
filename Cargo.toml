@@ -419,6 +419,7 @@ parse_datetime = "0.14.0"
 phf = "0.13.1"
 phf_codegen = "0.13.1"
 platform-info = "2.0.3"
+pretty_assertions = "1.4.1"
 procfs = "0.18"
 rand = { version = "0.10.0", features = ["std_rng"] }
 rand_chacha = { version = "0.10.0" }
@@ -611,7 +612,7 @@ jiff.workspace = true
 libc.workspace = true
 bytecount.workspace = true
 num-prime.workspace = true
-pretty_assertions = "1.4.0"
+pretty_assertions.workspace = true
 rand.workspace = true
 regex.workspace = true
 rustc-hash.workspace = true
