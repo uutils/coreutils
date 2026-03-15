@@ -94,9 +94,69 @@ fn gen_manpage<T: Args>(
         cmd
     };
 
+    // Generate the manpage to a buffer first so we can post-process it
+    let mut buffer = Vec::new();
     let man = Man::new(command);
-    man.render(&mut io::stdout())
-        .expect("Man page generation failed");
+    man.render(&mut buffer).expect("Man page generation failed");
+
+    // Convert to string for processing
+    let mut manpage = String::from_utf8(buffer).expect("Invalid UTF-8 in manpage");
+
+    // Fix the TH line: remove version info from date field and uppercase the command name
+    if let Some(th_pos) = manpage.find(".TH ") {
+        if let Some(line_end) = manpage[th_pos..].find('\n') {
+            let th_line = &manpage[th_pos..th_pos + line_end];
+            // Parse the TH line parts
+            let parts: Vec<&str> = th_line.split_whitespace().collect();
+            if parts.len() >= 2 {
+                let cmd_name = parts[1].to_uppercase();
+                // Reconstruct TH line with uppercase command name and no date
+                let new_th = format!(".TH {} 1", cmd_name);
+                manpage.replace_range(th_pos..th_pos + line_end, &new_th);
+            }
+        }
+    }
+
+    // Remove trailing whitespace from all lines and fix .br issues
+    let lines: Vec<String> = manpage
+        .lines()
+        .map(|line| line.trim_end().to_string())
+        .collect();
+
+    // Fix .br paragraph macro issues
+    let mut fixed_lines = Vec::new();
+    let mut skip_next_br = false;
+
+    for i in 0..lines.len() {
+        let line = &lines[i];
+
+        if line == ".br" {
+            // Check for problematic patterns with .br
+            let prev_is_br = i > 0 && lines[i - 1] == ".br";
+            let next_is_empty_then_br =
+                i + 2 < lines.len() && lines[i + 1].is_empty() && lines[i + 2] == ".br";
+            let prev_is_empty_with_br = i >= 2 && lines[i - 1].is_empty() && lines[i - 2] == ".br";
+
+            // Skip redundant .br in these patterns
+            if skip_next_br || prev_is_br || next_is_empty_then_br || prev_is_empty_with_br {
+                skip_next_br = false;
+                continue;
+            }
+
+            // If this .br is followed by empty line and another .br, skip the second one
+            if next_is_empty_then_br {
+                skip_next_br = true;
+            }
+        }
+
+        fixed_lines.push(line.clone());
+    }
+
+    manpage = fixed_lines.join("\n");
+    manpage.push('\n');
+
+    // Write the processed manpage to stdout
+    io::stdout().write_all(manpage.as_bytes()).unwrap();
     io::stdout().flush().unwrap();
     process::exit(0);
 }
