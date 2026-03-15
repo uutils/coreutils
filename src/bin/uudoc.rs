@@ -6,7 +6,7 @@
 // spell-checker:ignore mangen tldr mandoc uppercasing uppercased manpages DESTDIR
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     ffi::OsString,
     fs::File,
     io::{self, Read, Seek, Write},
@@ -17,8 +17,8 @@ use clap::{Arg, Command};
 use clap_complete::Shell;
 use clap_mangen::Man;
 use fluent_syntax::ast::{Entry, Message, Pattern};
-use jiff::Zoned;
 use fluent_syntax::parser;
+use jiff::Zoned;
 use regex::Regex;
 use textwrap::{fill, indent, termwidth};
 use zip::ZipArchive;
@@ -31,17 +31,16 @@ include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
 /// Post-process a generated manpage to fix mandoc lint issues
 ///
 /// This function:
-/// - Fixes the TH header by uppercasing command names and removing invalid date formats
+/// - Fixes the TH header by uppercasing command names and adding a proper date
 /// - Removes trailing whitespace from all lines
 /// - Fixes redundant .br paragraph macros that cause mandoc warnings
-fn post_process_manpage(manpage: String) -> String {
+/// - Removes .br before empty lines to avoid "br before sp" warnings
+/// - Removes .br after empty lines to avoid "br after sp" warnings
+/// - Fixes escape sequences (e.g., \\\\0 to \\0) to avoid "undefined escape" warnings
+fn post_process_manpage(manpage: String, date: &str) -> String {
     // Only match TH headers that have at least a command name on the same line
     // Use [ \t] instead of \s to avoid matching newlines
     // Use a date format that satisfies mandoc (YYYY-MM-DD)
-    let date = date.map_or_else(
-        || Zoned::now().strftime("%Y-%m-%d").to_string(),
-        str::to_string,
-    );
 
     let th_regex = Regex::new(r"(?m)^\.TH[ \t]+([^ \t\n]+)(?:[ \t]+[^\n]*)?$").unwrap();
     let mut result = th_regex
@@ -52,34 +51,24 @@ fn post_process_manpage(manpage: String) -> String {
         .to_string();
 
     // Process lines: remove trailing whitespace and fix .br issues in a single pass
-    let lines: Vec<&str> = result.lines().collect();
-    let mut fixed_lines = Vec::with_capacity(lines.len());
-    let mut skip_indices = HashSet::new();
+    let lines: Vec<&str> = result.lines().map(str::trim_end).collect();
+    let mut fixed_lines: Vec<&str> = Vec::with_capacity(lines.len());
 
-    // First pass: identify lines to skip (redundant .br macros)
     for i in 0..lines.len() {
-        let line = lines[i].trim_end();
+        let line = lines[i];
 
-        if line == ".br" && !skip_indices.contains(&i) {
-            // Check for consecutive .br macros
-            if i > 0 && lines[i - 1].trim_end() == ".br" {
-                skip_indices.insert(i);
-            }
-            // Check for .br, empty line, .br pattern
-            else if i + 2 < lines.len()
-                && lines[i + 1].trim().is_empty()
-                && lines[i + 2].trim_end() == ".br"
-            {
-                skip_indices.insert(i + 2);
+        if line == ".br" {
+            let preceded_by_empty_line = i > 0 && lines[i - 1].is_empty();
+            let followed_by_empty_line = i + 1 < lines.len() && lines[i + 1].is_empty();
+            let followed_by_br = i + 1 < lines.len() && lines[i + 1] == ".br";
+
+            if preceded_by_empty_line || followed_by_empty_line || followed_by_br {
+                // skip this ".br"
+                continue;
             }
         }
-    }
 
-    // Second pass: build the final output
-    for (i, line) in lines.iter().enumerate() {
-        if !skip_indices.contains(&i) {
-            fixed_lines.push(line.trim_end());
-        }
+        fixed_lines.push(line);
     }
 
     result = fixed_lines.join("\n");
@@ -174,7 +163,8 @@ fn gen_manpage<T: Args>(
     let manpage = String::from_utf8(buffer).expect("Invalid UTF-8 in manpage");
 
     // Post-process the manpage to fix mandoc lint issues
-    let processed_manpage = post_process_manpage(manpage, None);
+    let date = Zoned::now().strftime("%Y-%m-%d").to_string();
+    let processed_manpage = post_process_manpage(manpage, &date);
 
     // Write the processed manpage to stdout
     io::stdout()
@@ -726,7 +716,7 @@ mod tests {
             ".TH cat 1 \"cat (uutils coreutils) 0.7.0\"\n.SH NAME\ncat - concatenate files\n";
         let expected = ".TH CAT 1 \"2024-01-01\"\n.SH NAME\ncat - concatenate files\n";
 
-        let result = post_process_manpage(input.to_string(), Some("2024-01-01"));
+        let result = post_process_manpage(input.to_string(), "2024-01-01");
         assert_eq!(result, expected);
     }
 
@@ -736,7 +726,7 @@ mod tests {
         let input = ".TH TEST 1  \nSome text with trailing spaces   \n.SH SECTION  \n";
         let expected = ".TH TEST 1 \"2024-01-01\"\nSome text with trailing spaces\n.SH SECTION\n";
 
-        let result = post_process_manpage(input.to_string(), Some("2024-01-01"));
+        let result = post_process_manpage(input.to_string(), "2024-01-01");
         assert_eq!(result, expected);
     }
 
@@ -746,7 +736,7 @@ mod tests {
         let input = ".TH TEST 1\n.br\n.br\nSome text\n";
         let expected = ".TH TEST 1 \"2024-01-01\"\n.br\nSome text\n";
 
-        let result = post_process_manpage(input.to_string(), Some("2024-01-01"));
+        let result = post_process_manpage(input.to_string(), "2024-01-01");
         assert_eq!(result, expected);
     }
 
@@ -757,7 +747,7 @@ mod tests {
         let input = ".TH TEST 1\n.br\n\n.br\nSome text\n";
         let expected = ".TH TEST 1 \"2024-01-01\"\n\nSome text\n";
 
-        let result = post_process_manpage(input.to_string(), Some("2024-01-01"));
+        let result = post_process_manpage(input.to_string(), "2024-01-01");
         assert_eq!(result, expected);
     }
 
@@ -767,7 +757,7 @@ mod tests {
         let input = ".TH TEST 1\nLine 1\n.br\nLine 2\n";
         let expected = ".TH TEST 1 \"2024-01-01\"\nLine 1\n.br\nLine 2\n";
 
-        let result = post_process_manpage(input.to_string(), Some("2024-01-01"));
+        let result = post_process_manpage(input.to_string(), "2024-01-01");
         assert_eq!(result, expected);
     }
 
@@ -777,7 +767,7 @@ mod tests {
         let input = ".TH CaT 1 \"some version info\"\nContent\n";
         let expected = ".TH CAT 1 \"2024-01-01\"\nContent\n";
 
-        let result = post_process_manpage(input.to_string(), Some("2024-01-01"));
+        let result = post_process_manpage(input.to_string(), "2024-01-01");
         assert_eq!(result, expected);
     }
 
@@ -787,7 +777,7 @@ mod tests {
         let input = ".SH NAME\ntest - a test utility\n";
         let expected = ".SH NAME\ntest - a test utility\n";
 
-        let result = post_process_manpage(input.to_string(), Some("2024-01-01"));
+        let result = post_process_manpage(input.to_string(), "2024-01-01");
         assert_eq!(result, expected);
     }
 
@@ -799,7 +789,7 @@ mod tests {
         // .br followed/preceded by empty lines should be removed, consecutive .br should have one removed
         let expected = ".TH TEST 1 \"2024-01-01\"\nSection 1\n\nMiddle\n.br\nSection 2\n\nEnd\n";
 
-        let result = post_process_manpage(input.to_string(), Some("2024-01-01"));
+        let result = post_process_manpage(input.to_string(), "2024-01-01");
         assert_eq!(result, expected);
     }
 
@@ -808,25 +798,65 @@ mod tests {
         // Test that malformed TH headers don't cause panics and are handled gracefully
         let input1 = ".TH\nContent\n"; // Missing command name
         let expected1 = ".TH\nContent\n";
-        let result1 = post_process_manpage(input1.to_string(), Some("2024-01-01"));
+        let result1 = post_process_manpage(input1.to_string(), "2024-01-01");
         assert_eq!(result1, expected1);
 
         // TH header with special characters
         let input2 = ".TH test-cmd 1 \"version 1.0\"\nContent\n";
         let expected2 = ".TH TEST-CMD 1 \"2024-01-01\"\nContent\n";
-        let result2 = post_process_manpage(input2.to_string(), Some("2024-01-01"));
+        let result2 = post_process_manpage(input2.to_string(), "2024-01-01");
         assert_eq!(result2, expected2);
 
         // TH header at end of file without newline
         let input3 = "Content\n.TH test 1";
         let expected3 = "Content\n.TH TEST 1 \"2024-01-01\"\n";
-        let result3 = post_process_manpage(input3.to_string(), Some("2024-01-01"));
+        let result3 = post_process_manpage(input3.to_string(), "2024-01-01");
         assert_eq!(result3, expected3);
 
         // Multiple TH headers (only first should be processed due to ^anchor)
         let input4 = ".TH first 1\nMiddle\n.TH second 1\n";
         let expected4 = ".TH FIRST 1 \"2024-01-01\"\nMiddle\n.TH SECOND 1 \"2024-01-01\"\n";
-        let result4 = post_process_manpage(input4.to_string(), Some("2024-01-01"));
+        let result4 = post_process_manpage(input4.to_string(), "2024-01-01");
         assert_eq!(result4, expected4);
+    }
+
+    #[test]
+    fn test_post_process_manpage_removes_br_before_empty_line() {
+        // Test that .br is removed when followed by empty line (which becomes .sp)
+        let input = ".TH TEST 1\nSome text\n.br\n\nMore text\n";
+        let expected = ".TH TEST 1 \"2024-01-01\"\nSome text\n\nMore text\n";
+
+        let result = post_process_manpage(input.to_string(), "2024-01-01");
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_post_process_manpage_complex_br_before_empty() {
+        // Test multiple .br before empty line patterns
+        let input = ".TH TEST 1\nSection 1\n.br\n\nSection 2\n.br\n\nSection 3\n";
+        let expected = ".TH TEST 1 \"2024-01-01\"\nSection 1\n\nSection 2\n\nSection 3\n";
+
+        let result = post_process_manpage(input.to_string(), "2024-01-01");
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_post_process_manpage_removes_br_after_empty_line() {
+        // Test that .br is removed when preceded by empty line (which becomes .sp)
+        let input = ".TH TEST 1\nSome text\n\n.br\nMore text\n";
+        let expected = ".TH TEST 1 \"2024-01-01\"\nSome text\n\nMore text\n";
+
+        let result = post_process_manpage(input.to_string(), "2024-01-01");
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_post_process_manpage_fixes_escape_sequences() {
+        // Test that \\\\0 and \\0 are fixed to \e0 (literal backslash-zero)
+        let input = ".TH TEST 1\nText with \\\\\\\\0 and \\\\0 escape\n";
+        let expected = ".TH TEST 1 \"2024-01-01\"\nText with \\e0 and \\e0 escape\n";
+
+        let result = post_process_manpage(input.to_string(), "2024-01-01");
+        assert_eq!(result, expected);
     }
 }
