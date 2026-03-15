@@ -35,6 +35,7 @@ uudoc = [
   "dep:clap_complete",
   "dep:clap_mangen",
   "dep:fluent-syntax",
+  "dep:jiff",
   "dep:regex",
   "dep:zip",
 ]
@@ -477,13 +478,14 @@ uu_checksum_common = { version = "0.7.0", path = "src/uu/checksum_common" }
 uutests = { version = "0.7.0", package = "uutests", path = "tests/uutests" }
 
 [dependencies]
+clap.workspace = true
 clap_complete = { workspace = true, optional = true }
 clap_mangen = { workspace = true, optional = true }
-clap.workspace = true
 fluent-syntax = { workspace = true, optional = true }
-regex = { workspace = true, optional = true }
 itertools.workspace = true
+jiff = { workspace = true, optional = true }
 phf.workspace = true
+regex = { workspace = true, optional = true }
 selinux = { workspace = true, optional = true }
 textwrap.workspace = true
 uucore.workspace = true
