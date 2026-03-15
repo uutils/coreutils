@@ -1279,7 +1279,6 @@ fn get_line_for_printing(
     let blank_line = String::new();
     let formatted_line_number = get_formatted_line_number(options, file_line.line_number, index);
 
-
     // TODO: support non-UTF-8 bytes (currently replaced with U+FFFD)
     let content = String::from_utf8_lossy(&file_line.line_content);
     let mut complete_line = format!("{formatted_line_number}{content}");
