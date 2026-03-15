@@ -896,9 +896,6 @@ fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
 ///
 /// Returns a list of the form `(page_num, lines)`.
 ///
-/// # Errors
-///
-/// Returns an error if the bytes are not a valid UTF-8 string.
 fn get_pages(options: &OutputOptions, file_id: usize, buf: &[u8]) -> Vec<(usize, Vec<FileLine>)> {
     let start_page = options.start_page;
     let end_page = options.end_page;
@@ -1282,6 +1279,8 @@ fn get_line_for_printing(
     let blank_line = String::new();
     let formatted_line_number = get_formatted_line_number(options, file_line.line_number, index);
 
+
+    // TODO: support non-UTF-8 bytes (currently replaced with U+FFFD)
     let content = String::from_utf8_lossy(&file_line.line_content);
     let mut complete_line = format!("{formatted_line_number}{content}");
 
