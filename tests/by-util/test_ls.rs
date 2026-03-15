@@ -2549,6 +2549,18 @@ fn test_ls_non_existing() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_ls_not_a_directory_errors() {
+    let scene = TestScenario::new(util_name!());
+    scene
+        .ucmd()
+        .arg("/etc/hosts/test")
+        .fails()
+        .code_is(2)
+        .stderr_contains("not a directory");
+}
+
+#[test]
 fn test_ls_files_dirs() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
