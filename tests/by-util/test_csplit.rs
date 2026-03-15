@@ -1583,3 +1583,11 @@ fn test_write_error_dev_full_keep_files() {
     assert!(at.file_exists("xx00"));
     assert_eq!(at.read("xx00"), "1\n");
 }
+
+#[test]
+fn test_empty_regex_pattern() {
+    // '//' uses the empty regex (matches beginning of each line)
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input", "hello\nworld\n");
+    ucmd.args(&["input", "//"]).succeeds();
+}

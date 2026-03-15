@@ -109,14 +109,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect::<Result<Vec<_>, _>>()?;
 
     if args.len() == 1 && args[0] == b"--help" {
-        uu_app().print_help()?;
+        if uu_app().print_help().is_err() {
+            std::process::exit(3);
+        }
     } else if args.len() == 1 && args[0] == b"--version" {
-        writeln!(
+        if writeln!(
             stdout(),
             "{} {}",
             uucore::util_name(),
             uucore::crate_version!()
-        )?;
+        )
+        .is_err()
+        {
+            std::process::exit(3);
+        }
     } else {
         // The first argument may be "--" and should be be ignored.
         let args = if !args.is_empty() && args[0] == b"--" {

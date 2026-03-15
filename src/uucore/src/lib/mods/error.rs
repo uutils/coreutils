@@ -701,8 +701,20 @@ impl From<i32> for Box<dyn UError> {
 #[derive(Debug)]
 pub struct ClapErrorWrapper {
     code: i32,
+    write_failure_code: i32,
     error: clap::Error,
     print_failed: Cell<bool>,
+}
+
+impl ClapErrorWrapper {
+    /// Override the exit code to use when writing help/version output fails (e.g., /dev/full).
+    ///
+    /// By default this matches `code`, but some utilities use different exit codes for I/O errors
+    /// vs. argument parse errors (e.g., `tty` exits 3 on write errors, 2 on parse errors).
+    pub fn with_write_failure_code(mut self, code: i32) -> Self {
+        self.write_failure_code = code;
+        self
+    }
 }
 
 /// Extension trait for `clap::Error` to adjust the exit code.
@@ -715,6 +727,7 @@ impl From<clap::Error> for Box<dyn UError> {
     fn from(e: clap::Error) -> Self {
         Box::new(ClapErrorWrapper {
             code: 1,
+            write_failure_code: 1,
             error: e,
             print_failed: Cell::new(false),
         })
@@ -725,6 +738,7 @@ impl UClapError<ClapErrorWrapper> for clap::Error {
     fn with_exit_code(self, code: i32) -> ClapErrorWrapper {
         ClapErrorWrapper {
             code,
+            write_failure_code: code,
             error: self,
             print_failed: Cell::new(false),
         }
@@ -742,11 +756,16 @@ impl UClapError<Result<clap::ArgMatches, ClapErrorWrapper>>
 impl UError for ClapErrorWrapper {
     fn code(&self) -> i32 {
         // If the error is a DisplayHelp or DisplayVersion variant,
-        // check if printing failed. If it did, return 1, otherwise 0.
+        // check if printing failed. If it did, return the utility-specific write failure code,
+        // otherwise 0 (success).
         if let clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion =
             self.error.kind()
         {
-            i32::from(self.print_failed.get())
+            if self.print_failed.get() {
+                self.write_failure_code
+            } else {
+                0
+            }
         } else {
             self.code
         }
@@ -767,9 +786,6 @@ impl Display for ClapErrorWrapper {
             // Try to display this error to stderr, but ignore if that fails too
             // since we're already in an error state.
             let _ = writeln!(std::io::stderr(), "{}: {print_fail}", crate::util_name());
-            // Mirror GNU behavior: when failing to print help or version, exit with error code.
-            // This avoids silent failures when stdout is full or closed.
-            set_exit_code(1);
         }
         // Always return Ok(()) to satisfy Display's contract and prevent panic
         Ok(())

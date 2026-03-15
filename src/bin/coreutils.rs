@@ -16,26 +16,32 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
 
-fn usage<T>(utils: &UtilityMap<T>, name: &str) {
-    println!("{name} {VERSION} (multi-call binary)\n");
-    println!("Usage: {name} [function [arguments...]]");
-    println!("       {name} --list");
-    println!();
+fn usage<T>(utils: &UtilityMap<T>, name: &str) -> bool {
+    let mut out = io::stdout();
+    let ok = writeln!(out, "{name} {VERSION} (multi-call binary)\n").is_ok()
+        && writeln!(out, "Usage: {name} [function [arguments...]]").is_ok()
+        && writeln!(out, "       {name} --list").is_ok()
+        && writeln!(out).is_ok();
     #[cfg(feature = "feat_common_core")]
-    {
-        println!("Functions:");
-        println!("      '<uutils>' [arguments...]");
-        println!();
-    }
-    println!("Options:");
-    println!("      --list    lists all defined functions, one per row\n");
-    println!("Currently defined functions:\n");
+    let ok = ok
+        && writeln!(out, "Functions:").is_ok()
+        && writeln!(out, "      '<uutils>' [arguments...]").is_ok()
+        && writeln!(out).is_ok();
     let display_list = utils.keys().copied().join(", ");
-    let width = cmp::min(textwrap::termwidth(), 100) - 4 * 2; // (opinion/heuristic) max 100 chars wide with 4 character side indentions
-    println!(
-        "{}",
-        textwrap::indent(&textwrap::fill(&display_list, width), "    ")
-    );
+    let width = cmp::min(textwrap::termwidth(), 100) - 4 * 2;
+    ok && writeln!(out, "Options:").is_ok()
+        && writeln!(
+            out,
+            "      --list    lists all defined functions, one per row\n"
+        )
+        .is_ok()
+        && writeln!(out, "Currently defined functions:\n").is_ok()
+        && writeln!(
+            out,
+            "{}",
+            textwrap::indent(&textwrap::fill(&display_list, width), "    ")
+        )
+        .is_ok()
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -47,7 +53,9 @@ fn main() {
 
     let binary = validation::binary_path(&mut args);
     let binary_as_util = validation::name(&binary).unwrap_or_else(|| {
-        usage(&utils, "<unknown binary name>");
+        if !usage(&utils, "<unknown binary name>") {
+            process::exit(1);
+        }
         process::exit(0);
     });
 
@@ -78,17 +86,28 @@ fn main() {
             "--list" => {
                 // If --help is also present, show usage instead of list
                 if args.any(|arg| arg == "--help" || arg == "-h") {
-                    usage(&utils, binary_as_util);
+                    if !usage(&utils, binary_as_util) {
+                        process::exit(1);
+                    }
                     process::exit(0);
                 }
                 let utils: Vec<_> = utils.keys().collect();
                 for util in utils {
-                    println!("{util}");
+                    if writeln!(io::stdout(), "{util}").is_err() {
+                        process::exit(1);
+                    }
                 }
                 process::exit(0);
             }
             "--version" | "-V" => {
-                println!("{binary_as_util} {VERSION} (multi-call binary)");
+                if writeln!(
+                    io::stdout(),
+                    "{binary_as_util} {VERSION} (multi-call binary)"
+                )
+                .is_err()
+                {
+                    process::exit(1);
+                }
                 process::exit(0);
             }
             // Not a special command: fallthrough to calling a util
@@ -120,13 +139,15 @@ fn main() {
                                         .into_iter()
                                         .chain(args),
                                 );
-                                io::stdout().flush().expect("could not flush stdout");
+                                let _ = io::stdout().flush();
                                 process::exit(code);
                             }
                             None => validation::not_found(&util_os),
                         }
                     }
-                    usage(&utils, binary_as_util);
+                    if !usage(&utils, binary_as_util) {
+                        process::exit(1);
+                    }
                     process::exit(0);
                 } else if util.starts_with('-') {
                     // Argument looks like an option but wasn't recognized
@@ -138,7 +159,9 @@ fn main() {
         }
     } else {
         // no arguments provided
-        usage(&utils, binary_as_util);
+        if !usage(&utils, binary_as_util) {
+            process::exit(1);
+        }
         process::exit(0);
     }
 }

@@ -95,11 +95,11 @@ else
     # Use MULTICALL=y for faster build
     make MULTICALL=y SKIP_UTILS=more
     for binary in $("${UU_BUILD_DIR}"/coreutils --list)
-        do [ -e "${UU_BUILD_DIR}/${binary}" ] || ln -vf "${UU_BUILD_DIR}/coreutils" "${UU_BUILD_DIR}/${binary}"
+        do [ "${UU_BUILD_DIR}/coreutils" -ef "${UU_BUILD_DIR}/${binary}" ] || ln -vf "${UU_BUILD_DIR}/coreutils" "${UU_BUILD_DIR}/${binary}"
     done
-    ln -vf "${UU_BUILD_DIR}"/deps/libstdbuf.* -t "${UU_BUILD_DIR}"
+    ln -vf "${UU_BUILD_DIR}"/deps/libstdbuf.* -t "${UU_BUILD_DIR}" 2>/dev/null || true
 fi
-[ -e "${UU_BUILD_DIR}/ginstall" ] || ln -vf "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests use ginstall
+[ "${UU_BUILD_DIR}/install" -ef "${UU_BUILD_DIR}/ginstall" ] || ln -vf "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests use ginstall
 ##
 
 cd "${path_GNU}" && echo "[ pwd:'${PWD}' ]"
