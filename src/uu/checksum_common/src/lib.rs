@@ -164,7 +164,7 @@ pub fn checksum_main(
     let binary_flag = matches.get_flag(options::BINARY);
     let tag = matches.get_flag(options::TAG);
 
-    // clap provides the default value -. So we unwrap() safety.
+    #[allow(clippy::unwrap_used, reason = "clap provides '-' by default")]
     let files = matches
         .get_many::<OsString>(options::FILE)
         .unwrap()
