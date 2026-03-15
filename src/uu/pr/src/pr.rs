@@ -858,6 +858,280 @@ fn read_to_end(path: &str) -> Result<Vec<u8>, std::io::Error> {
     }
 }
 
+fn should_use_streaming_pr(path: &str, options: &OutputOptions) -> bool {
+    let is_simple_layout = options.number.is_none()
+        && options.expand_tabs.is_none()
+        && options.column_mode_options.is_none()
+        && options.merge_files_print.is_none()
+        && !options.join_lines
+        && options.line_width.is_none()
+        && options.offset_spaces.is_empty();
+
+    if !is_simple_layout {
+        return false;
+    }
+
+    path != FILE_STDIN
+        && lines_to_read_for_page(options) > 0
+        && metadata(path).is_ok_and(|meta| !meta.file_type().is_file())
+}
+
+fn page_is_in_range(page: usize, options: &OutputOptions) -> bool {
+    options.start_page <= page && options.end_page.is_none_or(|end| page <= end)
+}
+
+fn write_stream_page_header(
+    out: &mut impl Write,
+    options: &OutputOptions,
+    page: usize,
+) -> Result<(), std::io::Error> {
+    let line_separator = options.line_separator.as_bytes();
+    for line in header_content(options, page) {
+        out.write_all(line.as_bytes())?;
+        out.write_all(line_separator)?;
+    }
+    Ok(())
+}
+
+fn write_stream_page_trailer(
+    out: &mut impl Write,
+    options: &OutputOptions,
+    lines_in_page: usize,
+) -> Result<(), std::io::Error> {
+    let content_line_separator = options.content_line_separator.as_bytes();
+    if !options.form_feed_used {
+        // `print_page`/`write_columns` emits blank-content separators until
+        // the page reaches `lines_needed_per_page`.
+        let lines_needed_per_page = lines_to_read_for_page(options);
+        for _ in lines_in_page..lines_needed_per_page {
+            out.write_all(content_line_separator)?;
+        }
+    }
+
+    let line_separator = options.line_separator.as_bytes();
+    let trailer = trailer_content(options);
+    for (index, line) in trailer.iter().enumerate() {
+        out.write_all(line.as_bytes())?;
+        if index + 1 != trailer.len() {
+            out.write_all(line_separator)?;
+        }
+    }
+    out.write_all(options.page_separator_char.as_bytes())?;
+    Ok(())
+}
+
+fn finish_stream_page(
+    out: &mut impl Write,
+    options: &OutputOptions,
+    page: &mut usize,
+    page_active: &mut bool,
+    page_header_written: &mut bool,
+    lines_in_page: &mut usize,
+) -> Result<bool, std::io::Error> {
+    if *page_active && page_is_in_range(*page, options) {
+        if !*page_header_written {
+            write_stream_page_header(out, options, *page)?;
+            *page_header_written = true;
+        }
+        write_stream_page_trailer(out, options, *lines_in_page)?;
+    }
+
+    *page += 1;
+    *page_active = false;
+    *page_header_written = false;
+    *lines_in_page = 0;
+
+    Ok(options.end_page.is_some_and(|end| *page > end))
+}
+
+fn validate_utf8_stream_chunk(utf8_tail: &mut Vec<u8>, chunk: &[u8]) -> Result<(), PrError> {
+    let mut combined;
+    let data = if utf8_tail.is_empty() {
+        chunk
+    } else {
+        combined = Vec::with_capacity(utf8_tail.len() + chunk.len());
+        combined.extend_from_slice(utf8_tail);
+        combined.extend_from_slice(chunk);
+        combined.as_slice()
+    };
+
+    match std::str::from_utf8(data) {
+        Ok(_) => {
+            utf8_tail.clear();
+            Ok(())
+        }
+        Err(err) => {
+            if err.error_len().is_some() {
+                return Err(err.into());
+            }
+
+            utf8_tail.clear();
+            utf8_tail.extend_from_slice(&data[err.valid_up_to()..]);
+            Ok(())
+        }
+    }
+}
+
+fn pr_stream_simple_with_reader<R: Read>(
+    mut reader: R,
+    options: &OutputOptions,
+) -> Result<i32, PrError> {
+    let content_line_separator = options.content_line_separator.as_bytes();
+    let lines_needed_per_page = lines_to_read_for_page(options);
+
+    let out = stdout();
+    let mut out = out.lock();
+
+    let mut page = 1;
+    let mut page_active = false;
+    let mut page_header_written = false;
+    let mut lines_in_page = 0usize;
+    let mut saw_non_delimiter_since_last = false;
+    let mut last_delimiter: Option<u8> = None;
+    let mut utf8_tail = Vec::new();
+
+    let mut buf = [0_u8; 8192];
+    'read_loop: loop {
+        let n = reader.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        validate_utf8_stream_chunk(&mut utf8_tail, &buf[..n])?;
+
+        for &byte in &buf[..n] {
+            if byte == NL {
+                let ignore_empty_line =
+                    !saw_non_delimiter_since_last && matches!(last_delimiter, Some(FF));
+
+                if !ignore_empty_line {
+                    if !page_active {
+                        page_active = true;
+                        page_header_written = false;
+                    }
+
+                    if page_is_in_range(page, options) {
+                        if !page_header_written {
+                            write_stream_page_header(&mut out, options, page)?;
+                            page_header_written = true;
+                        }
+                        out.write_all(content_line_separator)?;
+                    }
+                    lines_in_page += 1;
+                }
+
+                saw_non_delimiter_since_last = false;
+                last_delimiter = Some(NL);
+
+                if page_active && lines_in_page >= lines_needed_per_page {
+                    if finish_stream_page(
+                        &mut out,
+                        options,
+                        &mut page,
+                        &mut page_active,
+                        &mut page_header_written,
+                        &mut lines_in_page,
+                    )? {
+                        break 'read_loop;
+                    }
+                }
+                continue;
+            }
+
+            if byte == FF {
+                let ignore_empty_line =
+                    !saw_non_delimiter_since_last && matches!(last_delimiter, Some(NL));
+
+                if !page_active {
+                    page_active = true;
+                    page_header_written = false;
+                }
+
+                if page_is_in_range(page, options) && !page_header_written {
+                    write_stream_page_header(&mut out, options, page)?;
+                    page_header_written = true;
+                }
+
+                if !ignore_empty_line {
+                    if page_is_in_range(page, options) {
+                        out.write_all(content_line_separator)?;
+                    }
+                    lines_in_page += 1;
+                }
+
+                saw_non_delimiter_since_last = false;
+                last_delimiter = Some(FF);
+
+                if finish_stream_page(
+                    &mut out,
+                    options,
+                    &mut page,
+                    &mut page_active,
+                    &mut page_header_written,
+                    &mut lines_in_page,
+                )? {
+                    break 'read_loop;
+                }
+                continue;
+            }
+
+            if !page_active {
+                page_active = true;
+                page_header_written = false;
+            }
+
+            if page_is_in_range(page, options) {
+                if !page_header_written {
+                    write_stream_page_header(&mut out, options, page)?;
+                    page_header_written = true;
+                }
+                out.write_all(&[byte])?;
+            }
+
+            saw_non_delimiter_since_last = true;
+            last_delimiter = None;
+        }
+    }
+
+    if !utf8_tail.is_empty() {
+        let err = std::str::from_utf8(&utf8_tail).unwrap_err();
+        return Err(err.into());
+    }
+
+    if saw_non_delimiter_since_last {
+        if !page_active {
+            page_active = true;
+            page_header_written = false;
+        }
+
+        if page_is_in_range(page, options) {
+            if !page_header_written {
+                write_stream_page_header(&mut out, options, page)?;
+                page_header_written = true;
+            }
+            out.write_all(content_line_separator)?;
+        }
+        lines_in_page += 1;
+    }
+
+    if page_active {
+        let _ = finish_stream_page(
+            &mut out,
+            options,
+            &mut page,
+            &mut page_active,
+            &mut page_header_written,
+            &mut lines_in_page,
+        )?;
+    }
+
+    Ok(0)
+}
+
+fn pr_stream_simple(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
+    let file = std::fs::File::open(path)?;
+    pr_stream_simple_with_reader(file, options)
+}
+
 fn apply_expand_tab(chunk: &mut String, byte: u8, expand_options: &ExpandTabsOptions) {
     if byte == expand_options.input_char as u8 {
         // If the byte encountered is the input char we use width to calculate
@@ -880,6 +1154,10 @@ fn apply_expand_tab(chunk: &mut String, byte: u8, expand_options: &ExpandTabsOpt
 }
 
 fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
+    if should_use_streaming_pr(path, options) {
+        return pr_stream_simple(path, options);
+    }
+
     // Read the entire contents of the file into a buffer.
     //
     // TODO Read incrementally.
