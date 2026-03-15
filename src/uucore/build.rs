@@ -502,7 +502,7 @@ mod tests {
             collected.push(locale.to_string());
             Ok(())
         })
-        .unwrap();
+        .expect("locale processing should succeed");
 
         assert_eq!(collected, vec!["en-US", "fr-FR"]);
     }
@@ -516,7 +516,7 @@ mod tests {
             collected.push(locale.to_string());
             Ok(())
         })
-        .unwrap();
+        .expect("locale processing should succeed");
 
         assert_eq!(collected, vec!["en-US"]);
     }

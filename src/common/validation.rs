@@ -78,7 +78,7 @@ fn get_canonical_util_name(util_name: &str) -> &str {
 pub fn binary_path(args: &mut impl Iterator<Item = OsString>) -> PathBuf {
     match args.next() {
         Some(ref s) if !s.is_empty() => PathBuf::from(s),
-        _ => std::env::current_exe().unwrap(),
+        _ => std::env::current_exe().expect("current executable path should be accessible"),
     }
 }
 

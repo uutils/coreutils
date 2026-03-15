@@ -78,12 +78,12 @@ fn gen_manpage<T: Args>(
         )
         .get_matches_from(std::iter::once(OsString::from("manpage")).chain(args));
 
-    let utility = matches.get_one::<String>("utility").unwrap();
+    let utility = matches.get_one::<String>("utility").expect("utility argument should be present");
     let command = if utility == "coreutils" {
         gen_coreutils_app(util_map)
     } else {
         validation::setup_localization_or_exit(utility);
-        let mut cmd = util_map.get(utility).unwrap().1();
+        let mut cmd = util_map.get(utility).expect("utility should exist in utility map").1();
         cmd.set_bin_name(utility.clone());
         let mut cmd = cmd.display_name(utility);
         if let Some(zip) = tldr {
@@ -97,7 +97,7 @@ fn gen_manpage<T: Args>(
     let man = Man::new(command);
     man.render(&mut io::stdout())
         .expect("Man page generation failed");
-    io::stdout().flush().unwrap();
+    io::stdout().flush().expect("stdout flush should succeed");
     process::exit(0);
 }
 
@@ -119,19 +119,19 @@ fn gen_completions<T: Args>(args: impl Iterator<Item = OsString>, util_map: &Uti
         )
         .get_matches_from(std::iter::once(OsString::from("completion")).chain(args));
 
-    let utility = matches.get_one::<String>("utility").unwrap();
-    let shell = *matches.get_one::<Shell>("shell").unwrap();
+    let utility = matches.get_one::<String>("utility").expect("utility argument should be present");
+    let shell = *matches.get_one::<Shell>("shell").expect("shell argument should be present");
 
     let mut command = if utility == "coreutils" {
         gen_coreutils_app(util_map)
     } else {
         validation::setup_localization_or_exit(utility);
-        util_map.get(utility).unwrap().1()
+        util_map.get(utility).expect("utility should exist in utility map").1()
     };
     let bin_name = std::env::var("PROG_PREFIX").unwrap_or_default() + utility;
 
     clap_complete::generate(shell, &mut command, bin_name, &mut io::stdout());
-    io::stdout().flush().unwrap();
+    io::stdout().flush().expect("stdout flush should succeed");
     process::exit(0);
 }
 
