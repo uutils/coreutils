@@ -68,6 +68,7 @@ enum LsError {
     IOError(#[from] std::io::Error),
 
     #[error("{}", match .1.kind() {
+		ErrorKind::NotADirectory => translate!("ls-error-not-directory", "path" => .0.quote()),
         ErrorKind::NotFound => translate!("ls-error-cannot-access-no-such-file", "path" => .0.quote()),
         ErrorKind::PermissionDenied => match .1.raw_os_error().unwrap_or(1) {
             1 => translate!("ls-error-cannot-access-operation-not-permitted", "path" => .0.quote()),
