@@ -290,7 +290,7 @@ fn test_foreground_signal0_kill_after() {
 #[test]
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
 fn test_timeout_sigrt() {
-    if !uucore::os::is_wsl() {
+    if !uucore::os::is_wsl() && uucore::signals::realtime_signal_bounds().is_some() {
         new_ucmd!()
             .args(&["-s", "SIGRTMIN", "0.1", "sleep", "2"])
             .succeeds();

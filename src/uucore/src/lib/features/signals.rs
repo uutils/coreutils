@@ -410,9 +410,7 @@ pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
 /// Parses signals of the form RTMIN(+[0-9]\+)?|RTMAX(-[0-9]\+)?
 fn try_parse_sigrt(signal_name: &str) -> Option<usize> {
-    if crate::os::is_wsl() {
-        return None;
-    }
+    realtime_signal_bounds()?;
     if let Some(rest) = signal_name.strip_prefix("RTMIN") {
         if rest.is_empty() {
             Some(libc::SIGRTMIN() as usize)
@@ -459,7 +457,7 @@ pub fn signal_name_by_value(signal_value: usize) -> Option<&'static str> {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn realtime_signal_bounds() -> Option<(usize, usize)> {
+pub fn realtime_signal_bounds() -> Option<(usize, usize)> {
     let rtmin = libc::SIGRTMIN();
     let rtmax = libc::SIGRTMAX();
 
@@ -467,7 +465,7 @@ fn realtime_signal_bounds() -> Option<(usize, usize)> {
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
-fn realtime_signal_bounds() -> Option<(usize, usize)> {
+pub fn realtime_signal_bounds() -> Option<(usize, usize)> {
     None
 }
 
