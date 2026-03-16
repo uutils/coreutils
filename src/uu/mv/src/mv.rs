@@ -105,7 +105,6 @@ pub struct Options {
     /// `--debug`
     pub debug: bool,
 
-
     /// `-Z, --context`
     pub context: Option<String>,
 }
