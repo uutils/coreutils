@@ -2080,6 +2080,11 @@ impl PathData {
     fn display_name(&self) -> &OsStr {
         &self.display_name
     }
+
+    #[inline]
+    fn display_name_lower_case(&self) -> String {
+        self.display_name.to_string_lossy().to_lowercase()
+    }
 }
 
 impl Colorable for PathData {
@@ -2327,6 +2332,9 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
 }
 
 fn sort_entries(entries: &mut [PathData], config: &Config) {
+    if entries.len() < 2 {
+        return;
+    }
     match config.sort {
         Sort::Time => entries.sort_by_key(|k| {
             Reverse(
@@ -2339,7 +2347,10 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
             entries.sort_by_key(|k| Reverse(k.metadata().map_or(0, Metadata::len)));
         }
         // The default sort in GNU ls is case insensitive
-        Sort::Name => entries.sort_by(|a, b| a.display_name().cmp(b.display_name())),
+        Sort::Name => entries.sort_by(|a, b| {
+            a.display_name_lower_case()
+                .cmp(&b.display_name_lower_case())
+        }),
         Sort::Version => entries.sort_by(|a, b| {
             version_cmp(
                 os_str_as_bytes_lossy(a.path().as_os_str()).as_ref(),
