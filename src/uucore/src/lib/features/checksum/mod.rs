@@ -250,14 +250,15 @@ pub enum SizedAlgoKind {
     Sha3(ShaLength),
     // Note: we store Blake2b's length as BYTES.
     Blake2b(Option<usize>),
+    // Shake* length are stored in bits.
     Shake128(Option<usize>),
     Shake256(Option<usize>),
 }
 
 impl SizedAlgoKind {
-    pub fn from_unsized(kind: AlgoKind, byte_length: Option<usize>) -> UResult<Self> {
+    pub fn from_unsized(kind: AlgoKind, output_length: Option<usize>) -> UResult<Self> {
         use AlgoKind as ak;
-        match (kind, byte_length) {
+        match (kind, output_length) {
             (
                 ak::Sysv
                 | ak::Bsd
@@ -305,19 +306,26 @@ impl SizedAlgoKind {
     }
 
     pub fn to_tag(self) -> String {
-        use SizedAlgoKind::*;
         match self {
-            Md5 => "MD5".into(),
-            Sm3 => "SM3".into(),
-            Sha1 => "SHA1".into(),
-            Blake3 => "BLAKE3".into(),
-            Sha2(len) => format!("SHA{}", len.as_usize()),
-            Sha3(len) => format!("SHA3-{}", len.as_usize()),
-            Blake2b(Some(byte_len)) => format!("BLAKE2b-{}", byte_len * 8),
-            Blake2b(None) => "BLAKE2b".into(),
-            Shake128(_) => "SHAKE128".into(),
-            Shake256(_) => "SHAKE256".into(),
-            Sysv | Bsd | Crc | Crc32b => panic!("Should not be used for tagging"),
+            Self::Md5 => "MD5".into(),
+            Self::Sm3 => "SM3".into(),
+            Self::Sha1 => "SHA1".into(),
+            Self::Blake3 => "BLAKE3".into(),
+            Self::Sha2(len) => format!("SHA{}", len.as_usize()),
+            Self::Sha3(len) => format!("SHA3-{}", len.as_usize()),
+            Self::Blake2b(Some(byte_len)) => format!("BLAKE2b-{}", byte_len * 8),
+            Self::Blake2b(None) => "BLAKE2b".into(),
+            Self::Shake128(opt_bit_len) => format!(
+                "SHAKE128-{}",
+                opt_bit_len.unwrap_or(Shake128::DEFAULT_BIT_SIZE)
+            ),
+            Self::Shake256(opt_bit_len) => format!(
+                "SHAKE256-{}",
+                opt_bit_len.unwrap_or(Shake256::DEFAULT_BIT_SIZE)
+            ),
+            Self::Sysv | Self::Bsd | Self::Crc | Self::Crc32b => {
+                panic!("Should not be used for tagging")
+            }
         }
     }
 
