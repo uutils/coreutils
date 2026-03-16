@@ -38,9 +38,6 @@ fn usage<T>(utils: &UtilityMap<T>, name: &str) {
     );
 }
 
-/// all defined coreutils options
-const COREUTILS_OPTIONS: [&str; 5] = ["--list", "-V", "--version", "-h", "--help"];
-
 /// Entry into Coreutils
 ///
 /// # Arguments
@@ -66,94 +63,95 @@ fn main() {
     let utils = util_map();
     let mut args = uucore::args_os();
 
-    // get binary which is always the first argument and remove it from args
     let binary = validation::binary_path(&mut args);
     let binary_as_util = validation::name(&binary).unwrap_or_else(|| {
-        // non UTF-8 name
         usage(&utils, "<unknown binary name>");
         process::exit(0);
     });
 
-    // get the called util
-    let util_os = if binary_as_util.ends_with("utils") || binary_as_util.ends_with("box") {
-        // todo: Remove support of "*box" from binary, but required for busy_box tests
-        // coreutils
+    // binary name ends with util name?
+    let is_coreutils = binary_as_util.ends_with("utils");
+    let matched_util = utils
+        .keys()
+        .filter(|&&u| binary_as_util.ends_with(u) && !is_coreutils)
+        .max_by_key(|u| u.len()); //Prefer stty more than tty. *utils is not ls
+
+    let util_name = if let Some(&util) = matched_util {
+        Some(OsString::from(util))
+    } else if is_coreutils || binary_as_util.ends_with("box") {
+        // todo: Remove support of "*box" from binary
         uucore::set_utility_is_second_arg();
-        if let Some(u_name) = args.next() {
-            u_name
-        } else {
-            // no arguments provided
-            usage(&utils, binary_as_util);
-            process::exit(0);
-        }
+        args.next()
     } else {
-        // Is the binary name a prefixed util name?
-        // Prefer stty more than tty. *utils is not ls
-        let name = if let Some(matched_util) = utils
-            .keys()
-            .filter(|&&util_name| binary_as_util.ends_with(util_name))
-            .max_by_key(|u| u.len())
-        {
-            *matched_util
-        } else {
-            binary_as_util
+        validation::not_found(&OsString::from(binary_as_util));
+    };
+
+    // 0th argument equals util name?
+    if let Some(util_os) = util_name {
+        let Some(util) = util_os.to_str() else {
+            validation::not_found(&util_os)
         };
 
-        OsString::from(name)
-    };
-
-    let Some(util) = util_os.to_str() else {
-        // non-UTF-8 name
-        validation::not_found(&util_os)
-    };
-
-    if let Some(&(uumain, _)) = utils.get(util) {
-        // TODO: plug the deactivation of the translation
-        // and load the English strings directly at compilation time in the
-        // binary to avoid the load of the flt
-        // Could be something like:
-        // #[cfg(not(feature = "only_english"))]
-        validation::setup_localization_or_exit(util);
-        process::exit(uumain(vec![util_os].into_iter().chain(args)));
-    } else {
-        let (option, help_util) = find_dominant_option(&util_os, &mut args);
-        match option {
-            SelectedOption::Help => match help_util {
-                // see if they want help on a specific util and if it is valid
-                Some(u_os) => match utils.get(&u_os.to_string_lossy()) {
-                    Some(&(uumain, _)) => {
-                        let code = uumain(
-                            vec![u_os, OsString::from("--help")]
-                                .into_iter()
-                                // Function requires a chain like in the Some case, but
-                                // the args are discarded as clap returns help immediately.
-                                .chain(args),
-                        );
-                        io::stdout().flush().expect("could not flush stdout");
-                        process::exit(code);
-                    }
-                    None => validation::not_found(&u_os),
-                },
-                // show coreutils help
-                None => usage(&utils, binary_as_util),
-            },
-            SelectedOption::Version => {
-                println!("{binary_as_util} {VERSION} (multi-call binary)");
+        #[allow(clippy::single_match_else)]
+        match utils.get(util) {
+            Some(&(uumain, _)) => {
+                // TODO: plug the deactivation of the translation
+                // and load the English strings directly at compilation time in the
+                // binary to avoid the load of the flt
+                // Could be something like:
+                // #[cfg(not(feature = "only_english"))]
+                validation::setup_localization_or_exit(util);
+                process::exit(uumain(vec![util_os].into_iter().chain(args)));
             }
-            SelectedOption::List => {
-                let utils: Vec<_> = utils.keys().collect();
-                for util in utils {
-                    println!("{util}");
+            None => {
+                let (option, help_util) = find_dominant_option(&util_os, &mut args);
+                match option {
+                    SelectedOption::Help => match help_util {
+                        // see if they want help on a specific util and if it is valid
+                        Some(u_os) => match utils.get(&u_os.to_string_lossy()) {
+                            Some(&(uumain, _)) => {
+                                let code = uumain(
+                                    vec![u_os, OsString::from("--help")]
+                                        .into_iter()
+                                        // Function requires a chain like in the Some case, but
+                                        // the args are discarded as clap returns help immediately.
+                                        .chain(args),
+                                );
+                                io::stdout().flush().expect("could not flush stdout");
+                                process::exit(code);
+                            }
+                            None => validation::not_found(&u_os),
+                        },
+                        // show coreutils help
+                        None => usage(&utils, binary_as_util),
+                    },
+                    SelectedOption::Version => {
+                        println!("{binary_as_util} {VERSION} (multi-call binary)");
+                    }
+                    SelectedOption::List => {
+                        let utils: Vec<_> = utils.keys().collect();
+                        for util in utils {
+                            println!("{util}");
+                        }
+                    }
+                    SelectedOption::Unrecognized(arg) => {
+                        // Argument looks like an option but wasn't recognized
+                        validation::unrecognized_option(binary_as_util, &arg);
+                    }
                 }
             }
-            SelectedOption::Unrecognized(arg) => {
-                // Argument looks like an option but wasn't recognized
-                validation::unrecognized_option(binary_as_util, &arg);
-            }
         }
-        // process::exit(0);
+    } else {
+        // no arguments provided
+        usage(&utils, binary_as_util);
+        process::exit(0);
     }
 }
+
+/// All defined coreutils options.
+// Important: when changing then adapt also [identify_option_from_partial_text]
+// as it works with the indexes of this array.
+const COREUTILS_OPTIONS: [&str; 5] = ["--help", "--list", "--version", "-h", "-V"];
 
 /// The dominant selected option.
 #[derive(Debug, Clone, PartialEq)]
@@ -229,8 +227,10 @@ fn identify_option_from_partial_text(arg: &OsString) -> SelectedOption {
     match possible_opts.len() {
         // exactly one hit
         1 => match &possible_opts[0] {
-            0 => SelectedOption::List,
-            1 | 2 => SelectedOption::Version,
+            // number represents index of [COREUTILS_OPTIONS]
+            0 | 3 => SelectedOption::Help,
+            1 => SelectedOption::List,
+            2 | 4 => SelectedOption::Version,
             _ => SelectedOption::Help,
         },
         // None or more hits. The latter can not happen with the allowed options.
