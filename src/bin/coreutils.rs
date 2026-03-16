@@ -160,7 +160,7 @@ const COREUTILS_OPTIONS: [&str; 5] = ["--help", "--list", "--version", "-h", "-V
 /// Unrecognized will return immediately.
 ///
 /// # Returns
-/// (SelectedOption, Util for help request, if any)
+/// (String with option, e.g. "--list", Util for help request, if any)
 fn find_dominant_option(
     first_arg: &OsString,
     args: &mut impl Iterator<Item = OsString>,
