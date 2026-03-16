@@ -226,8 +226,6 @@ feat_wasm = [
 # "feat_os_macos" == set of utilities which can be built/run on the MacOS platform
 feat_os_macos = [
   "feat_os_unix", ## == a modern/usual *nix platform
-  #
-  "feat_require_unix_hostid",
 ]
 # "feat_os_unix" == set of utilities which can be built/run on modern/usual *nix platforms.
 feat_os_unix = [
