@@ -18,6 +18,25 @@ use uutests::util::TerminalSimulation;
 use uutests::util::TestScenario;
 use uutests::{at_and_ucmd, util_name};
 
+
+
+#[cfg(unix)]
+#[test]
+fn test_mv_no_prompt_when_stdin_not_terminal() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("target", "original");
+    at.set_mode("target", 0o555);
+    at.write("source", "replacement");
+    
+    ucmd.arg("source")
+        .arg("target")
+        .pipe_in("")
+        .succeeds();
+    
+    assert_eq!(at.read("target"), "replacement");
+}
+
+
 #[test]
 fn test_mv_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
