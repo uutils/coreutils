@@ -39,7 +39,7 @@ fn usage<T>(utils: &UtilityMap<T>, name: &str) {
 }
 
 /// all defined coreutils options
-const COREUTILS_OPTIONS: [&'static str; 5] = ["--list", "-V", "--version", "-h", "--help"];
+const COREUTILS_OPTIONS: [&str; 5] = ["--list", "-V", "--version", "-h", "--help"];
 
 /// Entry into Coreutils
 ///
@@ -49,7 +49,7 @@ const COREUTILS_OPTIONS: [&'static str; 5] = ["--list", "-V", "--version", "-h",
 ///   The util name will be checked against the list of enabled utils, where
 ///   * the name exactly matches the name of an applet/util or
 ///   * the name matches <PREFIX><UTIL_NAME> pattern, e.g.
-///   'my_own_directory_service_ls' as long as the last letters match the utility.
+///     'my_own_directory_service_ls' as long as the last letters match the utility.
 /// * coreutils arg: --list, --version, -V, --help, -h (or shortened long versions): \
 ///   Output information about coreutils itself. \
 ///   Multiple of these arguments, output limited to one, with help > version > list.
@@ -75,16 +75,16 @@ fn main() {
     });
 
     // get the called util
-    let util_os = if binary_as_util.ends_with("utils") {
+    let util_os = if binary_as_util.ends_with("utils") || binary_as_util.ends_with("box") {
+        // todo: Remove support of "*box" from binary, but required for busy_box tests
         // coreutils
         uucore::set_utility_is_second_arg();
-        match args.next() {
-            Some(u) => u,
-            None => {
-                // no arguments provided
-                usage(&utils, binary_as_util);
-                process::exit(0);
-            }
+        if let Some(u_name) = args.next() {
+            u_name
+        } else {
+            // no arguments provided
+            usage(&utils, binary_as_util);
+            process::exit(0);
         }
     } else {
         // Is the binary name a prefixed util name?
@@ -107,54 +107,51 @@ fn main() {
         validation::not_found(&util_os)
     };
 
-    match utils.get(util) {
-        Some(&(uumain, _)) => {
-            // TODO: plug the deactivation of the translation
-            // and load the English strings directly at compilation time in the
-            // binary to avoid the load of the flt
-            // Could be something like:
-            // #[cfg(not(feature = "only_english"))]
-            validation::setup_localization_or_exit(util);
-            process::exit(uumain(vec![util_os].into_iter().chain(args)));
-        }
-        None => {
-            let (option, help_util) = find_dominant_option(&util_os, &mut args);
-            match option {
-                SelectedOption::Help => match help_util {
-                    // see if they want help on a specific util and if it is valid
-                    Some(u_os) => match utils.get(&u_os.to_string_lossy()) {
-                        Some(&(uumain, _)) => {
-                            let code = uumain(
-                                vec![u_os, OsString::from("--help")]
-                                    .into_iter()
-                                    // Function requires a chain like in the Some case, but
-                                    // the args are discarded as clap returns help immediately.
-                                    .chain(args),
-                            );
-                            io::stdout().flush().expect("could not flush stdout");
-                            process::exit(code);
-                        }
-                        None => validation::not_found(&u_os),
-                    },
-                    // show coreutils help
-                    None => usage(&utils, binary_as_util),
-                },
-                SelectedOption::Version => {
-                    println!("{binary_as_util} {VERSION} (multi-call binary)");
-                }
-                SelectedOption::List => {
-                    let utils: Vec<_> = utils.keys().collect();
-                    for util in utils {
-                        println!("{util}");
+    if let Some(&(uumain, _)) = utils.get(util) {
+        // TODO: plug the deactivation of the translation
+        // and load the English strings directly at compilation time in the
+        // binary to avoid the load of the flt
+        // Could be something like:
+        // #[cfg(not(feature = "only_english"))]
+        validation::setup_localization_or_exit(util);
+        process::exit(uumain(vec![util_os].into_iter().chain(args)));
+    } else {
+        let (option, help_util) = find_dominant_option(&util_os, &mut args);
+        match option {
+            SelectedOption::Help => match help_util {
+                // see if they want help on a specific util and if it is valid
+                Some(u_os) => match utils.get(&u_os.to_string_lossy()) {
+                    Some(&(uumain, _)) => {
+                        let code = uumain(
+                            vec![u_os, OsString::from("--help")]
+                                .into_iter()
+                                // Function requires a chain like in the Some case, but
+                                // the args are discarded as clap returns help immediately.
+                                .chain(args),
+                        );
+                        io::stdout().flush().expect("could not flush stdout");
+                        process::exit(code);
                     }
-                }
-                SelectedOption::Unrecognized(arg) => {
-                    // Argument looks like an option but wasn't recognized
-                    validation::unrecognized_option(binary_as_util, &arg);
+                    None => validation::not_found(&u_os),
+                },
+                // show coreutils help
+                None => usage(&utils, binary_as_util),
+            },
+            SelectedOption::Version => {
+                println!("{binary_as_util} {VERSION} (multi-call binary)");
+            }
+            SelectedOption::List => {
+                let utils: Vec<_> = utils.keys().collect();
+                for util in utils {
+                    println!("{util}");
                 }
             }
-            // process::exit(0);
+            SelectedOption::Unrecognized(arg) => {
+                // Argument looks like an option but wasn't recognized
+                validation::unrecognized_option(binary_as_util, &arg);
+            }
         }
+        // process::exit(0);
     }
 }
 
@@ -186,7 +183,7 @@ fn find_dominant_option(
             return (sel, None);
         }
         _ => {}
-    };
+    }
     // check remaining options, allows multiple
     while let Some(arg) = args.next() {
         let so = identify_option_from_partial_text(&arg);
@@ -200,7 +197,7 @@ fn find_dominant_option(
             SelectedOption::Version => sel = SelectedOption::Version,
             SelectedOption::List => {
                 if sel != SelectedOption::Version {
-                    sel = SelectedOption::List
+                    sel = SelectedOption::List;
                 }
             }
             // unrecognized is not allowed
@@ -237,6 +234,6 @@ fn identify_option_from_partial_text(arg: &OsString) -> SelectedOption {
             _ => SelectedOption::Help,
         },
         // None or more hits. The latter can not happen with the allowed options.
-        _ => SelectedOption::Unrecognized(arg.to_os_string()),
+        _ => SelectedOption::Unrecognized(arg.clone()),
     }
 }
