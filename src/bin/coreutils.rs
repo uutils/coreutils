@@ -105,8 +105,8 @@ fn main() {
             }
             None => {
                 let (option, help_util) = find_dominant_option(&util_os, &mut args);
-                match option {
-                    SelectedOption::Help => match help_util {
+                match option.as_str() {
+                    "--help" => match help_util {
                         // see if they want help on a specific util and if it is valid
                         Some(u_os) => match utils.get(&u_os.to_string_lossy()) {
                             Some(&(uumain, _)) => {
@@ -125,18 +125,18 @@ fn main() {
                         // show coreutils help
                         None => usage(&utils, binary_as_util),
                     },
-                    SelectedOption::Version => {
+                    "--version" => {
                         println!("{binary_as_util} {VERSION} (multi-call binary)");
                     }
-                    SelectedOption::List => {
+                    "--list" => {
                         let utils: Vec<_> = utils.keys().collect();
                         for util in utils {
                             println!("{util}");
                         }
                     }
-                    SelectedOption::Unrecognized(arg) => {
+                    _ => {
                         // Argument looks like an option but wasn't recognized
-                        validation::unrecognized_option(binary_as_util, &arg);
+                        validation::unrecognized_option(binary_as_util, &OsString::from(option));
                     }
                 }
             }
@@ -153,15 +153,6 @@ fn main() {
 // as it works with the indexes of this array.
 const COREUTILS_OPTIONS: [&str; 5] = ["--help", "--list", "--version", "-h", "-V"];
 
-/// The dominant selected option.
-#[derive(Debug, Clone, PartialEq)]
-enum SelectedOption {
-    Help,
-    Version,
-    List,
-    Unrecognized(OsString),
-}
-
 /// Coreutils only accepts one single option,
 /// if multiple are given, use the most dominant one.
 ///
@@ -173,33 +164,33 @@ enum SelectedOption {
 fn find_dominant_option(
     first_arg: &OsString,
     args: &mut impl Iterator<Item = OsString>,
-) -> (SelectedOption, Option<OsString>) {
+) -> (String, Option<OsString>) {
     let mut sel = identify_option_from_partial_text(first_arg);
-    match sel {
-        SelectedOption::Help => return (SelectedOption::Help, args.next()),
-        SelectedOption::Unrecognized(_) => {
+    match sel.as_str() {
+        "--help" => return (sel, args.next()),
+        "--list" | "--version" => {} // fall through
+        _ => {
             return (sel, None);
         }
-        _ => {}
     }
     // check remaining options, allows multiple
     while let Some(arg) = args.next() {
         let so = identify_option_from_partial_text(&arg);
-        match so {
+        match so.as_str() {
             // most dominant, return directly
-            SelectedOption::Help => {
+            "--help" => {
                 // if help is wanted, check if a tool was named
                 return (so, args.next());
             }
             // best after help, can be set directly
-            SelectedOption::Version => sel = SelectedOption::Version,
-            SelectedOption::List => {
-                if sel != SelectedOption::Version {
-                    sel = SelectedOption::List;
+            "--version" => sel = so,
+            "--list" => {
+                if sel != "--version" {
+                    sel = so;
                 }
             }
             // unrecognized is not allowed
-            SelectedOption::Unrecognized(_) => {
+            _ => {
                 return (so, None);
             }
         }
@@ -208,14 +199,12 @@ fn find_dominant_option(
     (sel, None)
 }
 
-// Will identify one, SelectedOption::None cannot be returned.
-fn identify_option_from_partial_text(arg: &OsString) -> SelectedOption {
+// Will identify the matching option and return it.
+fn identify_option_from_partial_text(arg: &OsString) -> String {
     let mut option = &arg.to_string_lossy()[..];
     if let Some(p) = option.find('=') {
         option = &option[0..p];
     }
-    // // don't care about hyphens, -h and --h(elp) are identical
-    // let option = option.replace("-", "");
     let l = option.len();
     let possible_opts: Vec<usize> = COREUTILS_OPTIONS
         .iter()
@@ -224,16 +213,18 @@ fn identify_option_from_partial_text(arg: &OsString) -> SelectedOption {
         .map(|(id, _)| id)
         .collect();
 
-    match possible_opts.len() {
+    let sel_opt = match possible_opts.len() {
         // exactly one hit
         1 => match &possible_opts[0] {
             // number represents index of [COREUTILS_OPTIONS]
-            0 | 3 => SelectedOption::Help,
-            1 => SelectedOption::List,
-            2 | 4 => SelectedOption::Version,
-            _ => SelectedOption::Help,
+            0 | 3 => "--help",
+            1 => "--list",
+            2 | 4 => "--version",
+            _ => "--help",
         },
         // None or more hits. The latter can not happen with the allowed options.
-        _ => SelectedOption::Unrecognized(arg.clone()),
-    }
+        _ => &arg.to_string_lossy(),
+    };
+
+    sel_opt.to_string()
 }
