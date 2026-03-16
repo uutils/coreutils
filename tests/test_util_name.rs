@@ -192,7 +192,7 @@ fn util_version() {
         println!("Skipping test: Binary not found at {:?}", scenario.bin_path);
         return;
     }
-    for arg in ["-V", "--version"] {
+    for arg in ["-V", "--version", "--ver"] {
         let child = Command::new(&scenario.bin_path)
             .arg(arg)
             .stdin(Stdio::piped())
@@ -207,6 +207,56 @@ fn util_version() {
         let ver = env::var("CARGO_PKG_VERSION").unwrap();
         assert_eq!(format!("coreutils {ver} (multi-call binary)\n"), output_str);
     }
+}
+
+#[test]
+fn util_help() {
+    use std::process::{Command, Stdio};
+
+    let scenario = TestScenario::new("--version");
+    if !scenario.bin_path.exists() {
+        println!("Skipping test: Binary not found at {:?}", scenario.bin_path);
+        return;
+    }
+    for arg in ["-h", "--help", "--he"] {
+        let child = Command::new(&scenario.bin_path)
+            .arg(arg)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let output = child.wait_with_output().unwrap();
+        assert_eq!(output.status.code(), Some(0));
+        assert_eq!(output.stderr, b"");
+        let output_str = String::from_utf8(output.stdout).unwrap();
+        assert!(output_str.contains("Usage: coreutils"));
+        assert!(output_str.contains("lists all defined functions"));
+    }
+}
+
+#[test]
+fn util_arg_priority() {
+    use std::process::{Command, Stdio};
+
+    let scenario = TestScenario::new("--version");
+    if !scenario.bin_path.exists() {
+        println!("Skipping test: Binary not found at {:?}", scenario.bin_path);
+        return;
+    }
+    let child = Command::new(&scenario.bin_path)
+        .arg("--list")
+        .arg("--version")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stderr, b"");
+    let output_str = String::from_utf8(output.stdout).unwrap();
+    let ver = env::var("CARGO_PKG_VERSION").unwrap();
+    assert_eq!(format!("coreutils {ver} (multi-call binary)\n"), output_str);
 }
 
 #[test]
