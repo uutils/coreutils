@@ -74,20 +74,6 @@ ifneq (,$(findstring windows,$(OS)))
 endif
 LN ?= ln -sf
 
-# Possible programs
-PROGS := \
-	$(shell sed -n '/feat_Tier1 = \[/,/\]/p' Cargo.toml | sed '1d;2d' |tr -d '],"\n')\
-	$(shell sed -n '/feat_common_core = \[/,/\]/p' Cargo.toml | sed '1d' |tr -d '],"\n')
-
-UNIX_PROGS := \
-	$(shell sed -n '/feat_require_unix_core = \[/,/\]/p' Cargo.toml | sed '1d' |tr -d '],"\n') \
-	hostid \
-	pinky \
-	stdbuf \
-	uptime \
-	users \
-	who
-
 SELINUX_PROGS := \
 	chcon \
 	runcon
@@ -95,8 +81,12 @@ SELINUX_PROGS := \
 $(info Detected OS = $(OS))
 
 ifeq (,$(findstring windows,$(OS)))
-	PROGS += $(UNIX_PROGS)
+	FEATURE_EXTRACT_UTILS := feat_os_unix
+else
+	FEATURE_EXTRACT_UTILS := feat_Tier1
 endif
+PROGS := $(shell cargo tree --depth 1 --features $(FEATURE_EXTRACT_UTILS) --format "{p}" --prefix none | sed -E -n 's/^uu_([^ ]+).*/\1/p')
+
 ifeq ($(SELINUX_ENABLED),1)
 	PROGS += $(SELINUX_PROGS)
 endif
@@ -111,7 +101,7 @@ endif
 # Programs with usable tests
 
 TESTS       := \
-	$(sort $(filter $(UTILS),$(PROGS) $(UNIX_PROGS) $(SELINUX_PROGS)))
+	$(sort $(filter $(UTILS),$(PROGS) $(SELINUX_PROGS)))
 
 TEST_NO_FAIL_FAST :=
 TEST_SPEC_FEATURE :=
