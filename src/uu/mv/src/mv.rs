@@ -161,7 +161,6 @@ static OPT_CONTEXT: &str = "context";
 static OPT_SELINUX: &str = "selinux";
 static PRESUME_INPUT_TTY: &str = "-presume-input-tty";
 
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
@@ -232,7 +231,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             Some(true)
         } else {
             None
-        }
+        },
     };
 
     mv(&files[..], &opts)
@@ -447,12 +446,12 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
     } else if target.exists() && source_is_dir {
         match opts.overwrite {
             OverwriteMode::NoClobber => return Ok(()),
-            OverwriteMode::Interactive => prompt_overwrite(target, None,opts)?,
+            OverwriteMode::Interactive => prompt_overwrite(target, None, opts)?,
             OverwriteMode::Force => {}
             OverwriteMode::Default => {
                 let (writable, mode) = is_writable(target);
                 if !writable && stdin().is_terminal() {
-                    prompt_overwrite(target, mode,opts)?;
+                    prompt_overwrite(target, mode, opts)?;
                 }
             }
         }
@@ -745,13 +744,13 @@ fn rename(
                 }
                 return Ok(());
             }
-            OverwriteMode::Interactive => prompt_overwrite(to, None,opts)?,
+            OverwriteMode::Interactive => prompt_overwrite(to, None, opts)?,
             OverwriteMode::Force => {}
             OverwriteMode::Default => {
                 // GNU mv prompts when stdin is a TTY and target is not writable
                 let (writable, mode) = is_writable(to);
                 if !writable && stdin().is_terminal() {
-                    prompt_overwrite(to, mode,opts)?;
+                    prompt_overwrite(to, mode, opts)?;
                 }
             }
         }
