@@ -62,11 +62,6 @@ jobs:
             brew install coreutils
           ;;
         esac
-    - name: Build with platform features
-      shell: bash
-      run: |
-        ## Build with platform-specific features to enable l10n functionality
-        cargo build --features ${{ matrix.job.features }}
     - name: Test l10n functionality
       shell: bash
       run: |
@@ -149,10 +144,6 @@ jobs:
         sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
         sudo locale-gen --keep-existing fr_FR.UTF-8
         locale -a | grep -i fr || exit 1
-    - name: Build coreutils with clap localization support
-      shell: bash
-      run: |
-        cargo build --features feat_os_unix --bin coreutils
     - name: Test English clap error localization
       shell: bash
       run: |
@@ -321,11 +312,6 @@ jobs:
         ## Generate French locale for testing
         sudo locale-gen --keep-existing fr_FR.UTF-8
         locale -a | grep -i fr || echo "French locale not found, continuing anyway"
-    - name: Build coreutils with l10n support
-      shell: bash
-      run: |
-        ## Build coreutils with Unix features and l10n support
-        cargo build --features feat_os_unix --bin coreutils
     - name: Test French localization
       shell: bash
       run: |
@@ -706,7 +692,7 @@ jobs:
         mkdir -p "$CARGO_INSTALL_DIR"
 
         # Install using cargo with l10n features
-        cargo install --path . --features ${{ matrix.job.features }} --root "$CARGO_INSTALL_DIR" --locked
+        cargo install --path . --features "ls,cat,touch" --root "$CARGO_INSTALL_DIR" --locked
 
         # Verify installation
         echo "Testing cargo-installed binaries..."
@@ -1379,11 +1365,3 @@ jobs:
           echo "::warning::More locales than expected ($total_match_count entries)"
           echo "This might be expected for utility + uucore locales"
         fi
-
-  l10n_locale_embedding_regression_test:
-    name: L10n/Locale Embedding Regression Test
-    runs-on: ubuntu-latest
-    needs: [l10n_locale_embedding_cat, l10n_locale_embedding_ls, l10n_locale_embedding_multicall, l10n_locale_embedding_cargo_install]
-    steps:
-    - name: All locale embedding tests passed
-      run: echo "✓ All locale embedding tests passed successfully"
