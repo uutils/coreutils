@@ -562,7 +562,8 @@ fn pline(possible_uid: Option<uid_t>) -> io::Result<()> {
     target_os = "linux",
     target_os = "android",
     target_os = "openbsd",
-    target_os = "cygwin"
+    target_os = "cygwin",
+    target_os = "netbsd"
 ))]
 fn pline(possible_uid: Option<uid_t>) -> io::Result<()> {
     let uid = possible_uid.unwrap_or_else(getuid);

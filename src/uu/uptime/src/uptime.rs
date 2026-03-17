@@ -246,8 +246,8 @@ fn process_utmpx(file: Option<&OsString>) -> (Option<time_t>, usize) {
 
     for line in records {
         match line.record_type() {
-            USER_PROCESS => nusers += 1,
-            BOOT_TIME => {
+            x if x == USER_PROCESS as i16 => nusers += 1,
+            x if x == BOOT_TIME as i16 => {
                 let dt = line.login_time();
                 if dt.unix_timestamp() > 0 {
                     boot_time = Some(dt.unix_timestamp() as time_t);

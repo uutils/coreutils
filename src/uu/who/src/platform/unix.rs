@@ -235,17 +235,27 @@ impl Who {
                                     self.print_runlevel(&ut);
                                 }
                             }
-                            utmpx::BOOT_TIME if self.need_boottime => self.print_boottime(&ut),
-                            utmpx::NEW_TIME if self.need_clockchange => self.print_clockchange(&ut),
-                            utmpx::INIT_PROCESS if self.need_initspawn => self.print_initspawn(&ut),
-                            utmpx::LOGIN_PROCESS if self.need_login => self.print_login(&ut),
-                            utmpx::DEAD_PROCESS if self.need_deadprocs => self.print_deadprocs(&ut),
+                            x if x == utmpx::BOOT_TIME as i16 && self.need_boottime => {
+                                self.print_boottime(&ut)
+                            }
+                            x if x == utmpx::NEW_TIME as i16 && self.need_clockchange => {
+                                self.print_clockchange(&ut)
+                            }
+                            x if x == utmpx::INIT_PROCESS as i16 && self.need_initspawn => {
+                                self.print_initspawn(&ut)
+                            }
+                            x if x == utmpx::LOGIN_PROCESS as i16 && self.need_login => {
+                                self.print_login(&ut)
+                            }
+                            x if x == utmpx::DEAD_PROCESS as i16 && self.need_deadprocs => {
+                                self.print_deadprocs(&ut)
+                            }
                             _ => {}
                         }
                     }
                 }
 
-                if ut.record_type() == utmpx::BOOT_TIME {}
+                if ut.record_type() == utmpx::BOOT_TIME as i16 {}
             }
         }
         Ok(())

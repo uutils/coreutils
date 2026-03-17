@@ -172,6 +172,7 @@ mod ut {
     pub use libc::_UTX_USERSIZE as UT_NAMESIZE;
 
     pub use libc::ACCOUNTING;
+    pub use libc::BOOT_TIME;
     pub use libc::DEAD_PROCESS;
     pub use libc::EMPTY;
     pub use libc::INIT_PROCESS;
@@ -207,10 +208,30 @@ pub struct Utmpx {
     inner: utmpx,
 }
 
+#[cfg(target_os = "netbsd")]
+impl Utmpx {
+    fn ut_type(&self) -> i16 {
+        self.inner.ut_type as i16
+    }
+    fn ut_user(&self) -> String {
+        chars2string!(self.inner.ut_name)
+    }
+}
+
+#[cfg(not(target_os = "netbsd"))]
+impl Utmpx {
+    fn ut_type(&self) -> i16 {
+        self.inner.ut_type
+    }
+    fn ut_user(&self) -> String {
+        chars2string!(self.inner.ut_user)
+    }
+}
+
 impl Utmpx {
     /// A.K.A. ut.ut_type
     pub fn record_type(&self) -> i16 {
-        self.inner.ut_type
+        self.ut_type()
     }
     /// A.K.A. ut.ut_pid
     pub fn pid(&self) -> i32 {
@@ -220,9 +241,9 @@ impl Utmpx {
     pub fn terminal_suffix(&self) -> String {
         chars2string!(self.inner.ut_id)
     }
-    /// A.K.A. ut.ut_user
+    ///  A.K.A. ut.ut_user / ut.ut_name (NetBSD)
     pub fn user(&self) -> String {
-        chars2string!(self.inner.ut_user)
+        self.ut_user()
     }
     /// A.K.A. ut.ut_host
     pub fn host(&self) -> String {
@@ -264,7 +285,7 @@ impl Utmpx {
     }
     /// check if the record is a user process
     pub fn is_user_process(&self) -> bool {
-        !self.user().is_empty() && self.record_type() == USER_PROCESS
+        !self.user().is_empty() && self.record_type() == USER_PROCESS as i16
     }
 
     /// Canonicalize host name using DNS

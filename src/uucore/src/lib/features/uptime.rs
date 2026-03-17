@@ -156,7 +156,7 @@ pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
     // Try provided boot_time or derive from utmpx
     let derived_boot_time = boot_time.or_else(|| {
         Utmpx::iter_all_records()
-            .filter(|r| r.record_type() == BOOT_TIME)
+            .filter(|r| r.record_type() == BOOT_TIME as i16)
             .map(|r| r.login_time().unix_timestamp())
             .find(|&ts| ts > 0)
             .map(|ts| ts as time_t)
@@ -303,7 +303,7 @@ pub fn get_nusers() -> usize {
 
     let mut num_user = 0;
     Utmpx::iter_all_records().for_each(|ut| {
-        if ut.record_type() == USER_PROCESS {
+        if ut.record_type() == USER_PROCESS as i16 {
             num_user += 1;
         }
     });
