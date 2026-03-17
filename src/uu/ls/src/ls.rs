@@ -2405,13 +2405,18 @@ fn enter_directory(
     display_items(&new_entries, config, state, dired)?;
 
     if config.recursive {
-        let new_dirs = new_entries
+        let mut new_dirs = new_entries
             .into_iter()
             .skip(if config.files == Files::All { 2 } else { 0 })
             .filter(|p| p.file_type().is_some_and(|ft| ft.is_dir()))
-            .rev();
+            .rev()
+            .collect();
 
-        entries_stack.extend(new_dirs);
+        if entries_stack.is_empty() {
+            *entries_stack = new_dirs;
+        } else {
+            entries_stack.append(&mut new_dirs);
+        }
     }
 
     Ok(())
@@ -2425,7 +2430,7 @@ fn recurse_directories(
     state: &mut ListState,
     dired: &mut DiredOutput,
 ) -> UResult<()> {
-    let mut entries_stack: Vec<PathData> = Vec::with_capacity(1024);
+    let mut entries_stack: Vec<PathData> = Vec::new();
 
     enter_directory(
         path_data,
