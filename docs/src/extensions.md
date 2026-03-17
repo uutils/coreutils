@@ -23,7 +23,7 @@ $ ls -w=80
 ```
 
 With GNU coreutils, `--help` usually prints the help message and `--version` prints the version.
-We also commonly provide short options: `-h` for help and `-V` for version.
+We also have short aliases for them: `-h` for help and `-V` for version for few utils. But we deprecate them since it cause confusion at some cases e.g. `sort -h`.
 
 ## `coreutils`
 
