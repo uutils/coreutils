@@ -1265,7 +1265,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     uucore::clap_localization::configure_localized_command(
-        Command::new(uucore::util_name())
+        Command::new("ls")
             .version(uucore::crate_version!())
             .override_usage(format_usage(&translate!("ls-usage")))
             .about(translate!("ls-about")),
