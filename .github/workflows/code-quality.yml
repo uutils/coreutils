@@ -10,6 +10,7 @@ on:
       - '*'
 
 env:
+  CARGO_INCREMENTAL: "0"
   # * style job configuration
   STYLE_FAIL_ON_FAULT: true ## (bool) fail the build if a style job contains a fault (error or warning); may be overridden on a per-job basis
 
@@ -66,8 +67,6 @@ jobs:
   style_lint:
     name: Style/lint
     runs-on: ${{ matrix.job.os }}
-    env:
-      CARGO_INCREMENTAL: 0
     strategy:
       fail-fast: false
       matrix:
