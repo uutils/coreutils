@@ -759,6 +759,28 @@ fn test_date_overflow() {
 }
 
 #[test]
+fn test_date_format_large_width_no_oom() {
+    // Regression: very large width like %8888888888r caused OOM.
+    // GNU caps width to i32::MAX; verify we don't crash.
+    // Use a moderate width with a fixed date to check the code path works.
+    new_ucmd!()
+        .arg("-d")
+        .arg("2024-01-01")
+        .arg("+%300S")
+        .succeeds()
+        .stdout_is(format!("{}\n", format_args!("{:0>300}", "00")));
+
+    // Test with a larger width to exercise the code path without producing
+    // gigabytes of output (the original %8888888888r would produce ~2GB).
+    new_ucmd!()
+        .arg("-d")
+        .arg("2024-01-01")
+        .arg("+%10000S")
+        .succeeds()
+        .stdout_is(format!("{}\n", format_args!("{:0>10000}", "00")));
+}
+
+#[test]
 fn test_date_parse_from_format() {
     const FILE: &str = "file-with-dates";
     let (at, mut ucmd) = at_and_ucmd!();
