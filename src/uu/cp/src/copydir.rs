@@ -114,7 +114,7 @@ impl<'a> Context<'a> {
 ///
 /// For convenience while traversing a directory, the [`Entry::new`]
 /// function allows creating an entry from a [`Context`] and a
-/// [`DirEntry`].
+/// [`Path`].
 ///
 /// # Examples
 ///
