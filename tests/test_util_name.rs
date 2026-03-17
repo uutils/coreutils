@@ -27,6 +27,24 @@ fn init() {
 }
 
 #[test]
+fn test_coreutils_help_ignore_args() {
+    use std::process::Command;
+
+    let scenario = TestScenario::new("help_ignoring_args");
+    if !scenario.bin_path.exists() {
+        return;
+    }
+
+    let output = Command::new(&scenario.bin_path)
+        .arg("--help")
+        .arg("---")
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(0));
+}
+
+#[test]
 #[cfg(feature = "ls")]
 fn execution_phrase_double() {
     use std::process::Command;
