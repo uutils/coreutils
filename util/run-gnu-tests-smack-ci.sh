@@ -1,7 +1,7 @@
 #!/bin/bash
 # Run GNU SMACK/ROOTFS tests in QEMU with SMACK-enabled kernel
 # Usage: run-gnu-tests-smack-ci.sh [GNU_DIR] [OUTPUT_DIR]
-# spell-checker:ignore rootfs zstd unzstd cpio newc nographic smackfs devtmpfs tmpfs poweroff libm libgcc libpthread libdl librt sysfs rwxat setuidgid
+# spell-checker:ignore commoncap rootfs zstd unzstd cpio newc nographic smackfs devtmpfs tmpfs poweroff libm libgcc libpthread libdl librt sysfs rwxat setuidgid
 set -e
 
 : ${PROFILE:=release-small}
@@ -15,18 +15,10 @@ echo "Setting up SMACK/ROOTFS test environment..."
 rm -rf "$QEMU_DIR"
 mkdir -p "$QEMU_DIR"/{rootfs/{bin,lib64,proc,sys,dev,tmp,etc,gnu},kernel}
 
-# Download Arch Linux kernel (has SMACK built-in)
-if [ ! -f /tmp/arch-vmlinuz ]; then
-    echo "Downloading Arch Linux kernel..."
-    curl -sL --retry 5 --retry-delay 2 --retry-all-errors \
-        -o /tmp/arch-kernel.pkg.tar.zst "https://archlinux.org/packages/core/x86_64/linux/download/"
-    zstd -d /tmp/arch-kernel.pkg.tar.zst -o /tmp/arch-kernel.pkg.tar 2>/dev/null || unzstd /tmp/arch-kernel.pkg.tar.zst -o /tmp/arch-kernel.pkg.tar
-    VMLINUZ_PATH=$(tar -tf /tmp/arch-kernel.pkg.tar | grep 'vmlinuz$' | head -1)
-    tar -xf /tmp/arch-kernel.pkg.tar -C /tmp "$VMLINUZ_PATH"
-    mv "/tmp/$VMLINUZ_PATH" /tmp/arch-vmlinuz
-    rm -rf /tmp/usr /tmp/arch-kernel.pkg.tar /tmp/arch-kernel.pkg.tar.zst
-fi
-cp /tmp/arch-vmlinuz "$QEMU_DIR/kernel/vmlinuz"
+# Copy Ubuntu kernel (runner's kernel does not work)
+sudo apt-get update || :
+sudo apt-get install -y linux-image-generic
+sudo install -Dvm644 "$(ls -1 /boot/vmlinuz-*-generic | head -n 1)" "$QEMU_DIR/kernel/vmlinuz"
 
 # Setup busybox
 BUSYBOX=/tmp/busybox
@@ -129,7 +121,7 @@ for TEST_PATH in $QEMU_TESTS; do
     OUTPUT=$(timeout 120 qemu-system-x86_64 \
         -kernel "$QEMU_DIR/kernel/vmlinuz" \
         -initrd "$WORK.gz" \
-        -append "console=ttyS0 quiet panic=-1 security=smack lsm=smack" \
+        -append "console=ttyS0 quiet panic=-1 lsm=capability,smack,commoncap security=smack apparmor=0" \
         -nographic -m 256M -no-reboot 2>&1) || true
 
     # Determine result
