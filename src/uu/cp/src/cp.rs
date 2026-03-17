@@ -1789,6 +1789,7 @@ pub(crate) fn copy_attributes(
     let source_metadata = fs::symlink_metadata(source)
         .map_err(|e| CpError::IoErrContext(e, context_for(source, dest)))?;
 
+    #[cfg(unix)]
     let mut failed_to_set_ownership = false;
 
     // Ownership must be changed first to avoid interfering with mode change.

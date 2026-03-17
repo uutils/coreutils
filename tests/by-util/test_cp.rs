@@ -7880,334 +7880,99 @@ fn test_cp_recursive_non_utf8_source() {
     assert!(at.plus("dir2").join("a").exists());
 }
 
-#[test]
+#[rstest]
 #[cfg(unix)]
-fn test_cp_existing_no_preserve_file() {
+fn test_cp_file_mode(
+    #[values(true, false)] is_existing: bool,
+    #[values(Some(true), None, Some(false))] preserve: Option<bool>,
+) {
     use std::io;
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
     scene.cmd("touch").arg("f1").succeeds();
-    scene.cmd("touch").arg("f2").succeeds();
     scene.cmd("chmod").arg("770").arg("f1").succeeds();
-    scene.cmd("chmod").arg("666").arg("f2").succeeds();
-    let f2_mode = at.metadata("f2").mode();
 
-    scene
-        .ucmd()
-        // umask should have no effect
-        .umask(0o700)
-        .arg("--no-preserve=mode")
-        .arg("f1")
-        .arg("f2")
-        .set_stdout(io::stdout())
-        .succeeds();
+    let f1_mode = at.metadata("f1").mode();
+    let f2_mode = if is_existing {
+        scene.cmd("touch").arg("f2").succeeds();
+        scene.cmd("chmod").arg("666").arg("f2").succeeds();
+        Some(at.metadata("f2").mode())
+    } else {
+        None
+    };
+
+    let mut command = scene.ucmd();
+    match preserve {
+        Some(true) => command.arg("--preserve=mode"),
+        Some(false) => command.arg("--no-preserve=mode"),
+        _ => &mut command,
+    }
+    .umask(0o700)
+    .arg("f1")
+    .arg("f2")
+    .set_stdout(io::stdout())
+    .succeeds();
 
     let f2_new_mode = at.metadata("f2").mode();
 
-    assert_eq!(f2_mode, f2_new_mode);
+    match (is_existing, preserve) {
+        (true, Some(false) | None) => {
+            assert_eq!(f2_mode.unwrap(), f2_new_mode);
+        }
+        (false, Some(false)) => assert_eq!(0o666 & !0o700, f2_new_mode & 0o777),
+        (false, None) => assert_eq!(!0o700 & 0o770, f2_new_mode & 0o777),
+        (_, Some(true)) => assert_eq!(f1_mode, f2_new_mode),
+    }
 }
 
-#[test]
+#[rstest]
 #[cfg(unix)]
-fn test_cp_existing_no_preserve_dir() {
+fn test_cp_dir_mode(
+    #[values(true, false)] is_existing: bool,
+    #[values(Some(true), None, Some(false))] preserve: Option<bool>,
+) {
     use std::io;
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
     scene.cmd("mkdir").arg("d1").succeeds();
-    scene.cmd("mkdir").arg("d2").succeeds();
     scene.cmd("chmod").arg("770").arg("d1").succeeds();
-    scene.cmd("chmod").arg("707").arg("d2").succeeds();
-    let d2_mode = at.metadata("d2").mode();
 
-    scene
-        .ucmd()
-        // umask should have no effect
-        .umask(0o700)
-        .arg("--no-preserve=mode")
-        .arg("-r")
-        .arg("d1/.")
-        .arg("d2")
-        .set_stdout(io::stdout())
-        .succeeds();
+    let d1_mode = at.metadata("d1").mode();
+    let d2_mode = if is_existing {
+        scene.cmd("mkdir").arg("d2").succeeds();
+        scene.cmd("chmod").arg("707").arg("d2").succeeds();
+        Some(at.metadata("d2").mode())
+    } else {
+        None
+    };
+
+    let mut command = scene.ucmd();
+    match preserve {
+        Some(true) => command.arg("--preserve=mode"),
+        Some(false) => command.arg("--no-preserve=mode"),
+        _ => &mut command,
+    }
+    .umask(0o700)
+    .arg("-r")
+    .arg("d1/.")
+    .arg("d2")
+    .set_stdout(io::stdout())
+    .succeeds();
 
     let d2_new_mode = at.metadata("d2").mode();
 
-    assert_eq!(d2_mode, d2_new_mode);
-}
-
-#[test]
-#[cfg(unix)]
-fn test_cp_existing_default_file() {
-    use std::io;
-
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
-    scene.cmd("touch").arg("f1").succeeds();
-    scene.cmd("touch").arg("f2").succeeds();
-    scene.cmd("chmod").arg("770").arg("f1").succeeds();
-    scene.cmd("chmod").arg("666").arg("f2").succeeds();
-    let f2_mode = at.metadata("f2").mode();
-
-    scene
-        .ucmd()
-        // umask should have no effect
-        .umask(0o700)
-        .arg("f1")
-        .arg("f2")
-        .set_stdout(io::stdout())
-        .succeeds();
-
-    let f2_new_mode = at.metadata("f2").mode();
-
-    assert_eq!(f2_mode, f2_new_mode);
-}
-
-#[test]
-#[cfg(unix)]
-fn test_cp_existing_default_dir() {
-    use std::io;
-
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
-    scene.cmd("mkdir").arg("d1").succeeds();
-    scene.cmd("mkdir").arg("d2").succeeds();
-    scene.cmd("chmod").arg("770").arg("d1").succeeds();
-    scene.cmd("chmod").arg("707").arg("d2").succeeds();
-    let d2_mode = at.metadata("d2").mode();
-
-    scene
-        .ucmd()
-        // umask should have no effect
-        .umask(0o700)
-        .arg("-r")
-        .arg("d1/.")
-        .arg("d2")
-        .set_stdout(io::stdout())
-        .succeeds();
-
-    let d2_new_mode = at.metadata("d2").mode();
-
-    assert_eq!(d2_mode, d2_new_mode);
-}
-
-#[test]
-#[cfg(unix)]
-fn test_cp_existing_preserve_file() {
-    use std::io;
-
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
-    scene.cmd("touch").arg("f1").succeeds();
-    scene.cmd("touch").arg("f2").succeeds();
-    scene.cmd("chmod").arg("770").arg("f1").succeeds();
-    scene.cmd("chmod").arg("666").arg("f2").succeeds();
-    let f1_mode = at.metadata("f1").mode();
-
-    scene
-        .ucmd()
-        // umask should have no effect
-        .umask(0o700)
-        .arg("--preserve=mode")
-        .arg("f1")
-        .arg("f2")
-        .set_stdout(io::stdout())
-        .succeeds();
-
-    let f2_mode = at.metadata("f2").mode();
-
-    assert_eq!(f1_mode, f2_mode);
-}
-
-#[test]
-#[cfg(unix)]
-fn test_cp_existing_preserve_dir() {
-    use std::io;
-
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
-    scene.cmd("mkdir").arg("d1").succeeds();
-    scene.cmd("mkdir").arg("d2").succeeds();
-    scene.cmd("chmod").arg("770").arg("d1").succeeds();
-    scene.cmd("chmod").arg("707").arg("d2").succeeds();
-    let d1_mode = at.metadata("d1").mode();
-
-    scene
-        .ucmd()
-        // umask should have no effect
-        .umask(0o700)
-        .arg("--preserve=mode")
-        .arg("-r")
-        .arg("d1/.")
-        .arg("d2")
-        .set_stdout(io::stdout())
-        .succeeds();
-
-    let d2_mode = at.metadata("d2").mode();
-
-    assert_eq!(d1_mode, d2_mode);
-}
-
-#[test]
-#[cfg(unix)]
-fn test_cp_not_existing_no_preserve_file() {
-    use std::io;
-
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
-    scene.cmd("touch").arg("f1").succeeds();
-    scene.cmd("chmod").arg("770").arg("f1").succeeds();
-
-    scene
-        .ucmd()
-        .umask(0o700)
-        .arg("--no-preserve=mode")
-        .arg("f1")
-        .arg("f2")
-        .set_stdout(io::stdout())
-        .succeeds();
-
-    let f2_mode = at.metadata("f2").mode();
-
-    assert_eq!(0o666 & !0o700, f2_mode & 0o777);
-}
-
-#[test]
-#[cfg(unix)]
-fn test_cp_not_existing_no_preserve_dir() {
-    use std::io;
-
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
-    scene.cmd("mkdir").arg("d1").succeeds();
-    scene.cmd("chmod").arg("770").arg("d1").succeeds();
-
-    scene
-        .ucmd()
-        .umask(0o700)
-        .arg("--no-preserve=mode")
-        .arg("-r")
-        .arg("d1")
-        .arg("d2")
-        .set_stdout(io::stdout())
-        .succeeds();
-
-    let d2_mode = at.metadata("d2").mode();
-
-    assert_eq!(!0o700 & 0o777, d2_mode & 0o777);
-}
-
-#[test]
-#[cfg(unix)]
-fn test_cp_not_existing_default_file() {
-    use std::io;
-
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
-    scene.cmd("touch").arg("f1").succeeds();
-    scene.cmd("chmod").arg("770").arg("f1").succeeds();
-
-    scene
-        .ucmd()
-        .umask(0o700)
-        .arg("f1")
-        .arg("f2")
-        .set_stdout(io::stdout())
-        .succeeds();
-
-    let f2_mode = at.metadata("f2").mode();
-
-    assert_eq!(!0o700 & 0o770, f2_mode & 0o777);
-}
-
-#[test]
-#[cfg(unix)]
-fn test_cp_not_existing_default_dir() {
-    use std::io;
-
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
-    scene.cmd("mkdir").arg("d1").succeeds();
-    scene.cmd("chmod").arg("770").arg("d1").succeeds();
-
-    scene
-        .ucmd()
-        .umask(0o700)
-        .arg("-r")
-        .arg("d1")
-        .arg("d2")
-        .set_stdout(io::stdout())
-        .succeeds();
-
-    let d2_mode = at.metadata("d2").mode();
-
-    assert_eq!(!0o700 & 0o770, d2_mode & 0o777);
-}
-
-#[test]
-#[cfg(unix)]
-fn test_cp_not_existing_preserve_file() {
-    use std::io;
-
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
-    scene.cmd("touch").arg("f1").succeeds();
-    scene.cmd("chmod").arg("770").arg("f1").succeeds();
-    let f1_mode = at.metadata("f1").mode();
-
-    scene
-        .ucmd()
-        // umask should have no effect
-        .umask(0o700)
-        .arg("--preserve=mode")
-        .arg("f1")
-        .arg("f2")
-        .set_stdout(io::stdout())
-        .succeeds();
-
-    let f2_mode = at.metadata("f2").mode();
-
-    assert_eq!(f1_mode, f2_mode);
-}
-
-#[test]
-#[cfg(unix)]
-fn test_cp_not_existing_preserve_dir() {
-    use std::io;
-
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
-    scene.cmd("mkdir").arg("d1").succeeds();
-    scene.cmd("chmod").arg("770").arg("d1").succeeds();
-    let d1_mode = at.metadata("d1").mode();
-
-    scene
-        .ucmd()
-        // umask should have no effect
-        .umask(0o700)
-        .arg("--preserve=mode")
-        .arg("-r")
-        .arg("d1")
-        .arg("d2")
-        .set_stdout(io::stdout())
-        .succeeds();
-
-    let d2_mode = at.metadata("d2").mode();
-
-    assert_eq!(d1_mode, d2_mode);
+    match (is_existing, preserve) {
+        (true, Some(false) | None) => {
+            assert_eq!(d2_mode.unwrap(), d2_new_mode);
+        }
+        (false, Some(false)) => assert_eq!(!0o700 & 0o777, d2_new_mode & 0o777),
+        (false, None) => assert_eq!(!0o700 & 0o770, d2_new_mode & 0o777),
+        (_, Some(true)) => assert_eq!(d1_mode, d2_new_mode),
+    }
 }
 
 #[test]
