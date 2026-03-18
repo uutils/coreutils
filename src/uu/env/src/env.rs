@@ -12,7 +12,7 @@ pub mod string_parser;
 pub mod variable_parser;
 
 use clap::builder::ValueParser;
-use clap::{Arg, ArgAction, Command, crate_name};
+use clap::{Arg, ArgAction, Command};
 use ini::Ini;
 use native_int_str::{
     Convert, NCvt, NativeIntStr, NativeIntString, NativeStr, from_native_int_representation_owned,
@@ -338,9 +338,9 @@ fn load_config_file(opts: &mut Options) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(crate_name!())
+    Command::new("env")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("env"))
         .about(translate!("env-about"))
         .override_usage(format_usage(&translate!("env-usage")))
         .after_help(translate!("env-after-help"))
@@ -657,12 +657,11 @@ impl EnvAppData {
                     | clap::error::ErrorKind::DisplayVersion => return Err(e.into()),
                     _ => {
                         // Use ErrorFormatter directly to handle error with shebang message callback
-                        let formatter =
-                            uucore::clap_localization::ErrorFormatter::new(uucore::util_name());
+                        let formatter = uucore::clap_localization::ErrorFormatter::new("env");
                         formatter.print_error_and_exit_with_callback(&e, 125, || {
-                            eprintln!(
-                                "{}: {}",
-                                uucore::util_name(),
+                            let _ = writeln!(
+                                stderr(),
+                                "env: {}",
                                 translate!("env-error-use-s-shebang")
                             );
                         });

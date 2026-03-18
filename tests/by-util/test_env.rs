@@ -140,7 +140,7 @@ fn test_env_version() {
         .arg("--version")
         .succeeds()
         .no_stderr()
-        .stdout_contains(util_name!());
+        .stdout_is(format!("env {}\n", uucore::crate_version!()));
 }
 
 #[test]

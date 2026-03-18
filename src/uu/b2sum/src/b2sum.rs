@@ -26,4 +26,5 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 #[inline]
 pub fn uu_app() -> Command {
     standalone_checksum_app_with_length(translate!("b2sum-about"), translate!("b2sum-usage"))
+        .name("b2sum")
 }

@@ -78,8 +78,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if unsafe { !_vprocmgr_detach_from_console(0).is_null() } {
         return Err(NohupError::CannotDetach.into());
     }
-
+    #[allow(clippy::unwrap_used, reason = "set as required by clap")]
     let mut cmd_iter = matches.get_many::<String>(options::CMD).unwrap();
+    #[allow(clippy::unwrap_used, reason = "set as required by clap")]
     let cmd = cmd_iter.next().unwrap();
     let args: Vec<&String> = cmd_iter.collect();
 

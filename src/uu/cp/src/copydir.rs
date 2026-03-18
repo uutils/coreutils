@@ -667,7 +667,9 @@ fn build_dir(
         };
 
         excluded_perms |= umask;
-        let mode = !excluded_perms & 0o777; //use only the last three octet bits
+        // Always keep the owner write bit so we can copy files into the directory.
+        // The correct final permissions are applied afterward by dirs_needing_permissions.
+        let mode = (!excluded_perms & 0o777) | 0o200; // mask to permission bits, always keep owner write
         std::os::unix::fs::DirBuilderExt::mode(&mut builder, mode);
     }
 
