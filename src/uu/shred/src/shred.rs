@@ -10,6 +10,8 @@ use clap::{Arg, ArgAction, Command};
 use libc::S_IWUSR;
 use rand::{RngExt as _, rngs::StdRng, seq::SliceRandom};
 use std::cell::RefCell;
+#[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
+use std::ffi::CString;
 use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
 #[cfg(unix)]
@@ -895,10 +897,96 @@ fn do_pass(
     Ok(())
 }
 
+#[cfg(target_vendor = "apple")]
+fn rename_new(old_path: &Path, new_path: &Path) -> io::Result<()> {
+    let old_path = cstring_from_path(old_path)?;
+    let new_path = cstring_from_path(new_path)?;
+
+    // SAFETY: Both pointers come from owned `CString` values that remain alive
+    // for the duration of this call, are NUL-terminated, and point to valid
+    // path bytes for the OS API.
+    let ret = unsafe { libc::renamex_np(old_path.as_ptr(), new_path.as_ptr(), libc::RENAME_EXCL) };
+    if ret == 0 {
+        return Ok(());
+    }
+
+    Err(io::Error::last_os_error())
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn rename_new(old_path: &Path, new_path: &Path) -> io::Result<()> {
+    let old_path_c = cstring_from_path(old_path)?;
+    let new_path_c = cstring_from_path(new_path)?;
+
+    // SAFETY: Both pointers come from owned `CString` values that remain alive
+    // for the duration of this call, are NUL-terminated, and point to valid
+    // path bytes for the OS API. `AT_FDCWD` targets the current working
+    // directory and `RENAME_NOREPLACE` requests kernel-enforced no-overwrite
+    // semantics atomically.
+    let ret = unsafe {
+        libc::renameat2(
+            libc::AT_FDCWD,
+            old_path_c.as_ptr(),
+            libc::AT_FDCWD,
+            new_path_c.as_ptr(),
+            libc::RENAME_NOREPLACE,
+        )
+    };
+    if ret == 0 {
+        return Ok(());
+    }
+
+    let err = io::Error::last_os_error();
+    if matches!(
+        err.raw_os_error(),
+        Some(libc::ENOSYS) | Some(libc::EINVAL) | Some(libc::EOPNOTSUPP)
+    ) {
+        // Fall back to check-then-rename when atomic no-overwrite is unsupported
+        // by kernel/filesystem. This is racy but preserves functionality.
+        if new_path.exists() {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "destination already exists",
+            ));
+        }
+        return fs::rename(old_path, new_path);
+    }
+
+    Err(err)
+}
+
+#[cfg(not(any(target_vendor = "apple", target_os = "linux", target_os = "android")))]
+fn rename_new(old_path: &Path, new_path: &Path) -> io::Result<()> {
+    // No kernel-level atomic no-overwrite rename available; fall back to
+    // check-then-rename. Racy, but functional and matches the non-Unix path.
+    if new_path.exists() {
+        return Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            "destination already exists",
+        ));
+    }
+    fs::rename(old_path, new_path)
+}
+
+#[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
+fn cstring_from_path(path: &Path) -> io::Result<CString> {
+    use std::os::unix::ffi::OsStrExt;
+
+    CString::new(path.as_os_str().as_bytes()).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "path contains interior NUL byte",
+        )
+    })
+}
+
 /// Repeatedly renames the file with strings of decreasing length (most likely all 0s)
 /// Return the path of the file after its last renaming or None in case of an error
 fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> PathBuf {
-    let file_name_len = orig_path.file_name().unwrap().len();
+    let file_name_len = orig_path
+        .file_name()
+        .expect("wipe_name called on a path with no filename component")
+        .len();
 
     let mut last_path = PathBuf::from(orig_path);
 
@@ -907,12 +995,7 @@ fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> Pa
         // If every possible filename already exists, just reduce the length and try again
         for name in FilenameIter::new(length) {
             let new_path = orig_path.with_file_name(name);
-            // We don't want the filename to already exist (don't overwrite)
-            // If it does, find another name that doesn't
-            if new_path.exists() {
-                continue;
-            }
-            match fs::rename(&last_path, &new_path) {
+            match rename_new(&last_path, &new_path) {
                 Ok(()) => {
                     if verbose {
                         show_error!(
@@ -935,6 +1018,7 @@ fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> Pa
                     last_path = new_path;
                     break;
                 }
+                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
                 Err(e) => {
                     let msg = translate!("shred-couldnt-rename", "file" => last_path.maybe_quote(), "new_name" => new_path.quote(), "error" => e);
                     show_error!("{msg}");
