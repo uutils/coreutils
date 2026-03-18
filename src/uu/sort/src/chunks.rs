@@ -53,6 +53,23 @@ pub struct LineData<'a> {
     pub num_infos: Vec<NumInfo>,
     pub parsed_floats: Vec<GeneralBigDecimalParseResult>,
     pub line_num_floats: Vec<Option<f64>>,
+    /// Arena buffer holding all collation sort keys concatenated.
+    pub collation_key_buffer: Vec<u8>,
+    /// End offsets into `collation_key_buffer` for each line's sort key.
+    pub collation_key_ends: Vec<usize>,
+}
+
+impl LineData<'_> {
+    /// Get the collation sort key for a line at the given index.
+    pub fn collation_key(&self, index: usize) -> &[u8] {
+        let start = if index == 0 {
+            0
+        } else {
+            self.collation_key_ends[index - 1]
+        };
+        let end = self.collation_key_ends[index];
+        &self.collation_key_buffer[start..end]
+    }
 }
 
 impl Chunk {
@@ -64,6 +81,8 @@ impl Chunk {
             contents.line_data.num_infos.clear();
             contents.line_data.parsed_floats.clear();
             contents.line_data.line_num_floats.clear();
+            contents.line_data.collation_key_buffer.clear();
+            contents.line_data.collation_key_ends.clear();
             contents.token_buffer.clear();
             let lines = unsafe {
                 // SAFETY: It is safe to (temporarily) transmute to a vector of lines with a longer lifetime,
@@ -84,23 +103,19 @@ impl Chunk {
             (
                 lines,
                 selections,
-                std::mem::take(&mut contents.line_data.num_infos),
-                std::mem::take(&mut contents.line_data.parsed_floats),
-                std::mem::take(&mut contents.line_data.line_num_floats),
-                std::mem::take(&mut contents.token_buffer),
-                contents.line_count_hint,
-            )
+                num_infos: std::mem::take(&mut contents.line_data.num_infos),
+                parsed_floats: std::mem::take(&mut contents.line_data.parsed_floats),
+                line_num_floats: std::mem::take(&mut contents.line_data.line_num_floats),
+                collation_key_buffer: std::mem::take(&mut contents.line_data.collation_key_buffer),
+                collation_key_ends: std::mem::take(&mut contents.line_data.collation_key_ends),
+                token_buffer: std::mem::take(&mut contents.token_buffer),
+                line_count_hint: contents.line_count_hint,
+                // buffer is set below after we consume `self`
+                buffer: Vec::new(),
+            }
         });
-        RecycledChunk {
-            lines: recycled_contents.0,
-            selections: recycled_contents.1,
-            num_infos: recycled_contents.2,
-            parsed_floats: recycled_contents.3,
-            line_num_floats: recycled_contents.4,
-            token_buffer: recycled_contents.5,
-            line_count_hint: recycled_contents.6,
-            buffer: self.into_owner(),
-        }
+        recycled_contents.buffer = self.into_owner();
+        recycled_contents
     }
 
     pub fn lines(&self) -> &Vec<Line<'_>> {
@@ -118,6 +133,8 @@ pub struct RecycledChunk {
     num_infos: Vec<NumInfo>,
     parsed_floats: Vec<GeneralBigDecimalParseResult>,
     line_num_floats: Vec<Option<f64>>,
+    collation_key_buffer: Vec<u8>,
+    collation_key_ends: Vec<usize>,
     token_buffer: Vec<Range<usize>>,
     line_count_hint: usize,
     buffer: Vec<u8>,
@@ -131,6 +148,8 @@ impl RecycledChunk {
             num_infos: Vec::new(),
             parsed_floats: Vec::new(),
             line_num_floats: Vec::new(),
+            collation_key_buffer: Vec::new(),
+            collation_key_ends: Vec::new(),
             token_buffer: Vec::new(),
             line_count_hint: 0,
             buffer: vec![0; capacity],
@@ -176,6 +195,8 @@ pub fn read<T: Read>(
         num_infos,
         parsed_floats,
         line_num_floats,
+        collation_key_buffer,
+        collation_key_ends,
         mut token_buffer,
         mut line_count_hint,
         mut buffer,
@@ -214,6 +235,8 @@ pub fn read<T: Read>(
                 num_infos,
                 parsed_floats,
                 line_num_floats,
+                collation_key_buffer,
+                collation_key_ends,
             };
             parse_lines(
                 read,
@@ -253,6 +276,8 @@ fn parse_lines<'a>(
     assert!(line_data.num_infos.is_empty());
     assert!(line_data.parsed_floats.is_empty());
     assert!(line_data.line_num_floats.is_empty());
+    assert!(line_data.collation_key_buffer.is_empty());
+    assert!(line_data.collation_key_ends.is_empty());
     token_buffer.clear();
     const SMALL_CHUNK_BYTES: usize = 64 * 1024;
     let mut estimated = (*line_count_hint).max(1);
