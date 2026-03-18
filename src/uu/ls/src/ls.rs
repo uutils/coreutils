@@ -2189,6 +2189,8 @@ fn push_basic_escape(buf: &mut String, byte: u8) {
     }
 }
 
+type DirData = (PathBuf, bool);
+
 // A struct to encapsulate state that is passed around from `list` functions.
 struct ListState<'a> {
     out: BufWriter<Stdout>,
@@ -2203,6 +2205,9 @@ struct ListState<'a> {
     #[cfg(unix)]
     gid_cache: FxHashMap<u32, String>,
     recent_time_range: RangeInclusive<SystemTime>,
+    stack: Vec<DirData>,
+    listed_ancestors: FxHashSet<FileInformation>,
+    initial_locs_len: usize,
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -2224,6 +2229,9 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         // According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
         recent_time_range: (SystemTime::now() - Duration::new(31_556_952 / 2, 0))
             ..=SystemTime::now(),
+        stack: Vec::new(),
+        listed_ancestors: FxHashSet::default(),
+        initial_locs_len,
     };
 
     for loc in locs {
@@ -2268,6 +2276,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     display_items(&files, config, &mut state, &mut dired)?;
 
     for (pos, path_data) in dirs.iter().enumerate() {
+        let needs_blank_line = pos != 0 || !files.is_empty();
         // Do read_dir call here to match GNU semantics by printing
         // read_dir errors before directory headings, names and totals
         let read_dir = match fs::read_dir(path_data.path()) {
@@ -2284,41 +2293,49 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
             Ok(rd) => rd,
         };
 
-        // Print dir heading - name... 'total' comes after error display
-        if initial_locs_len > 1 || config.recursive {
-            let needs_blank_line = !(pos.eq(&0usize) && files.is_empty());
-            if needs_blank_line {
-                writeln!(state.out)?;
-                if config.dired {
-                    dired.padding += 1;
-                }
-            }
-            if config.dired {
-                dired::indent(&mut state.out)?;
-            }
-            show_dir_name(path_data, &mut state.out, config)?;
-            writeln!(state.out)?;
-            if config.dired {
-                let dir_len = path_data.display_name().len();
-                // add the //SUBDIRED// coordinates
-                dired::calculate_subdired(&mut dired, dir_len);
-                // Add the padding for the dir name
-                dired::add_dir_name(&mut dired, dir_len);
-            }
-        }
-        let mut listed_ancestors = FxHashSet::default();
-        listed_ancestors.insert(FileInformation::from_path(
+        state.listed_ancestors.insert(FileInformation::from_path(
             path_data.path(),
             path_data.must_dereference,
         )?);
-        enter_directory(
-            path_data,
+
+        // List each of the arguments to ls first.
+        depth_first_list(
+            (path_data.path().to_path_buf(), needs_blank_line),
             read_dir,
             config,
             &mut state,
-            &mut listed_ancestors,
             &mut dired,
+            true,
         )?;
+
+        // Only runs if it must list recursively.
+        while let Some(dir_data) = state.stack.pop() {
+            let read_dir = match fs::read_dir(&dir_data.0) {
+                Err(err) => {
+                    // flush stdout buffer before the error to preserve formatting and order
+                    state.out.flush()?;
+                    show!(LsError::IOErrorContext(
+                        path_data.path().to_path_buf(),
+                        err,
+                        path_data.command_line
+                    ));
+                    continue;
+                }
+                Ok(rd) => rd,
+            };
+
+            depth_first_list(dir_data, read_dir, config, &mut state, &mut dired, false)?;
+
+            // Heuristic to ensure stack does not keep its capacity forever if there is
+            // combinatorial explosion; we decrease it logarithmically here.
+            let (cap, len) = (state.stack.capacity(), state.stack.len());
+            if cap > (len + 4) * 2 {
+                state.stack.shrink_to(len + (cap - len) / 2);
+            }
+        }
+
+        // No need to clear state.buf since [`enter_directory`] drains it.
+        state.listed_ancestors.clear();
     }
     if config.dired && !config.hyperlink {
         dired::print_dired_output(config, &dired, &mut state.out)?;
@@ -2435,18 +2452,55 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
         .any(|p| p.matches_with(&file_name, options))
 }
 
-#[allow(clippy::cognitive_complexity)]
-fn enter_directory(
-    path_data: &PathData,
+fn depth_first_list(
+    (dir_path, needs_blank_line): DirData,
     mut read_dir: ReadDir,
     config: &Config,
     state: &mut ListState,
-    listed_ancestors: &mut FxHashSet<FileInformation>,
     dired: &mut DiredOutput,
+    is_top_level: bool,
 ) -> UResult<()> {
-    // Create vec of entries with initial dot files
-    let mut entries: Vec<PathData> = if config.files == Files::All {
-        vec![
+    let path_data = PathData::new(dir_path, None, None, config, false);
+
+    // Print dir heading - name... 'total' comes after error display
+    if state.initial_locs_len > 1 || config.recursive {
+        if is_top_level {
+            if needs_blank_line {
+                writeln!(state.out)?;
+                if config.dired {
+                    dired.padding += 1;
+                }
+            }
+            if config.dired {
+                dired::indent(&mut state.out)?;
+            }
+            show_dir_name(&path_data, &mut state.out, config)?;
+            writeln!(state.out)?;
+            if config.dired {
+                let dir_len = path_data.path().as_os_str().len();
+                // add the //SUBDIRED// coordinates
+                dired::calculate_subdired(dired, dir_len);
+                // Add the padding for the dir name
+                dired::add_dir_name(dired, dir_len);
+            }
+        } else {
+            writeln!(state.out)?;
+            if config.dired {
+                dired.padding += 1;
+                dired::indent(&mut state.out)?;
+                let dir_name_size = path_data.path().as_os_str().len();
+                dired::calculate_subdired(dired, dir_name_size);
+                dired::add_dir_name(dired, dir_name_size);
+            }
+            show_dir_name(&path_data, &mut state.out, config)?;
+            writeln!(state.out)?;
+        }
+    }
+
+    // Append entries with initial dot files and record their existence
+    let (ref mut buf, trim) = if config.files == Files::All {
+        const DOT_DIRECTORIES: usize = 2;
+        let v = vec![
             PathData::new(
                 path_data.path().to_path_buf(),
                 None,
@@ -2461,95 +2515,78 @@ fn enter_directory(
                 config,
                 false,
             ),
-        ]
+        ];
+        (v, DOT_DIRECTORIES)
     } else {
-        vec![]
+        (Vec::new(), 0)
     };
 
     // Convert those entries to the PathData struct
     for raw_entry in read_dir.by_ref() {
-        let dir_entry = match raw_entry {
-            Ok(path) => path,
+        match raw_entry {
+            Ok(dir_entry) => {
+                if should_display(&dir_entry, config) {
+                    buf.push(PathData::new(
+                        dir_entry.path(),
+                        Some(dir_entry),
+                        None,
+                        config,
+                        false,
+                    ));
+                }
+            }
             Err(err) => {
                 state.out.flush()?;
                 show!(LsError::IOError(err));
-                continue;
             }
-        };
-
-        if should_display(&dir_entry, config) {
-            let entry_path_data =
-                PathData::new(dir_entry.path(), Some(dir_entry), None, config, false);
-            entries.push(entry_path_data);
         }
     }
+    // Relinquish unused space since we won't need it anymore.
+    buf.shrink_to_fit();
 
-    sort_entries(&mut entries, config);
+    sort_entries(buf, config);
 
-    // Print total after any error display
     if config.format == Format::Long || config.alloc_size {
-        let total = return_total(&entries, config, &mut state.out)?;
+        let total = return_total(buf, config, &mut state.out)?;
         write!(state.out, "{}", total.as_str())?;
         if config.dired {
             dired::add_total(dired, total.len());
         }
     }
 
-    display_items(&entries, config, state, dired)?;
+    display_items(buf, config, state, dired)?;
 
     if config.recursive {
-        // release the open fd before recursing to not run out of resources
-        for entry in &entries {
-            entry.de.take();
-        }
-        drop(read_dir);
-        for e in entries
+        for e in buf
             .iter()
-            .skip(if config.files == Files::All { 2 } else { 0 })
+            .skip(trim)
             .filter(|p| p.file_type().is_some_and(FileType::is_dir))
+            .rev()
         {
-            match fs::read_dir(e.path()) {
-                Err(err) => {
-                    state.out.flush()?;
-                    show!(LsError::IOErrorContext(
-                        e.path().to_path_buf(),
-                        err,
-                        e.command_line
-                    ));
-                }
-                Ok(rd) => {
-                    if listed_ancestors
-                        .insert(FileInformation::from_path(e.path(), e.must_dereference)?)
-                    {
-                        // when listing several directories in recursive mode, we show
-                        // "dirname:" at the beginning of the file list
-                        writeln!(state.out)?;
-                        if config.dired {
-                            // We already injected the first dir
-                            // Continue with the others
-                            // blank line between directory sections
-                            dired.padding += 1;
-                            dired::indent(&mut state.out)?;
-                            let dir_name_size = e.path().as_os_str().len();
-                            dired::calculate_subdired(dired, dir_name_size);
-                            // inject dir name
-                            dired::add_dir_name(dired, dir_name_size);
-                        }
-
-                        show_dir_name(e, &mut state.out, config)?;
-                        writeln!(state.out)?;
-                        enter_directory(e, rd, config, state, listed_ancestors, dired)?;
-                        listed_ancestors
-                            .remove(&FileInformation::from_path(e.path(), e.must_dereference)?);
-                    } else {
-                        state.out.flush()?;
-                        show!(LsError::AlreadyListedError(e.path().to_path_buf()));
+            // Try to open only to report any errors in order to match GNU semantics.
+            if let Err(err) = fs::read_dir(e.path()) {
+                state.out.flush()?;
+                show!(LsError::IOErrorContext(
+                    e.path().to_path_buf(),
+                    err,
+                    e.command_line
+                ));
+            } else {
+                let fi = FileInformation::from_path(e.path(), e.must_dereference)?;
+                if state.listed_ancestors.insert(fi) {
+                    // Push to stack, but with a less aggressive growth curve.
+                    let (cap, len) = (state.stack.capacity(), state.stack.len());
+                    if cap == len {
+                        state.stack.reserve_exact(len / 4 + 4);
                     }
+                    state.stack.push((e.path().to_path_buf(), true));
+                } else {
+                    state.out.flush()?;
+                    show!(LsError::AlreadyListedError(e.path().to_path_buf()));
                 }
             }
         }
     }
-
     Ok(())
 }
 
