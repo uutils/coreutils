@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore wipesync
+// spell-checker:ignore wipesync SECRETSECRET
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -245,7 +245,6 @@ fn test_shred_rejects_fifo() {
         .fails()
         .stderr_contains("invalid file type");
 }
-
 #[test]
 fn test_shred_verbose_no_padding_1() {
     let (at, mut ucmd) = at_and_ucmd!();

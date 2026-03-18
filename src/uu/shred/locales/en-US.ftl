@@ -65,6 +65,7 @@ shred-pass-progress = {$file}: pass
 shred-couldnt-rename = {$file}: Couldn't rename to {$new_name}: {$error}
 shred-failed-to-open-for-writing = {$file}: failed to open for writing
 shred-file-write-pass-failed = {$file}: File write pass failed
+shred-failed-to-close-file = {$file}: failed to close file
 shred-failed-to-remove-file = {$file}: failed to remove file
 shred-failed-to-truncate-file = {$file}: failed to truncate file
 
