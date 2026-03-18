@@ -23,6 +23,7 @@ env-error-backslash-c-not-allowed = '\\c' ne doit pas apparaître dans une chaî
 env-error-invalid-sequence = séquence invalide '\\{ $char }' dans -S à la position { $position }
 env-error-missing-closing-brace = Accolade fermante manquante à la position { $position }
 env-error-missing-variable = Nom de variable manquant à la position { $position }
+env-error-only-braced-variable = seule l'expansion ${VARNAME} est prise en charge à la position { $position }
 env-error-missing-closing-brace-after-value = Accolade fermante manquante après la valeur par défaut à la position { $position }
 env-error-unexpected-number = Caractère inattendu : '{ $char }', le nom de variable attendu ne doit pas commencer par 0..9 à la position { $position }
 env-error-expected-brace-or-colon = Caractère inattendu : '{ $char }', accolade fermante ('{"\\}"}') ou deux-points (':') attendu à la position { $position }

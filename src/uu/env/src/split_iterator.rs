@@ -99,18 +99,11 @@ impl<'a> SplitIterator<'a> {
             parser: self.get_parser_mut(),
         };
 
-        let (name, default) = var_parse.parse_variable()?;
+        let name = var_parse.parse_variable()?;
 
         let varname_os_str_cow = from_native_int_representation(Cow::Borrowed(name));
-        let value = std::env::var_os(varname_os_str_cow);
-        match (&value, default) {
-            (None, None) => {} // do nothing, just replace it with ""
-            (Some(value), _) => {
-                self.expander.put_string(value);
-            }
-            (None, Some(default)) => {
-                self.expander.put_native_string(default);
-            }
+        if let Some(value) = std::env::var_os(varname_os_str_cow) {
+            self.expander.put_string(value);
         }
 
         Ok(())

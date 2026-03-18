@@ -1860,21 +1860,19 @@ fn test_shebang_error() {
 
 #[test]
 #[cfg(not(target_os = "windows"))]
-fn test_braced_variable_with_default_value() {
-    new_ucmd!()
-        .arg("-Secho ${UNSET_VAR_UNLIKELY_12345:fallback}")
-        .succeeds()
-        .stdout_is("fallback\n");
-}
-
-#[test]
-#[cfg(not(target_os = "windows"))]
-fn test_braced_variable_with_default_when_set() {
-    new_ucmd!()
-        .env("TEST_VAR_12345", "actual")
-        .arg("-Secho ${TEST_VAR_12345:fallback}")
-        .succeeds()
-        .stdout_is("actual\n");
+fn test_reject_shell_style_variable_expansions() {
+    for split in [
+        "-Secho $TEST_VAR_12345",
+        "-Secho ${TEST_VAR_12345:fallback}",
+        "-Secho ${TEST_VAR_12345:-fallback}",
+        "-Secho ${TEST_VAR_12345-default}",
+    ] {
+        new_ucmd!()
+            .env("TEST_VAR_12345", "value")
+            .arg(split)
+            .fails_with_code(125)
+            .stderr_contains("only ${VARNAME} expansion is supported");
+    }
 }
 
 #[test]
@@ -1896,11 +1894,11 @@ fn test_braced_variable_error_missing_closing_brace() {
 }
 
 #[test]
-fn test_braced_variable_error_missing_closing_brace_after_default() {
+fn test_braced_variable_error_rejects_default_syntax() {
     new_ucmd!()
-        .arg("-Secho ${FOO:-value")
+        .arg("-Secho ${FOO:-value}")
         .fails_with_code(125)
-        .stderr_contains("Missing closing brace after default value");
+        .stderr_contains("only ${VARNAME} expansion is supported");
 }
 
 #[test]
@@ -1916,7 +1914,7 @@ fn test_braced_variable_error_unexpected_character() {
     new_ucmd!()
         .arg("-Secho ${FOO?}")
         .fails_with_code(125)
-        .stderr_contains("Unexpected character: '?'");
+        .stderr_contains("only ${VARNAME} expansion is supported");
 }
 
 #[test]

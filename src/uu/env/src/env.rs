@@ -63,12 +63,10 @@ pub enum EnvError {
     EnvParsingOfVariableMissingClosingBrace(usize),
     #[error("{}", translate!("env-error-missing-variable", "position" => .0))]
     EnvParsingOfMissingVariable(usize),
-    #[error("{}", translate!("env-error-missing-closing-brace-after-value", "position" => .0))]
-    EnvParsingOfVariableMissingClosingBraceAfterValue(usize),
+    #[error("{}", translate!("env-error-only-braced-variable", "position" => .0))]
+    EnvParsingOfVariableOnlyBracedName(usize),
     #[error("{}", translate!("env-error-unexpected-number", "position" => .0, "char" => .1.clone()))]
     EnvParsingOfVariableUnexpectedNumber(usize, String),
-    #[error("{}", translate!("env-error-expected-brace-or-colon", "position" => .0, "char" => .1.clone()))]
-    EnvParsingOfVariableExceptedBraceOrColon(usize, String),
     #[error("")]
     EnvReachedEnd,
     #[error("")]
@@ -481,15 +479,11 @@ pub fn parse_args_from_str(text: &NativeIntStr) -> UResult<Vec<NativeIntString>>
             125,
             translate!("env-error-variable-name-issue", "position" => pos, "error" => e),
         ),
-        EnvError::EnvParsingOfVariableMissingClosingBraceAfterValue(pos) => USimpleError::new(
+        EnvError::EnvParsingOfVariableOnlyBracedName(pos) => USimpleError::new(
             125,
             translate!("env-error-variable-name-issue", "position" => pos, "error" => e),
         ),
         EnvError::EnvParsingOfVariableUnexpectedNumber(pos, _) => USimpleError::new(
-            125,
-            translate!("env-error-variable-name-issue", "position" => pos, "error" => e),
-        ),
-        EnvError::EnvParsingOfVariableExceptedBraceOrColon(pos, _) => USimpleError::new(
             125,
             translate!("env-error-variable-name-issue", "position" => pos, "error" => e),
         ),
@@ -1246,21 +1240,34 @@ mod tests {
                 .contains("variable name issue (at 10): Missing closing brace")
         );
 
-        let result = parse_args_from_str(&NCvt::convert(r"echo ${FOO:-value"));
+        let result = parse_args_from_str(&NCvt::convert(r"echo ${FOO:-value}"));
         assert!(result.is_err());
         assert!(
             result
                 .unwrap_err()
                 .to_string()
-                .contains("variable name issue (at 17): Missing closing brace after default value")
+                .contains("only ${VARNAME} expansion is supported")
         );
 
+        let result = parse_args_from_str(&NCvt::convert(r"echo $FOO"));
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("only ${VARNAME} expansion is supported")
+        );
         let result = parse_args_from_str(&NCvt::convert(r"echo ${1FOO}"));
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("variable name issue (at 7): Unexpected character: '1', expected variable name must not start with 0..9"));
 
         let result = parse_args_from_str(&NCvt::convert(r"echo ${FOO?}"));
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("variable name issue (at 10): Unexpected character: '?', expected a closing brace ('}') or colon (':')"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("only ${VARNAME} expansion is supported")
+        );
     }
 }
