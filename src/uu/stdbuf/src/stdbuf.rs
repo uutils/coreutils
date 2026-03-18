@@ -245,9 +245,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("stdbuf")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("stdbuf"))
         .about(translate!("stdbuf-about"))
         .after_help(translate!("stdbuf-after-help"))
         .override_usage(format_usage(&translate!("stdbuf-usage")))

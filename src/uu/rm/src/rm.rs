@@ -294,7 +294,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("rm")
         .version(uucore::crate_version!())
         .about(translate!("rm-about"))
         .help_template(uucore::localized_help_template(uucore::util_name()))

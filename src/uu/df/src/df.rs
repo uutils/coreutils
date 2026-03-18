@@ -142,7 +142,7 @@ enum OptionsError {
         .0.iter()
             .map(|t| translate!("df-error-filesystem-type-both-selected-and-excluded", "type" => t.quote()))
             .collect::<Vec<_>>()
-            .join(format!("\n{}: ", uucore::util_name()).as_str())
+            .join("\ndf: ")
     )]
     FilesystemTypeBothSelectedAndExcluded(Vec<String>),
 }
@@ -451,7 +451,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if matches.get_flag(OPT_INODES) {
             println!(
                 "{}",
-                translate!("df-error-inodes-not-supported-windows", "program" => uucore::util_name())
+                translate!("df-error-inodes-not-supported-windows", "program" => "df")
             );
             return Ok(());
         }
@@ -498,7 +498,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("df")
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("df-about"))

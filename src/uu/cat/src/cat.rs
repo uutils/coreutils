@@ -268,11 +268,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("cat")
         .version(uucore::crate_version!())
         .override_usage(format_usage(&translate!("cat-usage")))
         .about(translate!("cat-about"))
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("cat"))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(
@@ -420,11 +420,11 @@ where
         Ok(())
     } else {
         // each next line is expected to display "cat: …"
-        let line_joiner = format!("\n{}: ", uucore::util_name());
+        let line_joiner = "\ncat: ";
 
         Err(uucore::error::USimpleError::new(
             error_messages.len() as i32,
-            error_messages.join(&line_joiner),
+            error_messages.join(line_joiner),
         ))
     }
 }

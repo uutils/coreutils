@@ -104,9 +104,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("mkdir")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("mkdir"))
         .about(translate!("mkdir-about"))
         .override_usage(format_usage(&translate!("mkdir-usage")))
         .infer_long_args(true)
@@ -316,7 +316,7 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
                 writeln!(
                     stdout(),
                     "{}",
-                    translate!("mkdir-verbose-created-directory", "util_name" => uucore::util_name(), "path" => path.quote())
+                    translate!("mkdir-verbose-created-directory", "util_name" => "mkdir", "path" => path.quote())
                 )?;
             }
 
@@ -366,7 +366,7 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
                 writeln!(
                     stdout(),
                     "{}",
-                    translate!("mkdir-verbose-created-directory", "util_name" => uucore::util_name(), "path" => path.quote())
+                    translate!("mkdir-verbose-created-directory", "util_name" => "mkdir", "path" => path.quote())
                 )?;
             }
             Ok(())

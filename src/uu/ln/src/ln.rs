@@ -143,9 +143,9 @@ pub fn uu_app() -> Command {
         backup_control::BACKUP_CONTROL_LONG_HELP
     );
 
-    Command::new(uucore::util_name())
+    Command::new("ln")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("ln"))
         .about(translate!("ln-about"))
         .override_usage(format_usage(&translate!("ln-usage")))
         .infer_long_args(true)

@@ -220,7 +220,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    let cmd = Command::new(uucore::util_name())
+    let cmd = Command::new("chroot")
         .version(uucore::crate_version!())
         .about(translate!("chroot-about"))
         .override_usage(format_usage(&translate!("chroot-usage")))
