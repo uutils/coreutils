@@ -507,12 +507,28 @@ fn check_and_handle_string_args(
     prefix_to_test: &str,
     all_args: &mut Vec<OsString>,
     do_debug_print_args: Option<&Vec<OsString>>,
+    require_non_empty_payload: bool,
+    strip_optional_leading_equals: bool,
 ) -> UResult<bool> {
     let native_arg = NCvt::convert(arg);
     if let Some(remaining_arg) = native_arg.strip_prefix(&*NCvt::convert(prefix_to_test)) {
+        if require_non_empty_payload && remaining_arg.is_empty() {
+            return Ok(false);
+        }
+
         if let Some(input_args) = do_debug_print_args {
             debug_print_args(input_args); // do it here, such that its also printed when we get an error/panic during parsing
         }
+
+        let remaining_arg = if strip_optional_leading_equals {
+            if let Some(stripped_remaining_arg) = remaining_arg.strip_prefix(&*NCvt::convert("=")) {
+                stripped_remaining_arg
+            } else {
+                remaining_arg
+            }
+        } else {
+            remaining_arg
+        };
 
         let arg_strings = parse_args_from_str(remaining_arg)?;
         all_args.extend(
@@ -568,7 +584,12 @@ impl EnvAppData {
             options::UNSET,
         ];
         let short_flags_with_args = ['a', 'C', 'f', 'u'];
+        let mut consumed_split_payload_arg: Option<usize> = None;
         for (n, arg) in original_args.iter().enumerate() {
+            if consumed_split_payload_arg == Some(n) {
+                consumed_split_payload_arg = None;
+                continue;
+            }
             let arg_str = arg.to_string_lossy();
             // Stop processing env flags once we reach the command or -- argument
             if 0 < n
@@ -583,13 +604,21 @@ impl EnvAppData {
             }
             expecting_arg = false;
             match arg {
-                b if check_and_handle_string_args(b, "--split-string", &mut all_args, None)? => {
+                b if check_and_handle_string_args(
+                    b,
+                    "--split-string",
+                    &mut all_args,
+                    None,
+                    true,
+                    true,
+                )? =>
+                {
                     self.had_string_argument = true;
                 }
-                b if check_and_handle_string_args(b, "-S", &mut all_args, None)? => {
+                b if check_and_handle_string_args(b, "-S", &mut all_args, None, true, false)? => {
                     self.had_string_argument = true;
                 }
-                b if check_and_handle_string_args(b, "-vS", &mut all_args, None)? => {
+                b if check_and_handle_string_args(b, "-vS", &mut all_args, None, true, false)? => {
                     self.do_debug_printing = true;
                     self.had_string_argument = true;
                 }
@@ -598,11 +627,38 @@ impl EnvAppData {
                     "-vvS",
                     &mut all_args,
                     Some(original_args),
+                    true,
+                    false,
                 )? =>
                 {
                     self.do_debug_printing = true;
                     self.do_input_debug_printing = Some(false); // already done
                     self.had_string_argument = true;
+                }
+                b if b == "--split-string" || b == "-S" || b == "-vS" || b == "-vvS" => {
+                    let Some(next_arg) = original_args.get(n + 1) else {
+                        all_args.push(arg.clone());
+                        continue;
+                    };
+
+                    if b == "-vS" || b == "-vvS" {
+                        self.do_debug_printing = true;
+                    }
+                    if b == "-vvS" {
+                        debug_print_args(original_args);
+                        self.do_input_debug_printing = Some(false);
+                    }
+
+                    let native_next_arg = NCvt::convert(next_arg);
+                    let arg_strings = parse_args_from_str(native_next_arg.as_ref())?;
+                    all_args.extend(
+                        arg_strings
+                            .into_iter()
+                            .map(from_native_int_representation_owned),
+                    );
+                    self.had_string_argument = true;
+                    expecting_arg = false;
+                    consumed_split_payload_arg = Some(n + 1);
                 }
                 _ => {
                     if let Some(flag) = arg_str.strip_prefix("--") {

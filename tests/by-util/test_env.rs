@@ -588,6 +588,31 @@ fn test_split_string_into_args_long_option_whitespace_handling() {
 
 #[cfg(not(target_os = "windows"))] // no printf available
 #[test]
+fn test_split_string_option_forms_match_gnu_required_argument_handling() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .args(&["-S", "printf x:%s\\n one two"])
+        .succeeds()
+        .stdout_is("x:one\nx:two\n");
+
+    scene
+        .ucmd()
+        .args(&["--split-string", "printf x:%s\\n one two"])
+        .succeeds()
+        .stdout_is("x:one\nx:two\n");
+
+    scene
+        .ucmd()
+        .arg("--split-string=printf x:%s\\n one two")
+        .succeeds()
+        .stdout_is("x:one\nx:two\n");
+}
+
+
+#[cfg(not(target_os = "windows"))] // no printf available
+#[test]
 fn test_split_string_into_args_debug_output_whitespace_handling() {
     let scene = TestScenario::new(util_name!());
 
