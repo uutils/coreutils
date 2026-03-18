@@ -42,6 +42,7 @@ shred-cannot-open-random-source = impossible d'ouvrir la source aléatoire : {$s
 shred-invalid-file-size = taille de fichier invalide : {$size}
 shred-no-such-file-or-directory = {$file} : Aucun fichier ou répertoire de ce type
 shred-not-a-file = {$file} : N'est pas un fichier
+shred-invalid-file-type = {$file} : type de fichier invalide
 
 # Texte d'aide des options
 shred-force-help = modifier les permissions pour permettre l'écriture si nécessaire

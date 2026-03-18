@@ -12,9 +12,9 @@ use rand::{RngExt as _, rngs::StdRng, seq::SliceRandom};
 use std::cell::RefCell;
 use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, Read, Seek, SeekFrom, Write};
 #[cfg(unix)]
-use std::os::unix::prelude::PermissionsExt;
+use std::io::IsTerminal;
+use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
@@ -613,6 +613,81 @@ fn create_compatible_sequence(
     }
 }
 
+#[cfg(unix)]
+fn reject_unsupported_file_type(path: &Path, file: &File) -> UResult<()> {
+    use std::os::unix::fs::FileTypeExt;
+
+    // Validate the open fd with fstat instead of trusting the path check,
+    // which an attacker could swap between check and open.
+    let fd_metadata = file
+        .metadata()
+        .map_err_context(|| translate!("shred-failed-to-get-metadata"))?;
+    let file_type = fd_metadata.file_type();
+
+    if file_type.is_fifo() || file_type.is_socket() {
+        return Err(USimpleError::new(
+            1,
+            translate!("shred-invalid-file-type", "file" => path.maybe_quote()),
+        ));
+    }
+
+    // Reject TTY character devices.
+    if file_type.is_char_device() && file.is_terminal() {
+        return Err(USimpleError::new(
+            1,
+            translate!("shred-invalid-file-type", "file" => path.maybe_quote()),
+        ));
+    }
+
+    Ok(())
+}
+
+fn target_size(file: &mut File, metadata: &fs::Metadata, size: Option<u64>) -> UResult<Option<u64>> {
+    if let Some(size) = size {
+        return Ok(Some(size));
+    }
+
+    if metadata.file_type().is_file() {
+        return Ok(Some(metadata.len()));
+    }
+
+    match file.seek(SeekFrom::End(0)) {
+        Ok(size) => {
+            file.rewind()
+                .map_err_context(|| translate!("shred-failed-to-seek-file"))?;
+
+            if size == 0 {
+                // Non-regular files can report an offset of 0 even when they accept writes
+                // (for example, character devices like /dev/zero). Use one bounded write
+                // block so we still run overwrite passes without looping forever.
+                Ok(Some(OPTIMAL_IO_BLOCK_SIZE as u64))
+            } else {
+                Ok(Some(size))
+            }
+        }
+        Err(_) => Ok(None),
+    }
+}
+
+fn filesystem_block_size(metadata: &fs::Metadata) -> u64 {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+
+        let block_size = metadata.blksize();
+        if block_size > 0 {
+            block_size
+        } else {
+            OPTIMAL_IO_BLOCK_SIZE as u64
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = metadata;
+        OPTIMAL_IO_BLOCK_SIZE as u64
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::cognitive_complexity)]
 fn wipe_file(
@@ -634,6 +709,7 @@ fn wipe_file(
             translate!("shred-no-such-file-or-directory", "file" => path.maybe_quote()),
         ));
     }
+    #[cfg(not(unix))]
     if !path.is_file() {
         return Err(USimpleError::new(
             1,
@@ -641,15 +717,19 @@ fn wipe_file(
         ));
     }
 
-    let metadata =
+    // Read path metadata for permission changes only.
+    // Type checks happen on the opened fd.
+    let path_metadata =
         fs::metadata(path).map_err_context(|| translate!("shred-failed-to-get-metadata"))?;
 
     // If force is true, set file permissions to not-readonly.
     if force {
-        let mut perms = metadata.permissions();
+        let mut perms = path_metadata.permissions();
         #[cfg(unix)]
         #[allow(clippy::useless_conversion, clippy::unnecessary_cast)]
         {
+            use std::os::unix::fs::PermissionsExt;
+
             // NOTE: set_readonly(false) makes the file world-writable on Unix.
             // NOTE: S_IWUSR type is u16 on macOS, i32 on Redox.
             if (perms.mode() & (S_IWUSR as u32)) == 0 {
@@ -664,10 +744,52 @@ fn wipe_file(
             .map_err_context(|| translate!("shred-failed-to-set-permissions"))?;
     }
 
+    // Pre-open fast-reject for FIFOs and sockets: opening a FIFO for writing
+    // blocks until a reader connects, so we must reject before open(). The
+    // post-open fstat check below closes the TOCTOU window for races.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::FileTypeExt;
+
+        let ft = path_metadata.file_type();
+        if ft.is_fifo() || ft.is_socket() {
+            return Err(USimpleError::new(
+                1,
+                translate!("shred-invalid-file-type", "file" => path.maybe_quote()),
+            ));
+        }
+    }
+
+    let mut open_opts = OpenOptions::new();
+    open_opts.write(true).truncate(false);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+
+        open_opts.custom_flags(libc::O_NOCTTY);
+    }
+    let mut file = open_opts.open(path).map_err_context(
+        || translate!("shred-failed-to-open-for-writing", "file" => path.maybe_quote()),
+    )?;
+    #[cfg(unix)]
+    reject_unsupported_file_type(path, &file)?;
+
+    let metadata = file
+        .metadata()
+        .map_err_context(|| translate!("shred-failed-to-get-metadata"))?;
+    let size = target_size(&mut file, &metadata, size)?.unwrap_or(metadata.len());
+    let is_regular_file = metadata.file_type().is_file();
+    let should_sync_data = is_regular_file;
+    let io_block_size = if is_regular_file {
+        filesystem_block_size(&metadata)
+    } else {
+        OPTIMAL_IO_BLOCK_SIZE as u64
+    };
+
     // Fill up our pass sequence
     let mut pass_sequence = Vec::new();
-    if metadata.len() != 0 {
-        // Only add passes if the file is non-empty
+    if size != 0 {
+        // Only add passes if the target contains bytes to overwrite
 
         if n_passes <= 3 {
             // Only random passes if n_passes <= 3
@@ -683,29 +805,17 @@ fn wipe_file(
             }
         }
 
-        // --zero specifies whether we want one final pass of 0x00 on our file
+        // If `zero` is set, append a final pass with 0x00 bytes.
         if zero {
             pass_sequence.push(PassType::Pattern(PATTERNS[0]));
         }
     }
 
     let total_passes = pass_sequence.len();
-    let mut file = OpenOptions::new()
-        .write(true)
-        .truncate(false)
-        .open(path)
-        .map_err_context(
-            || translate!("shred-failed-to-open-for-writing", "file" => path.maybe_quote()),
-        )?;
 
-    let size = match size {
-        Some(size) => size,
-        None => metadata.len(),
-    };
-
-    for (i, pass_type) in pass_sequence.into_iter().enumerate() {
+    for (i, pass_type) in pass_sequence.iter().enumerate() {
         if verbose {
-            let pass_name = pass_name(&pass_type);
+            let pass_name = pass_name(pass_type);
             let msg = translate!("shred-pass-progress", "file" => path.maybe_quote());
             show_error!(
                 "{msg} {}/{total_passes} ({pass_name})...",
@@ -713,7 +823,16 @@ fn wipe_file(
             );
         }
         // size is an optional argument for exactly how many bytes we want to shred
-        do_pass(&mut file, &pass_type, exact, random_source, size).map_err_context(
+        do_pass(
+            &mut file,
+            pass_type,
+            exact,
+            random_source,
+            size,
+            should_sync_data,
+            io_block_size,
+        )
+        .map_err_context(
             || translate!("shred-file-write-pass-failed", "file" => path.maybe_quote()),
         )?;
     }
@@ -726,7 +845,7 @@ fn wipe_file(
     Ok(())
 }
 
-fn split_on_blocks(file_size: u64, exact: bool) -> (u64, u64) {
+fn split_on_blocks(file_size: u64, exact: bool, io_block_size: u64) -> (u64, u64) {
     // OPTIMAL_IO_BLOCK_SIZE must not exceed BLOCK_SIZE. Violating this may cause overflows due
     // to alignment or performance issues.This kind of misconfiguration is
     // highly unlikely but would indicate a serious error.
@@ -735,10 +854,11 @@ fn split_on_blocks(file_size: u64, exact: bool) -> (u64, u64) {
     let file_size = if exact {
         file_size
     } else {
-        // The main idea here is to align the file size to the OPTIMAL_IO_BLOCK_SIZE, and then
+        let io_block_size = io_block_size.max(1);
+        // The main idea here is to align the file size to the io_block_size, and then
         // split it into BLOCK_SIZE + remaining bytes. Since the input data is already aligned to N
-        // * OPTIMAL_IO_BLOCK_SIZE, the output file size will also be aligned and correct.
-        file_size.div_ceil(OPTIMAL_IO_BLOCK_SIZE as u64) * OPTIMAL_IO_BLOCK_SIZE as u64
+        // * io_block_size, the output file size will also be aligned and correct.
+        file_size.div_ceil(io_block_size) * io_block_size
     };
     (file_size / BLOCK_SIZE as u64, file_size % BLOCK_SIZE as u64)
 }
@@ -749,12 +869,14 @@ fn do_pass(
     exact: bool,
     random_source: Option<&RefCell<File>>,
     file_size: u64,
+    should_sync_data: bool,
+    io_block_size: u64,
 ) -> Result<(), io::Error> {
     // We might be at the end of the file due to a previous iteration, so rewind.
     file.rewind()?;
 
     let mut writer = BytesWriter::from_pass_type(pass_type, random_source)?;
-    let (number_of_blocks, bytes_left) = split_on_blocks(file_size, exact);
+    let (number_of_blocks, bytes_left) = split_on_blocks(file_size, exact, io_block_size);
 
     // We start by writing BLOCK_SIZE times as many time as possible.
     for _ in 0..number_of_blocks {
@@ -762,11 +884,13 @@ fn do_pass(
         file.write_all(block)?;
     }
 
-    // Then we write remaining data which is smaller than the BLOCK_SIZE
+    // Then we write remaining data which is smaller than the BLOCK_SIZE.
     let block = writer.bytes_for_pass(bytes_left as usize)?;
     file.write_all(block)?;
 
-    file.sync_data()?;
+    if should_sync_data {
+        file.sync_data()?;
+    }
 
     Ok(())
 }
@@ -864,28 +988,38 @@ mod tests {
     fn test_align_non_exact_control_values() {
         // Note: This test only makes sense for the default values of BLOCK_SIZE and
         // OPTIMAL_IO_BLOCK_SIZE.
-        assert_eq!(split_on_blocks(1, false), (0, 4096));
-        assert_eq!(split_on_blocks(4095, false), (0, 4096));
-        assert_eq!(split_on_blocks(4096, false), (0, 4096));
-        assert_eq!(split_on_blocks(4097, false), (0, 8192));
-        assert_eq!(split_on_blocks(65535, false), (1, 0));
-        assert_eq!(split_on_blocks(65536, false), (1, 0));
-        assert_eq!(split_on_blocks(65537, false), (1, 4096));
+        assert_eq!(split_on_blocks(1, false, OPTIMAL_IO_BLOCK_SIZE as u64), (0, 4096));
+        assert_eq!(split_on_blocks(4095, false, OPTIMAL_IO_BLOCK_SIZE as u64), (0, 4096));
+        assert_eq!(split_on_blocks(4096, false, OPTIMAL_IO_BLOCK_SIZE as u64), (0, 4096));
+        assert_eq!(split_on_blocks(4097, false, OPTIMAL_IO_BLOCK_SIZE as u64), (0, 8192));
+        assert_eq!(split_on_blocks(65535, false, OPTIMAL_IO_BLOCK_SIZE as u64), (1, 0));
+        assert_eq!(split_on_blocks(65536, false, OPTIMAL_IO_BLOCK_SIZE as u64), (1, 0));
+        assert_eq!(split_on_blocks(65537, false, OPTIMAL_IO_BLOCK_SIZE as u64), (1, 4096));
     }
 
     #[test]
     fn test_align_non_exact_cycle() {
         for size in 1..BLOCK_SIZE as u64 * 2 {
-            let (number_of_blocks, bytes_left) = split_on_blocks(size, false);
+            let (number_of_blocks, bytes_left) =
+                split_on_blocks(size, false, OPTIMAL_IO_BLOCK_SIZE as u64);
             let test_size = number_of_blocks * BLOCK_SIZE as u64 + bytes_left;
             assert_eq!(test_size % OPTIMAL_IO_BLOCK_SIZE as u64, 0);
         }
     }
 
+
+    #[test]
+    fn test_align_non_exact_uses_provided_block_size() {
+        assert_eq!(split_on_blocks(1, false, 512), (0, 512));
+        assert_eq!(split_on_blocks(512, false, 512), (0, 512));
+        assert_eq!(split_on_blocks(513, false, 512), (0, 1024));
+    }
+
     #[test]
     fn test_align_exact_cycle() {
         for size in 1..BLOCK_SIZE as u64 * 2 {
-            let (number_of_blocks, bytes_left) = split_on_blocks(size, true);
+            let (number_of_blocks, bytes_left) =
+                split_on_blocks(size, true, OPTIMAL_IO_BLOCK_SIZE as u64);
             let test_size = number_of_blocks * BLOCK_SIZE as u64 + bytes_left;
             assert_eq!(test_size, size);
         }
