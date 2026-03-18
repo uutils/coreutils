@@ -172,16 +172,16 @@ mod ut {
     pub use libc::_UTX_USERSIZE as UT_NAMESIZE;
 
     pub use libc::ACCOUNTING;
-    pub use libc::BOOT_TIME;
-    pub use libc::DEAD_PROCESS;
-    pub use libc::EMPTY;
-    pub use libc::INIT_PROCESS;
-    pub use libc::LOGIN_PROCESS;
-    pub use libc::NEW_TIME;
-    pub use libc::OLD_TIME;
-    pub use libc::RUN_LVL;
-    pub use libc::SIGNATURE;
-    pub use libc::USER_PROCESS;
+    pub const BOOT_TIME: i16 = libc::BOOT_TIME as i16;
+    pub const DEAD_PROCESS: i16 = libc::DEAD_PROCESS as i16;
+    pub const EMPTY: i16 = libc::EMPTY as i16;
+    pub const INIT_PROCESS: i16 = libc::INIT_PROCESS as i16;
+    pub const LOGIN_PROCESS: i16 = libc::LOGIN_PROCESS as i16;
+    pub const NEW_TIME: i16 = libc::NEW_TIME as i16;
+    pub const OLD_TIME: i16 = libc::OLD_TIME as i16;
+    pub const RUN_LVL: i16 = libc::RUN_LVL as i16;
+    pub const SIGNATURE: i16 = libc::SIGNATURE as i16;
+    pub const USER_PROCESS: i16 = libc::USER_PROCESS as i16;
 }
 
 #[cfg(target_os = "cygwin")]
@@ -285,7 +285,7 @@ impl Utmpx {
     }
     /// check if the record is a user process
     pub fn is_user_process(&self) -> bool {
-        !self.user().is_empty() && self.record_type() == USER_PROCESS as i16
+        !self.user().is_empty() && self.record_type() == USER_PROCESS
     }
 
     /// Canonicalize host name using DNS

@@ -235,27 +235,27 @@ impl Who {
                                     self.print_runlevel(&ut);
                                 }
                             }
-                            x if x == utmpx::BOOT_TIME as i16 && self.need_boottime => {
-                                self.print_boottime(&ut)
+                            x if x == utmpx::BOOT_TIME && self.need_boottime => {
+                                self.print_boottime(&ut);
                             }
-                            x if x == utmpx::NEW_TIME as i16 && self.need_clockchange => {
-                                self.print_clockchange(&ut)
+                            x if x == utmpx::NEW_TIME && self.need_clockchange => {
+                                self.print_clockchange(&ut);
                             }
-                            x if x == utmpx::INIT_PROCESS as i16 && self.need_initspawn => {
-                                self.print_initspawn(&ut)
+                            x if x == utmpx::INIT_PROCESS && self.need_initspawn => {
+                                self.print_initspawn(&ut);
                             }
-                            x if x == utmpx::LOGIN_PROCESS as i16 && self.need_login => {
-                                self.print_login(&ut)
+                            x if x == utmpx::LOGIN_PROCESS && self.need_login => {
+                                self.print_login(&ut);
                             }
-                            x if x == utmpx::DEAD_PROCESS as i16 && self.need_deadprocs => {
-                                self.print_deadprocs(&ut)
+                            x if x == utmpx::DEAD_PROCESS && self.need_deadprocs => {
+                                self.print_deadprocs(&ut);
                             }
                             _ => {}
                         }
                     }
                 }
 
-                if ut.record_type() == utmpx::BOOT_TIME as i16 {}
+                if ut.record_type() == utmpx::BOOT_TIME {}
             }
         }
         Ok(())
