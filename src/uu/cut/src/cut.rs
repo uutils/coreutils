@@ -511,8 +511,7 @@ fn get_delimiters(matches: &ArgMatches) -> UResult<(Delimiter<'_>, Option<&[u8]>
             ));
         }
         Some(os_string) => {
-            if os_string == "''" || os_string.is_empty() {
-                // treat `''` as empty delimiter
+            if os_string.is_empty() {
                 Delimiter::Slice(b"\0")
             } else {
                 // For delimiter `-d` option value - allow both UTF-8 (possibly multi-byte) characters
@@ -540,7 +539,7 @@ fn get_delimiters(matches: &ArgMatches) -> UResult<(Delimiter<'_>, Option<&[u8]>
     let out_delim = matches
         .get_one::<OsString>(options::OUTPUT_DELIMITER)
         .map(|os_string| {
-            if os_string.is_empty() || os_string == "''" {
+            if os_string.is_empty() {
                 b"\0"
             } else {
                 os_str_as_bytes(os_string).unwrap()
