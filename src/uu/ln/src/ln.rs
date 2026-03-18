@@ -6,7 +6,7 @@
 // spell-checker:ignore (ToDO) srcpath targetpath EEXIST
 
 use clap::{Arg, ArgAction, Command};
-use std::io::{Write, stdout};
+use std::io::{ErrorKind, Write, stdout};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
 use uucore::fs::{make_path_relative_to, paths_refer_to_same_file};
@@ -251,7 +251,7 @@ pub fn uu_app() -> Command {
 
 fn exec(files: &[PathBuf], settings: &Settings) -> UResult<()> {
     // Handle cases where we create links in a directory first.
-    if let Some(ref target_path) = settings.target_dir {
+    if let Some(target_path) = &settings.target_dir {
         // 4th form: a directory is specified by -t.
         return link_files_in_dir(files, target_path, settings);
     }
@@ -404,7 +404,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
                 return Err(LnError::SameFile(src.to_owned(), dst.to_owned()).into());
             }
         }
-        if let Some(ref p) = backup_path {
+        if let Some(p) = &backup_path {
             fs::rename(dst, p)
                 .map_err_context(|| translate!("ln-cannot-backup", "file" => dst.quote()))?;
         }
@@ -432,7 +432,8 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
                         return Err(LnError::SameFile(src.to_owned(), dst.to_owned()).into());
                     }
                 }
-                if fs::remove_file(dst).is_ok() {}
+
+                if settings.symbolic && fs::remove_file(dst).is_ok() {}
                 // In case of error, don't do anything
             }
         }
@@ -449,25 +450,33 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
             } else {
                 source.to_path_buf()
             };
-            if let Err(e) = fs::hard_link(&p, dst) {
+            if let Err(err) = fs::hard_link(&p, dst) {
                 if p.is_dir() {
                     return Err(LnError::FailedToCreateHardLinkDir(source.to_path_buf()).into());
                 }
-                return Err(e).map_err_context(|| {
-                    translate!("ln-failed-to-create-hard-link", "source" => source.quote(), "dest" => dst.quote())
-                });
+                if settings.overwrite == OverwriteMode::Force && err.kind() == ErrorKind::AlreadyExists
+                {
+                    let _ = fs::remove_file(dst);
+                    // In case of error, don't do anything
+                    fs::hard_link(&p, dst).map_err_context(|| {
+                        translate!("ln-failed-to-create-hard-link", "source" => source.quote(), "dest" => dst.quote())
+                    })?;
+                } else {
+                    return Err(err).map_err_context(|| {
+                        translate!("ln-failed-to-create-hard-link", "source" => source.quote(), "dest" => dst.quote())
+                    });
+                }
             }
             Ok(())
         }
     })();
     if res.is_err() {
-        if let Some(ref p) = backup_path {
+        if let Some(p) = &backup_path {
             fs::rename(p, dst)
                 .map_err_context(|| translate!("ln-cannot-backup", "file" => dst.quote()))?;
         }
         res?;
     }
-
     if settings.verbose {
         let mut out = stdout();
         write!(out, "{} -> {}", dst.quote(), source.quote())?;

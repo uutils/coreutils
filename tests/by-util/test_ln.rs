@@ -883,6 +883,19 @@ fn test_force_same_file_detected_after_canonicalization() {
 }
 
 #[test]
+fn test_force_missing_hard_link_source_preserves_destination() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("dst", "keep\n");
+
+    ucmd.args(&["-f", "missing_source", "dst"])
+        .fails_with_code(1)
+        .stderr_contains("failed to create hard link 'missing_source'");
+
+    assert!(at.file_exists("dst"));
+    assert_eq!(at.read("dst"), "keep\n");
+}
+#[test]
 #[cfg(not(target_os = "android"))]
 fn test_force_ln_existing_hard_link_entry() {
     let scene = TestScenario::new(util_name!());
