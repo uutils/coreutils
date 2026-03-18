@@ -708,8 +708,6 @@ impl EnvAppData {
             &signal_apply_all,
         )?;
 
-        apply_change_directory(&opts)?;
-
         // NOTE: we manually set and unset the env vars below rather than using Command::env() to more
         //       easily handle the case where no command is given
 
@@ -748,6 +746,7 @@ impl EnvAppData {
             }
         }
 
+        apply_change_directory(&opts)?;
         if opts.program.is_empty() {
             // no program provided, so just dump all env vars to stdout
             print_all_env_vars(opts.line_ending)?;

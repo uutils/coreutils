@@ -480,6 +480,36 @@ fn test_fail_change_directory() {
     assert!(out.contains("env: cannot change directory to "));
 }
 
+#[test]
+fn test_chdir_happens_after_relative_file_loading() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.mkdir("target");
+    scene
+        .fixtures
+        .write("config.env", "CONFIG_SOURCE=from-root\n");
+    scene
+        .fixtures
+        .write("target/config.env", "CONFIG_SOURCE=from-target\n");
+
+    let out = scene
+        .ucmd()
+        .args(&["--chdir", "target", "--file", "config.env", "-i"])
+        .arg(uutests::util::get_tests_binary())
+        .arg(util_name!())
+        .succeeds()
+        .stdout_move_str();
+
+    assert!(
+        out.contains("CONFIG_SOURCE=from-root\n"),
+        "expected config file from invocation directory, got: {out:?}"
+    );
+    assert!(
+        !out.contains("CONFIG_SOURCE=from-target\n"),
+        "unexpectedly loaded config from --chdir target directory: {out:?}"
+    );
+}
+
+
 #[cfg(not(target_os = "windows"))] // windows has no executable "echo", its only supported as part of a batch-file
 #[test]
 fn test_split_string_into_args_one_argument_no_quotes() {
