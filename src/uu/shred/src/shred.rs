@@ -57,6 +57,10 @@ const PATTERN_BUFFER_SIZE: usize = BLOCK_SIZE + PATTERN_LENGTH - 1;
 /// example, `std::os::unix::fs::MetadataExt::blksize()`.
 const OPTIMAL_IO_BLOCK_SIZE: usize = 1 << 12;
 
+/// Sector size for recovering after write failures, matching GNU shred.
+/// Used to skip past bad sectors on EIO and continue overwriting.
+const SECTOR_SIZE: u64 = 512;
+
 /// Patterns that appear in order for the passes
 ///
 /// A single-byte pattern is equivalent to a multi-byte pattern of that byte three times.
@@ -188,6 +192,7 @@ impl BytesWriter {
         pass: &PassType,
         random_source: Option<&RefCell<File>>,
     ) -> Result<Self, io::Error> {
+
         match pass {
             PassType::Random => match random_source {
                 None => Ok(Self::Random {
@@ -240,6 +245,12 @@ impl BytesWriter {
                 *offset = (*offset + size) % PATTERN_LENGTH;
                 Ok(bytes)
             }
+        }
+    }
+
+    fn sync_pattern_offset(&mut self, file_offset: u64) {
+        if let Self::Pattern { offset, .. } = self {
+            *offset = (file_offset % PATTERN_LENGTH as u64) as usize;
         }
     }
 }
@@ -779,7 +790,7 @@ fn wipe_file(
     let metadata = file
         .metadata()
         .map_err_context(|| translate!("shred-failed-to-get-metadata"))?;
-    let size = target_size(&mut file, &metadata, size)?.unwrap_or(metadata.len());
+    let size = target_size(&mut file, &metadata, size)?;
     let is_regular_file = metadata.file_type().is_file();
     let should_sync_data = is_regular_file;
     let io_block_size = if is_regular_file {
@@ -790,7 +801,7 @@ fn wipe_file(
 
     // Fill up our pass sequence
     let mut pass_sequence = Vec::new();
-    if size != 0 {
+    if size != Some(0) {
         // Only add passes if the target contains bytes to overwrite
 
         if n_passes <= 3 {
@@ -876,33 +887,90 @@ fn split_on_blocks(file_size: u64, exact: bool, io_block_size: u64) -> (u64, u64
     (file_size / BLOCK_SIZE as u64, file_size % BLOCK_SIZE as u64)
 }
 
+
+fn is_eio(err: &io::Error) -> bool {
+    #[cfg(unix)]
+    {
+        err.raw_os_error() == Some(libc::EIO)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = err;
+        false
+    }
+}
+
 fn do_pass(
     file: &mut File,
     pass_type: &PassType,
     exact: bool,
     random_source: Option<&RefCell<File>>,
-    file_size: u64,
+    file_size: Option<u64>,
     should_sync_data: bool,
     io_block_size: u64,
 ) -> Result<(), io::Error> {
-    // We might be at the end of the file due to a previous iteration, so rewind.
-    file.rewind()?;
-
-    let mut writer = BytesWriter::from_pass_type(pass_type, random_source)?;
-    let (number_of_blocks, bytes_left) = split_on_blocks(file_size, exact, io_block_size);
-
-    // We start by writing BLOCK_SIZE times as many time as possible.
-    for _ in 0..number_of_blocks {
-        let block = writer.bytes_for_pass(BLOCK_SIZE)?;
-        file.write_all(block)?;
+    // Known-size passes must restart from the beginning each iteration.
+    if file_size.is_some() {
+        file.rewind()?;
     }
 
-    // Then we write remaining data which is smaller than the BLOCK_SIZE.
-    let block = writer.bytes_for_pass(bytes_left as usize)?;
-    file.write_all(block)?;
+    let mut writer = BytesWriter::from_pass_type(pass_type, random_source)?;
+
+    if let Some(file_size) = file_size {
+        let (number_of_blocks, bytes_left) = split_on_blocks(file_size, exact, io_block_size);
+        let total_bytes = number_of_blocks * BLOCK_SIZE as u64 + bytes_left;
+
+        let mut offset: u64 = 0;
+        while offset < total_bytes {
+            writer.sync_pattern_offset(offset);
+            let remaining = (total_bytes - offset) as usize;
+            let chunk_size = remaining.min(BLOCK_SIZE);
+            let block = writer.bytes_for_pass(chunk_size)?;
+
+            loop {
+                match file.write_all(block) {
+                    Ok(()) => {
+                        offset += chunk_size as u64;
+                        break;
+                    }
+                    Err(err) if is_eio(&err) => {
+                        // Bad sector: continue from the next sector after the bytes
+                        // the kernel accepted before reporting EIO.
+                        let current_pos = file.stream_position()?;
+                        let next_sector = (current_pos | (SECTOR_SIZE - 1)) + 1;
+                        if next_sector >= total_bytes {
+                            break;
+                        }
+                        file.seek(SeekFrom::Start(next_sector))?;
+                        offset = next_sector;
+                        break;
+                    }
+                    Err(err) => return Err(err),
+                }
+            }
+        }
+    } else {
+        loop {
+            let block = writer.bytes_for_pass(BLOCK_SIZE)?;
+            match file.write_all(block) {
+                Ok(()) => {}
+                Err(err)
+                    if err.kind() == io::ErrorKind::WriteZero
+                        || err.kind() == io::ErrorKind::StorageFull =>
+                {
+                    break;
+                }
+                Err(err) => return Err(err),
+            }
+        }
+    }
 
     if should_sync_data {
-        file.sync_data()?;
+        if let Err(err) = file.sync_data() {
+            if !is_eio(&err) {
+                return Err(err);
+            }
+        }
     }
 
     Ok(())
@@ -1106,7 +1174,9 @@ fn do_remove(
 #[cfg(test)]
 mod tests {
 
-    use crate::{BLOCK_SIZE, OPTIMAL_IO_BLOCK_SIZE, split_on_blocks};
+    use crate::{
+        BLOCK_SIZE, BytesWriter, OPTIMAL_IO_BLOCK_SIZE, PassType, Pattern, split_on_blocks,
+    };
 
     #[test]
     fn test_align_non_exact_control_values() {
@@ -1137,6 +1207,40 @@ mod tests {
         assert_eq!(split_on_blocks(1, false, 512), (0, 512));
         assert_eq!(split_on_blocks(512, false, 512), (0, 512));
         assert_eq!(split_on_blocks(513, false, 512), (0, 1024));
+    }
+
+
+    #[test]
+    fn test_pattern_writer_syncs_to_file_offset() {
+        let mut writer = BytesWriter::from_pass_type(
+            &PassType::Pattern(Pattern::Multi([b'A', b'B', b'C'])),
+            None,
+        )
+        .expect("pattern writer should be created");
+
+        writer.sync_pattern_offset(0);
+        assert_eq!(
+            writer.bytes_for_pass(1).expect("pattern byte at offset 0"),
+            b"A"
+        );
+
+        writer.sync_pattern_offset(1);
+        assert_eq!(
+            writer.bytes_for_pass(1).expect("pattern byte at offset 1"),
+            b"B"
+        );
+
+        writer.sync_pattern_offset(2);
+        assert_eq!(
+            writer.bytes_for_pass(1).expect("pattern byte at offset 2"),
+            b"C"
+        );
+
+        writer.sync_pattern_offset(3);
+        assert_eq!(
+            writer.bytes_for_pass(1).expect("pattern byte at offset 3"),
+            b"A"
+        );
     }
 
     #[test]
