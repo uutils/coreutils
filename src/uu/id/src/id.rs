@@ -587,7 +587,8 @@ fn pline(possible_uid: Option<uid_t>) -> io::Result<()> {
     target_os = "linux",
     target_os = "android",
     target_os = "openbsd",
-    target_os = "cygwin"
+    target_os = "cygwin",
+    target_os = "netbsd"
 ))]
 #[allow(clippy::unnecessary_wraps)]
 fn auditid() -> io::Result<()> {
@@ -598,7 +599,8 @@ fn auditid() -> io::Result<()> {
     target_os = "linux",
     target_os = "android",
     target_os = "openbsd",
-    target_os = "cygwin"
+    target_os = "cygwin",
+    target_os = "netbsd"
 )))]
 fn auditid() -> io::Result<()> {
     use std::mem::MaybeUninit;
