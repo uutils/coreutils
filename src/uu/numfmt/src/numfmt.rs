@@ -318,26 +318,22 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
 }
 
 fn print_debug_warnings(options: &NumfmtOptions, matches: &ArgMatches) {
+    fn print_warning(msg_key: &str) {
+        let _ = writeln!(stderr(), "numfmt: {}", translate!(msg_key));
+    }
+
     // Warn if no conversion option is specified
     // 2>/dev/full does not abort
     if options.transform.from == Unit::None
         && options.transform.to == Unit::None
         && options.padding == 0
     {
-        let _ = writeln!(
-            stderr(),
-            "numfmt: {}",
-            translate!("numfmt-debug-no-conversion")
-        );
+        print_warning("numfmt-debug-no-conversion");
     }
 
     // Warn if --header is used with command-line input
     if options.header > 0 && matches.get_many::<OsString>(NUMBER).is_some() {
-        let _ = writeln!(
-            stderr(),
-            "numfmt: {}",
-            translate!("numfmt-debug-header-ignored")
-        );
+        print_warning("numfmt-debug-header-ignored");
     }
 }
 
