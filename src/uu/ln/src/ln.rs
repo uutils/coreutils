@@ -295,7 +295,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
     let mut all_successful = true;
     for srcpath in files {
         let targetpath = if settings.no_dereference && target_dir.is_symlink() {
-            let remove_target = || -> UResult<()> {
+            let remove_target = || {
                 // In that case, we don't want to do link resolution
                 // We need to clean the target
                 if target_dir.is_file() {
@@ -318,7 +318,6 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
                         );
                     }
                 }
-                Ok(())
             };
             match settings.overwrite {
                 OverwriteMode::NoClobber => {}
@@ -327,11 +326,11 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
                         "{}",
                         translate!("ln-prompt-replace", "file" => target_dir.quote())
                     ) {
-                        remove_target()?;
+                        remove_target();
                     }
                 }
                 OverwriteMode::Force => {
-                    remove_target()?;
+                    remove_target();
                 }
             }
             target_dir.to_path_buf()
