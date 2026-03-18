@@ -19,6 +19,9 @@ clap-error-missing-required-arguments = { $error_word }: the following required 
 clap-error-possible-values = possible values
 clap-error-help-suggestion = For more information, try '{ $command } --help'.
 common-help-suggestion = For more information, try '--help'.
+# For clap_localization
+clap-error-ambiguous-argument=Error: Argument '{ $arg }' is ambiguous.
+  Did you mean one of these?
 
 # Common help text patterns
 help-flag-help = Print help information
