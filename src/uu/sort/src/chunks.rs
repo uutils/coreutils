@@ -75,7 +75,7 @@ impl LineData<'_> {
 impl Chunk {
     /// Destroy this chunk and return its components to be reused.
     pub fn recycle(mut self) -> RecycledChunk {
-        let recycled_contents = self.with_dependent_mut(|_, contents| {
+        let mut recycled_contents = self.with_dependent_mut(|_, contents| {
             contents.lines.clear();
             contents.line_data.selections.clear();
             contents.line_data.num_infos.clear();
@@ -100,7 +100,7 @@ impl Chunk {
                     &mut contents.line_data.selections,
                 ))
             };
-            (
+            RecycledChunk {
                 lines,
                 selections,
                 num_infos: std::mem::take(&mut contents.line_data.num_infos),
