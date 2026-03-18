@@ -286,7 +286,9 @@ fn test_all_patterns_present() {
 fn test_random_source_regular_file() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    // Currently, our block size is 4096. If it changes, this test has to be adapted.
+    // Use --size=4096 so the bytes consumed per pass are deterministic
+    // regardless of the filesystem's blksize() (which split_on_blocks uses
+    // for alignment when --exact/--size is not set).
     let mut many_bytes = Vec::with_capacity(4096 * 4);
 
     for i in 0..4096u32 {
@@ -301,6 +303,7 @@ fn test_random_source_regular_file() {
 
     ucmd
         .arg("-vn3")
+        .arg("--size=4096")
         .arg("--random-source=source_long")
         .arg(file)
         .succeeds()
