@@ -263,22 +263,41 @@ fn test_equal_as_delimiter() {
 
 #[test]
 fn test_empty_string_as_delimiter() {
-    for arg in ["-d''", "--delimiter=", "--delimiter=''"] {
+    new_ucmd!()
+        .args(&["-f2", "--delimiter="])
+        .pipe_in("a\0b\n")
+        .succeeds()
+        .stdout_only("b\n");
+}
+
+#[test]
+fn test_single_quote_pair_as_delimiter_is_invalid() {
+    for args in [&["-d", "''", "-f2"][..], &["--delimiter=''", "-f2"][..]] {
         new_ucmd!()
-            .args(&["-f2", arg])
-            .pipe_in("a\0b\n")
-            .succeeds()
-            .stdout_only("b\n");
+            .args(args)
+            .pipe_in("a''b\n")
+            .fails()
+            .stderr_contains("cut: the delimiter must be a single character")
+            .no_stdout();
     }
 }
 
 #[test]
 fn test_empty_string_as_delimiter_with_output_delimiter() {
     new_ucmd!()
-        .args(&["-f", "1,2", "-d", "''", "--output-delimiter=Z"])
+        .args(&["-f", "1,2", "--delimiter=", "--output-delimiter=Z"])
         .pipe_in("ab\0cd\n")
         .succeeds()
         .stdout_only_bytes("abZcd\n");
+}
+
+#[test]
+fn test_single_quote_pair_as_output_delimiter_is_literal() {
+    new_ucmd!()
+        .args(&["-f", "1,2", "-d:", "--output-delimiter=''"])
+        .pipe_in("ab:cd\n")
+        .succeeds()
+        .stdout_only_bytes("ab''cd\n");
 }
 
 #[test]
