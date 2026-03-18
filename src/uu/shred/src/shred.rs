@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) wipesync prefill couldnt fillpattern
+// spell-checker:ignore (words) wipesync prefill couldnt fillpattern renameat renameatx noreplace nocache renamex FDCWD
 
 use clap::{Arg, ArgAction, Command};
 #[cfg(unix)]
@@ -192,7 +192,6 @@ impl BytesWriter {
         pass: &PassType,
         random_source: Option<&RefCell<File>>,
     ) -> Result<Self, io::Error> {
-
         match pass {
             PassType::Random => match random_source {
                 None => Ok(Self::Random {
@@ -629,7 +628,6 @@ fn create_compatible_sequence(
 #[cfg(unix)]
 fn reject_unsupported_file_type(path: &Path, file: &File) -> UResult<()> {
     use std::os::unix::fs::FileTypeExt;
-
     // Validate the open fd with fstat instead of trusting the path check,
     // which an attacker could swap between check and open.
     let fd_metadata = file
@@ -644,7 +642,7 @@ fn reject_unsupported_file_type(path: &Path, file: &File) -> UResult<()> {
         ));
     }
 
-    // Reject TTY character devices.
+    // Reject TTY character devices
     if file_type.is_char_device() && file.is_terminal() {
         return Err(USimpleError::new(
             1,
@@ -655,7 +653,11 @@ fn reject_unsupported_file_type(path: &Path, file: &File) -> UResult<()> {
     Ok(())
 }
 
-fn target_size(file: &mut File, metadata: &fs::Metadata, size: Option<u64>) -> UResult<Option<u64>> {
+fn target_size(
+    file: &mut File,
+    metadata: &fs::Metadata,
+    size: Option<u64>,
+) -> UResult<Option<u64>> {
     if let Some(size) = size {
         return Ok(Some(size));
     }
@@ -681,26 +683,6 @@ fn target_size(file: &mut File, metadata: &fs::Metadata, size: Option<u64>) -> U
         Err(_) => Ok(None),
     }
 }
-
-fn filesystem_block_size(metadata: &fs::Metadata) -> u64 {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
-
-        let block_size = metadata.blksize();
-        if block_size > 0 {
-            block_size
-        } else {
-            OPTIMAL_IO_BLOCK_SIZE as u64
-        }
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = metadata;
-        OPTIMAL_IO_BLOCK_SIZE as u64
-    }
-}
-
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::cognitive_complexity)]
 fn wipe_file(
@@ -742,7 +724,6 @@ fn wipe_file(
         #[allow(clippy::useless_conversion, clippy::unnecessary_cast)]
         {
             use std::os::unix::fs::PermissionsExt;
-
             // NOTE: set_readonly(false) makes the file world-writable on Unix.
             // NOTE: S_IWUSR type is u16 on macOS, i32 on Redox.
             if (perms.mode() & (S_IWUSR as u32)) == 0 {
@@ -763,7 +744,6 @@ fn wipe_file(
     #[cfg(unix)]
     {
         use std::os::unix::fs::FileTypeExt;
-
         let ft = path_metadata.file_type();
         if ft.is_fifo() || ft.is_socket() {
             return Err(USimpleError::new(
@@ -778,21 +758,22 @@ fn wipe_file(
     #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt;
-
         open_opts.custom_flags(libc::O_NOCTTY);
     }
     let mut file = open_opts.open(path).map_err_context(
         || translate!("shred-failed-to-open-for-writing", "file" => path.maybe_quote()),
     )?;
+    // Validate file type on the opened fd so path swaps cannot bypass checks.
     #[cfg(unix)]
     reject_unsupported_file_type(path, &file)?;
 
+    // Get metadata from the fd for size/type decisions.
     let metadata = file
         .metadata()
         .map_err_context(|| translate!("shred-failed-to-get-metadata"))?;
+
     let size = target_size(&mut file, &metadata, size)?;
     let is_regular_file = metadata.file_type().is_file();
-    let should_sync_data = is_regular_file;
     let io_block_size = if is_regular_file {
         filesystem_block_size(&metadata)
     } else {
@@ -803,7 +784,6 @@ fn wipe_file(
     let mut pass_sequence = Vec::new();
     if size != Some(0) {
         // Only add passes if the target contains bytes to overwrite
-
         if n_passes <= 3 {
             // Only random passes if n_passes <= 3
             for _ in 0..n_passes {
@@ -824,6 +804,7 @@ fn wipe_file(
         }
     }
 
+    let should_sync_data = is_regular_file;
     let total_passes = pass_sequence.len();
 
     for (i, pass_type) in pass_sequence.iter().enumerate() {
@@ -861,12 +842,66 @@ fn wipe_file(
         }
     }
 
+    finalize_file(file, path, path_str, verbose, remove_method)
+}
+
+fn finalize_file(
+    file: File,
+    path: &Path,
+    path_str: &OsString,
+    verbose: bool,
+    remove_method: RemoveMethod,
+) -> UResult<()> {
+    checked_close(file).map_err_context(
+        || translate!("shred-failed-to-close-file", "file" => path.maybe_quote()),
+    )?;
+
     if remove_method != RemoveMethod::None {
         do_remove(path, path_str, verbose, remove_method).map_err_context(
             || translate!("shred-failed-to-remove-file", "file" => path.maybe_quote()),
         )?;
     }
+
     Ok(())
+}
+
+#[cfg(unix)]
+fn checked_close(file: File) -> io::Result<()> {
+    use std::os::fd::IntoRawFd;
+    let raw_fd = file.into_raw_fd();
+    // SAFETY: `raw_fd` came from `File::into_raw_fd`, which transfers ownership of an
+    // open descriptor to this function. We call `close` exactly once here and never use
+    // `raw_fd` again afterward.
+    let close_result = unsafe { libc::close(raw_fd) };
+    if close_result == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
+#[cfg(not(unix))]
+fn checked_close(file: File) -> io::Result<()> {
+    file.sync_all()
+}
+
+fn filesystem_block_size(metadata: &fs::Metadata) -> u64 {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+
+        let block_size = metadata.blksize();
+        if block_size > 0 {
+            block_size
+        } else {
+            OPTIMAL_IO_BLOCK_SIZE as u64
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = metadata;
+        OPTIMAL_IO_BLOCK_SIZE as u64
+    }
 }
 
 fn split_on_blocks(file_size: u64, exact: bool, io_block_size: u64) -> (u64, u64) {
@@ -884,9 +919,9 @@ fn split_on_blocks(file_size: u64, exact: bool, io_block_size: u64) -> (u64, u64
         // * io_block_size, the output file size will also be aligned and correct.
         file_size.div_ceil(io_block_size) * io_block_size
     };
+
     (file_size / BLOCK_SIZE as u64, file_size % BLOCK_SIZE as u64)
 }
-
 
 /// Enable or disable direct I/O on a file descriptor to bypass the page cache.
 /// This is a performance optimization matching GNU shred behavior.
@@ -894,7 +929,6 @@ fn split_on_blocks(file_size: u64, exact: bool, io_block_size: u64) -> (u64, u64
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn direct_mode(file: &File, enable: bool) {
     use std::os::unix::io::AsRawFd;
-
     let fd = file.as_raw_fd();
 
     // SAFETY: fd is a valid open file descriptor from a File we hold a reference to.
@@ -915,7 +949,6 @@ fn direct_mode(file: &File, enable: bool) {
 #[cfg(target_vendor = "apple")]
 fn direct_mode(file: &File, enable: bool) {
     use std::os::unix::io::AsRawFd;
-
     let fd = file.as_raw_fd();
 
     // SAFETY: fd is a valid open file descriptor. F_NOCACHE with 0 or 1 is safe.
@@ -929,6 +962,20 @@ fn direct_mode(file: &File, enable: bool) {
 ))]
 fn direct_mode(_file: &File, _enable: bool) {}
 
+/// Sync the parent directory of `path` to ensure directory entry changes
+/// (renames, unlinks) are durable.
+fn sync_parent_dir(path: &Path) -> io::Result<()> {
+    if let Some(parent) = path.parent() {
+        let dir_path = if parent.as_os_str().is_empty() {
+            Path::new(".")
+        } else {
+            parent
+        };
+        let dir = OpenOptions::new().read(true).open(dir_path)?;
+        dir.sync_all()?;
+    }
+    Ok(())
+}
 
 fn is_eio(err: &io::Error) -> bool {
     #[cfg(unix)]
@@ -941,7 +988,6 @@ fn is_eio(err: &io::Error) -> bool {
         false
     }
 }
-
 fn do_pass(
     file: &mut File,
     pass_type: &PassType,
@@ -1098,7 +1144,7 @@ fn rename_new(old_path: &Path, new_path: &Path) -> io::Result<()> {
 #[cfg(not(any(target_vendor = "apple", target_os = "linux", target_os = "android")))]
 fn rename_new(old_path: &Path, new_path: &Path) -> io::Result<()> {
     // No kernel-level atomic no-overwrite rename available; fall back to
-    // check-then-rename. Racy, but functional and matches the non-Unix path.
+    // check-then-rename.  Racy, but functional and matches the non-Unix path.
     if new_path.exists() {
         return Err(io::Error::new(
             io::ErrorKind::AlreadyExists,
@@ -1111,26 +1157,12 @@ fn rename_new(old_path: &Path, new_path: &Path) -> io::Result<()> {
 #[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
 fn cstring_from_path(path: &Path) -> io::Result<CString> {
     use std::os::unix::ffi::OsStrExt;
-
     CString::new(path.as_os_str().as_bytes()).map_err(|_| {
         io::Error::new(
             io::ErrorKind::InvalidInput,
             "path contains interior NUL byte",
         )
     })
-}
-
-fn sync_parent_dir(path: &Path) -> io::Result<()> {
-    if let Some(parent) = path.parent() {
-        let dir_path = if parent.as_os_str().is_empty() {
-            Path::new(".")
-        } else {
-            parent
-        };
-        let dir = OpenOptions::new().read(true).open(dir_path)?;
-        dir.sync_all()?;
-    }
-    Ok(())
 }
 
 /// Repeatedly renames the file with strings of decreasing length (most likely all 0s)
@@ -1159,9 +1191,9 @@ fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> Pa
                         );
                     }
 
+                    // Sync the parent directory to ensure the rename is durable.
+                    // GNU shred does this via fdatasync/fsync on the directory fd.
                     if remove_method == RemoveMethod::WipeSync {
-                        // Sync the parent directory to ensure the rename is durable.
-                        // GNU shred does this via fdatasync/fsync on the directory fd.
                         if let Err(err) = sync_parent_dir(&new_path) {
                             show_error!(
                                 "failed to sync directory after rename from {} to {}: {}",
@@ -1238,18 +1270,42 @@ mod tests {
     use crate::{
         BLOCK_SIZE, BytesWriter, OPTIMAL_IO_BLOCK_SIZE, PassType, Pattern, split_on_blocks,
     };
-
+    #[cfg(unix)]
+    use crate::{RemoveMethod, finalize_file};
+    #[cfg(unix)]
+    use std::os::fd::AsRawFd;
     #[test]
     fn test_align_non_exact_control_values() {
         // Note: This test only makes sense for the default values of BLOCK_SIZE and
         // OPTIMAL_IO_BLOCK_SIZE.
-        assert_eq!(split_on_blocks(1, false, OPTIMAL_IO_BLOCK_SIZE as u64), (0, 4096));
-        assert_eq!(split_on_blocks(4095, false, OPTIMAL_IO_BLOCK_SIZE as u64), (0, 4096));
-        assert_eq!(split_on_blocks(4096, false, OPTIMAL_IO_BLOCK_SIZE as u64), (0, 4096));
-        assert_eq!(split_on_blocks(4097, false, OPTIMAL_IO_BLOCK_SIZE as u64), (0, 8192));
-        assert_eq!(split_on_blocks(65535, false, OPTIMAL_IO_BLOCK_SIZE as u64), (1, 0));
-        assert_eq!(split_on_blocks(65536, false, OPTIMAL_IO_BLOCK_SIZE as u64), (1, 0));
-        assert_eq!(split_on_blocks(65537, false, OPTIMAL_IO_BLOCK_SIZE as u64), (1, 4096));
+        assert_eq!(
+            split_on_blocks(1, false, OPTIMAL_IO_BLOCK_SIZE as u64),
+            (0, 4096)
+        );
+        assert_eq!(
+            split_on_blocks(4095, false, OPTIMAL_IO_BLOCK_SIZE as u64),
+            (0, 4096)
+        );
+        assert_eq!(
+            split_on_blocks(4096, false, OPTIMAL_IO_BLOCK_SIZE as u64),
+            (0, 4096)
+        );
+        assert_eq!(
+            split_on_blocks(4097, false, OPTIMAL_IO_BLOCK_SIZE as u64),
+            (0, 8192)
+        );
+        assert_eq!(
+            split_on_blocks(65535, false, OPTIMAL_IO_BLOCK_SIZE as u64),
+            (1, 0)
+        );
+        assert_eq!(
+            split_on_blocks(65536, false, OPTIMAL_IO_BLOCK_SIZE as u64),
+            (1, 0)
+        );
+        assert_eq!(
+            split_on_blocks(65537, false, OPTIMAL_IO_BLOCK_SIZE as u64),
+            (1, 4096)
+        );
     }
 
     #[test]
@@ -1262,14 +1318,12 @@ mod tests {
         }
     }
 
-
     #[test]
     fn test_align_non_exact_uses_provided_block_size() {
         assert_eq!(split_on_blocks(1, false, 512), (0, 512));
         assert_eq!(split_on_blocks(512, false, 512), (0, 512));
         assert_eq!(split_on_blocks(513, false, 512), (0, 1024));
     }
-
 
     #[test]
     fn test_pattern_writer_syncs_to_file_offset() {
@@ -1303,7 +1357,39 @@ mod tests {
             b"A"
         );
     }
+    #[cfg(unix)]
+    #[test]
+    fn test_finalize_file_does_not_remove_on_close_error() {
+        let temp_dir =
+            std::env::temp_dir().join(format!("uu_shred_close_error_{}", std::process::id()));
+        std::fs::create_dir_all(&temp_dir).expect("test temporary directory is created");
 
+        let file_path = temp_dir.join("target");
+        std::fs::write(&file_path, b"content").expect("test file is created");
+
+        let file = std::fs::OpenOptions::new()
+            .write(true)
+            .open(&file_path)
+            .expect("test file opens for writing");
+        let raw_fd = file.as_raw_fd();
+
+        // SAFETY: `raw_fd` belongs to `file` and is currently valid. Closing it here
+        // intentionally simulates a late close failure when `finalize_file` performs its
+        // checked close on the same descriptor.
+        let close_result = unsafe { libc::close(raw_fd) };
+        assert_eq!(close_result, 0, "test setup closes descriptor once");
+
+        let file_name = std::ffi::OsString::from("target");
+        let result = finalize_file(file, &file_path, &file_name, false, RemoveMethod::Unlink);
+        assert!(result.is_err(), "close failure is reported");
+        assert!(
+            file_path.exists(),
+            "remove phase is skipped when close fails"
+        );
+
+        std::fs::remove_file(&file_path).expect("test file cleanup succeeds");
+        std::fs::remove_dir(&temp_dir).expect("test directory cleanup succeeds");
+    }
     #[test]
     fn test_align_exact_cycle() {
         for size in 1..BLOCK_SIZE as u64 * 2 {
