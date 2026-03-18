@@ -980,6 +980,19 @@ fn cstring_from_path(path: &Path) -> io::Result<CString> {
     })
 }
 
+fn sync_parent_dir(path: &Path) -> io::Result<()> {
+    if let Some(parent) = path.parent() {
+        let dir_path = if parent.as_os_str().is_empty() {
+            Path::new(".")
+        } else {
+            parent
+        };
+        let dir = OpenOptions::new().read(true).open(dir_path)?;
+        dir.sync_all()?;
+    }
+    Ok(())
+}
+
 /// Repeatedly renames the file with strings of decreasing length (most likely all 0s)
 /// Return the path of the file after its last renaming or None in case of an error
 fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> PathBuf {
@@ -1007,12 +1020,16 @@ fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> Pa
                     }
 
                     if remove_method == RemoveMethod::WipeSync {
-                        // Sync every file rename
-                        let new_file = OpenOptions::new()
-                            .write(true)
-                            .open(new_path.clone())
-                            .expect("Failed to open renamed file for syncing");
-                        new_file.sync_all().expect("Failed to sync renamed file");
+                        // Sync the parent directory to ensure the rename is durable.
+                        // GNU shred does this via fdatasync/fsync on the directory fd.
+                        if let Err(err) = sync_parent_dir(&new_path) {
+                            show_error!(
+                                "failed to sync directory after rename from {} to {}: {}",
+                                last_path.maybe_quote().to_string(),
+                                new_path.maybe_quote().to_string(),
+                                err
+                            );
+                        }
                     }
 
                     last_path = new_path;
@@ -1051,7 +1068,19 @@ fn do_remove(
         wipe_name(path, verbose, remove_method)
     };
 
-    fs::remove_file(remove_path)?;
+    fs::remove_file(&remove_path)?;
+
+    // Sync the parent directory after unlink to ensure removal is durable
+    // (matches GNU shred's directory sync after unlink).
+    if remove_method == RemoveMethod::WipeSync {
+        if let Err(err) = sync_parent_dir(&remove_path) {
+            show_error!(
+                "failed to sync directory after removing {}: {}",
+                orig_filename.maybe_quote(),
+                err
+            );
+        }
+    }
 
     if verbose {
         show_error!(
