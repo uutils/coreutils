@@ -279,15 +279,10 @@ impl<'a> SplitIterator<'a> {
                 self.take_one()?;
                 Ok(())
             }
-            Some(c) if REPLACEMENTS.iter().any(|&x| x.0 == c) => {
-                // See GNU test-suite e11: In single quotes, \t remains as it is.
-                // Comparing with GNU behavior: \a is not accepted and issues an error.
-                // So apparently only known sequences are allowed, even though they are not expanded.... bug of GNU?
+            Some(_) => {
                 self.push_char_to_word(BACKSLASH);
-                self.take_one()?;
                 Ok(())
             }
-            Some(c) => Err(self.make_invalid_sequence_backslash_xin_minus_s(c)),
         }
     }
 
