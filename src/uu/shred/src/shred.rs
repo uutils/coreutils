@@ -888,6 +888,48 @@ fn split_on_blocks(file_size: u64, exact: bool, io_block_size: u64) -> (u64, u64
 }
 
 
+/// Enable or disable direct I/O on a file descriptor to bypass the page cache.
+/// This is a performance optimization matching GNU shred behavior.
+/// Silently does nothing if the platform or filesystem doesn't support it.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn direct_mode(file: &File, enable: bool) {
+    use std::os::unix::io::AsRawFd;
+
+    let fd = file.as_raw_fd();
+
+    // SAFETY: fd is a valid open file descriptor from a File we hold a reference to.
+    let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+    if flags >= 0 {
+        let new_flags = if enable {
+            flags | libc::O_DIRECT
+        } else {
+            flags & !libc::O_DIRECT
+        };
+        if new_flags != flags {
+            // SAFETY: fd is valid, F_SETFL with an int argument is safe.
+            unsafe { libc::fcntl(fd, libc::F_SETFL, new_flags) };
+        }
+    }
+}
+
+#[cfg(target_vendor = "apple")]
+fn direct_mode(file: &File, enable: bool) {
+    use std::os::unix::io::AsRawFd;
+
+    let fd = file.as_raw_fd();
+
+    // SAFETY: fd is a valid open file descriptor. F_NOCACHE with 0 or 1 is safe.
+    unsafe { libc::fcntl(fd, libc::F_NOCACHE, i32::from(enable)) };
+}
+
+#[cfg(all(
+    not(target_os = "linux"),
+    not(target_os = "android"),
+    not(target_vendor = "apple")
+))]
+fn direct_mode(_file: &File, _enable: bool) {}
+
+
 fn is_eio(err: &io::Error) -> bool {
     #[cfg(unix)]
     {
@@ -920,6 +962,13 @@ fn do_pass(
         let (number_of_blocks, bytes_left) = split_on_blocks(file_size, exact, io_block_size);
         let total_bytes = number_of_blocks * BLOCK_SIZE as u64 + bytes_left;
 
+        // As a performance tweak, avoid direct I/O for small sizes.
+        // Direct I/O can be unsupported for small non-aligned sizes.
+        let mut try_without_direct_io = total_bytes < BLOCK_SIZE as u64;
+        if !try_without_direct_io {
+            direct_mode(file, true);
+        }
+
         let mut offset: u64 = 0;
         while offset < total_bytes {
             writer.sync_pattern_offset(offset);
@@ -932,6 +981,16 @@ fn do_pass(
                     Ok(()) => {
                         offset += chunk_size as u64;
                         break;
+                    }
+                    Err(err)
+                        if err.kind() == io::ErrorKind::InvalidInput && !try_without_direct_io =>
+                    {
+                        // Direct I/O may not be supported on this filesystem or
+                        // for this alignment. Retry without it.
+                        direct_mode(file, false);
+                        try_without_direct_io = true;
+                        // Retry the same write at the same offset.
+                        file.seek(SeekFrom::Start(offset))?;
                     }
                     Err(err) if is_eio(&err) => {
                         // Bad sector: continue from the next sector after the bytes
@@ -949,6 +1008,8 @@ fn do_pass(
                 }
             }
         }
+
+        direct_mode(file, false);
     } else {
         loop {
             let block = writer.bytes_for_pass(BLOCK_SIZE)?;
