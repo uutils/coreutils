@@ -65,6 +65,7 @@ shred-couldnt-rename = {$file} : Impossible de renommer en {$new_name} : {$error
 shred-failed-to-open-for-writing = {$file} : impossible d'ouvrir pour l'écriture
 shred-file-write-pass-failed = {$file} : Échec du passage d'écriture de fichier
 shred-failed-to-remove-file = {$file} : impossible de supprimer le fichier
+shred-failed-to-truncate-file = {$file} : impossible de tronquer le fichier
 
 # Messages d'erreur E/S de fichier
 shred-failed-to-clone-file-handle = échec du clonage du descripteur de fichier
