@@ -36,9 +36,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("logname")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("logname"))
         .override_usage(translate!("logname-usage"))
         .about(translate!("logname-about"))
         .infer_long_args(true)

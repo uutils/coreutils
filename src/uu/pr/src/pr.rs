@@ -192,9 +192,9 @@ enum PrError {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("pr")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("pr"))
         .about(translate!("pr-about"))
         .after_help(translate!("pr-after-help"))
         .override_usage(format_usage(&translate!("pr-usage")))

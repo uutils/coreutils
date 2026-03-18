@@ -94,9 +94,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("nohup")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("nohup"))
         .about(translate!("nohup-about"))
         .after_help(translate!("nohup-after-help"))
         .override_usage(format_usage(&translate!("nohup-usage")))
