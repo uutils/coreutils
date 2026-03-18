@@ -415,7 +415,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
                     return Err(LnError::SomeLinksFailed.into());
                 }
 
-                if fs::remove_file(dst).is_ok() {}
+                let _ = fs::remove_file(dst);
                 // In case of error, don't do anything
             }
             OverwriteMode::Force => {
@@ -432,7 +432,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
                         return Err(LnError::SameFile(src.to_owned(), dst.to_owned()).into());
                     }
                 }
-                if fs::remove_file(dst).is_ok() {}
+                let _ = fs::remove_file(dst);
                 // In case of error, don't do anything
             }
         }
