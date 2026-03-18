@@ -215,6 +215,31 @@ fn test_shred_fail_no_perm() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_shred_char_device_with_explicit_size() {
+    new_ucmd!()
+        .args(&["-n1", "--size=1", "/dev/null"])
+        .succeeds();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_shred_rejects_fifo() {
+    use std::time::Duration;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkfifo("fifo");
+
+    scene
+        .ucmd()
+        .arg("fifo")
+        .timeout(Duration::from_secs(2))
+        .fails()
+        .stderr_contains("invalid file type");
+}
+
+#[test]
 fn test_shred_verbose_no_padding_1() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "foo";

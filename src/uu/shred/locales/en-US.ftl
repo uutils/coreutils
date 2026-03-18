@@ -43,6 +43,7 @@ shred-cannot-open-random-source = cannot open random source: {$source}
 shred-invalid-file-size = invalid file size: {$size}
 shred-no-such-file-or-directory = {$file}: No such file or directory
 shred-not-a-file = {$file}: Not a file
+shred-invalid-file-type = {$file}: invalid file type
 
 # Option help text
 shred-force-help = change permissions to allow writing if necessary
