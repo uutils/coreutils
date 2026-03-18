@@ -62,6 +62,11 @@ pub struct LineData<'a> {
 impl LineData<'_> {
     /// Get the collation sort key for a line at the given index.
     pub fn collation_key(&self, index: usize) -> &[u8] {
+        debug_assert!(
+            index < self.collation_key_ends.len(),
+            "collation_key index {index} out of bounds (len {})",
+            self.collation_key_ends.len()
+        );
         let start = if index == 0 {
             0
         } else {
