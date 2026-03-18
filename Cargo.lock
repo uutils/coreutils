@@ -3272,6 +3272,7 @@ dependencies = [
  "fluent",
  "fts-sys",
  "libc",
+ "rustix",
  "selinux",
  "thiserror 2.0.18",
  "uucore",

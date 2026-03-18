@@ -191,7 +191,7 @@ if [ "$USE_MULTICALL" -eq 1 ]; then
     AVAILABLE_UTILS=$($COREUTILS_BIN --list)
 else
     AVAILABLE_UTILS=""
-    for util in rm chmod chown chgrp du mv cp; do
+    for util in rm chmod chown chgrp du mv cp chcon; do
         if [ -f "$PROJECT_ROOT/target/${PROFILE}/$util" ]; then
             AVAILABLE_UTILS="$AVAILABLE_UTILS $util"
         fi
@@ -239,6 +239,43 @@ if echo "$AVAILABLE_UTILS" | grep -q "chgrp"; then
     cp -r test_dir test_chgrp
     check_utility "chgrp" "openat,fchownat,newfstatat,chown,lchown" "openat fchownat" "-R $GROUP_ID test_chgrp" "recursive_chgrp"
     assert_descent_nofollow "chgrp" strace_chgrp_recursive_chgrp.log
+fi
+
+# chcon recursive relabel must resolve each target relative to the traversal
+# directory fd with O_NOFOLLOW and operate on the resulting fd (fd-based xattr,
+# or /proc/self/fd), never re-resolving the entry by path. Otherwise a
+# rename/symlink race could redirect a privileged recursive relabel off-tree
+# (issue #11402). This holds even without SELinux: the fd-anchored open happens
+# before the SELinux get/set, so the syscalls are observable regardless.
+if echo "$AVAILABLE_UTILS" | grep -q "chcon"; then
+    if [ "$USE_MULTICALL" -eq 1 ]; then
+        chcon_cmd="$COREUTILS_BIN chcon"
+    else
+        chcon_cmd="$PROJECT_ROOT/target/${PROFILE}/chcon"
+    fi
+
+    mkdir -p chcon_tree/sub
+    echo a > chcon_tree/file
+    echo b > chcon_tree/sub/nested
+    strace -f -e trace=openat,getxattr,lgetxattr,fgetxattr,setxattr,lsetxattr,fsetxattr \
+        -o strace_chcon_recursive.log \
+        $chcon_cmd -R -t etc_t chcon_tree 2>/dev/null || true
+
+    # Each relabel target is opened relative to a numeric dirfd with O_NOFOLLOW.
+    if ! grep -qE 'openat\([0-9]+, "(file|sub|nested)", [^)]*O_NOFOLLOW' strace_chcon_recursive.log; then
+        cat strace_chcon_recursive.log
+        fail_immediately "chcon -R must open relabel targets relative to the traversal dirfd with O_NOFOLLOW (issue #11402)"
+    fi
+    # SELinux xattr ops must be fd-anchored: fgetxattr/fsetxattr on a numeric fd,
+    # or *xattr on /proc/self/fd. A path-based xattr on the traversal entry is the
+    # TOCTOU pattern the fix removes.
+    path_based_xattr=$(grep -E '\bl?(get|set)xattr\("' strace_chcon_recursive.log | grep -v '"/proc/self/fd/' || true)
+    if [ -n "$path_based_xattr" ]; then
+        echo "$path_based_xattr"
+        fail_immediately "chcon -R is using path-based SELinux xattr (TOCTOU; expected fd-anchored access, issue #11402)"
+    fi
+    echo "✓ chcon -R anchors relabel to the traversal dirfd (O_NOFOLLOW, fd-based access)"
+    rm -rf chcon_tree
 fi
 
 # Test du - should use openat, newfstatat
