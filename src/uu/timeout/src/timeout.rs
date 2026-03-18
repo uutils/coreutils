@@ -296,7 +296,7 @@ fn wait_or_kill_process(
                 });
                 Ok(exit_code)
             } else {
-                Ok(ExitStatus::TimeoutFailed.into())
+                Ok(ExitStatus::CommandTimedOut.into())
             }
         }
         Ok(None) => {
