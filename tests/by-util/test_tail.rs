@@ -636,10 +636,7 @@ fn test_follow_multiple() {
 }
 
 #[test]
-#[cfg(all(
-    not(target_vendor = "apple"),
-    not(target_os = "windows")
-))]  // FIXME: test times out
++#[cfg(all(not(target_vendor = "apple"), not(target_os = "windows")))] // FIXME: test times out
 fn test_follow_name_multiple() {
     // spell-checker:disable-next-line
     for argument in ["--follow=name", "--follo=nam", "--f=n"] {
