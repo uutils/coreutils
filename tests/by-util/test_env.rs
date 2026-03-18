@@ -509,7 +509,6 @@ fn test_chdir_happens_after_relative_file_loading() {
     );
 }
 
-
 #[cfg(not(target_os = "windows"))] // windows has no executable "echo", its only supported as part of a batch-file
 #[test]
 fn test_split_string_into_args_one_argument_no_quotes() {
@@ -610,7 +609,6 @@ fn test_split_string_option_forms_match_gnu_required_argument_handling() {
         .stdout_is("x:one\nx:two\n");
 }
 
-
 #[cfg(not(target_os = "windows"))] // no printf available
 #[test]
 fn test_split_string_into_args_debug_output_whitespace_handling() {
@@ -658,6 +656,67 @@ fn test_gnu_e20() {
     assert_eq!(out.stdout_str(), output);
 }
 
+#[cfg(not(target_os = "windows"))] // no printf available
+#[test]
+fn test_split_string_single_quotes_keep_unknown_backslash_sequences_literal() {
+    let scene = TestScenario::new(util_name!());
+    scene
+        .ucmd()
+        .arg("-Sprintf %s '\\x'")
+        .succeeds()
+        .stdout_is("\\x");
+    scene
+        .ucmd()
+        .arg("-Sprintf %s '\\a'")
+        .succeeds()
+        .stdout_is("\\a");
+    scene
+        .ucmd()
+        .arg("-Sprintf %s '\\`'")
+        .succeeds()
+        .stdout_is("\\`");
+    scene
+        .ucmd()
+        .arg("-Sprintf %s '\\q'")
+        .succeeds()
+        .stdout_is("\\q");
+    scene
+        .ucmd()
+        .arg("-Sprintf %s '\\|'")
+        .succeeds()
+        .stdout_is("\\|");
+    scene
+        .ucmd()
+        .arg("-Sprintf %s '\\9'")
+        .succeeds()
+        .stdout_is("\\9");
+}
+
+#[cfg(not(target_os = "windows"))] // no printf available
+#[test]
+fn test_split_string_backslash_a_behavior_matches_gnu_quoting_context() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .arg("-Sprintf %s '\\a'")
+        .succeeds()
+        .stdout_is("\\a");
+
+    scene
+        .ucmd()
+        .arg("-Sprintf %s \"\\a\"")
+        .fails_with_code(125)
+        .no_stdout()
+        .stderr_contains("invalid sequence '\\a' in -S");
+
+    scene
+        .ucmd()
+        .arg("-Sprintf %s \\a")
+        .fails_with_code(125)
+        .no_stdout()
+        .stderr_contains("invalid sequence '\\a' in -S");
+}
 #[test]
 #[allow(clippy::cognitive_complexity)] // Ignore clippy lint of too long function sign
 fn test_env_parsing_errors() {
@@ -683,12 +742,6 @@ fn test_env_parsing_errors() {
 
     ts.ucmd()
         .arg(r#"-S"\a""#) // same as before, just using r#""#
-        .fails_with_code(125)
-        .no_stdout()
-        .stderr_is("env: invalid sequence '\\a' in -S at position 2\n");
-
-    ts.ucmd()
-        .arg("-S'\\a'") // single quotes, invalid escape sequence a
         .fails_with_code(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\a' in -S at position 2\n");
@@ -724,12 +777,6 @@ fn test_env_parsing_errors() {
         .stderr_is("env: invalid sequence '\\`' in -S at position 2\n");
 
     ts.ucmd()
-        .arg(r"-S'\`\&\;'") // single quotes, invalid escape sequence `
-        .fails_with_code(125)
-        .no_stdout()
-        .stderr_is("env: invalid sequence '\\`' in -S at position 2\n");
-
-    ts.ucmd()
         .arg(r"-S\`") // ` escaped without quotes
         .fails_with_code(125)
         .no_stdout()
@@ -737,12 +784,6 @@ fn test_env_parsing_errors() {
 
     ts.ucmd()
         .arg(r#"-S"\`""#) // ` escaped in double quotes
-        .fails_with_code(125)
-        .no_stdout()
-        .stderr_is("env: invalid sequence '\\`' in -S at position 2\n");
-
-    ts.ucmd()
-        .arg(r"-S'\`'") // ` escaped in single quotes
         .fails_with_code(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\`' in -S at position 2\n");
@@ -1334,7 +1375,7 @@ mod tests_split_iterator {
         assert_eq!(split("'\\"), Err(EnvError::EnvMissingClosingQuote(2, '\'')));
         assert_eq!(
             split(r#""$""#),
-            Err(EnvError::EnvParsingOfMissingVariable(2)),
+            Err(EnvError::EnvParsingOfVariableOnlyBracedName(2)),
         );
     }
 
@@ -1348,10 +1389,8 @@ mod tests_split_iterator {
             split("\"\\a\""),
             Err(EnvError::EnvInvalidSequenceBackslashXInMinusS(2, 'a'))
         );
-        assert_eq!(
-            split("'\\a'"),
-            Err(EnvError::EnvInvalidSequenceBackslashXInMinusS(2, 'a'))
-        );
+        assert_eq!(split("'\\a'"), Ok(vec![OsString::from("\\a")]));
+        assert_eq!(split("'\\`'"), Ok(vec![OsString::from("\\`")]));
         assert_eq!(
             split(r#""\a""#),
             Err(EnvError::EnvInvalidSequenceBackslashXInMinusS(2, 'a'))
