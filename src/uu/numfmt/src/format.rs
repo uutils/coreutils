@@ -203,20 +203,35 @@ fn apply_grouping(s: &str) -> String {
         return s.to_string();
     }
 
-    let mut grouped_rev = String::with_capacity(s.len() + (integer.len() / 3));
-    for (idx, ch) in integer.chars().rev().enumerate() {
-        if idx > 0 && idx % 3 == 0 {
-            grouped_rev.push_str(grouping_separator);
-        }
-        grouped_rev.push(ch);
-    }
-    let grouped_integer: String = grouped_rev.chars().rev().collect();
+    let sep_len = grouping_separator.len();
+    let num_seps = (integer.len() - 1) / 3;
+    let mut grouped = String::with_capacity(
+        sign.len()
+            + integer.len()
+            + num_seps * sep_len
+            + if fraction.is_empty() {
+                0
+            } else {
+                1 + fraction.len()
+            },
+    );
+    grouped.push_str(sign);
 
-    if fraction.is_empty() {
-        format!("{sign}{grouped_integer}")
-    } else {
-        format!("{sign}{grouped_integer}.{fraction}")
+    let first_group = integer.len() % 3;
+    let first_group = if first_group == 0 { 3 } else { first_group };
+    grouped.push_str(&integer[..first_group]);
+    for chunk in integer.as_bytes()[first_group..].chunks(3) {
+        grouped.push_str(grouping_separator);
+        // SAFETY: integer is known to be valid UTF-8 ASCII digits
+        grouped.push_str(std::str::from_utf8(chunk).unwrap());
     }
+
+    if !fraction.is_empty() {
+        grouped.push('.');
+        grouped.push_str(fraction);
+    }
+
+    grouped
 }
 
 fn next_field_index(s: &str) -> usize {
