@@ -48,6 +48,7 @@ macro_rules! declare_standalone {
                 ::uucore::translate!(concat!($bin, "-about")),
                 ::uucore::translate!(concat!($bin, "-usage")),
             )
+            .name($bin)
         }
     };
 }
@@ -96,7 +97,7 @@ pub fn standalone_main(algo: AlgoKind, cmd: Command, args: impl uucore::Args) ->
 
 /// Base command processing for all the checksum executables.
 pub fn default_checksum_app(about: String, usage: String) -> Command {
-    Command::new(util_name())
+    Command::new("")
         .version(crate_version!())
         .help_template(localized_help_template(util_name()))
         .about(about)

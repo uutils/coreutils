@@ -226,8 +226,6 @@ feat_wasm = [
 # "feat_os_macos" == set of utilities which can be built/run on the MacOS platform
 feat_os_macos = [
   "feat_os_unix", ## == a modern/usual *nix platform
-  #
-  "feat_require_unix_hostid",
 ]
 # "feat_os_unix" == set of utilities which can be built/run on modern/usual *nix platforms.
 feat_os_unix = [
@@ -391,12 +389,12 @@ gcd = "2.3"
 glob = "0.3.1"
 half = "2.4.1"
 hostname = "0.4"
-icu_calendar = "2.0.0"
-icu_collator = "2.0.0"
-icu_datetime = "2.0.0"
-icu_decimal = "2.0.0"
-icu_locale = "2.0.0"
-icu_provider = "2.0.0"
+icu_calendar = { version = "2.0.0", default-features = false }
+icu_collator = { version = "2.0.0", default-features = false }
+icu_datetime = { version = "2.0.0", default-features = false }
+icu_decimal = { version = "2.0.0", default-features = false }
+icu_locale = { version = "2.0.0", default-features = false }
+icu_provider = { version = "2.0.0", default-features = false }
 indicatif = "0.18.0"
 itertools = "0.14.0"
 itoa = "1.0.15"
@@ -456,7 +454,7 @@ sha3 = "0.10.8"
 blake2b_simd = "1.0.2"
 blake3 = "1.5.1"
 sm3 = "0.4.2"
-crc-fast = "1.5.0"
+crc-fast = { version = "1.5.0", default-features = false }
 digest = "0.10.7"
 
 # Fluent dependencies

@@ -140,7 +140,7 @@ fn test_env_version() {
         .arg("--version")
         .succeeds()
         .no_stderr()
-        .stdout_contains(util_name!());
+        .stdout_is(format!("env {}\n", uucore::crate_version!()));
 }
 
 #[test]
@@ -2008,4 +2008,23 @@ fn test_ignore_signal_pipe_broken_pipe_regression() {
         ignore_signal_exit_code == 0 || ignore_signal_exit_code == 1,
         "With --ignore-signal=PIPE, process should exit gracefully (0 or 1), got: {ignore_signal_exit_code}"
     );
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_disallow_double_underscore_all() {
+    new_ucmd!()
+        .args(&["--ignore-signal=__ALL__", "true"])
+        .fails()
+        .stderr_contains("invalid signal");
+
+    new_ucmd!()
+        .args(&["--default-signal=__ALL__", "true"])
+        .fails()
+        .stderr_contains("invalid signal");
+
+    new_ucmd!()
+        .args(&["--block-signal=__ALL__", "true"])
+        .fails()
+        .stderr_contains("invalid signal");
 }

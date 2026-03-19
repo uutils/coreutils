@@ -62,6 +62,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 // an uu_app function, so we return the `ls` app.
 pub fn uu_app() -> Command {
     uu_ls::uu_app()
+        .name("dir")
         .override_usage(format_usage(&translate!("dir-usage")))
         .about(translate!("dir-about"))
 }
