@@ -2188,8 +2188,10 @@ fn push_basic_escape(buf: &mut String, byte: u8) {
         }
     }
 }
-
-type DirData = (PathBuf, bool);
+struct DirData {
+    path: PathBuf,
+    needs_blank_line: bool,
+}
 
 // A struct to encapsulate state that is passed around from `list` functions.
 struct ListState<'a> {
@@ -2298,15 +2300,13 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
             path_data.must_dereference,
         )?);
 
+        let dir_data = DirData {
+            path: path_data.path().to_path_buf(),
+            needs_blank_line,
+        };
+
         // List each of the arguments to ls first.
-        depth_first_list(
-            (path_data.path().to_path_buf(), needs_blank_line),
-            read_dir,
-            config,
-            &mut state,
-            &mut dired,
-            true,
-        )?;
+        depth_first_list(dir_data, read_dir, config, &mut state, &mut dired, true)?;
 
         // Only runs if it must list recursively.
         while let Some(dir_data) = state.stack.pop() {
@@ -2453,7 +2453,7 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
 }
 
 fn depth_first_list(
-    (dir_path, needs_blank_line): DirData,
+    dir_data: DirData,
     mut read_dir: ReadDir,
     config: &Config,
     state: &mut ListState,
@@ -2579,7 +2579,13 @@ fn depth_first_list(
                     if cap == len {
                         state.stack.reserve_exact(len / 4 + 4);
                     }
-                    state.stack.push((e.path().to_path_buf(), true));
+
+                    let dir_data = DirData {
+                        path: path_data.path().to_path_buf(),
+                        needs_blank_line: true,
+                    };
+
+                    state.stack.push(dir_data);
                 } else {
                     state.out.flush()?;
                     show!(LsError::AlreadyListedError(e.path().to_path_buf()));
