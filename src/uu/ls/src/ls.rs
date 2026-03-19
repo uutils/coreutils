@@ -2193,6 +2193,15 @@ struct DirData {
     needs_blank_line: bool,
 }
 
+impl DirData {
+    fn new(path: &Path, needs_blank_line: bool) -> Self {
+        DirData {
+            path: path.to_path_buf(),
+            needs_blank_line,
+        }
+    }
+}
+
 // A struct to encapsulate state that is passed around from `list` functions.
 struct ListState<'a> {
     out: BufWriter<Stdout>,
@@ -2300,10 +2309,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
             path_data.must_dereference,
         )?);
 
-        let dir_data = DirData {
-            path: path_data.path().to_path_buf(),
-            needs_blank_line,
-        };
+        let dir_data = DirData::new(path_data.path(), needs_blank_line);
 
         // List each of the arguments to ls first.
         depth_first_list(dir_data, read_dir, config, &mut state, &mut dired, true)?;
@@ -2580,10 +2586,7 @@ fn depth_first_list(
                         state.stack.reserve_exact(len / 4 + 4);
                     }
 
-                    let dir_data = DirData {
-                        path: path_data.path().to_path_buf(),
-                        needs_blank_line: true,
-                    };
+                    let dir_data = DirData::new(path_data.path(), true);
 
                     state.stack.push(dir_data);
                 } else {
