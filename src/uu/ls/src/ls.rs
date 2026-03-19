@@ -3481,7 +3481,7 @@ fn display_item_name(
                                     style_manager,
                                     None,
                                     is_wrap(name.len()),
-                                ))
+                                ));
                             } else {
                                 name.push(escaped_target);
                             }
