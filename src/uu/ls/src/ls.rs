@@ -1985,21 +1985,14 @@ impl PathData {
         let md: OnceCell<Option<Metadata>> = OnceCell::new();
         let security_context: OnceCell<Box<str>> = OnceCell::new();
 
-        let de: RefCell<Option<Box<DirEntry>>> = if let Some(de) = dir_entry {
-            if must_dereference {
-                if let Ok(md_pb) = p_buf.metadata() {
-                    md.get_or_init(|| Some(md_pb.clone()));
-                    ft.get_or_init(|| Some(md_pb.file_type()));
-                }
-            }
-
-            if let Ok(ft_de) = de.file_type() {
-                ft.get_or_init(|| Some(ft_de));
-            }
-
-            RefCell::new(Some(de.into()))
-        } else {
+        let de: RefCell<Option<Box<DirEntry>>> = if must_dereference {
             RefCell::new(None)
+        } else {
+            if let Some(de) = dir_entry {
+                RefCell::new(Some(de.into()))
+            } else {
+                RefCell::new(None)
+            }
         };
 
         Self {
@@ -3481,13 +3474,17 @@ fn display_item_name(
                                 false,
                             );
 
-                            name.push(color_name(
-                                escaped_target,
-                                &target_data,
-                                style_manager,
-                                None,
-                                is_wrap(name.len()),
-                            ))
+                            if config.color.is_some() {
+                                name.push(color_name(
+                                    escaped_target,
+                                    &target_data,
+                                    style_manager,
+                                    None,
+                                    is_wrap(name.len()),
+                                ))
+                            } else {
+                                name.push(escaped_target);
+                            }
                         }
                         Err(_) => {
                             name.push(
