@@ -3481,29 +3481,13 @@ fn display_item_name(
                                 false,
                             );
 
-                            // Check if the target actually needs coloring
-                            let md_option: Option<Metadata> = target_data
-                                .metadata()
-                                .cloned()
-                                .or_else(|| target_data.p_buf.symlink_metadata().ok());
-                            let style = style_manager.colors.style_for_path_with_metadata(
-                                &target_data.p_buf,
-                                md_option.as_ref(),
-                            );
-
-                            if style.is_some() {
-                                // Only apply coloring if there's actually a style
-                                name.push(color_name(
-                                    escaped_target,
-                                    &target_data,
-                                    style_manager,
-                                    None,
-                                    is_wrap(name.len()),
-                                ));
-                            } else {
-                                // For regular files with no coloring, just use plain text
-                                name.push(escaped_target);
-                            }
+                            name.push(color_name(
+                                escaped_target,
+                                &target_data,
+                                style_manager,
+                                None,
+                                is_wrap(name.len()),
+                            ))
                         }
                         Err(_) => {
                             name.push(
