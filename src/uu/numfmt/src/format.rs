@@ -67,7 +67,28 @@ fn find_valid_number_with_suffix(s: &str, unit: Unit) -> Option<&str> {
     }
 }
 
-fn detailed_error_message(s: &str, unit: Unit) -> Option<String> {
+/// Given a string like "5 K Field2" with unit_separator=" ", returns the length
+/// of the valid prefix including the separator and suffix (e.g. "5 K" → 4).
+fn valid_end_with_unit_separator(
+    s: &str,
+    valid_part: &str,
+    unit: Unit,
+    unit_separator: &str,
+) -> Option<usize> {
+    let after_sep = s.get(valid_part.len()..)?.strip_prefix(unit_separator)?;
+
+    let mut chars = after_sep.chars();
+    let first_char = chars.next()?;
+
+    RawSuffix::try_from(&first_char).ok()?;
+
+    let is_iec = chars.next() == Some('i') && matches!(unit, Unit::Auto | Unit::Iec(true));
+    let suffix_len = 1 + usize::from(is_iec);
+
+    Some(valid_part.len() + unit_separator.len() + suffix_len)
+}
+
+fn detailed_error_message(s: &str, unit: Unit, unit_separator: &str) -> Option<String> {
     if s.is_empty() {
         return Some(translate!("numfmt-error-invalid-number-empty"));
     }
@@ -84,6 +105,20 @@ fn detailed_error_message(s: &str, unit: Unit) -> Option<String> {
         return Some(translate!("numfmt-error-invalid-number", "input" => s.quote()));
     }
 
+    // When a unit separator is in use, the valid part may extend beyond the
+    // contiguous number+suffix found by find_valid_number_with_suffix.
+    // For example "5 K Field2" with unit_separator=" " has number_prefix="5" but
+    // the real valid prefix is "5 K"; the trailing " Field2" is the garbage.
+    let valid_end =
+        if !unit_separator.is_empty() && number_prefix == find_numeric_beginning(s).unwrap_or("") {
+            valid_end_with_unit_separator(s, number_prefix, unit, unit_separator)
+                .unwrap_or(number_prefix.len())
+        } else {
+            number_prefix.len()
+        };
+
+    let valid_part = &s[..valid_end];
+
     if valid_part != s && valid_part.parse::<f64>().is_ok() {
         return match s.chars().nth(valid_part.len()) {
             Some('+' | '-') => {
@@ -97,9 +132,10 @@ fn detailed_error_message(s: &str, unit: Unit) -> Option<String> {
         };
     }
 
-    if valid_part != s && valid_part.parse::<f64>().is_err() {
+    if valid_part != s {
+        let trailing = s[valid_part.len()..].trim_start();
         return Some(
-            translate!("numfmt-error-invalid-specific-suffix", "input" => s.quote(), "suffix" => s[valid_part.len()..].quote()),
+            translate!("numfmt-error-invalid-specific-suffix", "input" => s.quote(), "suffix" => trailing.quote()),
         );
     }
     None
@@ -364,7 +400,9 @@ fn transform_from(s: &str, opts: &TransformOptions, options: &NumfmtOptions) -> 
         &options.unit_separator,
         options.explicit_unit_separator,
     )
-    .map_err(|original| detailed_error_message(s, opts.from).unwrap_or(original))?;
+    .map_err(|original| {
+        detailed_error_message(s, opts.from, &options.unit_separator).unwrap_or(original)
+    })?;
     let i = i * (opts.from_unit as f64);
 
     remove_suffix(i, suffix, opts.from).map(|n| {
@@ -815,12 +853,12 @@ mod tests {
 
     #[test]
     fn test_detailed_error_message() {
-        let result = detailed_error_message("123i", Unit::Auto);
+        let result = detailed_error_message("123i", Unit::Auto, "");
         assert!(result.is_some());
         let error = result.unwrap();
         assert!(error.contains("numfmt-error-invalid-suffix") || error.contains("invalid suffix"));
 
-        let result = detailed_error_message("5MF", Unit::Auto);
+        let result = detailed_error_message("5MF", Unit::Auto, "");
         assert!(result.is_some());
         let error = result.unwrap();
         assert!(
@@ -828,7 +866,7 @@ mod tests {
                 || error.contains("invalid suffix")
         );
 
-        let result = detailed_error_message("5KM", Unit::Auto);
+        let result = detailed_error_message("5KM", Unit::Auto, "");
         assert!(result.is_some());
         let error = result.unwrap();
         assert!(
