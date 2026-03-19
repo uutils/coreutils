@@ -51,25 +51,18 @@ fn format_and_write<W: std::io::Write>(
     // In non-abort modes we buffer the formatted output so that on error we
     // can emit the original line instead.
     let buffer_output = !matches!(options.invalid, InvalidModes::Abort);
-    let mut formatted_line = Vec::new();
-    let handled_line = {
-        let output: &mut dyn std::io::Write = if buffer_output {
-            &mut formatted_line
-        } else {
-            writer
-        };
+    let mut buf = Vec::new();
+    let dest: &mut dyn std::io::Write = if buffer_output { &mut buf } else { writer };
 
-        if options.delimiter.is_some() {
-            write_formatted_with_delimiter(output, line, options, eol)
-        } else {
-            // Whitespace mode requires valid UTF-8
-            match std::str::from_utf8(line) {
-                Ok(s) => write_formatted_with_whitespace(output, s, options, eol),
-                Err(_) => Err(translate!(
-                    "numfmt-error-invalid-number",
-                    "input" => escape_line(line).quote()
-                )),
-            }
+    let result = if options.delimiter.is_some() {
+        write_formatted_with_delimiter(dest, line, options, eol)
+    } else {
+        match std::str::from_utf8(line) {
+            Ok(s) => write_formatted_with_whitespace(dest, s, options, eol),
+            Err(_) => Err(translate!(
+                "numfmt-error-invalid-number",
+                "input" => escape_line(line).quote()
+            )),
         }
     };
 
@@ -87,7 +80,6 @@ fn format_and_write<W: std::io::Write>(
             InvalidModes::Ignore => {}
         }
         writer.write_all(input_line)?;
-
         if let Some(eol) = eol {
             writer.write_all(&[eol])?;
         }
@@ -95,7 +87,7 @@ fn format_and_write<W: std::io::Write>(
     }
 
     if buffer_output {
-        writer.write_all(&formatted_line)?;
+        writer.write_all(&buf)?;
     }
     Ok(false)
 }
