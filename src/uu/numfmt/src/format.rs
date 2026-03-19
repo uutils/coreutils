@@ -502,6 +502,30 @@ fn transform_to(
     })
 }
 
+/// Pad `s` to at least `width` characters using `fill`.
+/// Right-aligns when `right_align` is true, left-aligns otherwise.
+/// Unlike `format!("{:>width$}")`, this handles widths larger than 65535.
+fn pad_string(s: &str, width: usize, fill: char, right_align: bool) -> String {
+    let len = s.len();
+    if len >= width {
+        return s.to_string();
+    }
+    let pad = width - len;
+    let mut result = String::with_capacity(width);
+    if right_align {
+        for _ in 0..pad {
+            result.push(fill);
+        }
+        result.push_str(s);
+    } else {
+        result.push_str(s);
+        for _ in 0..pad {
+            result.push(fill);
+        }
+    }
+    result
+}
+
 fn format_string(
     source: &str,
     options: &NumfmtOptions,
@@ -549,16 +573,16 @@ fn format_string(
     let padded_number = match padding {
         0 => number_with_suffix,
         p if p > 0 && options.format.zero_padding => {
-            let zero_padded = format!("{number_with_suffix:0>padding$}", padding = p as usize);
+            let zero_padded = pad_string(&number_with_suffix, p as usize, '0', true);
 
             match implicit_padding.unwrap_or(options.padding) {
                 0 => zero_padded,
-                p if p > 0 => format!("{zero_padded:>padding$}", padding = p as usize),
-                p => format!("{zero_padded:<padding$}", padding = p.unsigned_abs()),
+                p if p > 0 => pad_string(&zero_padded, p as usize, ' ', true),
+                p => pad_string(&zero_padded, p.unsigned_abs(), ' ', false),
             }
         }
-        p if p > 0 => format!("{number_with_suffix:>padding$}", padding = p as usize),
-        p => format!("{number_with_suffix:<padding$}", padding = p.unsigned_abs()),
+        p if p > 0 => pad_string(&number_with_suffix, p as usize, ' ', true),
+        p => pad_string(&number_with_suffix, p.unsigned_abs(), ' ', false),
     };
 
     Ok(format!(
