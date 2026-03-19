@@ -2316,7 +2316,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
 
         // Only runs if it must list recursively.
         while let Some(dir_data) = state.stack.pop() {
-            let read_dir = match fs::read_dir(&dir_data.0) {
+            let read_dir = match fs::read_dir(&dir_data.path) {
                 Err(err) => {
                     // flush stdout buffer before the error to preserve formatting and order
                     state.out.flush()?;
