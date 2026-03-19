@@ -2068,7 +2068,7 @@ impl PathData {
         opt_xattrs.as_ref().is_some_and(|inner| {
             inner
                 .iter()
-                .filter_map(|key| key.to_str().map(|inner| inner.to_lowercase()))
+                .filter_map(|key| key.to_str().map(str::to_lowercase))
                 .any(|xattr| xattr.contains("acl"))
         })
     }
