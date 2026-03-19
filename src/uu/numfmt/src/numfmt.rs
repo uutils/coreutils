@@ -51,25 +51,18 @@ fn format_and_write<W: std::io::Write>(
     // In non-abort modes we buffer the formatted output so that on error we
     // can emit the original line instead.
     let buffer_output = !matches!(options.invalid, InvalidModes::Abort);
-    let mut formatted_line = Vec::new();
-    let handled_line = {
-        let output: &mut dyn std::io::Write = if buffer_output {
-            &mut formatted_line
-        } else {
-            writer
-        };
+    let mut buf = Vec::new();
+    let dest: &mut dyn std::io::Write = if buffer_output { &mut buf } else { writer };
 
-        if options.delimiter.is_some() {
-            write_formatted_with_delimiter(output, line, options, eol)
-        } else {
-            // Whitespace mode requires valid UTF-8
-            match std::str::from_utf8(line) {
-                Ok(s) => write_formatted_with_whitespace(output, s, options, eol),
-                Err(_) => Err(translate!(
-                    "numfmt-error-invalid-number",
-                    "input" => escape_line(line).quote()
-                )),
-            }
+    let result = if options.delimiter.is_some() {
+        write_formatted_with_delimiter(dest, line, options, eol)
+    } else {
+        match std::str::from_utf8(line) {
+            Ok(s) => write_formatted_with_whitespace(dest, s, options, eol),
+            Err(_) => Err(translate!(
+                "numfmt-error-invalid-number",
+                "input" => escape_line(line).quote()
+            )),
         }
     };
 
@@ -87,7 +80,6 @@ fn format_and_write<W: std::io::Write>(
             InvalidModes::Ignore => {}
         }
         writer.write_all(input_line)?;
-
         if let Some(eol) = eol {
             writer.write_all(&[eol])?;
         }
@@ -95,9 +87,69 @@ fn format_and_write<W: std::io::Write>(
     }
 
     if buffer_output {
-        writer.write_all(&formatted_line)?;
+        writer.write_all(&buf)?;
     }
     Ok(false)
+}
+
+/// Process command-line number arguments.
+///
+/// Returns `true` if any line contained invalid input.
+fn handle_args<'a>(args: impl Iterator<Item = &'a [u8]>, options: &NumfmtOptions) -> UResult<bool> {
+    let mut stdout = std::io::stdout().lock();
+    let terminator = if options.zero_terminated { 0u8 } else { b'\n' };
+    let mut saw_invalid = false;
+    let mut fmt_buf = Vec::new();
+    for l in args {
+        saw_invalid |= format_and_write(&mut stdout, l, options, Some(terminator), &mut fmt_buf)?;
+    }
+    Ok(saw_invalid)
+}
+
+/// Process lines read from stdin.
+///
+/// Returns `true` if any line contained invalid input.
+fn handle_buffer<R: BufRead>(mut input: R, options: &NumfmtOptions) -> UResult<bool> {
+    let terminator = if options.zero_terminated { 0u8 } else { b'\n' };
+    let mut stdout = std::io::stdout().lock();
+    let mut buf = Vec::new();
+    let mut fmt_buf = Vec::new();
+    let mut line_idx = 0;
+    let mut saw_invalid = false;
+
+    loop {
+        buf.clear();
+        let n = input
+            .read_until(terminator, &mut buf)
+            .map_err(|e| NumfmtError::IoError(e.to_string()))?;
+        if n == 0 {
+            break;
+        }
+
+        let has_terminator = buf.last() == Some(&terminator);
+        let line = if has_terminator {
+            &buf[..buf.len() - 1]
+        } else {
+            &buf[..]
+        };
+        // Emit the terminator only when the input line had one (preserve
+        // missing final newline).
+        let eol = has_terminator.then_some(terminator);
+
+        if line_idx < options.header {
+            // Pass header lines through unchanged.
+            stdout.write_all(line)?;
+            if let Some(t) = eol {
+                stdout.write_all(&[t])?;
+            }
+        } else {
+            saw_invalid |= format_and_write(&mut stdout, line, options, eol, &mut fmt_buf)?;
+        }
+
+        line_idx += 1;
+    }
+
+    Ok(saw_invalid)
 }
 
 fn parse_unit(s: &str) -> Result<Unit> {
