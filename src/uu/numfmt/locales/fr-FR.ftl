@@ -36,6 +36,7 @@ numfmt-after-help = Options d'UNITÉ :
   Une précision optionnelle (%.1f) remplacera la précision déterminée par l'entrée.
 
 # Messages d'aide
+numfmt-help-debug = afficher des avertissements sur les entrées invalides
 numfmt-help-delimiter = utiliser X au lieu d'espaces pour le délimiteur de champ
 numfmt-help-field = remplacer les nombres dans ces champs d'entrée ; voir FIELDS ci-dessous
 numfmt-help-format = utiliser le FORMAT à virgule flottante de style printf ; voir FORMAT ci-dessous pour les détails
@@ -75,3 +76,9 @@ numfmt-error-invalid-format-width-overflow = format invalide '{ $format }' (déb
 numfmt-error-invalid-precision = précision invalide dans le format '{ $format }'
 numfmt-error-format-too-many-percent = le format '{ $format }' a trop de directives %
 numfmt-error-unknown-invalid-mode = Mode invalide inconnu : { $mode }
+
+# Messages de débogage
+numfmt-debug-no-conversion = aucune option de conversion spécifiée
+numfmt-debug-grouping-no-effect = le groupement n'a aucun effet dans cette locale
+numfmt-debug-failed-to-convert = échec de conversion d'une partie des nombres en entrée
+numfmt-debug-header-ignored = --header ignoré avec une entrée en ligne de commande
