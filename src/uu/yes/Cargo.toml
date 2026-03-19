@@ -19,6 +19,7 @@ workspace = true
 path = "src/yes.rs"
 
 [dependencies]
+aligned-vec = { workspace = true }
 clap = { workspace = true }
 itertools = { workspace = true }
 fluent = { workspace = true }

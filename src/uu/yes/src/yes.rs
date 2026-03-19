@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // cSpell:ignore strs
-
+use aligned_vec::{AVec, Alignment, ConstAlign};
 use clap::{Arg, ArgAction, Command, builder::ValueParser};
 use std::error::Error;
 use std::ffi::OsString;
@@ -14,14 +14,15 @@ use uucore::format_usage;
 use uucore::translate;
 
 // it's possible that using a smaller or larger buffer might provide better performance on some
-// systems, but honestly this is good enough
+// systems, but honestly this is good enough (without zero-copy)
+// but let it multiple of page size at least for
 const BUF_SIZE: usize = 16 * 1024;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
-    let mut buffer = Vec::with_capacity(BUF_SIZE);
+    let mut buffer: AVec<u8, ConstAlign<BUF_SIZE>> = AVec::with_capacity(BUF_SIZE, BUF_SIZE);
     #[allow(clippy::unwrap_used, reason = "clap provides 'y' by default")]
     let _ = args_into_buffer(&mut buffer, matches.get_many::<OsString>("STRING").unwrap());
     prepare_buffer(&mut buffer);
@@ -55,8 +56,8 @@ pub fn uu_app() -> Command {
 
 /// Copies words from `i` into `buf`, separated by spaces.
 #[allow(clippy::unnecessary_wraps, reason = "needed on some platforms")]
-fn args_into_buffer<'a>(
-    buf: &mut Vec<u8>,
+fn args_into_buffer<'a, A: Alignment>(
+    buf: &mut AVec<u8, A>,
     i: impl Iterator<Item = &'a OsString>,
 ) -> Result<(), Box<dyn Error>> {
     // On Unix (and wasi), OsStrs are just &[u8]'s underneath...
@@ -91,7 +92,7 @@ fn args_into_buffer<'a>(
 
 /// Assumes buf holds a single output line forged from the command line arguments, copies it
 /// repeatedly until the buffer holds as many copies as it can under [`BUF_SIZE`].
-fn prepare_buffer(buf: &mut Vec<u8>) {
+fn prepare_buffer<A: Alignment>(buf: &mut AVec<u8, A>) {
     if buf.len() * 2 > BUF_SIZE {
         return;
     }
@@ -102,9 +103,14 @@ fn prepare_buffer(buf: &mut Vec<u8>) {
     let target_size = line_len * (BUF_SIZE / line_len);
 
     while buf.len() < target_size {
-        let to_copy = std::cmp::min(target_size - buf.len(), buf.len());
+        let current_len = buf.len();
+        let to_copy = std::cmp::min(target_size - current_len, current_len);
         debug_assert_eq!(to_copy % line_len, 0);
-        buf.extend_from_within(..to_copy);
+        #[allow(
+            clippy::unnecessary_to_owned,
+            reason = "needs useless copy without unsafe"
+        )]
+        buf.extend_from_slice(&buf[..to_copy].to_vec());
     }
 }
 
@@ -142,7 +148,8 @@ mod tests {
         ];
 
         for (line, final_len) in tests {
-            let mut v = std::iter::repeat_n(b'a', line).collect::<Vec<_>>();
+            let mut v: AVec<u8, ConstAlign<BUF_SIZE>> =
+                AVec::from_iter(BUF_SIZE, std::iter::repeat_n(b'a', line));
             prepare_buffer(&mut v);
             assert_eq!(v.len(), final_len);
         }
@@ -151,24 +158,27 @@ mod tests {
     #[test]
     fn test_args_into_buf() {
         {
-            let mut v = Vec::with_capacity(BUF_SIZE);
+            let mut v: AVec<u8, ConstAlign<BUF_SIZE>> = AVec::with_capacity(BUF_SIZE, BUF_SIZE);
             let default_args = ["y".into()];
             args_into_buffer(&mut v, default_args.iter()).unwrap();
-            assert_eq!(String::from_utf8(v).unwrap(), "y\n");
+            assert_eq!(String::from_utf8(v.to_vec()).unwrap(), "y\n");
         }
 
         {
-            let mut v = Vec::with_capacity(BUF_SIZE);
+            let mut v: AVec<u8, ConstAlign<BUF_SIZE>> = AVec::with_capacity(BUF_SIZE, BUF_SIZE);
             let args = ["foo".into()];
             args_into_buffer(&mut v, args.iter()).unwrap();
-            assert_eq!(String::from_utf8(v).unwrap(), "foo\n");
+            assert_eq!(String::from_utf8(v.to_vec()).unwrap(), "foo\n");
         }
 
         {
-            let mut v = Vec::with_capacity(BUF_SIZE);
+            let mut v: AVec<u8, ConstAlign<BUF_SIZE>> = AVec::with_capacity(BUF_SIZE, BUF_SIZE);
             let args = ["foo".into(), "bar    baz".into(), "qux".into()];
             args_into_buffer(&mut v, args.iter()).unwrap();
-            assert_eq!(String::from_utf8(v).unwrap(), "foo bar    baz qux\n");
+            assert_eq!(
+                String::from_utf8(v.to_vec()).unwrap(),
+                "foo bar    baz qux\n"
+            );
         }
     }
 }
