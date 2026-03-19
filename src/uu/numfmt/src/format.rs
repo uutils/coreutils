@@ -265,21 +265,18 @@ fn split_mergeable_suffix<'a>(s: &'a str, options: &NumfmtOptions) -> Option<(&'
         return None;
     }
 
-    match field.len() {
-        1 => {
-            let _ = field
-                .chars()
-                .next()
-                .filter(|c| RawSuffix::try_from(c).is_ok())?;
-        }
-        2 if field.ends_with('i') => {
-            let _ = field
-                .chars()
-                .next()
-                .filter(|c| RawSuffix::try_from(c).is_ok())?;
-        }
-        _ => return None,
+    let is_suffix = match field.len() {
+        1 => true,
+        2 => field.ends_with('i'),
+        _ => false,
+    };
+    if !is_suffix {
+        return None;
     }
+    field
+        .chars()
+        .next()
+        .filter(|c| RawSuffix::try_from(c).is_ok())?;
 
     Some((prefix, field))
 }
