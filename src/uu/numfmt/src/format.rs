@@ -234,19 +234,12 @@ fn apply_grouping(s: &str) -> String {
     grouped
 }
 
-fn next_field_index(s: &str) -> usize {
-    s.find(char::is_whitespace).unwrap_or(s.len())
-}
-
-fn split_next_field<'a>(s: &'a str) -> (&'a str, &'a str, &'a str) {
+fn split_next_field(s: &str) -> (&str, &str, &str) {
     let prefix_len = s.find(|c: char| !c.is_whitespace()).unwrap_or(s.len());
-    let prefix = &s[..prefix_len];
-    let field_start = prefix_len;
-    let field_len = next_field_index(&s[field_start..]);
-    let field_end = field_start + field_len;
-    let field = &s[field_start..field_end];
-    let rest = &s[field_end..];
-    (prefix, field, rest)
+    let field_end = s[prefix_len..]
+        .find(char::is_whitespace)
+        .map_or(s.len(), |i| prefix_len + i);
+    (&s[..prefix_len], &s[prefix_len..field_end], &s[field_end..])
 }
 
 /// When an explicit whitespace unit separator is set (e.g. `--unit-separator=" "`),
