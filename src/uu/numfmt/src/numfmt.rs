@@ -20,8 +20,6 @@ use std::str::FromStr;
 use units::{IEC_BASES, SI_BASES};
 use uucore::display::Quotable;
 use uucore::error::UResult;
-use uucore::util_name;
-
 use uucore::i18n::decimal::locale_grouping_separator;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::ranges::Range;
@@ -287,39 +285,6 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
     })
 }
 
-fn print_debug_warnings(options: &NumfmtOptions, matches: &ArgMatches) {
-    fn print_warning(msg_key: &str) {
-        let _ = writeln!(stderr(), "numfmt: {}", translate!(msg_key));
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
-    if options.grouping && locale_grouping_separator().is_empty() {
-        let _ = writeln!(
-            stderr(),
-            "{}: {}",
-            util_name(),
-            translate!("numfmt-debug-grouping-no-effect")
-        );
-    }
-
-    // Warn if --header is used with command-line input
-    if options.header > 0 && matches.get_many::<OsString>(NUMBER).is_some() {
-        print_warning("numfmt-debug-header-ignored");
-    }
-}
-
-#[uucore::main]
-pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    // GNU numfmt accepts both --debug and ---debug (triple dash); normalize for clap.
-    let normalized_args: Vec<OsString> = args
-        .map(|arg| {
-            if arg == "---debug" {
-                OsString::from("--debug")
-            } else {
-                arg
-            }
-        })
-        .collect();
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), normalized_args)?;
-
     let options = parse_options(&matches).map_err(NumfmtError::IllegalArgument)?;
 
     if options.debug {
@@ -341,8 +306,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             if options.debug && saw_invalid {
                 let _ = writeln!(
                     stderr(),
-                    "{}: {}",
-                    util_name(),
+                    "numfmt: {}",
                     translate!("numfmt-debug-failed-to-convert")
                 );
             }
