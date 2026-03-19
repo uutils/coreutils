@@ -2195,7 +2195,7 @@ struct DirData {
 
 impl DirData {
     fn new(path: &Path, needs_blank_line: bool) -> Self {
-        DirData {
+        Self {
             path: path.to_path_buf(),
             needs_blank_line,
         }
