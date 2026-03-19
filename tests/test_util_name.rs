@@ -27,6 +27,24 @@ fn init() {
 }
 
 #[test]
+fn test_coreutils_help_ignore_args() {
+    use std::process::Command;
+
+    let scenario = TestScenario::new("help_ignoring_args");
+    if !scenario.bin_path.exists() {
+        return;
+    }
+
+    let output = Command::new(&scenario.bin_path)
+        .arg("--help")
+        .arg("---")
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(0));
+}
+
+#[test]
 #[cfg(feature = "ls")]
 fn execution_phrase_double() {
     use std::process::Command;
@@ -246,7 +264,7 @@ fn util_arg_priority() {
     }
     let child = Command::new(&scenario.bin_path)
         .arg("--list")
-        .arg("--version")
+        .arg("--help")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -255,8 +273,8 @@ fn util_arg_priority() {
     assert_eq!(output.status.code(), Some(0));
     assert_eq!(output.stderr, b"");
     let output_str = String::from_utf8(output.stdout).unwrap();
-    let ver = env::var("CARGO_PKG_VERSION").unwrap();
-    assert_eq!(format!("coreutils {ver} (multi-call binary)\n"), output_str);
+    assert!(output_str.contains("Usage: coreutils"));
+    assert!(output_str.contains("lists all defined functions"));
 }
 
 #[test]
