@@ -432,7 +432,7 @@ where
 /// let result = handle_clap_result_with_exit_code(cmd, args, 125);
 /// ```
 pub fn handle_clap_result_with_exit_code<I, T>(
-    mut cmd: Command,
+    cmd: Command,
     itr: I,
     exit_code: i32,
 ) -> UResult<ArgMatches>
@@ -440,47 +440,10 @@ where
     I: IntoIterator<Item = T>,
     T: Into<OsString> + Clone,
 {
-    // cloning args for double use in error case
-    let args = itr.into_iter().collect::<Vec<T>>();
-    let itr = args.clone();
-    // using mut to avoid cloning cmd
-    cmd.try_get_matches_from_mut(itr).map_err(|e| {
+    cmd.try_get_matches_from(itr).map_err(|e| {
         if e.exit_code() == 0 {
             e.into() // Preserve help/version
         } else {
-            if e.kind() == ErrorKind::UnknownArgument || e.kind() == ErrorKind::InvalidSubcommand {
-                // find ambiguous options
-                // Find the string the user actually typed (e.g., "--de")
-                // for arg in &itr {}
-                let args_str: Vec<String> = args
-                    .into_iter()
-                    .map(|t| {
-                        let o: OsString = t.into();
-                        o.to_string_lossy().to_string()
-                    })
-                    .collect();
-                if let Some(provided) = args_str.iter().find(|a| a.starts_with("--")) {
-                    let search_term = provided.trim_start_matches("--");
-
-                    // Manually filter all defined long arguments
-                    let mut matches: Vec<_> = cmd
-                        .get_arguments()
-                        .filter_map(|arg| arg.get_long())
-                        .filter(|l| l.starts_with(search_term))
-                        .collect();
-
-                    if matches.len() > 1 {
-                        let mut msg =
-                            translate!("clap-error-ambiguous-argument", "arg" => provided);
-                        matches.sort();
-                        for m in matches {
-                            msg.push_str(&format!("\n  --{}", m));
-                        }
-                        return USimpleError::new(exit_code, msg);
-                    }
-                }
-            }
-
             let formatter = ErrorFormatter::new(crate::util_name());
             let code = formatter.print_error(&e, exit_code);
             USimpleError::new(code, "")
