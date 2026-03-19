@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+// spell-checker:ignore behaviour
 
 use crate::errors::NumfmtError;
 use crate::format::{escape_line, write_formatted_with_delimiter, write_formatted_with_whitespace};
@@ -64,19 +65,20 @@ fn format_and_write<W: std::io::Write>(
         }
     };
 
-    if let Err(error_message) = handled_line {
+    if let Err(msg) = result {
         match options.invalid {
             InvalidModes::Abort => {
-                return Err(Box::new(NumfmtError::FormattingError(error_message)));
+                return Err(Box::new(NumfmtError::FormattingError(msg)));
             }
             InvalidModes::Fail => {
-                show!(NumfmtError::FormattingError(error_message));
+                show!(NumfmtError::FormattingError(msg));
             }
             InvalidModes::Warn => {
-                let _ = writeln!(stderr(), "numfmt: {error_message}");
+                let _ = writeln!(stderr(), "numfmt: {msg}");
             }
             InvalidModes::Ignore => {}
         }
+        // On error, echo the original line unchanged.
         writer.write_all(input_line)?;
         if let Some(eol) = eol {
             writer.write_all(&[eol])?;
@@ -88,6 +90,64 @@ fn format_and_write<W: std::io::Write>(
         writer.write_all(&buf)?;
     }
     Ok(false)
+}
+
+/// Process command-line number arguments.
+///
+/// Returns `true` if any line contained invalid input.
+fn handle_args<'a>(args: impl Iterator<Item = &'a [u8]>, options: &NumfmtOptions) -> UResult<bool> {
+    let mut stdout = std::io::stdout().lock();
+    let terminator = if options.zero_terminated { 0u8 } else { b'\n' };
+    let mut saw_invalid = false;
+    for l in args {
+        saw_invalid |= format_and_write(&mut stdout, l, options, Some(terminator))?;
+    }
+    Ok(saw_invalid)
+}
+
+/// Process lines read from stdin.
+///
+/// Returns `true` if any line contained invalid input.
+fn handle_buffer<R: BufRead>(mut input: R, options: &NumfmtOptions) -> UResult<bool> {
+    let terminator = if options.zero_terminated { 0u8 } else { b'\n' };
+    let mut stdout = std::io::stdout().lock();
+    let mut buf = Vec::new();
+    let mut line_idx = 0;
+    let mut saw_invalid = false;
+
+    loop {
+        buf.clear();
+        let n = input
+            .read_until(terminator, &mut buf)
+            .map_err(|e| NumfmtError::IoError(e.to_string()))?;
+        if n == 0 {
+            break;
+        }
+
+        let has_terminator = buf.last() == Some(&terminator);
+        let line = if has_terminator {
+            &buf[..buf.len() - 1]
+        } else {
+            &buf[..]
+        };
+        // Emit the terminator only when the input line had one (preserve
+        // missing final newline).
+        let eol = has_terminator.then_some(terminator);
+
+        if line_idx < options.header {
+            // Pass header lines through unchanged.
+            stdout.write_all(line)?;
+            if let Some(t) = eol {
+                stdout.write_all(&[t])?;
+            }
+        } else {
+            saw_invalid |= format_and_write(&mut stdout, line, options, eol)?;
+        }
+
+        line_idx += 1;
+    }
+
+    Ok(saw_invalid)
 }
 
 fn parse_unit(s: &str) -> Result<Unit> {
@@ -285,6 +345,34 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
     })
 }
 
+fn print_debug_warnings(options: &NumfmtOptions, matches: &ArgMatches) {
+    fn print_warning(msg_key: &str) {
+        let _ = writeln!(stderr(), "numfmt: {}", translate!(msg_key));
+    }
+
+    // Warn if no conversion option is specified
+    // 2>/dev/full does not abort
+    if options.transform.from == Unit::None
+        && options.transform.to == Unit::None
+        && options.padding == 0
+        && !options.grouping
+    {
+        print_warning("numfmt-debug-no-conversion");
+    }
+
+    if options.grouping && locale_grouping_separator().is_empty() {
+        print_warning("numfmt-debug-grouping-no-effect");
+    }
+
+    // Warn if --header is used with command-line input
+    if options.header > 0 && matches.get_many::<OsString>(NUMBER).is_some() {
+        print_warning("numfmt-debug-header-ignored");
+    }
+}
+
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
     let options = parse_options(&matches).map_err(NumfmtError::IllegalArgument)?;
 
     if options.debug {
@@ -296,10 +384,17 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
             .map(|s| os_str_as_bytes(s).map_err(|e| e.to_string()))
             .collect::<std::result::Result<Vec<_>, _>>()
             .map_err(NumfmtError::IllegalArgument)?;
+        handle_args(byte_args.into_iter(), &options)
+    } else {
+        let stdin = std::io::stdin();
+        handle_buffer(stdin.lock(), &options)
+    };
 
     match result {
         Err(e) => {
-            std::io::stdout().flush().expect("error flushing stdout");
+            // Flush stdout before returning the error so any partial output is
+            // visible (matches GNU behaviour).
+            let _ = std::io::stdout().flush();
             Err(e)
         }
         Ok(saw_invalid) => {
