@@ -77,3 +77,9 @@ numfmt-error-invalid-format-width-overflow = invalid format '{ $format }' (width
 numfmt-error-invalid-precision = invalid precision in format '{ $format }'
 numfmt-error-format-too-many-percent = format '{ $format }' has too many % directives
 numfmt-error-unknown-invalid-mode = Unknown invalid mode: { $mode }
+
+# Debug messages
+numfmt-debug-no-conversion = no conversion option specified
+numfmt-debug-grouping-no-effect = grouping has no effect in this locale
+numfmt-debug-failed-to-convert = failed to convert some of the input numbers
+numfmt-debug-header-ignored = --header ignored with command-line input
