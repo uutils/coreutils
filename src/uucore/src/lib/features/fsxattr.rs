@@ -112,13 +112,10 @@ pub fn has_acl<P: AsRef<Path>>(file: P) -> bool {
 /// `true` if the file has an extended attribute named "security.capability", `false` otherwise.
 pub fn has_security_cap_acl<P: AsRef<Path>>(file: P) -> bool {
     // don't use exacl here, it is doing more getxattr call then needed
-    xattr::list_deref(file).is_ok_and(|mut acl| {
-        #[cfg(unix)]
-        return acl.contains(OsStr::from_bytes(b"security.capability"));
-
-        #[cfg(not(unix))]
-        return false;
-    })
+    xattr::get_deref(file, "security.capability")
+        .ok()
+        .flatten()
+        .is_some()
 }
 
 /// Returns the permissions bits of a file or directory which has Access Control List (ACL) entries based on its
