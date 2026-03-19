@@ -6,7 +6,7 @@
 // spell-checker:ignore getxattr posix_acl_default
 
 //! Set of functions to manage xattr on files and dirs
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::ffi::OsString;
 #[cfg(unix)]
 use std::path::Path;
@@ -60,6 +60,22 @@ pub fn retrieve_xattrs<P: AsRef<Path>>(source: P) -> std::io::Result<FxHashMap<O
         }
     }
     Ok(attrs)
+}
+
+/// Retrieves the extended attributes keys only of a given file or directory.
+///
+/// # Arguments
+///
+/// * `source` - A reference to the path of the file or directory.
+///
+/// # Returns
+///
+/// A result containing a HashSet of attributes names
+pub fn retrieve_xattr_list<P: AsRef<Path>>(source: P) -> FxHashSet<OsString> {
+    xattr::list(&source)
+        .unwrap_or_default()
+        .into_iter()
+        .collect()
 }
 
 /// Applies extended attributes (xattrs) to a given file or directory.

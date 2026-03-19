@@ -9,12 +9,11 @@
 #[cfg(unix)]
 use rustc_hash::FxHashMap;
 use rustc_hash::FxHashSet;
-use std::borrow::Cow;
-use std::cell::RefCell;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
+use std::{borrow::Cow, cell::RefCell};
 use std::{
     cell::{LazyCell, OnceCell},
     cmp::Reverse,
@@ -42,7 +41,7 @@ use thiserror::Error;
 #[cfg(unix)]
 use uucore::entries;
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-use uucore::fsxattr::has_acl;
+use uucore::fsxattr::retrieve_xattr_list;
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 #[cfg(any(
@@ -63,14 +62,13 @@ use uucore::{
     error::{UError, UResult, set_exit_code},
     format::human::{SizeFormat, human_readable},
     format_usage,
-    fs::FileInformation,
-    fs::display_permissions,
+    fs::{FileInformation, display_permissions},
     fsext::{MetadataTimeField, metadata_get_time},
     line_ending::LineEnding,
     os_str_as_bytes_lossy,
-    parser::parse_glob,
-    parser::parse_size::parse_size_non_zero_u64,
-    parser::shortcut_value_parser::ShortcutValueParser,
+    parser::{
+        parse_glob, parse_size::parse_size_non_zero_u64, shortcut_value_parser::ShortcutValueParser,
+    },
     quoting_style::{QuotingStyle, locale_aware_escape_dir_name, locale_aware_escape_name},
     show, show_error, show_warning,
     time::{FormatSystemTimeFallback, format, format_system_time},
@@ -1932,6 +1930,8 @@ struct PathData {
     // can be used to avoid reading the filetype. Can be also called d_type:
     // https://www.gnu.org/software/libc/manual/html_node/Directory-Entries.html
     de: RefCell<Option<Box<DirEntry>>>,
+    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+    xattrs: OnceCell<FxHashSet<OsString>>,
     security_context: OnceCell<Box<str>>,
     // Name of the file - will be empty for . or ..
     display_name: OsString,
@@ -1983,6 +1983,8 @@ impl PathData {
         // nearly free compared to a metadata() call on a Path
         let ft: OnceCell<Option<FileType>> = OnceCell::new();
         let md: OnceCell<Option<Metadata>> = OnceCell::new();
+        #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+        let xattrs: OnceCell<FxHashSet<OsString>> = OnceCell::new();
         let security_context: OnceCell<Box<str>> = OnceCell::new();
 
         let de: RefCell<Option<Box<DirEntry>>> = if let Some(de) = dir_entry {
@@ -2006,6 +2008,8 @@ impl PathData {
             md,
             ft,
             de,
+            #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+            xattrs,
             security_context,
             display_name,
             p_buf,
@@ -2049,6 +2053,33 @@ impl PathData {
                 }
             })
             .as_ref()
+    }
+
+    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+    pub fn has_acl(&self) -> bool {
+        if self.file_type().is_some_and(|ft| ft.is_symlink()) {
+            return false;
+        }
+
+        let opt_xattrs = self.xattrs.get_or_init(|| retrieve_xattr_list(self.path()));
+        // don't use exacl here, it is doing more getxattr call then needed
+        opt_xattrs
+            .iter()
+            .map(|key| key.to_string_lossy())
+            .any(|xattr| xattr.contains("acl"))
+    }
+
+    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+    pub fn has_security_cap(&self) -> bool {
+        if self.file_type().is_some_and(|ft| ft.is_symlink()) {
+            return false;
+        }
+
+        let cap_key = OsStr::new("security.capability");
+
+        let xattrs = self.xattrs.get_or_init(|| retrieve_xattr_list(self.path()));
+        // don't use exacl here, it is doing more getxattr call then needed
+        xattrs.get(cap_key).is_some()
     }
 
     fn file_type(&self) -> Option<&FileType> {
@@ -3018,7 +3049,7 @@ fn display_item_long(
         // TODO: See how Mac should work here
         let is_acl_set = false;
         #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-        let is_acl_set = has_acl(item.path());
+        let is_acl_set = item.has_acl();
         output_display.extend(display_permissions(md, true).as_bytes());
         if item.security_context(config).len() > 1 {
             // GNU `ls` uses a "." character to indicate a file with a security context,
@@ -3737,7 +3768,7 @@ fn calculate_padding_collection(
                 // TODO: See how Mac should work here
                 let is_acl_set = false;
                 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-                let is_acl_set = has_acl(item.display_name());
+                let is_acl_set = item.has_acl();
                 if context_len > 1 || is_acl_set {
                     padding_collections.link_count += 1;
                 }
