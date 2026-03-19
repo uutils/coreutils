@@ -54,7 +54,7 @@ pub fn copy_xattrs_skip_selinux<P: AsRef<Path>>(source: P, dest: P) -> std::io::
 /// A result containing a HashMap of attributes names and values, or an error.
 pub fn retrieve_xattrs<P: AsRef<Path>>(source: P) -> std::io::Result<FxHashMap<OsString, Vec<u8>>> {
     let mut attrs = FxHashMap::default();
-    for attr_name in xattr::list(&source)? {
+    for attr_name in retrieve_xattr_list(&source)? {
         if let Some(value) = xattr::get(&source, &attr_name)? {
             attrs.insert(attr_name, value);
         }
@@ -71,11 +71,8 @@ pub fn retrieve_xattrs<P: AsRef<Path>>(source: P) -> std::io::Result<FxHashMap<O
 /// # Returns
 ///
 /// A result containing a HashSet of attributes names
-pub fn retrieve_xattr_list<P: AsRef<Path>>(source: P) -> FxHashSet<OsString> {
-    xattr::list(&source)
-        .unwrap_or_default()
-        .into_iter()
-        .collect()
+pub fn retrieve_xattr_list<P: AsRef<Path>>(source: P) -> std::io::Result<FxHashSet<OsString>> {
+    Ok(xattr::list(&source)?.collect())
 }
 
 /// Applies extended attributes (xattrs) to a given file or directory.

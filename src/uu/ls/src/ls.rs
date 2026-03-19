@@ -1931,7 +1931,7 @@ struct PathData {
     // https://www.gnu.org/software/libc/manual/html_node/Directory-Entries.html
     de: RefCell<Option<Box<DirEntry>>>,
     #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-    xattrs: OnceCell<FxHashSet<OsString>>,
+    xattrs: OnceCell<Option<FxHashSet<OsString>>>,
     security_context: OnceCell<Box<str>>,
     // Name of the file - will be empty for . or ..
     display_name: OsString,
@@ -2061,12 +2061,16 @@ impl PathData {
             return false;
         }
 
-        let opt_xattrs = self.xattrs.get_or_init(|| retrieve_xattr_list(self.path()));
-        // don't use exacl here, it is doing more getxattr call then needed
-        opt_xattrs
-            .iter()
-            .map(|key| key.to_string_lossy())
-            .any(|xattr| xattr.contains("acl"))
+        let opt_xattrs = self
+            .xattrs
+            .get_or_init(|| retrieve_xattr_list(self.path()).ok());
+
+        opt_xattrs.is_some_and(|inner| {
+            inner
+                .iter()
+                .map(|key| key.to_string_lossy())
+                .any(|xattr| xattr.contains("acl"))
+        })
     }
 
     #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
@@ -2077,9 +2081,11 @@ impl PathData {
 
         let cap_key = OsStr::new("security.capability");
 
-        let xattrs = self.xattrs.get_or_init(|| retrieve_xattr_list(self.path()));
-        // don't use exacl here, it is doing more getxattr call then needed
-        xattrs.get(cap_key).is_some()
+        let xattrs = self
+            .xattrs
+            .get_or_init(|| retrieve_xattr_list(self.path()).ok());
+
+        xattrs.is_some_and(|inner| inner.get(cap_key).is_some())
     }
 
     fn file_type(&self) -> Option<&FileType> {
