@@ -2057,7 +2057,7 @@ impl PathData {
 
     #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
     pub fn has_acl(&self) -> bool {
-        if self.file_type().is_some_and(|ft| ft.is_symlink()) {
+        if self.file_type().is_some_and(FileType::is_symlink) {
             return false;
         }
 
@@ -2075,7 +2075,7 @@ impl PathData {
 
     #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
     pub fn has_security_cap(&self) -> bool {
-        if self.file_type().is_some_and(|ft| ft.is_symlink()) {
+        if self.file_type().is_some_and(FileType::is_symlink) {
             return false;
         }
 
