@@ -2541,8 +2541,6 @@ fn depth_first_list(
             }
         }
     }
-    // Relinquish unused space since we won't need it anymore.
-    buf.shrink_to_fit();
 
     sort_entries(buf, config);
 
@@ -2577,7 +2575,7 @@ fn depth_first_list(
                     // Push to stack, but with a less aggressive growth curve.
                     let (cap, len) = (state.stack.capacity(), state.stack.len());
                     if cap == len {
-                        state.stack.reserve_exact(len / 4 + 4);
+                        state.stack.reserve(len / 4 + 4);
                     }
                     state.stack.push((e.path().to_path_buf(), true));
                 } else {
