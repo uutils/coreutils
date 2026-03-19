@@ -2466,12 +2466,12 @@ fn depth_first_list(
     dired: &mut DiredOutput,
     is_top_level: bool,
 ) -> UResult<()> {
-    let path_data = PathData::new(dir_path, None, None, config, false);
+    let path_data = PathData::new(dir_data.path, None, None, config, false);
 
     // Print dir heading - name... 'total' comes after error display
     if state.initial_locs_len > 1 || config.recursive {
         if is_top_level {
-            if needs_blank_line {
+            if dir_data.needs_blank_line {
                 writeln!(state.out)?;
                 if config.dired {
                     dired.padding += 1;
