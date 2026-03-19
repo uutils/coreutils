@@ -1984,7 +1984,7 @@ impl PathData {
         let ft: OnceCell<Option<FileType>> = OnceCell::new();
         let md: OnceCell<Option<Metadata>> = OnceCell::new();
         #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-        let xattrs: OnceCell<FxHashSet<OsString>> = OnceCell::new();
+        let xattrs: OnceCell<Option<FxHashSet<OsString>>> = OnceCell::new();
         let security_context: OnceCell<Box<str>> = OnceCell::new();
 
         let de: RefCell<Option<Box<DirEntry>>> = if let Some(de) = dir_entry {
@@ -2065,7 +2065,7 @@ impl PathData {
             .xattrs
             .get_or_init(|| retrieve_xattr_list(self.path()).ok());
 
-        opt_xattrs.is_some_and(|inner| {
+        opt_xattrs.as_ref().is_some_and(|inner| {
             inner
                 .iter()
                 .map(|key| key.to_string_lossy())
@@ -2085,7 +2085,9 @@ impl PathData {
             .xattrs
             .get_or_init(|| retrieve_xattr_list(self.path()).ok());
 
-        xattrs.is_some_and(|inner| inner.get(cap_key).is_some())
+        xattrs
+            .as_ref()
+            .is_some_and(|inner| inner.get(cap_key).is_some())
     }
 
     fn file_type(&self) -> Option<&FileType> {
