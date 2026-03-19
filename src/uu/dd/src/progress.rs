@@ -427,8 +427,8 @@ pub(crate) fn gen_prog_updater(
     print_level: Option<StatusLevel>,
 ) -> impl Fn() {
     move || {
-        // As we are in a thread, we need to set up localization independently.
-        let _ = setup_localization("dd");
+        // should reuse translation templete from main thread
+        //let _ = setup_localization("dd");
 
         let mut progress_printed = false;
         while let Ok(update) = rx.recv() {
@@ -479,8 +479,8 @@ pub(crate) fn gen_prog_updater(
 ) -> impl Fn() {
     // --------------------------------------------------------------
     move || {
-        // As we are in a thread, we need to set up localization independently.
-        let _ = setup_localization("dd");
+        // should avoid
+        //let _ = setup_localization("dd");
 
         // Holds the state of whether we have printed the current progress.
         // This is needed so that we know whether or not to print a newline
