@@ -1948,8 +1948,10 @@ impl PathData {
         // For '..', the filename is None
         let display_name = if let Some(name) = file_name {
             name
-        } else {
+        } else if command_line {
             p_buf.as_os_str().to_os_string()
+        } else {
+            p_buf.file_name().unwrap_or_default().to_os_string()
         };
 
         let must_dereference = match &config.dereference {
