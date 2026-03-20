@@ -153,7 +153,9 @@ vmsplice
 
 # * vars/libc
 COMFOLLOW
+EACCESS
 EXDEV
+FDCWD
 FILENO
 FTSENT
 HOSTSIZE
@@ -198,7 +200,10 @@ blocksize
 canonname
 chroot
 dlsym
+eaccess
+euidaccess
 execvp
+faccessat
 fdatasync
 freeaddrinfo
 getaddrinfo
