@@ -9,9 +9,11 @@ use clap::builder::ValueParser;
 use clap::parser::ValuesRef;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
+#[cfg(all(unix, not(target_os = "linux")))]
+use std::os::unix::fs::MetadataExt;
 use std::io::{Write, stdout};
 use std::path::{Path, PathBuf};
-#[cfg(all(unix, target_os = "linux"))]
+#[cfg(not(windows))]
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
 use uucore::translate;
@@ -196,8 +198,9 @@ pub fn mkdir(path: &Path, config: &Config) -> UResult<()> {
     create_dir(path, false, config)
 }
 
-/// Only needed on Linux to add ACL permission bits after directory creation.
-#[cfg(all(unix, target_os = "linux"))]
+/// Only needed on Linux to add ACL permission bits after directory creation and on
+/// macos / bsd to inherit setgid bits
+#[cfg(not(windows))]
 fn chmod(path: &Path, mode: u32) -> UResult<()> {
     use std::fs::{Permissions, set_permissions};
     use std::os::unix::fs::PermissionsExt;
@@ -293,6 +296,25 @@ fn create_dir_with_mode(path: &Path, _mode: u32) -> std::io::Result<()> {
     std::fs::create_dir(path)
 }
 
+// macos and bsd systems do not inherit the parents directories SETGID bit on the kernel
+// level so we have to manually set the SETGID
+#[cfg(all(unix, not(target_os = "linux")))]
+fn inherit_setgid_bit(path: &Path) -> UResult<()> {
+    if let Some(parent) = path.parent() {
+        if let Ok(parent_metadata) = parent.metadata() {
+            if let Ok(paths_metadata) = path.metadata() {
+                if (parent_metadata.mode() & 0o2000) != (paths_metadata.mode() & 0o2000) {
+                    chmod(
+                        path,
+                        paths_metadata.mode() | parent_metadata.mode() & 0o2000,
+                    )?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 // Helper function to create a single directory with appropriate permissions
 // `is_parent` argument is not used on windows
 #[allow(unused_variables)]
@@ -319,6 +341,10 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
                     translate!("mkdir-verbose-created-directory", "util_name" => uucore::util_name(), "path" => path.quote())
                 )?;
             }
+            // macos and bsd systems do not inherit the parents directories SETGID bit on the kernel
+            // level so we have to manually set the SETGID
+            #[cfg(all(unix, not(target_os = "linux")))]
+            inherit_setgid_bit(path)?;
 
             // On Linux, we may need to add ACL permission bits via chmod.
             // On other Unix systems, the directory was already created with the correct mode.
