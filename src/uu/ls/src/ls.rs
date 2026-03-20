@@ -10,7 +10,6 @@
 use rustc_hash::FxHashMap;
 use rustc_hash::FxHashSet;
 use std::borrow::Cow;
-use std::cell::RefCell;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
@@ -1929,9 +1928,6 @@ struct PathData {
     // Result<MetaData> got from symlink_metadata() or metadata() based on config
     md: OnceCell<Option<Metadata>>,
     ft: OnceCell<Option<FileType>>,
-    // can be used to avoid reading the filetype. Can be also called d_type:
-    // https://www.gnu.org/software/libc/manual/html_node/Directory-Entries.html
-    de: RefCell<Option<Box<DirEntry>>>,
     security_context: OnceCell<Box<str>>,
     // Name of the file - will be empty for . or ..
     display_name: OsString,
@@ -1944,7 +1940,6 @@ struct PathData {
 impl PathData {
     fn new(
         p_buf: PathBuf,
-        dir_entry: Option<DirEntry>,
         file_name: Option<OsString>,
         config: &Config,
         command_line: bool,
@@ -1953,13 +1948,8 @@ impl PathData {
         // For '..', the filename is None
         let display_name = if let Some(name) = file_name {
             name
-        } else if command_line {
-            p_buf.as_os_str().to_os_string()
         } else {
-            dir_entry
-                .as_ref()
-                .map(DirEntry::file_name)
-                .unwrap_or_default()
+            p_buf.as_os_str().to_os_string()
         };
 
         let must_dereference = match &config.dereference {
@@ -1985,20 +1975,9 @@ impl PathData {
         let md: OnceCell<Option<Metadata>> = OnceCell::new();
         let security_context: OnceCell<Box<str>> = OnceCell::new();
 
-        let de: RefCell<Option<Box<DirEntry>>> = if must_dereference {
-            RefCell::new(None)
-        } else {
-            if let Some(de) = dir_entry {
-                RefCell::new(Some(de.into()))
-            } else {
-                RefCell::new(None)
-            }
-        };
-
         Self {
             md,
             ft,
-            de,
             security_context,
             display_name,
             p_buf,
@@ -2010,12 +1989,6 @@ impl PathData {
     fn metadata(&self) -> Option<&Metadata> {
         self.md
             .get_or_init(|| {
-                if !self.must_dereference {
-                    if let Some(dir_entry) = RefCell::take(&self.de).as_deref() {
-                        return dir_entry.metadata().ok();
-                    }
-                }
-
                 match get_metadata_with_deref_opt(self.path(), self.must_dereference) {
                     Err(err) => {
                         // FIXME: A bit tricky to propagate the result here
@@ -2228,7 +2201,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     };
 
     for loc in locs {
-        let path_data = PathData::new(PathBuf::from(loc), None, None, config, true);
+        let path_data = PathData::new(PathBuf::from(loc), None, config, true);
 
         // Getting metadata here is no big deal as it's just the CWD
         // and we really just want to know if the strings exist as files/dirs
@@ -2447,13 +2420,13 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
 
 fn depth_first_list(
     (dir_path, needs_blank_line): DirData,
-    mut read_dir: ReadDir,
+    read_dir: ReadDir,
     config: &Config,
     state: &mut ListState,
     dired: &mut DiredOutput,
     is_top_level: bool,
 ) -> UResult<()> {
-    let path_data = PathData::new(dir_path, None, None, config, false);
+    let path_data = PathData::new(dir_path, None, config, false);
 
     // Print dir heading - name... 'total' comes after error display
     if state.initial_locs_len > 1 || config.recursive {
@@ -2496,14 +2469,12 @@ fn depth_first_list(
         let v = vec![
             PathData::new(
                 path_data.path().to_path_buf(),
-                None,
                 Some(".".into()),
                 config,
                 false,
             ),
             PathData::new(
                 path_data.path().join(".."),
-                None,
                 Some("..".into()),
                 config,
                 false,
@@ -2515,17 +2486,11 @@ fn depth_first_list(
     };
 
     // Convert those entries to the PathData struct
-    for raw_entry in read_dir.by_ref() {
+    for raw_entry in read_dir {
         match raw_entry {
             Ok(dir_entry) => {
                 if should_display(&dir_entry, config) {
-                    buf.push(PathData::new(
-                        dir_entry.path(),
-                        Some(dir_entry),
-                        None,
-                        config,
-                        false,
-                    ));
+                    buf.push(PathData::new(dir_entry.path(), None, config, false));
                 }
             }
             Err(err) => {
@@ -3468,7 +3433,6 @@ fn display_item_name(
                         Ok(resolved_target) => {
                             let target_data = PathData::new(
                                 resolved_target,
-                                None,
                                 target_path.file_name().map(OsStr::to_os_string),
                                 config,
                                 false,
