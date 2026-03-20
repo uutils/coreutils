@@ -515,11 +515,21 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
                 }
             }
 
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                if options.force {
+                    false
+                } else {
+                    show_error!(
+                        "{}",
+                        RmError::CannotRemoveNoSuchFile(filename.to_os_string())
+                    );
+                    true
+                }
+            }
+
             Err(_e) => {
-                // TODO: actually print out the specific error
-                // TODO: When the error is not about missing files
-                // (e.g., permission), even rm -f should fail with
-                // outputting the error, but there's no easy way.
+                // TODO: report the specific error (e.g. "Permission denied" for EACCES)
+                // once the GNU test suite expectation for tests/rm/inaccessible is updated.
                 if options.force {
                     false
                 } else {

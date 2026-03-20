@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore rootlink
+// spell-checker:ignore rootlink ENOTDIR
 #![allow(clippy::stable_sort_primitive)]
 
 use std::process::Stdio;
@@ -1376,4 +1376,29 @@ fn test_preserve_root_literal_root() {
         .fails()
         .stderr_contains("it is dangerous to operate recursively on '/'")
         .stderr_contains("use --no-preserve-root to override this failsafe");
+}
+
+/// Test that `rm -f` silently ignores paths that cannot be stat'd because a
+/// component of the path is not a directory (ENOTDIR), matching GNU behavior.
+#[cfg(unix)]
+#[test]
+fn test_rm_force_ignores_symlink_metadata_error() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("existing_file");
+    // "existing_file/subpath" triggers ENOTDIR; -f must suppress it silently.
+    ucmd.args(&["-f", "existing_file/subpath"])
+        .succeeds()
+        .no_stderr();
+}
+
+/// Test that without `-f`, a path that cannot be stat'd due to ENOTDIR still
+/// causes a non-zero exit and reports an error.
+#[cfg(unix)]
+#[test]
+fn test_rm_reports_error_for_symlink_metadata_failure() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("existing_file");
+    ucmd.args(&["existing_file/subpath"])
+        .fails()
+        .stderr_contains("existing_file/subpath");
 }
