@@ -4,6 +4,10 @@
 // file that was distributed with this source code.
 use uutests::new_ucmd;
 #[cfg(any(target_vendor = "apple", target_os = "linux"))]
+use uutests::unwrap_or_return;
+#[cfg(any(target_vendor = "apple", target_os = "linux"))]
+use uutests::util::expected_result;
+#[cfg(any(target_vendor = "apple", target_os = "linux"))]
 use uutests::{util::TestScenario, util_name};
 
 #[ignore = "does not work as same as users > /dev/full"]
@@ -33,19 +37,9 @@ fn test_users_no_arg() {
 
 #[test]
 #[cfg(any(target_vendor = "apple", target_os = "linux"))]
-#[ignore = "issue #3219"]
 fn test_users_check_name() {
-    #[cfg(target_os = "linux")]
-    let util_name = util_name!();
-    #[cfg(target_vendor = "apple")]
-    let util_name = &format!("g{}", util_name!());
-
-    let expected = TestScenario::new(util_name)
-        .cmd(util_name)
-        .env("LC_ALL", "C")
-        .succeeds()
-        .stdout_move_str();
-
+    let ts = TestScenario::new(util_name!());
+    let expected = unwrap_or_return!(expected_result(&ts, &[])).stdout_move_str();
     new_ucmd!().succeeds().stdout_is(&expected);
 }
 
