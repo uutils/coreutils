@@ -2188,8 +2188,19 @@ fn push_basic_escape(buf: &mut String, byte: u8) {
         }
     }
 }
+struct DirData {
+    path: PathBuf,
+    needs_blank_line: bool,
+}
 
-type DirData = (PathBuf, bool);
+impl DirData {
+    fn new(path: &Path, needs_blank_line: bool) -> Self {
+        Self {
+            path: path.to_path_buf(),
+            needs_blank_line,
+        }
+    }
+}
 
 // A struct to encapsulate state that is passed around from `list` functions.
 struct ListState<'a> {
@@ -2298,19 +2309,14 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
             path_data.must_dereference,
         )?);
 
+        let dir_data = DirData::new(path_data.path(), needs_blank_line);
+
         // List each of the arguments to ls first.
-        depth_first_list(
-            (path_data.path().to_path_buf(), needs_blank_line),
-            read_dir,
-            config,
-            &mut state,
-            &mut dired,
-            true,
-        )?;
+        depth_first_list(dir_data, read_dir, config, &mut state, &mut dired, true)?;
 
         // Only runs if it must list recursively.
         while let Some(dir_data) = state.stack.pop() {
-            let read_dir = match fs::read_dir(&dir_data.0) {
+            let read_dir = match fs::read_dir(&dir_data.path) {
                 Err(err) => {
                     // flush stdout buffer before the error to preserve formatting and order
                     state.out.flush()?;
@@ -2453,19 +2459,19 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
 }
 
 fn depth_first_list(
-    (dir_path, needs_blank_line): DirData,
+    dir_data: DirData,
     mut read_dir: ReadDir,
     config: &Config,
     state: &mut ListState,
     dired: &mut DiredOutput,
     is_top_level: bool,
 ) -> UResult<()> {
-    let path_data = PathData::new(dir_path, None, None, config, false);
+    let path_data = PathData::new(dir_data.path, None, None, config, false);
 
     // Print dir heading - name... 'total' comes after error display
     if state.initial_locs_len > 1 || config.recursive {
         if is_top_level {
-            if needs_blank_line {
+            if dir_data.needs_blank_line {
                 writeln!(state.out)?;
                 if config.dired {
                     dired.padding += 1;
@@ -2579,7 +2585,10 @@ fn depth_first_list(
                     if cap == len {
                         state.stack.reserve_exact(len / 4 + 4);
                     }
-                    state.stack.push((e.path().to_path_buf(), true));
+
+                    let dir_data = DirData::new(path_data.path(), true);
+
+                    state.stack.push(dir_data);
                 } else {
                     state.out.flush()?;
                     show!(LsError::AlreadyListedError(e.path().to_path_buf()));
