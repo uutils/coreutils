@@ -284,6 +284,7 @@ impl SizedAlgoKind {
             (ak::Sm3, _) => Ok(Self::Sm3),
             (ak::Sha1, _) => Ok(Self::Sha1),
 
+            (ak::Blake2b, l) => Ok(Self::Blake2b(l)),
             (ak::Blake3, l) => Ok(Self::Blake3(l)),
             (ak::Shake128, l) => Ok(Self::Shake128(l)),
             (ak::Shake256, l) => Ok(Self::Shake256(l)),
@@ -292,14 +293,6 @@ impl SizedAlgoKind {
             (algo @ (ak::Sha2 | ak::Sha3), None) => {
                 Err(ChecksumError::LengthRequiredForSha(algo.to_lowercase().into()).into())
             }
-            // [`calculate_blake2b_length`] expects a length in bits but we
-            // have a length in bytes.
-            (algo @ ak::Blake2b, Some(l)) => Ok(Self::Blake2b(calculate_blake_length_str(
-                algo,
-                &(8 * l).to_string(),
-            )?)),
-            (ak::Blake2b, None) => Ok(Self::Blake2b(None)),
-
             (ak::Sha224, None) => Ok(Self::Sha2(ShaLength::Len224)),
             (ak::Sha256, None) => Ok(Self::Sha2(ShaLength::Len256)),
             (ak::Sha384, None) => Ok(Self::Sha2(ShaLength::Len384)),
@@ -495,34 +488,61 @@ pub fn digest_reader<T: Read>(
     Ok((digest.result(), output_size))
 }
 
-/// Calculates the BYTE length of the digest.
-pub fn calculate_blake_length_str(algo: AlgoKind, bit_length: &str) -> UResult<Option<usize>> {
+pub enum BlakeLength<'s> {
+    Int(usize),
+    String(&'s str),
+}
+
+/// Expects a size in BITS, either as a string or int, and returns it as a BYTE
+/// length.
+///
+/// Note: when the input is a string, validation may print error messages.
+/// Note: when the algo is Blake2b, values that are above 512
+/// (Blake2b::DEFAULT_BIT_SIZE) are errors.
+pub fn validate_calculate_blake_length(
+    algo: AlgoKind,
+    bit_length: BlakeLength<'_>,
+) -> UResult<Option<usize>> {
     debug_assert!(matches!(algo, AlgoKind::Blake2b | AlgoKind::Blake3));
 
+    // TODO MSRV>=1.89 : Replace format! with format_args! to make string
+    // evaluation lazy.
+    #[allow(clippy::useless_format)]
+    let (disp, parsed, may_print_error) = match &bit_length {
+        BlakeLength::Int(i) => (format!("{}", *i), Ok(*i), false),
+        BlakeLength::String(s) => (format!("{}", *s), s.parse::<usize>(), true),
+    };
+
+    let print_error = || {
+        if may_print_error {
+            show_error!("{}", ChecksumError::InvalidLength(disp.to_string()));
+        }
+    };
+
     // Blake2b's length is parsed in an u64.
-    match bit_length.parse::<usize>() {
+    match parsed {
         Ok(0) => Ok(None),
 
         // Error cases
-        Ok(n) if n > 512 && algo == AlgoKind::Blake2b => {
-            show_error!("{}", ChecksumError::InvalidLength(bit_length.into()));
+        Ok(n) if n > Blake2b::DEFAULT_BIT_SIZE && algo == AlgoKind::Blake2b => {
+            print_error();
             Err(ChecksumError::LengthTooBigForBlake(algo.to_uppercase().into()).into())
         }
         Err(e) if *e.kind() == IntErrorKind::PosOverflow => {
-            show_error!("{}", ChecksumError::InvalidLength(bit_length.into()));
+            print_error();
             Err(ChecksumError::LengthTooBigForBlake(algo.to_uppercase().into()).into())
         }
-        Err(_) => Err(ChecksumError::InvalidLength(bit_length.into()).into()),
+        Err(_) => Err(ChecksumError::InvalidLength(disp.to_string()).into()),
 
         Ok(n) if n % 8 != 0 => {
-            show_error!("{}", ChecksumError::InvalidLength(bit_length.into()));
+            print_error();
             Err(ChecksumError::LengthNotMultipleOf8.into())
         }
 
         // Valid cases
 
         // When length is 512, it is blake2b's default. So, don't show it
-        Ok(512) => Ok(None),
+        Ok(Blake2b::DEFAULT_BIT_SIZE) => Ok(None),
         // Divide by 8, as our blake2b implementation expects bytes instead of bits.
         Ok(n) => Ok(Some(n / 8)),
     }
@@ -644,17 +664,21 @@ mod tests {
     #[test]
     fn test_calculate_blake2b_length() {
         assert_eq!(
-            calculate_blake_length_str(AlgoKind::Blake2b, "0").unwrap(),
+            validate_calculate_blake_length(AlgoKind::Blake2b, BlakeLength::String("0")).unwrap(),
             None
         );
-        assert!(calculate_blake_length_str(AlgoKind::Blake2b, "10").is_err());
-        assert!(calculate_blake_length_str(AlgoKind::Blake2b, "520").is_err());
+        assert!(
+            validate_calculate_blake_length(AlgoKind::Blake2b, BlakeLength::String("10")).is_err()
+        );
+        assert!(
+            validate_calculate_blake_length(AlgoKind::Blake2b, BlakeLength::String("520")).is_err()
+        );
         assert_eq!(
-            calculate_blake_length_str(AlgoKind::Blake2b, "512").unwrap(),
+            validate_calculate_blake_length(AlgoKind::Blake2b, BlakeLength::String("512")).unwrap(),
             None
         );
         assert_eq!(
-            calculate_blake_length_str(AlgoKind::Blake2b, "256").unwrap(),
+            validate_calculate_blake_length(AlgoKind::Blake2b, BlakeLength::String("256")).unwrap(),
             Some(32)
         );
     }

@@ -15,11 +15,12 @@ use std::io::{self, BufReader, Read, Write, stderr, stdin};
 use os_display::Quotable;
 
 use crate::checksum::{
-    AlgoKind, ChecksumError, ReadingMode, SizedAlgoKind, digest_reader, unescape_filename,
+    AlgoKind, BlakeLength, ChecksumError, ReadingMode, SizedAlgoKind, digest_reader,
+    unescape_filename, validate_calculate_blake_length,
 };
 use crate::error::{FromIo, UError, UIoError, UResult, USimpleError};
 use crate::quoting_style::{QuotingStyle, locale_aware_escape_name};
-use crate::sum::{self, DigestOutput};
+use crate::sum::{self, Blake2b, Blake3, DigestOutput};
 use crate::{
     os_str_as_bytes, os_str_from_bytes, read_os_string_lines, show, show_warning_caps, translate,
 };
@@ -637,7 +638,12 @@ fn identify_algo_name_and_length(
 
     let bytes = if let Some(bitlen) = line_info.algo_bit_len {
         match line_algo {
-            ak::Blake2b | ak::Blake3 if bitlen % 8 == 0 => Some(bitlen / 8),
+            algo @ (ak::Blake2b | ak::Blake3) => {
+                match validate_calculate_blake_length(algo, BlakeLength::Int(bitlen)) {
+                    Ok(len) => len,
+                    Err(_) => return Err(LineCheckError::ImproperlyFormatted),
+                }
+            }
             ak::Sha2 | ak::Sha3 if [224, 256, 384, 512].contains(&bitlen) => Some(bitlen),
             ak::Shake128 | ak::Shake256 => Some(bitlen),
             // Either
@@ -653,10 +659,10 @@ fn identify_algo_name_and_length(
         }
     } else if line_algo == ak::Blake2b {
         // Default length with BLAKE2b,
-        Some(64)
+        Some(Blake2b::DEFAULT_BYTE_SIZE)
     } else if line_algo == ak::Blake3 {
         // Default length with BLAKE3,
-        Some(32)
+        Some(Blake3::DEFAULT_BYTE_SIZE)
     } else {
         None
     };
