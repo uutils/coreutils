@@ -2497,7 +2497,7 @@ fn depth_first_list(
     };
 
     // Convert those entries to the PathData struct
-    for raw_entry in read_dir.into_iter() {
+    for raw_entry in read_dir {
         match raw_entry {
             Ok(dir_entry) => {
                 let path_data =
