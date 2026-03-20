@@ -254,10 +254,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     .any(|v| matches.get_flag(v));
 
     let squeeze_blank = matches.get_flag(options::SQUEEZE_BLANK);
-    let files: Vec<OsString> = match matches.get_many::<OsString>(options::FILE) {
-        Some(v) => v.cloned().collect(),
-        None => vec![OsString::from("-")],
-    };
+    #[allow(clippy::unwrap_used, reason = "clap provides '-' by default")]
+    let files = matches.get_many::<OsString>(options::FILE).unwrap();
 
     let options = OutputOptions {
         show_ends,
@@ -266,7 +264,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         show_tabs,
         squeeze_blank,
     };
-    cat_files(&files, &options)
+    cat_files(files, &options)
 }
 
 pub fn uu_app() -> Command {
@@ -282,6 +280,7 @@ pub fn uu_app() -> Command {
                 .hide(true)
                 .action(ArgAction::Append)
                 .value_parser(clap::value_parser!(OsString))
+                .default_value("-")
                 .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
@@ -397,7 +396,10 @@ fn cat_path(path: &OsString, options: &OutputOptions, state: &mut OutputState) -
     }
 }
 
-fn cat_files(files: &[OsString], options: &OutputOptions) -> UResult<()> {
+fn cat_files<'a, I>(files: I, options: &OutputOptions) -> UResult<()>
+where
+    I: IntoIterator<Item = &'a OsString>,
+{
     let mut state = OutputState {
         line_number: LineNumber::new(),
         at_line_start: true,

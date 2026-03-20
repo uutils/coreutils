@@ -93,15 +93,15 @@ fn test_zero_termination_multi() {
 
 #[test]
 fn test_very_large_range() {
-    let num_samples = 10;
+    let num_samples = 256;
     let result = new_ucmd!()
         .arg("-n")
         .arg(num_samples.to_string())
-        .arg("-i0-1234567890")
+        .arg("-i1-100000000000")
         .succeeds();
     result.no_stderr();
 
-    let result_seq: Vec<isize> = result
+    let result_seq: Vec<u64> = result
         .stdout_str()
         .split('\n')
         .filter(|x| !x.is_empty())
@@ -109,7 +109,7 @@ fn test_very_large_range() {
         .collect();
     assert_eq!(result_seq.len(), num_samples, "Miscounted output length!");
     assert!(
-        result_seq.iter().all(|x| (0..=1_234_567_890).contains(x)),
+        result_seq.iter().all(|x| (0..=100_000_000_000).contains(x)),
         "Output includes element not from range: {}",
         result.stdout_str()
     );

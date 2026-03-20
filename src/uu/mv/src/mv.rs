@@ -1124,6 +1124,20 @@ fn copy_dir_contents_recursive(
     progress_bar: Option<&ProgressBar>,
     display_manager: Option<&MultiProgress>,
 ) -> io::Result<()> {
+    // Helper closure to print verbose messages
+    let print_verbose = |from: &Path, to: &Path| {
+        if verbose {
+            let message =
+                translate!("mv-verbose-renamed", "from" => from.quote(), "to" => to.quote());
+            match display_manager {
+                Some(pb) => pb.suspend(|| {
+                    println!("{message}");
+                }),
+                None => println!("{message}"),
+            }
+        }
+    };
+
     let entries = fs::read_dir(from_dir)?;
 
     for entry in entries {
@@ -1139,36 +1153,28 @@ fn copy_dir_contents_recursive(
         let entry_type = entry.file_type()?;
 
         if entry_type.is_symlink() {
-            copy_symlink(&from_path, &to_path)?;
-
-            // Print verbose message for symlink
-            if verbose {
-                let message = translate!(
-                    "mv-verbose-renamed",
-                    "from" => from_path.quote(),
-                    "to" => to_path.quote()
-                );
-                match display_manager {
-                    Some(pb) => pb.suspend(|| {
-                        println!("{message}");
-                    }),
-                    None => println!("{message}"),
-                }
+            // Handle symlinks first, before checking is_dir() which follows symlinks.
+            // This prevents symlinks to directories from being expanded into full copies.
+            #[cfg(unix)]
+            {
+                copy_file_with_hardlinks_helper(
+                    &from_path,
+                    &to_path,
+                    hardlink_tracker,
+                    hardlink_scanner,
+                )?;
             }
+            #[cfg(not(unix))]
+            {
+                rename_symlink_fallback(&from_path, &to_path)?;
+            }
+
+            print_verbose(&from_path, &to_path);
         } else if entry_type.is_dir() {
-            // Recursively copy subdirectory
+            // Recursively copy subdirectory (only real directories, not symlinks)
             fs::create_dir_all(&to_path)?;
 
-            // Print verbose message for directory
-            if verbose {
-                let message = translate!("mv-verbose-renamed", "from" => from_path.quote(), "to" => to_path.quote());
-                match display_manager {
-                    Some(pb) => pb.suspend(|| {
-                        println!("{message}");
-                    }),
-                    None => println!("{message}"),
-                }
-            }
+            print_verbose(&from_path, &to_path);
 
             copy_dir_contents_recursive(
                 &from_path,
@@ -1199,25 +1205,11 @@ fn copy_dir_contents_recursive(
             }
             #[cfg(not(unix))]
             {
-                if from_path.is_symlink() {
-                    // Copy a symlink file (no-follow).
-                    copy_symlink(&from_path, &to_path)?;
-                } else {
-                    // Copy a regular file.
-                    fs::copy(&from_path, &to_path)?;
-                }
+                // Symlinks are already handled above, so this is always a regular file
+                fs::copy(&from_path, &to_path)?;
             }
 
-            // Print verbose message for file
-            if verbose {
-                let message = translate!("mv-verbose-renamed", "from" => from_path.quote(), "to" => to_path.quote());
-                match display_manager {
-                    Some(pb) => pb.suspend(|| {
-                        println!("{message}");
-                    }),
-                    None => println!("{message}"),
-                }
-            }
+            print_verbose(&from_path, &to_path);
         }
 
         if let Some(pb) = progress_bar {

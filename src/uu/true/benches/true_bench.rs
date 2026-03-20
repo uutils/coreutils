@@ -7,15 +7,7 @@ use divan::{Bencher, black_box};
 use uu_true::uumain;
 use uucore::benchmark::run_util_function;
 
-/// Benchmark the common case: true with no arguments
-#[divan::bench]
-fn true_no_args(bencher: Bencher) {
-    bencher.bench(|| {
-        black_box(run_util_function(uumain, &[]));
-    });
-}
-
-/// Benchmark multiple consecutive invocations (throughput test)
+/// Benchmark multiple consecutive invocations (avoid less than 1 ns)
 #[divan::bench]
 fn true_consecutive_calls(bencher: Bencher) {
     bencher.bench(|| {

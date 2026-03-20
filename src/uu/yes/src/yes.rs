@@ -22,7 +22,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let mut buffer = Vec::with_capacity(BUF_SIZE);
-    args_into_buffer(&mut buffer, matches.get_many::<OsString>("STRING")).unwrap();
+    #[allow(clippy::unwrap_used, reason = "clap provides 'y' by default")]
+    let _ = args_into_buffer(&mut buffer, matches.get_many::<OsString>("STRING").unwrap());
     prepare_buffer(&mut buffer);
 
     match exec(&buffer) {
@@ -45,6 +46,7 @@ pub fn uu_app() -> Command {
         .override_usage(format_usage(&translate!("yes-usage")))
         .arg(
             Arg::new("STRING")
+                .default_value("y")
                 .value_parser(ValueParser::os_string())
                 .action(ArgAction::Append),
         )
@@ -55,13 +57,8 @@ pub fn uu_app() -> Command {
 #[allow(clippy::unnecessary_wraps, reason = "needed on some platforms")]
 fn args_into_buffer<'a>(
     buf: &mut Vec<u8>,
-    i: Option<impl Iterator<Item = &'a OsString>>,
+    i: impl Iterator<Item = &'a OsString>,
 ) -> Result<(), Box<dyn Error>> {
-    let Some(i) = i else {
-        buf.extend_from_slice(b"y\n");
-        return Ok(());
-    };
-
     // On Unix (and wasi), OsStrs are just &[u8]'s underneath...
     #[cfg(any(unix, target_os = "wasi"))]
     {
@@ -155,30 +152,22 @@ mod tests {
     fn test_args_into_buf() {
         {
             let mut v = Vec::with_capacity(BUF_SIZE);
-            args_into_buffer(&mut v, None::<std::slice::Iter<OsString>>).unwrap();
+            let default_args = ["y".into()];
+            args_into_buffer(&mut v, default_args.iter()).unwrap();
             assert_eq!(String::from_utf8(v).unwrap(), "y\n");
         }
 
         {
             let mut v = Vec::with_capacity(BUF_SIZE);
-            args_into_buffer(&mut v, Some([OsString::from("foo")].iter())).unwrap();
+            let args = ["foo".into()];
+            args_into_buffer(&mut v, args.iter()).unwrap();
             assert_eq!(String::from_utf8(v).unwrap(), "foo\n");
         }
 
         {
             let mut v = Vec::with_capacity(BUF_SIZE);
-            args_into_buffer(
-                &mut v,
-                Some(
-                    [
-                        OsString::from("foo"),
-                        OsString::from("bar    baz"),
-                        OsString::from("qux"),
-                    ]
-                    .iter(),
-                ),
-            )
-            .unwrap();
+            let args = ["foo".into(), "bar    baz".into(), "qux".into()];
+            args_into_buffer(&mut v, args.iter()).unwrap();
             assert_eq!(String::from_utf8(v).unwrap(), "foo bar    baz qux\n");
         }
     }

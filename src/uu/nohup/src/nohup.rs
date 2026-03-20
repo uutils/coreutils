@@ -78,8 +78,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if unsafe { !_vprocmgr_detach_from_console(0).is_null() } {
         return Err(NohupError::CannotDetach.into());
     }
-
+    #[allow(clippy::unwrap_used, reason = "set as required by clap")]
     let mut cmd_iter = matches.get_many::<String>(options::CMD).unwrap();
+    #[allow(clippy::unwrap_used, reason = "set as required by clap")]
     let cmd = cmd_iter.next().unwrap();
     let args: Vec<&String> = cmd_iter.collect();
 
@@ -150,12 +151,12 @@ fn find_stdout() -> UResult<File> {
             Ok(t)
         }
         Err(e1) => {
-            let Some(home) = env::var_os("HOME") else {
+            let Ok(home) = env::var("HOME") else {
                 return Err(NohupError::OpenFailed(internal_failure_code, e1).into());
             };
             let mut homeout = PathBuf::from(home);
             homeout.push(NOHUP_OUT);
-            let homeout_str = homeout.to_string_lossy();
+            let homeout_str = homeout.to_str().unwrap();
             match OpenOptions::new().create(true).append(true).open(&homeout) {
                 Ok(t) => {
                     show_error!(
@@ -186,7 +187,8 @@ unsafe extern "C" {
     target_os = "android",
     target_os = "freebsd",
     target_os = "openbsd",
-    target_os = "cygwin"
+    target_os = "cygwin",
+    target_os = "netbsd"
 ))]
 /// # Safety
 /// This function is unsafe because it dereferences a raw pointer.

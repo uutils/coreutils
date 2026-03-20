@@ -203,7 +203,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .ok_or_else(|| {
             USimpleError::new(
                 1,
-                translate!("touch-error-missing-file-operand", "help_command" => uucore::execution_phrase().to_string(),),
+                translate!("touch-error-missing-file-operand", "help_command" => uucore::execution_phrase().to_string()),
             )
         })?
         .collect();
@@ -622,14 +622,21 @@ fn try_futimens_via_write_fd(path: &Path, atime: FileTime, mtime: FileTime) -> s
     let mtime_sec = mtime.unix_seconds();
     let mtime_nsec = i64::from(mtime.nanoseconds());
 
+    #[cfg(target_pointer_width = "32")]
     let atime_spec = TimeSpec::new(
         atime_sec.try_into().unwrap(),
         atime_nsec.try_into().unwrap(),
     );
+    #[cfg(target_pointer_width = "64")]
+    let atime_spec = TimeSpec::new(atime_sec, atime_nsec);
+
+    #[cfg(target_pointer_width = "32")]
     let mtime_spec = TimeSpec::new(
         mtime_sec.try_into().unwrap(),
         mtime_nsec.try_into().unwrap(),
     );
+    #[cfg(target_pointer_width = "64")]
+    let mtime_spec = TimeSpec::new(mtime_sec, mtime_nsec);
 
     futimens(&file, &atime_spec, &mtime_spec).map_err(Error::from)
 }

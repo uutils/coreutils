@@ -297,12 +297,13 @@ impl<'a> Input<'a> {
 
 #[cfg(unix)]
 fn is_stdin_small_file() -> bool {
-    use std::os::unix::io::{AsRawFd, FromRawFd};
-    // Safety: we'll rely on Rust to give us a valid RawFd for stdin with which we can attempt to
-    // open a File, but only for the sake of fetching .metadata().  ManuallyDrop will ensure we
-    // don't do anything else to the FD if anything unexpected happens.
-    let f = std::mem::ManuallyDrop::new(unsafe { File::from_raw_fd(io::stdin().as_raw_fd()) });
-    matches!(f.metadata(), Ok(meta) if meta.is_file() && meta.len() <= (10 << 20))
+    use nix::sys::stat;
+    use std::os::fd::AsFd;
+
+    matches!(
+        stat::fstat(io::stdin().as_fd()),
+        Ok(meta) if meta.st_mode & libc::S_IFMT == libc::S_IFREG && meta.st_size <= (10 << 20)
+    )
 }
 
 #[cfg(not(unix))]
