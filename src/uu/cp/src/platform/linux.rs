@@ -6,14 +6,13 @@
 
 use libc::{SEEK_DATA, SEEK_HOLE};
 use std::fs::{File, OpenOptions};
-use std::io::Read;
+use std::io::{self, Read};
 use std::os::unix::fs::FileExt;
 use std::os::unix::fs::MetadataExt;
 use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
 use std::os::unix::io::AsRawFd;
 use std::path::Path;
 use uucore::buf_copy;
-use uucore::mode::get_umask;
 use uucore::translate;
 
 use crate::{
@@ -50,25 +49,64 @@ enum CopyMethod {
     SparseCopyWithoutHole,
 }
 
+/// Copy file contents with restrictive permissions initially to prevent race conditions.
+/// Creates the destination file with mode 0600 & !umask, copies the content,
+/// and lets the caller set the final permissions.
+fn copy_file_with_secure_permissions<P>(source: P, dest: P) -> io::Result<u64>
+where
+    P: AsRef<Path>,
+{
+    let mut src_file = File::open(&source)?;
+    // Create destination with restrictive permissions initially (to prevent race conditions)
+    // Mode 0o600 means read/write for owner only
+    let mut dst_file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(&dest)?;
+    io::copy(&mut src_file, &mut dst_file)
+}
+
 /// Use the Linux `ioctl_ficlone` API to do a copy-on-write clone.
 ///
 /// `fallback` controls what to do if the system call fails.
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn clone<P>(source: P, dest: P, fallback: CloneFallback) -> std::io::Result<()>
+fn clone<P>(source: P, dest: P, fallback: CloneFallback) -> io::Result<()>
 where
     P: AsRef<Path>,
 {
     let src_file = File::open(&source)?;
-    let dst_file = File::create(&dest)?;
+    // Create destination with restrictive permissions initially (to prevent race conditions)
+    // Mode 0o600 means read/write for owner only
+    let dst_file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(false)
+        .mode(0o600)
+        .open(&dest)?;
     let src_fd = src_file.as_raw_fd();
     let dst_fd = dst_file.as_raw_fd();
     let result = unsafe { libc::ioctl(dst_fd, libc::FICLONE, src_fd) };
     if result == 0 {
         return Ok(());
     }
+    let err = io::Error::last_os_error();
     match fallback {
-        CloneFallback::Error => Err(std::io::Error::last_os_error()),
-        CloneFallback::FSCopy => std::fs::copy(source, dest).map(|_| ()),
+        CloneFallback::Error => {
+            // FICLONE fails with EINVAL if the destination is not empty.
+            // Truncate and retry once before giving up.
+            if err.raw_os_error() == Some(libc::EINVAL) {
+                dst_file.set_len(0)?;
+                let retry = unsafe { libc::ioctl(dst_fd, libc::FICLONE, src_fd) };
+                if retry == 0 {
+                    return Ok(());
+                }
+                return Err(io::Error::last_os_error());
+            }
+            Err(err)
+        }
+        CloneFallback::FSCopy => copy_file_with_secure_permissions(source, dest).map(|_| ()),
         CloneFallback::SparseCopy => sparse_copy(source, dest),
         CloneFallback::SparseCopyWithoutHole => sparse_copy_without_hole(source, dest),
     }
@@ -78,7 +116,7 @@ where
 /// This function returns a tuple of (bool, u64, u64) signifying a tuple of (whether a file has
 /// data, its size, no of blocks it has allocated in disk)
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn check_for_data(source: &Path) -> Result<(bool, u64, u64), std::io::Error> {
+fn check_for_data(source: &Path) -> Result<(bool, u64, u64), io::Error> {
     let mut src_file = File::open(source)?;
     let metadata = src_file.metadata()?;
 
@@ -98,14 +136,14 @@ fn check_for_data(source: &Path) -> Result<(bool, u64, u64), std::io::Error> {
     match result {
         -1 => Ok((false, size, blocks)), // No data found or end of file
         _ if result >= 0 => Ok((true, size, blocks)), // Data found
-        _ => Err(std::io::Error::last_os_error()),
+        _ => Err(io::Error::last_os_error()),
     }
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 /// Checks whether a file is sparse i.e. it contains holes, uses the crude heuristic blocks < size / 512
 /// Reference:`<https://doc.rust-lang.org/std/os/unix/fs/trait.MetadataExt.html#tymethod.blocks>`
-fn check_sparse_detection(source: &Path) -> Result<bool, std::io::Error> {
+fn check_sparse_detection(source: &Path) -> Result<bool, io::Error> {
     let src_file = File::open(source)?;
     let metadata = src_file.metadata()?;
     let size = metadata.size();
@@ -120,17 +158,24 @@ fn check_sparse_detection(source: &Path) -> Result<bool, std::io::Error> {
 /// Optimized [`sparse_copy`] doesn't create holes for large sequences of zeros in non `sparse_files`
 /// Used when `--sparse=auto`
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn sparse_copy_without_hole<P>(source: P, dest: P) -> std::io::Result<()>
+fn sparse_copy_without_hole<P>(source: P, dest: P) -> io::Result<()>
 where
     P: AsRef<Path>,
 {
     let src_file = File::open(source)?;
-    let dst_file = File::create(dest)?;
+    // Create destination with restrictive permissions initially (to prevent race conditions)
+    // Mode 0o600 means read/write for owner only
+    let dst_file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(dest)?;
     let dst_fd = dst_file.as_raw_fd();
 
     let size = src_file.metadata()?.size();
     if unsafe { libc::ftruncate(dst_fd, size.try_into().unwrap()) } < 0 {
-        return Err(std::io::Error::last_os_error());
+        return Err(io::Error::last_os_error());
     }
     let src_fd = src_file.as_raw_fd();
     let mut current_offset: isize = 0;
@@ -152,7 +197,7 @@ where
             break;
         }
         if result <= -2 || hole <= -2 {
-            return Err(std::io::Error::last_os_error());
+            return Err(io::Error::last_os_error());
         }
         let len: isize = hole - current_offset;
         // Read and write data in chunks of `step` while reusing the same buffer
@@ -170,17 +215,24 @@ where
 /// Perform a sparse copy from one file to another.
 /// Creates a holes for large sequences of zeros in `non_sparse_files`, used for `--sparse=always`
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn sparse_copy<P>(source: P, dest: P) -> std::io::Result<()>
+fn sparse_copy<P>(source: P, dest: P) -> io::Result<()>
 where
     P: AsRef<Path>,
 {
     let mut src_file = File::open(source)?;
-    let dst_file = File::create(dest)?;
+    // Create destination with restrictive permissions initially (to prevent race conditions)
+    // Mode 0o600 means read/write for owner only
+    let dst_file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(dest)?;
     let dst_fd = dst_file.as_raw_fd();
 
     let size: usize = src_file.metadata()?.size().try_into().unwrap();
     if unsafe { libc::ftruncate(dst_fd, size.try_into().unwrap()) } < 0 {
-        return Err(std::io::Error::last_os_error());
+        return Err(io::Error::last_os_error());
     }
 
     let blksize = dst_file.metadata()?.blksize();
@@ -214,7 +266,7 @@ fn check_dest_is_fifo(dest: &Path) -> bool {
 }
 
 /// Copy the contents of a stream from `source` to `dest`.
-fn copy_stream<P>(source: P, dest: P) -> std::io::Result<u64>
+fn copy_stream<P>(source: P, dest: P) -> io::Result<u64>
 where
     P: AsRef<Path>,
 {
@@ -237,21 +289,21 @@ where
     // TODO Update the code below to respect the case where
     // `--preserve=ownership` is not true.
     let mut src_file = File::open(&source)?;
-    let mode = 0o622 & !get_umask();
+    // Create with restrictive permissions initially to prevent race conditions
+    // Mode 0o600 means read/write for owner only
+    // Use truncate(true) to ensure we overwrite existing content
     let mut dst_file = OpenOptions::new()
         .create(true)
         .write(true)
-        .mode(mode)
+        .truncate(true)
+        .mode(0o600)
         .open(&dest)?;
 
-    let dest_is_stream = is_stream(&dst_file.metadata()?);
-    if !dest_is_stream {
-        // `copy_stream` doesn't clear the dest file, if dest is not a stream, we should clear it manually.
-        dst_file.set_len(0)?;
-    }
+    let _dest_is_stream = is_stream(&dst_file.metadata()?);
+    // No need to set_len(0) since we're already using truncate(true)
 
     let num_bytes_copied = buf_copy::copy_stream(&mut src_file, &mut dst_file)
-        .map_err(|e| std::io::Error::other(format!("{e}")))?;
+        .map_err(|e| io::Error::other(format!("{e}")))?;
 
     Ok(num_bytes_copied)
 }
@@ -287,7 +339,9 @@ pub(crate) fn copy_on_write(
                 }
 
                 match copy_method {
-                    CopyMethod::FSCopy => std::fs::copy(source, dest).map(|_| ()),
+                    CopyMethod::FSCopy => {
+                        copy_file_with_secure_permissions(source, dest).map(|_| ())
+                    }
                     _ => sparse_copy(source, dest),
                 }
             }
@@ -303,7 +357,7 @@ pub(crate) fn copy_on_write(
                 if let Ok(debug) = result {
                     copy_debug = debug;
                 }
-                std::fs::copy(source, dest).map(|_| ())
+                copy_file_with_secure_permissions(source, dest).map(|_| ())
             }
         }
         (ReflinkMode::Never, SparseMode::Auto) => {
@@ -322,7 +376,7 @@ pub(crate) fn copy_on_write(
 
                 match copy_method {
                     CopyMethod::SparseCopyWithoutHole => sparse_copy_without_hole(source, dest),
-                    _ => std::fs::copy(source, dest).map(|_| ()),
+                    _ => copy_file_with_secure_permissions(source, dest).map(|_| ()),
                 }
             }
         }
@@ -401,7 +455,7 @@ pub(crate) fn copy_on_write(
 fn handle_reflink_auto_sparse_always(
     source: &Path,
     dest: &Path,
-) -> Result<(CopyDebug, CopyMethod), std::io::Error> {
+) -> Result<(CopyDebug, CopyMethod), io::Error> {
     let mut copy_debug = CopyDebug {
         offload: OffloadReflinkDebug::Unknown,
         reflink: OffloadReflinkDebug::Unsupported,
@@ -438,7 +492,7 @@ fn handle_reflink_auto_sparse_always(
 
 /// Handles debug results when flags are "--reflink=auto" and "--sparse=auto" and specifies what
 /// type of copy should be used
-fn handle_reflink_never_sparse_never(source: &Path) -> Result<CopyDebug, std::io::Error> {
+fn handle_reflink_never_sparse_never(source: &Path) -> Result<CopyDebug, io::Error> {
     let mut copy_debug = CopyDebug {
         offload: OffloadReflinkDebug::Unknown,
         reflink: OffloadReflinkDebug::No,
@@ -459,7 +513,7 @@ fn handle_reflink_never_sparse_never(source: &Path) -> Result<CopyDebug, std::io
 
 /// Handles debug results when flags are "--reflink=auto" and "--sparse=never", files will be copied
 /// through cloning them with fallback switching to [`std::fs::copy`]
-fn handle_reflink_auto_sparse_never(source: &Path) -> Result<CopyDebug, std::io::Error> {
+fn handle_reflink_auto_sparse_never(source: &Path) -> Result<CopyDebug, io::Error> {
     let mut copy_debug = CopyDebug {
         offload: OffloadReflinkDebug::Unknown,
         reflink: OffloadReflinkDebug::No,
@@ -484,7 +538,7 @@ fn handle_reflink_auto_sparse_never(source: &Path) -> Result<CopyDebug, std::io:
 fn handle_reflink_auto_sparse_auto(
     source: &Path,
     dest: &Path,
-) -> Result<(CopyDebug, CopyMethod), std::io::Error> {
+) -> Result<(CopyDebug, CopyMethod), io::Error> {
     let mut copy_debug = CopyDebug {
         offload: OffloadReflinkDebug::Unknown,
         reflink: OffloadReflinkDebug::Unsupported,
@@ -527,7 +581,7 @@ fn handle_reflink_auto_sparse_auto(
 fn handle_reflink_never_sparse_auto(
     source: &Path,
     dest: &Path,
-) -> Result<(CopyDebug, CopyMethod), std::io::Error> {
+) -> Result<(CopyDebug, CopyMethod), io::Error> {
     let mut copy_debug = CopyDebug {
         offload: OffloadReflinkDebug::Unknown,
         reflink: OffloadReflinkDebug::No,
@@ -563,7 +617,7 @@ fn handle_reflink_never_sparse_auto(
 fn handle_reflink_never_sparse_always(
     source: &Path,
     dest: &Path,
-) -> Result<(CopyDebug, CopyMethod), std::io::Error> {
+) -> Result<(CopyDebug, CopyMethod), io::Error> {
     let mut copy_debug = CopyDebug {
         offload: OffloadReflinkDebug::Unknown,
         reflink: OffloadReflinkDebug::No,
