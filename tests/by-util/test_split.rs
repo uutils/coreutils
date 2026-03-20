@@ -999,8 +999,8 @@ fn test_number_kth_of_n() {
             "--number=9223372036854775807/18446744073709551616",
             "asciilowercase.txt",
         ])
-        .fails()
-        .stderr_contains("split: invalid number of chunks: '18446744073709551616'");
+        .succeeds()
+        .stdout_only("");
 }
 
 #[test]
@@ -1033,8 +1033,7 @@ fn test_number_kth_of_n_round_robin() {
             "r/9223372036854775807/18446744073709551616",
             "fivelines.txt",
         ])
-        .fails()
-        .stderr_contains("split: invalid number of chunks: '18446744073709551616'");
+        .succeeds();
     new_ucmd!()
         .args(&["--number", "r/0/3", "fivelines.txt"])
         .fails()
@@ -2090,4 +2089,25 @@ fn test_split_directory_already_exists() {
         .fails_with_code(1)
         .no_stdout()
         .stderr_is("split: xaa: Is a directory\n");
+}
+
+// Test that split accepts overflow values by clamping to u64::MAX
+// See: https://github.com/uutils/coreutils/issues/10389
+#[test]
+fn test_split_number_overflow_accepted() {
+    // Test that split accepts u64::MAX+1 and clamps to u64::MAX
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    ucmd.args(&["-n", "18446744073709551616", "file"]) // 2^64 = u64::MAX + 1
+        .succeeds();
+    // split should succeed by clamping to u64::MAX chunks
+    // The output files may not be created if the input is smaller than chunk size,
+    // but the command should not fail
+
+    // Also test with a very large overflow value
+    let (at2, mut ucmd2) = at_and_ucmd!();
+    at2.touch("file2");
+    ucmd2
+        .args(&["-n", "999999999999999999999999999999", "file2"])
+        .succeeds();
 }
