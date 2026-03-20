@@ -71,6 +71,43 @@ pub fn locale_grouping_separator() -> &'static str {
     })
 }
 
+/// Return the grouping sizes for the given locale.
+/// Returns a tuple of (primary, secondary) group sizes.
+/// For example:
+///   - en_US: (3, 3) -> 1,000,000 (groups of 3)
+///   - hi_IN: (3, 2) -> 12,34,567 (first group 3, then groups of 2)
+fn get_grouping_sizes(loc: Locale) -> (u8, u8) {
+    let data_locale = DataLocale::from(loc);
+
+    let request = DataRequest {
+        id: DataIdentifierBorrowed::for_locale(&data_locale),
+        metadata: DataRequestMetadata::default(),
+    };
+
+    let response: DataResponse<DecimalSymbolsV1> =
+        icu_decimal::provider::Baked.load(request).unwrap();
+
+    let sizes = response.payload.get().grouping_sizes;
+    (sizes.primary, sizes.secondary)
+}
+
+/// Return the grouping sizes from the language we're working with.
+/// Returns a tuple of (primary, secondary) group sizes for locale-aware number formatting.
+/// For most locales this returns (3, 3), but Indian locales return (3, 2).
+pub fn locale_grouping_sizes() -> &'static (u8, u8) {
+    static GROUPING_SIZES: OnceLock<(u8, u8)> = OnceLock::new();
+
+    GROUPING_SIZES.get_or_init(|| {
+        let loc = get_numeric_locale().0.clone();
+        // C/POSIX locale (represented as "und") has no grouping.
+        if loc == locale!("und") {
+            (0, 0)
+        } else {
+            get_grouping_sizes(loc)
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use icu_locale::locale;
