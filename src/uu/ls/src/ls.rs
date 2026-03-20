@@ -9,11 +9,11 @@
 #[cfg(unix)]
 use rustc_hash::FxHashMap;
 use rustc_hash::FxHashSet;
-use std::borrow::Cow;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
+use std::{borrow::Cow, fs::DirEntry};
 use std::{
     cell::{LazyCell, OnceCell},
     cmp::Reverse,
@@ -1940,13 +1940,14 @@ struct PathData {
 impl PathData {
     fn new(
         p_buf: PathBuf,
-        file_name: Option<OsString>,
+        opt_dir_entry: Option<DirEntry>,
+        opt_file_name: Option<OsString>,
         config: &Config,
         command_line: bool,
     ) -> Self {
         // We cannot use `Path::ends_with` or `Path::Components`, because they remove occurrences of '.'
         // For '..', the filename is None
-        let display_name = if let Some(name) = file_name {
+        let display_name = if let Some(name) = opt_file_name {
             name
         } else if command_line {
             p_buf.as_os_str().to_os_string()
@@ -1974,6 +1975,10 @@ impl PathData {
         let ft: OnceCell<Option<FileType>> = OnceCell::new();
         let md: OnceCell<Option<Metadata>> = OnceCell::new();
         let security_context: OnceCell<Box<str>> = OnceCell::new();
+
+        if !must_dereference {
+            ft.get_or_init(|| opt_dir_entry.and_then(|de| de.file_type().ok()));
+        }
 
         Self {
             md,
@@ -2201,7 +2206,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     };
 
     for loc in locs {
-        let path_data = PathData::new(PathBuf::from(loc), None, config, true);
+        let path_data = PathData::new(PathBuf::from(loc), None, None, config, true);
 
         // Getting metadata here is no big deal as it's just the CWD
         // and we really just want to know if the strings exist as files/dirs
@@ -2430,7 +2435,7 @@ fn depth_first_list(
     dired: &mut DiredOutput,
     is_top_level: bool,
 ) -> UResult<()> {
-    let path_data = PathData::new(dir_path, None, config, false);
+    let path_data = PathData::new(dir_path, None, None, config, false);
 
     // Print dir heading - name... 'total' comes after error display
     if state.initial_locs_len > 1 || config.recursive {
@@ -2473,12 +2478,14 @@ fn depth_first_list(
         let v = vec![
             PathData::new(
                 path_data.path().to_path_buf(),
+                None,
                 Some(".".into()),
                 config,
                 false,
             ),
             PathData::new(
                 path_data.path().join(".."),
+                None,
                 Some("..".into()),
                 config,
                 false,
@@ -2493,7 +2500,8 @@ fn depth_first_list(
     for raw_entry in read_dir.into_iter() {
         match raw_entry {
             Ok(dir_entry) => {
-                let path_data = PathData::new(dir_entry.path(), None, config, false);
+                let path_data =
+                    PathData::new(dir_entry.path(), Some(dir_entry), None, config, false);
                 if should_display(&path_data, config) {
                     buf.push(path_data);
                 }
@@ -3438,6 +3446,7 @@ fn display_item_name(
                         Ok(resolved_target) => {
                             let target_data = PathData::new(
                                 resolved_target,
+                                None,
                                 target_path.file_name().map(OsStr::to_os_string),
                                 config,
                                 false,
