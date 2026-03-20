@@ -404,8 +404,6 @@ icu_locale = { version = "2.0.0", default-features = false }
 icu_provider = { version = "2.0.0", default-features = false }
 indicatif = "0.18.0"
 itertools = "0.14.0"
-jemalloc-ctl = "0.5"
-jemallocator = "0.5"
 itoa = "1.0.15"
 jiff = "0.2.18"
 jiff-icu = "0.2.2"
@@ -419,8 +417,6 @@ nix = { version = "0.31.2", default-features = false }
 nom = "8.0.0"
 notify = { version = "=8.2.0", features = ["macos_kqueue"] }
 num-bigint = "0.4.4"
-num-integer = "0.1"
-
 num-prime = "0.5.0"
 num-traits = "0.2.19"
 onig = { version = "~6.5.1", default-features = false }
