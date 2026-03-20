@@ -365,7 +365,12 @@ impl Chmoder {
 
         for filename in files {
             let file = Path::new(filename);
-            if !file.exists() {
+            // Use metadata() instead of exists() to distinguish between
+            // "file doesn't exist" and "permission denied" errors
+            let metadata_result = fs::metadata(file);
+            let file_accessible = metadata_result.is_ok();
+
+            if !file_accessible {
                 if file.is_symlink() {
                     if !self.dereference && !self.recursive {
                         // The file is a symlink and we should not follow it
@@ -388,7 +393,14 @@ impl Chmoder {
                         );
                     }
                 } else if !self.quiet {
-                    show!(ChmodError::NoSuchFile(filename.into()));
+                    // Check the actual error to provide appropriate message
+                    if let Err(err) = metadata_result {
+                        if err.kind() == std::io::ErrorKind::PermissionDenied {
+                            show!(ChmodError::PermissionDenied(filename.into()));
+                        } else {
+                            show!(ChmodError::NoSuchFile(filename.into()));
+                        }
+                    }
                 }
                 // GNU exits with exit code 1 even if -q or --quiet are passed
                 // So we set the exit code, because it hasn't been set yet if `self.quiet` is true.
