@@ -19,7 +19,7 @@ use std::{
     cmp::Reverse,
     ffi::{OsStr, OsString},
     fmt::Write as _,
-    fs::{self, DirEntry, FileType, Metadata, ReadDir},
+    fs::{self, FileType, Metadata, ReadDir},
     io::{BufWriter, ErrorKind, IsTerminal, Stdout, Write, stdout},
     iter,
     num::IntErrorKind,
@@ -1971,8 +1971,6 @@ impl PathData {
             Dereference::None => false,
         };
 
-        // Why prefer to check the DirEntry file_type()?  B/c the call is
-        // nearly free compared to a metadata() call on a Path
         let ft: OnceCell<Option<FileType>> = OnceCell::new();
         let md: OnceCell<Option<Metadata>> = OnceCell::new();
         let security_context: OnceCell<Box<str>> = OnceCell::new();
@@ -2375,22 +2373,22 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
     }
 }
 
-fn is_hidden(file_path: &DirEntry) -> bool {
+fn is_hidden(path_data: &PathData) -> bool {
     #[cfg(windows)]
     {
-        let metadata = file_path.metadata().unwrap();
+        let metadata = path_data.metadata().unwrap();
         let attr = metadata.file_attributes();
         (attr & 0x2) > 0
     }
     #[cfg(not(windows))]
     {
-        file_path.file_name().as_encoded_bytes().starts_with(b".")
+        path_data.file_name().as_encoded_bytes().starts_with(b".")
     }
 }
 
-fn should_display(entry: &DirEntry, config: &Config) -> bool {
+fn should_display(path_data: &PathData, config: &Config) -> bool {
     // check if hidden
-    if config.files == Files::Normal && is_hidden(entry) {
+    if config.files == Files::Normal && is_hidden(path_data) {
         return false;
     }
 
@@ -2402,22 +2400,19 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
         case_sensitive: true,
     };
 
-    let file_name = entry.file_name();
+    let file_name = path_data.file_name();
     // If the decoding fails, still match best we can
     // FIXME: use OsStrings or Paths once we have a glob crate that supports it:
     // https://github.com/rust-lang/glob/issues/23
     // https://github.com/rust-lang/glob/issues/78
     // https://github.com/BurntSushi/ripgrep/issues/1250
 
-    let file_name = match file_name.to_str() {
-        Some(s) => Cow::Borrowed(s),
-        None => file_name.to_string_lossy(),
-    };
+    let file_name_as_cow = file_name.to_string_lossy();
 
     !config
         .ignore_patterns
         .iter()
-        .any(|p| p.matches_with(&file_name, options))
+        .any(|p| p.matches_with(&file_name_as_cow, options))
 }
 
 fn depth_first_list(
@@ -2491,8 +2486,9 @@ fn depth_first_list(
     for raw_entry in read_dir {
         match raw_entry {
             Ok(dir_entry) => {
-                if should_display(&dir_entry, config) {
-                    buf.push(PathData::new(dir_entry.path(), None, config, false));
+                let path_data = PathData::new(dir_entry.path(), None, config, false);
+                if should_display(&path_data, config) {
+                    buf.push(path_data);
                 }
             }
             Err(err) => {
