@@ -1976,10 +1976,6 @@ impl PathData {
         let md: OnceCell<Option<Metadata>> = OnceCell::new();
         let security_context: OnceCell<Box<str>> = OnceCell::new();
 
-        if !must_dereference {
-            ft.get_or_init(|| opt_dir_entry.and_then(|de| de.file_type().ok()));
-        }
-
         Self {
             md,
             ft,
