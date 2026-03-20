@@ -15,15 +15,13 @@ readme.workspace = true
 [lints]
 workspace = true
 
-[build-dependencies]
-num-traits = { workspace = true } # used in src/numerics.rs, which is included by build.rs
-
 [dependencies]
 clap = { workspace = true }
-num-traits = { workspace = true }
 uucore = { workspace = true }
+memchr = { workspace = true }
 num-bigint = { workspace = true }
 num-prime = { workspace = true }
+num-traits = { workspace = true }
 fluent = { workspace = true }
 
 [[bin]]

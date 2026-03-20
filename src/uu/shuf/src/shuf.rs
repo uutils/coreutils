@@ -13,9 +13,9 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use clap::{Arg, ArgAction, Command, builder::ValueParser};
-use rand::rngs::ThreadRng;
 use rand::{
-    Rng,
+    RngExt as _,
+    rngs::ThreadRng,
     seq::{IndexedRandom, SliceRandom},
 };
 
@@ -276,9 +276,7 @@ fn split_seps(data: &[u8], sep: u8) -> Vec<&[u8]> {
     let predicted_capacity = data.len() / PREDICTED_LINE_LENGTH;
     let mut elements = Vec::with_capacity(predicted_capacity);
     elements.extend(data.split(|&b| b == sep));
-    if elements.last().is_some_and(|e| e.is_empty()) {
-        elements.pop();
-    }
+    let _ = elements.pop_if(|e| e.is_empty());
     elements
 }
 

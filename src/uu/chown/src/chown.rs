@@ -155,29 +155,23 @@ fn parse_uid(user: &str, spec: &str, sep: char) -> UResult<Option<u32>> {
     if user.is_empty() {
         return Ok(None);
     }
-    match Passwd::locate(user) {
-        Ok(u) => Ok(Some(u.uid)), // We have been able to get the uid
-        Err(_) => {
-            // we have NOT been able to find the uid
-            // but we could be in the case where we have user.group
-            if spec.contains('.') && !spec.contains(':') && sep == ':' {
-                // but the input contains a '.' but not a ':'
-                // we might have something like username.groupname
-                // So, try to parse it this way
-                parse_spec(spec, '.').map(|(uid, _)| uid)
-            } else {
-                // It's possible that the `user` string contains a
-                // numeric user ID, in which case, we respect that.
-                match user.parse() {
-                    Ok(uid) => Ok(Some(uid)),
-                    Err(_) => Err(USimpleError::new(
-                        1,
-                        translate!("chown-error-invalid-user", "user" => spec.quote()),
-                    )),
-                }
-            }
-        }
+
+    if let Ok(u) = Passwd::locate(user) {
+        return Ok(Some(u.uid));
     }
+
+    // Handle `username.groupname` syntax (e.g. when sep is ':' but spec contains '.')
+    if spec.contains('.') && !spec.contains(':') && sep == ':' {
+        return parse_spec(spec, '.').map(|(uid, _)| uid);
+    }
+
+    // Fallback: `user` string contains a numeric user ID
+    user.parse().map(Some).map_err(|_| {
+        USimpleError::new(
+            1,
+            translate!("chown-error-invalid-user", "user" => spec.quote()),
+        )
+    })
 }
 
 /// Parses the group string to extract the GID.

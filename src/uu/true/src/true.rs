@@ -3,21 +3,21 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 use clap::{Arg, ArgAction, Command};
-use std::{ffi::OsString, io::Write};
-use uucore::translate;
+use std::io::Write;
+use uucore::{crate_version, translate};
 
 // uucore::main does not support no-result
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args: Vec<OsString> = args.collect();
-    if args.len() != 2 {
+pub fn uumain(mut args: impl uucore::Args) -> i32 {
+    // skip binary name
+    let (Some(flag), None) = (args.nth(1), args.next()) else {
         return 0;
-    }
+    };
 
-    // args[0] is the name of the binary.
-    let error = if args[1] == "--help" {
+    let error = if flag == "--help" {
         uu_app().print_help()
-    } else if args[1] == "--version" {
-        write!(std::io::stdout(), "{}", uu_app().render_version())
+    } else if flag == "--version" {
+        // avoid uu_app for smaller binary size
+        writeln!(std::io::stdout(), "true {}", crate_version!())
     } else {
         return 0;
     };
@@ -26,7 +26,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         && print_fail.kind() != std::io::ErrorKind::BrokenPipe
     {
         // Try to display this error.
-        let _ = writeln!(std::io::stderr(), "{}: {print_fail}", uucore::util_name());
+        let _ = writeln!(std::io::stderr(), "true: {print_fail}");
         // Mirror GNU options. When failing to print warnings or version flags, then we exit
         // with FAIL. This avoids allocation some error information which may result in yet
         // other types of failure.
@@ -36,9 +36,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+    Command::new("true")
+        .version(crate_version!())
+        .help_template(uucore::localized_help_template("true"))
         .about(translate!("true-about"))
         // We provide our own help and version options, to ensure maximum compatibility with GNU.
         .disable_help_flag(true)

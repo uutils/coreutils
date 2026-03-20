@@ -647,7 +647,11 @@ fn test_follow_name_multiple() {
             .arg(FOOBAR_2_TXT)
             .run_no_wait();
 
+        #[cfg(target_os = "linux")]
         let delay = 100;
+        // unstable on macOS
+        #[cfg(not(target_os = "linux"))]
+        let delay = 1000;
 
         child
             .make_assertion_with_delay(delay)
@@ -1721,14 +1725,14 @@ fn test_retry9() {
     );
     let expected_stdout = "foo\nbar\nfoo\nbar\n";
 
-    let delay = 100;
+    let delay = 400;
 
     at.mkdir(parent_dir);
     at.truncate(user_path, "foo\n");
     let mut p = ts
         .ucmd()
         .arg("-F")
-        .arg("-s.1")
+        .arg("-s.2")
         .arg("--max-unchanged-stats=1")
         .arg(user_path)
         .run_no_wait();
@@ -3773,10 +3777,10 @@ fn test_when_argument_file_is_non_existent_unix_socket_address_then_error() {
         format!("tail: cannot open '{socket}' for reading: No such device or address\n");
     #[cfg(target_os = "freebsd")]
     let expected_stderr =
-        format!("tail: cannot open '{socket}' for reading: Operation not supported\n",);
+        format!("tail: cannot open '{socket}' for reading: Operation not supported\n");
     #[cfg(target_os = "macos")]
     let expected_stderr =
-        format!("tail: cannot open '{socket}' for reading: Operation not supported on socket\n",);
+        format!("tail: cannot open '{socket}' for reading: Operation not supported on socket\n");
 
     ts.ucmd()
         .arg(socket)

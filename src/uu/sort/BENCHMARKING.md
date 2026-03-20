@@ -51,7 +51,7 @@ Run `cargo build --release` before benchmarking after you make a change!
 
 ```toml
 [dependencies]
-rand = "0.8.3"
+rand = "0.10.0"
 ```
 
 ## main.rs
@@ -60,12 +60,12 @@ rand = "0.8.3"
 use rand::prelude::*;
 fn main() {
     let suffixes = ['k', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y', 'R', 'Q'];
-    let mut rng = thread_rng();
+    let mut rng = rand::rng();
     for _ in 0..100000 {
         println!(
             "{}{}",
-            rng.gen_range(0..1000000),
-            suffixes.choose(&mut rng).unwrap()
+            rng.random_range(0..1000000),
+            suffixes[rng.random_range(..suffixes.len())],
         )
     }
 }

@@ -118,6 +118,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     default_checksum_app(translate!("cksum-about"), translate!("cksum-usage"))
+        .name("cksum")
         .with_algo()
         .with_untagged()
         .with_tag(true)
