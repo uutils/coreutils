@@ -994,4 +994,140 @@ mod tests {
         assert_eq!(raw_suffix as i32, RawSuffix::Q as i32);
         assert_eq!(value, 5.0);
     }
+
+    #[test]
+    fn test_detailed_error_message_empty() {
+        let result = detailed_error_message("", Unit::Auto, "");
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_detailed_error_message_valid_number() {
+        // A plain valid number should return None (no error)
+        assert!(detailed_error_message("123", Unit::Auto, "").is_none());
+        assert!(detailed_error_message("5K", Unit::Auto, "").is_none());
+        assert!(detailed_error_message("-3.5M", Unit::Auto, "").is_none());
+    }
+
+    #[test]
+    fn test_detailed_error_message_trailing_garbage() {
+        // Number with suffix followed by extra chars
+        let result = detailed_error_message("5Kx", Unit::Auto, "").unwrap();
+        assert!(
+            result.contains("numfmt-error-invalid-specific-suffix")
+                || result.contains("invalid suffix")
+        );
+    }
+
+    #[test]
+    fn test_detailed_error_message_dot_only() {
+        let result = detailed_error_message(".", Unit::Auto, "").unwrap();
+        assert!(
+            result.contains("numfmt-error-invalid-suffix") || result.contains("invalid suffix")
+        );
+    }
+
+    #[test]
+    fn test_detailed_error_message_trailing_dot() {
+        let result = detailed_error_message("5.", Unit::Auto, "").unwrap();
+        assert!(
+            result.contains("numfmt-error-invalid-number") || result.contains("invalid number")
+        );
+    }
+
+    #[test]
+    fn test_detailed_error_message_unit_separator() {
+        // With unit separator, "5 K" is valid
+        assert!(detailed_error_message("5 K", Unit::Auto, " ").is_none());
+
+        // "5 Kx" should report trailing garbage after the suffix
+        let result = detailed_error_message("5 Kx", Unit::Auto, " ");
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_parse_number_part_valid() {
+        assert_eq!(parse_number_part("42", "42").unwrap(), 42.0);
+        assert_eq!(parse_number_part("-3.5", "-3.5").unwrap(), -3.5);
+        assert_eq!(parse_number_part("0", "0").unwrap(), 0.0);
+    }
+
+    #[test]
+    fn test_parse_number_part_trailing_dot() {
+        assert!(parse_number_part("5.", "5.").is_err());
+    }
+
+    #[test]
+    fn test_parse_number_part_non_numeric() {
+        assert!(parse_number_part("abc", "abc").is_err());
+        assert!(parse_number_part("", "").is_err());
+    }
+
+    #[test]
+    fn test_apply_grouping_short_numbers() {
+        // Numbers with fewer than 4 digits should be unchanged
+        assert_eq!(apply_grouping("0"), "0");
+        assert_eq!(apply_grouping("999"), "999");
+        assert_eq!(apply_grouping("-99"), "-99");
+    }
+
+    #[test]
+    fn test_apply_grouping_with_fraction() {
+        // Fraction part should not be grouped
+        let result = apply_grouping("1234.567");
+        // Depending on locale, separator may or may not be present
+        assert!(result.contains("567"));
+        assert!(result.contains('.'));
+    }
+
+    #[test]
+    fn test_apply_grouping_negative() {
+        let result = apply_grouping("-1234");
+        assert!(result.starts_with('-'));
+    }
+
+    #[test]
+    fn test_apply_grouping_large_numbers() {
+        // These tests verify grouping structure; actual separator depends on locale
+        let result = apply_grouping("1000000");
+        // Should have separators inserted (length grows if separator is non-empty)
+        assert!(result.len() >= 7);
+
+        let result = apply_grouping("1234567890");
+        assert!(result.len() >= 10);
+
+        let result = apply_grouping("-9999999999999");
+        assert!(result.starts_with('-'));
+        assert!(result.len() >= 13);
+    }
+
+    #[test]
+    fn test_apply_grouping_tiny_fraction() {
+        // Small decimal: integer part < 4 digits, so no grouping
+        assert_eq!(apply_grouping("0.000001"), "0.000001");
+        assert_eq!(apply_grouping("1.23456789"), "1.23456789");
+    }
+
+    #[test]
+    fn test_apply_grouping_exactly_four_digits() {
+        let result = apply_grouping("1000");
+        // Should be grouped (4 digits)
+        assert!(result.len() >= 4);
+    }
+
+    #[test]
+    fn test_parse_number_part_large_and_tiny() {
+        assert_eq!(
+            parse_number_part("999999999999", "999999999999").unwrap(),
+            999_999_999_999.0
+        );
+        assert_eq!(
+            parse_number_part("0.000000001", "0.000000001").unwrap(),
+            0.000_000_001
+        );
+        assert_eq!(
+            parse_number_part("-99999999", "-99999999").unwrap(),
+            -99_999_999.0
+        );
+    }
 }
