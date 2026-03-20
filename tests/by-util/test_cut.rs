@@ -230,6 +230,21 @@ fn test_zero_terminated_only_delimited() {
 }
 
 #[test]
+fn test_suppresses_unterminated_segment() {
+    new_ucmd!()
+        .args(&["-z", "-d", "", "-s", "-f", "1"])
+        .pipe_in("unterminated")
+        .succeeds()
+        .stdout_only_bytes("");
+
+    new_ucmd!()
+        .args(&["-z", "-d", "", "-s", "-f", "1"])
+        .pipe_in("terminated\0unterminated")
+        .succeeds()
+        .stdout_only_bytes("terminated\0");
+}
+
+#[test]
 fn test_is_a_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
 

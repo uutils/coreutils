@@ -27,6 +27,7 @@ tr-warning-invalid-utf8 = invalid utf8 sequence
 
 # Sequence parsing error messages
 tr-error-missing-char-class-name = missing character class name '[::]'
+tr-error-invalid-char-class = invalid character class { $class }
 tr-error-missing-equivalence-class-char = missing equivalence class character '[==]'
 tr-error-multiple-char-repeat-in-set2 = only one [c*] repeat construct may appear in string2
 tr-error-char-repeat-in-set1 = the [c*] repeat construct may not appear in string1
