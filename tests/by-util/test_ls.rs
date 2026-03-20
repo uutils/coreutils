@@ -951,6 +951,44 @@ fn test_ls_across() {
 }
 
 #[test]
+fn test_ls_across_single_row() {
+    // Regression test: uutils_term_grid had an off-by-one bug where the column-search
+    // loop used `..cells.len()` (exclusive) instead of `..=cells.len()` (inclusive),
+    // preventing it from ever trying to fit all items on one row.
+    // See: https://github.com/uutils/uutils-term-grid/pull/57
+    //      https://github.com/eza-community/eza/issues/1738
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    for name in &[
+        "code",
+        "Desktop",
+        "Documents",
+        "Downloads",
+        "Music",
+        "Pictures",
+        "Public",
+        "Templates",
+        "Videos",
+    ] {
+        at.touch(name);
+    }
+
+    // With width=96 and LC_ALL=C sort order all 9 entries (79 chars total) fit on one line.
+    // GNU ls produces: "Desktop  Documents  Downloads  Music  Pictures  Public  Templates  Videos  code"
+    for option in ACROSS_ARGS {
+        scene
+            .ucmd()
+            .env("LC_ALL", "C")
+            .arg(option)
+            .arg("--width=96")
+            .succeeds()
+            .stdout_only(
+                "Desktop\t Documents  Downloads  Music  Pictures\tPublic\tTemplates  Videos  code\n",
+            );
+    }
+}
+
+#[test]
 fn test_ls_commas() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
