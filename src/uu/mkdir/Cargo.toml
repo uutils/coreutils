@@ -23,6 +23,9 @@ clap = { workspace = true }
 uucore = { workspace = true, features = ["fs", "mode", "fsxattr"] }
 fluent = { workspace = true }
 
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true, features = ["fs"] }
+
 [features]
 selinux = ["uucore/selinux"]
 smack = ["uucore/smack"]
