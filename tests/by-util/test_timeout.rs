@@ -286,3 +286,21 @@ fn test_foreground_signal0_kill_after() {
         .args(&["--foreground", "-s0", "-k.1", ".1", "sleep", "10"])
         .fails_with_code(137);
 }
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_realtime_signal_names() {
+    // timeout should accept RTMIN and RTMAX as valid signal names
+    new_ucmd!()
+        .args(&["-v", "-s", "RTMAX", ".1", "sleep", "1"])
+        .fails()
+        .stderr_contains("sending signal RTMAX to command");
+    new_ucmd!()
+        .args(&["-v", "-s", "RTMIN", ".1", "sleep", "1"])
+        .fails()
+        .stderr_contains("sending signal RTMIN to command");
+    new_ucmd!()
+        .args(&["-v", "-s", "SIGRTMAX", ".1", "sleep", "1"])
+        .fails()
+        .stderr_contains("sending signal RTMAX to command");
+}
