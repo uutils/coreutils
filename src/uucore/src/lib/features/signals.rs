@@ -396,11 +396,24 @@ pub static ALL_SIGNALS: [&str; 32] = [
 pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
     let signal_name_upcase = signal_name_or_value.to_uppercase();
     if let Ok(value) = signal_name_upcase.parse() {
-        return if is_signal(value) { Some(value) } else { None };
+        if is_signal(value) {
+            return Some(value);
+        }
+        return realtime_signal_bounds()
+            .filter(|&(rtmin, rtmax)| value >= rtmin && value <= rtmax)
+            .map(|_| value);
     }
     let signal_name = signal_name_upcase.trim_start_matches("SIG");
 
-    ALL_SIGNALS.iter().position(|&s| s == signal_name)
+    if let Some(pos) = ALL_SIGNALS.iter().position(|&s| s == signal_name) {
+        return Some(pos);
+    }
+
+    realtime_signal_bounds().and_then(|(rtmin, rtmax)| match signal_name {
+        "RTMIN" => Some(rtmin),
+        "RTMAX" => Some(rtmax),
+        _ => None,
+    })
 }
 
 /// Returns true if the given number is a valid signal number.
@@ -753,4 +766,20 @@ fn linux_realtime_signal_names_resolve_to_runtime_values() {
 fn linux_unnamed_signal_numbers_are_valid_for_lists() {
     assert_eq!(signal_list_value_by_name_or_number("32"), Some(32));
     assert_eq!(signal_list_value_by_name_or_number("33"), Some(33));
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn linux_realtime_signals_resolve_by_name_or_value() {
+    let (rtmin, rtmax) = realtime_signal_bounds().unwrap();
+
+    // By name
+    assert_eq!(signal_by_name_or_value("RTMIN"), Some(rtmin));
+    assert_eq!(signal_by_name_or_value("RTMAX"), Some(rtmax));
+    assert_eq!(signal_by_name_or_value("SIGRTMIN"), Some(rtmin));
+    assert_eq!(signal_by_name_or_value("SIGRTMAX"), Some(rtmax));
+
+    // By numeric value
+    assert_eq!(signal_by_name_or_value(&rtmin.to_string()), Some(rtmin));
+    assert_eq!(signal_by_name_or_value(&rtmax.to_string()), Some(rtmax));
 }
