@@ -83,9 +83,15 @@ pub struct Blake2b {
 
 impl Blake2b {
     pub const DEFAULT_BYTE_SIZE: usize = 64;
+    pub const DEFAULT_BIT_SIZE: usize = Self::DEFAULT_BYTE_SIZE * 8;
 
     /// Return a new Blake2b instance with a custom output bytes length
     pub fn with_output_bytes(output_bytes: usize) -> Self {
+        debug_assert!(
+            output_bytes <= Self::DEFAULT_BYTE_SIZE,
+            "GNU doesn't accept BLAKE2b bigger than 64 bytes long"
+        );
+
         let mut params = blake2b_simd::Params::new();
         params.hash_length(output_bytes);
 
