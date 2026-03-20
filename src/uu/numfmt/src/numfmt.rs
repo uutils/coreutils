@@ -33,6 +33,9 @@ mod units;
 
 /// Format a single line and write it, handling `--invalid` error modes.
 ///
+/// `fmt_buf` is a caller-owned scratch buffer reused across calls to avoid
+/// allocating a new `Vec` on every line in non-abort invalid modes.
+///
 /// Returns `true` if the line contained invalid input (only possible in
 /// non-abort modes).
 fn format_and_write<W: std::io::Write>(
@@ -40,6 +43,7 @@ fn format_and_write<W: std::io::Write>(
     input_line: &[u8],
     options: &NumfmtOptions,
     eol: Option<u8>,
+    fmt_buf: &mut Vec<u8>,
 ) -> UResult<bool> {
     // GNU truncates at the first embedded null byte.
     let line = match memchr::memchr(b'\0', input_line) {
@@ -50,8 +54,8 @@ fn format_and_write<W: std::io::Write>(
     // In non-abort modes we buffer the formatted output so that on error we
     // can emit the original line instead.
     let buffer_output = !matches!(options.invalid, InvalidModes::Abort);
-    let mut buf = Vec::new();
-    let dest: &mut dyn std::io::Write = if buffer_output { &mut buf } else { writer };
+    fmt_buf.clear();
+    let dest: &mut dyn std::io::Write = if buffer_output { fmt_buf } else { writer };
 
     let result = if options.delimiter.is_some() {
         write_formatted_with_delimiter(dest, line, options, eol)
@@ -87,7 +91,7 @@ fn format_and_write<W: std::io::Write>(
     }
 
     if buffer_output {
-        writer.write_all(&buf)?;
+        writer.write_all(fmt_buf)?;
     }
     Ok(false)
 }
