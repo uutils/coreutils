@@ -3287,3 +3287,20 @@ fn test_check_shake256_no_length() {
         .fails()
         .stderr_only("cksum: 'standard input': no properly formatted checksum lines found\n");
 }
+
+// Regression test: cksum should handle write errors to /dev/full without aborting.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_write_error_dev_full() {
+    use std::fs::OpenOptions;
+    let dev_full = OpenOptions::new()
+        .write(true)
+        .open("/dev/full")
+        .expect("Failed to open /dev/full - test must run on Linux");
+
+    new_ucmd!()
+        .arg("/dev/null")
+        .set_stdout(dev_full)
+        .fails()
+        .code_is(1);
+}
