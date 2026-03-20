@@ -7,6 +7,8 @@
 
 use std::process::Stdio;
 
+#[cfg(unix)]
+use rlimit::Resource;
 use uutests::{at_and_ucmd, new_ucmd, util::TestScenario, util_name};
 
 #[test]
@@ -1376,4 +1378,30 @@ fn test_preserve_root_literal_root() {
         .fails()
         .stderr_contains("it is dangerous to operate recursively on '/'")
         .stderr_contains("use --no-preserve-root to override this failsafe");
+}
+
+/// Test that "traversal failed" message is shown when readdir fails during
+/// recursive removal (e.g., due to file descriptor exhaustion).
+#[cfg(unix)]
+#[test]
+fn test_traversal_failed_on_readdir_error() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir_all("a/b");
+    at.touch("a/b/file");
+
+    // Use a very low file descriptor limit so that dup() inside readdir
+    // fails with EMFILE ("Too many open files"), triggering the
+    // "traversal failed" error path.
+    let result = ucmd
+        .args(&["-rf", "a"])
+        .limit(Resource::NOFILE, 5, 5)
+        .fails();
+    result.stderr_contains("traversal failed");
+    // musl libc uses "No file descriptors available" instead of glibc's
+    // "Too many open files" for EMFILE.
+    let stderr = result.stderr_str();
+    assert!(
+        stderr.contains("Too many open files") || stderr.contains("No file descriptors available"),
+        "{stderr:?} does not contain expected EMFILE message"
+    );
 }
