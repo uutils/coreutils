@@ -17,15 +17,14 @@ mkdir -p "$QEMU_DIR"/{rootfs/{bin,lib64,proc,sys,dev,tmp,etc,gnu},kernel}
 
 # Copy Ubuntu kernel (runner's kernel does not work)
 sudo apt-get update || :
-sudo apt-get install -y linux-image-generic
+sudo apt-get install -y --no-install-recommends linux-image-generic
 sudo install -Dvm644 "$(ls -1 /boot/vmlinuz-*-generic | head -n 1)" "$QEMU_DIR/kernel/vmlinuz"
 
 # Setup busybox
-BUSYBOX=/tmp/busybox
-[ -f "$BUSYBOX" ] || curl -sL -o "$BUSYBOX" https://busybox.net/downloads/binaries/1.35.0-x86_64-linux-musl/busybox
-chmod +x "$BUSYBOX"
-cp "$BUSYBOX" "$QEMU_DIR/rootfs/bin/"
-(cd "$QEMU_DIR/rootfs/bin" && "$BUSYBOX" --list | xargs -I{} ln -sf busybox {} 2>/dev/null)
+curl -L -o b.tar.gz https://dl-cdn.alpinelinux.org/alpine/latest-stable/main/x86_64/busybox-static-1.37.0-r30.apk
+tar -xf b.tar.gz
+install -Dvm755 bin/busybox.static "$QEMU_DIR/rootfs/bin/busybox"
+(cd "$QEMU_DIR/rootfs/bin" && ./busybox --list | xargs -I{} ln -sf busybox {} 2>/dev/null)
 
 # Copy required libraries
 for lib in ld-linux-x86-64.so.2 libc.so.6 libm.so.6 libgcc_s.so.1 libpthread.so.0 libdl.so.2 librt.so.1; do
@@ -104,7 +103,7 @@ for TEST_PATH in $QEMU_TESTS; do
 
     # Hardlink utilities for SMACK/ROOTFS tests
     for U in $("$REPO_DIR/target/${PROFILE}/coreutils" --list); do
-        ln -vf "$REPO_DIR/target/${PROFILE}/coreutils" "$WORK/bin/$U"
+        ln -f "$REPO_DIR/target/${PROFILE}/coreutils" "$WORK/bin/$U"
     done
 
     # Set test script path and user
