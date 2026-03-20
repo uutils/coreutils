@@ -2497,7 +2497,7 @@ fn depth_first_list(
     };
 
     // Convert those entries to the PathData struct
-    for raw_entry in read_dir {
+    for raw_entry in read_dir.into_iter() {
         match raw_entry {
             Ok(dir_entry) => {
                 let path_data =
@@ -3443,7 +3443,7 @@ fn display_item_name(
                     }
 
                     match fs::canonicalize(&absolute_target) {
-                        Ok(resolved_target) => {
+                        Ok(resolved_target) if config.color.is_some() => {
                             let target_data = PathData::new(
                                 resolved_target,
                                 None,
@@ -3452,19 +3452,15 @@ fn display_item_name(
                                 false,
                             );
 
-                            if config.color.is_some() {
-                                name.push(color_name(
-                                    escaped_target,
-                                    &target_data,
-                                    style_manager,
-                                    None,
-                                    is_wrap(name.len()),
-                                ));
-                            } else {
-                                name.push(escaped_target);
-                            }
+                            name.push(color_name(
+                                escaped_target,
+                                &target_data,
+                                style_manager,
+                                None,
+                                is_wrap(name.len()),
+                            ));
                         }
-                        Err(_) => {
+                        _ => {
                             name.push(
                                 style_manager.apply_missing_target_style(
                                     escaped_target,
