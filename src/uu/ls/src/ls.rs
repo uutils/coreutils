@@ -2245,7 +2245,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         let needs_blank_line = pos != 0 || !files.is_empty();
         // Do read_dir call here to match GNU semantics by printing
         // read_dir errors before directory headings, names and totals
-        let read_dir = match fs::read_dir(path_data.path()) {
+        let mut read_dir = match fs::read_dir(path_data.path()) {
             Err(err) => {
                 // flush stdout buffer before the error to preserve formatting and order
                 state.out.flush()?;
@@ -2267,7 +2267,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         // List each of the arguments to ls first.
         depth_first_list(
             (path_data.path().to_path_buf(), needs_blank_line),
-            read_dir,
+            &mut read_dir,
             config,
             &mut state,
             &mut dired,
@@ -2276,7 +2276,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
 
         // Only runs if it must list recursively.
         while let Some(dir_data) = state.stack.pop() {
-            let read_dir = match fs::read_dir(&dir_data.0) {
+            let mut read_dir = match fs::read_dir(&dir_data.0) {
                 Err(err) => {
                     // flush stdout buffer before the error to preserve formatting and order
                     state.out.flush()?;
@@ -2290,7 +2290,14 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
                 Ok(rd) => rd,
             };
 
-            depth_first_list(dir_data, read_dir, config, &mut state, &mut dired, false)?;
+            depth_first_list(
+                dir_data,
+                &mut read_dir,
+                config,
+                &mut state,
+                &mut dired,
+                false,
+            )?;
 
             // Heuristic to ensure stack does not keep its capacity forever if there is
             // combinatorial explosion; we decrease it logarithmically here.
@@ -2417,7 +2424,7 @@ fn should_display(path_data: &PathData, config: &Config) -> bool {
 
 fn depth_first_list(
     (dir_path, needs_blank_line): DirData,
-    read_dir: ReadDir,
+    read_dir: &mut ReadDir,
     config: &Config,
     state: &mut ListState,
     dired: &mut DiredOutput,
@@ -2483,7 +2490,7 @@ fn depth_first_list(
     };
 
     // Convert those entries to the PathData struct
-    for raw_entry in read_dir {
+    for raw_entry in read_dir.into_iter() {
         match raw_entry {
             Ok(dir_entry) => {
                 let path_data = PathData::new(dir_entry.path(), None, config, false);
