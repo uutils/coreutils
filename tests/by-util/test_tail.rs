@@ -318,14 +318,11 @@ fn test_follow_redirect_stdin_name_retry() {
     }
 }
 
+// Note: The macOS-specific workaround for detecting stdin directories has been
+// moved to uucore::fs::is_stdin_directory(), which now works correctly on all
+// Unix platforms using fstat() on the file descriptor.
 #[test]
-#[cfg(all(
-    not(target_vendor = "apple"),
-    not(target_os = "windows"),
-    not(target_os = "android"),
-    not(target_os = "freebsd"),
-    not(target_os = "openbsd")
-))] // FIXME: for currently not working platforms
+#[cfg(unix)]
 fn test_stdin_redirect_dir() {
     // $ mkdir dir
     // $ tail < dir, $ tail - < dir
@@ -346,37 +343,6 @@ fn test_stdin_redirect_dir() {
         .fails_with_code(1)
         .no_stdout()
         .stderr_is("tail: error reading 'standard input': Is a directory\n");
-}
-
-// On macOS path.is_dir() can be false for directories if it was a redirect,
-// e.g. `$ tail < DIR. The library feature to detect the
-// std::io::ErrorKind::IsADirectory isn't stable so we currently show the a wrong
-// error message.
-// FIXME: If `std::io::ErrorKind::IsADirectory` becomes stable or macos handles
-//  redirected directories like linux show the correct message like in
-//  `test_stdin_redirect_dir`
-#[test]
-#[cfg(target_vendor = "apple")]
-fn test_stdin_redirect_dir_when_target_os_is_macos() {
-    // $ mkdir dir
-    // $ tail < dir, $ tail - < dir
-    // tail: error reading 'standard input': Is a directory
-
-    let ts = TestScenario::new(util_name!());
-    let at = &ts.fixtures;
-    at.mkdir("dir");
-
-    ts.ucmd()
-        .set_stdin(File::open(at.plus("dir")).unwrap())
-        .fails_with_code(1)
-        .no_stdout()
-        .stderr_is("tail: cannot open 'standard input' for reading: No such file or directory\n");
-    ts.ucmd()
-        .set_stdin(File::open(at.plus("dir")).unwrap())
-        .arg("-")
-        .fails_with_code(1)
-        .no_stdout()
-        .stderr_is("tail: cannot open 'standard input' for reading: No such file or directory\n");
 }
 
 #[test]
