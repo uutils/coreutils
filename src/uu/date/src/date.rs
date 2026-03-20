@@ -702,14 +702,44 @@ pub fn uu_app() -> Command {
         .arg(Arg::new(OPT_FORMAT).num_args(0..))
 }
 
+/// Expand `%x`, `%X`, `%r` into locale format strings from `nl_langinfo`
+/// before jiff sees them. `%%` is protected so `%%x` is not expanded.
+fn expand_locale_specifiers(format: &str) -> Cow<'_, str> {
+    if !format.contains("%x") && !format.contains("%X") && !format.contains("%r") {
+        return Cow::Borrowed(format);
+    }
+
+    const PLACEHOLDER: &str = "\x00PCT\x00";
+    let mut s = format.replace("%%", PLACEHOLDER);
+
+    if s.contains("%x") {
+        if let Some(date_fmt) = locale::get_locale_date_format() {
+            s = s.replace("%x", &date_fmt);
+        }
+    }
+    if s.contains("%X") {
+        if let Some(time_fmt) = locale::get_locale_time_format() {
+            s = s.replace("%X", &time_fmt);
+        }
+    }
+    if s.contains("%r") {
+        let ampm = locale::get_locale_time_ampm_format();
+        s = s.replace("%r", &ampm);
+    }
+
+    Cow::Owned(s.replace(PLACEHOLDER, "%%"))
+}
+
 fn format_date_with_locale_aware_months(
     date: &Zoned,
     format_string: &str,
     config: &Config<PosixCustom>,
     skip_localization: bool,
 ) -> Result<String, String> {
+    let format_string = expand_locale_specifiers(format_string);
+    let format_string = &*format_string;
+
     // First check if format string has GNU modifiers (width/flags) and format if present
-    // This optimization combines detection and formatting in a single pass
     if let Some(result) =
         format_modifiers::format_with_modifiers_if_present(date, format_string, config)
     {
