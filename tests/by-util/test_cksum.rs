@@ -27,6 +27,7 @@ const SHA_LENGTHS: [u32; 4] = [224, 256, 384, 512];
 #[case::sha384("sha384")]
 #[case::sha512("sha512")]
 #[case::blake2b("blake2b")]
+#[case::blake3("blake3")]
 #[case::sm3("sm3")]
 fn test_all_algos(#[case] algo: &str) {}
 
