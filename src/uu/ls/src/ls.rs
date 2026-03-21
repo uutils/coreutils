@@ -999,6 +999,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     let mut dirs = Vec::<PathData>::new();
     let mut dired = DiredOutput::default();
     let initial_locs_len = locs.len();
+    let now = SystemTime::now();
 
     let mut state = ListState {
         out: BufWriter::new(stdout()),
@@ -1010,8 +1011,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         // Time range for which to use the "recent" format. Anything from 0.5 year in the past to now
         // (files with modification time in the future use "old" format).
         // According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
-        recent_time_range: (SystemTime::now() - Duration::new(31_556_952 / 2, 0))
-            ..=SystemTime::now(),
+        recent_time_range: (now - Duration::new(31_556_952 / 2, 0))..=now,
         stack: Vec::new(),
         listed_ancestors: FxHashSet::default(),
         initial_locs_len,
