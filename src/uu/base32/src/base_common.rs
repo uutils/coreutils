@@ -104,7 +104,7 @@ pub fn parse_base_cmd_args(args: impl uucore::Args, command: Command) -> UResult
 }
 
 pub fn base_app(about: String, usage: String) -> Command {
-    let cmd = Command::new(uucore::util_name())
+    let cmd = Command::new("")
         .version(uucore::crate_version!())
         .about(about)
         .override_usage(format_usage(&usage))
