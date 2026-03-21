@@ -23,7 +23,7 @@ use uucore::error::UResult;
 
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::ranges::Range;
-use uucore::{format_usage, os_str_as_bytes, show, translate, util_name};
+use uucore::{format_usage, os_str_as_bytes, show, translate};
 
 pub mod errors;
 pub mod format;
@@ -112,7 +112,7 @@ fn write_line<W: std::io::Write>(
                 show!(NumfmtError::FormattingError(error_message));
             }
             InvalidModes::Warn => {
-                let _ = writeln!(stderr(), "{}: {error_message}", util_name());
+                let _ = writeln!(stderr(), "numfmt: {error_message}");
             }
             InvalidModes::Ignore => {}
         }
@@ -318,28 +318,22 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
 }
 
 fn print_debug_warnings(options: &NumfmtOptions, matches: &ArgMatches) {
+    fn print_warning(msg_key: &str) {
+        let _ = writeln!(stderr(), "numfmt: {}", translate!(msg_key));
+    }
+
     // Warn if no conversion option is specified
     // 2>/dev/full does not abort
     if options.transform.from == Unit::None
         && options.transform.to == Unit::None
         && options.padding == 0
     {
-        let _ = writeln!(
-            stderr(),
-            "{}: {}",
-            util_name(),
-            translate!("numfmt-debug-no-conversion")
-        );
+        print_warning("numfmt-debug-no-conversion");
     }
 
     // Warn if --header is used with command-line input
     if options.header > 0 && matches.get_many::<OsString>(NUMBER).is_some() {
-        let _ = writeln!(
-            stderr(),
-            "{}: {}",
-            util_name(),
-            translate!("numfmt-debug-header-ignored")
-        );
+        print_warning("numfmt-debug-header-ignored");
     }
 }
 
@@ -375,9 +369,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(util_name())
+    Command::new("numfmt")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(util_name()))
+        .help_template(uucore::localized_help_template("numfmt"))
         .about(translate!("numfmt-about"))
         .after_help(translate!("numfmt-after-help"))
         .override_usage(format_usage(&translate!("numfmt-usage")))
