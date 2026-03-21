@@ -749,9 +749,9 @@ fn display_item_name(
                     match fs::canonicalize(&absolute_target) {
                         Ok(resolved_target) => {
                             let target_data = PathData::new(
-                                resolved_target,
+                                resolved_target.as_path().into(),
                                 None,
-                                target_path.file_name().map(OsStr::to_os_string),
+                                target_path.file_name().map(Cow::Borrowed),
                                 config,
                                 false,
                             );
