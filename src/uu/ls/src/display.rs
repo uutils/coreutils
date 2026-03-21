@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly
-// spell-checker:ignore nohash strtime clocale
+// spell-checker:ignore nohash strtime clocale ilog
 
 use std::cell::LazyCell;
 #[cfg(unix)]
@@ -253,8 +253,12 @@ fn display_dir_entry_size(
             }
             SizeOrDeviceId::Size(size) => (size.len(), 0usize, 0usize),
         };
+        #[cfg(unix)]
+        let nlink_len = digits(md.nlink());
+        #[cfg(not(unix))]
+        let nlink_len = display_symlink_count(md).len();
         (
-            display_symlink_count(md).len(),
+            nlink_len,
             display_uname(md, config, state).len(),
             display_group(md, config, state).len(),
             size_len,
@@ -264,6 +268,11 @@ fn display_dir_entry_size(
     } else {
         (0, 0, 0, 0, 0, 0)
     }
+}
+
+#[cfg(unix)]
+fn digits(num: u64) -> usize {
+    (num.checked_ilog10().unwrap_or(0) + 1) as usize
 }
 
 // A simple, performant, ExtendPad trait to add a string to a Vec<u8>, padding with spaces
@@ -1218,7 +1227,7 @@ fn calculate_padding_collection(
         #[cfg(unix)]
         if config.inode {
             let inode_len = if let Some(md) = item.metadata() {
-                display_inode(md).len()
+                digits(md.ino())
             } else {
                 continue;
             };
