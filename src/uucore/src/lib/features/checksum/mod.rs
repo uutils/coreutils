@@ -250,8 +250,8 @@ pub enum SizedAlgoKind {
     Sha2(ShaLength),
     Sha3(ShaLength),
     // Note: we store Blake*'s length as BYTES.
-    Blake2b(Option<usize>),
-    Blake3(Option<usize>),
+    Blake2b(usize),
+    Blake3(usize),
     // Shake* length are stored in bits.
     Shake128(Option<usize>),
     Shake256(Option<usize>),
@@ -284,8 +284,8 @@ impl SizedAlgoKind {
             (ak::Sm3, _) => Ok(Self::Sm3),
             (ak::Sha1, _) => Ok(Self::Sha1),
 
-            (ak::Blake2b, l) => Ok(Self::Blake2b(l)),
-            (ak::Blake3, l) => Ok(Self::Blake3(l)),
+            (ak::Blake2b, l) => Ok(Self::Blake2b(l.unwrap_or(Blake2b::DEFAULT_BYTE_SIZE))),
+            (ak::Blake3, l) => Ok(Self::Blake3(l.unwrap_or(Blake3::DEFAULT_BYTE_SIZE))),
             (ak::Shake128, l) => Ok(Self::Shake128(l)),
             (ak::Shake256, l) => Ok(Self::Shake256(l)),
             (ak::Sha2, Some(l)) => Ok(Self::Sha2(ShaLength::try_from(l)?)),
@@ -307,14 +307,9 @@ impl SizedAlgoKind {
             Self::Sha1 => "SHA1".into(),
             Self::Sha2(len) => format!("SHA{}", len.as_usize()),
             Self::Sha3(len) => format!("SHA3-{}", len.as_usize()),
-            Self::Blake2b(Some(byte_len)) => format!("BLAKE2b-{}", byte_len * 8),
-            Self::Blake2b(None) => "BLAKE2b".into(),
-            Self::Blake3(byte_len) => {
-                format!(
-                    "BLAKE3-{}",
-                    byte_len.unwrap_or(Blake3::DEFAULT_BYTE_SIZE) * 8
-                )
-            }
+            Self::Blake2b(Blake2b::DEFAULT_BYTE_SIZE) => "BLAKE2b".into(),
+            Self::Blake2b(byte_len) => format!("BLAKE2b-{}", byte_len * 8),
+            Self::Blake3(byte_len) => format!("BLAKE3-{}", byte_len * 8),
             Self::Shake128(opt_bit_len) => format!(
                 "SHAKE128-{}",
                 opt_bit_len.unwrap_or(Shake128::DEFAULT_BIT_SIZE)
@@ -347,12 +342,8 @@ impl SizedAlgoKind {
             Self::Sha3(Len256) => Box::new(Sha3_256::default()),
             Self::Sha3(Len384) => Box::new(Sha3_384::default()),
             Self::Sha3(Len512) => Box::new(Sha3_512::default()),
-            Self::Blake2b(len_opt) => {
-                Box::new(len_opt.map(Blake2b::with_output_bytes).unwrap_or_default())
-            }
-            Self::Blake3(len_opt) => {
-                Box::new(len_opt.map(Blake3::with_output_bytes).unwrap_or_default())
-            }
+            Self::Blake2b(len) => Box::new(Blake2b::with_output_bytes(*len)),
+            Self::Blake3(len) => Box::new(Blake3::with_output_bytes(*len)),
             Self::Shake128(len_opt) => {
                 Box::new(len_opt.map(Shake128::with_output_bits).unwrap_or_default())
             }
@@ -371,10 +362,10 @@ impl SizedAlgoKind {
             Self::Md5 => 128,
             Self::Sm3 => 512,
             Self::Sha1 => 160,
-            Self::Blake3(len) => len.unwrap_or(Blake3::DEFAULT_BYTE_SIZE) * 8,
             Self::Sha2(len) => len.as_usize(),
             Self::Sha3(len) => len.as_usize(),
-            Self::Blake2b(len) => len.unwrap_or(Blake2b::DEFAULT_BYTE_SIZE * 8),
+            Self::Blake2b(len) => len * 8,
+            Self::Blake3(len) => len * 8,
             Self::Shake128(len) => len.unwrap_or(Shake128::DEFAULT_BIT_SIZE),
             Self::Shake256(len) => len.unwrap_or(Shake256::DEFAULT_BIT_SIZE),
         }
@@ -502,7 +493,7 @@ pub enum BlakeLength<'s> {
 pub fn validate_calculate_blake_length(
     algo: AlgoKind,
     bit_length: BlakeLength<'_>,
-) -> UResult<Option<usize>> {
+) -> UResult<usize> {
     debug_assert!(matches!(algo, AlgoKind::Blake2b | AlgoKind::Blake3));
 
     // TODO MSRV>=1.89 : Replace format! with format_args! to make string
@@ -521,7 +512,11 @@ pub fn validate_calculate_blake_length(
 
     // Blake2b's length is parsed in an u64.
     match parsed {
-        Ok(0) => Ok(None),
+        Ok(0) => Ok(if algo == AlgoKind::Blake2b {
+            Blake2b::DEFAULT_BYTE_SIZE
+        } else {
+            Blake3::DEFAULT_BYTE_SIZE
+        }),
 
         // Error cases
         Ok(n) if n > Blake2b::DEFAULT_BIT_SIZE && algo == AlgoKind::Blake2b => {
@@ -541,10 +536,8 @@ pub fn validate_calculate_blake_length(
 
         // Valid cases
 
-        // When length is 512, it is blake2b's default. So, don't show it
-        Ok(Blake2b::DEFAULT_BIT_SIZE) => Ok(None),
         // Divide by 8, as our blake2b implementation expects bytes instead of bits.
-        Ok(n) => Ok(Some(n / 8)),
+        Ok(n) => Ok(n / 8),
     }
 }
 
@@ -665,7 +658,7 @@ mod tests {
     fn test_calculate_blake2b_length() {
         assert_eq!(
             validate_calculate_blake_length(AlgoKind::Blake2b, BlakeLength::String("0")).unwrap(),
-            None
+            Blake2b::DEFAULT_BYTE_SIZE
         );
         assert!(
             validate_calculate_blake_length(AlgoKind::Blake2b, BlakeLength::String("10")).is_err()
@@ -675,11 +668,11 @@ mod tests {
         );
         assert_eq!(
             validate_calculate_blake_length(AlgoKind::Blake2b, BlakeLength::String("512")).unwrap(),
-            None
+            Blake2b::DEFAULT_BYTE_SIZE
         );
         assert_eq!(
             validate_calculate_blake_length(AlgoKind::Blake2b, BlakeLength::String("256")).unwrap(),
-            Some(32)
+            32
         );
     }
 }

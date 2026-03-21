@@ -63,7 +63,7 @@ pub fn standalone_with_length_main(
     algo: AlgoKind,
     cmd: Command,
     args: impl uucore::Args,
-    validate_len: fn(&str) -> UResult<Option<usize>>,
+    validate_len: fn(&str) -> UResult<usize>,
 ) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(cmd, args)?;
     let algo = Some(algo);
@@ -72,8 +72,7 @@ pub fn standalone_with_length_main(
         .get_one::<String>(options::LENGTH)
         .map(String::as_str)
         .map(validate_len)
-        .transpose()?
-        .flatten();
+        .transpose()?;
 
     //todo: deduplicate matches.get_flag
     let text = !matches.get_flag(options::BINARY);

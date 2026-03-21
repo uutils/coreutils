@@ -640,7 +640,7 @@ fn identify_algo_name_and_length(
         match line_algo {
             algo @ (ak::Blake2b | ak::Blake3) => {
                 match validate_calculate_blake_length(algo, BlakeLength::Int(bitlen)) {
-                    Ok(len) => len,
+                    Ok(len) => Some(len),
                     Err(_) => return Err(LineCheckError::ImproperlyFormatted),
                 }
             }
