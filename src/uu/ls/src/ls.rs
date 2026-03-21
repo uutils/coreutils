@@ -13,6 +13,8 @@ use rustc_hash::FxHashSet;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
+#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+use std::sync::Once;
 use std::{borrow::Cow, cell::RefCell};
 use std::{
     cell::{LazyCell, OnceCell},
@@ -1930,8 +1932,6 @@ struct PathData {
     // can be used to avoid reading the filetype. Can be also called d_type:
     // https://www.gnu.org/software/libc/manual/html_node/Directory-Entries.html
     de: RefCell<Option<Box<DirEntry>>>,
-    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-    xattrs: OnceCell<Option<FxHashSet<OsString>>>,
     security_context: OnceCell<Box<str>>,
     // Name of the file - will be empty for . or ..
     display_name: OsString,
@@ -1939,6 +1939,10 @@ struct PathData {
     p_buf: PathBuf,
     must_dereference: bool,
     command_line: bool,
+    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+    has_acl: OnceCell<bool>,
+    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+    has_security_cap: OnceCell<bool>,
 }
 
 impl PathData {
@@ -1983,8 +1987,6 @@ impl PathData {
         // nearly free compared to a metadata() call on a Path
         let ft: OnceCell<Option<FileType>> = OnceCell::new();
         let md: OnceCell<Option<Metadata>> = OnceCell::new();
-        #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-        let xattrs: OnceCell<Option<FxHashSet<OsString>>> = OnceCell::new();
         let security_context: OnceCell<Box<str>> = OnceCell::new();
 
         let de: RefCell<Option<Box<DirEntry>>> = if let Some(de) = dir_entry {
@@ -2008,13 +2010,15 @@ impl PathData {
             md,
             ft,
             de,
-            #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-            xattrs,
             security_context,
             display_name,
             p_buf,
             must_dereference,
             command_line,
+            #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+            has_acl: OnceCell::new(),
+            #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+            has_security_cap: OnceCell::new(),
         }
     }
 
@@ -2057,30 +2061,40 @@ impl PathData {
 
     #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
     pub fn has_acl(&self) -> bool {
-        let opt_xattrs = self
-            .xattrs
-            .get_or_init(|| retrieve_xattr_list(self.path()).ok());
+        self.init_xattrs_once();
 
-        opt_xattrs.as_ref().is_some_and(|inner| {
-            !self.file_type().is_some_and(FileType::is_symlink)
-                && inner
-                    .iter()
-                    .filter_map(|key| key.to_str().map(str::to_lowercase))
-                    .any(|xattr| xattr.contains("acl"))
-        })
+        self.has_acl.get().is_some_and(|inner| *inner)
     }
 
     #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
     pub fn has_security_cap(&self) -> bool {
-        let cap_key = OsStr::new("security.capability");
+        self.init_xattrs_once();
 
-        let opt_xattrs = self
-            .xattrs
-            .get_or_init(|| retrieve_xattr_list(self.path()).ok());
+        self.has_security_cap.get().is_some_and(|inner| *inner)
+    }
 
-        opt_xattrs.as_ref().is_some_and(|inner| {
-            !self.file_type().is_some_and(FileType::is_symlink) && inner.get(cap_key).is_some()
-        })
+    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+    pub fn init_xattrs_once(&self) {
+        static START: Once = Once::new();
+
+        START.call_once(|| {
+            let _ = retrieve_xattr_list(self.path()).map(|inner| {
+                self.has_security_cap.get_or_init(|| {
+                    let cap_key = OsStr::new("security.capability");
+
+                    !self.file_type().is_some_and(FileType::is_symlink)
+                        && inner.get(cap_key).is_some()
+                });
+
+                self.has_acl.get_or_init(|| {
+                    !self.file_type().is_some_and(FileType::is_symlink)
+                        && inner
+                            .iter()
+                            .filter_map(|key| key.to_str().map(str::to_lowercase))
+                            .any(|xattr| xattr.contains("acl"))
+                });
+            });
+        });
     }
 
     fn file_type(&self) -> Option<&FileType> {
