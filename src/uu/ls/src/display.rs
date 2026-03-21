@@ -11,6 +11,7 @@ use std::cell::LazyCell;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
+use std::sync::LazyLock;
 /// Show the directory name in the case where several arguments are given to ls
 use std::{borrow::Cow, iter};
 use std::{
@@ -1120,37 +1121,43 @@ fn classify_file(path: &PathData) -> Option<char> {
 }
 
 fn create_hyperlink(name: &OsStr, path: &PathData) -> OsString {
-    let hostname = hostname::get().unwrap_or_else(|_| OsString::from(""));
-    let hostname = hostname.to_string_lossy();
-
-    let absolute_path = fs::canonicalize(path.path()).unwrap_or_default();
-
-    // Get bytes for URL encoding in a cross-platform way
-    let absolute_path_bytes = os_str_as_bytes_lossy(absolute_path.as_os_str());
-
-    // a set of safe ASCII bytes that don't need encoding
-    #[cfg(not(target_os = "windows"))]
-    let unencoded_bytes = b"_-.~/";
-    #[cfg(target_os = "windows")]
-    let unencoded_bytes = b"_-.~/\\:";
-
-    // Encode at byte level to properly handle UTF-8 sequences and preserve invalid UTF-8
-    let full_encoded_path: String = absolute_path_bytes
-        .iter()
-        .map(|&b: &u8| {
-            if b.is_ascii_alphanumeric() || unencoded_bytes.contains(&b) {
-                (b as char).to_string()
-            } else {
-                format!("%{b:02x}")
-            }
-        })
-        .collect();
+    static HOSTNAME: LazyLock<OsString> = LazyLock::new(|| hostname::get().unwrap_or_default());
 
     // OSC 8 hyperlink format: \x1b]8;;URL\x1b\\TEXT\x1b]8;;\x1b\\
     // \x1b = ESC, \x1b\\ = ESC backslash
-    let mut ret: OsString = format!("\x1b]8;;file://{hostname}{full_encoded_path}\x1b\\").into();
+    // FIXME: switch to constants once OsStr::new() is const-stable and over our MSRV.
+    let osc_8_head = OsStr::new("\x1b]8;;file://");
+    let osc_8_tail = OsStr::new("\x1b]8;;\x1b\\");
+    let esc_bl = OsStr::new("\x1b\\");
+
+    let absolute_path = fs::canonicalize(path.path()).unwrap_or_default();
+    let mut ret = OsString::with_capacity(
+        osc_8_head.len()
+            + osc_8_tail.len()
+            + HOSTNAME.len()
+            + esc_bl.len()
+            + absolute_path.as_os_str().len(),
+    );
+    ret.push(osc_8_head);
+    ret.push(HOSTNAME.as_os_str());
+
+    // a set of safe ASCII bytes that don't need encoding
+    #[cfg(not(target_os = "windows"))]
+    let unencoded = |c| matches!(c, '_' | '-' | '.' | '~' | '/');
+    #[cfg(target_os = "windows")]
+    let unencoded = |c| matches!(c, '_' | '-' | '.' | '~' | '/' | '\\' | ':');
+
+    for &b in absolute_path.as_os_str().as_encoded_bytes() {
+        if b.is_ascii_alphanumeric() || unencoded(b as char) {
+            let _ = ret.write_char(b as char);
+        } else {
+            let _ = write!(ret, "%{b:02x}");
+        }
+    }
+
+    ret.push(esc_bl);
     ret.push(name);
-    ret.push("\x1b]8;;\x1b\\");
+    ret.push(osc_8_tail);
 
     ret
 }
