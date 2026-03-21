@@ -707,7 +707,7 @@ impl std::os::unix::fs::MetadataExt for Metadata {
     fn atime_nsec(&self) -> i64 {
         #[cfg(target_os = "netbsd")]
         {
-            self.stat.st_atimensec as i64
+            self.stat.st_atimensec
         }
 
         #[cfg(not(target_os = "netbsd"))]
@@ -737,7 +737,7 @@ impl std::os::unix::fs::MetadataExt for Metadata {
     fn mtime_nsec(&self) -> i64 {
         #[cfg(target_os = "netbsd")]
         {
-            self.stat.st_mtimensec as i64
+            self.stat.st_mtimensec
         }
 
         #[cfg(not(target_os = "netbsd"))]
@@ -767,7 +767,7 @@ impl std::os::unix::fs::MetadataExt for Metadata {
     fn ctime_nsec(&self) -> i64 {
         #[cfg(target_os = "netbsd")]
         {
-            self.stat.st_ctimensec as i64
+            self.stat.st_ctimensec
         }
 
         #[cfg(not(target_os = "netbsd"))]

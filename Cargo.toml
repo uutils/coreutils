@@ -31,7 +31,14 @@ expensive_tests = []
 # "test_risky_names" == enable tests that create problematic file names (would make a network share inaccessible to Windows, breaks SVN on Mac OS, etc.)
 test_risky_names = []
 # * only build `uudoc` when `--feature uudoc` is activated
-uudoc = ["dep:clap_complete", "dep:clap_mangen", "dep:fluent-syntax", "dep:zip"]
+uudoc = [
+  "dep:clap_complete",
+  "dep:clap_mangen",
+  "dep:fluent-syntax",
+  "dep:jiff",
+  "dep:regex",
+  "dep:zip",
+]
 ## features
 ## Optional feature for stdbuf
 # "feat_external_libstdbuf" == use an external libstdbuf.so for stdbuf instead of embedding it
@@ -389,12 +396,12 @@ gcd = "2.3"
 glob = "0.3.1"
 half = "2.4.1"
 hostname = "0.4"
-icu_calendar = "2.0.0"
-icu_collator = "2.0.0"
-icu_datetime = "2.0.0"
-icu_decimal = "2.0.0"
-icu_locale = "2.0.0"
-icu_provider = "2.0.0"
+icu_calendar = { version = "2.0.0", default-features = false }
+icu_collator = { version = "2.0.0", default-features = false }
+icu_datetime = { version = "2.0.0", default-features = false }
+icu_decimal = { version = "2.0.0", default-features = false }
+icu_locale = { version = "2.0.0", default-features = false }
+icu_provider = { version = "2.0.0", default-features = false }
 indicatif = "0.18.0"
 itertools = "0.14.0"
 itoa = "1.0.15"
@@ -454,7 +461,7 @@ sha3 = "0.10.8"
 blake2b_simd = "1.0.2"
 blake3 = "1.5.1"
 sm3 = "0.4.2"
-crc-fast = "1.5.0"
+crc-fast = { version = "1.5.0", default-features = false }
 digest = "0.10.7"
 
 # Fluent dependencies
@@ -471,12 +478,14 @@ uu_checksum_common = { version = "0.7.0", path = "src/uu/checksum_common" }
 uutests = { version = "0.7.0", package = "uutests", path = "tests/uutests" }
 
 [dependencies]
+clap.workspace = true
 clap_complete = { workspace = true, optional = true }
 clap_mangen = { workspace = true, optional = true }
-clap.workspace = true
 fluent-syntax = { workspace = true, optional = true }
 itertools.workspace = true
+jiff = { workspace = true, optional = true }
 phf.workspace = true
+regex = { workspace = true, optional = true }
 selinux = { workspace = true, optional = true }
 textwrap.workspace = true
 uucore.workspace = true
