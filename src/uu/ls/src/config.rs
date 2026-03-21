@@ -697,17 +697,9 @@ impl Config {
         let hyperlink = extract_hyperlink(options);
 
         let opt_block_size = options.get_one::<String>(options::size::BLOCK_SIZE);
-        let opt_si = opt_block_size.is_some()
-            && options
-                .get_one::<String>(options::size::BLOCK_SIZE)
-                .unwrap()
-                .eq("si")
+        let opt_si = opt_block_size.is_some_and(|x| x == options::size::SI)
             || options.get_flag(options::size::SI);
-        let opt_hr = (opt_block_size.is_some()
-            && options
-                .get_one::<String>(options::size::BLOCK_SIZE)
-                .unwrap()
-                .eq("human-readable"))
+        let opt_hr = opt_block_size.is_some_and(|x| x == options::size::HUMAN_READABLE)
             || options.get_flag(options::size::HUMAN_READABLE);
         let opt_kb = options.get_flag(options::size::KIBIBYTES);
 
