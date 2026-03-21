@@ -1128,7 +1128,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
 
 fn sort_entries(entries: &mut [PathData], config: &Config) {
     match config.sort {
-        Sort::Time => entries.sort_by_key(|k| {
+        Sort::Time => entries.sort_unstable_by_key(|k| {
             Reverse(
                 k.metadata()
                     .and_then(|md| metadata_get_time(md, config.time))
@@ -1136,24 +1136,24 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
             )
         }),
         Sort::Size => {
-            entries.sort_by_key(|k| Reverse(k.metadata().map_or(0, Metadata::len)));
+            entries.sort_unstable_by_key(|k| Reverse(k.metadata().map_or(0, Metadata::len)));
         }
         // The default sort in GNU ls is case insensitive
-        Sort::Name => entries.sort_by(|a, b| a.display_name().cmp(b.display_name())),
-        Sort::Version => entries.sort_by(|a, b| {
+        Sort::Name => entries.sort_unstable_by(|a, b| a.display_name().cmp(b.display_name())),
+        Sort::Version => entries.sort_unstable_by(|a, b| {
             version_cmp(
                 os_str_as_bytes_lossy(a.path().as_os_str()).as_ref(),
                 os_str_as_bytes_lossy(b.path().as_os_str()).as_ref(),
             )
-            .then(a.path().to_string_lossy().cmp(&b.path().to_string_lossy()))
+            .then(a.path().cmp(b.path()))
         }),
-        Sort::Extension => entries.sort_by(|a, b| {
+        Sort::Extension => entries.sort_unstable_by(|a, b| {
             a.path()
                 .extension()
                 .cmp(&b.path().extension())
                 .then(a.path().file_stem().cmp(&b.path().file_stem()))
         }),
-        Sort::Width => entries.sort_by(|a, b| {
+        Sort::Width => entries.sort_unstable_by(|a, b| {
             a.display_name()
                 .len()
                 .cmp(&b.display_name().len())
@@ -1167,7 +1167,7 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
     }
 
     if config.group_directories_first && config.sort != Sort::None {
-        entries.sort_by_key(|p| {
+        entries.sort_unstable_by_key(|p| {
             let ft = {
                 // We will always try to deref symlinks to group directories, so PathData.md
                 // is not always useful.
