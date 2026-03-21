@@ -77,7 +77,7 @@ fn main() {
         match util {
             "--list" => {
                 // If --help is also present, show usage instead of list
-                if args.any(|arg| arg == "--help" || arg == "-h") {
+                if args.any(|arg| arg == "--help") {
                     usage(&utils, binary_as_util);
                     process::exit(0);
                 }
@@ -87,7 +87,7 @@ fn main() {
                 }
                 process::exit(0);
             }
-            "--version" | "-V" => {
+            "--version" => {
                 println!("{binary_as_util} {VERSION} (multi-call binary)");
                 process::exit(0);
             }
@@ -106,7 +106,7 @@ fn main() {
                 process::exit(uumain(vec![util_os].into_iter().chain(args)));
             }
             None => {
-                if util == "--help" || util == "-h" {
+                if util == "--help" {
                     // see if they want help on a specific util
                     if let Some(util_os) = args.next() {
                         let Some(util) = util_os.to_str() else {
