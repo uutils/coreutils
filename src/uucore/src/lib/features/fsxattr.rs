@@ -6,11 +6,9 @@
 // spell-checker:ignore getxattr posix_acl_default
 
 //! Set of functions to manage xattr on files and dirs
-use itertools::Itertools;
-use rustc_hash::FxHashMap;
-use std::ffi::{OsStr, OsString};
+use rustc_hash::{FxHashMap, FxHashSet};
+use std::ffi::OsString;
 #[cfg(unix)]
-use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 
 /// Copies extended attributes (xattrs) from one file or directory to another.
@@ -56,12 +54,25 @@ pub fn copy_xattrs_skip_selinux<P: AsRef<Path>>(source: P, dest: P) -> std::io::
 /// A result containing a HashMap of attributes names and values, or an error.
 pub fn retrieve_xattrs<P: AsRef<Path>>(source: P) -> std::io::Result<FxHashMap<OsString, Vec<u8>>> {
     let mut attrs = FxHashMap::default();
-    for attr_name in xattr::list(&source)? {
+    for attr_name in retrieve_xattr_list(&source)? {
         if let Some(value) = xattr::get(&source, &attr_name)? {
             attrs.insert(attr_name, value);
         }
     }
     Ok(attrs)
+}
+
+/// Retrieves the extended attributes keys only of a given file or directory.
+///
+/// # Arguments
+///
+/// * `source` - A reference to the path of the file or directory.
+///
+/// # Returns
+///
+/// A result containing a HashSet of attributes names
+pub fn retrieve_xattr_list<P: AsRef<Path>>(source: P) -> std::io::Result<FxHashSet<OsString>> {
+    Ok(xattr::list(&source)?.collect())
 }
 
 /// Applies extended attributes (xattrs) to a given file or directory.
@@ -112,13 +123,10 @@ pub fn has_acl<P: AsRef<Path>>(file: P) -> bool {
 /// `true` if the file has an extended attribute named "security.capability", `false` otherwise.
 pub fn has_security_cap_acl<P: AsRef<Path>>(file: P) -> bool {
     // don't use exacl here, it is doing more getxattr call then needed
-    xattr::list_deref(file).is_ok_and(|mut acl| {
-        #[cfg(unix)]
-        return acl.contains(OsStr::from_bytes(b"security.capability"));
-
-        #[cfg(not(unix))]
-        return false;
-    })
+    xattr::get_deref(file, "security.capability")
+        .ok()
+        .flatten()
+        .is_some()
 }
 
 /// Returns the permissions bits of a file or directory which has Access Control List (ACL) entries based on its
@@ -137,38 +145,39 @@ pub fn get_acl_perm_bits_from_xattr<P: AsRef<Path>>(source: P) -> u32 {
 
     // Only default acl entries get inherited by objects under the path i.e. if child directories
     // will have their permissions modified.
-    if let Ok(entries) = retrieve_xattrs(source) {
-        let mut perm: u32 = 0;
-        if let Some(value) = entries.get(&OsString::from("system.posix_acl_default")) {
-            // value is xattr byte vector
-            // value follows a starts with a 4 byte header, and then has posix_acl_entries, each
-            // posix_acl_entry is separated by a u32 sequence i.e. 0xFFFFFFFF
-            //
-            // struct posix_acl_entries {
-            // e_tag: u16
-            //  e_perm: u16
-            //  e_id: u32
-            // }
-            //
-            // Reference: `https://github.com/torvalds/linux/blob/master/include/uapi/linux/posix_acl_xattr.h`
-            //
-            // The value of the header is 0x0002, so we skip the first four bytes of the value and
-            // process the rest
+    let mut perm: u32 = 0;
+    if let Some(value) = xattr::get(source, "system.posix_acl_default")
+        .ok()
+        .flatten()
+    {
+        // value is xattr byte vector
+        // value follows a starts with a 4 byte header, and then has posix_acl_entries, each
+        // posix_acl_entry is separated by a u32 sequence i.e. 0xFFFFFFFF
+        //
+        // struct posix_acl_entries {
+        // e_tag: u16
+        //  e_perm: u16
+        //  e_id: u32
+        // }
+        //
+        // Reference: `https://github.com/torvalds/linux/blob/master/include/uapi/linux/posix_acl_xattr.h`
+        //
+        // The value of the header is 0x0002, so we skip the first four bytes of the value and
+        // process the rest
 
-            let acl_entries = value
-                .split_at(3)
-                .1
-                .iter()
-                .filter(|&x| *x != 255)
-                .copied()
-                .collect::<Vec<u8>>();
+        let acl_entries = value
+            .split_at(3)
+            .1
+            .iter()
+            .filter(|&x| *x != 255)
+            .copied()
+            .collect::<Vec<u8>>();
 
-            for entry in acl_entries.chunks_exact(4) {
-                // Third byte and fourth byte will be the perm bits
-                perm = (perm << 3) | u32::from(entry[2]) | u32::from(entry[3]);
-            }
-            return perm;
+        for entry in acl_entries.chunks_exact(4) {
+            // Third byte and fourth byte will be the perm bits
+            perm = (perm << 3) | u32::from(entry[2]) | u32::from(entry[3]);
         }
+        return perm;
     }
     0
 }

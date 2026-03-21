@@ -9,12 +9,13 @@
 #[cfg(unix)]
 use rustc_hash::FxHashMap;
 use rustc_hash::FxHashSet;
-use std::borrow::Cow;
-use std::cell::RefCell;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
+#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+use std::sync::Once;
+use std::{borrow::Cow, cell::RefCell};
 use std::{
     cell::{LazyCell, OnceCell},
     cmp::Reverse,
@@ -42,7 +43,7 @@ use thiserror::Error;
 #[cfg(unix)]
 use uucore::entries;
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-use uucore::fsxattr::has_acl;
+use uucore::fsxattr::retrieve_xattr_list;
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 #[cfg(any(
@@ -63,14 +64,13 @@ use uucore::{
     error::{UError, UResult, set_exit_code},
     format::human::{SizeFormat, human_readable},
     format_usage,
-    fs::FileInformation,
-    fs::display_permissions,
+    fs::{FileInformation, display_permissions},
     fsext::{MetadataTimeField, metadata_get_time},
     line_ending::LineEnding,
     os_str_as_bytes_lossy,
-    parser::parse_glob,
-    parser::parse_size::parse_size_non_zero_u64,
-    parser::shortcut_value_parser::ShortcutValueParser,
+    parser::{
+        parse_glob, parse_size::parse_size_non_zero_u64, shortcut_value_parser::ShortcutValueParser,
+    },
     quoting_style::{QuotingStyle, locale_aware_escape_dir_name, locale_aware_escape_name},
     show, show_error, show_warning,
     time::{FormatSystemTimeFallback, format, format_system_time},
@@ -1939,6 +1939,10 @@ struct PathData {
     p_buf: PathBuf,
     must_dereference: bool,
     command_line: bool,
+    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+    has_acl: OnceCell<bool>,
+    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+    has_security_cap: OnceCell<bool>,
 }
 
 impl PathData {
@@ -2011,6 +2015,10 @@ impl PathData {
             p_buf,
             must_dereference,
             command_line,
+            #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+            has_acl: OnceCell::new(),
+            #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+            has_security_cap: OnceCell::new(),
         }
     }
 
@@ -2049,6 +2057,43 @@ impl PathData {
                 }
             })
             .as_ref()
+    }
+
+    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+    pub fn has_acl(&self) -> bool {
+        self.init_xattrs_once();
+
+        self.has_acl.get().is_some_and(|inner| *inner)
+    }
+
+    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+    pub fn has_security_cap(&self) -> bool {
+        self.init_xattrs_once();
+
+        self.has_security_cap.get().is_some_and(|inner| *inner)
+    }
+
+    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+    pub fn init_xattrs_once(&self) {
+        static START: Once = Once::new();
+
+        START.call_once(|| {
+            let _ = retrieve_xattr_list(self.path()).map(|inner| {
+                self.has_security_cap.get_or_init(|| {
+                    let cap_key = OsStr::new("security.capability");
+
+                    !self.file_type().is_some_and(FileType::is_symlink) && inner.contains(cap_key)
+                });
+
+                self.has_acl.get_or_init(|| {
+                    !self.file_type().is_some_and(FileType::is_symlink)
+                        && inner
+                            .iter()
+                            .filter_map(|key| key.to_str().map(str::to_lowercase))
+                            .any(|xattr| xattr.contains("acl"))
+                });
+            });
+        });
     }
 
     fn file_type(&self) -> Option<&FileType> {
@@ -3018,7 +3063,7 @@ fn display_item_long(
         // TODO: See how Mac should work here
         let is_acl_set = false;
         #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-        let is_acl_set = has_acl(item.path());
+        let is_acl_set = item.has_acl();
         output_display.extend(display_permissions(md, true).as_bytes());
         if item.security_context(config).len() > 1 {
             // GNU `ls` uses a "." character to indicate a file with a security context,
@@ -3737,7 +3782,7 @@ fn calculate_padding_collection(
                 // TODO: See how Mac should work here
                 let is_acl_set = false;
                 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-                let is_acl_set = has_acl(item.display_name());
+                let is_acl_set = item.has_acl();
                 if context_len > 1 || is_acl_set {
                     padding_collections.link_count += 1;
                 }
