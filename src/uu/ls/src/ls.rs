@@ -784,45 +784,54 @@ pub fn uu_app() -> Command {
     .after_help(translate!("ls-after-help"))
 }
 
+#[derive(Debug)]
+enum PathDataDisplayName<'a> {
+    SelfReferential,
+    Moo(Cow<'a, OsStr>),
+}
+
 /// Represents a Path along with it's associated data.
 /// Any data that will be reused several times makes sense to be added to this structure.
 /// Caching data here helps eliminate redundant syscalls to fetch same information.
 #[derive(Debug)]
-struct PathData {
+struct PathData<'a> {
     // Result<MetaData> got from symlink_metadata() or metadata() based on config
     md: OnceCell<Option<Metadata>>,
     ft: OnceCell<Option<FileType>>,
     // can be used to avoid reading the filetype. Can be also called d_type:
     // https://www.gnu.org/software/libc/manual/html_node/Directory-Entries.html
-    de: RefCell<Option<Box<DirEntry>>>,
+    de: RefCell<Option<DirEntry>>,
     security_context: OnceCell<Box<str>>,
     // Name of the file - will be empty for . or ..
-    display_name: OsString,
+    display_name: PathDataDisplayName<'a>,
     // PathBuf that all above data corresponds to
-    p_buf: PathBuf,
+    p_buf: Cow<'a, Path>,
     must_dereference: bool,
     command_line: bool,
 }
 
-impl PathData {
+impl<'a> PathData<'a> {
     fn new(
-        p_buf: PathBuf,
+        p_buf: Cow<'a, Path>,
         dir_entry: Option<DirEntry>,
-        file_name: Option<OsString>,
+        file_name: Option<Cow<'a, OsStr>>,
         config: &Config,
         command_line: bool,
     ) -> Self {
         // We cannot use `Path::ends_with` or `Path::Components`, because they remove occurrences of '.'
         // For '..', the filename is None
         let display_name = if let Some(name) = file_name {
-            name
+            PathDataDisplayName::Moo(name)
         } else if command_line {
-            p_buf.as_os_str().to_os_string()
+            PathDataDisplayName::SelfReferential
         } else {
-            dir_entry
-                .as_ref()
-                .map(DirEntry::file_name)
-                .unwrap_or_default()
+            PathDataDisplayName::Moo(
+                dir_entry
+                    .as_ref()
+                    .map(DirEntry::file_name)
+                    .unwrap_or_default()
+                    .into(),
+            )
         };
 
         let must_dereference = match &config.dereference {
@@ -848,7 +857,7 @@ impl PathData {
         let md: OnceCell<Option<Metadata>> = OnceCell::new();
         let security_context: OnceCell<Box<str>> = OnceCell::new();
 
-        let de: RefCell<Option<Box<DirEntry>>> = if let Some(de) = dir_entry {
+        let de: RefCell<Option<DirEntry>> = if let Some(de) = dir_entry {
             if must_dereference {
                 if let Ok(md_pb) = p_buf.metadata() {
                     md.get_or_init(|| Some(md_pb.clone()));
@@ -860,7 +869,7 @@ impl PathData {
                 ft.get_or_init(|| Some(ft_de));
             }
 
-            RefCell::new(Some(de.into()))
+            RefCell::new(Some(de))
         } else {
             RefCell::new(None)
         };
@@ -881,7 +890,7 @@ impl PathData {
         self.md
             .get_or_init(|| {
                 if !self.must_dereference {
-                    if let Some(dir_entry) = RefCell::take(&self.de).as_deref() {
+                    if let Some(dir_entry) = RefCell::take(&self.de) {
                         return dir_entry.metadata().ok();
                     }
                 }
@@ -941,11 +950,14 @@ impl PathData {
     }
 
     fn display_name(&self) -> &OsStr {
-        &self.display_name
+        match self.display_name {
+            PathDataDisplayName::SelfReferential => self.p_buf.as_os_str(),
+            PathDataDisplayName::Moo(ref cow) => cow,
+        }
     }
 }
 
-impl Colorable for PathData {
+impl Colorable for PathData<'_> {
     fn file_name(&self) -> OsString {
         self.display_name().to_os_string()
     }
@@ -1006,7 +1018,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     };
 
     for loc in locs {
-        let path_data = PathData::new(PathBuf::from(loc), None, None, config, true);
+        let path_data = PathData::new(loc.into(), None, None, config, true);
 
         // Getting metadata here is no big deal as it's just the CWD
         // and we really just want to know if the strings exist as files/dirs
@@ -1169,7 +1181,7 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
             !match ft {
                 None => {
                     // If it metadata cannot be determined, treat as a file.
-                    get_metadata_with_deref_opt(p.p_buf.as_path(), true)
+                    get_metadata_with_deref_opt(&p.p_buf, true)
                         .map_or_else(|_| false, |m| m.is_dir())
                 }
                 Some(ft) => ft.is_dir(),
@@ -1186,7 +1198,7 @@ fn depth_first_list(
     dired: &mut DiredOutput,
     is_top_level: bool,
 ) -> UResult<()> {
-    let path_data = PathData::new(dir_path, None, None, config, false);
+    let path_data = PathData::new(dir_path.as_path().into(), None, None, config, false);
 
     // Print dir heading - name... 'total' comes after error display
     if state.initial_locs_len > 1 || config.recursive {
@@ -1228,16 +1240,16 @@ fn depth_first_list(
         const DOT_DIRECTORIES: usize = 2;
         let v = vec![
             PathData::new(
-                path_data.path().to_path_buf(),
+                path_data.path().into(),
                 None,
-                Some(".".into()),
+                Some(OsStr::new(".").into()),
                 config,
                 false,
             ),
             PathData::new(
-                path_data.path().join(".."),
+                path_data.path().join("..").into(),
                 None,
-                Some("..".into()),
+                Some(OsStr::new("..").into()),
                 config,
                 false,
             ),
@@ -1253,7 +1265,7 @@ fn depth_first_list(
             Ok(dir_entry) => {
                 if should_display(&dir_entry, config) {
                     buf.push(PathData::new(
-                        dir_entry.path(),
+                        dir_entry.path().into(),
                         Some(dir_entry),
                         None,
                         config,
