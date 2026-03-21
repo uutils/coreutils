@@ -295,7 +295,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
     let mut all_successful = true;
     for srcpath in files {
         let targetpath = if settings.no_dereference && target_dir.is_symlink() {
-            let remove_target = || -> UResult<()> {
+            let remove_target = || {
                 // In that case, we don't want to do link resolution
                 // We need to clean the target
                 if target_dir.is_file() {
@@ -318,7 +318,6 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
                         );
                     }
                 }
-                Ok(())
             };
             match settings.overwrite {
                 OverwriteMode::NoClobber => {}
@@ -327,11 +326,11 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
                         "{}",
                         translate!("ln-prompt-replace", "file" => target_dir.quote())
                     ) {
-                        remove_target()?;
+                        remove_target();
                     }
                 }
                 OverwriteMode::Force => {
-                    remove_target()?;
+                    remove_target();
                 }
             }
             target_dir.to_path_buf()
@@ -415,7 +414,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
                     return Err(LnError::SomeLinksFailed.into());
                 }
 
-                if fs::remove_file(dst).is_ok() {}
+                let _ = fs::remove_file(dst);
                 // In case of error, don't do anything
             }
             OverwriteMode::Force => {
@@ -432,14 +431,14 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
                         return Err(LnError::SameFile(src.to_owned(), dst.to_owned()).into());
                     }
                 }
-                if fs::remove_file(dst).is_ok() {}
+                let _ = fs::remove_file(dst);
                 // In case of error, don't do anything
             }
         }
     }
 
-    if settings.symbolic {
-        symlink(&source, dst)?;
+    let res = if settings.symbolic {
+        symlink(&source, dst).map_err(Into::into)
     } else {
         let p = if settings.logical && source.is_symlink() {
             fs::canonicalize(&source)
@@ -447,14 +446,23 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
         } else {
             source.to_path_buf()
         };
-        if let Err(e) = fs::hard_link(&p, dst) {
-            if p.is_dir() {
-                return Err(LnError::FailedToCreateHardLinkDir(source.to_path_buf()).into());
+        match fs::hard_link(&p, dst) {
+            Ok(()) => Ok(()),
+            Err(_) if p.is_dir() => {
+                Err(LnError::FailedToCreateHardLinkDir(source.to_path_buf()).into())
             }
-            return Err(e).map_err_context(|| {
+            Err(e) => Err(e).map_err_context(|| {
                 translate!("ln-failed-to-create-hard-link", "source" => source.quote(), "dest" => dst.quote())
-            });
+            }),
         }
+    };
+
+    if let Err(e) = res {
+        if let Some(ref p) = backup_path {
+            fs::rename(p, dst)
+                .map_err_context(|| translate!("ln-cannot-backup", "file" => dst.quote()))?;
+        }
+        return Err(e);
     }
 
     if settings.verbose {
