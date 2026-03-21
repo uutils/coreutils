@@ -10,10 +10,9 @@ use rstest_reuse::{apply, template};
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
+use uutests::util::UCommand;
 use uutests::util::log_info;
 use uutests::util_name;
-
-const SHA_LENGTHS: [u32; 4] = [224, 256, 384, 512];
 
 #[template]
 #[rstest]
@@ -30,6 +29,18 @@ const SHA_LENGTHS: [u32; 4] = [224, 256, 384, 512];
 #[case::blake3("blake3")]
 #[case::sm3("sm3")]
 fn test_all_algos(#[case] algo: &str) {}
+
+#[template]
+#[rstest]
+fn test_sha(#[values("sha2", "sha3")] algo: &str, #[values(224, 256, 384, 512)] len: u32) {}
+
+fn sha_fixture_name(algo: &str, len: u32, prefix: &str, suffix: &str) -> String {
+    // assume algo is always "sha2" or "sha3"
+    match algo {
+        "sha2" => format!("{prefix}sha{len}{suffix}"),
+        _ => format!("{prefix}sha3_{len}{suffix}"),
+    }
+}
 
 #[test]
 fn test_invalid_arg() {
@@ -375,131 +386,126 @@ fn test_sha_missing_length() {
     }
 }
 
-#[test]
-fn test_sha2_single_file() {
-    for l in SHA_LENGTHS {
-        new_ucmd!()
-            .arg("--algorithm=sha2")
-            .arg(format!("--length={l}"))
-            .arg("lorem_ipsum.txt")
-            .succeeds()
-            .stdout_is_fixture(format!("sha{l}_single_file.expected"));
-    }
+fn sha_cmd(algo: &str, len: u32) -> UCommand {
+    let mut ucmd = new_ucmd!();
+    ucmd.arg(format!("--algorithm={algo}"))
+        .arg(format!("--length={len}"));
+    ucmd
 }
 
-#[test]
-fn test_sha2_multiple_files() {
-    for l in SHA_LENGTHS {
-        new_ucmd!()
-            .arg("--algorithm=sha2")
-            .arg(format!("--length={l}"))
-            .arg("lorem_ipsum.txt")
-            .arg("alice_in_wonderland.txt")
-            .succeeds()
-            .stdout_is_fixture(format!("sha{l}_multiple_files.expected"));
-    }
+#[apply(test_sha)]
+fn test_sha_single_file(algo: &str, len: u32) {
+    sha_cmd(algo, len)
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is_fixture(sha_fixture_name(algo, len, "", "_single_file.expected"));
 }
 
-#[test]
-fn test_sha2_stdin() {
-    for l in SHA_LENGTHS {
-        new_ucmd!()
-            .arg("--algorithm=sha2")
-            .arg(format!("--length={l}"))
-            .pipe_in_fixture("lorem_ipsum.txt")
-            .succeeds()
-            .stdout_is_fixture(format!("sha{l}_stdin.expected"));
-    }
+#[apply(test_sha)]
+fn test_sha_multiple_files(algo: &str, len: u32) {
+    sha_cmd(algo, len)
+        .arg("lorem_ipsum.txt")
+        .arg("alice_in_wonderland.txt")
+        .succeeds()
+        .stdout_is_fixture(sha_fixture_name(algo, len, "", "_multiple_files.expected"));
 }
 
-#[test]
-fn test_untagged_sha2_single_file() {
-    for l in SHA_LENGTHS {
-        new_ucmd!()
-            .arg("--untagged")
-            .arg("--algorithm=sha2")
-            .arg(format!("--length={l}"))
-            .arg("lorem_ipsum.txt")
-            .succeeds()
-            .stdout_is_fixture(format!("untagged/sha{l}_single_file.expected"));
-    }
+#[apply(test_sha)]
+fn test_sha_stdin(algo: &str, len: u32) {
+    sha_cmd(algo, len)
+        .pipe_in_fixture("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is_fixture(sha_fixture_name(algo, len, "", "_stdin.expected"));
 }
 
-#[test]
-fn test_untagged_sha2_multiple_files() {
-    for l in SHA_LENGTHS {
-        new_ucmd!()
-            .arg("--untagged")
-            .arg("--algorithm=sha2")
-            .arg(format!("--length={l}"))
-            .arg("lorem_ipsum.txt")
-            .arg("alice_in_wonderland.txt")
-            .succeeds()
-            .stdout_is_fixture(format!("untagged/sha{l}_multiple_files.expected"));
-    }
+#[apply(test_sha)]
+fn test_untagged_sha_single_file(algo: &str, len: u32) {
+    sha_cmd(algo, len)
+        .arg("--untagged")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is_fixture(sha_fixture_name(
+            algo,
+            len,
+            "untagged/",
+            "_single_file.expected",
+        ));
 }
 
-#[test]
-fn test_untagged_sha2_stdin() {
-    for l in SHA_LENGTHS {
-        new_ucmd!()
-            .arg("--untagged")
-            .arg("--algorithm=sha2")
-            .arg(format!("--length={l}"))
-            .pipe_in_fixture("lorem_ipsum.txt")
-            .succeeds()
-            .stdout_is_fixture(format!("untagged/sha{l}_stdin.expected"));
-    }
+#[apply(test_sha)]
+fn test_untagged_sha_multiple_files(algo: &str, len: u32) {
+    sha_cmd(algo, len)
+        .arg("--untagged")
+        .arg("lorem_ipsum.txt")
+        .arg("alice_in_wonderland.txt")
+        .succeeds()
+        .stdout_is_fixture(sha_fixture_name(
+            algo,
+            len,
+            "untagged/",
+            "_multiple_files.expected",
+        ));
 }
 
-#[test]
-fn test_check_tagged_sha2_single_file() {
-    for l in SHA_LENGTHS {
-        new_ucmd!()
-            .arg("--check")
-            .arg(format!("sha{l}_single_file.expected"))
-            .succeeds()
-            .stdout_is("lorem_ipsum.txt: OK\n");
-    }
+#[apply(test_sha)]
+fn test_untagged_sha_stdin(algo: &str, len: u32) {
+    sha_cmd(algo, len)
+        .arg("--untagged")
+        .pipe_in_fixture("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is_fixture(sha_fixture_name(algo, len, "untagged/", "_stdin.expected"));
 }
 
-#[test]
-fn test_check_tagged_sha2_multiple_files() {
-    for l in SHA_LENGTHS {
-        new_ucmd!()
-            .arg("--check")
-            .arg(format!("sha{l}_multiple_files.expected"))
-            .succeeds()
-            .stdout_contains("lorem_ipsum.txt: OK\n")
-            .stdout_contains("alice_in_wonderland.txt: OK\n");
-    }
+#[apply(test_sha)]
+fn test_check_tagged_sha_single_file(algo: &str, len: u32) {
+    new_ucmd!()
+        .arg("--check")
+        .arg(sha_fixture_name(algo, len, "", "_single_file.expected"))
+        .succeeds()
+        .stdout_is("lorem_ipsum.txt: OK\n");
 }
 
-// When checking sha2 in untagged mode, the length is automatically deduced
-// from the length of the digest.
-#[test]
-fn test_check_untagged_sha2_single_file() {
-    for l in SHA_LENGTHS {
-        new_ucmd!()
-            .arg("--check")
-            .arg("--algorithm=sha2")
-            .arg(format!("untagged/sha{l}_single_file.expected"))
-            .succeeds()
-            .stdout_is("lorem_ipsum.txt: OK\n");
-    }
+#[apply(test_sha)]
+fn test_check_tagged_sha_multiple_files(algo: &str, len: u32) {
+    new_ucmd!()
+        .arg("--check")
+        .arg(sha_fixture_name(algo, len, "", "_multiple_files.expected"))
+        .succeeds()
+        .stdout_contains("lorem_ipsum.txt: OK\n")
+        .stdout_contains("alice_in_wonderland.txt: OK\n");
 }
 
-#[test]
-fn test_check_untagged_sha2_multiple_files() {
-    for l in SHA_LENGTHS {
-        new_ucmd!()
-            .arg("--check")
-            .arg("--algorithm=sha2")
-            .arg(format!("untagged/sha{l}_multiple_files.expected"))
-            .succeeds()
-            .stdout_contains("lorem_ipsum.txt: OK\n")
-            .stdout_contains("alice_in_wonderland.txt: OK\n");
-    }
+// When checking sha2/sha3 in untagged mode, the length is automatically
+// deduced from the length of the digest.
+#[apply(test_sha)]
+fn test_check_untagged_sha_single_file(algo: &str, len: u32) {
+    new_ucmd!()
+        .arg("--check")
+        .arg(format!("--algorithm={algo}"))
+        .arg(sha_fixture_name(
+            algo,
+            len,
+            "untagged/",
+            "_single_file.expected",
+        ))
+        .succeeds()
+        .stdout_is("lorem_ipsum.txt: OK\n");
+}
+
+#[apply(test_sha)]
+fn test_check_untagged_sha_multiple_files(algo: &str, len: u32) {
+    new_ucmd!()
+        .arg("--check")
+        .arg(format!("--algorithm={algo}"))
+        .arg(sha_fixture_name(
+            algo,
+            len,
+            "untagged/",
+            "_multiple_files.expected",
+        ))
+        .succeeds()
+        .stdout_contains("lorem_ipsum.txt: OK\n")
+        .stdout_contains("alice_in_wonderland.txt: OK\n");
 }
 
 #[test]
@@ -553,133 +559,6 @@ fn test_check_sha2_tagged_variant() {
             .pipe_in(stdin)
             .succeeds()
             .stdout_is("f: OK\n");
-    }
-}
-
-#[test]
-fn test_sha3_single_file() {
-    for l in SHA_LENGTHS {
-        new_ucmd!()
-            .arg("--algorithm=sha3")
-            .arg(format!("--length={l}"))
-            .arg("lorem_ipsum.txt")
-            .succeeds()
-            .stdout_is_fixture(format!("sha3_{l}_single_file.expected"));
-    }
-}
-
-#[test]
-fn test_sha3_multiple_files() {
-    for l in SHA_LENGTHS {
-        new_ucmd!()
-            .arg("--algorithm=sha3")
-            .arg(format!("--length={l}"))
-            .arg("lorem_ipsum.txt")
-            .arg("alice_in_wonderland.txt")
-            .succeeds()
-            .stdout_is_fixture(format!("sha3_{l}_multiple_files.expected"));
-    }
-}
-
-#[test]
-fn test_sha3_stdin() {
-    for l in SHA_LENGTHS {
-        new_ucmd!()
-            .arg("--algorithm=sha3")
-            .arg(format!("--length={l}"))
-            .pipe_in_fixture("lorem_ipsum.txt")
-            .succeeds()
-            .stdout_is_fixture(format!("sha3_{l}_stdin.expected"));
-    }
-}
-
-#[test]
-fn test_untagged_sha3_single_file() {
-    for l in SHA_LENGTHS {
-        new_ucmd!()
-            .arg("--untagged")
-            .arg("--algorithm=sha3")
-            .arg(format!("--length={l}"))
-            .arg("lorem_ipsum.txt")
-            .succeeds()
-            .stdout_is_fixture(format!("untagged/sha3_{l}_single_file.expected"));
-    }
-}
-
-#[test]
-fn test_untagged_sha3_multiple_files() {
-    for l in SHA_LENGTHS {
-        new_ucmd!()
-            .arg("--untagged")
-            .arg("--algorithm=sha3")
-            .arg(format!("--length={l}"))
-            .arg("lorem_ipsum.txt")
-            .arg("alice_in_wonderland.txt")
-            .succeeds()
-            .stdout_is_fixture(format!("untagged/sha3_{l}_multiple_files.expected"));
-    }
-}
-
-#[test]
-fn test_untagged_sha3_stdin() {
-    for l in SHA_LENGTHS {
-        new_ucmd!()
-            .arg("--untagged")
-            .arg("--algorithm=sha3")
-            .arg(format!("--length={l}"))
-            .pipe_in_fixture("lorem_ipsum.txt")
-            .succeeds()
-            .stdout_is_fixture(format!("untagged/sha3_{l}_stdin.expected"));
-    }
-}
-
-#[test]
-fn test_check_tagged_sha3_single_file() {
-    for l in SHA_LENGTHS {
-        new_ucmd!()
-            .arg("--check")
-            .arg(format!("sha3_{l}_single_file.expected"))
-            .succeeds()
-            .stdout_is("lorem_ipsum.txt: OK\n");
-    }
-}
-
-#[test]
-fn test_check_tagged_sha3_multiple_files() {
-    for l in SHA_LENGTHS {
-        new_ucmd!()
-            .arg("--check")
-            .arg(format!("sha3_{l}_multiple_files.expected"))
-            .succeeds()
-            .stdout_contains("lorem_ipsum.txt: OK\n")
-            .stdout_contains("alice_in_wonderland.txt: OK\n");
-    }
-}
-
-// When checking sha3 in untagged mode, the length is automatically deduced
-// from the length of the digest.
-#[test]
-fn test_check_untagged_sha3_single_file() {
-    for l in SHA_LENGTHS {
-        new_ucmd!()
-            .arg("--check")
-            .arg("--algorithm=sha3")
-            .arg(format!("untagged/sha3_{l}_single_file.expected"))
-            .succeeds()
-            .stdout_is("lorem_ipsum.txt: OK\n");
-    }
-}
-
-#[test]
-fn test_check_untagged_sha3_multiple_files() {
-    for l in SHA_LENGTHS {
-        new_ucmd!()
-            .arg("--check")
-            .arg("--algorithm=sha3")
-            .arg(format!("untagged/sha3_{l}_multiple_files.expected"))
-            .succeeds()
-            .stdout_contains("lorem_ipsum.txt: OK\n")
-            .stdout_contains("alice_in_wonderland.txt: OK\n");
     }
 }
 
