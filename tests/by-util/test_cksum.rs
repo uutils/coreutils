@@ -13,10 +13,22 @@ use uutests::util::TestScenario;
 use uutests::util::log_info;
 use uutests::util_name;
 
-const ALGOS: [&str; 11] = [
-    "sysv", "bsd", "crc", "md5", "sha1", "sha224", "sha256", "sha384", "sha512", "blake2b", "sm3",
-];
 const SHA_LENGTHS: [u32; 4] = [224, 256, 384, 512];
+
+#[template]
+#[rstest]
+#[case::sysv("sysv")]
+#[case::bsd("bsd")]
+#[case::crc("crc")]
+#[case::md5("md5")]
+#[case::sha1("sha1")]
+#[case::sha224("sha224")]
+#[case::sha256("sha256")]
+#[case::sha384("sha384")]
+#[case::sha512("sha512")]
+#[case::blake2b("blake2b")]
+#[case::sm3("sm3")]
+fn test_all_algos(#[case] algo: &str) {}
 
 #[test]
 fn test_invalid_arg() {
@@ -170,43 +182,37 @@ fn test_tag_after_untagged() {
         .stdout_is_fixture("md5_single_file.expected");
 }
 
-#[test]
-fn test_algorithm_single_file() {
-    for algo in ALGOS {
-        for option in ["-a", "--algorithm"] {
-            new_ucmd!()
-                .arg(format!("{option}={algo}"))
-                .arg("lorem_ipsum.txt")
-                .succeeds()
-                .stdout_is_fixture(format!("{algo}_single_file.expected"));
-        }
+#[apply(test_all_algos)]
+fn test_algorithm_single_file(#[case] algo: &str) {
+    for option in ["-a", "--algorithm"] {
+        new_ucmd!()
+            .arg(format!("{option}={algo}"))
+            .arg("lorem_ipsum.txt")
+            .succeeds()
+            .stdout_is_fixture(format!("{algo}_single_file.expected"));
     }
 }
 
-#[test]
-fn test_algorithm_multiple_files() {
-    for algo in ALGOS {
-        for option in ["-a", "--algorithm"] {
-            new_ucmd!()
-                .arg(format!("{option}={algo}"))
-                .arg("lorem_ipsum.txt")
-                .arg("alice_in_wonderland.txt")
-                .succeeds()
-                .stdout_is_fixture(format!("{algo}_multiple_files.expected"));
-        }
+#[apply(test_all_algos)]
+fn test_algorithm_multiple_files(#[case] algo: &str) {
+    for option in ["-a", "--algorithm"] {
+        new_ucmd!()
+            .arg(format!("{option}={algo}"))
+            .arg("lorem_ipsum.txt")
+            .arg("alice_in_wonderland.txt")
+            .succeeds()
+            .stdout_is_fixture(format!("{algo}_multiple_files.expected"));
     }
 }
 
-#[test]
-fn test_algorithm_stdin() {
-    for algo in ALGOS {
-        for option in ["-a", "--algorithm"] {
-            new_ucmd!()
-                .arg(format!("{option}={algo}"))
-                .pipe_in_fixture("lorem_ipsum.txt")
-                .succeeds()
-                .stdout_is_fixture(format!("{algo}_stdin.expected"));
-        }
+#[apply(test_all_algos)]
+fn test_algorithm_stdin(#[case] algo: &str) {
+    for option in ["-a", "--algorithm"] {
+        new_ucmd!()
+            .arg(format!("{option}={algo}"))
+            .pipe_in_fixture("lorem_ipsum.txt")
+            .succeeds()
+            .stdout_is_fixture(format!("{algo}_stdin.expected"));
     }
 }
 
@@ -238,16 +244,14 @@ fn test_untagged_stdin() {
         .stdout_is_fixture("untagged/crc_stdin.expected");
 }
 
-#[test]
-fn test_untagged_algorithm_single_file() {
-    for algo in ALGOS {
-        new_ucmd!()
-            .arg("--untagged")
-            .arg(format!("--algorithm={algo}"))
-            .arg("lorem_ipsum.txt")
-            .succeeds()
-            .stdout_is_fixture(format!("untagged/{algo}_single_file.expected"));
-    }
+#[apply(test_all_algos)]
+fn test_untagged_algorithm_single_file(#[case] algo: &str) {
+    new_ucmd!()
+        .arg("--untagged")
+        .arg(format!("--algorithm={algo}"))
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is_fixture(format!("untagged/{algo}_single_file.expected"));
 }
 
 #[test]
@@ -272,29 +276,25 @@ fn test_untagged_algorithm_after_tag() {
         .stdout_is_fixture("untagged/md5_single_file.expected");
 }
 
-#[test]
-fn test_untagged_algorithm_multiple_files() {
-    for algo in ALGOS {
-        new_ucmd!()
-            .arg("--untagged")
-            .arg(format!("--algorithm={algo}"))
-            .arg("lorem_ipsum.txt")
-            .arg("alice_in_wonderland.txt")
-            .succeeds()
-            .stdout_is_fixture(format!("untagged/{algo}_multiple_files.expected"));
-    }
+#[apply(test_all_algos)]
+fn test_untagged_algorithm_multiple_files(#[case] algo: &str) {
+    new_ucmd!()
+        .arg("--untagged")
+        .arg(format!("--algorithm={algo}"))
+        .arg("lorem_ipsum.txt")
+        .arg("alice_in_wonderland.txt")
+        .succeeds()
+        .stdout_is_fixture(format!("untagged/{algo}_multiple_files.expected"));
 }
 
-#[test]
-fn test_untagged_algorithm_stdin() {
-    for algo in ALGOS {
-        new_ucmd!()
-            .arg("--untagged")
-            .arg(format!("--algorithm={algo}"))
-            .pipe_in_fixture("lorem_ipsum.txt")
-            .succeeds()
-            .stdout_is_fixture(format!("untagged/{algo}_stdin.expected"));
-    }
+#[apply(test_all_algos)]
+fn test_untagged_algorithm_stdin(#[case] algo: &str) {
+    new_ucmd!()
+        .arg("--untagged")
+        .arg(format!("--algorithm={algo}"))
+        .pipe_in_fixture("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is_fixture(format!("untagged/{algo}_stdin.expected"));
 }
 
 #[test]
@@ -846,18 +846,17 @@ fn test_blake2b_length_invalid() {
     }
 }
 
-#[test]
-fn test_raw_single_file() {
-    for algo in ALGOS {
-        new_ucmd!()
-            .arg("--raw")
-            .arg("lorem_ipsum.txt")
-            .arg(format!("--algorithm={algo}"))
-            .succeeds()
-            .no_stderr()
-            .stdout_is_fixture_bytes(format!("raw/{algo}_single_file.expected"));
-    }
+#[apply(test_all_algos)]
+fn test_raw_single_file(#[case] algo: &str) {
+    new_ucmd!()
+        .arg("--raw")
+        .arg("lorem_ipsum.txt")
+        .arg(format!("--algorithm={algo}"))
+        .succeeds()
+        .no_stderr()
+        .stdout_is_fixture_bytes(format!("raw/{algo}_single_file.expected"));
 }
+
 #[test]
 fn test_raw_multiple_files() {
     new_ucmd!()
@@ -882,18 +881,17 @@ fn test_base64_raw_conflicts() {
         .stderr_contains("--raw");
 }
 
-#[test]
-fn test_base64_single_file() {
-    for algo in ALGOS {
-        new_ucmd!()
-            .arg("--base64")
-            .arg("lorem_ipsum.txt")
-            .arg(format!("--algorithm={algo}"))
-            .succeeds()
-            .no_stderr()
-            .stdout_is_fixture_bytes(format!("base64/{algo}_single_file.expected"));
-    }
+#[apply(test_all_algos)]
+fn test_base64_single_file(#[case] algo: &str) {
+    new_ucmd!()
+        .arg("--base64")
+        .arg("lorem_ipsum.txt")
+        .arg(format!("--algorithm={algo}"))
+        .succeeds()
+        .no_stderr()
+        .stdout_is_fixture_bytes(format!("base64/{algo}_single_file.expected"));
 }
+
 #[test]
 fn test_base64_multiple_files() {
     new_ucmd!()
@@ -919,8 +917,8 @@ fn test_fail_on_folder() {
         .stderr_contains(format!("cksum: {folder_name}: Is a directory"));
 }
 
-#[test]
-fn test_all_algorithms_fail_on_folder() {
+#[apply(test_all_algos)]
+fn test_all_algorithms_fail_on_folder(#[case] algo: &str) {
     let scene = TestScenario::new(util_name!());
 
     let at = &scene.fixtures;
@@ -928,15 +926,13 @@ fn test_all_algorithms_fail_on_folder() {
     let folder_name = "a_folder";
     at.mkdir(folder_name);
 
-    for algo in ALGOS {
-        scene
-            .ucmd()
-            .arg(format!("--algorithm={algo}"))
-            .arg(folder_name)
-            .fails()
-            .no_stdout()
-            .stderr_contains(format!("cksum: {folder_name}: Is a directory"));
-    }
+    scene
+        .ucmd()
+        .arg(format!("--algorithm={algo}"))
+        .arg(folder_name)
+        .fails()
+        .no_stdout()
+        .stderr_contains(format!("cksum: {folder_name}: Is a directory"));
 }
 
 #[cfg(unix)]
