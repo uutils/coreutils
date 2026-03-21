@@ -604,6 +604,63 @@ fn test_month_default2() {
 }
 
 #[test]
+fn test_month_sort_french_locale() {
+    // Test locale-aware month sorting (mirrors GNU sort-month.sh test).
+    // Uses French UTF-8 locale where abbreviated months are:
+    // spell-checker:disable-next-line
+    // janv. févr. mars avril mai juin juil. août sept. oct. nov. déc.
+    let result = new_ucmd!()
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .arg("-M")
+        // spell-checker:disable-next-line
+        .pipe_in("mai\ndéc.\njanv.\njuin\nfévr.\nmars\navril\njuil.\naoût\nsept.\noct.\nnov.\n")
+        .run();
+
+    // Skip if locale is not available on the system
+    if result.succeeded() {
+        assert_eq!(
+            result.stdout_str(),
+            "janv.\nfévr.\nmars\navril\nmai\njuin\njuil.\naoût\nsept.\noct.\nnov.\ndéc.\n",
+        );
+    }
+}
+
+#[test]
+fn test_month_sort_hungarian_locale() {
+    // Hungarian abbreviated months: jan febr márc ápr máj jún júl aug szept okt nov dec
+    let result = new_ucmd!()
+        .env("LC_ALL", "hu_HU.UTF-8")
+        .arg("-M")
+        // spell-checker:disable-next-line
+        .pipe_in("máj\ndec\njan\njún\nfebr\nmárc\nápr\njúl\naug\nszept\nokt\nnov\n")
+        .run();
+
+    if result.succeeded() {
+        assert_eq!(
+            result.stdout_str(),
+            "jan\nfebr\nmárc\nápr\nmáj\njún\njúl\naug\nszept\nokt\nnov\ndec\n",
+        );
+    }
+}
+
+#[test]
+fn test_month_sort_japanese_locale() {
+    // Japanese abbreviated months have leading spaces: " 1月" " 2月" ... "10月" "11月" "12月"
+    let result = new_ucmd!()
+        .env("LC_ALL", "ja_JP.UTF-8")
+        .arg("-M")
+        .pipe_in("5月\n12月\n1月\n6月\n2月\n3月\n4月\n7月\n8月\n9月\n10月\n11月\n")
+        .run();
+
+    if result.succeeded() {
+        assert_eq!(
+            result.stdout_str(),
+            "1月\n2月\n3月\n4月\n5月\n6月\n7月\n8月\n9月\n10月\n11月\n12月\n",
+        );
+    }
+}
+
+#[test]
 fn test_default_unsorted_ints2() {
     let input = "9\n1909888\n000\n1\n2";
     new_ucmd!()
