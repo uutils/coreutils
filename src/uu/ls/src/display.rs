@@ -382,7 +382,7 @@ pub fn display_items(
                 prefix_context,
                 more_info,
                 state.style_manager.as_mut(),
-                LazyCell::new(Box::new(|| 0)),
+                LazyCell::new(|| 0),
             );
 
             names_vec.push(cell.displayed);
@@ -686,7 +686,7 @@ fn display_item_name(
     prefix_context: Option<usize>,
     more_info: Option<String>,
     mut style_manager: Option<&mut StyleManager>,
-    current_column: LazyCell<usize, Box<dyn FnOnce() -> usize + '_>>,
+    current_column: LazyCell<usize, impl FnOnce() -> usize>,
 ) -> DisplayItemName {
     // This is our return value. We start by `&path.display_name` and modify it along the way.
     let mut name = escape_name_with_locale(path.display_name(), config);
@@ -986,9 +986,7 @@ fn display_item_long(
             None,
             None,
             state.style_manager.as_mut(),
-            LazyCell::new(Box::new(|| {
-                ansi_width(&String::from_utf8_lossy(&state.display_buf))
-            })),
+            LazyCell::new(|| ansi_width(&String::from_utf8_lossy(&state.display_buf))),
         );
 
         let needs_space = quoted && !os_str_starts_with(&item_display.displayed, b"'");
@@ -1097,9 +1095,7 @@ fn display_item_long(
             None,
             None,
             state.style_manager.as_mut(),
-            LazyCell::new(Box::new(|| {
-                ansi_width(&String::from_utf8_lossy(&state.display_buf))
-            })),
+            LazyCell::new(|| ansi_width(&String::from_utf8_lossy(&state.display_buf))),
         );
         let date_len = 12;
 
