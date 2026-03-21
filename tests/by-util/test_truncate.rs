@@ -254,6 +254,10 @@ fn test_invalid_numbers() {
         .args(&["-s", "0B", "file"])
         .fails()
         .stderr_contains("Invalid number: '0B'");
+    new_ucmd!()
+        .args(&["-s", "1b", "file"])
+        .fails()
+        .stderr_contains("Invalid number: '1b'");
 }
 
 #[test]

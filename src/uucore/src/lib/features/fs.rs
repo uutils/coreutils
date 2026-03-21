@@ -164,6 +164,7 @@ impl FileInformation {
         #[cfg(all(not(any(target_os = "netbsd")), target_pointer_width = "64"))]
         return self.0.st_ino;
         #[cfg(any(target_os = "netbsd", not(target_pointer_width = "64")))]
+        #[allow(clippy::useless_conversion)]
         return self.0.st_ino.into();
     }
 }
