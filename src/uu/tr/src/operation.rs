@@ -34,6 +34,7 @@ pub trait ChunkProcessor {
 #[derive(Debug, Clone)]
 pub enum BadSequence {
     MissingCharClassName,
+    InvalidCharClass(String),
     MissingEquivalentClassChar,
     MultipleCharRepeatInSet2,
     CharRepeatInSet1,
@@ -52,6 +53,13 @@ impl Display for BadSequence {
         match self {
             Self::MissingCharClassName => {
                 write!(f, "{}", translate!("tr-error-missing-char-class-name"))
+            }
+            Self::InvalidCharClass(class) => {
+                write!(
+                    f,
+                    "{}",
+                    translate!("tr-error-invalid-char-class", "class" => format!("'{}'", class))
+                )
             }
             Self::MissingEquivalentClassChar => {
                 write!(
@@ -516,31 +524,32 @@ impl Sequence {
     }
 
     fn parse_class(input: &[u8]) -> IResult<&[u8], Result<Self, BadSequence>> {
-        delimited(
-            tag("[:"),
-            alt((
-                map(
-                    alt((
-                        value(Self::Class(Class::Alnum), tag("alnum")),
-                        value(Self::Class(Class::Alpha), tag("alpha")),
-                        value(Self::Class(Class::Blank), tag("blank")),
-                        value(Self::Class(Class::Control), tag("cntrl")),
-                        value(Self::Class(Class::Digit), tag("digit")),
-                        value(Self::Class(Class::Graph), tag("graph")),
-                        value(Self::Class(Class::Lower), tag("lower")),
-                        value(Self::Class(Class::Print), tag("print")),
-                        value(Self::Class(Class::Punct), tag("punct")),
-                        value(Self::Class(Class::Space), tag("space")),
-                        value(Self::Class(Class::Upper), tag("upper")),
-                        value(Self::Class(Class::Xdigit), tag("xdigit")),
-                    )),
-                    Ok,
-                ),
-                value(Err(BadSequence::MissingCharClassName), tag("")),
-            )),
-            tag(":]"),
-        )
-        .parse(input)
+        preceded(tag("[:"), terminated(take_until(":]"), tag(":]")))
+            .parse(input)
+            .map(|(l, class_name)| {
+                (
+                    l,
+                    match class_name {
+                        b"" => Err(BadSequence::MissingCharClassName),
+                        b"alnum" => Ok(Self::Class(Class::Alnum)),
+                        b"alpha" => Ok(Self::Class(Class::Alpha)),
+                        b"blank" => Ok(Self::Class(Class::Blank)),
+                        b"cntrl" => Ok(Self::Class(Class::Control)),
+                        b"digit" => Ok(Self::Class(Class::Digit)),
+                        b"graph" => Ok(Self::Class(Class::Graph)),
+                        b"lower" => Ok(Self::Class(Class::Lower)),
+                        b"print" => Ok(Self::Class(Class::Print)),
+                        b"punct" => Ok(Self::Class(Class::Punct)),
+                        b"space" => Ok(Self::Class(Class::Space)),
+                        b"upper" => Ok(Self::Class(Class::Upper)),
+                        b"xdigit" => Ok(Self::Class(Class::Xdigit)),
+                        _ => Err(BadSequence::InvalidCharClass(format!(
+                            "[:{}:]",
+                            String::from_utf8_lossy(class_name)
+                        ))),
+                    },
+                )
+            })
     }
 
     fn parse_char_equal(input: &[u8]) -> IResult<&[u8], Result<Self, BadSequence>> {
