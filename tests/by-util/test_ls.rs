@@ -58,6 +58,20 @@ const COMMA_ARGS: &[&str] = &["-m", "--format=commas", "--for=commas"];
 const COLUMN_ARGS: &[&str] = &["-C", "--format=columns", "--for=columns"];
 
 #[test]
+#[cfg(unix)]
+fn test_directory_in_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+
+    scene
+        .ucmd()
+        .arg("file/missing")
+        .fails_with_code(2)
+        .stderr_is("ls: cannot access 'file/missing': Not a directory\n");
+}
+
+#[test]
 fn test_invalid_flag() {
     new_ucmd!()
         .arg("--invalid-argument")

@@ -22,6 +22,7 @@ ls-error-cannot-open-directory-bad-descriptor = cannot open directory {$path}: B
 ls-error-unknown-io-error = unknown io error: {$path}, '{$error}'
 ls-error-invalid-block-size = invalid --block-size argument {$size}
 ls-error-dired-and-zero-incompatible = --dired and --zero are incompatible
+ls-error-not-directory = cannot access {$path}: Not a directory
 ls-error-not-listing-already-listed = {$path}: not listing already-listed directory
 ls-error-invalid-time-style = invalid --time-style argument {$style}
   Possible values are:
