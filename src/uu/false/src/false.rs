@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 use clap::{Arg, ArgAction, Command};
 use std::io::Write;
-use uucore::translate;
+use uucore::{crate_version, translate};
 
 // uucore::main does not support no-result
 pub fn uumain(mut args: impl uucore::Args) -> i32 {
@@ -16,7 +16,8 @@ pub fn uumain(mut args: impl uucore::Args) -> i32 {
     let error = if flag == "--help" {
         uu_app().print_help()
     } else if flag == "--version" {
-        write!(std::io::stdout(), "{}", uu_app().render_version())
+        // avoid uu_app for smaller binary size
+        writeln!(std::io::stdout(), "false {}", crate_version!())
     } else {
         return 1;
     };
@@ -24,15 +25,15 @@ pub fn uumain(mut args: impl uucore::Args) -> i32 {
     if let Err(print_fail) = error
         && print_fail.kind() != std::io::ErrorKind::BrokenPipe
     {
-        let _ = writeln!(std::io::stderr(), "{}: {print_fail}", uucore::util_name());
+        let _ = writeln!(std::io::stderr(), "false: {print_fail}");
     }
     1
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+    Command::new("false")
+        .version(crate_version!())
+        .help_template(uucore::localized_help_template("false"))
         .about(translate!("false-about"))
         // We provide our own help and version options, to ensure maximum compatibility with GNU.
         .disable_help_flag(true)

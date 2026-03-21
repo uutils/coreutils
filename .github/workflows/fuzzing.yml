@@ -3,6 +3,9 @@ name: Fuzzing
 # spell-checker:ignore (people) dtolnay Swatinem taiki-e
 # spell-checker:ignore (misc) fuzzer
 
+env:
+  CARGO_INCREMENTAL: "0"
+
 on:
   pull_request:
   push:
@@ -20,8 +23,6 @@ concurrency:
 jobs:
   uufuzz-examples:
     name: Build and test uufuzz examples
-    env:
-      CARGO_INCREMENTAL: 0
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
@@ -75,7 +76,6 @@ jobs:
     timeout-minutes: 5
     env:
       RUN_FOR: 60
-      CARGO_INCREMENTAL: 0
     strategy:
       matrix:
         test-target:
