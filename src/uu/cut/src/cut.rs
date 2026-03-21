@@ -260,9 +260,9 @@ fn cut_fields_newline_char_delim<R: Read, W: Write>(
     reader: R,
     out: &mut W,
     ranges: &[Range],
-    only_delimited: bool,
     newline_char: u8,
     out_delim: &[u8],
+    only_delimited: bool,
 ) -> UResult<()> {
     let mut reader = BufReader::new(reader);
     let mut line = Vec::new();
@@ -398,9 +398,9 @@ fn cut_fields<R: Read, W: Write>(
                 reader,
                 out,
                 ranges,
-                field_opts.only_delimited,
                 newline_char,
                 out_delim,
+                field_opts.only_delimited,
             )
         }
         Delimiter::Slice(delim) => {
