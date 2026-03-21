@@ -903,11 +903,11 @@ fn display_item_long(
         if item.security_context(config).len() > 1 {
             // GNU `ls` uses a "." character to indicate a file with a security context,
             // but not other alternate access method.
-            state.display_buf.extend(b".");
+            state.display_buf.push(b'.');
         } else if is_acl_set {
-            state.display_buf.extend(b"+");
+            state.display_buf.push(b'+');
         } else {
-            state.display_buf.extend(b" ");
+            state.display_buf.push(b' ');
         }
 
         state
@@ -915,7 +915,7 @@ fn display_item_long(
             .extend_pad_left(&display_symlink_count(md), padding.link_count);
 
         if config.long.owner {
-            state.display_buf.extend(b" ");
+            state.display_buf.push(b' ');
             state.display_buf.extend_pad_right(
                 display_uname(md, config, &mut state.uid_cache),
                 padding.uname,
@@ -923,7 +923,7 @@ fn display_item_long(
         }
 
         if config.long.group {
-            state.display_buf.extend(b" ");
+            state.display_buf.push(b' ');
             state.display_buf.extend_pad_right(
                 display_group(md, config, &mut state.gid_cache),
                 padding.group,
@@ -931,7 +931,7 @@ fn display_item_long(
         }
 
         if config.context {
-            state.display_buf.extend(b" ");
+            state.display_buf.push(b' ');
             state
                 .display_buf
                 .extend_pad_right(item.security_context(config), padding.context);
@@ -940,7 +940,7 @@ fn display_item_long(
         // Author is only different from owner on GNU/Hurd, so we reuse
         // the owner, since GNU/Hurd is not currently supported by Rust.
         if config.long.author {
-            state.display_buf.extend(b" ");
+            state.display_buf.push(b' ');
             state.display_buf.extend_pad_right(
                 display_uname(md, config, &mut state.uid_cache),
                 padding.uname,
@@ -949,11 +949,11 @@ fn display_item_long(
 
         match display_len_or_rdev(md, config) {
             SizeOrDeviceId::Size(size) => {
-                state.display_buf.extend(b" ");
+                state.display_buf.push(b' ');
                 state.display_buf.extend_pad_left(&size, padding.size);
             }
             SizeOrDeviceId::Device(major, minor) => {
-                state.display_buf.extend(b" ");
+                state.display_buf.push(b' ');
                 state.display_buf.extend_pad_left(
                     &major,
                     #[cfg(not(unix))]
@@ -976,9 +976,9 @@ fn display_item_long(
             }
         }
 
-        state.display_buf.extend(b" ");
+        state.display_buf.push(b' ');
         display_date(md, config, &state.recent_time_range, &mut state.display_buf)?;
-        state.display_buf.extend(b" ");
+        state.display_buf.push(b' ');
 
         let item_display = display_item_name(
             item,
@@ -1009,7 +1009,8 @@ fn display_item_long(
 
         let item_name = item_display.displayed;
         let displayed_item = if needs_space {
-            let mut ret: OsString = " ".into();
+            let mut ret = OsString::with_capacity(item_name.len() + 1);
+            let _ = ret.write_char(' ');
             ret.push(&item_name);
             ret
         } else {
@@ -1023,61 +1024,61 @@ fn display_item_long(
         let leading_char = {
             if let Some(ft) = item.file_type() {
                 if ft.is_char_device() {
-                    "c"
+                    'c'
                 } else if ft.is_block_device() {
-                    "b"
+                    'b'
                 } else if ft.is_symlink() {
-                    "l"
+                    'l'
                 } else if ft.is_dir() {
-                    "d"
+                    'd'
                 } else {
-                    "-"
+                    '-'
                 }
             } else if item.is_dangling_link() {
-                "l"
+                'l'
             } else {
-                "-"
+                '-'
             }
         };
         #[cfg(not(unix))]
         let leading_char = {
             if let Some(ft) = item.file_type() {
                 if ft.is_symlink() {
-                    "l"
+                    'l'
                 } else if ft.is_dir() {
-                    "d"
+                    'd'
                 } else {
-                    "-"
+                    '-'
                 }
             } else if item.is_dangling_link() {
-                "l"
+                'l'
             } else {
-                "-"
+                '-'
             }
         };
 
-        state.display_buf.extend(leading_char.as_bytes());
+        state.display_buf.push(leading_char as u8);
         state.display_buf.extend(b"?????????");
         if item.security_context(config).len() > 1 {
             // GNU `ls` uses a "." character to indicate a file with a security context,
             // but not other alternate access method.
-            state.display_buf.extend(b".");
+            state.display_buf.push(b'.');
         }
-        state.display_buf.extend(b" ");
+        state.display_buf.push(b' ');
         state.display_buf.extend_pad_left("?", padding.link_count);
 
         if config.long.owner {
-            state.display_buf.extend(b" ");
+            state.display_buf.push(b' ');
             state.display_buf.extend_pad_right("?", padding.uname);
         }
 
         if config.long.group {
-            state.display_buf.extend(b" ");
+            state.display_buf.push(b' ');
             state.display_buf.extend_pad_right("?", padding.group);
         }
 
         if config.context {
-            state.display_buf.extend(b" ");
+            state.display_buf.push(b' ');
             state
                 .display_buf
                 .extend_pad_right(item.security_context(config), padding.context);
@@ -1086,7 +1087,7 @@ fn display_item_long(
         // Author is only different from owner on GNU/Hurd, so we reuse
         // the owner, since GNU/Hurd is not currently supported by Rust.
         if config.long.author {
-            state.display_buf.extend(b" ");
+            state.display_buf.push(b' ');
             state.display_buf.extend_pad_right("?", padding.uname);
         }
 
@@ -1102,11 +1103,11 @@ fn display_item_long(
         );
         let date_len = 12;
 
-        state.display_buf.extend(b" ");
+        state.display_buf.push(b' ');
         state.display_buf.extend_pad_left("?", padding.size);
-        state.display_buf.extend(b" ");
+        state.display_buf.push(b' ');
         state.display_buf.extend_pad_left("?", date_len);
-        state.display_buf.extend(b" ");
+        state.display_buf.push(b' ');
 
         if config.dired {
             update_dired_for_item(
