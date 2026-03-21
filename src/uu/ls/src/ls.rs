@@ -2062,7 +2062,7 @@ impl PathData {
             .get_or_init(|| retrieve_xattr_list(self.path()).ok());
 
         opt_xattrs.as_ref().is_some_and(|inner| {
-            self.file_type().is_some_and(FileType::is_symlink)
+            !self.file_type().is_some_and(FileType::is_symlink)
                 && inner
                     .iter()
                     .filter_map(|key| key.to_str().map(str::to_lowercase))
@@ -2079,7 +2079,7 @@ impl PathData {
             .get_or_init(|| retrieve_xattr_list(self.path()).ok());
 
         opt_xattrs.as_ref().is_some_and(|inner| {
-            self.file_type().is_some_and(FileType::is_symlink) && inner.get(cap_key).is_some()
+            !self.file_type().is_some_and(FileType::is_symlink) && inner.get(cap_key).is_some()
         })
     }
 
