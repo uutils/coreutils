@@ -1,0 +1,109 @@
+# spell-checker:ignore mandoc uudoc manpages dtolnay libsystemd libattr libcap DESTDIR
+
+name: Manpage Validation
+
+on:
+  pull_request:
+    paths:
+      - 'src/bin/uudoc.rs'
+      - 'src/uu/*/locales/*.ftl'
+      - 'src/uu/*/src/*.rs'
+      - 'Cargo.toml'
+      - 'GNUmakefile'
+      - '.github/workflows/manpage-lint.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/bin/uudoc.rs'
+      - 'src/uu/*/locales/*.ftl'
+      - 'src/uu/*/src/*.rs'
+      - 'Cargo.toml'
+      - 'GNUmakefile'
+      - '.github/workflows/manpage-lint.yml'
+
+jobs:
+  manpage-lint:
+    name: Validate manpages with mandoc
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        locale: [en_US.UTF-8, fr_FR.UTF-8]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install prerequisites
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mandoc locales-all
+          sudo apt-get install -y libselinux1-dev libsystemd-dev libacl1-dev libattr1-dev libcap-dev
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build manpages (${{ matrix.locale }})
+        run: |
+          # Create temporary directory for manpages
+          MANPAGE_DIR=$(mktemp -d)
+          echo "MANPAGE_DIR=${MANPAGE_DIR}" >> $GITHUB_ENV
+
+          # Set locale for manpage generation
+          export LANG=${{ matrix.locale }}
+
+          # Build and install manpages to temporary directory
+          make install-manpages DESTDIR="${MANPAGE_DIR}"
+
+      - name: Validate manpages with mandoc (${{ matrix.locale }})
+        run: |
+          # Find all generated manpages
+          MANPAGE_PATH="${MANPAGE_DIR}/usr/local/share/man/man1"
+
+          # Check if manpages were generated
+          if [ ! -d "${MANPAGE_PATH}" ]; then
+            echo "Error: No manpages found at ${MANPAGE_PATH}"
+            exit 1
+          fi
+
+          # Initialize error tracking
+          ERRORS_FOUND=0
+          ERROR_LOG=$(mktemp)
+
+          echo "Validating ${{ matrix.locale }} manpages with mandoc..."
+          echo "=========================================="
+
+          # Validate each manpage
+          for manpage in "${MANPAGE_PATH}"/*.1; do
+            if [ -f "$manpage" ]; then
+              filename=$(basename "$manpage")
+
+              # Run mandoc lint and capture output (only errors, not style warnings)
+              if ! mandoc -T lint -W error "$manpage" 2>&1 | tee -a "$ERROR_LOG"; then
+                echo "Errors found in $filename"
+                ERRORS_FOUND=1
+              else
+                # Check if mandoc produced any output (errors only, not style warnings)
+                if mandoc -T lint -W error "$manpage" 2>&1 | grep -q .; then
+                  echo "Warnings found in $filename"
+                  ERRORS_FOUND=1
+                else
+                  echo "$filename is valid"
+                fi
+              fi
+            fi
+          done
+
+          echo ""
+          echo "=================================="
+
+          # Summary and exit
+          if [ "$ERRORS_FOUND" -eq 1 ]; then
+            echo "Manpage validation failed. Issues found:"
+            echo ""
+            cat "$ERROR_LOG"
+            exit 1
+          else
+            echo "All manpages validated successfully!"
+          fi
