@@ -860,8 +860,8 @@ impl<'a> PathData<'a> {
         let de: RefCell<Option<DirEntry>> = if let Some(de) = dir_entry {
             if must_dereference {
                 if let Ok(md_pb) = p_buf.metadata() {
-                    md.get_or_init(|| Some(md_pb.clone()));
                     ft.get_or_init(|| Some(md_pb.file_type()));
+                    md.get_or_init(|| Some(md_pb));
                 }
             }
 
@@ -1430,7 +1430,7 @@ fn get_security_context<'a>(
                     "{}",
                     translate!(
                         "ls-warning-failed-to-get-security-context",
-                        "path" => path.quote().to_string()
+                        "path" => path.quote()
                     )
                 );
                 return Cow::Borrowed(SUBSTITUTE_STRING);
@@ -1441,18 +1441,10 @@ fn get_security_context<'a>(
 
                 let context = context.strip_suffix(&[0]).unwrap_or(context);
 
-                let res: String = String::from_utf8(context.to_vec()).unwrap_or_else(|e| {
-                    show_warning!(
-                        "{}",
-                        translate!(
-                            "ls-warning-getting-security-context",
-                            "path" => path.quote().to_string(),
-                            "error" => e.to_string()
-                        )
-                    );
-
-                    String::from_utf8_lossy(context).to_string()
-                });
+                let res: String = match str::from_utf8(context) {
+                    Ok(s) => s.to_string(),
+                    Err(_) => String::from_utf8_lossy(context).into_owned(),
+                };
 
                 return Cow::Owned(res);
             }
