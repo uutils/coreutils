@@ -74,3 +74,12 @@ fn test_help_shows_vdir_not_ls() {
         "Help should not show 'ls [OPTION]'"
     );
 }
+
+#[test]
+fn test_version() {
+    new_ucmd!()
+        .arg("--version")
+        .succeeds()
+        .no_stderr()
+        .stdout_is(format!("vdir {}\n", uucore::crate_version!()));
+}
