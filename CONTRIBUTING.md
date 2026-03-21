@@ -80,7 +80,7 @@ issues and writing documentation are just as important as writing code.
 We can't fix bugs we don't know about, so good issues are super helpful! Here
 are some tips for writing good issues:
 
-- Make sure the bug is coreutils's one. Some utils e.g. `find` and `sed` belong to [different repositories](https://github.com/uutils).
+- Confirm the bug is in coreutils; some tools (e.g., `find`, `sed`) are maintained in separate repositories under the uutils project.
 - If you find a bug, make sure it's still a problem on the [`main` branch](https://github.com/uutils/coreutils/releases/tag/latest-commit).
 - Search through the existing issues to see whether it has already been
   reported.
