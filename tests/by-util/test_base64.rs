@@ -10,6 +10,15 @@ use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 
 #[test]
+fn test_version() {
+    new_ucmd!()
+        .arg("--version")
+        .succeeds()
+        .no_stderr()
+        .stdout_is(format!("base64 {}\n", uucore::crate_version!()));
+}
+
+#[test]
 #[cfg(target_os = "linux")]
 fn test_base64_non_utf8_paths() {
     use std::os::unix::ffi::OsStringExt;
