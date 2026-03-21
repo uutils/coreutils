@@ -164,7 +164,7 @@ fn escape_name_with_locale(name: &OsStr, config: &Config) -> OsString {
 
 fn locale_quote(name: &OsStr, style: LocaleQuoting) -> OsString {
     let bytes = os_str_as_bytes_lossy(name);
-    let mut quoted = String::new();
+    let mut quoted = String::with_capacity(name.len() + 2);
     match style {
         LocaleQuoting::Single => quoted.push('\''),
         LocaleQuoting::Double => quoted.push('"'),
@@ -355,7 +355,7 @@ pub fn display_items(
             write!(state.out, "{}", style_manager.apply_normal())?;
         }
 
-        let mut names_vec = Vec::new();
+        let mut names_vec = Vec::with_capacity(items.len());
 
         #[cfg(unix)]
         let should_display_leading_info = config.inode || config.alloc_size;
@@ -820,7 +820,9 @@ fn display_item_name(
             };
 
             let old_name = name;
-            name = format!("{security_context} ").into();
+            name = OsString::with_capacity(security_context.len() + 1 + old_name.len());
+            name.push(security_context);
+            name.push(" ");
             name.push(old_name);
         }
     }
