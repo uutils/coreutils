@@ -968,7 +968,7 @@ fn test_dev_null() {
 
 #[cfg(unix)]
 #[test]
-fn test_blake2b_512() {
+fn test_blake2b_default_length() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
@@ -2049,6 +2049,28 @@ fn test_check_blake_length_guess() {
     // and the checksum length is not default.
     let incorrect = "BLAKE2b (foo.dat) = 171cdfdf84ed";
     at.write("foo.sums", incorrect);
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg(at.subdir.join("foo.sums"))
+        .fails()
+        .stderr_contains("foo.sums: no properly formatted checksum lines found");
+
+    // This is incorrect because the length hint provided doesn't match the
+    // checksum length.
+    let length_mismatch = "BLAKE2b-8 (foo.dat) = 171cdfdf84ed";
+    at.write("foo.sums", length_mismatch);
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg(at.subdir.join("foo.sums"))
+        .fails()
+        .stderr_contains("foo.sums: no properly formatted checksum lines found");
+
+    // In this case, validation should fail because even though the checksum
+    // length matches the hint, it is above BLAKE2b's max (512).
+    let too_long = "BLAKE2b-520 (/dev/null) = 0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
+    at.write("foo.sums", too_long);
     scene
         .ucmd()
         .arg("--check")
