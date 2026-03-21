@@ -260,8 +260,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     #[allow(clippy::if_same_then_else)]
     if matches.get_flag(options::FILE_SYSTEM) {
-        #[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
-        syncfs(files)?;
+        if files.is_empty() {
+            sync()?;
+        } else {
+            #[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
+            syncfs(files)?;
+        }
     } else if matches.get_flag(options::DATA) {
         #[cfg(any(target_os = "linux", target_os = "android"))]
         fdatasync(files)?;
