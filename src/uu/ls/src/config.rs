@@ -7,6 +7,7 @@
 // spell-checker:ignore nohash strtime clocale
 
 use std::{
+    borrow::Cow,
     ffi::{OsStr, OsString},
     io::{IsTerminal, stdout},
     num::IntErrorKind,
@@ -1029,8 +1030,8 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
 
     if let Some(field) = options
         .get_one::<String>(options::TIME_STYLE)
-        .map(ToOwned::to_owned)
-        .or_else(|| std::env::var("TIME_STYLE").ok())
+        .map(|s| Cow::Borrowed(s.as_str()))
+        .or_else(|| std::env::var("TIME_STYLE").ok().map(Cow::Owned))
     {
         //If both FULL_TIME and TIME_STYLE are present
         //The one added last is dominant
