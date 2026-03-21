@@ -531,7 +531,7 @@ fn display_additional_leading_info(
     {
         if config.inode {
             let i = if let Some(md) = item.metadata() {
-                get_inode(md)
+                display_inode(md)
             } else {
                 "?".to_owned()
             };
@@ -540,10 +540,10 @@ fn display_additional_leading_info(
     }
 
     if config.alloc_size {
-        let s = if let Some(md) = item.metadata() {
-            display_size(get_block_size(md, config), config)
+        let s: Cow<'_, str> = if let Some(md) = item.metadata() {
+            display_size(get_block_size(md, config), config).into()
         } else {
-            "?".to_owned()
+            "?".into()
         };
         // extra space is insert to align the sizes, as needed for all formats, except for the comma format.
         if config.format == Format::Commas {
@@ -558,11 +558,6 @@ fn display_additional_leading_info(
 
 fn calculate_line_len(output_len: usize, item_len: usize) -> usize {
     output_len + item_len + 1 // line ending
-}
-
-#[cfg(unix)]
-fn get_inode(metadata: &Metadata) -> String {
-    format!("{}", metadata.ino())
 }
 
 // Currently getpwuid is `linux` target only. If it's broken state.out into
@@ -662,7 +657,7 @@ pub fn display_size(size: u64, config: &Config) -> String {
 ///
 /// This function relies on the following parameters in the provided `&Config`:
 /// * `config.quoting_style` to decide how we will escape `name` using [`locale_aware_escape_name`].
-/// * `config.inode` decides whether to display inode numbers beside names using [`get_inode`].
+/// * `config.inode` decides whether to display inode numbers beside names using [`display_inode`].
 /// * `config.color` decides whether it's going to color `name` using [`color_name`].
 /// * `config.indicator_style` to append specific characters to `name` using [`classify_file`].
 /// * `config.format` to display symlink targets if `Format::Long`. This function is also
@@ -839,7 +834,7 @@ fn display_item_name(
 /// This writes to the [`BufWriter`] `state.out` a single string of the output of `ls -l`.
 ///
 /// It writes the following keys, in order:
-/// * `inode` ([`get_inode`], config-optional)
+/// * `inode` ([`display_inode`], config-optional)
 /// * `permissions` ([`display_permissions`])
 /// * `symlink_count` ([`display_symlink_count`])
 /// * `owner` ([`display_uname`], config-optional)
@@ -1193,7 +1188,7 @@ fn display_symlink_count(metadata: &Metadata) -> String {
 
 #[cfg(unix)]
 fn display_inode(metadata: &Metadata) -> String {
-    get_inode(metadata)
+    metadata.ino().to_string()
 }
 
 #[cfg(unix)]
