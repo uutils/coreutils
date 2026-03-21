@@ -2082,8 +2082,7 @@ impl PathData {
                 self.has_security_cap.get_or_init(|| {
                     let cap_key = OsStr::new("security.capability");
 
-                    !self.file_type().is_some_and(FileType::is_symlink)
-                        && inner.get(cap_key).is_some()
+                    !self.file_type().is_some_and(FileType::is_symlink) && inner.contains(cap_key)
                 });
 
                 self.has_acl.get_or_init(|| {
