@@ -6,12 +6,14 @@
 // spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly
 // spell-checker:ignore nohash strtime clocale ilog
 
+use core::ops::RangeInclusive;
 use std::cell::LazyCell;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::sync::LazyLock;
+use std::time::SystemTime;
 /// Show the directory name in the case where several arguments are given to ls
 use std::{borrow::Cow, iter};
 use std::{
@@ -23,6 +25,8 @@ use std::{
 
 use ansi_width::ansi_width;
 use glob::MatchOptions;
+#[cfg(unix)]
+use rustc_hash::FxHashMap;
 use term_grid::{DEFAULT_SEPARATOR_SIZE, Direction, Filling, Grid, GridOptions};
 
 #[cfg(unix)]
@@ -53,7 +57,7 @@ use uucore::{
     time::{FormatSystemTimeFallback, format_system_time},
 };
 
-use crate::colors::color_name;
+use crate::colors::{StyleManager, color_name};
 use crate::config::Files;
 use crate::dired::{self, DiredOutput};
 use crate::{Config, ListState, LsError, PathData, get_block_size};
@@ -258,8 +262,8 @@ fn display_dir_entry_size(
         let nlink_len = display_symlink_count(md).len();
         (
             nlink_len,
-            display_uname(md, config, state).len(),
-            display_group(md, config, state).len(),
+            display_uname(md, config, &mut state.uid_cache).len(),
+            display_group(md, config, &mut state.gid_cache).len(),
             size_len,
             major_len,
             minor_len,
@@ -377,7 +381,7 @@ pub fn display_items(
                 config,
                 prefix_context,
                 more_info,
-                state,
+                state.style_manager.as_mut(),
                 LazyCell::new(Box::new(|| 0)),
             );
 
@@ -563,10 +567,14 @@ fn calculate_line_len(output_len: usize, item_len: usize) -> usize {
 // Currently getpwuid is `linux` target only. If it's broken state.out into
 // a posix-compliant attribute this can be updated...
 #[cfg(unix)]
-fn display_uname<'a>(metadata: &Metadata, config: &Config, state: &'a mut ListState) -> &'a String {
+fn display_uname<'a>(
+    metadata: &Metadata,
+    config: &Config,
+    uid_cache: &'a mut FxHashMap<u32, String>,
+) -> &'a String {
     let uid = metadata.uid();
 
-    state.uid_cache.entry(uid).or_insert_with(|| {
+    uid_cache.entry(uid).or_insert_with(|| {
         if config.long.numeric_uid_gid {
             uid.to_string()
         } else {
@@ -576,9 +584,13 @@ fn display_uname<'a>(metadata: &Metadata, config: &Config, state: &'a mut ListSt
 }
 
 #[cfg(unix)]
-fn display_group<'a>(metadata: &Metadata, config: &Config, state: &'a mut ListState) -> &'a String {
+fn display_group<'a>(
+    metadata: &Metadata,
+    config: &Config,
+    gid_cache: &'a mut FxHashMap<u32, String>,
+) -> &'a String {
     let gid = metadata.gid();
-    state.gid_cache.entry(gid).or_insert_with(|| {
+    gid_cache.entry(gid).or_insert_with(|| {
         if config.long.numeric_uid_gid {
             gid.to_string()
         } else {
@@ -588,19 +600,19 @@ fn display_group<'a>(metadata: &Metadata, config: &Config, state: &'a mut ListSt
 }
 
 #[cfg(not(unix))]
-fn display_uname(_metadata: &Metadata, _config: &Config, _state: &mut ListState) -> &'static str {
+fn display_uname(_metadata: &Metadata, _config: &Config, _uid_cache: &mut ()) -> &'static str {
     "somebody"
 }
 
 #[cfg(not(unix))]
-fn display_group(_metadata: &Metadata, _config: &Config, _state: &mut ListState) -> &'static str {
+fn display_group(_metadata: &Metadata, _config: &Config, _gid_cache: &mut ()) -> &'static str {
     "somegroup"
 }
 
 fn display_date(
     metadata: &Metadata,
     config: &Config,
-    state: &mut ListState,
+    recent_time_range: &RangeInclusive<SystemTime>,
     out: &mut Vec<u8>,
 ) -> UResult<()> {
     let Some(time) = metadata_get_time(metadata, config.time) else {
@@ -611,7 +623,7 @@ fn display_date(
     // Use "recent" format if the given date is considered recent (i.e., in the last 6 months),
     // or if no "older" format is available.
     let fmt = match &config.time_format_older {
-        Some(time_format_older) if !state.recent_time_range.contains(&time) => time_format_older,
+        Some(time_format_older) if !recent_time_range.contains(&time) => time_format_older,
         _ => &config.time_format_recent,
     };
 
@@ -673,7 +685,7 @@ fn display_item_name(
     config: &Config,
     prefix_context: Option<usize>,
     more_info: Option<String>,
-    state: &mut ListState,
+    mut style_manager: Option<&mut StyleManager>,
     current_column: LazyCell<usize, Box<dyn FnOnce() -> usize + '_>>,
 ) -> DisplayItemName {
     // This is our return value. We start by `&path.display_name` and modify it along the way.
@@ -686,7 +698,7 @@ fn display_item_name(
         name = create_hyperlink(&name, path);
     }
 
-    if let Some(style_manager) = &mut state.style_manager {
+    if let Some(style_manager) = style_manager.as_mut() {
         let len = name.len();
         name = color_name(name, path, style_manager, None, is_wrap(len));
     }
@@ -739,7 +751,7 @@ fn display_item_name(
                 // We might as well color the symlink output after the arrow.
                 // This makes extra system calls, but provides important information that
                 // people run `ls -l --color` are very interested in.
-                if let Some(style_manager) = &mut state.style_manager {
+                if let Some(style_manager) = &mut style_manager {
                     let escaped_target = escape_name_with_locale(target_path.as_os_str(), config);
                     // We get the absolute path to be able to construct PathData with valid Metadata.
                     // This is because relative symlinks will fail to get_metadata.
@@ -870,14 +882,14 @@ fn display_item_long(
     dired: &mut DiredOutput,
     quoted: bool,
 ) -> UResult<()> {
-    let mut output_display: Vec<u8> = Vec::with_capacity(128);
-
     // apply normal color to non filename outputs
     if let Some(style_manager) = &mut state.style_manager {
-        output_display.extend(style_manager.apply_normal().as_bytes());
+        state
+            .display_buf
+            .extend(style_manager.apply_normal().as_bytes());
     }
     if config.dired {
-        output_display.extend(b"  ");
+        state.display_buf.extend(b"  ");
     }
     if let Some(md) = item.metadata() {
         #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
@@ -885,49 +897,64 @@ fn display_item_long(
         let is_acl_set = false;
         #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
         let is_acl_set = has_acl(item.path());
-        output_display.extend(display_permissions(md, true).as_bytes());
+        state
+            .display_buf
+            .extend(display_permissions(md, true).as_bytes());
         if item.security_context(config).len() > 1 {
             // GNU `ls` uses a "." character to indicate a file with a security context,
             // but not other alternate access method.
-            output_display.extend(b".");
+            state.display_buf.extend(b".");
         } else if is_acl_set {
-            output_display.extend(b"+");
+            state.display_buf.extend(b"+");
         } else {
-            output_display.extend(b" ");
+            state.display_buf.extend(b" ");
         }
 
-        output_display.extend_pad_left(&display_symlink_count(md), padding.link_count);
+        state
+            .display_buf
+            .extend_pad_left(&display_symlink_count(md), padding.link_count);
 
         if config.long.owner {
-            output_display.extend(b" ");
-            output_display.extend_pad_right(display_uname(md, config, state), padding.uname);
+            state.display_buf.extend(b" ");
+            state.display_buf.extend_pad_right(
+                display_uname(md, config, &mut state.uid_cache),
+                padding.uname,
+            );
         }
 
         if config.long.group {
-            output_display.extend(b" ");
-            output_display.extend_pad_right(display_group(md, config, state), padding.group);
+            state.display_buf.extend(b" ");
+            state.display_buf.extend_pad_right(
+                display_group(md, config, &mut state.gid_cache),
+                padding.group,
+            );
         }
 
         if config.context {
-            output_display.extend(b" ");
-            output_display.extend_pad_right(item.security_context(config), padding.context);
+            state.display_buf.extend(b" ");
+            state
+                .display_buf
+                .extend_pad_right(item.security_context(config), padding.context);
         }
 
         // Author is only different from owner on GNU/Hurd, so we reuse
         // the owner, since GNU/Hurd is not currently supported by Rust.
         if config.long.author {
-            output_display.extend(b" ");
-            output_display.extend_pad_right(display_uname(md, config, state), padding.uname);
+            state.display_buf.extend(b" ");
+            state.display_buf.extend_pad_right(
+                display_uname(md, config, &mut state.uid_cache),
+                padding.uname,
+            );
         }
 
         match display_len_or_rdev(md, config) {
             SizeOrDeviceId::Size(size) => {
-                output_display.extend(b" ");
-                output_display.extend_pad_left(&size, padding.size);
+                state.display_buf.extend(b" ");
+                state.display_buf.extend_pad_left(&size, padding.size);
             }
             SizeOrDeviceId::Device(major, minor) => {
-                output_display.extend(b" ");
-                output_display.extend_pad_left(
+                state.display_buf.extend(b" ");
+                state.display_buf.extend_pad_left(
                     &major,
                     #[cfg(not(unix))]
                     0usize,
@@ -938,8 +965,8 @@ fn display_item_long(
                             .saturating_sub(padding.minor.saturating_add(2usize)),
                     ),
                 );
-                output_display.extend(b", ");
-                output_display.extend_pad_left(
+                state.display_buf.extend(b", ");
+                state.display_buf.extend_pad_left(
                     &minor,
                     #[cfg(not(unix))]
                     0usize,
@@ -949,18 +976,18 @@ fn display_item_long(
             }
         }
 
-        output_display.extend(b" ");
-        display_date(md, config, state, &mut output_display)?;
-        output_display.extend(b" ");
+        state.display_buf.extend(b" ");
+        display_date(md, config, &state.recent_time_range, &mut state.display_buf)?;
+        state.display_buf.extend(b" ");
 
         let item_display = display_item_name(
             item,
             config,
             None,
             None,
-            state,
+            state.style_manager.as_mut(),
             LazyCell::new(Box::new(|| {
-                ansi_width(&String::from_utf8_lossy(&output_display))
+                ansi_width(&String::from_utf8_lossy(&state.display_buf))
             })),
         );
 
@@ -972,7 +999,12 @@ fn display_item_long(
                 dired_name_len += 1;
             }
             let displayed_len = item_display.displayed.len() + usize::from(needs_space);
-            update_dired_for_item(dired, output_display.len(), displayed_len, dired_name_len);
+            update_dired_for_item(
+                dired,
+                state.display_buf.len(),
+                displayed_len,
+                dired_name_len,
+            );
         }
 
         let item_name = item_display.displayed;
@@ -984,8 +1016,8 @@ fn display_item_long(
             item_name
         };
 
-        write_os_str(&mut output_display, &displayed_item)?;
-        output_display.push(config.line_ending as u8);
+        write_os_str(&mut state.display_buf, &displayed_item)?;
+        state.display_buf.push(config.line_ending as u8);
     } else {
         #[cfg(unix)]
         let leading_char = {
@@ -1024,36 +1056,38 @@ fn display_item_long(
             }
         };
 
-        output_display.extend(leading_char.as_bytes());
-        output_display.extend(b"?????????");
+        state.display_buf.extend(leading_char.as_bytes());
+        state.display_buf.extend(b"?????????");
         if item.security_context(config).len() > 1 {
             // GNU `ls` uses a "." character to indicate a file with a security context,
             // but not other alternate access method.
-            output_display.extend(b".");
+            state.display_buf.extend(b".");
         }
-        output_display.extend(b" ");
-        output_display.extend_pad_left("?", padding.link_count);
+        state.display_buf.extend(b" ");
+        state.display_buf.extend_pad_left("?", padding.link_count);
 
         if config.long.owner {
-            output_display.extend(b" ");
-            output_display.extend_pad_right("?", padding.uname);
+            state.display_buf.extend(b" ");
+            state.display_buf.extend_pad_right("?", padding.uname);
         }
 
         if config.long.group {
-            output_display.extend(b" ");
-            output_display.extend_pad_right("?", padding.group);
+            state.display_buf.extend(b" ");
+            state.display_buf.extend_pad_right("?", padding.group);
         }
 
         if config.context {
-            output_display.extend(b" ");
-            output_display.extend_pad_right(item.security_context(config), padding.context);
+            state.display_buf.extend(b" ");
+            state
+                .display_buf
+                .extend_pad_right(item.security_context(config), padding.context);
         }
 
         // Author is only different from owner on GNU/Hurd, so we reuse
         // the owner, since GNU/Hurd is not currently supported by Rust.
         if config.long.author {
-            output_display.extend(b" ");
-            output_display.extend_pad_right("?", padding.uname);
+            state.display_buf.extend(b" ");
+            state.display_buf.extend_pad_right("?", padding.uname);
         }
 
         let displayed_item = display_item_name(
@@ -1061,32 +1095,33 @@ fn display_item_long(
             config,
             None,
             None,
-            state,
+            state.style_manager.as_mut(),
             LazyCell::new(Box::new(|| {
-                ansi_width(&String::from_utf8_lossy(&output_display))
+                ansi_width(&String::from_utf8_lossy(&state.display_buf))
             })),
         );
         let date_len = 12;
 
-        output_display.extend(b" ");
-        output_display.extend_pad_left("?", padding.size);
-        output_display.extend(b" ");
-        output_display.extend_pad_left("?", date_len);
-        output_display.extend(b" ");
+        state.display_buf.extend(b" ");
+        state.display_buf.extend_pad_left("?", padding.size);
+        state.display_buf.extend(b" ");
+        state.display_buf.extend_pad_left("?", date_len);
+        state.display_buf.extend(b" ");
 
         if config.dired {
             update_dired_for_item(
                 dired,
-                output_display.len(),
+                state.display_buf.len(),
                 displayed_item.displayed.len(),
                 displayed_item.dired_name_len,
             );
         }
         let displayed_item = displayed_item.displayed;
-        write_os_str(&mut output_display, &displayed_item)?;
-        output_display.push(config.line_ending as u8);
+        write_os_str(&mut state.display_buf, &displayed_item)?;
+        state.display_buf.push(config.line_ending as u8);
     }
-    state.out.write_all(&output_display)?;
+    state.out.write_all(&state.display_buf)?;
+    state.display_buf.clear();
 
     Ok(())
 }
