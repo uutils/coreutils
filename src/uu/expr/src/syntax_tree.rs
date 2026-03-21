@@ -624,9 +624,6 @@ pub struct AstNode {
 #[derive(Debug, Clone)]
 #[cfg_attr(test, derive(Eq, PartialEq))]
 pub enum AstNodeInner {
-    Evaluated {
-        value: NumOrStr,
-    },
     Leaf {
         value: MaybeNonUtf8String,
     },
@@ -650,15 +647,6 @@ impl AstNode {
         Parser::new(input).parse()
     }
 
-    pub fn evaluated(self) -> ExprResult<Self> {
-        Ok(Self {
-            id: get_next_id(),
-            inner: AstNodeInner::Evaluated {
-                value: self.eval()?,
-            },
-        })
-    }
-
     pub fn eval(&self) -> ExprResult<NumOrStr> {
         // This function implements a recursive tree-walking algorithm, but uses an explicit
         // stack approach instead of native recursion to avoid potential stack overflow
@@ -669,9 +657,6 @@ impl AstNode {
 
         while let Some(node) = stack.pop() {
             match &node.inner {
-                AstNodeInner::Evaluated { value, .. } => {
-                    result_stack.insert(node.id, Ok(value.clone()));
-                }
                 AstNodeInner::Leaf { value, .. } => {
                     result_stack.insert(node.id, Ok(value.to_owned().into()));
                 }
@@ -896,9 +881,7 @@ impl<'a, S: AsRef<MaybeNonUtf8Str>> Parser<'a, S> {
                 value: self.next()?.into(),
             },
             b"(" => {
-                // Evaluate the node just after parsing to we detect arithmetic
-                // errors before checking for the closing parenthesis.
-                let s = self.parse_expression()?.evaluated()?;
+                let s = self.parse_expression()?;
 
                 match self.next() {
                     Ok(b")") => {}
@@ -1070,9 +1053,7 @@ mod test {
             AstNode::parse(&["(", "1", "+", "2", ")", "*", "3"]),
             Ok(op(
                 BinOp::Numeric(NumericOp::Mul),
-                op(BinOp::Numeric(NumericOp::Add), "1", "2")
-                    .evaluated()
-                    .unwrap(),
+                op(BinOp::Numeric(NumericOp::Add), "1", "2"),
                 "3"
             ))
         );
