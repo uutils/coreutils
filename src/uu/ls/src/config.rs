@@ -342,17 +342,22 @@ fn extract_time(options: &clap::ArgMatches) -> MetadataTimeField {
 /// Some env variables can be passed
 /// For now, we are only verifying if empty or not and known for `TERM`
 fn is_color_compatible_term() -> bool {
-    let is_term_set = std::env::var("TERM").is_ok();
-    let is_colorterm_set = std::env::var("COLORTERM").is_ok();
+    let term = std::env::var_os("TERM");
+    let colorterm = std::env::var_os("COLORTERM");
+    let is_term_set = term.is_some();
+    let is_colorterm_set = colorterm.is_some();
 
-    let term = std::env::var("TERM").unwrap_or_default();
-    let colorterm = std::env::var("COLORTERM").unwrap_or_default();
+    let term = term.unwrap_or_default();
+    let colorterm = colorterm.unwrap_or_default();
 
     // Search function in the TERM struct to manage the wildcards
-    let term_matches = |term: &str| -> bool {
+    let term_matches = |term: &OsStr| -> bool {
         uucore::colors::TERMS.iter().any(|&pattern| {
             term == pattern
-                || (pattern.ends_with('*') && term.starts_with(&pattern[..pattern.len() - 1]))
+                || (pattern.ends_with('*')
+                    && term
+                        .as_encoded_bytes()
+                        .starts_with(&pattern.as_bytes()[..pattern.len() - 1]))
         })
     };
 
