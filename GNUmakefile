@@ -67,12 +67,10 @@ TOYBOX_SRC  := $(TOYBOX_ROOT)/toybox-$(TOYBOX_VER)
 # todo: support building wasm
 OS := $(or $(CARGO_BUILD_TARGET),$(shell rustc --print host-tuple))
 
-# Windows does not allow symlink by default.
-# Allow to override LN for AppArmor.
-ifneq (,$(findstring windows,$(OS)))
-	LN ?= ln -f
-endif
-LN ?= ln -sf
+# hardlinks are better default since
+# - Windows(cygwin) does not allow symlink by default
+# - std::env:current_exe resolves symlink
+LN ?= ln -f
 
 SELINUX_PROGS := \
 	chcon \
