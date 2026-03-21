@@ -47,7 +47,6 @@ use uucore::{
     format::human::human_readable,
     fs::display_permissions,
     fsext::metadata_get_time,
-    line_ending::LineEnding,
     os_str_as_bytes_lossy,
     quoting_style::{QuotingStyle, locale_aware_escape_dir_name, locale_aware_escape_name},
     show,
@@ -557,8 +556,8 @@ fn display_additional_leading_info(
     result
 }
 
-fn calculate_line_len(output_len: usize, item_len: usize, line_ending: LineEnding) -> usize {
-    output_len + item_len + line_ending.to_string().len()
+fn calculate_line_len(output_len: usize, item_len: usize) -> usize {
+    output_len + item_len + 1 // line ending
 }
 
 #[cfg(unix)]
@@ -976,13 +975,7 @@ fn display_item_long(
                 dired_name_len += 1;
             }
             let displayed_len = item_display.displayed.len() + usize::from(needs_space);
-            update_dired_for_item(
-                dired,
-                output_display.len(),
-                displayed_len,
-                dired_name_len,
-                config.line_ending,
-            );
+            update_dired_for_item(dired, output_display.len(), displayed_len, dired_name_len);
         }
 
         let item_name = item_display.displayed;
@@ -995,7 +988,7 @@ fn display_item_long(
         };
 
         write_os_str(&mut output_display, &displayed_item)?;
-        output_display.extend(config.line_ending.to_string().as_bytes());
+        output_display.push(config.line_ending as u8);
     } else {
         #[cfg(unix)]
         let leading_char = {
@@ -1090,12 +1083,11 @@ fn display_item_long(
                 output_display.len(),
                 displayed_item.displayed.len(),
                 displayed_item.dired_name_len,
-                config.line_ending,
             );
         }
         let displayed_item = displayed_item.displayed;
         write_os_str(&mut output_display, &displayed_item)?;
-        output_display.extend(config.line_ending.to_string().as_bytes());
+        output_display.push(config.line_ending as u8);
     }
     state.out.write_all(&output_display)?;
 
@@ -1189,9 +1181,8 @@ fn update_dired_for_item(
     output_display_len: usize,
     displayed_len: usize,
     dired_name_len: usize,
-    line_ending: LineEnding,
 ) {
-    let line_len = calculate_line_len(output_display_len, displayed_len, line_ending);
+    let line_len = calculate_line_len(output_display_len, displayed_len);
     dired::calculate_and_update_positions(dired, output_display_len, dired_name_len, line_len);
 }
 
