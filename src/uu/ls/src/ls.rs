@@ -2057,15 +2057,15 @@ impl PathData {
 
     #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
     pub fn has_acl(&self) -> bool {
-        if self.file_type().is_some_and(FileType::is_symlink) {
-            return false;
-        }
-
-        let opt_xattrs = self
-            .xattrs
-            .get_or_init(|| retrieve_xattr_list(self.path()).ok());
-
         opt_xattrs.as_ref().is_some_and(|inner| {
+            if self.file_type().is_some_and(FileType::is_symlink) {
+                return false;
+            }
+
+            let opt_xattrs = self
+                .xattrs
+                .get_or_init(|| retrieve_xattr_list(self.path()).ok());
+
             inner
                 .iter()
                 .filter_map(|key| key.to_str().map(str::to_lowercase))
@@ -2075,19 +2075,19 @@ impl PathData {
 
     #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
     pub fn has_security_cap(&self) -> bool {
-        if self.file_type().is_some_and(FileType::is_symlink) {
-            return false;
-        }
+        xattrs.as_ref().is_some_and(|inner| {
+            if self.file_type().is_some_and(FileType::is_symlink) {
+                return false;
+            }
 
-        let cap_key = OsStr::new("security.capability");
+            let cap_key = OsStr::new("security.capability");
 
-        let xattrs = self
-            .xattrs
-            .get_or_init(|| retrieve_xattr_list(self.path()).ok());
+            let xattrs = self
+                .xattrs
+                .get_or_init(|| retrieve_xattr_list(self.path()).ok());
 
-        xattrs
-            .as_ref()
-            .is_some_and(|inner| inner.get(cap_key).is_some())
+            inner.get(cap_key).is_some()
+        })
     }
 
     fn file_type(&self) -> Option<&FileType> {
