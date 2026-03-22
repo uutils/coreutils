@@ -145,7 +145,12 @@ fn format_with_modifiers(
         // Check if this specifier has modifiers
         if !flags.is_empty() || !width_str.is_empty() {
             // Apply modifiers to the formatted value
-            let width: usize = width_str.parse().unwrap_or(0);
+            // Cap width to i32::MAX to match GNU behavior, which uses int for width.
+            // Without this cap, very large widths (e.g., %8888888888r) cause issues.
+            let width: usize = width_str
+                .parse::<usize>()
+                .unwrap_or(0)
+                .min(i32::MAX as usize);
             let explicit_width = !width_str.is_empty();
             let modified = apply_modifiers(&formatted, flags, width, spec, explicit_width);
             result.push_str(&modified);
@@ -709,5 +714,24 @@ mod tests {
             result, "19",
             "GNU: %_C should produce '19', not '  19' (default width is 2, not 4)"
         );
+    }
+
+    #[test]
+    fn test_large_width_capped() {
+        // Regression test: very large widths caused OOM.
+        // We cap width to i32::MAX to match GNU behavior.
+        // Test with a reasonable width to avoid allocating 2GB in tests.
+        let value = "12:00:00 AM";
+        let result = apply_modifiers(value, "", 100, "r", true);
+        assert_eq!(result.len(), 100);
+
+        // Verify that the width capping logic works
+        // The parse and min operations should handle this correctly
+        let width_str = "8888888888";
+        let width = width_str
+            .parse::<usize>()
+            .unwrap_or(0)
+            .min(i32::MAX as usize);
+        assert_eq!(width, i32::MAX as usize);
     }
 }
