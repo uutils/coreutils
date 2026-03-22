@@ -9,6 +9,8 @@
 use core::ops::RangeInclusive;
 use std::cell::LazyCell;
 #[cfg(unix)]
+use std::fmt::Display;
+#[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
@@ -18,7 +20,7 @@ use std::time::SystemTime;
 use std::{borrow::Cow, iter};
 use std::{
     ffi::{OsStr, OsString},
-    fmt::Write as _,
+    fmt::Write as FmtWrite,
     fs::{self, DirEntry, FileType, Metadata},
     io::{BufWriter, Stdout, Write},
 };
@@ -333,9 +335,7 @@ pub fn display_items(
             let should_display_leading_info = config.alloc_size;
 
             if should_display_leading_info {
-                let more_info = display_additional_leading_info(item, &padding_collection, config);
-
-                write!(state.out, "{more_info}")?;
+                display_additional_leading_info(item, &padding_collection, config, &mut state.out)?;
             }
 
             display_item_long(item, &padding_collection, config, state, dired, quoted)?;
@@ -368,7 +368,9 @@ pub fn display_items(
 
         for i in items {
             let more_info = if should_display_leading_info {
-                Some(display_additional_leading_info(i, &padding, config))
+                let mut s = Vec::new();
+                display_additional_leading_info(i, &padding, config, &mut s)?;
+                Some(String::from_utf8(s).unwrap()) // Should always be UTF-8
             } else {
                 None
             };
@@ -529,17 +531,17 @@ fn display_additional_leading_info(
     item: &PathData,
     padding: &PaddingCollection,
     config: &Config,
-) -> String {
-    let mut result = String::new();
+    out: &mut impl Write,
+) -> UResult<()> {
     #[cfg(unix)]
     {
         if config.inode {
-            let i = if let Some(md) = item.metadata() {
-                display_inode(md)
+            let inode = padding.inode;
+            if let Some(md) = item.metadata() {
+                write!(out, "{:>inode$} ", display_inode(md))?;
             } else {
-                "?".to_owned()
-            };
-            write!(result, "{} ", pad_left(&i, padding.inode)).unwrap();
+                write!(out, "{:>inode$} ", '?')?;
+            }
         }
     }
 
@@ -551,13 +553,15 @@ fn display_additional_leading_info(
         };
         // extra space is insert to align the sizes, as needed for all formats, except for the comma format.
         if config.format == Format::Commas {
-            write!(result, "{s} ").unwrap();
+            out.write_all(s.as_bytes())?;
+            out.write_all(b" ")?;
         } else {
-            write!(result, "{} ", pad_left(&s, padding.block_size)).unwrap();
+            let block_size = padding.block_size;
+            write!(out, "{s:>block_size$} ")?;
         }
     }
 
-    result
+    Ok(())
 }
 
 fn calculate_line_len(output_len: usize, item_len: usize) -> usize {
@@ -1221,7 +1225,7 @@ fn display_symlink_count(metadata: &Metadata) -> String {
 }
 
 #[cfg(unix)]
-fn display_inode(metadata: &Metadata) -> String {
+fn display_inode(metadata: &Metadata) -> impl Display {
     metadata.ino().to_string()
 }
 
