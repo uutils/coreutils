@@ -752,14 +752,16 @@ fn display_item_name(
                     let escaped_target = escape_name_with_locale(target_path.as_os_str(), config);
                     // We get the absolute path to be able to construct PathData with valid Metadata.
                     // This is because relative symlinks will fail to get_metadata.
-                    let mut absolute_target = target_path.clone();
-                    if target_path.is_relative() {
-                        if let Some(parent) = path.path().parent() {
-                            absolute_target = parent.join(absolute_target);
+                    let absolute_target = if target_path.is_relative() {
+                        match path.path().parent() {
+                            Some(p) => &p.join(&target_path),
+                            None => &target_path,
                         }
-                    }
+                    } else {
+                        &target_path
+                    };
 
-                    match fs::canonicalize(&absolute_target) {
+                    match fs::canonicalize(absolute_target) {
                         Ok(resolved_target) => {
                             let target_data = PathData::new(
                                 resolved_target.as_path().into(),
@@ -822,15 +824,15 @@ fn display_item_name(
     // to get correct alignment from later calls to`display_grid()`.
     if config.context {
         if let Some(pad_count) = prefix_context {
-            let security_context = if matches!(config.format, Format::Commas) {
-                path.security_context(config).to_string()
+            let security_context: Cow<'_, str> = if matches!(config.format, Format::Commas) {
+                path.security_context(config).into()
             } else {
-                pad_left(path.security_context(config), pad_count)
+                pad_left(path.security_context(config), pad_count).into()
             };
 
             let old_name = name;
             name = OsString::with_capacity(security_context.len() + 1 + old_name.len());
-            name.push(security_context);
+            name.push(security_context.as_ref());
             name.push(" ");
             name.push(old_name);
         }
