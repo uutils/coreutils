@@ -22,6 +22,7 @@ path = "src/yes.rs"
 clap = { workspace = true }
 itertools = { workspace = true }
 fluent = { workspace = true }
+rustix = { workspace = true, features = ["fs", "pipe"] }
 
 [target.'cfg(unix)'.dependencies]
 uucore = { workspace = true, features = ["pipes", "signals"] }
