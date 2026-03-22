@@ -22,6 +22,7 @@ path = "src/yes.rs"
 clap = { workspace = true }
 itertools = { workspace = true }
 fluent = { workspace = true }
+rustix = { workspace = true, features = ["pipe"] }
 uucore = { workspace = true }
 
 [[bin]]
