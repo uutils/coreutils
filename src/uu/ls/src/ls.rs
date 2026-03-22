@@ -784,10 +784,12 @@ pub fn uu_app() -> Command {
     .after_help(translate!("ls-after-help"))
 }
 
+/// Represents the possible values of [`PathData::display_name`]. The reason this is a
+/// separate enum is to avoid a self-referential struct, as it is moved in hot loops.
 #[derive(Debug)]
 enum PathDataDisplayName<'a> {
     SelfReferential,
-    Moo(Cow<'a, OsStr>),
+    Custom(Cow<'a, OsStr>),
 }
 
 /// Represents a Path along with it's associated data.
@@ -821,11 +823,11 @@ impl<'a> PathData<'a> {
         // We cannot use `Path::ends_with` or `Path::Components`, because they remove occurrences of '.'
         // For '..', the filename is None
         let display_name = if let Some(name) = file_name {
-            PathDataDisplayName::Moo(name)
+            PathDataDisplayName::Custom(name)
         } else if command_line {
             PathDataDisplayName::SelfReferential
         } else {
-            PathDataDisplayName::Moo(
+            PathDataDisplayName::Custom(
                 dir_entry
                     .as_ref()
                     .map(DirEntry::file_name)
@@ -952,7 +954,7 @@ impl<'a> PathData<'a> {
     fn display_name(&self) -> &OsStr {
         match self.display_name {
             PathDataDisplayName::SelfReferential => self.p_buf.as_os_str(),
-            PathDataDisplayName::Moo(ref cow) => cow,
+            PathDataDisplayName::Custom(ref cow) => cow,
         }
     }
 }
@@ -1452,7 +1454,17 @@ fn get_security_context<'a>(
 
                 let res: String = match str::from_utf8(context) {
                     Ok(s) => s.to_string(),
-                    Err(_) => String::from_utf8_lossy(context).into_owned(),
+                    Err(e) => {
+                        show_warning!(
+                            "{}",
+                            translate!(
+                                "ls-warning-getting-security-context",
+                                "path" => path.quote(),
+                                "error" => e
+                            )
+                        );
+                        String::from_utf8_lossy(context).into_owned()
+                    }
                 };
 
                 return Cow::Owned(res);
