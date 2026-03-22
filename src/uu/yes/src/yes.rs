@@ -109,6 +109,11 @@ fn prepare_buffer(buf: &mut Vec<u8>) {
 }
 
 pub fn exec(bytes: &[u8]) -> io::Result<()> {
+    #[cfg(unix)]
+    if uucore::signals::stdout_was_closed() {
+        return Err(io::Error::from_raw_os_error(libc::EBADF));
+    }
+
     let stdout = io::stdout();
     let mut stdout = stdout.lock();
 
