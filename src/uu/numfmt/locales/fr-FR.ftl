@@ -36,11 +36,13 @@ numfmt-after-help = Options d'UNITÉ :
   Une précision optionnelle (%.1f) remplacera la précision déterminée par l'entrée.
 
 # Messages d'aide
+numfmt-help-debug = afficher des avertissements sur les entrées invalides
 numfmt-help-delimiter = utiliser X au lieu d'espaces pour le délimiteur de champ
 numfmt-help-field = remplacer les nombres dans ces champs d'entrée ; voir FIELDS ci-dessous
 numfmt-help-format = utiliser le FORMAT à virgule flottante de style printf ; voir FORMAT ci-dessous pour les détails
 numfmt-help-from = mettre automatiquement à l'échelle les nombres d'entrée vers les UNITÉs ; voir UNIT ci-dessous
 numfmt-help-from-unit = spécifier la taille de l'unité d'entrée
+numfmt-help-grouping = utiliser le groupement des chiffres défini par la locale, par exemple 1 000 000 (ce qui n'a aucun effet dans la locale C/POSIX)
 numfmt-help-to = mettre automatiquement à l'échelle les nombres de sortie vers les UNITÉs ; voir UNIT ci-dessous
 numfmt-help-to-unit = la taille de l'unité de sortie
 numfmt-help-padding = remplir la sortie à N caractères ; N positif alignera à droite ; N négatif alignera à gauche ; le remplissage est ignoré si la sortie est plus large que N ; la valeur par défaut est de remplir automatiquement si un espace est trouvé
@@ -55,6 +57,7 @@ numfmt-error-unsupported-unit = Une unité non supportée est spécifiée
 numfmt-error-invalid-unit-size = taille d'unité invalide : { $size }
 numfmt-error-invalid-padding = valeur de remplissage invalide { $value }
 numfmt-error-invalid-header = valeur d'en-tête invalide { $value }
+numfmt-error-grouping-cannot-be-combined-with-format = --grouping ne peut pas être combiné avec --format
 numfmt-error-grouping-cannot-be-combined-with-to = le groupement ne peut pas être combiné avec --to
 numfmt-error-delimiter-must-be-single-character = le délimiteur doit être un seul caractère
 numfmt-error-invalid-number-empty = nombre invalide : ''
@@ -73,3 +76,9 @@ numfmt-error-invalid-format-width-overflow = format invalide '{ $format }' (déb
 numfmt-error-invalid-precision = précision invalide dans le format '{ $format }'
 numfmt-error-format-too-many-percent = le format '{ $format }' a trop de directives %
 numfmt-error-unknown-invalid-mode = Mode invalide inconnu : { $mode }
+
+# Messages de débogage
+numfmt-debug-no-conversion = aucune option de conversion spécifiée
+numfmt-debug-grouping-no-effect = le groupement n'a aucun effet dans cette locale
+numfmt-debug-failed-to-convert = échec de conversion d'une partie des nombres en entrée
+numfmt-debug-header-ignored = --header ignoré avec une entrée en ligne de commande

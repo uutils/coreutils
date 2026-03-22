@@ -317,6 +317,14 @@ fn test_should_report_invalid_number_with_interior_junk() {
 }
 
 #[test]
+fn test_should_report_invalid_number_with_sign_after_decimal() {
+    new_ucmd!()
+        .args(&["--", "-0.-1"])
+        .fails_with_code(2)
+        .stderr_is("numfmt: invalid number: '-0.-1'\n");
+}
+
+#[test]
 fn test_should_skip_leading_space_from_stdin() {
     new_ucmd!()
         .args(&["--from=auto"])
@@ -1106,6 +1114,14 @@ fn test_format_grouping_conflicts_with_to_option() {
 }
 
 #[test]
+fn test_grouping_conflicts_with_format_option() {
+    new_ucmd!()
+        .args(&["--format=%f", "--grouping"])
+        .fails_with_code(1)
+        .stderr_contains("--grouping cannot be combined with --format");
+}
+
+#[test]
 fn test_zero_terminated_command_line_args() {
     new_ucmd!()
         .args(&["--zero-terminated", "--to=si", "1000"])
@@ -1200,6 +1216,68 @@ fn test_debug_warnings() {
         .succeeds()
         .stdout_is("4.0K\n")
         .stderr_is("numfmt: --header ignored with command-line input\n");
+
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .args(&["--debug", "--grouping", "--from=si", "4.0K"])
+        .succeeds()
+        .stdout_is("4000\n")
+        .stderr_is("numfmt: grouping has no effect in this locale\n");
+}
+
+#[test]
+fn test_debug_reports_failed_conversions_summary() {
+    new_ucmd!()
+        .args(&[
+            "--invalid=fail",
+            "--debug",
+            "--to=si",
+            "1000",
+            "Foo",
+            "3000",
+        ])
+        .fails_with_code(2)
+        .stdout_is("1.0k\nFoo\n3.0k\n")
+        .stderr_is(
+            "numfmt: invalid number: 'Foo'\nnumfmt: failed to convert some of the input numbers\n",
+        );
+}
+
+#[test]
+fn test_invalid_fail_with_fields_does_not_duplicate_output() {
+    new_ucmd!()
+        .args(&["--invalid=fail", "--field=2", "--from=si", "--to=iec"])
+        .pipe_in("A 1K x\nB Foo y\nC 3G z\n")
+        .fails_with_code(2)
+        .stdout_is("A 1000 x\nB Foo y\nC 2.8G z\n")
+        .stderr_is("numfmt: invalid number: 'Foo'\n");
+}
+
+#[test]
+fn test_abort_with_fields_preserves_partial_output() {
+    new_ucmd!()
+        .args(&["--field=3", "--from=auto", "Hello 40M World 90G"])
+        .fails_with_code(2)
+        .stdout_is("Hello 40M ")
+        .stderr_is("numfmt: invalid number: 'World'\n");
+}
+
+#[test]
+fn test_rejects_malformed_number_forms() {
+    new_ucmd!()
+        .args(&["--from=si", "12.K"])
+        .fails_with_code(2)
+        .stderr_contains("invalid number: '12.K'");
+
+    new_ucmd!()
+        .args(&["--from=si", "--delimiter=,", "12.  2"])
+        .fails_with_code(2)
+        .stderr_contains("invalid number: '12.  2'");
+
+    new_ucmd!()
+        .arg("..1")
+        .fails_with_code(2)
+        .stderr_contains("invalid suffix in input: '..1'");
 }
 
 #[test]
@@ -1235,6 +1313,21 @@ fn test_empty_delimiter_multi_char_unit_separator() {
         .pipe_in("1  K\n2  M\n3  G\n")
         .succeeds()
         .stdout_only("1000\n2000000\n3000000000\n");
+}
+
+#[test]
+fn test_whitespace_mode_parses_custom_unit_separator_inputs() {
+    new_ucmd!()
+        .args(&["--from=iec", "--unit-separator=::"])
+        .pipe_in("4::K\n")
+        .succeeds()
+        .stdout_only("4096\n");
+
+    new_ucmd!()
+        .args(&["--from=iec", "--unit-separator=\u{a0}"])
+        .pipe_in("4\u{a0}K\n")
+        .succeeds()
+        .stdout_only("4096\n");
 }
 
 #[test]

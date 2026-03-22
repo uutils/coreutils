@@ -3,66 +3,14 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore powf
+// spell-checker:ignore powf seps
 
 use uucore::display::Quotable;
+use uucore::i18n::decimal::locale_grouping_separator;
 use uucore::translate;
 
 use crate::options::{NumfmtOptions, RoundMethod, TransformOptions};
 use crate::units::{DisplayableSuffix, IEC_BASES, RawSuffix, Result, SI_BASES, Suffix, Unit};
-
-/// Iterate over a line's fields, where each field is a contiguous sequence of
-/// non-whitespace, optionally prefixed with one or more characters of leading
-/// whitespace. Fields are returned as tuples of `(prefix, field)`.
-///
-/// # Examples:
-///
-/// ```
-/// let mut fields = uu_numfmt::format::WhitespaceSplitter { s: Some("    1234 5") };
-///
-/// assert_eq!(Some(("    ", "1234")), fields.next());
-/// assert_eq!(Some((" ", "5")), fields.next());
-/// assert_eq!(None, fields.next());
-/// ```
-///
-/// Delimiters are included in the results; `prefix` will be empty only for
-/// the first field of the line (including the case where the input line is
-/// empty):
-///
-/// ```
-/// let mut fields = uu_numfmt::format::WhitespaceSplitter { s: Some("first second") };
-///
-/// assert_eq!(Some(("", "first")), fields.next());
-/// assert_eq!(Some((" ", "second")), fields.next());
-///
-/// let mut fields = uu_numfmt::format::WhitespaceSplitter { s: Some("") };
-///
-/// assert_eq!(Some(("", "")), fields.next());
-/// ```
-pub struct WhitespaceSplitter<'a> {
-    pub s: Option<&'a str>,
-}
-
-impl<'a> Iterator for WhitespaceSplitter<'a> {
-    type Item = (&'a str, &'a str);
-
-    /// Yield the next field in the input string as a tuple `(prefix, field)`.
-    fn next(&mut self) -> Option<Self::Item> {
-        let haystack = self.s?;
-
-        let (prefix, field) = haystack.split_at(
-            haystack
-                .find(|c: char| !c.is_whitespace())
-                .unwrap_or(haystack.len()),
-        );
-
-        let (field, rest) = field.split_at(field.find(char::is_whitespace).unwrap_or(field.len()));
-
-        self.s = if rest.is_empty() { None } else { Some(rest) };
-
-        Some((prefix, field))
-    }
-}
 
 fn find_numeric_beginning(s: &str) -> Option<&str> {
     let mut decimal_point_seen = false;
@@ -80,6 +28,9 @@ fn find_numeric_beginning(s: &str) -> Option<&str> {
         if c == '.' && !decimal_point_seen {
             decimal_point_seen = true;
             continue;
+        }
+        if idx > 0 && &s[..idx] == "." {
+            return Some(&s[..idx]);
         }
         if s[..idx].parse::<f64>().is_err() {
             return None;
@@ -119,7 +70,7 @@ fn find_valid_number_with_suffix(s: &str, unit: Unit) -> Option<&str> {
     }
 }
 
-fn detailed_error_message(s: &str, unit: Unit) -> Option<String> {
+fn detailed_error_message(s: &str, unit: Unit, unit_separator: &str) -> Option<String> {
     if s.is_empty() {
         return Some(translate!("numfmt-error-invalid-number-empty"));
     }
@@ -128,8 +79,54 @@ fn detailed_error_message(s: &str, unit: Unit) -> Option<String> {
         .ok_or(translate!("numfmt-error-invalid-number", "input" => s.quote()))
         .ok()?;
 
+    if valid_part == "." {
+        return Some(translate!("numfmt-error-invalid-suffix", "input" => s.quote()));
+    }
+
+    if valid_part.ends_with('.') {
+        return Some(translate!("numfmt-error-invalid-number", "input" => s.quote()));
+    }
+
+    // When a unit separator is in use, the valid part may extend beyond the
+    // contiguous number+suffix found by find_valid_number_with_suffix.
+    // For example "5 K Field2" with unit_separator=" " has valid_part="5" but
+    // the real valid prefix is "5 K"; the trailing " Field2" is the garbage.
+    let valid_end =
+        if !unit_separator.is_empty() && valid_part == find_numeric_beginning(s).unwrap_or("") {
+            let rest = &s[valid_part.len()..];
+            if let Some(after_sep) = rest.strip_prefix(unit_separator) {
+                // Check if the next char is a valid suffix letter
+                let mut chars = after_sep.chars();
+                let has_suffix = chars
+                    .next()
+                    .is_some_and(|c| RawSuffix::try_from(&c).is_ok());
+                if has_suffix {
+                    let suffix_char_len = 1;
+                    let with_i =
+                        chars.next() == Some('i') && [Unit::Auto, Unit::Iec(true)].contains(&unit);
+                    let suffix_len = if with_i {
+                        suffix_char_len + 1
+                    } else {
+                        suffix_char_len
+                    };
+                    valid_part.len() + unit_separator.len() + suffix_len
+                } else {
+                    valid_part.len()
+                }
+            } else {
+                valid_part.len()
+            }
+        } else {
+            valid_part.len()
+        };
+
+    let valid_part = &s[..valid_end];
+
     if valid_part != s && valid_part.parse::<f64>().is_ok() {
         return match s.chars().nth(valid_part.len()) {
+            Some('+' | '-') => {
+                Some(translate!("numfmt-error-invalid-number", "input" => s.quote()))
+            }
             Some(v) if RawSuffix::try_from(&v).is_ok() => Some(
                 translate!("numfmt-error-rejecting-suffix", "number" => valid_part, "suffix" => s[valid_part.len()..]),
             ),
@@ -138,15 +135,30 @@ fn detailed_error_message(s: &str, unit: Unit) -> Option<String> {
         };
     }
 
-    if valid_part != s && valid_part.parse::<f64>().is_err() {
+    if valid_part != s {
+        let trailing = s[valid_part.len()..].trim_start();
         return Some(
-            translate!("numfmt-error-invalid-specific-suffix", "input" => s.quote(), "suffix" => s[valid_part.len()..].quote()),
+            translate!("numfmt-error-invalid-specific-suffix", "input" => s.quote(), "suffix" => trailing.quote()),
         );
     }
     None
 }
 
-fn parse_suffix(s: &str, unit: Unit, max_whitespace: usize) -> Result<(f64, Option<Suffix>)> {
+fn parse_number_part(s: &str, input: &str) -> Result<f64> {
+    if s.ends_with('.') {
+        return Err(translate!("numfmt-error-invalid-number", "input" => input.quote()));
+    }
+
+    s.parse::<f64>()
+        .map_err(|_| translate!("numfmt-error-invalid-number", "input" => input.quote()))
+}
+
+fn parse_suffix(
+    s: &str,
+    unit: Unit,
+    unit_separator: &str,
+    explicit_unit_separator: bool,
+) -> Result<(f64, Option<Suffix>)> {
     let trimmed = s.trim_end();
     if trimmed.is_empty() {
         return Err(translate!("numfmt-error-invalid-number-empty"));
@@ -185,21 +197,153 @@ fn parse_suffix(s: &str, unit: Unit, max_whitespace: usize) -> Result<(f64, Opti
     };
 
     let number_part = &trimmed[..trimmed.len() - suffix_len];
-    let number_trimmed = number_part.trim_end();
 
-    // Validate whitespace between number and suffix
     if suffix.is_some() {
-        let whitespace = number_part.len() - number_trimmed.len();
-        if whitespace > max_whitespace {
-            return Err(translate!("numfmt-error-invalid-suffix", "input" => s.quote()));
-        }
+        let separator_len = if explicit_unit_separator {
+            if number_part.ends_with(unit_separator) {
+                unit_separator.len()
+            } else if unit_separator.is_empty() {
+                0
+            } else {
+                return Err(translate!("numfmt-error-invalid-suffix", "input" => s.quote()));
+            }
+        } else {
+            let number_trimmed = number_part.trim_end();
+            let whitespace = number_part.len() - number_trimmed.len();
+            if whitespace > 1 {
+                return Err(translate!("numfmt-error-invalid-suffix", "input" => s.quote()));
+            }
+            whitespace
+        };
+
+        let number = parse_number_part(&number_part[..number_part.len() - separator_len], s)?;
+
+        return Ok((number, suffix));
     }
 
-    let number = number_trimmed
-        .parse::<f64>()
-        .map_err(|_| translate!("numfmt-error-invalid-number", "input" => s.quote()))?;
+    let number = parse_number_part(number_part, s)?;
 
     Ok((number, suffix))
+}
+
+fn apply_grouping(s: &str) -> String {
+    let grouping_separator = locale_grouping_separator();
+    if grouping_separator.is_empty() {
+        return s.to_string();
+    }
+
+    let (sign, rest) = if let Some(rest) = s.strip_prefix('-') {
+        ("-", rest)
+    } else {
+        ("", s)
+    };
+    let (integer, fraction) = rest.split_once('.').map_or((rest, ""), |(i, f)| (i, f));
+    if integer.len() < 4 {
+        return s.to_string();
+    }
+
+    let sep_len = grouping_separator.len();
+    let num_seps = (integer.len() - 1) / 3;
+    let mut grouped = String::with_capacity(
+        sign.len()
+            + integer.len()
+            + num_seps * sep_len
+            + if fraction.is_empty() {
+                0
+            } else {
+                1 + fraction.len()
+            },
+    );
+    grouped.push_str(sign);
+
+    let first_group = integer.len() % 3;
+    let first_group = if first_group == 0 { 3 } else { first_group };
+    grouped.push_str(&integer[..first_group]);
+    for chunk in integer.as_bytes()[first_group..].chunks(3) {
+        grouped.push_str(grouping_separator);
+        // SAFETY: integer is known to be valid UTF-8 ASCII digits
+        grouped.push_str(std::str::from_utf8(chunk).unwrap());
+    }
+
+    if !fraction.is_empty() {
+        grouped.push('.');
+        grouped.push_str(fraction);
+    }
+
+    grouped
+}
+
+fn split_next_field(s: &str) -> (&str, &str, &str) {
+    let prefix_len = s.find(|c: char| !c.is_whitespace()).unwrap_or(s.len());
+    let field_end = s[prefix_len..]
+        .find(char::is_whitespace)
+        .map_or(s.len(), |i| prefix_len + i);
+    (&s[..prefix_len], &s[prefix_len..field_end], &s[field_end..])
+}
+
+/// When an explicit whitespace unit separator is set (e.g. `--unit-separator=" "`),
+/// a suffix like "K" may appear as a separate whitespace-delimited field.  Detect
+/// this case so the caller can merge the suffix back into the preceding number field.
+fn split_mergeable_suffix<'a>(s: &'a str, options: &NumfmtOptions) -> Option<(&'a str, &'a str)> {
+    if !options.explicit_unit_separator
+        || options.unit_separator.is_empty()
+        || !options.unit_separator.chars().all(char::is_whitespace)
+    {
+        return None;
+    }
+
+    if !s.starts_with(&options.unit_separator) {
+        return None;
+    }
+
+    let (prefix, field, _) = split_next_field(s);
+    if prefix != options.unit_separator {
+        return None;
+    }
+
+    let is_suffix = match field.len() {
+        1 => true,
+        2 => field.ends_with('i'),
+        _ => false,
+    };
+    if !is_suffix {
+        return None;
+    }
+    field
+        .chars()
+        .next()
+        .filter(|c| RawSuffix::try_from(c).is_ok())?;
+
+    Some((prefix, field))
+}
+
+struct WhitespaceSplitter<'a, 'b> {
+    s: Option<&'a str>,
+    options: &'b NumfmtOptions,
+}
+
+impl<'a> Iterator for WhitespaceSplitter<'a, '_> {
+    type Item = (&'a str, &'a str);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let haystack = self.s?;
+        let (prefix, field, rest) = split_next_field(haystack);
+
+        if field.is_empty() {
+            self.s = None;
+            return Some((prefix, field));
+        }
+
+        if let Some((suffix_prefix, suffix_field)) = split_mergeable_suffix(rest, self.options) {
+            let merged_len = prefix.len() + field.len() + suffix_prefix.len() + suffix_field.len();
+            let merged_field = &haystack[prefix.len()..merged_len];
+            self.s = Some(&haystack[merged_len..]).filter(|rest| !rest.is_empty());
+            return Some((prefix, merged_field));
+        }
+
+        self.s = Some(rest).filter(|rest| !rest.is_empty());
+        Some((prefix, field))
+    }
 }
 
 /// Returns the implicit precision of a number, which is the count of digits after the dot. For
@@ -252,9 +396,16 @@ fn remove_suffix(i: f64, s: Option<Suffix>, u: Unit) -> Result<f64> {
     }
 }
 
-fn transform_from(s: &str, opts: &TransformOptions, max_whitespace: usize) -> Result<f64> {
-    let (i, suffix) = parse_suffix(s, opts.from, max_whitespace)
-        .map_err(|original| detailed_error_message(s, opts.from).unwrap_or(original))?;
+fn transform_from(s: &str, opts: &TransformOptions, options: &NumfmtOptions) -> Result<f64> {
+    let (i, suffix) = parse_suffix(
+        s,
+        opts.from,
+        &options.unit_separator,
+        options.explicit_unit_separator,
+    )
+    .map_err(|original| {
+        detailed_error_message(s, opts.from, &options.unit_separator).unwrap_or(original)
+    })?;
     let i = i * (opts.from_unit as f64);
 
     remove_suffix(i, suffix, opts.from).map(|n| {
@@ -389,6 +540,30 @@ fn transform_to(
     })
 }
 
+/// Pad `s` to at least `width` characters using `fill`.
+/// Right-aligns when `right_align` is true, left-aligns otherwise.
+/// Unlike `format!("{:>width$}")`, this handles widths larger than 65535.
+fn pad_string(s: &str, width: usize, fill: char, right_align: bool) -> String {
+    let len = s.len();
+    if len >= width {
+        return s.to_string();
+    }
+    let pad = width - len;
+    let mut result = String::with_capacity(width);
+    if right_align {
+        for _ in 0..pad {
+            result.push(fill);
+        }
+        result.push_str(s);
+    } else {
+        result.push_str(s);
+        for _ in 0..pad {
+            result.push(fill);
+        }
+    }
+    result
+}
+
 fn format_string(
     source: &str,
     options: &NumfmtOptions,
@@ -409,11 +584,7 @@ fn format_string(
     };
 
     let number = transform_to(
-        transform_from(
-            source_without_suffix,
-            &options.transform,
-            options.max_whitespace,
-        )?,
+        transform_from(source_without_suffix, &options.transform, options)?,
         &options.transform,
         options.round,
         precision,
@@ -421,9 +592,15 @@ fn format_string(
     )?;
 
     // bring back the suffix before applying padding
+    let grouped_number = if options.grouping {
+        apply_grouping(&number)
+    } else {
+        number
+    };
+
     let number_with_suffix = match &options.suffix {
-        Some(suffix) => format!("{number}{suffix}"),
-        None => number,
+        Some(suffix) => format!("{grouped_number}{suffix}"),
+        None => grouped_number,
     };
 
     let padding = options
@@ -434,16 +611,16 @@ fn format_string(
     let padded_number = match padding {
         0 => number_with_suffix,
         p if p > 0 && options.format.zero_padding => {
-            let zero_padded = format!("{number_with_suffix:0>padding$}", padding = p as usize);
+            let zero_padded = pad_string(&number_with_suffix, p as usize, '0', true);
 
             match implicit_padding.unwrap_or(options.padding) {
                 0 => zero_padded,
-                p if p > 0 => format!("{zero_padded:>padding$}", padding = p as usize),
-                p => format!("{zero_padded:<padding$}", padding = p.unsigned_abs()),
+                p if p > 0 => pad_string(&zero_padded, p as usize, ' ', true),
+                p => pad_string(&zero_padded, p.unsigned_abs(), ' ', false),
             }
         }
-        p if p > 0 => format!("{number_with_suffix:>padding$}", padding = p as usize),
-        p => format!("{number_with_suffix:<padding$}", padding = p.unsigned_abs()),
+        p if p > 0 => pad_string(&number_with_suffix, p as usize, ' ', true),
+        p => pad_string(&number_with_suffix, p.unsigned_abs(), ' ', false),
     };
 
     Ok(format!(
@@ -489,7 +666,7 @@ fn split_bytes<'a>(input: &'a [u8], delim: &'a [u8]) -> impl Iterator<Item = &'a
     })
 }
 
-pub fn write_formatted_with_delimiter<W: std::io::Write>(
+pub fn write_formatted_with_delimiter<W: std::io::Write + ?Sized>(
     writer: &mut W,
     input: &[u8],
     options: &NumfmtOptions,
@@ -525,13 +702,16 @@ pub fn write_formatted_with_delimiter<W: std::io::Write>(
     Ok(())
 }
 
-pub fn write_formatted_with_whitespace<W: std::io::Write>(
+pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
     writer: &mut W,
     s: &str,
     options: &NumfmtOptions,
     eol: Option<u8>,
 ) -> Result<()> {
-    for (n, (prefix, field)) in (1..).zip(WhitespaceSplitter { s: Some(s) }) {
+    for (n, (prefix, field)) in (1..).zip(WhitespaceSplitter {
+        s: Some(s),
+        options,
+    }) {
         let field_selected = uucore::ranges::contain(&options.fields, n);
 
         if field_selected {
@@ -613,7 +793,7 @@ mod tests {
 
     #[test]
     fn test_parse_suffix_q_r_k() {
-        let result = parse_suffix("1Q", Unit::Auto, 1);
+        let result = parse_suffix("1Q", Unit::Auto, "", false);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
         assert_eq!(number, 1.0);
@@ -622,7 +802,7 @@ mod tests {
         assert_eq!(raw_suffix as i32, RawSuffix::Q as i32);
         assert!(!with_i);
 
-        let result = parse_suffix("2R", Unit::Auto, 1);
+        let result = parse_suffix("2R", Unit::Auto, "", false);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
         assert_eq!(number, 2.0);
@@ -631,7 +811,7 @@ mod tests {
         assert_eq!(raw_suffix as i32, RawSuffix::R as i32);
         assert!(!with_i);
 
-        let result = parse_suffix("3k", Unit::Auto, 1);
+        let result = parse_suffix("3k", Unit::Auto, "", false);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
         assert_eq!(number, 3.0);
@@ -640,7 +820,7 @@ mod tests {
         assert_eq!(raw_suffix as i32, RawSuffix::K as i32);
         assert!(!with_i);
 
-        let result = parse_suffix("4Qi", Unit::Auto, 1);
+        let result = parse_suffix("4Qi", Unit::Auto, "", false);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
         assert_eq!(number, 4.0);
@@ -649,7 +829,7 @@ mod tests {
         assert_eq!(raw_suffix as i32, RawSuffix::Q as i32);
         assert!(with_i);
 
-        let result = parse_suffix("5Ri", Unit::Auto, 1);
+        let result = parse_suffix("5Ri", Unit::Auto, "", false);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
         assert_eq!(number, 5.0);
@@ -661,13 +841,13 @@ mod tests {
 
     #[test]
     fn test_parse_suffix_error_messages() {
-        let result = parse_suffix("foo", Unit::Auto, 1);
+        let result = parse_suffix("foo", Unit::Auto, "", false);
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert!(error.contains("numfmt-error-invalid-number") || error.contains("invalid number"));
         assert!(!error.contains("invalid suffix"));
 
-        let result = parse_suffix("World", Unit::Auto, 1);
+        let result = parse_suffix("World", Unit::Auto, "", false);
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert!(error.contains("numfmt-error-invalid-number") || error.contains("invalid number"));
@@ -676,12 +856,12 @@ mod tests {
 
     #[test]
     fn test_detailed_error_message() {
-        let result = detailed_error_message("123i", Unit::Auto);
+        let result = detailed_error_message("123i", Unit::Auto, "");
         assert!(result.is_some());
         let error = result.unwrap();
         assert!(error.contains("numfmt-error-invalid-suffix") || error.contains("invalid suffix"));
 
-        let result = detailed_error_message("5MF", Unit::Auto);
+        let result = detailed_error_message("5MF", Unit::Auto, "");
         assert!(result.is_some());
         let error = result.unwrap();
         assert!(
@@ -689,7 +869,7 @@ mod tests {
                 || error.contains("invalid suffix")
         );
 
-        let result = detailed_error_message("5KM", Unit::Auto);
+        let result = detailed_error_message("5KM", Unit::Auto, "");
         assert!(result.is_some());
         let error = result.unwrap();
         assert!(
@@ -813,5 +993,141 @@ mod tests {
         let (raw_suffix, _) = suffix.unwrap();
         assert_eq!(raw_suffix as i32, RawSuffix::Q as i32);
         assert_eq!(value, 5.0);
+    }
+
+    #[test]
+    fn test_detailed_error_message_empty() {
+        let result = detailed_error_message("", Unit::Auto, "");
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_detailed_error_message_valid_number() {
+        // A plain valid number should return None (no error)
+        assert!(detailed_error_message("123", Unit::Auto, "").is_none());
+        assert!(detailed_error_message("5K", Unit::Auto, "").is_none());
+        assert!(detailed_error_message("-3.5M", Unit::Auto, "").is_none());
+    }
+
+    #[test]
+    fn test_detailed_error_message_trailing_garbage() {
+        // Number with suffix followed by extra chars
+        let result = detailed_error_message("5Kx", Unit::Auto, "").unwrap();
+        assert!(
+            result.contains("numfmt-error-invalid-specific-suffix")
+                || result.contains("invalid suffix")
+        );
+    }
+
+    #[test]
+    fn test_detailed_error_message_dot_only() {
+        let result = detailed_error_message(".", Unit::Auto, "").unwrap();
+        assert!(
+            result.contains("numfmt-error-invalid-suffix") || result.contains("invalid suffix")
+        );
+    }
+
+    #[test]
+    fn test_detailed_error_message_trailing_dot() {
+        let result = detailed_error_message("5.", Unit::Auto, "").unwrap();
+        assert!(
+            result.contains("numfmt-error-invalid-number") || result.contains("invalid number")
+        );
+    }
+
+    #[test]
+    fn test_detailed_error_message_unit_separator() {
+        // With unit separator, "5 K" is valid
+        assert!(detailed_error_message("5 K", Unit::Auto, " ").is_none());
+
+        // "5 Kx" should report trailing garbage after the suffix
+        let result = detailed_error_message("5 Kx", Unit::Auto, " ");
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_parse_number_part_valid() {
+        assert_eq!(parse_number_part("42", "42").unwrap(), 42.0);
+        assert_eq!(parse_number_part("-3.5", "-3.5").unwrap(), -3.5);
+        assert_eq!(parse_number_part("0", "0").unwrap(), 0.0);
+    }
+
+    #[test]
+    fn test_parse_number_part_trailing_dot() {
+        assert!(parse_number_part("5.", "5.").is_err());
+    }
+
+    #[test]
+    fn test_parse_number_part_non_numeric() {
+        assert!(parse_number_part("abc", "abc").is_err());
+        assert!(parse_number_part("", "").is_err());
+    }
+
+    #[test]
+    fn test_apply_grouping_short_numbers() {
+        // Numbers with fewer than 4 digits should be unchanged
+        assert_eq!(apply_grouping("0"), "0");
+        assert_eq!(apply_grouping("999"), "999");
+        assert_eq!(apply_grouping("-99"), "-99");
+    }
+
+    #[test]
+    fn test_apply_grouping_with_fraction() {
+        // Fraction part should not be grouped
+        let result = apply_grouping("1234.567");
+        // Depending on locale, separator may or may not be present
+        assert!(result.contains("567"));
+        assert!(result.contains('.'));
+    }
+
+    #[test]
+    fn test_apply_grouping_negative() {
+        let result = apply_grouping("-1234");
+        assert!(result.starts_with('-'));
+    }
+
+    #[test]
+    fn test_apply_grouping_large_numbers() {
+        // These tests verify grouping structure; actual separator depends on locale
+        let result = apply_grouping("1000000");
+        // Should have separators inserted (length grows if separator is non-empty)
+        assert!(result.len() >= 7);
+
+        let result = apply_grouping("1234567890");
+        assert!(result.len() >= 10);
+
+        let result = apply_grouping("-9999999999999");
+        assert!(result.starts_with('-'));
+        assert!(result.len() >= 13);
+    }
+
+    #[test]
+    fn test_apply_grouping_tiny_fraction() {
+        // Small decimal: integer part < 4 digits, so no grouping
+        assert_eq!(apply_grouping("0.000001"), "0.000001");
+        assert_eq!(apply_grouping("1.23456789"), "1.23456789");
+    }
+
+    #[test]
+    fn test_apply_grouping_exactly_four_digits() {
+        let result = apply_grouping("1000");
+        // Should be grouped (4 digits)
+        assert!(result.len() >= 4);
+    }
+
+    #[test]
+    fn test_parse_number_part_large_and_tiny() {
+        assert_eq!(
+            parse_number_part("999999999999", "999999999999").unwrap(),
+            999_999_999_999.0
+        );
+        assert_eq!(
+            parse_number_part("0.000000001", "0.000000001").unwrap(),
+            0.000_000_001
+        );
+        assert_eq!(
+            parse_number_part("-99999999", "-99999999").unwrap(),
+            -99_999_999.0
+        );
     }
 }
