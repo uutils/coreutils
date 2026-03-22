@@ -345,11 +345,6 @@ fn extract_time(options: &clap::ArgMatches) -> MetadataTimeField {
 fn is_color_compatible_term() -> bool {
     let term = std::env::var_os("TERM");
     let colorterm = std::env::var_os("COLORTERM");
-    let is_term_set = term.is_some();
-    let is_colorterm_set = colorterm.is_some();
-
-    let term = term.unwrap_or_default();
-    let colorterm = colorterm.unwrap_or_default();
 
     // Search function in the TERM struct to manage the wildcards
     let term_matches = |term: &OsStr| -> bool {
@@ -362,14 +357,11 @@ fn is_color_compatible_term() -> bool {
         })
     };
 
-    if is_term_set && term.is_empty() && is_colorterm_set && colorterm.is_empty() {
-        return false;
+    match (term, colorterm) {
+        (Some(t), Some(c)) if t.is_empty() && c.is_empty() => false,
+        (Some(t), _) if !t.is_empty() => term_matches(&t),
+        _ => true,
     }
-
-    if !term.is_empty() && !term_matches(&term) {
-        return false;
-    }
-    true
 }
 
 /// Extracts the color option to use based on the options provided.
@@ -1030,8 +1022,8 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
 
     if let Some(field) = options
         .get_one::<String>(options::TIME_STYLE)
-        .map(|s| Cow::Borrowed(s.as_str()))
-        .or_else(|| std::env::var("TIME_STYLE").ok().map(Cow::Owned))
+        .map(Cow::from)
+        .or_else(|| std::env::var("TIME_STYLE").ok().map(Cow::from))
     {
         //If both FULL_TIME and TIME_STYLE are present
         //The one added last is dominant
