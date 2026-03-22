@@ -66,6 +66,38 @@ fn test_delete() {
 }
 
 #[test]
+fn test_delete_graph_and_print_match_gnu() {
+    let input = [b' ', b'A', b'!', b'\t', b'\n'];
+    new_ucmd!()
+        .args(&["-d", "[:graph:]"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is_bytes([b' ', b'\t', b'\n']);
+
+    new_ucmd!()
+        .args(&["-d", "[:print:]"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is_bytes([b'\t', b'\n']);
+}
+
+#[test]
+fn test_delete_complement_graph_and_print_match_gnu() {
+    let input = [b' ', b'A', b'!', b'\t', b'\n'];
+    new_ucmd!()
+        .args(&["-d", "-c", "[:graph:]"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is_bytes([b'A', b'!']);
+
+    new_ucmd!()
+        .args(&["-d", "-c", "[:print:]"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is_bytes([b' ', b'A', b'!']);
+}
+
+#[test]
 fn test_delete_afterwards_is_not_flag() {
     new_ucmd!()
         .args(&["a-z", "-d"])
