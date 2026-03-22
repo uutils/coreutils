@@ -557,10 +557,6 @@ fn display_additional_leading_info(
     Ok(())
 }
 
-fn calculate_line_len(output_len: usize, item_len: usize) -> usize {
-    output_len + item_len + 1 // line ending
-}
-
 // Currently getpwuid is `linux` target only. If it's broken state.out into
 // a posix-compliant attribute this can be updated...
 #[cfg(unix)]
@@ -1210,7 +1206,7 @@ fn update_dired_for_item(
     displayed_len: usize,
     dired_name_len: usize,
 ) {
-    let line_len = calculate_line_len(output_display_len, displayed_len);
+    let line_len = output_display_len + displayed_len + 1; // +1 for line ending
     dired::calculate_and_update_positions(dired, output_display_len, dired_name_len, line_len);
 }
 
