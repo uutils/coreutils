@@ -238,9 +238,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("dircolors")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("dircolors"))
         .about(translate!("dircolors-about"))
         .after_help(translate!("dircolors-after-help"))
         .override_usage(format_usage(&translate!("dircolors-usage")))

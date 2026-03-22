@@ -15,7 +15,7 @@ use uucore::display::Quotable;
 use uucore::error::{UResult, set_exit_code, strip_errno};
 use uucore::translate;
 
-use uucore::{format_usage, show_error, util_name};
+use uucore::{format_usage, show_error};
 
 static OPT_IGNORE_FAIL_NON_EMPTY: &str = "ignore-fail-on-non-empty";
 static OPT_PARENTS: &str = "parents";
@@ -114,7 +114,7 @@ fn remove_single(path: &Path, opts: Opts) -> Result<(), Error<'_>> {
     if opts.verbose {
         println!(
             "{}",
-            translate!("rmdir-verbose-removing-directory", "util_name" => util_name(), "path" => path.quote())
+            translate!("rmdir-verbose-removing-directory", "util_name" => "rmdir", "path" => path.quote())
         );
     }
     remove_dir(path).map_err(|error| Error { error, path })
@@ -178,9 +178,9 @@ struct Opts {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(util_name())
+    Command::new("rmdir")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(util_name()))
+        .help_template(uucore::localized_help_template("rmdir"))
         .about(translate!("rmdir-about"))
         .override_usage(format_usage(&translate!("rmdir-usage")))
         .infer_long_args(true)
