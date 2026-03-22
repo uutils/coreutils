@@ -51,6 +51,8 @@ crates is as follows:
 We have separated repositories for crates that we maintain but also publish for
 use by others:
 
+- [coreutils-i18n](https://github.com/uutils/coreutils-l10n)
+- [num-prime](https://github.com/uutils/num-prime)
 - [uutils-term-grid](https://github.com/uutils/uutils-term-grid)
 - [parse_datetime](https://github.com/uutils/parse_datetime)
 
@@ -78,6 +80,7 @@ issues and writing documentation are just as important as writing code.
 We can't fix bugs we don't know about, so good issues are super helpful! Here
 are some tips for writing good issues:
 
+- Confirm the bug is in coreutils; some tools (e.g., `find`, `sed`) are maintained in separate repositories under the uutils project.
 - If you find a bug, make sure it's still a problem on the [`main` branch](https://github.com/uutils/coreutils/releases/tag/latest-commit).
 - Search through the existing issues to see whether it has already been
   reported.
@@ -123,7 +126,7 @@ submit a patch!
 ### Don't `panic!`
 
 The coreutils should be very reliable. This means that we should never `panic!`.
-Therefore, you should avoid using `.unwrap()` and `panic!`. Sometimes the use of
+Therefore, you should avoid using `println!`, `.unwrap()` and `panic!`. Sometimes the use of
 `unreachable!` can be justified with a comment explaining why that code is
 unreachable.
 
@@ -259,9 +262,6 @@ We take pride in supporting many operating systems and architectures. Any code
 you contribute must at least compile without warnings for all platforms in the
 CI. However, you can use `#[cfg(...)]` attributes to create platform dependent
 features.
-
-**Tip:** For Windows, Microsoft provides some images (VMWare, Hyper-V,
-VirtualBox and Parallels) for development [on their official download page](https://developer.microsoft.com/windows/downloads/virtual-machines/).
 
 ## Improving the GNU compatibility
 
