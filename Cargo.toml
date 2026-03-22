@@ -432,7 +432,6 @@ rayon = "1.10"
 regex = "1.10.4"
 rlimit = "0.11.0"
 rstest = "0.26.0"
-rstest_reuse = "0.7.0"
 rustc-hash = "2.1.1"
 rust-ini = "0.21.0"
 same-file = "1.0.6"
@@ -641,7 +640,6 @@ uucore = { workspace = true, features = [
 walkdir.workspace = true
 hex-literal = "1.0.0"
 rstest.workspace = true
-rstest_reuse.workspace = true
 
 [target.'cfg(unix)'.dev-dependencies]
 nix = { workspace = true, features = [

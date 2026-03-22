@@ -62,17 +62,34 @@ TOYBOX_ROOT := $(BASEDIR)/tmp
 TOYBOX_VER  := 0.8.12
 TOYBOX_SRC  := $(TOYBOX_ROOT)/toybox-$(TOYBOX_VER)
 
-# Detect the target system
-# See https://doc.rust-lang.org/beta/rustc/platform-support.html
-# todo: support building wasm
-OS := $(or $(CARGO_BUILD_TARGET),$(shell rustc --print host-tuple))
+#------------------------------------------------------------------------
+# Detect the host system.
+# On Windows uname -s might return MINGW_NT-* or CYGWIN_NT-*.
+# Otherwise let it default to the kernel name returned by uname -s
+# (Linux, Darwin, FreeBSD, …).
+#------------------------------------------------------------------------
+OS ?= $(shell uname -s)
 
 # Windows does not allow symlink by default.
 # Allow to override LN for AppArmor.
-ifneq (,$(findstring windows,$(OS)))
+ifneq (,$(findstring _NT,$(OS)))
 	LN ?= ln -f
 endif
 LN ?= ln -sf
+
+# Possible programs
+PROGS := \
+	$(shell sed -n '/feat_Tier1 = \[/,/\]/p' Cargo.toml | sed '1d;2d' |tr -d '],"\n')\
+	$(shell sed -n '/feat_common_core = \[/,/\]/p' Cargo.toml | sed '1d' |tr -d '],"\n')
+
+UNIX_PROGS := \
+	$(shell sed -n '/feat_require_unix_core = \[/,/\]/p' Cargo.toml | sed '1d' |tr -d '],"\n') \
+	hostid \
+	pinky \
+	stdbuf \
+	uptime \
+	users \
+	who
 
 SELINUX_PROGS := \
 	chcon \
@@ -80,13 +97,9 @@ SELINUX_PROGS := \
 
 $(info Detected OS = $(OS))
 
-ifeq (,$(findstring windows,$(OS)))
-	FEATURE_EXTRACT_UTILS := feat_os_unix
-else
-	FEATURE_EXTRACT_UTILS := feat_Tier1
+ifeq (,$(findstring MINGW,$(OS)))
+	PROGS += $(UNIX_PROGS)
 endif
-PROGS := $(shell cargo tree --depth 1 --features $(FEATURE_EXTRACT_UTILS) --format "{p}" --prefix none | sed -E -n 's/^uu_([^ ]+).*/\1/p')
-
 ifeq ($(SELINUX_ENABLED),1)
 	PROGS += $(SELINUX_PROGS)
 endif
@@ -101,7 +114,7 @@ endif
 # Programs with usable tests
 
 TESTS       := \
-	$(sort $(filter $(UTILS),$(PROGS) $(SELINUX_PROGS)))
+	$(sort $(filter $(UTILS),$(PROGS) $(UNIX_PROGS) $(SELINUX_PROGS)))
 
 TEST_NO_FAIL_FAST :=
 TEST_SPEC_FEATURE :=
@@ -275,7 +288,7 @@ install: build install-manpages install-completions install-locales
 	mkdir -p $(INSTALLDIR_BIN)
 ifneq (,$(and $(findstring stdbuf,$(UTILS)),$(findstring feat_external_libstdbuf,$(CARGOFLAGS))))
 	mkdir -p $(DESTDIR)$(LIBSTDBUF_DIR)
-ifneq (,$(findstring cygwin,$(OS)))
+ifneq (,$(findstring CYGWIN,$(OS)))
 	$(INSTALL) -m 755 $(BUILDDIR)/deps/stdbuf.dll $(DESTDIR)$(LIBSTDBUF_DIR)/libstdbuf.dll
 else
 	$(INSTALL) -m 755 $(BUILDDIR)/deps/libstdbuf.* $(DESTDIR)$(LIBSTDBUF_DIR)/
@@ -295,7 +308,7 @@ else
 endif
 
 uninstall:
-ifeq (,$(findstring windows,$(OS)))
+ifeq (,$(findstring MINGW,$(OS)))
 	rm -f $(DESTDIR)$(LIBSTDBUF_DIR)/libstdbuf.*
 	-rm -d $(DESTDIR)$(LIBSTDBUF_DIR) 2>/dev/null || true
 endif
