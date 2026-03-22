@@ -163,6 +163,7 @@ impl TakeAllLinesBuffer {
         reader: &mut impl Read,
         separator: u8,
     ) -> std::io::Result<BytesAndLines> {
+        self.partial_line = false;
         let bytes_read = self.inner.fill_buffer(reader)?;
         // Count the number of lines...
         self.terminated_lines = memchr_iter(separator, self.inner.remaining_buffer()).count();
