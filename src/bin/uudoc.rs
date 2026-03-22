@@ -959,6 +959,28 @@ mod tests {
         assert_eq!(writer.extract_fluent_value("any-key"), None);
     }
 
+    /// A shared buffer that implements Write for use in tests.
+    #[derive(Clone)]
+    struct SharedBuf(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+
+    impl SharedBuf {
+        fn new() -> Self {
+            Self(std::sync::Arc::new(std::sync::Mutex::new(Vec::new())))
+        }
+        fn to_string(&self) -> String {
+            String::from_utf8_lossy(&self.0.lock().unwrap()).into_owned()
+        }
+    }
+
+    impl Write for SharedBuf {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.0.lock().unwrap().write(buf)
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
     #[test]
     fn test_options_resolves_shared_fluent_keys_in_help_text() {
         // End-to-end test: an option whose help text is a shared Fluent key
@@ -974,8 +996,9 @@ mod tests {
         let platforms: &'static HashMap<&'static str, Vec<String>> =
             Box::leak(Box::new(HashMap::new()));
         let tldr_zip: &'static mut Option<ZipArchive<File>> = Box::leak(Box::new(None));
+        let buf = SharedBuf::new();
         let mut writer = MDWriter {
-            w: Box::new(Vec::<u8>::new()),
+            w: Box::new(buf.clone()),
             command,
             name: "base32",
             tldr_zip,
@@ -985,14 +1008,7 @@ mod tests {
         };
 
         writer.options().unwrap();
-
-        // Recover the output buffer
-        let output = {
-            let buf = writer.w.as_ref() as *const dyn Write as *const Vec<u8>;
-            // SAFETY: we know the writer wraps a Vec<u8>
-            unsafe { &*buf }
-        };
-        let html = String::from_utf8_lossy(output);
+        let html = buf.to_string();
 
         // The resolved text "decode data" must appear, NOT the raw key
         assert!(
@@ -1041,8 +1057,9 @@ ck-common-help-status = don't output anything, status code shows success
         let platforms: &'static HashMap<&'static str, Vec<String>> =
             Box::leak(Box::new(HashMap::new()));
         let tldr_zip: &'static mut Option<ZipArchive<File>> = Box::leak(Box::new(None));
+        let buf = SharedBuf::new();
         let mut writer = MDWriter {
-            w: Box::new(Vec::<u8>::new()),
+            w: Box::new(buf.clone()),
             command,
             name: "sha224sum",
             tldr_zip,
@@ -1052,12 +1069,7 @@ ck-common-help-status = don't output anything, status code shows success
         };
 
         writer.options().unwrap();
-
-        let output = {
-            let buf = writer.w.as_ref() as *const dyn Write as *const Vec<u8>;
-            unsafe { &*buf }
-        };
-        let html = String::from_utf8_lossy(output);
+        let html = buf.to_string();
 
         assert!(
             html.contains("read checksums from the FILEs and check them"),
