@@ -3188,6 +3188,47 @@ pub fn run_ucmd_as_root_with_stdin_stdout(
     }
 }
 
+/// Check whether rootless unshare is available in this environment.
+#[cfg(target_os = "linux")]
+pub fn is_rootless_unshare_available() -> bool {
+    Command::new("unshare")
+        .args(["-rm", "sh", "-c", "true"])
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
+/// Run a shell script in a rootless unshare namespace (`-rm`).
+///
+/// Returns `None` when unshare is unavailable/not permitted or if execution fails.
+#[cfg(target_os = "linux")]
+pub fn run_in_rootless_unshare(script: &str) -> Option<Output> {
+    if !is_rootless_unshare_available() {
+        return None;
+    }
+
+    Command::new("unshare")
+        .args(["-rm", "sh", "-c", script])
+        .output()
+        .ok()
+}
+
+/// Run a shell script in a rootless unshare namespace (`-rm`) with extra environment variables.
+///
+/// Returns `None` when unshare is unavailable/not permitted or if execution fails.
+#[cfg(target_os = "linux")]
+pub fn run_in_rootless_unshare_with_env(script: &str, envs: &[(&str, &Path)]) -> Option<Output> {
+    if !is_rootless_unshare_available() {
+        return None;
+    }
+
+    let mut command = Command::new("unshare");
+    command.args(["-rm", "sh", "-c", script]);
+    for (key, value) in envs {
+        command.env(key, value);
+    }
+    command.output().ok()
+}
+
 /// Sanity checks for test utils
 #[cfg(test)]
 mod tests {
