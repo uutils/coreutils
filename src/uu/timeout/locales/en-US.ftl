@@ -22,6 +22,7 @@ timeout-after-help = Upon timeout, send the TERM signal to COMMAND, if no other 
 # Error messages
 timeout-error-invalid-signal = { $signal }: invalid signal
 timeout-error-failed-to-execute-process = failed to execute process: { $error }
+timeout-error-monitor-exited-before-child-exec = timeout monitor exited before child exec
 
 # Verbose messages
 timeout-verbose-sending-signal = sending signal { $signal } to command { $command }
