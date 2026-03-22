@@ -9,6 +9,7 @@ use uucore::display::Quotable;
 pub use uucore::entries::{self, Group, Locate, Passwd};
 use uucore::format_usage;
 use uucore::perms::{GidUidOwnerFilter, IfFrom, chown_base, options};
+use uucore::show_warning;
 use uucore::translate;
 
 use uucore::error::{FromIo, UResult, USimpleError};
@@ -151,18 +152,13 @@ pub fn uu_app() -> Command {
 }
 
 /// Parses the user string to extract the UID.
-fn parse_uid(user: &str, spec: &str, sep: char) -> UResult<Option<u32>> {
+fn parse_uid(user: &str, spec: &str) -> UResult<Option<u32>> {
     if user.is_empty() {
         return Ok(None);
     }
 
     if let Ok(u) = Passwd::locate(user) {
         return Ok(Some(u.uid));
-    }
-
-    // Handle `username.groupname` syntax (e.g. when sep is ':' but spec contains '.')
-    if spec.contains('.') && !spec.contains(':') && sep == ':' {
-        return parse_spec(spec, '.').map(|(uid, _)| uid);
     }
 
     // Fallback: `user` string contains a numeric user ID
@@ -209,7 +205,20 @@ fn parse_spec(spec: &str, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
     let user = args.next().unwrap_or("");
     let group = args.next().unwrap_or("");
 
-    let uid = parse_uid(user, spec, sep)?;
+    // Handle `owner.group` syntax: when the separator is ':' but the spec
+    // contains '.' and not ':', the full spec is treated as the user field.
+    // If that user lookup fails, re-parse with '.' as separator (like GNU does)
+    // so that both owner and group are applied.
+    if sep == ':' && !spec.contains(':') && spec.contains('.') {
+        if let Ok(uid) = parse_uid(user, spec) {
+            let gid = parse_gid(group, spec)?;
+            return Ok((uid, gid));
+        }
+        show_warning!("'.' should be ':': {}", spec.quote());
+        return parse_spec(spec, '.');
+    }
+
+    let uid = parse_uid(user, spec)?;
     let gid = parse_gid(group, spec)?;
 
     if user.chars().next().is_some_and(char::is_numeric) && group.is_empty() && spec != user {
