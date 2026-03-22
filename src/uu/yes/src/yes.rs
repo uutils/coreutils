@@ -13,8 +13,12 @@ use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
 use uucore::translate;
 
-// it's possible that using a smaller or larger buffer might provide better performance on some
-// systems, but honestly this is good enough
+#[cfg(target_os = "linux")]
+const MAX_ROOTLESS_PIPE_SIZE: usize = 1024 * 1024;
+// todo: investigate best rate for sendfile
+#[cfg(target_os = "linux")]
+const BUF_SIZE: usize = MAX_ROOTLESS_PIPE_SIZE;
+#[cfg(not(target_os = "linux"))]
 const BUF_SIZE: usize = 16 * 1024;
 
 #[uucore::main]
@@ -110,8 +114,42 @@ fn prepare_buffer(buf: &mut Vec<u8>) {
 
 pub fn exec(bytes: &[u8]) -> io::Result<()> {
     let stdout = io::stdout();
-    let mut stdout = stdout.lock();
+    #[cfg(target_os = "linux")]
+    {
+        use rustix::fs::{
+            MemfdFlags, SealFlags, SeekFrom, fcntl_add_seals, memfd_create, seek, sendfile,
+        };
+        use rustix::io::write;
+        // make read-only fd for safe zero-copy
+        // sendfile  zero-copy is much slower than vmsplice, but 0 unsafe
+        // maybe, we should align fd by 1 MB by someway
+        if let Ok(fd) = memfd_create("y", MemfdFlags::CLOEXEC | MemfdFlags::ALLOW_SEALING)
+            && write(&fd, bytes).is_ok()
+            && seek(&fd, SeekFrom::Start(0)).is_ok()
+        {
+            // try to seal fd. SealFlags::all() do nothing if one of them is unsupported
+            let _ = fcntl_add_seals(
+                &fd,
+                SealFlags::SHRINK | SealFlags::GROW | SealFlags::WRITE | SealFlags::SEAL,
+            );
+            // extend pipe size (if target is pipe)
+            let _ = rustix::pipe::fcntl_setpipe_size(&stdout, MAX_ROOTLESS_PIPE_SIZE);
+            let len = bytes.len();
+            loop {
+                match sendfile(&stdout, &fd, None, len) {
+                    Ok(n) if n > 0 => {}
+                    Ok(0) => {
+                        if seek(&fd, SeekFrom::Start(0)).is_err() {
+                            break;
+                        }
+                    }
+                    _ => break, // sendfile has wrong error with >/dev/full. diagnose it by write
+                }
+            }
+        }
+    }
 
+    let mut stdout = stdout.lock();
     loop {
         stdout.write_all(bytes)?;
     }
@@ -122,6 +160,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg(not(target_os = "linux"))] // Linux uses different buffer size
     fn test_prepare_buffer() {
         let tests = [
             (150, 16350),

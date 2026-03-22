@@ -8,6 +8,7 @@ advapi32-sys
 aho-corasick
 backtrace
 blake2b_simd
+rustix
 
 # * uutils project
 uutils
@@ -361,8 +362,13 @@ uutils
 
 # * function names
 getcwd
+sendfile
+setpipe
 
 # * other
+CLOEXEC
+memfd
+Memfd
 weblate
 algs
 wasm
