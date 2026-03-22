@@ -48,3 +48,7 @@ sed -i -e "s|uucore = { version=\">=$FROM\",|uucore = { version=\">=$TO\",|" $PR
 # Update crates using uucore_procs
 #shellcheck disable=SC2086
 sed -i -e "s|uucore_procs = { version=\">=$FROM\",|uucore_procs = { version=\">=$TO\",|" $PROGS
+
+# Update Cargo.lock files
+cargo update --workspace
+cargo update --workspace --manifest-path fuzz/Cargo.toml
