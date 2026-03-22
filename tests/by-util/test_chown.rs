@@ -204,8 +204,15 @@ fn test_chown_dot_separator_warning() {
         return;
     }
     result.stderr_contains("warning: '.' should be ':'");
-    // "retained as" in verbose output confirms both owner and group were applied
-    result.stderr_contains("retained as");
+    // verbose output confirms both owner and group were processed;
+    // "retained as" on Linux (file group matches id -gn), "changed ownership"
+    // on BSDs where files inherit group from parent dir (e.g. /tmp -> wheel)
+    assert!(
+        result.stderr_str().contains("retained as")
+            || result.stderr_str().contains("changed ownership"),
+        "expected verbose ownership output, got: {}",
+        result.stderr_str()
+    );
 
     // chown user: file should NOT warn
     scene
