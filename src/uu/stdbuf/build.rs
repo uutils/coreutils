@@ -9,28 +9,6 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-#[cfg(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "dragonfly"
-))]
-mod platform {
-    pub const DYLIB_EXT: &str = ".so";
-}
-
-#[cfg(target_vendor = "apple")]
-mod platform {
-    pub const DYLIB_EXT: &str = ".dylib";
-}
-
-#[cfg(target_os = "cygwin")]
-mod platform {
-    pub const DYLIB_EXT: &str = ".dll";
-}
-
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=src/libstdbuf/src/libstdbuf.rs");
@@ -58,6 +36,21 @@ fn main() {
     let out_dir = env::var("OUT_DIR").expect("OUT_DIR not set");
     let target = env::var("TARGET").unwrap_or_else(|_| "unknown".to_string());
 
+    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
+    let target_vendor = env::var("CARGO_CFG_TARGET_VENDOR").unwrap();
+    let target_family = env::var("CARGO_CFG_TARGET_FAMILY").unwrap();
+
+    if target_family != "unix" {
+        return;
+    }
+    let dylib_ext = if target_vendor == "apple" {
+        ".dylib"
+    } else if target_os == "cygwin" {
+        ".dll"
+    } else {
+        ".so"
+    };
+
     // Check if we're building from the repository (where src/libstdbuf exists)
     // or from crates.io (where it doesn't)
     let libstdbuf_src = Path::new("src/libstdbuf");
@@ -65,7 +58,7 @@ fn main() {
         // When building from crates.io, libstdbuf is already available as a dependency
         // We can't build it here, so we'll need to handle this differently
         // For now, we'll create a dummy library file to satisfy the include_bytes! macro
-        let lib_name = format!("libstdbuf{}", platform::DYLIB_EXT);
+        let lib_name = format!("libstdbuf{dylib_ext}");
         let dest_path = Path::new(&out_dir).join(&lib_name);
 
         // Create an empty file as a placeholder
@@ -108,11 +101,12 @@ fn main() {
     assert!(status.success(), "Failed to build libstdbuf");
 
     // Copy the built library to OUT_DIR for include_bytes! to find
-    #[cfg(target_os = "cygwin")]
-    let lib_name = format!("stdbuf{}", platform::DYLIB_EXT);
-    #[cfg(not(target_os = "cygwin"))]
-    let lib_name = format!("libstdbuf{}", platform::DYLIB_EXT);
-    let dest_path = Path::new(&out_dir).join(format!("libstdbuf{}", platform::DYLIB_EXT));
+    let lib_name = if target_os == "cygwin" {
+        format!("stdbuf{dylib_ext}")
+    } else {
+        format!("libstdbuf{dylib_ext}")
+    };
+    let dest_path = Path::new(&out_dir).join(format!("libstdbuf{dylib_ext}"));
 
     // Check multiple possible locations for the built library
     let possible_paths = if !target.is_empty() && target != "unknown" {
