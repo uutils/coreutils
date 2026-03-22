@@ -8,8 +8,9 @@
 use std::{
     collections::HashMap,
     ffi::OsString,
-    fs::File,
+    fs::{self, File},
     io::{self, Read, Seek, Write},
+    path::Path,
     process,
 };
 
@@ -350,6 +351,12 @@ fn main() -> io::Result<()> {
         }
     }
 
+    // Load all FTL files from all utility directories into a combined string.
+    // This allows utilities that share keys across crates (e.g., sha224sum using
+    // ck-common-help-* from checksum_common, or base64 using base-common-help-*
+    // from base32) to resolve those keys during doc generation.
+    let all_fluent = load_all_ftl("src/uu");
+
     println!("Writing to utils");
     for (&name, (_, command)) in utils {
         let (utils_name, usage_name, command) = match name {
@@ -360,13 +367,11 @@ fn main() -> io::Result<()> {
         };
         let p = format!("docs/src/utils/{usage_name}.md");
 
-        let fluent = File::open(format!("src/uu/{utils_name}/locales/en-US.ftl"))
-            .and_then(|mut f: File| {
-                let mut s = String::new();
-                f.read_to_string(&mut s)?;
-                Ok(s)
-            })
-            .ok();
+        let fluent = if all_fluent.is_empty() {
+            None
+        } else {
+            Some(all_fluent.clone())
+        };
 
         if let Ok(f) = File::create(&p) {
             MDWriter {
@@ -386,6 +391,26 @@ fn main() -> io::Result<()> {
         writeln!(summary, "* [{usage_name}](utils/{usage_name}.md)")?;
     }
     Ok(())
+}
+
+/// Load and concatenate all `en-US.ftl` files from utility locale directories.
+/// This allows shared Fluent keys (e.g., `ck-common-help-*` in `checksum_common`)
+/// to be resolved when generating docs for utilities that depend on them.
+fn load_all_ftl(uu_dir: &str) -> String {
+    let mut combined = String::new();
+    let base = Path::new(uu_dir);
+    if let Ok(entries) = fs::read_dir(base) {
+        for entry in entries.flatten() {
+            let ftl_path = entry.path().join("locales/en-US.ftl");
+            if ftl_path.is_file() {
+                if let Ok(content) = fs::read_to_string(&ftl_path) {
+                    combined.push('\n');
+                    combined.push_str(&content);
+                }
+            }
+        }
+    }
+    combined
 }
 
 fn fix_usage(name: &str, usage: String) -> String {
@@ -978,5 +1003,106 @@ mod tests {
             !html.contains("base-common-help-decode"),
             "Raw Fluent key should not appear in output, got:\n{html}"
         );
+    }
+
+    #[test]
+    fn test_options_resolves_cross_crate_fluent_keys() {
+        // Simulates sha224sum: its own FTL only has sha224sum-about/usage,
+        // but options use ck-common-help-* keys from checksum_common's FTL.
+        // When all FTL files are combined, these keys must resolve.
+        let combined_ftl = "\
+sha224sum-about = Print or check the SHA224 checksums
+sha224sum-usage = sha224sum [OPTIONS] [FILE]...
+ck-common-help-check = read checksums from the FILEs and check them
+ck-common-help-warn = warn about improperly formatted checksum lines
+ck-common-help-status = don't output anything, status code shows success
+";
+        let command = Command::new("sha224sum")
+            .arg(
+                Arg::new("check")
+                    .short('c')
+                    .long("check")
+                    .help("ck-common-help-check")
+                    .action(clap::ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new("warn")
+                    .short('w')
+                    .long("warn")
+                    .help("ck-common-help-warn")
+                    .action(clap::ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new("status")
+                    .long("status")
+                    .help("ck-common-help-status")
+                    .action(clap::ArgAction::SetTrue),
+            );
+        let platforms: &'static HashMap<&'static str, Vec<String>> =
+            Box::leak(Box::new(HashMap::new()));
+        let tldr_zip: &'static mut Option<ZipArchive<File>> = Box::leak(Box::new(None));
+        let mut writer = MDWriter {
+            w: Box::new(Vec::<u8>::new()),
+            command,
+            name: "sha224sum",
+            tldr_zip,
+            utils_per_platform: platforms,
+            fluent: Some(combined_ftl.to_string()),
+            fluent_key: "sha224sum".to_string(),
+        };
+
+        writer.options().unwrap();
+
+        let output = {
+            let buf = writer.w.as_ref() as *const dyn Write as *const Vec<u8>;
+            unsafe { &*buf }
+        };
+        let html = String::from_utf8_lossy(output);
+
+        assert!(
+            html.contains("read checksums from the FILEs and check them"),
+            "Expected resolved ck-common-help-check, got:\n{html}"
+        );
+        assert!(
+            !html.contains("ck-common-help-check"),
+            "Raw Fluent key ck-common-help-check should not appear, got:\n{html}"
+        );
+        assert!(
+            html.contains("warn about improperly formatted checksum lines"),
+            "Expected resolved ck-common-help-warn, got:\n{html}"
+        );
+        assert!(
+            html.contains("don't output anything, status code shows success"),
+            "Expected resolved ck-common-help-status, got:\n{html}"
+        );
+    }
+
+    #[test]
+    fn test_load_all_ftl_combines_files() {
+        // Create a temporary directory structure mirroring src/uu/*/locales/
+        let tmp = std::env::temp_dir().join("uudoc_test_ftl");
+        let _ = fs::remove_dir_all(&tmp);
+
+        let util_a = tmp.join("util_a/locales");
+        let util_b = tmp.join("util_b/locales");
+        fs::create_dir_all(&util_a).unwrap();
+        fs::create_dir_all(&util_b).unwrap();
+
+        fs::write(util_a.join("en-US.ftl"), "key-a = value A\n").unwrap();
+        fs::write(util_b.join("en-US.ftl"), "key-b = value B\n").unwrap();
+
+        let combined = load_all_ftl(tmp.to_str().unwrap());
+
+        assert!(combined.contains("key-a = value A"), "Missing key-a");
+        assert!(combined.contains("key-b = value B"), "Missing key-b");
+
+        // Clean up
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_load_all_ftl_handles_missing_dir() {
+        let result = load_all_ftl("/nonexistent/path");
+        assert!(result.is_empty());
     }
 }
