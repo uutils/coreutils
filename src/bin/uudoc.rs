@@ -250,7 +250,7 @@ fn main() -> io::Result<()> {
     let utils = util_map::<Box<dyn Iterator<Item = OsString>>>();
     // Initialize localization for uucore common strings (used by tldr example attribution)
     let _ = uucore::locale::setup_localization("uudoc");
-    match std::fs::create_dir("docs/src/utils/") {
+    match fs::create_dir("docs/src/utils/") {
         Err(e) if e.kind() == io::ErrorKind::AlreadyExists => Ok(()),
         x => x,
     }?;
