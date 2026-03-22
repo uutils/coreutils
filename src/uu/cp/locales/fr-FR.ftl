@@ -1,21 +1,22 @@
 cp-about = Copier SOURCE vers DEST, ou plusieurs SOURCE(s) vers RÉPERTOIRE.
-cp-usage = cp [OPTION]... [-T] SOURCE DEST
-  cp [OPTION]... SOURCE... RÉPERTOIRE
-  cp [OPTION]... -t RÉPERTOIRE SOURCE...
-cp-after-help = Ne pas copier un non-répertoire qui a une destination existante avec le même horodatage de modification ou plus récent ;
-  à la place, ignorer silencieusement le fichier sans échec. Si les horodatages sont préservés, la comparaison est faite avec
-  l'horodatage source tronqué aux résolutions du système de fichiers de destination et des appels système utilisés pour
-  mettre à jour les horodatages ; cela évite le travail en double si plusieurs commandes cp -pu sont exécutées avec la même source
-  et destination. Cette option est ignorée si l'option -n ou --no-clobber est également spécifiée. De plus, si
-  --preserve=links est également spécifié (comme avec cp -au par exemple), cela aura la priorité ; par conséquent,
-  selon l'ordre dans lequel les fichiers sont traités depuis la source, les fichiers plus récents dans la destination peuvent être remplacés,
-  pour refléter les liens durs dans la source. ce qui donne plus de contrôle sur les fichiers existants dans la destination qui sont
-  remplacés, et sa valeur peut être l'une des suivantes :
+cp-usage =
+    cp [OPTION]... [-T] SOURCE DEST
+    cp [OPTION]... SOURCE... RÉPERTOIRE
+    cp [OPTION]... -t RÉPERTOIRE SOURCE...
+cp-after-help =
+    Ne pas copier un non-répertoire qui a une destination existante avec le même horodatage de modification ou plus récent ;
+    à la place, ignorer silencieusement le fichier sans échec. Si les horodatages sont préservés, la comparaison est faite avec
+    l'horodatage source tronqué aux résolutions du système de fichiers de destination et des appels système utilisés pour
+    mettre à jour les horodatages ; cela évite le travail en double si plusieurs commandes cp -pu sont exécutées avec la même source
+    et destination. Cette option est ignorée si l'option -n ou --no-clobber est également spécifiée. De plus, si
+    --preserve=links est également spécifié (comme avec cp -au par exemple), cela aura la priorité ; par conséquent,
+    selon l'ordre dans lequel les fichiers sont traités depuis la source, les fichiers plus récents dans la destination peuvent être remplacés,
+    pour refléter les liens durs dans la source. ce qui donne plus de contrôle sur les fichiers existants dans la destination qui sont
+    remplacés, et sa valeur peut être l'une des suivantes :
 
-  - all C'est l'opération par défaut lorsqu'une option --update n'est pas spécifiée, et entraîne le remplacement de tous les fichiers existants dans la destination.
-  - none Cela est similaire à l'option --no-clobber, en ce sens qu'aucun fichier dans la destination n'est remplacé, mais ignorer un fichier n'induit pas d'échec.
-  - older C'est l'opération par défaut lorsque --update est spécifié, et entraîne le remplacement des fichiers s'ils sont plus anciens que le fichier source correspondant.
-
+    - all C'est l'opération par défaut lorsqu'une option --update n'est pas spécifiée, et entraîne le remplacement de tous les fichiers existants dans la destination.
+    - none Cela est similaire à l'option --no-clobber, en ce sens qu'aucun fichier dans la destination n'est remplacé, mais ignorer un fichier n'induit pas d'échec.
+    - older C'est l'opération par défaut lorsque --update est spécifié, et entraîne le remplacement des fichiers s'ils sont plus anciens que le fichier source correspondant.
 # Messages d'aide
 cp-help-target-directory = copier tous les arguments SOURCE dans le répertoire cible
 cp-help-no-target-directory = Traiter DEST comme un fichier régulier et non comme un répertoire
@@ -46,7 +47,6 @@ cp-help-selinux = définir le contexte de sécurité SELinux du fichier de desti
 cp-help-context = comme -Z, ou si CTX est spécifié, définir le contexte de sécurité SELinux ou SMACK à CTX
 cp-help-progress = Afficher une barre de progression. Note : cette fonctionnalité n'est pas supportée par GNU coreutils.
 cp-help-copy-contents = Non implémenté : copier le contenu des fichiers spéciaux lors de la récursion
-
 # Messages d'erreur
 cp-error-missing-file-operand = opérande fichier manquant
 cp-error-missing-destination-operand = opérande fichier de destination manquant après { $source }
@@ -85,15 +85,13 @@ cp-error-selinux-not-enabled = SELinux n'était pas activé lors de la compilati
 cp-error-selinux-set-context = échec de la définition du contexte de sécurité de { $path } : { $error }
 cp-error-selinux-get-context = échec de l'obtention du contexte de sécurité de { $path }
 cp-error-selinux-error = Erreur SELinux : { $error }
-cp-error-selinux-context-conflict = impossible de combiner --context (-Z) avec --preserve=context
 cp-error-cannot-create-fifo = impossible de créer le fifo { $path } : Le fichier existe
-cp-error-cannot-create-special-file = impossible de créer le fichier spécial { $path } : { $error }
 cp-error-invalid-attribute = attribut invalide { $value }
 cp-error-failed-to-create-whole-tree = échec de la création de l'arborescence complète
 cp-error-failed-to-create-directory = Échec de la création du répertoire : { $error }
-cp-error-backup-format = cp : { $error }
-  Tentez '{ $exec } --help' pour plus d'informations.
-
+cp-error-backup-format =
+    cp : { $error }
+    Tentez '{ $exec } --help' pour plus d'informations.
 # Debug enum strings
 cp-debug-enum-no = non
 cp-debug-enum-yes = oui
@@ -103,17 +101,14 @@ cp-debug-enum-unknown = inconnu
 cp-debug-enum-zeros = zéros
 cp-debug-enum-seek-hole = SEEK_HOLE
 cp-debug-enum-seek-hole-zeros = SEEK_HOLE + zéros
-
 # Messages d'avertissement
 cp-warning-source-specified-more-than-once = { $file_type } source { $source } spécifié plus d'une fois
-
 # Messages verbeux et de débogage
 cp-verbose-copied = { $source } -> { $dest }
 cp-debug-skipped = { $path } ignoré
-cp-verbose-removed = removed { $path }
+cp-verbose-removed = { $path } supprimé
 cp-verbose-created-directory = { $source } -> { $dest }
 cp-debug-copy-offload = copy offload : { $offload }, reflink : { $reflink }, sparse detection : { $sparse }
-
 # Invites
 cp-prompt-overwrite = écraser { $path } ?
 cp-prompt-overwrite-with-mode = remplacer { $path }, en écrasant le mode

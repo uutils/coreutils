@@ -1,7 +1,6 @@
 [book]
 authors = ["uutils contributors"]
 language = "en"
-multilingual = false
 src = "src"
 title = "uutils Documentation"
 

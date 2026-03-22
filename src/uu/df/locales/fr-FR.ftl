@@ -1,14 +1,15 @@
-df-about = afficher des informations sur le système de fichiers sur lequel chaque FICHIER réside,
-  ou tous les systèmes de fichiers par défaut.
+df-about =
+    afficher des informations sur le système de fichiers sur lequel chaque FICHIER réside,
+    ou tous les systèmes de fichiers par défaut.
 df-usage = df [OPTION]... [FICHIER]...
-df-after-help = Les valeurs affichées sont en unités de la première TAILLE disponible de --block-size,
-  et des variables d'environnement DF_BLOCK_SIZE, BLOCK_SIZE et BLOCKSIZE.
-  Sinon, les unités par défaut sont 1024 octets (ou 512 si POSIXLY_CORRECT est défini).
+df-after-help =
+    Les valeurs affichées sont en unités de la première TAILLE disponible de --block-size,
+    et des variables d'environnement DF_BLOCK_SIZE, BLOCK_SIZE et BLOCKSIZE.
+    Sinon, les unités par défaut sont 1024 octets (ou 512 si POSIXLY_CORRECT est défini).
 
-  TAILLE est un entier et une unité optionnelle (exemple : 10M est 10*1024*1024).
-  Les unités sont K, M, G, T, P, E, Z, Y (puissances de 1024) ou KB, MB,... (puissances
-  de 1000). Les unités peuvent être décimales, hexadécimales, octales, binaires.
-
+    TAILLE est un entier et une unité optionnelle (exemple : 10M est 10*1024*1024).
+    Les unités sont K, M, G, T, P, E, Z, Y (puissances de 1024) ou KB, MB,... (puissances
+    de 1000).
 # Messages d'aide
 df-help-print-help = afficher les informations d'aide.
 df-help-all = inclure les systèmes de fichiers factices
@@ -26,7 +27,6 @@ df-help-sync = invoquer sync avant d'obtenir les informations d'utilisation (non
 df-help-type = limiter l'affichage aux systèmes de fichiers de type TYPE
 df-help-print-type = afficher le type de système de fichiers
 df-help-exclude-type = limiter l'affichage aux systèmes de fichiers pas de type TYPE
-
 # Messages d'erreur
 df-error-block-size-too-large = argument --block-size '{ $size }' trop grand
 df-error-invalid-block-size = argument --block-size invalide { $size }
@@ -38,12 +38,11 @@ df-error-no-file-systems-processed = aucun système de fichiers traité
 df-error-cannot-access-over-mounted = impossible d'accéder à { $path } : sur-monté par un autre périphérique
 df-error-cannot-read-table-of-mounted-filesystems = impossible de lire la table des systèmes de fichiers montés
 df-error-inodes-not-supported-windows = { $program } : ne supporte pas l'option -i
-
 # En-têtes du tableau
 df-header-filesystem = Sys. de fichiers
 df-header-size = Taille
 df-header-used = Utilisé
-df-header-avail = Disp.
+df-header-avail = Dispo
 df-header-available = Disponible
 df-header-use-percent = Util%
 df-header-capacity = Capacité
@@ -54,7 +53,6 @@ df-header-iavail = ILibre
 df-header-iuse-percent = IUtil%
 df-header-file = Fichier
 df-header-type = Type
-
 # Autres messages
 df-total = total
 df-blocks-suffix = -blocs
