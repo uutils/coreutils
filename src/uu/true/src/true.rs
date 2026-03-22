@@ -13,23 +13,17 @@ pub fn uumain(mut args: impl uucore::Args) -> i32 {
         return 0;
     };
 
-    let error = if flag == "--help" {
+    if let Err(e) = (if flag == "--help" {
         uu_app().print_help()
     } else if flag == "--version" {
         // avoid uu_app for smaller binary size
         writeln!(std::io::stdout(), "true {}", crate_version!())
     } else {
         return 0;
-    };
-
-    if let Err(print_fail) = error
-        && print_fail.kind() != std::io::ErrorKind::BrokenPipe
+    }) && e.kind() != std::io::ErrorKind::BrokenPipe
     {
-        // Try to display this error.
-        let _ = writeln!(std::io::stderr(), "true: {print_fail}");
-        // Mirror GNU options. When failing to print warnings or version flags, then we exit
-        // with FAIL. This avoids allocation some error information which may result in yet
-        // other types of failure.
+        // GNU compatibility: >/dev/full has exit code 1 and >/dev/full 2>/dev/full does not crush
+        let _ = writeln!(std::io::stderr(), "true: {e}");
         return 1;
     }
     0

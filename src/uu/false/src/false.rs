@@ -13,19 +13,17 @@ pub fn uumain(mut args: impl uucore::Args) -> i32 {
         return 1;
     };
 
-    let error = if flag == "--help" {
+    if let Err(e) = (if flag == "--help" {
         uu_app().print_help()
     } else if flag == "--version" {
         // avoid uu_app for smaller binary size
         writeln!(std::io::stdout(), "false {}", crate_version!())
     } else {
         return 1;
-    };
-
-    if let Err(print_fail) = error
-        && print_fail.kind() != std::io::ErrorKind::BrokenPipe
+    }) && e.kind() != std::io::ErrorKind::BrokenPipe
     {
-        let _ = writeln!(std::io::stderr(), "false: {print_fail}");
+        // GNU compatibility: >/dev/full is error and >/dev/full 2>/dev/full does not crush
+        let _ = writeln!(std::io::stderr(), "false: {e}");
     }
     1
 }
