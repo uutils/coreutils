@@ -471,39 +471,32 @@ fn display_grid(
             writeln!(out)?;
         }
     } else {
-        let names: Vec<_> = if quoted {
-            // In case some names are quoted, GNU adds a space before each
-            // entry that does not start with a quote to make it prettier
-            // on multiline.
-            //
-            // Example:
-            // ```
-            // $ ls
-            // 'a\nb'   bar
-            //  foo     baz
-            // ^       ^
-            // These spaces is added
-            // ```
+        let names: Vec<String> = {
+            let mut buf = Vec::new();
             names
                 .map(|n| {
-                    if os_str_starts_with(&n, b"'") || os_str_starts_with(&n, b"\"") {
-                        n
-                    } else {
-                        let mut ret: OsString = " ".into();
-                        ret.push(n);
-                        ret
+                    // In case some names are quoted, GNU adds a space before each
+                    // entry that does not start with a quote to make it prettier
+                    // on multiline.
+                    //
+                    // Example:
+                    // ```
+                    // $ ls
+                    // 'a\nb'   bar
+                    //  foo     baz
+                    // ^       ^
+                    // These spaces is added
+                    // ```
+                    // FIXME: the Grid crate only supports &str, so can't display raw bytes
+                    buf.clear();
+                    if quoted && !os_str_starts_with(&n, b"'") && !os_str_starts_with(&n, b"\"") {
+                        buf.push(b' ');
                     }
+                    buf.extend(n.as_encoded_bytes());
+                    String::from_utf8_lossy(&buf).into_owned()
                 })
                 .collect()
-        } else {
-            names.collect()
         };
-
-        // FIXME: the Grid crate only supports &str, so can't display raw bytes
-        let names: Vec<_> = names
-            .into_iter()
-            .map(|s| s.to_string_lossy().into_owned())
-            .collect();
 
         // Since tab_size=0 means no \t, use Spaces separator for optimization.
         let filling = match tab_size {
