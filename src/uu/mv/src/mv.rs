@@ -20,7 +20,7 @@ use rustc_hash::FxHashSet;
 use std::env;
 use std::ffi::OsString;
 use std::fs;
-use std::io::{self, IsTerminal};
+use std::io::{self, IsTerminal, stdin};
 #[cfg(unix)]
 use std::os::unix;
 #[cfg(unix)]
@@ -427,12 +427,12 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
     } else if target.exists() && source_is_dir {
         match opts.overwrite {
             OverwriteMode::NoClobber => return Ok(()),
-            OverwriteMode::Interactive => prompt_overwrite(target, None)?,
+            OverwriteMode::Interactive => prompt_overwrite(target, None, opts)?,
             OverwriteMode::Force => {}
             OverwriteMode::Default => {
                 let (writable, mode) = is_writable(target);
-                if !writable && io::stdin().is_terminal() {
-                    prompt_overwrite(target, mode)?;
+                if !writable && stdin().is_terminal() {
+                    prompt_overwrite(target, mode, opts)?;
                 }
             }
         }
@@ -725,13 +725,13 @@ fn rename(
                 }
                 return Ok(());
             }
-            OverwriteMode::Interactive => prompt_overwrite(to, None)?,
+            OverwriteMode::Interactive => prompt_overwrite(to, None, opts)?,
             OverwriteMode::Force => {}
             OverwriteMode::Default => {
                 // GNU mv prompts when stdin is a TTY and target is not writable
                 let (writable, mode) = is_writable(to);
-                if !writable && io::stdin().is_terminal() {
-                    prompt_overwrite(to, mode)?;
+                if !writable && stdin().is_terminal() {
+                    prompt_overwrite(to, mode, opts)?;
                 }
             }
         }
@@ -1276,7 +1276,12 @@ fn get_interactive_prompt(to: &Path, _cached_mode: Option<u32>) -> String {
 }
 
 /// Prompts the user for confirmation and returns an error if declined.
-fn prompt_overwrite(to: &Path, cached_mode: Option<u32>) -> io::Result<()> {
+fn prompt_overwrite(to: &Path, cached_mode: Option<u32>, options: &Options) -> io::Result<()> {
+    if !stdin().is_terminal() {
+        if options.overwrite == OverwriteMode::Default {
+            return Ok(());
+        }
+    }
     if !prompt_yes!("{}", get_interactive_prompt(to, cached_mode)) {
         return Err(io::Error::other(""));
     }
