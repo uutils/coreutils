@@ -615,12 +615,10 @@ impl MDWriter<'_, '_> {
             }
             writeln!(self.w, "</dt>")?;
             let help_text = arg.get_help().unwrap_or_default().to_string();
-            // Try to resolve Fluent key if it looks like one, otherwise use as-is
-            let resolved_help = if help_text.starts_with(&format!("{}-help-", self.fluent_key)) {
-                self.extract_fluent_value(&help_text).unwrap_or(help_text)
-            } else {
-                help_text
-            };
+            // Try to resolve Fluent key from the FTL file, otherwise use help text as-is.
+            // We always attempt resolution because shared keys (e.g. "base-common-help-*")
+            // don't necessarily start with the utility-specific prefix.
+            let resolved_help = self.extract_fluent_value(&help_text).unwrap_or(help_text);
             writeln!(
                 self.w,
                 "<dd>\n\n{}\n\n</dd>",
@@ -855,5 +853,130 @@ mod tests {
 
         let result = post_process_manpage(input.to_string(), "2024-01-01");
         assert_eq!(result, expected);
+    }
+
+    /// Helper to create an MDWriter with given FTL content for testing
+    fn make_test_writer(fluent_content: &str, fluent_key: &str) -> MDWriter<'static, 'static> {
+        // Leak the HashMap to get a 'static reference (fine in tests)
+        let platforms: &'static HashMap<&'static str, Vec<String>> =
+            Box::leak(Box::new(HashMap::new()));
+        let tldr_zip: &'static mut Option<ZipArchive<File>> = Box::leak(Box::new(None));
+        MDWriter {
+            w: Box::new(Vec::new()),
+            command: Command::new("test"),
+            name: "test",
+            tldr_zip,
+            utils_per_platform: platforms,
+            fluent: Some(fluent_content.to_string()),
+            fluent_key: fluent_key.to_string(),
+        }
+    }
+
+    #[test]
+    fn test_extract_fluent_value_resolves_utility_specific_keys() {
+        let ftl = "base32-about = encode/decode data and print to standard output\n\
+                    base32-usage = base32 [OPTION]... [FILE]\n";
+        let writer = make_test_writer(ftl, "base32");
+
+        assert_eq!(
+            writer.extract_fluent_value("base32-about"),
+            Some("encode/decode data and print to standard output".to_string())
+        );
+        assert_eq!(
+            writer.extract_fluent_value("base32-usage"),
+            Some("base32 [OPTION]... [FILE]".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_fluent_value_resolves_shared_keys() {
+        // Regression test: shared Fluent keys like "base-common-help-decode"
+        // don't start with the utility prefix "base32-". They must still be
+        // resolved from the same FTL file.
+        let ftl = "base32-about = encode/decode data\n\
+                    base-common-help-decode = decode data\n\
+                    base-common-help-ignore-garbage = when decoding, ignore non-alphabet characters\n";
+        let writer = make_test_writer(ftl, "base32");
+
+        assert_eq!(
+            writer.extract_fluent_value("base-common-help-decode"),
+            Some("decode data".to_string())
+        );
+        assert_eq!(
+            writer.extract_fluent_value("base-common-help-ignore-garbage"),
+            Some("when decoding, ignore non-alphabet characters".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_fluent_value_returns_none_for_missing_keys() {
+        let ftl = "base32-about = encode/decode data\n";
+        let writer = make_test_writer(ftl, "base32");
+
+        assert_eq!(writer.extract_fluent_value("nonexistent-key"), None);
+    }
+
+    #[test]
+    fn test_extract_fluent_value_returns_none_when_no_ftl() {
+        let platforms: &'static HashMap<&'static str, Vec<String>> =
+            Box::leak(Box::new(HashMap::new()));
+        let tldr_zip: &'static mut Option<ZipArchive<File>> = Box::leak(Box::new(None));
+        let writer = MDWriter {
+            w: Box::new(Vec::new()),
+            command: Command::new("test"),
+            name: "test",
+            tldr_zip,
+            utils_per_platform: platforms,
+            fluent: None,
+            fluent_key: "test".to_string(),
+        };
+
+        assert_eq!(writer.extract_fluent_value("any-key"), None);
+    }
+
+    #[test]
+    fn test_options_resolves_shared_fluent_keys_in_help_text() {
+        // End-to-end test: an option whose help text is a shared Fluent key
+        // must have that key resolved in the generated markdown output.
+        let ftl = "base-common-help-decode = decode data\n";
+        let command = Command::new("base32").arg(
+            Arg::new("decode")
+                .short('d')
+                .long("decode")
+                .help("base-common-help-decode")
+                .action(clap::ArgAction::SetTrue),
+        );
+        let platforms: &'static HashMap<&'static str, Vec<String>> =
+            Box::leak(Box::new(HashMap::new()));
+        let tldr_zip: &'static mut Option<ZipArchive<File>> = Box::leak(Box::new(None));
+        let mut writer = MDWriter {
+            w: Box::new(Vec::<u8>::new()),
+            command,
+            name: "base32",
+            tldr_zip,
+            utils_per_platform: platforms,
+            fluent: Some(ftl.to_string()),
+            fluent_key: "base32".to_string(),
+        };
+
+        writer.options().unwrap();
+
+        // Recover the output buffer
+        let output = {
+            let buf = writer.w.as_ref() as *const dyn Write as *const Vec<u8>;
+            // SAFETY: we know the writer wraps a Vec<u8>
+            unsafe { &*buf }
+        };
+        let html = String::from_utf8_lossy(output);
+
+        // The resolved text "decode data" must appear, NOT the raw key
+        assert!(
+            html.contains("decode data"),
+            "Expected resolved help text 'decode data', got:\n{html}"
+        );
+        assert!(
+            !html.contains("base-common-help-decode"),
+            "Raw Fluent key should not appear in output, got:\n{html}"
+        );
     }
 }
