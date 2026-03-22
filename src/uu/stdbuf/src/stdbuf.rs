@@ -4,6 +4,8 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) tempdir dyld dylib optgrps libstdbuf
+#[cfg(not(unix))]
+compile_error!("stdbuf is not supported on the target");
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
@@ -31,14 +33,9 @@ mod options {
 
 #[cfg(all(
     not(feature = "feat_external_libstdbuf"),
-    any(
-        target_os = "linux",
-        target_os = "android",
-        target_os = "freebsd",
-        target_os = "netbsd",
-        target_os = "openbsd",
-        target_os = "dragonfly"
-    )
+    unix,
+    not(target_vendor = "apple"),
+    not(target_os = "cygwin")
 ))]
 const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.so"));
 
@@ -82,14 +79,7 @@ enum ProgramOptionsError {
     ValueTooLarge(String),
 }
 
-#[cfg(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "dragonfly"
-))]
+#[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "cygwin")))]
 #[expect(
     clippy::unnecessary_wraps,
     reason = "fn sig must match on all platforms"
@@ -107,20 +97,13 @@ fn preload_strings() -> UResult<(&'static str, &'static str)> {
     Ok(("DYLD_LIBRARY_PATH", "dylib"))
 }
 
-#[cfg(not(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "dragonfly",
-    target_vendor = "apple"
-)))]
+#[cfg(target_os = "cygwin")]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "fn sig must match on all platforms"
+)]
 fn preload_strings() -> UResult<(&'static str, &'static str)> {
-    Err(USimpleError::new(
-        1,
-        translate!("stdbuf-error-command-not-supported"),
-    ))
+    Ok(("LD_PRELOAD", "dll"))
 }
 
 fn check_option(matches: &ArgMatches, name: &str) -> Result<BufferType, ProgramOptionsError> {
