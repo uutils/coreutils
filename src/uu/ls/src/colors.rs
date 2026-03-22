@@ -786,7 +786,7 @@ fn parse_indicator_codes() -> (FxHashMap<Indicator, String>, bool) {
 }
 
 fn canonicalize_indicator_value(value: &str) -> Cow<'_, str> {
-    if value.len() == 1 && value.chars().all(|c| c.is_ascii_digit()) {
+    if value.len() == 1 && value.as_bytes()[0].is_ascii_digit() {
         let mut canonical = String::with_capacity(2);
         canonical.push('0');
         canonical.push_str(value);
