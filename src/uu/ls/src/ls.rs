@@ -1300,10 +1300,9 @@ fn depth_first_list(
     sort_entries(buf, config);
 
     if config.format == Format::Long || config.alloc_size {
-        let total = return_total(buf, config, &mut state.out)?;
-        write!(state.out, "{}", total.as_str())?;
+        let total = write_total(buf, config, &mut state.out)?;
         if config.dired {
-            dired::add_total(dired, total.len());
+            dired::add_total(dired, total);
         }
     }
 
@@ -1351,11 +1350,7 @@ fn get_metadata_with_deref_opt(p_buf: &Path, dereference: bool) -> std::io::Resu
     }
 }
 
-fn return_total(
-    items: &[PathData],
-    config: &Config,
-    out: &mut BufWriter<Stdout>,
-) -> UResult<String> {
+fn write_total(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout>) -> UResult<usize> {
     let mut total_size = 0;
     for item in items {
         total_size += item
@@ -1366,11 +1361,10 @@ fn return_total(
     if config.dired {
         dired::indent(out)?;
     }
-    Ok(format!(
-        "{}{}",
-        translate!("ls-total", "size" => display_size(total_size, config)),
-        config.line_ending
-    ))
+    let total = translate!("ls-total", "size" => display_size(total_size, config));
+    out.write_all(total.as_bytes())?;
+    out.write_all(&[config.line_ending as u8])?;
+    Ok(total.len() + 1)
 }
 
 #[allow(unused_variables)]
