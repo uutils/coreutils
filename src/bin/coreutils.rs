@@ -8,7 +8,6 @@ use coreutils::validation;
 use itertools::Itertools as _;
 use std::cmp;
 use std::ffi::OsString;
-use std::io::{self, Write};
 use std::process;
 use uucore::Args;
 
@@ -125,26 +124,8 @@ fn main() {
                 process::exit(uumain(vec![util_os].into_iter().chain(args)));
             }
             None => {
+                // GNU coreutils --help string shows help for coreutils
                 if util == "--help" || util == "-h" {
-                    // see if they want help on a specific util
-                    if let Some(util_os) = args.next() {
-                        let Some(util) = util_os.to_str() else {
-                            validation::not_found(&util_os)
-                        };
-
-                        match utils.get(util) {
-                            Some(&(uumain, _)) => {
-                                let code = uumain(
-                                    vec![util_os, OsString::from("--help")]
-                                        .into_iter()
-                                        .chain(args),
-                                );
-                                io::stdout().flush().expect("could not flush stdout");
-                                process::exit(code);
-                            }
-                            None => validation::not_found(&util_os),
-                        }
-                    }
                     usage(&utils, binary_as_util);
                     process::exit(0);
                 } else if util.starts_with('-') {
