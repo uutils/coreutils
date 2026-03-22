@@ -38,10 +38,14 @@ fn main() {
 
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
     let target_vendor = env::var("CARGO_CFG_TARGET_VENDOR").unwrap();
+    let target_family = env::var("CARGO_CFG_TARGET_FAMILY").unwrap();
 
+    if target_family != "unix" {
+        return;
+    }
     let dylib_ext = if target_vendor == "apple" {
         ".dylib"
-    } else if target_os == "windows" || target_os == "cygwin" {
+    } else if target_os == "cygwin" {
         ".dll"
     } else {
         ".so"
