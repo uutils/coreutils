@@ -231,3 +231,10 @@ pub fn dev_null() -> Option<File> {
         None
     }
 }
+
+// Less noisy wrapper around [`rustix::pipe::tee`]
+#[inline]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn tee(source: &impl AsFd, target: &impl AsFd, len: usize) -> rustix::io::Result<usize> {
+    rustix::pipe::tee(source, target, len, SpliceFlags::empty())
+}

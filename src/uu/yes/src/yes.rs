@@ -12,7 +12,14 @@ use uucore::error::{UResult, USimpleError, strip_errno};
 use uucore::format_usage;
 use uucore::translate;
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+const PAGE_SIZE: usize = 4096;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use uucore::pipes::MAX_ROOTLESS_PIPE_SIZE;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+const BUF_SIZE: usize = MAX_ROOTLESS_PIPE_SIZE;
 // it's possible that using a smaller or larger buffer might provide better performance
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 const BUF_SIZE: usize = 16 * 1024;
 
 #[uucore::main]
@@ -21,9 +28,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     #[allow(clippy::unwrap_used, reason = "clap provides 'y' by default")]
     let mut buffer = args_into_buffer(matches.get_many::<OsString>("STRING").unwrap())?;
-    prepare_buffer(&mut buffer);
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    let aligned = PAGE_SIZE.is_multiple_of(buffer.len());
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    let aligned = false;
 
-    match exec(&buffer) {
+    prepare_buffer(&mut buffer);
+    match exec(&buffer, aligned) {
         Ok(()) => Ok(()),
         // On Windows, silently handle broken pipe since there's no SIGPIPE
         #[cfg(windows)]
@@ -97,8 +108,40 @@ fn prepare_buffer(buf: &mut Vec<u8>) {
     }
 }
 
-pub fn exec(bytes: &[u8]) -> io::Result<()> {
+pub fn exec(bytes: &[u8], aligned: bool) -> io::Result<()> {
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    let _ = aligned;
     let stdout = io::stdout();
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    let mut stdout = stdout;
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        use uucore::pipes::{pipe, splice, tee};
+        // don't show any error from fast-path and fallback to write for proper message
+        if let Ok((p_read, mut p_write)) = pipe()
+            // todo: zero-copy with default size when fcntl failed
+            && rustix::pipe::fcntl_setpipe_size(&stdout, MAX_ROOTLESS_PIPE_SIZE).is_ok()
+            && p_write.write_all(bytes).is_ok()
+        {
+            if aligned && tee(&p_read, &stdout, PAGE_SIZE).is_ok() {
+                while let Ok(1..) = tee(&p_read, &stdout, usize::MAX) {}
+            } else if let Ok((broker_read, broker_write)) = pipe() {
+                // tee() cannot control offset and write to non-pipe
+                'hybrid: while let Ok(mut remain) = tee(&p_read, &broker_write, usize::MAX) {
+                    debug_assert!(remain == bytes.len(), "splice() should cleanup pipe");
+                    while remain > 0 {
+                        if let Ok(s) = splice(&broker_read, &stdout, remain) {
+                            remain -= s;
+                        } else {
+                            // avoid output breakage with reduced remain even if it would not happen
+                            stdout.write_all(&bytes[bytes.len() - remain..])?;
+                            break 'hybrid;
+                        }
+                    }
+                }
+            }
+        }
+    }
     let mut stdout = stdout.lock();
 
     loop {
@@ -111,6 +154,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg(not(any(target_os = "linux", target_os = "android")))] // Linux uses different buffer size
     fn test_prepare_buffer() {
         let tests = [
             (150, 16350),
