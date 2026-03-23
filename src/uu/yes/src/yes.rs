@@ -13,8 +13,12 @@ use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
 use uucore::translate;
 
-// it's possible that using a smaller or larger buffer might provide better performance on some
-// systems, but honestly this is good enough
+#[cfg(any(target_os = "linux", target_os = "android"))]
+const MAX_ROOTLESS_PIPE_SIZE: usize = 1024 * 1024;
+// todo: investigate best rate
+#[cfg(any(target_os = "linux", target_os = "android"))]
+const BUF_SIZE: usize = MAX_ROOTLESS_PIPE_SIZE;
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 const BUF_SIZE: usize = 16 * 1024;
 
 #[uucore::main]
@@ -110,8 +114,27 @@ fn prepare_buffer(buf: &mut Vec<u8>) {
 
 pub fn exec(bytes: &[u8]) -> io::Result<()> {
     let stdout = io::stdout();
-    let mut stdout = stdout.lock();
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        use rustix::io::write;
+        use rustix::pipe::{SpliceFlags, fcntl_setpipe_size, pipe, tee};
+        // fast-path for pipe. todo: port the fast-path for > file
+        if let Ok((p_read, p_write)) = pipe() {
+            let _ = fcntl_setpipe_size(&p_read, MAX_ROOTLESS_PIPE_SIZE);
+            let _ = fcntl_setpipe_size(&p_write, MAX_ROOTLESS_PIPE_SIZE);
+            let _ = fcntl_setpipe_size(&stdout, MAX_ROOTLESS_PIPE_SIZE);
+            let _ = write(&p_write, bytes);
+            loop {
+                match tee(&p_read, &stdout, MAX_ROOTLESS_PIPE_SIZE, SpliceFlags::MORE) {
+                    Ok(n) if n > 0 => {}
+                    Ok(0) => break,
+                    _ => break,
+                }
+            }
+        }
+    }
 
+    let mut stdout = stdout.lock();
     loop {
         stdout.write_all(bytes)?;
     }
@@ -122,6 +145,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg(not(any(target_os = "linux", target_os = "android")))] // Linux uses different buffer size
     fn test_prepare_buffer() {
         let tests = [
             (150, 16350),
