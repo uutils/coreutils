@@ -451,9 +451,19 @@ fn buffer_stdin() -> std::io::Result<StdinData> {
 }
 
 fn try_mmap_file(file: &File) -> Option<Mmap> {
-    // SAFETY: If the file is truncated while we map it, SIGBUS will be raised
-    // and our process will be terminated, thus preventing access of invalid memory.
-    unsafe { Mmap::map(file).ok() }
+    // Use make_read_only() on a MmapMut created with MAP_PRIVATE.
+    // With MAP_PRIVATE, truncation of the underlying file won't cause
+    // SIGBUS because the kernel serves zero-filled pages for the
+    // truncated region instead of faulting. This is safer than the
+    // default MAP_SHARED from Mmap::map().
+    //
+    // See: https://github.com/uutils/coreutils/issues/9748
+    let mmap_mut = unsafe {
+        memmap2::MmapOptions::new()
+            .map_copy_read_only(file)
+            .ok()?
+    };
+    Some(mmap_mut)
 }
 
 #[cfg(test)]
