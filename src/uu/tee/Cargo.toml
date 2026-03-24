@@ -26,3 +26,11 @@ fluent = { workspace = true }
 [[bin]]
 name = "tee"
 path = "src/main.rs"
+
+[dev-dependencies]
+divan = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
+[[bench]]
+name = "tee_bench"
+harness = false
