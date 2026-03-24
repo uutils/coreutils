@@ -504,6 +504,10 @@ jobs:
             ;;
         esac
     - uses: taiki-e/install-action@v2
+      # `cross` v0.2.5 lacks `libexecinfo` on NetBSD. However, this has been added in main.
+      # See https://github.com/cross-rs/cross/blob/main/docker/netbsd.sh
+      # We are pulling cross from a specific commit hash rather than HEAD to avoid any potential breakage that may be introduced.
+      # Once `cross` v0.3 is out, these conditionals can be removed.
       if: steps.vars.outputs.CARGO_CMD == 'cross' && matrix.job.target != 'x86_64-unknown-netbsd'
       with:
         tool: cross@0.2.5
