@@ -183,9 +183,7 @@ fn tee(options: &Options) -> Result<()> {
     );
 
     let mut output = MultiWriter::new(writers, options.output_error.clone());
-    let input = &mut NamedReader {
-        inner: Box::new(stdin()) as Box<dyn Read>,
-    };
+    let mut input = stdin();
 
     #[cfg(target_os = "linux")]
     if options.ignore_pipe_errors && !ensure_stdout_not_broken()? && output.writers.len() == 1 {
@@ -193,13 +191,16 @@ fn tee(options: &Options) -> Result<()> {
     }
 
     // We cannot use std::io::copy here as it doesn't flush the output buffer
-    let res = match copy(input, &mut output) {
+    let res = match copy(&mut input, &mut output) {
         // ErrorKind::Other is raised by MultiWriter when all writers
         // have exited, so that copy will abort. It's equivalent to
         // success of this part (if there was an error that should
         // cause a failure from any writer, that error would have been
         // returned instead).
-        Err(e) if e.kind() != ErrorKind::Other => Err(e),
+        Err(e) if e.kind() != ErrorKind::Other => {
+            let _ = writeln!(stderr(), "{}", translate!("tee-error-stdin", "error" => e));
+            Err(e)
+        }
         _ => Ok(()),
     };
 
@@ -401,21 +402,5 @@ impl Write for NamedWriter {
 
     fn flush(&mut self) -> Result<()> {
         self.inner.flush()
-    }
-}
-
-struct NamedReader {
-    inner: Box<dyn Read>,
-}
-
-impl Read for NamedReader {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
-        match self.inner.read(buf) {
-            Err(f) => {
-                let _ = writeln!(stderr(), "{}", translate!("tee-error-stdin", "error" => f));
-                Err(f)
-            }
-            okay => okay,
-        }
     }
 }
