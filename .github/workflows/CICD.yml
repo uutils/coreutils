@@ -504,9 +504,12 @@ jobs:
             ;;
         esac
     - uses: taiki-e/install-action@v2
-      if: steps.vars.outputs.CARGO_CMD == 'cross'
+      if: steps.vars.outputs.CARGO_CMD == 'cross' && matrix.job.target != 'x86_64-unknown-netbsd'
       with:
         tool: cross@0.2.5
+    - name: Install cross from git (NetBSD)
+      if: steps.vars.outputs.CARGO_CMD == 'cross' && matrix.job.target == 'x86_64-unknown-netbsd'
+      run: cargo install cross --git https://github.com/cross-rs/cross --rev 588b3c99db52b5a9c5906fab96cfadcf1bde7863
     - name: Create all needed build/work directories
       shell: bash
       run: |
