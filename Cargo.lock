@@ -2055,8 +2055,7 @@ dependencies = [
 [[package]]
 name = "num-prime"
 version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b285c575532a33ef6fdd3a57640d0b1c70e6ca48644d6df7bbd4b7a0cfbbb12d"
+source = "git+https://github.com/uutils/num-prime?branch=main#395cef5d78e8a939f2e4a8e93b44f44a00166c46"
 dependencies = [
  "bitvec",
  "either",
