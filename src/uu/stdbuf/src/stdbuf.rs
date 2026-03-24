@@ -4,6 +4,8 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) tempdir dyld dylib optgrps libstdbuf
+#[cfg(not(unix))]
+compile_error!("stdbuf is not supported on the target");
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
@@ -105,22 +107,6 @@ fn preload_strings() -> UResult<(&'static str, &'static str)> {
 )]
 fn preload_strings() -> UResult<(&'static str, &'static str)> {
     Ok(("DYLD_LIBRARY_PATH", "dylib"))
-}
-
-#[cfg(not(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "dragonfly",
-    target_vendor = "apple"
-)))]
-fn preload_strings() -> UResult<(&'static str, &'static str)> {
-    Err(USimpleError::new(
-        1,
-        translate!("stdbuf-error-command-not-supported"),
-    ))
 }
 
 fn check_option(matches: &ArgMatches, name: &str) -> Result<BufferType, ProgramOptionsError> {
