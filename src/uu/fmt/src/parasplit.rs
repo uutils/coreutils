@@ -13,10 +13,8 @@ use unicode_width::UnicodeWidthChar;
 use crate::FileOrStdReader;
 use crate::FmtOptions;
 
-// Prevent unbounded buffering on inputs without newlines or paragraph breaks.
+// Prevent unbounded buffering on inputs without newlines.
 const MAX_LINE_BYTES: usize = 1024 * 1024; // 1 MiB
-const MAX_PARAGRAPH_BYTES: usize = 1024 * 1024; // 1 MiB
-const MAX_PARAGRAPH_LINES: usize = 10_000;
 
 fn char_width(c: char) -> usize {
     if (c as usize) < 0xA0 {
@@ -172,6 +170,7 @@ pub struct FileLine {
 pub struct FileLines<'a> {
     opts: &'a FmtOptions,
     reader: &'a mut FileOrStdReader,
+    /// Leftover bytes from a previous read that exceeded MAX_LINE_BYTES
     pending: Vec<u8>,
 }
 
@@ -184,8 +183,10 @@ impl FileLines<'_> {
         }
     }
 
-    fn read_line_limited(&mut self) -> Option<Vec<u8>> {
-        loop {
+    /// Read a line, limiting memory usage on inputs without newlines.
+    fn read_limited_line(&mut self) -> Option<Vec<u8>> {
+        // First, drain any pending bytes from a previous split
+        if !self.pending.is_empty() {
             if let Some(pos) = self.pending.iter().position(|&b| b == b'\n') {
                 let mut line: Vec<u8> = self.pending.drain(..=pos).collect();
                 if line.ends_with(b"\n") {
@@ -196,54 +197,61 @@ impl FileLines<'_> {
                 }
                 return Some(line);
             }
-
+            // No newline in pending, check if we need to return it as-is or read more
             if self.pending.len() >= MAX_LINE_BYTES {
-                let mut trim_trailing_cr = false;
-                if let Ok(buf) = self.reader.fill_buf() {
-                    if !buf.is_empty() {
-                        if buf[0] == b'\n' {
-                            trim_trailing_cr = self.pending.ends_with(b"\r");
-                            self.reader.consume(1);
-                        } else if buf.starts_with(b"\r\n") {
-                            self.reader.consume(2);
-                        }
-                    }
-                }
-
-                let mut line: Vec<u8> = self.pending.drain(..MAX_LINE_BYTES).collect();
-                if trim_trailing_cr {
-                    line.pop();
-                }
-                return Some(line);
-            }
-
-            let Ok(buf) = self.reader.fill_buf() else {
-                if self.pending.is_empty() {
-                    return None;
-                }
                 return Some(std::mem::take(&mut self.pending));
-            };
-
-            if buf.is_empty() {
-                if self.pending.is_empty() {
-                    return None;
-                }
-                return Some(std::mem::take(&mut self.pending));
-            }
-
-            if let Some(pos) = buf.iter().position(|&b| b == b'\n') {
-                let take = pos + 1;
-                let space = MAX_LINE_BYTES - self.pending.len();
-                let take = take.min(space);
-                self.pending.extend_from_slice(&buf[..take]);
-                self.reader.consume(take);
-            } else {
-                let space = MAX_LINE_BYTES - self.pending.len();
-                let take = space.min(buf.len());
-                self.pending.extend_from_slice(&buf[..take]);
-                self.reader.consume(take);
             }
         }
+
+        let mut buf = std::mem::take(&mut self.pending);
+        match self.reader.read_until(b'\n', &mut buf) {
+            Ok(0) => {
+                if buf.is_empty() {
+                    return None;
+                }
+                // EOF reached, return remaining buffer
+                if buf.ends_with(b"\n") {
+                    buf.pop();
+                    if buf.ends_with(b"\r") {
+                        buf.pop();
+                    }
+                }
+                return Some(buf);
+            }
+            Ok(_) => {}
+            Err(_) => return None,
+        }
+
+        // If buffer exceeds limit, split it
+        if buf.len() > MAX_LINE_BYTES {
+            // Check if the byte after MAX_LINE_BYTES is a newline (handle CRLF)
+            let split_pos = if buf.len() > MAX_LINE_BYTES + 1
+                && buf[MAX_LINE_BYTES] == b'\r'
+                && buf[MAX_LINE_BYTES + 1] == b'\n'
+            {
+                MAX_LINE_BYTES + 2
+            } else if buf.len() > MAX_LINE_BYTES && buf[MAX_LINE_BYTES] == b'\n' {
+                MAX_LINE_BYTES + 1
+            } else {
+                MAX_LINE_BYTES
+            };
+
+            self.pending = buf.split_off(split_pos);
+            // If we split at a newline boundary, consume it
+            if buf.ends_with(b"\n") {
+                buf.pop();
+                if buf.ends_with(b"\r") {
+                    buf.pop();
+                }
+            }
+        } else if buf.ends_with(b"\n") {
+            buf.pop();
+            if buf.ends_with(b"\r") {
+                buf.pop();
+            }
+        }
+
+        Some(buf)
     }
 
     /// returns true if this line should be formatted
@@ -326,7 +334,7 @@ impl Iterator for FileLines<'_> {
     type Item = Line;
 
     fn next(&mut self) -> Option<Line> {
-        let n = self.read_line_limited()?;
+        let n = self.read_limited_line()?;
 
         // if this line is entirely whitespace,
         // emit a blank line
@@ -478,20 +486,12 @@ impl Iterator for ParagraphStream<'_> {
         let mut prefix_len = 0;
         let mut prefix_indent_end = 0;
         let mut p_lines = Vec::new();
-        let mut total_bytes: usize = 0;
-        let mut line_count: usize = 0;
 
         let mut in_mail = false;
         let mut second_done = false; // for when we use crown or tagged mode
         while let Some(Line::FormatLine(fl)) = self.lines.peek() {
             // peek ahead
             // need to explicitly force fl out of scope before we can call self.lines.next()
-            if !p_lines.is_empty() {
-                let would_bytes = total_bytes.saturating_add(fl.line.len());
-                if line_count >= MAX_PARAGRAPH_LINES || would_bytes > MAX_PARAGRAPH_BYTES {
-                    break;
-                }
-            }
             if p_lines.is_empty() {
                 // first time through the loop, get things set up
                 // detect mail header
@@ -572,8 +572,6 @@ impl Iterator for ParagraphStream<'_> {
             }
 
             p_lines.push(self.lines.next().unwrap().get_formatline().line);
-            line_count = line_count.saturating_add(1);
-            total_bytes = total_bytes.saturating_add(p_lines.last().map_or(0, Vec::len));
 
             // when we're in split-only mode, we never join lines, so stop here
             if self.opts.split_only {
