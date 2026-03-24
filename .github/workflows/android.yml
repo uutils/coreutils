@@ -111,7 +111,7 @@ jobs:
           ~/.android/avd/*/*.lock
     - name: Create and cache emulator image
       if: steps.avd-cache.outputs.cache-hit != 'true'
-      uses: reactivecircus/android-emulator-runner@v2.35.0
+      uses: reactivecircus/android-emulator-runner@v2.37.0
       with:
         api-level: ${{ matrix.api-level }}
         target: ${{ matrix.target }}
@@ -156,7 +156,7 @@ jobs:
         free -mh
         df -Th
     - name: Build and Test
-      uses: reactivecircus/android-emulator-runner@v2.35.0
+      uses: reactivecircus/android-emulator-runner@v2.37.0
       with:
         api-level: ${{ matrix.api-level }}
         target: ${{ matrix.target }}
@@ -190,7 +190,7 @@ jobs:
         key: ${{ matrix.arch }}_${{ matrix.target}}_${{ steps.read_rustc_hash.outputs.content }}_${{ hashFiles('**/Cargo.toml', '**/Cargo.lock') }}_v3
     - name: archive any output (error screenshots)
       if: always()
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: test_output_${{ env.AVD_CACHE_KEY }}
         path: output

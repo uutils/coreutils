@@ -10,12 +10,12 @@ mod locale;
 
 use clap::{Arg, ArgAction, Command};
 use jiff::fmt::strtime::{self, BrokenDownTime, Config, PosixCustom};
-use jiff::tz::{TimeZone, TimeZoneDatabase};
+use jiff::tz::{Offset, TimeZone, TimeZoneDatabase};
 use jiff::{Timestamp, Zoned};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Read, Write};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write, stderr};
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use uucore::display::Quotable;
@@ -436,7 +436,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     format!("{date_part} 00:00 {offset}")
                 };
                 if settings.debug {
-                    eprintln!("date: warning: using midnight as starting time: 00:00:00");
+                    let _ = writeln!(
+                        stderr(),
+                        "date: warning: using midnight as starting time: 00:00:00"
+                    );
                 }
                 parse_date(composed, &now, DebugOptions::new(settings.debug, false))
             } else if let Some((total_hours, day_delta)) = military_tz_with_offset {
@@ -747,78 +750,64 @@ fn make_format_string(settings: &Settings) -> &str {
     }
 }
 
-/// Minimal disambiguation rules for highly ambiguous timezone abbreviations.
-/// Only includes cases where multiple major timezones share the same abbreviation.
-/// All other abbreviations are discovered dynamically from the IANA database.
-///
-/// Disambiguation rationale (GNU compatible):
-/// - CST: Central Standard Time (US) preferred over China/Cuba Standard Time
-/// - EST: Eastern Standard Time (US) preferred over Australian Eastern Standard Time
-/// - IST: India Standard Time preferred over Israel/Irish Standard Time
-/// - MST: Mountain Standard Time (US) preferred over Malaysia Standard Time
-/// - PST: Pacific Standard Time (US) - widely used abbreviation
-/// - GMT: Alias for UTC (universal)
-/// - Australian timezones: AWST, ACST, AEST (cannot be dynamically discovered)
-///
-/// All other timezones (JST, CET, etc.) are dynamically resolved from IANA database. // spell-checker:disable-line
-static PREFERRED_TZ_MAPPINGS: &[(&str, &str)] = &[
-    // Universal (no ambiguity, but commonly used)
-    ("UTC", "UTC"),
-    ("GMT", "UTC"),
-    // Highly ambiguous US timezones (GNU compatible)
-    ("PST", "America/Los_Angeles"),
-    ("PDT", "America/Los_Angeles"),
-    ("MST", "America/Denver"),
-    ("MDT", "America/Denver"),
-    ("CST", "America/Chicago"), // Ambiguous: US vs China vs Cuba
-    ("CDT", "America/Chicago"),
-    ("EST", "America/New_York"), // Ambiguous: US vs Australia
-    ("EDT", "America/New_York"),
-    // Other highly ambiguous cases
-    /* spell-checker: disable */
-    ("IST", "Asia/Kolkata"), // Ambiguous: India vs Israel vs Ireland
-    // Australian timezones (cannot be discovered from IANA location names)
-    ("AWST", "Australia/Perth"),    // Australian Western Standard Time
-    ("ACST", "Australia/Adelaide"), // Australian Central Standard Time
-    ("ACDT", "Australia/Adelaide"), // Australian Central Daylight Time
-    ("AEST", "Australia/Sydney"),   // Australian Eastern Standard Time
-    ("AEDT", "Australia/Sydney"),   // Australian Eastern Daylight Time
-                                    /* spell-checker: enable */
+/// Timezone abbreviations with known fixed UTC offsets.
+/// Checked first because the abbreviation encodes the exact offset
+/// (e.g., EDT always means UTC-4, even in winter when New York observes EST).
+/// Offset is in seconds to support half-hour zones like IST (UTC+5:30).
+/// All other timezones (JST, CET, etc.) are dynamically resolved from IANA database.
+/* spell-checker: disable */
+static FIXED_OFFSET_ABBREVIATIONS: &[(&str, i32)] = &[
+    ("UTC", 0),
+    ("GMT", 0),
+    ("MEST", 7200), // UTC+2 Middle European Summer Time
+    // US timezones (GNU compatible)
+    ("PST", -28800), // UTC-8
+    ("PDT", -25200), // UTC-7
+    ("MST", -25200), // UTC-7
+    ("MDT", -21600), // UTC-6
+    ("CST", -21600), // UTC-6 (Ambiguous: US Central, not China/Cuba)
+    ("CDT", -18000), // UTC-5
+    ("EST", -18000), // UTC-5
+    ("EDT", -14400), // UTC-4
+    // Indian Standard Time (Ambiguous: India vs Israel vs Ireland)
+    ("IST", 19800), // UTC+5:30
+    // Australian timezones
+    ("AWST", 28800), // UTC+8
+    ("ACST", 34200), // UTC+9:30
+    ("ACDT", 37800), // UTC+10:30
+    ("AEST", 36000), // UTC+10
+    ("AEDT", 39600), // UTC+11
+    // German timezones
+    ("MEZ", 3600),  // UTC+1
+    ("MESZ", 7200), // UTC+2
+    // Asian timezones
+    ("KST", 32400), // UTC+9 Korean Standard Time
 ];
+/* spell-checker: enable */
 
 /// Lazy-loaded timezone abbreviation lookup map built from IANA database.
 static TZ_ABBREV_CACHE: OnceLock<HashMap<String, String>> = OnceLock::new();
 
 /// Build timezone abbreviation lookup map from IANA database.
-/// Uses preferred mappings for disambiguation, then searches all timezones.
+/// This is a fallback for abbreviations not covered by FIXED_OFFSET_ABBREVIATIONS.
 fn build_tz_abbrev_map() -> HashMap<String, String> {
     let mut map = HashMap::new();
 
-    // First, add preferred mappings (these take precedence)
-    for (abbrev, iana) in PREFERRED_TZ_MAPPINGS {
-        map.insert((*abbrev).to_string(), (*iana).to_string());
-    }
-
-    // Then, try to find additional abbreviations from IANA database
-    // This gives us broader coverage while respecting disambiguation preferences
     let tzdb = TimeZoneDatabase::from_env(); // spell-checker:disable-line
     // spell-checker:disable-next-line
     for tz_name in tzdb.available() {
         let tz_str = tz_name.as_str();
-        // Skip if we already have a preferred mapping for this zone
-        if !map.values().any(|v| v == tz_str) {
-            // For zones without preferred mappings, use last component as potential abbreviation
-            // e.g., "Pacific/Fiji" could map to "FIJI"
-            if let Some(last_part) = tz_str.split('/').next_back() {
-                let potential_abbrev = last_part.to_uppercase();
-                // Only add if it looks like an abbreviation (2-5 uppercase chars)
-                if potential_abbrev.len() >= 2
-                    && potential_abbrev.len() <= 5
-                    && potential_abbrev.chars().all(|c| c.is_ascii_uppercase())
-                {
-                    map.entry(potential_abbrev)
-                        .or_insert_with(|| tz_str.to_string());
-                }
+        // Use last component as potential abbreviation
+        // e.g., "Pacific/Fiji" could map to "FIJI"
+        if let Some(last_part) = tz_str.split('/').next_back() {
+            let potential_abbrev = last_part.to_uppercase();
+            // Only add if it looks like an abbreviation (2-5 uppercase chars)
+            if potential_abbrev.len() >= 2
+                && potential_abbrev.len() <= 5
+                && potential_abbrev.chars().all(|c| c.is_ascii_uppercase())
+            {
+                map.entry(potential_abbrev)
+                    .or_insert_with(|| tz_str.to_string());
             }
         }
     }
@@ -838,7 +827,7 @@ fn tz_abbrev_to_iana(abbrev: &str) -> Option<&str> {
 /// If an abbreviation is found and the date is parsable, returns `Some(Zoned)`.
 /// Returns `None` if no abbreviation is detected or if parsing fails, indicating
 /// that standard parsing should be attempted.
-fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S) -> Option<Zoned> {
+fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S, now: &Zoned) -> Option<Zoned> {
     let s = date_str.as_ref();
 
     // Look for timezone abbreviation at the end of the string
@@ -849,17 +838,22 @@ fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S) -> Option<Zoned> {
             && last_word.len() <= 5
             && last_word.chars().all(|c| c.is_ascii_uppercase())
         {
-            if let Some(iana_name) = tz_abbrev_to_iana(last_word) {
-                // Try to get the timezone
-                if let Ok(tz) = TimeZone::get(iana_name) {
-                    // Parse the date part (everything before the TZ abbreviation)
-                    let date_part = s.trim_end_matches(last_word).trim();
-                    // Parse in the target timezone so "10:30 EDT" means 10:30 in EDT
-                    if let Ok(parsed) = parse_datetime::parse_datetime(date_part) {
-                        let dt = parsed.datetime();
-                        if let Ok(zoned) = dt.to_zoned(tz) {
-                            return Some(zoned);
-                        }
+            let tz = if let Some(&(_, offset_secs)) = FIXED_OFFSET_ABBREVIATIONS
+                .iter()
+                .find(|(abbr, _)| *abbr == last_word)
+            {
+                Offset::from_seconds(offset_secs).ok().map(TimeZone::fixed)
+            } else {
+                tz_abbrev_to_iana(last_word).and_then(|name| TimeZone::get(name).ok())
+            };
+
+            if let Some(tz) = tz {
+                let date_part = s.trim_end_matches(last_word).trim();
+                // Parse in the target timezone so "10:30 EDT" means 10:30 in EDT
+                if let Ok(parsed) = parse_datetime::parse_datetime_at_date(now.clone(), date_part) {
+                    let dt = parsed.datetime();
+                    if let Ok(zoned) = dt.to_zoned(tz) {
+                        return Some(zoned);
                     }
                 }
             }
@@ -904,22 +898,25 @@ fn parse_date<S: AsRef<str> + Clone>(
     let input_str = s.as_ref();
 
     if dbg_opts.debug {
-        eprintln!("date: input string: {input_str}");
+        let _ = writeln!(stderr(), "date: input string: {input_str}");
     }
 
     // First, try to parse any timezone abbreviations
-    if let Some(zoned) = try_parse_with_abbreviation(input_str) {
+    if let Some(zoned) = try_parse_with_abbreviation(input_str, now) {
         if dbg_opts.debug {
-            eprintln!(
+            let mut err = stderr().lock();
+            let _ = writeln!(
+                err,
                 "date: parsed date part: (Y-M-D) {}",
                 strtime::format("%Y-%m-%d", &zoned).unwrap_or_default()
             );
-            eprintln!(
+            let _ = writeln!(
+                err,
                 "date: parsed time part: {}",
                 strtime::format("%H:%M:%S", &zoned).unwrap_or_default()
             );
             let tz_display = zoned.time_zone().iana_name().unwrap_or("system default");
-            eprintln!("date: input timezone: {tz_display}");
+            let _ = writeln!(err, "date: input timezone: {tz_display}");
         }
         return Ok(zoned);
     }
@@ -931,17 +928,20 @@ fn parse_date<S: AsRef<str> + Clone>(
             let result = date.timestamp().to_zoned(now.time_zone().clone());
             if dbg_opts.debug {
                 // Show final parsed date and time
-                eprintln!(
+                let mut err = stderr().lock();
+                let _ = writeln!(
+                    err,
                     "date: parsed date part: (Y-M-D) {}",
                     strtime::format("%Y-%m-%d", &result).unwrap_or_default()
                 );
-                eprintln!(
+                let _ = writeln!(
+                    err,
                     "date: parsed time part: {}",
                     strtime::format("%H:%M:%S", &result).unwrap_or_default()
                 );
 
                 // Show timezone information
-                eprintln!("date: input timezone: system default");
+                let _ = writeln!(err, "date: input timezone: system default");
 
                 // Check if time component was specified, if not warn about midnight usage
                 // Only warn for date-only inputs (no time specified), but not for epoch formats (@N)
@@ -950,7 +950,10 @@ fn parse_date<S: AsRef<str> + Clone>(
                     // Input likely didn't specify a time, so midnight was assumed
                     let time_str = strtime::format("%H:%M:%S", &result).unwrap_or_default();
                     if time_str == "00:00:00" {
-                        eprintln!("date: warning: using midnight as starting time: 00:00:00");
+                        let _ = writeln!(
+                            err,
+                            "date: warning: using midnight as starting time: 00:00:00"
+                        );
                     }
                 }
             }
@@ -1107,6 +1110,14 @@ mod tests {
         assert_eq!(parse_military_timezone_with_offset(""), None); // Empty
         assert_eq!(parse_military_timezone_with_offset("m999"), None); // Too long
         assert_eq!(parse_military_timezone_with_offset("9m"), None); // Starts with digit
+    }
+
+    #[test]
+    fn test_abbreviation_resolves_relative_date_against_now() {
+        let now = "2025-03-15T20:00:00+00:00[UTC]".parse::<Zoned>().unwrap();
+        let result =
+            parse_date("yesterday 10:00 GMT", &now, DebugOptions::new(false, false)).unwrap();
+        assert_eq!(result.date(), jiff::civil::date(2025, 3, 14));
     }
 
     #[test]

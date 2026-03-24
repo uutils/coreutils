@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (ToDO) copydir ficlone fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO
+// spell-checker:ignore (ToDO) copydir ficlone fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO sflag
 
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
@@ -10,7 +10,7 @@ use std::ffi::OsString;
 use std::fmt::Display;
 use std::fs::{self, Metadata, OpenOptions, Permissions};
 #[cfg(unix)]
-use std::os::unix::fs::{FileTypeExt, PermissionsExt};
+use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 #[cfg(unix)]
 use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf, StripPrefixError};
@@ -22,6 +22,8 @@ use uucore::translate;
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, value_parser};
 use filetime::FileTime;
 use indicatif::{ProgressBar, ProgressStyle};
+#[cfg(unix)]
+use nix::sys::stat::{Mode, SFlag, dev_t, mknod as nix_mknod, mode_t};
 use thiserror::Error;
 
 use platform::copy_on_write;
@@ -1054,10 +1056,10 @@ impl Options {
             .get_one::<PathBuf>(options::TARGET_DIRECTORY)
             .cloned();
 
-        if let Some(dir) = &target_dir {
-            if !dir.is_dir() {
-                return Err(CpError::NotADirectory(dir.clone()));
-            }
+        if let Some(dir) = &target_dir
+            && !dir.is_dir()
+        {
+            return Err(CpError::NotADirectory(dir.clone()));
         }
         // cp follows POSIX conventions for overriding options such as "-a",
         // "-d", "--preserve", and "--no-preserve". We can use clap's
@@ -2227,13 +2229,8 @@ fn handle_copy_mode(
     source_metadata: &Metadata,
     symlinked_files: &mut HashSet<FileInformation>,
     source_in_command_line: bool,
-    source_is_fifo: bool,
-    source_is_socket: bool,
     created_parent_dirs: &mut HashSet<PathBuf>,
-    #[cfg(unix)] source_is_stream: bool,
 ) -> CopyResult<PerformedAction> {
-    let source_is_symlink = source_metadata.is_symlink();
-
     match options.copy_mode {
         CopyMode::Link => {
             if dest.exists() {
@@ -2267,13 +2264,9 @@ fn handle_copy_mode(
                 dest,
                 options,
                 context,
-                source_is_symlink,
-                source_is_fifo,
-                source_is_socket,
+                source_metadata,
                 symlinked_files,
                 created_parent_dirs,
-                #[cfg(unix)]
-                source_is_stream,
             )?;
         }
         CopyMode::SymLink => {
@@ -2291,13 +2284,9 @@ fn handle_copy_mode(
                             dest,
                             options,
                             context,
-                            source_is_symlink,
-                            source_is_fifo,
-                            source_is_socket,
+                            source_metadata,
                             symlinked_files,
                             created_parent_dirs,
-                            #[cfg(unix)]
-                            source_is_stream,
                         )?;
                     }
                     UpdateMode::None => {
@@ -2328,13 +2317,9 @@ fn handle_copy_mode(
                             dest,
                             options,
                             context,
-                            source_is_symlink,
-                            source_is_fifo,
-                            source_is_socket,
+                            source_metadata,
                             symlinked_files,
                             created_parent_dirs,
-                            #[cfg(unix)]
-                            source_is_stream,
                         )?;
                     }
                 }
@@ -2344,13 +2329,9 @@ fn handle_copy_mode(
                     dest,
                     options,
                     context,
-                    source_is_symlink,
-                    source_is_fifo,
-                    source_is_socket,
+                    source_metadata,
                     symlinked_files,
                     created_parent_dirs,
-                    #[cfg(unix)]
-                    source_is_stream,
                 )?;
             }
         }
@@ -2582,15 +2563,6 @@ fn copy_file(
         context,
     );
 
-    #[cfg(unix)]
-    let source_is_fifo = source_metadata.file_type().is_fifo();
-    #[cfg(unix)]
-    let source_is_socket = source_metadata.file_type().is_socket();
-    #[cfg(not(unix))]
-    let source_is_fifo = false;
-    #[cfg(not(unix))]
-    let source_is_socket = false;
-
     let source_is_stream = is_stream(&source_metadata);
 
     let performed_action = handle_copy_mode(
@@ -2601,11 +2573,7 @@ fn copy_file(
         &source_metadata,
         symlinked_files,
         source_in_command_line,
-        source_is_fifo,
-        source_is_socket,
         created_parent_dirs,
-        #[cfg(unix)]
-        source_is_stream,
     )?;
 
     if options.verbose && performed_action != PerformedAction::Skipped {
@@ -2741,18 +2709,14 @@ fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
 
 /// Copy the file from `source` to `dest` either using the normal `fs::copy` or a
 /// copy-on-write scheme if --reflink is specified and the filesystem supports it.
-#[allow(clippy::too_many_arguments)]
 fn copy_helper(
     source: &Path,
     dest: &Path,
     options: &Options,
     context: &str,
-    source_is_symlink: bool,
-    source_is_fifo: bool,
-    source_is_socket: bool,
+    source_metadata: &Metadata,
     symlinked_files: &mut HashSet<FileInformation>,
     created_parent_dirs: &mut HashSet<PathBuf>,
-    #[cfg(unix)] source_is_stream: bool,
 ) -> CopyResult<()> {
     if options.parents {
         let parent = dest.parent().unwrap_or(dest);
@@ -2765,13 +2729,21 @@ fn copy_helper(
         return Err(CpError::NotADirectory(dest.to_path_buf()));
     }
 
-    if source_is_socket && options.recursive && !options.copy_contents {
-        #[cfg(unix)]
-        copy_socket(dest, options.overwrite, options.debug)?;
-    } else if source_is_fifo && options.recursive && !options.copy_contents {
-        #[cfg(unix)]
-        copy_fifo(dest, options.overwrite, options.debug)?;
-    } else if source_is_symlink {
+    #[cfg(unix)]
+    if options.recursive && !options.copy_contents {
+        let ft = source_metadata.file_type();
+        if ft.is_socket() {
+            return copy_socket(dest, options.overwrite, options.debug);
+        }
+        if ft.is_fifo() {
+            return copy_fifo(dest, options.overwrite, options.debug);
+        }
+        if ft.is_char_device() || ft.is_block_device() {
+            return copy_node(dest, source_metadata, options.overwrite, options.debug);
+        }
+    }
+
+    if source_metadata.is_symlink() {
         copy_link(source, dest, symlinked_files, options)?;
     } else {
         let copy_debug = copy_on_write(
@@ -2781,7 +2753,7 @@ fn copy_helper(
             options.sparse_mode,
             context,
             #[cfg(unix)]
-            source_is_stream,
+            is_stream(source_metadata),
         )?;
 
         if !options.attributes_only && options.debug {
@@ -2814,6 +2786,27 @@ fn copy_socket(dest: &Path, overwrite: OverwriteMode, debug: bool) -> CopyResult
 
     UnixListener::bind(dest)?;
     Ok(())
+}
+
+#[cfg(unix)]
+fn copy_node(
+    dest: &Path,
+    source_metadata: &Metadata,
+    overwrite: OverwriteMode,
+    debug: bool,
+) -> CopyResult<()> {
+    if dest.exists() {
+        overwrite.verify(dest, debug)?;
+        fs::remove_file(dest)?;
+    }
+    let sflag = if source_metadata.file_type().is_char_device() {
+        SFlag::S_IFCHR
+    } else {
+        SFlag::S_IFBLK
+    };
+    let mode = Mode::from_bits_truncate(source_metadata.mode() as mode_t);
+    nix_mknod(dest, sflag, mode, source_metadata.rdev() as dev_t)
+        .map_err(|e| translate!("cp-error-cannot-create-special-file", "path" => dest.quote(), "error" => e.desc()).into())
 }
 
 fn copy_link(

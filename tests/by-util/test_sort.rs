@@ -1387,13 +1387,12 @@ fn test_tmp_files_deleted_on_sigint() {
     use std::{fs::read_dir, time::Duration};
 
     use nix::{sys::signal, unistd::Pid};
-    use rand::rngs::SmallRng;
+    use rand::{RngExt as _, SeedableRng, rngs::SmallRng};
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("tmp_dir");
     let file_name = "big_file_to_sort.txt";
     {
-        use rand::{Rng, SeedableRng};
         use std::io::Write;
         let mut file = at.make_file(file_name);
         // approximately 20 MB
@@ -2731,6 +2730,21 @@ fn test_locale_utf8_sort_debug_message() {
         .pipe_in("a\nA\nb\nB\n")
         .succeeds()
         .stderr_contains("text ordering performed using ‘en_US.UTF-8’ sorting rules");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_failed_to_set_locale_debug_message() {
+    let result = new_ucmd!()
+        .env("LC_ALL", "not-valid-locale")
+        .arg("--debug")
+        .pipe_in("a\nA\nb\nB\n")
+        .succeeds();
+
+    result.stderr_contains("text ordering performed using simple byte comparison");
+
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    result.stderr_contains("failed to set locale");
 }
 
 #[test]

@@ -10,16 +10,14 @@ mod error;
 use clap::{Arg, ArgAction, Command};
 use memchr::memmem;
 use memmap2::Mmap;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::io::{BufWriter, Read, Write, stdin, stdout};
-use std::{
-    fs::{File, read},
-    io::copy,
-    path::Path,
-};
+use std::{fs::File, io::copy, path::Path};
+#[cfg(unix)]
+use uucore::error::UError;
+use uucore::error::UResult;
 #[cfg(unix)]
 use uucore::error::set_exit_code;
-use uucore::error::{UError, UResult};
 use uucore::{format_usage, show};
 
 use crate::error::TacError;
@@ -40,10 +38,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let before = matches.get_flag(options::BEFORE);
     let regex = matches.get_flag(options::REGEX);
     let raw_separator = matches
-        .get_one::<String>(options::SEPARATOR)
-        .map_or("\n", |s| s.as_str());
+        .get_one::<OsString>(options::SEPARATOR)
+        .map_or(OsStr::new("\n"), |s| s.as_os_str());
+
     let separator = if raw_separator.is_empty() {
-        "\0"
+        OsStr::new("\0")
     } else {
         raw_separator
     };
@@ -82,6 +81,7 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .long(options::SEPARATOR)
                 .help(translate!("tac-help-separator"))
+                .value_parser(clap::value_parser!(OsString))
                 .value_name("STRING"),
         )
         .arg(
@@ -147,7 +147,9 @@ fn buffer_tac_regex(
         // Determine if there is a match for `pattern` starting at index
         // `i` in `data`. Only search up to the line ending that was
         // found previously.
-        if let Some(match_) = pattern.find_at(&data[..this_line_end], i) {
+        if let Some(match_) = pattern.find_at(&data[..this_line_end], i)
+            && match_.start() == i
+        {
             // Record this index as the ending of the current line.
             this_line_end = i;
 
@@ -183,7 +185,7 @@ fn buffer_tac_regex(
 /// If `before` is `true`, then this function assumes that the
 /// `separator` appears at the beginning of each line, as in
 /// `"/abc/def"`.
-fn buffer_tac(data: &[u8], before: bool, separator: &str) -> std::io::Result<()> {
+fn buffer_tac(data: &[u8], before: bool, separator: &OsStr) -> std::io::Result<()> {
     let out = stdout();
     let mut out = BufWriter::new(out.lock());
 
@@ -206,7 +208,7 @@ fn buffer_tac(data: &[u8], before: bool, separator: &str) -> std::io::Result<()>
     // The `before` flag controls whether the line separator appears at
     // the end of the line (as in "abc\ndef\n") or at the beginning of
     // the line (as in "/abc/def").
-    for i in memmem::rfind_iter(data, separator) {
+    for i in memmem::rfind_iter(data, separator.as_encoded_bytes()) {
         if before {
             out.write_all(&data[i..following_line_start])?;
             following_line_start = i;
@@ -228,91 +230,102 @@ fn buffer_tac(data: &[u8], before: bool, separator: &str) -> std::io::Result<()>
 /// Concretely:
 /// - Toggle escaping of (), |, {}
 /// - Escape ^ and $ when not at edges
-/// - Leave expressions inside [] unchanged
-fn translate_regex_flavor(regex: &str) -> String {
-    let mut result = String::new();
-    let mut chars = regex.chars().peekable();
+/// - Leave only ASCII bytes inside []
+/// - Escape non-ASCII bytes as `(?-u:\xFF)` outside []
+fn translate_regex_flavor(bytes: &[u8]) -> String {
+    let mut result = Vec::new();
+    let mut i = 0;
     let mut inside_brackets = false;
     let mut prev_was_backslash = false;
-    let mut last_char: Option<char> = None;
+    let mut last_byte: Option<u8> = None;
 
-    while let Some(c) = chars.next() {
+    while let Some(b) = bytes.get(i) {
         let is_escaped = prev_was_backslash;
         prev_was_backslash = false;
 
-        match c {
+        match b {
+            _ if inside_brackets && !b.is_ascii() => {
+                i += 1;
+                continue;
+            }
             // Unescape escaped (), |, {} when not inside brackets
-            '\\' if !inside_brackets && !is_escaped => {
-                if let Some(&next) = chars.peek() {
-                    if matches!(next, '(' | ')' | '|' | '{' | '}') {
-                        result.push(next);
-                        last_char = Some(next);
-                        chars.next();
+            b'\\' if !inside_brackets && !is_escaped => {
+                if let Some(next) = bytes.get(i + 1) {
+                    if matches!(next, b'(' | b')' | b'|' | b'{' | b'}') {
+                        result.push(*next);
+                        last_byte = Some(*next);
+                        i += 2;
                         continue;
                     }
                 }
 
-                result.push('\\');
-                last_char = Some('\\');
+                result.push(b'\\');
+                last_byte = Some(b'\\');
                 prev_was_backslash = true;
             }
             // Bracket tracking
-            '[' => {
+            b'[' => {
                 inside_brackets = true;
-                result.push(c);
-                last_char = Some(c);
+                result.push(*b);
+                last_byte = Some(*b);
             }
-            ']' => {
+            b']' => {
                 inside_brackets = false;
-                result.push(c);
-                last_char = Some(c);
+                result.push(*b);
+                last_byte = Some(*b);
             }
             // Escape (), |, {} when not escaped and outside brackets
-            '(' | ')' | '|' | '{' | '}' if !inside_brackets && !is_escaped => {
-                result.push('\\');
-                result.push(c);
-                last_char = Some(c);
+            b'(' | b')' | b'|' | b'{' | b'}' if !inside_brackets && !is_escaped => {
+                result.push(b'\\');
+                result.push(*b);
+                last_byte = Some(*b);
             }
-            '^' if !inside_brackets && !is_escaped => {
-                let is_anchor_position = result.is_empty() || matches!(last_char, Some('(' | '|'));
+            b'^' if !inside_brackets && !is_escaped => {
+                let is_anchor_position =
+                    result.is_empty() || matches!(last_byte, Some(b'(' | b'|'));
                 if !is_anchor_position {
-                    result.push('\\');
+                    result.push(b'\\');
                 }
-                result.push(c);
-                last_char = Some(c);
+                result.push(*b);
+                last_byte = Some(*b);
             }
-            '$' if !inside_brackets && !is_escaped => {
-                let next_is_anchor_position = match chars.peek() {
+            b'$' if !inside_brackets && !is_escaped => {
+                let next_is_anchor_position = match bytes.get(i + 1) {
                     None => true,
-                    Some(&')' | &'|') => true,
-                    Some(&'\\') => {
+                    Some(b')' | b'|') => true,
+                    Some(b'\\') => {
                         // Peek two ahead to see if it's \) or \|
-                        let chars_vec: Vec<char> = chars.clone().take(2).collect();
-                        matches!(chars_vec.get(1), Some(&')' | &'|'))
+                        matches!(bytes.get(i + 2), Some(b')' | b'|'))
                     }
                     _ => false,
                 };
                 if !next_is_anchor_position {
-                    result.push('\\');
+                    result.push(b'\\');
                 }
-                result.push(c);
-                last_char = Some(c);
+                result.push(*b);
+                last_byte = Some(*b);
+            }
+            _ if !b.is_ascii() => {
+                let _ = write!(result, r"(?-u:\x{b:02x})");
+                last_byte = None;
             }
             _ => {
-                result.push(c);
-                last_char = Some(c);
+                result.push(*b);
+                last_byte = Some(*b);
             }
         }
+
+        i += 1;
     }
 
-    result
+    String::from_utf8(result).expect("produces ASCII bytes")
 }
 
 #[allow(clippy::cognitive_complexity)]
-fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &str) -> UResult<()> {
+fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &OsStr) -> UResult<()> {
     // Compile the regular expression pattern if it is provided.
     let maybe_pattern = if regex {
-        match regex::bytes::RegexBuilder::new(&translate_regex_flavor(separator))
+        match regex::bytes::RegexBuilder::new(&translate_regex_flavor(separator.as_encoded_bytes()))
             .multi_line(true)
             .build()
         {
@@ -362,31 +375,26 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &str) -> UR
             }
         } else {
             let path = Path::new(filename);
-            if path.is_dir() {
-                let e: Box<dyn UError> =
-                    TacError::InvalidDirectoryArgument(filename.clone()).into();
-                show!(e);
-                continue;
-            }
+            let mut file = match File::open(path) {
+                Ok(f) => f,
+                Err(e) => {
+                    show!(TacError::OpenError(filename.clone(), e));
+                    continue;
+                }
+            };
 
-            if path.metadata().is_err() {
-                let e: Box<dyn UError> = TacError::FileNotFound(filename.clone()).into();
-                show!(e);
-                continue;
-            }
-
-            if let Some(mmap1) = try_mmap_path(path) {
+            if let Some(mmap1) = try_mmap_file(&file) {
                 mmap = mmap1;
                 &mmap
             } else {
-                match read(path) {
-                    Ok(buf1) => {
-                        buf = buf1;
+                let mut contents = Vec::new();
+                match file.read_to_end(&mut contents) {
+                    Ok(_) => {
+                        buf = contents;
                         &buf
                     }
                     Err(e) => {
-                        let e: Box<dyn UError> = TacError::ReadError(filename.clone(), e).into();
-                        show!(e);
+                        show!(TacError::ReadError(filename.clone(), e));
                         continue;
                     }
                 }
@@ -442,14 +450,10 @@ fn buffer_stdin() -> std::io::Result<StdinData> {
     }
 }
 
-fn try_mmap_path(path: &Path) -> Option<Mmap> {
-    let file = File::open(path).ok()?;
-
+fn try_mmap_file(file: &File) -> Option<Mmap> {
     // SAFETY: If the file is truncated while we map it, SIGBUS will be raised
     // and our process will be terminated, thus preventing access of invalid memory.
-    let mmap = unsafe { Mmap::map(&file).ok()? };
-
-    Some(mmap)
+    unsafe { Mmap::map(file).ok() }
 }
 
 #[cfg(test)]
@@ -458,81 +462,81 @@ mod tests_hybrid_flavor {
 
     #[test]
     fn test_grouping_and_alternation() {
-        assert_eq!(translate_regex_flavor(r"\(abc\)"), r"(abc)");
+        assert_eq!(translate_regex_flavor(br"\(abc\)"), r"(abc)");
 
-        assert_eq!(translate_regex_flavor(r"(abc)"), r"\(abc\)");
+        assert_eq!(translate_regex_flavor(br"(abc)"), r"\(abc\)");
 
-        assert_eq!(translate_regex_flavor(r"a\|b"), r"a|b");
+        assert_eq!(translate_regex_flavor(br"a\|b"), r"a|b");
 
-        assert_eq!(translate_regex_flavor(r"a|b"), r"a\|b");
+        assert_eq!(translate_regex_flavor(br"a|b"), r"a\|b");
     }
 
     #[test]
     fn test_quantifiers() {
-        assert_eq!(translate_regex_flavor("a+"), "a+");
+        assert_eq!(translate_regex_flavor(b"a+"), "a+");
 
-        assert_eq!(translate_regex_flavor("a*"), "a*");
+        assert_eq!(translate_regex_flavor(b"a*"), "a*");
 
-        assert_eq!(translate_regex_flavor("a?"), "a?");
+        assert_eq!(translate_regex_flavor(b"a?"), "a?");
 
-        assert_eq!(translate_regex_flavor(r"a\+"), r"a\+");
+        assert_eq!(translate_regex_flavor(br"a\+"), r"a\+");
 
-        assert_eq!(translate_regex_flavor(r"a\*"), r"a\*");
+        assert_eq!(translate_regex_flavor(br"a\*"), r"a\*");
 
-        assert_eq!(translate_regex_flavor(r"a\?"), r"a\?");
+        assert_eq!(translate_regex_flavor(br"a\?"), r"a\?");
     }
 
     #[test]
     fn test_intervals() {
-        assert_eq!(translate_regex_flavor(r"a\{1,3\}"), r"a{1,3}");
+        assert_eq!(translate_regex_flavor(br"a\{1,3\}"), r"a{1,3}");
 
-        assert_eq!(translate_regex_flavor(r"a{1,3}"), r"a\{1,3\}");
+        assert_eq!(translate_regex_flavor(br"a{1,3}"), r"a\{1,3\}");
     }
 
     #[test]
     fn test_anchors_context() {
-        assert_eq!(translate_regex_flavor(r"^abc$"), r"^abc$");
+        assert_eq!(translate_regex_flavor(br"^abc$"), r"^abc$");
 
-        assert_eq!(translate_regex_flavor(r"a^b"), r"a\^b");
-        assert_eq!(translate_regex_flavor(r"a$b"), r"a\$b");
+        assert_eq!(translate_regex_flavor(br"a^b"), r"a\^b");
+        assert_eq!(translate_regex_flavor(br"a$b"), r"a\$b");
 
         // Anchors inside groups (reset by \(...\) regardless of position)
-        assert_eq!(translate_regex_flavor(r"\(^abc\)"), r"(^abc)");
-        assert_eq!(translate_regex_flavor(r"z\(^abc\)"), r"z(^abc)");
-        assert_eq!(translate_regex_flavor(r"\(abc$\)"), r"(abc$)");
-        assert_eq!(translate_regex_flavor(r"\(abc$\)z"), r"(abc$)z");
+        assert_eq!(translate_regex_flavor(br"\(^abc\)"), r"(^abc)");
+        assert_eq!(translate_regex_flavor(br"z\(^abc\)"), r"z(^abc)");
+        assert_eq!(translate_regex_flavor(br"\(abc$\)"), r"(abc$)");
+        assert_eq!(translate_regex_flavor(br"\(abc$\)z"), r"(abc$)z");
 
         // Anchors inside alternation (reset by \| regardless of position)
-        assert_eq!(translate_regex_flavor(r"^a\|^b"), r"^a|^b");
-        assert_eq!(translate_regex_flavor(r"x\|^b"), r"x|^b");
-        assert_eq!(translate_regex_flavor(r"a$\|b$"), r"a$|b$");
+        assert_eq!(translate_regex_flavor(br"^a\|^b"), r"^a|^b");
+        assert_eq!(translate_regex_flavor(br"x\|^b"), r"x|^b");
+        assert_eq!(translate_regex_flavor(br"a$\|b$"), r"a$|b$");
     }
 
     #[test]
     fn test_character_classes() {
-        assert_eq!(translate_regex_flavor(r"[a-z]"), r"[a-z]");
+        assert_eq!(translate_regex_flavor(br"[a-z]"), r"[a-z]");
 
-        assert_eq!(translate_regex_flavor(r"[.]"), r"[.]");
-        assert_eq!(translate_regex_flavor(r"[+]"), r"[+]");
+        assert_eq!(translate_regex_flavor(br"[.]"), r"[.]");
+        assert_eq!(translate_regex_flavor(br"[+]"), r"[+]");
 
-        assert_eq!(translate_regex_flavor(r"[]abc]"), r"[]abc]");
+        assert_eq!(translate_regex_flavor(br"[]abc]"), r"[]abc]");
 
-        assert_eq!(translate_regex_flavor(r"[^]abc]"), r"[^]abc]");
+        assert_eq!(translate_regex_flavor(br"[^]abc]"), r"[^]abc]");
     }
 
     #[test]
     fn test_complex_strings() {
-        assert_eq!(translate_regex_flavor(r"(\d+)[+*]"), r"\(\d+\)[+*]");
+        assert_eq!(translate_regex_flavor(br"(\d+)[+*]"), r"\(\d+\)[+*]");
 
-        assert_eq!(translate_regex_flavor(r"\(\d+\)\{2\}"), r"(\d+){2}");
+        assert_eq!(translate_regex_flavor(br"\(\d+\)\{2\}"), r"(\d+){2}");
     }
 
     #[test]
     fn test_edge_cases() {
-        assert_eq!(translate_regex_flavor(r"abc\"), r"abc\");
+        assert_eq!(translate_regex_flavor(br"abc\"), r"abc\");
 
-        assert_eq!(translate_regex_flavor(r"\\"), r"\\");
+        assert_eq!(translate_regex_flavor(br"\\"), r"\\");
 
-        assert_eq!(translate_regex_flavor(r"\^"), r"\^");
+        assert_eq!(translate_regex_flavor(br"\^"), r"\^");
     }
 }

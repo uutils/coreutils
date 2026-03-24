@@ -97,6 +97,7 @@ else
     for binary in $("${UU_BUILD_DIR}"/coreutils --list)
         do [ -e "${UU_BUILD_DIR}/${binary}" ] || ln -vf "${UU_BUILD_DIR}/coreutils" "${UU_BUILD_DIR}/${binary}"
     done
+    ln -vf "${UU_BUILD_DIR}"/deps/libstdbuf.* -t "${UU_BUILD_DIR}"
 fi
 [ -e "${UU_BUILD_DIR}/ginstall" ] || ln -vf "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests use ginstall
 ##
@@ -164,6 +165,11 @@ fi
 # automake or config.status and undo our edits.
 touch Makefile.in Makefile
 
+# Patch the Makefile PATH to point to uutils build dir instead of GNU src/
+sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
+# Prevent make check from rebuilding the GNU binaries over the uutils ones
+sed -i 's/^check-am: all-am/check-am:/' Makefile
+
 grep -rl 'path_prepend_' tests/* | xargs -r "${SED}" -i 's| path_prepend_ ./src||'
 # path_prepend_ sets $abs_path_dir_: set it manually instead.
 grep -rl '\$abs_path_dir_' tests/*/*.sh | xargs -r "${SED}" -i "s|\$abs_path_dir_|${UU_BUILD_DIR//\//\\/}|g"
@@ -178,8 +184,6 @@ sed -i 's/^print_ver_.*/require_selinux_/' tests/chcon/chcon-fail.sh
 
 # We use coreutils yes
 sed -i "s|--coreutils-prog=||g" tests/misc/coreutils.sh
-# Different message
-sed -i "s|coreutils: unknown program 'blah'|blah: function/utility not found|" tests/misc/coreutils.sh
 
 # Use the system coreutils where the test fails due to error in a util that is not the one being tested
 sed -i "s|grep '^#define HAVE_CAP 1' \$CONFIG_HEADER > /dev/null|true|"  tests/ls/capability.sh

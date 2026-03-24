@@ -223,9 +223,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut command_values = matches
         .get_many::<OsString>(options::COMMAND)
-        .ok_or_else(|| UUsageError::new(125, "no command specified".to_string()))?;
+        .ok_or_else(|| UUsageError::new(125, "no command specified"))?;
     let Some(first_command) = command_values.next() else {
-        return Err(UUsageError::new(125, "no command specified".to_string()));
+        return Err(UUsageError::new(125, "no command specified"));
     };
     let mut command = process::Command::new(first_command);
     let command_params: Vec<&OsString> = command_values.collect();

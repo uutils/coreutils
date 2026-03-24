@@ -7,7 +7,7 @@
 
 //! Set of functions to manage xattr on files and dirs
 use itertools::Itertools;
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::ffi::{OsStr, OsString};
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
@@ -54,8 +54,8 @@ pub fn copy_xattrs_skip_selinux<P: AsRef<Path>>(source: P, dest: P) -> std::io::
 /// # Returns
 ///
 /// A result containing a HashMap of attributes names and values, or an error.
-pub fn retrieve_xattrs<P: AsRef<Path>>(source: P) -> std::io::Result<HashMap<OsString, Vec<u8>>> {
-    let mut attrs = HashMap::new();
+pub fn retrieve_xattrs<P: AsRef<Path>>(source: P) -> std::io::Result<FxHashMap<OsString, Vec<u8>>> {
+    let mut attrs = FxHashMap::default();
     for attr_name in xattr::list(&source)? {
         if let Some(value) = xattr::get(&source, &attr_name)? {
             attrs.insert(attr_name, value);
@@ -76,7 +76,7 @@ pub fn retrieve_xattrs<P: AsRef<Path>>(source: P) -> std::io::Result<HashMap<OsS
 /// A result indicating success or failure.
 pub fn apply_xattrs<P: AsRef<Path>>(
     dest: P,
-    xattrs: HashMap<OsString, Vec<u8>>,
+    xattrs: FxHashMap<OsString, Vec<u8>>,
 ) -> std::io::Result<()> {
     for (attr, value) in xattrs {
         xattr::set(&dest, &attr, &value)?;
@@ -207,7 +207,7 @@ mod tests {
 
         File::create(&file_path).unwrap();
 
-        let mut test_xattrs = HashMap::new();
+        let mut test_xattrs = FxHashMap::default();
         let test_attr = "user.test_attr";
         let test_value = b"test value";
         test_xattrs.insert(OsString::from(test_attr), test_value.to_vec());

@@ -556,6 +556,7 @@ pub struct FsUsage {
 
 impl FsUsage {
     #[cfg(unix)]
+    #[allow(clippy::unnecessary_cast)]
     pub fn new(statvfs: StatFs) -> Self {
         {
             #[cfg(all(
@@ -815,10 +816,12 @@ impl FsMeta for StatFs {
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[allow(clippy::unnecessary_cast)]
     fn io_size(&self) -> u64 {
         self.f_frsize as u64
     }
     #[cfg(any(target_vendor = "apple", target_os = "freebsd", target_os = "netbsd"))]
+    #[allow(clippy::unnecessary_cast)]
     fn io_size(&self) -> u64 {
         #[cfg(target_os = "freebsd")]
         return self.f_iosize;
@@ -853,7 +856,8 @@ impl FsMeta for StatFs {
     fn fsid(&self) -> u64 {
         // Use type inference to determine the type of f_fsid
         // (libc::__fsid_t on Android, libc::fsid_t on other platforms)
-        let f_fsid: &[u32; 2] = unsafe { &*(&raw const self.f_fsid).cast() };
+        let f_fsid = self.f_fsid;
+        let f_fsid: [u32; 2] = unsafe { mem::transmute(f_fsid) };
         ((u64::from(f_fsid[0])) << 32) | u64::from(f_fsid[1])
     }
     #[cfg(not(any(
@@ -863,6 +867,7 @@ impl FsMeta for StatFs {
         target_os = "android",
         target_os = "openbsd"
     )))]
+    #[allow(clippy::unnecessary_cast)]
     fn fsid(&self) -> u64 {
         self.f_fsid as u64
     }
@@ -876,6 +881,7 @@ impl FsMeta for StatFs {
         1024
     }
     #[cfg(any(target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))]
+    #[allow(clippy::unnecessary_cast)]
     fn namelen(&self) -> u64 {
         self.f_namemax as u64 // spell-checker:disable-line
     }

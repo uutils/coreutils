@@ -112,11 +112,11 @@ fn generate_ls_colors(fmt: &OutputFmt, sep: &str) -> String {
         }
         let (prefix, suffix) = get_colors_format_strings(fmt);
         let ls_colors = parts.join(sep);
-        format!("{prefix}{}:{ls_colors}:{suffix}", generate_type_output(fmt),)
+        format!("{prefix}{}:{ls_colors}:{suffix}", generate_type_output(fmt))
     }
 }
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
@@ -364,8 +364,7 @@ where
     let mut state = ParseState::Global;
     let mut saw_colorterm_match = false;
 
-    for (num, line) in user_input.into_iter().enumerate() {
-        let num = num + 1;
+    for (num, line) in (1..).zip(user_input.into_iter()) {
         let line = line.borrow().purify();
         if line.is_empty() {
             continue;

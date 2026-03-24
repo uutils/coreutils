@@ -10,6 +10,7 @@ on:
       - '*'
 
 env:
+  CARGO_INCREMENTAL: "0"
   # * style job configuration
   STYLE_FAIL_ON_FAULT: true ## (bool) fail the build if a style job contains a fault (error or warning); may be overridden on a per-job basis
 
@@ -66,10 +67,6 @@ jobs:
   style_lint:
     name: Style/lint
     runs-on: ${{ matrix.job.os }}
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
-      CARGO_INCREMENTAL: 0
     strategy:
       fail-fast: false
       matrix:
@@ -87,7 +84,14 @@ jobs:
         components: clippy
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
+      id: sccache-setup
       uses: mozilla-actions/sccache-action@v0.0.9
+      continue-on-error: true
+    - name: Export sccache
+      if: steps.sccache-setup.outcome == 'success'
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -112,7 +116,7 @@ jobs:
           ;;
         esac
     - name: "`cargo clippy` lint testing"
-      uses: nick-fields/retry@v3
+      uses: nick-fields/retry@v4
       with:
         max_attempts: 3
         retry_on: error

@@ -7,7 +7,7 @@
 // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/sort.html
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 
-// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef GETFD localeconv
+// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef GETFD localeconv foldhash
 
 mod buffer_hint;
 mod check;
@@ -18,21 +18,22 @@ mod merge;
 mod numeric_str_cmp;
 mod tmp_dir;
 
-use ahash::AHashMap;
 use bigdecimal::BigDecimal;
 use chunks::LineData;
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
+use foldhash::fast::FoldHasher;
+use foldhash::{HashMap, SharedSeed};
 use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
-use rand::{Rng, rng};
+use rand::{RngExt as _, rng};
 use rayon::prelude::*;
 use std::cmp::Ordering;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{File, OpenOptions};
-use std::hash::{BuildHasher, Hash, Hasher};
+use std::hash::{Hash, Hasher};
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::{IntErrorKind, NonZero};
 use std::ops::Range;
@@ -47,7 +48,7 @@ use uucore::error::{FromIo, strip_errno};
 use uucore::error::{UError, UResult, USimpleError, UUsageError};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
 #[cfg(feature = "i18n-collator")]
-use uucore::i18n::collator::locale_cmp;
+use uucore::i18n::collator::{compute_sort_key_utf8, locale_cmp};
 use uucore::i18n::decimal::locale_decimal_separator;
 use uucore::line_ending::LineEnding;
 use uucore::parser::num_parser::{ExtendedParser, ExtendedParserError};
@@ -323,6 +324,7 @@ struct Precomputed {
     floats_per_line: usize,
     selections_per_line: usize,
     fast_lexicographic: bool,
+    fast_locale_collation: bool,
     fast_ascii_insensitive: bool,
     tokenize_blank_thousands_sep: bool,
     tokenize_allow_unit_after_blank: bool,
@@ -386,6 +388,8 @@ impl GlobalSettings {
 
         self.precomputed.fast_lexicographic =
             !disable_fast_lexicographic && self.can_use_fast_lexicographic();
+        self.precomputed.fast_locale_collation =
+            disable_fast_lexicographic && self.can_use_fast_lexicographic();
         self.precomputed.fast_ascii_insensitive = self.can_use_fast_ascii_insensitive();
     }
 
@@ -631,6 +635,15 @@ impl<'a> Line<'a> {
         token_buffer: &mut Vec<Field>,
         settings: &GlobalSettings,
     ) -> Self {
+        #[cfg(feature = "i18n-collator")]
+        if settings.precomputed.fast_locale_collation {
+            compute_sort_key_utf8(line, &mut line_data.collation_key_buffer);
+            line_data
+                .collation_key_ends
+                .push(line_data.collation_key_buffer.len());
+            return Self { line, index };
+        }
+
         let needs_line_data = settings.precomputed.needs_tokens
             || settings.precomputed.selections_per_line > 0
             || settings.precomputed.num_infos_per_line > 0
@@ -1680,7 +1693,7 @@ fn index_legacy_warnings(processed_args: &[OsString], legacy_warnings: &mut [Leg
         return;
     }
 
-    let mut index_by_arg = AHashMap::default();
+    let mut index_by_arg = HashMap::default();
     for (warning_idx, warning) in legacy_warnings.iter().enumerate() {
         index_by_arg.insert(warning.arg_index, warning_idx);
     }
@@ -1752,8 +1765,15 @@ fn default_merge_batch_size() -> usize {
     }
 }
 
+#[cfg(not(unix))]
 fn locale_failed_to_set() -> bool {
-    matches!(env::var("LC_ALL").ok().as_deref(), Some("missing"))
+    env::var_os("LC_ALL").as_deref() == Some(OsStr::new("missing"))
+}
+
+#[cfg(unix)]
+fn locale_failed_to_set() -> bool {
+    use nix::libc;
+    unsafe { libc::setlocale(libc::LC_COLLATE, c"".as_ptr()).is_null() }
 }
 
 fn key_zero_width(selector: &FieldSelector) -> bool {
@@ -1809,8 +1829,7 @@ fn emit_debug_warnings(
         show_error!("{}", translate!("sort-warning-simple-byte-comparison"));
     }
 
-    for (idx, selector) in settings.selectors.iter().enumerate() {
-        let key_index = idx + 1;
+    for (key_index, selector) in (1..).zip(settings.selectors.iter()) {
         if let Some(legacy) = legacy_warnings
             .iter()
             .find(|warning| warning.key_index == Some(key_index))
@@ -2607,6 +2626,18 @@ fn compare_by<'a>(
         };
     }
 
+    #[cfg(feature = "i18n-collator")]
+    if global_settings.precomputed.fast_locale_collation {
+        let a_key = a_line_data.collation_key(a.index);
+        let b_key = b_line_data.collation_key(b.index);
+        let cmp = a_key.cmp(b_key);
+        return if global_settings.reverse {
+            cmp.reverse()
+        } else {
+            cmp
+        };
+    }
+
     if global_settings.precomputed.fast_ascii_insensitive {
         let cmp = ascii_case_insensitive_cmp(a.line, b.line);
         if cmp != Ordering::Equal || a.line == b.line {
@@ -2919,7 +2950,7 @@ fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
     let mut buf = [0u8; BUF_LEN];
     let mut total = 0usize;
     // freeze seed for --random-source
-    let mut hasher = ahash::RandomState::with_seeds(1, 1, 1, 1).build_hasher();
+    let mut hasher = FoldHasher::with_seed(1, SharedSeed::global_fixed());
 
     loop {
         let n = reader
@@ -2945,7 +2976,7 @@ fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
 
     let first = hasher.finish();
     // freeze seed for --random-source
-    let mut second_hasher = ahash::RandomState::with_seeds(2, 2, 2, 2).build_hasher();
+    let mut second_hasher = FoldHasher::with_seed(2, SharedSeed::global_fixed());
     second_hasher.write(RANDOM_SOURCE_TAG);
     second_hasher.write_u64(first);
     let second = second_hasher.finish();
@@ -2958,7 +2989,9 @@ fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
 
 fn get_hash<T: Hash>(t: &T) -> u64 {
     // Is reproducibility of get_hash itself needed for --random-source ?
-    ahash::RandomState::with_seeds(0, 0, 0, 0).hash_one(t)
+    let mut s = FoldHasher::with_seed(0, SharedSeed::global_fixed());
+    t.hash(&mut s);
+    s.finish()
 }
 
 fn random_shuffle(a: &[u8], b: &[u8], salt: &[u8]) -> Ordering {

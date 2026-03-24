@@ -5,6 +5,8 @@
 
 // spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR outfile uufs xattrs
 // spell-checker:ignore bdfl hlsl IRWXO IRWXG nconfined matchpathcon libselinux-devel prwx doesnotexist reftests subdirs mksocket srwx
+#[cfg(unix)]
+use rstest::rstest;
 use uucore::display::Quotable;
 #[cfg(feature = "feat_selinux")]
 use uucore::selinux::get_getfattr_output;
@@ -3171,6 +3173,133 @@ fn test_cp_fifo() {
     assert_eq!(permission, "prwx-wx--x".to_string());
 }
 
+#[rstest]
+#[case::recursive("-R")]
+#[case::archive("-a")]
+#[cfg(unix)]
+fn test_cp_recursive_char_device(#[case] flag: &str) {
+    use nix::sys::stat::{Mode, SFlag, mknod as nix_mknod};
+    use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
+    use uutests::util::run_ucmd_as_root;
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let mode = Mode::S_IRUSR | Mode::S_IWUSR | Mode::S_IRGRP;
+    if nix_mknod(
+        at.plus("null").as_path(),
+        SFlag::S_IFCHR,
+        mode,
+        uucore::fs::makedev(1, 3),
+    )
+    .is_err()
+    {
+        print!("Test skipped; creating a char device node requires CAP_MKNOD");
+        return;
+    }
+    if let Ok(result) = run_ucmd_as_root(&ts, &[flag, "null", "null2"]) {
+        result.success();
+        let null2_metadata = at.plus("null2").metadata().unwrap();
+        assert!(null2_metadata.file_type().is_char_device());
+        assert_eq!(
+            null2_metadata.rdev(),
+            at.plus("null").metadata().unwrap().rdev()
+        );
+        assert_eq!(
+            null2_metadata.permissions().mode() & 0o777,
+            mode.bits() as _
+        );
+    } else {
+        print!("Test skipped; copying a char device node requires CAP_MKNOD");
+    }
+}
+
+#[rstest]
+#[case::recursive("-R")]
+#[case::archive("-a")]
+#[cfg(unix)]
+fn test_cp_recursive_char_device_no_permission(#[case] flag: &str) {
+    new_ucmd!()
+        .args(&[flag, "/dev/null", "null2"])
+        .fails()
+        .stderr_is("cp: cannot create special file 'null2': Operation not permitted\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_recursive_char_device_copy_contents() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-R", "--copy-contents", "/dev/null", "null2"])
+        .succeeds()
+        .no_stderr();
+    assert!(at.plus("null2").metadata().unwrap().file_type().is_file());
+    assert_eq!(at.read("null2"), "");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_char_device() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["/dev/null", "null2"]).succeeds().no_stderr();
+    assert!(at.plus("null2").metadata().unwrap().file_type().is_file());
+    assert_eq!(at.read("null2"), "");
+}
+
+#[rstest]
+#[case::recursive("-R")]
+#[case::archive("-a")]
+#[cfg(unix)]
+fn test_cp_recursive_block_device(#[case] flag: &str) {
+    use nix::sys::stat::{Mode, SFlag, mknod as nix_mknod};
+    use std::os::unix::fs::{FileTypeExt, MetadataExt};
+    use uutests::util::run_ucmd_as_root;
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    if nix_mknod(
+        at.plus("sda").as_path(),
+        SFlag::S_IFBLK,
+        Mode::S_IRUSR | Mode::S_IWUSR,
+        uucore::fs::makedev(8, 0),
+    )
+    .is_err()
+    {
+        print!("Test skipped; creating a block device node requires CAP_MKNOD");
+        return;
+    }
+    if let Ok(result) = run_ucmd_as_root(&ts, &[flag, "sda", "sda2"]) {
+        result.success();
+        let sda2_metadata = at.plus("sda2").metadata().unwrap();
+        assert!(sda2_metadata.file_type().is_block_device());
+        assert_eq!(
+            sda2_metadata.rdev(),
+            at.plus("sda").metadata().unwrap().rdev()
+        );
+    } else {
+        print!("Test skipped; copying a block device node requires CAP_MKNOD");
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_block_device_no_permission() {
+    use nix::sys::stat::{Mode, SFlag, mknod as nix_mknod};
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    if nix_mknod(
+        at.plus("sda").as_path(),
+        SFlag::S_IFBLK,
+        Mode::S_IRUSR | Mode::S_IWUSR,
+        uucore::fs::makedev(8, 0),
+    )
+    .is_err()
+    {
+        print!("Test skipped; creating a block device node requires CAP_MKNOD");
+        return;
+    }
+    ts.ucmd()
+        .args(&["-R", "sda", "sda2"])
+        .fails()
+        .stderr_is("cp: cannot create special file 'sda2': Operation not permitted\n");
+}
+
 #[test]
 #[cfg(unix)]
 fn test_cp_socket() {
@@ -3664,6 +3793,27 @@ fn test_copy_dir_preserve_subdir_permissions() {
     assert!(at.dir_exists("b1/a2"));
     assert_metadata_eq!(at.metadata("a1"), at.metadata("b1"));
     assert_metadata_eq!(at.metadata("a1/a2"), at.metadata("b1/a2"));
+}
+
+/// cp should successfully copy a read-only source directory containing files.
+/// Regression test: build_dir previously created the destination with the source's
+/// read-only mode, causing EPERM when copying files into it.
+#[cfg(all(not(windows), not(target_os = "freebsd"), not(target_os = "openbsd")))]
+#[test]
+fn test_copy_dir_preserve_readonly_source_with_files() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("src");
+    at.write("src/file.txt", "hello");
+    at.set_mode("src", 0o0555);
+
+    ucmd.args(&["-p", "-r", "src", "dest"])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    assert!(at.dir_exists("dest"));
+    assert_eq!(at.read("dest/file.txt"), "hello");
+    assert_metadata_eq!(at.metadata("src"), at.metadata("dest"));
 }
 
 /// Test for preserving permissions when copying a directory, even in
@@ -7707,4 +7857,23 @@ fn test_cp_preserve_context_with_z_fails() {
     ucmd.args(&["--preserve=context", "-Z", "src", "dst"])
         .fails()
         .stderr_contains("cannot combine");
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "macos")))]
+fn test_cp_recursive_non_utf8_source() {
+    use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir(OsStr::from_bytes(b"dir\x80"));
+    at.mkdir("dir2");
+    at.touch(OsStr::from_bytes(b"dir\x80/a"));
+
+    ucmd.arg("-r")
+        .arg(OsStr::from_bytes(b"dir\x80/."))
+        .arg("dir2")
+        .succeeds()
+        .no_output();
+
+    assert!(at.plus("dir2").join("a").exists());
 }

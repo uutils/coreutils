@@ -87,6 +87,7 @@ cp-error-selinux-get-context = failed to get security context of { $path }
 cp-error-selinux-error = SELinux error: { $error }
 cp-error-selinux-context-conflict = cannot combine --context (-Z) with --preserve=context
 cp-error-cannot-create-fifo = cannot create fifo { $path }: File exists
+cp-error-cannot-create-special-file = cannot create special file { $path }: { $error }
 cp-error-invalid-attribute = invalid attribute { $value }
 cp-error-failed-to-create-whole-tree = failed to create whole tree
 cp-error-failed-to-create-directory = Failed to create directory: { $error }

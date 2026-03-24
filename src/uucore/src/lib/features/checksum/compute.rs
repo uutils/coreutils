@@ -5,7 +5,7 @@
 
 // spell-checker:ignore bitlen
 
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsStr;
 use std::fs::File;
 use std::io::{self, BufReader, Read, Write};
 use std::path::Path;
@@ -115,38 +115,18 @@ impl OutputFormat {
     ///
     /// Since standalone utils can't use the Raw or Legacy output format, it is
     /// decided only using the --tag, --binary and --text arguments.
-    pub fn from_standalone(args: impl Iterator<Item = OsString>) -> UResult<Self> {
-        let mut text = true;
-        let mut tag = false;
-
-        for arg in args {
-            if arg == "--" {
-                break;
-            } else if arg == "--tag" {
-                tag = true;
-                text = false;
-            } else if arg == "--binary" || arg == "-b" {
-                text = false;
-            } else if arg == "--text" || arg == "-t" {
-                // Finding a `--text` after `--tag` is an error.
-                if tag {
-                    return Err(ChecksumError::TextAfterTag.into());
-                }
-                text = true;
-            }
-        }
-
+    pub fn from_standalone(text: bool, tag: bool) -> Self {
         if tag {
-            Ok(Self::Tagged(DigestFormat::Hexadecimal))
+            Self::Tagged(DigestFormat::Hexadecimal)
         } else {
-            Ok(Self::Untagged(
+            Self::Untagged(
                 DigestFormat::Hexadecimal,
                 if text {
                     ReadingMode::Text
                 } else {
                     ReadingMode::Binary
                 },
-            ))
+            )
         }
     }
 }

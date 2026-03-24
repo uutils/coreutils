@@ -11,7 +11,8 @@ on:
 env:
   # * style job configuration
   STYLE_FAIL_ON_FAULT: true ## (bool) fail the build if a style job contains a fault (error or warning); may be overridden on a per-job basis
-
+  CARGO_INCREMENTAL: "0"
+  RUST_BACKTRACE: "1"
 permissions:
   contents: read # to fetch code (actions/checkout)
 
@@ -25,10 +26,6 @@ jobs:
   l10n_build_test:
     name: L10n/Build and Test
     runs-on: ${{ matrix.job.os }}
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
-      CARGO_INCREMENTAL: 0
     strategy:
       fail-fast: false
       matrix:
@@ -40,11 +37,17 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
+      id: sccache-setup
       uses: mozilla-actions/sccache-action@v0.0.9
+      continue-on-error: true
+    - name: Export sccache
+      if: steps.sccache-setup.outcome == 'success'
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -59,19 +62,12 @@ jobs:
             brew install coreutils
           ;;
         esac
-    - name: Build with platform features
-      shell: bash
-      run: |
-        ## Build with platform-specific features to enable l10n functionality
-        cargo build --features ${{ matrix.job.features }}
     - name: Test l10n functionality
       shell: bash
       run: |
         ## Test l10n functionality
         cargo test -p uucore locale
         cargo test
-      env:
-        RUST_BACKTRACE: "1"
 
   l10n_fluent_syntax:
     name: L10n/Fluent Syntax Check
@@ -93,7 +89,7 @@ jobs:
       shell: bash
       run: |
 
-        fluent_dirs=$(find . -name "*.ftl" -type f -exec dirname {} \; | sort | uniq 2>/dev/null || true)
+        fluent_dirs=$(find . -name "*.ftl" -type f -exec dirname {} \; | sort | uniq 2>/dev/null || :)
 
         if [ -n "$fluent_dirs" ]; then
           echo "Found Fluent directories:"
@@ -128,28 +124,26 @@ jobs:
   l10n_clap_error_localization:
     name: L10n/Clap Error Localization Test
     runs-on: ubuntu-latest
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
-      CARGO_INCREMENTAL: 0
     steps:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
+      id: sccache-setup
       uses: mozilla-actions/sccache-action@v0.0.9
+      continue-on-error: true
+    - name: Export sccache
+      if: steps.sccache-setup.outcome == 'success'
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
     - name: Install/setup prerequisites
       shell: bash
       run: |
         sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
         sudo locale-gen --keep-existing fr_FR.UTF-8
         locale -a | grep -i fr || exit 1
-    - name: Build coreutils with clap localization support
-      shell: bash
-      run: |
-        cargo build --features feat_os_unix --bin coreutils
     - name: Test English clap error localization
       shell: bash
       run: |
@@ -196,8 +190,6 @@ jobs:
           echo "✗ ERROR: English clap error localization not working properly"
           exit 1
         fi
-      env:
-        RUST_BACKTRACE: "1"
 
     - name: Test French clap error localization
       shell: bash
@@ -261,8 +253,6 @@ jobs:
           echo "✗ No ANSI color codes found - colors may not be working"
           echo "::warning::ANSI color codes not detected in clap error output"
         fi
-      env:
-        RUST_BACKTRACE: "1"
 
     - name: Test clap localization with multiple utilities
       shell: bash
@@ -293,24 +283,24 @@ jobs:
           echo "✗ ERROR: Clap localization not working for enough utilities"
           exit 1
         fi
-      env:
-        RUST_BACKTRACE: "1"
 
   l10n_french_integration:
     name: L10n/French Integration Test
     runs-on: ubuntu-latest
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
-      CARGO_INCREMENTAL: 0
     steps:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
+      id: sccache-setup
       uses: mozilla-actions/sccache-action@v0.0.9
+      continue-on-error: true
+    - name: Export sccache
+      if: steps.sccache-setup.outcome == 'success'
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -322,11 +312,6 @@ jobs:
         ## Generate French locale for testing
         sudo locale-gen --keep-existing fr_FR.UTF-8
         locale -a | grep -i fr || echo "French locale not found, continuing anyway"
-    - name: Build coreutils with l10n support
-      shell: bash
-      run: |
-        ## Build coreutils with Unix features and l10n support
-        cargo build --features feat_os_unix --bin coreutils
     - name: Test French localization
       shell: bash
       run: |
@@ -403,16 +388,10 @@ jobs:
           echo "✗ ERROR: No French strings were detected, but commands executed successfully"
           exit 1
         fi
-      env:
-        RUST_BACKTRACE: "1"
 
   l10n_multicall_binary_install:
     name: L10n/Multi-call Binary Install Test
     runs-on: ${{ matrix.job.os }}
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
-      CARGO_INCREMENTAL: 0
     strategy:
       fail-fast: false
       matrix:
@@ -423,10 +402,16 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
+      id: sccache-setup
       uses: mozilla-actions/sccache-action@v0.0.9
+      continue-on-error: true
+    - name: Export sccache
+      if: steps.sccache-setup.outcome == 'success'
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -457,7 +442,7 @@ jobs:
 
         # First check if binary exists after build
         echo "Checking if coreutils was built..."
-        ls -la target/release-small/coreutils || echo "No coreutils binary in target/release-small/"
+        target/release-small/coreutils --version || echo "No coreutils binary in target/release-small/"
 
         make FEATURES="${{ matrix.job.features }}" PROFILE=release-small MULTICALL=y
 
@@ -466,7 +451,7 @@ jobs:
 
         echo "Running make install..."
         echo "Before install - checking what we have:"
-        ls -la target/release-small/coreutils 2>/dev/null || echo "No coreutils in target/release-small"
+        target/release-small/coreutils --version 2>/dev/null || echo "No coreutils in target/release-small"
 
         # Run make install with verbose output to see what happens
         echo "About to run: make install DESTDIR=\"$INSTALL_DIR\" PREFIX=/usr PROFILE=release-small MULTICALL=y"
@@ -486,9 +471,8 @@ jobs:
         echo "Current directory: $(pwd)"
         echo "INSTALL_DIR: $INSTALL_DIR"
         echo "Checking if build succeeded..."
-        if [ -f "target/release-small/coreutils" ]; then
+        if target/release-small/coreutils --version; then
           echo "✓ Build succeeded - coreutils binary exists in target/release-small/"
-          ls -la target/release-small/coreutils
         else
           echo "✗ Build failed - no coreutils binary in target/release-small/"
           echo "Contents of target/release-small/:"
@@ -522,7 +506,7 @@ jobs:
           find "$INSTALL_DIR" -type f 2>/dev/null | head -50
 
           # As a last resort, check if it's in the build directory
-          if [ -f "target/release/coreutils" ]; then
+          if "target/release/coreutils" --version; then
             echo "Using binary from build directory as fallback"
             COREUTILS_BIN="$(pwd)/target/release/coreutils"
             export COREUTILS_BIN
@@ -561,10 +545,6 @@ jobs:
   l10n_installation_test:
     name: L10n/Installation Test (Make & Cargo)
     runs-on: ${{ matrix.job.os }}
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
-      CARGO_INCREMENTAL: 0
     strategy:
       fail-fast: false
       matrix:
@@ -575,10 +555,16 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
+      id: sccache-setup
       uses: mozilla-actions/sccache-action@v0.0.9
+      continue-on-error: true
+    - name: Export sccache
+      if: steps.sccache-setup.outcome == 'success'
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -610,9 +596,8 @@ jobs:
 
         # Verify installation
         echo "Testing make-installed binaries..."
-        if [ -f "$MAKE_INSTALL_DIR/usr/bin/coreutils" ]; then
+        if "$MAKE_INSTALL_DIR/usr/bin/coreutils" --version; then
           echo "✓ coreutils binary installed via make successfully"
-          "$MAKE_INSTALL_DIR/usr/bin/coreutils" --version
         else
           echo "✗ coreutils binary not found after make install"
           exit 1
@@ -707,13 +692,12 @@ jobs:
         mkdir -p "$CARGO_INSTALL_DIR"
 
         # Install using cargo with l10n features
-        cargo install --path . --features ${{ matrix.job.features }} --root "$CARGO_INSTALL_DIR" --locked
+        cargo install --path . --features "ls,cat,touch" --root "$CARGO_INSTALL_DIR" --locked
 
         # Verify installation
         echo "Testing cargo-installed binaries..."
-        if [ -f "$CARGO_INSTALL_DIR/bin/coreutils" ]; then
+        if "$CARGO_INSTALL_DIR/bin/coreutils" --version; then
           echo "✓ coreutils binary installed successfully"
-          "$CARGO_INSTALL_DIR/bin/coreutils" --version
         else
           echo "✗ coreutils binary not found after cargo install"
           exit 1
@@ -753,7 +737,7 @@ jobs:
         echo "Checking structure of coreutils-l10n-repo:"
         ls -la coreutils-l10n-repo/ | head -10
         echo "Looking for locales directory:"
-        find coreutils-l10n-repo -name "*.ftl" -type f 2>/dev/null | head -10 || true
+        find coreutils-l10n-repo -name "*.ftl" -type f 2>/dev/null | head -10 || :
         echo "Checking specific utilities:"
         ls -la coreutils-l10n-repo/src/uu/ls/locales/ 2>/dev/null || echo "No ls directory in correct location"
         find coreutils-l10n-repo -path "*/ls/*.ftl" 2>/dev/null | head -5 || echo "No ls ftl files found"
@@ -787,7 +771,7 @@ jobs:
 
         # Debug: Show what was actually installed
         echo "Files installed in locale directory:"
-        find "$LOCALE_DIR" -name "*.ftl" 2>/dev/null | head -10 || true
+        find "$LOCALE_DIR" -name "*.ftl" 2>/dev/null | head -10 || :
 
         # Fallback: If no files were installed from l10n repo, try copying from main repo
         if [ -z "$(find "$LOCALE_DIR" -name "*.ftl" 2>/dev/null)" ]; then
@@ -797,11 +781,11 @@ jobs:
             if [ -d "$util_dir/locales" ]; then
               echo "Copying locales for $util_name from main repo..."
               mkdir -p "$LOCALE_DIR/$util_name"
-              cp "$util_dir/locales"/*.ftl "$LOCALE_DIR/$util_name/" 2>/dev/null || true
+              cp "$util_dir/locales"/*.ftl "$LOCALE_DIR/$util_name/" 2>/dev/null || :
             fi
           done
           echo "Files after fallback:"
-          find "$LOCALE_DIR" -name "*.ftl" 2>/dev/null | head -10 || true
+          find "$LOCALE_DIR" -name "*.ftl" 2>/dev/null | head -10 || :
         fi
 
         echo "✓ Additional locale files installed"
@@ -816,7 +800,7 @@ jobs:
         LOCALE_DIR="$CARGO_INSTALL_DIR/share/locales"
 
         echo "Checking installed binary..."
-        if [ ! -f "$CARGO_INSTALL_DIR/bin/coreutils" ]; then
+        if ! "$CARGO_INSTALL_DIR/bin/coreutils" --version; then
           echo "✗ coreutils binary not found"
           exit 1
         fi
@@ -901,18 +885,20 @@ jobs:
   l10n_locale_support_verification:
     name: L10n/Locale Support Verification
     runs-on: ubuntu-latest
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
-      CARGO_INCREMENTAL: 0
     steps:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
+      id: sccache-setup
       uses: mozilla-actions/sccache-action@v0.0.9
+      continue-on-error: true
+    - name: Export sccache
+      if: steps.sccache-setup.outcome == 'success'
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -939,7 +925,7 @@ jobs:
 
         # Debug: Show what was installed
         echo "Contents of installation directory:"
-        find "$INSTALL_DIR" -type f -name "coreutils" -o -name "ls" 2>/dev/null | head -20 || true
+        find "$INSTALL_DIR" -type f -name "coreutils" -o -name "ls" 2>/dev/null | head -20 || :
         echo "Looking for binaries in: $INSTALL_DIR/usr/bin/"
         ls -la "$INSTALL_DIR/usr/bin/" || echo "Directory not found"
 
@@ -1127,24 +1113,24 @@ jobs:
         fi
 
         echo "✓ All locale-specific functionality tests passed"
-      env:
-        RUST_BACKTRACE: "1"
 
   l10n_embedded_locale_regression_test:
     name: L10n/Embedded Locale Regression Test
     runs-on: ubuntu-latest
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
-      CARGO_INCREMENTAL: 0
     steps:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
+      id: sccache-setup
       uses: mozilla-actions/sccache-action@v0.0.9
+      continue-on-error: true
+    - name: Export sccache
+      if: steps.sccache-setup.outcome == 'success'
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -1161,7 +1147,6 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
       with:
         # Use different cache key for each build to avoid conflicts
@@ -1193,7 +1178,6 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
       with:
         # Use different cache key for each build to avoid conflicts
@@ -1225,7 +1209,6 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
       with:
         # Use different cache key for each build to avoid conflicts
@@ -1255,20 +1238,22 @@ jobs:
   l10n_locale_embedding_cargo_install:
     name: L10n/Locale Embedding - Cargo Install
     runs-on: ubuntu-latest
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
-      CARGO_INCREMENTAL: 0
     steps:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
       with:
         key: cargo-install-locale-embedding
     - name: Run sccache-cache
+      id: sccache-setup
       uses: mozilla-actions/sccache-action@v0.0.9
+      continue-on-error: true
+    - name: Export sccache
+      if: steps.sccache-setup.outcome == 'success'
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
     - name: Install prerequisites
       run: |
         sudo apt-get -y update
@@ -1380,11 +1365,3 @@ jobs:
           echo "::warning::More locales than expected ($total_match_count entries)"
           echo "This might be expected for utility + uucore locales"
         fi
-
-  l10n_locale_embedding_regression_test:
-    name: L10n/Locale Embedding Regression Test
-    runs-on: ubuntu-latest
-    needs: [l10n_locale_embedding_cat, l10n_locale_embedding_ls, l10n_locale_embedding_multicall, l10n_locale_embedding_cargo_install]
-    steps:
-    - name: All locale embedding tests passed
-      run: echo "✓ All locale embedding tests passed successfully"

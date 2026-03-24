@@ -763,6 +763,30 @@ fn test_files0_progressive_stream() {
         .stdout_only("36 370 2189 total\n");
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn test_files0_stops_after_stdout_write_error() {
+    use std::fs::OpenOptions;
+
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+
+    let stderr = new_ucmd!()
+        .args(&["--files0-from=-", "--total=never"])
+        .set_stdout(dev_full)
+        .pipe_in(b"/dev/null\0/dev/null\0/dev/null\0")
+        .fails()
+        .stderr_str()
+        .to_string();
+
+    assert_eq!(
+        stderr
+            .matches("failed to print result for /dev/null")
+            .count(),
+        1,
+        "wc should stop after the first stdout write error: {stderr:?}"
+    );
+}
+
 #[test]
 fn files0_from_dir() {
     // On Unix, `read(open("."))` fails. On Windows, `open(".")` fails. Thus, the errors happen in

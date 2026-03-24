@@ -185,9 +185,9 @@ mod tests {
             let _lock = LOCALE_MUTEX.lock().unwrap();
 
             // Save original locale (both environment and process locale)
-            let original_lc_all = std::env::var("LC_ALL").ok();
-            let original_lc_time = std::env::var("LC_TIME").ok();
-            let original_lang = std::env::var("LANG").ok();
+            let original_lc_all = std::env::var_os("LC_ALL");
+            let original_lc_time = std::env::var_os("LC_TIME");
+            let original_lang = std::env::var_os("LANG");
 
             // Save current process locale
             let original_process_locale = unsafe {

@@ -435,12 +435,11 @@ fn safe_du(
     };
 
     'file_loop: for entry_name in entries {
-        let entry_path = path.join(&entry_name);
-
         // First get the lstat (without following symlinks) to check if it's a symlink
         let lstat = match dir_fd.stat_at(&entry_name, SymlinkBehavior::NoFollow) {
             Ok(stat) => stat,
             Err(e) => {
+                let entry_path = path.join(&entry_name);
                 print_tx.send(Err(e.map_err_context(
                     || translate!("du-error-cannot-access", "path" => entry_path.quote()),
                 )))?;
@@ -479,7 +478,7 @@ fn safe_du(
         let this_stat = if is_dir {
             // For directories, recurse using safe_du
             Stat {
-                path: entry_path.clone(),
+                path: path.join(&entry_name),
                 size: 0,
                 #[allow(clippy::unnecessary_cast)]
                 blocks: entry_stat.st_blocks as u64,
@@ -492,7 +491,7 @@ fn safe_du(
         } else {
             // For files
             Stat {
-                path: entry_path.clone(),
+                path: path.join(&entry_name),
                 #[allow(clippy::unnecessary_cast)]
                 size: entry_stat.st_size as u64,
                 #[allow(clippy::unnecessary_cast)]
@@ -537,7 +536,7 @@ fn safe_du(
             }
 
             let this_stat = safe_du(
-                &entry_path,
+                &this_stat.path,
                 options,
                 depth + 1,
                 seen_inodes,

@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker: ignore: AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado febr
+// spell-checker: ignore: AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado febr MEST KST
 
 use std::cmp::Ordering;
 
@@ -1119,6 +1119,73 @@ fn test_date_tz_abbreviation_dst_handling() {
 }
 
 #[test]
+fn test_date_tz_abbreviation_fixed_offset_outside_season() {
+    // Abbreviations encode a fixed UTC offset regardless of the date.
+    // Using a DST abbreviation outside its season should still use the
+    // fixed offset the abbreviation implies, not the zone's current offset.
+
+    // EDT (UTC-4) used in winter (New York observes EST in January)
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-u")
+        .arg("-d")
+        .arg("2026-01-15 10:00 EDT")
+        .arg("+%F %T %Z")
+        .succeeds()
+        .stdout_is("2026-01-15 14:00:00 UTC\n");
+
+    // PST (UTC-8) used in summer (Los Angeles observes PDT in June)
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-u")
+        .arg("-d")
+        .arg("2026-06-15 10:00 PST")
+        .arg("+%F %T %Z")
+        .succeeds()
+        .stdout_is("2026-06-15 18:00:00 UTC\n");
+
+    // PDT (UTC-7) used in winter
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-u")
+        .arg("-d")
+        .arg("2026-01-15 10:00 PDT")
+        .arg("+%F %T %Z")
+        .succeeds()
+        .stdout_is("2026-01-15 17:00:00 UTC\n");
+
+    // CDT (UTC-5) used in winter
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-u")
+        .arg("-d")
+        .arg("2026-01-15 10:00 CDT")
+        .arg("+%F %T %Z")
+        .succeeds()
+        .stdout_is("2026-01-15 15:00:00 UTC\n");
+
+    // MDT (UTC-6) used in winter
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-u")
+        .arg("-d")
+        .arg("2026-01-15 10:00 MDT")
+        .arg("+%F %T %Z")
+        .succeeds()
+        .stdout_is("2026-01-15 16:00:00 UTC\n");
+
+    // MEST (UTC+2) used in winter
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-u")
+        .arg("-d")
+        .arg("2026-01-15 10:00 MEST")
+        .arg("+%F %T %Z")
+        .succeeds()
+        .stdout_is("2026-01-15 08:00:00 UTC\n");
+}
+
+#[test]
 fn test_date_tz_abbreviation_with_day_of_week() {
     // Test timezone abbreviations with full date format including day of week
     new_ucmd!()
@@ -1134,6 +1201,29 @@ fn test_date_tz_abbreviation_with_day_of_week() {
         .arg("+%Y-%m-%d %H:%M:%S")
         .succeeds()
         .no_stderr();
+}
+
+#[test]
+fn test_date_tz_abbreviation_with_relative_date() {
+    // Verify that "yesterday" in "-u -d yesterday 10:00 GMT" is resolved
+    // relative to UTC, not the local TZ.
+    let expected = new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-u")
+        .arg("-d")
+        .arg("yesterday 10:00 GMT")
+        .arg("+%F %T %Z")
+        .succeeds()
+        .stdout_str()
+        .to_string();
+    new_ucmd!()
+        .env("TZ", "Australia/Sydney")
+        .arg("-u")
+        .arg("-d")
+        .arg("yesterday 10:00 GMT")
+        .arg("+%F %T %Z")
+        .succeeds()
+        .stdout_is(expected);
 }
 
 #[test]
@@ -1530,7 +1620,7 @@ fn test_date_locale_en_us_vs_c_difference() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple",))]
+#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
 fn test_date_locale_fr_french() {
     // Test French locale (fr_FR.UTF-8) behavior
     // French typically uses 24-hour format and may have localized day/month names
@@ -2334,6 +2424,126 @@ fn test_date_format_modifier_percent_escape() {
         .stdout_is("%Y=0000001999\n");
 }
 
+// Tests for format modifier edge cases (flags without explicit width)
+#[test]
+fn test_date_format_modifier_edge_cases() {
+    // Test cases: (date, format, expected_output, description)
+    let cases = vec![
+        // Underscore flag without explicit width (uses default width)
+        ("1999-06-01", "%_d", " 1", "%_d pads day to default width 2"),
+        (
+            "1999-06-15",
+            "%_m",
+            " 6",
+            "%_m pads month to default width 2",
+        ),
+        (
+            "1999-06-01 05:00:00",
+            "%_H",
+            " 5",
+            "%_H pads hour to default width 2",
+        ),
+        (
+            "1999-06-01",
+            "%_Y",
+            "1999",
+            "%_Y year already at default width 4",
+        ),
+        (
+            "1999-06-01",
+            "%_C",
+            "19",
+            "%_C century uses default width 2",
+        ),
+        ("2024-06-01", "%_C", "20", "%_C century for year 2024"),
+        (
+            "1999-01-01",
+            "%_j",
+            "  1",
+            "%_j pads day-of-year to default width 3",
+        ),
+        ("1999-04-10", "%_j", "100", "%_j day 100 already at width 3"),
+        // Zero flag on space-padded specifiers (overrides default padding)
+        (
+            "1999-06-05",
+            "%0e",
+            "05",
+            "%0e overrides space-padding with zero",
+        ),
+        (
+            "1999-06-01 05:00:00",
+            "%0k",
+            "05",
+            "%0k overrides space-padding with zero",
+        ),
+        (
+            "1999-06-01 05:00:00",
+            "%0l",
+            "05",
+            "%0l overrides space-padding with zero",
+        ),
+        // Zero flag without explicit width (uses default width)
+        (
+            "1999-06-01",
+            "%0d",
+            "01",
+            "%0d day with zero padding (default width 2)",
+        ),
+        (
+            "1999-06-15",
+            "%0m",
+            "06",
+            "%0m month with zero padding (default width 2)",
+        ),
+        (
+            "1999-01-01",
+            "%0j",
+            "001",
+            "%0j day-of-year with zero padding (default width 3)",
+        ),
+        // Space-padded specifiers default behavior (no modifier)
+        ("1999-06-05", "%e", " 5", "%e defaults to space padding"),
+        (
+            "1999-06-01 05:00:00",
+            "%k",
+            " 5",
+            "%k defaults to space padding",
+        ),
+        (
+            "1999-06-01 05:00:00",
+            "%l",
+            " 5",
+            "%l defaults to space padding",
+        ),
+        // Plus flag without explicit width
+        (
+            "1999-06-01",
+            "%+Y",
+            "1999",
+            "%+Y no sign for 4-digit year without width",
+        ),
+        (
+            "1999-06-01",
+            "%+6Y",
+            "+01999",
+            "%+6Y with explicit width adds sign",
+        ),
+    ];
+
+    for (date, format, expected, description) in cases {
+        let result = new_ucmd!()
+            .env("TZ", "UTC")
+            .args(&["-d", date, &format!("+{format}")])
+            .succeeds();
+        // stdout includes newline, expected is without newline
+        assert_eq!(
+            result.stdout_str(),
+            format!("{expected}\n"),
+            "{description}"
+        );
+    }
+}
+
 // Tests for --debug flag
 #[test]
 fn test_date_debug_basic() {
@@ -2612,4 +2822,17 @@ fn test_date_debug_current_time() {
     let stderr = result.stderr_str();
     // No parsing happens for "now", so no debug output
     assert_eq!(stderr, "");
+}
+
+#[test]
+fn test_korean_time_zone() {
+    // KST (UTC+9 korean standard time) used in winter
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-u")
+        .arg("-d")
+        .arg("2026-01-15 10:00 KST")
+        .arg("+%F %T %Z")
+        .succeeds()
+        .stdout_is("2026-01-15 01:00:00 UTC\n");
 }

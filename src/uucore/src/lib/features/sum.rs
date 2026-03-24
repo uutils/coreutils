@@ -122,25 +122,48 @@ impl Digest for Blake2b {
     }
 }
 
-#[derive(Default)]
-pub struct Blake3(blake3::Hasher);
+pub struct Blake3 {
+    digest: blake3::Hasher,
+    byte_size: usize,
+}
+
+impl Blake3 {
+    /// Default length for the BLAKE3 digest in bytes.
+    pub const DEFAULT_BYTE_SIZE: usize = 32;
+
+    pub fn with_output_bytes(output_bytes: usize) -> Self {
+        Self {
+            digest: blake3::Hasher::new(),
+            byte_size: output_bytes,
+        }
+    }
+}
+
+impl Default for Blake3 {
+    fn default() -> Self {
+        Self {
+            digest: blake3::Hasher::default(),
+            byte_size: Self::DEFAULT_BYTE_SIZE,
+        }
+    }
+}
 
 impl Digest for Blake3 {
     fn hash_update(&mut self, input: &[u8]) {
-        self.0.update(input);
+        self.digest.update(input);
     }
 
     fn hash_finalize(&mut self, out: &mut [u8]) {
-        let hash_result = &self.0.finalize();
-        out.copy_from_slice(hash_result.as_bytes());
+        let mut hash_result = self.digest.finalize_xof();
+        hash_result.fill(out);
     }
 
     fn reset(&mut self) {
-        *self = Self::default();
+        *self = Self::with_output_bytes(self.output_bytes());
     }
 
     fn output_bits(&self) -> usize {
-        256
+        self.byte_size * 8
     }
 }
 
