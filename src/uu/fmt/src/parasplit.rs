@@ -183,18 +183,23 @@ impl FileLines<'_> {
         }
     }
 
+    /// Remove trailing LF or CRLF from a buffer.
+    fn strip_line_ending(buf: &mut Vec<u8>) {
+        if buf.ends_with(b"\n") {
+            buf.pop();
+            if buf.ends_with(b"\r") {
+                buf.pop();
+            }
+        }
+    }
+
     /// Read a line, limiting memory usage on inputs without newlines.
     fn read_limited_line(&mut self) -> Option<Vec<u8>> {
         // First, drain any pending bytes from a previous split
         if !self.pending.is_empty() {
             if let Some(pos) = self.pending.iter().position(|&b| b == b'\n') {
                 let mut line: Vec<u8> = self.pending.drain(..=pos).collect();
-                if line.ends_with(b"\n") {
-                    line.pop();
-                    if line.ends_with(b"\r") {
-                        line.pop();
-                    }
-                }
+                Self::strip_line_ending(&mut line);
                 return Some(line);
             }
             // No newline in pending, check if we need to return it as-is or read more
@@ -210,12 +215,7 @@ impl FileLines<'_> {
                     return None;
                 }
                 // EOF reached, return remaining buffer
-                if buf.ends_with(b"\n") {
-                    buf.pop();
-                    if buf.ends_with(b"\r") {
-                        buf.pop();
-                    }
-                }
+                Self::strip_line_ending(&mut buf);
                 return Some(buf);
             }
             Ok(_) => {}
@@ -238,17 +238,9 @@ impl FileLines<'_> {
 
             self.pending = buf.split_off(split_pos);
             // If we split at a newline boundary, consume it
-            if buf.ends_with(b"\n") {
-                buf.pop();
-                if buf.ends_with(b"\r") {
-                    buf.pop();
-                }
-            }
-        } else if buf.ends_with(b"\n") {
-            buf.pop();
-            if buf.ends_with(b"\r") {
-                buf.pop();
-            }
+            Self::strip_line_ending(&mut buf);
+        } else {
+            Self::strip_line_ending(&mut buf);
         }
 
         Some(buf)
