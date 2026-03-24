@@ -810,6 +810,7 @@ struct PathData<'a> {
     p_buf: Cow<'a, Path>,
     must_dereference: bool,
     command_line: bool,
+    synthetic: bool,
 }
 
 impl<'a> PathData<'a> {
@@ -819,6 +820,7 @@ impl<'a> PathData<'a> {
         file_name: Option<Cow<'a, OsStr>>,
         config: &Config,
         command_line: bool,
+        synthetic: bool,
     ) -> Self {
         // We cannot use `Path::ends_with` or `Path::Components`, because they remove occurrences of '.'
         // For '..', the filename is None
@@ -885,6 +887,7 @@ impl<'a> PathData<'a> {
             p_buf,
             must_dereference,
             command_line,
+            synthetic,
         }
     }
 
@@ -1039,7 +1042,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     };
 
     for loc in locs {
-        let path_data = PathData::new(loc.into(), None, None, config, true);
+        let path_data = PathData::new(loc.into(), None, None, config, true, false);
 
         // Getting metadata here is no big deal as it's just the CWD
         // and we really just want to know if the strings exist as files/dirs
@@ -1216,7 +1219,7 @@ fn depth_first_list(
     dired: &mut DiredOutput,
     is_top_level: bool,
 ) -> UResult<()> {
-    let path_data = PathData::new(dir_path.into(), None, None, config, false);
+    let path_data = PathData::new(dir_path.into(), None, None, config, false, false);
 
     // Print dir heading - name... 'total' comes after error display
     if state.initial_locs_len > 1 || config.recursive {
@@ -1254,15 +1257,15 @@ fn depth_first_list(
     }
 
     // Append entries with initial dot files and record their existence
-    let (mut buf, trim) = if config.files == Files::All {
-        const DOT_DIRECTORIES: usize = 2;
-        let v = vec![
+    let mut buf = if config.files == Files::All {
+        vec![
             PathData::new(
                 path_data.path().into(),
                 None,
                 Some(OsStr::new(".").into()),
                 config,
                 false,
+                true,
             ),
             PathData::new(
                 path_data.path().join("..").into(),
@@ -1270,11 +1273,11 @@ fn depth_first_list(
                 Some(OsStr::new("..").into()),
                 config,
                 false,
+                true,
             ),
-        ];
-        (v, DOT_DIRECTORIES)
+        ]
     } else {
-        (Vec::new(), 0)
+        Vec::new()
     };
 
     // Convert those entries to the PathData struct
@@ -1287,6 +1290,7 @@ fn depth_first_list(
                         Some(dir_entry),
                         None,
                         config,
+                        false,
                         false,
                     ));
                 }
@@ -1314,8 +1318,7 @@ fn depth_first_list(
     if config.recursive {
         for e in buf
             .into_iter()
-            .skip(trim)
-            .filter(|p| p.file_type().is_some_and(FileType::is_dir))
+            .filter(|p| p.file_type().is_some_and(FileType::is_dir) && !p.synthetic)
             .rev()
         {
             // Try to open only to report any errors in order to match GNU semantics.
