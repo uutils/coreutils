@@ -194,3 +194,69 @@ macro_rules! show_warning_caps(
         let _ = writeln!(error, $($args)+);
     })
 );
+/// Implement [`From`] for an enum with simple variant mappings.
+///
+/// This macro generates `From<T>` implementations for the specified enum,
+/// mapping each input type to a corresponding enum variant. Optionally,
+/// it can also generate `From<&T>` implementations by copying the value.
+///
+/// # Syntax
+///
+/// ```ignore
+/// impl_from_for_enum!(EnumName:
+///     Type1 => Variant1,
+///     Type2 => Variant2, ref
+/// );
+/// ```
+///
+/// - `Type => Variant` generates `impl From<Type> for Enum`.
+/// - Adding `, ref` additionally generates `impl From<&Type> for Enum`,
+///   dereferencing the input value.
+///
+/// # Examples
+///
+/// ```ignore
+/// impl_from_for_enum!(CharByte:
+///     char => Char,
+///     u8 => Byte, ref
+/// );
+/// ```
+///
+/// This expands roughly to:
+///
+/// ```ignore
+/// impl From<char> for CharByte { ... }
+/// impl From<u8> for CharByte { ... }
+/// impl From<&u8> for CharByte { ... }
+/// ```
+///
+/// # Notes
+///
+/// - The referenced implementations (`From<&T>`) require `T: Copy`.
+/// - This macro is intended for simple enum wrappers where variants
+///   directly wrap the input type.
+#[macro_export]
+macro_rules! impl_from_for_enum {
+    (
+        $enum:ident :
+        $(
+            $type:ty => $variant:ident $(, ref)?
+        ),* $(,)?
+    ) => {
+        $(
+            impl From<$type> for $enum {
+                fn from(value: $type) -> Self {
+                    $enum::$variant(value)
+                }
+            }
+
+            $(
+                impl From<&$type> for $enum {
+                    fn from(value: &$type) -> Self {
+                        $enum::$variant(*value)
+                    }
+                }
+            )?
+        )*
+    };
+}
