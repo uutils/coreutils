@@ -5,6 +5,7 @@
 // spell-checker:ignore (words) asdf algo algos asha mgmt xffname hexa GFYEQ HYQK Yqxb dont checkfile
 
 use rstest::rstest;
+use rstest_reuse::{apply, template};
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -3150,13 +3151,19 @@ fn test_check_checkfile_with_io_error() {
     "ac"
 )]
 fn test_shake128(#[case] args: &[&str], #[case] expected: &str) {
+    let bit_len = if args.is_empty() || args[1] == "0" {
+        "256"
+    } else {
+        args[1]
+    };
+
     new_ucmd!()
         .arg("-a")
         .arg("shake128")
         .args(args)
         .pipe_in("xxx")
         .succeeds()
-        .stdout_only(format!("SHAKE128 (-) = {expected}\n"));
+        .stdout_only(format!("SHAKE128-{bit_len} (-) = {expected}\n"));
 }
 
 #[rstest]
@@ -3213,11 +3220,180 @@ fn test_shake128(#[case] args: &[&str], #[case] expected: &str) {
     "2f"
 )]
 fn test_shake256(#[case] args: &[&str], #[case] expected: &str) {
+    let bit_len = if args.is_empty() || args[1] == "0" {
+        "512"
+    } else {
+        args[1]
+    };
+
     new_ucmd!()
         .arg("-a")
         .arg("shake256")
         .args(args)
         .pipe_in("xxx")
         .succeeds()
-        .stdout_only(format!("SHAKE256 (-) = {expected}\n"));
+        .stdout_only(format!("SHAKE256-{bit_len} (-) = {expected}\n"));
+}
+
+#[test]
+fn test_check_shake128_no_length() {
+    const INPUT_SHAKE128_CORRECT_LEN: &str =
+        "SHAKE128 (bar) = ac8549b2861a151896ab721bd29d7a20c1a3d1f75b31266f786f20d963fb0fdf";
+    const INPUT_SHAKE128_WRONG_LEN: &str = "SHAKE128 (bar) = ac8549b2861a151896ab721bd29d7a20";
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("bar", "xxx");
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("shake128")
+        .arg("-c")
+        .pipe_in(INPUT_SHAKE128_CORRECT_LEN)
+        .succeeds();
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("shake128")
+        .arg("-c")
+        .pipe_in(INPUT_SHAKE128_WRONG_LEN)
+        .fails()
+        .stderr_only("cksum: 'standard input': no properly formatted checksum lines found\n");
+}
+
+#[test]
+fn test_check_shake256_no_length() {
+    const INPUT_SHAKE256_CORRECT_LEN: &str = "SHAKE256 (bar) = 2fa631503c3ea5fe85131dbfa24805185474740e6dcb5f2a64f69d932bcb55f7b24958f3e3c4cc0e71f1fe6f054cd3fb28b9efb62b4f8f3fbe6d50d90f5c6eba";
+    const INPUT_SHAKE256_WRONG_LEN: &str =
+        "SHAKE256 (bar) = 2fa631503c3ea5fe85131dbfa24805185474740e6dcb5f2a64f69d932bcb55f7";
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("bar", "xxx");
+
+    scene
+        .ucmd()
+        .arg("-c")
+        .pipe_in(INPUT_SHAKE256_CORRECT_LEN)
+        .succeeds();
+
+    scene
+        .ucmd()
+        .arg("-c")
+        .pipe_in(INPUT_SHAKE256_WRONG_LEN)
+        .fails()
+        .stderr_only("cksum: 'standard input': no properly formatted checksum lines found\n");
+}
+
+#[template]
+#[rstest]
+#[case::no_length(
+    b"foo",
+    "04e0bb39f30b1a3feb89f536c93be15055482df748674b00d26e5a75777702e9",
+    None
+)]
+#[case(
+    b"foo",
+    "04e0bb39f30b1a3feb89f536c93be15055482df748674b00d26e5a75777702e9",
+    Some(0)
+)]
+#[case(
+    b"foo",
+    "04e0bb39f30b1a3feb89f536c93be15055482df748674b00d26e5a75777702e9",
+    Some(256)
+)]
+#[case(
+    b"foo",
+    "04e0bb39f30b1a3feb89f536c93be15055482df748674b00d26e5a75777702e9791074b7511b59d31c71c62f5a745689fa6c",
+    Some(400)
+)]
+#[case(b"foo", "04e0bb39f3", Some(40))]
+#[case(b"foo", "04e0", Some(16))]
+#[case(b"foo", "04", Some(8))]
+fn test_blake3(#[case] input: &[u8], #[case] expected: &str, #[case] length: Option<usize>) {}
+
+#[apply(test_blake3)]
+fn test_compute_blake3(
+    #[case] input: &[u8],
+    #[case] expected: &str,
+    #[case] length: Option<usize>,
+) {
+    let length_args: &[String] = if let Some(len) = length {
+        &["-l".into(), len.to_string()]
+    } else {
+        &[]
+    };
+
+    new_ucmd!()
+        .arg("-a")
+        .arg("blake3")
+        .args(length_args)
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(format!(
+            "BLAKE3{} (-) = {expected}\n",
+            match length {
+                Some(0) | None => "-256".into(),
+                Some(i) => format!("-{i}"),
+            }
+        ));
+
+    // with --untagged
+    new_ucmd!()
+        .arg("-a")
+        .arg("blake3")
+        .arg("--untagged")
+        .args(length_args)
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(format!("{expected}  -\n"));
+}
+
+#[apply(test_blake3)]
+fn test_check_blake3_tagged(
+    #[case] input: &[u8],
+    #[case] digest: &str,
+    #[case] opt_len: Option<usize>,
+) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write_bytes("FILE", input);
+
+    let len = match opt_len {
+        Some(0) => "-256".into(),
+        Some(i) => format!("-{i}"),
+        None => String::new(),
+    };
+
+    let tagged = format!("BLAKE3{len} (FILE) = {digest}",);
+
+    ucmd.arg("-c")
+        .arg("-a")
+        .arg("blake3")
+        .pipe_in(tagged)
+        .succeeds()
+        .stdout_only("FILE: OK\n");
+}
+
+#[apply(test_blake3)]
+#[allow(clippy::used_underscore_binding)]
+fn test_check_blake3_untagged(
+    #[case] input: &[u8],
+    #[case] digest: &str,
+    #[case] _opt_len: Option<usize>,
+) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write_bytes("FILE", input);
+
+    let untagged = format!("{digest} FILE");
+
+    ucmd.arg("-c")
+        .arg("-a")
+        .arg("blake3")
+        .pipe_in(untagged)
+        .succeeds()
+        .stdout_only("FILE: OK\n");
 }

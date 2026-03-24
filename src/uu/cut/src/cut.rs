@@ -260,9 +260,9 @@ fn cut_fields_newline_char_delim<R: Read, W: Write>(
     reader: R,
     out: &mut W,
     ranges: &[Range],
-    only_delimited: bool,
     newline_char: u8,
     out_delim: &[u8],
+    only_delimited: bool,
 ) -> UResult<()> {
     let mut reader = BufReader::new(reader);
     let mut line = Vec::new();
@@ -398,9 +398,9 @@ fn cut_fields<R: Read, W: Write>(
                 reader,
                 out,
                 ranges,
-                field_opts.only_delimited,
                 newline_char,
                 out_delim,
+                field_opts.only_delimited,
             )
         }
         Delimiter::Slice(delim) => {
@@ -440,20 +440,18 @@ fn cut_fields<R: Read, W: Write>(
     }
 }
 
-fn cut_files(mut filenames: Vec<OsString>, mode: &Mode) {
+fn cut_files<'a, I>(filenames: I, mode: &Mode)
+where
+    I: IntoIterator<Item = &'a OsString>,
+{
     let mut stdin_read = false;
-
-    if filenames.is_empty() {
-        filenames.push(OsString::from("-"));
-    }
-
     let mut out: Box<dyn Write> = if stdout().is_terminal() {
         Box::new(stdout())
     } else {
         Box::new(BufWriter::new(stdout())) as Box<dyn Write>
     };
 
-    for filename in &filenames {
+    for filename in filenames {
         if filename == "-" {
             if stdin_read {
                 continue;
@@ -513,8 +511,7 @@ fn get_delimiters(matches: &ArgMatches) -> UResult<(Delimiter<'_>, Option<&[u8]>
             ));
         }
         Some(os_string) => {
-            if os_string == "''" || os_string.is_empty() {
-                // treat `''` as empty delimiter
+            if os_string.is_empty() {
                 Delimiter::Slice(b"\0")
             } else {
                 // For delimiter `-d` option value - allow both UTF-8 (possibly multi-byte) characters
@@ -542,7 +539,7 @@ fn get_delimiters(matches: &ArgMatches) -> UResult<(Delimiter<'_>, Option<&[u8]>
     let out_delim = matches
         .get_one::<OsString>(options::OUTPUT_DELIMITER)
         .map(|os_string| {
-            if os_string.is_empty() || os_string == "''" {
+            if os_string.is_empty() {
                 b"\0"
             } else {
                 os_str_as_bytes(os_string).unwrap()
@@ -674,12 +671,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let mode = mode_parse.map_err(|e| USimpleError::new(1, e))?;
-
-    let files = matches
-        .get_many::<OsString>(options::FILE)
-        .unwrap_or_default()
-        .cloned()
-        .collect();
+    #[allow(clippy::unwrap_used, reason = "clap provides '-' by default")]
+    let files = matches.get_many::<OsString>(options::FILE).unwrap();
 
     cut_files(files, &mode);
 
@@ -776,6 +769,7 @@ pub fn uu_app() -> Command {
                 .hide(true)
                 .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath)
+                .default_value("-")
                 .value_parser(clap::value_parser!(OsString)),
         )
         .arg(

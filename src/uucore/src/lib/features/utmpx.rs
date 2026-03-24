@@ -164,7 +164,6 @@ mod ut {
 mod ut {
     pub static DEFAULT_FILE: &str = "/var/run/utmpx";
 
-    pub const ACCOUNTING: usize = 9;
     pub const SHUTDOWN_TIME: usize = 11;
 
     pub use libc::_UTX_HOSTSIZE as UT_HOSTSIZE;
@@ -173,15 +172,16 @@ mod ut {
     pub use libc::_UTX_USERSIZE as UT_NAMESIZE;
 
     pub use libc::ACCOUNTING;
-    pub use libc::DEAD_PROCESS;
-    pub use libc::EMPTY;
-    pub use libc::INIT_PROCESS;
-    pub use libc::LOGIN_PROCESS;
-    pub use libc::NEW_TIME;
-    pub use libc::OLD_TIME;
-    pub use libc::RUN_LVL;
-    pub use libc::SIGNATURE;
-    pub use libc::USER_PROCESS;
+    pub const BOOT_TIME: i16 = libc::BOOT_TIME as i16;
+    pub const DEAD_PROCESS: i16 = libc::DEAD_PROCESS as i16;
+    pub const EMPTY: i16 = libc::EMPTY as i16;
+    pub const INIT_PROCESS: i16 = libc::INIT_PROCESS as i16;
+    pub const LOGIN_PROCESS: i16 = libc::LOGIN_PROCESS as i16;
+    pub const NEW_TIME: i16 = libc::NEW_TIME as i16;
+    pub const OLD_TIME: i16 = libc::OLD_TIME as i16;
+    pub const RUN_LVL: i16 = libc::RUN_LVL as i16;
+    pub const SIGNATURE: i16 = libc::SIGNATURE as i16;
+    pub const USER_PROCESS: i16 = libc::USER_PROCESS as i16;
 }
 
 #[cfg(target_os = "cygwin")]
@@ -208,10 +208,30 @@ pub struct Utmpx {
     inner: utmpx,
 }
 
+#[cfg(target_os = "netbsd")]
+impl Utmpx {
+    fn ut_type(&self) -> i16 {
+        self.inner.ut_type as i16
+    }
+    fn ut_user(&self) -> String {
+        chars2string!(self.inner.ut_name)
+    }
+}
+
+#[cfg(not(target_os = "netbsd"))]
+impl Utmpx {
+    fn ut_type(&self) -> i16 {
+        self.inner.ut_type
+    }
+    fn ut_user(&self) -> String {
+        chars2string!(self.inner.ut_user)
+    }
+}
+
 impl Utmpx {
     /// A.K.A. ut.ut_type
     pub fn record_type(&self) -> i16 {
-        self.inner.ut_type
+        self.ut_type()
     }
     /// A.K.A. ut.ut_pid
     pub fn pid(&self) -> i32 {
@@ -221,9 +241,9 @@ impl Utmpx {
     pub fn terminal_suffix(&self) -> String {
         chars2string!(self.inner.ut_id)
     }
-    /// A.K.A. ut.ut_user
+    ///  A.K.A. ut.ut_user / ut.ut_name (NetBSD)
     pub fn user(&self) -> String {
-        chars2string!(self.inner.ut_user)
+        self.ut_user()
     }
     /// A.K.A. ut.ut_host
     pub fn host(&self) -> String {

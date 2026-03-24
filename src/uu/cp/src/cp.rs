@@ -1056,10 +1056,10 @@ impl Options {
             .get_one::<PathBuf>(options::TARGET_DIRECTORY)
             .cloned();
 
-        if let Some(dir) = &target_dir {
-            if !dir.is_dir() {
-                return Err(CpError::NotADirectory(dir.clone()));
-            }
+        if let Some(dir) = &target_dir
+            && !dir.is_dir()
+        {
+            return Err(CpError::NotADirectory(dir.clone()));
         }
         // cp follows POSIX conventions for overriding options such as "-a",
         // "-d", "--preserve", and "--no-preserve". We can use clap's

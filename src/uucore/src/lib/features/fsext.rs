@@ -556,6 +556,7 @@ pub struct FsUsage {
 
 impl FsUsage {
     #[cfg(unix)]
+    #[allow(clippy::unnecessary_cast)]
     pub fn new(statvfs: StatFs) -> Self {
         {
             #[cfg(all(
@@ -815,10 +816,12 @@ impl FsMeta for StatFs {
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[allow(clippy::unnecessary_cast)]
     fn io_size(&self) -> u64 {
         self.f_frsize as u64
     }
     #[cfg(any(target_vendor = "apple", target_os = "freebsd", target_os = "netbsd"))]
+    #[allow(clippy::unnecessary_cast)]
     fn io_size(&self) -> u64 {
         #[cfg(target_os = "freebsd")]
         return self.f_iosize;
@@ -864,6 +867,7 @@ impl FsMeta for StatFs {
         target_os = "android",
         target_os = "openbsd"
     )))]
+    #[allow(clippy::unnecessary_cast)]
     fn fsid(&self) -> u64 {
         self.f_fsid as u64
     }
@@ -877,6 +881,7 @@ impl FsMeta for StatFs {
         1024
     }
     #[cfg(any(target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))]
+    #[allow(clippy::unnecessary_cast)]
     fn namelen(&self) -> u64 {
         self.f_namemax as u64 // spell-checker:disable-line
     }

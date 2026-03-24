@@ -1387,13 +1387,12 @@ fn test_tmp_files_deleted_on_sigint() {
     use std::{fs::read_dir, time::Duration};
 
     use nix::{sys::signal, unistd::Pid};
-    use rand::rngs::SmallRng;
+    use rand::{RngExt as _, SeedableRng, rngs::SmallRng};
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("tmp_dir");
     let file_name = "big_file_to_sort.txt";
     {
-        use rand::{Rng, SeedableRng};
         use std::io::Write;
         let mut file = at.make_file(file_name);
         // approximately 20 MB

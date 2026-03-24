@@ -106,6 +106,8 @@ skip = [
   { name = "zerocopy-derive", version = "0.7.35" },
   # hashbrown
   { name = "foldhash", version = "0.1.5" },
+  # keccak, sha1, sha2
+  { name = "cpufeatures", version = "0.2.17" },
 ]
 # spell-checker: enable
 

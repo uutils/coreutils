@@ -7,8 +7,6 @@
 
 use std::fs::File;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use std::io::IoSlice;
-#[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::fd::AsFd;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -53,12 +51,4 @@ pub fn splice_exact(source: &impl AsFd, target: &impl AsFd, len: usize) -> Resul
         left -= written;
     }
     Ok(())
-}
-
-/// Copy data from `bytes` into `target`, which must be a pipe.
-///
-/// Returns the number of successfully copied bytes.
-#[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn vmsplice(target: &impl AsFd, bytes: &[u8]) -> Result<usize> {
-    nix::fcntl::vmsplice(target, &[IoSlice::new(bytes)], SpliceFFlags::empty())
 }

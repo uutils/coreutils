@@ -104,7 +104,7 @@ pub fn parse_base_cmd_args(args: impl uucore::Args, command: Command) -> UResult
 }
 
 pub fn base_app(about: String, usage: String) -> Command {
-    let cmd = Command::new(uucore::util_name())
+    let cmd = Command::new("")
         .version(uucore::crate_version!())
         .about(about)
         .override_usage(format_usage(&usage))
@@ -455,39 +455,37 @@ pub mod fast_encode {
             .iter()
             .enumerate()
             .step_by(encode_in_chunks_of_size)
-            .map(|(idx, _)| {
+            .filter_map(|(idx, _)| {
                 // The part of `input_buffer` that was actually filled by the call
                 // to `read`
-                &input[idx..min(input_size, idx + encode_in_chunks_of_size)]
-            })
-            .map(|buffer| {
+                let buffer = &input[idx..min(input_size, idx + encode_in_chunks_of_size)];
+
                 if buffer.len() < encode_in_chunks_of_size {
                     leftover_buffer.extend(buffer);
                     assert!(leftover_buffer.len() < encode_in_chunks_of_size);
-                    return None;
+                    None
+                } else {
+                    Some(buffer)
                 }
-                Some(buffer)
             })
-            .for_each(|buffer| {
-                if let Some(read_buffer) = buffer {
-                    // Encode data in chunks, then place it in `encoded_buffer`
-                    assert_eq!(read_buffer.len(), encode_in_chunks_of_size);
-                    encode_in_chunks_to_buffer(
-                        supports_fast_decode_and_encode,
-                        read_buffer,
-                        &mut encoded_buffer,
-                    )
-                    .unwrap();
-                    // Write all data in `encoded_buffer` to `output`
-                    write_to_output(
-                        &mut line_wrapping,
-                        &mut encoded_buffer,
-                        output,
-                        false,
-                        wrap == Some(0),
-                    )
-                    .unwrap();
-                }
+            .for_each(|read_buffer| {
+                // Encode data in chunks, then place it in `encoded_buffer`
+                assert_eq!(read_buffer.len(), encode_in_chunks_of_size);
+                encode_in_chunks_to_buffer(
+                    supports_fast_decode_and_encode,
+                    read_buffer,
+                    &mut encoded_buffer,
+                )
+                .unwrap();
+                // Write all data in `encoded_buffer` to `output`
+                write_to_output(
+                    &mut line_wrapping,
+                    &mut encoded_buffer,
+                    output,
+                    false,
+                    wrap == Some(0),
+                )
+                .unwrap();
             });
 
         // Cleanup

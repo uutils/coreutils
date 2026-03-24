@@ -126,7 +126,5 @@ fn num_cpus_all() -> usize {
 /// In some cases, [`thread::available_parallelism`]() may return an Err
 /// In this case, we will return 1 (like GNU)
 fn available_parallelism() -> usize {
-    thread::available_parallelism()
-        .map(std::num::NonZeroUsize::get)
-        .unwrap_or(1)
+    thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get)
 }
