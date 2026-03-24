@@ -69,7 +69,7 @@ jobs:
         ## * using the 'stable' toolchain is necessary to avoid "unexpected '--filter-platform'" errors
         cargo +stable tree --locked --no-dedupe -e=no-dev --prefix=none --features ${{ matrix.job.features }} | grep -vE "$PWD" | sort --unique
     - name: Commit any changes (to '${{ env.BRANCH_TARGET }}')
-      uses: EndBug/add-and-commit@v9
+      uses: EndBug/add-and-commit@v10
       with:
         new_branch: ${{ env.BRANCH_TARGET }}
         default_author: github_actions

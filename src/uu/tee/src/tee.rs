@@ -231,22 +231,18 @@ fn copy(mut input: impl Read, mut output: impl Write) -> Result<usize> {
     let mut len = 0;
 
     loop {
-        let received = match input.read(&mut buffer) {
-            Ok(bytes_count) => bytes_count,
-            Err(e) if e.kind() == ErrorKind::Interrupted => continue,
+        match input.read(&mut buffer) {
+            Ok(0) => return Ok(len), // end of file
+            Ok(received) => {
+                output.write_all(&buffer[..received])?;
+                // flush the buffer to comply with POSIX requirement that
+                // `tee` does not buffer the input.
+                output.flush()?;
+                len += received;
+            }
+            Err(e) if e.kind() == ErrorKind::Interrupted => {}
             Err(e) => return Err(e),
-        };
-
-        if received == 0 {
-            return Ok(len);
         }
-
-        output.write_all(&buffer[0..received])?;
-
-        // We need to flush the buffer here to comply with POSIX requirement that
-        // `tee` does not buffer the input.
-        output.flush()?;
-        len += received;
     }
 }
 

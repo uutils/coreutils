@@ -17,8 +17,8 @@
 # 10) Create the release on github https://github.com/uutils/coreutils/releases/new
 # 11) Make sure we have good release notes
 
-FROM="0.6.0"
-TO="0.7.0"
+FROM="0.7.0"
+TO="0.8.0"
 
 PROGS=$(ls -1d src/uu/*/Cargo.toml src/uu/stdbuf/src/libstdbuf/Cargo.toml src/uucore/Cargo.toml Cargo.toml fuzz/uufuzz/Cargo.toml src/uu/stdbuf/Cargo.toml)
 
@@ -48,3 +48,7 @@ sed -i -e "s|uucore = { version=\">=$FROM\",|uucore = { version=\">=$TO\",|" $PR
 # Update crates using uucore_procs
 #shellcheck disable=SC2086
 sed -i -e "s|uucore_procs = { version=\">=$FROM\",|uucore_procs = { version=\">=$TO\",|" $PROGS
+
+# Update Cargo.lock files
+cargo update --workspace
+cargo update --workspace --manifest-path fuzz/Cargo.toml

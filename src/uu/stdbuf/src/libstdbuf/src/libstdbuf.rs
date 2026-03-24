@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (ToDO) getreent reent IOFBF IOLBF IONBF setvbuf stderrp stdinp stdoutp
+// spell-checker:ignore (ToDO) getreent reent IOFBF IOLBF IONBF setvbuf stderrp stdinp stdoutp fdopen
 
 use ctor::ctor;
 use libc::{_IOFBF, _IOLBF, _IONBF, FILE, c_char, c_int, fileno, size_t};
@@ -35,6 +35,11 @@ pub unsafe extern "C" fn __stdbuf_get_stdin() -> *mut FILE {
         unsafe { __stdin }
     }
 
+    #[cfg(target_os = "netbsd")]
+    {
+        unsafe { libc::fdopen(0, c"r".as_ptr()) }
+    }
+
     #[cfg(target_os = "cygwin")]
     {
         // _getreent()->_std{in,out,err}
@@ -61,6 +66,7 @@ pub unsafe extern "C" fn __stdbuf_get_stdin() -> *mut FILE {
     #[cfg(not(any(
         target_os = "macos",
         target_os = "freebsd",
+        target_os = "netbsd",
         target_os = "openbsd",
         target_os = "cygwin"
     )))]
@@ -92,6 +98,11 @@ pub unsafe extern "C" fn __stdbuf_get_stdout() -> *mut FILE {
         unsafe { __stdout }
     }
 
+    #[cfg(target_os = "netbsd")]
+    {
+        unsafe { libc::fdopen(1, c"w".as_ptr()) }
+    }
+
     #[cfg(target_os = "cygwin")]
     {
         // _getreent()->_std{in,out,err}
@@ -118,6 +129,7 @@ pub unsafe extern "C" fn __stdbuf_get_stdout() -> *mut FILE {
     #[cfg(not(any(
         target_os = "macos",
         target_os = "freebsd",
+        target_os = "netbsd",
         target_os = "openbsd",
         target_os = "cygwin"
     )))]
@@ -149,6 +161,11 @@ pub unsafe extern "C" fn __stdbuf_get_stderr() -> *mut FILE {
         unsafe { __stderr }
     }
 
+    #[cfg(target_os = "netbsd")]
+    {
+        unsafe { libc::fdopen(2, c"w".as_ptr()) }
+    }
+
     #[cfg(target_os = "cygwin")]
     {
         // _getreent()->_std{in,out,err}
@@ -175,6 +192,7 @@ pub unsafe extern "C" fn __stdbuf_get_stderr() -> *mut FILE {
     #[cfg(not(any(
         target_os = "macos",
         target_os = "freebsd",
+        target_os = "netbsd",
         target_os = "openbsd",
         target_os = "cygwin"
     )))]
