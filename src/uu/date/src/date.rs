@@ -14,6 +14,7 @@ use jiff::tz::{Offset, TimeZone, TimeZoneDatabase};
 use jiff::{Timestamp, Zoned};
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stderr};
 use std::path::PathBuf;
@@ -285,7 +286,7 @@ fn parse_military_timezone_with_offset(s: &str) -> Option<(i32, DayDelta)> {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
-    let date_source = if let Some(date_os) = matches.get_one::<std::ffi::OsString>(OPT_DATE) {
+    let date_source = if let Some(date_os) = matches.get_one::<OsString>(OPT_DATE) {
         // Convert OsString to String, handling invalid UTF-8 with GNU-compatible error
         let date = date_os.to_str().ok_or_else(|| {
             let bytes = date_os.as_encoded_bytes();
@@ -307,17 +308,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     // Check for extra operands (multiple positional arguments)
-    if let Some(formats) = matches.get_many::<String>(OPT_FORMAT) {
-        let format_args: Vec<&String> = formats.collect();
+    if let Some(formats) = matches.get_many::<OsString>(OPT_FORMAT) {
+        let format_args: Vec<&OsString> = formats.collect();
         if format_args.len() > 1 {
             return Err(USimpleError::new(
                 1,
-                translate!("date-error-extra-operand", "operand" => format_args[1]),
+                translate!("date-error-extra-operand", "operand" => format_args[1].to_string_lossy()),
             ));
         }
     }
 
-    let format = if let Some(form) = matches.get_one::<String>(OPT_FORMAT) {
+    let format = if let Some(form) = matches.get_one::<OsString>(OPT_FORMAT) {
+        let form = form.to_string_lossy();
         if !form.starts_with('+') {
             // if an optional Format String was found but the user has not provided an input date
             // GNU prints an invalid date Error
@@ -604,7 +606,7 @@ pub fn uu_app() -> Command {
                 .value_name("STRING")
                 .allow_hyphen_values(true)
                 .overrides_with(OPT_DATE)
-                .value_parser(clap::value_parser!(std::ffi::OsString))
+                .value_parser(clap::value_parser!(OsString))
                 .help(translate!("date-help-date")),
         )
         .arg(
@@ -699,7 +701,11 @@ pub fn uu_app() -> Command {
                 .help(translate!("date-help-universal"))
                 .action(ArgAction::SetTrue),
         )
-        .arg(Arg::new(OPT_FORMAT).num_args(0..))
+        .arg(
+            Arg::new(OPT_FORMAT)
+                .num_args(0..)
+                .value_parser(clap::value_parser!(OsString)),
+        )
 }
 
 fn format_date_with_locale_aware_months(

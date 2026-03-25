@@ -87,12 +87,12 @@ cfg_langinfo! {
                 return None;
             }
 
-            let format = CStr::from_ptr(d_t_fmt_ptr).to_str().ok()?;
+            let format = CStr::from_ptr(d_t_fmt_ptr).to_string_lossy();
             if format.is_empty() {
                 return None;
             }
 
-            Some(format.to_string())
+            Some(format.into_owned())
         }
     }
 
