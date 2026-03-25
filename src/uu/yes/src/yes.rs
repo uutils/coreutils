@@ -9,7 +9,7 @@ use clap::{Arg, ArgAction, Command, builder::ValueParser};
 use std::error::Error;
 use std::ffi::OsString;
 use std::io::{self, Write};
-use uucore::error::{UResult, USimpleError};
+use uucore::error::{UResult, USimpleError, strip_errno};
 use uucore::format_usage;
 use uucore::translate;
 
@@ -33,7 +33,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Err(err) if err.kind() == io::ErrorKind::BrokenPipe => Ok(()),
         Err(err) => Err(USimpleError::new(
             1,
-            translate!("yes-error-standard-output", "error" => err),
+            translate!("yes-error-standard-output", "error" => strip_errno(&err)),
         )),
     }
 }
