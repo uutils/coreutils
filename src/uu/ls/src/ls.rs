@@ -810,7 +810,8 @@ struct PathData<'a> {
     p_buf: Cow<'a, Path>,
     must_dereference: bool,
     command_line: bool,
-    synthetic: bool,
+    // True if it is one of the two dot dirs: `.` and `..`.
+    is_dot_dir: bool,
 }
 
 impl<'a> PathData<'a> {
@@ -887,7 +888,7 @@ impl<'a> PathData<'a> {
             p_buf,
             must_dereference,
             command_line,
-            synthetic,
+            is_dot_dir: synthetic,
         }
     }
 
@@ -1325,7 +1326,7 @@ fn depth_first_list(
     if config.recursive {
         for e in buf
             .into_iter()
-            .filter(|p| p.file_type().is_some_and(FileType::is_dir) && !p.synthetic)
+            .filter(|p| p.file_type().is_some_and(FileType::is_dir) && !p.is_dot_dir)
             .rev()
         {
             // Try to open only to report any errors in order to match GNU semantics.
