@@ -11,3 +11,5 @@ curl -L "${repo}/releases/download/v${ver}/coreutils-${ver}.tar.xz" | tar --stri
  for f in "${backport[@]}"
   do curl -L ${repo}/raw/refs/heads/master/tests/$f > tests/$f
  done
+# adjust for getlimits > $ver
+sed -i.b "s/\$ENOSPC/No space left on device/" tests/misc/yes.sh
