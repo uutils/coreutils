@@ -200,6 +200,22 @@ impl AlgoKind {
         use AlgoKind::*;
         matches!(self, Sysv | Bsd | Crc | Crc32b)
     }
+
+    /// When checking untagged format lines, non-XOF non-legacy algorithms
+    /// should report "improperly formatted lines" if the digest length isn't
+    /// equivalent to this.
+    pub fn expected_digest_bit_len(self) -> Option<usize> {
+        match self {
+            Self::Md5 => Some(Md5::BIT_SIZE),
+            Self::Sm3 => Some(Sm3::BIT_SIZE),
+            Self::Sha1 => Some(Sha1::BIT_SIZE),
+            Self::Sha224 => Some(Sha224::BIT_SIZE),
+            Self::Sha256 => Some(Sha256::BIT_SIZE),
+            Self::Sha384 => Some(Sha384::BIT_SIZE),
+            Self::Sha512 => Some(Sha512::BIT_SIZE),
+            _ => None,
+        }
+    }
 }
 
 /// Holds a length for a SHA2 of SHA3 algorithm kind.
