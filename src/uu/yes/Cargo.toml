@@ -24,6 +24,7 @@ itertools = { workspace = true }
 fluent = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
 uucore = { workspace = true, features = ["pipes", "signals"] }
 
 [target.'cfg(not(unix))'.dependencies]
