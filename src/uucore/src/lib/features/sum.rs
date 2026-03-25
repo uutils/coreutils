@@ -176,6 +176,10 @@ impl Digest for Blake3 {
 #[derive(Default)]
 pub struct Sm3(sm3::Sm3);
 
+impl Sm3 {
+    pub const BIT_SIZE: usize = 256;
+}
+
 impl Digest for Sm3 {
     fn hash_update(&mut self, input: &[u8]) {
         <sm3::Sm3 as sm3::Digest>::update(&mut self.0, input);
@@ -190,7 +194,7 @@ impl Digest for Sm3 {
     }
 
     fn output_bits(&self) -> usize {
-        256
+        Self::BIT_SIZE
     }
 }
 
@@ -367,6 +371,9 @@ impl Digest for SysV {
 // Implements the Digest trait for sha2 / sha3 algorithms with fixed output
 macro_rules! impl_digest_common {
     ($algo_type: ty, $size: literal) => {
+        impl $algo_type {
+            pub const BIT_SIZE: usize = $size;
+        }
         impl Default for $algo_type {
             fn default() -> Self {
                 Self(Default::default())
@@ -386,7 +393,7 @@ macro_rules! impl_digest_common {
             }
 
             fn output_bits(&self) -> usize {
-                $size
+                Self::BIT_SIZE
             }
         }
     };
