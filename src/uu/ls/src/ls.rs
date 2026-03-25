@@ -1144,6 +1144,13 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     if config.dired && !config.hyperlink {
         dired::print_dired_output(config, &dired, &mut state.out)?;
     }
+
+    // Check all nodes are cleared after recursive listing in integration tests.
+    // FIXME: Turn into a proper test; integration testing most likely requires
+    // hard-linked directories, so it is a no-go. A unit test may be more
+    // feasible given a heavy refactor that decouples [`depth_first_list`].
+    debug_assert!(state.listed_ancestors.is_empty());
+
     Ok(())
 }
 
