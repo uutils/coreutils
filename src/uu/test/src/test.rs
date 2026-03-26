@@ -230,11 +230,12 @@ fn files(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
 }
 
 fn isatty(fd: &OsStr) -> ParseResult<bool> {
+    use std::io::IsTerminal;
     fd.to_str()
         .map(str::trim)
         .and_then(|s| s.parse().ok())
         .ok_or_else(|| ParseError::InvalidInteger(fd.quote().to_string()))
-        .map(|i| unsafe { libc::isatty(i) == 1 })
+        .map(|i| unsafe { std::os::fd::BorrowedFd::borrow_raw(i) }.is_terminal())
 }
 
 #[derive(Eq, PartialEq)]

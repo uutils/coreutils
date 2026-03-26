@@ -21,7 +21,6 @@ path = "src/test.rs"
 [dependencies]
 clap = { workspace = true }
 fluent = { workspace = true }
-libc = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = ["process"] }
 
