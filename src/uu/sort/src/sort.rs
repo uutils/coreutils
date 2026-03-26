@@ -2042,7 +2042,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // sort errors with "cannot open: [...]" instead of "cannot read: [...]" here
         let reader = open_with_open_failed_error(&files0_from)?;
         let buf_reader = BufReader::new(reader);
-        for (line_num, line) in buf_reader.split(b'\0').flatten().enumerate() {
+        for (line_num, line_res) in buf_reader.split(b'\0').enumerate() {
+            let line = line_res.map_err(|error| SortError::ReadFailed {
+                path: files0_from.clone(),
+                error,
+            })?;
             let f = std::str::from_utf8(&line)
                 .expect("Could not parse string from zero terminated input.");
             match f {

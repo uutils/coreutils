@@ -1569,6 +1569,15 @@ fn test_files0_from_empty() {
         .stderr_only("sort: no input from 'file'\n");
 }
 
+#[test]
+#[cfg(unix)]
+fn test_files0_read_error() {
+    new_ucmd!()
+        .args(&["--files0-from", "."])
+        .fails_with_code(2)
+        .stderr_only("sort: cannot read: .: Is a directory\n");
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 // Test for GNU tests/sort/sort-files0-from.pl "empty-non-regular"
