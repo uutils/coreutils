@@ -631,8 +631,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
             };
 
             let dir_exists = if to_create.exists() {
-                fs::symlink_metadata(to_create)
-                    .is_ok_and(|m| m.is_dir() && !m.file_type().is_symlink())
+                metadata(to_create).is_ok_and(|m| m.is_dir())
             } else {
                 false
             };
@@ -643,7 +642,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                     if b.target_dir.is_none()
                         && sources.len() == 1
                         && !is_potential_directory_path(&target)
-                        && let Ok(dir_fd) = DirFd::open(to_create, SymlinkBehavior::NoFollow)
+                        && let Ok(dir_fd) = DirFd::open(to_create, SymlinkBehavior::Follow)
                         && let Some(filename) = target.file_name()
                     {
                         target_parent_fd = Some(dir_fd);
