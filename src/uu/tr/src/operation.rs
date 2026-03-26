@@ -185,8 +185,7 @@ impl Sequence {
                         .chain(33..=47)
                         .chain(58..=64)
                         .chain(91..=96)
-                        .chain(123..=126)
-                        .chain(std::iter::once(32)), // space
+                        .chain(123..=126),
                 ),
                 Class::Print => Box::new(
                     (48..=57) // digit
@@ -196,7 +195,8 @@ impl Sequence {
                         .chain(33..=47)
                         .chain(58..=64)
                         .chain(91..=96)
-                        .chain(123..=126),
+                        .chain(123..=126)
+                        .chain(std::iter::once(32)), // space
                 ),
                 Class::Punct => Box::new((33..=47).chain(58..=64).chain(91..=96).chain(123..=126)),
                 Class::Space => Box::new(unicode_table::SPACES.iter().copied()),
