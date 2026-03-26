@@ -2,12 +2,13 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+#[cfg(unix)]
 use std::fs::File;
-
+#[cfg(unix)]
 use uutests::new_ucmd;
 
 #[test]
-#[cfg(not(windows))]
+#[cfg(unix)]
 fn test_dev_null() {
     new_ucmd!()
         .set_stdin(File::open("/dev/null").unwrap())
@@ -16,7 +17,7 @@ fn test_dev_null() {
 }
 
 #[test]
-#[cfg(not(windows))]
+#[cfg(unix)]
 fn test_dev_null_silent() {
     new_ucmd!()
         .args(&["-s"])
@@ -26,6 +27,7 @@ fn test_dev_null_silent() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_close_stdin() {
     let mut child = new_ucmd!().run_no_wait();
     child.close_stdin();
@@ -33,6 +35,7 @@ fn test_close_stdin() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_close_stdin_silent() {
     let mut child = new_ucmd!().arg("-s").run_no_wait();
     child.close_stdin();
@@ -40,6 +43,7 @@ fn test_close_stdin_silent() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_close_stdin_silent_long() {
     let mut child = new_ucmd!().arg("--silent").run_no_wait();
     child.close_stdin();
@@ -47,6 +51,7 @@ fn test_close_stdin_silent_long() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_close_stdin_silent_alias() {
     let mut child = new_ucmd!().arg("--quiet").run_no_wait();
     child.close_stdin();
@@ -54,11 +59,13 @@ fn test_close_stdin_silent_alias() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_wrong_argument() {
     new_ucmd!().args(&["a"]).fails_with_code(2);
 }
 
 #[test]
+#[cfg(unix)]
 fn test_help() {
     new_ucmd!().args(&["--help"]).succeeds();
 }
