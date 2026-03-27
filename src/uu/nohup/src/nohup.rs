@@ -14,6 +14,7 @@ use std::os::unix::prelude::*;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
+use std::sync::LazyLock;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult, set_exit_code};
@@ -55,20 +56,20 @@ impl UError for NohupError {
     }
 }
 
-fn failure_code() -> i32 {
-    if env::var("POSIXLY_CORRECT").is_ok() {
+static FAILURE_CODE: LazyLock<i32> = LazyLock::new(|| {
+    if env::var_os("POSIXLY_CORRECT").is_some() {
         POSIX_NOHUP_FAILURE
     } else {
         EXIT_CANCELED
     }
-}
+});
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result_with_exit_code(
         uu_app(),
         args,
-        failure_code(),
+        *FAILURE_CODE,
     )?;
 
     replace_fds()?;
@@ -136,8 +137,6 @@ fn replace_fds() -> UResult<()> {
 }
 
 fn find_stdout() -> UResult<File> {
-    let internal_failure_code = failure_code();
-
     match OpenOptions::new()
         .create(true)
         .append(true)
@@ -152,7 +151,7 @@ fn find_stdout() -> UResult<File> {
         }
         Err(e1) => {
             let Ok(home) = env::var("HOME") else {
-                return Err(NohupError::OpenFailed(internal_failure_code, e1).into());
+                return Err(NohupError::OpenFailed(*FAILURE_CODE, e1).into());
             };
             let mut homeout = PathBuf::from(home);
             homeout.push(NOHUP_OUT);
@@ -165,13 +164,12 @@ fn find_stdout() -> UResult<File> {
                     );
                     Ok(t)
                 }
-                Err(e2) => Err(NohupError::OpenFailed2(
-                    internal_failure_code,
-                    e1,
-                    homeout_str.to_string(),
-                    e2,
-                )
-                .into()),
+                Err(e2) => {
+                    Err(
+                        NohupError::OpenFailed2(*FAILURE_CODE, e1, homeout_str.to_string(), e2)
+                            .into(),
+                    )
+                }
             }
         }
     }
