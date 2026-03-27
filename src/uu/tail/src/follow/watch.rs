@@ -90,6 +90,9 @@ pub struct Observer {
     /// The [`FollowMode`]
     pub follow: Option<FollowMode>,
 
+    /// True when stdin resolves to a tailable file that we should follow.
+    stdin_is_tailable: bool,
+
     /// Indicates whether to use the fallback `polling` method instead of the
     /// platform specific event driven method. Since `use_polling` is subject to
     /// change during runtime it is moved out of [`Settings`].
@@ -100,6 +103,7 @@ pub struct Observer {
     pub files: FileHandling,
 
     pub pid: platform::Pid,
+    stdin_key: Option<PathBuf>,
 }
 
 impl Observer {
@@ -119,12 +123,30 @@ impl Observer {
         Self {
             retry,
             follow,
+            stdin_is_tailable: false,
             use_polling,
             watcher_rx: None,
             orphans: Vec::new(),
             files,
             pid,
+            stdin_key: None,
         }
+    }
+
+    pub fn set_stdin_is_tailable(&mut self, value: bool) {
+        self.stdin_is_tailable = value;
+    }
+
+    pub fn stdin_is_tailable(&self) -> bool {
+        self.stdin_is_tailable
+    }
+
+    pub fn set_stdin_key<P: Into<PathBuf>>(&mut self, path: P) {
+        self.stdin_key = Some(path.into());
+    }
+
+    pub fn stdin_key(&self) -> Option<&PathBuf> {
+        self.stdin_key.as_ref()
     }
 
     pub fn from(settings: &Settings) -> Self {
@@ -145,11 +167,12 @@ impl Observer {
         update_last: bool,
     ) -> UResult<()> {
         if self.follow.is_some() {
-            let path = if path.is_relative() {
+            let path = if path.is_relative() && !path.is_stdin() {
                 std::env::current_dir()?.join(path)
             } else {
                 path.to_owned()
             };
+
             let metadata = path.metadata().ok();
             self.files.insert(
                 &path,
@@ -630,6 +653,22 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
             // This is a workaround because `Notify::PollWatcher`
             // does not recognize the "renaming" of files.
             paths = observer.files.keys().cloned().collect::<Vec<_>>();
+        }
+
+        if observer.stdin_is_tailable() {
+            if let Some(stdin_path) = observer.stdin_key() {
+                if observer.files.contains_key(stdin_path) && !paths.iter().any(|p| p == stdin_path)
+                {
+                    paths.push(stdin_path.clone());
+                }
+            } else {
+                let stdin_path = PathBuf::from(text::DEV_STDIN);
+                if observer.files.contains_key(stdin_path.as_path())
+                    && !paths.iter().any(|p| p.is_stdin())
+                {
+                    paths.push(stdin_path);
+                }
+            }
         }
 
         // main print loop
