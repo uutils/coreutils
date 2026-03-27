@@ -4,21 +4,26 @@
 // file that was distributed with this source code.
 
 //! Thin zero-copy-related wrappers around functions from the `rustix` crate.
+
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::fs::File;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::fd::AsFd;
-
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::pipe::SpliceFlags;
+pub const MAX_ROOTLESS_PIPE_SIZE: usize = 1024 * 1024;
 
 /// A wrapper around [`rustix::pipe::pipe`] that ensures the pipe is cleaned up.
 ///
 /// Returns two `File` objects: everything written to the second can be read
 /// from the first.
+/// This is used only for resolving the limitation for splice: one of a input or output should be pipe
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn pipe() -> std::io::Result<(File, File)> {
     let (read, write) = rustix::pipe::pipe()?;
+    // improve performance for splice
+    let _ = fcntl(&read, FcntlArg::F_SETPIPE_SZ(MAX_ROOTLESS_PIPE_SIZE as i32));
+
     Ok((File::from(read), File::from(write)))
 }
 
