@@ -23,7 +23,6 @@ all-features = true
 [features]
 default = ["feat_common_core"]
 ## OS feature shortcodes
-macos = ["feat_os_macos"]
 unix = ["feat_os_unix"]
 windows = ["feat_os_windows"]
 ## project-specific feature shortcodes
@@ -229,10 +228,6 @@ feat_wasm = [
   # useless?
   "arch",
   "uname",
-]
-# "feat_os_macos" == set of utilities which can be built/run on the MacOS platform
-feat_os_macos = [
-  "feat_os_unix", ## == a modern/usual *nix platform
 ]
 # "feat_os_unix" == set of utilities which can be built/run on modern/usual *nix platforms.
 feat_os_unix = [
