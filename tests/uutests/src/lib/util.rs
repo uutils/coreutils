@@ -106,6 +106,22 @@ fn read_scenario_fixture<S: AsRef<OsStr>>(tmpd: Option<&Rc<TempDir>>, file_rel_p
     AtPath::new(tmpdir_path).read_bytes(file_rel_path.as_ref().to_str().unwrap())
 }
 
+/// Wrapper around [`ExitStatus`] which with a human-readable [`Display`](std::fmt::Display).
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+struct PrettyExitStatus(ExitStatus);
+
+impl std::fmt::Display for PrettyExitStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut s = f.debug_struct("ExitStatus");
+        s.field("code", &self.0.code());
+        #[cfg(unix)]
+        {
+            s.field("signal", &self.0.signal());
+        }
+        s.finish()
+    }
+}
+
 /// A command result is the outputs of a command (streams and status code)
 /// within a struct which has convenience assertion functions about those outputs
 #[derive(Debug, Clone)]
@@ -409,7 +425,13 @@ impl CmdResult {
     /// Returns the program's exit code
     /// Panics if not run or has not finished yet for example when run with `run_no_wait()`
     pub fn code(&self) -> i32 {
-        self.exit_status().code().unwrap()
+        let s = self.exit_status();
+        s.code().unwrap_or_else(|| {
+            panic!(
+                "Program did not exit with a status code: {}",
+                PrettyExitStatus(s)
+            )
+        })
     }
 
     /// Verify the exit code of the program
@@ -421,7 +443,7 @@ impl CmdResult {
     /// ```
     #[track_caller]
     pub fn code_is(&self, expected_code: i32) -> &Self {
-        let fails = self.code() != expected_code;
+        let fails = self.exit_status().code() != Some(expected_code);
         if fails {
             eprintln!(
                 "stdout:\n{}\nstderr:\n{}",
@@ -429,7 +451,13 @@ impl CmdResult {
                 self.stderr_str()
             );
         }
-        assert_eq!(self.code(), expected_code);
+        assert_eq!(
+            self.exit_status().code(),
+            Some(expected_code),
+            "Expected exit status to have code {}; got: {}",
+            expected_code,
+            PrettyExitStatus(self.exit_status()),
+        );
         self
     }
 
@@ -452,8 +480,8 @@ impl CmdResult {
     pub fn success(&self) -> &Self {
         assert!(
             self.succeeded(),
-            "Command was expected to succeed. code: {}\nstdout = {}\n stderr = {}",
-            self.code(),
+            "Command was expected to succeed, got: {}\nstdout = {}\nstderr = {}",
+            PrettyExitStatus(self.exit_status()),
             self.stdout_str(),
             self.stderr_str()
         );
@@ -3193,6 +3221,7 @@ pub fn run_ucmd_as_root_with_stdin_stdout(
 mod tests {
     // spell-checker:ignore (tests) asdfsadfa
     use super::*;
+    use std::panic;
 
     // Create a init for the test with a fake value (not needed)
     #[cfg(test)]
@@ -3234,9 +3263,18 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
     fn test_command_result_when_exit_32_then_success_panic() {
-        run_cmd("exit 32").success();
+        let err = panic::catch_unwind(|| {
+            let _ = run_cmd("exit 32").success();
+        })
+        .expect_err("command should have failed with an error");
+        let msg = err
+            .downcast_ref::<String>()
+            .expect("panic payload was expected to be a string");
+        std::assert_eq!(
+            msg,
+            "Command was expected to succeed, got: ExitStatus { code: Some(32), signal: None }\nstdout = \nstderr = "
+        );
     }
 
     #[test]
@@ -3323,6 +3361,41 @@ mod tests {
         result.stderr_is_bytes(&vector);
         result.stderr_only(string);
         result.stderr_only_bytes(&vector);
+    }
+
+    #[test]
+    fn test_code_is_success() {
+        run_cmd("exit 32").code_is(32);
+    }
+
+    #[test]
+    fn test_code_is_failure() {
+        let err = panic::catch_unwind(|| {
+            let _ = run_cmd("exit 32").code_is(64);
+        })
+        .expect_err("code_is() should have failed with an error");
+        let msg = err
+            .downcast_ref::<String>()
+            .expect("panic payload was expected to be a string");
+        std::assert!(msg.contains(
+            "Expected exit status to have code 64; got: ExitStatus { code: Some(32), signal: None }"
+        ));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_code_is_failure_with_signal() {
+        let err = panic::catch_unwind(|| {
+            let _ = run_cmd("kill -INT $$").code_is(64);
+        })
+        .expect_err("code_is() should have failed with an error");
+        let msg = err
+            .downcast_ref::<String>()
+            .expect("panic payload was expected to be a string");
+        dbg!(msg);
+        std::assert!(msg.contains(
+            "Expected exit status to have code 64; got: ExitStatus { code: None, signal: Some(2) }"
+        ));
     }
 
     #[test]
