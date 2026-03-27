@@ -452,6 +452,35 @@ fn test_all_but_last_bytes_large_file_piped() {
 }
 
 #[test]
+fn test_all_but_last_lines_large_file_presume_input_pipe() {
+    // Validate print-all-but-last-n-lines on the non-seekable path for a large terminated input.
+    // This input shape forces repeated buffer reuse while some chunks end mid-line.
+    let scene = TestScenario::new(util_name!());
+    let fixtures = &scene.fixtures;
+
+    let input_file_name = "reused_line_chunks";
+    let expected_output_file_name = "reused_line_chunks_elide_last";
+    let line = "aaaaaa\n";
+    let input_line_count: usize = 20_000;
+
+    let mut input = String::with_capacity(line.len() * input_line_count);
+    for _ in 0..input_line_count {
+        input.push_str(line);
+    }
+    fixtures.write(input_file_name, &input);
+    fixtures.write(
+        expected_output_file_name,
+        &line.repeat(input_line_count - 1),
+    );
+
+    scene
+        .ucmd()
+        .args(&["---presume-input-pipe", "-n", "-1", input_file_name])
+        .succeeds()
+        .stdout_only_fixture(expected_output_file_name);
+}
+
+#[test]
 fn test_all_but_last_lines_large_file() {
     // Create our fixtures on the fly. We need the input file to be at least double
     // the size of BUF_SIZE as specified in head.rs. Go for something a bit bigger
