@@ -543,13 +543,15 @@ impl Settings {
         filename: &str,
         is_new: bool,
     ) -> io::Result<BufWriter<Box<dyn Write>>> {
-        if platform::paths_refer_to_same_file(&self.input, filename.as_ref()) {
+        if self.filter.is_some()
+            && platform::paths_refer_to_same_file(&self.input, filename.as_ref())
+        {
             return Err(io::Error::other(
                 translate!("split-error-would-overwrite-input", "file" => filename.quote()),
             ));
         }
 
-        platform::instantiate_current_writer(self.filter.as_deref(), filename, is_new)
+        platform::instantiate_current_writer(self.filter.as_deref(), &self.input, filename, is_new)
     }
 }
 
