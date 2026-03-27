@@ -93,6 +93,7 @@ unic-langid = { workspace = true }
 thiserror = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
 nix = { workspace = true, features = [
   "dir",
   "fs",

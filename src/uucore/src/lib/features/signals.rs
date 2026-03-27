@@ -18,6 +18,173 @@ use nix::sys::signal::{
     Signal::SIGINT, Signal::SIGPIPE, sigaction, signal,
 };
 
+// ---------------------------------------------------------------------------
+// Thin libc-based signal wrappers
+//
+// These replace nix's signal module for operations that rustix does not cover
+// (sigaction, signal(), SigSet, SigHandler, sigprocmask).
+// ---------------------------------------------------------------------------
+#[cfg(unix)]
+pub mod csignal {
+    use std::io;
+    use std::mem::MaybeUninit;
+
+    /// Signal handler disposition.
+    #[derive(Debug, Clone, Copy)]
+    pub enum SigHandler {
+        /// Default signal action.
+        SigDfl,
+        /// Ignore the signal.
+        SigIgn,
+        /// Call the given handler function.
+        Handler(extern "C" fn(libc::c_int)),
+    }
+
+    impl SigHandler {
+        fn to_sigaction_handler(self) -> libc::sighandler_t {
+            match self {
+                Self::SigDfl => libc::SIG_DFL,
+                Self::SigIgn => libc::SIG_IGN,
+                Self::Handler(f) => f as libc::sighandler_t,
+            }
+        }
+
+        fn from_sigaction_handler(handler: libc::sighandler_t) -> Self {
+            if handler == libc::SIG_DFL {
+                Self::SigDfl
+            } else if handler == libc::SIG_IGN {
+                Self::SigIgn
+            } else {
+                // SAFETY: the handler is a valid function pointer set by a previous signal() call
+                Self::Handler(unsafe {
+                    std::mem::transmute::<libc::sighandler_t, extern "C" fn(libc::c_int)>(handler)
+                })
+            }
+        }
+    }
+
+    /// Wrapper around `libc::sigset_t`.
+    #[derive(Clone)]
+    pub struct SigSet(libc::sigset_t);
+
+    impl SigSet {
+        /// Creates an empty signal set.
+        pub fn empty() -> Self {
+            let mut set = MaybeUninit::<libc::sigset_t>::uninit();
+            // SAFETY: sigemptyset initializes the sigset_t
+            unsafe { libc::sigemptyset(set.as_mut_ptr()) };
+            Self(unsafe { set.assume_init() })
+        }
+
+        /// Creates a signal set with all signals.
+        pub fn all() -> Self {
+            let mut set = MaybeUninit::<libc::sigset_t>::uninit();
+            // SAFETY: sigfillset initializes the sigset_t
+            unsafe { libc::sigfillset(set.as_mut_ptr()) };
+            Self(unsafe { set.assume_init() })
+        }
+
+        /// Adds a signal to the set.
+        pub fn add(&mut self, signum: libc::c_int) {
+            // SAFETY: sigaddset operates on a valid sigset_t
+            unsafe { libc::sigaddset(&raw mut self.0, signum) };
+        }
+
+        /// Returns a pointer to the inner sigset_t.
+        pub fn as_ptr(&self) -> *const libc::sigset_t {
+            &raw const self.0
+        }
+    }
+
+    /// Flags for `sigaction`.
+    pub mod sa_flags {
+        pub const SA_RESTART: libc::c_int = libc::SA_RESTART as libc::c_int;
+    }
+
+    /// How to modify the signal mask in `sigprocmask`.
+    #[derive(Debug, Clone, Copy)]
+    pub enum SigmaskHow {
+        /// Block the signals in the set.
+        Block,
+        /// Unblock the signals in the set.
+        Unblock,
+        /// Set the signal mask to the given set.
+        SetMask,
+    }
+
+    impl SigmaskHow {
+        fn as_libc(self) -> libc::c_int {
+            match self {
+                Self::Block => libc::SIG_BLOCK,
+                Self::Unblock => libc::SIG_UNBLOCK,
+                Self::SetMask => libc::SIG_SETMASK,
+            }
+        }
+    }
+
+    fn last_os_error() -> io::Error {
+        io::Error::last_os_error()
+    }
+
+    /// Set the disposition of a signal using `libc::signal()`.
+    ///
+    /// Returns the previous signal handler.
+    ///
+    /// # Safety
+    /// If `handler` is `SigHandler::Handler(f)`, the function `f` must be
+    /// async-signal-safe.
+    pub unsafe fn set_signal_handler(
+        signum: libc::c_int,
+        handler: SigHandler,
+    ) -> io::Result<SigHandler> {
+        let prev = unsafe { libc::signal(signum, handler.to_sigaction_handler()) };
+        if prev == libc::SIG_ERR {
+            Err(last_os_error())
+        } else {
+            Ok(SigHandler::from_sigaction_handler(prev))
+        }
+    }
+
+    /// Install a signal action using `libc::sigaction()`.
+    ///
+    /// # Safety
+    /// If the handler is a function pointer, it must be async-signal-safe.
+    pub unsafe fn set_signal_action(
+        signum: libc::c_int,
+        handler: SigHandler,
+        flags: libc::c_int,
+        mask: &SigSet,
+    ) -> io::Result<()> {
+        let mut sa: libc::sigaction = unsafe { std::mem::zeroed() };
+        sa.sa_sigaction = handler.to_sigaction_handler();
+        sa.sa_flags = flags as _;
+        sa.sa_mask = mask.0;
+
+        let ret = unsafe { libc::sigaction(signum, &raw const sa, std::ptr::null_mut()) };
+        if ret == -1 {
+            Err(last_os_error())
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Block/unblock/set signal mask using `libc::sigprocmask()`.
+    pub fn sigprocmask(
+        how: SigmaskHow,
+        set: Option<&SigSet>,
+        oldset: Option<&mut SigSet>,
+    ) -> io::Result<()> {
+        let set_ptr = set.map_or(std::ptr::null(), SigSet::as_ptr);
+        let oldset_ptr = oldset.map_or(std::ptr::null_mut(), |s| &raw mut s.0);
+        let ret = unsafe { libc::sigprocmask(how.as_libc(), set_ptr, oldset_ptr) };
+        if ret == -1 {
+            Err(last_os_error())
+        } else {
+            Ok(())
+        }
+    }
+}
+
 /// The default signal value.
 pub static DEFAULT_SIGNAL: usize = 15;
 
