@@ -7,9 +7,8 @@ use super::{CatResult, FdReadable, InputHandle};
 use rustix::io::{read, write};
 use std::os::{fd::AsFd, unix::io::AsRawFd};
 
-use uucore::pipes::{pipe, splice, splice_exact};
+use uucore::pipes::{MAX_ROOTLESS_PIPE_SIZE, pipe, splice, splice_exact};
 
-const SPLICE_SIZE: usize = 1024 * 128;
 const BUF_SIZE: usize = 1024 * 16;
 
 /// This function is called from `write_fast()` on Linux and Android. The
@@ -24,10 +23,16 @@ pub(super) fn write_fast_using_splice<R: FdReadable, S: AsRawFd + AsFd>(
     handle: &InputHandle<R>,
     write_fd: &S,
 ) -> CatResult<bool> {
+    use nix::fcntl::{FcntlArg, fcntl};
     let (pipe_rd, pipe_wr) = pipe()?;
+    // improve performance
+    let _ = fcntl(
+        write_fd,
+        FcntlArg::F_SETPIPE_SZ(MAX_ROOTLESS_PIPE_SIZE as i32),
+    );
 
     loop {
-        match splice(&handle.reader, &pipe_wr, SPLICE_SIZE) {
+        match splice(&handle.reader, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
             Ok(n) => {
                 if n == 0 {
                     return Ok(false);

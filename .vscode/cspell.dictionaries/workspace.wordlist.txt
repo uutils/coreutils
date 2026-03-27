@@ -374,6 +374,7 @@ weblate
 algs
 wasm
 wasip
+SETPIPE
 
 # * stty terminal flags
 brkint
