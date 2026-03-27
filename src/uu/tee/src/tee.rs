@@ -14,7 +14,7 @@ use uucore::format_usage;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::translate;
 
-// spell-checker:ignore nopipe
+// spell-checker:ignore espidf nopipe
 
 #[cfg(target_os = "linux")]
 use uucore::signals::ensure_stdout_not_broken;
@@ -218,18 +218,33 @@ fn copy(mut input: impl Read, mut output: impl Write) -> Result<usize> {
     // the standard library:
     // https://github.com/rust-lang/rust/blob/2feb91181882e525e698c4543063f4d0296fcf91/library/std/src/io/copy.rs#L271-L297
 
-    // Use buffer size from std implementation:
+    // Use small buffer size from std implementation for small input
     // https://github.com/rust-lang/rust/blob/2feb91181882e525e698c4543063f4d0296fcf91/library/std/src/sys/io/mod.rs#L44
-    // spell-checker:ignore espidf
-    const DEFAULT_BUF_SIZE: usize = if cfg!(target_os = "espidf") {
+    const FIRST_BUF_SIZE: usize = if cfg!(target_os = "espidf") {
         512
     } else {
         8 * 1024
     };
-
-    let mut buffer = [0u8; DEFAULT_BUF_SIZE];
+    let mut buffer = [0u8; FIRST_BUF_SIZE];
     let mut len = 0;
+    match input.read(&mut buffer) {
+        Ok(0) => return Ok(0),
+        Ok(bytes_count) => {
+            output.write_all(&buffer[0..bytes_count])?;
+            len = bytes_count;
+            if bytes_count < FIRST_BUF_SIZE {
+                // flush the buffer to comply with POSIX requirement that
+                // `tee` does not buffer the input.
+                output.flush()?;
+                return Ok(len);
+            }
+        }
+        Err(e) if e.kind() == ErrorKind::Interrupted => (),
+        Err(e) => return Err(e),
+    }
 
+    // but optimize buffer size also for large file
+    let mut buffer = vec![0u8; 4 * FIRST_BUF_SIZE]; //stack array makes code path for smaller file slower
     loop {
         match input.read(&mut buffer) {
             Ok(0) => return Ok(len), // end of file
