@@ -6,8 +6,6 @@
 #![allow(clippy::missing_errors_doc)]
 
 #[cfg(unix)]
-use nix::libc;
-#[cfg(unix)]
 use nix::sys::signal::Signal;
 #[cfg(feature = "echo")]
 use regex::Regex;

@@ -24,6 +24,7 @@ doctest = false
 clap = { workspace = true }
 uucore = { workspace = true, features = ["mode", "fs"] }
 fluent = { workspace = true }
+libc = { workspace = true }
 nix = { workspace = true }
 
 [features]
