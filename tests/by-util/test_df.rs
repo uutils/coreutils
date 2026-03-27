@@ -166,6 +166,34 @@ fn test_df_rounding() {
 }
 
 #[test]
+fn test_df_human_readable_suffix() {
+    use regex::Regex;
+
+    // Exercise the suffix selection loop in to_magnitude_and_suffix through
+    // actual df output with -h (binary) and -H (SI), ensuring suffixes render
+    // without panic.
+    let re = Regex::new(r"\d[KMGTPEZY]").unwrap(); // spell-checker:disable-line
+
+    let output = new_ucmd!()
+        .args(&["-h", "--total"])
+        .succeeds()
+        .stdout_str_lossy();
+    assert!(
+        re.is_match(&output),
+        "expected human-readable suffix in -h output: {output}"
+    );
+
+    let output = new_ucmd!()
+        .args(&["-H", "--total"])
+        .succeeds()
+        .stdout_str_lossy();
+    assert!(
+        re.is_match(&output),
+        "expected human-readable suffix in -H output: {output}"
+    );
+}
+
+#[test]
 fn test_df_output_overridden() {
     let expected = if cfg!(target_os = "macos") {
         vec![
