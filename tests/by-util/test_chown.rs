@@ -494,7 +494,7 @@ fn test_chown_only_group_id() {
     }
     result.stderr_contains("retained as");
 
-    // Apparently on CI "macos-latest, x86_64-apple-darwin, feat_os_macos"
+    // Apparently on CI "macos-latest, x86_64-apple-darwin, feat_os_unix"
     // the process has the rights to change from runner:staff to runner:wheel
     #[cfg(any(windows, all(unix, not(target_os = "macos"))))]
     // FreeBSD user on CI is part of wheel group

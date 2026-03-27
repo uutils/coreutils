@@ -111,8 +111,6 @@ sets of uutils for a platform (on that platform) is as simple as specifying it
 as a feature:
 
 ```shell
-cargo build --release --features macos
-# or ...
 cargo build --release --features windows
 # or ...
 cargo build --release --features unix

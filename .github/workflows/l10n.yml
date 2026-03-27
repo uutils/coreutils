@@ -31,7 +31,7 @@ jobs:
       matrix:
         job:
           - { os: ubuntu-latest  , features: "feat_os_unix" }
-          - { os: macos-latest   , features: "feat_os_macos" }
+          - { os: macos-latest   , features: "feat_os_unix" }
           - { os: windows-latest , features: "feat_os_windows" }
     steps:
     - uses: actions/checkout@v6
@@ -397,7 +397,7 @@ jobs:
       matrix:
         job:
           - { os: ubuntu-latest  , features: "feat_os_unix" }
-          - { os: macos-latest   , features: "feat_os_macos" }
+          - { os: macos-latest   , features: "feat_os_unix" }
     steps:
     - uses: actions/checkout@v6
       with:
@@ -550,7 +550,7 @@ jobs:
       matrix:
         job:
           - { os: ubuntu-latest  , features: "feat_os_unix" }
-          - { os: macos-latest   , features: "feat_os_macos" }
+          - { os: macos-latest   , features: "feat_os_unix" }
     steps:
     - uses: actions/checkout@v6
       with:
