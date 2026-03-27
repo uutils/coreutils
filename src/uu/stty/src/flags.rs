@@ -7,9 +7,10 @@
 // spell-checker:ignore ignbrk brkint ignpar parmrk inpck istrip inlcr igncr icrnl ixoff ixon iuclc ixany imaxbel iutf
 // spell-checker:ignore opost olcuc ocrnl onlcr onocr onlret ofdel nldly crdly tabdly bsdly vtdly ffdly
 // spell-checker:ignore isig icanon iexten echoe crterase echok echonl noflsh xcase tostop echoprt prterase echoctl ctlecho echoke crtkill flusho extproc
-// spell-checker:ignore lnext rprnt susp swtch vdiscard veof veol verase vintr vkill vlnext vquit vreprint vstart vstop vsusp vswtc vwerase werase
+// spell-checker:ignore lnext rprnt susp dsusp swtch vdiscard veof veol verase vintr vkill vlnext vquit vreprint vstart vstop vsusp vswtc vwerase werase VDSUSP
 // spell-checker:ignore sigquit sigtstp
 // spell-checker:ignore cbreak decctlq evenp litout oddp
+// spell-checker:ignore cdtrdsr CDTRDSR ofill OFILL dsusp VDSUSP VFLUSHO VSTATUS noncanonical VMIN deciseconds noncanonical VTIME
 
 use crate::Flag;
 
@@ -54,10 +55,14 @@ pub const CONTROL_FLAGS: &[Flag<C>] = &[
     Flag::new_grouped("cs7", C::CS7, C::CSIZE),
     Flag::new_grouped("cs8", C::CS8, C::CSIZE).sane(),
     Flag::new("hupcl", C::HUPCL),
+    // Not supported by nix and libc.
+    // Flag::new("hup", C::HUP).hidden(),
     Flag::new("cstopb", C::CSTOPB),
     Flag::new("cread", C::CREAD).sane(),
     Flag::new("clocal", C::CLOCAL),
     Flag::new("crtscts", C::CRTSCTS),
+    // Not supported by nix and libc.
+    // Flag::new("cdtrdsr", C::CDTRDSR),
 ];
 
 pub const INPUT_FLAGS: &[Flag<I>] = &[
@@ -70,11 +75,19 @@ pub const INPUT_FLAGS: &[Flag<I>] = &[
     Flag::new("inlcr", I::INLCR),
     Flag::new("igncr", I::IGNCR),
     Flag::new("icrnl", I::ICRNL).sane(),
-    Flag::new("ixoff", I::IXOFF),
-    Flag::new("tandem", I::IXOFF),
     Flag::new("ixon", I::IXON),
-    // not supported by nix
-    // Flag::new("iuclc", I::IUCLC),
+    Flag::new("ixoff", I::IXOFF),
+    Flag::new("tandem", I::IXOFF).hidden(),
+    #[cfg(any(
+        target_os = "aix",
+        target_os = "android",
+        target_os = "cygwin",
+        target_os = "haiku",
+        target_os = "hurd",
+        target_os = "nto",
+        target_os = "linux"
+    ))]
+    Flag::new("iuclc", I::IUCLC),
     Flag::new("ixany", I::IXANY),
     Flag::new("imaxbel", I::IMAXBEL).sane(),
     #[cfg(any(target_os = "android", target_os = "linux", target_os = "macos"))]
@@ -94,6 +107,14 @@ pub const OUTPUT_FLAGS: &[Flag<O>] = &[
     Flag::new("onlcr", O::ONLCR).sane(),
     Flag::new("onocr", O::ONOCR),
     Flag::new("onlret", O::ONLRET),
+    #[cfg(any(
+        target_os = "android",
+        target_os = "haiku",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "macos"
+    ))]
+    Flag::new("ofill", O::OFILL),
     #[cfg(any(
         target_os = "android",
         target_os = "haiku",
@@ -242,8 +263,13 @@ pub const LOCAL_FLAGS: &[Flag<L>] = &[
     Flag::new("echok", L::ECHOK).sane(),
     Flag::new("echonl", L::ECHONL),
     Flag::new("noflsh", L::NOFLSH),
-    // Not supported by nix
-    // Flag::new("xcase", L::XCASE),
+    #[cfg(any(
+        target_os = "aix",
+        target_os = "android",
+        target_os = "haiku",
+        target_os = "linux",
+    ))]
+    Flag::new("xcase", L::XCASE),
     Flag::new("tostop", L::TOSTOP),
     #[cfg(not(target_os = "cygwin"))]
     Flag::new("echoprt", L::ECHOPRT),
@@ -342,6 +368,18 @@ pub const CONTROL_CHARS: &[(&str, S)] = &[
     ("stop", S::VSTOP),
     // Sends a suspend signal (SIGTSTP).
     ("susp", S::VSUSP),
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd",
+        target_os = "aix",
+        target_os = "solaris"
+    ))]
+    // Sends a delayed suspend signal (SIGTSTP).
+    ("dsusp", S::VDSUSP),
     // Reprints the current line.
     ("rprnt", S::VREPRINT),
     // Deletes the last word typed.
@@ -350,6 +388,25 @@ pub const CONTROL_CHARS: &[(&str, S)] = &[
     ("lnext", S::VLNEXT),
     // Discards the current line.
     ("discard", S::VDISCARD),
+    // deprecated compat option.
+    // Not supported by nix and libc.
+    // ("flush", S::VFLUSHO),
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd",
+    ))]
+    // Status character
+    ("status", S::VSTATUS),
+    // Minimum number of characters for noncanonical read.
+    // We handle this manually.
+    // ("min", S::VMIN),
+    // Timeout in deciseconds for noncanonical read.
+    // We handle this manually.
+    // ("time", S::VTIME),
 ];
 
 /// This constant lists all possible combination settings, using a bool to represent if the setting is negatable
@@ -370,4 +427,5 @@ pub const COMBINATION_SETTINGS: &[(&str, bool)] = &[
     ("pass8", true),
     ("raw", true),
     ("sane", false),
+    ("tabs", true),
 ];
