@@ -21,6 +21,7 @@ uucore = { workspace = true }
 memchr = { workspace = true }
 num-bigint = { workspace = true }
 num-prime = { workspace = true }
+num-traits = { workspace = true }
 fluent = { workspace = true }
 
 [[bin]]
