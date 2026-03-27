@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars) RFILE
+// spell-checker:ignore (vars) RFILE RDONLY CLOEXEC
 
 #![cfg(any(target_os = "linux", target_os = "android"))]
 #![allow(clippy::upper_case_acronyms)]
@@ -14,10 +14,13 @@ use uucore::translate;
 use uucore::{display::Quotable, format_usage, show_error, show_warning};
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
+use nix::fcntl::{OFlag, openat};
+use nix::sys::stat::Mode;
 use selinux::{OpaqueSecurityContext, SecurityContext};
 
 use std::borrow::Cow;
 use std::ffi::{CStr, CString, OsStr, OsString};
+use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 use std::os::raw::c_int;
 use std::path::{Path, PathBuf};
 use std::{fs, io};
@@ -499,115 +502,121 @@ fn process_file(
     fts: &mut fts::FTS,
     root_dev_ino: Option<DeviceAndINode>,
 ) -> Result<()> {
-    let mut entry = fts.last_entry_ref().unwrap();
+    let (file_full_name, fts_access_path, mut result) = {
+        let mut entry = fts
+            .last_entry_ref()
+            .expect("last_entry_ref is present after successful read_next_entry");
 
-    let file_full_name = entry.path().map(PathBuf::from).ok_or_else(|| {
-        Error::from_io(
-            translate!("chcon-op-file-name-validation"),
-            io::ErrorKind::InvalidInput.into(),
-        )
-    })?;
+        let file_full_name = entry.path().map(PathBuf::from).ok_or_else(|| {
+            Error::from_io(
+                translate!("chcon-op-file-name-validation"),
+                io::ErrorKind::InvalidInput.into(),
+            )
+        })?;
 
-    let fts_access_path = entry.access_path().ok_or_else(|| {
-        let err = io::ErrorKind::InvalidInput.into();
-        Error::from_io1(
-            translate!("chcon-op-file-name-validation"),
-            &file_full_name,
-            err,
-        )
-    })?;
+        let fts_access_path = entry.access_path().map(PathBuf::from).ok_or_else(|| {
+            let err = io::ErrorKind::InvalidInput.into();
+            Error::from_io1(
+                translate!("chcon-op-file-name-validation"),
+                &file_full_name,
+                err,
+            )
+        })?;
 
-    let err = |s, k: io::ErrorKind| Error::from_io1(s, &file_full_name, k.into());
+        let err = |s, k: io::ErrorKind| Error::from_io1(s, &file_full_name, k.into());
 
-    let fts_err = |s| {
-        let r = io::Error::from_raw_os_error(entry.errno());
-        Err(Error::from_io1(s, &file_full_name, r))
-    };
+        let fts_err = |s| {
+            let r = io::Error::from_raw_os_error(entry.errno());
+            Err(Error::from_io1(s, &file_full_name, r))
+        };
 
-    // SAFETY: If `entry.fts_statp` is not null, then is is assumed to be valid.
-    let file_dev_ino: DeviceAndINode = if let Some(st) = entry.stat() {
-        st.try_into()?
-    } else {
-        return Err(err(
-            translate!("chcon-op-getting-meta-data"),
-            io::ErrorKind::InvalidInput,
-        ));
-    };
+        // SAFETY: If `entry.fts_statp` is not null, then is is assumed to be valid.
+        let file_dev_ino: DeviceAndINode = if let Some(st) = entry.stat() {
+            st.try_into()?
+        } else {
+            return Err(err(
+                translate!("chcon-op-getting-meta-data"),
+                io::ErrorKind::InvalidInput,
+            ));
+        };
 
-    let mut result = Ok(());
+        let mut result = Ok(());
 
-    match entry.flags() {
-        fts_sys::FTS_D => {
-            if options.recursive_mode.is_recursive() {
-                if root_dev_ino_check(root_dev_ino, file_dev_ino) {
-                    // This happens e.g., with "chcon -R --preserve-root ... /"
-                    // and with "chcon -RH --preserve-root ... symlink-to-root".
-                    root_dev_ino_warn(&file_full_name);
+        match entry.flags() {
+            fts_sys::FTS_D => {
+                if options.recursive_mode.is_recursive() {
+                    if root_dev_ino_check(root_dev_ino, file_dev_ino) {
+                        // This happens e.g., with "chcon -R --preserve-root ... /"
+                        // and with "chcon -RH --preserve-root ... symlink-to-root".
+                        root_dev_ino_warn(&file_full_name);
 
-                    // Tell fts not to traverse into this hierarchy.
-                    let _ignored = fts.set(fts_sys::FTS_SKIP);
+                        // Tell fts not to traverse into this hierarchy.
+                        let _ignored = fts.set(fts_sys::FTS_SKIP);
 
-                    // Ensure that we do not process "/" on the second visit.
-                    let _ignored = fts.read_next_entry();
+                        // Ensure that we do not process "/" on the second visit.
+                        let _ignored = fts.read_next_entry();
 
-                    return Err(err(
-                        translate!("chcon-op-modifying-root-path"),
-                        io::ErrorKind::PermissionDenied,
-                    ));
+                        return Err(err(
+                            translate!("chcon-op-modifying-root-path"),
+                            io::ErrorKind::PermissionDenied,
+                        ));
+                    }
+
+                    return Ok(());
+                }
+            }
+
+            fts_sys::FTS_DP => {
+                if !options.recursive_mode.is_recursive() {
+                    return Ok(());
+                }
+            }
+
+            fts_sys::FTS_NS => {
+                // For a top-level file or directory, this FTS_NS (stat failed) indicator is determined
+                // at the time of the initial fts_open call. With programs like chmod, chown, and chgrp,
+                // that modify permissions, it is possible that the file in question is accessible when
+                // control reaches this point. So, if this is the first time we've seen the FTS_NS for
+                // this file, tell fts_read to stat it "again".
+                if entry.level() == 0 && entry.number() == 0 {
+                    entry.set_number(1);
+                    let _ignored = fts.set(fts_sys::FTS_AGAIN);
+                    return Ok(());
                 }
 
-                return Ok(());
-            }
-        }
-
-        fts_sys::FTS_DP => {
-            if !options.recursive_mode.is_recursive() {
-                return Ok(());
-            }
-        }
-
-        fts_sys::FTS_NS => {
-            // For a top-level file or directory, this FTS_NS (stat failed) indicator is determined
-            // at the time of the initial fts_open call. With programs like chmod, chown, and chgrp,
-            // that modify permissions, it is possible that the file in question is accessible when
-            // control reaches this point. So, if this is the first time we've seen the FTS_NS for
-            // this file, tell fts_read to stat it "again".
-            if entry.level() == 0 && entry.number() == 0 {
-                entry.set_number(1);
-                let _ignored = fts.set(fts_sys::FTS_AGAIN);
-                return Ok(());
+                result = fts_err(translate!("chcon-op-accessing"));
             }
 
-            result = fts_err(translate!("chcon-op-accessing"));
-        }
+            fts_sys::FTS_ERR => result = fts_err(translate!("chcon-op-accessing")),
 
-        fts_sys::FTS_ERR => result = fts_err(translate!("chcon-op-accessing")),
+            fts_sys::FTS_DNR => result = fts_err(translate!("chcon-op-reading-directory")),
 
-        fts_sys::FTS_DNR => result = fts_err(translate!("chcon-op-reading-directory")),
-
-        fts_sys::FTS_DC => {
-            if cycle_warning_required(options.recursive_mode.fts_open_options(), &entry) {
-                emit_cycle_warning(&file_full_name);
-                return Err(err(
-                    translate!("chcon-op-reading-cyclic-directory"),
-                    io::ErrorKind::InvalidData,
-                ));
+            fts_sys::FTS_DC => {
+                if cycle_warning_required(options.recursive_mode.fts_open_options(), &entry) {
+                    emit_cycle_warning(&file_full_name);
+                    return Err(err(
+                        translate!("chcon-op-reading-cyclic-directory"),
+                        io::ErrorKind::InvalidData,
+                    ));
+                }
             }
+
+            _ => {}
         }
 
-        _ => {}
-    }
+        if entry.flags() == fts_sys::FTS_DP
+            && result.is_ok()
+            && root_dev_ino_check(root_dev_ino, file_dev_ino)
+        {
+            root_dev_ino_warn(&file_full_name);
+            result = Err(err(
+                translate!("chcon-op-modifying-root-path"),
+                io::ErrorKind::PermissionDenied,
+            ));
+        }
 
-    if entry.flags() == fts_sys::FTS_DP
-        && result.is_ok()
-        && root_dev_ino_check(root_dev_ino, file_dev_ino)
-    {
-        root_dev_ino_warn(&file_full_name);
-        result = Err(err(
-            translate!("chcon-op-modifying-root-path"),
-            io::ErrorKind::PermissionDenied,
-        ));
-    }
+        (file_full_name, fts_access_path, result)
+    };
 
     if result.is_ok() {
         if options.verbose {
@@ -617,7 +626,17 @@ fn process_file(
             );
         }
 
-        result = change_file_context(options, context, fts_access_path);
+        let traversal_dir_fd = fts
+            .current_dir_fd()
+            .map_err(|r| Error::from_io1(translate!("chcon-op-accessing"), &file_full_name, r))?;
+
+        result = change_file_context(
+            options,
+            context,
+            traversal_dir_fd.as_fd(),
+            &fts_access_path,
+            &file_full_name,
+        );
     }
 
     if !options.recursive_mode.is_recursive() {
@@ -626,11 +645,37 @@ fn process_file(
     result
 }
 
+fn open_target_fd(
+    traversal_dir_fd: BorrowedFd<'_>,
+    target_path: &Path,
+    affect_symlink_referent: bool,
+    display_path: &Path,
+) -> Result<OwnedFd> {
+    let flags = if affect_symlink_referent {
+        OFlag::O_RDONLY | OFlag::O_CLOEXEC
+    } else {
+        OFlag::O_PATH | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC
+    };
+
+    openat(traversal_dir_fd, target_path, flags, Mode::empty())
+        .map_err(io::Error::from)
+        .map_err(|err| Error::from_io1(translate!("chcon-op-accessing"), display_path, err))
+}
+
 fn change_file_context(
     options: &Options,
     context: &SELinuxSecurityContext,
-    path: &Path,
+    traversal_dir_fd: BorrowedFd<'_>,
+    target_path: &Path,
+    display_path: &Path,
 ) -> Result<()> {
+    let target_fd = open_target_fd(
+        traversal_dir_fd,
+        target_path,
+        options.affect_symlink_referent,
+        display_path,
+    )?;
+
     match &options.mode {
         CommandLineMode::Custom {
             user,
@@ -643,21 +688,20 @@ fn change_file_context(
                 // components, there isn't really an obvious default. Thus, we just give up.
                 let op = translate!("chcon-op-applying-partial-context");
                 let err = io::ErrorKind::InvalidInput.into();
-                Err(Error::from_io1(op, path, err))
+                Err(Error::from_io1(op, display_path, err))
             };
 
-            let file_context =
-                match SecurityContext::of_path(path, options.affect_symlink_referent, false) {
-                    Ok(Some(context)) => context,
+            let file_context = match SecurityContext::of_file(&target_fd, false) {
+                Ok(Some(context)) => context,
 
-                    Ok(None) => return err0(),
-                    Err(r) => {
-                        return Err(Error::from_selinux(
-                            translate!("chcon-op-getting-security-context"),
-                            r,
-                        ));
-                    }
-                };
+                Ok(None) => return err0(),
+                Err(r) => {
+                    return Err(Error::from_selinux(
+                        translate!("chcon-op-getting-security-context"),
+                        r,
+                    ));
+                }
+            };
 
             let c_file_context = match file_context.to_c_string() {
                 Ok(Some(context)) => context,
@@ -674,7 +718,11 @@ fn change_file_context(
             let se_context =
                 OpaqueSecurityContext::from_c_str(c_file_context.as_ref()).map_err(|_r| {
                     let err = io::ErrorKind::InvalidInput.into();
-                    Error::from_io1(translate!("chcon-op-creating-security-context"), path, err)
+                    Error::from_io1(
+                        translate!("chcon-op-creating-security-context"),
+                        display_path,
+                        err,
+                    )
                 })?;
 
             type SetValueProc = fn(&OpaqueSecurityContext, &CStr) -> selinux::errors::Result<()>;
@@ -690,7 +738,11 @@ fn change_file_context(
                 if let Some(new_value) = new_value {
                     let c_new_value = os_str_to_c_string(new_value).map_err(|_r| {
                         let err = io::ErrorKind::InvalidInput.into();
-                        Error::from_io1(translate!("chcon-op-creating-security-context"), path, err)
+                        Error::from_io1(
+                            translate!("chcon-op-creating-security-context"),
+                            display_path,
+                            err,
+                        )
                     })?;
 
                     set_value_proc(&se_context, &c_new_value).map_err(|r| {
@@ -707,7 +759,7 @@ fn change_file_context(
                 Ok(()) // Nothing to change.
             } else {
                 SecurityContext::from_c_str(&context_string, false)
-                    .set_for_path(path, options.affect_symlink_referent, false)
+                    .set_for_file(&target_fd)
                     .map_err(|r| {
                         Error::from_selinux(translate!("chcon-op-setting-security-context"), r)
                     })
@@ -717,7 +769,7 @@ fn change_file_context(
         CommandLineMode::ReferenceBased { .. } | CommandLineMode::ContextBased { .. } => {
             if let Some(c_context) = context.to_c_string()? {
                 SecurityContext::from_c_str(c_context.as_ref(), false)
-                    .set_for_path(path, options.affect_symlink_referent, false)
+                    .set_for_file(&target_fd)
                     .map_err(|r| {
                         Error::from_selinux(translate!("chcon-op-setting-security-context"), r)
                     })
@@ -725,7 +777,7 @@ fn change_file_context(
                 let err = io::ErrorKind::InvalidInput.into();
                 Err(Error::from_io1(
                     translate!("chcon-op-setting-security-context"),
-                    path,
+                    display_path,
                     err,
                 ))
             }
