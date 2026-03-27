@@ -3,7 +3,7 @@ use uu_cat::uumain;
 use uucore::benchmark::{run_util_function, setup_test_file};
 
 #[divan::bench(args = [10_000])]
-fn bench_cat_default(bencher: Bencher, size_bytes: usize) {
+fn cat_default(bencher: Bencher, size_bytes: usize) {
     let data = vec![b'a'; size_bytes];
 
     let file_path = setup_test_file(&data);
