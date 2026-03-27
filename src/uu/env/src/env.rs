@@ -18,8 +18,6 @@ use native_int_str::{
     Convert, NCvt, NativeIntStr, NativeIntString, NativeStr, from_native_int_representation_owned,
 };
 #[cfg(unix)]
-use nix::libc;
-#[cfg(unix)]
 use nix::sys::signal::{
     SigHandler::{SigDfl, SigIgn},
     SigSet, SigmaskHow, Signal, signal, sigprocmask,
