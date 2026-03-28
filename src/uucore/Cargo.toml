@@ -94,16 +94,14 @@ thiserror = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
-nix = { workspace = true, features = [
-  "dir",
+rustix = { workspace = true, features = [
+  "pipe",
+  "process",
   "fs",
-  "poll",
-  "signal",
-  "uio",
-  "user",
-  "zerocopy",
+  "event",
+  "termios",
+  "time",
 ] }
-rustix = { workspace = true, features = ["pipe", "process", "fs", "event", "termios", "time"] }
 walkdir = { workspace = true, optional = true }
 xattr = { workspace = true, optional = true }
 

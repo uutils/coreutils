@@ -39,7 +39,14 @@ uucore = { workspace = true, features = [
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 
 [target.'cfg(unix)'.dependencies]
-nix = { workspace = true, features = ["process", "signal", "term", "user"] }
+nix = { workspace = true, features = [
+  "fs",
+  "process",
+  "signal",
+  "socket",
+  "term",
+  "user",
+] }
 rlimit = { workspace = true }
 
 [target.'cfg(all(unix, not(any(target_os = "macos", target_os = "openbsd"))))'.dependencies]
