@@ -6,12 +6,6 @@
 /* Last synced with: sync (GNU coreutils) 8.13 */
 
 use clap::{Arg, ArgAction, Command};
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::errno::Errno;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::fcntl::{OFlag, open};
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::sys::stat::Mode;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, get_exit_code, set_exit_code};
@@ -235,13 +229,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         #[cfg(any(target_os = "linux", target_os = "android"))]
         {
             let path = Path::new(&f);
-            if let Err(e) = open(path, OFlag::O_NONBLOCK, Mode::empty()) {
-                if e != Errno::EACCES || (e == Errno::EACCES && path.is_dir()) {
-                    show_error!(
-                        "{}",
-                        translate!("sync-error-opening-file", "file" => f.quote(), "err" => e.desc())
-                    );
-                    set_exit_code(1);
+            match rustix::fs::open(
+                path,
+                rustix::fs::OFlags::NONBLOCK,
+                rustix::fs::Mode::empty(),
+            ) {
+                Ok(_fd) => { /* OwnedFd auto-closes on drop */ }
+                Err(e) => {
+                    let is_eacces = e == rustix::io::Errno::ACCESS;
+                    if !is_eacces || path.is_dir() {
+                        let err = std::io::Error::from(e);
+                        show_error!(
+                            "{}",
+                            translate!("sync-error-opening-file", "file" => f.quote(), "err" => err)
+                        );
+                        set_exit_code(1);
+                    }
                 }
             }
         }
