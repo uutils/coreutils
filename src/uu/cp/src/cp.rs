@@ -9,6 +9,7 @@ use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
 use std::fmt::Display;
 use std::fs::{self, Metadata, OpenOptions, Permissions};
+use std::io::{Write, stdout};
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 #[cfg(unix)]
@@ -448,11 +449,14 @@ impl Display for SparseDebug {
 /// This function prints the debug information of a file copy operation if
 /// no hard link or symbolic link is required, and data copy is required.
 /// It prints the debug information of the offload, reflink, and sparse detection actions.
-fn show_debug(copy_debug: &CopyDebug) {
-    println!(
+fn show_debug<W: Write>(writer: &mut W, copy_debug: &CopyDebug) -> io::Result<()> {
+    writeln!(
+        writer,
         "{}",
         translate!("cp-debug-copy-offload", "offload" => copy_debug.offload, "reflink" => copy_debug.reflink, "sparse" => copy_debug.sparse_detection)
-    );
+    )?;
+
+    Ok(())
 }
 
 static EXIT_ERR: i32 = 1;
@@ -1637,11 +1641,15 @@ fn file_mode_for_interactive_overwrite(
 }
 
 impl OverwriteMode {
-    fn verify(self, path: &Path, debug: bool) -> CopyResult<()> {
+    fn verify<W: Write>(self, writer: &mut W, path: &Path, debug: bool) -> CopyResult<()> {
         match self {
             Self::NoClobber => {
                 if debug {
-                    println!("{}", translate!("cp-debug-skipped", "path" => path.quote()));
+                    writeln!(
+                        writer,
+                        "{}",
+                        translate!("cp-debug-skipped", "path" => path.quote())
+                    )?;
                 }
                 Err(CpError::Skipped(false))
             }
@@ -1996,7 +2004,8 @@ fn is_forbidden_to_copy_to_same_file(
 }
 
 /// Back up, remove, or leave intact the destination file, depending on the options.
-fn handle_existing_dest(
+fn handle_existing_dest<W: Write>(
+    writer: &mut W,
     source: &Path,
     dest: &Path,
     options: &Options,
@@ -2014,13 +2023,13 @@ fn handle_existing_dest(
 
     if options.update == UpdateMode::None {
         if options.debug {
-            println!("skipped {}", dest.quote());
+            writeln!(writer, "skipped {}", dest.quote())?;
         }
         return Err(CpError::Skipped(false));
     }
 
     if options.update != UpdateMode::IfOlder {
-        options.overwrite.verify(dest, options.debug)?;
+        options.overwrite.verify(writer, dest, options.debug)?;
     }
 
     let mut is_dest_removed = false;
@@ -2119,10 +2128,11 @@ fn delete_path(path: &Path, options: &Options) -> CopyResult<()> {
     match fs::remove_file(path) {
         Ok(()) => {
             if options.verbose {
-                println!(
+                writeln!(
+                    stdout(),
                     "{}",
                     translate!("cp-verbose-removed", "path" => path.quote())
-                );
+                )?;
             }
         }
         Err(err) if err.kind() == io::ErrorKind::NotFound => {
@@ -2175,23 +2185,31 @@ fn aligned_ancestors<'a>(source: &'a Path, dest: &'a Path) -> Vec<(&'a Path, &'a
     result
 }
 
-fn print_verbose_output(
+fn print_verbose_output<W: Write>(
+    writer: &mut W,
     parents: bool,
     progress_bar: Option<&ProgressBar>,
     source: &Path,
     dest: &Path,
-) {
+) -> io::Result<()> {
     if let Some(pb) = progress_bar {
         // Suspend (hide) the progress bar so the println won't overlap with the progress bar.
         pb.suspend(|| {
-            print_paths(parents, source, dest);
+            let _ = print_paths(writer, parents, source, dest);
         });
     } else {
-        print_paths(parents, source, dest);
+        print_paths(writer, parents, source, dest)?;
     }
+
+    Ok(())
 }
 
-fn print_paths(parents: bool, source: &Path, dest: &Path) {
+fn print_paths<W: Write>(
+    writer: &mut W,
+    parents: bool,
+    source: &Path,
+    dest: &Path,
+) -> io::Result<()> {
     if parents {
         // For example, if copying file `a/b/c` and its parents
         // to directory `d/`, then print
@@ -2200,14 +2218,17 @@ fn print_paths(parents: bool, source: &Path, dest: &Path) {
         //     a/b -> d/a/b
         //
         for (x, y) in aligned_ancestors(source, dest) {
-            println!(
+            writeln!(
+                writer,
                 "{}",
                 translate!("cp-verbose-created-directory", "source" => x.display(), "dest" => y.display())
-            );
+            )?;
         }
     }
 
-    println!("{}", context_for(source, dest));
+    writeln!(writer, "{}", context_for(source, dest))?;
+
+    Ok(())
 }
 
 /// Handles the copy mode for a file copy operation.
@@ -2221,7 +2242,8 @@ fn print_paths(parents: bool, source: &Path, dest: &Path) {
 /// * `Ok(())` - The file was copied successfully.
 /// * `Err(CopyError)` - An error occurred while copying the file.
 #[allow(clippy::too_many_arguments)]
-fn handle_copy_mode(
+fn handle_copy_mode<W: Write>(
+    writer: &mut W,
     source: &Path,
     dest: &Path,
     options: &Options,
@@ -2260,6 +2282,7 @@ fn handle_copy_mode(
         }
         CopyMode::Copy => {
             copy_helper(
+                writer,
                 source,
                 dest,
                 options,
@@ -2280,6 +2303,7 @@ fn handle_copy_mode(
                 match options.update {
                     UpdateMode::All => {
                         copy_helper(
+                            writer,
                             source,
                             dest,
                             options,
@@ -2291,7 +2315,7 @@ fn handle_copy_mode(
                     }
                     UpdateMode::None => {
                         if options.debug {
-                            println!("skipped {}", dest.quote());
+                            writeln!(writer, "skipped {}", dest.quote())?;
                         }
 
                         return Ok(PerformedAction::Skipped);
@@ -2310,9 +2334,10 @@ fn handle_copy_mode(
                             return Ok(PerformedAction::Skipped);
                         }
 
-                        options.overwrite.verify(dest, options.debug)?;
+                        options.overwrite.verify(writer, dest, options.debug)?;
 
                         copy_helper(
+                            writer,
                             source,
                             dest,
                             options,
@@ -2325,6 +2350,7 @@ fn handle_copy_mode(
                 }
             } else {
                 copy_helper(
+                    writer,
                     source,
                     dest,
                     options,
@@ -2410,6 +2436,8 @@ fn copy_file(
     created_parent_dirs: &mut HashSet<PathBuf>,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
+    let mut stdout = stdout().lock();
+
     let source_is_symlink = source.is_symlink();
     let initial_dest_metadata = dest.symlink_metadata().ok();
     let dest_is_symlink = initial_dest_metadata
@@ -2493,7 +2521,14 @@ fn copy_file(
                 }
             }
         }
-        handle_existing_dest(source, dest, options, source_in_command_line, copied_files)?;
+        handle_existing_dest(
+            &mut stdout,
+            source,
+            dest,
+            options,
+            source_in_command_line,
+            copied_files,
+        )?;
         if are_hardlinks_to_same_file(source, dest) {
             if options.copy_mode == CopyMode::Copy {
                 return Ok(());
@@ -2527,7 +2562,7 @@ fn copy_file(
             fs::hard_link(new_source, dest)?;
 
             if options.verbose {
-                print_verbose_output(options.parents, progress_bar, source, dest);
+                print_verbose_output(&mut stdout, options.parents, progress_bar, source, dest)?;
             }
 
             return Ok(());
@@ -2566,6 +2601,7 @@ fn copy_file(
     let source_is_stream = is_stream(&source_metadata);
 
     let performed_action = handle_copy_mode(
+        &mut stdout,
         source,
         dest,
         options,
@@ -2577,7 +2613,7 @@ fn copy_file(
     )?;
 
     if options.verbose && performed_action != PerformedAction::Skipped {
-        print_verbose_output(options.parents, progress_bar, source, dest);
+        print_verbose_output(&mut stdout, options.parents, progress_bar, source, dest)?;
     }
 
     // TODO: implement something similar to gnu's lchown
@@ -2709,7 +2745,9 @@ fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
 
 /// Copy the file from `source` to `dest` either using the normal `fs::copy` or a
 /// copy-on-write scheme if --reflink is specified and the filesystem supports it.
-fn copy_helper(
+#[allow(clippy::too_many_arguments)]
+fn copy_helper<W: Write>(
+    writer: &mut W,
     source: &Path,
     dest: &Path,
     options: &Options,
@@ -2733,13 +2771,19 @@ fn copy_helper(
     if options.recursive && !options.copy_contents {
         let ft = source_metadata.file_type();
         if ft.is_socket() {
-            return copy_socket(dest, options.overwrite, options.debug);
+            return copy_socket(writer, dest, options.overwrite, options.debug);
         }
         if ft.is_fifo() {
-            return copy_fifo(dest, options.overwrite, options.debug);
+            return copy_fifo(writer, dest, options.overwrite, options.debug);
         }
         if ft.is_char_device() || ft.is_block_device() {
-            return copy_node(dest, source_metadata, options.overwrite, options.debug);
+            return copy_node(
+                writer,
+                dest,
+                source_metadata,
+                options.overwrite,
+                options.debug,
+            );
         }
     }
 
@@ -2757,7 +2801,7 @@ fn copy_helper(
         )?;
 
         if !options.attributes_only && options.debug {
-            show_debug(&copy_debug);
+            show_debug(writer, &copy_debug)?;
         }
     }
 
@@ -2767,9 +2811,14 @@ fn copy_helper(
 // "Copies" a FIFO by creating a new one. This workaround is because Rust's
 // built-in fs::copy does not handle FIFOs (see rust-lang/rust/issues/79390).
 #[cfg(unix)]
-fn copy_fifo(dest: &Path, overwrite: OverwriteMode, debug: bool) -> CopyResult<()> {
+fn copy_fifo<W: Write>(
+    writer: &mut W,
+    dest: &Path,
+    overwrite: OverwriteMode,
+    debug: bool,
+) -> CopyResult<()> {
     if dest.exists() {
-        overwrite.verify(dest, debug)?;
+        overwrite.verify(writer, dest, debug)?;
         fs::remove_file(dest)?;
     }
 
@@ -2778,9 +2827,14 @@ fn copy_fifo(dest: &Path, overwrite: OverwriteMode, debug: bool) -> CopyResult<(
 }
 
 #[cfg(unix)]
-fn copy_socket(dest: &Path, overwrite: OverwriteMode, debug: bool) -> CopyResult<()> {
+fn copy_socket<W: Write>(
+    writer: &mut W,
+    dest: &Path,
+    overwrite: OverwriteMode,
+    debug: bool,
+) -> CopyResult<()> {
     if dest.exists() {
-        overwrite.verify(dest, debug)?;
+        overwrite.verify(writer, dest, debug)?;
         fs::remove_file(dest)?;
     }
 
@@ -2789,14 +2843,15 @@ fn copy_socket(dest: &Path, overwrite: OverwriteMode, debug: bool) -> CopyResult
 }
 
 #[cfg(unix)]
-fn copy_node(
+fn copy_node<W: Write>(
+    writer: &mut W,
     dest: &Path,
     source_metadata: &Metadata,
     overwrite: OverwriteMode,
     debug: bool,
 ) -> CopyResult<()> {
     if dest.exists() {
-        overwrite.verify(dest, debug)?;
+        overwrite.verify(writer, dest, debug)?;
         fs::remove_file(dest)?;
     }
     let sflag = if source_metadata.file_type().is_char_device() {
