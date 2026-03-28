@@ -103,6 +103,7 @@ nix = { workspace = true, features = [
   "user",
   "zerocopy",
 ] }
+rustix = { workspace = true, features = ["pipe", "process", "fs", "event", "termios", "time"] }
 walkdir = { workspace = true, optional = true }
 xattr = { workspace = true, optional = true }
 
