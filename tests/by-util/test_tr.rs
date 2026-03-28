@@ -374,6 +374,14 @@ fn test_truncate_with_set1_shorter_than_set2() {
 }
 
 #[test]
+fn test_truncate_applies_before_complement_with_class() {
+    new_ucmd!()
+        .args(&["-ct", "[:digit:]", "X"])
+        .pipe_in("A")
+        .succeeds()
+        .stdout_is("X");
+}
+#[test]
 fn missing_args_fails() {
     let (_, mut ucmd) = at_and_ucmd!();
     ucmd.fails().stderr_contains("missing operand");
