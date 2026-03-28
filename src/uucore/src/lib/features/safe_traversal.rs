@@ -10,7 +10,7 @@
 //
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
 // spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod mkdirat CREAT WRONLY ELOOP ENOTDIR
-// spell-checker:ignore atimensec mtimensec ctimensec
+// spell-checker:ignore atimensec mtimensec ctimensec chmodat chownat
 
 #[cfg(test)]
 use std::os::unix::ffi::OsStringExt;
@@ -22,11 +22,15 @@ use std::os::unix::ffi::OsStrExt;
 use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd, IntoRawFd, OwnedFd, RawFd};
 use std::path::{Path, PathBuf};
 
-use nix::dir::Dir;
-use nix::fcntl::{OFlag, openat};
-use nix::sys::stat::{FchmodatFlags, FileStat, Mode, fchmodat, fstatat, mkdirat};
-use nix::unistd::{Gid, Uid, UnlinkatFlags, fchown, fchownat, unlinkat};
 use os_display::Quotable;
+// Re-export Stat so downstream crates can use it without depending on rustix directly
+pub use rustix::fs::Stat;
+
+use rustix::fs::{
+    AtFlags, Dir, Mode, OFlags, chmodat, fchmod, fchown, fstat, mkdirat, open, openat, statat,
+    unlinkat,
+};
+use rustix::fs::{Gid, Uid, chownat};
 
 use crate::translate;
 
@@ -107,15 +111,17 @@ impl From<SafeTraversalError> for io::Error {
     }
 }
 
-// Helper function to read directory entries using nix
+// Helper function to read directory entries using rustix
 fn read_dir_entries(fd: &OwnedFd) -> io::Result<Vec<OsString>> {
     let mut entries = Vec::new();
 
-    // Duplicate the fd for Dir (it takes ownership)
-    let dup_fd = nix::unistd::dup(fd).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
-    let mut dir = Dir::from_fd(dup_fd).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
-    for entry_result in dir.iter() {
-        let entry = entry_result.map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+    // Use dup + Dir::new instead of Dir::read_from, because read_from does
+    // openat(fd, ".") which requires execute permission on the directory.
+    // Dir::new wraps the fd directly (using getdents64 or fdopendir).
+    let dup_fd = rustix::io::dup(fd).map_err(io::Error::from)?;
+    let dir = Dir::new(dup_fd).map_err(io::Error::from)?;
+    for entry_result in dir {
+        let entry = entry_result.map_err(io::Error::from)?;
         let name = entry.file_name();
         let name_os = OsStr::from_bytes(name.to_bytes());
         if name_os != "." && name_os != ".." {
@@ -138,15 +144,13 @@ impl DirFd {
     /// * `path` - The path to the directory to open
     /// * `symlink_behavior` - Whether to follow symlinks when opening
     pub fn open(path: &Path, symlink_behavior: SymlinkBehavior) -> io::Result<Self> {
-        let mut flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC;
+        let mut flags = OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC;
         if !symlink_behavior.should_follow() {
-            flags |= OFlag::O_NOFOLLOW;
+            flags |= OFlags::NOFOLLOW;
         }
-        let fd = nix::fcntl::open(path, flags, Mode::empty()).map_err(|e| {
-            SafeTraversalError::OpenFailed {
-                path: path.into(),
-                source: io::Error::from_raw_os_error(e as i32),
-            }
+        let fd = open(path, flags, Mode::empty()).map_err(|e| SafeTraversalError::OpenFailed {
+            path: path.into(),
+            source: io::Error::from(e),
         })?;
         Ok(Self { fd })
     }
@@ -157,37 +161,35 @@ impl DirFd {
     /// * `name` - The name of the subdirectory to open
     /// * `symlink_behavior` - Whether to follow symlinks when opening
     pub fn open_subdir(&self, name: &OsStr, symlink_behavior: SymlinkBehavior) -> io::Result<Self> {
-        let name_cstr =
-            CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
-        let mut flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC;
+        // Validate no null bytes (preserve PathContainsNull error)
+        CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
+        let mut flags = OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC;
         if !symlink_behavior.should_follow() {
-            flags |= OFlag::O_NOFOLLOW;
+            flags |= OFlags::NOFOLLOW;
         }
-        let fd = openat(&self.fd, name_cstr.as_c_str(), flags, Mode::empty()).map_err(|e| {
+        let fd = openat(&self.fd, name, flags, Mode::empty()).map_err(|e| {
             SafeTraversalError::OpenFailed {
                 path: name.into(),
-                source: io::Error::from_raw_os_error(e as i32),
+                source: io::Error::from(e),
             }
         })?;
         Ok(Self { fd })
     }
 
     /// Get raw stat data for a file relative to this directory
-    pub fn stat_at(&self, name: &OsStr, symlink_behavior: SymlinkBehavior) -> io::Result<FileStat> {
-        let name_cstr =
-            CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
+    pub fn stat_at(&self, name: &OsStr, symlink_behavior: SymlinkBehavior) -> io::Result<Stat> {
+        // Validate no null bytes (preserve PathContainsNull error)
+        CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
 
         let flags = if symlink_behavior.should_follow() {
-            nix::fcntl::AtFlags::empty()
+            AtFlags::empty()
         } else {
-            nix::fcntl::AtFlags::AT_SYMLINK_NOFOLLOW
+            AtFlags::SYMLINK_NOFOLLOW
         };
 
-        let stat = fstatat(&self.fd, name_cstr.as_c_str(), flags).map_err(|e| {
-            SafeTraversalError::StatFailed {
-                path: name.into(),
-                source: io::Error::from_raw_os_error(e as i32),
-            }
+        let stat = statat(&self.fd, name, flags).map_err(|e| SafeTraversalError::StatFailed {
+            path: name.into(),
+            source: io::Error::from(e),
         })?;
 
         Ok(stat)
@@ -209,10 +211,10 @@ impl DirFd {
     }
 
     /// Get raw stat data for this directory
-    pub fn fstat(&self) -> io::Result<FileStat> {
-        let stat = nix::sys::stat::fstat(&self.fd).map_err(|e| SafeTraversalError::StatFailed {
+    pub fn fstat(&self) -> io::Result<Stat> {
+        let stat = fstat(&self.fd).map_err(|e| SafeTraversalError::StatFailed {
             path: translate!("safe-traversal-current-directory").into(),
-            source: io::Error::from_raw_os_error(e as i32),
+            source: io::Error::from(e),
         })?;
         Ok(stat)
     }
@@ -230,19 +232,17 @@ impl DirFd {
 
     /// Remove a file or empty directory relative to this directory
     pub fn unlink_at(&self, name: &OsStr, is_dir: bool) -> io::Result<()> {
-        let name_cstr =
-            CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
+        // Validate no null bytes (preserve PathContainsNull error)
+        CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
         let flags = if is_dir {
-            UnlinkatFlags::RemoveDir
+            AtFlags::REMOVEDIR
         } else {
-            UnlinkatFlags::NoRemoveDir
+            AtFlags::empty()
         };
 
-        unlinkat(&self.fd, name_cstr.as_c_str(), flags).map_err(|e| {
-            SafeTraversalError::UnlinkFailed {
-                path: name.into(),
-                source: io::Error::from_raw_os_error(e as i32),
-            }
+        unlinkat(&self.fd, name, flags).map_err(|e| SafeTraversalError::UnlinkFailed {
+            path: name.into(),
+            source: io::Error::from(e),
         })?;
 
         Ok(())
@@ -257,20 +257,19 @@ impl DirFd {
         gid: Option<u32>,
         symlink_behavior: SymlinkBehavior,
     ) -> io::Result<()> {
-        let name_cstr =
-            CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
+        // Validate no null bytes (preserve PathContainsNull error)
+        CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
 
         let flags = if symlink_behavior.should_follow() {
-            nix::fcntl::AtFlags::empty()
+            AtFlags::empty()
         } else {
-            nix::fcntl::AtFlags::AT_SYMLINK_NOFOLLOW
+            AtFlags::SYMLINK_NOFOLLOW
         };
 
         let uid = uid.map(Uid::from_raw);
         let gid = gid.map(Gid::from_raw);
 
-        fchownat(&self.fd, name_cstr.as_c_str(), uid, gid, flags)
-            .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+        chownat(&self.fd, name, uid, gid, flags).map_err(io::Error::from)?;
 
         Ok(())
     }
@@ -280,7 +279,7 @@ impl DirFd {
         let uid = uid.map(Uid::from_raw);
         let gid = gid.map(Gid::from_raw);
 
-        fchown(&self.fd, uid, gid).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+        fchown(&self.fd, uid, gid).map_err(io::Error::from)?;
 
         Ok(())
     }
@@ -293,40 +292,38 @@ impl DirFd {
         symlink_behavior: SymlinkBehavior,
     ) -> io::Result<()> {
         let flags = if symlink_behavior.should_follow() {
-            FchmodatFlags::FollowSymlink
+            AtFlags::empty()
         } else {
-            FchmodatFlags::NoFollowSymlink
+            AtFlags::SYMLINK_NOFOLLOW
         };
 
-        let mode = Mode::from_bits_truncate(mode as libc::mode_t);
+        let mode = Mode::from_raw_mode(mode as libc::mode_t);
 
-        let name_cstr =
-            CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
+        // Validate no null bytes (preserve PathContainsNull error)
+        CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
 
-        fchmodat(&self.fd, name_cstr.as_c_str(), mode, flags)
-            .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+        chmodat(&self.fd, name, mode, flags).map_err(io::Error::from)?;
 
         Ok(())
     }
 
     /// Change mode of this directory
     pub fn fchmod(&self, mode: u32) -> io::Result<()> {
-        let mode = Mode::from_bits_truncate(mode as libc::mode_t);
+        let mode = Mode::from_raw_mode(mode as libc::mode_t);
 
-        nix::sys::stat::fchmod(&self.fd, mode)
-            .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+        fchmod(&self.fd, mode).map_err(io::Error::from)?;
 
         Ok(())
     }
 
     /// Create a directory relative to this directory
     pub fn mkdir_at(&self, name: &OsStr, mode: u32) -> io::Result<()> {
-        let name_cstr =
-            CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
-        let mode = Mode::from_bits_truncate(mode as libc::mode_t);
+        // Validate no null bytes (preserve PathContainsNull error)
+        CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
+        let mode = Mode::from_raw_mode(mode as libc::mode_t);
 
-        if let Err(e) = mkdirat(self.fd.as_fd(), name_cstr.as_c_str(), mode) {
-            let err = io::Error::from_raw_os_error(e as i32);
+        if let Err(e) = mkdirat(self.fd.as_fd(), name, mode) {
+            let err = io::Error::from(e);
             return Err(SafeTraversalError::OpenFailed {
                 path: name.into(),
                 source: err,
@@ -339,13 +336,12 @@ impl DirFd {
     /// Open a file for writing relative to this directory
     /// Creates the file if it doesn't exist, truncates if it does
     pub fn open_file_at(&self, name: &OsStr) -> io::Result<fs::File> {
-        let name_cstr =
-            CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
-        let flags = OFlag::O_CREAT | OFlag::O_WRONLY | OFlag::O_TRUNC | OFlag::O_CLOEXEC;
-        let mode = Mode::from_bits_truncate(0o666); // Default file permissions
+        // Validate no null bytes (preserve PathContainsNull error)
+        CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
+        let flags = OFlags::CREATE | OFlags::WRONLY | OFlags::TRUNC | OFlags::CLOEXEC;
+        let mode = Mode::from_raw_mode(0o666); // Default file permissions
 
-        let fd: OwnedFd = openat(self.fd.as_fd(), name_cstr.as_c_str(), flags, mode)
-            .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+        let fd: OwnedFd = openat(self.fd.as_fd(), name, flags, mode).map_err(io::Error::from)?;
 
         // Convert OwnedFd to raw fd and create File
         let raw_fd = fd.into_raw_fd();
@@ -532,7 +528,7 @@ pub struct FileInfo {
 }
 
 impl FileInfo {
-    pub fn from_stat(stat: &libc::stat) -> Self {
+    pub fn from_stat(stat: &Stat) -> Self {
         // Allow unnecessary cast because st_dev and st_ino have different types on different platforms
         #[allow(clippy::unnecessary_cast)]
         Self {
@@ -592,11 +588,11 @@ impl FileType {
 /// Metadata wrapper for safer access to file information
 #[derive(Debug, Clone)]
 pub struct Metadata {
-    stat: FileStat,
+    stat: Stat,
 }
 
 impl Metadata {
-    pub fn from_stat(stat: FileStat) -> Self {
+    pub fn from_stat(stat: Stat) -> Self {
         Self { stat }
     }
 
@@ -692,94 +688,34 @@ impl std::os::unix::fs::MetadataExt for Metadata {
         self.stat.st_size as u64
     }
 
+    #[allow(clippy::unnecessary_cast)]
     fn atime(&self) -> i64 {
-        #[cfg(target_pointer_width = "32")]
-        {
-            self.stat.st_atime.into()
-        }
-        #[cfg(not(target_pointer_width = "32"))]
-        {
-            self.stat.st_atime
-        }
+        self.stat.st_atime as i64
     }
 
+    #[allow(clippy::unnecessary_cast)]
     fn atime_nsec(&self) -> i64 {
-        #[cfg(target_os = "netbsd")]
-        {
-            self.stat.st_atimensec
-        }
-
-        #[cfg(not(target_os = "netbsd"))]
-        {
-            #[cfg(target_pointer_width = "32")]
-            {
-                self.stat.st_atime_nsec.into()
-            }
-            #[cfg(not(target_pointer_width = "32"))]
-            {
-                self.stat.st_atime_nsec
-            }
-        }
+        self.stat.st_atime_nsec as i64
     }
 
+    #[allow(clippy::unnecessary_cast)]
     fn mtime(&self) -> i64 {
-        #[cfg(target_pointer_width = "32")]
-        {
-            self.stat.st_mtime.into()
-        }
-        #[cfg(not(target_pointer_width = "32"))]
-        {
-            self.stat.st_mtime
-        }
+        self.stat.st_mtime as i64
     }
 
+    #[allow(clippy::unnecessary_cast)]
     fn mtime_nsec(&self) -> i64 {
-        #[cfg(target_os = "netbsd")]
-        {
-            self.stat.st_mtimensec
-        }
-
-        #[cfg(not(target_os = "netbsd"))]
-        {
-            #[cfg(target_pointer_width = "32")]
-            {
-                self.stat.st_mtime_nsec.into()
-            }
-            #[cfg(not(target_pointer_width = "32"))]
-            {
-                self.stat.st_mtime_nsec
-            }
-        }
+        self.stat.st_mtime_nsec as i64
     }
 
+    #[allow(clippy::unnecessary_cast)]
     fn ctime(&self) -> i64 {
-        #[cfg(target_pointer_width = "32")]
-        {
-            self.stat.st_ctime.into()
-        }
-        #[cfg(not(target_pointer_width = "32"))]
-        {
-            self.stat.st_ctime
-        }
+        self.stat.st_ctime as i64
     }
 
+    #[allow(clippy::unnecessary_cast)]
     fn ctime_nsec(&self) -> i64 {
-        #[cfg(target_os = "netbsd")]
-        {
-            self.stat.st_ctimensec
-        }
-
-        #[cfg(not(target_os = "netbsd"))]
-        {
-            #[cfg(target_pointer_width = "32")]
-            {
-                self.stat.st_ctime_nsec.into()
-            }
-            #[cfg(not(target_pointer_width = "32"))]
-            {
-                self.stat.st_ctime_nsec
-            }
-        }
+        self.stat.st_ctime_nsec as i64
     }
 
     // st_blksize type varies by platform (i32/i64/u32/u64 depending on platform)
@@ -949,7 +885,7 @@ mod tests {
         let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
 
         // Duplicate the fd first so we don't have ownership conflicts
-        let dup_fd = nix::unistd::dup(&dir_fd).unwrap();
+        let dup_fd = rustix::io::dup(&dir_fd).unwrap();
         let from_raw_fd = DirFd::from_raw_fd(dup_fd.into_raw_fd()).unwrap();
 
         // Both should refer to the same directory
