@@ -10,14 +10,6 @@
 //! It provides a way to convert signal names to their corresponding values and vice versa.
 //! It also provides a way to ignore the SIGINT signal and enable pipe errors.
 
-#[cfg(unix)]
-use nix::errno::Errno;
-#[cfg(unix)]
-use nix::sys::signal::{
-    SaFlags, SigAction, SigHandler, SigHandler::SigDfl, SigHandler::SigIgn, SigSet, Signal,
-    Signal::SIGINT, Signal::SIGPIPE, sigaction, signal,
-};
-
 // ---------------------------------------------------------------------------
 // Thin libc-based signal wrappers
 //
@@ -650,42 +642,41 @@ pub fn signal_list_value_by_name_or_number(spec: &str) -> Option<usize> {
 
 /// Restores SIGPIPE to default behavior (process terminates on broken pipe).
 #[cfg(unix)]
-pub fn enable_pipe_errors() -> Result<(), Errno> {
-    // We pass the error as is, the return value would just be Ok(SigDfl), so we can safely ignore it.
-    // SAFETY: this function is safe as long as we do not use a custom SigHandler -- we use the default one.
-    unsafe { signal(SIGPIPE, SigDfl) }.map(|_| ())
+pub fn enable_pipe_errors() -> std::io::Result<()> {
+    // SAFETY: SigDfl is always safe.
+    unsafe { csignal::set_signal_handler(libc::SIGPIPE, csignal::SigHandler::SigDfl) }.map(|_| ())
 }
 
 /// Ignores SIGPIPE signal (broken pipe errors are returned instead of terminating).
 /// Use this to override the default SIGPIPE handling when you need to handle
 /// broken pipe errors gracefully (e.g., tee with --output-error).
 #[cfg(unix)]
-pub fn disable_pipe_errors() -> Result<(), Errno> {
-    // SAFETY: this function is safe as long as we do not use a custom SigHandler -- we use the default one.
-    unsafe { signal(SIGPIPE, SigIgn) }.map(|_| ())
+pub fn disable_pipe_errors() -> std::io::Result<()> {
+    // SAFETY: SigIgn is always safe.
+    unsafe { csignal::set_signal_handler(libc::SIGPIPE, csignal::SigHandler::SigIgn) }.map(|_| ())
 }
 
 /// Ignores the SIGINT signal.
 #[cfg(unix)]
-pub fn ignore_interrupts() -> Result<(), Errno> {
-    // We pass the error as is, the return value would just be Ok(SigIgn), so we can safely ignore it.
-    // SAFETY: this function is safe as long as we do not use a custom SigHandler -- we use the default one.
-    unsafe { signal(SIGINT, SigIgn) }.map(|_| ())
+pub fn ignore_interrupts() -> std::io::Result<()> {
+    // SAFETY: SigIgn is always safe.
+    unsafe { csignal::set_signal_handler(libc::SIGINT, csignal::SigHandler::SigIgn) }.map(|_| ())
 }
 
 /// Installs a signal handler. The handler must be async-signal-safe.
 #[cfg(unix)]
 pub fn install_signal_handler(
-    sig: Signal,
-    handler: extern "C" fn(std::os::raw::c_int),
-) -> Result<(), Errno> {
-    let action = SigAction::new(
-        SigHandler::Handler(handler),
-        SaFlags::SA_RESTART,
-        SigSet::empty(),
-    );
-    unsafe { sigaction(sig, &action) }?;
-    Ok(())
+    sig: libc::c_int,
+    handler: extern "C" fn(libc::c_int),
+) -> std::io::Result<()> {
+    unsafe {
+        csignal::set_signal_action(
+            sig,
+            csignal::SigHandler::Handler(handler),
+            csignal::sa_flags::SA_RESTART,
+            &csignal::SigSet::empty(),
+        )
+    }
 }
 
 // Detect closed stdin/stdout before Rust reopens them as /dev/null (see issue #2873)
@@ -815,10 +806,9 @@ pub const fn sigpipe_was_ignored() -> bool {
 
 #[cfg(target_os = "linux")]
 pub fn ensure_stdout_not_broken() -> std::io::Result<bool> {
-    use nix::{
-        poll::{PollFd, PollFlags, PollTimeout, poll},
-        sys::stat::{SFlag, fstat},
-    };
+    use rustix::event::{PollFd, PollFlags, poll};
+    use rustix::fs::fstat;
+    use rustix::time::Timespec;
     use std::io::stdout;
     use std::os::fd::AsFd;
 
@@ -826,32 +816,31 @@ pub fn ensure_stdout_not_broken() -> std::io::Result<bool> {
 
     // First, check that stdout is a fifo and return true if it's not the case
     let stat = fstat(out.as_fd())?;
-    if !SFlag::from_bits_truncate(stat.st_mode).contains(SFlag::S_IFIFO) {
+    if (stat.st_mode & libc::S_IFMT) != libc::S_IFIFO {
         return Ok(true);
     }
 
     // POLLRDBAND is the flag used by GNU tee.
-    let mut pfds = [PollFd::new(out.as_fd(), PollFlags::POLLRDBAND)];
+    let mut pfds = [PollFd::new(&out, PollFlags::RDBAND)];
 
     // Then, ensure that the pipe is not broken.
-    // Use ZERO timeout to return immediately - we just want to check the current state.
-    let res = poll(&mut pfds, PollTimeout::ZERO)?;
+    // Use 0 timeout to return immediately - we just want to check the current state.
+    let zero_timeout = Timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    let res = poll(&mut pfds, Some(&zero_timeout))?;
 
     if res > 0 {
         // poll returned with events ready - check if POLLERR is set (pipe broken)
-        let error = pfds.iter().any(|pfd| {
-            if let Some(revents) = pfd.revents() {
-                revents.contains(PollFlags::POLLERR)
-            } else {
-                true
-            }
-        });
+        let error = pfds
+            .iter()
+            .any(|pfd| pfd.revents().contains(PollFlags::ERR));
         return Ok(!error);
     }
 
-    // res == 0 means no events ready (timeout reached immediately with ZERO timeout).
+    // res == 0 means no events ready (timeout reached immediately with 0 timeout).
     // This means the pipe is healthy (not broken).
-    // res < 0 would be an error, but nix returns Err in that case.
     Ok(true)
 }
 
