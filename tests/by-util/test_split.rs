@@ -2091,3 +2091,46 @@ fn test_split_directory_already_exists() {
         .no_stdout()
         .stderr_is("split: xaa: Is a directory\n");
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_split_io_error() {
+    use std::process::Command;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // Use ln command to create a symlink to /dev/full, like the GNU test does
+    // This is more reliable in various test environments
+    let ln_result = Command::new("ln")
+        .args(["-sf", "/dev/full", "xaa"])
+        .current_dir(at.as_string())
+        .status();
+
+    if ln_result.is_err() || !ln_result.unwrap().success() {
+        // Skip the test if we can't create the symlink (might happen in some test environments)
+        eprintln!("Skipping I/O error test: cannot create symlink to /dev/full");
+        return;
+    }
+
+    // Create input with 2 bytes to be split into 1-byte chunks
+    at.write("input", "ab");
+
+    // split should fail with exit code 1 when writing to /dev/full
+    ucmd.args(&["-b", "1", "input"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("split: xaa: No space left on device");
+
+    // The symlink should still exist after the failed split
+    // Note: at.file_exists() doesn't handle symlinks properly, so we use Path::exists() as fallback
+    let xaa_path = at.as_string().clone() + "/xaa";
+    assert!(
+        at.file_exists("xaa") || Path::new(&xaa_path).exists(),
+        "Expected xaa symlink to exist after failed split"
+    );
+    // But split should not have continued to create additional files
+    assert!(
+        !at.file_exists("xab"),
+        "Expected xab to not exist after split failure"
+    );
+}

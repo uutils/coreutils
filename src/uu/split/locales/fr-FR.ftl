@@ -38,11 +38,16 @@ split-error-cannot-determine-input-size = { $input } : impossible de déterminer
 split-error-cannot-determine-file-size = { $input } : impossible de déterminer la taille du fichier
 split-error-cannot-read-from-input = { $input } : impossible de lire depuis l'entrée : { $error }
 split-error-input-output-error = erreur d'entrée/sortie
+split-error-flush-before-file-switch = erreur de vidage avant changement de fichier
+split-error-flush-already-reported = erreur de vidage déjà signalée
+split-error-write-already-reported = erreur d'écriture déjà signalée
+split-error-flush-in-chunk-writer = erreur de vidage dans ByteChunkWriter
 split-error-unable-to-open-file = impossible d'ouvrir { $file } ; abandon
 split-error-unable-to-reopen-file = impossible de rouvrir { $file } ; abandon
 split-error-file-descriptor-limit = limite de descripteurs de fichiers atteinte, mais aucun descripteur de fichier à fermer. { $count } écrivains fermés auparavant.
 split-error-shell-process-returned = Le processus shell a retourné { $code }
 split-error-shell-process-terminated = Le processus shell a été terminé par un signal
+split-error-is-a-directory = { $dir } : Est un répertoire
 
 # Messages d'aide pour les options de ligne de commande
 split-help-bytes = mettre TAILLE octets par fichier de sortie
