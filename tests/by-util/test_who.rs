@@ -16,7 +16,7 @@ fn test_invalid_arg() {
 
 #[cfg(unix)]
 #[test]
-#[ignore = "issue #3219"]
+#[cfg(not(target_os = "openbsd"))]
 fn test_count() {
     let ts = TestScenario::new(util_name!());
     for opt in ["-q", "--count", "--c"] {
@@ -42,7 +42,7 @@ fn test_boot() {
 
 #[cfg(unix)]
 #[test]
-#[ignore = "issue #3219"]
+#[cfg(not(target_os = "openbsd"))]
 fn test_heading() {
     let ts = TestScenario::new(util_name!());
     for opt in ["-H", "--heading", "--head"] {
@@ -61,7 +61,7 @@ fn test_heading() {
 
 #[cfg(unix)]
 #[test]
-#[ignore = "issue #3219"]
+#[cfg(not(target_os = "openbsd"))]
 fn test_short() {
     let ts = TestScenario::new(util_name!());
     for opt in ["-s", "--short", "--s"] {
@@ -128,7 +128,7 @@ fn test_time() {
 
 #[cfg(unix)]
 #[test]
-#[ignore = "issue #3219"]
+#[cfg(not(target_os = "openbsd"))]
 fn test_mesg() {
     // -T, -w, --mesg
     //     add user's message status as +, - or ?
@@ -172,7 +172,7 @@ fn test_too_many_args() {
 
 #[cfg(unix)]
 #[test]
-#[ignore = "issue #3219"]
+#[cfg(not(target_os = "openbsd"))]
 fn test_users() {
     let ts = TestScenario::new(util_name!());
     for opt in ["-u", "--users", "--us"] {
@@ -198,7 +198,7 @@ fn test_users() {
 
 #[cfg(unix)]
 #[test]
-#[ignore = "issue #3219"]
+#[cfg(not(target_os = "openbsd"))]
 fn test_lookup() {
     let opt = "--lookup";
     let ts = TestScenario::new(util_name!());
@@ -219,7 +219,7 @@ fn test_dead() {
 
 #[cfg(unix)]
 #[test]
-#[ignore = "issue #3219"]
+#[cfg(not(target_os = "openbsd"))]
 fn test_all_separately() {
     if cfg!(target_os = "macos") {
         // TODO: fix `-u`, see: test_users
@@ -237,7 +237,7 @@ fn test_all_separately() {
 
 #[cfg(unix)]
 #[test]
-#[ignore = "issue #3219"]
+#[cfg(not(target_os = "openbsd"))]
 fn test_all() {
     if cfg!(target_os = "macos") {
         // TODO: fix `-u`, see: test_users
@@ -253,25 +253,27 @@ fn test_all() {
 
 #[cfg(unix)]
 #[test]
-#[ignore = "issue #3219"]
+#[cfg(not(target_os = "openbsd"))]
 fn test_locale() {
     let ts = TestScenario::new(util_name!());
 
-    let expected_stdout =
+    let c_stdout =
         unwrap_or_return!(gnu_cmd_result(&ts, &[], &[("LC_ALL", "C")])).stdout_move_str();
-    ts.ucmd()
-        .env("LC_ALL", "C")
-        .succeeds()
-        .stdout_is(&expected_stdout);
+    ts.ucmd().env("LC_ALL", "C").succeeds().stdout_is(&c_stdout);
 
-    let expected_stdout =
+    let utf8_stdout =
         unwrap_or_return!(gnu_cmd_result(&ts, &[], &[("LC_ALL", "en_US.UTF-8")])).stdout_move_str();
-    ts.ucmd()
-        .env("LC_ALL", "C")
-        .succeeds()
-        .stdout_str_check(|s| s != expected_stdout);
-    ts.ucmd()
-        .env("LC_ALL", "en_US.UTF-8")
-        .succeeds()
-        .stdout_is(&expected_stdout);
+    // Only check locale differences when GNU itself produces different
+    // output between locales. In CI environments without users or without
+    // the en_US.UTF-8 locale installed, both may produce identical output.
+    if c_stdout != utf8_stdout {
+        ts.ucmd()
+            .env("LC_ALL", "C")
+            .succeeds()
+            .stdout_str_check(|s| s != utf8_stdout);
+        ts.ucmd()
+            .env("LC_ALL", "en_US.UTF-8")
+            .succeeds()
+            .stdout_is(&utf8_stdout);
+    }
 }
