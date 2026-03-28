@@ -7,7 +7,7 @@
 
 use clap::{Arg, ArgAction, Command, value_parser};
 use libc::{S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR, mode_t};
-use nix::sys::stat::{Mode, SFlag, mknod as nix_mknod, umask as nix_umask};
+use std::ffi::CString;
 
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError, set_exit_code};
@@ -35,11 +35,11 @@ enum FileType {
 }
 
 impl FileType {
-    fn as_sflag(&self) -> SFlag {
+    fn as_mode(&self) -> mode_t {
         match self {
-            Self::Block => SFlag::S_IFBLK,
-            Self::Character => SFlag::S_IFCHR,
-            Self::Fifo => SFlag::S_IFIFO,
+            Self::Block => libc::S_IFBLK,
+            Self::Character => libc::S_IFCHR,
+            Self::Fifo => libc::S_IFIFO,
         }
     }
 }
@@ -47,7 +47,7 @@ impl FileType {
 /// Configuration for special inode creation.
 struct Config {
     /// Permission bits for the inode
-    mode: Mode,
+    mode: mode_t,
 
     file_type: FileType,
 
@@ -70,28 +70,27 @@ fn mknod(file_name: &str, config: Config) -> i32 {
     let have_prev_umask = if config.use_umask {
         None
     } else {
-        Some(nix_umask(Mode::empty()))
+        // SAFETY: umask is a standard POSIX function, always safe to call
+        Some(unsafe { libc::umask(0) })
     };
 
-    let mknod_err = nix_mknod(
-        file_name,
-        config.file_type.as_sflag(),
-        config.mode,
-        config.dev as _,
-    )
-    .err();
-    let errno = if mknod_err.is_some() { -1 } else { 0 };
+    let c_path = CString::new(file_name).unwrap();
+    let combined_mode = config.file_type.as_mode() | config.mode;
+    // SAFETY: c_path is a valid null-terminated C string
+    let ret = unsafe { libc::mknod(c_path.as_ptr(), combined_mode, config.dev as _) };
+    let errno = if ret != 0 { -1 } else { 0 };
 
     // set umask back to original value
     if let Some(prev_umask) = have_prev_umask {
-        nix_umask(prev_umask);
+        // SAFETY: umask is always safe to call
+        unsafe { libc::umask(prev_umask) };
     }
 
-    if let Some(err) = mknod_err {
+    if ret != 0 {
         eprintln!(
             "{}: {}",
             uucore::execution_phrase(),
-            std::io::Error::from(err)
+            std::io::Error::last_os_error()
         );
     }
 
@@ -141,7 +140,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             parse_mode(str_mode).map_err(|e| USimpleError::new(1, e))?
         }
     };
-    let mode = Mode::from_bits_truncate(mode_permissions as mode_t);
+    let mode = (mode_permissions as mode_t) & 0o7777;
 
     let file_name = matches
         .get_one::<String>("name")

@@ -4,6 +4,7 @@ name = "uu_tail"
 description = "tail ~ (uutils) display the last lines of input"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/tail"
 version.workspace = true
+authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -17,21 +18,18 @@ workspace = true
 
 [lib]
 path = "src/tail.rs"
-doctest = false
 
 [dependencies]
 clap = { workspace = true }
+libc = { workspace = true }
 memchr = { workspace = true }
+notify = { workspace = true }
 uucore = { workspace = true, features = ["fs", "parser-size", "signals"] }
 same-file = { workspace = true }
 fluent = { workspace = true }
 
-[target.'cfg(not(target_os = "wasi"))'.dependencies]
-libc = { workspace = true }
-notify = { workspace = true }
-
 [target.'cfg(unix)'.dependencies]
-rustix = { workspace = true, features = ["fs", "process"] }
+rustix = { workspace = true, features = ["fs"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [

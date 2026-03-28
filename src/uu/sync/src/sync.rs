@@ -7,11 +7,7 @@
 
 use clap::{Arg, ArgAction, Command};
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::errno::Errno;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::fcntl::{OFlag, open};
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::sys::stat::Mode;
+use std::ffi::CString;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, get_exit_code, set_exit_code};
@@ -29,12 +25,9 @@ static ARG_FILES: &str = "files";
 #[cfg(unix)]
 mod platform {
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    use nix::fcntl::{FcntlArg, OFlag, fcntl};
-    use nix::unistd::sync;
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    use nix::unistd::{fdatasync, syncfs};
-    #[cfg(any(target_os = "linux", target_os = "android"))]
     use std::fs::{File, OpenOptions};
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    use std::os::fd::AsFd;
     #[cfg(any(target_os = "linux", target_os = "android"))]
     use std::os::unix::fs::OpenOptionsExt;
     #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -51,7 +44,7 @@ mod platform {
         reason = "fn sig must match on all platforms"
     )]
     pub fn do_sync() -> UResult<()> {
-        sync();
+        rustix::fs::sync();
         Ok(())
     }
 
@@ -62,19 +55,16 @@ mod platform {
     fn open_and_reset_nonblock(path: &str) -> UResult<File> {
         let f = OpenOptions::new()
             .read(true)
-            .custom_flags(OFlag::O_NONBLOCK.bits())
+            .custom_flags(libc::O_NONBLOCK)
             .open(path)
             .map_err_context(|| path.to_string())?;
         // Reset O_NONBLOCK flag if it was set (matches GNU behavior)
         // This is non-critical, so we log errors but don't fail
-        if let Err(e) = fcntl(&f, FcntlArg::F_SETFL(OFlag::empty())) {
-            use std::io::{Write, stderr};
-            let _ = writeln!(
-                stderr(),
+        if let Err(e) = rustix::fs::fcntl_setfl(f.as_fd(), rustix::fs::OFlags::empty()) {
+            eprintln!(
                 "sync: {}",
-                translate!("sync-warning-fcntl-failed", "file" => path, "error" => e.to_string())
+                translate!("sync-warning-fcntl-failed", "file" => path, "error" => std::io::Error::from(e).to_string())
             );
-            uucore::error::set_exit_code(1);
         }
         Ok(f)
     }
@@ -83,9 +73,11 @@ mod platform {
     pub fn do_syncfs(files: Vec<String>) -> UResult<()> {
         for path in files {
             let f = open_and_reset_nonblock(&path)?;
-            syncfs(f).map_err_context(
-                || translate!("sync-error-syncing-file", "file" => path.quote()),
-            )?;
+            rustix::fs::syncfs(f.as_fd())
+                .map_err(std::io::Error::from)
+                .map_err_context(
+                    || translate!("sync-error-syncing-file", "file" => path.quote()),
+                )?;
         }
         Ok(())
     }
@@ -94,9 +86,11 @@ mod platform {
     pub fn do_fdatasync(files: Vec<String>) -> UResult<()> {
         for path in files {
             let f = open_and_reset_nonblock(&path)?;
-            fdatasync(f).map_err_context(
-                || translate!("sync-error-syncing-file", "file" => path.quote()),
-            )?;
+            rustix::fs::fdatasync(f.as_fd())
+                .map_err(std::io::Error::from)
+                .map_err_context(
+                    || translate!("sync-error-syncing-file", "file" => path.quote()),
+                )?;
         }
         Ok(())
     }
@@ -231,18 +225,26 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     for f in &files {
-        // Use the Nix open to be able to set the NONBLOCK flags for fifo files
+        // Use open with O_NONBLOCK to be able to handle fifo files
         #[cfg(any(target_os = "linux", target_os = "android"))]
         {
             let path = Path::new(&f);
-            if let Err(e) = open(path, OFlag::O_NONBLOCK, Mode::empty()) {
-                if e != Errno::EACCES || (e == Errno::EACCES && path.is_dir()) {
+            let c_path = CString::new(f.as_str()).unwrap();
+            // SAFETY: c_path is a valid null-terminated C string
+            let fd = unsafe { libc::open(c_path.as_ptr(), libc::O_NONBLOCK) };
+            if fd < 0 {
+                let err = std::io::Error::last_os_error();
+                let is_eacces = err.raw_os_error() == Some(libc::EACCES);
+                if !is_eacces || path.is_dir() {
                     show_error!(
                         "{}",
-                        translate!("sync-error-opening-file", "file" => f.quote(), "err" => e.desc())
+                        translate!("sync-error-opening-file", "file" => f.quote(), "err" => err)
                     );
                     set_exit_code(1);
                 }
+            } else {
+                // SAFETY: fd is a valid open file descriptor
+                unsafe { libc::close(fd) };
             }
         }
         #[cfg(not(any(target_os = "linux", target_os = "android")))]
@@ -263,12 +265,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     #[allow(clippy::if_same_then_else)]
     if matches.get_flag(options::FILE_SYSTEM) {
-        if files.is_empty() {
-            sync()?;
-        } else {
-            #[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
-            syncfs(files)?;
-        }
+        #[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
+        syncfs(files)?;
     } else if matches.get_flag(options::DATA) {
         #[cfg(any(target_os = "linux", target_os = "android"))]
         fdatasync(files)?;
@@ -279,9 +277,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new("sync")
+    Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template("sync"))
+        .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("sync-about"))
         .override_usage(format_usage(&translate!("sync-usage")))
         .infer_long_args(true)

@@ -25,8 +25,6 @@ libc = { workspace = true }
 uucore = { workspace = true, features = ["parser", "process", "signals"] }
 fluent = { workspace = true }
 
-[target.'cfg(unix)'.dependencies]
-nix = { workspace = true, features = ["signal"] }
 
 [[bin]]
 name = "timeout"

@@ -4,8 +4,7 @@
 // file that was distributed with this source code.
 
 use clap::{Arg, ArgAction, Command, value_parser};
-use nix::sys::stat::Mode;
-use nix::unistd::mkfifo;
+use std::ffi::CString;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use uucore::display::Quotable;
@@ -48,7 +47,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     for f in fifos {
-        if mkfifo(f.as_str(), Mode::from_bits_truncate(0o666)).is_err() {
+        let c_path = CString::new(f.as_str()).unwrap();
+        // SAFETY: c_path is a valid null-terminated C string
+        if unsafe { libc::mkfifo(c_path.as_ptr(), 0o666) } != 0 {
             show!(USimpleError::new(
                 1,
                 translate!("mkfifo-error-cannot-create-fifo", "path" => f.quote()),
