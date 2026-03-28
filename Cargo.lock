@@ -4224,6 +4224,7 @@ dependencies = [
  "clap",
  "fluent",
  "nix",
+ "rustix",
  "uucore",
  "windows-sys 0.61.2",
 ]
