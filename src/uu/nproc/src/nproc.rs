@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) NPROCESSORS nprocs numstr sysconf
+// spell-checker:ignore (ToDO) NPROCESSORS SCHED getscheduler nprocs numstr sched sysconf
 
 use clap::{Arg, ArgAction, Command};
 use std::io::{Write, stdout};
@@ -67,7 +67,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
             // the variable 'OMP_NUM_THREADS' doesn't exist
             // fallback to the regular CPU detection
-            Err(_) => available_parallelism(),
+            Err(_) => {
+                // ignore quota under some schedulers
+                #[cfg(any(target_os = "linux", target_os = "android"))]
+                {
+                    let policy = unsafe { libc::sched_getscheduler(0) };
+                    if policy == libc::SCHED_FIFO
+                        || policy == libc::SCHED_RR
+                        || policy == libc::SCHED_DEADLINE
+                    {
+                        num_cpus_all()
+                    } else {
+                        available_parallelism()
+                    }
+                }
+                #[cfg(not(any(target_os = "linux", target_os = "android")))]
+                available_parallelism()
+            }
         }
     };
 
