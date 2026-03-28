@@ -245,12 +245,42 @@ fn parse_pids(pids: &[String]) -> UResult<Vec<i32>> {
 }
 
 fn kill(sig: i32, pids: &[i32]) {
+    use rustix::process::{
+        Pid, Signal, kill_current_process_group, kill_process, kill_process_group,
+        test_kill_current_process_group, test_kill_process, test_kill_process_group,
+    };
+
     for &pid in pids {
-        // SAFETY: kill() is a standard POSIX function. sig=0 checks process existence.
-        let ret = unsafe { libc::kill(pid, sig) };
-        if ret != 0 {
+        let esrch = || Err(rustix::io::Errno::SRCH);
+        let result = if sig == 0 {
+            // Signal 0: test if process/group exists
+            match pid.cmp(&0) {
+                std::cmp::Ordering::Greater => {
+                    Pid::from_raw(pid).map_or_else(esrch, test_kill_process)
+                }
+                std::cmp::Ordering::Equal => test_kill_current_process_group(),
+                std::cmp::Ordering::Less => {
+                    Pid::from_raw(-pid).map_or_else(esrch, test_kill_process_group)
+                }
+            }
+        } else {
+            // SAFETY: sig is a non-zero value from user input; the kernel
+            // will reject truly invalid signal numbers with EINVAL.
+            let signal = unsafe { Signal::from_raw_unchecked(sig) };
+            match pid.cmp(&0) {
+                std::cmp::Ordering::Greater => {
+                    Pid::from_raw(pid).map_or_else(esrch, |p| kill_process(p, signal))
+                }
+                std::cmp::Ordering::Equal => kill_current_process_group(signal),
+                std::cmp::Ordering::Less => {
+                    Pid::from_raw(-pid).map_or_else(esrch, |p| kill_process_group(p, signal))
+                }
+            }
+        };
+
+        if let Err(e) = result {
             show!(
-                Error::last_os_error()
+                Error::from(e)
                     .map_err_context(|| { translate!("kill-error-sending-signal", "pid" => pid) })
             );
         }
