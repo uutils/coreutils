@@ -480,6 +480,35 @@ fn test_fail_change_directory() {
     assert!(out.contains("env: cannot change directory to "));
 }
 
+#[test]
+fn test_chdir_happens_after_relative_file_loading() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.mkdir("target");
+    scene
+        .fixtures
+        .write("config.env", "CONFIG_SOURCE=from-root\n");
+    scene
+        .fixtures
+        .write("target/config.env", "CONFIG_SOURCE=from-target\n");
+
+    let out = scene
+        .ucmd()
+        .args(&["--chdir", "target", "--file", "config.env", "-i"])
+        .arg(uutests::util::get_tests_binary())
+        .arg(util_name!())
+        .succeeds()
+        .stdout_move_str();
+
+    assert!(
+        out.contains("CONFIG_SOURCE=from-root\n"),
+        "expected config file from invocation directory, got: {out:?}"
+    );
+    assert!(
+        !out.contains("CONFIG_SOURCE=from-target\n"),
+        "unexpectedly loaded config from --chdir target directory: {out:?}"
+    );
+}
+
 #[cfg(not(target_os = "windows"))] // windows has no executable "echo", its only supported as part of a batch-file
 #[test]
 fn test_split_string_into_args_one_argument_no_quotes() {
@@ -558,6 +587,30 @@ fn test_split_string_into_args_long_option_whitespace_handling() {
 
 #[cfg(not(target_os = "windows"))] // no printf available
 #[test]
+fn test_split_string_option_forms_match_gnu_required_argument_handling() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .args(&["-S", "printf x:%s\\n one two"])
+        .succeeds()
+        .stdout_is("x:one\nx:two\n");
+
+    scene
+        .ucmd()
+        .args(&["--split-string", "printf x:%s\\n one two"])
+        .succeeds()
+        .stdout_is("x:one\nx:two\n");
+
+    scene
+        .ucmd()
+        .arg("--split-string=printf x:%s\\n one two")
+        .succeeds()
+        .stdout_is("x:one\nx:two\n");
+}
+
+#[cfg(not(target_os = "windows"))] // no printf available
+#[test]
 fn test_split_string_into_args_debug_output_whitespace_handling() {
     let scene = TestScenario::new(util_name!());
 
@@ -603,6 +656,67 @@ fn test_gnu_e20() {
     assert_eq!(out.stdout_str(), output);
 }
 
+#[cfg(not(target_os = "windows"))] // no printf available
+#[test]
+fn test_split_string_single_quotes_keep_unknown_backslash_sequences_literal() {
+    let scene = TestScenario::new(util_name!());
+    scene
+        .ucmd()
+        .arg("-Sprintf %s '\\x'")
+        .succeeds()
+        .stdout_is("\\x");
+    scene
+        .ucmd()
+        .arg("-Sprintf %s '\\a'")
+        .succeeds()
+        .stdout_is("\\a");
+    scene
+        .ucmd()
+        .arg("-Sprintf %s '\\`'")
+        .succeeds()
+        .stdout_is("\\`");
+    scene
+        .ucmd()
+        .arg("-Sprintf %s '\\q'")
+        .succeeds()
+        .stdout_is("\\q");
+    scene
+        .ucmd()
+        .arg("-Sprintf %s '\\|'")
+        .succeeds()
+        .stdout_is("\\|");
+    scene
+        .ucmd()
+        .arg("-Sprintf %s '\\9'")
+        .succeeds()
+        .stdout_is("\\9");
+}
+
+#[cfg(not(target_os = "windows"))] // no printf available
+#[test]
+fn test_split_string_backslash_a_behavior_matches_gnu_quoting_context() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .arg("-Sprintf %s '\\a'")
+        .succeeds()
+        .stdout_is("\\a");
+
+    scene
+        .ucmd()
+        .arg("-Sprintf %s \"\\a\"")
+        .fails_with_code(125)
+        .no_stdout()
+        .stderr_contains("invalid sequence '\\a' in -S");
+
+    scene
+        .ucmd()
+        .arg("-Sprintf %s \\a")
+        .fails_with_code(125)
+        .no_stdout()
+        .stderr_contains("invalid sequence '\\a' in -S");
+}
 #[test]
 #[allow(clippy::cognitive_complexity)] // Ignore clippy lint of too long function sign
 fn test_env_parsing_errors() {
@@ -628,12 +742,6 @@ fn test_env_parsing_errors() {
 
     ts.ucmd()
         .arg(r#"-S"\a""#) // same as before, just using r#""#
-        .fails_with_code(125)
-        .no_stdout()
-        .stderr_is("env: invalid sequence '\\a' in -S at position 2\n");
-
-    ts.ucmd()
-        .arg("-S'\\a'") // single quotes, invalid escape sequence a
         .fails_with_code(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\a' in -S at position 2\n");
@@ -669,12 +777,6 @@ fn test_env_parsing_errors() {
         .stderr_is("env: invalid sequence '\\`' in -S at position 2\n");
 
     ts.ucmd()
-        .arg(r"-S'\`\&\;'") // single quotes, invalid escape sequence `
-        .fails_with_code(125)
-        .no_stdout()
-        .stderr_is("env: invalid sequence '\\`' in -S at position 2\n");
-
-    ts.ucmd()
         .arg(r"-S\`") // ` escaped without quotes
         .fails_with_code(125)
         .no_stdout()
@@ -682,12 +784,6 @@ fn test_env_parsing_errors() {
 
     ts.ucmd()
         .arg(r#"-S"\`""#) // ` escaped in double quotes
-        .fails_with_code(125)
-        .no_stdout()
-        .stderr_is("env: invalid sequence '\\`' in -S at position 2\n");
-
-    ts.ucmd()
-        .arg(r"-S'\`'") // ` escaped in single quotes
         .fails_with_code(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\`' in -S at position 2\n");
@@ -1279,7 +1375,7 @@ mod tests_split_iterator {
         assert_eq!(split("'\\"), Err(EnvError::EnvMissingClosingQuote(2, '\'')));
         assert_eq!(
             split(r#""$""#),
-            Err(EnvError::EnvParsingOfMissingVariable(2)),
+            Err(EnvError::EnvParsingOfVariableOnlyBracedName(2)),
         );
     }
 
@@ -1293,10 +1389,8 @@ mod tests_split_iterator {
             split("\"\\a\""),
             Err(EnvError::EnvInvalidSequenceBackslashXInMinusS(2, 'a'))
         );
-        assert_eq!(
-            split("'\\a'"),
-            Err(EnvError::EnvInvalidSequenceBackslashXInMinusS(2, 'a'))
-        );
+        assert_eq!(split("'\\a'"), Ok(vec![OsString::from("\\a")]));
+        assert_eq!(split("'\\`'"), Ok(vec![OsString::from("\\`")]));
         assert_eq!(
             split(r#""\a""#),
             Err(EnvError::EnvInvalidSequenceBackslashXInMinusS(2, 'a'))
@@ -1860,21 +1954,19 @@ fn test_shebang_error() {
 
 #[test]
 #[cfg(not(target_os = "windows"))]
-fn test_braced_variable_with_default_value() {
-    new_ucmd!()
-        .arg("-Secho ${UNSET_VAR_UNLIKELY_12345:fallback}")
-        .succeeds()
-        .stdout_is("fallback\n");
-}
-
-#[test]
-#[cfg(not(target_os = "windows"))]
-fn test_braced_variable_with_default_when_set() {
-    new_ucmd!()
-        .env("TEST_VAR_12345", "actual")
-        .arg("-Secho ${TEST_VAR_12345:fallback}")
-        .succeeds()
-        .stdout_is("actual\n");
+fn test_reject_shell_style_variable_expansions() {
+    for split in [
+        "-Secho $TEST_VAR_12345",
+        "-Secho ${TEST_VAR_12345:fallback}",
+        "-Secho ${TEST_VAR_12345:-fallback}",
+        "-Secho ${TEST_VAR_12345-default}",
+    ] {
+        new_ucmd!()
+            .env("TEST_VAR_12345", "value")
+            .arg(split)
+            .fails_with_code(125)
+            .stderr_contains("only ${VARNAME} expansion is supported");
+    }
 }
 
 #[test]
@@ -1896,11 +1988,11 @@ fn test_braced_variable_error_missing_closing_brace() {
 }
 
 #[test]
-fn test_braced_variable_error_missing_closing_brace_after_default() {
+fn test_braced_variable_error_rejects_default_syntax() {
     new_ucmd!()
-        .arg("-Secho ${FOO:-value")
+        .arg("-Secho ${FOO:-value}")
         .fails_with_code(125)
-        .stderr_contains("Missing closing brace after default value");
+        .stderr_contains("only ${VARNAME} expansion is supported");
 }
 
 #[test]
@@ -1916,7 +2008,7 @@ fn test_braced_variable_error_unexpected_character() {
     new_ucmd!()
         .arg("-Secho ${FOO?}")
         .fails_with_code(125)
-        .stderr_contains("Unexpected character: '?'");
+        .stderr_contains("only ${VARNAME} expansion is supported");
 }
 
 #[test]

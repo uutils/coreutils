@@ -63,12 +63,10 @@ pub enum EnvError {
     EnvParsingOfVariableMissingClosingBrace(usize),
     #[error("{}", translate!("env-error-missing-variable", "position" => .0))]
     EnvParsingOfMissingVariable(usize),
-    #[error("{}", translate!("env-error-missing-closing-brace-after-value", "position" => .0))]
-    EnvParsingOfVariableMissingClosingBraceAfterValue(usize),
+    #[error("{}", translate!("env-error-only-braced-variable", "position" => .0))]
+    EnvParsingOfVariableOnlyBracedName(usize),
     #[error("{}", translate!("env-error-unexpected-number", "position" => .0, "char" => .1.clone()))]
     EnvParsingOfVariableUnexpectedNumber(usize, String),
-    #[error("{}", translate!("env-error-expected-brace-or-colon", "position" => .0, "char" => .1.clone()))]
-    EnvParsingOfVariableExceptedBraceOrColon(usize, String),
     #[error("")]
     EnvReachedEnd,
     #[error("")]
@@ -481,15 +479,11 @@ pub fn parse_args_from_str(text: &NativeIntStr) -> UResult<Vec<NativeIntString>>
             125,
             translate!("env-error-variable-name-issue", "position" => pos, "error" => e),
         ),
-        EnvError::EnvParsingOfVariableMissingClosingBraceAfterValue(pos) => USimpleError::new(
+        EnvError::EnvParsingOfVariableOnlyBracedName(pos) => USimpleError::new(
             125,
             translate!("env-error-variable-name-issue", "position" => pos, "error" => e),
         ),
         EnvError::EnvParsingOfVariableUnexpectedNumber(pos, _) => USimpleError::new(
-            125,
-            translate!("env-error-variable-name-issue", "position" => pos, "error" => e),
-        ),
-        EnvError::EnvParsingOfVariableExceptedBraceOrColon(pos, _) => USimpleError::new(
             125,
             translate!("env-error-variable-name-issue", "position" => pos, "error" => e),
         ),
@@ -513,12 +507,28 @@ fn check_and_handle_string_args(
     prefix_to_test: &str,
     all_args: &mut Vec<OsString>,
     do_debug_print_args: Option<&Vec<OsString>>,
+    require_non_empty_payload: bool,
+    strip_optional_leading_equals: bool,
 ) -> UResult<bool> {
     let native_arg = NCvt::convert(arg);
     if let Some(remaining_arg) = native_arg.strip_prefix(&*NCvt::convert(prefix_to_test)) {
+        if require_non_empty_payload && remaining_arg.is_empty() {
+            return Ok(false);
+        }
+
         if let Some(input_args) = do_debug_print_args {
             debug_print_args(input_args); // do it here, such that its also printed when we get an error/panic during parsing
         }
+
+        let remaining_arg = if strip_optional_leading_equals {
+            if let Some(stripped_remaining_arg) = remaining_arg.strip_prefix(&*NCvt::convert("=")) {
+                stripped_remaining_arg
+            } else {
+                remaining_arg
+            }
+        } else {
+            remaining_arg
+        };
 
         let arg_strings = parse_args_from_str(remaining_arg)?;
         all_args.extend(
@@ -574,7 +584,12 @@ impl EnvAppData {
             options::UNSET,
         ];
         let short_flags_with_args = ['a', 'C', 'f', 'u'];
+        let mut consumed_split_payload_arg: Option<usize> = None;
         for (n, arg) in original_args.iter().enumerate() {
+            if consumed_split_payload_arg == Some(n) {
+                consumed_split_payload_arg = None;
+                continue;
+            }
             let arg_str = arg.to_string_lossy();
             // Stop processing env flags once we reach the command or -- argument
             if 0 < n
@@ -589,13 +604,21 @@ impl EnvAppData {
             }
             expecting_arg = false;
             match arg {
-                b if check_and_handle_string_args(b, "--split-string", &mut all_args, None)? => {
+                b if check_and_handle_string_args(
+                    b,
+                    "--split-string",
+                    &mut all_args,
+                    None,
+                    true,
+                    true,
+                )? =>
+                {
                     self.had_string_argument = true;
                 }
-                b if check_and_handle_string_args(b, "-S", &mut all_args, None)? => {
+                b if check_and_handle_string_args(b, "-S", &mut all_args, None, true, false)? => {
                     self.had_string_argument = true;
                 }
-                b if check_and_handle_string_args(b, "-vS", &mut all_args, None)? => {
+                b if check_and_handle_string_args(b, "-vS", &mut all_args, None, true, false)? => {
                     self.do_debug_printing = true;
                     self.had_string_argument = true;
                 }
@@ -604,11 +627,38 @@ impl EnvAppData {
                     "-vvS",
                     &mut all_args,
                     Some(original_args),
+                    true,
+                    false,
                 )? =>
                 {
                     self.do_debug_printing = true;
                     self.do_input_debug_printing = Some(false); // already done
                     self.had_string_argument = true;
+                }
+                b if b == "--split-string" || b == "-S" || b == "-vS" || b == "-vvS" => {
+                    let Some(next_arg) = original_args.get(n + 1) else {
+                        all_args.push(arg.clone());
+                        continue;
+                    };
+
+                    if b == "-vS" || b == "-vvS" {
+                        self.do_debug_printing = true;
+                    }
+                    if b == "-vvS" {
+                        debug_print_args(original_args);
+                        self.do_input_debug_printing = Some(false);
+                    }
+
+                    let native_next_arg = NCvt::convert(next_arg);
+                    let arg_strings = parse_args_from_str(native_next_arg.as_ref())?;
+                    all_args.extend(
+                        arg_strings
+                            .into_iter()
+                            .map(from_native_int_representation_owned),
+                    );
+                    self.had_string_argument = true;
+                    expecting_arg = false;
+                    consumed_split_payload_arg = Some(n + 1);
                 }
                 _ => {
                     if let Some(flag) = arg_str.strip_prefix("--") {
@@ -714,8 +764,6 @@ impl EnvAppData {
             &signal_apply_all,
         )?;
 
-        apply_change_directory(&opts)?;
-
         // NOTE: we manually set and unset the env vars below rather than using Command::env() to more
         //       easily handle the case where no command is given
 
@@ -754,6 +802,7 @@ impl EnvAppData {
             }
         }
 
+        apply_change_directory(&opts)?;
         if opts.program.is_empty() {
             // no program provided, so just dump all env vars to stdout
             print_all_env_vars(opts.line_ending)?;
@@ -1246,21 +1295,34 @@ mod tests {
                 .contains("variable name issue (at 10): Missing closing brace")
         );
 
-        let result = parse_args_from_str(&NCvt::convert(r"echo ${FOO:-value"));
+        let result = parse_args_from_str(&NCvt::convert(r"echo ${FOO:-value}"));
         assert!(result.is_err());
         assert!(
             result
                 .unwrap_err()
                 .to_string()
-                .contains("variable name issue (at 17): Missing closing brace after default value")
+                .contains("only ${VARNAME} expansion is supported")
         );
 
+        let result = parse_args_from_str(&NCvt::convert(r"echo $FOO"));
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("only ${VARNAME} expansion is supported")
+        );
         let result = parse_args_from_str(&NCvt::convert(r"echo ${1FOO}"));
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("variable name issue (at 7): Unexpected character: '1', expected variable name must not start with 0..9"));
 
         let result = parse_args_from_str(&NCvt::convert(r"echo ${FOO?}"));
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("variable name issue (at 10): Unexpected character: '?', expected a closing brace ('}') or colon (':')"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("only ${VARNAME} expansion is supported")
+        );
     }
 }
