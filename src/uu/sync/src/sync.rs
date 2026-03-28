@@ -6,8 +6,6 @@
 /* Last synced with: sync (GNU coreutils) 8.13 */
 
 use clap::{Arg, ArgAction, Command};
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use std::ffi::CString;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, get_exit_code, set_exit_code};
@@ -229,22 +227,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         #[cfg(any(target_os = "linux", target_os = "android"))]
         {
             let path = Path::new(&f);
-            let c_path = CString::new(f.as_str()).unwrap();
-            // SAFETY: c_path is a valid null-terminated C string
-            let fd = unsafe { libc::open(c_path.as_ptr(), libc::O_NONBLOCK) };
-            if fd < 0 {
-                let err = std::io::Error::last_os_error();
-                let is_eacces = err.raw_os_error() == Some(libc::EACCES);
-                if !is_eacces || path.is_dir() {
-                    show_error!(
-                        "{}",
-                        translate!("sync-error-opening-file", "file" => f.quote(), "err" => err)
-                    );
-                    set_exit_code(1);
+            match rustix::fs::open(
+                path,
+                rustix::fs::OFlags::NONBLOCK,
+                rustix::fs::Mode::empty(),
+            ) {
+                Ok(_fd) => { /* OwnedFd auto-closes on drop */ }
+                Err(e) => {
+                    let is_eacces = e == rustix::io::Errno::ACCESS;
+                    if !is_eacces || path.is_dir() {
+                        let err = std::io::Error::from(e);
+                        show_error!(
+                            "{}",
+                            translate!("sync-error-opening-file", "file" => f.quote(), "err" => err)
+                        );
+                        set_exit_code(1);
+                    }
                 }
-            } else {
-                // SAFETY: fd is a valid open file descriptor
-                unsafe { libc::close(fd) };
             }
         }
         #[cfg(not(any(target_os = "linux", target_os = "android")))]
