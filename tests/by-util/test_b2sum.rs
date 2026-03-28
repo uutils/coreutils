@@ -177,7 +177,6 @@ fn test_invalid_b2sum_length_option_not_multiple_of_8() {
 #[rstest]
 #[case("513")]
 #[case("1024")]
-#[case("18446744073709552000")]
 fn test_invalid_b2sum_length_option_too_large(#[case] len: &str) {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -193,6 +192,23 @@ fn test_invalid_b2sum_length_option_too_large(#[case] len: &str) {
         .no_stdout()
         .stderr_contains(format!("b2sum: invalid length: '{len}'"))
         .stderr_contains("b2sum: maximum digest length for 'BLAKE2b' is 512 bits");
+}
+
+#[test]
+fn test_invalid_b2sum_length_option_overflow() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("testf", "foobar\n");
+
+    // Overflow is rejected by clap's usize parser
+    scene
+        .ccmd("b2sum")
+        .arg("--length")
+        .arg("18446744073709552000")
+        .arg(at.subdir.join("testf"))
+        .fails_with_code(1)
+        .no_stdout();
 }
 
 #[test]
