@@ -25,10 +25,9 @@ use uucore::{
     signals::{signal_by_name_or_value, signal_list_name_by_value},
 };
 
-use nix::sys::signal::{SigHandler, Signal, kill};
-use nix::unistd::{Pid, getpid, setpgid};
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
+use uucore::signals::csignal::{self, SigHandler};
 
 pub mod options {
     pub static FOREGROUND: &str = "foreground";
@@ -182,7 +181,7 @@ pub fn uu_app() -> Command {
 /// Install SIGCHLD handler to ensure waiting for child works even if parent ignored SIGCHLD.
 fn install_sigchld() {
     extern "C" fn chld(_: libc::c_int) {}
-    let _ = unsafe { nix::sys::signal::signal(Signal::SIGCHLD, SigHandler::Handler(chld)) };
+    let _ = unsafe { csignal::set_signal_handler(libc::SIGCHLD, SigHandler::Handler(chld)) };
 }
 
 /// We should terminate child process when receiving termination signals.
@@ -201,23 +200,24 @@ fn install_signal_handlers(term_signal: usize) {
     let sigpipe_ignored = uucore::signals::sigpipe_was_ignored();
 
     for sig in [
-        Signal::SIGALRM,
-        Signal::SIGINT,
-        Signal::SIGQUIT,
-        Signal::SIGHUP,
-        Signal::SIGTERM,
-        Signal::SIGPIPE,
-        Signal::SIGUSR1,
-        Signal::SIGUSR2,
+        libc::SIGALRM,
+        libc::SIGINT,
+        libc::SIGQUIT,
+        libc::SIGHUP,
+        libc::SIGTERM,
+        libc::SIGPIPE,
+        libc::SIGUSR1,
+        libc::SIGUSR2,
     ] {
-        if sig == Signal::SIGPIPE && sigpipe_ignored {
+        if sig == libc::SIGPIPE && sigpipe_ignored {
             continue; // Skip SIGPIPE if it was ignored by parent
         }
-        let _ = unsafe { nix::sys::signal::signal(sig, handler) };
+        let _ = unsafe { csignal::set_signal_handler(sig, handler) };
     }
 
-    if let Ok(sig) = Signal::try_from(term_signal as i32) {
-        let _ = unsafe { nix::sys::signal::signal(sig, handler) };
+    let term_sig = term_signal as libc::c_int;
+    if term_sig > 0 {
+        let _ = unsafe { csignal::set_signal_handler(term_sig, handler) };
     }
 }
 
@@ -324,8 +324,11 @@ fn preserve_signal_info(signal: libc::c_int) -> libc::c_int {
     // The easiest way to preserve the latter seems to be to kill
     // ourselves with whatever signal our child exited with, which is
     // what the following is intended to accomplish.
-    if let Ok(sig) = Signal::try_from(signal) {
-        let _ = kill(getpid(), Some(sig));
+    if signal > 0 {
+        // SAFETY: kill() and getpid() are standard POSIX functions
+        unsafe {
+            libc::kill(libc::getpid(), signal);
+        }
     }
     signal
 }
@@ -346,7 +349,11 @@ fn timeout(
     verbose: bool,
 ) -> UResult<()> {
     if !foreground {
-        let _ = setpgid(Pid::from_raw(0), Pid::from_raw(0));
+        // SAFETY: setpgid is a standard POSIX function; (0, 0) sets the current process
+        // as a new process group leader
+        unsafe {
+            libc::setpgid(0, 0);
+        }
     }
 
     let mut cmd_builder = process::Command::new(&cmd[0]);
@@ -359,26 +366,26 @@ fn timeout(
     #[cfg(unix)]
     {
         #[cfg(target_os = "linux")]
-        let death_sig = Signal::try_from(signal as i32).ok();
+        let death_sig = signal as libc::c_int;
         let sigpipe_was_ignored = uucore::signals::sigpipe_was_ignored();
         let stdin_was_closed = uucore::signals::stdin_was_closed();
 
         unsafe {
             cmd_builder.pre_exec(move || {
                 // Reset terminal signals to default
-                let _ = nix::sys::signal::signal(Signal::SIGTTIN, SigHandler::SigDfl);
-                let _ = nix::sys::signal::signal(Signal::SIGTTOU, SigHandler::SigDfl);
+                let _ = csignal::set_signal_handler(libc::SIGTTIN, SigHandler::SigDfl);
+                let _ = csignal::set_signal_handler(libc::SIGTTOU, SigHandler::SigDfl);
                 // Preserve SIGPIPE ignore status if parent had it ignored
                 if sigpipe_was_ignored {
-                    let _ = nix::sys::signal::signal(Signal::SIGPIPE, SigHandler::SigIgn);
+                    let _ = csignal::set_signal_handler(libc::SIGPIPE, SigHandler::SigIgn);
                 }
                 // If stdin was closed before Rust reopened it as /dev/null, close it in child
                 if stdin_was_closed {
                     libc::close(libc::STDIN_FILENO);
                 }
                 #[cfg(target_os = "linux")]
-                if let Some(sig) = death_sig {
-                    let _ = nix::sys::prctl::set_pdeathsig(sig);
+                if death_sig > 0 {
+                    libc::prctl(libc::PR_SET_PDEATHSIG, death_sig);
                 }
                 Ok(())
             });

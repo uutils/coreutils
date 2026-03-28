@@ -567,6 +567,47 @@ impl From<nix::Error> for Box<dyn UError> {
     }
 }
 
+/// Enables the conversion from [`Result<T, rustix::io::Errno>`] to [`UResult<T>`].
+#[cfg(unix)]
+impl<T> FromIo<UResult<T>> for Result<T, rustix::io::Errno> {
+    fn map_err_context(self, context: impl FnOnce() -> String) -> UResult<T> {
+        self.map_err(|e| {
+            Box::new(UIoError {
+                context: Some(context()),
+                inner: std::io::Error::from(e),
+            }) as Box<dyn UError>
+        })
+    }
+}
+
+#[cfg(unix)]
+impl<T> FromIo<UResult<T>> for rustix::io::Errno {
+    fn map_err_context(self, context: impl FnOnce() -> String) -> UResult<T> {
+        Err(Box::new(UIoError {
+            context: Some(context()),
+            inner: std::io::Error::from(self),
+        }) as Box<dyn UError>)
+    }
+}
+
+#[cfg(unix)]
+impl From<rustix::io::Errno> for UIoError {
+    fn from(f: rustix::io::Errno) -> Self {
+        Self {
+            context: None,
+            inner: std::io::Error::from(f),
+        }
+    }
+}
+
+#[cfg(unix)]
+impl From<rustix::io::Errno> for Box<dyn UError> {
+    fn from(f: rustix::io::Errno) -> Self {
+        let u_error: UIoError = f.into();
+        Box::new(u_error) as Self
+    }
+}
+
 /// Shorthand to construct [`UIoError`]-instances.
 ///
 /// This macro serves as a convenience call to quickly construct instances of

@@ -24,7 +24,8 @@ uucore = { workspace = true, features = ["parser"] }
 fluent = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
-nix = { workspace = true, features = ["ioctl", "term"] }
+libc = { workspace = true }
+rustix = { workspace = true, features = ["termios"] }
 
 [[bin]]
 name = "stty"

@@ -28,11 +28,11 @@ use nix::libc::{O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ, c_ushort};
 ))]
 use nix::libc::{TCGETS2, termios2};
 
-use nix::sys::termios::{
-    ControlFlags, InputFlags, LocalFlags, OutputFlags, SetArg, SpecialCharacterIndices as S,
-    Termios, cfsetispeed, cfsetospeed, tcgetattr, tcsetattr,
+use rustix::termios::{
+    ControlModes as ControlFlags, InputModes as InputFlags, LocalModes as LocalFlags,
+    OptionalActions, OutputModes as OutputFlags, SpecialCodeIndex as S, Termios, tcgetattr,
+    tcsetattr,
 };
-use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
 use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{self, Stdin, stdin, stdout};
@@ -231,19 +231,27 @@ pub struct TermSize {
     y: c_ushort,
 }
 
-ioctl_read_bad!(
-    /// Get terminal window size
-    tiocgwinsz,
-    TIOCGWINSZ,
-    TermSize
-);
+/// Get terminal window size via ioctl
+///
+/// # Safety
+/// `size` must point to a valid, writable `TermSize` and `fd` must be a valid terminal fd.
+unsafe fn tiocgwinsz(fd: RawFd, size: *mut TermSize) -> io::Result<()> {
+    if unsafe { libc::ioctl(fd, TIOCGWINSZ, size) } == -1 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
 
-ioctl_write_ptr_bad!(
-    /// Set terminal window size
-    tiocswinsz,
-    TIOCSWINSZ,
-    TermSize
-);
+/// Set terminal window size via ioctl
+///
+/// # Safety
+/// `size` must point to a valid `TermSize` and `fd` must be a valid terminal fd.
+unsafe fn tiocswinsz(fd: RawFd, size: *mut TermSize) -> io::Result<()> {
+    if unsafe { libc::ioctl(fd, TIOCSWINSZ, size) } == -1 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -269,7 +277,7 @@ fn stty(opts: &Options) -> UResult<()> {
         ));
     }
 
-    let mut set_arg = SetArg::TCSADRAIN;
+    let mut set_arg = OptionalActions::Drain;
     let mut valid_args: Vec<ArgOptions> = Vec::new();
 
     if let Some(args) = &opts.settings {
@@ -352,10 +360,10 @@ fn stty(opts: &Options) -> UResult<()> {
                     }
                 }
                 "drain" => {
-                    set_arg = SetArg::TCSADRAIN;
+                    set_arg = OptionalActions::Drain;
                 }
                 "-drain" => {
-                    set_arg = SetArg::TCSANOW;
+                    set_arg = OptionalActions::Now;
                 }
                 "size" => {
                     valid_args.push(ArgOptions::Print(PrintSetting::Size));
@@ -550,7 +558,7 @@ fn check_flag_group<T>(flag: &Flag<T>, remove: bool) -> bool {
     remove && flag.group.is_some()
 }
 
-fn print_special_setting(setting: &PrintSetting, fd: i32) -> nix::Result<()> {
+fn print_special_setting(setting: &PrintSetting, fd: i32) -> io::Result<()> {
     match setting {
         PrintSetting::Size => {
             let mut size = TermSize::default();
@@ -626,23 +634,23 @@ fn print_terminal_size(
     opts: &Options,
     window_size: Option<&TermSize>,
     term_size: Option<&TermSize>,
-) -> nix::Result<()> {
+) -> io::Result<()> {
     // GNU linked against glibc 2.42 provides us baudrate 51 which panics cfgetospeed
     #[cfg(not(target_os = "linux"))]
-    let speed = nix::sys::termios::cfgetospeed(termios);
-    #[cfg(target_os = "linux")]
-    #[cfg(all(not(target_arch = "powerpc"), not(target_arch = "powerpc64")))]
-    ioctl_read_bad!(tcgets2, TCGETS2, termios2);
+    let speed = termios.output_speed();
     #[cfg(target_os = "linux")]
     #[cfg(all(not(target_arch = "powerpc"), not(target_arch = "powerpc64")))]
     let speed = {
         let mut t2 = unsafe { std::mem::zeroed::<termios2>() };
-        unsafe { tcgets2(opts.file.as_raw_fd(), &raw mut t2)? };
+        // SAFETY: TCGETS2 ioctl reads termios2 struct from fd
+        if unsafe { libc::ioctl(opts.file.as_raw_fd(), TCGETS2, &raw mut t2) } == -1 {
+            return Err(io::Error::last_os_error());
+        }
         t2.c_ospeed
     };
     #[cfg(target_os = "linux")]
     #[cfg(any(target_arch = "powerpc", target_arch = "powerpc64"))]
-    let speed = nix::sys::termios::cfgetospeed(termios);
+    let speed = termios.output_speed();
 
     let mut printer = WrappedPrinter::new(window_size);
 
@@ -690,10 +698,7 @@ fn print_terminal_size(
 
     #[cfg(any(target_os = "linux", target_os = "redox"))]
     {
-        // For some reason the normal nix Termios struct does not expose the line,
-        // so we get the underlying libc::termios struct to get that information.
-        let libc_termios: nix::libc::termios = termios.clone().into();
-        let line = libc_termios.c_line;
+        let line = termios.line_discipline;
         printer.print(&translate!("stty-output-line", "line" => line));
     }
     printer.flush();
@@ -824,7 +829,7 @@ fn string_to_flag(option: &str) -> Option<AllFlags<'_>> {
     None
 }
 
-fn control_char_to_string(cc: nix::libc::cc_t) -> nix::Result<String> {
+fn control_char_to_string(cc: libc::cc_t) -> io::Result<String> {
     if cc == 0 {
         return Ok(translate!("stty-output-undef"));
     }
@@ -844,7 +849,7 @@ fn control_char_to_string(cc: nix::libc::cc_t) -> nix::Result<String> {
         // DEL character
         0x7f => Ok(("^", '?')),
         // Out of range (above 8 bits)
-        _ => Err(nix::errno::Errno::ERANGE),
+        _ => Err(io::Error::from_raw_os_error(libc::ERANGE)),
     }?;
 
     Ok(format!("{meta_prefix}{ctrl_prefix}{character}"))
@@ -854,12 +859,12 @@ fn print_control_chars(
     termios: &Termios,
     opts: &Options,
     term_size: Option<&TermSize>,
-) -> nix::Result<()> {
+) -> io::Result<()> {
     if !opts.all {
         // Print only control chars that differ from sane defaults
         let mut printer = WrappedPrinter::new(term_size);
         for (text, cc_index) in CONTROL_CHARS {
-            let current_val = termios.control_chars[*cc_index as usize];
+            let current_val = termios.special_codes[*cc_index];
             let sane_val = get_sane_control_char(*cc_index);
 
             if current_val != sane_val {
@@ -877,12 +882,12 @@ fn print_control_chars(
     for (text, cc_index) in CONTROL_CHARS {
         printer.print(&format!(
             "{text} = {};",
-            control_char_to_string(termios.control_chars[*cc_index as usize])?
+            control_char_to_string(termios.special_codes[*cc_index])?
         ));
     }
     printer.print(&translate!("stty-output-min-time",
-        "min" => termios.control_chars[S::VMIN as usize],
-        "time" => termios.control_chars[S::VTIME as usize]
+        "min" => termios.special_codes[S::VMIN],
+        "time" => termios.special_codes[S::VTIME]
     ));
     printer.flush();
     Ok(())
@@ -891,12 +896,17 @@ fn print_control_chars(
 fn print_in_save_format(termios: &Termios) {
     print!(
         "{:x}:{:x}:{:x}:{:x}",
-        termios.input_flags.bits(),
-        termios.output_flags.bits(),
-        termios.control_flags.bits(),
-        termios.local_flags.bits()
+        termios.input_modes.bits(),
+        termios.output_modes.bits(),
+        termios.control_modes.bits(),
+        termios.local_modes.bits()
     );
-    for cc in termios.control_chars {
+    // Print all special codes in save format by accessing the raw cc array
+    // via a pointer cast, since rustix doesn't expose the inner array.
+    let cc_ptr = (&raw const termios.special_codes).cast::<[libc::cc_t; libc::NCCS]>();
+    // SAFETY: SpecialCodes is a transparent wrapper around [cc_t; NCCS]
+    let cc_array = unsafe { &*cc_ptr };
+    for cc in cc_array {
         print!(":{cc:x}");
     }
     println!();
@@ -904,12 +914,12 @@ fn print_in_save_format(termios: &Termios) {
 
 /// Gets terminal size using the tiocgwinsz ioctl system call.
 /// This queries the kernel for the current terminal window dimensions.
-fn get_terminal_size(fd: RawFd) -> nix::Result<TermSize> {
+fn get_terminal_size(fd: RawFd) -> io::Result<TermSize> {
     let mut term_size = TermSize::default();
     unsafe { tiocgwinsz(fd, &raw mut term_size) }.map(|_| term_size)
 }
 
-fn print_settings(termios: &Termios, opts: &Options) -> nix::Result<()> {
+fn print_settings(termios: &Termios, opts: &Options) -> io::Result<()> {
     if opts.save {
         print_in_save_format(termios);
     } else {
@@ -972,7 +982,7 @@ fn print_flags<T: TermiosFlag>(
 }
 
 /// Apply a single setting
-fn apply_setting(termios: &mut Termios, setting: &AllFlags) -> nix::Result<()> {
+fn apply_setting(termios: &mut Termios, setting: &AllFlags) -> io::Result<()> {
     match setting {
         AllFlags::Baud(_, _) => apply_baud_rate_flag(termios, setting)?,
         AllFlags::ControlFlags((setting, disable)) => {
@@ -991,14 +1001,14 @@ fn apply_setting(termios: &mut Termios, setting: &AllFlags) -> nix::Result<()> {
     Ok(())
 }
 
-fn apply_baud_rate_flag(termios: &mut Termios, input: &AllFlags) -> nix::Result<()> {
+fn apply_baud_rate_flag(termios: &mut Termios, input: &AllFlags) -> io::Result<()> {
     if let AllFlags::Baud(rate, baud_type) = input {
         match baud_type {
-            flags::BaudType::Input => cfsetispeed(termios, *rate)?,
-            flags::BaudType::Output => cfsetospeed(termios, *rate)?,
+            flags::BaudType::Input => termios.set_input_speed(*rate)?,
+            flags::BaudType::Output => termios.set_output_speed(*rate)?,
             flags::BaudType::Both => {
-                cfsetispeed(termios, *rate)?;
-                cfsetospeed(termios, *rate)?;
+                termios.set_input_speed(*rate)?;
+                termios.set_output_speed(*rate)?;
             }
         }
     }
@@ -1006,7 +1016,7 @@ fn apply_baud_rate_flag(termios: &mut Termios, input: &AllFlags) -> nix::Result<
 }
 
 fn apply_char_mapping(termios: &mut Termios, mapping: &(S, u8)) {
-    termios.control_chars[mapping.0 as usize] = mapping.1;
+    termios.special_codes[mapping.0] = mapping.1;
 }
 
 /// Apply a saved terminal state to the current termios.
@@ -1027,15 +1037,19 @@ fn apply_saved_state(termios: &mut Termios, state: &[u32]) {
     }
 
     // Apply the four flag groups, done (as _) for MacOS size compatibility
-    termios.input_flags = InputFlags::from_bits_truncate(state[0] as _);
-    termios.output_flags = OutputFlags::from_bits_truncate(state[1] as _);
-    termios.control_flags = ControlFlags::from_bits_truncate(state[2] as _);
-    termios.local_flags = LocalFlags::from_bits_truncate(state[3] as _);
+    termios.input_modes = InputFlags::from_bits_truncate(state[0] as _);
+    termios.output_modes = OutputFlags::from_bits_truncate(state[1] as _);
+    termios.control_modes = ControlFlags::from_bits_truncate(state[2] as _);
+    termios.local_modes = LocalFlags::from_bits_truncate(state[3] as _);
 
     // Apply control characters if present (stored as u32 but used as u8)
+    // Access the raw cc array via pointer cast since rustix doesn't expose the inner array.
+    let cc_ptr = (&raw mut termios.special_codes).cast::<[libc::cc_t; libc::NCCS]>();
+    // SAFETY: SpecialCodes is a transparent wrapper around [cc_t; NCCS]
+    let cc_array = unsafe { &mut *cc_ptr };
     for (i, &cc_val) in state.iter().skip(4).enumerate() {
-        if i < termios.control_chars.len() {
-            termios.control_chars[i] = cc_val as u8;
+        if i < cc_array.len() {
+            cc_array[i] = cc_val as u8;
         }
     }
 }
@@ -1044,7 +1058,7 @@ fn apply_special_setting(
     _termios: &mut Termios,
     setting: &SpecialSetting,
     fd: i32,
-) -> nix::Result<()> {
+) -> io::Result<()> {
     let mut size = TermSize::default();
     unsafe { tiocgwinsz(fd, &raw mut size)? };
     match setting {
@@ -1241,15 +1255,7 @@ fn get_sane_control_char(cc_index: S) -> u8 {
         }
     }
     // Default values for control chars not in the sane list
-    match cc_index {
-        S::VEOL => 0,
-        S::VEOL2 => 0,
-        S::VMIN => 1,
-        S::VTIME => 0,
-        #[cfg(target_os = "linux")]
-        S::VSWTC => 0,
-        _ => 0,
-    }
+    u8::from(cc_index == S::VMIN)
 }
 
 pub fn uu_app() -> Command {
@@ -1291,45 +1297,45 @@ pub fn uu_app() -> Command {
 
 impl TermiosFlag for ControlFlags {
     fn is_in(&self, termios: &Termios, group: Option<Self>) -> bool {
-        termios.control_flags.contains(*self)
-            && group.is_none_or(|g| !termios.control_flags.intersects(g - *self))
+        termios.control_modes.contains(*self)
+            && group.is_none_or(|g| !termios.control_modes.intersects(g - *self))
     }
 
     fn apply(&self, termios: &mut Termios, val: bool) {
-        termios.control_flags.set(*self, val);
+        termios.control_modes.set(*self, val);
     }
 }
 
 impl TermiosFlag for InputFlags {
     fn is_in(&self, termios: &Termios, group: Option<Self>) -> bool {
-        termios.input_flags.contains(*self)
-            && group.is_none_or(|g| !termios.input_flags.intersects(g - *self))
+        termios.input_modes.contains(*self)
+            && group.is_none_or(|g| !termios.input_modes.intersects(g - *self))
     }
 
     fn apply(&self, termios: &mut Termios, val: bool) {
-        termios.input_flags.set(*self, val);
+        termios.input_modes.set(*self, val);
     }
 }
 
 impl TermiosFlag for OutputFlags {
     fn is_in(&self, termios: &Termios, group: Option<Self>) -> bool {
-        termios.output_flags.contains(*self)
-            && group.is_none_or(|g| !termios.output_flags.intersects(g - *self))
+        termios.output_modes.contains(*self)
+            && group.is_none_or(|g| !termios.output_modes.intersects(g - *self))
     }
 
     fn apply(&self, termios: &mut Termios, val: bool) {
-        termios.output_flags.set(*self, val);
+        termios.output_modes.set(*self, val);
     }
 }
 
 impl TermiosFlag for LocalFlags {
     fn is_in(&self, termios: &Termios, group: Option<Self>) -> bool {
-        termios.local_flags.contains(*self)
-            && group.is_none_or(|g| !termios.local_flags.intersects(g - *self))
+        termios.local_modes.contains(*self)
+            && group.is_none_or(|g| !termios.local_modes.intersects(g - *self))
     }
 
     fn apply(&self, termios: &mut Termios, val: bool) {
-        termios.local_flags.set(*self, val);
+        termios.local_modes.set(*self, val);
     }
 }
 

@@ -13,11 +13,8 @@
 
 use crate::Flag;
 
-#[cfg(not(bsd))]
-use nix::sys::termios::BaudRate;
-use nix::sys::termios::{
-    ControlFlags as C, InputFlags as I, LocalFlags as L, OutputFlags as O,
-    SpecialCharacterIndices as S,
+use rustix::termios::{
+    ControlModes as C, InputModes as I, LocalModes as L, OutputModes as O, SpecialCodeIndex as S,
 };
 
 #[derive(Debug)]
@@ -31,10 +28,7 @@ pub enum BaudType {
 #[derive(Debug)]
 #[cfg_attr(test, derive(PartialEq))]
 pub enum AllFlags<'a> {
-    #[cfg(bsd)]
     Baud(u32, BaudType),
-    #[cfg(not(bsd))]
-    Baud(BaudRate, BaudType),
     ControlFlags((&'a Flag<C>, bool)),
     InputFlags((&'a Flag<I>, bool)),
     LocalFlags((&'a Flag<L>, bool)),
@@ -94,123 +88,88 @@ pub const OUTPUT_FLAGS: &[Flag<O>] = &[
     Flag::new("onlcr", O::ONLCR).sane(),
     Flag::new("onocr", O::ONOCR),
     Flag::new("onlret", O::ONLRET),
-    #[cfg(any(
-        target_os = "android",
-        target_os = "haiku",
-        target_os = "linux",
-        target_vendor = "apple"
-    ))]
+    // Output delay flags: only available on Linux (glibc) and Android.
+    // Not available on BSDs (macOS/iOS), musl, or other platforms in rustix.
+    #[cfg(any(target_os = "android", target_os = "haiku", target_os = "linux"))]
     Flag::new("ofdel", O::OFDEL),
-    #[cfg(any(
-        target_os = "android",
-        target_os = "haiku",
-        target_os = "linux",
-        target_vendor = "apple"
+    #[cfg(all(
+        any(target_os = "android", target_os = "haiku", target_os = "linux"),
+        not(target_env = "musl")
     ))]
     Flag::new_grouped("nl0", O::NL0, O::NLDLY).sane(),
-    #[cfg(any(
-        target_os = "android",
-        target_os = "haiku",
-        target_os = "linux",
-        target_vendor = "apple"
+    #[cfg(all(
+        any(target_os = "android", target_os = "haiku", target_os = "linux"),
+        not(target_env = "musl")
     ))]
     Flag::new_grouped("nl1", O::NL1, O::NLDLY),
-    #[cfg(any(
-        target_os = "android",
-        target_os = "haiku",
-        target_os = "linux",
-        target_vendor = "apple"
+    #[cfg(all(
+        any(target_os = "android", target_os = "haiku", target_os = "linux"),
+        not(target_env = "musl")
     ))]
     Flag::new_grouped("cr0", O::CR0, O::CRDLY).sane(),
-    #[cfg(any(
-        target_os = "android",
-        target_os = "haiku",
-        target_os = "linux",
-        target_vendor = "apple"
+    #[cfg(all(
+        any(target_os = "android", target_os = "haiku", target_os = "linux"),
+        not(target_env = "musl")
     ))]
     Flag::new_grouped("cr1", O::CR1, O::CRDLY),
-    #[cfg(any(
-        target_os = "android",
-        target_os = "haiku",
-        target_os = "linux",
-        target_vendor = "apple"
+    #[cfg(all(
+        any(target_os = "android", target_os = "haiku", target_os = "linux"),
+        not(target_env = "musl")
     ))]
     Flag::new_grouped("cr2", O::CR2, O::CRDLY),
-    #[cfg(any(
-        target_os = "android",
-        target_os = "haiku",
-        target_os = "linux",
-        target_vendor = "apple"
+    #[cfg(all(
+        any(target_os = "android", target_os = "haiku", target_os = "linux"),
+        not(target_env = "musl")
     ))]
     Flag::new_grouped("cr3", O::CR3, O::CRDLY),
-    #[cfg(any(
-        target_os = "android",
-        target_os = "haiku",
-        target_os = "linux",
-        target_vendor = "apple"
+    #[cfg(all(
+        any(target_os = "android", target_os = "haiku", target_os = "linux"),
+        not(target_env = "musl")
     ))]
     Flag::new_grouped("tab0", O::TAB0, O::TABDLY).sane(),
-    #[cfg(any(
-        target_os = "android",
-        target_os = "haiku",
-        target_os = "linux",
-        target_vendor = "apple"
+    #[cfg(all(
+        any(target_os = "android", target_os = "haiku", target_os = "linux"),
+        not(target_env = "musl")
     ))]
     Flag::new_grouped("tab1", O::TAB1, O::TABDLY),
-    #[cfg(any(
-        target_os = "android",
-        target_os = "haiku",
-        target_os = "linux",
-        target_vendor = "apple"
+    #[cfg(all(
+        any(target_os = "android", target_os = "haiku", target_os = "linux"),
+        not(target_env = "musl")
     ))]
     Flag::new_grouped("tab2", O::TAB2, O::TABDLY),
-    #[cfg(any(
-        target_os = "android",
-        target_os = "haiku",
-        target_os = "linux",
-        target_vendor = "apple"
+    #[cfg(all(
+        any(target_os = "android", target_os = "haiku", target_os = "linux"),
+        not(target_env = "musl")
     ))]
     Flag::new_grouped("tab3", O::TAB3, O::TABDLY),
-    #[cfg(any(
-        target_os = "android",
-        target_os = "haiku",
-        target_os = "linux",
-        target_vendor = "apple"
+    #[cfg(all(
+        any(target_os = "android", target_os = "haiku", target_os = "linux"),
+        not(target_env = "musl")
     ))]
     Flag::new_grouped("bs0", O::BS0, O::BSDLY).sane(),
-    #[cfg(any(
-        target_os = "android",
-        target_os = "haiku",
-        target_os = "linux",
-        target_vendor = "apple"
+    #[cfg(all(
+        any(target_os = "android", target_os = "haiku", target_os = "linux"),
+        not(target_env = "musl")
     ))]
     Flag::new_grouped("bs1", O::BS1, O::BSDLY),
-    #[cfg(any(
-        target_os = "android",
-        target_os = "haiku",
-        target_os = "linux",
-        target_vendor = "apple"
+    #[cfg(all(
+        any(target_os = "android", target_os = "haiku", target_os = "linux"),
+        not(target_env = "musl")
     ))]
     Flag::new_grouped("vt0", O::VT0, O::VTDLY).sane(),
-    #[cfg(any(
-        target_os = "android",
-        target_os = "haiku",
-        target_os = "linux",
-        target_vendor = "apple"
+    #[cfg(all(
+        any(target_os = "android", target_os = "haiku", target_os = "linux"),
+        not(target_env = "musl")
     ))]
     Flag::new_grouped("vt1", O::VT1, O::VTDLY),
-    #[cfg(any(
-        target_os = "android",
-        target_os = "haiku",
-        target_os = "linux",
-        target_vendor = "apple"
+    #[cfg(all(
+        any(target_os = "android", target_os = "haiku", target_os = "linux"),
+        not(target_env = "musl")
     ))]
     Flag::new_grouped("ff0", O::FF0, O::FFDLY).sane(),
-    #[cfg(any(
-        target_os = "android",
-        target_os = "haiku",
-        target_os = "linux",
-        target_vendor = "apple"
+    #[cfg(all(
+        any(target_os = "android", target_os = "haiku", target_os = "linux"),
+        not(target_env = "musl")
     ))]
     Flag::new_grouped("ff1", O::FF1, O::FFDLY),
 ];
@@ -241,63 +200,62 @@ pub const LOCAL_FLAGS: &[Flag<L>] = &[
     Flag::new("extproc", L::EXTPROC),
 ];
 
-// BSD's use u32 as baud rate, so using the enum is unnecessary.
+// Baud rate table mapping string names to speed values.
+// rustix uses actual integer speed values, not encoded B* constants.
 #[cfg(not(bsd))]
-pub const BAUD_RATES: &[(&str, BaudRate)] = &[
-    ("0", BaudRate::B0),
-    ("50", BaudRate::B50),
-    ("75", BaudRate::B75),
-    ("110", BaudRate::B110),
-    ("134", BaudRate::B134),
-    ("150", BaudRate::B150),
-    ("200", BaudRate::B200),
-    ("300", BaudRate::B300),
-    ("600", BaudRate::B600),
-    ("1200", BaudRate::B1200),
-    ("1800", BaudRate::B1800),
-    ("2400", BaudRate::B2400),
-    ("4800", BaudRate::B4800),
-    ("9600", BaudRate::B9600),
-    ("19200", BaudRate::B19200),
-    ("38400", BaudRate::B38400),
-    ("57600", BaudRate::B57600),
-    ("115200", BaudRate::B115200),
-    ("230400", BaudRate::B230400),
-    ("460800", BaudRate::B460800),
+pub const BAUD_RATES: &[(&str, u32)] = &[
+    ("0", 0),
+    ("50", 50),
+    ("75", 75),
+    ("110", 110),
+    ("134", 134),
+    ("150", 150),
+    ("200", 200),
+    ("300", 300),
+    ("600", 600),
+    ("1200", 1200),
+    ("1800", 1800),
+    ("2400", 2400),
+    ("9600", 9600),
+    ("19200", 19200),
+    ("38400", 38400),
+    ("57600", 57600),
+    ("115200", 115_200),
+    ("230400", 230_400),
     #[cfg(any(target_os = "android", target_os = "linux"))]
-    ("500000", BaudRate::B500000),
+    ("500000", 500_000),
     #[cfg(any(target_os = "android", target_os = "linux"))]
-    ("576000", BaudRate::B576000),
+    ("576000", 576_000),
     #[cfg(any(target_os = "android", target_os = "linux"))]
-    ("921600", BaudRate::B921600),
+    ("921600", 921_600),
     #[cfg(any(target_os = "android", target_os = "linux"))]
-    ("1000000", BaudRate::B1000000),
+    ("1000000", 1_000_000),
     #[cfg(any(target_os = "android", target_os = "linux"))]
-    ("1152000", BaudRate::B1152000),
+    ("1152000", 1_152_000),
     #[cfg(any(target_os = "android", target_os = "linux"))]
-    ("1500000", BaudRate::B1500000),
+    ("1500000", 1_500_000),
     #[cfg(any(target_os = "android", target_os = "linux"))]
-    ("2000000", BaudRate::B2000000),
+    ("2000000", 2_000_000),
     #[cfg(any(
         target_os = "android",
         all(target_os = "linux", not(target_arch = "sparc64"))
     ))]
-    ("2500000", BaudRate::B2500000),
+    ("2500000", 2_500_000),
     #[cfg(any(
         target_os = "android",
         all(target_os = "linux", not(target_arch = "sparc64"))
     ))]
-    ("3000000", BaudRate::B3000000),
+    ("3000000", 3_000_000),
     #[cfg(any(
         target_os = "android",
         all(target_os = "linux", not(target_arch = "sparc64"))
     ))]
-    ("3500000", BaudRate::B3500000),
+    ("3500000", 3_500_000),
     #[cfg(any(
         target_os = "android",
         all(target_os = "linux", not(target_arch = "sparc64"))
     ))]
-    ("4000000", BaudRate::B4000000),
+    ("4000000", 4_000_000),
 ];
 /// Control characters for the stty command.
 ///

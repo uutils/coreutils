@@ -110,17 +110,14 @@ fn physical_memory_bytes() -> Option<u128> {
     any(target_os = "linux", target_os = "android")
 ))]
 fn physical_memory_bytes_unix() -> Option<u128> {
-    use nix::unistd::{SysconfVar, sysconf};
+    let page_size = u128::try_from(rustix::param::page_size()).ok()?;
 
-    let pages = match sysconf(SysconfVar::_PHYS_PAGES) {
-        Ok(Some(pages)) if pages > 0 => u128::try_from(pages).ok()?,
-        _ => return None,
-    };
-
-    let page_size = match sysconf(SysconfVar::PAGE_SIZE) {
-        Ok(Some(page_size)) if page_size > 0 => u128::try_from(page_size).ok()?,
-        _ => return None,
-    };
+    // Use libc::sysconf for _SC_PHYS_PAGES since rustix doesn't expose it
+    let pages = unsafe { libc::sysconf(libc::_SC_PHYS_PAGES) };
+    if pages <= 0 {
+        return None;
+    }
+    let pages = u128::try_from(pages).ok()?;
 
     Some(pages.saturating_mul(page_size))
 }
