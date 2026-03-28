@@ -3,13 +3,13 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) tstr sigstr cmdname setpgid sigchld getpid
+// spell-checker:ignore (ToDO) tstr sigstr cmdname setpgid sigchld getpid getppid
 
 mod status;
 
 use crate::status::ExitStatus;
 use clap::{Arg, ArgAction, Command};
-use std::io::{ErrorKind, Write};
+use std::io::{Error, ErrorKind, Write};
 use std::os::unix::process::ExitStatusExt;
 use std::process::{self, Child, Stdio};
 use std::sync::atomic::{self, AtomicBool};
@@ -26,7 +26,7 @@ use uucore::{
 };
 
 use nix::sys::signal::{SigHandler, Signal, kill};
-use nix::unistd::{Pid, getpid, setpgid};
+use nix::unistd::{Pid, getpid, getppid, setpgid};
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 
@@ -379,6 +379,13 @@ fn timeout(
                 #[cfg(target_os = "linux")]
                 if let Some(sig) = death_sig {
                     let _ = nix::sys::prctl::set_pdeathsig(sig);
+                }
+                // Close the post-fork race where the timeout monitor can die
+                // after PDEATHSIG setup but before exec starts the target command.
+                if getppid().as_raw() == 1 {
+                    return Err(Error::other(
+                        translate!("timeout-error-monitor-exited-before-child-exec"),
+                    ));
                 }
                 Ok(())
             });
