@@ -1435,9 +1435,10 @@ pub(crate) fn current_open_fd_count() -> Option<usize> {
 
     let mut count = 0usize;
     for fd in 0..limit {
-        let fd = fd as libc::c_int;
-        // Probe with libc::fcntl because the fd may be invalid.
-        if unsafe { libc::fcntl(fd, libc::F_GETFD) } != -1 {
+        let fd = fd as std::os::fd::RawFd;
+        // SAFETY: We are only probing whether the fd is valid via fcntl_getfd;
+        // the borrowed fd is not used beyond this call.
+        if rustix::io::fcntl_getfd(unsafe { std::os::fd::BorrowedFd::borrow_raw(fd) }).is_ok() {
             count = count.saturating_add(1);
         }
     }

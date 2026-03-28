@@ -52,7 +52,7 @@ ctrlc = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
-rustix = { workspace = true, features = ["process", "param"] }
+rustix = { workspace = true, features = ["process", "param", "fs"] }
 
 [dev-dependencies]
 divan = { workspace = true }
