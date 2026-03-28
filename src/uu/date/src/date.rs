@@ -5,6 +5,7 @@
 
 // spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres AWST ACST AEST foobarbaz
 
+mod error;
 mod format_modifiers;
 mod locale;
 
@@ -29,6 +30,8 @@ use uucore::{format_usage, show};
 use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
 
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
+
+use crate::error::{Error, StdoutError};
 
 // Options
 const DATE: &str = "date";
@@ -283,6 +286,11 @@ fn parse_military_timezone_with_offset(s: &str) -> Option<(i32, DayDelta)> {
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    #[cfg(unix)]
+    if uucore::signals::stdout_was_closed() {
+        return Err(Error::from(StdoutError::BadFd).into());
+    }
+
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let date_source = if let Some(date_os) = matches.get_one::<std::ffi::OsString>(OPT_DATE) {
@@ -562,9 +570,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     &config,
                     skip_localization,
                 ) {
-                    Ok(s) => writeln!(stdout, "{s}").map_err(|e| {
-                        USimpleError::new(1, translate!("date-error-write", "error" => e))
-                    })?,
+                    Ok(s) => {
+                        writeln!(stdout, "{s}").map_err(|e| Error::from(StdoutError::Io(e)))?;
+                    }
                     Err(e) => {
                         let _ = stdout.flush();
                         return Err(USimpleError::new(
@@ -586,7 +594,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     stdout
         .flush()
-        .map_err(|e| USimpleError::new(1, translate!("date-error-write", "error" => e)))?;
+        .map_err(|e| Error::from(StdoutError::Io(e)))?;
     Ok(())
 }
 

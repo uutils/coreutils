@@ -105,7 +105,7 @@ date-error-setting-date-not-supported-macos = setting the date is not supported 
 date-error-setting-date-not-supported-redox = setting the date is not supported by Redox
 date-error-cannot-set-date = cannot set date
 date-error-extra-operand = extra operand '{$operand}'
-date-error-write = write error: {$error}
+date-error-stdout = standard output: {$error}
 date-error-format-missing-plus = the argument {$arg} lacks a leading '+';
   when using an option to specify date(s), any non-option
   argument must be a format string beginning with '+'
