@@ -10,15 +10,172 @@
 //! It provides a way to convert signal names to their corresponding values and vice versa.
 //! It also provides a way to ignore the SIGINT signal and enable pipe errors.
 
+// ---------------------------------------------------------------------------
+// Thin libc-based signal wrappers
+//
+// These replace nix's signal module for operations that rustix does not cover
+// (sigaction, signal(), SigSet, SigHandler, sigprocmask).
+// ---------------------------------------------------------------------------
 #[cfg(unix)]
-use nix::errno::Errno;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::libc;
-#[cfg(unix)]
-use nix::sys::signal::{
-    SaFlags, SigAction, SigHandler, SigHandler::SigDfl, SigHandler::SigIgn, SigSet, Signal,
-    Signal::SIGINT, Signal::SIGPIPE, sigaction, signal,
-};
+pub mod csignal {
+    use std::io;
+    use std::mem::MaybeUninit;
+
+    /// Signal handler disposition.
+    #[derive(Debug, Clone, Copy)]
+    pub enum SigHandler {
+        /// Default signal action.
+        SigDfl,
+        /// Ignore the signal.
+        SigIgn,
+        /// Call the given handler function.
+        Handler(extern "C" fn(libc::c_int)),
+    }
+
+    impl SigHandler {
+        fn to_sigaction_handler(self) -> libc::sighandler_t {
+            match self {
+                Self::SigDfl => libc::SIG_DFL,
+                Self::SigIgn => libc::SIG_IGN,
+                Self::Handler(f) => f as libc::sighandler_t,
+            }
+        }
+
+        fn from_sigaction_handler(handler: libc::sighandler_t) -> Self {
+            if handler == libc::SIG_DFL {
+                Self::SigDfl
+            } else if handler == libc::SIG_IGN {
+                Self::SigIgn
+            } else {
+                // SAFETY: the handler is a valid function pointer set by a previous signal() call
+                Self::Handler(unsafe {
+                    std::mem::transmute::<libc::sighandler_t, extern "C" fn(libc::c_int)>(handler)
+                })
+            }
+        }
+    }
+
+    /// Wrapper around `libc::sigset_t`.
+    #[derive(Clone)]
+    pub struct SigSet(libc::sigset_t);
+
+    impl SigSet {
+        /// Creates an empty signal set.
+        pub fn empty() -> Self {
+            let mut set = MaybeUninit::<libc::sigset_t>::uninit();
+            // SAFETY: sigemptyset initializes the sigset_t
+            unsafe { libc::sigemptyset(set.as_mut_ptr()) };
+            Self(unsafe { set.assume_init() })
+        }
+
+        /// Creates a signal set with all signals.
+        pub fn all() -> Self {
+            let mut set = MaybeUninit::<libc::sigset_t>::uninit();
+            // SAFETY: sigfillset initializes the sigset_t
+            unsafe { libc::sigfillset(set.as_mut_ptr()) };
+            Self(unsafe { set.assume_init() })
+        }
+
+        /// Adds a signal to the set.
+        pub fn add(&mut self, signum: libc::c_int) {
+            // SAFETY: sigaddset operates on a valid sigset_t
+            unsafe { libc::sigaddset(&raw mut self.0, signum) };
+        }
+
+        /// Returns a pointer to the inner sigset_t.
+        pub fn as_ptr(&self) -> *const libc::sigset_t {
+            &raw const self.0
+        }
+    }
+
+    /// Flags for `sigaction`.
+    pub mod sa_flags {
+        pub const SA_RESTART: libc::c_int = libc::SA_RESTART as libc::c_int;
+    }
+
+    /// How to modify the signal mask in `sigprocmask`.
+    #[derive(Debug, Clone, Copy)]
+    pub enum SigmaskHow {
+        /// Block the signals in the set.
+        Block,
+        /// Unblock the signals in the set.
+        Unblock,
+        /// Set the signal mask to the given set.
+        SetMask,
+    }
+
+    impl SigmaskHow {
+        fn as_libc(self) -> libc::c_int {
+            match self {
+                Self::Block => libc::SIG_BLOCK,
+                Self::Unblock => libc::SIG_UNBLOCK,
+                Self::SetMask => libc::SIG_SETMASK,
+            }
+        }
+    }
+
+    fn last_os_error() -> io::Error {
+        io::Error::last_os_error()
+    }
+
+    /// Set the disposition of a signal using `libc::signal()`.
+    ///
+    /// Returns the previous signal handler.
+    ///
+    /// # Safety
+    /// If `handler` is `SigHandler::Handler(f)`, the function `f` must be
+    /// async-signal-safe.
+    pub unsafe fn set_signal_handler(
+        signum: libc::c_int,
+        handler: SigHandler,
+    ) -> io::Result<SigHandler> {
+        let prev = unsafe { libc::signal(signum, handler.to_sigaction_handler()) };
+        if prev == libc::SIG_ERR {
+            Err(last_os_error())
+        } else {
+            Ok(SigHandler::from_sigaction_handler(prev))
+        }
+    }
+
+    /// Install a signal action using `libc::sigaction()`.
+    ///
+    /// # Safety
+    /// If the handler is a function pointer, it must be async-signal-safe.
+    pub unsafe fn set_signal_action(
+        signum: libc::c_int,
+        handler: SigHandler,
+        flags: libc::c_int,
+        mask: &SigSet,
+    ) -> io::Result<()> {
+        let mut sa: libc::sigaction = unsafe { std::mem::zeroed() };
+        sa.sa_sigaction = handler.to_sigaction_handler();
+        sa.sa_flags = flags as _;
+        sa.sa_mask = mask.0;
+
+        let ret = unsafe { libc::sigaction(signum, &raw const sa, std::ptr::null_mut()) };
+        if ret == -1 {
+            Err(last_os_error())
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Block/unblock/set signal mask using `libc::sigprocmask()`.
+    pub fn sigprocmask(
+        how: SigmaskHow,
+        set: Option<&SigSet>,
+        oldset: Option<&mut SigSet>,
+    ) -> io::Result<()> {
+        let set_ptr = set.map_or(std::ptr::null(), SigSet::as_ptr);
+        let oldset_ptr = oldset.map_or(std::ptr::null_mut(), |s| &raw mut s.0);
+        let ret = unsafe { libc::sigprocmask(how.as_libc(), set_ptr, oldset_ptr) };
+        if ret == -1 {
+            Err(last_os_error())
+        } else {
+            Ok(())
+        }
+    }
+}
 
 /// The default signal value.
 pub static DEFAULT_SIGNAL: usize = 15;
@@ -485,42 +642,41 @@ pub fn signal_list_value_by_name_or_number(spec: &str) -> Option<usize> {
 
 /// Restores SIGPIPE to default behavior (process terminates on broken pipe).
 #[cfg(unix)]
-pub fn enable_pipe_errors() -> Result<(), Errno> {
-    // We pass the error as is, the return value would just be Ok(SigDfl), so we can safely ignore it.
-    // SAFETY: this function is safe as long as we do not use a custom SigHandler -- we use the default one.
-    unsafe { signal(SIGPIPE, SigDfl) }.map(|_| ())
+pub fn enable_pipe_errors() -> std::io::Result<()> {
+    // SAFETY: SigDfl is always safe.
+    unsafe { csignal::set_signal_handler(libc::SIGPIPE, csignal::SigHandler::SigDfl) }.map(|_| ())
 }
 
 /// Ignores SIGPIPE signal (broken pipe errors are returned instead of terminating).
 /// Use this to override the default SIGPIPE handling when you need to handle
 /// broken pipe errors gracefully (e.g., tee with --output-error).
 #[cfg(unix)]
-pub fn disable_pipe_errors() -> Result<(), Errno> {
-    // SAFETY: this function is safe as long as we do not use a custom SigHandler -- we use the default one.
-    unsafe { signal(SIGPIPE, SigIgn) }.map(|_| ())
+pub fn disable_pipe_errors() -> std::io::Result<()> {
+    // SAFETY: SigIgn is always safe.
+    unsafe { csignal::set_signal_handler(libc::SIGPIPE, csignal::SigHandler::SigIgn) }.map(|_| ())
 }
 
 /// Ignores the SIGINT signal.
 #[cfg(unix)]
-pub fn ignore_interrupts() -> Result<(), Errno> {
-    // We pass the error as is, the return value would just be Ok(SigIgn), so we can safely ignore it.
-    // SAFETY: this function is safe as long as we do not use a custom SigHandler -- we use the default one.
-    unsafe { signal(SIGINT, SigIgn) }.map(|_| ())
+pub fn ignore_interrupts() -> std::io::Result<()> {
+    // SAFETY: SigIgn is always safe.
+    unsafe { csignal::set_signal_handler(libc::SIGINT, csignal::SigHandler::SigIgn) }.map(|_| ())
 }
 
 /// Installs a signal handler. The handler must be async-signal-safe.
 #[cfg(unix)]
 pub fn install_signal_handler(
-    sig: Signal,
-    handler: extern "C" fn(std::os::raw::c_int),
-) -> Result<(), Errno> {
-    let action = SigAction::new(
-        SigHandler::Handler(handler),
-        SaFlags::SA_RESTART,
-        SigSet::empty(),
-    );
-    unsafe { sigaction(sig, &action) }?;
-    Ok(())
+    sig: libc::c_int,
+    handler: extern "C" fn(libc::c_int),
+) -> std::io::Result<()> {
+    unsafe {
+        csignal::set_signal_action(
+            sig,
+            csignal::SigHandler::Handler(handler),
+            csignal::sa_flags::SA_RESTART,
+            &csignal::SigSet::empty(),
+        )
+    }
 }
 
 // Detect closed stdin/stdout before Rust reopens them as /dev/null (see issue #2873)
@@ -651,10 +807,9 @@ pub const fn sigpipe_was_ignored() -> bool {
 
 #[cfg(target_os = "linux")]
 pub fn ensure_stdout_not_broken() -> std::io::Result<bool> {
-    use nix::{
-        poll::{PollFd, PollFlags, PollTimeout, poll},
-        sys::stat::{SFlag, fstat},
-    };
+    use rustix::event::{PollFd, PollFlags, poll};
+    use rustix::fs::fstat;
+    use rustix::time::Timespec;
     use std::io::stdout;
     use std::os::fd::AsFd;
 
@@ -662,32 +817,31 @@ pub fn ensure_stdout_not_broken() -> std::io::Result<bool> {
 
     // First, check that stdout is a fifo and return true if it's not the case
     let stat = fstat(out.as_fd())?;
-    if !SFlag::from_bits_truncate(stat.st_mode).contains(SFlag::S_IFIFO) {
+    if (stat.st_mode & libc::S_IFMT) != libc::S_IFIFO {
         return Ok(true);
     }
 
     // POLLRDBAND is the flag used by GNU tee.
-    let mut pfds = [PollFd::new(out.as_fd(), PollFlags::POLLRDBAND)];
+    let mut pfds = [PollFd::new(&out, PollFlags::RDBAND)];
 
     // Then, ensure that the pipe is not broken.
-    // Use ZERO timeout to return immediately - we just want to check the current state.
-    let res = poll(&mut pfds, PollTimeout::ZERO)?;
+    // Use 0 timeout to return immediately - we just want to check the current state.
+    let zero_timeout = Timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    let res = poll(&mut pfds, Some(&zero_timeout))?;
 
     if res > 0 {
         // poll returned with events ready - check if POLLERR is set (pipe broken)
-        let error = pfds.iter().any(|pfd| {
-            if let Some(revents) = pfd.revents() {
-                revents.contains(PollFlags::POLLERR)
-            } else {
-                true
-            }
-        });
+        let error = pfds
+            .iter()
+            .any(|pfd| pfd.revents().contains(PollFlags::ERR));
         return Ok(!error);
     }
 
-    // res == 0 means no events ready (timeout reached immediately with ZERO timeout).
+    // res == 0 means no events ready (timeout reached immediately with 0 timeout).
     // This means the pipe is healthy (not broken).
-    // res < 0 would be an error, but nix returns Err in that case.
     Ok(true)
 }
 

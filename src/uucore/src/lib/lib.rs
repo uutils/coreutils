@@ -131,11 +131,7 @@ pub use crate::features::smack;
 //## core functions
 
 #[cfg(unix)]
-use nix::errno::Errno;
-#[cfg(unix)]
-use nix::sys::signal::{
-    SaFlags, SigAction, SigHandler::SigDfl, SigSet, Signal::SIGBUS, Signal::SIGSEGV, sigaction,
-};
+use crate::signals::csignal;
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, BufReader};
@@ -151,17 +147,21 @@ use std::sync::{LazyLock, atomic::Ordering};
 /// Disables the custom signal handlers installed by Rust for stack-overflow handling. With those custom signal handlers processes ignore the first SIGBUS and SIGSEGV signal they receive.
 /// See <https://github.com/rust-lang/rust/blob/8ac1525e091d3db28e67adcbbd6db1e1deaa37fb/src/libstd/sys/unix/stack_overflow.rs#L71-L92> for details.
 #[cfg(unix)]
-pub fn disable_rust_signal_handlers() -> Result<(), Errno> {
+pub fn disable_rust_signal_handlers() -> std::io::Result<()> {
     unsafe {
-        sigaction(
-            SIGSEGV,
-            &SigAction::new(SigDfl, SaFlags::empty(), SigSet::all()),
+        csignal::set_signal_action(
+            libc::SIGSEGV,
+            csignal::SigHandler::SigDfl,
+            0,
+            &csignal::SigSet::all(),
         )
     }?;
     unsafe {
-        sigaction(
-            SIGBUS,
-            &SigAction::new(SigDfl, SaFlags::empty(), SigSet::all()),
+        csignal::set_signal_action(
+            libc::SIGBUS,
+            csignal::SigHandler::SigDfl,
+            0,
+            &csignal::SigSet::all(),
         )
     }?;
     Ok(())
