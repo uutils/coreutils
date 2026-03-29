@@ -8,6 +8,7 @@
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 
 // spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef GETFD localeconv foldhash
+// spell-checker:ignore (misc) uppercased qsort getmonth juin juil
 
 mod buffer_hint;
 mod check;
@@ -42,6 +43,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::Utf8Error;
+use std::sync::OnceLock;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, strip_errno};
@@ -49,6 +51,7 @@ use uucore::error::{UError, UResult, USimpleError, UUsageError};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
 #[cfg(feature = "i18n-collator")]
 use uucore::i18n::collator::{compute_sort_key_utf8, locale_cmp};
+use uucore::i18n::datetime::get_locale_months;
 use uucore::i18n::decimal::locale_decimal_separator;
 use uucore::line_ending::LineEnding;
 use uucore::parser::num_parser::{ExtendedParser, ExtendedParserError};
@@ -787,31 +790,23 @@ impl<'a> Line<'a> {
                 }
                 SortMode::Month => {
                     let initial_selection = &self.line[selection.clone()];
-
-                    let mut month_chars = initial_selection
+                    let first_non_blank = initial_selection
                         .iter()
-                        .enumerate()
-                        .skip_while(|(_, c)| c.is_ascii_whitespace());
+                        .position(|c| !c.is_ascii_whitespace())
+                        .unwrap_or(initial_selection.len());
 
-                    let month = if month_parse(initial_selection) == Month::Unknown {
+                    let (parsed, match_len) = month_parse(initial_selection);
+
+                    if parsed == Month::Unknown {
                         // We failed to parse a month, which is equivalent to matching nothing.
                         // Add the "no match for key" marker to the first non-whitespace character.
-                        let first_non_whitespace = month_chars.next();
-                        first_non_whitespace.map_or(
-                            initial_selection.len()..initial_selection.len(),
-                            |(idx, _)| idx..idx,
-                        )
+                        selection.start += first_non_blank;
+                        selection.end = selection.start;
                     } else {
-                        // We parsed a month. Match the first three non-whitespace characters, which must be the month we parsed.
-                        month_chars.next().unwrap().0
-                            ..month_chars
-                                .nth(2)
-                                .map_or(initial_selection.len(), |(idx, _)| idx)
-                    };
-
-                    // Shorten selection to month.
-                    selection.start += month.start;
-                    selection.end = selection.start + month.len();
+                        // We parsed a month. Use the actual match byte length.
+                        selection.start += first_non_blank;
+                        selection.end = selection.start + match_len;
+                    }
                 }
                 _ => {}
             }
@@ -3021,30 +3016,79 @@ enum Month {
     December,
 }
 
+/// Cached locale month lookup table.
+/// Each entry is (uppercased_name, month_value).
+type MonthTable = Vec<(Vec<u8>, Month)>;
+
+fn get_locale_month_table() -> Option<&'static MonthTable> {
+    static TABLE: OnceLock<Option<MonthTable>> = OnceLock::new();
+
+    TABLE
+        .get_or_init(|| {
+            let months = get_locale_months()?;
+            let all_months = [
+                Month::January,
+                Month::February,
+                Month::March,
+                Month::April,
+                Month::May,
+                Month::June,
+                Month::July,
+                Month::August,
+                Month::September,
+                Month::October,
+                Month::November,
+                Month::December,
+            ];
+            let table: Vec<(Vec<u8>, Month)> = months
+                .iter()
+                .zip(all_months.iter())
+                .map(|(name, &month)| (name.clone(), month))
+                .collect();
+            Some(table)
+        })
+        .as_ref()
+}
+
 /// Parse the beginning string into a Month, returning [`Month::Unknown`] on errors.
-fn month_parse(line: &[u8]) -> Month {
+/// Also returns the byte length consumed from the input (after leading blanks).
+///
+/// The stored locale month names have blanks stripped and are uppercased.
+/// Comparison against input is case-insensitive but NOT blank-insensitive:
+/// the input must match the stored name exactly (after leading blank trimming).
+fn month_parse(line: &[u8]) -> (Month, usize) {
     let line = line.trim_ascii_start();
 
+    // Try locale-specific month names by scanning all entries.
+    if let Some(table) = get_locale_month_table() {
+        for (name, month) in table {
+            if line.len() >= name.len() && line[..name.len()].eq_ignore_ascii_case(name) {
+                return (*month, name.len());
+            }
+        }
+    }
+
+    // Fall back to English 3-letter abbreviations
     match line.get(..3).map(<[u8]>::to_ascii_uppercase).as_deref() {
-        Some(b"JAN") => Month::January,
-        Some(b"FEB") => Month::February,
-        Some(b"MAR") => Month::March,
-        Some(b"APR") => Month::April,
-        Some(b"MAY") => Month::May,
-        Some(b"JUN") => Month::June,
-        Some(b"JUL") => Month::July,
-        Some(b"AUG") => Month::August,
-        Some(b"SEP") => Month::September,
-        Some(b"OCT") => Month::October,
-        Some(b"NOV") => Month::November,
-        Some(b"DEC") => Month::December,
-        _ => Month::Unknown,
+        Some(b"JAN") => (Month::January, 3),
+        Some(b"FEB") => (Month::February, 3),
+        Some(b"MAR") => (Month::March, 3),
+        Some(b"APR") => (Month::April, 3),
+        Some(b"MAY") => (Month::May, 3),
+        Some(b"JUN") => (Month::June, 3),
+        Some(b"JUL") => (Month::July, 3),
+        Some(b"AUG") => (Month::August, 3),
+        Some(b"SEP") => (Month::September, 3),
+        Some(b"OCT") => (Month::October, 3),
+        Some(b"NOV") => (Month::November, 3),
+        Some(b"DEC") => (Month::December, 3),
+        _ => (Month::Unknown, 0),
     }
 }
 
 fn month_compare(a: &[u8], b: &[u8]) -> Ordering {
-    let ma = month_parse(a);
-    let mb = month_parse(b);
+    let ma = month_parse(a).0;
+    let mb = month_parse(b).0;
 
     ma.cmp(&mb)
 }

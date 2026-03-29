@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) ints (linux) NOFILE dfgi
+// spell-checker:ignore (words) ints (linux) NOFILE dfgi abmon
 #![allow(clippy::cast_possible_wrap)]
 
 use std::env;
@@ -15,6 +15,8 @@ use std::time::Duration;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
+#[cfg(unix)]
+use uutests::util::is_locale_available;
 
 fn test_helper(file_name: &str, possible_args: &[&str]) {
     for args in possible_args {
@@ -601,6 +603,160 @@ fn test_month_default2() {
             .succeeds()
             .stdout_only("000may\nJAn\nFeb\nMAY\nJun\n");
     }
+}
+
+/// Query the system for abbreviated month names via `locale abmon`.
+/// Returns a vector of 12 month abbreviations in order (Jan..Dec),
+/// or None if the command fails or returns unexpected output.
+#[cfg(any(target_vendor = "apple", target_os = "openbsd"))]
+fn get_system_abmon(locale: &str) -> Option<Vec<String>> {
+    let output = Command::new("locale")
+        .env("LC_ALL", locale)
+        .arg("abmon")
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8(output.stdout).ok()?;
+    let months: Vec<String> = text
+        .trim()
+        .split(';')
+        .map(String::from)
+        .filter(|m| !m.is_empty())
+        .collect();
+    if months.len() == 12 {
+        Some(months)
+    } else {
+        None
+    }
+}
+
+/// Build shuffled input and sorted expected output from month names.
+#[cfg(any(target_vendor = "apple", target_os = "openbsd"))]
+fn month_sort_input_expected(months: &[String]) -> (String, String) {
+    // Shuffled order: May, Dec, Jan, Jun, Feb, Mar, Apr, Jul, Aug, Sep, Oct, Nov
+    let shuffle_order = [4, 11, 0, 5, 1, 2, 3, 6, 7, 8, 9, 10];
+    let input = shuffle_order
+        .iter()
+        .map(|&i| months[i].as_str())
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n";
+    let expected = months.join("\n") + "\n";
+    (input, expected)
+}
+
+#[test]
+#[cfg(unix)]
+fn test_month_sort_french_locale() {
+    let locale = "fr_FR.UTF-8";
+    if !is_locale_available(locale) {
+        return;
+    }
+    // spell-checker:disable
+    // On macOS/OpenBSD, abbreviated month names vary across OS versions (different CLDR data),
+    // so we query the system dynamically. On other platforms, glibc values are stable.
+    #[cfg(any(target_vendor = "apple", target_os = "openbsd"))]
+    let (input, expected) = {
+        let Some(months) = get_system_abmon(locale) else {
+            return;
+        };
+        month_sort_input_expected(&months)
+    };
+    #[cfg(not(any(target_vendor = "apple", target_os = "openbsd")))]
+    let (input, expected) = (
+        "mai\ndéc.\njanv.\njuin\nfévr.\nmars\navril\njuil.\naoût\nsept.\noct.\nnov.\n".to_string(),
+        "janv.\nfévr.\nmars\navril\nmai\njuin\njuil.\naoût\nsept.\noct.\nnov.\ndéc.\n".to_string(),
+    );
+    // spell-checker:enable
+    new_ucmd!()
+        .env("LC_ALL", locale)
+        .arg("-M")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_month_sort_hungarian_locale() {
+    let locale = "hu_HU.UTF-8";
+    if !is_locale_available(locale) {
+        return;
+    }
+    // spell-checker:disable
+    #[cfg(any(target_vendor = "apple", target_os = "openbsd"))]
+    let (input, expected) = {
+        let Some(months) = get_system_abmon(locale) else {
+            return;
+        };
+        month_sort_input_expected(&months)
+    };
+    #[cfg(not(any(target_vendor = "apple", target_os = "openbsd")))]
+    let (input, expected) = (
+        "máj\ndec\njan\njún\nfebr\nmárc\nápr\njúl\naug\nszept\nokt\nnov\n".to_string(),
+        "jan\nfebr\nmárc\nápr\nmáj\njún\njúl\naug\nszept\nokt\nnov\ndec\n".to_string(),
+    );
+    // spell-checker:enable
+    new_ucmd!()
+        .env("LC_ALL", locale)
+        .arg("-M")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
+/// Test that embedded blanks in month names cause a non-match (GNU compat).
+/// E.g. "av   ril" should NOT match "avril" — GNU treats it as unknown.
+#[test]
+#[cfg(unix)]
+fn test_month_sort_french_embedded_blanks() {
+    let locale = "fr_FR.UTF-8";
+    if !is_locale_available(locale) {
+        return;
+    }
+    // spell-checker:disable
+    // "av   ril" has embedded spaces and should NOT be recognized as avril.
+    // GNU sort -M treats it as unknown, sorting it before any recognized month.
+    let input = "juin\nav   ril\nmars\nfévr.\n";
+    let expected = "av   ril\nfévr.\nmars\njuin\n";
+    // spell-checker:enable
+    new_ucmd!()
+        .env("LC_ALL", locale)
+        .arg("-M")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_month_sort_japanese_locale() {
+    let locale = "ja_JP.UTF-8";
+    if !is_locale_available(locale) {
+        return;
+    }
+    // On OpenBSD, abbreviated month names may differ, so query dynamically.
+    #[cfg(target_os = "openbsd")]
+    let (input, expected) = {
+        let Some(months) = get_system_abmon(locale) else {
+            return;
+        };
+        month_sort_input_expected(&months)
+    };
+    // Japanese abbreviated months are numeric (1月..12月) on glibc/macOS
+    #[cfg(not(target_os = "openbsd"))]
+    let (input, expected) = (
+        "5月\n12月\n1月\n6月\n2月\n3月\n4月\n7月\n8月\n9月\n10月\n11月\n".to_string(),
+        "1月\n2月\n3月\n4月\n5月\n6月\n7月\n8月\n9月\n10月\n11月\n12月\n".to_string(),
+    );
+    new_ucmd!()
+        .env("LC_ALL", locale)
+        .arg("-M")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
 }
 
 #[test]
