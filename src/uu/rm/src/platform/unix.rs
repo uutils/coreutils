@@ -349,7 +349,11 @@ pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Opt
             return !options.force;
         }
         Err(e) => {
-            return handle_error_with_force(e, path, options);
+            let e = e.map_err_context(
+                || translate!("rm-error-traversal-failed", "path" => path.display().to_string()),
+            );
+            show_error!("{e}");
+            return true;
         }
     };
 

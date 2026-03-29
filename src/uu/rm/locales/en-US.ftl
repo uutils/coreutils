@@ -44,6 +44,7 @@ rm-error-dangerous-recursive-operation-same-as-root = it is dangerous to operate
 rm-error-use-no-preserve-root = use --no-preserve-root to override this failsafe
 rm-error-refusing-to-remove-directory = refusing to remove '.' or '..' directory: skipping {$path}
 rm-error-cannot-remove = cannot remove {$file}
+rm-error-traversal-failed = traversal failed: {$path}
 rm-error-may-not-abbreviate-no-preserve-root = you may not abbreviate the --no-preserve-root option
 
 # Verbose messages
