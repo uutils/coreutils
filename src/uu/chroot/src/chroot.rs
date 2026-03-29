@@ -391,17 +391,18 @@ fn set_supplemental_gids_with_strategy(
 
 /// Change the root, set the user ID, and set the group IDs for this process.
 fn set_context(options: &Options) -> UResult<()> {
-    enter_chroot(&options.newroot, options.skip_chdir)?;
     match &options.userspec {
         None | Some(UserSpec::NeitherGroupNorUser) => {
             let strategy = Strategy::Nothing;
             set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
+            enter_chroot(&options.newroot, options.skip_chdir)?;
         }
         Some(UserSpec::UserOnly(user)) => {
             let uid = name_to_uid(user)?;
             let gid = usr2gid(user).map_err(|_| ChrootError::NoGroupSpecified(uid))?;
             let strategy = Strategy::FromUID(uid, false);
             set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
+            enter_chroot(&options.newroot, options.skip_chdir)?;
             set_gid(gid).map_err(|e| ChrootError::SetGidFailed(user.to_owned(), e))?;
             set_uid(uid).map_err(|e| ChrootError::SetUserFailed(user.to_owned(), e))?;
         }
@@ -409,6 +410,7 @@ fn set_context(options: &Options) -> UResult<()> {
             let gid = name_to_gid(group)?;
             let strategy = Strategy::Nothing;
             set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
+            enter_chroot(&options.newroot, options.skip_chdir)?;
             set_gid(gid).map_err(|e| ChrootError::SetGidFailed(group.to_owned(), e))?;
         }
         Some(UserSpec::UserAndGroup(user, group)) => {
@@ -416,6 +418,7 @@ fn set_context(options: &Options) -> UResult<()> {
             let gid = name_to_gid(group)?;
             let strategy = Strategy::FromUID(uid, true);
             set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
+            enter_chroot(&options.newroot, options.skip_chdir)?;
             set_gid(gid).map_err(|e| ChrootError::SetGidFailed(group.to_owned(), e))?;
             set_uid(uid).map_err(|e| ChrootError::SetUserFailed(user.to_owned(), e))?;
         }
