@@ -765,6 +765,7 @@ fn display_item_name(
                                 target_path.file_name().map(Cow::Borrowed),
                                 config,
                                 false,
+                                false,
                             );
 
                             // Check if the target actually needs coloring
