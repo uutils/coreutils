@@ -1620,6 +1620,45 @@ fn test_date_locale_en_us_vs_c_difference() {
 }
 
 #[test]
+fn test_date_locale_hu_hungarian() {
+    // Test Hungarian locale (hu_HU.UTF-8) behavior
+    // Hungarian typically uses 24-hour format and may have localized day/month names
+
+    let result = new_ucmd!()
+        .env("LC_ALL", "hu_HU.UTF-8")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-12-14T13:00:00")
+        .succeeds();
+
+    let stdout = result.stdout_str();
+
+    // Hungarian locale should use 24-hour format (no AM/PM)
+    assert!(
+        !stdout.contains("AM") && !stdout.contains("PM"),
+        "Hungarian locale should use 24-hour format (no AM/PM), got: {stdout}"
+    );
+
+    // Should have 13:00 (not 1:00)
+    assert!(
+        stdout.contains("13:00"),
+        "Hungarian locale should show 13:00 for 1 PM, got: {stdout}"
+    );
+
+    // Timezone should be included (our implementation adds %Z if missing)
+    assert!(
+        stdout.contains("UTC") || stdout.contains("+00") || stdout.contains('Z'),
+        "Output should include timezone information, got: {stdout}"
+    );
+
+    // Check proper formatting (no double dots, day name, etc.) of entire output
+    assert!(
+        stdout == "2025. dec. 14., vasárnap, 13:00:00 UTC\n",
+        "Incorrect Hungarian output format, got: {stdout}"
+    );
+}
+
+#[test]
 #[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
 fn test_date_locale_fr_french() {
     // Test French locale (fr_FR.UTF-8) behavior
@@ -2149,6 +2188,7 @@ fn test_locale_month_names() {
         ("es_ES.UTF-8", "enero", "junio", "diciembre"),
         ("it_IT.UTF-8", "gennaio", "giugno", "dicembre"),
         ("pt_BR.UTF-8", "janeiro", "junho", "dezembro"),
+        ("hu_HU.UTF-8", "január", "június", "december"),
         ("ja_JP.UTF-8", "1月", "6月", "12月"),
         ("zh_CN.UTF-8", "一月", "六月", "十二月"),
     ] {
