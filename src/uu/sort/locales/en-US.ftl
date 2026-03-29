@@ -53,6 +53,7 @@ sort-failed-fetch-rlimit = Failed to fetch rlimit
 sort-invalid-suffix-in-option-arg = invalid suffix in --{$option} argument {$arg}
 sort-invalid-option-arg = invalid --{$option} argument {$arg}
 sort-option-arg-too-large = --{$option} argument {$arg} too large
+sort-error-builder-config = invalid configuration for {$option}: {$error}
 sort-error-disorder = {$file}:{$line_number}: disorder: {$line}
 sort-error-buffer-size-too-big = Buffer size {$size} does not fit in address space
 sort-error-no-match-for-key = ^ no match for key

@@ -9,7 +9,9 @@ use std::{env, fmt};
 
 use uucore::{
     display::Quotable,
-    parser::parse_size::{ParseSizeError, parse_size_non_zero_u64, parse_size_u64},
+    parser::parse_size::{
+        ParseSizeError, extract_thousands_separator_flag, parse_size_non_zero_u64, parse_size_u64,
+    },
 };
 
 /// The first ten powers of 1024.
@@ -160,6 +162,13 @@ pub(crate) enum BlockSize {
     Bytes(u64),
 }
 
+/// Configuration for block size display, including thousands separator flag.
+#[derive(Debug, PartialEq)]
+pub(crate) struct BlockSizeConfig {
+    pub(crate) block_size: BlockSize,
+    pub(crate) use_thousands_separator: bool,
+}
+
 impl BlockSize {
     /// Returns the associated value
     pub(crate) fn as_u64(&self) -> u64 {
@@ -191,29 +200,47 @@ impl Default for BlockSize {
     }
 }
 
-pub(crate) fn read_block_size(matches: &ArgMatches) -> Result<BlockSize, ParseSizeError> {
+pub(crate) fn read_block_size(matches: &ArgMatches) -> Result<BlockSizeConfig, ParseSizeError> {
     if matches.contains_id(OPT_BLOCKSIZE) {
         let s = matches.get_one::<String>(OPT_BLOCKSIZE).unwrap();
-        let bytes = parse_size_u64(s)?;
+        let (cleaned, use_thousands) = extract_thousands_separator_flag(s);
+        let bytes = parse_size_u64(cleaned)?;
 
         if bytes > 0 {
-            Ok(BlockSize::Bytes(bytes))
+            Ok(BlockSizeConfig {
+                block_size: BlockSize::Bytes(bytes),
+                use_thousands_separator: use_thousands,
+            })
         } else {
             Err(ParseSizeError::ParseFailure(format!("{}", s.quote())))
         }
     } else if matches.get_flag(OPT_PORTABILITY) {
-        Ok(BlockSize::default())
-    } else if let Some(bytes) = block_size_from_env() {
-        Ok(BlockSize::Bytes(bytes))
+        Ok(BlockSizeConfig {
+            block_size: BlockSize::default(),
+            use_thousands_separator: false,
+        })
+    } else if let Some((bytes, use_thousands)) = block_size_from_env() {
+        Ok(BlockSizeConfig {
+            block_size: BlockSize::Bytes(bytes),
+            use_thousands_separator: use_thousands,
+        })
     } else {
-        Ok(BlockSize::default())
+        Ok(BlockSizeConfig {
+            block_size: BlockSize::default(),
+            use_thousands_separator: false,
+        })
     }
 }
 
-fn block_size_from_env() -> Option<u64> {
+fn block_size_from_env() -> Option<(u64, bool)> {
     for env_var in ["DF_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
         if let Ok(env_size) = env::var(env_var) {
-            return parse_size_non_zero_u64(&env_size).ok();
+            let (cleaned, use_thousands) = extract_thousands_separator_flag(&env_size);
+            if let Ok(size) = parse_size_non_zero_u64(cleaned) {
+                return Some((size, use_thousands));
+            }
+            // If env var is set but invalid, return None (don't check other env vars)
+            return None;
         }
     }
 

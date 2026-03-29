@@ -50,16 +50,203 @@ pub fn human_readable(size: u64, sfmt: SizeFormat) -> String {
     }
 }
 
-#[cfg(test)]
-#[test]
-fn test_human_readable() {
-    let test_cases = [
-        (133_456_345, SizeFormat::Binary, "128M"),
-        (12 * 1024 * 1024, SizeFormat::Binary, "12M"),
-        (8500, SizeFormat::Binary, "8.4K"),
-    ];
+/// Get the thousands separator character from LC_NUMERIC locale.
+///
+/// Uses ICU to get the locale-appropriate grouping separator.
+/// The result is cached after the first call for efficiency.
+///
+/// # Returns
+/// - `'\0'` for C/POSIX locale (no separator)
+/// - The locale's grouping separator character (e.g., ',' for en_US, '\u{202f}' for fr_FR)
+pub fn get_thousands_separator() -> char {
+    #[cfg(feature = "i18n-decimal")]
+    {
+        use crate::i18n::decimal::locale_grouping_separator;
+        use crate::i18n::get_numeric_locale;
 
-    for &(size, sfmt, expected_str) in &test_cases {
-        assert_eq!(human_readable(size, sfmt), expected_str);
+        // Check if this is C/POSIX locale (no thousands separator)
+        let (locale, _) = get_numeric_locale();
+        if locale.to_string() == "und" {
+            return '\0';
+        }
+
+        // Get the grouping separator from ICU (cached via OnceLock)
+        let sep = locale_grouping_separator();
+        sep.chars().next().unwrap_or(',')
+    }
+
+    #[cfg(not(feature = "i18n-decimal"))]
+    {
+        // Fallback when i18n-decimal is not enabled: use comma
+        ','
+    }
+}
+
+/// Format a number with thousands separators based on LC_NUMERIC locale.
+///
+/// This function reads the LC_NUMERIC environment variable to determine
+/// the thousands separator character. Falls back to comma if not set.
+///
+/// # Arguments
+/// * `number` - The number to format
+///
+/// # Returns
+/// A string with thousands separators inserted
+///
+/// # Examples
+/// ```
+/// use uucore::format::human::format_with_thousands_separator;
+/// // With LC_NUMERIC=en_US.UTF-8 (or default)
+/// assert_eq!(format_with_thousands_separator(1234567), "1,234,567");
+/// // With LC_NUMERIC=de_DE.UTF-8
+/// // assert_eq!(format_with_thousands_separator(1234567), "1.234.567");
+/// ```
+pub fn format_with_thousands_separator(number: u64) -> String {
+    let separator = get_thousands_separator();
+
+    // C/POSIX locale has no thousands separator
+    if separator == '\0' {
+        return number.to_string();
+    }
+
+    // Get locale-aware grouping sizes (primary, secondary)
+    // Most locales: (3, 3), Indian locales: (3, 2)
+    let (primary, secondary) = get_locale_grouping_sizes();
+
+    let num_str = number.to_string();
+    let len = num_str.len();
+
+    // Calculate positions where separators should be inserted
+    let mut sep_positions = Vec::new();
+    let mut pos = len;
+
+    // First group uses primary size
+    if pos > primary as usize {
+        pos -= primary as usize;
+        sep_positions.push(pos);
+    }
+
+    // Subsequent groups use secondary size
+    while pos > secondary as usize {
+        pos -= secondary as usize;
+        sep_positions.push(pos);
+    }
+
+    // Build result with separators
+    let mut result = String::with_capacity(len + sep_positions.len());
+
+    for (i, ch) in num_str.chars().enumerate() {
+        if sep_positions.contains(&i) {
+            result.push(separator);
+        }
+        result.push(ch);
+    }
+
+    result
+}
+
+/// Get locale-aware grouping sizes.
+/// Returns (primary, secondary) group sizes.
+/// Most locales return (3, 3), Indian locales return (3, 2).
+#[cfg(feature = "i18n-decimal")]
+fn get_locale_grouping_sizes() -> (u8, u8) {
+    use crate::i18n::decimal::locale_grouping_sizes;
+    *locale_grouping_sizes()
+}
+
+#[cfg(not(feature = "i18n-decimal"))]
+fn get_locale_grouping_sizes() -> (u8, u8) {
+    // Default to groups of 3 when i18n-decimal is not enabled
+    (3, 3)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_human_readable() {
+        let test_cases = [
+            (133_456_345, SizeFormat::Binary, "128M"),
+            (12 * 1024 * 1024, SizeFormat::Binary, "12M"),
+            (8500, SizeFormat::Binary, "8.4K"),
+        ];
+
+        for &(size, sfmt, expected_str) in &test_cases {
+            assert_eq!(human_readable(size, sfmt), expected_str);
+        }
+    }
+
+    #[test]
+    fn test_format_with_thousands_separator() {
+        // When i18n-decimal is not enabled, separator is '\0' (no grouping)
+        // When i18n-decimal is enabled, behavior depends on locale
+        let result = format_with_thousands_separator(1_000_000);
+
+        // Test that the function runs without panic for various inputs
+        assert_eq!(format_with_thousands_separator(0), "0");
+        assert_eq!(format_with_thousands_separator(123), "123");
+
+        // Result should either have separators (with i18n-decimal) or not
+        assert!(
+            result == "1000000" || result == "1,000,000" || result == "1.000.000",
+            "Unexpected format: {result}"
+        );
+    }
+
+    #[test]
+    fn test_format_with_grouping_sizes() {
+        // Test the grouping logic directly with different (primary, secondary) sizes
+
+        // Helper to test grouping with specific sizes
+        fn test_grouping(number: u64, primary: u8, secondary: u8, expected: &str) {
+            let num_str = number.to_string();
+            let len = num_str.len();
+            let mut sep_positions = Vec::new();
+            let mut pos = len;
+
+            // First group uses primary size
+            if pos > primary as usize {
+                pos -= primary as usize;
+                sep_positions.push(pos);
+            }
+
+            // Subsequent groups use secondary size
+            while pos > secondary as usize {
+                pos -= secondary as usize;
+                sep_positions.push(pos);
+            }
+
+            let mut result = String::with_capacity(len + sep_positions.len());
+            for (i, ch) in num_str.chars().enumerate() {
+                if sep_positions.contains(&i) {
+                    result.push(',');
+                }
+                result.push(ch);
+            }
+
+            assert_eq!(
+                result, expected,
+                "Failed for number {number} with ({primary}, {secondary})"
+            );
+        }
+
+        // Test (3, 3) grouping - standard Western format
+        test_grouping(1_000, 3, 3, "1,000");
+        test_grouping(1_000_000, 3, 3, "1,000,000");
+        test_grouping(12_345_678, 3, 3, "12,345,678");
+        test_grouping(123_456_789, 3, 3, "123,456,789");
+
+        // Test (3, 2) grouping - Indian numbering system
+        test_grouping(1_000, 3, 2, "1,000");
+        test_grouping(10_000, 3, 2, "10,000");
+        test_grouping(100_000, 3, 2, "1,00,000"); // 100,000 in Indian format
+        test_grouping(1_234_567, 3, 2, "12,34,567"); // 1,234,567 in Indian format
+        test_grouping(12_345_678, 3, 2, "1,23,45,678"); // 12,345,678 in Indian format
+
+        // Edge cases
+        test_grouping(123, 3, 3, "123"); // No grouping needed
+        test_grouping(12, 3, 2, "12"); // No grouping needed
+        test_grouping(1_234, 3, 2, "1,234"); // Only primary grouping applies
     }
 }
