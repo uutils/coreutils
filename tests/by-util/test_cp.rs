@@ -7877,3 +7877,75 @@ fn test_cp_recursive_non_utf8_source() {
 
     assert!(at.plus("dir2").join("a").exists());
 }
+
+#[test]
+#[cfg(all(
+    unix,
+    not(any(target_os = "android", target_os = "macos", target_os = "openbsd"))
+))]
+fn test_cp_xattr_implicit_vs_explicit() {
+    // Test the difference between implicit (-a) and explicit (--preserve=xattr) xattr handling
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let source_file = "source.txt";
+    at.write(source_file, "test content");
+
+    // Try to set an xattr on the source file
+    let xattr_key = "user.test";
+    let xattr_value = "test_value";
+
+    let xattr_set = Command::new("setfattr")
+        .args([
+            "-n",
+            xattr_key,
+            "-v",
+            xattr_value,
+            &at.plus_as_string(source_file),
+        ])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+
+    if !xattr_set {
+        eprintln!("Skipping test: Cannot set xattrs");
+        return;
+    }
+
+    // Test 1: cp -a (implicit xattr preservation - should never fail)
+    scene
+        .ucmd()
+        .args(&["-a", source_file, "dest_implicit.txt"])
+        .succeeds()
+        .no_stderr(); // Should not produce errors for implicit preservation
+
+    assert!(at.file_exists("dest_implicit.txt"));
+
+    // Test 2: cp --preserve=xattr (explicit - may fail if filesystem doesn't support)
+    // This should succeed on normal filesystems but the behavior differs from -a
+    // in that explicit --preserve=xattr is "required" while -a is "best effort"
+    let result = scene
+        .ucmd()
+        .args(&["--preserve=xattr", source_file, "dest_explicit.txt"])
+        .run();
+
+    // The file should be created either way
+    if at.file_exists("dest_explicit.txt") {
+        // Check if xattrs were actually preserved
+        let getfattr_check = Command::new("getfattr")
+            .args(["-n", xattr_key, &at.plus_as_string("dest_explicit.txt")])
+            .output()
+            .unwrap();
+
+        if getfattr_check.status.success() {
+            // xattrs were preserved successfully
+            assert!(
+                result.succeeded(),
+                "cp --preserve=xattr should succeed when xattrs can be preserved"
+            );
+        }
+        // If xattrs weren't preserved, the behavior depends on the filesystem
+    }
+}

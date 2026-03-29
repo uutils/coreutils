@@ -2882,6 +2882,7 @@ fn test_mv_cross_device_symlink_preserved() {
     at.write("src_dir/local.txt", "local content");
     symlink("/etc", at.plus("src_dir/etc_link")).expect("Failed to create symlink");
 
+    // Verify initial state
     assert!(at.is_symlink("src_dir/etc_link"));
 
     // Force cross-filesystem move using /dev/shm (tmpfs)
@@ -2896,6 +2897,7 @@ fn test_mv_cross_device_symlink_preserved() {
         .succeeds()
         .no_stderr();
 
+    // Verify source was removed
     assert!(!at.dir_exists("src_dir"));
 
     // Verify the symlink was preserved (not expanded)
@@ -3005,4 +3007,58 @@ fn test_mv_cross_device_file_symlink_preserved() {
         fs::read_to_string(&moved_target).expect("Failed to read target file"),
         "target content"
     );
+}
+
+#[test]
+#[cfg(all(target_os = "linux", not(target_os = "android")))]
+fn test_mv_cross_device_xattr_basic() {
+    // Basic test that mv handles xattrs correctly during cross-device moves
+    use std::process::Command;
+    use tempfile::TempDir;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create a source file
+    let source_file = "source_xattr.txt";
+    at.write(source_file, "test content");
+
+    // Try to set an xattr
+    let xattr_key = "user.test";
+    let xattr_value = "test_value";
+
+    let xattr_set = Command::new("setfattr")
+        .args([
+            "-n",
+            xattr_key,
+            "-v",
+            xattr_value,
+            &at.plus_as_string(source_file),
+        ])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+
+    if !xattr_set {
+        eprintln!("Skipping test: Cannot set xattrs");
+        return;
+    }
+
+    // Create target on different filesystem (tmpfs)
+    let Ok(target_dir) = TempDir::new_in("/dev/shm/") else {
+        eprintln!("Skipping test: Cannot create directory in /dev/shm");
+        return;
+    };
+
+    let target_path = target_dir.path().join("moved.txt");
+
+    // Move should succeed even if xattrs can't be preserved
+    scene
+        .ucmd()
+        .arg(at.plus_as_string(source_file))
+        .arg(target_path.to_str().unwrap())
+        .succeeds();
+
+    assert!(!at.file_exists(source_file));
+    assert!(target_path.exists());
 }
