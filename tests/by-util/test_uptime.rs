@@ -380,8 +380,8 @@ fn test_uptime_macos_output_format() {
         "Output should contain 'up': {stdout}"
     );
 
-    // Verify load average is present
-    let load_re = Regex::new(r"load average: \d+\.\d+, \d+\.\d+, \d+\.\d+").unwrap();
+    // Verify load average is present (decimal point is optional, e.g., "10" or "10.00")
+    let load_re = Regex::new(r"load average: \d+(?:\.\d+)?, \d+(?:\.\d+)?, \d+(?:\.\d+)?").unwrap();
     assert!(
         load_re.is_match(stdout),
         "Output should contain load average: {stdout}"
