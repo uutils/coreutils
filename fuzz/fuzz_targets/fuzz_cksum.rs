@@ -6,7 +6,7 @@
 
 #![no_main]
 use libfuzzer_sys::fuzz_target;
-use rand::Rng;
+use rand::RngExt;
 use std::env::temp_dir;
 use std::ffi::OsString;
 use std::fs::{self, File};
