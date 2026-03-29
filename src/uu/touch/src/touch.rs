@@ -817,6 +817,12 @@ fn pathbuf_from_stdout() -> Result<PathBuf, TouchError> {
     {
         Ok(PathBuf::from("/proc/self/fd/1"))
     }
+    #[cfg(target_os = "wasi")]
+    {
+        return Err(TouchError::UnsupportedPlatformFeature(
+            "touch - (stdout) is not supported on WASI".to_string(),
+        ));
+    }
     #[cfg(windows)]
     {
         use std::os::windows::prelude::AsRawHandle;
@@ -872,10 +878,6 @@ fn pathbuf_from_stdout() -> Result<PathBuf, TouchError> {
         Ok(String::from_utf16(&file_path_buffer[0..buffer_size])
             .map_err(|e| TouchError::WindowsStdoutPathError(e.to_string()))?
             .into())
-    }
-    #[cfg(target_os = "wasi")]
-    {
-        Ok(PathBuf::from("/dev/stdout"))
     }
 }
 

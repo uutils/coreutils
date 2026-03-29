@@ -64,6 +64,13 @@ impl FileInformation {
         Ok(Self(info))
     }
 
+    /// Get information from a currently open file
+    #[cfg(target_os = "wasi")]
+    pub fn from_file(file: &fs::File) -> IOResult<Self> {
+        let meta = file.metadata()?;
+        Ok(Self(meta))
+    }
+
     /// Get information for a given path.
     ///
     /// If `path` points to a symlink and `dereference` is true, information about
@@ -169,9 +176,11 @@ impl FileInformation {
         return self.0.st_nlink.try_into().unwrap();
         #[cfg(windows)]
         return self.0.number_of_links();
-        // WASI: nlink is not available in std::fs::Metadata, return 1
         #[cfg(target_os = "wasi")]
-        return 1;
+        {
+            use std::os::wasi::fs::MetadataExt;
+            return self.0.nlink();
+        }
     }
 
     #[cfg(unix)]
@@ -191,20 +200,19 @@ impl PartialEq for FileInformation {
     }
 }
 
-// WASI: compare by file type and size as a basic heuristic since
-// device/inode numbers are not available through std::fs::Metadata.
-#[cfg(target_os = "wasi")]
-impl PartialEq for FileInformation {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.file_type() == other.0.file_type() && self.0.len() == other.0.len()
-    }
-}
-
 #[cfg(target_os = "windows")]
 impl PartialEq for FileInformation {
     fn eq(&self, other: &Self) -> bool {
         self.0.volume_serial_number() == other.0.volume_serial_number()
             && self.0.file_index() == other.0.file_index()
+    }
+}
+
+#[cfg(target_os = "wasi")]
+impl PartialEq for FileInformation {
+    fn eq(&self, other: &Self) -> bool {
+        use std::os::wasi::fs::MetadataExt;
+        self.0.dev() == other.0.dev() && self.0.ino() == other.0.ino()
     }
 }
 
@@ -224,8 +232,9 @@ impl Hash for FileInformation {
         }
         #[cfg(target_os = "wasi")]
         {
-            self.0.len().hash(state);
-            self.0.file_type().is_dir().hash(state);
+            use std::os::wasi::fs::MetadataExt;
+            self.0.dev().hash(state);
+            self.0.ino().hash(state);
         }
     }
 }

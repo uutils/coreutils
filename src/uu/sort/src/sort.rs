@@ -2148,22 +2148,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         settings.buffer_size_is_explicit = false;
     }
 
-    let mut tmp_dir = TmpDirWrapper::new(matches.get_one::<String>(options::TMP_DIR).map_or_else(
-        || {
-            // WASI does not support std::env::temp_dir() — it panics with
-            // "no filesystem on wasm". Use /tmp as a nominal fallback;
-            // the WASI ext_sort path never actually creates temp files.
-            #[cfg(target_os = "wasi")]
-            {
-                PathBuf::from("/tmp")
-            }
-            #[cfg(not(target_os = "wasi"))]
-            {
+    let mut tmp_dir = TmpDirWrapper::new(
+        matches
+            .get_one::<String>(options::TMP_DIR)
+            .map(PathBuf::from)
+            .or_else(|| env::var_os("TMPDIR").map(PathBuf::from))
+            .unwrap_or_else(|| {
+                // env::temp_dir() panics on WASI; default to /tmp
+                #[cfg(target_os = "wasi")]
+                return PathBuf::from("/tmp");
+                #[cfg(not(target_os = "wasi"))]
                 env::temp_dir()
-            }
-        },
-        PathBuf::from,
-    ));
+            }),
+    );
 
     settings.compress_prog = matches
         .get_one::<String>(options::COMPRESS_PROG)
