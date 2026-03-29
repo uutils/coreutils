@@ -475,7 +475,7 @@ impl Chmoder {
         if (!file_path.is_symlink() || should_follow_symlink) && file_path.is_dir() {
             match DirFd::open(file_path, SymlinkBehavior::Follow) {
                 Ok(dir_fd) => {
-                    r = self.safe_traverse_dir(&dir_fd, file_path).and(r);
+                    r = self.safe_traverse_dir(dir_fd, file_path).and(r);
                 }
                 Err(err) => {
                     // Handle permission denied errors with proper file path context
@@ -491,57 +491,67 @@ impl Chmoder {
     }
 
     #[cfg(all(unix, not(target_os = "redox")))]
-    fn safe_traverse_dir(&self, dir_fd: &DirFd, dir_path: &Path) -> UResult<()> {
+    fn safe_traverse_dir(&self, root_fd: DirFd, root_path: &Path) -> UResult<()> {
         let mut r = Ok(());
-
-        let entries = dir_fd.read_dir()?;
+        // Depth-first traversal without recursive calls while keeping descriptor usage bounded.
+        let mut stack: Vec<(Vec<OsString>, PathBuf)> = vec![(Vec::new(), root_path.to_path_buf())];
 
         // Determine if we should follow symlinks (doesn't depend on entry_name)
         let should_follow_symlink = self.traverse_symlinks == TraverseSymlinks::All;
 
-        for entry_name in entries {
-            let entry_path = dir_path.join(&entry_name);
-
-            let dir_meta = dir_fd.metadata_at(&entry_name, should_follow_symlink.into());
-            let Ok(meta) = dir_meta else {
-                // Handle permission denied with proper file path context
-                let e = dir_meta.unwrap_err();
-                let error = if e.kind() == std::io::ErrorKind::PermissionDenied {
-                    ChmodError::PermissionDenied(entry_path).into()
-                } else {
-                    e.into()
-                };
-                r = r.and(Err(error));
-                continue;
+        while let Some((relative_dir_components, dir_path)) = stack.pop() {
+            let dir_fd = match root_fd
+                .open_subdir_chain(relative_dir_components.iter().map(OsString::as_os_str))
+            {
+                Ok(fd) => fd,
+                Err(err) => {
+                    let error = if err.kind() == std::io::ErrorKind::PermissionDenied {
+                        ChmodError::PermissionDenied(dir_path).into()
+                    } else {
+                        err.into()
+                    };
+                    r = r.and(Err(error));
+                    continue;
+                }
             };
 
-            if entry_path.is_symlink() {
-                r = self
-                    .handle_symlink_during_safe_recursion(&entry_path, dir_fd, &entry_name)
-                    .and(r);
-            } else {
-                // For regular files and directories, chmod them
-                r = self
-                    .safe_chmod_file(&entry_path, dir_fd, &entry_name, meta.mode() & 0o7777)
-                    .and(r);
+            let entries = dir_fd.read_dir()?;
 
-                // Recurse into subdirectories using the existing directory fd
-                if meta.is_dir() {
-                    match dir_fd.open_subdir(&entry_name, SymlinkBehavior::Follow) {
-                        Ok(child_dir_fd) => {
-                            r = self.safe_traverse_dir(&child_dir_fd, &entry_path).and(r);
-                        }
-                        Err(err) => {
-                            let error = if err.kind() == std::io::ErrorKind::PermissionDenied {
-                                ChmodError::PermissionDenied(entry_path).into()
-                            } else {
-                                err.into()
-                            };
-                            r = r.and(Err(error));
-                        }
+            for entry_name in entries {
+                let entry_path = dir_path.join(&entry_name);
+
+                let dir_meta = dir_fd.metadata_at(&entry_name, should_follow_symlink.into());
+                let Ok(meta) = dir_meta else {
+                    // Handle permission denied with proper file path context
+                    let e = dir_meta.unwrap_err();
+                    let error = if e.kind() == std::io::ErrorKind::PermissionDenied {
+                        ChmodError::PermissionDenied(entry_path).into()
+                    } else {
+                        e.into()
+                    };
+                    r = r.and(Err(error));
+                    continue;
+                };
+
+                if entry_path.is_symlink() {
+                    r = self
+                        .handle_symlink_during_safe_recursion(&entry_path, &dir_fd, &entry_name)
+                        .and(r);
+                } else {
+                    // For regular files and directories, chmod them
+                    r = self
+                        .safe_chmod_file(&entry_path, &dir_fd, &entry_name, meta.mode() & 0o7777)
+                        .and(r);
+
+                    // Queue subdirectories; parent dir_fd can be dropped before processing children.
+                    if meta.is_dir() {
+                        let mut child_components = relative_dir_components.clone();
+                        child_components.push(entry_name.clone());
+                        stack.push((child_components, entry_path.clone()));
                     }
                 }
             }
+            // dir_fd is dropped here, releasing its file descriptor before the next depth step.
         }
         r
     }
