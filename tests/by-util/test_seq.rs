@@ -849,6 +849,11 @@ fn test_invalid_float_point_fail_properly() {
         .fails()
         .no_stdout()
         .usage_error("invalid floating point argument: '-.1e92233720368547758070'");
+    new_ucmd!()
+        .args(&["1e4933"])
+        .fails()
+        .no_stdout()
+        .usage_error("invalid floating point argument: '1e4933'");
 }
 
 #[test]
@@ -1128,4 +1133,9 @@ fn test_equalize_widths_corner_cases() {
         .args(&["-w", "0x1.1", "1.00002", "3"])
         .succeeds()
         .stdout_is("1.0625\n2.06252\n");
+}
+
+#[test]
+fn test_seq_one_e_negative_u16_max() {
+    new_ucmd!().args(&["1e-65536", "1e-65536"]).succeeds();
 }

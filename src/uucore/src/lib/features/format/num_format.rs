@@ -370,7 +370,11 @@ fn format_float_decimal(
             return format!("{bd:.0}.");
         }
     }
-    format!("{bd:.precision$}")
+    if u16::try_from(precision).is_ok() {
+        format!("{bd:.precision$}")
+    } else {
+        bd.to_plain_string()
+    }
 }
 
 /// Converts a `&BigDecimal` to a scientific-like `X.XX * 10^e`.
