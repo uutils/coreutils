@@ -417,6 +417,14 @@ fn test_numeric_unsorted_ints() {
 }
 
 #[test]
+fn test_numeric_with_prefix() {
+    test_helper(
+        "numeric_with_prefix",
+        &["-n", "--numeric-sort", "--sort=numeric"],
+    );
+}
+
+#[test]
 fn test_human_block_sizes() {
     test_helper(
         "human_block_sizes",
