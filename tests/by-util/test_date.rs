@@ -2836,3 +2836,208 @@ fn test_korean_time_zone() {
         .succeeds()
         .stdout_is("2026-01-15 01:00:00 UTC\n");
 }
+
+#[test]
+fn test_positional_set_invalid_month() {
+    new_ucmd!()
+        .arg("13011200")
+        .fails_with_code(1)
+        .stderr_contains("invalid date");
+}
+
+#[test]
+fn test_positional_set_invalid_day() {
+    new_ucmd!()
+        .arg("01321200")
+        .fails_with_code(1)
+        .stderr_contains("invalid date");
+}
+
+#[test]
+fn test_positional_set_feb_30() {
+    new_ucmd!()
+        .arg("02301200")
+        .fails_with_code(1)
+        .stderr_contains("invalid date");
+}
+
+#[test]
+fn test_positional_invalid_hour() {
+    new_ucmd!()
+        .arg("01012500")
+        .fails_with_code(1)
+        .stderr_contains("invalid date");
+}
+
+#[test]
+fn test_positional_set_invalid_minute() {
+    new_ucmd!()
+        .arg("01010160")
+        .fails_with_code(1)
+        .stderr_contains("invalid date");
+}
+
+#[test]
+fn test_positional_set_invalid_length() {
+    new_ucmd!()
+        .arg("010101600")
+        .fails_with_code(1)
+        .stderr_contains("invalid date");
+}
+
+#[test]
+fn test_positional_set_non_digits() {
+    new_ucmd!()
+        .arg("010110a")
+        .fails_with_code(1)
+        .stderr_contains("invalid date");
+}
+
+#[test]
+fn test_positional_set_wrong_seconds_suffix() {
+    new_ucmd!()
+        .arg("01011200.1")
+        .fails_with_code(1)
+        .stderr_contains("invalid date");
+    new_ucmd!()
+        .arg("01012359.aa")
+        .fails_with_code(1)
+        .stderr_contains("invalid date");
+    new_ucmd!()
+        .arg("01011200.123")
+        .fails_with_code(1)
+        .stderr_contains("invalid date");
+}
+
+#[test]
+fn test_positional_set_with_extra_operand() {
+    new_ucmd!()
+        .args(&["01011200", "+%Y"])
+        .fails_with_code(1)
+        .stderr_contains("extra operand");
+}
+
+#[test]
+fn test_positional_set_with_d_flag_format_error() {
+    new_ucmd!()
+        .args(&["--date", "2025-01-01", "01012025"])
+        .fails_with_code(1)
+        .stderr_contains("lacks a leading '+'");
+}
+
+#[test]
+#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+fn test_positional_set_12_digits() {
+    if geteuid() == 0 || uucore::os::is_wsl_1() {
+        return;
+    }
+    let result = new_ucmd!().arg("010112002025").fails();
+    result.no_stdout();
+    assert!(
+        result.stderr_str().starts_with("date: cannot set date: "),
+        "Expected permission error, got: {}",
+        result.stderr_str()
+    );
+}
+
+#[test]
+#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+fn test_positional_set_8_digits() {
+    if geteuid() == 0 || uucore::os::is_wsl_1() {
+        return;
+    }
+    let result = new_ucmd!().arg("01011200").fails();
+    result.no_stdout();
+    assert!(
+        result.stderr_str().starts_with("date: cannot set date: "),
+        "Expected permission error, got: {}",
+        result.stderr_str()
+    );
+}
+
+#[test]
+#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+fn test_positional_set_10_digits() {
+    if geteuid() == 0 || uucore::os::is_wsl_1() {
+        return;
+    }
+    let result = new_ucmd!().arg("0101120025").fails();
+    result.no_stdout();
+    assert!(
+        result.stderr_str().starts_with("date: cannot set date: "),
+        "Expected permission error, got: {}",
+        result.stderr_str()
+    );
+}
+
+#[test]
+#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+fn test_positional_set_12_digits_with_seconds() {
+    if geteuid() == 0 || uucore::os::is_wsl_1() {
+        return;
+    }
+    let result = new_ucmd!().arg("010112002025.40").fails();
+    result.no_stdout();
+    assert!(
+        result.stderr_str().starts_with("date: cannot set date: "),
+        "Expected permission error, got: {}",
+        result.stderr_str()
+    );
+}
+
+#[test]
+#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+fn test_positional_set_12_digits_with_utc_flag() {
+    if geteuid() == 0 || uucore::os::is_wsl_1() {
+        return;
+    }
+    let result = new_ucmd!().args(&["-u", "010112002025"]).fails();
+    result.no_stdout();
+    assert!(
+        result.stderr_str().starts_with("date: cannot set date: "),
+        "Expected permission error, got: {}",
+        result.stderr_str()
+    );
+}
+
+#[test]
+#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+fn test_positional_set_century_rule_68() {
+    if geteuid() == 0 || uucore::os::is_wsl_1() {
+        return;
+    }
+    let result = new_ucmd!().arg("0101120068").fails();
+    result.no_stdout();
+    assert!(
+        result.stderr_str().starts_with("date: cannot set date: "),
+        "Expected permission error, got: {}",
+        result.stderr_str()
+    );
+}
+
+#[test]
+#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+fn test_positional_set_century_rule_69() {
+    if geteuid() == 0 || uucore::os::is_wsl_1() {
+        return;
+    }
+    let result = new_ucmd!().arg("0101120069").fails();
+    result.no_stdout();
+    assert!(
+        result.stderr_str().starts_with("date: cannot set date: "),
+        "Expected permission error, got: {}",
+        result.stderr_str()
+    );
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn test_positional_set_macos_unavailable() {
+    let result = new_ucmd!().arg("010112002025").fails();
+    result.no_stdout();
+    assert!(
+        result
+            .stderr_str()
+            .starts_with("date: setting the date is not supported by macOS")
+    );
+}
