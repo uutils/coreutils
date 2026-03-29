@@ -1,25 +1,17 @@
-ls-about = Liste le contenu des répertoires.
-  Ignore les fichiers et répertoires commençant par un '.' par défaut
-dir-about = Liste le contenu des répertoires.
-  Ignore les fichiers et répertoires commençant par un '.' par défaut
-vdir-about = Liste le contenu des répertoires.
-  Ignore les fichiers et répertoires commençant par un '.' par défaut
-
-  Les arguments obligatoires pour les options longues le sont aussi pour les options courtes.
+ls-about = Lister le contenu des répertoires.
+  Ignorer les fichiers et répertoires commençant par un '.' par défaut
 ls-usage = ls [OPTION]... [FICHIER]...
-dir-usage = dir [OPTION]... [FICHIER]...
-vdir-usage = vdir [OPTION]... [FICHIER]...
 ls-after-help = L'argument TIME_STYLE peut être full-iso, long-iso, iso, locale ou +FORMAT. FORMAT est interprété comme dans date. De plus, la variable d'environnement TIME_STYLE définit le style par défaut à utiliser.
 
 # Messages d'erreur
 ls-error-invalid-line-width = largeur de ligne invalide : {$width}
 ls-error-general-io = erreur d'E/S générale : {$error}
-ls-error-cannot-access-no-such-file = impossible d'accéder à {$path} : Aucun fichier ou répertoire de ce type
-ls-error-cannot-access-operation-not-permitted = impossible d'accéder à {$path} : Opération non autorisée
-ls-error-cannot-open-directory-permission-denied = impossible d'ouvrir le répertoire {$path} : Permission refusée
-ls-error-cannot-open-file-permission-denied = impossible d'ouvrir le fichier {$path} : Permission refusée
-ls-error-cannot-open-directory-bad-descriptor = impossible d'ouvrir le répertoire {$path} : Mauvais descripteur de fichier
-ls-error-unknown-io-error = erreur d'E/S inconnue : {$path}, '{$error}'
+ls-error-cannot-access-no-such-file = impossible d'accéder à '{$path}' : Aucun fichier ou répertoire de ce type
+ls-error-cannot-access-operation-not-permitted = impossible d'accéder à '{$path}' : Opération non autorisée
+ls-error-cannot-open-directory-permission-denied = impossible d'ouvrir le répertoire '{$path}' : Permission refusée
+ls-error-cannot-open-file-permission-denied = impossible d'ouvrir le fichier '{$path}' : Permission refusée
+ls-error-cannot-open-directory-bad-descriptor = impossible d'ouvrir le répertoire '{$path}' : Mauvais descripteur de fichier
+ls-error-unknown-io-error = erreur d'E/S inconnue : '{$path}', '{$error}'
 ls-error-invalid-block-size = argument --block-size invalide {$size}
 ls-error-dired-and-zero-incompatible = --dired et --zero sont incompatibles
 ls-error-not-listing-already-listed = {$path} : ne liste pas un répertoire déjà listé
@@ -131,6 +123,4 @@ ls-invalid-quoting-style = {$program} : Ignorer la valeur invalide de la variabl
 ls-invalid-columns-width = ignorer la largeur invalide dans la variable d'environnement COLUMNS : {$width}
 ls-invalid-ignore-pattern = Motif invalide pour ignore : {$pattern}
 ls-invalid-hide-pattern = Motif invalide pour hide : {$pattern}
-ls-warning-unrecognized-ls-colors-prefix = préfixe non reconnu : {$prefix}
-ls-warning-unparsable-ls-colors = valeur illisible pour la variable d'environnement LS_COLORS
 ls-total = total {$size}

@@ -114,10 +114,6 @@ dd-after-help = ### Opérandes
   - noctty : ne pas assigner un tty de contrôle.
   - nofollow : ne pas suivre les liens système.
 
-# Common strings
-dd-standard-input = 'entrée standard'
-dd-standard-output = 'sortie standard'
-
 # Error messages
 dd-error-failed-to-open = échec de l'ouverture de { $path }
 dd-error-write-error = erreur d'écriture
@@ -127,7 +123,8 @@ dd-error-cannot-skip-offset = '{ $file }' : impossible d'ignorer jusqu'au décal
 dd-error-cannot-skip-invalid = '{ $file }' : impossible d'ignorer : Argument invalide
 dd-error-cannot-seek-invalid = '{ $output }' : impossible de rechercher : Argument invalide
 dd-error-not-directory = définir les indicateurs pour '{ $file }' : N'est pas un répertoire
-dd-error-failed-discard-cache = échec de la suppression du cache pour : { $file }
+dd-error-failed-discard-cache-input = échec de la suppression du cache pour : 'entrée standard'
+dd-error-failed-discard-cache-output = échec de la suppression du cache pour : 'sortie standard'
 
 # Parse errors
 dd-error-unrecognized-operand = Opérande non reconnue '{ $operand }'
