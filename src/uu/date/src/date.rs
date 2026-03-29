@@ -708,24 +708,25 @@ fn format_date_with_locale_aware_months(
     config: &Config<PosixCustom>,
     skip_localization: bool,
 ) -> Result<String, String> {
-    // First check if format string has GNU modifiers (width/flags) and format if present
-    // This optimization combines detection and formatting in a single pass
-    if let Some(result) =
-        format_modifiers::format_with_modifiers_if_present(date, format_string, config)
-    {
+    // Apply locale-aware name substitution (month/day names) before modifier
+    // processing, so that formats like "%-e" don't bypass localization of "%b"/"%A".
+    let localized;
+    let fmt = if !skip_localization && should_use_icu_locale() {
+        localized = localize_format_string(format_string, date.date());
+        &localized
+    } else {
+        format_string
+    };
+
+    // Check if format string has GNU modifiers (width/flags) and format if present
+    if let Some(result) = format_modifiers::format_with_modifiers_if_present(date, fmt, config) {
         return result.map_err(|e| e.to_string());
     }
 
     let broken_down = BrokenDownTime::from(date);
-
-    let result = if !should_use_icu_locale() || skip_localization {
-        broken_down.to_string_with_config(config, format_string)
-    } else {
-        let fmt = localize_format_string(format_string, date.date());
-        broken_down.to_string_with_config(config, &fmt)
-    };
-
-    result.map_err(|e| e.to_string())
+    broken_down
+        .to_string_with_config(config, fmt)
+        .map_err(|e| e.to_string())
 }
 
 /// Return the appropriate format string for the given settings.
