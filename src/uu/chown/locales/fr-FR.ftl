@@ -21,3 +21,6 @@ chown-error-failed-to-get-attributes = échec de l'obtention des attributs de { 
 chown-error-invalid-user = utilisateur invalide : { $user }
 chown-error-invalid-group = groupe invalide : { $group }
 chown-error-invalid-spec = spécification invalide : { $spec }
+
+# Messages d'avertissement
+chown-warning-dot-separator = '.' devrait être ':' : { $spec }
