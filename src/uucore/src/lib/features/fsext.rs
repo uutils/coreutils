@@ -428,7 +428,6 @@ fn mount_dev_id(mount_dir: &OsStr) -> String {
     }
 }
 
-#[cfg(not(target_os = "wasi"))]
 use crate::error::UResult;
 #[cfg(any(
     target_os = "freebsd",
@@ -459,7 +458,6 @@ use std::ptr;
 use std::slice;
 
 /// Read file system list.
-#[cfg(not(target_os = "wasi"))]
 pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
     #[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
     {
@@ -540,18 +538,12 @@ pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
         target_os = "redox",
         target_os = "illumos",
         target_os = "solaris",
+        target_os = "wasi"
     ))]
     {
         // No method to read mounts on these platforms
         Ok(Vec::new())
     }
-}
-
-/// Read file system list.
-#[cfg(target_os = "wasi")]
-pub fn read_fs_list() -> Vec<MountInfo> {
-    // No method to read mounts on WASI
-    Vec::new()
 }
 
 #[derive(Debug, Clone)]
