@@ -71,6 +71,13 @@ impl FileInformation {
         Ok(Self(info))
     }
 
+    /// Get information from a currently open file
+    #[cfg(target_os = "wasi")]
+    pub fn from_file(file: &fs::File) -> IOResult<Self> {
+        let meta = file.metadata()?;
+        Ok(Self(meta))
+    }
+
     /// Get information for a given path.
     ///
     /// If `path` points to a symlink and `dereference` is true, information about
@@ -188,6 +195,14 @@ impl PartialEq for FileInformation {
     fn eq(&self, other: &Self) -> bool {
         self.0.volume_serial_number() == other.0.volume_serial_number()
             && self.0.file_index() == other.0.file_index()
+    }
+}
+
+#[cfg(target_os = "wasi")]
+impl PartialEq for FileInformation {
+    fn eq(&self, other: &Self) -> bool {
+        use std::os::wasi::fs::MetadataExt;
+        self.0.dev() == other.0.dev() && self.0.ino() == other.0.ino()
     }
 }
 

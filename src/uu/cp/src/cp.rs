@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+#![cfg_attr(target_os = "wasi", feature(wasi_ext))]
 // spell-checker:ignore (ToDO) copydir fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO sflag
 // spell-checker:ignore RDONLY futimens utimensat
 
@@ -21,6 +22,7 @@ use uucore::fsxattr::{copy_acls, copy_xattrs, copy_xattrs_skip_selinux};
 use uucore::translate;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, value_parser};
+#[cfg(not(target_os = "wasi"))]
 use filetime::FileTime;
 use indicatif::{ProgressBar, ProgressStyle};
 #[cfg(unix)]
@@ -883,7 +885,12 @@ impl Attributes {
         #[cfg(unix)]
         ownership: Preserve::Yes { required: true },
         mode: Preserve::Yes { required: true },
+        // WASI: filetime panics in from_last_{access,modification}_time,
+        // so timestamps cannot be preserved. Mark as optional so -a works.
+        #[cfg(not(target_os = "wasi"))]
         timestamps: Preserve::Yes { required: true },
+        #[cfg(target_os = "wasi")]
+        timestamps: Preserve::Yes { required: false },
         context: {
             #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
             {
@@ -1889,31 +1896,40 @@ pub(crate) fn copy_attributes(
     })?;
 
     handle_preserve(attributes.timestamps, || -> CopyResult<()> {
-        let atime = FileTime::from_last_access_time(&source_metadata);
-        let mtime = FileTime::from_last_modification_time(&source_metadata);
-        // `set_file_times` opens the destination (O_RDONLY) before calling
-        // futimens; opening a FIFO or device with no peer blocks forever, and a
-        // socket cannot be opened at all. For symlinks and these special files
-        // use the path-based, no-follow variant, which sets the times via
-        // utimensat without opening.
-        #[cfg(unix)]
-        let no_open = {
-            let ft = source_metadata.file_type();
-            dest.is_symlink()
-                || ft.is_fifo()
-                || ft.is_socket()
-                || ft.is_char_device()
-                || ft.is_block_device()
-        };
-        #[cfg(not(unix))]
-        let no_open = dest.is_symlink();
-        if no_open {
-            filetime::set_symlink_file_times(dest, atime, mtime)?;
-        } else {
-            filetime::set_file_times(dest, atime, mtime)?;
-        }
+        // filetime's WASI backend panics in from_last_{access,modification}_time,
+        // so return ENOTSUP. handle_preserve silently suppresses ENOTSUP for
+        // optional preservation (-a) and reports it for required (--preserve=timestamps).
+        #[cfg(target_os = "wasi")]
+        return Err(io::Error::from_raw_os_error(95).into()); // 95 = EOPNOTSUPP
 
-        Ok(())
+        #[cfg(not(target_os = "wasi"))]
+        {
+            let atime = FileTime::from_last_access_time(&source_metadata);
+            let mtime = FileTime::from_last_modification_time(&source_metadata);
+            // `set_file_times` opens the destination (O_RDONLY) before calling
+            // futimens; opening a FIFO or device with no peer blocks forever, and a
+            // socket cannot be opened at all. For symlinks and these special files
+            // use the path-based, no-follow variant, which sets the times via
+            // utimensat without opening.
+            #[cfg(unix)]
+            let no_open = {
+                let ft = source_metadata.file_type();
+                dest.is_symlink()
+                    || ft.is_fifo()
+                    || ft.is_socket()
+                    || ft.is_char_device()
+                    || ft.is_block_device()
+            };
+            #[cfg(not(unix))]
+            let no_open = dest.is_symlink();
+            if no_open {
+                filetime::set_symlink_file_times(dest, atime, mtime)?;
+            } else {
+                filetime::set_file_times(dest, atime, mtime)?;
+            }
+
+            Ok(())
+        }
     })?;
 
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
@@ -1959,19 +1975,9 @@ pub(crate) fn copy_attributes(
 fn symlink_file(
     source: &Path,
     dest: &Path,
-    #[cfg(not(target_os = "wasi"))] symlinked_files: &mut HashSet<FileInformation>,
-    #[cfg(target_os = "wasi")] _symlinked_files: &mut HashSet<FileInformation>,
+    symlinked_files: &mut HashSet<FileInformation>,
 ) -> CopyResult<()> {
-    #[cfg(target_os = "wasi")]
-    {
-        Err(CpError::IoErrContext(
-            io::Error::new(io::ErrorKind::Unsupported, "symlinks not supported"),
-            translate!("cp-error-cannot-create-symlink",
-                       "dest" => get_filename(dest).unwrap_or("?").quote(),
-                       "source" => get_filename(source).unwrap_or("?").quote()),
-        ))
-    }
-    #[cfg(not(any(windows, target_os = "wasi")))]
+    #[cfg(unix)]
     {
         std::os::unix::fs::symlink(source, dest).map_err(|e| {
             CpError::IoErrContext(
@@ -1993,13 +1999,21 @@ fn symlink_file(
             )
         })?;
     }
-    #[cfg(not(target_os = "wasi"))]
+    #[cfg(target_os = "wasi")]
     {
-        if let Ok(file_info) = FileInformation::from_path(dest, false) {
-            symlinked_files.insert(file_info);
-        }
-        Ok(())
+        std::os::wasi::fs::symlink_path(source, dest).map_err(|e| {
+            CpError::IoErrContext(
+                e,
+                translate!("cp-error-cannot-create-symlink",
+                           "dest" => get_filename(dest).unwrap_or("?").quote(),
+                           "source" => get_filename(source).unwrap_or("?").quote()),
+            )
+        })?;
     }
+    if let Ok(file_info) = FileInformation::from_path(dest, false) {
+        symlinked_files.insert(file_info);
+    }
+    Ok(())
 }
 
 fn context_for(src: &Path, dest: &Path) -> String {
