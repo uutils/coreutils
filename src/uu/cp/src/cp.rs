@@ -521,7 +521,7 @@ pub fn uu_app() -> Command {
         options::ATTRIBUTES_ONLY,
         options::COPY_CONTENTS,
     ];
-    Command::new(uucore::util_name())
+    Command::new("cp")
         .version(uucore::crate_version!())
         .about(translate!("cp-about"))
         .help_template(uucore::localized_help_template(uucore::util_name()))
@@ -1404,7 +1404,7 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
                 )
                 .unwrap(),
             )
-            .with_message(uucore::util_name());
+            .with_message("cp");
         pb.tick();
         Some(pb)
     } else {

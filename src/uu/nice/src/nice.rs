@@ -153,7 +153,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // exit code when failing to write the advisory is 125, but Rust
     // will produce an exit code of 101 when it panics.
     if unsafe { libc::setpriority(PRIO_PROCESS, 0, niceness) } == -1 {
-        let warning_msg = translate!("nice-warning-setpriority", "util_name" => uucore::util_name(), "error" => Error::last_os_error());
+        let warning_msg = translate!("nice-warning-setpriority", "util_name" => "nice", "error" => Error::last_os_error());
 
         if write!(std::io::stderr(), "{warning_msg}").is_err() {
             set_exit_code(125);
@@ -179,13 +179,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("nice")
         .about(translate!("nice-about"))
         .override_usage(format_usage(&translate!("nice-usage")))
         .trailing_var_arg(true)
         .infer_long_args(true)
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("nice"))
         .arg(
             Arg::new(options::ADJUSTMENT)
                 .short('n')

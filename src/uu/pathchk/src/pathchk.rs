@@ -81,9 +81,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("paste")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("paste"))
         .about(translate!("pathchk-about"))
         .override_usage(format_usage(&translate!("pathchk-usage")))
         .infer_long_args(true)

@@ -228,7 +228,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("seq")
         .trailing_var_arg(true)
         .infer_long_args(true)
         .version(uucore::crate_version!())
