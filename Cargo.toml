@@ -1,7 +1,7 @@
 # coreutils (uutils)
 # * see the repository LICENSE, README, and CONTRIBUTING files for more information
 
-# spell-checker:ignore (libs) bigdecimal datetime foldhash serde gethostid kqueue libselinux mangen memmap uuhelp startswith constness expl unnested logind cfgs interner
+# spell-checker:ignore (libs) bigdecimal datetime foldhash serde gethostid kqueue libselinux mangen memmap uuhelp startswith constness expl unnested logind cfgs interner getauxval
 
 [package]
 name = "coreutils"
@@ -430,6 +430,9 @@ rstest = "0.26.0"
 rstest_reuse = "0.7.0"
 rustc-hash = "2.1.1"
 rust-ini = "0.21.0"
+# binary name of coreutils can be hijacked by overriding getauxval via LD_PRELOAD
+# So we use param and avoid libc backend
+rustix = { version = "1.1.4", features = ["param"] }
 same-file = "1.0.6"
 self_cell = "1.0.4"
 selinux = "=0.6.0"
@@ -598,6 +601,9 @@ wc = { optional = true, version = "0.8.0", package = "uu_wc", path = "src/uu/wc"
 who = { optional = true, version = "0.8.0", package = "uu_who", path = "src/uu/who" }
 whoami = { optional = true, version = "0.8.0", package = "uu_whoami", path = "src/uu/whoami" }
 yes = { optional = true, version = "0.8.0", package = "uu_yes", path = "src/uu/yes" }
+
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+rustix.workspace = true
 
 # this breaks clippy linting with: "tests/by-util/test_factor_benches.rs: No such file or directory (os error 2)"
 # factor_benches = { optional = true, version = "0.0.0", package = "uu_factor_benches", path = "tests/benches/factor" }
