@@ -911,3 +911,11 @@ fn test_head_non_utf8_paths() {
     assert!(output.contains("line3"));
 }
 // Test that head handles non-UTF-8 file names without crashing
+
+#[test]
+fn test_do_not_attempt_to_read_a_directory() {
+    new_ucmd!()
+        .arg(".")
+        .fails_with_code(1)
+        .stderr_contains("error reading '.'");
+}
