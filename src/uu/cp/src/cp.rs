@@ -1620,7 +1620,7 @@ fn file_mode_for_interactive_overwrite(
 
                         Some((
                             format!("{mode_without_leading_digits:04o}"),
-                            uucore::fs::display_permissions_unix(mode, false),
+                            uucore::fs::display_permissions_unix(mode as u32, false),
                         ))
                     }
                 }

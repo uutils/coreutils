@@ -1255,14 +1255,13 @@ fn is_writable(path: &Path) -> (bool, Option<u32>) {
 
 #[cfg(unix)]
 fn get_interactive_prompt(to: &Path, cached_mode: Option<u32>) -> String {
-    use libc::mode_t;
     // Use cached mode if available, otherwise fetch it
     let mode = cached_mode.or_else(|| to.metadata().ok().map(|m| m.permissions().mode()));
     if let Some(mode) = mode {
         let file_mode = mode & 0o777;
         // Check if file is not writable by user
         if (mode & 0o200) == 0 {
-            let perms = display_permissions_unix(mode as mode_t, false);
+            let perms = display_permissions_unix(mode, false);
             let mode_info = format!("{file_mode:04o} ({perms})");
             return translate!("mv-prompt-overwrite-mode", "target" => to.quote(), "mode_info" => mode_info);
         }
