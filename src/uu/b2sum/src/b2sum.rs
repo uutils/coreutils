@@ -16,7 +16,7 @@ use uucore::translate;
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let calculate_blake2b_length =
-        |s: &str| parse_blake_length(AlgoKind::Blake2b, BlakeLength::String(s));
+        |n: usize| parse_blake_length(AlgoKind::Blake2b, BlakeLength::Int(n));
     standalone_with_length_main(AlgoKind::Blake2b, uu_app(), args, calculate_blake2b_length)
 }
 

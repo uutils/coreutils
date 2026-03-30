@@ -276,6 +276,10 @@ pub enum SizedAlgoKind {
 impl SizedAlgoKind {
     pub fn from_unsized(kind: AlgoKind, output_length: Option<usize>) -> UResult<Self> {
         use AlgoKind as ak;
+        // 0 is used as a sentinel by callers that use clap's default_value("0") for --length,
+        // meaning the user did not explicitly provide a length. Normalize Some(0) to None so
+        // that the match arms below treat it the same as "no length given".
+        let output_length = output_length.filter(|&n| n != 0);
         match (kind, output_length) {
             (
                 ak::Sysv
@@ -509,10 +513,15 @@ pub enum BlakeLength<'s> {
 pub fn parse_blake_length(algo: AlgoKind, bit_length: BlakeLength<'_>) -> UResult<usize> {
     debug_assert!(matches!(algo, AlgoKind::Blake2b | AlgoKind::Blake3));
 
+    // Previously only handled BlakeLength::String. Extended to BlakeLength::Int so that
+    // callers passing a parsed usize (via clap's value_parser) also emit the "invalid length"
+    // error message before the primary error.
     let print_error = || {
-        if let BlakeLength::String(s) = bit_length {
-            show_error!("{}", ChecksumError::InvalidLength(s.to_string()));
-        }
+        let s = match bit_length {
+            BlakeLength::String(s) => s.to_string(),
+            BlakeLength::Int(i) => i.to_string(),
+        };
+        show_error!("{}", ChecksumError::InvalidLength(s));
     };
 
     let n = match bit_length {

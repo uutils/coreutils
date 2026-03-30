@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use clap::{Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, value_parser};
 use uucore::{checksum::SUPPORTED_ALGORITHMS, translate};
 
 /// List of all options that can be encountered in checksum utils
@@ -77,6 +77,8 @@ impl ChecksumCommand for Command {
                 .long(options::LENGTH)
                 .short('l')
                 .help(translate!("ck-common-help-length"))
+                .value_parser(value_parser!(usize))
+                .default_value("0")
                 .action(ArgAction::Set),
         )
     }

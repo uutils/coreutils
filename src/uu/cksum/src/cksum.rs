@@ -44,38 +44,34 @@ fn print_cpu_debug_info() {
 }
 
 /// Sanitize the `--length` argument depending on `--algorithm` and `--length`.
-fn maybe_sanitize_length(
-    algo_cli: Option<AlgoKind>,
-    input_length: Option<&str>,
-) -> UResult<Option<usize>> {
+fn maybe_sanitize_length(algo_cli: Option<AlgoKind>, input_length: usize) -> UResult<usize> {
     match (algo_cli, input_length) {
-        // No provided length is not a problem so far.
-        (_, None) => Ok(None),
-
-        // For SHA2 and SHA3, if a length is provided, ensure it is correct.
-        (Some(algo @ (AlgoKind::Sha2 | AlgoKind::Sha3)), Some(s_len)) => {
-            sanitize_sha2_sha3_length_str(algo, s_len).map(Some)
+        // For SHA2 and SHA3, if a non-zero length is provided, ensure it is correct.
+        // 0 means "not provided" (clap's default_value) — pass it through so that
+        // from_unsized can emit the appropriate "requires specifying --length" error,
+        // which also allows --check mode to infer the length from the checksum file.
+        (Some(algo @ (AlgoKind::Sha2 | AlgoKind::Sha3)), len) => {
+            if len == 0 {
+                Ok(0)
+            } else {
+                sanitize_sha2_sha3_length_str(algo, &len.to_string())
+            }
         }
 
         // SHAKE128 and SHAKE256 algorithms optionally take a bit length. No
         // validation is performed on this length, any value is valid. If the
         // given length is not a multiple of 8, the last byte of the output
         // will have its extra bits set to zero.
-        (Some(AlgoKind::Shake128 | AlgoKind::Shake256), Some(len)) => match len.parse::<usize>() {
-            Ok(0) => Ok(None),
-            Ok(l) => Ok(Some(l)),
-            Err(_) => Err(ChecksumError::InvalidLength(len.into()).into()),
-        },
+        (Some(AlgoKind::Shake128 | AlgoKind::Shake256), len) => Ok(len),
 
         // For BLAKE, if a length is provided, validate it.
-        (Some(algo @ (AlgoKind::Blake2b | AlgoKind::Blake3)), Some(len)) => {
-            parse_blake_length(algo, BlakeLength::String(len)).map(Some)
+        (Some(algo @ (AlgoKind::Blake2b | AlgoKind::Blake3)), len) => {
+            parse_blake_length(algo, BlakeLength::Int(len))
         }
 
-        // For any other provided algorithm, check if length is 0.
-        // Otherwise, this is an error.
-        (_, Some(len)) if len.parse::<u32>() == Ok(0_u32) => Ok(None),
-        (_, Some(_)) => Err(ChecksumError::LengthOnlyForBlake2bSha2Sha3.into()),
+        // For any other algorithm, length must be 0.
+        (_, 0) => Ok(0),
+        (_, _) => Err(ChecksumError::LengthOnlyForBlake2bSha2Sha3.into()),
     }
 }
 
@@ -88,11 +84,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(AlgoKind::from_cksum)
         .transpose()?;
 
-    let input_length = matches
-        .get_one::<String>(options::LENGTH)
-        .map(String::as_str);
+    #[allow(clippy::unwrap_used, reason = "LENGTH has default_value(\"0\")")]
+    let input_length = *matches.get_one::<usize>(options::LENGTH).unwrap();
 
-    let length = maybe_sanitize_length(algo_cli, input_length)?;
+    let length = match maybe_sanitize_length(algo_cli, input_length)? {
+        0 => None,
+        n => Some(n),
+    };
     let tag = !matches.get_flag(options::UNTAGGED);
     let binary = matches.get_flag(options::BINARY);
     let text = matches.get_flag(options::TEXT);
