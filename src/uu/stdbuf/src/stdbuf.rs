@@ -80,30 +80,18 @@ enum ProgramOptionsError {
 }
 
 #[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "cygwin")))]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "fn sig must match on all platforms"
-)]
-fn preload_strings() -> UResult<(&'static str, &'static str)> {
-    Ok(("LD_PRELOAD", "so"))
+fn preload_strings() -> (&'static str, &'static str) {
+    ("LD_PRELOAD", "so")
 }
 
 #[cfg(target_vendor = "apple")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "fn sig must match on all platforms"
-)]
-fn preload_strings() -> UResult<(&'static str, &'static str)> {
-    Ok(("DYLD_LIBRARY_PATH", "dylib"))
+fn preload_strings() -> (&'static str, &'static str) {
+    ("DYLD_LIBRARY_PATH", "dylib")
 }
 
 #[cfg(target_os = "cygwin")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "fn sig must match on all platforms"
-)]
-fn preload_strings() -> UResult<(&'static str, &'static str)> {
-    Ok(("LD_PRELOAD", "dll"))
+fn preload_strings() -> (&'static str, &'static str) {
+    ("LD_PRELOAD", "dll")
 }
 
 fn check_option(matches: &ArgMatches, name: &str) -> Result<BufferType, ProgramOptionsError> {
@@ -146,7 +134,7 @@ fn get_preload_env(tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
     use std::fs::File;
     use std::io::Write;
 
-    let (preload, extension) = preload_strings()?;
+    let (preload, extension) = preload_strings();
     let inject_path = tmp_dir.path().join("libstdbuf").with_extension(extension);
 
     let mut file = File::create(&inject_path)?;
@@ -157,7 +145,7 @@ fn get_preload_env(tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
 
 #[cfg(feature = "feat_external_libstdbuf")]
 fn get_preload_env(_tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
-    let (preload, extension) = preload_strings()?;
+    let (preload, extension) = preload_strings();
 
     // Use the directory provided at compile time via LIBSTDBUF_DIR environment variable
     // This will fail to compile if LIBSTDBUF_DIR is not set, which is the desired behavior
