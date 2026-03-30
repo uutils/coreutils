@@ -185,6 +185,7 @@ feat_wasm = [
   "base64",
   "basenc",
   "cut",
+  "ls",
   "date",
   "dircolors",
   "dirname",
