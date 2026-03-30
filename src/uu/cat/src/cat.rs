@@ -498,7 +498,11 @@ fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
     }
     // If we're not on Linux or Android, or the splice() call failed,
     // fall back on slower writing.
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    let mut buf = vec![0; 1024 * 64]; // lazy allocation for small files
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
     let mut buf = [0; 1024 * 64];
+
     loop {
         match handle.reader.read(&mut buf) {
             Ok(n) => {
