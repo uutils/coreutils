@@ -281,6 +281,9 @@ impl LineFormat {
         // tagged format does not put a space before (filename)
 
         let par_idx = rest.iter().position(|&b| b == b'(')?;
+        if par_idx < 1 {
+            return None;
+        }
         let sub_case = if rest[par_idx - 1] == b' ' {
             SubCase::Posix
         } else {
