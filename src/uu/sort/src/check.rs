@@ -16,9 +16,11 @@ use std::{
     ffi::OsStr,
     io::Read,
     iter,
-    sync::mpsc::{Receiver, SyncSender, sync_channel},
-    thread,
 };
+#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+use std::sync::mpsc::{sync_channel, SyncSender, Receiver};
+#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+use std::thread;
 use uucore::error::UResult;
 
 /// Check if the file at `path` is ordered.
@@ -28,13 +30,35 @@ use uucore::error::UResult;
 /// The code we should exit with.
 pub fn check(path: &OsStr, settings: &GlobalSettings) -> UResult<()> {
     let max_allowed_cmp = if settings.unique {
-        // If `unique` is enabled, the previous line must compare _less_ to the next one.
         Ordering::Less
     } else {
-        // Otherwise, the line previous line must compare _less or equal_ to the next one.
         Ordering::Equal
     };
     let file = open(path)?;
+    let chunk_size = if settings.buffer_size < 100 * 1024 {
+        settings.buffer_size
+    } else {
+        100 * 1024
+    };
+
+    #[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+    {
+        check_threaded(path, settings, max_allowed_cmp, file, chunk_size)
+    }
+    #[cfg(all(target_os = "wasi", not(target_feature = "atomics")))]
+    {
+        check_sync(path, settings, max_allowed_cmp, file, chunk_size)
+    }
+}
+
+#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+fn check_threaded(
+    path: &OsStr,
+    settings: &GlobalSettings,
+    max_allowed_cmp: Ordering,
+    file: Box<dyn Read + Send>,
+    chunk_size: usize,
+) -> UResult<()> {
     let (recycled_sender, recycled_receiver) = sync_channel(2);
     let (loaded_sender, loaded_receiver) = sync_channel(2);
     thread::spawn({
@@ -42,13 +66,7 @@ pub fn check(path: &OsStr, settings: &GlobalSettings) -> UResult<()> {
         move || reader(file, &recycled_receiver, &loaded_sender, &settings)
     });
     for _ in 0..2 {
-        let _ = recycled_sender.send(RecycledChunk::new(if settings.buffer_size < 100 * 1024 {
-            // when the buffer size is smaller than 100KiB we choose it instead of the default.
-            // this improves testability.
-            settings.buffer_size
-        } else {
-            100 * 1024
-        }));
+        let _ = recycled_sender.send(RecycledChunk::new(chunk_size));
     }
 
     let mut prev_chunk: Option<Chunk> = None;
@@ -56,8 +74,6 @@ pub fn check(path: &OsStr, settings: &GlobalSettings) -> UResult<()> {
     for chunk in loaded_receiver {
         line_idx += 1;
         if let Some(prev_chunk) = prev_chunk.take() {
-            // Check if the first element of the new chunk is greater than the last
-            // element from the previous chunk
             let prev_last = prev_chunk.lines().last().unwrap();
             let new_first = chunk.lines().first().unwrap();
 
@@ -99,6 +115,7 @@ pub fn check(path: &OsStr, settings: &GlobalSettings) -> UResult<()> {
 }
 
 /// The function running on the reader thread.
+#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
 fn reader(
     mut file: Box<dyn Read + Send>,
     receiver: &Receiver<RecycledChunk>,
@@ -117,6 +134,86 @@ fn reader(
             settings.line_ending.into(),
             settings,
         )?;
+        if !should_continue {
+            break;
+        }
+    }
+    Ok(())
+}
+
+/// Synchronous check for targets without thread support.
+#[cfg(all(target_os = "wasi", not(target_feature = "atomics")))]
+fn check_sync(
+    path: &OsStr,
+    settings: &GlobalSettings,
+    max_allowed_cmp: Ordering,
+    mut file: Box<dyn Read + Send>,
+    chunk_size: usize,
+) -> UResult<()> {
+    let separator = settings.line_ending.into();
+    let mut carry_over = vec![];
+    let mut prev_chunk: Option<Chunk> = None;
+    let mut spare_recycled: Option<RecycledChunk> = None;
+    let mut line_idx = 0;
+
+    loop {
+        let recycled = spare_recycled
+            .take()
+            .unwrap_or_else(|| RecycledChunk::new(chunk_size));
+
+        let (chunk, should_continue) = chunks::read_to_chunk(
+            recycled,
+            None,
+            &mut carry_over,
+            &mut file,
+            &mut iter::empty(),
+            separator,
+            settings,
+        )?;
+
+        let Some(chunk) = chunk else {
+            break;
+        };
+
+        line_idx += 1;
+        if let Some(prev) = prev_chunk.take() {
+            let prev_last = prev.lines().last().unwrap();
+            let new_first = chunk.lines().first().unwrap();
+
+            if compare_by(
+                prev_last,
+                new_first,
+                settings,
+                prev.line_data(),
+                chunk.line_data(),
+            ) > max_allowed_cmp
+            {
+                return Err(SortError::Disorder {
+                    file: path.to_owned(),
+                    line_number: line_idx,
+                    line: String::from_utf8_lossy(new_first.line).into_owned(),
+                    silent: settings.check_silent,
+                }
+                .into());
+            }
+            spare_recycled = Some(prev.recycle());
+        }
+
+        for (a, b) in chunk.lines().iter().tuple_windows() {
+            line_idx += 1;
+            if compare_by(a, b, settings, chunk.line_data(), chunk.line_data()) > max_allowed_cmp {
+                return Err(SortError::Disorder {
+                    file: path.to_owned(),
+                    line_number: line_idx,
+                    line: String::from_utf8_lossy(b.line).into_owned(),
+                    silent: settings.check_silent,
+                }
+                .into());
+            }
+        }
+
+        prev_chunk = Some(chunk);
+
         if !should_continue {
             break;
         }
