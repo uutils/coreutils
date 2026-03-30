@@ -213,6 +213,7 @@ feat_wasm = [
   "shred",
   "shuf",
   "sleep",
+  "sort",
   "sum",
   "tee",
   "true",
