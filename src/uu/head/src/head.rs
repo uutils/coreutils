@@ -16,7 +16,7 @@ use std::os::fd::AsFd;
 use std::path::PathBuf;
 use thiserror::Error;
 use uucore::display::{Quotable, print_verbatim};
-use uucore::error::{FromIo, UError, UResult};
+use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
 use uucore::translate;
 use uucore::{format_usage, show};
@@ -519,6 +519,13 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                     continue;
                 }
             };
+            if file_handle.metadata().is_ok_and(|m| m.file_type().is_dir()) {
+                show!(USimpleError::new(
+                    1,
+                    translate!("head-error-reading-file", "name" => file.quote(), "err" => "Is a directory")
+                ));
+                continue;
+            }
             if (options.files.len() > 1 && !options.quiet) || options.verbose {
                 if !first {
                     println!();
