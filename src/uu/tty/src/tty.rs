@@ -27,22 +27,27 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let _ = uucore::signals::disable_pipe_errors();
 
     let silent = matches.get_flag(options::SILENT);
+    let is_tty = std::io::stdin().is_terminal();
 
     // If silent, we don't need the name, only whether or not stdin is a tty.
     if silent {
-        return if std::io::stdin().is_terminal() {
-            Ok(())
-        } else {
-            Err(1.into())
-        };
+        return if is_tty { Ok(()) } else { Err(1.into()) };
     }
 
     let mut stdout = std::io::stdout();
-
+    #[cfg(unix)]
     let name = nix::unistd::ttyname(std::io::stdin());
+    #[cfg(not(unix))] // todo: maximize cygwin compatibility
+    let name = if is_tty {
+        Ok(std::ffi::OsString::from("/dev/tty"))
+    } else {
+        Err(())
+    };
 
     let write_result = if let Ok(name) = name {
-        stdout.write_all_os(name.as_os_str())
+        stdout
+            .write_all_os(name.as_os_str())
+            .and_then(|_| writeln!(stdout))
     } else {
         set_exit_code(1);
         writeln!(stdout, "{}", translate!("tty-not-a-tty"))
