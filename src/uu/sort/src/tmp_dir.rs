@@ -2,18 +2,21 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+#[cfg(not(target_os = "redox"))]
+use std::path::Path;
+#[cfg(not(target_os = "redox"))]
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
     fs::File,
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::{Arc, LazyLock, Mutex},
 };
 
 use tempfile::TempDir;
-use uucore::{
-    error::{UResult, USimpleError},
-    show_error, translate,
-};
+use uucore::error::UResult;
+#[cfg(not(target_os = "redox"))]
+use uucore::{error::USimpleError, show_error, translate};
 
 use crate::{SortError, current_open_fd_count, fd_soft_limit};
 
@@ -181,6 +184,7 @@ impl Drop for TmpDirWrapper {
 
 /// Remove the directory at `path` by deleting its child files and then itself.
 /// Errors while deleting child files are ignored.
+#[cfg(not(target_os = "redox"))]
 fn remove_tmp_dir(path: &Path) -> std::io::Result<()> {
     if let Ok(read_dir) = std::fs::read_dir(path) {
         for file in read_dir.flatten() {
