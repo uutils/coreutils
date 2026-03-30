@@ -481,8 +481,17 @@ fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
     let mut stdout_lock = stdout.lock();
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
-        // If we're on Linux or Android, try to use the splice() system call
-        // for faster writing. If it works, we're done.
+        // splice is slow for small files (https://github.com/uutils/coreutils/issues/10832)
+        const SPLICE_THRESHOLD: u64 = 16 * 1024;
+        let copied = io::copy(
+            &mut handle.reader.by_ref().take(SPLICE_THRESHOLD),
+            &mut stdout_lock,
+        )?;
+        if copied < SPLICE_THRESHOLD {
+            stdout_lock.flush()?;
+            return Ok(());
+        }
+        // splice syscall is faster for large file
         if !splice::write_fast_using_splice(handle, &stdout_lock)? {
             return Ok(());
         }
