@@ -279,3 +279,4 @@ Nofile
 rprocess
 statat
 getdents
+SIGTHR
