@@ -3,6 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+#![cfg_attr(target_os = "wasi", feature(wasi_ext))]
+
 // spell-checker:ignore (ToDO) srcpath targetpath EEXIST
 
 use clap::{Arg, ArgAction, Command};
@@ -22,6 +24,8 @@ use thiserror::Error;
 
 #[cfg(any(unix, target_os = "redox"))]
 use std::os::unix::fs::symlink;
+#[cfg(target_os = "wasi")]
+use std::os::wasi::fs::symlink_path as symlink;
 #[cfg(windows)]
 use std::os::windows::fs::{symlink_dir, symlink_file};
 use std::path::{Path, PathBuf};
@@ -521,12 +525,4 @@ pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> io::Result
     } else {
         symlink_file(src, dst)
     }
-}
-
-#[cfg(target_os = "wasi")]
-fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(_src: P1, _dst: P2) -> io::Result<()> {
-    Err(io::Error::new(
-        io::ErrorKind::Unsupported,
-        "symlinks not supported on this platform",
-    ))
 }
