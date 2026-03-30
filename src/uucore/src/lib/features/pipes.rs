@@ -5,12 +5,14 @@
 
 //! Thin pipe-related wrappers around functions from the `nix` crate.
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use nix::fcntl::{FcntlArg, SpliceFFlags, fcntl};
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use std::fs::File;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::fd::AsFd;
-
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::fcntl::SpliceFFlags;
+pub const MAX_ROOTLESS_PIPE_SIZE: usize = 1024 * 1024;
 
 pub use nix::{Error, Result};
 
@@ -18,8 +20,13 @@ pub use nix::{Error, Result};
 ///
 /// Returns two `File` objects: everything written to the second can be read
 /// from the first.
+/// This is used only for resolving the limitation for splice: one of a input or output should be pipe
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn pipe() -> Result<(File, File)> {
     let (read, write) = nix::unistd::pipe()?;
+    // improve performance for splice
+    let _ = fcntl(&read, FcntlArg::F_SETPIPE_SZ(MAX_ROOTLESS_PIPE_SIZE as i32));
+
     Ok((File::from(read), File::from(write)))
 }
 
