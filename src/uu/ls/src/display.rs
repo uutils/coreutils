@@ -96,7 +96,7 @@ pub(crate) struct DisplayItemName {
     pub(crate) dired_name_len: usize,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum IndicatorStyle {
     None,
     Slash,
@@ -706,29 +706,12 @@ fn display_item_name(
         }
     }
 
-    if config.indicator_style != IndicatorStyle::None {
-        let sym = classify_file(path);
+    let is_long_symlink = config.format == Format::Long
+        && path.file_type().is_some_and(FileType::is_symlink)
+        && !path.must_dereference;
 
-        let char_opt = match config.indicator_style {
-            IndicatorStyle::Classify => sym,
-            IndicatorStyle::FileType => {
-                // Don't append an asterisk.
-                match sym {
-                    Some('*') => None,
-                    _ => sym,
-                }
-            }
-            IndicatorStyle::Slash => {
-                // Append only a slash.
-                match sym {
-                    Some('/') => Some('/'),
-                    _ => None,
-                }
-            }
-            IndicatorStyle::None => None,
-        };
-
-        if let Some(c) = char_opt {
+    if !is_long_symlink {
+        if let Some(c) = indicator_char(path, config.indicator_style) {
             let _ = name.write_char(c);
         }
     }
@@ -746,66 +729,68 @@ fn display_item_name(
                 // We might as well color the symlink output after the arrow.
                 // This makes extra system calls, but provides important information that
                 // people run `ls -l --color` are very interested in.
-                if let Some(style_manager) = &mut style_manager {
-                    let escaped_target = escape_name_with_locale(target_path.as_os_str(), config);
-                    // We get the absolute path to be able to construct PathData with valid Metadata.
-                    // This is because relative symlinks will fail to get_metadata.
-                    let absolute_target = if target_path.is_relative() {
-                        match path.path().parent() {
-                            Some(p) => &p.join(&target_path),
-                            None => &target_path,
-                        }
-                    } else {
-                        &target_path
-                    };
+                let escaped_target = escape_name_with_locale(target_path.as_os_str(), config);
 
-                    match fs::canonicalize(absolute_target) {
-                        Ok(resolved_target) => {
-                            let target_data = PathData::new(
-                                resolved_target.as_path().into(),
-                                None,
-                                target_path.file_name().map(Cow::Borrowed),
-                                config,
-                                false,
-                            );
+                // We get the absolute path to be able to construct PathData with valid Metadata.
+                // This is because relative symlinks will fail to get_metadata.
+                let absolute_target = if target_path.is_relative() {
+                    match path.path().parent() {
+                        Some(p) => p.join(&target_path),
+                        None => target_path.clone(),
+                    }
+                } else {
+                    target_path.clone()
+                };
 
-                            // Check if the target actually needs coloring
+                match fs::canonicalize(&absolute_target) {
+                    Ok(resolved_target) => {
+                        let target_data = PathData::new(
+                            resolved_target.as_path().into(),
+                            None,
+                            target_path.file_name().map(Cow::Borrowed),
+                            config,
+                            false,
+                        );
+
+                        let mut target_display = escaped_target.clone();
+                        if let Some(style_manager) = &mut style_manager {
                             let md_option: Option<Metadata> = target_data
                                 .metadata()
                                 .cloned()
                                 .or_else(|| target_data.p_buf.symlink_metadata().ok());
-                            let style = style_manager.colors.style_for_path_with_metadata(
-                                &target_data.p_buf,
-                                md_option.as_ref(),
-                            );
 
-                            if style.is_some() {
-                                // Only apply coloring if there's actually a style
-                                name.push(color_name(
-                                    escaped_target,
+                            if style_manager
+                                .colors
+                                .style_for_path_with_metadata(&target_data.p_buf, md_option.as_ref())
+                                .is_some()
+                            {
+                                target_display = color_name(
+                                    escaped_target.clone(),
                                     &target_data,
                                     style_manager,
                                     None,
                                     is_wrap(name.len()),
-                                ));
-                            } else {
-                                // For regular files with no coloring, just use plain text
-                                name.push(escaped_target);
+                                );
                             }
                         }
-                        Err(_) => {
+
+                        name.push(target_display);
+                        if let Some(c) = indicator_char(&target_data, config.indicator_style) {
+                            let _ = name.write_char(c);
+                        }
+                    }
+                    Err(_) => {
+                        if let Some(style_manager) = &mut style_manager {
                             name.push(
                                 style_manager.apply_missing_target_style(
                                     escaped_target,
                                     is_wrap(name.len()),
                                 ),
                             );
+                        } else {
+                            name.push(escaped_target);
                         }
                     }
-                } else {
-                    // If no coloring is required, we just use target as is.
-                    // Apply the right quoting
-                    name.push(escape_name_with_locale(target_path.as_os_str(), config));
                 }
             }
             Err(err) => {
@@ -1122,6 +1107,23 @@ fn display_item_long(
     state.display_buf.clear();
 
     Ok(())
+}
+
+fn indicator_char(path: &PathData, style: IndicatorStyle) -> Option<char> {
+    let sym = classify_file(path);
+
+    match style {
+        IndicatorStyle::Classify => sym,
+        IndicatorStyle::FileType => match sym {
+            Some('*') => None,
+            _ => sym,
+        },
+        IndicatorStyle::Slash => match sym {
+            Some('/') => Some('/'),
+            _ => None,
+        },
+        IndicatorStyle::None => None,
+    }
 }
 
 fn classify_file(path: &PathData) -> Option<char> {
