@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore wipesync
+// spell-checker:ignore wipesync SECRETSECRET
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -192,7 +192,7 @@ fn test_shred_empty() {
 #[test]
 #[cfg(all(unix, feature = "chmod"))]
 fn test_shred_fail_no_perm() {
-    use std::path::Path;
+    use std::{fs, path::Path};
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -201,9 +201,11 @@ fn test_shred_fail_no_perm() {
     let file = "test_shred_remove_a";
 
     let binding = Path::new("dir").join(file);
-    let path = binding.to_str().unwrap();
+    let path = binding
+        .to_str()
+        .expect("fixture path should be valid UTF-8");
     at.mkdir(dir);
-    at.touch(path);
+    at.write(path, "SECRETSECRET"); // cspell:disable-line
     scene.ccmd("chmod").arg("a-w").arg(dir).succeeds();
 
     scene
@@ -212,8 +214,37 @@ fn test_shred_fail_no_perm() {
         .arg(path)
         .fails()
         .stderr_contains("Couldn't rename to");
+    assert!(at.file_exists(path));
+    let file_len = fs::metadata(at.plus(path))
+        .expect("test file should still exist after failed remove")
+        .len();
+    assert_eq!(file_len, 0);
 }
 
+#[test]
+#[cfg(unix)]
+fn test_shred_char_device_with_explicit_size() {
+    new_ucmd!()
+        .args(&["-n1", "--size=1", "/dev/null"])
+        .succeeds();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_shred_rejects_fifo() {
+    use std::time::Duration;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkfifo("fifo");
+
+    scene
+        .ucmd()
+        .arg("fifo")
+        .timeout(Duration::from_secs(2))
+        .fails()
+        .stderr_contains("invalid file type");
+}
 #[test]
 fn test_shred_verbose_no_padding_1() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -254,7 +285,9 @@ fn test_all_patterns_present() {
 fn test_random_source_regular_file() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    // Currently, our block size is 4096. If it changes, this test has to be adapted.
+    // Use --size=4096 so the bytes consumed per pass are deterministic
+    // regardless of the filesystem's blksize() (which split_on_blocks uses
+    // for alignment when --exact/--size is not set).
     let mut many_bytes = Vec::with_capacity(4096 * 4);
 
     for i in 0..4096u32 {
@@ -269,6 +302,7 @@ fn test_random_source_regular_file() {
 
     ucmd
         .arg("-vn3")
+        .arg("--size=4096")
         .arg("--random-source=source_long")
         .arg(file)
         .succeeds()

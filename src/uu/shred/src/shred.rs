@@ -3,18 +3,20 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) wipesync prefill couldnt fillpattern
+// spell-checker:ignore (words) wipesync prefill couldnt fillpattern renameat renameatx noreplace nocache renamex FDCWD
 
 use clap::{Arg, ArgAction, Command};
 #[cfg(unix)]
 use libc::S_IWUSR;
 use rand::{RngExt as _, rngs::StdRng, seq::SliceRandom};
 use std::cell::RefCell;
+#[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
+use std::ffi::CString;
 use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, Read, Seek, SeekFrom, Write};
 #[cfg(unix)]
-use std::os::unix::prelude::PermissionsExt;
+use std::io::IsTerminal;
+use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
@@ -54,6 +56,10 @@ const PATTERN_BUFFER_SIZE: usize = BLOCK_SIZE + PATTERN_LENGTH - 1;
 /// it's defined as a constant. However, it's possible to get the actual size at runtime using, for
 /// example, `std::os::unix::fs::MetadataExt::blksize()`.
 const OPTIMAL_IO_BLOCK_SIZE: usize = 1 << 12;
+
+/// Sector size for recovering after write failures, matching GNU shred.
+/// Used to skip past bad sectors on EIO and continue overwriting.
+const SECTOR_SIZE: u64 = 512;
 
 /// Patterns that appear in order for the passes
 ///
@@ -238,6 +244,12 @@ impl BytesWriter {
                 *offset = (*offset + size) % PATTERN_LENGTH;
                 Ok(bytes)
             }
+        }
+    }
+
+    fn sync_pattern_offset(&mut self, file_offset: u64) {
+        if let Self::Pattern { offset, .. } = self {
+            *offset = (file_offset % PATTERN_LENGTH as u64) as usize;
         }
     }
 }
@@ -613,6 +625,64 @@ fn create_compatible_sequence(
     }
 }
 
+#[cfg(unix)]
+fn reject_unsupported_file_type(path: &Path, file: &File) -> UResult<()> {
+    use std::os::unix::fs::FileTypeExt;
+    // Validate the open fd with fstat instead of trusting the path check,
+    // which an attacker could swap between check and open.
+    let fd_metadata = file
+        .metadata()
+        .map_err_context(|| translate!("shred-failed-to-get-metadata"))?;
+    let file_type = fd_metadata.file_type();
+
+    if file_type.is_fifo() || file_type.is_socket() {
+        return Err(USimpleError::new(
+            1,
+            translate!("shred-invalid-file-type", "file" => path.maybe_quote()),
+        ));
+    }
+
+    // Reject TTY character devices
+    if file_type.is_char_device() && file.is_terminal() {
+        return Err(USimpleError::new(
+            1,
+            translate!("shred-invalid-file-type", "file" => path.maybe_quote()),
+        ));
+    }
+
+    Ok(())
+}
+
+fn target_size(
+    file: &mut File,
+    metadata: &fs::Metadata,
+    size: Option<u64>,
+) -> UResult<Option<u64>> {
+    if let Some(size) = size {
+        return Ok(Some(size));
+    }
+
+    if metadata.file_type().is_file() {
+        return Ok(Some(metadata.len()));
+    }
+
+    match file.seek(SeekFrom::End(0)) {
+        Ok(size) => {
+            file.rewind()
+                .map_err_context(|| translate!("shred-failed-to-seek-file"))?;
+
+            if size == 0 {
+                // Non-regular files can report an offset of 0 even when they accept writes
+                // (for example, character devices like /dev/zero). Use one bounded write
+                // block so we still run overwrite passes without looping forever.
+                Ok(Some(OPTIMAL_IO_BLOCK_SIZE as u64))
+            } else {
+                Ok(Some(size))
+            }
+        }
+        Err(_) => Ok(None),
+    }
+}
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::cognitive_complexity)]
 fn wipe_file(
@@ -634,6 +704,7 @@ fn wipe_file(
             translate!("shred-no-such-file-or-directory", "file" => path.maybe_quote()),
         ));
     }
+    #[cfg(not(unix))]
     if !path.is_file() {
         return Err(USimpleError::new(
             1,
@@ -641,15 +712,18 @@ fn wipe_file(
         ));
     }
 
-    let metadata =
+    // Read path metadata for permission changes only.
+    // Type checks happen on the opened fd.
+    let path_metadata =
         fs::metadata(path).map_err_context(|| translate!("shred-failed-to-get-metadata"))?;
 
     // If force is true, set file permissions to not-readonly.
     if force {
-        let mut perms = metadata.permissions();
+        let mut perms = path_metadata.permissions();
         #[cfg(unix)]
         #[allow(clippy::useless_conversion, clippy::unnecessary_cast)]
         {
+            use std::os::unix::fs::PermissionsExt;
             // NOTE: set_readonly(false) makes the file world-writable on Unix.
             // NOTE: S_IWUSR type is u16 on macOS, i32 on Redox.
             if (perms.mode() & (S_IWUSR as u32)) == 0 {
@@ -664,11 +738,52 @@ fn wipe_file(
             .map_err_context(|| translate!("shred-failed-to-set-permissions"))?;
     }
 
+    // Pre-open fast-reject for FIFOs and sockets: opening a FIFO for writing
+    // blocks until a reader connects, so we must reject before open(). The
+    // post-open fstat check below closes the TOCTOU window for races.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::FileTypeExt;
+        let ft = path_metadata.file_type();
+        if ft.is_fifo() || ft.is_socket() {
+            return Err(USimpleError::new(
+                1,
+                translate!("shred-invalid-file-type", "file" => path.maybe_quote()),
+            ));
+        }
+    }
+
+    let mut open_opts = OpenOptions::new();
+    open_opts.write(true).truncate(false);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        open_opts.custom_flags(libc::O_NOCTTY);
+    }
+    let mut file = open_opts.open(path).map_err_context(
+        || translate!("shred-failed-to-open-for-writing", "file" => path.maybe_quote()),
+    )?;
+    // Validate file type on the opened fd so path swaps cannot bypass checks.
+    #[cfg(unix)]
+    reject_unsupported_file_type(path, &file)?;
+
+    // Get metadata from the fd for size/type decisions.
+    let metadata = file
+        .metadata()
+        .map_err_context(|| translate!("shred-failed-to-get-metadata"))?;
+
+    let size = target_size(&mut file, &metadata, size)?;
+    let is_regular_file = metadata.file_type().is_file();
+    let io_block_size = if is_regular_file {
+        filesystem_block_size(&metadata)
+    } else {
+        OPTIMAL_IO_BLOCK_SIZE as u64
+    };
+
     // Fill up our pass sequence
     let mut pass_sequence = Vec::new();
-    if metadata.len() != 0 {
-        // Only add passes if the file is non-empty
-
+    if size != Some(0) {
+        // Only add passes if the target contains bytes to overwrite
         if n_passes <= 3 {
             // Only random passes if n_passes <= 3
             for _ in 0..n_passes {
@@ -683,29 +798,18 @@ fn wipe_file(
             }
         }
 
-        // --zero specifies whether we want one final pass of 0x00 on our file
+        // If `zero` is set, append a final pass with 0x00 bytes.
         if zero {
             pass_sequence.push(PassType::Pattern(PATTERNS[0]));
         }
     }
 
+    let should_sync_data = is_regular_file;
     let total_passes = pass_sequence.len();
-    let mut file = OpenOptions::new()
-        .write(true)
-        .truncate(false)
-        .open(path)
-        .map_err_context(
-            || translate!("shred-failed-to-open-for-writing", "file" => path.maybe_quote()),
-        )?;
 
-    let size = match size {
-        Some(size) => size,
-        None => metadata.len(),
-    };
-
-    for (i, pass_type) in pass_sequence.into_iter().enumerate() {
+    for (i, pass_type) in pass_sequence.iter().enumerate() {
         if verbose {
-            let pass_name = pass_name(&pass_type);
+            let pass_name = pass_name(pass_type);
             let msg = translate!("shred-pass-progress", "file" => path.maybe_quote());
             show_error!(
                 "{msg} {}/{total_passes} ({pass_name})...",
@@ -713,20 +817,94 @@ fn wipe_file(
             );
         }
         // size is an optional argument for exactly how many bytes we want to shred
-        do_pass(&mut file, &pass_type, exact, random_source, size).map_err_context(
+        do_pass(
+            &mut file,
+            pass_type,
+            exact,
+            random_source,
+            size,
+            should_sync_data,
+            io_block_size,
+        )
+        .map_err_context(
             || translate!("shred-file-write-pass-failed", "file" => path.maybe_quote()),
         )?;
     }
+
+    if remove_method != RemoveMethod::None && metadata.file_type().is_file() {
+        file.set_len(0).map_err_context(
+            || translate!("shred-failed-to-truncate-file", "file" => path.maybe_quote()),
+        )?;
+        if should_sync_data {
+            file.sync_data().map_err_context(
+                || translate!("shred-failed-to-truncate-file", "file" => path.maybe_quote()),
+            )?;
+        }
+    }
+
+    finalize_file(file, path, path_str, verbose, remove_method)
+}
+
+fn finalize_file(
+    file: File,
+    path: &Path,
+    path_str: &OsString,
+    verbose: bool,
+    remove_method: RemoveMethod,
+) -> UResult<()> {
+    checked_close(file).map_err_context(
+        || translate!("shred-failed-to-close-file", "file" => path.maybe_quote()),
+    )?;
 
     if remove_method != RemoveMethod::None {
         do_remove(path, path_str, verbose, remove_method).map_err_context(
             || translate!("shred-failed-to-remove-file", "file" => path.maybe_quote()),
         )?;
     }
+
     Ok(())
 }
 
-fn split_on_blocks(file_size: u64, exact: bool) -> (u64, u64) {
+#[cfg(unix)]
+fn checked_close(file: File) -> io::Result<()> {
+    use std::os::fd::IntoRawFd;
+    let raw_fd = file.into_raw_fd();
+    // SAFETY: `raw_fd` came from `File::into_raw_fd`, which transfers ownership of an
+    // open descriptor to this function. We call `close` exactly once here and never use
+    // `raw_fd` again afterward.
+    let close_result = unsafe { libc::close(raw_fd) };
+    if close_result == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
+#[cfg(not(unix))]
+fn checked_close(file: File) -> io::Result<()> {
+    file.sync_all()
+}
+
+fn filesystem_block_size(metadata: &fs::Metadata) -> u64 {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+
+        let block_size = metadata.blksize();
+        if block_size > 0 {
+            block_size
+        } else {
+            OPTIMAL_IO_BLOCK_SIZE as u64
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = metadata;
+        OPTIMAL_IO_BLOCK_SIZE as u64
+    }
+}
+
+fn split_on_blocks(file_size: u64, exact: bool, io_block_size: u64) -> (u64, u64) {
     // OPTIMAL_IO_BLOCK_SIZE must not exceed BLOCK_SIZE. Violating this may cause overflows due
     // to alignment or performance issues.This kind of misconfiguration is
     // highly unlikely but would indicate a serious error.
@@ -735,46 +913,265 @@ fn split_on_blocks(file_size: u64, exact: bool) -> (u64, u64) {
     let file_size = if exact {
         file_size
     } else {
-        // The main idea here is to align the file size to the OPTIMAL_IO_BLOCK_SIZE, and then
+        let io_block_size = io_block_size.max(1);
+        // The main idea here is to align the file size to the io_block_size, and then
         // split it into BLOCK_SIZE + remaining bytes. Since the input data is already aligned to N
-        // * OPTIMAL_IO_BLOCK_SIZE, the output file size will also be aligned and correct.
-        file_size.div_ceil(OPTIMAL_IO_BLOCK_SIZE as u64) * OPTIMAL_IO_BLOCK_SIZE as u64
+        // * io_block_size, the output file size will also be aligned and correct.
+        file_size.div_ceil(io_block_size) * io_block_size
     };
+
     (file_size / BLOCK_SIZE as u64, file_size % BLOCK_SIZE as u64)
 }
 
+/// Enable or disable direct I/O on a file descriptor to bypass the page cache.
+/// This is a performance optimization matching GNU shred behavior.
+/// Silently does nothing if the platform or filesystem doesn't support it.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn direct_mode(file: &File, enable: bool) {
+    use std::os::unix::io::AsRawFd;
+    let fd = file.as_raw_fd();
+
+    // SAFETY: fd is a valid open file descriptor from a File we hold a reference to.
+    let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+    if flags >= 0 {
+        let new_flags = if enable {
+            flags | libc::O_DIRECT
+        } else {
+            flags & !libc::O_DIRECT
+        };
+        if new_flags != flags {
+            // SAFETY: fd is valid, F_SETFL with an int argument is safe.
+            unsafe { libc::fcntl(fd, libc::F_SETFL, new_flags) };
+        }
+    }
+}
+
+#[cfg(target_vendor = "apple")]
+fn direct_mode(file: &File, enable: bool) {
+    use std::os::unix::io::AsRawFd;
+    let fd = file.as_raw_fd();
+
+    // SAFETY: fd is a valid open file descriptor. F_NOCACHE with 0 or 1 is safe.
+    unsafe { libc::fcntl(fd, libc::F_NOCACHE, i32::from(enable)) };
+}
+
+#[cfg(all(
+    not(target_os = "linux"),
+    not(target_os = "android"),
+    not(target_vendor = "apple")
+))]
+fn direct_mode(_file: &File, _enable: bool) {}
+
+/// Sync the parent directory of `path` to ensure directory entry changes
+/// (renames, unlinks) are durable.
+fn sync_parent_dir(path: &Path) -> io::Result<()> {
+    if let Some(parent) = path.parent() {
+        let dir_path = if parent.as_os_str().is_empty() {
+            Path::new(".")
+        } else {
+            parent
+        };
+        let dir = OpenOptions::new().read(true).open(dir_path)?;
+        dir.sync_all()?;
+    }
+    Ok(())
+}
+
+fn is_eio(err: &io::Error) -> bool {
+    #[cfg(unix)]
+    {
+        err.raw_os_error() == Some(libc::EIO)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = err;
+        false
+    }
+}
 fn do_pass(
     file: &mut File,
     pass_type: &PassType,
     exact: bool,
     random_source: Option<&RefCell<File>>,
-    file_size: u64,
+    file_size: Option<u64>,
+    should_sync_data: bool,
+    io_block_size: u64,
 ) -> Result<(), io::Error> {
-    // We might be at the end of the file due to a previous iteration, so rewind.
-    file.rewind()?;
-
-    let mut writer = BytesWriter::from_pass_type(pass_type, random_source)?;
-    let (number_of_blocks, bytes_left) = split_on_blocks(file_size, exact);
-
-    // We start by writing BLOCK_SIZE times as many time as possible.
-    for _ in 0..number_of_blocks {
-        let block = writer.bytes_for_pass(BLOCK_SIZE)?;
-        file.write_all(block)?;
+    // Known-size passes must restart from the beginning each iteration.
+    if file_size.is_some() {
+        file.rewind()?;
     }
 
-    // Then we write remaining data which is smaller than the BLOCK_SIZE
-    let block = writer.bytes_for_pass(bytes_left as usize)?;
-    file.write_all(block)?;
+    let mut writer = BytesWriter::from_pass_type(pass_type, random_source)?;
 
-    file.sync_data()?;
+    if let Some(file_size) = file_size {
+        let (number_of_blocks, bytes_left) = split_on_blocks(file_size, exact, io_block_size);
+        let total_bytes = number_of_blocks * BLOCK_SIZE as u64 + bytes_left;
+
+        // As a performance tweak, avoid direct I/O for small sizes.
+        // Direct I/O can be unsupported for small non-aligned sizes.
+        let mut try_without_direct_io = total_bytes < BLOCK_SIZE as u64;
+        if !try_without_direct_io {
+            direct_mode(file, true);
+        }
+
+        let mut offset: u64 = 0;
+        while offset < total_bytes {
+            writer.sync_pattern_offset(offset);
+            let remaining = (total_bytes - offset) as usize;
+            let chunk_size = remaining.min(BLOCK_SIZE);
+            let block = writer.bytes_for_pass(chunk_size)?;
+
+            loop {
+                match file.write_all(block) {
+                    Ok(()) => {
+                        offset += chunk_size as u64;
+                        break;
+                    }
+                    Err(err)
+                        if err.kind() == io::ErrorKind::InvalidInput && !try_without_direct_io =>
+                    {
+                        // Direct I/O may not be supported on this filesystem or
+                        // for this alignment. Retry without it.
+                        direct_mode(file, false);
+                        try_without_direct_io = true;
+                        // Retry the same write at the same offset.
+                        file.seek(SeekFrom::Start(offset))?;
+                    }
+                    Err(err) if is_eio(&err) => {
+                        // Bad sector: continue from the next sector after the bytes
+                        // the kernel accepted before reporting EIO.
+                        let current_pos = file.stream_position()?;
+                        let next_sector = (current_pos | (SECTOR_SIZE - 1)) + 1;
+                        if next_sector >= total_bytes {
+                            break;
+                        }
+                        file.seek(SeekFrom::Start(next_sector))?;
+                        offset = next_sector;
+                        break;
+                    }
+                    Err(err) => return Err(err),
+                }
+            }
+        }
+
+        direct_mode(file, false);
+    } else {
+        loop {
+            let block = writer.bytes_for_pass(BLOCK_SIZE)?;
+            match file.write_all(block) {
+                Ok(()) => {}
+                Err(err)
+                    if err.kind() == io::ErrorKind::WriteZero
+                        || err.kind() == io::ErrorKind::StorageFull =>
+                {
+                    break;
+                }
+                Err(err) => return Err(err),
+            }
+        }
+    }
+
+    if should_sync_data {
+        if let Err(err) = file.sync_data() {
+            if !is_eio(&err) {
+                return Err(err);
+            }
+        }
+    }
 
     Ok(())
+}
+
+#[cfg(target_vendor = "apple")]
+fn rename_new(old_path: &Path, new_path: &Path) -> io::Result<()> {
+    let old_path = cstring_from_path(old_path)?;
+    let new_path = cstring_from_path(new_path)?;
+
+    // SAFETY: Both pointers come from owned `CString` values that remain alive
+    // for the duration of this call, are NUL-terminated, and point to valid
+    // path bytes for the OS API.
+    let ret = unsafe { libc::renamex_np(old_path.as_ptr(), new_path.as_ptr(), libc::RENAME_EXCL) };
+    if ret == 0 {
+        return Ok(());
+    }
+
+    Err(io::Error::last_os_error())
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn rename_new(old_path: &Path, new_path: &Path) -> io::Result<()> {
+    let old_path_c = cstring_from_path(old_path)?;
+    let new_path_c = cstring_from_path(new_path)?;
+
+    // SAFETY: Both pointers come from owned `CString` values that remain alive
+    // for the duration of this call, are NUL-terminated, and point to valid
+    // path bytes for the OS API. `AT_FDCWD` targets the current working
+    // directory and `RENAME_NOREPLACE` requests kernel-enforced no-overwrite
+    // semantics atomically.
+    let ret = unsafe {
+        libc::renameat2(
+            libc::AT_FDCWD,
+            old_path_c.as_ptr(),
+            libc::AT_FDCWD,
+            new_path_c.as_ptr(),
+            libc::RENAME_NOREPLACE,
+        )
+    };
+    if ret == 0 {
+        return Ok(());
+    }
+
+    let err = io::Error::last_os_error();
+    if matches!(
+        err.raw_os_error(),
+        Some(libc::ENOSYS) | Some(libc::EINVAL) | Some(libc::EOPNOTSUPP)
+    ) {
+        // Fall back to check-then-rename when atomic no-overwrite is unsupported
+        // by kernel/filesystem. This is racy but preserves functionality.
+        if new_path.exists() {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "destination already exists",
+            ));
+        }
+        return fs::rename(old_path, new_path);
+    }
+
+    Err(err)
+}
+
+#[cfg(not(any(target_vendor = "apple", target_os = "linux", target_os = "android")))]
+fn rename_new(old_path: &Path, new_path: &Path) -> io::Result<()> {
+    // No kernel-level atomic no-overwrite rename available; fall back to
+    // check-then-rename.  Racy, but functional and matches the non-Unix path.
+    if new_path.exists() {
+        return Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            "destination already exists",
+        ));
+    }
+    fs::rename(old_path, new_path)
+}
+
+#[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
+fn cstring_from_path(path: &Path) -> io::Result<CString> {
+    use std::os::unix::ffi::OsStrExt;
+    CString::new(path.as_os_str().as_bytes()).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "path contains interior NUL byte",
+        )
+    })
 }
 
 /// Repeatedly renames the file with strings of decreasing length (most likely all 0s)
 /// Return the path of the file after its last renaming or None in case of an error
 fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> PathBuf {
-    let file_name_len = orig_path.file_name().unwrap().len();
+    let file_name_len = orig_path
+        .file_name()
+        .expect("wipe_name called on a path with no filename component")
+        .len();
 
     let mut last_path = PathBuf::from(orig_path);
 
@@ -783,12 +1180,7 @@ fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> Pa
         // If every possible filename already exists, just reduce the length and try again
         for name in FilenameIter::new(length) {
             let new_path = orig_path.with_file_name(name);
-            // We don't want the filename to already exist (don't overwrite)
-            // If it does, find another name that doesn't
-            if new_path.exists() {
-                continue;
-            }
-            match fs::rename(&last_path, &new_path) {
+            match rename_new(&last_path, &new_path) {
                 Ok(()) => {
                     if verbose {
                         show_error!(
@@ -799,18 +1191,23 @@ fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> Pa
                         );
                     }
 
+                    // Sync the parent directory to ensure the rename is durable.
+                    // GNU shred does this via fdatasync/fsync on the directory fd.
                     if remove_method == RemoveMethod::WipeSync {
-                        // Sync every file rename
-                        let new_file = OpenOptions::new()
-                            .write(true)
-                            .open(new_path.clone())
-                            .expect("Failed to open renamed file for syncing");
-                        new_file.sync_all().expect("Failed to sync renamed file");
+                        if let Err(err) = sync_parent_dir(&new_path) {
+                            show_error!(
+                                "failed to sync directory after rename from {} to {}: {}",
+                                last_path.maybe_quote().to_string(),
+                                new_path.maybe_quote().to_string(),
+                                err
+                            );
+                        }
                     }
 
                     last_path = new_path;
                     break;
                 }
+                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
                 Err(e) => {
                     let msg = translate!("shred-couldnt-rename", "file" => last_path.maybe_quote(), "new_name" => new_path.quote(), "error" => e);
                     show_error!("{msg}");
@@ -843,7 +1240,19 @@ fn do_remove(
         wipe_name(path, verbose, remove_method)
     };
 
-    fs::remove_file(remove_path)?;
+    fs::remove_file(&remove_path)?;
+
+    // Sync the parent directory after unlink to ensure removal is durable
+    // (matches GNU shred's directory sync after unlink).
+    if remove_method == RemoveMethod::WipeSync {
+        if let Err(err) = sync_parent_dir(&remove_path) {
+            show_error!(
+                "failed to sync directory after removing {}: {}",
+                orig_filename.maybe_quote(),
+                err
+            );
+        }
+    }
 
     if verbose {
         show_error!(
@@ -858,34 +1267,134 @@ fn do_remove(
 #[cfg(test)]
 mod tests {
 
-    use crate::{BLOCK_SIZE, OPTIMAL_IO_BLOCK_SIZE, split_on_blocks};
-
+    use crate::{
+        BLOCK_SIZE, BytesWriter, OPTIMAL_IO_BLOCK_SIZE, PassType, Pattern, split_on_blocks,
+    };
+    #[cfg(unix)]
+    use crate::{RemoveMethod, finalize_file};
+    #[cfg(unix)]
+    use std::os::fd::AsRawFd;
     #[test]
     fn test_align_non_exact_control_values() {
         // Note: This test only makes sense for the default values of BLOCK_SIZE and
         // OPTIMAL_IO_BLOCK_SIZE.
-        assert_eq!(split_on_blocks(1, false), (0, 4096));
-        assert_eq!(split_on_blocks(4095, false), (0, 4096));
-        assert_eq!(split_on_blocks(4096, false), (0, 4096));
-        assert_eq!(split_on_blocks(4097, false), (0, 8192));
-        assert_eq!(split_on_blocks(65535, false), (1, 0));
-        assert_eq!(split_on_blocks(65536, false), (1, 0));
-        assert_eq!(split_on_blocks(65537, false), (1, 4096));
+        assert_eq!(
+            split_on_blocks(1, false, OPTIMAL_IO_BLOCK_SIZE as u64),
+            (0, 4096)
+        );
+        assert_eq!(
+            split_on_blocks(4095, false, OPTIMAL_IO_BLOCK_SIZE as u64),
+            (0, 4096)
+        );
+        assert_eq!(
+            split_on_blocks(4096, false, OPTIMAL_IO_BLOCK_SIZE as u64),
+            (0, 4096)
+        );
+        assert_eq!(
+            split_on_blocks(4097, false, OPTIMAL_IO_BLOCK_SIZE as u64),
+            (0, 8192)
+        );
+        assert_eq!(
+            split_on_blocks(65535, false, OPTIMAL_IO_BLOCK_SIZE as u64),
+            (1, 0)
+        );
+        assert_eq!(
+            split_on_blocks(65536, false, OPTIMAL_IO_BLOCK_SIZE as u64),
+            (1, 0)
+        );
+        assert_eq!(
+            split_on_blocks(65537, false, OPTIMAL_IO_BLOCK_SIZE as u64),
+            (1, 4096)
+        );
     }
 
     #[test]
     fn test_align_non_exact_cycle() {
         for size in 1..BLOCK_SIZE as u64 * 2 {
-            let (number_of_blocks, bytes_left) = split_on_blocks(size, false);
+            let (number_of_blocks, bytes_left) =
+                split_on_blocks(size, false, OPTIMAL_IO_BLOCK_SIZE as u64);
             let test_size = number_of_blocks * BLOCK_SIZE as u64 + bytes_left;
             assert_eq!(test_size % OPTIMAL_IO_BLOCK_SIZE as u64, 0);
         }
     }
 
     #[test]
+    fn test_align_non_exact_uses_provided_block_size() {
+        assert_eq!(split_on_blocks(1, false, 512), (0, 512));
+        assert_eq!(split_on_blocks(512, false, 512), (0, 512));
+        assert_eq!(split_on_blocks(513, false, 512), (0, 1024));
+    }
+
+    #[test]
+    fn test_pattern_writer_syncs_to_file_offset() {
+        let mut writer = BytesWriter::from_pass_type(
+            &PassType::Pattern(Pattern::Multi([b'A', b'B', b'C'])),
+            None,
+        )
+        .expect("pattern writer should be created");
+
+        writer.sync_pattern_offset(0);
+        assert_eq!(
+            writer.bytes_for_pass(1).expect("pattern byte at offset 0"),
+            b"A"
+        );
+
+        writer.sync_pattern_offset(1);
+        assert_eq!(
+            writer.bytes_for_pass(1).expect("pattern byte at offset 1"),
+            b"B"
+        );
+
+        writer.sync_pattern_offset(2);
+        assert_eq!(
+            writer.bytes_for_pass(1).expect("pattern byte at offset 2"),
+            b"C"
+        );
+
+        writer.sync_pattern_offset(3);
+        assert_eq!(
+            writer.bytes_for_pass(1).expect("pattern byte at offset 3"),
+            b"A"
+        );
+    }
+    #[cfg(unix)]
+    #[test]
+    fn test_finalize_file_does_not_remove_on_close_error() {
+        let temp_dir =
+            std::env::temp_dir().join(format!("uu_shred_close_error_{}", std::process::id()));
+        std::fs::create_dir_all(&temp_dir).expect("test temporary directory is created");
+
+        let file_path = temp_dir.join("target");
+        std::fs::write(&file_path, b"content").expect("test file is created");
+
+        let file = std::fs::OpenOptions::new()
+            .write(true)
+            .open(&file_path)
+            .expect("test file opens for writing");
+        let raw_fd = file.as_raw_fd();
+
+        // SAFETY: `raw_fd` belongs to `file` and is currently valid. Closing it here
+        // intentionally simulates a late close failure when `finalize_file` performs its
+        // checked close on the same descriptor.
+        let close_result = unsafe { libc::close(raw_fd) };
+        assert_eq!(close_result, 0, "test setup closes descriptor once");
+
+        let file_name = std::ffi::OsString::from("target");
+        let result = finalize_file(file, &file_path, &file_name, false, RemoveMethod::Unlink);
+        assert!(result.is_err(), "close failure is reported");
+        assert!(
+            file_path.exists(),
+            "remove phase is skipped when close fails"
+        );
+
+        std::fs::remove_file(&file_path).expect("test file cleanup succeeds");
+        std::fs::remove_dir(&temp_dir).expect("test directory cleanup succeeds");
+    }
+    #[test]
     fn test_align_exact_cycle() {
         for size in 1..BLOCK_SIZE as u64 * 2 {
-            let (number_of_blocks, bytes_left) = split_on_blocks(size, true);
+            let (number_of_blocks, bytes_left) =
+                split_on_blocks(size, true, OPTIMAL_IO_BLOCK_SIZE as u64);
             let test_size = number_of_blocks * BLOCK_SIZE as u64 + bytes_left;
             assert_eq!(test_size, size);
         }

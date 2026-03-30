@@ -42,6 +42,7 @@ shred-cannot-open-random-source = impossible d'ouvrir la source aléatoire : {$s
 shred-invalid-file-size = taille de fichier invalide : {$size}
 shred-no-such-file-or-directory = {$file} : Aucun fichier ou répertoire de ce type
 shred-not-a-file = {$file} : N'est pas un fichier
+shred-invalid-file-type = {$file} : type de fichier invalide
 
 # Texte d'aide des options
 shred-force-help = modifier les permissions pour permettre l'écriture si nécessaire
@@ -64,6 +65,8 @@ shred-couldnt-rename = {$file} : Impossible de renommer en {$new_name} : {$error
 shred-failed-to-open-for-writing = {$file} : impossible d'ouvrir pour l'écriture
 shred-file-write-pass-failed = {$file} : Échec du passage d'écriture de fichier
 shred-failed-to-remove-file = {$file} : impossible de supprimer le fichier
+shred-failed-to-truncate-file = {$file} : impossible de tronquer le fichier
+shred-failed-to-close-file = {$file} : échec de la fermeture du fichier
 
 # Messages d'erreur E/S de fichier
 shred-failed-to-clone-file-handle = échec du clonage du descripteur de fichier
