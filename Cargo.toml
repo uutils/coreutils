@@ -204,6 +204,7 @@ feat_wasm = [
   "pathchk",
   "pr",
   "printenv",
+  "head",
   "printf",
   "ptx",
   "pwd",
