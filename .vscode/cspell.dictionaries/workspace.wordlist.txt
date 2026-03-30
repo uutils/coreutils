@@ -8,6 +8,7 @@ advapi32-sys
 aho-corasick
 backtrace
 blake2b_simd
+rustix
 
 # * uutils project
 uutils
@@ -362,6 +363,7 @@ uutils
 
 # * function names
 getcwd
+setpipe
 
 # * other
 getlimits
