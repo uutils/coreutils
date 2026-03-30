@@ -45,6 +45,8 @@ macro_rules! has {
 pub struct FileInformation(
     #[cfg(unix)] nix::sys::stat::FileStat,
     #[cfg(windows)] winapi_util::file::Information,
+    // WASI does not have nix::sys::stat, so we store std::fs::Metadata instead.
+    #[cfg(target_os = "wasi")] std::fs::Metadata,
 );
 
 impl FileInformation {
@@ -91,6 +93,16 @@ impl FileInformation {
             let file = open_options.read(true).open(path.as_ref())?;
             Self::from_file(&file)
         }
+        // WASI: use std::fs::metadata / symlink_metadata since nix is not available
+        #[cfg(target_os = "wasi")]
+        {
+            let metadata = if dereference {
+                std::fs::metadata(path.as_ref())
+            } else {
+                std::fs::symlink_metadata(path.as_ref())
+            };
+            Ok(Self(metadata?))
+        }
     }
 
     pub fn file_size(&self) -> u64 {
@@ -102,6 +114,10 @@ impl FileInformation {
         #[cfg(target_os = "windows")]
         {
             self.0.file_size()
+        }
+        #[cfg(target_os = "wasi")]
+        {
+            self.0.len()
         }
     }
 
@@ -153,6 +169,9 @@ impl FileInformation {
         return self.0.st_nlink.try_into().unwrap();
         #[cfg(windows)]
         return self.0.number_of_links();
+        // WASI: nlink is not available in std::fs::Metadata, return 1
+        #[cfg(target_os = "wasi")]
+        return 1;
     }
 
     #[cfg(unix)]
@@ -169,6 +188,15 @@ impl FileInformation {
 impl PartialEq for FileInformation {
     fn eq(&self, other: &Self) -> bool {
         self.0.st_dev == other.0.st_dev && self.0.st_ino == other.0.st_ino
+    }
+}
+
+// WASI: compare by file type and size as a basic heuristic since
+// device/inode numbers are not available through std::fs::Metadata.
+#[cfg(target_os = "wasi")]
+impl PartialEq for FileInformation {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.file_type() == other.0.file_type() && self.0.len() == other.0.len()
     }
 }
 
@@ -193,6 +221,10 @@ impl Hash for FileInformation {
         {
             self.0.volume_serial_number().hash(state);
             self.0.file_index().hash(state);
+        }
+        #[cfg(target_os = "wasi")]
+        {
+            self.0.len().hash(state);
         }
     }
 }
@@ -778,11 +810,18 @@ pub fn is_stdin_directory(stdin: &Stdin) -> bool {
         }
         false
     }
+
+    // WASI: stdin is never a directory
+    #[cfg(target_os = "wasi")]
+    {
+        let _ = stdin;
+        false
+    }
 }
 
 pub mod sane_blksize {
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(unix)]
     use std::os::unix::fs::MetadataExt;
     use std::{fs::metadata, path::Path};
 
@@ -809,12 +848,12 @@ pub mod sane_blksize {
         #[cfg(unix)] metadata: &std::fs::Metadata,
         #[cfg(not(unix))] _: &std::fs::Metadata,
     ) -> u64 {
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(unix)]
         {
             sane_blksize(metadata.blksize())
         }
 
-        #[cfg(target_os = "windows")]
+        #[cfg(not(unix))]
         {
             DEFAULT
         }
