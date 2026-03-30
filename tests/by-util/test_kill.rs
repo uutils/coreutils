@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore IAMNOTASIGNAL RTMAX RTMIN SIGRTMAX
+// spell-checker:ignore IAMNOTASIGNAL RTMAX RTMIN SIGRTMAX SIGRT SIGRTMIN SIGRTMAX
 use regex::Regex;
 use std::os::unix::process::ExitStatusExt;
 use std::process::{Child, Command};
@@ -492,4 +492,19 @@ fn test_kill_signal_only_no_pid() {
         .arg("-TERM")
         .fails()
         .stderr_contains("no process ID specified");
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+fn test_kill_with_signal_sigrt() {
+    if !uucore::os::is_wsl() && uucore::signals::realtime_signal_bounds().is_some() {
+        for signal in &["SIGRTMIN", "SIGRTMIN+1", "SIGRTMAX", "SIGRTMAX-1"] {
+            let target = Target::new();
+            new_ucmd!()
+                .arg("-s")
+                .arg(signal)
+                .arg(format!("{}", target.pid()))
+                .succeeds();
+        }
+    }
 }
