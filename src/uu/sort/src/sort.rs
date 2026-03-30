@@ -29,7 +29,7 @@ use foldhash::fast::FoldHasher;
 use foldhash::{HashMap, SharedSeed};
 use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
 use rand::{RngExt as _, rng};
-#[cfg(not(target_os = "wasi"))]
+#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
 use rayon::slice::ParallelSliceMut;
 use std::cmp::Ordering;
 use std::env;
@@ -38,7 +38,7 @@ use std::fs::{File, OpenOptions};
 use std::hash::{Hash, Hasher};
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
-#[cfg(not(target_os = "wasi"))]
+#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
 use std::num::NonZero;
 use std::ops::Range;
 #[cfg(unix)]
@@ -2126,7 +2126,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         settings.threads = matches
             .get_one::<String>(options::PARALLEL)
             .map_or_else(|| "0".to_string(), String::from);
-        #[cfg(not(target_os = "wasi"))]
+        #[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
         {
             let num_threads = match settings.threads.parse::<usize>() {
                 Ok(0) | Err(_) => std::thread::available_parallelism().map_or(1, NonZero::get),
@@ -2620,14 +2620,14 @@ fn sort_by<'a>(unsorted: &mut Vec<Line<'a>>, settings: &GlobalSettings, line_dat
     // WASI does not support threads, so use non-parallel sort to avoid
     // rayon's thread pool which triggers an unreachable trap.
     if settings.stable || settings.unique {
-        #[cfg(not(target_os = "wasi"))]
+        #[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
         unsorted.par_sort_by(cmp);
-        #[cfg(target_os = "wasi")]
+        #[cfg(all(target_os = "wasi", not(target_feature = "atomics")))]
         unsorted.sort_by(cmp);
     } else {
-        #[cfg(not(target_os = "wasi"))]
+        #[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
         unsorted.par_sort_unstable_by(cmp);
-        #[cfg(target_os = "wasi")]
+        #[cfg(all(target_os = "wasi", not(target_feature = "atomics")))]
         unsorted.sort_unstable_by(cmp);
     }
 }

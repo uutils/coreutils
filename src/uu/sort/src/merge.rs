@@ -20,12 +20,17 @@ use std::{
     path::{Path, PathBuf},
     process::{Child, ChildStdin, ChildStdout, Command, Stdio},
     rc::Rc,
+};
+#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+use std::{
     sync::mpsc::{Receiver, Sender, SyncSender, channel, sync_channel},
     thread::{self, JoinHandle},
 };
 
 use compare::Compare;
-use uucore::error::{FromIo, UResult};
+#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+use uucore::error::FromIo;
+use uucore::error::UResult;
 
 use crate::{
     GlobalSettings, Output, SortError,
@@ -103,11 +108,46 @@ pub fn merge(
     let files = files
         .iter()
         .map(|file| open(file).map(|file| PlainMergeInput { inner: file }));
+    #[cfg(all(target_os = "wasi", not(target_feature = "atomics")))]
+    if settings.compress_prog.is_some() {
+        let _ = writeln!(
+            std::io::stderr(),
+            "sort: warning: --compress-program is ignored on this platform"
+        );
+        return merge_with_file_limit::<_, _, WriteablePlainTmpFile>(
+            files, settings, output, tmp_dir,
+        );
+    }
+
     if settings.compress_prog.is_none() {
         merge_with_file_limit::<_, _, WriteablePlainTmpFile>(files, settings, output, tmp_dir)
     } else {
         merge_with_file_limit::<_, _, WriteableCompressedTmpFile>(files, settings, output, tmp_dir)
     }
+}
+
+/// Merge and write to output — dispatches between threaded and synchronous.
+fn do_merge_to_output<M: MergeInput + 'static>(
+    files: impl Iterator<Item = UResult<M>>,
+    settings: &GlobalSettings,
+    output: Output,
+) -> UResult<()> {
+    #[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+    return merge_without_limit(files, settings)?.write_all(settings, output);
+    #[cfg(all(target_os = "wasi", not(target_feature = "atomics")))]
+    return merge_without_limit_sync(files, settings)?.write_all(settings, output);
+}
+
+/// Merge and write to a writer — dispatches between threaded and synchronous.
+fn do_merge_to_writer<M: MergeInput + 'static>(
+    files: impl Iterator<Item = UResult<M>>,
+    settings: &GlobalSettings,
+    out: &mut impl Write,
+) -> UResult<()> {
+    #[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+    return merge_without_limit(files, settings)?.write_all_to(settings, out);
+    #[cfg(all(target_os = "wasi", not(target_feature = "atomics")))]
+    return merge_without_limit_sync(files, settings)?.write_all_to(settings, out);
 }
 
 // Merge already sorted `MergeInput`s.
@@ -125,8 +165,7 @@ pub fn merge_with_file_limit<
     debug_assert!(batch_size >= 2);
 
     if files.len() <= batch_size {
-        let merger = merge_without_limit(files, settings);
-        merger?.write_all(settings, output)
+        do_merge_to_output(files, settings, output)
     } else {
         let mut temporary_files = vec![];
         let mut batch = Vec::with_capacity(batch_size);
@@ -134,23 +173,21 @@ pub fn merge_with_file_limit<
             batch.push(file);
             if batch.len() >= batch_size {
                 assert_eq!(batch.len(), batch_size);
-                let merger = merge_without_limit(batch.into_iter(), settings)?;
-                batch = Vec::with_capacity(batch_size);
+                let full_batch = std::mem::replace(&mut batch, Vec::with_capacity(batch_size));
 
                 let mut tmp_file =
                     Tmp::create(tmp_dir.next_file()?, settings.compress_prog.as_deref())?;
-                merger.write_all_to(settings, tmp_file.as_write())?;
+                do_merge_to_writer(full_batch.into_iter(), settings, tmp_file.as_write())?;
                 temporary_files.push(tmp_file.finished_writing()?);
             }
         }
         // Merge any remaining files that didn't get merged in a full batch above.
         if !batch.is_empty() {
             assert!(batch.len() < batch_size);
-            let merger = merge_without_limit(batch.into_iter(), settings)?;
 
             let mut tmp_file =
                 Tmp::create(tmp_dir.next_file()?, settings.compress_prog.as_deref())?;
-            merger.write_all_to(settings, tmp_file.as_write())?;
+            do_merge_to_writer(batch.into_iter(), settings, tmp_file.as_write())?;
             temporary_files.push(tmp_file.finished_writing()?);
         }
         merge_with_file_limit::<_, _, Tmp>(
@@ -171,6 +208,7 @@ pub fn merge_with_file_limit<
 ///
 /// It is the responsibility of the caller to ensure that `files` yields only
 /// as many files as we are allowed to open concurrently.
+#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
 fn merge_without_limit<M: MergeInput + 'static, F: Iterator<Item = UResult<M>>>(
     files: F,
     settings: &GlobalSettings,
@@ -235,6 +273,7 @@ fn merge_without_limit<M: MergeInput + 'static, F: Iterator<Item = UResult<M>>>(
     })
 }
 /// The struct on the reader thread representing an input file
+#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
 struct ReaderFile<M: MergeInput> {
     file: M,
     sender: SyncSender<Chunk>,
@@ -242,6 +281,7 @@ struct ReaderFile<M: MergeInput> {
 }
 
 /// The function running on the reader thread.
+#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
 fn reader(
     recycled_receiver: &Receiver<(usize, RecycledChunk)>,
     files: &mut [Option<ReaderFile<impl MergeInput>>],
@@ -276,6 +316,7 @@ fn reader(
     Ok(())
 }
 /// The struct on the main thread representing an input file
+#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
 pub struct MergeableFile {
     current_chunk: Rc<Chunk>,
     line_idx: usize,
@@ -289,10 +330,12 @@ pub struct MergeableFile {
 struct PreviousLine {
     chunk: Rc<Chunk>,
     line_idx: usize,
+    #[cfg_attr(all(target_os = "wasi", not(target_feature = "atomics")), allow(dead_code))]
     file_number: usize,
 }
 
 /// Merges files together. This is **not** an iterator because of lifetime problems.
+#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
 struct FileMerger<'a> {
     heap: binary_heap_plus::BinaryHeap<MergeableFile, FileComparator<'a>>,
     request_sender: Sender<(usize, RecycledChunk)>,
@@ -300,6 +343,7 @@ struct FileMerger<'a> {
     reader_join_handle: JoinHandle<UResult<()>>,
 }
 
+#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
 impl FileMerger<'_> {
     /// Write the merged contents to the output file.
     fn write_all(self, settings: &GlobalSettings, output: Output) -> UResult<()> {
@@ -381,6 +425,7 @@ struct FileComparator<'a> {
     settings: &'a GlobalSettings,
 }
 
+#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
 impl Compare<MergeableFile> for FileComparator<'_> {
     fn compare(&self, a: &MergeableFile, b: &MergeableFile) -> Ordering {
         let mut cmp = compare_by(
@@ -595,4 +640,199 @@ impl<R: Read + Send> MergeInput for PlainMergeInput<R> {
     fn as_read(&mut self) -> &mut Self::InnerRead {
         &mut self.inner
     }
+}
+
+// ---------------------------------------------------------------------------
+// Synchronous merge for targets without thread support (e.g. wasm32-wasip1).
+// ---------------------------------------------------------------------------
+
+#[cfg(all(target_os = "wasi", not(target_feature = "atomics")))]
+struct SyncReaderFile<M: MergeInput> {
+    file: M,
+    carry_over: Vec<u8>,
+}
+
+#[cfg(all(target_os = "wasi", not(target_feature = "atomics")))]
+struct SyncMergeableFile {
+    current_chunk: Rc<Chunk>,
+    line_idx: usize,
+    file_number: usize,
+}
+
+#[cfg(all(target_os = "wasi", not(target_feature = "atomics")))]
+impl Compare<SyncMergeableFile> for FileComparator<'_> {
+    fn compare(&self, a: &SyncMergeableFile, b: &SyncMergeableFile) -> Ordering {
+        let mut cmp = compare_by(
+            &a.current_chunk.lines()[a.line_idx],
+            &b.current_chunk.lines()[b.line_idx],
+            self.settings,
+            a.current_chunk.line_data(),
+            b.current_chunk.line_data(),
+        );
+        if cmp == Ordering::Equal {
+            cmp = a.file_number.cmp(&b.file_number);
+        }
+        cmp.reverse()
+    }
+}
+
+#[cfg(all(target_os = "wasi", not(target_feature = "atomics")))]
+struct SyncFileMerger<'a, M: MergeInput> {
+    heap: binary_heap_plus::BinaryHeap<SyncMergeableFile, FileComparator<'a>>,
+    readers: Vec<Option<SyncReaderFile<M>>>,
+    prev: Option<PreviousLine>,
+    recycled: Option<RecycledChunk>,
+    settings: &'a GlobalSettings,
+}
+
+#[cfg(all(target_os = "wasi", not(target_feature = "atomics")))]
+impl<M: MergeInput> SyncFileMerger<'_, M> {
+    fn write_all(self, settings: &GlobalSettings, output: Output) -> UResult<()> {
+        let mut out = output.into_write();
+        self.write_all_to(settings, &mut out)
+    }
+
+    fn write_all_to(mut self, settings: &GlobalSettings, out: &mut impl Write) -> UResult<()> {
+        while self.write_next(settings, out)? {}
+        for reader in self.readers.into_iter().flatten() {
+            reader.file.finished_reading()?;
+        }
+        Ok(())
+    }
+
+    fn write_next(
+        &mut self,
+        settings: &GlobalSettings,
+        out: &mut impl Write,
+    ) -> UResult<bool> {
+        if let Some(file) = self.heap.peek() {
+            let prev = self.prev.replace(PreviousLine {
+                chunk: file.current_chunk.clone(),
+                line_idx: file.line_idx,
+                file_number: file.file_number,
+            });
+
+            file.current_chunk.with_dependent(|_, contents| {
+                let current_line = &contents.lines[file.line_idx];
+                if settings.unique {
+                    if let Some(prev) = &prev {
+                        let cmp = compare_by(
+                            &prev.chunk.lines()[prev.line_idx],
+                            current_line,
+                            settings,
+                            prev.chunk.line_data(),
+                            file.current_chunk.line_data(),
+                        );
+                        if cmp == Ordering::Equal {
+                            return Ok(());
+                        }
+                    }
+                }
+                current_line.print(out, settings)
+            })?;
+
+            let was_last = file.current_chunk.lines().len() == file.line_idx + 1;
+            let file_number = file.file_number;
+
+            if was_last {
+                let separator = self.settings.line_ending.into();
+                let recycled = self
+                    .recycled
+                    .take()
+                    .unwrap_or_else(|| RecycledChunk::new(8 * 1024));
+                let next_chunk = if let Some(reader) = self.readers[file_number].as_mut() {
+                    let (chunk, should_continue) = chunks::read_to_chunk(
+                        recycled,
+                        None,
+                        &mut reader.carry_over,
+                        reader.file.as_read(),
+                        &mut iter::empty(),
+                        separator,
+                        self.settings,
+                    )?;
+                    if !should_continue {
+                        if let Some(reader) = self.readers[file_number].take() {
+                            reader.file.finished_reading()?;
+                        }
+                    }
+                    chunk
+                } else {
+                    None
+                };
+
+                if let Some(next_chunk) = next_chunk {
+                    let mut file = self.heap.peek_mut().unwrap();
+                    file.current_chunk = Rc::new(next_chunk);
+                    file.line_idx = 0;
+                } else {
+                    self.heap.pop();
+                }
+            } else {
+                self.heap.peek_mut().unwrap().line_idx += 1;
+            }
+
+            // Recycle the previous chunk if no other reference holds it.
+            if let Some(prev) = prev {
+                if let Ok(chunk) = Rc::try_unwrap(prev.chunk) {
+                    self.recycled = Some(chunk.recycle());
+                }
+            }
+        }
+        Ok(!self.heap.is_empty())
+    }
+}
+
+#[cfg(all(target_os = "wasi", not(target_feature = "atomics")))]
+fn merge_without_limit_sync<'a, M: MergeInput + 'static, F: Iterator<Item = UResult<M>>>(
+    files: F,
+    settings: &'a GlobalSettings,
+) -> UResult<SyncFileMerger<'a, M>> {
+    let separator = settings.line_ending.into();
+    let mut readers: Vec<Option<SyncReaderFile<M>>> = Vec::new();
+    let mut mergeable_files = Vec::new();
+
+    for (file_number, file) in files.enumerate() {
+        let mut reader = SyncReaderFile {
+            file: file?,
+            carry_over: vec![],
+        };
+        let recycled = RecycledChunk::new(8 * 1024);
+        let (chunk, should_continue) = chunks::read_to_chunk(
+            recycled,
+            None,
+            &mut reader.carry_over,
+            reader.file.as_read(),
+            &mut iter::empty(),
+            separator,
+            settings,
+        )?;
+
+        if let Some(chunk) = chunk {
+            mergeable_files.push(SyncMergeableFile {
+                current_chunk: Rc::new(chunk),
+                line_idx: 0,
+                file_number,
+            });
+            if should_continue {
+                readers.push(Some(reader));
+            } else {
+                reader.file.finished_reading()?;
+                readers.push(None);
+            }
+        } else {
+            reader.file.finished_reading()?;
+            readers.push(None);
+        }
+    }
+
+    Ok(SyncFileMerger {
+        heap: binary_heap_plus::BinaryHeap::from_vec_cmp(
+            mergeable_files,
+            FileComparator { settings },
+        ),
+        readers,
+        prev: None,
+        recycled: None,
+        settings,
+    })
 }

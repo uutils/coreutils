@@ -6,15 +6,8 @@
 //! External sort: sort large inputs that may not fit in memory.
 //!
 //! On most platforms this uses a multi-threaded chunked approach with
-//! temporary files. On WASI (no threads) we fall back to an in-memory sort.
+//! temporary files. On WASI without atomics, synchronous fallbacks are
+//! used instead (selected via `cfg` guards inside the module).
 
-#[cfg(not(target_os = "wasi"))]
 mod threaded;
-#[cfg(not(target_os = "wasi"))]
 pub use threaded::ext_sort;
-
-#[cfg(target_os = "wasi")]
-mod wasi;
-#[cfg(target_os = "wasi")]
-// `self::` needed to disambiguate from the `wasi` crate
-pub use self::wasi::ext_sort;
