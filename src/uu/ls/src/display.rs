@@ -1146,7 +1146,12 @@ fn classify_file(path: &PathData) -> Option<char> {
 }
 
 fn create_hyperlink(name: &OsStr, path: &PathData) -> OsString {
+    // The `hostname` crate does not support WASI (no OS-level hostname API),
+    // so we use an empty string for hyperlinks on WASI.
+    #[cfg(not(target_os = "wasi"))]
     static HOSTNAME: LazyLock<OsString> = LazyLock::new(|| hostname::get().unwrap_or_default());
+    #[cfg(target_os = "wasi")]
+    static HOSTNAME: LazyLock<OsString> = LazyLock::new(OsString::new);
 
     // OSC 8 hyperlink format: \x1b]8;;URL\x1b\\TEXT\x1b]8;;\x1b\\
     // \x1b = ESC, \x1b\\ = ESC backslash
