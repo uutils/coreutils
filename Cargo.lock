@@ -3285,6 +3285,7 @@ name = "uu_cat"
 version = "0.8.0"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
  "memchr",
  "nix",
