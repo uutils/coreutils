@@ -98,7 +98,6 @@ pub(crate) struct DisplayItemName {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum IndicatorStyle {
-    None,
     Slash,
     FileType,
     Classify,
@@ -735,14 +734,14 @@ fn display_item_name(
                 // This is because relative symlinks will fail to get_metadata.
                 let absolute_target = if target_path.is_relative() {
                     match path.path().parent() {
-                        Some(p) => p.join(&target_path),
-                        None => target_path.clone(),
+                        Some(p) => &p.join(&target_path),
+                        None => &target_path,
                     }
                 } else {
-                    target_path.clone()
+                    &target_path
                 };
 
-                match fs::canonicalize(&absolute_target) {
+                match fs::canonicalize(absolute_target) {
                     Ok(resolved_target) => {
                         let target_data = PathData::new(
                             resolved_target.as_path().into(),
@@ -752,27 +751,32 @@ fn display_item_name(
                             false,
                         );
 
-                        let mut target_display = escaped_target.clone();
-                        if let Some(style_manager) = &mut style_manager {
-                            let md_option: Option<Metadata> = target_data
-                                .metadata()
-                                .cloned()
-                                .or_else(|| target_data.p_buf.symlink_metadata().ok());
-
+                        let target_display = if let Some(style_manager) = style_manager {
+                            let md = match target_data.metadata() {
+                                Some(md) => Some(Cow::Borrowed(md)),
+                                None => target_data.p_buf.symlink_metadata().ok().map(Cow::Owned),
+                            };
+                            // Check if the target actually needs coloring
                             if style_manager
                                 .colors
-                                .style_for_path_with_metadata(&target_data.p_buf, md_option.as_ref())
+                                .style_for_path_with_metadata(&target_data.p_buf, md.as_deref())
                                 .is_some()
                             {
-                                target_display = color_name(
-                                    escaped_target.clone(),
+                                // Only apply coloring if there's actually a style
+                                &color_name(
+                                    escaped_target,
                                     &target_data,
                                     style_manager,
                                     None,
                                     is_wrap(name.len()),
-                                );
+                                )
+                            } else {
+                                // For regular files with no coloring, just use plain text
+                                &escaped_target
                             }
-                        }
+                        } else {
+                            &escaped_target
+                        };
 
                         name.push(target_display);
                         if let Some(c) = indicator_char(&target_data, config.indicator_style) {
@@ -788,6 +792,8 @@ fn display_item_name(
                                 ),
                             );
                         } else {
+                            // If no coloring is required, we just use target as is.
+                            // with the right quoting
                             name.push(escaped_target);
                         }
                     }
@@ -1109,7 +1115,8 @@ fn display_item_long(
     Ok(())
 }
 
-fn indicator_char(path: &PathData, style: IndicatorStyle) -> Option<char> {
+fn indicator_char(path: &PathData, style: Option<IndicatorStyle>) -> Option<char> {
+    let style = style?;
     let sym = classify_file(path);
 
     match style {
@@ -1122,7 +1129,6 @@ fn indicator_char(path: &PathData, style: IndicatorStyle) -> Option<char> {
             Some('/') => Some('/'),
             _ => None,
         },
-        IndicatorStyle::None => None,
     }
 }
 
