@@ -179,6 +179,7 @@ feat_Tier1 = [
 # We don't need to support all of wasm targets. So the ambiguous name is used at here
 # It is bit complex to deduplicate with other lists
 feat_wasm = [
+  "arch",
   "basename",
   "base32",
   "base64",
@@ -213,6 +214,7 @@ feat_wasm = [
   "tee",
   "true",
   "truncate",
+  "uname",
   "unexpand",
   "uniq",
   "unlink",
@@ -227,9 +229,6 @@ feat_wasm = [
   "sha256sum",
   "sha384sum",
   "sha512sum",
-  # useless?
-  "arch",
-  "uname",
 ]
 # "feat_os_unix" == set of utilities which can be built/run on modern/usual *nix platforms.
 feat_os_unix = [
