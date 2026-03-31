@@ -82,6 +82,7 @@ impl DebugOptions {
 enum ParsedDateValue {
     InRange(Zoned),
     Extended(parse_datetime::ExtendedDateTime),
+    ExtendedInZone(parse_datetime::ExtendedDateTime, TimeZone),
 }
 
 /// Various ways of displaying the date
@@ -379,7 +380,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 ));
             }
             Ok(ParsedDateValue::InRange(date)) => Some(date),
-            Ok(ParsedDateValue::Extended(_)) => {
+            Ok(ParsedDateValue::Extended(_) | ParsedDateValue::ExtendedInZone(_, _)) => {
                 return Err(USimpleError::new(
                     1,
                     translate!("date-error-invalid-date", "date" => s.as_str()),
@@ -591,6 +592,36 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     matches!(settings.format, Format::Rfc5322 | Format::Rfc3339(_));
                 let (date, tz_name, zone_display) =
                     convert_extended_for_output(&date, settings.utc, &now)
+                    .map_err(|e| {
+                        USimpleError::new(
+                            1,
+                            translate!("date-error-invalid-format", "format" => format_string, "error" => e),
+                        )
+                    })?;
+                match format_extended_date(
+                    &date,
+                    format_string,
+                    &tz_name,
+                    &zone_display,
+                    skip_localization,
+                ) {
+                    Ok(s) => writeln!(stdout, "{s}").map_err(|e| {
+                        USimpleError::new(1, translate!("date-error-write", "error" => e))
+                    })?,
+                    Err(e) => {
+                        let _ = stdout.flush();
+                        return Err(USimpleError::new(
+                            1,
+                            translate!("date-error-invalid-format", "format" => format_string, "error" => e),
+                        ));
+                    }
+                }
+            }
+            Ok(ParsedDateValue::ExtendedInZone(date, zone)) => {
+                let skip_localization =
+                    matches!(settings.format, Format::Rfc5322 | Format::Rfc3339(_));
+                let (date, tz_name, zone_display) =
+                    preserve_extended_for_output_in_zone(&date, settings.utc, &zone)
                     .map_err(|e| {
                         USimpleError::new(
                             1,
@@ -897,14 +928,22 @@ fn convert_extended_for_output(
     utc: bool,
     now: &Zoned,
 ) -> Result<(parse_datetime::ExtendedDateTime, String, String), String> {
+    convert_extended_for_output_in_zone(date, utc, now.time_zone())
+}
+
+fn convert_extended_for_output_in_zone(
+    date: &parse_datetime::ExtendedDateTime,
+    utc: bool,
+    zone: &TimeZone,
+) -> Result<(parse_datetime::ExtendedDateTime, String, String), String> {
     let (target_offset, tz_name) = if utc {
         (0, "UTC".to_string())
     } else {
-        offset_info_for_extended_in_zone(date, now.time_zone())?
+        offset_info_for_extended_in_zone(date, zone)?
     };
     let zone_display = if utc {
         "UTC".to_string()
-    } else if let Some(name) = now.time_zone().iana_name() {
+    } else if let Some(name) = zone.iana_name() {
         name.to_string()
     } else {
         format_offset(target_offset, 0)?
@@ -918,24 +957,30 @@ fn convert_extended_for_output(
     Ok((converted, tz_name, zone_display))
 }
 
+fn preserve_extended_for_output_in_zone(
+    date: &parse_datetime::ExtendedDateTime,
+    utc: bool,
+    zone: &TimeZone,
+) -> Result<(parse_datetime::ExtendedDateTime, String, String), String> {
+    if utc {
+        return convert_extended_for_output_in_zone(date, true, zone);
+    }
+
+    let (_, tz_name) = local_offset_info_for_extended_in_zone(date, zone)?;
+    let zone_display = if let Some(name) = zone.iana_name() {
+        name.to_string()
+    } else {
+        format_offset(date.offset_seconds, 0)?
+    };
+    Ok((date.clone(), tz_name, zone_display))
+}
+
 fn resolve_extended_in_zone(
     date: &parse_datetime::ExtendedDateTime,
     zone: &TimeZone,
 ) -> Result<parse_datetime::ExtendedDateTime, String> {
-    let surrogate_local = jiff::civil::DateTime::new(
-        surrogate_year_for_rules(date.year),
-        date.month as i8,
-        date.day as i8,
-        date.hour as i8,
-        date.minute as i8,
-        date.second as i8,
-        date.nanosecond as i32,
-    )
-    .map_err(|e| e.to_string())?;
-    let zoned = zone
-        .to_ambiguous_zoned(surrogate_local)
-        .compatible()
-        .map_err(|e| e.to_string())?;
+    let (surrogate_local, zoned) = surrogate_zoned_for_extended(date, zone)?;
+    let _ = surrogate_local;
     parse_datetime::ExtendedDateTime::new(
         parse_datetime::DateParts {
             year: date.year,
@@ -951,6 +996,27 @@ fn resolve_extended_in_zone(
         zoned.offset().seconds(),
     )
     .map_err(str::to_string)
+}
+
+fn surrogate_zoned_for_extended(
+    date: &parse_datetime::ExtendedDateTime,
+    zone: &TimeZone,
+) -> Result<(jiff::civil::DateTime, Zoned), String> {
+    let surrogate_local = jiff::civil::DateTime::new(
+        surrogate_year_for_rules(date.year),
+        date.month as i8,
+        date.day as i8,
+        date.hour as i8,
+        date.minute as i8,
+        date.second as i8,
+        date.nanosecond as i32,
+    )
+    .map_err(|e| e.to_string())?;
+    let zoned = zone
+        .to_ambiguous_zoned(surrogate_local)
+        .compatible()
+        .map_err(|e| e.to_string())?;
+    Ok((surrogate_local, zoned))
 }
 
 fn surrogate_year_for_rules(year: u32) -> i16 {
@@ -987,6 +1053,15 @@ fn offset_info_for_extended_in_zone(
         .map_err(|e| e.to_string())?
         .timestamp();
     let info = zone.to_offset_info(surrogate_ts);
+    Ok((info.offset().seconds(), info.abbreviation().to_string()))
+}
+
+fn local_offset_info_for_extended_in_zone(
+    date: &parse_datetime::ExtendedDateTime,
+    zone: &TimeZone,
+) -> Result<(i32, String), String> {
+    let (_, zoned) = surrogate_zoned_for_extended(date, zone)?;
+    let info = zone.to_offset_info(zoned.timestamp());
     Ok((info.offset().seconds(), info.abbreviation().to_string()))
 }
 
@@ -1477,7 +1552,7 @@ fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S, now: &Zoned) -> Optio
                         }
                         parse_datetime::ParsedDateTime::Extended(parsed) => {
                             if let Ok(date) = resolve_extended_in_zone(&parsed, &tz) {
-                                return Some(ParsedDateValue::Extended(date));
+                                return Some(ParsedDateValue::ExtendedInZone(date, tz));
                             }
                         }
                     }
@@ -1542,6 +1617,18 @@ fn parse_date<S: AsRef<str> + Clone>(
                     );
                 }
                 ParsedDateValue::Extended(date) => {
+                    let _ = writeln!(
+                        err,
+                        "date: parsed date part: (Y-M-D) {:04}-{:02}-{:02}",
+                        date.year, date.month, date.day
+                    );
+                    let _ = writeln!(
+                        err,
+                        "date: parsed time part: {:02}:{:02}:{:02}",
+                        date.hour, date.minute, date.second
+                    );
+                }
+                ParsedDateValue::ExtendedInZone(date, _) => {
                     let _ = writeln!(
                         err,
                         "date: parsed date part: (Y-M-D) {:04}-{:02}-{:02}",
@@ -1781,7 +1868,9 @@ mod tests {
             ParsedDateValue::InRange(zoned) => {
                 assert_eq!(zoned.date(), jiff::civil::date(2025, 3, 14));
             }
-            ParsedDateValue::Extended(_) => panic!("expected in-range date"),
+            ParsedDateValue::Extended(_) | ParsedDateValue::ExtendedInZone(_, _) => {
+                panic!("expected in-range date")
+            }
         }
     }
 
@@ -1797,7 +1886,9 @@ mod tests {
         .unwrap();
         let date = match date {
             ParsedDateValue::InRange(zoned) => zoned,
-            ParsedDateValue::Extended(_) => panic!("expected in-range date"),
+            ParsedDateValue::Extended(_) | ParsedDateValue::ExtendedInZone(_, _) => {
+                panic!("expected in-range date")
+            }
         };
         let utc = convert_for_set(date, true);
         assert_eq!((utc.hour(), utc.minute(), utc.second()), (6, 53, 1)); // AWST(+08:00) -> -8h

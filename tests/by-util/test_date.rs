@@ -3067,6 +3067,30 @@ fn test_korean_time_zone() {
 #[test]
 fn test_large_year_timezone_abbreviations() {
     new_ucmd!()
+        .env("TZ", "UTC0")
+        .arg("-d")
+        .arg("10000-01-01 00:00 KST")
+        .arg("+%Q|%:z|%Z")
+        .succeeds()
+        .stdout_is("+0900|+09:00|+09\n");
+
+    new_ucmd!()
+        .env("TZ", "UTC0")
+        .arg("-d")
+        .arg("10000-01-01 00:00 MEZ")
+        .arg("+%Q|%:z|%Z")
+        .succeeds()
+        .stdout_is("+0100|+01:00|+01\n");
+
+    new_ucmd!()
+        .env("TZ", "UTC0")
+        .arg("-d")
+        .arg("10000-01-01 00:00 SAMOA")
+        .arg("+%Q|%:z|%Z")
+        .succeeds()
+        .stdout_is("Pacific/Samoa|-11:00|SST\n");
+
+    new_ucmd!()
         .env("TZ", "UTC")
         .arg("-u")
         .arg("-d")
@@ -3092,4 +3116,43 @@ fn test_large_year_timezone_abbreviations() {
         .arg("+%F %T %:z %Z")
         .succeeds()
         .stdout_is("10000-07-01 04:00:00 +00:00 UTC\n");
+}
+
+#[test]
+fn test_large_year_timezone_abbreviations_match_in_range_behavior() {
+    let in_range_kst = new_ucmd!()
+        .env("TZ", "UTC0")
+        .arg("-d")
+        .arg("2024-01-01 00:00 KST")
+        .arg("+%Q|%:z|%Z")
+        .succeeds()
+        .stdout_str()
+        .to_string();
+    let large_year_kst = new_ucmd!()
+        .env("TZ", "UTC0")
+        .arg("-d")
+        .arg("10000-01-01 00:00 KST")
+        .arg("+%Q|%:z|%Z")
+        .succeeds()
+        .stdout_str()
+        .to_string();
+    assert_eq!(large_year_kst, in_range_kst);
+
+    let in_range_samoa = new_ucmd!()
+        .env("TZ", "UTC0")
+        .arg("-d")
+        .arg("2024-01-01 00:00 SAMOA")
+        .arg("+%Q|%:z|%Z")
+        .succeeds()
+        .stdout_str()
+        .to_string();
+    let large_year_samoa = new_ucmd!()
+        .env("TZ", "UTC0")
+        .arg("-d")
+        .arg("10000-01-01 00:00 SAMOA")
+        .arg("+%Q|%:z|%Z")
+        .succeeds()
+        .stdout_str()
+        .to_string();
+    assert_eq!(large_year_samoa, in_range_samoa);
 }
