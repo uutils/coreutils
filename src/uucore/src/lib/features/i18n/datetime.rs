@@ -178,7 +178,6 @@ pub fn get_locale_months() -> Option<&'static [Vec<u8>; 12]> {
     target_os = "dragonfly"
 ))]
 fn get_locale_months_inner() -> Option<[Vec<u8>; 12]> {
-    use nix::libc;
     use std::ffi::CStr;
 
     let abmon_items: [libc::nl_item; 12] = [
