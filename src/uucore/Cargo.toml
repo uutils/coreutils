@@ -37,6 +37,7 @@ jiff = { workspace = true, optional = true, features = [
   "tzdb-concatenated",
 ] }
 rustc-hash = { workspace = true }
+rustix = { workspace = true, features = ["pipe"] }
 time = { workspace = true, optional = true, features = [
   "formatting",
   "local-offset",
