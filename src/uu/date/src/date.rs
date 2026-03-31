@@ -918,6 +918,41 @@ fn convert_extended_for_output(
     Ok((converted, tz_name, zone_display))
 }
 
+fn resolve_extended_in_zone(
+    date: &parse_datetime::ExtendedDateTime,
+    zone: &TimeZone,
+) -> Result<parse_datetime::ExtendedDateTime, String> {
+    let surrogate_local = jiff::civil::DateTime::new(
+        surrogate_year_for_rules(date.year),
+        date.month as i8,
+        date.day as i8,
+        date.hour as i8,
+        date.minute as i8,
+        date.second as i8,
+        date.nanosecond as i32,
+    )
+    .map_err(|e| e.to_string())?;
+    let zoned = zone
+        .to_ambiguous_zoned(surrogate_local)
+        .compatible()
+        .map_err(|e| e.to_string())?;
+    parse_datetime::ExtendedDateTime::new(
+        parse_datetime::DateParts {
+            year: date.year,
+            month: date.month,
+            day: date.day,
+        },
+        parse_datetime::TimeParts {
+            hour: date.hour,
+            minute: date.minute,
+            second: date.second,
+            nanosecond: date.nanosecond,
+        },
+        zoned.offset().seconds(),
+    )
+    .map_err(str::to_string)
+}
+
 fn surrogate_year_for_rules(year: u32) -> i16 {
     if year <= 9_999 {
         year as i16
@@ -1406,10 +1441,10 @@ fn tz_abbrev_to_iana(abbrev: &str) -> Option<&str> {
 
 /// Attempts to parse a date string that contains a timezone abbreviation (e.g. "EST").
 ///
-/// If an abbreviation is found and the date is parsable, returns `Some(Zoned)`.
+/// If an abbreviation is found and the date is parsable, returns `Some(ParsedDateValue)`.
 /// Returns `None` if no abbreviation is detected or if parsing fails, indicating
 /// that standard parsing should be attempted.
-fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S, now: &Zoned) -> Option<Zoned> {
+fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S, now: &Zoned) -> Option<ParsedDateValue> {
     let s = date_str.as_ref();
 
     // Look for timezone abbreviation at the end of the string
@@ -1432,12 +1467,19 @@ fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S, now: &Zoned) -> Optio
             if let Some(tz) = tz {
                 let date_part = s.trim_end_matches(last_word).trim();
                 // Parse in the target timezone so "10:30 EDT" means 10:30 in EDT
-                if let Ok(parse_datetime::ParsedDateTime::InRange(parsed)) =
-                    parse_datetime::parse_datetime_at_date(now.clone(), date_part)
-                {
-                    let dt = parsed.datetime();
-                    if let Ok(zoned) = dt.to_zoned(tz) {
-                        return Some(zoned);
+                if let Ok(parsed) = parse_datetime::parse_datetime_at_date(now.clone(), date_part) {
+                    match parsed {
+                        parse_datetime::ParsedDateTime::InRange(parsed) => {
+                            let dt = parsed.datetime();
+                            if let Ok(zoned) = dt.to_zoned(tz) {
+                                return Some(ParsedDateValue::InRange(zoned));
+                            }
+                        }
+                        parse_datetime::ParsedDateTime::Extended(parsed) => {
+                            if let Ok(date) = resolve_extended_in_zone(&parsed, &tz) {
+                                return Some(ParsedDateValue::Extended(date));
+                            }
+                        }
                     }
                 }
             }
@@ -1483,23 +1525,38 @@ fn parse_date<S: AsRef<str> + Clone>(
     }
 
     // First, try to parse any timezone abbreviations
-    if let Some(zoned) = try_parse_with_abbreviation(input_str, now) {
+    if let Some(parsed) = try_parse_with_abbreviation(input_str, now) {
         if dbg_opts.debug {
             let mut err = stderr().lock();
-            let _ = writeln!(
-                err,
-                "date: parsed date part: (Y-M-D) {}",
-                strtime::format("%Y-%m-%d", &zoned).unwrap_or_default()
-            );
-            let _ = writeln!(
-                err,
-                "date: parsed time part: {}",
-                strtime::format("%H:%M:%S", &zoned).unwrap_or_default()
-            );
-            let tz_display = zoned.time_zone().iana_name().unwrap_or("system default");
-            let _ = writeln!(err, "date: input timezone: {tz_display}");
+            match &parsed {
+                ParsedDateValue::InRange(zoned) => {
+                    let _ = writeln!(
+                        err,
+                        "date: parsed date part: (Y-M-D) {}",
+                        strtime::format("%Y-%m-%d", zoned).unwrap_or_default()
+                    );
+                    let _ = writeln!(
+                        err,
+                        "date: parsed time part: {}",
+                        strtime::format("%H:%M:%S", zoned).unwrap_or_default()
+                    );
+                }
+                ParsedDateValue::Extended(date) => {
+                    let _ = writeln!(
+                        err,
+                        "date: parsed date part: (Y-M-D) {:04}-{:02}-{:02}",
+                        date.year, date.month, date.day
+                    );
+                    let _ = writeln!(
+                        err,
+                        "date: parsed time part: {:02}:{:02}:{:02}",
+                        date.hour, date.minute, date.second
+                    );
+                }
+            }
+            let _ = writeln!(err, "date: input timezone: timezone abbreviation");
         }
-        return Ok(ParsedDateValue::InRange(zoned));
+        return Ok(parsed);
     }
 
     match parse_datetime::parse_datetime_at_date(now.clone(), input_str) {

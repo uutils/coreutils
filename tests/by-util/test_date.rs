@@ -3063,3 +3063,33 @@ fn test_korean_time_zone() {
         .succeeds()
         .stdout_is("2026-01-15 01:00:00 UTC\n");
 }
+
+#[test]
+fn test_large_year_timezone_abbreviations() {
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-u")
+        .arg("-d")
+        .arg("10000-01-01 00:00 KST")
+        .arg("+%F %T %:z %Z")
+        .succeeds()
+        .stdout_is("9999-12-31 15:00:00 +00:00 UTC\n");
+
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-u")
+        .arg("-d")
+        .arg("10000-01-01 00:00 MEZ")
+        .arg("+%F %T %:z %Z")
+        .succeeds()
+        .stdout_is("9999-12-31 23:00:00 +00:00 UTC\n");
+
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-u")
+        .arg("-d")
+        .arg("10000-07-01 00:00 EDT")
+        .arg("+%F %T %:z %Z")
+        .succeeds()
+        .stdout_is("10000-07-01 04:00:00 +00:00 UTC\n");
+}
