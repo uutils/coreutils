@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 use super::{CatResult, FdReadable, InputHandle};
 
-use nix::unistd;
+use rustix::io::{read, write};
 use std::os::{fd::AsFd, unix::io::AsRawFd};
 
 use uucore::pipes::{pipe, splice, splice_exact};
@@ -52,20 +52,20 @@ pub(super) fn write_fast_using_splice<R: FdReadable, S: AsRawFd + AsFd>(
 /// Move exactly `num_bytes` bytes from `read_fd` to `write_fd`.
 ///
 /// Panics if not enough bytes can be read.
-fn copy_exact(read_fd: &impl AsFd, write_fd: &impl AsFd, num_bytes: usize) -> nix::Result<()> {
+fn copy_exact(read_fd: &impl AsFd, write_fd: &impl AsFd, num_bytes: usize) -> std::io::Result<()> {
     let mut left = num_bytes;
     let mut buf = [0; BUF_SIZE];
     while left > 0 {
-        let read = unistd::read(read_fd, &mut buf)?;
-        assert_ne!(read, 0, "unexpected end of pipe");
+        let n = read(read_fd, &mut buf)?;
+        assert_ne!(n, 0, "unexpected end of pipe");
         let mut written = 0;
-        while written < read {
-            match unistd::write(write_fd, &buf[written..read])? {
-                0 => panic!(),
-                n => written += n,
+        while written < n {
+            match write(write_fd, &buf[written..n])? {
+                0 => unreachable!("fd should be writable"),
+                w => written += w,
             }
         }
-        left -= read;
+        left -= n;
     }
     Ok(())
 }
