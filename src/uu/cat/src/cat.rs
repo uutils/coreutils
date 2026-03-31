@@ -84,10 +84,10 @@ enum CatError {
     /// Wrapper around `io::Error`
     #[error("{}", strip_errno(.0))]
     Io(#[from] io::Error),
-    /// Wrapper around `nix::Error`
+    /// Wrapper around `rustix::io::Errno`
     #[cfg(any(target_os = "linux", target_os = "android"))]
     #[error("{0}")]
-    Nix(#[from] nix::Error),
+    Rustix(#[from] rustix::io::Errno),
     /// Unknown file type; it's not a regular file, socket, etc.
     #[error("{}", translate!("cat-error-unknown-filetype", "ft_debug" => .ft_debug))]
     UnknownFiletype {

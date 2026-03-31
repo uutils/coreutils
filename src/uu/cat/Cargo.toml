@@ -26,7 +26,7 @@ uucore = { workspace = true, features = ["fast-inc", "fs", "pipes", "signals"] }
 fluent = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
-nix = { workspace = true }
+rustix = { workspace = true, features = ["fs"] }
 
 [target.'cfg(windows)'.dependencies]
 winapi-util = { workspace = true }
