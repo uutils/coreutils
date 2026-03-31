@@ -3395,17 +3395,17 @@ fn test_ls_indicator_style_symlink_target_long() {
     at.mkdir("dir");
     assert!(at.dir_exists("dir"));
 
-    at.symlink_dir("dir", "linkdir");
-    assert!(at.is_symlink("linkdir"));
+    at.symlink_dir("dir", "dir_link");
+    assert!(at.is_symlink("dir_link"));
 
     scene
         .ucmd()
         .arg("--classify")
         .arg("-l")
-        .arg("linkdir")
+        .arg("dir_link")
         .succeeds()
-        .stdout_contains("linkdir -> ")
-        .stdout_does_not_contain("linkdir@ -> ")
+        .stdout_contains("dir_link -> ")
+        .stdout_does_not_contain("dir_link@ -> ")
         .stdout_contains("/dir/");
 }
 
