@@ -57,3 +57,6 @@ repos:
         entry: bash -c 'if command -v cspell >/dev/null 2>&1; then cspell --no-must-find-files -- "$@"; else echo "cspell not found, skipping spell check"; exit 0; fi' --
         pass_filenames: true
         language: system
+
+ci:
+  skip: [rust-linting, rust-clippy, cargo-lock-check, cspell]
