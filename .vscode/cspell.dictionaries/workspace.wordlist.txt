@@ -367,6 +367,7 @@ uutils
 
 # * function names
 getcwd
+setpipe
 
 # * other
 getlimits
@@ -374,7 +375,6 @@ weblate
 algs
 wasm
 wasip
-SETPIPE
 
 # * stty terminal flags
 brkint
