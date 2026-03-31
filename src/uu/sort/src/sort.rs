@@ -48,7 +48,7 @@ use uucore::error::{FromIo, strip_errno};
 use uucore::error::{UError, UResult, USimpleError, UUsageError};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
 #[cfg(feature = "i18n-collator")]
-use uucore::i18n::collator::locale_cmp;
+use uucore::i18n::collator::{compute_sort_key_utf8, locale_cmp};
 use uucore::i18n::decimal::locale_decimal_separator;
 use uucore::line_ending::LineEnding;
 use uucore::parser::num_parser::{ExtendedParser, ExtendedParserError};
@@ -324,6 +324,7 @@ struct Precomputed {
     floats_per_line: usize,
     selections_per_line: usize,
     fast_lexicographic: bool,
+    fast_locale_collation: bool,
     fast_ascii_insensitive: bool,
     tokenize_blank_thousands_sep: bool,
     tokenize_allow_unit_after_blank: bool,
@@ -387,6 +388,8 @@ impl GlobalSettings {
 
         self.precomputed.fast_lexicographic =
             !disable_fast_lexicographic && self.can_use_fast_lexicographic();
+        self.precomputed.fast_locale_collation =
+            disable_fast_lexicographic && self.can_use_fast_lexicographic();
         self.precomputed.fast_ascii_insensitive = self.can_use_fast_ascii_insensitive();
     }
 
@@ -632,6 +635,15 @@ impl<'a> Line<'a> {
         token_buffer: &mut Vec<Field>,
         settings: &GlobalSettings,
     ) -> Self {
+        #[cfg(feature = "i18n-collator")]
+        if settings.precomputed.fast_locale_collation {
+            compute_sort_key_utf8(line, &mut line_data.collation_key_buffer);
+            line_data
+                .collation_key_ends
+                .push(line_data.collation_key_buffer.len());
+            return Self { line, index };
+        }
+
         let needs_line_data = settings.precomputed.needs_tokens
             || settings.precomputed.selections_per_line > 0
             || settings.precomputed.num_infos_per_line > 0
@@ -2030,7 +2042,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // sort errors with "cannot open: [...]" instead of "cannot read: [...]" here
         let reader = open_with_open_failed_error(&files0_from)?;
         let buf_reader = BufReader::new(reader);
-        for (line_num, line) in buf_reader.split(b'\0').flatten().enumerate() {
+        for (line_num, line_res) in buf_reader.split(b'\0').enumerate() {
+            let line = line_res.map_err(|error| SortError::ReadFailed {
+                path: files0_from.clone(),
+                error,
+            })?;
             let f = std::str::from_utf8(&line)
                 .expect("Could not parse string from zero terminated input.");
             match f {
@@ -2607,6 +2623,18 @@ fn compare_by<'a>(
 ) -> Ordering {
     if global_settings.precomputed.fast_lexicographic {
         let cmp = a.line.cmp(b.line);
+        return if global_settings.reverse {
+            cmp.reverse()
+        } else {
+            cmp
+        };
+    }
+
+    #[cfg(feature = "i18n-collator")]
+    if global_settings.precomputed.fast_locale_collation {
+        let a_key = a_line_data.collation_key(a.index);
+        let b_key = b_line_data.collation_key(b.index);
+        let cmp = a_key.cmp(b_key);
         return if global_settings.reverse {
             cmp.reverse()
         } else {

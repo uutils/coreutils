@@ -139,6 +139,7 @@ EEXIST
 EINVAL
 ENODATA
 ENOENT
+ENOSPC
 ENOSYS
 ENOTEMPTY
 EOPNOTSUPP
@@ -365,6 +366,7 @@ execfn
 getcwd
 
 # * other
+getlimits
 weblate
 algs
 wasm

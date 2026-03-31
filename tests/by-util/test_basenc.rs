@@ -9,6 +9,15 @@
 use uutests::{at_and_ucmd, new_ucmd};
 
 #[test]
+fn test_version() {
+    new_ucmd!()
+        .arg("--version")
+        .succeeds()
+        .no_stderr()
+        .stdout_is(format!("basenc {}\n", uucore::crate_version!()));
+}
+
+#[test]
 fn test_z85_not_padded_decode() {
     // The z85 crate deviates from the standard in some cases; we have to catch those
     new_ucmd!()

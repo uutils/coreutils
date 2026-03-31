@@ -10,6 +10,7 @@ on:
       - '*'
 
 env:
+  CARGO_INCREMENTAL: "0"
   # * style job configuration
   STYLE_FAIL_ON_FAULT: true ## (bool) fail the build if a style job contains a fault (error or warning); may be overridden on a per-job basis
 
@@ -66,14 +67,12 @@ jobs:
   style_lint:
     name: Style/lint
     runs-on: ${{ matrix.job.os }}
-    env:
-      CARGO_INCREMENTAL: 0
     strategy:
       fail-fast: false
       matrix:
         job:
           - { os: ubuntu-latest  , features: all             , workspace: true }
-          - { os: macos-latest   , features: feat_os_macos }
+          - { os: macos-latest   , features: feat_os_unix }
           - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v6
@@ -117,7 +116,7 @@ jobs:
           ;;
         esac
     - name: "`cargo clippy` lint testing"
-      uses: nick-fields/retry@v3
+      uses: nick-fields/retry@v4
       with:
         max_attempts: 3
         retry_on: error

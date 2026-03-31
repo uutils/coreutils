@@ -308,7 +308,8 @@ fn set_supplemental_gids(gids: &[libc::gid_t]) -> std::io::Result<()> {
         target_vendor = "apple",
         target_os = "freebsd",
         target_os = "openbsd",
-        target_os = "cygwin"
+        target_os = "cygwin",
+        target_os = "netbsd"
     ))]
     let n = gids.len() as libc::c_int;
     #[cfg(any(target_os = "linux", target_os = "android"))]

@@ -530,7 +530,7 @@ pub(crate) fn color_name(
         let has_capabilities = style_manager
             .colors
             .has_explicit_style_for(Indicator::Capabilities)
-            && uucore::fsxattr::has_security_cap_acl(path.p_buf.as_path());
+            && uucore::fsxattr::has_security_cap_acl(&path.p_buf);
 
         // If the file has capabilities, use a specific style for `ca` (capabilities)
         if has_capabilities {
@@ -786,7 +786,7 @@ fn parse_indicator_codes() -> (FxHashMap<Indicator, String>, bool) {
 }
 
 fn canonicalize_indicator_value(value: &str) -> Cow<'_, str> {
-    if value.len() == 1 && value.chars().all(|c| c.is_ascii_digit()) {
+    if value.len() == 1 && value.as_bytes()[0].is_ascii_digit() {
         let mut canonical = String::with_capacity(2);
         canonical.push('0');
         canonical.push_str(value);
