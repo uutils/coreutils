@@ -883,6 +883,10 @@ fn pathbuf_from_stdout() -> Result<PathBuf, TouchError> {
             .map_err(|e| TouchError::WindowsStdoutPathError(e.to_string()))?
             .into())
     }
+    #[cfg(target_os = "wasi")]
+    {
+        Ok(PathBuf::from("/dev/stdout"))
+    }
 }
 
 #[cfg(test)]
