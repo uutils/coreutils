@@ -587,6 +587,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 }
             }
             Ok(ParsedDateValue::Extended(date)) => {
+                let skip_localization =
+                    matches!(settings.format, Format::Rfc5322 | Format::Rfc3339(_));
                 let (date, tz_name) = convert_extended_for_output(&date, settings.utc, &now)
                     .map_err(|e| {
                         USimpleError::new(
@@ -594,7 +596,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                             translate!("date-error-invalid-format", "format" => format_string, "error" => e),
                         )
                     })?;
-                match format_extended_date(&date, format_string, &tz_name) {
+                match format_extended_date(&date, format_string, &tz_name, skip_localization) {
                     Ok(s) => writeln!(stdout, "{s}").map_err(|e| {
                         USimpleError::new(1, translate!("date-error-write", "error" => e))
                     })?,
@@ -804,6 +806,59 @@ fn month_full(month: u8) -> &'static str {
     MONTHS[(month - 1) as usize]
 }
 
+struct LocalizedNames {
+    weekday_abbrev: String,
+    weekday_full: String,
+    month_abbrev: String,
+    month_full: String,
+}
+
+#[cfg(feature = "i18n-datetime")]
+fn localized_names_for_extended(
+    date: &parse_datetime::ExtendedDateTime,
+    skip_localization: bool,
+) -> Result<Option<LocalizedNames>, String> {
+    if skip_localization || !should_use_icu_locale() {
+        return Ok(None);
+    }
+
+    let surrogate = jiff::civil::DateTime::new(
+        surrogate_year_for_rules(date.year),
+        date.month as i8,
+        date.day as i8,
+        date.hour as i8,
+        date.minute as i8,
+        date.second as i8,
+        date.nanosecond as i32,
+    )
+    .map_err(|e| e.to_string())?
+    .to_zoned(TimeZone::UTC)
+    .map_err(|e| e.to_string())?;
+
+    let config = Config::new().custom(PosixCustom::new()).lenient(true);
+    let format = |fmt: &str| -> Result<String, String> {
+        let localized = localize_format_string(fmt, surrogate.date());
+        BrokenDownTime::from(&surrogate)
+            .to_string_with_config(&config, &localized)
+            .map_err(|e| e.to_string())
+    };
+
+    Ok(Some(LocalizedNames {
+        weekday_abbrev: format("%a")?,
+        weekday_full: format("%A")?,
+        month_abbrev: format("%b")?,
+        month_full: format("%B")?,
+    }))
+}
+
+#[cfg(not(feature = "i18n-datetime"))]
+fn localized_names_for_extended(
+    _date: &parse_datetime::ExtendedDateTime,
+    _skip_localization: bool,
+) -> Result<Option<LocalizedNames>, String> {
+    Ok(None)
+}
+
 fn format_offset(offset_seconds: i32, colon_count: usize) -> Result<String, String> {
     let sign = if offset_seconds < 0 { '-' } else { '+' };
     let abs = offset_seconds.unsigned_abs();
@@ -983,10 +1038,12 @@ fn format_extended_date(
     date: &parse_datetime::ExtendedDateTime,
     format_string: &str,
     tz_name: &str,
+    skip_localization: bool,
 ) -> Result<String, String> {
     let mut out = String::new();
     let mut chars = format_string.chars().peekable();
     let mut week_fields: Option<WeekFields> = None;
+    let localized_names = localized_names_for_extended(date, skip_localization)?;
 
     while let Some(ch) = chars.next() {
         if ch != '%' {
@@ -1082,12 +1139,37 @@ fn format_extended_date(
             'M' => format_num(date.minute as u64, 2, '0', width, &flags),
             'S' => format_num(date.second as u64, 2, '0', width, &flags),
             'N' => format_num(date.nanosecond as u64, 9, '0', width, &flags),
+            'q' => format_num(((date.month - 1) / 3 + 1) as u64, 1, '0', width, &flags),
             'p' => apply_case(ampm, &flags),
             'P' => apply_case(&ampm.to_ascii_lowercase(), &flags),
-            'a' => apply_case(weekday_abbrev(date.weekday_sunday0()), &flags),
-            'A' => apply_case(weekday_full(date.weekday_sunday0()), &flags),
-            'b' | 'h' => apply_case(month_abbrev(date.month), &flags),
-            'B' => apply_case(month_full(date.month), &flags),
+            'a' => apply_case(
+                localized_names
+                    .as_ref()
+                    .map(|names| names.weekday_abbrev.as_str())
+                    .unwrap_or_else(|| weekday_abbrev(date.weekday_sunday0())),
+                &flags,
+            ),
+            'A' => apply_case(
+                localized_names
+                    .as_ref()
+                    .map(|names| names.weekday_full.as_str())
+                    .unwrap_or_else(|| weekday_full(date.weekday_sunday0())),
+                &flags,
+            ),
+            'b' | 'h' => apply_case(
+                localized_names
+                    .as_ref()
+                    .map(|names| names.month_abbrev.as_str())
+                    .unwrap_or_else(|| month_abbrev(date.month)),
+                &flags,
+            ),
+            'B' => apply_case(
+                localized_names
+                    .as_ref()
+                    .map(|names| names.month_full.as_str())
+                    .unwrap_or_else(|| month_full(date.month)),
+                &flags,
+            ),
             'u' => {
                 let weekday_monday1 = match date.weekday_sunday0() {
                     0 => 7,

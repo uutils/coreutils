@@ -173,6 +173,32 @@ fn test_large_year_week_format_specifiers() {
 }
 
 #[test]
+fn test_large_year_supports_existing_quarter_format() {
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("TZ", "UTC0")
+        .arg("-d")
+        .arg("10000-05-01")
+        .arg("+%q")
+        .succeeds()
+        .stdout_is("2\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_large_year_respects_localized_month_names() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .env("TZ", "UTC0")
+        .args(&["-d", "10000-01-01", "+%B"])
+        .succeeds()
+        .stdout_is("janvier\n");
+}
+
+#[test]
 fn test_format_option_not_to_capture_other_valid_arguments() {
     new_ucmd!()
         .arg("+%Y%m%d%H%M%S")
