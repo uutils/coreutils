@@ -67,8 +67,6 @@ use uucore::error::{USimpleError, set_exit_code};
 use uucore::show_if_err;
 use uucore::{format_usage, show_error};
 
-const BUF_INIT_BYTE: u8 = 0xDD;
-
 /// Final settings after parsing
 #[derive(Default)]
 struct Settings {
@@ -520,11 +518,12 @@ impl Input<'_> {
     /// Fills a given buffer.
     /// Reads in increments of 'self.ibs'.
     /// The start of each ibs-sized read follows the previous one.
-    fn fill_consecutive(&mut self, buf: &mut Vec<u8>) -> io::Result<ReadStat> {
+    fn fill_consecutive(&mut self, buf: &mut Vec<u8>, bsize: usize) -> io::Result<ReadStat> {
         let mut reads_complete = 0;
         let mut reads_partial = 0;
         let mut bytes_total = 0;
-
+        // serious perf drop with 0-fill https://github.com/uutils/coreutils/issues/11544
+        buf.resize(bsize, 0);
         for chunk in buf.chunks_mut(self.settings.ibs) {
             match self.read(chunk)? {
                 rlen if rlen == self.settings.ibs => {
@@ -544,30 +543,34 @@ impl Input<'_> {
             reads_partial,
             // Records are not truncated when filling.
             records_truncated: 0,
-            bytes_total: bytes_total.try_into().unwrap(),
+            bytes_total: bytes_total as u64,
         })
     }
 
     /// Fills a given buffer.
     /// Reads in increments of 'self.ibs'.
     /// The start of each ibs-sized read is aligned to multiples of ibs; remaining space is filled with the 'pad' byte.
-    fn fill_blocks(&mut self, buf: &mut Vec<u8>, pad: u8) -> io::Result<ReadStat> {
+    fn fill_blocks(&mut self, buf: &mut Vec<u8>, bsize: usize, pad: u8) -> io::Result<ReadStat> {
         let mut reads_complete = 0;
         let mut reads_partial = 0;
         let mut base_idx = 0;
         let mut bytes_total = 0;
 
-        while base_idx < buf.len() {
-            let next_blk = cmp::min(base_idx + self.settings.ibs, buf.len());
+        buf.clear();
+        while base_idx < bsize {
+            let next_blk = cmp::min(base_idx + self.settings.ibs, bsize);
             let target_len = next_blk - base_idx;
+            buf.resize(next_blk, 0);
 
             match self.read(&mut buf[base_idx..next_blk])? {
-                0 => break,
+                0 => {
+                    buf.truncate(base_idx);
+                    break;
+                }
                 rlen if rlen < target_len => {
                     bytes_total += rlen;
                     reads_partial += 1;
-                    let padding = vec![pad; target_len - rlen];
-                    buf.splice(base_idx + rlen..next_blk, padding.into_iter());
+                    buf[base_idx + rlen..next_blk].fill(pad);
                 }
                 rlen => {
                     bytes_total += rlen;
@@ -578,7 +581,6 @@ impl Input<'_> {
             base_idx += self.settings.ibs;
         }
 
-        buf.truncate(base_idx);
         Ok(ReadStat {
             reads_complete,
             reads_partial,
@@ -1168,7 +1170,8 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
 
     // Create a common buffer with a capacity of the block size.
     // This is the max size needed.
-    let mut buf = vec![BUF_INIT_BYTE; bsize];
+    let mut buf = vec![0; 0];
+    buf.try_reserve(bsize)?;
 
     // Spawn a timer thread to provide a scheduled signal indicating when we
     // should send an update of our progress to the reporting thread.
@@ -1365,12 +1368,10 @@ fn read_helper(i: &mut Input, buf: &mut Vec<u8>, bsize: usize) -> io::Result<Rea
     }
     // ------------------------------------------------------------------
     // Read
-    // Resize the buffer to the bsize. Any garbage data in the buffer is overwritten or truncated, so there is no need to fill with BUF_INIT_BYTE first.
-    buf.resize(bsize, BUF_INIT_BYTE);
 
     let mut rstat = match i.settings.iconv.sync {
-        Some(ch) => i.fill_blocks(buf, ch)?,
-        _ => i.fill_consecutive(buf)?,
+        Some(ch) => i.fill_blocks(buf, bsize, ch)?,
+        _ => i.fill_consecutive(buf, bsize)?,
     };
     // Return early if no data
     if rstat.reads_complete == 0 && rstat.reads_partial == 0 {
