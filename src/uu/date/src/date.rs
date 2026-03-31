@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres AWST ACST AEST foobarbaz
+// spell-checker:ignore strtime yday ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres AWST ACST AEST foobarbaz
 
 mod format_modifiers;
 mod locale;
@@ -1060,10 +1060,9 @@ fn format_extended_date(
             match chars.next() {
                 Some('z') => out.push_str(&format_offset(date.offset_seconds, colons)?),
                 Some(other) => {
+                    let specifier = ":".repeat(colons);
                     return Err(format!(
-                        "unsupported extended format specifier %{}{}",
-                        ":".repeat(colons),
-                        other
+                        "unsupported extended format specifier %{specifier}{other}"
                     ));
                 }
                 None => return Err("trailing '%' in format string".to_string()),
@@ -1143,31 +1142,30 @@ fn format_extended_date(
             'p' => apply_case(ampm, &flags),
             'P' => apply_case(&ampm.to_ascii_lowercase(), &flags),
             'a' => apply_case(
-                localized_names
-                    .as_ref()
-                    .map(|names| names.weekday_abbrev.as_str())
-                    .unwrap_or_else(|| weekday_abbrev(date.weekday_sunday0())),
+                localized_names.as_ref().map_or_else(
+                    || weekday_abbrev(date.weekday_sunday0()),
+                    |names| names.weekday_abbrev.as_str(),
+                ),
                 &flags,
             ),
             'A' => apply_case(
-                localized_names
-                    .as_ref()
-                    .map(|names| names.weekday_full.as_str())
-                    .unwrap_or_else(|| weekday_full(date.weekday_sunday0())),
+                localized_names.as_ref().map_or_else(
+                    || weekday_full(date.weekday_sunday0()),
+                    |names| names.weekday_full.as_str(),
+                ),
                 &flags,
             ),
             'b' | 'h' => apply_case(
-                localized_names
-                    .as_ref()
-                    .map(|names| names.month_abbrev.as_str())
-                    .unwrap_or_else(|| month_abbrev(date.month)),
+                localized_names.as_ref().map_or_else(
+                    || month_abbrev(date.month),
+                    |names| names.month_abbrev.as_str(),
+                ),
                 &flags,
             ),
             'B' => apply_case(
                 localized_names
                     .as_ref()
-                    .map(|names| names.month_full.as_str())
-                    .unwrap_or_else(|| month_full(date.month)),
+                    .map_or_else(|| month_full(date.month), |names| names.month_full.as_str()),
                 &flags,
             ),
             'u' => {
@@ -1246,26 +1244,22 @@ fn format_extended_date(
                 format_num(date.hour as u64, 2, '0', None, &FormatFlags::default()),
                 format_num(date.minute as u64, 2, '0', None, &FormatFlags::default())
             ),
-            'r' => format!(
-                "{}:{}:{} {}",
-                format_num(hour12 as u64, 2, '0', None, &FormatFlags::default()),
-                format_num(date.minute as u64, 2, '0', None, &FormatFlags::default()),
-                format_num(date.second as u64, 2, '0', None, &FormatFlags::default()),
-                ampm
-            ),
-            'c' => format!(
-                "{} {} {} {} {}",
-                weekday_abbrev(date.weekday_sunday0()),
-                month_abbrev(date.month),
-                format_num(date.day as u64, 2, ' ', None, &FormatFlags::default()),
-                format!(
-                    "{}:{}:{}",
-                    format_num(date.hour as u64, 2, '0', None, &FormatFlags::default()),
-                    format_num(date.minute as u64, 2, '0', None, &FormatFlags::default()),
-                    format_num(date.second as u64, 2, '0', None, &FormatFlags::default())
-                ),
-                format_num(date.year as u64, 4, '0', None, &FormatFlags::default())
-            ),
+            'r' => {
+                let hour = format_num(hour12 as u64, 2, '0', None, &FormatFlags::default());
+                let minute = format_num(date.minute as u64, 2, '0', None, &FormatFlags::default());
+                let second = format_num(date.second as u64, 2, '0', None, &FormatFlags::default());
+                format!("{hour}:{minute}:{second} {ampm}")
+            }
+            'c' => {
+                let weekday = weekday_abbrev(date.weekday_sunday0());
+                let month = month_abbrev(date.month);
+                let day = format_num(date.day as u64, 2, ' ', None, &FormatFlags::default());
+                let hour = format_num(date.hour as u64, 2, '0', None, &FormatFlags::default());
+                let minute = format_num(date.minute as u64, 2, '0', None, &FormatFlags::default());
+                let second = format_num(date.second as u64, 2, '0', None, &FormatFlags::default());
+                let year = format_num(date.year as u64, 4, '0', None, &FormatFlags::default());
+                format!("{weekday} {month} {day} {hour}:{minute}:{second} {year}")
+            }
             'Z' => apply_case(tz_name, &flags),
             'z' => format_offset(date.offset_seconds, 0)?,
             's' => date.unix_seconds().to_string(),
