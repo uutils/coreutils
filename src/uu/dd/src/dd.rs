@@ -1168,11 +1168,6 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         );
     }
 
-    // Create a common buffer with a capacity of the block size.
-    // This is the max size needed.
-    let mut buf = vec![0; 0];
-    buf.try_reserve(bsize)?;
-
     // Spawn a timer thread to provide a scheduled signal indicating when we
     // should send an update of our progress to the reporting thread.
     //
@@ -1210,6 +1205,11 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     // blocks to this output. Read/write statistics are updated on
     // each iteration and cumulative statistics are reported to
     // the progress reporting thread.
+    // Create a common buffer with a capacity of the block size.
+    // This is the max size needed.
+    let mut buf = vec![0; 0];
+    buf.try_reserve(bsize)?;
+    unsafe { buf.set_len(bsize) }; // todo: buf should be cleared and extended by safe data
     while below_count_limit(i.settings.count, &rstat) {
         // Read a block from the input then write the block to the output.
         //
@@ -1368,7 +1368,7 @@ fn read_helper(i: &mut Input, buf: &mut Vec<u8>, bsize: usize) -> io::Result<Rea
     }
     // ------------------------------------------------------------------
     // Read
-
+    buf.resize(bsize, 0);
     let mut rstat = match i.settings.iconv.sync {
         Some(ch) => i.fill_blocks(buf, bsize, ch)?,
         _ => i.fill_consecutive(buf, bsize)?,
