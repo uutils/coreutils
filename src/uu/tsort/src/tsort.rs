@@ -82,7 +82,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 target_os = "linux",
                 target_os = "android",
                 target_os = "fuchsia",
-                target_os = "wasi",
                 target_env = "uclibc",
                 target_os = "freebsd",
             ))]

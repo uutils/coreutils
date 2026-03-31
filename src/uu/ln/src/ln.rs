@@ -488,3 +488,11 @@ pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> std::io::R
         symlink_file(src, dst)
     }
 }
+
+#[cfg(target_os = "wasi")]
+fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(_src: P1, _dst: P2) -> std::io::Result<()> {
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "symlinks not supported on this platform",
+    ))
+}
