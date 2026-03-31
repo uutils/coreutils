@@ -184,6 +184,7 @@ feat_wasm = [
   "base32",
   "base64",
   "basenc",
+  "cat",
   "cut",
   "date",
   "dircolors",
