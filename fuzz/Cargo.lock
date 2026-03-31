@@ -2144,6 +2144,7 @@ dependencies = [
  "os_display",
  "procfs",
  "rustc-hash",
+ "rustix",
  "sha1",
  "sha2",
  "sha3",
