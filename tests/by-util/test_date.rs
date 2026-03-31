@@ -173,6 +173,43 @@ fn test_large_year_week_format_specifiers() {
 }
 
 #[test]
+fn test_large_year_supports_existing_q_format_in_local_timezone() {
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("TZ", "America/New_York")
+        .arg("-d")
+        .arg("10000-05-01")
+        .arg("+%Q")
+        .succeeds()
+        .stdout_is("America/New_York\n");
+}
+
+#[test]
+fn test_large_year_supports_existing_q_format_in_utc_mode() {
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("TZ", "America/New_York")
+        .arg("-u")
+        .arg("-d")
+        .arg("10000-05-01")
+        .arg("+%Q")
+        .succeeds()
+        .stdout_is("UTC\n");
+}
+
+#[test]
+fn test_large_year_supports_existing_q_format_for_fixed_offset_output() {
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("TZ", "UTC0")
+        .arg("-d")
+        .arg("10000-05-01")
+        .arg("+%Q")
+        .succeeds()
+        .stdout_is("+0000\n");
+}
+
+#[test]
 fn test_large_year_supports_existing_quarter_format() {
     new_ucmd!()
         .env("LANG", "C")
@@ -182,6 +219,61 @@ fn test_large_year_supports_existing_quarter_format() {
         .arg("+%q")
         .succeeds()
         .stdout_is("2\n");
+}
+
+#[test]
+fn test_large_year_preserves_existing_eo_literal_behavior() {
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("TZ", "UTC0")
+        .arg("-d")
+        .arg("10000-01-01")
+        .arg("+%OB|%EA|%Od")
+        .succeeds()
+        .stdout_is("%OB|%EA|%Od\n");
+}
+
+#[test]
+fn test_large_year_matches_in_range_existing_q_and_modifier_behavior() {
+    let in_range_q = new_ucmd!()
+        .env("LANG", "C")
+        .env("TZ", "UTC0")
+        .arg("-d")
+        .arg("2024-01-01")
+        .arg("+%Q")
+        .succeeds()
+        .stdout_str()
+        .to_string();
+    let large_year_q = new_ucmd!()
+        .env("LANG", "C")
+        .env("TZ", "UTC0")
+        .arg("-d")
+        .arg("10000-01-01")
+        .arg("+%Q")
+        .succeeds()
+        .stdout_str()
+        .to_string();
+    assert_eq!(large_year_q, in_range_q);
+
+    let in_range_modifiers = new_ucmd!()
+        .env("LANG", "C")
+        .env("TZ", "UTC0")
+        .arg("-d")
+        .arg("2024-01-01")
+        .arg("+%OB|%EA|%Od")
+        .succeeds()
+        .stdout_str()
+        .to_string();
+    let large_year_modifiers = new_ucmd!()
+        .env("LANG", "C")
+        .env("TZ", "UTC0")
+        .arg("-d")
+        .arg("10000-01-01")
+        .arg("+%OB|%EA|%Od")
+        .succeeds()
+        .stdout_str()
+        .to_string();
+    assert_eq!(large_year_modifiers, in_range_modifiers);
 }
 
 #[test]

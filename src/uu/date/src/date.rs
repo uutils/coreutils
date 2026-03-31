@@ -589,14 +589,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             Ok(ParsedDateValue::Extended(date)) => {
                 let skip_localization =
                     matches!(settings.format, Format::Rfc5322 | Format::Rfc3339(_));
-                let (date, tz_name) = convert_extended_for_output(&date, settings.utc, &now)
+                let (date, tz_name, zone_display) =
+                    convert_extended_for_output(&date, settings.utc, &now)
                     .map_err(|e| {
                         USimpleError::new(
                             1,
                             translate!("date-error-invalid-format", "format" => format_string, "error" => e),
                         )
                     })?;
-                match format_extended_date(&date, format_string, &tz_name, skip_localization) {
+                match format_extended_date(
+                    &date,
+                    format_string,
+                    &tz_name,
+                    &zone_display,
+                    skip_localization,
+                ) {
                     Ok(s) => writeln!(stdout, "{s}").map_err(|e| {
                         USimpleError::new(1, translate!("date-error-write", "error" => e))
                     })?,
@@ -889,11 +896,18 @@ fn convert_extended_for_output(
     date: &parse_datetime::ExtendedDateTime,
     utc: bool,
     now: &Zoned,
-) -> Result<(parse_datetime::ExtendedDateTime, String), String> {
+) -> Result<(parse_datetime::ExtendedDateTime, String, String), String> {
     let (target_offset, tz_name) = if utc {
         (0, "UTC".to_string())
     } else {
         offset_info_for_extended_in_zone(date, now.time_zone())?
+    };
+    let zone_display = if utc {
+        "UTC".to_string()
+    } else if let Some(name) = now.time_zone().iana_name() {
+        name.to_string()
+    } else {
+        format_offset(target_offset, 0)?
     };
     let converted = parse_datetime::ExtendedDateTime::from_unix_seconds(
         date.unix_seconds(),
@@ -901,7 +915,7 @@ fn convert_extended_for_output(
         target_offset,
     )
     .map_err(str::to_string)?;
-    Ok((converted, tz_name))
+    Ok((converted, tz_name, zone_display))
 }
 
 fn surrogate_year_for_rules(year: u32) -> i16 {
@@ -1038,6 +1052,7 @@ fn format_extended_date(
     date: &parse_datetime::ExtendedDateTime,
     format_string: &str,
     tz_name: &str,
+    zone_display: &str,
     skip_localization: bool,
 ) -> Result<String, String> {
     let mut out = String::new();
@@ -1070,26 +1085,32 @@ fn format_extended_date(
             continue;
         }
 
+        let mut raw_token = String::from("%");
         let mut flags = FormatFlags::default();
         loop {
             match chars.peek().copied() {
                 Some('-') => {
                     flags.no_pad = true;
+                    raw_token.push('-');
                     chars.next();
                 }
                 Some('_') => {
                     flags.pad = Some(' ');
+                    raw_token.push('_');
                     chars.next();
                 }
                 Some('0') => {
                     flags.pad = Some('0');
+                    raw_token.push('0');
                     chars.next();
                 }
                 Some('^') => {
                     flags.upper = true;
+                    raw_token.push('^');
                     chars.next();
                 }
                 Some('#') => {
+                    raw_token.push('#');
                     chars.next();
                 }
                 _ => break,
@@ -1100,6 +1121,7 @@ fn format_extended_date(
         while let Some(c) = chars.peek().copied() {
             if c.is_ascii_digit() {
                 chars.next();
+                raw_token.push(c);
                 let digit = (c as u8 - b'0') as usize;
                 width = Some(width.unwrap_or(0).saturating_mul(10).saturating_add(digit));
             } else {
@@ -1107,13 +1129,23 @@ fn format_extended_date(
             }
         }
 
-        if matches!(chars.peek(), Some('E' | 'O')) {
-            chars.next();
-        }
+        let modifier = match chars.peek().copied() {
+            Some('E' | 'O') => {
+                let modifier = chars.next().expect("peeked modifier must exist");
+                raw_token.push(modifier);
+                Some(modifier)
+            }
+            _ => None,
+        };
 
         let spec = chars
             .next()
             .ok_or_else(|| "trailing '%' in format string".to_string())?;
+        raw_token.push(spec);
+        if modifier.is_some() {
+            out.push_str(&raw_token);
+            continue;
+        }
         let ampm = if date.hour < 12 { "AM" } else { "PM" };
         let hour12 = match date.hour % 12 {
             0 => 12,
@@ -1139,6 +1171,7 @@ fn format_extended_date(
             'S' => format_num(date.second as u64, 2, '0', width, &flags),
             'N' => format_num(date.nanosecond as u64, 9, '0', width, &flags),
             'q' => format_num(((date.month - 1) / 3 + 1) as u64, 1, '0', width, &flags),
+            'Q' => apply_case(zone_display, &flags),
             'p' => apply_case(ampm, &flags),
             'P' => apply_case(&ampm.to_ascii_lowercase(), &flags),
             'a' => apply_case(
