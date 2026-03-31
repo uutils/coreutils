@@ -59,6 +59,28 @@ fn test_touch_default() {
 }
 
 #[test]
+fn test_touch_large_year_date_does_not_panic() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_large_year_date_does_not_panic";
+    let result = ucmd.args(&["-d", "10000-01-01 00:00:00", file]).run();
+
+    let stderr = String::from_utf8_lossy(result.stderr());
+    let code = result.try_exit_status().and_then(|s| s.code());
+    assert_ne!(
+        code,
+        Some(101),
+        "touch must not panic for large years: {stderr}"
+    );
+    assert!(
+        !stderr.contains("panicked"),
+        "touch must not panic for large years: {stderr}"
+    );
+
+    // Keep the test workspace clean if the command succeeded.
+    let _ = remove_file(at.plus_as_string(file));
+}
+
+#[test]
 fn test_touch_no_create_file_absent() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_no_create_file_absent";

@@ -79,6 +79,11 @@ impl DebugOptions {
     }
 }
 
+enum ParsedDateValue {
+    InRange(Zoned),
+    Extended(parse_datetime::ExtendedDateTime),
+}
+
 /// Various ways of displaying the date
 enum Format {
     Iso8601(Iso8601Format),
@@ -364,18 +369,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Zoned::now()
     };
 
-    let set_to = match matches
-        .get_one::<String>(OPT_SET)
-        .map(|s| parse_date(s, &now, DebugOptions::new(debug_mode, true)))
-    {
+    let set_to = match matches.get_one::<String>(OPT_SET) {
         None => None,
-        Some(Err((input, _err))) => {
-            return Err(USimpleError::new(
-                1,
-                translate!("date-error-invalid-date", "date" => input),
-            ));
-        }
-        Some(Ok(date)) => Some(date),
+        Some(s) => match parse_date(s, &now, DebugOptions::new(debug_mode, true)) {
+            Err((input, _err)) => {
+                return Err(USimpleError::new(
+                    1,
+                    translate!("date-error-invalid-date", "date" => input),
+                ));
+            }
+            Ok(ParsedDateValue::InRange(date)) => Some(date),
+            Ok(ParsedDateValue::Extended(_)) => {
+                return Err(USimpleError::new(
+                    1,
+                    translate!("date-error-invalid-date", "date" => s.as_str()),
+                ));
+            }
+        },
     };
 
     let settings = Settings {
@@ -525,18 +535,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     translate!("date-error-cannot-set-date", "path" => path.quote(), "error" => e),
                 )
             })?;
-            let date = ts.to_zoned(TimeZone::try_system().unwrap_or(TimeZone::UTC));
+            let date = ParsedDateValue::InRange(
+                ts.to_zoned(TimeZone::try_system().unwrap_or(TimeZone::UTC)),
+            );
             let iter = std::iter::once(Ok(date));
             Box::new(iter)
         }
         DateSource::Resolution => {
             let resolution = get_clock_resolution();
-            let date = resolution.to_zoned(TimeZone::system());
+            let date = ParsedDateValue::InRange(resolution.to_zoned(TimeZone::system()));
             let iter = std::iter::once(Ok(date));
             Box::new(iter)
         }
         DateSource::Now => {
-            let iter = std::iter::once(Ok(now));
+            let iter = std::iter::once(Ok(ParsedDateValue::InRange(now.clone())));
             Box::new(iter)
         }
     };
@@ -548,7 +560,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let config = Config::new().custom(PosixCustom::new()).lenient(true);
     for date in dates {
         match date {
-            Ok(date) => {
+            Ok(ParsedDateValue::InRange(date)) => {
                 let date = if settings.utc {
                     date.with_time_zone(TimeZone::UTC)
                 } else {
@@ -562,6 +574,27 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     &config,
                     skip_localization,
                 ) {
+                    Ok(s) => writeln!(stdout, "{s}").map_err(|e| {
+                        USimpleError::new(1, translate!("date-error-write", "error" => e))
+                    })?,
+                    Err(e) => {
+                        let _ = stdout.flush();
+                        return Err(USimpleError::new(
+                            1,
+                            translate!("date-error-invalid-format", "format" => format_string, "error" => e),
+                        ));
+                    }
+                }
+            }
+            Ok(ParsedDateValue::Extended(date)) => {
+                let (date, tz_name) = convert_extended_for_output(&date, settings.utc, &now)
+                    .map_err(|e| {
+                        USimpleError::new(
+                            1,
+                            translate!("date-error-invalid-format", "format" => format_string, "error" => e),
+                        )
+                    })?;
+                match format_extended_date(&date, format_string, &tz_name) {
                     Ok(s) => writeln!(stdout, "{s}").map_err(|e| {
                         USimpleError::new(1, translate!("date-error-write", "error" => e))
                     })?,
@@ -728,6 +761,446 @@ fn format_date_with_locale_aware_months(
     result.map_err(|e| e.to_string())
 }
 
+fn weekday_abbrev(weekday_sunday0: u8) -> &'static str {
+    const WEEKDAYS: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    WEEKDAYS[weekday_sunday0 as usize]
+}
+
+fn weekday_full(weekday_sunday0: u8) -> &'static str {
+    const WEEKDAYS: [&str; 7] = [
+        "Sunday",
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+    ];
+    WEEKDAYS[weekday_sunday0 as usize]
+}
+
+fn month_abbrev(month: u8) -> &'static str {
+    const MONTHS: [&str; 12] = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ];
+    MONTHS[(month - 1) as usize]
+}
+
+fn month_full(month: u8) -> &'static str {
+    const MONTHS: [&str; 12] = [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+    ];
+    MONTHS[(month - 1) as usize]
+}
+
+fn format_offset(offset_seconds: i32, colon_count: usize) -> Result<String, String> {
+    let sign = if offset_seconds < 0 { '-' } else { '+' };
+    let abs = offset_seconds.unsigned_abs();
+    let h = abs / 3600;
+    let m = (abs % 3600) / 60;
+    let s = abs % 60;
+    match colon_count {
+        0 => Ok(format!("{sign}{h:02}{m:02}")),
+        1 => Ok(format!("{sign}{h:02}:{m:02}")),
+        2 => Ok(format!("{sign}{h:02}:{m:02}:{s:02}")),
+        3 => {
+            if s != 0 {
+                Ok(format!("{sign}{h:02}:{m:02}:{s:02}"))
+            } else if m != 0 {
+                Ok(format!("{sign}{h:02}:{m:02}"))
+            } else {
+                Ok(format!("{sign}{h:02}"))
+            }
+        }
+        _ => Err(format!(
+            "unsupported extended format specifier %{}z",
+            ":".repeat(colon_count)
+        )),
+    }
+}
+
+fn convert_extended_for_output(
+    date: &parse_datetime::ExtendedDateTime,
+    utc: bool,
+    now: &Zoned,
+) -> Result<(parse_datetime::ExtendedDateTime, String), String> {
+    let (target_offset, tz_name) = if utc {
+        (0, "UTC".to_string())
+    } else {
+        offset_info_for_extended_in_zone(date, now.time_zone())?
+    };
+    let converted = parse_datetime::ExtendedDateTime::from_unix_seconds(
+        date.unix_seconds(),
+        date.nanosecond,
+        target_offset,
+    )
+    .map_err(str::to_string)?;
+    Ok((converted, tz_name))
+}
+
+fn surrogate_year_for_rules(year: u32) -> i16 {
+    if year <= 9_999 {
+        year as i16
+    } else {
+        const BASE: u32 = 9_600;
+        (BASE + ((year - BASE) % 400)) as i16
+    }
+}
+
+fn offset_info_for_extended_in_zone(
+    date: &parse_datetime::ExtendedDateTime,
+    zone: &TimeZone,
+) -> Result<(i32, String), String> {
+    let utc = parse_datetime::ExtendedDateTime::from_unix_seconds(
+        date.unix_seconds(),
+        date.nanosecond,
+        0,
+    )
+    .map_err(str::to_string)?;
+    let surrogate = jiff::civil::DateTime::new(
+        surrogate_year_for_rules(utc.year),
+        utc.month as i8,
+        utc.day as i8,
+        utc.hour as i8,
+        utc.minute as i8,
+        utc.second as i8,
+        utc.nanosecond as i32,
+    )
+    .map_err(|e| e.to_string())?;
+    let surrogate_ts = surrogate
+        .to_zoned(TimeZone::UTC)
+        .map_err(|e| e.to_string())?
+        .timestamp();
+    let info = zone.to_offset_info(surrogate_ts);
+    Ok((info.offset().seconds(), info.abbreviation().to_string()))
+}
+
+#[derive(Clone, Copy)]
+struct WeekFields {
+    sunday_week: u8,
+    monday_week: u8,
+    iso_week: u8,
+    iso_year: u32,
+}
+
+fn compute_week_fields(date: &parse_datetime::ExtendedDateTime) -> Result<WeekFields, String> {
+    let jan1 = parse_datetime::ExtendedDateTime::new(
+        parse_datetime::DateParts {
+            year: date.year,
+            month: 1,
+            day: 1,
+        },
+        parse_datetime::TimeParts {
+            hour: 0,
+            minute: 0,
+            second: 0,
+            nanosecond: 0,
+        },
+        0,
+    )
+    .map_err(str::to_string)?;
+    let yday0 = i32::from(date.day_of_year()) - 1;
+    let jan1_sunday0 = i32::from(jan1.weekday_sunday0());
+    let jan1_monday0 = (jan1_sunday0 + 6).rem_euclid(7);
+
+    let first_sunday = (7 - jan1_sunday0).rem_euclid(7);
+    let sunday_week = if yday0 < first_sunday {
+        0
+    } else {
+        1 + (yday0 - first_sunday) / 7
+    };
+    let first_monday = (7 - jan1_monday0).rem_euclid(7);
+    let monday_week = if yday0 < first_monday {
+        0
+    } else {
+        1 + (yday0 - first_monday) / 7
+    };
+
+    let surrogate_year = surrogate_year_for_rules(date.year);
+    let surrogate_date = jiff::civil::Date::new(surrogate_year, date.month as i8, date.day as i8)
+        .map_err(|e| e.to_string())?;
+    let iso = surrogate_date.iso_week_date();
+    let iso_year_delta = i64::from(date.year) - i64::from(surrogate_year);
+    let iso_year = i64::from(iso.year()) + iso_year_delta;
+    if iso_year < 0 || iso_year > i64::from(u32::MAX) {
+        return Err("ISO week year is out of range".to_string());
+    }
+
+    Ok(WeekFields {
+        sunday_week: sunday_week as u8,
+        monday_week: monday_week as u8,
+        iso_week: iso.week() as u8,
+        iso_year: iso_year as u32,
+    })
+}
+
+#[derive(Default)]
+struct FormatFlags {
+    no_pad: bool,
+    pad: Option<char>,
+    upper: bool,
+}
+
+fn apply_case(s: &str, flags: &FormatFlags) -> String {
+    if flags.upper {
+        s.to_ascii_uppercase()
+    } else {
+        s.to_string()
+    }
+}
+
+fn format_num(
+    value: u64,
+    default_width: usize,
+    default_pad: char,
+    width: Option<usize>,
+    flags: &FormatFlags,
+) -> String {
+    if flags.no_pad {
+        return value.to_string();
+    }
+    let width = width.unwrap_or(default_width);
+    let pad = flags.pad.unwrap_or(default_pad);
+    if pad == '0' {
+        format!("{value:0width$}")
+    } else {
+        format!("{value:>width$}")
+    }
+}
+
+fn format_extended_date(
+    date: &parse_datetime::ExtendedDateTime,
+    format_string: &str,
+    tz_name: &str,
+) -> Result<String, String> {
+    let mut out = String::new();
+    let mut chars = format_string.chars().peekable();
+    let mut week_fields: Option<WeekFields> = None;
+
+    while let Some(ch) = chars.next() {
+        if ch != '%' {
+            out.push(ch);
+            continue;
+        }
+
+        if let Some(':') = chars.peek().copied() {
+            let mut colons = 0usize;
+            while let Some(':') = chars.peek().copied() {
+                chars.next();
+                colons += 1;
+            }
+            match chars.next() {
+                Some('z') => out.push_str(&format_offset(date.offset_seconds, colons)?),
+                Some(other) => {
+                    return Err(format!(
+                        "unsupported extended format specifier %{}{}",
+                        ":".repeat(colons),
+                        other
+                    ));
+                }
+                None => return Err("trailing '%' in format string".to_string()),
+            }
+            continue;
+        }
+
+        let mut flags = FormatFlags::default();
+        loop {
+            match chars.peek().copied() {
+                Some('-') => {
+                    flags.no_pad = true;
+                    chars.next();
+                }
+                Some('_') => {
+                    flags.pad = Some(' ');
+                    chars.next();
+                }
+                Some('0') => {
+                    flags.pad = Some('0');
+                    chars.next();
+                }
+                Some('^') => {
+                    flags.upper = true;
+                    chars.next();
+                }
+                Some('#') => {
+                    chars.next();
+                }
+                _ => break,
+            }
+        }
+
+        let mut width: Option<usize> = None;
+        while let Some(c) = chars.peek().copied() {
+            if c.is_ascii_digit() {
+                chars.next();
+                let digit = (c as u8 - b'0') as usize;
+                width = Some(width.unwrap_or(0).saturating_mul(10).saturating_add(digit));
+            } else {
+                break;
+            }
+        }
+
+        if matches!(chars.peek(), Some('E' | 'O')) {
+            chars.next();
+        }
+
+        let spec = chars
+            .next()
+            .ok_or_else(|| "trailing '%' in format string".to_string())?;
+        let ampm = if date.hour < 12 { "AM" } else { "PM" };
+        let hour12 = match date.hour % 12 {
+            0 => 12,
+            h => h,
+        };
+        let y2 = date.year % 100;
+        let century = date.year / 100;
+
+        let piece = match spec {
+            '%' => "%".to_string(),
+            'Y' => format_num(date.year as u64, 4, '0', width, &flags),
+            'C' => format_num(century as u64, 2, '0', width, &flags),
+            'y' => format_num(y2 as u64, 2, '0', width, &flags),
+            'm' => format_num(date.month as u64, 2, '0', width, &flags),
+            'd' => format_num(date.day as u64, 2, '0', width, &flags),
+            'e' => format_num(date.day as u64, 2, ' ', width, &flags),
+            'j' => format_num(date.day_of_year() as u64, 3, '0', width, &flags),
+            'H' => format_num(date.hour as u64, 2, '0', width, &flags),
+            'I' => format_num(hour12 as u64, 2, '0', width, &flags),
+            'k' => format_num(date.hour as u64, 2, ' ', width, &flags),
+            'l' => format_num(hour12 as u64, 2, ' ', width, &flags),
+            'M' => format_num(date.minute as u64, 2, '0', width, &flags),
+            'S' => format_num(date.second as u64, 2, '0', width, &flags),
+            'N' => format_num(date.nanosecond as u64, 9, '0', width, &flags),
+            'p' => apply_case(ampm, &flags),
+            'P' => apply_case(&ampm.to_ascii_lowercase(), &flags),
+            'a' => apply_case(weekday_abbrev(date.weekday_sunday0()), &flags),
+            'A' => apply_case(weekday_full(date.weekday_sunday0()), &flags),
+            'b' | 'h' => apply_case(month_abbrev(date.month), &flags),
+            'B' => apply_case(month_full(date.month), &flags),
+            'u' => {
+                let weekday_monday1 = match date.weekday_sunday0() {
+                    0 => 7,
+                    w => w,
+                };
+                format_num(weekday_monday1 as u64, 1, '0', width, &flags)
+            }
+            'w' => format_num(date.weekday_sunday0() as u64, 1, '0', width, &flags),
+            'U' => {
+                if week_fields.is_none() {
+                    week_fields = Some(compute_week_fields(date)?);
+                }
+                let wf = week_fields
+                    .as_ref()
+                    .ok_or_else(|| "failed to compute week fields".to_string())?;
+                format_num(wf.sunday_week as u64, 2, '0', width, &flags)
+            }
+            'W' => {
+                if week_fields.is_none() {
+                    week_fields = Some(compute_week_fields(date)?);
+                }
+                let wf = week_fields
+                    .as_ref()
+                    .ok_or_else(|| "failed to compute week fields".to_string())?;
+                format_num(wf.monday_week as u64, 2, '0', width, &flags)
+            }
+            'V' => {
+                if week_fields.is_none() {
+                    week_fields = Some(compute_week_fields(date)?);
+                }
+                let wf = week_fields
+                    .as_ref()
+                    .ok_or_else(|| "failed to compute week fields".to_string())?;
+                format_num(wf.iso_week as u64, 2, '0', width, &flags)
+            }
+            'G' => {
+                if week_fields.is_none() {
+                    week_fields = Some(compute_week_fields(date)?);
+                }
+                let wf = week_fields
+                    .as_ref()
+                    .ok_or_else(|| "failed to compute week fields".to_string())?;
+                format_num(wf.iso_year as u64, 4, '0', width, &flags)
+            }
+            'g' => {
+                if week_fields.is_none() {
+                    week_fields = Some(compute_week_fields(date)?);
+                }
+                let wf = week_fields
+                    .as_ref()
+                    .ok_or_else(|| "failed to compute week fields".to_string())?;
+                format_num((wf.iso_year % 100) as u64, 2, '0', width, &flags)
+            }
+            'F' => format!(
+                "{}-{}-{}",
+                format_num(date.year as u64, 4, '0', None, &FormatFlags::default()),
+                format_num(date.month as u64, 2, '0', None, &FormatFlags::default()),
+                format_num(date.day as u64, 2, '0', None, &FormatFlags::default())
+            ),
+            'D' | 'x' => format!(
+                "{}/{}/{}",
+                format_num(date.month as u64, 2, '0', None, &FormatFlags::default()),
+                format_num(date.day as u64, 2, '0', None, &FormatFlags::default()),
+                format_num(y2 as u64, 2, '0', None, &FormatFlags::default())
+            ),
+            'T' | 'X' => format!(
+                "{}:{}:{}",
+                format_num(date.hour as u64, 2, '0', None, &FormatFlags::default()),
+                format_num(date.minute as u64, 2, '0', None, &FormatFlags::default()),
+                format_num(date.second as u64, 2, '0', None, &FormatFlags::default())
+            ),
+            'R' => format!(
+                "{}:{}",
+                format_num(date.hour as u64, 2, '0', None, &FormatFlags::default()),
+                format_num(date.minute as u64, 2, '0', None, &FormatFlags::default())
+            ),
+            'r' => format!(
+                "{}:{}:{} {}",
+                format_num(hour12 as u64, 2, '0', None, &FormatFlags::default()),
+                format_num(date.minute as u64, 2, '0', None, &FormatFlags::default()),
+                format_num(date.second as u64, 2, '0', None, &FormatFlags::default()),
+                ampm
+            ),
+            'c' => format!(
+                "{} {} {} {} {}",
+                weekday_abbrev(date.weekday_sunday0()),
+                month_abbrev(date.month),
+                format_num(date.day as u64, 2, ' ', None, &FormatFlags::default()),
+                format!(
+                    "{}:{}:{}",
+                    format_num(date.hour as u64, 2, '0', None, &FormatFlags::default()),
+                    format_num(date.minute as u64, 2, '0', None, &FormatFlags::default()),
+                    format_num(date.second as u64, 2, '0', None, &FormatFlags::default())
+                ),
+                format_num(date.year as u64, 4, '0', None, &FormatFlags::default())
+            ),
+            'Z' => apply_case(tz_name, &flags),
+            'z' => format_offset(date.offset_seconds, 0)?,
+            's' => date.unix_seconds().to_string(),
+            'n' => "\n".to_string(),
+            't' => "\t".to_string(),
+            other => {
+                return Err(format!(
+                    "unsupported format specifier %{other} for out-of-range year"
+                ));
+            }
+        };
+        out.push_str(&piece);
+    }
+
+    Ok(out)
+}
+
 /// Return the appropriate format string for the given settings.
 fn make_format_string(settings: &Settings) -> &str {
     match settings.format {
@@ -850,7 +1323,9 @@ fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S, now: &Zoned) -> Optio
             if let Some(tz) = tz {
                 let date_part = s.trim_end_matches(last_word).trim();
                 // Parse in the target timezone so "10:30 EDT" means 10:30 in EDT
-                if let Ok(parsed) = parse_datetime::parse_datetime_at_date(now.clone(), date_part) {
+                if let Ok(parse_datetime::ParsedDateTime::InRange(parsed)) =
+                    parse_datetime::parse_datetime_at_date(now.clone(), date_part)
+                {
                     let dt = parsed.datetime();
                     if let Ok(zoned) = dt.to_zoned(tz) {
                         return Some(zoned);
@@ -864,9 +1339,7 @@ fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S, now: &Zoned) -> Optio
     None
 }
 
-/// Parse a `String` into a `DateTime`.
-/// If it fails, return a tuple of the `String` along with its `ParseError`.
-/// Helper function to parse dates from a line-based reader (stdin or file)
+/// Helper function to parse dates from a line-based reader (stdin or file).
 ///
 /// Takes any `Read` source, reads it line by line, and parses each line as a date.
 /// Returns a boxed iterator over the parse results.
@@ -874,7 +1347,9 @@ fn parse_dates_from_reader<R: Read + 'static>(
     reader: R,
     now: &Zoned,
     dbg_opts: DebugOptions,
-) -> Box<dyn Iterator<Item = Result<Zoned, (String, parse_datetime::ParseDateTimeError)>> + '_> {
+) -> Box<
+    dyn Iterator<Item = Result<ParsedDateValue, (String, parse_datetime::ParseDateTimeError)>> + '_,
+> {
     let lines = BufReader::new(reader).lines();
     Box::new(
         lines
@@ -883,18 +1358,15 @@ fn parse_dates_from_reader<R: Read + 'static>(
     )
 }
 
+/// Parse a string into a date value.
 ///
-/// **Update for parse_datetime 0.13:**
-/// - parse_datetime 0.11: returned `chrono::DateTime` → required conversion to `jiff::Zoned`
-/// - parse_datetime 0.13: returns `jiff::Zoned` directly → no conversion needed
-///
-/// This change was necessary to fix issue #8754 (parsing large second values like
-/// "12345.123456789 seconds ago" which failed in 0.11 but works in 0.13).
+/// `parse_datetime` returns `ParsedDateTime` directly so we can preserve
+/// large-year results alongside normal `Zoned` values.
 fn parse_date<S: AsRef<str> + Clone>(
     s: S,
     now: &Zoned,
     dbg_opts: DebugOptions,
-) -> Result<Zoned, (String, parse_datetime::ParseDateTimeError)> {
+) -> Result<ParsedDateValue, (String, parse_datetime::ParseDateTimeError)> {
     let input_str = s.as_ref();
 
     if dbg_opts.debug {
@@ -918,16 +1390,13 @@ fn parse_date<S: AsRef<str> + Clone>(
             let tz_display = zoned.time_zone().iana_name().unwrap_or("system default");
             let _ = writeln!(err, "date: input timezone: {tz_display}");
         }
-        return Ok(zoned);
+        return Ok(ParsedDateValue::InRange(zoned));
     }
 
     match parse_datetime::parse_datetime_at_date(now.clone(), input_str) {
-        // Convert to system timezone for display
-        // (parse_datetime 0.13 returns Zoned in the input's timezone)
-        Ok(date) => {
+        Ok(parse_datetime::ParsedDateTime::InRange(date)) => {
             let result = date.timestamp().to_zoned(now.time_zone().clone());
             if dbg_opts.debug {
-                // Show final parsed date and time
                 let mut err = stderr().lock();
                 let _ = writeln!(
                     err,
@@ -940,14 +1409,9 @@ fn parse_date<S: AsRef<str> + Clone>(
                     strtime::format("%H:%M:%S", &result).unwrap_or_default()
                 );
 
-                // Show timezone information
                 let _ = writeln!(err, "date: input timezone: system default");
 
-                // Check if time component was specified, if not warn about midnight usage
-                // Only warn for date-only inputs (no time specified), but not for epoch formats (@N)
-                // or inputs that explicitly specify a time (containing ':')
                 if dbg_opts.warn_midnight && !input_str.contains(':') && !input_str.contains('@') {
-                    // Input likely didn't specify a time, so midnight was assumed
                     let time_str = strtime::format("%H:%M:%S", &result).unwrap_or_default();
                     if time_str == "00:00:00" {
                         let _ = writeln!(
@@ -957,7 +1421,37 @@ fn parse_date<S: AsRef<str> + Clone>(
                     }
                 }
             }
-            Ok(result)
+            Ok(ParsedDateValue::InRange(result))
+        }
+        Ok(parse_datetime::ParsedDateTime::Extended(date)) => {
+            if dbg_opts.debug {
+                let mut err = stderr().lock();
+                let _ = writeln!(
+                    err,
+                    "date: parsed date part: (Y-M-D) {:04}-{:02}-{:02}",
+                    date.year, date.month, date.day
+                );
+                let _ = writeln!(
+                    err,
+                    "date: parsed time part: {:02}:{:02}:{:02}",
+                    date.hour, date.minute, date.second
+                );
+                let _ = writeln!(err, "date: input timezone: system default");
+
+                if dbg_opts.warn_midnight
+                    && !input_str.contains(':')
+                    && !input_str.contains('@')
+                    && date.hour == 0
+                    && date.minute == 0
+                    && date.second == 0
+                {
+                    let _ = writeln!(
+                        err,
+                        "date: warning: using midnight as starting time: 00:00:00"
+                    );
+                }
+            }
+            Ok(ParsedDateValue::Extended(date))
         }
         Err(e) => Err((input_str.into(), e)),
     }
@@ -1117,7 +1611,12 @@ mod tests {
         let now = "2025-03-15T20:00:00+00:00[UTC]".parse::<Zoned>().unwrap();
         let result =
             parse_date("yesterday 10:00 GMT", &now, DebugOptions::new(false, false)).unwrap();
-        assert_eq!(result.date(), jiff::civil::date(2025, 3, 14));
+        match result {
+            ParsedDateValue::InRange(zoned) => {
+                assert_eq!(zoned.date(), jiff::civil::date(2025, 3, 14));
+            }
+            ParsedDateValue::Extended(_) => panic!("expected in-range date"),
+        }
     }
 
     #[test]
@@ -1130,6 +1629,10 @@ mod tests {
             DebugOptions::new(false, false),
         )
         .unwrap();
+        let date = match date {
+            ParsedDateValue::InRange(zoned) => zoned,
+            ParsedDateValue::Extended(_) => panic!("expected in-range date"),
+        };
         let utc = convert_for_set(date, true);
         assert_eq!((utc.hour(), utc.minute(), utc.second()), (6, 53, 1)); // AWST(+08:00) -> -8h
     }
