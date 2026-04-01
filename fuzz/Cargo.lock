@@ -1409,7 +1409,7 @@ checksum = "1a80800c0488c3a21695ea981a54918fbb37abf04f4d0720c453632255e2ff0e"
 [[package]]
 name = "parse_datetime"
 version = "0.15.0"
-source = "git+https://github.com/uutils/parse_datetime?rev=ee4971cc73d6018855823873a4571793a2ca465e#ee4971cc73d6018855823873a4571793a2ca465e"
+source = "git+https://github.com/uutils/parse_datetime?tag=0.15.0#7440dd9ecb00b2bb50873b7803963bfcee4b2e8f"
 dependencies = [
  "jiff",
  "num-traits",
