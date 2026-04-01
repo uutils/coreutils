@@ -4433,7 +4433,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "libc",
- "nix",
+ "rustix",
  "tempfile",
  "thiserror 2.0.18",
  "unicode-width 0.2.2",
