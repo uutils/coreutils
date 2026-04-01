@@ -623,22 +623,33 @@ fn try_futimens_via_write_fd(path: &Path, atime: FileTime, mtime: FileTime) -> s
     let mtime_nsec = i64::from(mtime.nanoseconds());
 
     #[cfg(target_pointer_width = "32")]
-    let atime_spec = TimeSpec::new(
-        atime_sec.try_into().unwrap(),
-        atime_nsec.try_into().unwrap(),
-    );
+    let atime_spec = timespec_from_parts(atime_sec, atime_nsec)?;
     #[cfg(target_pointer_width = "64")]
     let atime_spec = TimeSpec::new(atime_sec, atime_nsec);
 
     #[cfg(target_pointer_width = "32")]
-    let mtime_spec = TimeSpec::new(
-        mtime_sec.try_into().unwrap(),
-        mtime_nsec.try_into().unwrap(),
-    );
+    let mtime_spec = timespec_from_parts(mtime_sec, mtime_nsec)?;
     #[cfg(target_pointer_width = "64")]
     let mtime_spec = TimeSpec::new(mtime_sec, mtime_nsec);
 
     futimens(&file, &atime_spec, &mtime_spec).map_err(Error::from)
+}
+
+#[cfg(all(unix, target_pointer_width = "32"))]
+fn timespec_from_parts(seconds: i64, nanoseconds: i64) -> std::io::Result<TimeSpec> {
+    let seconds = i32::try_from(seconds).map_err(|_| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "timestamp is out of range for futimens on 32-bit targets",
+        )
+    })?;
+    let nanoseconds = i32::try_from(nanoseconds).map_err(|_| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "timestamp nanoseconds are out of range for futimens on 32-bit targets",
+        )
+    })?;
+    Ok(TimeSpec::new(seconds, nanoseconds))
 }
 
 /// Get metadata of the provided path

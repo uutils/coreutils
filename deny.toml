@@ -114,6 +114,8 @@ skip = [
   { name = "crypto-common", version = "0.1.7" },
   # digest
   { name = "block-buffer", version = "0.10.4" },
+  # parse_datetime, toml_edit
+  { name = "winnow", version = "1.0.1" },
 ]
 # spell-checker: enable
 
