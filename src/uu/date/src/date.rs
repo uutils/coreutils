@@ -53,10 +53,15 @@ const OPT_REFERENCE: &str = "reference";
 const OPT_UNIVERSAL: &str = "universal";
 const OPT_UNIVERSAL_2: &str = "utc";
 
+/// Character emitted by `String::from_utf8_lossy` for each ill-formed byte subsequence.
+const UNICODE_REPLACEMENT: char = '\u{FFFD}';
+
 /// Settings for this program, parsed from the command line
 struct Settings {
     utc: bool,
     format: Format,
+    /// Raw format bytes for Custom format, to preserve non-UTF-8 bytes in output
+    format_raw: Option<Vec<u8>>,
     date_source: DateSource,
     set_to: Option<Zoned>,
     debug: bool,
@@ -318,25 +323,31 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
+    let mut format_raw: Option<Vec<u8>> = None;
     let format = if let Some(form) = matches.get_one::<OsString>(OPT_FORMAT) {
-        let form = form.to_string_lossy();
-        if !form.starts_with('+') {
+        let raw_bytes = form.as_encoded_bytes();
+        if raw_bytes.first() != Some(&b'+') {
+            let form_lossy = form.to_string_lossy();
             // if an optional Format String was found but the user has not provided an input date
             // GNU prints an invalid date Error
             if !matches!(date_source, DateSource::Human(_)) {
                 return Err(USimpleError::new(
                     1,
-                    translate!("date-error-invalid-date", "date" => form),
+                    translate!("date-error-invalid-date", "date" => form_lossy),
                 ));
             }
             // If the user did provide an input date with the --date flag and the Format String is
             // not starting with '+' GNU prints the missing '+' error message
             return Err(USimpleError::new(
                 1,
-                translate!("date-error-format-missing-plus", "arg" => form),
+                translate!("date-error-format-missing-plus", "arg" => form_lossy),
             ));
         }
-        let form = form[1..].to_string();
+        let bytes_after_plus = &raw_bytes[1..];
+        if std::str::from_utf8(bytes_after_plus).is_err() {
+            format_raw = Some(bytes_after_plus.to_vec());
+        }
+        let form = String::from_utf8_lossy(bytes_after_plus).into_owned();
         Format::Custom(form)
     } else if let Some(fmt) = matches
         .get_many::<String>(OPT_ISO_8601)
@@ -383,6 +394,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let settings = Settings {
         utc,
         format,
+        format_raw,
         date_source,
         set_to,
         debug: debug_mode,
@@ -546,6 +558,26 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let format_string = make_format_string(&settings);
     let mut stdout = BufWriter::new(std::io::stdout().lock());
 
+    // Pre-extract non-UTF-8 chunks from the raw format bytes (if any).
+    // from_utf8_lossy emits one U+FFFD per ill-formed subsequence (WTF-8 spec),
+    // so we can match them 1:1 when restoring original bytes in the output.
+    let raw_chunks: Option<Vec<&[u8]>> = settings.format_raw.as_ref().map(|raw| {
+        let mut chunks = Vec::new();
+        let mut i = 0;
+        while i < raw.len() {
+            match std::str::from_utf8(&raw[i..]) {
+                Ok(_) => break,
+                Err(e) => {
+                    i += e.valid_up_to();
+                    let len = e.error_len().unwrap_or(raw.len() - i);
+                    chunks.push(&raw[i..i + len]);
+                    i += len;
+                }
+            }
+        }
+        chunks
+    });
+
     // Format all the dates
     let config = Config::new().custom(PosixCustom::new()).lenient(true);
     for date in dates {
@@ -564,9 +596,34 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     &config,
                     skip_localization,
                 ) {
-                    Ok(s) => writeln!(stdout, "{s}").map_err(|e| {
-                        USimpleError::new(1, translate!("date-error-write", "error" => e))
-                    })?,
+                    Ok(s) => {
+                        if let Some(ref chunks) = raw_chunks {
+                            // Restore non-UTF-8 bytes that were replaced with
+                            // U+FFFD by the lossy conversion. strftime passes
+                            // U+FFFD through unchanged. Each FFFD in the output
+                            // corresponds to the next ill-formed byte subsequence
+                            // from the original format string.
+                            let mut chunk_iter = chunks.iter();
+                            let mut out = Vec::with_capacity(s.len());
+                            for ch in s.chars() {
+                                if ch == UNICODE_REPLACEMENT {
+                                    if let Some(chunk) = chunk_iter.next() {
+                                        out.extend_from_slice(chunk);
+                                    }
+                                } else {
+                                    let mut buf = [0u8; 4];
+                                    out.extend_from_slice(ch.encode_utf8(&mut buf).as_bytes());
+                                }
+                            }
+                            out.push(b'\n');
+                            stdout.write_all(&out)
+                        } else {
+                            writeln!(stdout, "{s}")
+                        }
+                        .map_err(|e| {
+                            USimpleError::new(1, translate!("date-error-write", "error" => e))
+                        })?;
+                    }
                     Err(e) => {
                         let _ = stdout.flush();
                         return Err(USimpleError::new(

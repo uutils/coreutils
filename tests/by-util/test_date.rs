@@ -2349,26 +2349,31 @@ fn test_locale_day_names() {
     }
 }
 
-/// Test that non-UTF-8 format bytes don't cause errors.
-/// zh_CN.GB18030's date_fmt contains Chinese characters (年, 月, 日) encoded
-/// in GB18030 which is not valid UTF-8. The format argument must handle this
-/// gracefully via lossy conversion.
+/// Test that non-UTF-8 format bytes are preserved in output (not replaced
+/// with U+FFFD), matching GNU behavior.
 #[test]
 #[cfg(unix)]
-fn test_date_non_utf8_locale_gb18030() {
+fn test_date_non_utf8_format_preserved() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
 
-    // GB18030-encoded "年" (0xC4EA) + "%m" + "月" (0xD4C2) + "%d" + "日" (0xC8D5)
-    // These bytes are valid GB18030 but not valid UTF-8.
-    let fmt_bytes: &[u8] = b"+\xc4\xea%m\xd4\xc2%d\xc8\xd5";
-
+    // Simple case: \xFF should pass through as-is
+    let fmt_bytes: &[u8] = b"+\xff%m";
     new_ucmd!()
-        .env("LC_ALL", "zh_CN.GB18030")
         .arg("-d")
         .arg("2025-10-11T13:00")
         .arg(OsStr::from_bytes(fmt_bytes))
-        .succeeds();
+        .succeeds()
+        .stdout_is_bytes(b"\xff10\n");
+
+    // GB18030-encoded "年" (0xC4EA) + "%m" + "月" (0xD4C2) + "%d" + "日" (0xC8D5)
+    let fmt_bytes: &[u8] = b"+\xc4\xea%m\xd4\xc2%d\xc8\xd5";
+    new_ucmd!()
+        .arg("-d")
+        .arg("2025-10-11T13:00")
+        .arg(OsStr::from_bytes(fmt_bytes))
+        .succeeds()
+        .stdout_is_bytes(b"\xc4\xea10\xd4\xc211\xc8\xd5\n");
 }
 
 #[test]
