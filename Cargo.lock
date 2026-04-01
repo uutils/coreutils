@@ -3461,7 +3461,7 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
- "nix",
+ "rustix",
  "tempfile",
  "thiserror 2.0.18",
  "unicode-width 0.2.2",
