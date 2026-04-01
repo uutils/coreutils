@@ -35,7 +35,7 @@ use std::ffi::OsString;
 use std::fs::Metadata;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(unix)]
 use std::os::fd::AsFd;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::unix::fs::OpenOptionsExt;
@@ -224,6 +224,27 @@ enum Source {
     /// Input from a named pipe, also known as a FIFO.
     #[cfg(unix)]
     Fifo(File),
+}
+
+#[cfg(unix)]
+impl AsFd for Source {
+    fn as_fd(&self) -> rustix::fd::BorrowedFd<'_> {
+        match self {
+            Self::File(f) => f.as_fd(),
+            #[cfg(unix)]
+            Self::StdinFile(f) | Self::Fifo(f) => f.as_fd(),
+        }
+    }
+}
+
+#[cfg(windows)]
+impl AsHandle for Source {
+    fn as_handle(&self) -> std::os::windows::io::BorrowedHandle<'_> {
+        match self {
+            Self::File(f) => f.as_handle(),
+            _ => todo!(),
+        }
+    }
 }
 
 impl Source {
@@ -521,25 +542,37 @@ impl Input<'_> {
     /// Fills a given buffer.
     /// Reads in increments of 'self.ibs'.
     /// The start of each ibs-sized read follows the previous one.
-    fn fill_consecutive(&mut self, buf: &mut Vec<u8>) -> io::Result<ReadStat> {
+    fn fill_consecutive(&mut self, buf: &mut Vec<u8>, bsize: usize) -> io::Result<ReadStat> {
         let mut reads_complete = 0;
         let mut reads_partial = 0;
         let mut bytes_total = 0;
+        buf.clear();
+        let spare = buf.spare_capacity_mut();
+        let limit = bsize.min(spare.len());
 
-        for chunk in buf.chunks_mut(self.settings.ibs) {
-            match self.read(chunk)? {
+        // rustix cause OOM with
+        // for chunk in target_area.chunks_mut(self.settings.ibs) {
+        // so manually slice chunk...
+        while bytes_total < limit {
+            let c_size = self.settings.ibs.min(limit - bytes_total);
+            let chunk = &mut spare[bytes_total..bytes_total + c_size];
+            let (filled, _uninit) = rustix::io::read(&self.src, chunk)?;
+            match filled.len() {
                 rlen if rlen == self.settings.ibs => {
                     bytes_total += rlen;
                     reads_complete += 1;
                 }
                 rlen if rlen > 0 => {
+                    //_uninit.fill(std::mem::MaybeUninit::new(0));
                     bytes_total += rlen;
                     reads_partial += 1;
                 }
                 _ => break,
             }
         }
-        buf.truncate(bytes_total);
+        // todo: use wrapper to extend buf with read at same time without unsafe
+        // SAFETY: spare was filled
+        unsafe { buf.set_len(bytes_total) };
         Ok(ReadStat {
             reads_complete,
             reads_partial,
@@ -552,7 +585,10 @@ impl Input<'_> {
     /// Fills a given buffer.
     /// Reads in increments of 'self.ibs'.
     /// The start of each ibs-sized read is aligned to multiples of ibs; remaining space is filled with the 'pad' byte.
-    fn fill_blocks(&mut self, buf: &mut Vec<u8>, pad: u8) -> io::Result<ReadStat> {
+    fn fill_blocks(&mut self, buf: &mut Vec<u8>, bsize: usize, pad: u8) -> io::Result<ReadStat> {
+        // Resize the buffer to the bsize. Any garbage data in the buffer is overwritten or truncated, so there is no need to fill with BUF_INIT_BYTE first.
+        // resizing buf cause serious performance drop https://github.com/uutils/coreutils/issues/11544
+        buf.resize(bsize, BUF_INIT_BYTE);
         let mut reads_complete = 0;
         let mut reads_partial = 0;
         let mut base_idx = 0;
@@ -1367,13 +1403,10 @@ fn read_helper(i: &mut Input, buf: &mut Vec<u8>, bsize: usize) -> io::Result<Rea
     }
     // ------------------------------------------------------------------
     // Read
-    // Resize the buffer to the bsize. Any garbage data in the buffer is overwritten or truncated, so there is no need to fill with BUF_INIT_BYTE first.
-    // resizing buf cause serious performance drop https://github.com/uutils/coreutils/issues/11544
-    buf.resize(bsize, BUF_INIT_BYTE);
 
     let mut rstat = match i.settings.iconv.sync {
-        Some(ch) => i.fill_blocks(buf, ch)?,
-        _ => i.fill_consecutive(buf)?,
+        Some(ch) => i.fill_blocks(buf, bsize, ch)?,
+        _ => i.fill_consecutive(buf, bsize)?,
     };
     // Return early if no data
     if rstat.reads_complete == 0 && rstat.reads_partial == 0 {
