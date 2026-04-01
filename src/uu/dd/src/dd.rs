@@ -521,13 +521,24 @@ impl Input<'_> {
     /// Fills a given buffer.
     /// Reads in increments of 'self.ibs'.
     /// The start of each ibs-sized read follows the previous one.
-    fn fill_consecutive(&mut self, buf: &mut Vec<u8>) -> io::Result<ReadStat> {
+    fn fill_consecutive(&mut self, buf: &mut Vec<u8>, bsize: usize) -> io::Result<ReadStat> {
         let mut reads_complete = 0;
         let mut reads_partial = 0;
         let mut bytes_total = 0;
+        buf.clear();
+        let spare = buf.spare_capacity_mut();
+        let spare_len = spare.len();
+        let target_area = &mut spare[..bsize.min(spare_len)];
 
-        for chunk in buf.chunks_mut(self.settings.ibs) {
-            match self.read(chunk)? {
+        for chunk in target_area.chunks_mut(self.settings.ibs) {
+            // std cannot fix https://github.com/uutils/coreutils/issues/11544 without unsafe yet
+            // todo switch to let slice: &mut [u8] = unsafe { chunk.assume_init_mut() }; with Rust 1.93
+            // no stable API to remove unsafe <https://github.com/rust-lang/rust/issues/78485>
+            // rustix::io::read avoids the unsafe with better performance, but unix only
+            // SAFETY: used only for overriding reserved area of buf
+            #[allow(clippy::transmute_ptr_to_ptr)]
+            let slice: &mut [u8] = unsafe { std::mem::transmute(chunk) };
+            match self.read(slice)? {
                 rlen if rlen == self.settings.ibs => {
                     bytes_total += rlen;
                     reads_complete += 1;
@@ -535,11 +546,14 @@ impl Input<'_> {
                 rlen if rlen > 0 => {
                     bytes_total += rlen;
                     reads_partial += 1;
+                    slice[rlen..].fill(0); // needed for unsafe set_len
                 }
                 _ => break,
             }
         }
-        buf.truncate(bytes_total);
+        // todo: use wrapper to extend buf with read at same time without unsafe
+        // SAFETY: we just filled bytes_total of spare
+        unsafe { buf.set_len(bytes_total) };
         Ok(ReadStat {
             reads_complete,
             reads_partial,
@@ -552,7 +566,10 @@ impl Input<'_> {
     /// Fills a given buffer.
     /// Reads in increments of 'self.ibs'.
     /// The start of each ibs-sized read is aligned to multiples of ibs; remaining space is filled with the 'pad' byte.
-    fn fill_blocks(&mut self, buf: &mut Vec<u8>, pad: u8) -> io::Result<ReadStat> {
+    fn fill_blocks(&mut self, buf: &mut Vec<u8>, bsize: usize, pad: u8) -> io::Result<ReadStat> {
+        // Resize the buffer to the bsize. Any garbage data in the buffer is overwritten or truncated, so there is no need to fill with BUF_INIT_BYTE first.
+        // resizing buf cause serious performance drop https://github.com/uutils/coreutils/issues/11544
+        buf.resize(bsize, BUF_INIT_BYTE);
         let mut reads_complete = 0;
         let mut reads_partial = 0;
         let mut base_idx = 0;
@@ -1367,13 +1384,10 @@ fn read_helper(i: &mut Input, buf: &mut Vec<u8>, bsize: usize) -> io::Result<Rea
     }
     // ------------------------------------------------------------------
     // Read
-    // Resize the buffer to the bsize. Any garbage data in the buffer is overwritten or truncated, so there is no need to fill with BUF_INIT_BYTE first.
-    // resizing buf cause serious performance drop https://github.com/uutils/coreutils/issues/11544
-    buf.resize(bsize, BUF_INIT_BYTE);
 
     let mut rstat = match i.settings.iconv.sync {
-        Some(ch) => i.fill_blocks(buf, ch)?,
-        _ => i.fill_consecutive(buf)?,
+        Some(ch) => i.fill_blocks(buf, bsize, ch)?,
+        _ => i.fill_consecutive(buf, bsize)?,
     };
     // Return early if no data
     if rstat.reads_complete == 0 && rstat.reads_partial == 0 {
