@@ -178,14 +178,12 @@ fn tee(options: &Options) -> Result<()> {
         0,
         NamedWriter {
             name: translate!("tee-standard-output").into(),
-            inner: Box::new(stdout()),
+            inner: Writer::Stdout(stdout()),
         },
     );
 
     let mut output = MultiWriter::new(writers, options.output_error.clone());
-    let input = &mut NamedReader {
-        inner: Box::new(stdin()) as Box<dyn Read>,
-    };
+    let input = NamedReader { inner: stdin() };
 
     #[cfg(target_os = "linux")]
     if options.ignore_pipe_errors && !ensure_stdout_not_broken()? && output.writers.len() == 1 {
@@ -263,7 +261,7 @@ fn open(
     };
     match mode.write(true).create(true).open(path.as_path()) {
         Ok(file) => Some(Ok(NamedWriter {
-            inner: Box::new(file),
+            inner: Writer::File(file),
             name: name.clone(),
         })),
         Err(f) => {
@@ -389,8 +387,29 @@ impl Write for MultiWriter {
     }
 }
 
+enum Writer {
+    File(std::fs::File),
+    Stdout(std::io::Stdout),
+}
+
+impl Write for Writer {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+        match self {
+            Self::File(f) => f.write(buf),
+            Self::Stdout(s) => s.write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> Result<()> {
+        match self {
+            Self::File(f) => f.flush(),
+            Self::Stdout(s) => s.flush(),
+        }
+    }
+}
+
 struct NamedWriter {
-    inner: Box<dyn Write>,
+    inner: Writer,
     pub name: OsString,
 }
 
@@ -405,7 +424,7 @@ impl Write for NamedWriter {
 }
 
 struct NamedReader {
-    inner: Box<dyn Read>,
+    inner: std::io::Stdin,
 }
 
 impl Read for NamedReader {
