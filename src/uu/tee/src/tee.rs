@@ -57,24 +57,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let append = matches.get_flag(options::APPEND);
     let ignore_interrupts = matches.get_flag(options::IGNORE_INTERRUPTS);
     let ignore_pipe_errors = matches.get_flag(options::IGNORE_PIPE_ERRORS);
-    let output_error = if matches.contains_id(options::OUTPUT_ERROR) {
-        match matches
-            .get_one::<String>(options::OUTPUT_ERROR)
-            .map(String::as_str)
-        {
-            Some("warn") => Some(OutputErrorMode::Warn),
-            // If no argument is specified for --output-error,
-            // defaults to warn-nopipe
-            None | Some("warn-nopipe") => Some(OutputErrorMode::WarnNoPipe),
-            Some("exit") => Some(OutputErrorMode::Exit),
-            Some("exit-nopipe") => Some(OutputErrorMode::ExitNoPipe),
-            _ => unreachable!(),
-        }
-    } else if ignore_pipe_errors {
-        Some(OutputErrorMode::WarnNoPipe)
-    } else {
-        None
-    };
+    let output_error = matches
+        .get_one::<String>(options::OUTPUT_ERROR)
+        .map(|s| match s.as_str() {
+            "warn" => OutputErrorMode::Warn,
+            "warn-nopipe" => OutputErrorMode::WarnNoPipe,
+            "exit" => OutputErrorMode::Exit,
+            "exit-nopipe" => OutputErrorMode::ExitNoPipe,
+            _ => unreachable!("clap excluded it"),
+        })
+        .or_else(|| ignore_pipe_errors.then_some(OutputErrorMode::WarnNoPipe));
 
     let files = matches
         .get_many::<OsString>(options::FILE)
@@ -142,6 +134,7 @@ pub fn uu_app() -> Command {
                 .long(options::OUTPUT_ERROR)
                 .require_equals(true)
                 .num_args(0..=1)
+                .default_missing_value("warn-nopipe")
                 .value_parser(ShortcutValueParser::new([
                     PossibleValue::new("warn").help(translate!("tee-help-output-error-warn")),
                     PossibleValue::new("warn-nopipe")
