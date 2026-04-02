@@ -297,11 +297,10 @@ impl<'a> Input<'a> {
 
 #[cfg(unix)]
 fn is_stdin_small_file() -> bool {
-    use nix::sys::stat;
     use std::os::fd::AsFd;
 
     matches!(
-        stat::fstat(io::stdin().as_fd()),
+        rustix::fs::fstat(io::stdin().as_fd()),
         Ok(meta) if meta.st_mode as libc::mode_t & libc::S_IFMT == libc::S_IFREG && meta.st_size <= (10 << 20)
     )
 }

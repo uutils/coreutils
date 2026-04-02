@@ -13,6 +13,8 @@ use regex::Regex;
 #[cfg(all(unix, not(target_os = "macos")))]
 use uucore::process::geteuid;
 use uutests::util::TestScenario;
+#[cfg(unix)]
+use uutests::util::is_locale_available;
 use uutests::{at_and_ucmd, new_ucmd, util_name};
 
 #[test]
@@ -2067,20 +2069,7 @@ fn test_date_parenthesis_vs_other_special_chars() {
 fn test_date_iranian_locale_solar_hijri_calendar() {
     // Test Iranian locale uses Solar Hijri calendar
     // Verify the Solar Hijri calendar is used in the Iranian locale
-    use std::process::Command;
-
-    // Check if Iranian locale is available
-    let locale_check = Command::new("locale")
-        .env("LC_ALL", "fa_IR.UTF-8")
-        .arg("charmap")
-        .output();
-
-    let locale_available = match locale_check {
-        Ok(output) => String::from_utf8_lossy(&output.stdout).trim() == "UTF-8",
-        Err(_) => false,
-    };
-
-    if !locale_available {
+    if !is_locale_available("fa_IR.UTF-8") {
         println!("Skipping Iranian locale test - fa_IR.UTF-8 locale not available");
         return;
     }
@@ -2147,20 +2136,7 @@ fn test_date_iranian_locale_solar_hijri_calendar() {
 fn test_date_ethiopian_locale_calendar() {
     // Test Ethiopian locale uses Ethiopian calendar
     // Verify the Ethiopian calendar is used in the Ethiopian locale
-    use std::process::Command;
-
-    // Check if Ethiopian locale is available
-    let locale_check = Command::new("locale")
-        .env("LC_ALL", "am_ET.UTF-8")
-        .arg("charmap")
-        .output();
-
-    let locale_available = match locale_check {
-        Ok(output) => String::from_utf8_lossy(&output.stdout).trim() == "UTF-8",
-        Err(_) => false,
-    };
-
-    if !locale_available {
+    if !is_locale_available("am_ET.UTF-8") {
         println!("Skipping Ethiopian locale test - am_ET.UTF-8 locale not available");
         return;
     }
@@ -2227,20 +2203,7 @@ fn test_date_ethiopian_locale_calendar() {
 fn test_date_thai_locale_solar_calendar() {
     // Test Thai locale uses Thai solar calendar
     // Verify the Thai solar calendar is used with the Thai locale
-    use std::process::Command;
-
-    // Check if Thai locale is available
-    let locale_check = Command::new("locale")
-        .env("LC_ALL", "th_TH.UTF-8")
-        .arg("charmap")
-        .output();
-
-    let locale_available = match locale_check {
-        Ok(output) => String::from_utf8_lossy(&output.stdout).trim() == "UTF-8",
-        Err(_) => false,
-    };
-
-    if !locale_available {
+    if !is_locale_available("th_TH.UTF-8") {
         println!("Skipping Thai locale test - th_TH.UTF-8 locale not available");
         return;
     }

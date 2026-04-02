@@ -17,6 +17,15 @@ use std::time::Duration;
 // spell-checker:ignore nopipe
 
 #[test]
+#[cfg(unix)]
+fn test_error_stdin_directory() {
+    new_ucmd!()
+        .set_stdin(std::fs::File::open(".").unwrap())
+        .fails_with_code(1)
+        .stderr_is("tee: read error: Is a directory\n");
+}
+
+#[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
