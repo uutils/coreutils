@@ -42,6 +42,7 @@ use std::num::IntErrorKind;
 use std::num::NonZero;
 use std::ops::Range;
 #[cfg(unix)]
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::Utf8Error;
