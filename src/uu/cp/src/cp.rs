@@ -1896,12 +1896,13 @@ pub(crate) fn copy_attributes(
 fn symlink_file(
     source: &Path,
     dest: &Path,
-    symlinked_files: &mut HashSet<FileInformation>,
+    #[cfg(not(target_os = "wasi"))] symlinked_files: &mut HashSet<FileInformation>,
+    #[cfg(target_os = "wasi")] _symlinked_files: &mut HashSet<FileInformation>,
 ) -> CopyResult<()> {
     #[cfg(target_os = "wasi")]
     {
         return Err(CpError::IoErrContext(
-            std::io::Error::new(std::io::ErrorKind::Unsupported, "symlinks not supported"),
+            io::Error::new(io::ErrorKind::Unsupported, "symlinks not supported"),
             translate!("cp-error-cannot-create-symlink",
                        "dest" => get_filename(dest).unwrap_or("?").quote(),
                        "source" => get_filename(source).unwrap_or("?").quote()),
@@ -1930,10 +1931,13 @@ fn symlink_file(
             )
         })?;
     }
-    if let Ok(file_info) = FileInformation::from_path(dest, false) {
-        symlinked_files.insert(file_info);
+    #[cfg(not(target_os = "wasi"))]
+    {
+        if let Ok(file_info) = FileInformation::from_path(dest, false) {
+            symlinked_files.insert(file_info);
+        }
+        Ok(())
     }
-    Ok(())
 }
 
 fn context_for(src: &Path, dest: &Path) -> String {
