@@ -80,29 +80,6 @@ fn cp_preserve_metadata(
     });
 }
 
-#[divan::bench(args = [16])]
-fn cp_large_file(bencher: Bencher, size_mb: usize) {
-    bencher
-        .with_inputs(|| {
-            let temp_dir = TempDir::new().unwrap();
-            let source = temp_dir.path().join("source.bin");
-            binary_data::create_file(&source, size_mb, b'x');
-            (temp_dir, source)
-        })
-        .counter(divan::counter::BytesCount::new(size_mb * 1024 * 1024))
-        .bench_values(|(temp_dir, source)| {
-            // Use unique destination name to avoid filesystem allocation variance
-            let dest = temp_dir.path().join(format!(
-                "dest_{}.bin",
-                std::ptr::addr_of!(temp_dir) as usize
-            ));
-            let source_str = source.to_str().unwrap();
-            let dest_str = dest.to_str().unwrap();
-
-            black_box(run_util_function(uumain, &[source_str, dest_str]));
-        });
-}
-
 fn main() {
     divan::main();
 }
