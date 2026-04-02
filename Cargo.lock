@@ -1382,9 +1382,9 @@ dependencies = [
 
 [[package]]
 name = "icu_calendar"
-version = "2.2.0"
+version = "2.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "baf11bd83ebd0cd319e23a9a9c9a25b564a1fadc3bbc93069b8abc9d8df812bf"
+checksum = "a2b2acc6263f494f1df50685b53ff8e57869e47d5c6fe39c23d518ae9a4f3e45"
 dependencies = [
  "calendrical_calculations",
  "displaydoc",
