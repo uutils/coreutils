@@ -154,6 +154,8 @@ fcntl
 vmsplice
 
 # * vars/libc
+memsize
+sysctlbyname
 COMFOLLOW
 EXDEV
 FILENO
