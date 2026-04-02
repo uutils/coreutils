@@ -2,7 +2,7 @@ use divan::{Bencher, black_box};
 use uu_cat::uumain;
 use uucore::benchmark::{run_util_function, setup_test_file};
 
-#[divan::bench(args = [10_000])]
+#[divan::bench(args = [10_000, 10_000_000])]
 fn cat_default(bencher: Bencher, size_bytes: usize) {
     let data = vec![b'a'; size_bytes];
 
