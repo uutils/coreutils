@@ -18,6 +18,7 @@ pub const MAX_ROOTLESS_PIPE_SIZE: usize = 1024 * 1024;
 /// Returns two `File` objects: everything written to the second can be read
 /// from the first.
 /// This is used only for resolving the limitation for splice: one of a input or output should be pipe
+#[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn pipe() -> std::io::Result<(File, File)> {
     let (read, write) = rustix::pipe::pipe()?;
@@ -36,6 +37,7 @@ pub fn pipe() -> std::io::Result<(File, File)> {
 /// To get around this requirement, consider splicing from your source into
 /// a [`pipe`] and then from the pipe into your target (with `splice_exact`):
 /// this is still very efficient.
+#[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn splice(source: &impl AsFd, target: &impl AsFd, len: usize) -> std::io::Result<usize> {
     Ok(rustix::pipe::splice(
@@ -53,6 +55,7 @@ pub fn splice(source: &impl AsFd, target: &impl AsFd, len: usize) -> std::io::Re
 /// Exactly `len` bytes are moved from `source` into `target`.
 ///
 /// Panics if `source` runs out of data before `len` bytes have been moved.
+#[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn splice_exact(source: &impl AsFd, target: &impl AsFd, len: usize) -> std::io::Result<()> {
     let mut left = len;
@@ -62,4 +65,23 @@ pub fn splice_exact(source: &impl AsFd, target: &impl AsFd, len: usize) -> std::
         left -= written;
     }
     Ok(())
+}
+
+/// Return verified /dev/null
+///
+/// `splice` to /dev/null is faster than `read` when we skip or count the input which is not able to seek
+#[inline]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn dev_null() -> Option<File> {
+    let null = std::fs::OpenOptions::new()
+        .write(true)
+        .open("/dev/null")
+        .ok()?;
+    let stat = rustix::fs::fstat(&null).ok()?;
+    let dev = stat.st_rdev;
+    if (rustix::fs::major(dev), rustix::fs::minor(dev)) == (1, 3) {
+        Some(null)
+    } else {
+        None
+    }
 }
