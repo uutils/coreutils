@@ -30,7 +30,7 @@ use foldhash::{HashMap, SharedSeed};
 use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
 use rand::{RngExt as _, rng};
 #[cfg(not(target_os = "wasi"))]
-use rayon::prelude::*;
+use rayon::slice::ParallelSliceMut;
 use std::cmp::Ordering;
 use std::env;
 use std::ffi::{OsStr, OsString};
