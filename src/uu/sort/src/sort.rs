@@ -39,7 +39,7 @@ use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::{IntErrorKind, NonZero};
 use std::ops::Range;
 #[cfg(unix)]
-use std::os::unix::ffi::OsStrExt;
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::Utf8Error;
@@ -2042,26 +2042,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 path: files0_from.clone(),
                 error,
             })?;
-            let f = std::str::from_utf8(&line)
-                .expect("Could not parse string from zero terminated input.");
-            match f {
-                STDIN_FILE => {
-                    return Err(SortError::MinusInStdIn.into());
+            #[cfg(unix)]
+            let f = OsStr::from_bytes(&line);
+            #[cfg(not(unix))]
+            let f_str = String::from_utf8_lossy(&line);
+            #[cfg(not(unix))]
+            let f = OsStr::new(f_str.as_ref());
+
+            if f == STDIN_FILE {
+                return Err(SortError::MinusInStdIn.into());
+            }
+            if f.is_empty() {
+                return Err(SortError::ZeroLengthFileName {
+                    file: files0_from,
+                    line_num: line_num + 1,
                 }
-                "" => {
-                    return Err(SortError::ZeroLengthFileName {
-                        file: files0_from,
-                        line_num: line_num + 1,
-                    }
-                    .into());
-                }
-                _ => {}
+                .into());
             }
 
-            files.push(OsString::from(
-                std::str::from_utf8(&line)
-                    .expect("Could not parse string from zero terminated input."),
-            ));
+            files.push(f.to_os_string());
         }
         if files.is_empty() {
             return Err(SortError::EmptyInputFile { file: files0_from }.into());
