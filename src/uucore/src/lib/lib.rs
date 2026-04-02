@@ -590,7 +590,7 @@ pub enum CharByte {
 }
 
 impl_from_for_enum!(CharByte:
-    char => Char,
+    char => Char;
     u8 => Byte, ref
 );
 

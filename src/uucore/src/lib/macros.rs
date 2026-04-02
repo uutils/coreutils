@@ -194,6 +194,7 @@ macro_rules! show_warning_caps(
         let _ = writeln!(error, $($args)+);
     })
 );
+
 /// Implement [`From`] for an enum with simple variant mappings.
 ///
 /// This macro generates `From<T>` implementations for the specified enum,
@@ -237,26 +238,24 @@ macro_rules! show_warning_caps(
 ///   directly wrap the input type.
 #[macro_export]
 macro_rules! impl_from_for_enum {
-    (
-        $enum:ident :
-        $(
-            $type:ty => $variant:ident $(, ref)?
-        ),* $(,)?
-    ) => {
-        $(
-            impl From<$type> for $enum {
-                fn from(value: $type) -> Self {
-                    $enum::$variant(value)
-                }
-            }
+    ( @step $enum:ident, $type:ty => $variant:ident, ref ) => {
+        impl From<$type> for $enum {
+            fn from(value: $type) -> Self { $enum::$variant(value) }
+        }
+        impl From<&$type> for $enum {
+            fn from(value: &$type) -> Self { $enum::$variant(*value) }
+        }
+    };
 
-            $(
-                impl From<&$type> for $enum {
-                    fn from(value: &$type) -> Self {
-                        $enum::$variant(*value)
-                    }
-                }
-            )?
+    ( @step $enum:ident, $type:ty => $variant:ident ) => {
+        impl From<$type> for $enum {
+            fn from(value: $type) -> Self { $enum::$variant(value) }
+        }
+    };
+
+    ( $enum:ident : $( $type:ty => $variant:ident $(, $r:ident)? );* $(;)? ) => {
+        $(
+            $crate::impl_from_for_enum!(@step $enum, $type => $variant $(, $r)?);
         )*
     };
 }
