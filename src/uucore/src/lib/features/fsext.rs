@@ -535,10 +535,11 @@ pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
         target_os = "aix",
         target_os = "redox",
         target_os = "illumos",
-        target_os = "solaris"
+        target_os = "solaris",
+        target_os = "wasi"
     ))]
     {
-        // No method to read mounts, yet
+        // No method to read mounts on these platforms
         Ok(Vec::new())
     }
 }

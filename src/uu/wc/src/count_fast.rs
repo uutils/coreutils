@@ -16,8 +16,6 @@ use std::io::{self, ErrorKind, Read};
 #[cfg(unix)]
 use libc::{_SC_PAGESIZE, S_IFREG, sysconf};
 #[cfg(unix)]
-use nix::sys::stat;
-#[cfg(unix)]
 use std::io::{Seek, SeekFrom};
 #[cfg(unix)]
 use std::os::fd::{AsFd, AsRawFd};
@@ -49,7 +47,9 @@ fn count_bytes_using_splice(fd: &impl AsFd) -> Result<usize, usize> {
         .write(true)
         .open("/dev/null")
         .map_err(|_| 0_usize)?;
-    let null_rdev = stat::fstat(null_file.as_fd()).map_err(|_| 0_usize)?.st_rdev as libc::dev_t;
+    let null_rdev = rustix::fs::fstat(null_file.as_fd())
+        .map_err(|_| 0_usize)?
+        .st_rdev as libc::dev_t;
     if (libc::major(null_rdev), libc::minor(null_rdev)) != (1, 3) {
         // This is not a proper /dev/null, writing to it is probably bad
         // Bit of an edge case, but it has been known to happen
@@ -92,7 +92,7 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
     #[cfg(unix)]
     {
         let fd = handle.as_fd();
-        if let Ok(stat) = stat::fstat(fd) {
+        if let Ok(stat) = rustix::fs::fstat(fd) {
             // If the file is regular, then the `st_size` should hold
             // the file's size in bytes.
             // If stat.st_size = 0 then

@@ -160,6 +160,10 @@ else
     touch gnu-built
 fi
 
+# Keep getlimits available on PATH for GNU shell and Perl tests even when
+# reusing an existing GNU build directory.
+test -f src/getlimits && cp -f src/getlimits "${UU_BUILD_DIR}"
+
 # Keep Makefile.in newer than the local.mk files we just modified,
 # and Makefile newer than Makefile.in, so make won't re-run
 # automake or config.status and undo our edits.
