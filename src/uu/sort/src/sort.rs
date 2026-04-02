@@ -29,6 +29,7 @@ use foldhash::fast::FoldHasher;
 use foldhash::{HashMap, SharedSeed};
 use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
 use rand::{RngExt as _, rng};
+#[cfg(not(target_os = "wasi"))]
 use rayon::prelude::*;
 use std::cmp::Ordering;
 use std::env;
@@ -2127,9 +2128,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             Ok(0) | Err(_) => std::thread::available_parallelism().map_or(1, NonZero::get),
             Ok(n) => n,
         };
-        let _ = rayon::ThreadPoolBuilder::new()
-            .num_threads(num_threads)
-            .build_global();
+        #[cfg(not(target_os = "wasi"))]
+        {
+            let _ = rayon::ThreadPoolBuilder::new()
+                .num_threads(num_threads)
+                .build_global();
+        }
     }
 
     if let Some(size_str) = matches.get_one::<String>(options::BUF_SIZE) {
@@ -2602,10 +2606,19 @@ fn exec(
 }
 
 fn sort_by<'a>(unsorted: &mut Vec<Line<'a>>, settings: &GlobalSettings, line_data: &LineData<'a>) {
+    let cmp = |a: &Line<'a>, b: &Line<'a>| compare_by(a, b, settings, line_data, line_data);
+    // WASI does not support threads, so use non-parallel sort to avoid
+    // rayon's thread pool which triggers an unreachable trap.
     if settings.stable || settings.unique {
-        unsorted.par_sort_by(|a, b| compare_by(a, b, settings, line_data, line_data));
+        #[cfg(not(target_os = "wasi"))]
+        unsorted.par_sort_by(cmp);
+        #[cfg(target_os = "wasi")]
+        unsorted.sort_by(cmp);
     } else {
-        unsorted.par_sort_unstable_by(|a, b| compare_by(a, b, settings, line_data, line_data));
+        #[cfg(not(target_os = "wasi"))]
+        unsorted.par_sort_unstable_by(cmp);
+        #[cfg(target_os = "wasi")]
+        unsorted.sort_unstable_by(cmp);
     }
 }
 
