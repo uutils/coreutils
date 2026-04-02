@@ -39,6 +39,7 @@ use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::{IntErrorKind, NonZero};
 use std::ops::Range;
 #[cfg(unix)]
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::Utf8Error;
