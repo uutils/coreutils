@@ -29,11 +29,9 @@ const FILE_ATTRIBUTE_NORMAL: u32 = 128;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use libc::S_IFIFO;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use uucore::pipes::{pipe, splice, splice_exact};
+use uucore::pipes::{MAX_ROOTLESS_PIPE_SIZE, pipe, splice, splice_exact};
 
 const BUF_SIZE: usize = 256 * 1024;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-const SPLICE_SIZE: usize = 128 * 1024;
 
 /// This is a Linux-specific function to count the number of bytes using the
 /// `splice` system call, which is faster than using `read`.
@@ -55,11 +53,14 @@ fn count_bytes_using_splice(fd: &impl AsFd) -> Result<usize, usize> {
         // Bit of an edge case, but it has been known to happen
         return Err(0);
     }
+    // todo: avoid generating broker if input is pipe (fcntl_setpipe_size succeed) and directly splice() to /dev/null to save RAM usage
     let (pipe_rd, pipe_wr) = pipe().map_err(|_| 0_usize)?;
 
     let mut byte_count = 0;
+    // improve throughput from pipe
+    let _ = rustix::pipe::fcntl_setpipe_size(fd, MAX_ROOTLESS_PIPE_SIZE);
     loop {
-        match splice(fd, &pipe_wr, SPLICE_SIZE) {
+        match splice(fd, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
             Ok(0) => break,
             Ok(res) => {
                 byte_count += res;
