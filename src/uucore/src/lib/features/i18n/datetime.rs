@@ -82,15 +82,27 @@ pub fn localize_format_string(format: &str, date: JiffDate) -> String {
         let (cal_year, cal_month, cal_day) = match calendar_type {
             CalendarType::Buddhist => {
                 let d = iso_date.to_calendar(Buddhist);
-                (d.extended_year(), d.month().ordinal, d.day_of_month().0)
+                (
+                    d.year().extended_year(),
+                    d.month().ordinal,
+                    d.day_of_month().0,
+                )
             }
             CalendarType::Persian => {
                 let d = iso_date.to_calendar(Persian);
-                (d.extended_year(), d.month().ordinal, d.day_of_month().0)
+                (
+                    d.year().extended_year(),
+                    d.month().ordinal,
+                    d.day_of_month().0,
+                )
             }
             CalendarType::Ethiopian => {
                 let d = iso_date.to_calendar(Ethiopian::new());
-                (d.extended_year(), d.month().ordinal, d.day_of_month().0)
+                (
+                    d.year().extended_year(),
+                    d.month().ordinal,
+                    d.day_of_month().0,
+                )
             }
             CalendarType::Gregorian => unreachable!(),
         };
