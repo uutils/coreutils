@@ -197,6 +197,10 @@ impl MetadataExtTail for Metadata {
             // }
             false
         }
+        #[cfg(not(any(unix, windows)))]
+        {
+            false
+        }
     }
 }
 

@@ -216,6 +216,7 @@ feat_wasm = [
   "shuf",
   "sleep",
   "sum",
+  "tail",
   "tee",
   "tr",
   "true",
