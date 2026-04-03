@@ -28,6 +28,7 @@ use crate::os_str_from_bytes;
 #[cfg(windows)]
 use crate::show_warning;
 
+#[cfg(not(target_os = "wasi"))]
 use std::ffi::OsStr;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
@@ -64,13 +65,14 @@ use libc::{
 };
 #[cfg(unix)]
 use std::ffi::{CStr, CString};
+#[cfg(not(target_os = "wasi"))]
 use std::io::Error as IOError;
 #[cfg(unix)]
 use std::mem;
 #[cfg(windows)]
 use std::path::Path;
 use std::time::SystemTime;
-#[cfg(not(windows))]
+#[cfg(unix)]
 use std::time::UNIX_EPOCH;
 use std::{borrow::Cow, ffi::OsString};
 

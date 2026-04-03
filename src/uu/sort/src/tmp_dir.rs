@@ -54,7 +54,7 @@ fn should_install_signal_handler() -> bool {
     open_fds.saturating_add(CTRL_C_FDS + RESERVED_FOR_MERGE) <= limit
 }
 
-#[cfg(not(target_os = "redox"))]
+#[cfg(not(any(target_os = "redox", target_os = "wasi")))]
 fn ensure_signal_handler_installed(state: Arc<Mutex<HandlerRegistration>>) -> UResult<()> {
     // This shared state must originate from `HANDLER_STATE` so the handler always sees
     // the current lock/path pair and can clean up the active temp directory on SIGINT.
@@ -104,7 +104,7 @@ fn ensure_signal_handler_installed(state: Arc<Mutex<HandlerRegistration>>) -> UR
     Ok(())
 }
 
-#[cfg(target_os = "redox")]
+#[cfg(any(target_os = "redox", target_os = "wasi"))]
 fn ensure_signal_handler_installed(_state: Arc<Mutex<HandlerRegistration>>) -> UResult<()> {
     Ok(())
 }
