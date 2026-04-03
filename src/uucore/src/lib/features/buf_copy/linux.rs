@@ -7,7 +7,7 @@
 
 use crate::{
     error::UResult,
-    pipes::{pipe, splice, splice_exact},
+    pipes::{MAX_ROOTLESS_PIPE_SIZE, pipe, splice, splice_exact},
 };
 
 /// Buffer-based copying utilities for unix (excluding Linux).
@@ -28,7 +28,6 @@ pub trait FdWritable: Write + AsFd + AsRawFd {}
 
 impl<T> FdWritable for T where T: Write + AsFd + AsRawFd {}
 
-const SPLICE_SIZE: usize = 1024 * 128;
 const BUF_SIZE: usize = 1024 * 16;
 
 /// Conversion from a `rustix::io::Errno` into our `Error` which implements `UError`.
@@ -92,9 +91,14 @@ where
 {
     let (pipe_rd, pipe_wr) = pipe()?;
     let mut bytes: u64 = 0;
+    // improve throughput
+    // no need to increase pipe size of input fd since
+    // - sender with splice probably increased size already
+    // - sender without splice is bottleneck
+    let _ = rustix::pipe::fcntl_setpipe_size(dest, MAX_ROOTLESS_PIPE_SIZE);
 
     loop {
-        match splice(&source, &pipe_wr, SPLICE_SIZE) {
+        match splice(&source, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
             Ok(n) => {
                 if n == 0 {
                     return Ok((bytes, false));
