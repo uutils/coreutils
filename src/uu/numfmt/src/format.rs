@@ -302,18 +302,13 @@ fn split_mergeable_suffix<'a>(s: &'a str, options: &NumfmtOptions) -> Option<(&'
         return None;
     }
 
-    let is_suffix = match field.len() {
-        1 => true,
-        2 => field.ends_with('i'),
-        _ => false,
-    };
-    if !is_suffix {
-        return None;
+    let first_char = field.chars().next()?;
+    RawSuffix::try_from(&first_char).ok()?;
+    match field.len() {
+        1 => {}
+        2 if field.ends_with('i') => {}
+        _ => return None,
     }
-    field
-        .chars()
-        .next()
-        .filter(|c| RawSuffix::try_from(c).is_ok())?;
 
     Some((prefix, field))
 }
@@ -552,15 +547,11 @@ fn pad_string(s: &str, width: usize, fill: char, right_align: bool) -> String {
     let pad = width - len;
     let mut result = String::with_capacity(width);
     if right_align {
-        for _ in 0..pad {
-            result.push(fill);
-        }
+        result.extend(std::iter::repeat_n(fill, pad));
         result.push_str(s);
     } else {
         result.push_str(s);
-        for _ in 0..pad {
-            result.push(fill);
-        }
+        result.extend(std::iter::repeat_n(fill, pad));
     }
     result
 }
