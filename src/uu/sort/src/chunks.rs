@@ -47,7 +47,7 @@ pub struct ChunkContents<'a> {
     pub line_count_hint: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct LineData<'a> {
     pub selections: Vec<&'a [u8]>,
     pub num_infos: Vec<NumInfo>,
@@ -429,5 +429,34 @@ fn read_to_buffer<T: Read>(
             }
             Err(e) => return Err(USimpleError::new(2, e.to_string())),
         }
+    }
+}
+
+/// Parse a buffer into a `ChunkContents` suitable for `Chunk::try_new`.
+/// Used by the WASI single-threaded sort path.
+#[cfg(target_os = "wasi")]
+pub fn parse_into_chunk<'a>(
+    buffer: &'a [u8],
+    separator: u8,
+    settings: &GlobalSettings,
+) -> ChunkContents<'a> {
+    let mut lines = Vec::new();
+    let mut line_data = LineData::default();
+    let mut token_buffer = Vec::new();
+    let mut line_count_hint = 0;
+    parse_lines(
+        buffer,
+        &mut lines,
+        &mut line_data,
+        &mut token_buffer,
+        &mut line_count_hint,
+        separator,
+        settings,
+    );
+    ChunkContents {
+        lines,
+        line_data,
+        token_buffer,
+        line_count_hint,
     }
 }
