@@ -36,4 +36,4 @@ jobs:
       env:
         CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime
       run: |
-        cargo test --target wasm32-wasip1 --no-default-features -p uu_echo -p uu_cut
+        cargo test --target wasm32-wasip1 --no-default-features -p uu_echo -p uu_cut -p uu_sort
