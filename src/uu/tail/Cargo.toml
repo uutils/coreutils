@@ -21,12 +21,14 @@ path = "src/tail.rs"
 
 [dependencies]
 clap = { workspace = true }
-libc = { workspace = true }
 memchr = { workspace = true }
-notify = { workspace = true }
 uucore = { workspace = true, features = ["fs", "parser-size", "signals"] }
 same-file = { workspace = true }
 fluent = { workspace = true }
+
+[target.'cfg(not(target_os = "wasi"))'.dependencies]
+libc = { workspace = true }
+notify = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 rustix = { workspace = true, features = ["fs"] }
