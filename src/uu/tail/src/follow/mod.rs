@@ -3,6 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+#[cfg(not(target_os = "wasi"))]
 mod files;
 #[cfg(not(target_os = "wasi"))]
 mod watch;
@@ -21,21 +22,19 @@ mod wasi_stubs {
 
     pub struct Observer {
         pub use_polling: bool,
-        pub pid: super::super::platform::Pid,
     }
 
     impl Observer {
-        pub fn from(settings: &Settings) -> Self {
-            Self {
-                use_polling: false,
-                pid: settings.pid,
-            }
+        pub fn from(_settings: &Settings) -> Self {
+            Self { use_polling: false }
         }
 
+        #[allow(clippy::unnecessary_wraps)]
         pub fn start(&mut self, _settings: &Settings) -> UResult<()> {
             Ok(())
         }
 
+        #[allow(clippy::unnecessary_wraps)]
         pub fn add_path(
             &mut self,
             _path: &Path,
@@ -46,6 +45,7 @@ mod wasi_stubs {
             Ok(())
         }
 
+        #[allow(clippy::unnecessary_wraps)]
         pub fn add_bad_path(
             &mut self,
             _path: &Path,
