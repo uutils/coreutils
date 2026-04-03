@@ -225,6 +225,7 @@ impl Hash for FileInformation {
         #[cfg(target_os = "wasi")]
         {
             self.0.len().hash(state);
+            self.0.file_type().is_dir().hash(state);
         }
     }
 }
