@@ -21,7 +21,7 @@ pub fn paths_refer_to_same_file(_p1: &std::ffi::OsStr, _p2: &std::ffi::OsStr) ->
 #[cfg(target_os = "wasi")]
 pub fn instantiate_current_writer(
     _filter: Option<&str>,
-    filename: &str,
+    filename: &std::ffi::OsStr,
     is_new: bool,
 ) -> std::io::Result<std::io::BufWriter<Box<dyn std::io::Write>>> {
     let file = if is_new {
