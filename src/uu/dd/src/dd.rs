@@ -178,16 +178,48 @@ impl Num {
     }
 }
 
+// cannot put cfg in where... (https://github.com/rust-lang/rust/issues/115590)
+#[cfg(any(target_os = "linux", target_os = "android"))]
+trait DdReader: Read + AsFd {}
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+trait DdReader: Read {}
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl<T: Read + AsFd> DdReader for T {}
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+impl<T: Read> DdReader for T {}
 /// Read and discard `n` bytes from `reader` using a buffer of size `buf_size`.
 ///
 /// This is more efficient than `io::copy` with `BufReader` because it reads
 /// directly in `buf_size`-sized chunks, matching GNU dd's behavior.
 /// Returns the total number of bytes actually read.
-fn read_and_discard<R: Read>(reader: &mut R, n: u64, buf_size: usize) -> io::Result<u64> {
-    // todo: consider splice()ing to /dev/null on Linux
-    let mut buf = Vec::with_capacity(buf_size);
+fn read_and_discard<R: DdReader>(reader: &mut R, n: u64, buf_size: usize) -> io::Result<u64> {
     let mut total = 0u64;
     let mut remaining = n;
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        //fast-path
+        use std::sync::OnceLock;
+        use uucore::pipes::{MAX_ROOTLESS_PIPE_SIZE, dev_null, splice};
+        static INIT: OnceLock<Option<File>> = OnceLock::new();
+        let null = INIT.get_or_init(|| {
+            dev_null().inspect(|_| {
+                let _ = rustix::pipe::fcntl_setpipe_size(&reader, MAX_ROOTLESS_PIPE_SIZE);
+            })
+        });
+        if let Some(null) = null {
+            while remaining > 0 {
+                match splice(&reader, &null, remaining as usize) {
+                    Ok(0) => return Ok(total), // no need to allocate buf
+                    Ok(bytes_read) => {
+                        total += bytes_read as u64;
+                        remaining -= bytes_read as u64;
+                    }
+                    Err(_) => break,
+                }
+            }
+        }
+    }
+    let mut buf = Vec::with_capacity(buf_size);
     while remaining > 0 {
         let to_read = cmp::min(remaining, buf_size as u64);
         buf.clear();

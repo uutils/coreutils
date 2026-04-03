@@ -34,6 +34,8 @@ fluent = { workspace = true }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 nix = { workspace = true, features = ["fs", "signal"] }
+rustix = { workspace = true, features = ["pipe"] }
+uucore = { workspace = true, features = ["pipes"] }
 
 [[bin]]
 name = "dd"
