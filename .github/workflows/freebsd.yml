@@ -1,6 +1,6 @@
 name: FreeBSD
 
-# spell-checker:ignore sshfs usesh vmactions taiki Swatinem esac fdescfs fdesc nextest copyback logind
+# spell-checker:ignore sshfs usesh vmactions taiki esac fdescfs fdesc nextest copyback logind
 
 env:
   # * style job configuration

@@ -5,7 +5,7 @@ name: make
 # spell-checker:ignore (jargon) deps softprops toolchain
 # spell-checker:ignore (people) dawidd
 # spell-checker:ignore (shell/tools) nextest sccache zstd
-# spell-checker:ignore (misc) bindir busytest defconfig DESTDIR manpages multisize runtest Swatinem testsuite toybox uutils
+# spell-checker:ignore (misc) bindir busytest defconfig DESTDIR manpages multisize runtest testsuite toybox uutils
 
 env:
   PROJECT_NAME: coreutils
