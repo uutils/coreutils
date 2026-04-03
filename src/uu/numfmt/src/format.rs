@@ -18,6 +18,10 @@ fn find_numeric_beginning(s: &str) -> Option<&str> {
         return None;
     }
 
+    if s.starts_with('.') {
+        return Some(".");
+    }
+
     for (idx, c) in s.char_indices() {
         if c == '-' && idx == 0 {
             continue;
@@ -93,7 +97,7 @@ fn detailed_error_message(s: &str, unit: Unit, unit_separator: &str) -> Option<S
         return Some(translate!("numfmt-error-invalid-number-empty"));
     }
 
-    let valid_part = find_valid_number_with_suffix(s, unit)
+    let number_prefix = find_valid_number_with_suffix(s, unit)
         .ok_or(translate!("numfmt-error-invalid-number", "input" => s.quote()))
         .ok()?;
 
@@ -122,7 +126,7 @@ fn detailed_error_message(s: &str, unit: Unit, unit_separator: &str) -> Option<S
     if valid_part != s && valid_part.parse::<f64>().is_ok() {
         return match s.chars().nth(valid_part.len()) {
             Some('+' | '-') => {
-                Some(translate!("numfmt-error-invalid-number", "input" => s.quote()))
+                Some(translate!("numfmt-error-invalid-suffix", "input" => s.quote()))
             }
             Some(v) if RawSuffix::try_from(&v).is_ok() => Some(
                 translate!("numfmt-error-rejecting-suffix", "number" => valid_part, "suffix" => s[valid_part.len()..]),
