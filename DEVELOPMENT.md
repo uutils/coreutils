@@ -52,30 +52,25 @@ For MacOS and Windows platform specific setup please check [MacOS GNU utils](#ma
 
 ### pre-commit hooks
 
-A configuration for `pre-commit` is provided in the repository. It allows
-automatically checking every git commit you make to ensure it compiles, and
-passes `clippy` and `rustfmt` without warnings.
+A `pre-commit` configuration is included in the repository to run various checks on each commit.
 
-To use the provided hook:
+To enable the hooks:
 
 1. [Install `pre-commit`](https://pre-commit.com/#install)
-1. Run `pre-commit install` while in the repository directory
+1. Run `pre-commit install` in the repository
 
-Your git commits will then automatically be checked. If a check fails, an error
-message will explain why, and your commit will be canceled. You can then make
-the suggested changes, and run `git commit ...` again.
-
-**NOTE: On MacOS** the pre-commit hooks are currently broken. There are workarounds involving switching to unstable nightly Rust and components.
+Commits are automatically validated.
+If a check fails, the commit is aborted and an error message is displayed.
+Apply the required changes and retry the commit.
 
 ### clippy
 
 ```shell
-cargo clippy --all-targets --all-features
+cargo clippy --workspace --all-targets --all-features
 ```
 
-The `msrv` key in the clippy configuration file `clippy.toml` is used to disable
-lints pertaining to newer features by specifying the minimum supported Rust
-version (MSRV).
+**NOTE: On MacOS** avoid using the `--all-features` option as it currently
+triggers compilation errors (see <https://github.com/uutils/coreutils/issues/11019>).
 
 ### rustfmt
 
