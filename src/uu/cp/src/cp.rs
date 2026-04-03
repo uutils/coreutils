@@ -1901,13 +1901,12 @@ fn symlink_file(
 ) -> CopyResult<()> {
     #[cfg(target_os = "wasi")]
     {
-        return Err(CpError::IoErrContext(
+        Err(CpError::IoErrContext(
             io::Error::new(io::ErrorKind::Unsupported, "symlinks not supported"),
             translate!("cp-error-cannot-create-symlink",
                        "dest" => get_filename(dest).unwrap_or("?").quote(),
                        "source" => get_filename(source).unwrap_or("?").quote()),
-        )
-        .into());
+        ))
     }
     #[cfg(not(any(windows, target_os = "wasi")))]
     {
