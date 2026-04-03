@@ -39,6 +39,13 @@ cfg_langinfo! {
     const DATE_FMT: libc::nl_item = 0x2006c;
     #[cfg(not(target_os = "linux"))]
     const DATE_FMT: libc::nl_item = libc::D_T_FMT;
+
+    /// `D_FMT` — locale date format (used by `%x`)
+    const D_FMT_ITEM: libc::nl_item = libc::D_FMT;
+    /// `T_FMT` — locale time format (used by `%X`)
+    const T_FMT_ITEM: libc::nl_item = libc::T_FMT;
+    /// `T_FMT_AMPM` — locale 12-hour time format (used by `%r`)
+    const T_FMT_AMPM_ITEM: libc::nl_item = libc::T_FMT_AMPM;
 }
 
 cfg_langinfo! {
@@ -117,6 +124,50 @@ cfg_langinfo! {
     }
 }
 
+cfg_langinfo! {
+    fn query_nl_langinfo(item: libc::nl_item) -> Option<String> {
+        #[cfg(test)]
+        let _lock = LOCALE_MUTEX.lock().unwrap();
+
+        unsafe {
+            libc::setlocale(libc::LC_TIME, c"".as_ptr());
+
+            let ptr = libc::nl_langinfo(item);
+            if ptr.is_null() {
+                return None;
+            }
+
+            let s = CStr::from_ptr(ptr).to_str().ok()?;
+            if s.is_empty() {
+                return None;
+            }
+
+            Some(s.to_string())
+        }
+    }
+
+    /// Returns the locale date format (`D_FMT`) used by `%x`.
+    pub fn get_locale_date_format() -> Option<String> {
+        query_nl_langinfo(D_FMT_ITEM)
+    }
+
+    /// Returns the locale time format (`T_FMT`) used by `%X`.
+    pub fn get_locale_time_format() -> Option<String> {
+        query_nl_langinfo(T_FMT_ITEM)
+    }
+
+    /// Returns the locale 12-hour time format (`T_FMT_AMPM`) used by `%r`.
+    /// GNU date falls back to `%I:%M:%S %p` if it's completely undefined.
+    /// However, if a locale explicitly defines it as empty (like French), it uses `%H:%M:%S`.
+    pub fn get_locale_time_ampm_format() -> String {
+        let fmt = query_nl_langinfo(T_FMT_AMPM_ITEM);
+        match fmt.as_deref() {
+            Some("") | None => "%H:%M:%S".to_string(),
+            Some(s) => s.to_string(),
+        }
+    }
+}
+
 /// On platforms without nl_langinfo support, use 24-hour format by default
 #[cfg(not(any(
     target_os = "linux",
@@ -128,6 +179,45 @@ cfg_langinfo! {
 )))]
 pub fn get_locale_default_format() -> &'static str {
     "%a %b %e %X %Z %Y"
+}
+
+/// Fallback for platforms without `nl_langinfo`.
+#[cfg(not(any(
+    target_os = "linux",
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd",
+    target_os = "dragonfly"
+)))]
+pub fn get_locale_date_format() -> Option<String> {
+    None
+}
+
+/// Fallback for platforms without `nl_langinfo`.
+#[cfg(not(any(
+    target_os = "linux",
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd",
+    target_os = "dragonfly"
+)))]
+pub fn get_locale_time_format() -> Option<String> {
+    None
+}
+
+/// Fallback for platforms without `nl_langinfo`.
+#[cfg(not(any(
+    target_os = "linux",
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd",
+    target_os = "dragonfly"
+)))]
+pub fn get_locale_time_ampm_format() -> String {
+    "%I:%M:%S %p".to_string()
 }
 
 #[cfg(test)]
