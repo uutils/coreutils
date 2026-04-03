@@ -1,6 +1,6 @@
 name: OpenBSD
 
-# spell-checker:ignore sshfs usesh vmactions taiki Swatinem esac fdescfs fdesc sccache nextest copyback logind bindgen libclang
+# spell-checker:ignore sshfs usesh vmactions taiki esac fdescfs fdesc sccache nextest copyback logind bindgen libclang
 
 env:
   # * style job configuration

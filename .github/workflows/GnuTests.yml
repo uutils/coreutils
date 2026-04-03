@@ -1,10 +1,10 @@
 name: GnuTests
 
-# spell-checker:ignore (abbrev/names) CodeCov gnulib GnuTests Swatinem
+# spell-checker:ignore (abbrev/names) CodeCov gnulib GnuTests
 # spell-checker:ignore (jargon) submodules devel
 # spell-checker:ignore (libs/utils) chksum dpkg getenforce gperf lcov libexpect limactl pyinotify setenforce shopt valgrind libattr libcap taiki-e zstd cpio
 # spell-checker:ignore (options) Ccodegen Coverflow Cpanic Zpanic
-# spell-checker:ignore (people) Dawid Dziurla * dawidd dtolnay
+# spell-checker:ignore (people) Dawid Dziurla * dawidd
 # spell-checker:ignore (vars) FILESET SUBDIRS XPASS
 # spell-checker:ignore userns nodocs
 
