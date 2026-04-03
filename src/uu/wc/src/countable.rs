@@ -24,7 +24,6 @@ pub trait WordCountable: AsFd + AsRawFd + Read {
 pub trait WordCountable: Read {
     type Buffered: BufRead;
     fn buffered(self) -> Self::Buffered;
-    #[cfg(not(target_os = "wasi"))]
     fn inner_file(&mut self) -> Option<&mut File>;
 }
 
@@ -41,8 +40,6 @@ impl WordCountable for StdinLock<'_> {
     fn buffered(self) -> Self::Buffered {
         self
     }
-
-    #[cfg(not(target_os = "wasi"))]
     fn inner_file(&mut self) -> Option<&mut File> {
         None
     }
@@ -65,7 +62,6 @@ impl WordCountable for File {
         BufReader::new(self)
     }
 
-    #[cfg(not(target_os = "wasi"))]
     fn inner_file(&mut self) -> Option<&mut File> {
         Some(self)
     }
