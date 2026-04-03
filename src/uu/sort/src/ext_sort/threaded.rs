@@ -3,21 +3,15 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-//! Sort big files by using auxiliary files for storing intermediate chunks.
-//!
-//! Files are read into chunks of memory which are then sorted individually and
-//! written to temporary files. There are two threads: One sorter, and one reader/writer.
-//! The buffers for the individual chunks are recycled. There are two buffers.
+//! Threaded external sort: read input in chunks, sort them in a background
+//! thread, and spill to temporary files when memory is exceeded.
 
 use std::cmp::Ordering;
 use std::fs::File;
-use std::io::{Write, stderr};
+use std::io::{Read, Write, stderr};
 use std::path::PathBuf;
-use std::{
-    io::Read,
-    sync::mpsc::{Receiver, SyncSender},
-    thread,
-};
+use std::sync::mpsc::{Receiver, SyncSender};
+use std::thread;
 
 use itertools::Itertools;
 use uucore::error::{UResult, strip_errno};
@@ -29,11 +23,10 @@ use crate::merge::WriteablePlainTmpFile;
 use crate::merge::WriteableTmpFile;
 use crate::tmp_dir::TmpDirWrapper;
 use crate::{
-    GlobalSettings,
+    GlobalSettings, Line,
     chunks::{self, Chunk},
-    compare_by, merge, sort_by,
+    compare_by, merge, print_sorted, sort_by,
 };
-use crate::{Line, print_sorted};
 
 // Note: update `test_sort::test_start_buffer` if this size is changed
 // Fixed to 8 KiB (equivalent to `std::sys::io::DEFAULT_BUF_SIZE` on most targets)
@@ -41,47 +34,9 @@ const DEFAULT_BUF_SIZE: usize = 8 * 1024;
 
 /// Sort files by using auxiliary files for storing intermediate chunks (if needed), and output the result.
 ///
-/// On WASI, threads are not available, so we read all input into memory,
-/// sort in a single thread, and output directly.
-#[cfg(target_os = "wasi")]
-pub fn ext_sort(
-    files: &mut impl Iterator<Item = UResult<Box<dyn Read + Send>>>,
-    settings: &GlobalSettings,
-    output: Output,
-    _tmp_dir: &mut TmpDirWrapper,
-) -> UResult<()> {
-    let separator = settings.line_ending.into();
-    // Read all input into memory at once. Unlike the threaded path which uses
-    // chunked buffered reads, WASI has no threads so we accept the memory cost.
-    let mut input = Vec::new();
-    for file in files {
-        file?.read_to_end(&mut input)?;
-    }
-    if input.is_empty() {
-        return Ok(());
-    }
-    let mut chunk = chunks::Chunk::try_new(input, |buffer| {
-        chunks::parse_into_chunk(buffer, separator, settings)
-    })?;
-    chunk.with_dependent_mut(|_, contents| {
-        sort_by(&mut contents.lines, settings, &contents.line_data);
-    });
-    if settings.unique {
-        print_sorted(
-            chunk.lines().iter().dedup_by(|a, b| {
-                compare_by(a, b, settings, chunk.line_data(), chunk.line_data()) == Ordering::Equal
-            }),
-            settings,
-            output,
-        )?;
-    } else {
-        print_sorted(chunk.lines().iter(), settings, output)?;
-    }
-    Ok(())
-}
-
-/// Sort files by using auxiliary files for storing intermediate chunks (if needed), and output the result.
-#[cfg(not(target_os = "wasi"))]
+/// Two threads cooperate: one reads input and writes temporary chunk files,
+/// while the other sorts each chunk in memory. Once all chunks are written,
+/// they are merged back together for final output.
 pub fn ext_sort(
     files: &mut impl Iterator<Item = UResult<Box<dyn Read + Send>>>,
     settings: &GlobalSettings,
