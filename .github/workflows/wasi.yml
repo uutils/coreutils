@@ -36,4 +36,7 @@ jobs:
       env:
         CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime
       run: |
-        cargo test --target wasm32-wasip1 --no-default-features -p uu_echo -p uu_cut -p uu_sort
+        # Get all utilities and exclude ones that don't compile for wasm32-wasip1
+        EXCLUDE="dd|df|du|env|expr|mktemp|more|tac|test"
+        UTILS=$(./util/show-utils.sh | tr ' ' '\n' | grep -vE "^($EXCLUDE)$" | sed 's/^/-p uu_/' | tr '\n' ' ')
+        cargo test --target wasm32-wasip1 --no-default-features $UTILS
