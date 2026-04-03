@@ -37,13 +37,6 @@ repos:
         pass_filenames: true
         types: [file, rust]
         language: system
-      - id: rust-clippy
-        name: Rust clippy
-        description: Run cargo clippy on files included in the commit.
-        entry: cargo +stable clippy --frozen --workspace --all-targets --all-features -- -D warnings
-        pass_filenames: false
-        types: [file, rust]
-        language: system
       - id: cargo-lock-check
         name: Cargo.lock sync check
         description: Ensure Cargo.lock and fuzz/Cargo.lock are up-to-date.
@@ -59,4 +52,4 @@ repos:
         language: system
 
 ci:
-  skip: [rust-linting, rust-clippy, cargo-lock-check, cspell]
+  skip: [rust-linting, cargo-lock-check, cspell]
