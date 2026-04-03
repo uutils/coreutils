@@ -23,9 +23,9 @@ pub(super) fn write_fast_using_splice<R: FdReadable, S: AsRawFd + AsFd>(
     handle: &InputHandle<R>,
     write_fd: &S,
 ) -> CatResult<bool> {
-    const FIRST_PIPE_SIZE: usize = 64 * 1024;
-    if splice(&handle.reader, &write_fd, FIRST_PIPE_SIZE).is_ok() {
-        // fcntl improves performance for large file which is large overhead for small files
+    if splice(&handle.reader, &write_fd, MAX_ROOTLESS_PIPE_SIZE).is_ok() {
+        // fcntl improves throughput
+        // todo: avoid fcntl overhead for small input, but don't fcntl inside of the loop
         let _ = rustix::pipe::fcntl_setpipe_size(write_fd, MAX_ROOTLESS_PIPE_SIZE);
         loop {
             match splice(&handle.reader, &write_fd, MAX_ROOTLESS_PIPE_SIZE) {
@@ -35,14 +35,12 @@ pub(super) fn write_fast_using_splice<R: FdReadable, S: AsRawFd + AsFd>(
             }
         }
     } else {
-        // output is not pipe. Needs broker to use splice() which is high cost for small files
+        // both of in/output are not pipe. needs broker to use splice() with additional costs
         let (pipe_rd, pipe_wr) = pipe()?;
         loop {
             match splice(&handle.reader, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
+                Ok(0) => return Ok(false),
                 Ok(n) => {
-                    if n == 0 {
-                        return Ok(false);
-                    }
                     if splice_exact(&pipe_rd, write_fd, n).is_err() {
                         // If the first splice manages to copy to the intermediate
                         // pipe, but the second splice to stdout fails for some reason
@@ -53,9 +51,7 @@ pub(super) fn write_fast_using_splice<R: FdReadable, S: AsRawFd + AsFd>(
                         return Ok(true);
                     }
                 }
-                Err(_) => {
-                    return Ok(true);
-                }
+                Err(_) => return Ok(true),
             }
         }
     }
