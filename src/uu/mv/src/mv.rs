@@ -930,10 +930,7 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
 
 #[cfg(target_os = "wasi")]
 fn rename_symlink_fallback(_from: &Path, _to: &Path) -> io::Result<()> {
-    Err(io::Error::new(
-        io::ErrorKind::Other,
-        translate!("mv-error-no-symlink-support"),
-    ))
+    Err(io::Error::other(translate!("mv-error-no-symlink-support")))
 }
 
 fn rename_dir_fallback(
