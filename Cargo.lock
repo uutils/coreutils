@@ -3638,6 +3638,7 @@ dependencies = [
  "clap",
  "fluent",
  "memchr",
+ "rustix",
  "thiserror 2.0.18",
  "uucore",
 ]

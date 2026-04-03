@@ -166,6 +166,7 @@ fn wrap_in_stdout_error(err: io::Error) -> io::Error {
     )
 }
 
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 fn read_n_bytes(input: impl Read, n: u64) -> io::Result<u64> {
     // Read the first `n` bytes from the `input` reader.
     let mut reader = input.take(n);
@@ -182,6 +183,81 @@ fn read_n_bytes(input: impl Read, n: u64) -> io::Result<u64> {
     stdout.flush().map_err(wrap_in_stdout_error)?;
 
     Ok(bytes_written)
+}
+
+// read_n_bytes with zero-copy fast-path
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn read_n_bytes(input: impl Read + AsFd, n: u64) -> io::Result<u64> {
+    use uucore::pipes::splice;
+    let pipe_size = uucore::pipes::MAX_ROOTLESS_PIPE_SIZE.min(n as usize);
+    let mut stdout = io::stdout();
+    let mut n = n;
+    let mut bytes_written: u64 = 0;
+    // io::copy's internal splice() breaks FUSE <https://github.com/uutils/coreutils/issues/9609#issuecomment-3636584324>
+    // we cannot always fallback to write as it needs 2 Ctrl+D on tty
+    let mut needs_fallback = uucore::pipes::might_fuse(&input);
+    if let Ok(b) = splice(&input, &stdout, n as usize) {
+        bytes_written = b as u64;
+        n -= bytes_written;
+        if n == 0 {
+            // avoid fcntl overhead for small input
+            return Ok(bytes_written);
+        }
+        // improves throughput (expected that input is already extended if it is coming from splice)
+        let _ = rustix::pipe::fcntl_setpipe_size(&stdout, pipe_size);
+        loop {
+            match splice(&input, &stdout, n as usize) {
+                Ok(0) => break,
+                Ok(s @ 1..) => {
+                    n -= s as u64;
+                    bytes_written += s as u64;
+                }
+                _ => {
+                    needs_fallback = true;
+                    break;
+                }
+            }
+        }
+    } else if let Ok((broker_r, broker_w)) = uucore::pipes::pipe_with_size(pipe_size) {
+        // both of in/output are not pipe. needs broker to use splice() with additional cost
+        loop {
+            match splice(&input, &broker_w, n as usize) {
+                Ok(0) => break,
+                Ok(s @ 1..) => {
+                    if uucore::pipes::splice_exact(&broker_r, &stdout, s).is_ok() {
+                        n -= s as u64;
+                        bytes_written += s as u64;
+                    } else {
+                        let mut drain = Vec::with_capacity(s); // bounded by pipe size
+                        broker_r.take(s as u64).read_to_end(&mut drain)?;
+                        stdout.write_all(&drain).map_err(wrap_in_stdout_error)?;
+                        needs_fallback = true;
+                        break;
+                    }
+                }
+                _ => {
+                    needs_fallback = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    if !needs_fallback {
+        return Ok(bytes_written);
+    }
+    let mut reader = input.take(n);
+    let mut stdout = stdout.lock();
+    let mut buf = vec![0u8; (32 * 1024).min(n as usize)]; //use heap to avoid early allocation
+    loop {
+        match reader.read(&mut buf).map_err(wrap_in_stdout_error)? {
+            0 => return Ok(bytes_written),
+            n => {
+                stdout.write_all(&buf[..n]).map_err(wrap_in_stdout_error)?;
+                bytes_written += n as u64;
+            }
+        }
+    }
 }
 
 fn read_n_lines(input: &mut impl io::BufRead, n: u64, separator: u8) -> io::Result<u64> {
@@ -608,6 +684,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(any(target_os = "linux", target_os = "android")))] // missing trait for rustix::fd::AsFd
     fn read_early_exit() {
         let mut empty = io::BufReader::new(Cursor::new(Vec::new()));
         assert!(read_n_bytes(&mut empty, 0).is_ok());

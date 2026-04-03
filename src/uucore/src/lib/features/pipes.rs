@@ -30,6 +30,18 @@ pub fn pipe() -> std::io::Result<(File, File)> {
     Ok((File::from(read), File::from(write)))
 }
 
+#[inline]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn pipe_with_size(s: usize) -> std::io::Result<(File, File)> {
+    let (read, write) = rustix::pipe::pipe()?;
+    const DEFAULT_SIZE: usize = 64 * 1024;
+    if s > DEFAULT_SIZE {
+        let _ = fcntl_setpipe_size(&read, s);
+    }
+
+    Ok((File::from(read), File::from(write)))
+}
+
 /// Less noisy wrapper around [`rustix::pipe::splice`].
 ///
 /// Up to `len` bytes are moved from `source` to `target`. Returns the number

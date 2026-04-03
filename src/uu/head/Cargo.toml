@@ -30,6 +30,10 @@ uucore = { workspace = true, features = [
 ] }
 fluent = { workspace = true }
 
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+rustix = { workspace = true, features = ["fs"] }
+uucore = { workspace = true, features = ["pipes"] }
+
 [[bin]]
 name = "head"
 path = "src/main.rs"
