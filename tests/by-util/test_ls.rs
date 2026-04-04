@@ -7133,3 +7133,18 @@ fn test_ls_non_utf8_hidden() {
 
     scene.ucmd().succeeds().stdout_does_not_contain(".hidden");
 }
+
+#[test]
+#[cfg(target_os = "wasi")]
+fn test_ls_a_dotdot_no_error_on_wasi() {
+    // On WASI the sandbox may block access to ".." at the preopened root.
+    // ls -a should still succeed and show ".." without an error message.
+    let scene = TestScenario::new(util_name!());
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("-1")
+        .succeeds()
+        .stdout_contains("..")
+        .no_stderr();
+}
