@@ -22,8 +22,6 @@ pub const MAX_ROOTLESS_PIPE_SIZE: usize = 1024 * 1024;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn pipe() -> std::io::Result<(File, File)> {
     let (read, write) = rustix::pipe::pipe()?;
-    // improve performance for splice
-    let _ = fcntl_setpipe_size(&read, MAX_ROOTLESS_PIPE_SIZE);
 
     Ok((File::from(read), File::from(write)))
 }
