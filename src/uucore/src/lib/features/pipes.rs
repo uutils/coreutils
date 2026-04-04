@@ -56,7 +56,7 @@ pub fn splice(source: &impl AsFd, target: &impl AsFd, len: usize) -> std::io::Re
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn splice_exact(source: &impl AsFd, target: &impl AsFd, len: usize) -> std::io::Result<()> {
     let mut left = len;
-    while left != 0 {
+    while left > 0 {
         let written = splice(source, target, left)?;
         debug_assert_ne!(written, 0, "unexpected end of data");
         left -= written;
