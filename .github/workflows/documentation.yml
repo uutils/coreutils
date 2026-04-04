@@ -1,4 +1,4 @@
-# spell-checker:ignore dtolnay libsystemd libattr libcap gsub
+# spell-checker:ignore libsystemd libattr libcap gsub
 
 name: Check uudoc Documentation Generation
 

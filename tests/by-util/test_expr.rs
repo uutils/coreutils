@@ -218,6 +218,29 @@ fn test_and() {
 }
 
 #[test]
+fn test_parenthesized_short_circuit_dead_branches() {
+    new_ucmd!()
+        .args(&["1", "|", "(", "1", "/", "0", ")"])
+        .succeeds()
+        .stdout_only("1\n");
+
+    new_ucmd!()
+        .args(&["0", "&", "(", "1", "/", "0", ")"])
+        .fails_with_code(1)
+        .stdout_only("0\n");
+
+    new_ucmd!()
+        .args(&["1", "|", "(", "0", "&", "(", "1", "/", "0", ")", ")"])
+        .succeeds()
+        .stdout_only("1\n");
+
+    new_ucmd!()
+        .args(&["0", "&", "(", "1", "|", "(", "1", "/", "0", ")", ")"])
+        .fails_with_code(1)
+        .stdout_only("0\n");
+}
+
+#[test]
 fn test_length_fail() {
     new_ucmd!().args(&["length", "αbcdef", "1"]).fails();
 }
@@ -580,11 +603,11 @@ fn test_num_str_comparison() {
 }
 
 #[test]
-fn test_eager_evaluation() {
+fn test_missing_closing_parenthesis_reports_syntax_error() {
     new_ucmd!()
         .args(&["(", "1", "/", "0"])
         .fails()
-        .stderr_contains("division by zero");
+        .stderr_contains("expecting ')' after '0'");
 }
 
 #[test]

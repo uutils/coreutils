@@ -185,9 +185,13 @@ LINESIZE
 NAMESIZE
 RTLD_NEXT
     RTLD
+RTMAX
+RTMIN
 SIGABRT
 SIGINT
 SIGKILL
+SIGRTMAX
+SIGRTMIN
 SIGSTOP
 SIGTERM
 SYS_fdatasync
@@ -364,6 +368,7 @@ uutils
 # * function names
 execfn
 getcwd
+setpipe
 
 # * other
 getlimits

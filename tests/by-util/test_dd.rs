@@ -116,6 +116,14 @@ fn help() {
 }
 
 #[test]
+fn test_out_of_memory() {
+    new_ucmd!()
+        .arg("bs=1PB")
+        .fails_with_code(1)
+        .stderr_contains("memory"); //todo: improve error message at all platforms
+}
+
+#[test]
 fn test_stdin_stdout() {
     let input = build_ascii_block(521);
     let output = String::from_utf8(input.clone()).unwrap();

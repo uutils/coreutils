@@ -1353,9 +1353,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("stat")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("stat"))
         .about(translate!("stat-about"))
         .after_help(translate!("stat-after-help"))
         .override_usage(format_usage(&translate!("stat-usage")))

@@ -571,6 +571,8 @@ impl MergeInput for CompressedTmpMergeInput {
     type InnerRead = ChildStdout;
 
     fn finished_reading(self) -> UResult<()> {
+        // Explicitly close stdout before waiting on the child process.
+        #[allow(clippy::drop_non_drop)]
         drop(self.child_stdout);
         check_child_success(self.child, &self.compress_prog)?;
         let _ = fs::remove_file(self.path);
