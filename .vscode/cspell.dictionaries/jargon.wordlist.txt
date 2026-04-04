@@ -215,6 +215,10 @@ vals
 inval
 nofield
 
+# ci
+dtolnay
+Swatinem
+
 # * clippy
 uninlined
 nonminimal

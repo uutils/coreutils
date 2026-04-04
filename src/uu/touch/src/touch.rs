@@ -263,9 +263,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("touch")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("touch"))
         .about(translate!("touch-about"))
         .override_usage(format_usage(&translate!("touch-usage")))
         .infer_long_args(true)
@@ -882,6 +882,10 @@ fn pathbuf_from_stdout() -> Result<PathBuf, TouchError> {
         Ok(String::from_utf16(&file_path_buffer[0..buffer_size])
             .map_err(|e| TouchError::WindowsStdoutPathError(e.to_string()))?
             .into())
+    }
+    #[cfg(target_os = "wasi")]
+    {
+        Ok(PathBuf::from("/dev/stdout"))
     }
 }
 

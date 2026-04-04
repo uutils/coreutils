@@ -70,7 +70,7 @@ pub struct Behavior {
 
 #[derive(Error, Debug)]
 enum InstallError {
-    #[error("{}", translate!("install-error-dir-needs-arg", "util_name" => uucore::util_name()))]
+    #[error("{}", translate!("install-error-dir-needs-arg", "util_name" => "install"))]
     DirNeedsArg,
 
     #[error("{}", translate!("install-error-create-dir-failed", "path" => .0.quote()))]
@@ -193,9 +193,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("install")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("install"))
         .about(translate!("install-about"))
         .override_usage(format_usage(&translate!("install-usage")))
         .infer_long_args(true)

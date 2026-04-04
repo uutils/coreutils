@@ -29,14 +29,17 @@ use foldhash::fast::FoldHasher;
 use foldhash::{HashMap, SharedSeed};
 use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
 use rand::{RngExt as _, rng};
-use rayon::prelude::*;
+#[cfg(not(target_os = "wasi"))]
+use rayon::slice::ParallelSliceMut;
 use std::cmp::Ordering;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{File, OpenOptions};
 use std::hash::{Hash, Hasher};
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
-use std::num::{IntErrorKind, NonZero};
+use std::num::IntErrorKind;
+#[cfg(not(target_os = "wasi"))]
+use std::num::NonZero;
 use std::ops::Range;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
@@ -2123,13 +2126,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         settings.threads = matches
             .get_one::<String>(options::PARALLEL)
             .map_or_else(|| "0".to_string(), String::from);
-        let num_threads = match settings.threads.parse::<usize>() {
-            Ok(0) | Err(_) => std::thread::available_parallelism().map_or(1, NonZero::get),
-            Ok(n) => n,
-        };
-        let _ = rayon::ThreadPoolBuilder::new()
-            .num_threads(num_threads)
-            .build_global();
+        #[cfg(not(target_os = "wasi"))]
+        {
+            let num_threads = match settings.threads.parse::<usize>() {
+                Ok(0) | Err(_) => std::thread::available_parallelism().map_or(1, NonZero::get),
+                Ok(n) => n,
+            };
+            let _ = rayon::ThreadPoolBuilder::new()
+                .num_threads(num_threads)
+                .build_global();
+        }
     }
 
     if let Some(size_str) = matches.get_one::<String>(options::BUF_SIZE) {
@@ -2142,11 +2148,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         settings.buffer_size_is_explicit = false;
     }
 
-    let mut tmp_dir = TmpDirWrapper::new(
-        matches
-            .get_one::<String>(options::TMP_DIR)
-            .map_or_else(env::temp_dir, PathBuf::from),
-    );
+    let mut tmp_dir = TmpDirWrapper::new(matches.get_one::<String>(options::TMP_DIR).map_or_else(
+        || {
+            // WASI does not support std::env::temp_dir() — it panics with
+            // "no filesystem on wasm". Use /tmp as a nominal fallback;
+            // the WASI ext_sort path never actually creates temp files.
+            #[cfg(target_os = "wasi")]
+            {
+                PathBuf::from("/tmp")
+            }
+            #[cfg(not(target_os = "wasi"))]
+            {
+                env::temp_dir()
+            }
+        },
+        PathBuf::from,
+    ));
 
     settings.compress_prog = matches
         .get_one::<String>(options::COMPRESS_PROG)
@@ -2339,7 +2356,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     uucore::clap_localization::configure_localized_command(
-        Command::new(uucore::util_name())
+        Command::new("sort")
             .version(uucore::crate_version!())
             .about(translate!("sort-about"))
             .after_help(translate!("sort-after-help"))
@@ -2602,10 +2619,19 @@ fn exec(
 }
 
 fn sort_by<'a>(unsorted: &mut Vec<Line<'a>>, settings: &GlobalSettings, line_data: &LineData<'a>) {
+    let cmp = |a: &Line<'a>, b: &Line<'a>| compare_by(a, b, settings, line_data, line_data);
+    // WASI does not support threads, so use non-parallel sort to avoid
+    // rayon's thread pool which triggers an unreachable trap.
     if settings.stable || settings.unique {
-        unsorted.par_sort_by(|a, b| compare_by(a, b, settings, line_data, line_data));
+        #[cfg(not(target_os = "wasi"))]
+        unsorted.par_sort_by(cmp);
+        #[cfg(target_os = "wasi")]
+        unsorted.sort_by(cmp);
     } else {
-        unsorted.par_sort_unstable_by(|a, b| compare_by(a, b, settings, line_data, line_data));
+        #[cfg(not(target_os = "wasi"))]
+        unsorted.par_sort_unstable_by(cmp);
+        #[cfg(target_os = "wasi")]
+        unsorted.sort_unstable_by(cmp);
     }
 }
 

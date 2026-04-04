@@ -105,6 +105,13 @@ fn test_preserve_status() {
 }
 
 #[test]
+fn test_kill_after_preserves_timeout_exit_without_preserve_status() {
+    new_ucmd!()
+        .args(&["-k", "1", "1", "sleep", "10"])
+        .fails_with_code(124)
+        .no_output();
+}
+#[test]
 fn test_preserve_status_even_when_send_signal() {
     // When sending CONT signal, process doesn't get killed or stopped.
     // So, expected result is success and code 0.

@@ -46,7 +46,7 @@ pub struct FileInformation(
     #[cfg(unix)] nix::sys::stat::FileStat,
     #[cfg(windows)] winapi_util::file::Information,
     // WASI does not have nix::sys::stat, so we store std::fs::Metadata instead.
-    #[cfg(target_os = "wasi")] std::fs::Metadata,
+    #[cfg(target_os = "wasi")] fs::Metadata,
 );
 
 impl FileInformation {
@@ -97,9 +97,9 @@ impl FileInformation {
         #[cfg(target_os = "wasi")]
         {
             let metadata = if dereference {
-                std::fs::metadata(path.as_ref())
+                fs::metadata(path.as_ref())
             } else {
-                std::fs::symlink_metadata(path.as_ref())
+                fs::symlink_metadata(path.as_ref())
             };
             Ok(Self(metadata?))
         }
@@ -225,6 +225,7 @@ impl Hash for FileInformation {
         #[cfg(target_os = "wasi")]
         {
             self.0.len().hash(state);
+            self.0.file_type().is_dir().hash(state);
         }
     }
 }
@@ -763,9 +764,12 @@ pub fn are_hardlinks_or_one_way_symlink_to_same_file(source: &Path, target: &Pat
 /// # Arguments
 ///
 /// * `path` - A reference to the path to be checked.
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "wasi"))]
 pub fn path_ends_with_terminator(path: &Path) -> bool {
+    #[cfg(unix)]
     use std::os::unix::prelude::OsStrExt;
+    #[cfg(target_os = "wasi")]
+    use std::os::wasi::ffi::OsStrExt;
     path.as_os_str()
         .as_bytes()
         .last()

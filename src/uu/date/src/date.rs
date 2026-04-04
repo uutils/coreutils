@@ -591,7 +591,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("date")
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("date-about"))
@@ -718,12 +718,19 @@ fn format_date_with_locale_aware_months(
 
     let broken_down = BrokenDownTime::from(date);
 
+    // When the i18n-datetime feature is enabled (default), use ICU locale-aware
+    // formatting if the locale requires it. Without the feature (e.g. wasi/wasm
+    // builds that use --no-default-features), skip localization entirely and
+    // format with the raw strftime string.
+    #[cfg(feature = "i18n-datetime")]
     let result = if !should_use_icu_locale() || skip_localization {
         broken_down.to_string_with_config(config, format_string)
     } else {
         let fmt = localize_format_string(format_string, date.date());
         broken_down.to_string_with_config(config, &fmt)
     };
+    #[cfg(not(feature = "i18n-datetime"))]
+    let result = broken_down.to_string_with_config(config, format_string);
 
     result.map_err(|e| e.to_string())
 }

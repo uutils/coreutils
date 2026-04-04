@@ -9,8 +9,6 @@ use uucore::hardware::SimdPolicy;
 
 use super::WordCountable;
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use std::fs::OpenOptions;
 use std::io::{self, ErrorKind, Read};
 
 #[cfg(unix)]
@@ -29,11 +27,9 @@ const FILE_ATTRIBUTE_NORMAL: u32 = 128;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use libc::S_IFIFO;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use uucore::pipes::{pipe, splice, splice_exact};
+use uucore::pipes::{MAX_ROOTLESS_PIPE_SIZE, pipe, splice, splice_exact};
 
 const BUF_SIZE: usize = 256 * 1024;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-const SPLICE_SIZE: usize = 128 * 1024;
 
 /// This is a Linux-specific function to count the number of bytes using the
 /// `splice` system call, which is faster than using `read`.
@@ -43,23 +39,15 @@ const SPLICE_SIZE: usize = 128 * 1024;
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn count_bytes_using_splice(fd: &impl AsFd) -> Result<usize, usize> {
-    let null_file = OpenOptions::new()
-        .write(true)
-        .open("/dev/null")
-        .map_err(|_| 0_usize)?;
-    let null_rdev = rustix::fs::fstat(null_file.as_fd())
-        .map_err(|_| 0_usize)?
-        .st_rdev as libc::dev_t;
-    if (libc::major(null_rdev), libc::minor(null_rdev)) != (1, 3) {
-        // This is not a proper /dev/null, writing to it is probably bad
-        // Bit of an edge case, but it has been known to happen
-        return Err(0);
-    }
+    let null_file = uucore::pipes::dev_null().ok_or(0_usize)?;
+    // todo: avoid generating broker if input is pipe (fcntl_setpipe_size succeed) and directly splice() to /dev/null to save RAM usage
     let (pipe_rd, pipe_wr) = pipe().map_err(|_| 0_usize)?;
 
     let mut byte_count = 0;
+    // improve throughput from pipe
+    let _ = rustix::pipe::fcntl_setpipe_size(fd, MAX_ROOTLESS_PIPE_SIZE);
     loop {
-        match splice(fd, &pipe_wr, SPLICE_SIZE) {
+        match splice(fd, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
             Ok(0) => break,
             Ok(res) => {
                 byte_count += res;

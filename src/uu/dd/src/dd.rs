@@ -184,13 +184,14 @@ impl Num {
 /// directly in `buf_size`-sized chunks, matching GNU dd's behavior.
 /// Returns the total number of bytes actually read.
 fn read_and_discard<R: Read>(reader: &mut R, n: u64, buf_size: usize) -> io::Result<u64> {
-    let mut buf = vec![0u8; buf_size];
+    // todo: consider splice()ing to /dev/null on Linux
+    let mut buf = Vec::with_capacity(buf_size);
     let mut total = 0u64;
     let mut remaining = n;
-
     while remaining > 0 {
-        let to_read = cmp::min(remaining, buf_size as u64) as usize;
-        match reader.read(&mut buf[..to_read]) {
+        let to_read = cmp::min(remaining, buf_size as u64);
+        buf.clear();
+        match reader.by_ref().take(to_read).read_to_end(&mut buf) {
             Ok(0) => break, // EOF
             Ok(bytes_read) => {
                 total += bytes_read as u64;
@@ -1537,7 +1538,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("dd")
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("dd-about"))

@@ -125,7 +125,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new("timeout")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("timeout"))
         .about(translate!("timeout-about"))
         .override_usage(format_usage(&translate!("timeout-usage")))
         .arg(
@@ -296,7 +296,7 @@ fn wait_or_kill_process(
                 });
                 Ok(exit_code)
             } else {
-                Ok(ExitStatus::TimeoutFailed.into())
+                Ok(ExitStatus::CommandTimedOut.into())
             }
         }
         Ok(None) => {
