@@ -1859,7 +1859,7 @@ fn test_files0_from_non_utf8() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     // non-UTF-8 bytes (0xFF)
-    let filename = std::ffi::OsString::from_vec(vec![b'a', 0xFF, b'b']);
+    let filename = std::ffi::OsString::from_vec(b"a\xffb".into());
     std::fs::write(at.plus(&filename), b"20\n10\n").unwrap();
 
     let list_contents = vec![b'a', 0xFF, b'b', 0];
