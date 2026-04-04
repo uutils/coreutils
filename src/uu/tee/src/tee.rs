@@ -3,52 +3,24 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use clap::{Arg, ArgAction, Command, builder::PossibleValue};
+// spell-checker:ignore espidf nopipe
+
 use std::ffi::OsString;
 use std::fs::OpenOptions;
 use std::io::{Error, ErrorKind, Read, Result, Write, stderr, stdin, stdout};
 use std::path::PathBuf;
 use uucore::display::Quotable;
 use uucore::error::{UResult, strip_errno};
-use uucore::format_usage;
-use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::translate;
 
-// spell-checker:ignore espidf nopipe
+mod cli;
+pub use crate::cli::uu_app;
+use crate::cli::{Options, OutputErrorMode, options};
 
 #[cfg(target_os = "linux")]
 use uucore::signals::ensure_stdout_not_broken;
 #[cfg(unix)]
 use uucore::signals::{disable_pipe_errors, ignore_interrupts};
-
-mod options {
-    pub const APPEND: &str = "append";
-    pub const IGNORE_INTERRUPTS: &str = "ignore-interrupts";
-    pub const FILE: &str = "file";
-    pub const IGNORE_PIPE_ERRORS: &str = "ignore-pipe-errors";
-    pub const OUTPUT_ERROR: &str = "output-error";
-}
-
-#[allow(dead_code)]
-struct Options {
-    append: bool,
-    ignore_interrupts: bool,
-    ignore_pipe_errors: bool,
-    files: Vec<OsString>,
-    output_error: Option<OutputErrorMode>,
-}
-
-#[derive(Clone, Debug)]
-enum OutputErrorMode {
-    /// Diagnose write error on any output
-    Warn,
-    /// Diagnose write error on any output that is not a pipe
-    WarnNoPipe,
-    /// Exit upon write error on any output
-    Exit,
-    /// Exit upon write error on any output that is not a pipe
-    ExitNoPipe,
-}
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -82,69 +54,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     tee(&options).map_err(|_| 1.into())
-}
-
-pub fn uu_app() -> Command {
-    Command::new("tee")
-        .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template("tee"))
-        .about(translate!("tee-about"))
-        .override_usage(format_usage(&translate!("tee-usage")))
-        .after_help(translate!("tee-after-help"))
-        .infer_long_args(true)
-        // Since we use value-specific help texts for "--output-error", clap's "short help" and "long help" differ.
-        // However, this is something that the GNU tests explicitly test for, so we *always* show the long help instead.
-        .disable_help_flag(true)
-        .arg(
-            Arg::new("--help")
-                .short('h')
-                .long("help")
-                .help(translate!("tee-help-help"))
-                .action(ArgAction::HelpLong),
-        )
-        .arg(
-            Arg::new(options::APPEND)
-                .long(options::APPEND)
-                .short('a')
-                .help(translate!("tee-help-append"))
-                .action(ArgAction::SetTrue)
-                .overrides_with(options::APPEND),
-        )
-        .arg(
-            Arg::new(options::IGNORE_INTERRUPTS)
-                .long(options::IGNORE_INTERRUPTS)
-                .short('i')
-                .help(translate!("tee-help-ignore-interrupts"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::FILE)
-                .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::FilePath)
-                .value_parser(clap::value_parser!(OsString)),
-        )
-        .arg(
-            Arg::new(options::IGNORE_PIPE_ERRORS)
-                .short('p')
-                .help(translate!("tee-help-ignore-pipe-errors"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::OUTPUT_ERROR)
-                .long(options::OUTPUT_ERROR)
-                .require_equals(true)
-                .num_args(0..=1)
-                .default_missing_value("warn-nopipe")
-                .value_parser(ShortcutValueParser::new([
-                    PossibleValue::new("warn").help(translate!("tee-help-output-error-warn")),
-                    PossibleValue::new("warn-nopipe")
-                        .help(translate!("tee-help-output-error-warn-nopipe")),
-                    PossibleValue::new("exit").help(translate!("tee-help-output-error-exit")),
-                    PossibleValue::new("exit-nopipe")
-                        .help(translate!("tee-help-output-error-exit-nopipe")),
-                ]))
-                .help(translate!("tee-help-output-error")),
-        )
 }
 
 fn tee(options: &Options) -> Result<()> {
