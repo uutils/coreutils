@@ -82,19 +82,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 target_os = "linux",
                 target_os = "android",
                 target_os = "fuchsia",
-                target_os = "wasi",
                 target_env = "uclibc",
                 target_os = "freebsd",
             ))]
             {
-                use nix::fcntl::{PosixFadviseAdvice, posix_fadvise};
+                use rustix::fs::{Advice, fadvise};
                 use std::os::unix::io::AsFd;
 
-                posix_fadvise(
+                fadvise(
                     file.as_fd(),
-                    0, // offset 0 => from the start of the file
-                    0, // length 0 => for the whole file
-                    PosixFadviseAdvice::POSIX_FADV_SEQUENTIAL,
+                    0,    // offset 0 => from the start of the file
+                    None, // None => for the whole file
+                    Advice::Sequential,
                 )
                 .ok();
             }

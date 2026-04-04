@@ -22,7 +22,7 @@ use uucore::translate;
 
 use uucore::{
     format_usage,
-    signals::{signal_by_name_or_value, signal_name_by_value},
+    signals::{signal_by_name_or_value, signal_list_name_by_value},
 };
 
 use nix::sys::signal::{SigHandler, Signal, kill};
@@ -227,7 +227,7 @@ fn report_if_verbose(signal: usize, cmd: &str, verbose: bool) {
         let s = if signal == 0 {
             "0".to_string()
         } else {
-            signal_name_by_value(signal).unwrap().to_string()
+            signal_list_name_by_value(signal).unwrap()
         };
         let mut stderr = std::io::stderr();
         let _ = writeln!(
@@ -296,7 +296,7 @@ fn wait_or_kill_process(
                 });
                 Ok(exit_code)
             } else {
-                Ok(ExitStatus::TimeoutFailed.into())
+                Ok(ExitStatus::CommandTimedOut.into())
             }
         }
         Ok(None) => {

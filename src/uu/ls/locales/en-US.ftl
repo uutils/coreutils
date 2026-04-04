@@ -22,6 +22,7 @@ ls-error-cannot-open-directory-bad-descriptor = cannot open directory {$path}: B
 ls-error-unknown-io-error = unknown io error: {$path}, '{$error}'
 ls-error-invalid-block-size = invalid --block-size argument {$size}
 ls-error-dired-and-zero-incompatible = --dired and --zero are incompatible
+ls-error-not-directory = cannot access {$path}: Not a directory
 ls-error-not-listing-already-listed = {$path}: not listing already-listed directory
 ls-error-invalid-time-style = invalid --time-style argument {$style}
   Possible values are:
@@ -55,7 +56,7 @@ ls-help-escape-quoting-style = Use escape quoting style. Equivalent to `--quotin
 ls-help-c-quoting-style = Use C quoting style. Equivalent to `--quoting-style=c`
 ls-help-replace-control-chars = Replace control characters with '?' if they are not escaped.
 ls-help-show-control-chars = Show control characters 'as is' if they are not escaped.
-ls-help-show-time-field = Show time in <field>:
+ls-help-show-time-field = Show time in `<field>`:
     access time (-u): atime, access, use;
     change time (-t): ctime, status.
     modification time: mtime, modification.
@@ -71,7 +72,7 @@ ls-help-time-access = If the long listing format (e.g., -l, -o) is being used, p
 ls-help-hide-pattern = do not list implied entries matching shell PATTERN (overridden by -a or -A)
 ls-help-ignore-pattern = do not list implied entries matching shell PATTERN
 ls-help-ignore-backups = Ignore entries which end with ~.
-ls-help-sort-by-field = Sort by <field>: name, none (-U), time (-t), size (-S), extension (-X) or width
+ls-help-sort-by-field = Sort by `<field>`: name, none (-U), time (-t), size (-S), extension (-X) or width
 ls-help-sort-by-size = Sort by file size, largest first.
 ls-help-sort-by-time = Sort by modification time (the 'mtime' in the inode), newest first.
 ls-help-sort-by-version = Natural sort of (version) numbers in the filenames.

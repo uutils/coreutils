@@ -41,7 +41,7 @@ pub fn uu_app() -> Command {
         .after_help(translate!("test-after-help"))
 }
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     let program = args.next().unwrap_or_else(|| OsString::from("test"));
     let binary_name = uucore::util_name();

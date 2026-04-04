@@ -23,7 +23,10 @@ use std::fs;
 #[cfg(unix)]
 use std::os::unix::prelude::PermissionsExt;
 
-use rand::Rng;
+use rand::{
+    RngExt as _, SeedableRng as _,
+    rngs::{self, SmallRng},
+};
 use tempfile::Builder;
 use thiserror::Error;
 
@@ -510,7 +513,12 @@ fn dry_exec(tmpdir: &Path, prefix: &str, rand: usize, suffix: &str) -> PathBuf {
 
     // Randomize.
     let bytes = &mut buf[prefix.len()..prefix.len() + rand];
-    rand::rng().fill(bytes);
+    SmallRng::try_from_rng(&mut rngs::SysRng)
+        .unwrap_or_else(|_| {
+            //rand::rng panics if getrandom failed
+            SmallRng::seed_from_u64(bytes.as_ptr() as usize as u64)
+        })
+        .fill(bytes);
     for byte in bytes {
         *byte = match *byte % 62 {
             v @ 0..=9 => v + b'0',

@@ -1,5 +1,6 @@
 # See https://pre-commit.com for more information
 # See https://pre-commit.com/hooks.html for more hooks
+exclude: ^tests/fixtures/
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
@@ -43,9 +44,19 @@ repos:
         pass_filenames: false
         types: [file, rust]
         language: system
+      - id: cargo-lock-check
+        name: Cargo.lock sync check
+        description: Ensure Cargo.lock and fuzz/Cargo.lock are up-to-date.
+        entry: bash -c 'for dir in . fuzz; do ( cd "$dir" && cargo fetch --locked --quiet ) || { echo "ERROR - $dir/Cargo.lock is out of date. Run -> cd $dir && cargo update"; exit 1; } done'
+        pass_filenames: false
+        files: 'Cargo\.(toml|lock)$'
+        language: system
       - id: cspell
         name: Code spell checker (cspell)
         description: Run cspell to check for spelling errors (if available).
         entry: bash -c 'if command -v cspell >/dev/null 2>&1; then cspell --no-must-find-files -- "$@"; else echo "cspell not found, skipping spell check"; exit 0; fi' --
         pass_filenames: true
         language: system
+
+ci:
+  skip: [rust-linting, rust-clippy, cargo-lock-check, cspell]

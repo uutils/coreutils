@@ -12,7 +12,7 @@ use uucore::{error::UResult, format_usage};
 
 use uucore::translate;
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     uucore::clap_localization::handle_clap_result(uu_app(), args)?;
     /*
@@ -21,10 +21,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
      * is a no-op unless unsigned int is wider than 32 bits.
      */
 
-    let mut result: c_long;
-    unsafe {
-        result = gethostid();
-    }
+    let mut result: c_long = unsafe { gethostid() };
 
     #[allow(overflowing_literals)]
     let mask = 0xffff_ffff;

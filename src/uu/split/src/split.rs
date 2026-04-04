@@ -14,7 +14,7 @@ use crate::filenames::{FilenameIterator, Suffix, SuffixError};
 use crate::strategy::{NumberType, Strategy, StrategyError};
 use clap::{Arg, ArgAction, ArgMatches, Command, ValueHint, parser::ValueSource};
 use std::env;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs::{File, metadata};
 use std::io;
 use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write, stdin};
@@ -540,10 +540,10 @@ impl Settings {
 
     fn instantiate_current_writer(
         &self,
-        filename: &str,
+        filename: &OsStr,
         is_new: bool,
     ) -> io::Result<BufWriter<Box<dyn Write>>> {
-        if platform::paths_refer_to_same_file(&self.input, filename.as_ref()) {
+        if platform::paths_refer_to_same_file(&self.input, filename) {
             return Err(io::Error::other(
                 translate!("split-error-would-overwrite-input", "file" => filename.quote()),
             ));
@@ -920,7 +920,7 @@ impl Write for LineChunkWriter<'_> {
 
 /// Output file parameters
 struct OutFile {
-    filename: String,
+    filename: OsString,
     maybe_writer: Option<BufWriter<Box<dyn Write>>>,
     is_new: bool,
 }
@@ -974,7 +974,7 @@ impl ManageOutFiles for OutFiles {
             let maybe_writer = if is_writer_optional {
                 None
             } else {
-                let instantiated = settings.instantiate_current_writer(filename.as_str(), true);
+                let instantiated = settings.instantiate_current_writer(&filename, true);
                 // If there was an error instantiating the writer for a file,
                 // it could be due to hitting the system limit of open files,
                 // so record it as None and let [`get_writer`] function handle closing/re-opening
@@ -1011,7 +1011,7 @@ impl ManageOutFiles for OutFiles {
         // might "steel" the freed fd and open a file on its side. Then it would be beneficial
         // if split would be able to close another fd before cancellation.
         'loop1: loop {
-            let filename_to_open = self[idx].filename.as_str();
+            let filename_to_open = &self[idx].filename;
             let file_to_open_is_new = self[idx].is_new;
             let maybe_writer =
                 settings.instantiate_current_writer(filename_to_open, file_to_open_is_new);
@@ -1156,7 +1156,7 @@ where
         out_files = OutFiles::init(num_chunks, settings, false)?;
     }
 
-    let buf = &mut Vec::new();
+    let mut buf = Vec::with_capacity((chunk_size_base + 1) as usize);
     for i in 1_u64..=num_chunks {
         let chunk_size = chunk_size_base + (chunk_size_reminder > i - 1) as u64;
         buf.clear();
@@ -1175,7 +1175,7 @@ where
                 }
             };
 
-            let n_bytes_read = reader.by_ref().take(limit).read_to_end(buf);
+            let n_bytes_read = reader.by_ref().take(limit).read_to_end(&mut buf);
 
             match n_bytes_read {
                 Ok(n_bytes) => {
@@ -1191,13 +1191,13 @@ where
 
             if let Some(chunk_number) = kth_chunk {
                 if i == chunk_number {
-                    stdout_writer.write_all(buf)?;
+                    stdout_writer.write_all(&buf)?;
                     break;
                 }
             } else {
                 let idx = (i - 1) as usize;
                 let writer = out_files.get_writer(idx, settings)?;
-                writer.write_all(buf)?;
+                writer.write_all(&buf)?;
             }
         } else {
             break;

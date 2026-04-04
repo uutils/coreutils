@@ -15,7 +15,7 @@ use jiff::{Timestamp, Zoned};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Read, Write};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write, stderr};
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use uucore::display::Quotable;
@@ -436,7 +436,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     format!("{date_part} 00:00 {offset}")
                 };
                 if settings.debug {
-                    eprintln!("date: warning: using midnight as starting time: 00:00:00");
+                    let _ = writeln!(
+                        stderr(),
+                        "date: warning: using midnight as starting time: 00:00:00"
+                    );
                 }
                 parse_date(composed, &now, DebugOptions::new(settings.debug, false))
             } else if let Some((total_hours, day_delta)) = military_tz_with_offset {
@@ -715,12 +718,19 @@ fn format_date_with_locale_aware_months(
 
     let broken_down = BrokenDownTime::from(date);
 
+    // When the i18n-datetime feature is enabled (default), use ICU locale-aware
+    // formatting if the locale requires it. Without the feature (e.g. wasi/wasm
+    // builds that use --no-default-features), skip localization entirely and
+    // format with the raw strftime string.
+    #[cfg(feature = "i18n-datetime")]
     let result = if !should_use_icu_locale() || skip_localization {
         broken_down.to_string_with_config(config, format_string)
     } else {
         let fmt = localize_format_string(format_string, date.date());
         broken_down.to_string_with_config(config, &fmt)
     };
+    #[cfg(not(feature = "i18n-datetime"))]
+    let result = broken_down.to_string_with_config(config, format_string);
 
     result.map_err(|e| e.to_string())
 }
@@ -756,6 +766,7 @@ fn make_format_string(settings: &Settings) -> &str {
 static FIXED_OFFSET_ABBREVIATIONS: &[(&str, i32)] = &[
     ("UTC", 0),
     ("GMT", 0),
+    ("MEST", 7200), // UTC+2 Middle European Summer Time
     // US timezones (GNU compatible)
     ("PST", -28800), // UTC-8
     ("PDT", -25200), // UTC-7
@@ -776,6 +787,8 @@ static FIXED_OFFSET_ABBREVIATIONS: &[(&str, i32)] = &[
     // German timezones
     ("MEZ", 3600),  // UTC+1
     ("MESZ", 7200), // UTC+2
+    // Asian timezones
+    ("KST", 32400), // UTC+9 Korean Standard Time
 ];
 /* spell-checker: enable */
 
@@ -892,22 +905,25 @@ fn parse_date<S: AsRef<str> + Clone>(
     let input_str = s.as_ref();
 
     if dbg_opts.debug {
-        eprintln!("date: input string: {input_str}");
+        let _ = writeln!(stderr(), "date: input string: {input_str}");
     }
 
     // First, try to parse any timezone abbreviations
     if let Some(zoned) = try_parse_with_abbreviation(input_str, now) {
         if dbg_opts.debug {
-            eprintln!(
+            let mut err = stderr().lock();
+            let _ = writeln!(
+                err,
                 "date: parsed date part: (Y-M-D) {}",
                 strtime::format("%Y-%m-%d", &zoned).unwrap_or_default()
             );
-            eprintln!(
+            let _ = writeln!(
+                err,
                 "date: parsed time part: {}",
                 strtime::format("%H:%M:%S", &zoned).unwrap_or_default()
             );
             let tz_display = zoned.time_zone().iana_name().unwrap_or("system default");
-            eprintln!("date: input timezone: {tz_display}");
+            let _ = writeln!(err, "date: input timezone: {tz_display}");
         }
         return Ok(zoned);
     }
@@ -919,17 +935,20 @@ fn parse_date<S: AsRef<str> + Clone>(
             let result = date.timestamp().to_zoned(now.time_zone().clone());
             if dbg_opts.debug {
                 // Show final parsed date and time
-                eprintln!(
+                let mut err = stderr().lock();
+                let _ = writeln!(
+                    err,
                     "date: parsed date part: (Y-M-D) {}",
                     strtime::format("%Y-%m-%d", &result).unwrap_or_default()
                 );
-                eprintln!(
+                let _ = writeln!(
+                    err,
                     "date: parsed time part: {}",
                     strtime::format("%H:%M:%S", &result).unwrap_or_default()
                 );
 
                 // Show timezone information
-                eprintln!("date: input timezone: system default");
+                let _ = writeln!(err, "date: input timezone: system default");
 
                 // Check if time component was specified, if not warn about midnight usage
                 // Only warn for date-only inputs (no time specified), but not for epoch formats (@N)
@@ -938,7 +957,10 @@ fn parse_date<S: AsRef<str> + Clone>(
                     // Input likely didn't specify a time, so midnight was assumed
                     let time_str = strtime::format("%H:%M:%S", &result).unwrap_or_default();
                     if time_str == "00:00:00" {
-                        eprintln!("date: warning: using midnight as starting time: 00:00:00");
+                        let _ = writeln!(
+                            err,
+                            "date: warning: using midnight as starting time: 00:00:00"
+                        );
                     }
                 }
             }

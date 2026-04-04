@@ -2,7 +2,7 @@
 # `build-gnu.bash` ~ builds GNU coreutils (from supplied sources)
 #
 
-# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW
+# spell-checker:ignore (paths) abmon deref discrim eacces getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW
 # spell-checker:ignore baddecode submodules xstrtol distros ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) greadlink gsed multihardlink texinfo CARGOFLAGS
 # spell-checker:ignore openat TOCTOU CFLAGS tmpfs gnproc
 
@@ -160,6 +160,10 @@ else
     touch gnu-built
 fi
 
+# Keep getlimits available on PATH for GNU shell and Perl tests even when
+# reusing an existing GNU build directory.
+test -f src/getlimits && cp -f src/getlimits "${UU_BUILD_DIR}"
+
 # Keep Makefile.in newer than the local.mk files we just modified,
 # and Makefile newer than Makefile.in, so make won't re-run
 # automake or config.status and undo our edits.
@@ -184,8 +188,6 @@ sed -i 's/^print_ver_.*/require_selinux_/' tests/chcon/chcon-fail.sh
 
 # We use coreutils yes
 sed -i "s|--coreutils-prog=||g" tests/misc/coreutils.sh
-# Different message
-sed -i "s|coreutils: unknown program 'blah'|blah: function/utility not found|" tests/misc/coreutils.sh
 
 # Use the system coreutils where the test fails due to error in a util that is not the one being tested
 sed -i "s|grep '^#define HAVE_CAP 1' \$CONFIG_HEADER > /dev/null|true|"  tests/ls/capability.sh

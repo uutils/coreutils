@@ -5,8 +5,8 @@
 
 use std::ops::RangeInclusive;
 
-use rand::{RngCore as _, SeedableRng as _};
-use rand_chacha::ChaCha12Rng;
+use rand::Rng as _;
+use rand_chacha::{ChaCha12Rng, rand_core::SeedableRng as _};
 use sha3::{Digest as _, Sha3_256};
 
 /// Reproducible seeded random number generation.

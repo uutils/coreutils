@@ -4,6 +4,8 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) tempdir dyld dylib optgrps libstdbuf
+#[cfg(not(unix))]
+compile_error!("stdbuf is not supported on the target");
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
@@ -31,14 +33,9 @@ mod options {
 
 #[cfg(all(
     not(feature = "feat_external_libstdbuf"),
-    any(
-        target_os = "linux",
-        target_os = "android",
-        target_os = "freebsd",
-        target_os = "netbsd",
-        target_os = "openbsd",
-        target_os = "dragonfly"
-    )
+    unix,
+    not(target_vendor = "apple"),
+    not(target_os = "cygwin")
 ))]
 const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.so"));
 
@@ -82,45 +79,19 @@ enum ProgramOptionsError {
     ValueTooLarge(String),
 }
 
-#[cfg(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "dragonfly"
-))]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "fn sig must match on all platforms"
-)]
-fn preload_strings() -> UResult<(&'static str, &'static str)> {
-    Ok(("LD_PRELOAD", "so"))
+#[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "cygwin")))]
+fn preload_strings() -> (&'static str, &'static str) {
+    ("LD_PRELOAD", "so")
 }
 
 #[cfg(target_vendor = "apple")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "fn sig must match on all platforms"
-)]
-fn preload_strings() -> UResult<(&'static str, &'static str)> {
-    Ok(("DYLD_LIBRARY_PATH", "dylib"))
+fn preload_strings() -> (&'static str, &'static str) {
+    ("DYLD_LIBRARY_PATH", "dylib")
 }
 
-#[cfg(not(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "dragonfly",
-    target_vendor = "apple"
-)))]
-fn preload_strings() -> UResult<(&'static str, &'static str)> {
-    Err(USimpleError::new(
-        1,
-        translate!("stdbuf-error-command-not-supported"),
-    ))
+#[cfg(target_os = "cygwin")]
+fn preload_strings() -> (&'static str, &'static str) {
+    ("LD_PRELOAD", "dll")
 }
 
 fn check_option(matches: &ArgMatches, name: &str) -> Result<BufferType, ProgramOptionsError> {
@@ -163,7 +134,7 @@ fn get_preload_env(tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
     use std::fs::File;
     use std::io::Write;
 
-    let (preload, extension) = preload_strings()?;
+    let (preload, extension) = preload_strings();
     let inject_path = tmp_dir.path().join("libstdbuf").with_extension(extension);
 
     let mut file = File::create(&inject_path)?;
@@ -174,7 +145,7 @@ fn get_preload_env(tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
 
 #[cfg(feature = "feat_external_libstdbuf")]
 fn get_preload_env(_tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
-    let (preload, extension) = preload_strings()?;
+    let (preload, extension) = preload_strings();
 
     // Use the directory provided at compile time via LIBSTDBUF_DIR environment variable
     // This will fail to compile if LIBSTDBUF_DIR is not set, which is the desired behavior
@@ -183,7 +154,7 @@ fn get_preload_env(_tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
     // Search paths in order:
     // 1. Directory where stdbuf is located (program_path)
     // 2. Compile-time directory from LIBSTDBUF_DIR
-    let mut search_paths: Vec<PathBuf> = Vec::new();
+    let mut search_paths: Vec<PathBuf> = Vec::with_capacity(2);
 
     // First, try to get the directory where stdbuf is running from
     if let Ok(exe_path) = std::env::current_exe() {

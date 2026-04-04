@@ -294,30 +294,43 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
 
     let mut all_successful = true;
     for srcpath in files {
-        let targetpath = if settings.no_dereference
-            && matches!(settings.overwrite, OverwriteMode::Force)
-            && target_dir.is_symlink()
-        {
-            // In that case, we don't want to do link resolution
-            // We need to clean the target
-            if target_dir.is_file() {
-                if let Err(e) = fs::remove_file(target_dir) {
-                    show_error!(
-                        "{}",
-                        translate!("ln-error-could-not-update", "target" => target_dir.quote(), "error" => e)
-                    );
+        let targetpath = if settings.no_dereference && target_dir.is_symlink() {
+            let remove_target = || {
+                // In that case, we don't want to do link resolution
+                // We need to clean the target
+                if target_dir.is_file() {
+                    if let Err(e) = fs::remove_file(target_dir) {
+                        show_error!(
+                            "{}",
+                            translate!("ln-error-could-not-update", "target" => target_dir.quote(), "error" => e)
+                        );
+                    }
                 }
-            }
-            #[cfg(windows)]
-            if target_dir.is_dir() {
-                // Not sure why but on Windows, the symlink can be
-                // considered as a dir
-                // See test_ln::test_symlink_no_deref_dir
-                if let Err(e) = fs::remove_dir(target_dir) {
-                    show_error!(
+                #[cfg(windows)]
+                if target_dir.is_dir() {
+                    // Not sure why but on Windows, the symlink can be
+                    // considered as a dir
+                    // See test_ln::test_symlink_no_deref_dir
+                    if let Err(e) = fs::remove_dir(target_dir) {
+                        show_error!(
+                            "{}",
+                            translate!("ln-error-could-not-update", "target" => target_dir.quote(), "error" => e)
+                        );
+                    }
+                }
+            };
+            match settings.overwrite {
+                OverwriteMode::NoClobber => {}
+                OverwriteMode::Interactive => {
+                    if prompt_yes!(
                         "{}",
-                        translate!("ln-error-could-not-update", "target" => target_dir.quote(), "error" => e)
-                    );
+                        translate!("ln-prompt-replace", "file" => target_dir.quote())
+                    ) {
+                        remove_target();
+                    }
+                }
+                OverwriteMode::Force => {
+                    remove_target();
                 }
             }
             target_dir.to_path_buf()
@@ -401,7 +414,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
                     return Err(LnError::SomeLinksFailed.into());
                 }
 
-                if fs::remove_file(dst).is_ok() {}
+                let _ = fs::remove_file(dst);
                 // In case of error, don't do anything
             }
             OverwriteMode::Force => {
@@ -418,14 +431,14 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
                         return Err(LnError::SameFile(src.to_owned(), dst.to_owned()).into());
                     }
                 }
-                if fs::remove_file(dst).is_ok() {}
+                let _ = fs::remove_file(dst);
                 // In case of error, don't do anything
             }
         }
     }
 
-    if settings.symbolic {
-        symlink(&source, dst)?;
+    let res = if settings.symbolic {
+        symlink(&source, dst).map_err(Into::into)
     } else {
         let p = if settings.logical && source.is_symlink() {
             fs::canonicalize(&source)
@@ -433,14 +446,23 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
         } else {
             source.to_path_buf()
         };
-        if let Err(e) = fs::hard_link(&p, dst) {
-            if p.is_dir() {
-                return Err(LnError::FailedToCreateHardLinkDir(source.to_path_buf()).into());
+        match fs::hard_link(&p, dst) {
+            Ok(()) => Ok(()),
+            Err(_) if p.is_dir() => {
+                Err(LnError::FailedToCreateHardLinkDir(source.to_path_buf()).into())
             }
-            return Err(e).map_err_context(|| {
+            Err(e) => Err(e).map_err_context(|| {
                 translate!("ln-failed-to-create-hard-link", "source" => source.quote(), "dest" => dst.quote())
-            });
+            }),
         }
+    };
+
+    if let Err(e) = res {
+        if let Some(ref p) = backup_path {
+            fs::rename(p, dst)
+                .map_err_context(|| translate!("ln-cannot-backup", "file" => dst.quote()))?;
+        }
+        return Err(e);
     }
 
     if settings.verbose {
@@ -465,4 +487,12 @@ pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> std::io::R
     } else {
         symlink_file(src, dst)
     }
+}
+
+#[cfg(target_os = "wasi")]
+fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(_src: P1, _dst: P2) -> std::io::Result<()> {
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "symlinks not supported on this platform",
+    ))
 }

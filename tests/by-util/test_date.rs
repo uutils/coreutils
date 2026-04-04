@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker: ignore: AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado febr
+// spell-checker: ignore: AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado febr MEST KST
 
 use std::cmp::Ordering;
 
@@ -13,6 +13,8 @@ use regex::Regex;
 #[cfg(all(unix, not(target_os = "macos")))]
 use uucore::process::geteuid;
 use uutests::util::TestScenario;
+#[cfg(unix)]
+use uutests::util::is_locale_available;
 use uutests::{at_and_ucmd, new_ucmd, util_name};
 
 #[test]
@@ -1173,6 +1175,16 @@ fn test_date_tz_abbreviation_fixed_offset_outside_season() {
         .arg("+%F %T %Z")
         .succeeds()
         .stdout_is("2026-01-15 16:00:00 UTC\n");
+
+    // MEST (UTC+2) used in winter
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-u")
+        .arg("-d")
+        .arg("2026-01-15 10:00 MEST")
+        .arg("+%F %T %Z")
+        .succeeds()
+        .stdout_is("2026-01-15 08:00:00 UTC\n");
 }
 
 #[test]
@@ -1610,7 +1622,7 @@ fn test_date_locale_en_us_vs_c_difference() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple",))]
+#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
 fn test_date_locale_fr_french() {
     // Test French locale (fr_FR.UTF-8) behavior
     // French typically uses 24-hour format and may have localized day/month names
@@ -1830,20 +1842,7 @@ fn test_date_parenthesis_vs_other_special_chars() {
 fn test_date_iranian_locale_solar_hijri_calendar() {
     // Test Iranian locale uses Solar Hijri calendar
     // Verify the Solar Hijri calendar is used in the Iranian locale
-    use std::process::Command;
-
-    // Check if Iranian locale is available
-    let locale_check = Command::new("locale")
-        .env("LC_ALL", "fa_IR.UTF-8")
-        .arg("charmap")
-        .output();
-
-    let locale_available = match locale_check {
-        Ok(output) => String::from_utf8_lossy(&output.stdout).trim() == "UTF-8",
-        Err(_) => false,
-    };
-
-    if !locale_available {
+    if !is_locale_available("fa_IR.UTF-8") {
         println!("Skipping Iranian locale test - fa_IR.UTF-8 locale not available");
         return;
     }
@@ -1910,20 +1909,7 @@ fn test_date_iranian_locale_solar_hijri_calendar() {
 fn test_date_ethiopian_locale_calendar() {
     // Test Ethiopian locale uses Ethiopian calendar
     // Verify the Ethiopian calendar is used in the Ethiopian locale
-    use std::process::Command;
-
-    // Check if Ethiopian locale is available
-    let locale_check = Command::new("locale")
-        .env("LC_ALL", "am_ET.UTF-8")
-        .arg("charmap")
-        .output();
-
-    let locale_available = match locale_check {
-        Ok(output) => String::from_utf8_lossy(&output.stdout).trim() == "UTF-8",
-        Err(_) => false,
-    };
-
-    if !locale_available {
+    if !is_locale_available("am_ET.UTF-8") {
         println!("Skipping Ethiopian locale test - am_ET.UTF-8 locale not available");
         return;
     }
@@ -1990,20 +1976,7 @@ fn test_date_ethiopian_locale_calendar() {
 fn test_date_thai_locale_solar_calendar() {
     // Test Thai locale uses Thai solar calendar
     // Verify the Thai solar calendar is used with the Thai locale
-    use std::process::Command;
-
-    // Check if Thai locale is available
-    let locale_check = Command::new("locale")
-        .env("LC_ALL", "th_TH.UTF-8")
-        .arg("charmap")
-        .output();
-
-    let locale_available = match locale_check {
-        Ok(output) => String::from_utf8_lossy(&output.stdout).trim() == "UTF-8",
-        Err(_) => false,
-    };
-
-    if !locale_available {
+    if !is_locale_available("th_TH.UTF-8") {
         println!("Skipping Thai locale test - th_TH.UTF-8 locale not available");
         return;
     }
@@ -2812,4 +2785,17 @@ fn test_date_debug_current_time() {
     let stderr = result.stderr_str();
     // No parsing happens for "now", so no debug output
     assert_eq!(stderr, "");
+}
+
+#[test]
+fn test_korean_time_zone() {
+    // KST (UTC+9 korean standard time) used in winter
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-u")
+        .arg("-d")
+        .arg("2026-01-15 10:00 KST")
+        .arg("+%F %T %Z")
+        .succeeds()
+        .stdout_is("2026-01-15 01:00:00 UTC\n");
 }

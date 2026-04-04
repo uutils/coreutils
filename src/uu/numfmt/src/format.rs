@@ -452,6 +452,26 @@ fn format_string(
     ))
 }
 
+/// Encodes a byte slice as a string, representing non-UTF-8 bytes and non-printable ASCII
+/// bytes as octal escapes. Valid UTF-8 multi-byte characters pass through unchanged.
+/// Used to safely format invalid input in error messages.
+pub(crate) fn escape_line(line: &[u8]) -> String {
+    let mut result = String::new();
+    for chunk in line.utf8_chunks() {
+        for c in chunk.valid().chars() {
+            if c.is_ascii() && !c.is_ascii_graphic() && !c.is_ascii_whitespace() {
+                result.push_str(&format!("\\{:03o}", c as u8));
+            } else {
+                result.push(c);
+            }
+        }
+        for &b in chunk.invalid() {
+            result.push_str(&format!("\\{b:03o}"));
+        }
+    }
+    result
+}
+
 fn split_bytes<'a>(input: &'a [u8], delim: &'a [u8]) -> impl Iterator<Item = &'a [u8]> {
     let mut remainder = Some(input);
     std::iter::from_fn(move || {
@@ -488,7 +508,7 @@ pub fn write_formatted_with_delimiter<W: std::io::Write>(
         if field_selected {
             // Field must be valid UTF-8 for numeric conversion
             let field_str = std::str::from_utf8(field)
-                .map_err(|_| translate!("numfmt-error-invalid-number", "input" => String::from_utf8_lossy(field).into_owned().quote()))?
+                .map_err(|_| translate!("numfmt-error-invalid-number", "input" => escape_line(field).quote()))?
                 .trim_start();
             let formatted = format_string(field_str, options, None)?;
             writer.write_all(formatted.as_bytes()).unwrap();

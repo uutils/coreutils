@@ -121,7 +121,7 @@ struct State {
     user_specified: bool,
 }
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
@@ -562,7 +562,8 @@ fn pline(possible_uid: Option<uid_t>) -> io::Result<()> {
     target_os = "linux",
     target_os = "android",
     target_os = "openbsd",
-    target_os = "cygwin"
+    target_os = "cygwin",
+    target_os = "netbsd"
 ))]
 fn pline(possible_uid: Option<uid_t>) -> io::Result<()> {
     let uid = possible_uid.unwrap_or_else(getuid);
@@ -586,7 +587,8 @@ fn pline(possible_uid: Option<uid_t>) -> io::Result<()> {
     target_os = "linux",
     target_os = "android",
     target_os = "openbsd",
-    target_os = "cygwin"
+    target_os = "cygwin",
+    target_os = "netbsd"
 ))]
 #[allow(clippy::unnecessary_wraps)]
 fn auditid() -> io::Result<()> {
@@ -597,7 +599,8 @@ fn auditid() -> io::Result<()> {
     target_os = "linux",
     target_os = "android",
     target_os = "openbsd",
-    target_os = "cygwin"
+    target_os = "cygwin",
+    target_os = "netbsd"
 )))]
 fn auditid() -> io::Result<()> {
     use std::mem::MaybeUninit;

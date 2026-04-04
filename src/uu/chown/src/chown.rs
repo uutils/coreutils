@@ -9,6 +9,7 @@ use uucore::display::Quotable;
 pub use uucore::entries::{self, Group, Locate, Passwd};
 use uucore::format_usage;
 use uucore::perms::{GidUidOwnerFilter, IfFrom, chown_base, options};
+use uucore::show_warning;
 use uucore::translate;
 
 use uucore::error::{FromIo, UResult, USimpleError};
@@ -151,33 +152,22 @@ pub fn uu_app() -> Command {
 }
 
 /// Parses the user string to extract the UID.
-fn parse_uid(user: &str, spec: &str, sep: char) -> UResult<Option<u32>> {
+fn parse_uid(user: &str, spec: &str) -> UResult<Option<u32>> {
     if user.is_empty() {
         return Ok(None);
     }
-    match Passwd::locate(user) {
-        Ok(u) => Ok(Some(u.uid)), // We have been able to get the uid
-        Err(_) => {
-            // we have NOT been able to find the uid
-            // but we could be in the case where we have user.group
-            if spec.contains('.') && !spec.contains(':') && sep == ':' {
-                // but the input contains a '.' but not a ':'
-                // we might have something like username.groupname
-                // So, try to parse it this way
-                parse_spec(spec, '.').map(|(uid, _)| uid)
-            } else {
-                // It's possible that the `user` string contains a
-                // numeric user ID, in which case, we respect that.
-                match user.parse() {
-                    Ok(uid) => Ok(Some(uid)),
-                    Err(_) => Err(USimpleError::new(
-                        1,
-                        translate!("chown-error-invalid-user", "user" => spec.quote()),
-                    )),
-                }
-            }
-        }
+
+    if let Ok(u) = Passwd::locate(user) {
+        return Ok(Some(u.uid));
     }
+
+    // Fallback: `user` string contains a numeric user ID
+    user.parse().map(Some).map_err(|_| {
+        USimpleError::new(
+            1,
+            translate!("chown-error-invalid-user", "user" => spec.quote()),
+        )
+    })
 }
 
 /// Parses the group string to extract the GID.
@@ -215,7 +205,20 @@ fn parse_spec(spec: &str, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
     let user = args.next().unwrap_or("");
     let group = args.next().unwrap_or("");
 
-    let uid = parse_uid(user, spec, sep)?;
+    // dot separator: try as username first, fall back to owner.group (like GNU)
+    if sep == ':' && !spec.contains(':') && spec.contains('.') {
+        if let Ok(uid) = parse_uid(user, spec) {
+            let gid = parse_gid(group, spec)?;
+            return Ok((uid, gid));
+        }
+        show_warning!(
+            "{}",
+            translate!("chown-warning-dot-separator", "spec" => spec.quote())
+        );
+        return parse_spec(spec, '.');
+    }
+
+    let uid = parse_uid(user, spec)?;
     let gid = parse_gid(group, spec)?;
 
     if user.chars().next().is_some_and(char::is_numeric) && group.is_empty() && spec != user {

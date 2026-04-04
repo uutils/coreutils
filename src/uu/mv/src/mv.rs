@@ -821,6 +821,8 @@ fn rename_with_fallback(
         const EXDEV: i32 = windows_sys::Win32::Foundation::ERROR_NOT_SAME_DEVICE as _;
         #[cfg(unix)]
         const EXDEV: i32 = libc::EXDEV as _;
+        #[cfg(target_os = "wasi")]
+        const EXDEV: i32 = 18; // POSIX EXDEV value
 
         // We will only copy if:
         // 1. Files are on different devices (EXDEV error)
@@ -926,13 +928,9 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     }
 }
 
-#[cfg(not(any(windows, unix)))]
-fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
-    let path_symlink_points_to = fs::read_link(from)?;
-    Err(io::Error::new(
-        io::ErrorKind::Other,
-        translate!("mv-error-no-symlink-support"),
-    ))
+#[cfg(target_os = "wasi")]
+fn rename_symlink_fallback(_from: &Path, _to: &Path) -> io::Result<()> {
+    Err(io::Error::other(translate!("mv-error-no-symlink-support")))
 }
 
 fn rename_dir_fallback(
@@ -1039,6 +1037,20 @@ fn copy_dir_contents_recursive(
     progress_bar: Option<&ProgressBar>,
     display_manager: Option<&MultiProgress>,
 ) -> io::Result<()> {
+    // Helper closure to print verbose messages
+    let print_verbose = |from: &Path, to: &Path| {
+        if verbose {
+            let message =
+                translate!("mv-verbose-renamed", "from" => from.quote(), "to" => to.quote());
+            match display_manager {
+                Some(pb) => pb.suspend(|| {
+                    println!("{message}");
+                }),
+                None => println!("{message}"),
+            }
+        }
+    };
+
     let entries = fs::read_dir(from_dir)?;
 
     for entry in entries {
@@ -1051,20 +1063,29 @@ fn copy_dir_contents_recursive(
             pb.set_message(from_path.to_string_lossy().to_string());
         }
 
-        if from_path.is_dir() {
-            // Recursively copy subdirectory
+        if from_path.is_symlink() {
+            // Handle symlinks first, before checking is_dir() which follows symlinks.
+            // This prevents symlinks to directories from being expanded into full copies.
+            #[cfg(unix)]
+            {
+                copy_file_with_hardlinks_helper(
+                    &from_path,
+                    &to_path,
+                    hardlink_tracker,
+                    hardlink_scanner,
+                )?;
+            }
+            #[cfg(not(unix))]
+            {
+                rename_symlink_fallback(&from_path, &to_path)?;
+            }
+
+            print_verbose(&from_path, &to_path);
+        } else if from_path.is_dir() {
+            // Recursively copy subdirectory (only real directories, not symlinks)
             fs::create_dir_all(&to_path)?;
 
-            // Print verbose message for directory
-            if verbose {
-                let message = translate!("mv-verbose-renamed", "from" => from_path.quote(), "to" => to_path.quote());
-                match display_manager {
-                    Some(pb) => pb.suspend(|| {
-                        println!("{message}");
-                    }),
-                    None => println!("{message}"),
-                }
-            }
+            print_verbose(&from_path, &to_path);
 
             copy_dir_contents_recursive(
                 &from_path,
@@ -1090,25 +1111,11 @@ fn copy_dir_contents_recursive(
             }
             #[cfg(not(unix))]
             {
-                if from_path.is_symlink() {
-                    // Copy a symlink file (no-follow).
-                    rename_symlink_fallback(&from_path, &to_path)?;
-                } else {
-                    // Copy a regular file.
-                    fs::copy(&from_path, &to_path)?;
-                }
+                // Symlinks are already handled above, so this is always a regular file
+                fs::copy(&from_path, &to_path)?;
             }
 
-            // Print verbose message for file
-            if verbose {
-                let message = translate!("mv-verbose-renamed", "from" => from_path.quote(), "to" => to_path.quote());
-                match display_manager {
-                    Some(pb) => pb.suspend(|| {
-                        println!("{message}");
-                    }),
-                    None => println!("{message}"),
-                }
-            }
+            print_verbose(&from_path, &to_path);
         }
 
         if let Some(pb) = progress_bar {
@@ -1246,14 +1253,13 @@ fn is_writable(path: &Path) -> (bool, Option<u32>) {
 
 #[cfg(unix)]
 fn get_interactive_prompt(to: &Path, cached_mode: Option<u32>) -> String {
-    use libc::mode_t;
     // Use cached mode if available, otherwise fetch it
     let mode = cached_mode.or_else(|| to.metadata().ok().map(|m| m.permissions().mode()));
     if let Some(mode) = mode {
         let file_mode = mode & 0o777;
         // Check if file is not writable by user
         if (mode & 0o200) == 0 {
-            let perms = display_permissions_unix(mode as mode_t, false);
+            let perms = display_permissions_unix(mode, false);
             let mode_info = format!("{file_mode:04o} ({perms})");
             return translate!("mv-prompt-overwrite-mode", "target" => to.quote(), "mode_info" => mode_info);
         }

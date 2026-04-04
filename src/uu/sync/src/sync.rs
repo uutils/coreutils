@@ -68,10 +68,13 @@ mod platform {
         // Reset O_NONBLOCK flag if it was set (matches GNU behavior)
         // This is non-critical, so we log errors but don't fail
         if let Err(e) = fcntl(&f, FcntlArg::F_SETFL(OFlag::empty())) {
-            eprintln!(
+            use std::io::{Write, stderr};
+            let _ = writeln!(
+                stderr(),
                 "sync: {}",
                 translate!("sync-warning-fcntl-failed", "file" => path, "error" => e.to_string())
             );
+            uucore::error::set_exit_code(1);
         }
         Ok(f)
     }
@@ -260,8 +263,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     #[allow(clippy::if_same_then_else)]
     if matches.get_flag(options::FILE_SYSTEM) {
-        #[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
-        syncfs(files)?;
+        if files.is_empty() {
+            sync()?;
+        } else {
+            #[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
+            syncfs(files)?;
+        }
     } else if matches.get_flag(options::DATA) {
         #[cfg(any(target_os = "linux", target_os = "android"))]
         fdatasync(files)?;

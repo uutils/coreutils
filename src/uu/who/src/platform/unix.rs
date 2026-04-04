@@ -179,16 +179,14 @@ fn time_string(ut: &UtmpxRecord) -> String {
 
 #[inline]
 fn current_tty() -> String {
-    unsafe {
-        let res = ttyname(STDIN_FILENO);
-        if res.is_null() {
-            String::new()
-        } else {
-            CStr::from_ptr(res.cast_const())
-                .to_string_lossy()
-                .trim_start_matches("/dev/")
-                .to_owned()
-        }
+    let p = unsafe { ttyname(STDIN_FILENO) };
+    if p.is_null() {
+        String::new()
+    } else {
+        unsafe { CStr::from_ptr(p) }
+            .to_string_lossy()
+            .trim_start_matches("/dev/")
+            .to_owned()
     }
 }
 
@@ -235,11 +233,21 @@ impl Who {
                                     self.print_runlevel(&ut);
                                 }
                             }
-                            utmpx::BOOT_TIME if self.need_boottime => self.print_boottime(&ut),
-                            utmpx::NEW_TIME if self.need_clockchange => self.print_clockchange(&ut),
-                            utmpx::INIT_PROCESS if self.need_initspawn => self.print_initspawn(&ut),
-                            utmpx::LOGIN_PROCESS if self.need_login => self.print_login(&ut),
-                            utmpx::DEAD_PROCESS if self.need_deadprocs => self.print_deadprocs(&ut),
+                            x if x == utmpx::BOOT_TIME && self.need_boottime => {
+                                self.print_boottime(&ut);
+                            }
+                            x if x == utmpx::NEW_TIME && self.need_clockchange => {
+                                self.print_clockchange(&ut);
+                            }
+                            x if x == utmpx::INIT_PROCESS && self.need_initspawn => {
+                                self.print_initspawn(&ut);
+                            }
+                            x if x == utmpx::LOGIN_PROCESS && self.need_login => {
+                                self.print_login(&ut);
+                            }
+                            x if x == utmpx::DEAD_PROCESS && self.need_deadprocs => {
+                                self.print_deadprocs(&ut);
+                            }
                             _ => {}
                         }
                     }

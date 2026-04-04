@@ -17,7 +17,7 @@ mod options {
     pub const SILENT: &str = "silent";
 }
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 2)?;
 
@@ -39,10 +39,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut stdout = std::io::stdout();
 
-    let name = nix::unistd::ttyname(std::io::stdin());
+    let name = rustix::termios::ttyname(std::io::stdin(), Vec::with_capacity(8));
 
     let write_result = if let Ok(name) = name {
-        stdout.write_all_os(name.as_os_str())
+        use std::os::unix::ffi::OsStrExt;
+        let os_name = std::ffi::OsStr::from_bytes(name.as_bytes());
+        stdout.write_all_os(os_name)
     } else {
         set_exit_code(1);
         writeln!(stdout, "{}", translate!("tty-not-a-tty"))

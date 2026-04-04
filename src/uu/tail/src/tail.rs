@@ -220,7 +220,7 @@ fn tail_file(
 /// Without `--pid`, FIFOs block on open() until a writer connects (GNU behavior).
 #[cfg(unix)]
 fn open_file(path: &Path, use_nonblock_for_fifo: bool) -> io::Result<File> {
-    use nix::fcntl::{FcntlArg, OFlag, fcntl};
+    use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
     use std::fs::OpenOptions;
     use std::os::fd::AsFd;
     use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
@@ -237,9 +237,9 @@ fn open_file(path: &Path, use_nonblock_for_fifo: bool) -> io::Result<File> {
             .open(path)?;
 
         // Clear O_NONBLOCK so reads block normally
-        let flags = fcntl(file.as_fd(), FcntlArg::F_GETFL)?;
-        let new_flags = OFlag::from_bits_truncate(flags) & !OFlag::O_NONBLOCK;
-        fcntl(file.as_fd(), FcntlArg::F_SETFL(new_flags))?;
+        let flags = fcntl_getfl(file.as_fd())?;
+        let new_flags = flags & !OFlags::NONBLOCK;
+        fcntl_setfl(file.as_fd(), new_flags)?;
 
         Ok(file)
     } else {
