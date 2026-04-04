@@ -8,11 +8,7 @@
 // spell-checker:ignore backport
 
 #[cfg(unix)]
-use libc::{
-    S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK, S_IRGRP, S_IROTH,
-    S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP, S_IWOTH, S_IWUSR, S_IXGRP, S_IXOTH, S_IXUSR,
-    mkfifo, mode_t,
-};
+use libc::mkfifo;
 #[cfg(all(unix, not(target_os = "redox")))]
 pub use libc::{major, makedev, minor};
 use std::collections::HashSet;
@@ -49,6 +45,8 @@ macro_rules! has {
 pub struct FileInformation(
     #[cfg(unix)] nix::sys::stat::FileStat,
     #[cfg(windows)] winapi_util::file::Information,
+    // WASI does not have nix::sys::stat, so we store std::fs::Metadata instead.
+    #[cfg(target_os = "wasi")] fs::Metadata,
 );
 
 impl FileInformation {
@@ -95,6 +93,16 @@ impl FileInformation {
             let file = open_options.read(true).open(path.as_ref())?;
             Self::from_file(&file)
         }
+        // WASI: use std::fs::metadata / symlink_metadata since nix is not available
+        #[cfg(target_os = "wasi")]
+        {
+            let metadata = if dereference {
+                fs::metadata(path.as_ref())
+            } else {
+                fs::symlink_metadata(path.as_ref())
+            };
+            Ok(Self(metadata?))
+        }
     }
 
     pub fn file_size(&self) -> u64 {
@@ -106,6 +114,10 @@ impl FileInformation {
         #[cfg(target_os = "windows")]
         {
             self.0.file_size()
+        }
+        #[cfg(target_os = "wasi")]
+        {
+            self.0.len()
         }
     }
 
@@ -157,6 +169,9 @@ impl FileInformation {
         return self.0.st_nlink.try_into().unwrap();
         #[cfg(windows)]
         return self.0.number_of_links();
+        // WASI: nlink is not available in std::fs::Metadata, return 1
+        #[cfg(target_os = "wasi")]
+        return 1;
     }
 
     #[cfg(unix)]
@@ -173,6 +188,15 @@ impl FileInformation {
 impl PartialEq for FileInformation {
     fn eq(&self, other: &Self) -> bool {
         self.0.st_dev == other.0.st_dev && self.0.st_ino == other.0.st_ino
+    }
+}
+
+// WASI: compare by file type and size as a basic heuristic since
+// device/inode numbers are not available through std::fs::Metadata.
+#[cfg(target_os = "wasi")]
+impl PartialEq for FileInformation {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.file_type() == other.0.file_type() && self.0.len() == other.0.len()
     }
 }
 
@@ -197,6 +221,11 @@ impl Hash for FileInformation {
         {
             self.0.volume_serial_number().hash(state);
             self.0.file_index().hash(state);
+        }
+        #[cfg(target_os = "wasi")]
+        {
+            self.0.len().hash(state);
+            self.0.file_type().is_dir().hash(state);
         }
     }
 }
@@ -464,12 +493,44 @@ pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> 
 #[cfg(unix)]
 /// Display the permissions of a file
 pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> String {
-    let mode: mode_t = metadata.mode() as mode_t;
-    display_permissions_unix(mode, display_file_type)
+    display_permissions_unix(metadata.mode(), display_file_type)
+}
+
+/// Portable file mode bit constants, equivalent to the POSIX `S_I*` values.
+///
+/// These are defined here as plain `u32` so they are available on every
+/// platform, including Windows, without requiring `libc` or a Unix target.
+/// Callers that previously used `libc::S_IFDIR` etc. can import these instead.
+pub mod mode {
+    // File-type mask and values
+    pub const S_IFMT: u32 = 0o170_000; // bitmask for the file-type field
+    pub const S_IFSOCK: u32 = 0o140_000; // socket
+    pub const S_IFLNK: u32 = 0o120_000; // symbolic link
+    pub const S_IFREG: u32 = 0o100_000; // regular file
+    pub const S_IFBLK: u32 = 0o060_000; // block device
+    pub const S_IFDIR: u32 = 0o040_000; // directory
+    pub const S_IFCHR: u32 = 0o020_000; // character device
+    pub const S_IFIFO: u32 = 0o010_000; // named pipe (FIFO)
+
+    // Permission and special-mode bits
+    pub const S_ISUID: u32 = 0o4000; // setuid
+    pub const S_ISGID: u32 = 0o2000; // setgid
+    pub const S_ISVTX: u32 = 0o1000; // sticky
+
+    pub const S_IRUSR: u32 = 0o0400; // owner read
+    pub const S_IWUSR: u32 = 0o0200; // owner write
+    pub const S_IXUSR: u32 = 0o0100; // owner execute
+
+    pub const S_IRGRP: u32 = 0o0040; // group read
+    pub const S_IWGRP: u32 = 0o0020; // group write
+    pub const S_IXGRP: u32 = 0o0010; // group execute
+
+    pub const S_IROTH: u32 = 0o0004; // other read
+    pub const S_IWOTH: u32 = 0o0002; // other write
+    pub const S_IXOTH: u32 = 0o0001; // other execute
 }
 
 /// Returns a character representation of the file type based on its mode.
-/// This function is specific to Unix-like systems.
 ///
 /// - `mode`: The mode of the file, typically obtained from file metadata.
 ///
@@ -482,8 +543,8 @@ pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> 
 /// - 'l' for symbolic links
 /// - 's' for sockets
 /// - '?' for any other unrecognized file types
-#[cfg(unix)]
-fn get_file_display(mode: mode_t) -> char {
+fn get_file_display(mode: u32) -> char {
+    use mode::{S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK};
     match mode & S_IFMT {
         S_IFDIR => 'd',
         S_IFCHR => 'c',
@@ -500,9 +561,12 @@ fn get_file_display(mode: mode_t) -> char {
 // The logic below is more readable written this way.
 #[allow(clippy::if_not_else)]
 #[allow(clippy::cognitive_complexity)]
-#[cfg(unix)]
-/// Display the permissions of a file on a unix like system
-pub fn display_permissions_unix(mode: mode_t, display_file_type: bool) -> String {
+/// Display the unix permissions of a file
+pub fn display_permissions_unix(mode: u32, display_file_type: bool) -> String {
+    use mode::{
+        S_IRGRP, S_IROTH, S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP, S_IWOTH, S_IWUSR, S_IXGRP,
+        S_IXOTH, S_IXUSR,
+    };
     let mut result;
     if display_file_type {
         result = String::with_capacity(10);
@@ -511,31 +575,31 @@ pub fn display_permissions_unix(mode: mode_t, display_file_type: bool) -> String
         result = String::with_capacity(9);
     }
 
-    result.push(if has!(mode, S_IRUSR) { 'r' } else { '-' });
-    result.push(if has!(mode, S_IWUSR) { 'w' } else { '-' });
-    result.push(if has!(mode, S_ISUID as mode_t) {
-        if has!(mode, S_IXUSR) { 's' } else { 'S' }
-    } else if has!(mode, S_IXUSR) {
+    result.push(if mode & S_IRUSR != 0 { 'r' } else { '-' });
+    result.push(if mode & S_IWUSR != 0 { 'w' } else { '-' });
+    result.push(if mode & S_ISUID != 0 {
+        if mode & S_IXUSR != 0 { 's' } else { 'S' }
+    } else if mode & S_IXUSR != 0 {
         'x'
     } else {
         '-'
     });
 
-    result.push(if has!(mode, S_IRGRP) { 'r' } else { '-' });
-    result.push(if has!(mode, S_IWGRP) { 'w' } else { '-' });
-    result.push(if has!(mode, S_ISGID as mode_t) {
-        if has!(mode, S_IXGRP) { 's' } else { 'S' }
-    } else if has!(mode, S_IXGRP) {
+    result.push(if mode & S_IRGRP != 0 { 'r' } else { '-' });
+    result.push(if mode & S_IWGRP != 0 { 'w' } else { '-' });
+    result.push(if mode & S_ISGID != 0 {
+        if mode & S_IXGRP != 0 { 's' } else { 'S' }
+    } else if mode & S_IXGRP != 0 {
         'x'
     } else {
         '-'
     });
 
-    result.push(if has!(mode, S_IROTH) { 'r' } else { '-' });
-    result.push(if has!(mode, S_IWOTH) { 'w' } else { '-' });
-    result.push(if has!(mode, S_ISVTX as mode_t) {
-        if has!(mode, S_IXOTH) { 't' } else { 'T' }
-    } else if has!(mode, S_IXOTH) {
+    result.push(if mode & S_IROTH != 0 { 'r' } else { '-' });
+    result.push(if mode & S_IWOTH != 0 { 'w' } else { '-' });
+    result.push(if mode & S_ISVTX != 0 {
+        if mode & S_IXOTH != 0 { 't' } else { 'T' }
+    } else if mode & S_IXOTH != 0 {
         'x'
     } else {
         '-'
@@ -700,9 +764,12 @@ pub fn are_hardlinks_or_one_way_symlink_to_same_file(source: &Path, target: &Pat
 /// # Arguments
 ///
 /// * `path` - A reference to the path to be checked.
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "wasi"))]
 pub fn path_ends_with_terminator(path: &Path) -> bool {
+    #[cfg(unix)]
     use std::os::unix::prelude::OsStrExt;
+    #[cfg(target_os = "wasi")]
+    use std::os::wasi::ffi::OsStrExt;
     path.as_os_str()
         .as_bytes()
         .last()
@@ -730,8 +797,9 @@ pub fn path_ends_with_terminator(path: &Path) -> bool {
 pub fn is_stdin_directory(stdin: &Stdin) -> bool {
     #[cfg(unix)]
     {
+        use mode::{S_IFDIR, S_IFMT};
         use nix::sys::stat::fstat;
-        let mode = fstat(stdin.as_fd()).unwrap().st_mode as mode_t;
+        let mode = fstat(stdin.as_fd()).unwrap().st_mode as u32;
         // We use the S_IFMT mask ala S_ISDIR() to avoid mistaking
         // sockets for directories.
         mode & S_IFMT == S_IFDIR
@@ -746,11 +814,18 @@ pub fn is_stdin_directory(stdin: &Stdin) -> bool {
         }
         false
     }
+
+    // WASI: stdin is never a directory
+    #[cfg(target_os = "wasi")]
+    {
+        let _ = stdin;
+        false
+    }
 }
 
 pub mod sane_blksize {
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(unix)]
     use std::os::unix::fs::MetadataExt;
     use std::{fs::metadata, path::Path};
 
@@ -777,12 +852,12 @@ pub mod sane_blksize {
         #[cfg(unix)] metadata: &std::fs::Metadata,
         #[cfg(not(unix))] _: &std::fs::Metadata,
     ) -> u64 {
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(unix)]
         {
             sane_blksize(metadata.blksize())
         }
 
-        #[cfg(target_os = "windows")]
+        #[cfg(not(unix))]
         {
             DEFAULT
         }
@@ -964,9 +1039,9 @@ mod tests {
         }
     }
 
-    #[cfg(unix)]
     #[test]
     fn test_display_permissions() {
+        use mode::*;
         // spell-checker:ignore (perms) brwsr drwxr rwxr
         assert_eq!(
             "drwxr-xr-x",
@@ -992,29 +1067,29 @@ mod tests {
 
         assert_eq!(
             "brwSr-xr-x",
-            display_permissions_unix(S_IFBLK | S_ISUID as mode_t | 0o655, true)
+            display_permissions_unix(S_IFBLK | S_ISUID | 0o655, true)
         );
         assert_eq!(
             "brwsr-xr-x",
-            display_permissions_unix(S_IFBLK | S_ISUID as mode_t | 0o755, true)
+            display_permissions_unix(S_IFBLK | S_ISUID | 0o755, true)
         );
 
         assert_eq!(
             "prw---sr--",
-            display_permissions_unix(S_IFIFO | S_ISGID as mode_t | 0o614, true)
+            display_permissions_unix(S_IFIFO | S_ISGID | 0o614, true)
         );
         assert_eq!(
             "prw---Sr--",
-            display_permissions_unix(S_IFIFO | S_ISGID as mode_t | 0o604, true)
+            display_permissions_unix(S_IFIFO | S_ISGID | 0o604, true)
         );
 
         assert_eq!(
             "c---r-xr-t",
-            display_permissions_unix(S_IFCHR | S_ISVTX as mode_t | 0o055, true)
+            display_permissions_unix(S_IFCHR | S_ISVTX | 0o055, true)
         );
         assert_eq!(
             "c---r-xr-T",
-            display_permissions_unix(S_IFCHR | S_ISVTX as mode_t | 0o054, true)
+            display_permissions_unix(S_IFCHR | S_ISVTX | 0o054, true)
         );
     }
 
@@ -1095,9 +1170,9 @@ mod tests {
         assert!(are_hardlinks_to_same_file(path1, &path2));
     }
 
-    #[cfg(unix)]
     #[test]
     fn test_get_file_display() {
+        use mode::*;
         assert_eq!(get_file_display(S_IFDIR | 0o755), 'd');
         assert_eq!(get_file_display(S_IFCHR | 0o644), 'c');
         assert_eq!(get_file_display(S_IFBLK | 0o600), 'b');

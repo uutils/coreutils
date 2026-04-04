@@ -821,6 +821,8 @@ fn rename_with_fallback(
         const EXDEV: i32 = windows_sys::Win32::Foundation::ERROR_NOT_SAME_DEVICE as _;
         #[cfg(unix)]
         const EXDEV: i32 = libc::EXDEV as _;
+        #[cfg(target_os = "wasi")]
+        const EXDEV: i32 = 18; // POSIX EXDEV value
 
         // We will only copy if:
         // 1. Files are on different devices (EXDEV error)
@@ -926,13 +928,9 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     }
 }
 
-#[cfg(not(any(windows, unix)))]
-fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
-    let path_symlink_points_to = fs::read_link(from)?;
-    Err(io::Error::new(
-        io::ErrorKind::Other,
-        translate!("mv-error-no-symlink-support"),
-    ))
+#[cfg(target_os = "wasi")]
+fn rename_symlink_fallback(_from: &Path, _to: &Path) -> io::Result<()> {
+    Err(io::Error::other(translate!("mv-error-no-symlink-support")))
 }
 
 fn rename_dir_fallback(
@@ -1255,14 +1253,13 @@ fn is_writable(path: &Path) -> (bool, Option<u32>) {
 
 #[cfg(unix)]
 fn get_interactive_prompt(to: &Path, cached_mode: Option<u32>) -> String {
-    use libc::mode_t;
     // Use cached mode if available, otherwise fetch it
     let mode = cached_mode.or_else(|| to.metadata().ok().map(|m| m.permissions().mode()));
     if let Some(mode) = mode {
         let file_mode = mode & 0o777;
         // Check if file is not writable by user
         if (mode & 0o200) == 0 {
-            let perms = display_permissions_unix(mode as mode_t, false);
+            let perms = display_permissions_unix(mode, false);
             let mode_info = format!("{file_mode:04o} ({perms})");
             return translate!("mv-prompt-overwrite-mode", "target" => to.quote(), "mode_info" => mode_info);
         }

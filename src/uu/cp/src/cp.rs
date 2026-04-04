@@ -1620,7 +1620,7 @@ fn file_mode_for_interactive_overwrite(
 
                         Some((
                             format!("{mode_without_leading_digits:04o}"),
-                            uucore::fs::display_permissions_unix(mode, false),
+                            uucore::fs::display_permissions_unix(mode as u32, false),
                         ))
                     }
                 }
@@ -1896,9 +1896,19 @@ pub(crate) fn copy_attributes(
 fn symlink_file(
     source: &Path,
     dest: &Path,
-    symlinked_files: &mut HashSet<FileInformation>,
+    #[cfg(not(target_os = "wasi"))] symlinked_files: &mut HashSet<FileInformation>,
+    #[cfg(target_os = "wasi")] _symlinked_files: &mut HashSet<FileInformation>,
 ) -> CopyResult<()> {
-    #[cfg(not(windows))]
+    #[cfg(target_os = "wasi")]
+    {
+        Err(CpError::IoErrContext(
+            io::Error::new(io::ErrorKind::Unsupported, "symlinks not supported"),
+            translate!("cp-error-cannot-create-symlink",
+                       "dest" => get_filename(dest).unwrap_or("?").quote(),
+                       "source" => get_filename(source).unwrap_or("?").quote()),
+        ))
+    }
+    #[cfg(not(any(windows, target_os = "wasi")))]
     {
         std::os::unix::fs::symlink(source, dest).map_err(|e| {
             CpError::IoErrContext(
@@ -1920,10 +1930,13 @@ fn symlink_file(
             )
         })?;
     }
-    if let Ok(file_info) = FileInformation::from_path(dest, false) {
-        symlinked_files.insert(file_info);
+    #[cfg(not(target_os = "wasi"))]
+    {
+        if let Ok(file_info) = FileInformation::from_path(dest, false) {
+            symlinked_files.insert(file_info);
+        }
+        Ok(())
     }
-    Ok(())
 }
 
 fn context_for(src: &Path, dest: &Path) -> String {

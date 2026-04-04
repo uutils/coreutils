@@ -1,4 +1,4 @@
-# spell-checker:ignore mandoc uudoc manpages dtolnay libsystemd libattr libcap DESTDIR
+# spell-checker:ignore mandoc uudoc manpages libsystemd libattr libcap DESTDIR
 
 name: Manpage Validation
 

@@ -131,6 +131,7 @@ feat_common_core = [
   "numfmt",
   "od",
   "paste",
+  "pathchk",
   "pr",
   "printenv",
   "printf",
@@ -178,12 +179,19 @@ feat_Tier1 = [
 # We don't need to support all of wasm targets. So the ambiguous name is used at here
 # It is bit complex to deduplicate with other lists
 feat_wasm = [
-  "basename",
+  "arch",
   "base32",
   "base64",
   "basenc",
+  "basename",
+  "cat",
+  "comm",
+  "cp",
+  "csplit",
   "cut",
+  "ls",
   "date",
+  "dir",
   "dircolors",
   "dirname",
   "echo",
@@ -192,28 +200,49 @@ feat_wasm = [
   "false",
   "fmt",
   "fold",
+  "head",
   "join",
   "link",
+  "ln",
+  "ls",
+  "mkdir",
+  "mv",
   "nl",
+  "nproc",
   "numfmt",
   "od",
   "paste",
+  "pathchk",
   "pr",
   "printenv",
+  "head",
   "printf",
   "ptx",
   "pwd",
+  "readlink",
+  "realpath",
+  "rm",
+  "rmdir",
   "seq",
+  "sort",
+  "split",
   "shred",
   "shuf",
   "sleep",
+  "sort",
   "sum",
+  "tail",
   "tee",
+  "touch",
+  "tr",
   "true",
   "truncate",
+  "tsort",
+  "uname",
   "unexpand",
   "uniq",
   "unlink",
+  "vdir",
   "wc",
   "yes",
   # cksum family
@@ -225,9 +254,6 @@ feat_wasm = [
   "sha256sum",
   "sha384sum",
   "sha512sum",
-  # useless?
-  "arch",
-  "uname",
 ]
 # "feat_os_unix" == set of utilities which can be built/run on modern/usual *nix platforms.
 feat_os_unix = [
@@ -287,7 +313,6 @@ feat_require_unix_core = [
   "mknod",
   "nice",
   "nohup",
-  "pathchk",
   "stat",
   "stty",
   "timeout",
@@ -316,7 +341,6 @@ feat_os_unix_fuchsia = [
   "mkfifo",
   "mknod",
   "nice",
-  "pathchk",
   "tty",
   "uname",
   "unlink",
@@ -430,6 +454,7 @@ rstest = "0.26.0"
 rstest_reuse = "0.7.0"
 rustc-hash = "2.1.1"
 rust-ini = "0.21.0"
+rustix = "1.1.4"
 same-file = "1.0.6"
 self_cell = "1.0.4"
 selinux = "=0.6.0"

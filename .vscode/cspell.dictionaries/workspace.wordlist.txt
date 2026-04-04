@@ -8,6 +8,7 @@ advapi32-sys
 aho-corasick
 backtrace
 blake2b_simd
+rustix
 
 # * uutils project
 uutils
@@ -184,9 +185,13 @@ LINESIZE
 NAMESIZE
 RTLD_NEXT
     RTLD
+RTMAX
+RTMIN
 SIGABRT
 SIGINT
 SIGKILL
+SIGRTMAX
+SIGRTMIN
 SIGSTOP
 SIGTERM
 SYS_fdatasync
@@ -362,6 +367,7 @@ uutils
 
 # * function names
 getcwd
+setpipe
 
 # * other
 getlimits

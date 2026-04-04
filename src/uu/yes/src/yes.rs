@@ -92,14 +92,9 @@ fn args_into_buffer<'a>(
 /// Assumes buf holds a single output line forged from the command line arguments, copies it
 /// repeatedly until the buffer holds as many copies as it can under [`BUF_SIZE`].
 fn prepare_buffer(buf: &mut Vec<u8>) {
-    if buf.len() * 2 > BUF_SIZE {
-        return;
-    }
-
-    assert!(!buf.is_empty());
-
     let line_len = buf.len();
-    let target_size = line_len * (BUF_SIZE / line_len);
+    debug_assert!(line_len > 0, "buffer is not empty since we have newline");
+    let target_size = line_len * (BUF_SIZE / line_len); // 0 if line_len is already large enough
 
     while buf.len() < target_size {
         let to_copy = std::cmp::min(target_size - buf.len(), buf.len());

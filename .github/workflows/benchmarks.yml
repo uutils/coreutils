@@ -1,6 +1,6 @@
 name: Benchmarks
 
-# spell-checker:ignore (people) dtolnay Swatinem taiki-e
+# spell-checker:ignore (people) taiki-e
 # spell-checker:ignore (misc) codspeed sccache
 
 on:
@@ -30,6 +30,7 @@ jobs:
           uu_base64,
           uu_cksum,
           uu_cp,
+          uu_cat,
           uu_cut,
           uu_dd,
           uu_df,

@@ -334,7 +334,7 @@ impl<'a> FilenameIterator<'a> {
 }
 
 impl Iterator for FilenameIterator<'_> {
-    type Item = String;
+    type Item = OsString;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.first_iteration {
@@ -344,12 +344,10 @@ impl Iterator for FilenameIterator<'_> {
         }
         // The first and third parts are just taken directly from the
         // struct parameters unchanged.
-        Some(format!(
-            "{}{}{}",
-            self.prefix.to_string_lossy(),
-            self.number,
-            self.additional_suffix.to_string_lossy()
-        ))
+        let mut filename = self.prefix.to_os_string();
+        filename.push(self.number.to_string());
+        filename.push(self.additional_suffix);
+        Some(filename)
     }
 }
 
@@ -511,5 +509,30 @@ mod tests {
         };
         let it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix);
         assert!(it.is_err());
+    }
+    #[test]
+    #[cfg(unix)]
+    fn test_filename_iterator_preserves_non_utf8_bytes() {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::{OsStrExt, OsStringExt};
+
+        let suffix = Suffix {
+            stype: SuffixType::Alphabetic,
+            length: 2,
+            start: 0,
+            auto_widening: false,
+            additional: std::ffi::OsString::from_vec(vec![0xFE]),
+        };
+
+        let mut it = FilenameIterator::new(OsStr::from_bytes(b"p\xFF"), &suffix)
+            .expect("valid fixed-width filename iterator");
+        assert_eq!(
+            it.next().expect("first chunk filename exists").into_vec(),
+            b"p\xFFaa\xFE".to_vec()
+        );
+        assert_eq!(
+            it.next().expect("second chunk filename exists").into_vec(),
+            b"p\xFFab\xFE".to_vec()
+        );
     }
 }
