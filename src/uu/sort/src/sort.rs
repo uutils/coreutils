@@ -42,7 +42,7 @@ use std::num::IntErrorKind;
 use std::num::NonZero;
 use std::ops::Range;
 #[cfg(unix)]
-use std::os::unix::ffi::{OsStrExt};
+use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::Utf8Error;
@@ -2045,26 +2045,35 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 path: files0_from.clone(),
                 error,
             })?;
-            #[cfg(unix)]
-            let f = OsStr::from_bytes(&line);
-            #[cfg(not(unix))]
-            let f_str = String::from_utf8_lossy(&line);
-            #[cfg(not(unix))]
-            let f = OsStr::new(f_str.as_ref());
 
-            if f == STDIN_FILE {
-                return Err(SortError::MinusInStdIn.into());
-            }
-            if f.is_empty() {
-                return Err(SortError::ZeroLengthFileName {
-                    file: files0_from,
-                    line_num: line_num + 1,
+            let f: OsString = {
+                #[cfg(unix)]
+                {
+                    OsStr::from_bytes(&line).to_os_string()
                 }
-                .into());
+                #[cfg(not(unix))]
+                {
+                    String::from_utf8_lossy(&line).into_owned().into()
+                }
+            };
+
+            match f.to_str() {
+                Some(s) if s == STDIN_FILE => {
+                    return Err(SortError::MinusInStdIn.into());
+                }
+                Some("") => {
+                    return Err(SortError::ZeroLengthFileName {
+                        file: files0_from,
+                        line_num: line_num + 1,
+                    }
+                    .into());
+                }
+                _ => {}
             }
 
-            files.push(f.to_os_string());
+            files.push(f);
         }
+
         if files.is_empty() {
             return Err(SortError::EmptyInputFile { file: files0_from }.into());
         }
