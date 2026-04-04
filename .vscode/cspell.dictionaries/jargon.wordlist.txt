@@ -219,6 +219,9 @@ nofield
 dtolnay
 Swatinem
 
+preopened
+dotdot
+
 # * clippy
 uninlined
 nonminimal
