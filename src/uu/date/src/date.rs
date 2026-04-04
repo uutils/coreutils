@@ -706,7 +706,8 @@ fn format_date_with_locale_aware_months(
     date: &Zoned,
     format_string: &str,
     config: &Config<PosixCustom>,
-    skip_localization: bool,
+    #[cfg(feature = "i18n-datetime")] skip_localization: bool,
+    #[cfg(not(feature = "i18n-datetime"))] _skip_localization: bool,
 ) -> Result<String, String> {
     // First check if format string has GNU modifiers (width/flags) and format if present
     // This optimization combines detection and formatting in a single pass
