@@ -308,6 +308,41 @@ fn create_english_bundle_from_embedded(
     }
 }
 
+/// Create a bundle from embedded locale files for any locale on WASI.
+/// Bypasses the global OnceLock cache (uses Box::leak) so it can be
+/// called for multiple locales in the same process.
+#[cfg(target_os = "wasi")]
+fn create_wasi_bundle_from_embedded(
+    locale: &LanguageIdentifier,
+    util_name: &str,
+) -> Result<FluentBundle<&'static FluentResource>, LocalizationError> {
+    let locale_str = locale.to_string();
+    let mut bundle: FluentBundle<&'static FluentResource> = FluentBundle::new(vec![locale.clone()]);
+    bundle.set_use_isolating(false);
+
+    let mut try_add = |key: &str| {
+        if let Some(content) = get_embedded_locale(key) {
+            if let Ok(resource) = FluentResource::try_new(content.to_string()) {
+                bundle.add_resource_overriding(Box::leak(Box::new(resource)));
+            }
+        }
+    };
+
+    try_add(&format!("uucore/{locale_str}.ftl"));
+    if util_name.ends_with("sum") {
+        try_add(&format!("checksum_common/{locale_str}.ftl"));
+    }
+    try_add(&format!("{util_name}/{locale_str}.ftl"));
+
+    if bundle.has_message("common-error") || bundle.has_message(&format!("{util_name}-about")) {
+        Ok(bundle)
+    } else {
+        Err(LocalizationError::LocalesDirNotFound(format!(
+            "No embedded locale found for {util_name}/{locale_str}"
+        )))
+    }
+}
+
 fn get_message_internal(id: &str, args: Option<FluentArgs>) -> String {
     LOCALIZER.with(|lock| {
         lock.get()
