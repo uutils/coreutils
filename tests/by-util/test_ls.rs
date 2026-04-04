@@ -7146,6 +7146,5 @@ fn test_ls_a_dotdot_no_error_on_wasi() {
         .arg("-1")
         .succeeds()
         .stdout_contains("..")
-        .stdout_contains(".")
         .no_stderr();
 }
