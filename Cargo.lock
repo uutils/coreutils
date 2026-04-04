@@ -3441,10 +3441,12 @@ dependencies = [
  "icu_locale",
  "jiff",
  "jiff-icu",
+ "libc",
  "nix",
  "parse_datetime",
  "regex",
  "tempfile",
+ "thiserror 2.0.18",
  "uucore",
  "windows-sys 0.61.2",
 ]

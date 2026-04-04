@@ -1970,9 +1970,11 @@ dependencies = [
  "icu_locale",
  "jiff",
  "jiff-icu",
+ "libc",
  "nix",
  "parse_datetime",
  "regex",
+ "thiserror",
  "uucore",
  "windows-sys 0.61.2",
 ]
