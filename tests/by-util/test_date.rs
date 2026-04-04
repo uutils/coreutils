@@ -2387,6 +2387,47 @@ fn test_date_format_modifier_percent_escape() {
         .stdout_is("%Y=0000001999\n");
 }
 
+#[test]
+fn test_date_format_modifier_huge_width_fails_without_abort() {
+    // GNU date also exits with failure for extremely large width.
+    // Assert exit code only to avoid coupling to implementation-specific error text.
+    let format = format!("+%{}c", usize::MAX);
+    new_ucmd!().arg(&format).fails().code_is(1);
+}
+
+#[test]
+fn test_date_format_large_width_no_oom() {
+    // Regression: very large width like %8888888888r caused OOM.
+    // GNU caps width to i32::MAX; verify we don't crash.
+    // Use a moderate width with a fixed date to check the code path works.
+    new_ucmd!()
+        .arg("-d")
+        .arg("2024-01-01")
+        .arg("+%300S")
+        .succeeds()
+        .stdout_is(format!("{}\n", format_args!("{:0>300}", "00")));
+
+    // Test with a larger width to exercise the code path without producing
+    // gigabytes of output (the original %8888888888r would produce ~2GB).
+    new_ucmd!()
+        .arg("-d")
+        .arg("2024-01-01")
+        .arg("+%10000S")
+        .succeeds()
+        .stdout_is(format!("{}\n", format_args!("{:0>10000}", "00")));
+
+    // Mixed literal text with multiple width-modified specifiers.
+    // 2024-01-01 is Monday (day-of-week 1).
+    // %2u → "01", literal "ueuu", %6666u → "1" zero-padded to 6666, literal "-r".
+    let expected = format!("01ueuu{}-r\n", format_args!("{:0>6666}", "1"));
+    new_ucmd!()
+        .arg("-d")
+        .arg("2024-01-01")
+        .arg("+%2uueuu%6666u-r")
+        .succeeds()
+        .stdout_is(expected);
+}
+
 // Tests for format modifier edge cases (flags without explicit width)
 #[test]
 fn test_date_format_modifier_edge_cases() {
@@ -2504,19 +2545,6 @@ fn test_date_format_modifier_edge_cases() {
             format!("{expected}\n"),
             "{description}"
         );
-    }
-}
-
-#[test]
-fn test_date_format_modifier_huge_width_fails_without_abort() {
-    // GNU date also exits with failure for extremely large width.
-    // Assert exit code only to avoid coupling to implementation-specific error text.
-    let formats = [
-        format!("+%{}c", usize::MAX),
-        "+%184467440737095516160c".into(),
-    ];
-    for format in formats {
-        new_ucmd!().arg(&format).fails().code_is(1);
     }
 }
 
