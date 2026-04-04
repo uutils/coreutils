@@ -40,24 +40,33 @@ const BUF_SIZE: usize = 256 * 1024;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn count_bytes_using_splice(fd: &impl AsFd) -> Result<usize, usize> {
     let null_file = uucore::pipes::dev_null().ok_or(0_usize)?;
-    // todo: avoid generating broker if input is pipe (fcntl_setpipe_size succeed) and directly splice() to /dev/null to save RAM usage
-    let (pipe_rd, pipe_wr) = pipe().map_err(|_| 0_usize)?;
-
     let mut byte_count = 0;
-    // improve throughput from pipe
-    let _ = rustix::pipe::fcntl_setpipe_size(fd, MAX_ROOTLESS_PIPE_SIZE);
-    loop {
-        match splice(fd, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
-            Ok(0) => break,
-            Ok(res) => {
-                byte_count += res;
-                // Silent the warning as we want to the error message
-                if splice_exact(&pipe_rd, &null_file, res).is_err() {
-                    return Err(byte_count);
-                }
+    if let Ok(res) = splice(fd, &null_file, MAX_ROOTLESS_PIPE_SIZE) {
+        byte_count += res;
+        // no need to increase pipe size of input fd since
+        // - sender with splice probably increased size already
+        // - sender without splice is bottleneck of our wc -c
+        loop {
+            match splice(fd, &null_file, MAX_ROOTLESS_PIPE_SIZE) {
+                Ok(0) => break,
+                Ok(res) => byte_count += res,
+                Err(_) => return Err(byte_count),
             }
-            Err(_) => return Err(byte_count),
         }
+    } else if let Ok((pipe_rd, pipe_wr)) = pipe() {
+        // input is not pipe. needs broker to use splice() with additional cost
+        loop {
+            match splice(fd, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
+                Ok(0) => break,
+                Ok(res) => {
+                    byte_count += res;
+                    splice_exact(&pipe_rd, &null_file, res).map_err(|_| byte_count)?;
+                }
+                Err(_) => return Err(byte_count),
+            }
+        }
+    } else {
+        return Ok(0_usize);
     }
 
     Ok(byte_count)
