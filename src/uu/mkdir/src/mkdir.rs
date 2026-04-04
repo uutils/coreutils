@@ -8,6 +8,8 @@
 use clap::builder::ValueParser;
 use clap::parser::ValuesRef;
 use clap::{Arg, ArgAction, ArgMatches, Command};
+#[cfg(unix)]
+use nix::sys::stat::{Mode, umask};
 use std::ffi::OsString;
 use std::io::{Write, stdout};
 use std::path::{Path, PathBuf};
@@ -252,23 +254,20 @@ fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
 
 /// RAII guard to restore umask on drop, ensuring cleanup even on panic.
 #[cfg(unix)]
-struct UmaskGuard(uucore::libc::mode_t);
+struct UmaskGuard(Mode);
 
 #[cfg(unix)]
 impl UmaskGuard {
-    /// Set umask to the given value and return a guard that restores the original on drop.
-    fn set(new_mask: uucore::libc::mode_t) -> Self {
-        let old_mask = unsafe { uucore::libc::umask(new_mask) };
-        Self(old_mask)
+    /// Set umask to 0 and return a guard that restores the original on drop.
+    fn new() -> Self {
+        Self(umask(Mode::empty()))
     }
 }
 
 #[cfg(unix)]
 impl Drop for UmaskGuard {
     fn drop(&mut self) {
-        unsafe {
-            uucore::libc::umask(self.0);
-        }
+        let _ = umask(self.0);
     }
 }
 
@@ -281,10 +280,7 @@ impl Drop for UmaskGuard {
 fn create_dir_with_mode(path: &Path, mode: u32) -> std::io::Result<()> {
     use std::os::unix::fs::DirBuilderExt;
 
-    // Temporarily set umask to 0 so the directory is created with the exact mode.
-    // The guard restores the original umask on drop, even if we panic.
-    let _guard = UmaskGuard::set(0);
-
+    let _guard = UmaskGuard::new();
     std::fs::DirBuilder::new().mode(mode).create(path)
 }
 
