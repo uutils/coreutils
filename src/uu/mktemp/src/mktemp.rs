@@ -434,9 +434,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("mktemp")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("mktemp"))
         .about(translate!("mktemp-about"))
         .override_usage(format_usage(&translate!("mktemp-usage")))
         .infer_long_args(true)
