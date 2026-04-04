@@ -34,9 +34,8 @@ pub(super) fn write_fast_using_splice<R: FdReadable, S: AsRawFd + AsFd>(
                 Err(_) => return Ok(true),
             }
         }
-    } else {
+    } else if let Ok((pipe_rd, pipe_wr)) = pipe() {
         // both of in/output are not pipe. needs broker to use splice() with additional costs
-        let (pipe_rd, pipe_wr) = pipe()?;
         loop {
             match splice(&handle.reader, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
                 Ok(0) => return Ok(false),
@@ -54,6 +53,8 @@ pub(super) fn write_fast_using_splice<R: FdReadable, S: AsRawFd + AsFd>(
                 Err(_) => return Ok(true),
             }
         }
+    } else {
+        Ok(true)
     }
 }
 
