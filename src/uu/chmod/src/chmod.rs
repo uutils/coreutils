@@ -174,11 +174,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("chmod")
         .version(uucore::crate_version!())
         .about(translate!("chmod-about"))
         .override_usage(format_usage(&translate!("chmod-usage")))
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("chmod"))
         .args_override_self(true)
         .infer_long_args(true)
         .no_binary_name(true)

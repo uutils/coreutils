@@ -450,9 +450,9 @@ pub fn uu_app() -> Command {
     #[cfg(not(any(unix, target_os = "windows")))]
     let polling_help = translate!("tail-help-polling-unix");
 
-    Command::new(uucore::util_name())
+    Command::new("tail")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("tail"))
         .about(translate!("tail-about"))
         .override_usage(format_usage(&translate!("tail-usage")))
         .infer_long_args(true)

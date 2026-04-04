@@ -85,7 +85,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    let cmd = Command::new(uucore::util_name())
+    let cmd = Command::new("runcon")
         .version(uucore::crate_version!())
         .about(translate!("runcon-about"))
         .after_help(translate!("runcon-after-help"))
