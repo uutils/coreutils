@@ -481,12 +481,27 @@ pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
         // Load both utility-specific and common strings
         init_localization(&locale, &locales_dir, p)?;
     } else {
-        // No locales directory found, use embedded English with common strings directly
+        // No locales directory found, use embedded locales
         let default_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
             .expect("Default locale should always be valid");
-        let english_bundle: FluentBundle<&'static FluentResource> =
-            create_english_bundle_from_embedded(&default_locale, p)?;
-        let localizer = Localizer::new(english_bundle);
+
+        #[cfg(target_os = "wasi")]
+        let localizer = {
+            let english_bundle = create_wasi_bundle_from_embedded(&default_locale, p)?;
+            if locale == default_locale {
+                Localizer::new(english_bundle)
+            } else if let Ok(localized) = create_wasi_bundle_from_embedded(&locale, p) {
+                Localizer::new(localized).with_fallback(english_bundle)
+            } else {
+                Localizer::new(english_bundle)
+            }
+        };
+
+        #[cfg(not(target_os = "wasi"))]
+        let localizer = {
+            let english_bundle = create_english_bundle_from_embedded(&default_locale, p)?;
+            Localizer::new(english_bundle)
+        };
 
         LOCALIZER.with(|lock| {
             lock.set(localizer)
