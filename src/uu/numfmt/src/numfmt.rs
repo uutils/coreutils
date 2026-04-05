@@ -194,20 +194,15 @@ fn parse_unit_size_suffix(s: &str) -> Option<usize> {
         return Some(1);
     }
 
-    let suffix = s.chars().next().unwrap();
-
-    if let Some(i) = ['K', 'M', 'G', 'T', 'P', 'E']
+    let i = ['K', 'M', 'G', 'T', 'P', 'E']
         .iter()
-        .position(|&ch| ch == suffix)
-    {
-        return match s.len() {
-            1 => Some(SI_BASES[i + 1] as usize),
-            2 if s.ends_with('i') => Some(IEC_BASES[i + 1] as usize),
-            _ => None,
-        };
-    }
+        .position(|&ch| s.starts_with(ch))?;
 
-    None
+    match s.len() {
+        1 => Some(SI_BASES[i + 1] as usize),
+        2 if s.ends_with('i') => Some(IEC_BASES[i + 1] as usize),
+        _ => None,
+    }
 }
 
 /// Parse delimiter argument, ensuring it's a single character.
