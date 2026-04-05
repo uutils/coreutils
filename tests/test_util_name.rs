@@ -28,6 +28,22 @@ fn init() {
 
 #[test]
 #[cfg(all(feature = "env", any(target_os = "linux", target_os = "android")))]
+fn binary_name_symlink_chain() {
+    let ts = TestScenario::new("chain");
+    let core_path = &ts.bin_path;
+    let env_path = ts.fixtures.plus("prefixed-env");
+    let dummy_path = ts.fixtures.plus("dummy");
+    symlink_file(core_path, &env_path).unwrap();
+    symlink_file(&env_path, &dummy_path).unwrap();
+    let is_env = std::process::Command::new(&dummy_path)
+        .status()
+        .unwrap()
+        .success();
+    assert!(is_env, "symlink chain dummy -> env -> coreutils failed");
+}
+
+#[test]
+#[cfg(all(feature = "env", any(target_os = "linux", target_os = "android")))]
 fn binary_name_protection() {
     let ts = TestScenario::new("env");
     let bin = ts.bin_path.clone();

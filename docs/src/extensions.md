@@ -25,11 +25,14 @@ $ ls -w=80
 With GNU coreutils, `--help` usually prints the help message and `--version` prints the version.
 We also commonly provide short options: `-h` for help and `-V` for version.
 
-## `coreutils`
+## `coreutils` (multi-call binary)
 
 Our `coreutils` calls utility by `coreutils utility-name` and has `--list` to run against busybox test suite.
 Our `coreutils` is called as `utility-name` if its binary name ends with `utility-name` to support prefixed names.
 Longer name is prioritized e.g. `sum` with the prefix `ck` is called as `cksum`.
+
+On Linux, the symlink chain `dummy` -> `utility-name` -> `coreutils` tries to run `utility-name`
+i.e. `dummy` tries to behave like individual binaries. It is important if `utility-name` is `true`.
 
 ## `env`
 

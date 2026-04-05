@@ -94,15 +94,17 @@ pub fn binary_path(args: &mut impl Iterator<Item = OsString>) -> PathBuf {
     let exec_path = Path::new(OsStr::from_bytes(execfn_bytes));
     let argv0 = args.next().unwrap();
     let mut shebang_buf = [0u8; 2];
-    // exec_path is wrong when called from shebang or memfd_create (/proc/self/fd/*)
-    // argv0 is not full-path when called from PATH
     if execfn_bytes.rsplit(|&b| b == b'/').next() == argv0.as_bytes().rsplit(|&b| b == b'/').next()
-        || execfn_bytes.starts_with(b"/proc/")
+    {
+        // argv0 is not full-path when called from PATH
+        exec_path.into()
+    } else if execfn_bytes.starts_with(b"/proc/")
         || (File::open(Path::new(exec_path))
             .and_then(|mut f| f.read_exact(&mut shebang_buf))
             .is_ok()
             && &shebang_buf == b"#!")
     {
+        // exec_path is wrong when called from shebang or memfd_create (/proc/self/fd/*)
         argv0.into()
     } else {
         exec_path.into()

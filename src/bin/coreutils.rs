@@ -73,6 +73,18 @@ fn main() {
         // todo: Remove support of "*box" from binary
         uucore::set_utility_is_second_arg();
         args.next()
+    // with the invalid_name -> true -> coreutils symlink chain, run true
+    // this is possible on the platform not using argv0
+    } else if cfg!(any(target_os = "linux", target_os = "android"))
+        && let Ok(binary) = std::fs::read_link(&binary)
+        && let Some(valid) = validation::name(&binary)
+        && !valid.ends_with("utils")
+        && let Some(&matched) = utils
+            .keys()
+            .filter(|&&u| valid.ends_with(u))
+            .max_by_key(|u| u.len())
+    {
+        Some(OsString::from(matched))
     } else {
         validation::not_found(&OsString::from(binary_as_util));
     };
