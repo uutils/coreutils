@@ -30,7 +30,7 @@ numfmt-after-help = Options d'UNITÉ :
   Plusieurs champs/plages peuvent être séparés par des virgules
 
   FORMAT doit être adapté pour imprimer un argument à virgule flottante %f.
-  Une guillemet optionnelle (%'f) activera --grouping (si supporté par la locale actuelle).
+  Une guillemet optionnelle (%'f) activera --grouping (si pris en charge par la locale actuelle).
   Une valeur de largeur optionnelle (%10f) remplira la sortie. Un zéro optionnel (%010f)
   remplira le nombre de zéros. Des valeurs négatives optionnelles (%-10f) aligneront à gauche.
   Une précision optionnelle (%.1f) remplacera la précision déterminée par l'entrée.
@@ -51,7 +51,7 @@ numfmt-help-invalid = définir le mode d'échec pour les entrées invalides
 numfmt-help-zero-terminated = le délimiteur de ligne est NUL, pas retour à la ligne
 
 # Messages d'erreur
-numfmt-error-unsupported-unit = Une unité non supportée est spécifiée
+numfmt-error-unsupported-unit = Une unité non prise en charge est spécifiée
 numfmt-error-invalid-unit-size = taille d'unité invalide : { $size }
 numfmt-error-invalid-padding = valeur de remplissage invalide { $value }
 numfmt-error-invalid-header = valeur d'en-tête invalide { $value }
@@ -63,9 +63,9 @@ numfmt-error-invalid-specific-suffix = suffixe invalide dans l'entrée { $input 
 numfmt-error-invalid-number = nombre invalide : { $input }
 numfmt-error-missing-i-suffix = suffixe 'i' manquant dans l'entrée : '{ $number }{ $suffix }' (par ex. Ki/Mi/Gi)
 numfmt-error-rejecting-suffix = rejet du suffixe dans l'entrée : '{ $number }{ $suffix }' (considérez utiliser --from)
-numfmt-error-suffix-unsupported-for-unit = Ce suffixe n'est pas supporté pour l'unité spécifiée
-numfmt-error-unit-auto-not-supported-with-to = L'unité 'auto' n'est pas supportée avec les options --to
-numfmt-error-number-too-big = Le nombre est trop grand et non supporté
+numfmt-error-suffix-unsupported-for-unit = Ce suffixe n'est pas pris en charge pour l'unité spécifiée
+numfmt-error-unit-auto-not-supported-with-to = L'unité 'auto' n'est pas prise en charge avec les options --to
+numfmt-error-number-too-big = Le nombre est trop grand et non pris en charge
 numfmt-error-format-no-percent = le format '{ $format }' n'a pas de directive %
 numfmt-error-format-ends-in-percent = le format '{ $format }' se termine par %
 numfmt-error-invalid-format-directive = format invalide '{ $format }', la directive doit être %[0]['][-][N][.][N]f
