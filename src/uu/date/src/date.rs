@@ -985,12 +985,12 @@ fn get_clock_resolution() -> Timestamp {
 /// as `CLOCK_REALTIME` is required to be supported.
 /// Failure would indicate a non-conforming or otherwise broken implementation.
 fn get_clock_resolution() -> Timestamp {
-    use nix::time::{ClockId, clock_getres};
+    use rustix::time::{ClockId, clock_getres};
 
-    let timespec = clock_getres(ClockId::CLOCK_REALTIME).unwrap();
+    let timespec = clock_getres(ClockId::Realtime);
 
-    #[allow(clippy::unnecessary_cast)] // Cast required on 32-bit platforms
-    Timestamp::constant(timespec.tv_sec() as _, timespec.tv_nsec() as _)
+    #[allow(clippy::unnecessary_cast, reason = "needed for 32 bit target")]
+    Timestamp::constant(timespec.tv_sec as _, timespec.tv_nsec as _)
 }
 
 #[cfg(all(unix, target_os = "redox"))]
@@ -1047,12 +1047,16 @@ fn set_system_datetime(_date: Zoned) -> UResult<()> {
 /// `<https://linux.die.net/man/3/clock_settime>`
 /// `<https://www.gnu.org/software/libc/manual/html_node/Time-Types.html>`
 fn set_system_datetime(date: Zoned) -> UResult<()> {
-    use nix::{sys::time::TimeSpec, time::ClockId};
+    use rustix::time::{ClockId, Timespec, clock_settime};
 
     let ts = date.timestamp();
-    let timespec = TimeSpec::new(ts.as_second() as _, ts.subsec_nanosecond() as _);
+    let timespec = Timespec {
+        tv_sec: ts.as_second() as _,
+        tv_nsec: ts.subsec_nanosecond() as _,
+    };
 
-    nix::time::clock_settime(ClockId::CLOCK_REALTIME, timespec)
+    clock_settime(ClockId::Realtime, timespec)
+        .map_err(std::io::Error::from)
         .map_err_context(|| translate!("date-error-cannot-set-date"))
 }
 
