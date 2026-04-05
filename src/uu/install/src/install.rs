@@ -1106,11 +1106,7 @@ fn finalize_installed_file(
     }
 
     if b.verbose {
-        write!(
-            stdout(),
-            "{}",
-            translate!("install-verbose-copy", "from" => from.quote(), "to" => to.quote())
-        )?;
+        write!(stdout(), "{} -> {}", from.quote(), to.quote())?;
         match backup_path {
             Some(path) => writeln!(
                 stdout(),

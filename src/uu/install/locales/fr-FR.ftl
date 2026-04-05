@@ -57,5 +57,4 @@ install-warning-compare-ignored = l'option --compare (-C) est ignorée quand un 
 install-verbose-creating-directory = création du répertoire { $path }
 install-verbose-creating-directory-step = install : création du répertoire { $path }
 install-verbose-removed = supprimé { $path }
-install-verbose-copy = { $from } -> { $to }
 install-verbose-backup = (sauvegarde : { $backup })
