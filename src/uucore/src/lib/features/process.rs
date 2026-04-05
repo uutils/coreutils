@@ -7,16 +7,17 @@
 // spell-checker:ignore (sys/unix) WIFSIGNALED ESRCH
 // spell-checker:ignore pgrep pwait snice getpgrp
 
-use libc::{gid_t, pid_t, uid_t};
+use libc::{gid_t, pid_t, uid_t, waitpid};
 #[cfg(not(target_os = "redox"))]
 use nix::errno::Errno;
 use nix::sys::signal::{self as nix_signal, SigHandler, Signal};
 use nix::unistd::Pid;
 use std::io;
+use std::os::unix::process::ExitStatusExt;
 use std::process::Child;
 use std::process::ExitStatus;
-use std::sync::atomic;
 use std::sync::atomic::AtomicBool;
+use std::sync::{atomic, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -145,10 +146,22 @@ impl ChildExt for Child {
         // .try_wait() doesn't drop stdin, so we do it manually
         drop(self.stdin.take());
 
+        let (tx, rx) = mpsc::channel();
+
+        let pid = self.id();
+
+        thread::spawn(move || {
+            let mut status = 0;
+
+            unsafe { waitpid(pid as i32, &raw mut status, 0) };
+
+            _ = tx.send(status);
+        });
+
         let start = Instant::now();
         loop {
-            if let Some(status) = self.try_wait()? {
-                return Ok(Some(status));
+            if let Ok(v) = rx.recv_timeout(Duration::from_millis(100)) {
+                return Ok(Some(ExitStatus::from_raw(v)));
             }
 
             if start.elapsed() >= timeout
@@ -156,11 +169,6 @@ impl ChildExt for Child {
             {
                 break;
             }
-
-            // XXX: this is kinda gross, but it's cleaner than starting a thread just to wait
-            //      (which was the previous solution).  We might want to use a different duration
-            //      here as well
-            thread::sleep(Duration::from_millis(100));
         }
 
         Ok(None)
