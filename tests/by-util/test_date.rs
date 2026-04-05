@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 //
 // spell-checker: ignore: AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado febr MEST KST uueuu ueuu
+// spell-checker: ignore: uppercases
 
 use std::cmp::Ordering;
 
@@ -1822,6 +1823,168 @@ fn test_date_parenthesis_comment() {
             .arg(format)
             .succeeds()
             .stdout_only(expected);
+    }
+}
+
+#[test]
+#[ignore = "https://github.com/uutils/coreutils/issues/11660 — GNU date pads to the requested width when it is narrower than the default (e.g. `%02j` on day-1 -> `01`); uutils strips leading zeros to `1`."]
+fn test_date_strftime_narrow_width_on_wide_default() {
+    // `%j` has a default width of 3. Requesting `%02j` on day 1 should yield `01`.
+    // uutils currently yields `1`.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2024-01-01")
+        .arg("+%02j")
+        .succeeds()
+        .stdout_is("01\n");
+}
+
+#[test]
+#[ignore = "https://github.com/uutils/parse_datetime/issues/283 — GNU date floors negative fractional epochs (`@-1.5` -> -2); uutils truncates toward zero (-> -1)."]
+fn test_date_negative_fractional_epoch_flooring() {
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("@-1.5")
+        .arg("+%s")
+        .succeeds()
+        .stdout_is("-2\n");
+}
+
+#[test]
+#[ignore = "https://github.com/uutils/parse_datetime/issues/282 — parse_datetime rejects `HH:MM am/pm` forms (e.g. `2024-06-15 12:00 PM`, `2024-06-15 11:30am`). GNU date accepts them."]
+fn test_date_input_hhmm_ampm() {
+    for input in [
+        "2024-06-15 12:00 PM",
+        "2024-06-15 11:30am",
+        "2024-06-15 3:00 PM",
+    ] {
+        new_ucmd!()
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg(input)
+            .arg("+%H:%M")
+            .succeeds();
+    }
+}
+
+#[test]
+#[ignore = "https://github.com/uutils/parse_datetime/issues/281 — GNU date re-zones input with trailing TZ abbreviation (e.g. `2024-01-01 EST`) into the local TZ; uutils keeps the input TZ on output."]
+fn test_date_input_trailing_tz_abbrev_rezones() {
+    // `TZ=UTC+1 date -d '2024-01-01 EST'` should display the instant in UTC+1
+    // (GNU: 04:00:00 UTC), not leave it in EST (uutils: 00:00:00 -05).
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC+1")
+        .arg("-d")
+        .arg("2024-01-01 EST")
+        .arg("+%H:%M:%S %:z")
+        .succeeds()
+        .stdout_is("04:00:00 -01:00\n");
+}
+
+#[test]
+#[ignore = "https://github.com/uutils/coreutils/issues/11659 — GNU date treats the `#` case-swap flag as no-op on `%P` (already-lowercase alt); uutils uppercases it to `PM`."]
+fn test_date_strftime_case_flag_on_alt_ampm() {
+    // `%P` is GNU's lowercase am/pm. `%#P` should stay lowercase in GNU; uutils flips to `PM`.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2024-06-15 13:45:30")
+        .arg("+%#P")
+        .succeeds()
+        .stdout_is("pm\n");
+}
+
+#[test]
+#[ignore = "https://github.com/uutils/coreutils/issues/11658 — GNU date applies flags/widths to `%N` (nanoseconds); uutils ignores/mishandles them."]
+fn test_date_strftime_n_width_and_flags() {
+    // `%_3N` should space-pad nanoseconds to width 3. GNU outputs `0  `; uutils outputs `0`.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("@0")
+        .arg("+%_3N")
+        .succeeds()
+        .stdout_is("0  \n");
+    // `%-N` (no-padding flag) should still output the full 9-digit default.
+    // GNU: `000000000`; uutils: `0`.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("@0")
+        .arg("+%-N")
+        .succeeds()
+        .stdout_is("000000000\n");
+}
+
+#[test]
+#[ignore = "https://github.com/uutils/coreutils/issues/11657 — GNU date treats composite strftime specifiers (%D, %F, %T, ...) as atomic; flags like `-` should not propagate to sub-fields."]
+fn test_date_strftime_flag_on_composite() {
+    // GNU `%-D` keeps `06/15/24` (flag ignored on composite).
+    // uutils applies `-` to inner `%m`, producing `6/15/24`.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2024-06-15")
+        .arg("+%-D")
+        .succeeds()
+        .stdout_is("06/15/24\n");
+}
+
+#[test]
+#[ignore = "https://github.com/uutils/coreutils/issues/11656 — GNU date strips the `O` strftime modifier in C locale (e.g. `%Om` -> `%m`); uutils leaks it as literal `%om`."]
+fn test_date_strftime_o_modifier() {
+    // In C locale the `O` modifier is a no-op (alternative numeric symbols).
+    // GNU renders `%Om` as `06` for June; uutils renders it as the literal `%Om`.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2024-06-15")
+        .arg("+%Om-%Oy-%Ol")
+        .succeeds()
+        .stdout_is("06-24-12\n");
+}
+
+#[test]
+#[ignore = "https://github.com/uutils/parse_datetime/issues/280 — GNU date accepts bare timezone abbreviations (UT, GMT, ...) meaning `now in that TZ`; parse_datetime rejects them."]
+fn test_date_bare_timezone_abbreviation() {
+    // GNU: `date -d ut`, `date -d UT`, `date -d gmt` → current time in UTC.
+    // uutils: "invalid date" error.
+    for input in ["ut", "UT", "gmt", "GMT"] {
+        new_ucmd!()
+            .env("TZ", "UTC+1")
+            .arg("-d")
+            .arg(input)
+            .arg("+%Z")
+            .succeeds()
+            .stdout_is("UTC\n");
+    }
+}
+
+#[test]
+#[ignore = "https://github.com/uutils/parse_datetime/issues/279 — GNU date silently ignores unrecognized trailing tokens (e.g. `8j`), but parse_datetime rejects them."]
+fn test_date_ignores_unrecognized_trailing_tokens() {
+    // GNU compatibility: trailing unknown word-tokens after a valid number are ignored.
+    // GNU parses `8j`, `8 j`, etc. as hour 8; our parse_datetime crate errors out.
+    for input in ["8j", "8 j"] {
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .arg("-u")
+            .arg("-d")
+            .arg(input)
+            .arg("+%H:%M:%S")
+            .succeeds()
+            .stdout_only("08:00:00\n");
     }
 }
 
