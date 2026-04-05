@@ -7,7 +7,7 @@ use super::{CatResult, FdReadable, InputHandle};
 use rustix::io::{read, write};
 use std::os::{fd::AsFd, unix::io::AsRawFd};
 
-use uucore::pipes::{MAX_ROOTLESS_PIPE_SIZE, pipe, splice, splice_exact};
+use uucore::pipes::{MAX_ROOTLESS_PIPE_SIZE, is_end_of_file, pipe, splice, splice_exact};
 
 const BUF_SIZE: usize = 1024 * 16;
 
@@ -30,7 +30,7 @@ pub(super) fn write_fast_using_splice<R: FdReadable, S: AsRawFd + AsFd>(
         loop {
             match splice(&handle.reader, &write_fd, MAX_ROOTLESS_PIPE_SIZE) {
                 Ok(1..) => {}
-                Ok(0) => return Ok(false),
+                Ok(0) => return Ok(!is_end_of_file(&handle.reader)),
                 Err(_) => return Ok(true),
             }
         }
@@ -38,7 +38,7 @@ pub(super) fn write_fast_using_splice<R: FdReadable, S: AsRawFd + AsFd>(
         // both of in/output are not pipe. needs broker to use splice() with additional costs
         loop {
             match splice(&handle.reader, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
-                Ok(0) => return Ok(false),
+                Ok(0) => return Ok(!is_end_of_file(&handle.reader)),
                 Ok(n) => {
                     if splice_exact(&pipe_rd, write_fd, n).is_err() {
                         // If the first splice manages to copy to the intermediate

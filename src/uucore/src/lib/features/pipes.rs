@@ -52,6 +52,27 @@ pub fn splice(source: &impl AsFd, target: &impl AsFd, len: usize) -> std::io::Re
     )?)
 }
 
+/// check that splice reached to end of file
+/// ignore 2nd Ctrl + D
+/// <https://github.com/uutils/coreutils/issues/9609>
+#[inline]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn is_end_of_file(source: &impl AsFd) -> bool {
+    use rustix::event::{PollFd, PollFlags, poll};
+    use rustix::time::Timespec;
+    let mut pfd = [PollFd::new(source, PollFlags::IN)];
+    matches!(
+        poll(
+            &mut pfd,
+            Some(&Timespec {
+                tv_sec: 0,
+                tv_nsec: 0
+            })
+        ),
+        Ok(0)
+    )
+}
+
 /// Splice wrapper which fully finishes the write.
 ///
 /// Exactly `len` bytes are moved from `source` into `target`.
