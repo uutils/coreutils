@@ -252,13 +252,13 @@ fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
 
 /// RAII guard to restore umask on drop, ensuring cleanup even on panic.
 #[cfg(unix)]
-struct UmaskGuard(uucore::libc::mode_t);
+struct UmaskGuard(rustix::fs::Mode);
 
 #[cfg(unix)]
 impl UmaskGuard {
     /// Set umask to the given value and return a guard that restores the original on drop.
-    fn set(new_mask: uucore::libc::mode_t) -> Self {
-        let old_mask = unsafe { uucore::libc::umask(new_mask) };
+    fn set(new_mask: rustix::fs::Mode) -> Self {
+        let old_mask = rustix::process::umask(new_mask);
         Self(old_mask)
     }
 }
@@ -266,9 +266,7 @@ impl UmaskGuard {
 #[cfg(unix)]
 impl Drop for UmaskGuard {
     fn drop(&mut self) {
-        unsafe {
-            uucore::libc::umask(self.0);
-        }
+        rustix::process::umask(self.0);
     }
 }
 
@@ -283,7 +281,7 @@ fn create_dir_with_mode(path: &Path, mode: u32) -> std::io::Result<()> {
 
     // Temporarily set umask to 0 so the directory is created with the exact mode.
     // The guard restores the original umask on drop, even if we panic.
-    let _guard = UmaskGuard::set(0);
+    let _guard = UmaskGuard::set(rustix::fs::Mode::empty());
 
     std::fs::DirBuilder::new().mode(mode).create(path)
 }
