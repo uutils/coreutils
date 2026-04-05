@@ -11,18 +11,20 @@ use rustix::pipe::{SpliceFlags, fcntl_setpipe_size};
 use std::fs::File;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::fd::AsFd;
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub const MAX_ROOTLESS_PIPE_SIZE: usize = 1024 * 1024;
 
 /// A wrapper around [`rustix::pipe::pipe`] that ensures the pipe is cleaned up.
 ///
 /// Returns two `File` objects: everything written to the second can be read
 /// from the first.
-/// This is used only for resolving the limitation for splice: one of a input or output should be pipe
+/// used for resolving the limitation for splice: one of a input or output should be pipe
 #[inline]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(target_os = "linux", target_os = "android", test))]
 pub fn pipe() -> std::io::Result<(File, File)> {
     let (read, write) = rustix::pipe::pipe()?;
     // improve performance for splice
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     let _ = fcntl_setpipe_size(&read, MAX_ROOTLESS_PIPE_SIZE);
 
     Ok((File::from(read), File::from(write)))
