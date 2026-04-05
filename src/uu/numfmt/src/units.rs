@@ -33,8 +33,9 @@ pub enum Unit {
 pub type Result<T> = std::result::Result<T, String>;
 
 #[derive(Clone, Copy, Debug)]
+#[repr(usize)]
 pub enum RawSuffix {
-    K,
+    K = 0,
     M,
     G,
     T,
@@ -44,6 +45,15 @@ pub enum RawSuffix {
     Y,
     R,
     Q,
+}
+
+impl RawSuffix {
+    /// Index of this suffix in [`SI_BASES`] / [`IEC_BASES`] minus one.
+    /// `K` is 0, `M` is 1, ..., `Q` is 9. The associated base is
+    /// `BASES[self.index() + 1]`.
+    pub fn index(self) -> usize {
+        self as usize
+    }
 }
 
 impl TryFrom<&char> for RawSuffix {
@@ -70,25 +80,20 @@ pub type Suffix = (RawSuffix, WithI);
 
 pub struct DisplayableSuffix(pub Suffix, pub Unit);
 
+/// Upper-case characters for each [`RawSuffix`], indexed by [`RawSuffix::index`].
+const SUFFIX_CHARS: [char; 10] = ['K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y', 'R', 'Q'];
+
 impl fmt::Display for DisplayableSuffix {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let Self((ref raw_suffix, ref with_i), unit) = *self;
-        match (raw_suffix, unit) {
-            (RawSuffix::K, Unit::Si) => write!(f, "k"),
-            (RawSuffix::K, _) => write!(f, "K"),
-            (RawSuffix::M, _) => write!(f, "M"),
-            (RawSuffix::G, _) => write!(f, "G"),
-            (RawSuffix::T, _) => write!(f, "T"),
-            (RawSuffix::P, _) => write!(f, "P"),
-            (RawSuffix::E, _) => write!(f, "E"),
-            (RawSuffix::Z, _) => write!(f, "Z"),
-            (RawSuffix::Y, _) => write!(f, "Y"),
-            (RawSuffix::R, _) => write!(f, "R"),
-            (RawSuffix::Q, _) => write!(f, "Q"),
+        let Self((raw_suffix, with_i), unit) = *self;
+        let ch = match (raw_suffix, unit) {
+            (RawSuffix::K, Unit::Si) => 'k',
+            _ => SUFFIX_CHARS[raw_suffix.index()],
+        };
+        write!(f, "{ch}")?;
+        if with_i {
+            write!(f, "i")?;
         }
-        .and_then(|()| match with_i {
-            true => write!(f, "i"),
-            false => Ok(()),
-        })
+        Ok(())
     }
 }
