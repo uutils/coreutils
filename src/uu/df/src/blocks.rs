@@ -9,36 +9,10 @@ use std::{env, fmt};
 
 use uucore::{
     display::Quotable,
-    parser::parse_size::{ParseSizeError, parse_size_non_zero_u64, parse_size_u64},
+    parser::parse_size::{
+        IEC_BASES, ParseSizeError, SI_BASES, parse_size_non_zero_u64, parse_size_u64,
+    },
 };
-
-/// The first ten powers of 1024.
-const IEC_BASES: [u128; 10] = [
-    1,
-    1_024,
-    1_048_576,
-    1_073_741_824,
-    1_099_511_627_776,
-    1_125_899_906_842_624,
-    1_152_921_504_606_846_976,
-    1_180_591_620_717_411_303_424,
-    1_208_925_819_614_629_174_706_176,
-    1_237_940_039_285_380_274_899_124_224,
-];
-
-/// The first ten powers of 1000.
-const SI_BASES: [u128; 10] = [
-    1,
-    1_000,
-    1_000_000,
-    1_000_000_000,
-    1_000_000_000_000,
-    1_000_000_000_000_000,
-    1_000_000_000_000_000_000,
-    1_000_000_000_000_000_000_000,
-    1_000_000_000_000_000_000_000_000,
-    1_000_000_000_000_000_000_000_000_000,
-];
 
 /// A `SuffixType` determines whether the suffixes are 1000 or 1024 based, and whether they are
 /// intended for `HumanReadable` mode or not.
@@ -50,8 +24,8 @@ pub(crate) enum SuffixType {
 }
 
 impl SuffixType {
-    /// The first ten powers of 1024 and 1000, respectively.
-    fn bases(self) -> [u128; 10] {
+    /// The first eleven powers of 1024 and 1000, respectively.
+    fn bases(self) -> [u128; 11] {
         match self {
             Self::Iec | Self::HumanReadable(HumanReadable::Binary) => IEC_BASES,
             Self::Si | Self::HumanReadable(HumanReadable::Decimal) => SI_BASES,
