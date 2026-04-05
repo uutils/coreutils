@@ -2,7 +2,7 @@
 # `build-gnu.bash` ~ builds GNU coreutils (from supplied sources)
 #
 
-# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW
+# spell-checker:ignore (paths) abmon deref discrim eacces getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW
 # spell-checker:ignore baddecode submodules xstrtol distros ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) greadlink gsed multihardlink texinfo CARGOFLAGS
 # spell-checker:ignore openat TOCTOU CFLAGS tmpfs gnproc
 
@@ -90,15 +90,16 @@ cd -
 export CARGOFLAGS # tell to make
 if [ "${SELINUX_ENABLED}" = 1 ];then
     # Build few utils for SELinux for faster build. MULTICALL=y fails...
-    make UTILS="cat chcon chmod cp cut dd echo env groups id install ln ls mkdir mkfifo mknod mktemp mv printf rm rmdir runcon seq stat test touch tr true uname wc whoami"
+    make UTILS="cat chcon chmod cp cut dd echo env groups id install ln ls mkdir mkfifo mknod mktemp mv printf realpath rm rmdir runcon seq stat test touch tr true uname wc whoami"
 else
     # Use MULTICALL=y for faster build
     make MULTICALL=y SKIP_UTILS=more
     for binary in $("${UU_BUILD_DIR}"/coreutils --list)
-        do [ -e "${UU_BUILD_DIR}/${binary}" ] || ln -vf "${UU_BUILD_DIR}/coreutils" "${UU_BUILD_DIR}/${binary}"
+        do ln -vf "${UU_BUILD_DIR}/coreutils" "${UU_BUILD_DIR}/${binary}"
     done
+    ln -vf "${UU_BUILD_DIR}"/deps/libstdbuf.* -t "${UU_BUILD_DIR}"
 fi
-[ -e "${UU_BUILD_DIR}/ginstall" ] || ln -vf "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests use ginstall
+ln -vf "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests use ginstall
 ##
 
 cd "${path_GNU}" && echo "[ pwd:'${PWD}' ]"
@@ -124,7 +125,7 @@ else
     : > man/local.mk
     # Use CFLAGS for best build time since we discard GNU coreutils
     CFLAGS="${CFLAGS} -pipe -O0 -s" ./configure -C --quiet --disable-gcc-warnings --disable-nls --disable-dependency-tracking --disable-bold-man-page-references \
-      --enable-single-binary=symlinks --enable-install-program="arch,kill,uptime,hostname" \
+      --enable-single-binary=hardlinks --enable-install-program="arch,kill,uptime,hostname" \
       "$([ "${SELINUX_ENABLED}" = 1 ] && echo --with-selinux || echo --without-selinux)"
     #Add timeout to to protect against hangs
     sed -i 's|^"\$@|'"${SYSTEM_TIMEOUT}"' 600 "\$@|' build-aux/test-driver
@@ -140,7 +141,7 @@ else
 
     # Handle generated factor tests
     t_first=00
-    t_max=37
+    t_max=40
     seq=$(
         i=${t_first}
         while test "${i}" -le "${t_max}"; do
@@ -149,8 +150,8 @@ else
         done
        )
     for i in ${seq}; do
-        echo "strip t${i}.sh from Makefile"
-        sed -i -e "s/\$(tf)\/t${i}.sh//g" Makefile
+        echo "strip t${i}.sh from Makefile and tests/local.mk"
+        sed -i -e "s/\$(tf)\/t${i}.sh//g" Makefile tests/local.mk
     done
 
     # Remove tests checking for --version & --help
@@ -159,9 +160,26 @@ else
     touch gnu-built
 fi
 
+# Keep getlimits available on PATH for GNU shell and Perl tests even when
+# reusing an existing GNU build directory.
+test -f src/getlimits && cp -f src/getlimits "${UU_BUILD_DIR}"
+
+# Keep Makefile.in newer than the local.mk files we just modified,
+# and Makefile newer than Makefile.in, so make won't re-run
+# automake or config.status and undo our edits.
+touch Makefile.in Makefile
+
+# Patch the Makefile PATH to point to uutils build dir instead of GNU src/
+sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
+# Prevent make check from rebuilding the GNU binaries over the uutils ones
+sed -i 's/^check-am: all-am/check-am:/' Makefile
+
 grep -rl 'path_prepend_' tests/* | xargs -r "${SED}" -i 's| path_prepend_ ./src||'
 # path_prepend_ sets $abs_path_dir_: set it manually instead.
 grep -rl '\$abs_path_dir_' tests/*/*.sh | xargs -r "${SED}" -i "s|\$abs_path_dir_|${UU_BUILD_DIR//\//\\/}|g"
+# Some tests use $abs_top_builddir/src for shebangs: point them to the uutils build dir.
+grep -rl '\$abs_top_builddir/src' tests/*/*.sh tests/*/*.pl | xargs -r "${SED}" -i "s|\$abs_top_builddir/src|${UU_BUILD_DIR//\//\\/}|g"
+grep -rl '\$ENV{abs_top_builddir}/src' tests/*/*.pl | xargs -r "${SED}" -i "s|\$ENV{abs_top_builddir}/src|${UU_BUILD_DIR//\//\\/}|g"
 
 # We can't build runcon and chcon without libselinux. But GNU no longer builds dummies of them. So consider they are SELinux specific.
 sed -i 's/^print_ver_.*/require_selinux_/' tests/runcon/runcon-compute.sh
@@ -170,8 +188,6 @@ sed -i 's/^print_ver_.*/require_selinux_/' tests/chcon/chcon-fail.sh
 
 # We use coreutils yes
 sed -i "s|--coreutils-prog=||g" tests/misc/coreutils.sh
-# Different message
-sed -i "s|coreutils: unknown program 'blah'|blah: function/utility not found|" tests/misc/coreutils.sh
 
 # Use the system coreutils where the test fails due to error in a util that is not the one being tested
 sed -i "s|grep '^#define HAVE_CAP 1' \$CONFIG_HEADER > /dev/null|true|"  tests/ls/capability.sh
@@ -295,9 +311,6 @@ sed -i -e "s|-: No such file or directory|cannot access '-': No such file or dir
 sed -i '1s/^/exit 0  # Skip test - uutils du uses safe traversal that prevents this race condition\n/' tests/du/move-dir-while-traversing.sh
 
 awk 'BEGIN {count=0} /compare exp out2/ && count < 6 {sub(/compare exp out2/, "grep -q \"cannot be used with\" out2"); count++} 1' tests/df/df-output.sh > tests/df/df-output.sh.tmp && mv tests/df/df-output.sh.tmp tests/df/df-output.sh
-
-# with ls --dired, in case of error, we have a slightly different error position
-sed -i -e "s|44 45|48 49|" tests/ls/stat-failed.sh
 
 # small difference in the error message
 sed -i -e "s/ls: invalid argument 'XX' for 'time style'/ls: invalid --time-style argument 'XX'/" \

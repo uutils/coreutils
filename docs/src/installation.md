@@ -15,10 +15,8 @@ You can also [build uutils from source](build.md).
 [![crates.io package](https://repology.org/badge/version-for-repo/crates_io/uutils-coreutils.svg)](https://crates.io/crates/coreutils)
 
 ```shell
-# Linux
+# Unix like
 cargo install coreutils --features unix --locked
-# MacOs
-cargo install coreutils --features macos --locked
 # Windows
 cargo install coreutils --features windows --locked
 ```

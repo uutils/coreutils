@@ -117,14 +117,24 @@ fn tail_file(
     observer: &mut Observer,
     offset: u64,
 ) -> UResult<()> {
-    if !path.exists() {
-        set_exit_code(1);
-        show_error!(
-            "{}",
-            translate!("tail-error-cannot-open-no-such-file", "file" => input.display_name.clone(), "error" => translate!("tail-no-such-file-or-directory"))
-        );
-        observer.add_bad_path(path, input.display_name.as_str(), false)?;
-    } else if path.is_dir() {
+    let md = path.metadata();
+    if let Err(ref e) = md {
+        if e.kind() == ErrorKind::NotFound {
+            set_exit_code(1);
+            show_error!(
+                "{}",
+                translate!(
+                    "tail-error-cannot-open-no-such-file",
+                    "file" => input.display_name.clone(),
+                    "error" => translate!("tail-no-such-file-or-directory")
+                )
+            );
+            observer.add_bad_path(path, input.display_name.as_str(), false)?;
+            return Ok(());
+        }
+    }
+
+    if path.is_dir() {
         set_exit_code(1);
 
         header_printer.print_input(input);
@@ -146,7 +156,6 @@ fn tail_file(
             );
         }
         if !observer.follow_name_retry() {
-            // skip directory if not retry
             return Ok(());
         }
         observer.add_bad_path(path, input.display_name.as_str(), false)?;
@@ -211,7 +220,7 @@ fn tail_file(
 /// Without `--pid`, FIFOs block on open() until a writer connects (GNU behavior).
 #[cfg(unix)]
 fn open_file(path: &Path, use_nonblock_for_fifo: bool) -> io::Result<File> {
-    use nix::fcntl::{FcntlArg, OFlag, fcntl};
+    use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
     use std::fs::OpenOptions;
     use std::os::fd::AsFd;
     use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
@@ -228,9 +237,9 @@ fn open_file(path: &Path, use_nonblock_for_fifo: bool) -> io::Result<File> {
             .open(path)?;
 
         // Clear O_NONBLOCK so reads block normally
-        let flags = fcntl(file.as_fd(), FcntlArg::F_GETFL)?;
-        let new_flags = OFlag::from_bits_truncate(flags) & !OFlag::O_NONBLOCK;
-        fcntl(file.as_fd(), FcntlArg::F_SETFL(new_flags))?;
+        let flags = fcntl_getfl(file.as_fd())?;
+        let new_flags = flags & !OFlags::NONBLOCK;
+        fcntl_setfl(file.as_fd(), new_flags)?;
 
         Ok(file)
     } else {

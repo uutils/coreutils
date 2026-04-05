@@ -12,6 +12,7 @@ use std::io::{Seek, SeekFrom};
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::{Path, PathBuf};
+#[cfg(not(target_os = "wasi"))]
 use uucore::error::UResult;
 use uucore::translate;
 
@@ -157,7 +158,9 @@ impl FileExtTail for File {
 
 pub trait MetadataExtTail {
     fn is_tailable(&self) -> bool;
+    #[cfg(not(target_os = "wasi"))]
     fn got_truncated(&self, other: &Metadata) -> UResult<bool>;
+    #[cfg(not(target_os = "wasi"))]
     fn file_id_eq(&self, other: &Metadata) -> bool;
 }
 
@@ -175,10 +178,12 @@ impl MetadataExtTail for Metadata {
     }
 
     /// Return true if the file was modified and is now shorter
+    #[cfg(not(target_os = "wasi"))]
     fn got_truncated(&self, other: &Metadata) -> UResult<bool> {
         Ok(other.len() < self.len() && other.modified()? != self.modified()?)
     }
 
+    #[cfg(not(target_os = "wasi"))]
     fn file_id_eq(&self, #[cfg(unix)] other: &Metadata, #[cfg(not(unix))] _: &Metadata) -> bool {
         #[cfg(unix)]
         {
@@ -200,12 +205,14 @@ impl MetadataExtTail for Metadata {
     }
 }
 
+#[cfg(not(target_os = "wasi"))]
 pub trait PathExtTail {
     fn is_stdin(&self) -> bool;
     fn is_orphan(&self) -> bool;
     fn is_tailable(&self) -> bool;
 }
 
+#[cfg(not(target_os = "wasi"))]
 impl PathExtTail for Path {
     fn is_stdin(&self) -> bool {
         self.eq(Self::new(text::DASH))

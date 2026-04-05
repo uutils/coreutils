@@ -14,10 +14,9 @@ use nix::fcntl::{OFlag, open};
 use nix::sys::stat::Mode;
 use std::path::Path;
 use uucore::display::Quotable;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use uucore::error::FromIo;
-use uucore::error::{UResult, USimpleError};
+use uucore::error::{UResult, USimpleError, get_exit_code, set_exit_code};
 use uucore::format_usage;
+use uucore::show_error;
 use uucore::translate;
 
 pub mod options {
@@ -69,10 +68,13 @@ mod platform {
         // Reset O_NONBLOCK flag if it was set (matches GNU behavior)
         // This is non-critical, so we log errors but don't fail
         if let Err(e) = fcntl(&f, FcntlArg::F_SETFL(OFlag::empty())) {
-            eprintln!(
+            use std::io::{Write, stderr};
+            let _ = writeln!(
+                stderr(),
                 "sync: {}",
                 translate!("sync-warning-fcntl-failed", "file" => path, "error" => e.to_string())
             );
+            uucore::error::set_exit_code(1);
         }
         Ok(f)
     }
@@ -235,27 +237,38 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let path = Path::new(&f);
             if let Err(e) = open(path, OFlag::O_NONBLOCK, Mode::empty()) {
                 if e != Errno::EACCES || (e == Errno::EACCES && path.is_dir()) {
-                    e.map_err_context(
-                        || translate!("sync-error-opening-file", "file" => f.quote()),
-                    )?;
+                    show_error!(
+                        "{}",
+                        translate!("sync-error-opening-file", "file" => f.quote(), "err" => e.desc())
+                    );
+                    set_exit_code(1);
                 }
             }
         }
         #[cfg(not(any(target_os = "linux", target_os = "android")))]
         {
             if !Path::new(&f).exists() {
-                return Err(USimpleError::new(
-                    1,
-                    translate!("sync-error-no-such-file", "file" => f.quote()),
-                ));
+                show_error!(
+                    "{}",
+                    translate!("sync-error-no-such-file", "file" => f.quote())
+                );
+                set_exit_code(1);
             }
         }
     }
 
+    if get_exit_code() != 0 {
+        return Err(USimpleError::new(1, ""));
+    }
+
     #[allow(clippy::if_same_then_else)]
     if matches.get_flag(options::FILE_SYSTEM) {
-        #[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
-        syncfs(files)?;
+        if files.is_empty() {
+            sync()?;
+        } else {
+            #[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
+            syncfs(files)?;
+        }
     } else if matches.get_flag(options::DATA) {
         #[cfg(any(target_os = "linux", target_os = "android"))]
         fdatasync(files)?;
@@ -266,9 +279,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("sync")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("sync"))
         .about(translate!("sync-about"))
         .override_usage(format_usage(&translate!("sync-usage")))
         .infer_long_args(true)

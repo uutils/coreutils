@@ -1,4 +1,4 @@
-# spell-checker:ignore (misc) testsuite runtest findstring (targets) busytest toybox distclean pkgs nextest ; (vars/env) BINDIR BUILDDIR CARGOFLAGS DESTDIR DOCSDIR INSTALLDIR INSTALLEES MULTICALL DATAROOTDIR TESTDIR manpages
+# spell-checker:ignore (misc) testsuite runtest findstring (targets) busytest toybox distclean pkgs nextest ; (vars/env) BINDIR BUILDDIR CARGOFLAGS CFLAGS DESTDIR DOCSDIR INSTALLDIR INSTALLEES MULTICALL DATAROOTDIR TESTDIR manpages
 
 # Config options
 ifneq (,$(filter install, $(MAKECMDGOALS)))
@@ -62,34 +62,15 @@ TOYBOX_ROOT := $(BASEDIR)/tmp
 TOYBOX_VER  := 0.8.12
 TOYBOX_SRC  := $(TOYBOX_ROOT)/toybox-$(TOYBOX_VER)
 
-#------------------------------------------------------------------------
-# Detect the host system.
-# On Windows uname -s might return MINGW_NT-* or CYGWIN_NT-*.
-# Otherwise let it default to the kernel name returned by uname -s
-# (Linux, Darwin, FreeBSD, …).
-#------------------------------------------------------------------------
-OS := $(shell uname -s)
+# Detect the target system
+# See https://doc.rust-lang.org/beta/rustc/platform-support.html
+# todo: support building wasm
+OS := $(or $(CARGO_BUILD_TARGET),$(shell rustc --print host-tuple))
 
-# Windows does not allow symlink by default.
-# Allow to override LN for AppArmor.
-ifneq (,$(findstring _NT,$(OS)))
-	LN ?= ln -f
-endif
-LN ?= ln -sf
-
-# Possible programs
-PROGS := \
-	$(shell sed -n '/feat_Tier1 = \[/,/\]/p' Cargo.toml | sed '1d;2d' |tr -d '],"\n')\
-	$(shell sed -n '/feat_common_core = \[/,/\]/p' Cargo.toml | sed '1d' |tr -d '],"\n')
-
-UNIX_PROGS := \
-	$(shell sed -n '/feat_require_unix_core = \[/,/\]/p' Cargo.toml | sed '1d' |tr -d '],"\n') \
-	hostid \
-	pinky \
-	stdbuf \
-	uptime \
-	users \
-	who
+# hardlinks are better default since
+# - Windows(cygwin) does not allow symlink by default
+# - std::env:current_exe resolves symlink
+LN ?= ln -f
 
 SELINUX_PROGS := \
 	chcon \
@@ -97,9 +78,13 @@ SELINUX_PROGS := \
 
 $(info Detected OS = $(OS))
 
-ifeq (,$(findstring MINGW,$(OS)))
-	PROGS += $(UNIX_PROGS)
+ifeq (,$(findstring windows,$(OS)))
+	FEATURE_EXTRACT_UTILS := feat_os_unix
+else
+	FEATURE_EXTRACT_UTILS := feat_Tier1
 endif
+PROGS := $(shell cargo tree --depth 1 --features $(FEATURE_EXTRACT_UTILS) --format "{p}" --prefix none | sed -E -n 's/^uu_([^ ]+).*/\1/p')
+
 ifeq ($(SELINUX_ENABLED),1)
 	PROGS += $(SELINUX_PROGS)
 endif
@@ -114,7 +99,7 @@ endif
 # Programs with usable tests
 
 TESTS       := \
-	$(sort $(filter $(UTILS),$(PROGS) $(UNIX_PROGS) $(SELINUX_PROGS)))
+	$(sort $(filter $(UTILS),$(PROGS) $(SELINUX_PROGS)))
 
 TEST_NO_FAIL_FAST :=
 TEST_SPEC_FEATURE :=
@@ -170,7 +155,7 @@ nextest:
 	${CARGO} nextest run ${CARGOFLAGS} --features "$(TESTS) $(TEST_SPEC_FEATURE)" $(PROFILE_CMD) --no-default-features $(TEST_NO_FAIL_FAST)
 
 test_toybox:
-	-(cd $(TOYBOX_SRC)/ && make tests)
+	-(cd $(TOYBOX_SRC)/ && CFLAGS="-pipe -O0 -s" make tests)
 
 toybox-src:
 	if [ ! -e "$(TOYBOX_SRC)" ] ; then \
@@ -288,7 +273,7 @@ install: build install-manpages install-completions install-locales
 	mkdir -p $(INSTALLDIR_BIN)
 ifneq (,$(and $(findstring stdbuf,$(UTILS)),$(findstring feat_external_libstdbuf,$(CARGOFLAGS))))
 	mkdir -p $(DESTDIR)$(LIBSTDBUF_DIR)
-ifneq (,$(findstring CYGWIN,$(OS)))
+ifneq (,$(findstring cygwin,$(OS)))
 	$(INSTALL) -m 755 $(BUILDDIR)/deps/stdbuf.dll $(DESTDIR)$(LIBSTDBUF_DIR)/libstdbuf.dll
 else
 	$(INSTALL) -m 755 $(BUILDDIR)/deps/libstdbuf.* $(DESTDIR)$(LIBSTDBUF_DIR)/
@@ -308,7 +293,7 @@ else
 endif
 
 uninstall:
-ifeq (,$(findstring MINGW,$(OS)))
+ifeq (,$(findstring windows,$(OS)))
 	rm -f $(DESTDIR)$(LIBSTDBUF_DIR)/libstdbuf.*
 	-rm -d $(DESTDIR)$(LIBSTDBUF_DIR) 2>/dev/null || true
 endif

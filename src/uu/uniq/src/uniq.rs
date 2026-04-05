@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore badoption
+// spell-checker:ignore badoption CTYPE
 use clap::{
     Arg, ArgAction, ArgMatches, Command, builder::ValueParser, error::ContextKind, error::Error,
     error::ErrorKind,
@@ -186,6 +186,17 @@ impl Uniq {
         }
     }
 
+    fn is_c_locale() -> bool {
+        for key in ["LC_ALL", "LC_CTYPE", "LANG"] {
+            if let Some(v) = std::env::var_os(key) {
+                if !v.is_empty() {
+                    return v == "C" || v == "POSIX";
+                }
+            }
+        }
+        true
+    }
+
     fn key_end_index(&self, line: &[u8], key_start: usize) -> usize {
         let remainder = &line[key_start..];
         match self.slice_stop {
@@ -194,10 +205,15 @@ impl Uniq {
                 if remainder.is_empty() {
                     return key_start;
                 }
-                if let Ok(valid) = std::str::from_utf8(remainder) {
+                if Self::is_c_locale() {
+                    // for C or POSIX we count bytes
+                    key_start + remainder.len().min(limit)
+                } else if let Ok(valid) = std::str::from_utf8(remainder) {
+                    // for UTF-8 we count characters
                     let prefix_len = Self::char_prefix_len(valid, limit);
                     key_start + prefix_len
                 } else {
+                    // for invalid UTF-8 we count bytes
                     key_start + remainder.len().min(limit)
                 }
             }
@@ -231,9 +247,7 @@ impl Uniq {
         if bytes_read == 0 {
             return Ok(false);
         }
-        if buffer.last().is_some_and(|last| *last == line_terminator) {
-            buffer.pop();
-        }
+        let _ = buffer.pop_if(|last| *last == line_terminator);
         Ok(true)
     }
 
@@ -641,7 +655,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 return Err(map_clap_errors(clap_error));
             }
             // Use ErrorFormatter directly to handle error
-            let formatter = uucore::clap_localization::ErrorFormatter::new(uucore::util_name());
+            let formatter = uucore::clap_localization::ErrorFormatter::new("uniq");
             formatter.print_error_and_exit_with_callback(&clap_error, 1, || {});
         }
     };
@@ -685,7 +699,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    let cmd = Command::new(uucore::util_name())
+    let cmd = Command::new("uniq")
         .version(uucore::crate_version!())
         .about(translate!("uniq-about"))
         .override_usage(format_usage(&translate!("uniq-usage")))

@@ -45,6 +45,7 @@ selinux-error-file-open-failure = failed to open the file: { $error }
 selinux-error-context-retrieval-failure = failed to retrieve the security context: { $error }
 selinux-error-context-set-failure = failed to set default file creation context to '{ $context }': { $error }
 selinux-error-context-conversion-failure = failed to set default file creation context to '{ $context }': { $error }
+selinux-error-operation-not-supported = operation not supported
 
 # SMACK error messages
 smack-error-not-enabled = SMACK is not enabled on this system
@@ -79,3 +80,7 @@ checksum-failed-open-file = { $count ->
    *[other] { $count } listed files could not be read
 }
 checksum-error-algo-bad-format = { $file }: { $line }: improperly formatted { $algo } checksum line
+
+# uudoc tldr examples messages
+uudoc-tldr-attribution = The examples are provided by the [tldr-pages project](https://tldr.sh) under the [CC BY 4.0 License](https://github.com/tldr-pages/tldr/blob/main/LICENSE.md).
+uudoc-tldr-disclaimer = Please note that, as uutils is a work in progress, some examples might fail.

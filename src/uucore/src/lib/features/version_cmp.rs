@@ -115,8 +115,8 @@ pub fn version_cmp(mut a: &[u8], mut b: &[u8]) -> Ordering {
     // 2. Compare leading numerical part
     // 3. Repeat
     while !a.is_empty() || !b.is_empty() {
-        let a_numerical_start = a.iter().position(|c| c.is_ascii_digit()).unwrap_or(a.len());
-        let b_numerical_start = b.iter().position(|c| c.is_ascii_digit()).unwrap_or(b.len());
+        let a_numerical_start = a.iter().position(u8::is_ascii_digit).unwrap_or(a.len());
+        let b_numerical_start = b.iter().position(u8::is_ascii_digit).unwrap_or(b.len());
 
         let a_str = &a[..a_numerical_start];
         let b_str = &b[..b_numerical_start];

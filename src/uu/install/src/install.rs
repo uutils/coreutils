@@ -28,6 +28,8 @@ use uucore::error::{FromIo, UError, UResult, UUsageError};
 use uucore::fs::dir_strip_dot_for_creation;
 use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
 use uucore::process::{getegid, geteuid};
+#[cfg(unix)]
+use uucore::safe_traversal::{DirFd, SymlinkBehavior, create_dir_all_safe};
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::{
     SeLinuxError, contexts_differ, get_selinux_security_context, is_selinux_enabled,
@@ -63,12 +65,12 @@ pub struct Behavior {
     preserve_context: bool,
     context: Option<String>,
     default_context: bool,
-    unprivileged: bool,
+    privileged: bool,
 }
 
 #[derive(Error, Debug)]
 enum InstallError {
-    #[error("{}", translate!("install-error-dir-needs-arg", "util_name" => uucore::util_name()))]
+    #[error("{}", translate!("install-error-dir-needs-arg", "util_name" => "install"))]
     DirNeedsArg,
 
     #[error("{}", translate!("install-error-create-dir-failed", "path" => .0.quote()))]
@@ -191,9 +193,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("install")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("install"))
         .about(translate!("install-about"))
         .override_usage(format_usage(&translate!("install-usage")))
         .infer_long_args(true)
@@ -386,13 +388,10 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     }
 
     // Check if compare is used with non-permission mode bits
-    // TODO use a let chain once we have a MSRV of 1.88 or greater
-    if compare {
-        if let Some(mode) = specified_mode {
-            let non_permission_bits = 0o7000; // setuid, setgid, sticky bits
-            if mode & non_permission_bits != 0 {
-                show_error!("{}", translate!("install-warning-compare-ignored"));
-            }
+    if compare && let Some(mode) = specified_mode {
+        let non_permission_bits = 0o7000; // setuid, setgid, sticky bits
+        if mode & non_permission_bits != 0 {
+            show_error!("{}", translate!("install-warning-compare-ignored"));
         }
     }
 
@@ -426,7 +425,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
 
     let context = matches.get_one::<String>(OPT_CONTEXT).cloned();
     let default_context = matches.get_flag(OPT_DEFAULT_CONTEXT);
-    let unprivileged = matches.get_flag(OPT_UNPRIVILEGED);
+    let privileged = !matches.get_flag(OPT_UNPRIVILEGED);
 
     Ok(Behavior {
         main_function,
@@ -450,7 +449,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         preserve_context: matches.get_flag(OPT_PRESERVE_CONTEXT),
         context,
         default_context,
-        unprivileged,
+        privileged,
     })
 }
 
@@ -490,7 +489,7 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
                 }
 
                 // Set SELinux context for all created directories if needed
-                #[cfg(feature = "selinux")]
+                #[cfg(all(feature = "selinux", target_os = "linux"))]
                 if should_set_selinux_context(b) {
                     let context = get_context_for_selinux(b);
                     set_selinux_context_for_directories_install(path_to_create.as_path(), context);
@@ -511,11 +510,11 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
                 continue;
             }
 
-            if !b.unprivileged {
+            if b.privileged {
                 show_if_err!(chown_optional_user_group(path, b));
 
                 // Set SELinux context for directory if needed
-                #[cfg(feature = "selinux")]
+                #[cfg(all(feature = "selinux", target_os = "linux"))]
                 if b.default_context {
                     show_if_err!(set_selinux_default_context(path));
                 } else if b.context.is_some() {
@@ -594,6 +593,11 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
 
     let sources = &paths.iter().map(PathBuf::from).collect::<Vec<_>>();
 
+    #[cfg(unix)]
+    let mut target_parent_fd: Option<DirFd> = None;
+    #[cfg(unix)]
+    let mut target_filename: Option<OsString> = None;
+
     if b.create_leading {
         // if -t is used in combination with -D, create whole target because it does not include filename
         let to_create: Option<&Path> = if b.target_dir.is_some() {
@@ -605,8 +609,13 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
             None
         };
 
+        // If -t is used, check if target exists as a file before trying to create directories
+        if b.target_dir.is_some() && target.exists() && !target.is_dir() {
+            return Err(InstallError::NotADirectory(target.clone()).into());
+        }
+
         if let Some(to_create) = to_create {
-            // if the path ends in /, remove it
+            let to_create_original = to_create;
             let to_create_owned;
             let to_create = match uucore::os_str_as_bytes(to_create.as_os_str()) {
                 Ok(path_bytes) if path_bytes.ends_with(b"/") => {
@@ -621,7 +630,27 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                 _ => to_create,
             };
 
-            if !to_create.exists() {
+            let dir_exists = if to_create.exists() {
+                fs::symlink_metadata(to_create)
+                    .is_ok_and(|m| m.is_dir() && !m.file_type().is_symlink())
+            } else {
+                false
+            };
+
+            if dir_exists {
+                #[cfg(unix)]
+                {
+                    if b.target_dir.is_none()
+                        && sources.len() == 1
+                        && !is_potential_directory_path(&target)
+                        && let Ok(dir_fd) = DirFd::open(to_create, SymlinkBehavior::NoFollow)
+                        && let Some(filename) = target.file_name()
+                    {
+                        target_parent_fd = Some(dir_fd);
+                        target_filename = Some(filename.to_os_string());
+                    }
+                }
+            } else {
                 if b.verbose {
                     let mut result = PathBuf::new();
                     // When creating directories with -Dv, show directory creations step by step
@@ -638,23 +667,62 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                     }
                 }
 
-                if let Err(e) = fs::create_dir_all(to_create) {
-                    return Err(InstallError::CreateDirFailed(to_create.to_path_buf(), e).into());
+                #[cfg(unix)]
+                {
+                    // Use DEFAULT_MODE (0o755) for created directories - this matches GNU install
+                    // behavior. The actual mode will be modified by umask at the kernel level.
+                    match create_dir_all_safe(to_create, DEFAULT_MODE) {
+                        Ok(dir_fd) => {
+                            if b.target_dir.is_none()
+                                && sources.len() == 1
+                                && !is_potential_directory_path(&target)
+                                && let Some(filename) = target.file_name()
+                            {
+                                target_parent_fd = Some(dir_fd);
+                                target_filename = Some(filename.to_os_string());
+                            }
+
+                            // Set SELinux context for all created directories if needed
+                            #[cfg(all(feature = "selinux", target_os = "linux"))]
+                            if should_set_selinux_context(b) {
+                                let context = get_context_for_selinux(b);
+                                set_selinux_context_for_directories_install(to_create, context);
+                            }
+                        }
+                        Err(e) => {
+                            if e.kind() == std::io::ErrorKind::AlreadyExists
+                                && to_create.exists()
+                                && !to_create.is_dir()
+                            {
+                                return Err(InstallError::NotADirectory(
+                                    to_create_original.to_path_buf(),
+                                )
+                                .into());
+                            }
+                            return Err(InstallError::CreateDirFailed(
+                                to_create_original.to_path_buf(),
+                                e,
+                            )
+                            .into());
+                        }
+                    }
                 }
 
-                // Set SELinux context for all created directories if needed
-                #[cfg(feature = "selinux")]
-                if should_set_selinux_context(b) {
-                    let context = get_context_for_selinux(b);
-                    set_selinux_context_for_directories_install(to_create, context);
-                }
-            }
-        }
-        if b.target_dir.is_some() {
-            let p = to_create.unwrap();
+                #[cfg(not(unix))]
+                {
+                    if let Err(e) = fs::create_dir_all(to_create) {
+                        return Err(
+                            InstallError::CreateDirFailed(to_create.to_path_buf(), e).into()
+                        );
+                    }
 
-            if !p.exists() || !p.is_dir() {
-                return Err(InstallError::NotADirectory(p.to_path_buf()).into());
+                    // Set SELinux context for all created directories if needed
+                    #[cfg(all(feature = "selinux", target_os = "linux"))]
+                    if should_set_selinux_context(b) {
+                        let context = get_context_for_selinux(b);
+                        set_selinux_context_for_directories_install(to_create, context);
+                    }
+                }
             }
         }
     }
@@ -679,7 +747,33 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
         }
 
         if target.is_file() || is_new_file_path(&target) {
-            copy(source, &target, b)
+            #[cfg(unix)]
+            if let (Some(ref parent_fd), Some(ref filename)) = (target_parent_fd, target_filename) {
+                if b.compare && !need_copy(source, &target, b) {
+                    return Ok(());
+                }
+
+                let backup_path = perform_backup(&target, b)?;
+
+                if let Err(e) = parent_fd.unlink_at(filename.as_os_str(), false)
+                    && e.kind() != std::io::ErrorKind::NotFound
+                {
+                    show_error!(
+                        "{}",
+                        translate!("install-error-failed-to-remove", "path" => target.quote(), "error" => format!("{e:?}"))
+                    );
+                }
+
+                copy_file_safe(source, parent_fd, filename.as_os_str())?;
+
+                finalize_installed_file(source, &target, b, backup_path)
+            } else {
+                copy(source, &target, b)
+            }
+            #[cfg(not(unix))]
+            {
+                copy(source, &target, b)
+            }
         } else {
             Err(InstallError::InvalidTarget(target).into())
         }
@@ -800,6 +894,38 @@ fn perform_backup(to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
     }
 }
 
+/// Copy a file using directory file descriptor for safe traversal.
+///
+/// This is the fd-based counterpart to `copy_file`. It prevents symlink race
+/// conditions by using `openat` to create the destination file relative to a
+/// directory file descriptor, rather than using path-based operations.
+///
+/// Note: This function and `copy_file` share similar logic but cannot easily
+/// be consolidated because they use fundamentally different APIs:
+/// - `copy_file_safe` uses fd-based `DirFd::open_file_at()` (openat syscall)
+/// - `copy_file` uses path-based `OpenOptions::new().create_new().open()`
+#[cfg(unix)]
+fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsStr) -> UResult<()> {
+    let from_meta = metadata(from)?;
+
+    // Check if source and destination are the same file
+    if let Ok(to_stat) = to_parent_fd.stat_at(to_filename, SymlinkBehavior::Follow) {
+        // st_dev and st_ino types vary by platform (i32/u32 on macOS, u64 on Linux)
+        #[allow(clippy::unnecessary_cast)]
+        if from_meta.dev() == to_stat.st_dev as u64 && from_meta.ino() == to_stat.st_ino as u64 {
+            return Err(
+                InstallError::SameFile(from.to_path_buf(), PathBuf::from(to_filename)).into(),
+            );
+        }
+    }
+
+    let mut src = File::open(from)?;
+    let mut dst = to_parent_fd.open_file_at(to_filename)?;
+    copy_stream(&mut src, &mut dst)?;
+
+    Ok(())
+}
+
 /// Copy a file from one path to another. Handles the certain cases of special
 /// files (e.g character specials).
 ///
@@ -813,10 +939,11 @@ fn perform_backup(to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
 /// Returns an empty Result or an error in case of failure.
 ///
 fn copy_file(from: &Path, to: &Path) -> UResult<()> {
-    if let Ok(to_abs) = to.canonicalize() {
-        if from.canonicalize()? == to_abs {
-            return Err(InstallError::SameFile(from.to_path_buf(), to.to_path_buf()).into());
-        }
+    use std::os::unix::fs::OpenOptionsExt;
+    if let Ok(to_abs) = to.canonicalize()
+        && from.canonicalize()? == to_abs
+    {
+        return Err(InstallError::SameFile(from.to_path_buf(), to.to_path_buf()).into());
     }
 
     if to.is_dir() && !from.is_dir() {
@@ -827,21 +954,23 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
         .into());
     }
 
-    // Remove existing file at destination to allow overwriting
-    // Note: create_new() below provides TOCTOU protection; if something
-    // appears at this path between the remove and create, it will fail safely
-    if let Err(e) = fs::remove_file(to) {
-        if e.kind() != std::io::ErrorKind::NotFound {
-            show_error!(
-                "{}",
-                translate!("install-error-failed-to-remove", "path" => to.quote(), "error" => format!("{e:?}"))
-            );
-        }
+    // Remove existing file (create_new below provides TOCTOU protection)
+    if let Err(e) = fs::remove_file(to)
+        && e.kind() != std::io::ErrorKind::NotFound
+    {
+        show_error!(
+            "{}",
+            translate!("install-error-failed-to-remove", "path" => to.quote(), "error" => format!("{e:?}"))
+        );
     }
 
     let mut handle = File::open(from)?;
     // create_new provides TOCTOU protection
-    let mut dest = OpenOptions::new().write(true).create_new(true).open(to)?;
+    let mut dest = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(to)?;
 
     copy_stream(&mut handle, &mut dest).map_err(|err| {
         InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err.to_string())
@@ -909,7 +1038,7 @@ fn set_ownership_and_permissions(to: &Path, b: &Behavior) -> UResult<()> {
         return Err(InstallError::ChmodFailed(to.to_path_buf()).into());
     }
 
-    if !b.unprivileged {
+    if b.privileged {
         chown_optional_user_group(to, b)?;
     }
 
@@ -943,28 +1072,13 @@ fn preserve_timestamps(from: &Path, to: &Path) -> UResult<()> {
     Ok(())
 }
 
-/// Copy one file to a new location, changing metadata.
-///
-/// Returns a Result type with the Err variant containing the error message.
-///
-/// # Parameters
-///
-/// _from_ must exist as a non-directory.
-/// _to_ must be a non-existent file, whose parent directory exists.
-///
-/// # Errors
-///
-/// If the copy system call fails, we print a verbose error and return an empty error value.
-///
-fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
-    if b.compare && !need_copy(from, to, b) {
-        return Ok(());
-    }
-    // Declare the path here as we may need it for the verbose output below.
-    let backup_path = perform_backup(to, b)?;
-
-    copy_file(from, to)?;
-
+/// Apply post-copy operations: strip, ownership, permissions, timestamps, SELinux, and verbose output.
+fn finalize_installed_file(
+    from: &Path,
+    to: &Path,
+    b: &Behavior,
+    backup_path: Option<PathBuf>,
+) -> UResult<()> {
     #[cfg(not(windows))]
     if b.strip {
         strip_file(to, b)?;
@@ -976,8 +1090,8 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
         preserve_timestamps(from, to)?;
     }
 
-    #[cfg(feature = "selinux")]
-    if !b.unprivileged {
+    #[cfg(all(feature = "selinux", target_os = "linux"))]
+    if b.privileged {
         if b.preserve_context {
             uucore::selinux::preserve_security_context(from, to)
                 .map_err(|e| InstallError::SelinuxContextFailed(e.to_string()))?;
@@ -1010,6 +1124,31 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
     Ok(())
 }
 
+/// Copy one file to a new location, changing metadata.
+///
+/// Returns a Result type with the Err variant containing the error message.
+///
+/// # Parameters
+///
+/// _from_ must exist as a non-directory.
+/// _to_ must be a non-existent file, whose parent directory exists.
+///
+/// # Errors
+///
+/// If the copy system call fails, we print a verbose error and return an empty error value.
+///
+fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
+    if b.compare && !need_copy(from, to, b) {
+        return Ok(());
+    }
+    // Declare the path here as we may need it for the verbose output below.
+    let backup_path = perform_backup(to, b)?;
+
+    copy_file(from, to)?;
+
+    finalize_installed_file(from, to, b, backup_path)
+}
+
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn get_context_for_selinux(b: &Behavior) -> Option<&String> {
     if b.default_context {
@@ -1019,9 +1158,9 @@ fn get_context_for_selinux(b: &Behavior) -> Option<&String> {
     }
 }
 
-#[cfg(feature = "selinux")]
+#[cfg(all(feature = "selinux", target_os = "linux"))]
 fn should_set_selinux_context(b: &Behavior) -> bool {
-    !b.unprivileged && (b.context.is_some() || b.default_context)
+    b.privileged && (b.context.is_some() || b.default_context)
 }
 
 /// Check if a file needs to be copied due to ownership differences when no explicit group is specified.
@@ -1078,10 +1217,10 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
     };
 
     // Check if the destination is a symlink (should always be replaced)
-    if let Ok(to_symlink_meta) = fs::symlink_metadata(to) {
-        if to_symlink_meta.file_type().is_symlink() {
-            return true;
-        }
+    if let Ok(to_symlink_meta) = fs::symlink_metadata(to)
+        && to_symlink_meta.file_type().is_symlink()
+    {
+        return true;
     }
 
     // Define special file mode bits (setuid, setgid, sticky).
@@ -1114,27 +1253,26 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
         return true;
     }
 
-    #[cfg(feature = "selinux")]
-    if !b.unprivileged && b.preserve_context && contexts_differ(from, to) {
-        return true;
-    }
-
-    // TODO: if -P (#1809) and from/to contexts mismatch, return true.
-
-    // Check if the owner ID is specified and differs from the destination file's owner.
-    if let Some(owner_id) = b.owner_id {
-        if !b.unprivileged && owner_id != to_meta.uid() {
+    if b.privileged {
+        #[cfg(all(feature = "selinux", target_os = "linux"))]
+        if b.preserve_context && contexts_differ(from, to) {
             return true;
         }
-    }
 
-    // Check if the group ID is specified and differs from the destination file's group.
-    if let Some(group_id) = b.group_id {
-        if !b.unprivileged && group_id != to_meta.gid() {
-            return true;
+        // TODO: if -P (#1809) and from/to contexts mismatch, return true.
+
+        // Check if the owner ID is specified and differs from the destination file's owner.
+        match b.owner_id {
+            Some(uid) if uid != to_meta.uid() => return true,
+            _ => {}
         }
-    } else if !b.unprivileged && needs_copy_for_ownership(to, &to_meta) {
-        return true;
+
+        // Check if the group ID is specified and differs from the destination file's group.
+        match b.group_id {
+            Some(gid) if gid != to_meta.gid() => return true,
+            None if needs_copy_for_ownership(to, &to_meta) => return true,
+            _ => {}
+        }
     }
 
     // Check if the contents of the source and destination files differ.

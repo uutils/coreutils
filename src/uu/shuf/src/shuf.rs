@@ -13,9 +13,9 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use clap::{Arg, ArgAction, Command, builder::ValueParser};
-use rand::rngs::ThreadRng;
 use rand::{
-    Rng,
+    RngExt as _,
+    rngs::ThreadRng,
     seq::{IndexedRandom, SliceRandom},
 };
 
@@ -172,10 +172,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("shuf")
         .about(translate!("shuf-about"))
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("shuf"))
         .override_usage(format_usage(&translate!("shuf-usage")))
         .infer_long_args(true)
         .arg(
@@ -272,10 +272,11 @@ fn split_seps(data: &[u8], sep: u8) -> Vec<&[u8]> {
     // If data is empty (and does not even contain a single 'sep'
     // to indicate the presence of an empty element), then behave
     // as if the input contained no elements at all.
-    let mut elements: Vec<&[u8]> = data.split(|&b| b == sep).collect();
-    if elements.last().is_some_and(|e| e.is_empty()) {
-        elements.pop();
-    }
+    const PREDICTED_LINE_LENGTH: usize = 64;
+    let predicted_capacity = data.len() / PREDICTED_LINE_LENGTH;
+    let mut elements = Vec::with_capacity(predicted_capacity);
+    elements.extend(data.split(|&b| b == sep));
+    let _ = elements.pop_if(|e| e.is_empty());
     elements
 }
 
@@ -357,7 +358,7 @@ impl Shufable for RangeInclusive<u64> {
         amount: u64,
     ) -> UResult<impl Iterator<Item = UResult<Self::Item>>> {
         let amount = usize::try_from(amount).unwrap_or(usize::MAX);
-        Ok(NonrepeatingIterator::new(self.clone(), rng).take(amount))
+        Ok(NonrepeatingIterator::new(self.clone(), rng, Some(amount)).take(amount))
     }
 }
 
@@ -378,7 +379,6 @@ impl Writable for &OsStr {
 }
 
 impl Writable for u64 {
-    #[inline]
     fn write_all_to(&self, output: &mut impl OsWrite) -> Result<(), io::Error> {
         // The itoa crate is surprisingly much more efficient than a formatted write.
         // It speeds up `shuf -r -n1000000 -i1-1024` by 1.8×.
@@ -395,7 +395,6 @@ fn handle_write_error(e: io::Error) -> Box<dyn uucore::error::UError> {
     e.map_err_context(move || ctx)
 }
 
-#[inline(never)]
 fn shuf_exec(
     input: &mut impl Shufable,
     opts: &Options,

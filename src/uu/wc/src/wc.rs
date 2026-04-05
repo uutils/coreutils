@@ -297,12 +297,12 @@ impl<'a> Input<'a> {
 
 #[cfg(unix)]
 fn is_stdin_small_file() -> bool {
-    use std::os::unix::io::{AsRawFd, FromRawFd};
-    // Safety: we'll rely on Rust to give us a valid RawFd for stdin with which we can attempt to
-    // open a File, but only for the sake of fetching .metadata().  ManuallyDrop will ensure we
-    // don't do anything else to the FD if anything unexpected happens.
-    let f = std::mem::ManuallyDrop::new(unsafe { File::from_raw_fd(io::stdin().as_raw_fd()) });
-    matches!(f.metadata(), Ok(meta) if meta.is_file() && meta.len() <= (10 << 20))
+    use std::os::fd::AsFd;
+
+    matches!(
+        rustix::fs::fstat(io::stdin().as_fd()),
+        Ok(meta) if meta.st_mode as libc::mode_t & libc::S_IFMT == libc::S_IFREG && meta.st_size <= (10 << 20)
+    )
 }
 
 #[cfg(not(unix))]
@@ -392,7 +392,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("wc")
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("wc-about"))
@@ -988,6 +988,7 @@ fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
             if let Err(err) = print_stats(settings, &word_count, maybe_title_str, number_width) {
                 let title = maybe_title_str.unwrap_or(OsStr::new("<stdin>"));
                 show!(err.map_err_context(|| translate!("wc-error-failed-to-print-result", "title" => title.to_string_lossy())));
+                return Ok(());
             }
         }
         // Print deferred error after stats to match GNU wc output order

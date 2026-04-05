@@ -10,38 +10,47 @@ use std::cmp;
 use std::ffi::OsString;
 use std::io::{self, Write};
 use std::process;
-use uucore::Args;
+use uucore::{Args, error::strip_errno};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
 
 fn usage<T>(utils: &UtilityMap<T>, name: &str) {
-    println!("{name} {VERSION} (multi-call binary)\n");
-    println!("Usage: {name} [function [arguments...]]");
-    println!("       {name} --list");
-    println!();
+    let display_list = utils.keys().copied().join(", ");
+    let width = cmp::min(textwrap::termwidth(), 100) - 8; // (opinion/heuristic) max 100 chars wide with 4 character side indentions
+    let indent_list = textwrap::indent(&textwrap::fill(&display_list, width), "    ");
     #[cfg(feature = "feat_common_core")]
-    {
-        println!("Functions:");
-        println!("      '<uutils>' [arguments...]");
-        println!();
-    }
-    println!("Options:");
-    println!("      --list    lists all defined functions, one per row\n");
-    println!("Currently defined functions:\n");
-    let display_list = utils.keys().copied().sorted_unstable().join(", ");
-    let width = cmp::min(textwrap::termwidth(), 100) - 4 * 2; // (opinion/heuristic) max 100 chars wide with 4 character side indentions
-    println!(
-        "{}",
-        textwrap::indent(&textwrap::fill(&display_list, width), "    ")
+    let common_core_string = "
+Functions:
+      '<uutils>' [arguments...]
+
+";
+    #[cfg(not(feature = "feat_common_core"))]
+    let common_core_string = "";
+    let s = format!(
+        "{name} {VERSION} (multi-call binary)
+
+Usage: {name} [function [arguments...]]
+       {name} --list
+
+{common_core_string}Options:
+      --list    lists all defined functions, one per row
+
+Currently defined functions:
+
+{indent_list}"
     );
+    if let Err(e) = writeln!(io::stdout(), "{s}")
+        && e.kind() != io::ErrorKind::BrokenPipe
+    {
+        let _ = writeln!(io::stderr(), "coreutils: {}", strip_errno(&e));
+        process::exit(1);
+    }
 }
 
 #[allow(clippy::cognitive_complexity)]
 fn main() {
-    uucore::panic::mute_sigpipe_panic();
-
     let utils = util_map();
     let mut args = uucore::args_os();
 
@@ -76,20 +85,29 @@ fn main() {
 
         match util {
             "--list" => {
-                // If --help is also present, show usage instead of list
-                if args.any(|arg| arg == "--help" || arg == "-h") {
-                    usage(&utils, binary_as_util);
-                    process::exit(0);
+                // we should fail with additional args https://github.com/uutils/coreutils/issues/11383#issuecomment-4082564058
+                if args.next().is_some() {
+                    let _ = writeln!(io::stderr(), "coreutils: invalid argument");
+                    process::exit(1);
                 }
-                let mut utils: Vec<_> = utils.keys().collect();
-                utils.sort();
-                for util in utils {
-                    println!("{util}");
+                let mut out = io::stdout().lock();
+                for util in utils.keys() {
+                    if let Err(e) = writeln!(out, "{util}")
+                        && e.kind() != io::ErrorKind::BrokenPipe
+                    {
+                        let _ = writeln!(io::stderr(), "coreutils: {}", strip_errno(&e));
+                        process::exit(1);
+                    }
                 }
                 process::exit(0);
             }
             "--version" | "-V" => {
-                println!("{binary_as_util} {VERSION} (multi-call binary)");
+                if let Err(e) = writeln!(io::stdout(), "coreutils {VERSION} (multi-call binary)")
+                    && e.kind() != io::ErrorKind::BrokenPipe
+                {
+                    let _ = writeln!(io::stderr(), "coreutils: {}", strip_errno(&e));
+                    process::exit(1);
+                }
                 process::exit(0);
             }
             // Not a special command: fallthrough to calling a util
@@ -138,8 +156,13 @@ fn main() {
             }
         }
     } else {
-        // no arguments provided
-        usage(&utils, binary_as_util);
-        process::exit(0);
+        // GNU just fails, but busybox tests needs usage
+        // todo: patch the test suite instead
+        if binary_as_util.ends_with("box") {
+            usage(&utils, binary_as_util);
+        } else {
+            let _ = writeln!(io::stderr(), "coreutils: missing argument");
+        }
+        process::exit(1);
     }
 }

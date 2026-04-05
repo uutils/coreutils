@@ -196,7 +196,7 @@ impl Settings {
             follow_retry,
             matches
                 .get_one::<String>(options::FOLLOW)
-                .map(|s| s.as_str()),
+                .map(String::as_str),
         ) {
             // -F and --follow if -F is specified after --follow. We don't need to care about the
             // value of --follow.
@@ -287,11 +287,11 @@ impl Settings {
     }
 
     pub fn has_only_stdin(&self) -> bool {
-        self.inputs.iter().all(|input| input.is_stdin())
+        self.inputs.iter().all(Input::is_stdin)
     }
 
     pub fn has_stdin(&self) -> bool {
-        self.inputs.iter().any(|input| input.is_stdin())
+        self.inputs.iter().any(Input::is_stdin)
     }
 
     pub fn num_inputs(&self) -> usize {
@@ -344,7 +344,7 @@ impl Settings {
     /// process.
     pub fn verify(&self) -> VerificationResult {
         // Mimic GNU's tail for `tail -F`
-        if self.inputs.iter().any(|i| i.is_stdin()) && self.follow == Some(FollowMode::Name) {
+        if self.inputs.iter().any(Input::is_stdin) && self.follow == Some(FollowMode::Name) {
             return VerificationResult::CannotFollowStdinByName;
         }
 
@@ -447,10 +447,12 @@ pub fn uu_app() -> Command {
     let polling_help = translate!("tail-help-polling-unix");
     #[cfg(target_os = "windows")]
     let polling_help = translate!("tail-help-polling-windows");
+    #[cfg(not(any(unix, target_os = "windows")))]
+    let polling_help = translate!("tail-help-polling-unix");
 
-    Command::new(uucore::util_name())
+    Command::new("tail")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("tail"))
         .about(translate!("tail-about"))
         .override_usage(format_usage(&translate!("tail-usage")))
         .infer_long_args(true)

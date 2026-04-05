@@ -6,9 +6,18 @@ use regex::Regex;
 use uutests::new_ucmd;
 
 #[test]
-fn test_normal() {
-    let re = Regex::new(r"^[0-9a-f]{8}").unwrap();
+fn test_output_format() {
+    // Output must be exactly 8 lowercase hex digits followed by a newline.
+    let re = Regex::new(r"^[0-9a-f]{8}\n$").unwrap();
     new_ucmd!().succeeds().stdout_matches(&re);
+}
+
+#[test]
+fn test_help() {
+    new_ucmd!()
+        .arg("--help")
+        .succeeds()
+        .stdout_contains("Print the numeric identifier");
 }
 
 #[test]

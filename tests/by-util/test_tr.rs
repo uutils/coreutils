@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore aabbaa aabbcc aabc abbb abbbcddd abcc abcdefabcdef abcdefghijk abcdefghijklmn abcdefghijklmnop ABCDEFGHIJKLMNOPQRS abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFZZ abcxyz ABCXYZ abcxyzabcxyz ABCXYZABCXYZ acbdef alnum amzamz AMZXAMZ bbbd cclass cefgm cntrl compl dabcdef dncase Gzabcdefg PQRST upcase wxyzz xdigit XXXYYY xycde xyyye xyyz xyzzzzxyzzzz ZABCDEF Zamz Cdefghijkl Cdefghijklmn asdfqqwweerr qwerr asdfqwer qwer aassddffqwer asdfqwer
+// spell-checker:ignore aabbaa aabbcc aabc abbb abbbcddd abcc abcdefabcdef abcdefghijk abcdefghijklmn abcdefghijklmnop ABCDEFGHIJKLMNOPQRS abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFZZ abcxyz ABCXYZ abcxyzabcxyz ABCXYZABCXYZ acbdef alnum amzamz AMZXAMZ bbbd cclass cefgm cntrl compl dabcdef dncase fooclass Gzabcdefg PQRST upcase wxyzz xdigit XXXYYY xycde xyyye xyyz xyzzzzxyzzzz ZABCDEF Zamz Cdefghijkl Cdefghijklmn asdfqqwweerr qwerr asdfqwer qwer aassddffqwer asdfqwer
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 
@@ -63,6 +63,38 @@ fn test_delete() {
         .pipe_in("aBcD")
         .succeeds()
         .stdout_is("BD");
+}
+
+#[test]
+fn test_delete_graph_and_print_match_gnu() {
+    let input = [b' ', b'A', b'!', b'\t', b'\n'];
+    new_ucmd!()
+        .args(&["-d", "[:graph:]"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is_bytes([b' ', b'\t', b'\n']);
+
+    new_ucmd!()
+        .args(&["-d", "[:print:]"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is_bytes([b'\t', b'\n']);
+}
+
+#[test]
+fn test_delete_complement_graph_and_print_match_gnu() {
+    let input = [b' ', b'A', b'!', b'\t', b'\n'];
+    new_ucmd!()
+        .args(&["-d", "-c", "[:graph:]"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is_bytes([b'A', b'!']);
+
+    new_ucmd!()
+        .args(&["-d", "-c", "[:print:]"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is_bytes([b' ', b'A', b'!']);
 }
 
 #[test]
@@ -1186,6 +1218,15 @@ fn check_against_gnu_tr_tests_empty_cc() {
 }
 
 #[test]
+fn check_against_gnu_tr_tests_invalid_cc() {
+    new_ucmd!()
+        .args(&["[:fooclass:]", "x"])
+        .pipe_in("")
+        .fails()
+        .stderr_is("tr: invalid character class '[:fooclass:]'\n");
+}
+
+#[test]
 fn check_against_gnu_tr_tests_repeat_set1() {
     new_ucmd!()
         .args(&["[a*]", "a"])
@@ -1542,6 +1583,30 @@ fn test_non_digit_repeat() {
         .pipe_in("")
         .fails()
         .stderr_only("tr: invalid repeat count 'c' in [c*n] construct\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_octal_escape_ambiguous_followed_by_non_utf8() {
+    // This case does not trigger the panic
+    let set1 = OsStr::from_bytes(b"\\501a");
+    new_ucmd!()
+        .arg("-d")
+        .arg(set1)
+        .pipe_in("(1a)")
+        .succeeds()
+        .stderr_contains("warning: the ambiguous octal escape")
+        .stdout_is(")");
+
+    // An user is not supposed to use this invalid utf8 set but
+    // we would need to make the command more error-proof still
+    let set1 = OsStr::from_bytes(b"\\501\xff");
+    new_ucmd!()
+        .arg("-d")
+        .arg(set1)
+        .pipe_in([b'(', b'1', 0xff, b')'])
+        .succeeds()
+        .stderr_contains("warning: invalid utf8 sequence");
 }
 
 #[cfg(target_os = "linux")]

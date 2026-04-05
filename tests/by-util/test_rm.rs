@@ -1008,6 +1008,22 @@ fn test_unreadable_and_nonempty_dir() {
 
 #[cfg(not(windows))]
 #[test]
+fn test_recursive_remove_unreadable_subdir() {
+    // Regression test for https://github.com/uutils/coreutils/issues/10966
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir_all("foo/bar");
+    at.touch("foo/bar/baz");
+    at.set_mode("foo/bar", 0o0000);
+
+    let result = ucmd.args(&["-r", "-f", "foo"]).fails();
+    result.stderr_contains("Permission denied");
+    result.stderr_contains("foo/bar");
+
+    at.set_mode("foo/bar", 0o0755);
+}
+
+#[cfg(not(windows))]
+#[test]
 fn test_inaccessible_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir");

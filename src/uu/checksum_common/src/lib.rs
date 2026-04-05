@@ -5,6 +5,7 @@
 
 // spell-checker:ignore (ToDO) algo
 
+use std::borrow::Borrow;
 use std::ffi::OsString;
 
 use clap::builder::ValueParser;
@@ -47,6 +48,7 @@ macro_rules! declare_standalone {
                 ::uucore::translate!(concat!($bin, "-about")),
                 ::uucore::translate!(concat!($bin, "-usage")),
             )
+            .name($bin)
         }
     };
 }
@@ -61,7 +63,7 @@ pub fn standalone_with_length_main(
     algo: AlgoKind,
     cmd: Command,
     args: impl uucore::Args,
-    validate_len: fn(&str) -> UResult<Option<usize>>,
+    validate_len: fn(&str) -> UResult<usize>,
 ) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(cmd, args)?;
     let algo = Some(algo);
@@ -70,27 +72,31 @@ pub fn standalone_with_length_main(
         .get_one::<String>(options::LENGTH)
         .map(String::as_str)
         .map(validate_len)
-        .transpose()?
-        .flatten();
+        .transpose()?;
 
-    let format = OutputFormat::from_standalone(std::env::args_os());
+    //todo: deduplicate matches.get_flag
+    let text = !matches.get_flag(options::BINARY);
+    let tag = matches.get_flag(options::TAG);
+    let format = OutputFormat::from_standalone(text, tag);
 
-    checksum_main(algo, length, matches, format?)
+    checksum_main(algo, length, matches, format)
 }
 
 /// Entrypoint for standalone checksums *NOT* accepting the `--length` argument
 pub fn standalone_main(algo: AlgoKind, cmd: Command, args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(cmd, args)?;
     let algo = Some(algo);
+    //todo: deduplicate matches.get_flag
+    let text = !matches.get_flag(options::BINARY);
+    let tag = matches.get_flag(options::TAG);
+    let format = OutputFormat::from_standalone(text, tag);
 
-    let format = OutputFormat::from_standalone(std::env::args_os());
-
-    checksum_main(algo, None, matches, format?)
+    checksum_main(algo, None, matches, format)
 }
 
 /// Base command processing for all the checksum executables.
 pub fn default_checksum_app(about: String, usage: String) -> Command {
-    Command::new(util_name())
+    Command::new("")
         .version(crate_version!())
         .help_template(localized_help_template(util_name()))
         .about(about)
@@ -154,24 +160,30 @@ pub fn checksum_main(
     let quiet = check_flag("quiet")?;
     let strict = check_flag("strict")?;
     let status = check_flag("status")?;
+    let text_flag = matches.get_flag(options::TEXT);
+    let binary_flag = matches.get_flag(options::BINARY);
+    let tag = matches.get_flag(options::TAG);
 
-    // clap provides the default value -. So we unwrap() safety.
+    #[allow(clippy::unwrap_used, reason = "clap provides '-' by default")]
     let files = matches
         .get_many::<OsString>(options::FILE)
         .unwrap()
-        .map(|s| s.as_os_str());
+        .map(Borrow::borrow);
+
+    if text_flag && tag {
+        return Err(ChecksumError::TextAfterTag.into());
+    }
 
     if check {
         // cksum does not support '--check'ing legacy algorithms
         if algo.is_some_and(AlgoKind::is_legacy) {
             return Err(ChecksumError::AlgorithmNotSupportedWithCheck.into());
         }
-
-        let text_flag = matches.get_flag(options::TEXT);
-        let binary_flag = matches.get_flag(options::BINARY);
-        let tag = matches.get_flag(options::TAG);
-
-        if tag || binary_flag || text_flag {
+        // Maybe, we should just use clap
+        if tag {
+            return Err(ChecksumError::TagCheck.into());
+        }
+        if binary_flag || text_flag {
             return Err(ChecksumError::BinaryTextConflict.into());
         }
 

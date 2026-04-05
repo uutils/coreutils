@@ -116,6 +116,7 @@ noxfer
 ofile
 oflag
 oflags
+openat
 pdeathsig
 peekable
 performant
@@ -213,6 +214,13 @@ val
 vals
 inval
 nofield
+
+# ci
+dtolnay
+Swatinem
+
+preopened
+dotdot
 
 # * clippy
 uninlined

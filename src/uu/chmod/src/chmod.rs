@@ -14,12 +14,11 @@ use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::fs::display_permissions_unix;
-use uucore::libc::mode_t;
 use uucore::mode;
 use uucore::perms::{TraverseSymlinks, configure_symlink_and_recursion};
 
 #[cfg(all(unix, not(target_os = "redox")))]
-use uucore::safe_traversal::DirFd;
+use uucore::safe_traversal::{DirFd, SymlinkBehavior};
 use uucore::{format_usage, show, show_error};
 
 use uucore::translate;
@@ -175,11 +174,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("chmod")
         .version(uucore::crate_version!())
         .about(translate!("chmod-about"))
         .override_usage(format_usage(&translate!("chmod-usage")))
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("chmod"))
         .args_override_self(true)
         .infer_long_args(true)
         .no_binary_name(true)
@@ -313,8 +312,8 @@ impl Chmoder {
     /// Report permission changes based on verbose and changes flags
     fn report_permission_change(&self, file_path: &Path, old_mode: u32, new_mode: u32) {
         if self.verbose || self.changes {
-            let current_permissions = display_permissions_unix(old_mode as mode_t, false);
-            let new_permissions = display_permissions_unix(new_mode as mode_t, false);
+            let current_permissions = display_permissions_unix(old_mode, false);
+            let new_permissions = display_permissions_unix(new_mode, false);
 
             if new_mode != old_mode {
                 println!(
@@ -473,7 +472,7 @@ impl Chmoder {
 
         // If the path is a directory (or we should follow symlinks), recurse into it using safe traversal
         if (!file_path.is_symlink() || should_follow_symlink) && file_path.is_dir() {
-            match DirFd::open(file_path) {
+            match DirFd::open(file_path, SymlinkBehavior::Follow) {
                 Ok(dir_fd) => {
                     r = self.safe_traverse_dir(&dir_fd, file_path).and(r);
                 }
@@ -502,7 +501,7 @@ impl Chmoder {
         for entry_name in entries {
             let entry_path = dir_path.join(&entry_name);
 
-            let dir_meta = dir_fd.metadata_at(&entry_name, should_follow_symlink);
+            let dir_meta = dir_fd.metadata_at(&entry_name, should_follow_symlink.into());
             let Ok(meta) = dir_meta else {
                 // Handle permission denied with proper file path context
                 let e = dir_meta.unwrap_err();
@@ -527,7 +526,7 @@ impl Chmoder {
 
                 // Recurse into subdirectories using the existing directory fd
                 if meta.is_dir() {
-                    match dir_fd.open_subdir(&entry_name) {
+                    match dir_fd.open_subdir(&entry_name, SymlinkBehavior::Follow) {
                         Ok(child_dir_fd) => {
                             r = self.safe_traverse_dir(&child_dir_fd, &entry_path).and(r);
                         }
@@ -591,7 +590,7 @@ impl Chmoder {
 
         // Use safe traversal to change the mode
         let follow_symlinks = self.dereference;
-        if let Err(_e) = dir_fd.chmod_at(entry_name, new_mode, follow_symlinks) {
+        if let Err(_e) = dir_fd.chmod_at(entry_name, new_mode, follow_symlinks.into()) {
             if self.verbose {
                 println!(
                     "failed to change mode of {} to {new_mode:o}",
@@ -668,8 +667,8 @@ impl Chmoder {
             if (new_mode & !naively_expected_new_mode) != 0 {
                 return Err(ChmodError::NewPermissions(
                     file.into(),
-                    display_permissions_unix(new_mode as mode_t, false),
-                    display_permissions_unix(naively_expected_new_mode as mode_t, false),
+                    display_permissions_unix(new_mode, false),
+                    display_permissions_unix(naively_expected_new_mode, false),
                 )
                 .into());
             }
@@ -691,8 +690,8 @@ impl Chmoder {
                 println!(
                     "failed to change mode of file {} from {fperm:04o} ({}) to {mode:04o} ({})",
                     file.quote(),
-                    display_permissions_unix(fperm as mode_t, false),
-                    display_permissions_unix(mode as mode_t, false)
+                    display_permissions_unix(fperm, false),
+                    display_permissions_unix(mode, false)
                 );
             }
             Err(1)

@@ -1,12 +1,12 @@
-use std::time::Duration;
-
 // This file is part of the uutils coreutils package.
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore dont
-use rstest::rstest;
 
+// spell-checker:ignore dont
+
+use rstest::rstest;
+use std::time::Duration;
 use uucore::display::Quotable;
 use uutests::util::TestScenario;
 use uutests::{new_ucmd, util_name};
@@ -104,6 +104,13 @@ fn test_preserve_status() {
     }
 }
 
+#[test]
+fn test_kill_after_preserves_timeout_exit_without_preserve_status() {
+    new_ucmd!()
+        .args(&["-k", "1", "1", "sleep", "10"])
+        .fails_with_code(124)
+        .no_output();
+}
 #[test]
 fn test_preserve_status_even_when_send_signal() {
     // When sending CONT signal, process doesn't get killed or stopped.
@@ -285,4 +292,22 @@ fn test_foreground_signal0_kill_after() {
     new_ucmd!()
         .args(&["--foreground", "-s0", "-k.1", ".1", "sleep", "10"])
         .fails_with_code(137);
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_realtime_signal_names() {
+    // timeout should accept RTMIN and RTMAX as valid signal names
+    new_ucmd!()
+        .args(&["-v", "-s", "RTMAX", ".1", "sleep", "1"])
+        .fails()
+        .stderr_contains("sending signal RTMAX to command");
+    new_ucmd!()
+        .args(&["-v", "-s", "RTMIN", ".1", "sleep", "1"])
+        .fails()
+        .stderr_contains("sending signal RTMIN to command");
+    new_ucmd!()
+        .args(&["-v", "-s", "SIGRTMAX", ".1", "sleep", "1"])
+        .fails()
+        .stderr_contains("sending signal RTMAX to command");
 }

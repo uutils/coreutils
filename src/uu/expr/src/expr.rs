@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 use clap::{Arg, ArgAction, Command};
-use std::io::Write;
+use std::io::{Write, stdout};
 use syntax_tree::{AstNode, is_truthy};
 use thiserror::Error;
 use uucore::os_string_to_vec;
@@ -71,9 +71,9 @@ impl UError for ExprError {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("expr")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("expr"))
         .about(translate!("expr-about"))
         .override_usage(format_usage(&translate!("expr-usage")))
         .after_help(translate!("expr-after-help"))
@@ -99,7 +99,7 @@ pub fn uu_app() -> Command {
         )
 }
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // For expr utility we do not want getopts.
     // The following usage should work without escaping hyphens: `expr -15 = 1 + 2 \* \( 3 - -4 \)`
@@ -109,9 +109,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect::<Result<Vec<_>, _>>()?;
 
     if args.len() == 1 && args[0] == b"--help" {
-        let _ = uu_app().print_help();
+        uu_app().print_help()?;
     } else if args.len() == 1 && args[0] == b"--version" {
-        println!("{} {}", uucore::util_name(), uucore::crate_version!());
+        writeln!(stdout(), "expr {}", uucore::crate_version!())?;
     } else {
         // The first argument may be "--" and should be be ignored.
         let args = if !args.is_empty() && args[0] == b"--" {
@@ -121,8 +121,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         };
 
         let res = AstNode::parse(args)?.eval()?.eval_as_string();
-        let _ = std::io::stdout().write_all(&res);
-        let _ = std::io::stdout().write_all(b"\n");
+        let _ = stdout().write_all(&res);
+        let _ = stdout().write_all(b"\n");
 
         if !is_truthy(&res.into()) {
             return Err(1.into());

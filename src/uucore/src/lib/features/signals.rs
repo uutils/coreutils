@@ -12,6 +12,8 @@
 
 #[cfg(unix)]
 use nix::errno::Errno;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use nix::libc;
 #[cfg(unix)]
 use nix::sys::signal::{
     SaFlags, SigAction, SigHandler, SigHandler::SigDfl, SigHandler::SigIgn, SigSet, Signal,
@@ -394,11 +396,24 @@ pub static ALL_SIGNALS: [&str; 32] = [
 pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
     let signal_name_upcase = signal_name_or_value.to_uppercase();
     if let Ok(value) = signal_name_upcase.parse() {
-        return if is_signal(value) { Some(value) } else { None };
+        if is_signal(value) {
+            return Some(value);
+        }
+        return realtime_signal_bounds()
+            .filter(|&(rtmin, rtmax)| value >= rtmin && value <= rtmax)
+            .map(|_| value);
     }
     let signal_name = signal_name_upcase.trim_start_matches("SIG");
 
-    ALL_SIGNALS.iter().position(|&s| s == signal_name)
+    if let Some(pos) = ALL_SIGNALS.iter().position(|&s| s == signal_name) {
+        return Some(pos);
+    }
+
+    realtime_signal_bounds().and_then(|(rtmin, rtmax)| match signal_name {
+        "RTMIN" => Some(rtmin),
+        "RTMAX" => Some(rtmax),
+        _ => None,
+    })
 }
 
 /// Returns true if the given number is a valid signal number.
@@ -409,6 +424,63 @@ pub fn is_signal(num: usize) -> bool {
 /// Returns the signal name for a given signal value.
 pub fn signal_name_by_value(signal_value: usize) -> Option<&'static str> {
     ALL_SIGNALS.get(signal_value).copied()
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn realtime_signal_bounds() -> Option<(usize, usize)> {
+    let rtmin = libc::SIGRTMIN();
+    let rtmax = libc::SIGRTMAX();
+
+    (0 < rtmin && rtmin <= rtmax).then_some((rtmin as usize, rtmax as usize))
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+fn realtime_signal_bounds() -> Option<(usize, usize)> {
+    None
+}
+
+/// Returns the largest signal number that list-style interfaces should accept.
+pub fn signal_number_upper_bound() -> usize {
+    let base = ALL_SIGNALS.len() - 1;
+
+    realtime_signal_bounds().map_or(base, |(_, rtmax)| rtmax.max(base))
+}
+
+/// Returns the signal name for list-style interfaces.
+pub fn signal_list_name_by_value(signal_value: usize) -> Option<String> {
+    if let Some(signal_name) = signal_name_by_value(signal_value) {
+        return Some(signal_name.to_string());
+    }
+
+    realtime_signal_bounds().and_then(|(rtmin, rtmax)| {
+        if signal_value == rtmin {
+            Some("RTMIN".to_string())
+        } else if signal_value == rtmax {
+            Some("RTMAX".to_string())
+        } else {
+            None
+        }
+    })
+}
+
+/// Returns the signal value for list-style interfaces.
+pub fn signal_list_value_by_name_or_number(spec: &str) -> Option<usize> {
+    let spec_upcase = spec.to_uppercase();
+
+    if let Ok(value) = spec_upcase.parse::<usize>() {
+        return (value <= signal_number_upper_bound()).then_some(value);
+    }
+
+    if let Some(value) = signal_by_name_or_value(&spec_upcase) {
+        return Some(value);
+    }
+
+    let signal_name = spec_upcase.trim_start_matches("SIG");
+    realtime_signal_bounds().and_then(|(rtmin, rtmax)| match signal_name {
+        "RTMIN" => Some(rtmin),
+        "RTMAX" => Some(rtmax),
+        _ => None,
+    })
 }
 
 /// Restores SIGPIPE to default behavior (process terminates on broken pipe).
@@ -466,6 +538,9 @@ static STDERR_WAS_CLOSED: AtomicBool = AtomicBool::new(false);
 #[cfg(unix)]
 static SIGPIPE_WAS_IGNORED: AtomicBool = AtomicBool::new(false);
 
+#[cfg(unix)]
+static STARTUP_STATE_WAS_CAPTURED: AtomicBool = AtomicBool::new(false);
+
 /// Captures stdio and SIGPIPE state at process initialization, before main() runs.
 ///
 /// # Safety
@@ -476,6 +551,11 @@ pub unsafe extern "C" fn capture_startup_state() {
     use nix::libc;
     use std::mem::MaybeUninit;
     use std::ptr;
+
+    // No spinlock because we're single-threaded at this point
+    if STARTUP_STATE_WAS_CAPTURED.swap(true, Ordering::Relaxed) {
+        return;
+    }
 
     // Capture stdio state
     unsafe {
@@ -641,4 +721,73 @@ fn name() {
     for (value, signal) in ALL_SIGNALS.iter().enumerate() {
         assert_eq!(signal_name_by_value(value), Some(*signal));
     }
+}
+
+#[test]
+fn list_signal_names_match_static_signal_names() {
+    for (value, signal) in ALL_SIGNALS.iter().enumerate() {
+        assert_eq!(signal_list_name_by_value(value), Some(signal.to_string()));
+    }
+}
+
+#[test]
+fn list_signal_numbers_follow_upper_bound() {
+    assert_eq!(
+        signal_list_value_by_name_or_number(&signal_number_upper_bound().to_string()),
+        Some(signal_number_upper_bound())
+    );
+    assert_eq!(
+        signal_list_value_by_name_or_number(&(signal_number_upper_bound() + 1).to_string()),
+        None
+    );
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn linux_realtime_signal_upper_bound_includes_rtmax() {
+    let (_, rtmax) = realtime_signal_bounds().unwrap();
+    assert!(signal_number_upper_bound() >= rtmax);
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn linux_realtime_signal_names_are_listed() {
+    let (rtmin, rtmax) = realtime_signal_bounds().unwrap();
+
+    assert_eq!(signal_list_name_by_value(rtmin), Some("RTMIN".to_string()));
+    assert_eq!(signal_list_name_by_value(rtmax), Some("RTMAX".to_string()));
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn linux_realtime_signal_names_resolve_to_runtime_values() {
+    let (rtmin, rtmax) = realtime_signal_bounds().unwrap();
+
+    assert_eq!(signal_list_value_by_name_or_number("RTMIN"), Some(rtmin));
+    assert_eq!(signal_list_value_by_name_or_number("RTMAX"), Some(rtmax));
+    assert_eq!(signal_list_value_by_name_or_number("SIGRTMIN"), Some(rtmin));
+    assert_eq!(signal_list_value_by_name_or_number("SIGRTMAX"), Some(rtmax));
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn linux_unnamed_signal_numbers_are_valid_for_lists() {
+    assert_eq!(signal_list_value_by_name_or_number("32"), Some(32));
+    assert_eq!(signal_list_value_by_name_or_number("33"), Some(33));
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn linux_realtime_signals_resolve_by_name_or_value() {
+    let (rtmin, rtmax) = realtime_signal_bounds().unwrap();
+
+    // By name
+    assert_eq!(signal_by_name_or_value("RTMIN"), Some(rtmin));
+    assert_eq!(signal_by_name_or_value("RTMAX"), Some(rtmax));
+    assert_eq!(signal_by_name_or_value("SIGRTMIN"), Some(rtmin));
+    assert_eq!(signal_by_name_or_value("SIGRTMAX"), Some(rtmax));
+
+    // By numeric value
+    assert_eq!(signal_by_name_or_value(&rtmin.to_string()), Some(rtmin));
+    assert_eq!(signal_by_name_or_value(&rtmax.to_string()), Some(rtmax));
 }

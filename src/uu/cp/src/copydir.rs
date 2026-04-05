@@ -26,10 +26,22 @@ use uucore::translate;
 use uucore::uio_error;
 use walkdir::{DirEntry, WalkDir};
 
+#[cfg(all(feature = "selinux", target_os = "linux"))]
+use crate::set_selinux_context;
 use crate::{
     CopyMode, CopyResult, CpError, Options, aligned_ancestors, context_for, copy_attributes,
     copy_file,
 };
+
+/// Represents a directory that needs permission fixup after copying its contents.
+struct DirNeedingPermissions {
+    /// Absolute path to the source directory
+    source: PathBuf,
+    /// Path to the destination directory
+    dest: PathBuf,
+    /// Whether this directory was freshly created by the copy operation
+    was_created: bool,
+}
 
 /// Ensure a Windows path starts with a `\\?`.
 #[cfg(target_os = "windows")]
@@ -84,7 +96,7 @@ fn get_local_to_root_parent(
 /// Given an iterator, return all its items except the last.
 fn skip_last<T>(mut iter: impl Iterator<Item = T>) -> impl Iterator<Item = T> {
     let last = iter.next();
-    iter.scan(last, |state, item| state.replace(item))
+    iter.scan(last, Option::replace)
 }
 
 /// Paths that are invariant throughout the traversal when copying a directory.
@@ -110,17 +122,18 @@ impl<'a> Context<'a> {
         let current_dir = env::current_dir()?;
         let root_path = current_dir.join(root);
         let target_is_file = target.is_file();
-        let root_parent = if target.exists() && !root.to_str().unwrap().ends_with("/.") {
-            root_path.parent().map(|p| p.to_path_buf())
-        } else if root == Path::new(".") && target.is_dir() {
-            // Special case: when copying current directory (.) to an existing directory,
-            // we don't want to use the parent path as root_parent because we want to
-            // copy the contents of the current directory directly into the target directory,
-            // not create a subdirectory with the current directory's name.
-            None
-        } else {
-            Some(root_path)
-        };
+        let root_parent =
+            if target.exists() && !root.as_os_str().as_encoded_bytes().ends_with(b"/.") {
+                root_path.parent().map(ToOwned::to_owned)
+            } else if root == Path::new(".") && target.is_dir() {
+                // Special case: when copying current directory (.) to an existing directory,
+                // we don't want to use the parent path as root_parent because we want to
+                // copy the contents of the current directory directly into the target directory,
+                // not create a subdirectory with the current directory's name.
+                None
+            } else {
+                Some(root_path)
+            };
         Ok(Self {
             current_dir,
             root_parent,
@@ -217,10 +230,10 @@ impl Entry {
             // an extra level of nesting. For example, if we're in /home/user/source_dir
             // and copying . to /home/user/dest_dir, we want to copy source_dir/file.txt
             // to dest_dir/file.txt, not dest_dir/source_dir/file.txt.
-            if let Some(current_dir_name) = context.current_dir.file_name() {
-                if let Ok(stripped) = descendant.strip_prefix(current_dir_name) {
-                    descendant = stripped.to_path_buf();
-                }
+            if let Some(current_dir_name) = context.current_dir.file_name()
+                && let Ok(stripped) = descendant.strip_prefix(current_dir_name)
+            {
+                descendant = stripped.to_path_buf();
             }
         }
 
@@ -237,7 +250,12 @@ impl Entry {
 
 #[allow(clippy::too_many_arguments)]
 /// Copy a single entry during a directory traversal.
-/// Returns a bool value indicating whether this function created a directory or not
+///
+/// # Returns
+///
+/// Returns `Ok(true)` if this function created a new directory, `Ok(false)` otherwise.
+/// This information is used to determine whether default directory permissions should
+/// be preserved during attribute copying.
 fn copy_direntry(
     progress_bar: Option<&ProgressBar>,
     entry: &Entry,
@@ -282,8 +300,8 @@ fn copy_direntry(
     }
 
     // If the source is not a directory, then we need to copy the file.
-    if !source_is_dir {
-        if let Err(err) = copy_file(
+    if !source_is_dir
+        && let Err(err) = copy_file(
             progress_bar,
             &entry.source_relative,
             entry.local_to_target.as_path(),
@@ -293,34 +311,34 @@ fn copy_direntry(
             copied_files,
             created_parent_dirs,
             false,
-        ) {
-            if preserve_hard_links {
-                if !source_is_symlink {
-                    return Err(err);
+        )
+    {
+        if preserve_hard_links {
+            if !source_is_symlink {
+                return Err(err);
+            }
+            // silent the error with a symlink
+            // In case we do --archive, we might copy the symlink
+            // before the file itself
+        } else {
+            // At this point, `path` is just a plain old file.
+            // Terminate this function immediately if there is any
+            // kind of error *except* a "permission denied" error.
+            //
+            // TODO What other kinds of errors, if any, should
+            // cause us to continue walking the directory?
+            match err {
+                CpError::IoErrContext(e, _) if e.kind() == io::ErrorKind::PermissionDenied => {
+                    show!(uio_error!(
+                        e,
+                        "{}",
+                        translate!(
+                            "cp-error-cannot-open-for-reading",
+                            "source" => entry.source_relative.quote()
+                        ),
+                    ));
                 }
-                // silent the error with a symlink
-                // In case we do --archive, we might copy the symlink
-                // before the file itself
-            } else {
-                // At this point, `path` is just a plain old file.
-                // Terminate this function immediately if there is any
-                // kind of error *except* a "permission denied" error.
-                //
-                // TODO What other kinds of errors, if any, should
-                // cause us to continue walking the directory?
-                match err {
-                    CpError::IoErrContext(e, _) if e.kind() == io::ErrorKind::PermissionDenied => {
-                        show!(uio_error!(
-                            e,
-                            "{}",
-                            translate!(
-                                "cp-error-cannot-open-for-reading",
-                                "source" => entry.source_relative.quote()
-                            ),
-                        ));
-                    }
-                    e => return Err(e),
-                }
+                e => return Err(e),
             }
         }
     }
@@ -422,7 +440,7 @@ pub(crate) fn copy_directory(
     let mut last_iter: Option<DirEntry> = None;
 
     // Keep track of all directories we've created that need permission fixes
-    let mut dirs_needing_permissions: Vec<(PathBuf, PathBuf, bool)> = Vec::new();
+    let mut dirs_needing_permissions: Vec<DirNeedingPermissions> = Vec::new();
 
     // Traverse the contents of the directory, copying each one.
     for direntry_result in WalkDir::new(root)
@@ -477,15 +495,16 @@ pub(crate) fn copy_directory(
                             &entry.local_to_target,
                             &options.attributes,
                             false,
+                            options.set_selinux_context,
                         )?;
                         continue;
                     }
                     // Add this directory to our list for permission fixing later
-                    dirs_needing_permissions.push((
-                        entry.source_absolute.clone(),
-                        entry.local_to_target.clone(),
-                        created,
-                    ));
+                    dirs_needing_permissions.push(DirNeedingPermissions {
+                        source: entry.source_absolute.clone(),
+                        dest: entry.local_to_target.clone(),
+                        was_created: created,
+                    });
 
                     // If true, last_iter is not a parent of this iter.
                     // The means we just exited a directory.
@@ -519,6 +538,7 @@ pub(crate) fn copy_directory(
                                 &entry.local_to_target,
                                 &options.attributes,
                                 false,
+                                options.set_selinux_context,
                             )?;
                         }
                     }
@@ -534,8 +554,19 @@ pub(crate) fn copy_directory(
 
     // Fix permissions for all directories we created
     // This ensures that even sibling directories get their permissions fixed
-    for (source_path, dest_path, created) in dirs_needing_permissions {
-        copy_attributes(&source_path, &dest_path, &options.attributes, created)?;
+    for dir in dirs_needing_permissions {
+        copy_attributes(
+            &dir.source,
+            &dir.dest,
+            &options.attributes,
+            dir.was_created,
+            options.set_selinux_context,
+        )?;
+
+        #[cfg(all(feature = "selinux", target_os = "linux"))]
+        if options.set_selinux_context {
+            set_selinux_context(&dir.dest, options.context.as_ref())?;
+        }
     }
 
     // Also fix permissions for parent directories,
@@ -544,7 +575,18 @@ pub(crate) fn copy_directory(
         let dest = target.join(root.file_name().unwrap());
         for (x, y) in aligned_ancestors(root, dest.as_path()) {
             if let Ok(src) = canonicalize(x, MissingHandling::Normal, ResolveMode::Physical) {
-                copy_attributes(&src, y, &options.attributes, false)?;
+                copy_attributes(
+                    &src,
+                    y,
+                    &options.attributes,
+                    false,
+                    options.set_selinux_context,
+                )?;
+
+                #[cfg(all(feature = "selinux", target_os = "linux"))]
+                if options.set_selinux_context {
+                    set_selinux_context(y, options.context.as_ref())?;
+                }
             }
         }
     }
@@ -625,7 +667,9 @@ fn build_dir(
         };
 
         excluded_perms |= umask;
-        let mode = !excluded_perms & 0o777; //use only the last three octet bits
+        // Always keep the owner write bit so we can copy files into the directory.
+        // The correct final permissions are applied afterward by dirs_needing_permissions.
+        let mode = (!excluded_perms & 0o777) | 0o200; // mask to permission bits, always keep owner write
         std::os::unix::fs::DirBuilderExt::mode(&mut builder, mode);
     }
 

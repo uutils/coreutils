@@ -765,7 +765,7 @@ fn parse_print_settings(matches: &clap::ArgMatches) -> UResult<(bool, bool, bool
 }
 
 fn get_and_parse_field_number(matches: &clap::ArgMatches, key: &str) -> UResult<Option<usize>> {
-    let value = matches.get_one::<String>(key).map(|s| s.as_str());
+    let value = matches.get_one::<String>(key).map(String::as_str);
     parse_field_number_option(value)
 }
 
@@ -863,7 +863,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("join")
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("join-about"))

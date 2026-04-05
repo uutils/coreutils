@@ -19,7 +19,7 @@ use std::os::fd::AsFd;
 use std::os::unix::fs::FileTypeExt;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::UResult;
+use uucore::error::{UResult, strip_errno};
 use uucore::translate;
 use uucore::{fast_inc::fast_inc_one, format_usage};
 
@@ -82,12 +82,12 @@ impl LineNumber {
 #[derive(Error, Debug)]
 enum CatError {
     /// Wrapper around `io::Error`
-    #[error("{0}")]
+    #[error("{}", strip_errno(.0))]
     Io(#[from] io::Error),
-    /// Wrapper around `nix::Error`
+    /// Wrapper around `rustix::io::Errno`
     #[cfg(any(target_os = "linux", target_os = "android"))]
     #[error("{0}")]
-    Nix(#[from] nix::Error),
+    Rustix(#[from] rustix::io::Errno),
     /// Unknown file type; it's not a regular file, socket, etc.
     #[error("{}", translate!("cat-error-unknown-filetype", "ft_debug" => .ft_debug))]
     UnknownFiletype {
@@ -254,10 +254,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     .any(|v| matches.get_flag(v));
 
     let squeeze_blank = matches.get_flag(options::SQUEEZE_BLANK);
-    let files: Vec<OsString> = match matches.get_many::<OsString>(options::FILE) {
-        Some(v) => v.cloned().collect(),
-        None => vec![OsString::from("-")],
-    };
+    #[allow(clippy::unwrap_used, reason = "clap provides '-' by default")]
+    let files = matches.get_many::<OsString>(options::FILE).unwrap();
 
     let options = OutputOptions {
         show_ends,
@@ -266,15 +264,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         show_tabs,
         squeeze_blank,
     };
-    cat_files(&files, &options)
+    cat_files(files, &options)
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("cat")
         .version(uucore::crate_version!())
         .override_usage(format_usage(&translate!("cat-usage")))
         .about(translate!("cat-about"))
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("cat"))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(
@@ -282,6 +280,7 @@ pub fn uu_app() -> Command {
                 .hide(true)
                 .action(ArgAction::Append)
                 .value_parser(clap::value_parser!(OsString))
+                .default_value("-")
                 .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
@@ -397,7 +396,10 @@ fn cat_path(path: &OsString, options: &OutputOptions, state: &mut OutputState) -
     }
 }
 
-fn cat_files(files: &[OsString], options: &OutputOptions) -> UResult<()> {
+fn cat_files<'a, I>(files: I, options: &OutputOptions) -> UResult<()>
+where
+    I: IntoIterator<Item = &'a OsString>,
+{
     let mut state = OutputState {
         line_number: LineNumber::new(),
         at_line_start: true,
@@ -418,11 +420,11 @@ fn cat_files(files: &[OsString], options: &OutputOptions) -> UResult<()> {
         Ok(())
     } else {
         // each next line is expected to display "cat: …"
-        let line_joiner = format!("\n{}: ", uucore::util_name());
+        let line_joiner = "\ncat: ";
 
         Err(uucore::error::USimpleError::new(
             error_messages.len() as i32,
-            error_messages.join(&line_joiner),
+            error_messages.join(line_joiner),
         ))
     }
 }
@@ -476,17 +478,17 @@ fn get_input_type(path: &OsString) -> CatResult<InputType> {
 /// simple memory copy.
 fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
     let stdout = io::stdout();
-    let mut stdout_lock = stdout.lock();
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         // If we're on Linux or Android, try to use the splice() system call
         // for faster writing. If it works, we're done.
-        if !splice::write_fast_using_splice(handle, &stdout_lock)? {
+        if !splice::write_fast_using_splice(handle, &stdout)? {
             return Ok(());
         }
     }
     // If we're not on Linux or Android, or the splice() call failed,
     // fall back on slower writing.
+    let mut stdout_lock = stdout.lock();
     let mut buf = [0; 1024 * 64];
     loop {
         match handle.reader.read(&mut buf) {

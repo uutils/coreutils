@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) chdir progname subcommand subcommands unsets setenv putenv spawnp SIGSEGV SIGBUS sigaction Sigmask sigprocmask
+// spell-checker:ignore (ToDO) chdir progname subcommand subcommands unsets setenv putenv spawnp SIGSEGV SIGBUS sigaction Sigmask sigprocmask elidable
 
 pub mod native_int_str;
 pub mod split_iterator;
@@ -12,7 +12,7 @@ pub mod string_parser;
 pub mod variable_parser;
 
 use clap::builder::ValueParser;
-use clap::{Arg, ArgAction, Command, crate_name};
+use clap::{Arg, ArgAction, Command};
 use ini::Ini;
 use native_int_str::{
     Convert, NCvt, NativeIntStr, NativeIntString, NativeStr, from_native_int_representation_owned,
@@ -24,24 +24,26 @@ use nix::sys::signal::{
     SigHandler::{SigDfl, SigIgn},
     SigSet, SigmaskHow, Signal, signal, sigprocmask,
 };
+#[cfg(unix)]
+use nix::unistd::execvp;
 use std::borrow::Cow;
 #[cfg(unix)]
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
+#[cfg(unix)]
+use std::ffi::CString;
 use std::ffi::{OsStr, OsString};
 use std::io;
 use std::io::Write as _;
 use std::io::stderr;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
-#[cfg(unix)]
-use std::os::unix::process::CommandExt;
 
 use uucore::display::{Quotable, print_all_env_vars};
 use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError};
 use uucore::line_ending::LineEnding;
 #[cfg(unix)]
-use uucore::signals::{ALL_SIGNALS, signal_by_name_or_value, signal_name_by_value};
+use uucore::signals::{signal_by_name_or_value, signal_name_by_value, signal_number_upper_bound};
 use uucore::translate;
 use uucore::{format_usage, show_warning};
 
@@ -166,10 +168,6 @@ fn parse_signal_opt(target: &mut SignalRequest, opt: &OsStr) -> UResult<()> {
     if opt.is_empty() {
         return Ok(());
     }
-    if opt == "__ALL__" {
-        target.apply_all = true;
-        return Ok(());
-    }
 
     for sig in opt
         .as_bytes()
@@ -191,7 +189,7 @@ fn parse_signal_opt(target: &mut SignalRequest, opt: &OsStr) -> UResult<()> {
 }
 
 #[cfg(unix)]
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct SignalRequest {
     apply_all: bool,
     signals: BTreeSet<usize>,
@@ -214,7 +212,7 @@ impl SignalRequest {
             f(sig, true)?;
         }
         if self.apply_all {
-            for sig_value in 1..ALL_SIGNALS.len() {
+            for sig_value in 1..=signal_number_upper_bound() {
                 if self.signals.contains(&sig_value) {
                     continue;
                 }
@@ -266,7 +264,11 @@ impl SignalActionLog {
 }
 
 #[cfg(unix)]
-fn build_signal_request(matches: &clap::ArgMatches, option: &str) -> UResult<SignalRequest> {
+fn build_signal_request(
+    matches: &clap::ArgMatches,
+    option: &str,
+    signal_apply_all: &BTreeSet<&str>,
+) -> UResult<SignalRequest> {
     let mut request = SignalRequest::default();
     let mut provided_values = 0usize;
 
@@ -274,7 +276,9 @@ fn build_signal_request(matches: &clap::ArgMatches, option: &str) -> UResult<Sig
     if let Some(iter) = matches.get_many::<OsString>(option) {
         for opt in iter {
             if opt.is_empty() {
-                explicit_empty = true;
+                if !signal_apply_all.contains(option) {
+                    explicit_empty = true;
+                }
                 continue;
             }
             provided_values += 1;
@@ -336,9 +340,9 @@ fn load_config_file(opts: &mut Options) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(crate_name!())
+    Command::new("env")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("env"))
         .about(translate!("env-about"))
         .override_usage(format_usage(&translate!("env-usage")))
         .after_help(translate!("env-after-help"))
@@ -536,6 +540,13 @@ struct EnvAppData {
     had_string_argument: bool,
 }
 
+struct ParsedArguments {
+    original_args: Vec<OsString>,
+    matches: clap::ArgMatches,
+    #[cfg(unix)]
+    signal_apply_all: BTreeSet<&'static str>,
+}
+
 impl EnvAppData {
     fn make_error_no_such_file_or_dir(&self, prog: &OsStr) -> Box<dyn UError> {
         uucore::show_error!(
@@ -632,17 +643,20 @@ impl EnvAppData {
     fn parse_arguments(
         &mut self,
         original_args: impl uucore::Args,
-    ) -> Result<(Vec<OsString>, clap::ArgMatches), Box<dyn UError>> {
+    ) -> Result<ParsedArguments, Box<dyn UError>> {
         let original_args: Vec<OsString> = original_args.collect();
-        let mut args = self.process_all_string_arguments(&original_args)?;
+        let args = self.process_all_string_arguments(&original_args)?;
+        #[cfg(unix)]
+        let mut signal_apply_all = BTreeSet::new();
 
-        for arg in &mut args {
+        #[cfg(unix)]
+        for arg in &args {
             if arg == "--ignore-signal" {
-                *arg = OsString::from("--ignore-signal=__ALL__");
+                signal_apply_all.insert(options::IGNORE_SIGNAL);
             } else if arg == "--default-signal" {
-                *arg = OsString::from("--default-signal=__ALL__");
+                signal_apply_all.insert(options::DEFAULT_SIGNAL);
             } else if arg == "--block-signal" {
-                *arg = OsString::from("--block-signal=__ALL__");
+                signal_apply_all.insert(options::BLOCK_SIGNAL);
             }
         }
 
@@ -655,12 +669,11 @@ impl EnvAppData {
                     | clap::error::ErrorKind::DisplayVersion => return Err(e.into()),
                     _ => {
                         // Use ErrorFormatter directly to handle error with shebang message callback
-                        let formatter =
-                            uucore::clap_localization::ErrorFormatter::new(uucore::util_name());
+                        let formatter = uucore::clap_localization::ErrorFormatter::new("env");
                         formatter.print_error_and_exit_with_callback(&e, 125, || {
-                            eprintln!(
-                                "{}: {}",
-                                uucore::util_name(),
+                            let _ = writeln!(
+                                stderr(),
+                                "env: {}",
                                 translate!("env-error-use-s-shebang")
                             );
                         });
@@ -668,11 +681,21 @@ impl EnvAppData {
                 }
             }
         };
-        Ok((original_args, matches))
+        Ok(ParsedArguments {
+            original_args,
+            matches,
+            #[cfg(unix)]
+            signal_apply_all,
+        })
     }
 
     fn run_env(&mut self, original_args: impl uucore::Args) -> UResult<()> {
-        let (original_args, matches) = self.parse_arguments(original_args)?;
+        let ParsedArguments {
+            original_args,
+            matches,
+            #[cfg(unix)]
+            signal_apply_all,
+        } = self.parse_arguments(original_args)?;
 
         self.do_debug_printing = self.do_debug_printing || (0 != matches.get_count("debug"));
         self.do_input_debug_printing = self
@@ -685,7 +708,11 @@ impl EnvAppData {
             }
         }
 
-        let mut opts = make_options(&matches)?;
+        let mut opts = make_options(
+            &matches,
+            #[cfg(unix)]
+            &signal_apply_all,
+        )?;
 
         apply_change_directory(&opts)?;
 
@@ -784,16 +811,40 @@ impl EnvAppData {
 
         #[cfg(unix)]
         {
-            // Execute the program using exec, which replaces the current process.
-            let err = std::process::Command::new(&*prog)
-                .arg0(&*arg0)
-                .args(args)
-                .exec();
+            // Use execvp() directly to preserve signal handlers set by apply_signal_action().
+            // Command::exec() would reset SIGPIPE, interfering with --ignore-signal=PIPE.
 
-            // exec() only returns if there was an error
-            match err.kind() {
-                io::ErrorKind::NotFound => Err(self.make_error_no_such_file_or_dir(&prog)),
-                io::ErrorKind::PermissionDenied => {
+            // Convert program name to CString.
+            let prog_os: &OsStr = prog.as_ref();
+            let Ok(prog_cstring) = CString::new(prog_os.as_bytes()) else {
+                return Err(self.make_error_no_such_file_or_dir(&prog));
+            };
+
+            // Prepare arguments for execvp.
+            let mut argv = Vec::new();
+
+            // Convert arg0 to CString.
+            let arg0_os: &OsStr = arg0.as_ref();
+            let Ok(arg0_cstring) = CString::new(arg0_os.as_bytes()) else {
+                return Err(self.make_error_no_such_file_or_dir(&prog));
+            };
+            argv.push(arg0_cstring);
+
+            // Convert remaining arguments to CString.
+            for arg in args {
+                let arg_os = arg;
+                let Ok(arg_cstring) = CString::new(arg_os.as_bytes()) else {
+                    return Err(self.make_error_no_such_file_or_dir(&prog));
+                };
+                argv.push(arg_cstring);
+            }
+
+            // Execute the program using execvp. this replaces the current
+            // process. The execvp function takes care of appending a NULL
+            // argument to the argument list so that we don't have to.
+            match execvp(&prog_cstring, &argv) {
+                Err(nix::errno::Errno::ENOENT) => Err(self.make_error_no_such_file_or_dir(&prog)),
+                Err(nix::errno::Errno::EACCES) => {
                     uucore::show_error!(
                         "{}",
                         translate!(
@@ -803,15 +854,18 @@ impl EnvAppData {
                     );
                     Err(126.into())
                 }
-                _ => {
+                Err(_) => {
                     uucore::show_error!(
                         "{}",
                         translate!(
                             "env-error-unknown",
-                            "error" => err
+                            "error" => "execvp failed"
                         )
                     );
                     Err(126.into())
+                }
+                Ok(_) => {
+                    unreachable!("execvp should never return on success")
                 }
             }
         }
@@ -860,26 +914,34 @@ fn apply_removal_of_all_env_vars(opts: &Options<'_>) {
     }
 }
 
-fn make_options(matches: &clap::ArgMatches) -> UResult<Options<'_>> {
+#[cfg_attr(not(unix), allow(clippy::elidable_lifetime_names))]
+fn make_options<'a>(
+    matches: &'a clap::ArgMatches,
+    #[cfg(unix)] signal_apply_all: &BTreeSet<&'static str>,
+) -> UResult<Options<'a>> {
     let ignore_env = matches.get_flag("ignore-environment");
     let line_ending = LineEnding::from_zero_flag(matches.get_flag("null"));
-    let running_directory = matches.get_one::<OsString>("chdir").map(|s| s.as_os_str());
+    let running_directory = matches
+        .get_one::<OsString>("chdir")
+        .map(OsString::as_os_str);
     let files = match matches.get_many::<OsString>("file") {
-        Some(v) => v.map(|s| s.as_os_str()).collect(),
+        Some(v) => v.map(OsString::as_os_str).collect(),
         None => Vec::with_capacity(0),
     };
     let unsets = match matches.get_many::<OsString>("unset") {
-        Some(v) => v.map(|s| s.as_os_str()).collect(),
+        Some(v) => v.map(OsString::as_os_str).collect(),
         None => Vec::with_capacity(0),
     };
-    let argv0 = matches.get_one::<OsString>("argv0").map(|s| s.as_os_str());
+    let argv0 = matches
+        .get_one::<OsString>("argv0")
+        .map(OsString::as_os_str);
 
     #[cfg(unix)]
-    let ignore_signal = build_signal_request(matches, options::IGNORE_SIGNAL)?;
+    let ignore_signal = build_signal_request(matches, options::IGNORE_SIGNAL, signal_apply_all)?;
     #[cfg(unix)]
-    let default_signal = build_signal_request(matches, options::DEFAULT_SIGNAL)?;
+    let default_signal = build_signal_request(matches, options::DEFAULT_SIGNAL, signal_apply_all)?;
     #[cfg(unix)]
-    let block_signal = build_signal_request(matches, options::BLOCK_SIGNAL)?;
+    let block_signal = build_signal_request(matches, options::BLOCK_SIGNAL, signal_apply_all)?;
     #[cfg(unix)]
     let list_signal_handling = matches.get_flag(options::LIST_SIGNAL_HANDLING);
 

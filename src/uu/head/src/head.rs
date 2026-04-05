@@ -13,10 +13,10 @@ use std::io::{self, BufWriter, Read, Seek, SeekFrom, Write};
 use std::num::TryFromIntError;
 #[cfg(unix)]
 use std::os::fd::AsFd;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use thiserror::Error;
 use uucore::display::{Quotable, print_verbatim};
-use uucore::error::{FromIo, UError, UResult};
+use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
 use uucore::translate;
 use uucore::{format_usage, show};
@@ -67,9 +67,9 @@ impl UError for HeadError {
 type HeadResult<T> = Result<T, HeadError>;
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("head")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("head"))
         .about(translate!("head-about"))
         .override_usage(format_usage(&translate!("head-usage")))
         .infer_long_args(true)
@@ -510,6 +510,13 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
 
             Ok(())
         } else {
+            if Path::new(file).is_dir() {
+                show!(USimpleError::new(
+                    1,
+                    translate!("head-error-reading-file", "name" => file.quote(), "err" => "Is a directory")
+                ));
+                continue;
+            }
             let mut file_handle = match File::open(file) {
                 Ok(f) => f,
                 Err(err) => {

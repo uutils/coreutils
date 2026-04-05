@@ -300,6 +300,11 @@ fn test_gnu_mode_dumb_format() {
     new_ucmd!().pipe_in("a b").succeeds().stdout_only(
         "                                       a b\n                                   a   b\n",
     );
+
+    new_ucmd!()
+        .pipe_in("2a")
+        .succeeds()
+        .stdout_only(format!("{}2   a\n", " ".repeat(35)));
 }
 
 #[test]
@@ -331,12 +336,33 @@ fn test_unicode_padding_alignment() {
 }
 
 #[test]
+fn test_gnu_compat_numeric_token_with_emoji_produces_no_index() {
+    // GNU ptx produces no output for this input in default mode.
+    new_ucmd!()
+        .pipe_in("012345678901234567890123456789🛠\n")
+        .succeeds()
+        .no_output();
+}
+
+#[test]
 fn test_unicode_truncation_alignment() {
     new_ucmd!()
         .args(&["-w", "10"])
         .pipe_in("föö bar")
         .succeeds()
         .stdout_only("     /   bar\n        föö/\n");
+}
+
+#[test]
+fn test_unicode_in_after_chunk_does_not_panic() {
+    // Regression test for a panic in get_output_chunks() when the computed
+    // max_after_size used byte lengths but the output was assembled as chars.
+    // The emoji is multibyte in UTF-8 and previously could trigger:
+    // `assertion failed: max_after_size >= after.len()`.
+    new_ucmd!()
+        .pipe_in("We've got +11 more G of 1.70. 🛠\n")
+        .succeeds()
+        .stdout_contains("We've got +11");
 }
 
 #[test]
@@ -354,6 +380,32 @@ fn test_narrow_width_with_long_reference_no_panic() {
         .pipe_in("content")
         .succeeds()
         .stdout_only(":1       content\n");
+}
+
+#[test]
+fn test_typeset_mode_default_width_100() {
+    new_ucmd!()
+        .args(&["-t"])
+        .pipe_in("bar\n")
+        .succeeds()
+        .stdout_only(format!("{}bar\n", " ".repeat(53)));
+}
+
+#[test]
+fn test_typeset_mode_w_overrides_t() {
+    new_ucmd!()
+        .args(&["-t", "-w", "10"])
+        .pipe_in("bar\n")
+        .succeeds()
+        .stdout_only(format!("{}bar\n", " ".repeat(8)));
+}
+
+#[test]
+fn test_default_width_72() {
+    new_ucmd!()
+        .pipe_in("bar\n")
+        .succeeds()
+        .stdout_only(format!("{}bar\n", " ".repeat(39)));
 }
 
 #[test]

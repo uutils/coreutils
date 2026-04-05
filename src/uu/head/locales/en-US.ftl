@@ -7,10 +7,10 @@ head-usage = head [FLAG]... [FILE]...
 
 # Help messages
 head-help-bytes = print the first NUM bytes of each file;
- with the leading '-', print all but the last
+ with a leading '-', print all but the last
  NUM bytes of each file
 head-help-lines = print the first NUM lines instead of the first 10;
- with the leading '-', print all but the last
+ with a leading '-', print all but the last
  NUM lines of each file
 head-help-quiet = never print headers giving file names
 head-help-verbose = always print headers giving file names

@@ -9,8 +9,10 @@
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use itertools::Itertools;
 use regex::Regex;
+use std::ffi::OsStr;
 use std::fs::metadata;
 use std::io::{Read, Write, stderr, stdin, stdout};
+use std::str::Utf8Error;
 use std::string::FromUtf8Error;
 use std::time::SystemTime;
 use thiserror::Error;
@@ -57,6 +59,7 @@ mod options {
     pub const JOIN_LINES: &str = "join-lines";
     pub const HELP: &str = "help";
     pub const FILES: &str = "files";
+    pub const EXPAND_TABS: &str = "expand-tabs";
 }
 
 struct OutputOptions {
@@ -79,6 +82,7 @@ struct OutputOptions {
     join_lines: bool,
     col_sep_for_printing: String,
     line_width: Option<usize>,
+    expand_tabs: Option<ExpandTabsOptions>,
 }
 
 /// One line of an input file, annotated with file, page, and line number.
@@ -87,7 +91,7 @@ struct FileLine {
     file_id: usize,
     page_number: usize,
     line_number: usize,
-    line_content: String,
+    line_content: Vec<u8>,
 }
 
 impl FileLine {
@@ -96,16 +100,25 @@ impl FileLine {
         page_number: usize,
         line_number: usize,
         buf: &[u8],
-    ) -> Result<Self, FromUtf8Error> {
-        // TODO Don't read bytes to String just to directly write them
-        // out again anyway.
-        let line_content = String::from_utf8(buf.to_vec())?;
-        Ok(Self {
+        options: &OutputOptions,
+    ) -> Self {
+        let line_content = if let Some(expand_tabs) = &options.expand_tabs {
+            let mut result =
+                Vec::with_capacity(buf.len() + buf.len() / 20 * expand_tabs.width as usize);
+            for b in buf {
+                apply_expand_tab(&mut result, *b, expand_tabs);
+            }
+            result
+        } else {
+            buf.to_vec()
+        };
+
+        Self {
             file_id,
             page_number,
             line_number,
             line_content,
-        })
+        }
     }
 }
 
@@ -121,6 +134,21 @@ struct NumberingMode {
     width: usize,
     separator: String,
     first_number: usize,
+}
+
+#[derive(Debug)]
+struct ExpandTabsOptions {
+    input_char: char,
+    width: i32,
+}
+
+impl Default for ExpandTabsOptions {
+    fn default() -> Self {
+        Self {
+            width: 8,
+            input_char: TAB,
+        }
+    }
 }
 
 impl Default for NumberingMode {
@@ -149,6 +177,14 @@ impl From<FromUtf8Error> for PrError {
     }
 }
 
+impl From<Utf8Error> for PrError {
+    fn from(err: Utf8Error) -> Self {
+        Self::EncounteredErrors {
+            msg: err.to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Error)]
 enum PrError {
     #[error("pr: {msg}")]
@@ -156,9 +192,9 @@ enum PrError {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("pr")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("pr"))
         .about(translate!("pr-about"))
         .after_help(translate!("pr-after-help"))
         .override_usage(format_usage(&translate!("pr-usage")))
@@ -326,6 +362,14 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath),
         )
+        .arg(
+            Arg::new(options::EXPAND_TABS)
+                .long(options::EXPAND_TABS)
+                .short('e')
+                .num_args(1)
+                .value_name("[CHAR][WIDTH]")
+                .help(translate!("pr-help-expand-tabs")),
+        )
 }
 
 #[uucore::main]
@@ -339,7 +383,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut files = matches
         .get_many::<String>(options::FILES)
-        .map(|v| v.map(|s| s.as_str()).collect::<Vec<_>>())
+        .map(|v| v.map(String::as_str).collect::<Vec<_>>())
         .unwrap_or_default()
         .clone();
     if files.is_empty() {
@@ -390,6 +434,7 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
     let column_page_option = Regex::new(r"^[-+]\d+.*").unwrap();
     let num_regex = Regex::new(r"^[^-]\d*$").unwrap();
     let n_regex = Regex::new(r"^-n\s*$").unwrap();
+    let e_regex = Regex::new(r"^-e").unwrap();
     let mut arguments = args.to_owned();
     let num_option = args.iter().find_position(|x| n_regex.is_match(x.trim()));
     if let Some((pos, _value)) = num_option {
@@ -399,6 +444,17 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
                 arguments.insert(pos + 1, format!("{}", NumberingMode::default().width));
                 arguments.insert(pos + 2, could_be_file);
             }
+        }
+    }
+
+    // To ensure not to accidentally delete the next argument after a short flag for -e we insert
+    // the default values for the -e flag is '-e' is present without direct arguments.
+    let expand_tabs_option = arguments
+        .iter()
+        .find_position(|x| e_regex.is_match(x.trim()));
+    if let Some((pos, value)) = expand_tabs_option {
+        if value.trim().len() <= 2 {
+            arguments[pos] = "-e\t8".to_string();
         }
     }
 
@@ -435,8 +491,8 @@ fn get_date_format(matches: &ArgMatches) -> String {
             // Replicate behavior from GNU manual.
             if std::env::var("POSIXLY_CORRECT").is_ok()
                 // TODO: This needs to be moved to uucore and handled by icu?
-                && (std::env::var("LC_TIME").unwrap_or_default() == "POSIX"
-                    || std::env::var("LC_ALL").unwrap_or_default() == "POSIX")
+                && (std::env::var_os("LC_TIME").as_deref() == Some(OsStr::new("POSIX"))
+                    || std::env::var_os("LC_ALL").as_deref() == Some(OsStr::new("POSIX")))
             {
                 "%b %e %H:%M %Y"
             } else {
@@ -522,6 +578,26 @@ fn build_options(
                 None
             }
         });
+
+    let expand_tabs = matches
+        .get_one::<String>(options::EXPAND_TABS)
+        .map(|s| {
+            s.chars().next().map_or(Ok(ExpandTabsOptions::default()), |c| {
+                if c.is_ascii_digit() {
+                    s
+                        .parse()
+                        .map_err(|_e| PrError::EncounteredErrors { msg: format!("{}\n{}", translate!("pr-error-invalid-expand-tab-argument", "arg" => s), translate!("pr-try-help-message")) })
+                        .map(|width| ExpandTabsOptions{input_char: TAB, width})
+                } else if s.len() > 1 {
+                    s[1..]
+                        .parse()
+                        .map_err(|_e| PrError::EncounteredErrors { msg: format!("{}\n{}", translate!("pr-error-invalid-expand-tab-argument", "arg" => &s[1..]), translate!("pr-try-help-message")) })
+                        .map(|width| ExpandTabsOptions{input_char: c, width})
+                } else {
+                    Ok(ExpandTabsOptions{input_char: c, width: 8})
+                }
+            })
+        }).transpose()?;
 
     let double_space = matches.get_flag(options::DOUBLE_SPACE);
 
@@ -759,6 +835,7 @@ fn build_options(
         join_lines,
         col_sep_for_printing,
         line_width,
+        expand_tabs,
     })
 }
 
@@ -776,13 +853,34 @@ fn read_to_end(path: &str) -> Result<Vec<u8>, std::io::Error> {
     }
 }
 
+fn apply_expand_tab(chunk: &mut Vec<u8>, byte: u8, expand_options: &ExpandTabsOptions) {
+    if byte == expand_options.input_char as u8 {
+        // If the byte encountered is the input char we use width to calculate
+        // the amount of spaces needed (if no input char given we stored '\t'
+        // in our struct)
+        let spaces_needed =
+            expand_options.width as usize - (chunk.len() % expand_options.width as usize);
+        chunk.extend(std::iter::repeat_n(b' ', spaces_needed));
+    } else if byte == TAB as u8 {
+        // If a byte got passed to the -e flag (eg -ea1)  which is not '\t' GNU
+        // still expands it but does not use an optionally given width parameter
+        // but does the '\t' expansion with the default value (8)
+        let spaces_needed = 8 - (chunk.len() % 8);
+        chunk.extend(std::iter::repeat_n(b' ', spaces_needed));
+    } else {
+        // This arm means the byte is neither '\t' nor the bytes to be
+        // expanded
+        chunk.push(byte);
+    }
+}
+
 fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
     // Read the entire contents of the file into a buffer.
     //
     // TODO Read incrementally.
     let buf = read_to_end(path)?;
 
-    let pages = get_pages(options, 0, &buf)?;
+    let pages = get_pages(options, 0, &buf);
 
     // Split the text into pages, and then print each line in each page.
     for page_with_page_number in pages {
@@ -798,14 +896,7 @@ fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
 ///
 /// Returns a list of the form `(page_num, lines)`.
 ///
-/// # Errors
-///
-/// Returns an error if the bytes are not a valid UTF-8 string.
-fn get_pages(
-    options: &OutputOptions,
-    file_id: usize,
-    buf: &[u8],
-) -> Result<Vec<(usize, Vec<FileLine>)>, FromUtf8Error> {
+fn get_pages(options: &OutputOptions, file_id: usize, buf: &[u8]) -> Vec<(usize, Vec<FileLine>)> {
     let start_page = options.start_page;
     let end_page = options.end_page;
     let lines_needed_per_page = lines_to_read_for_page(options);
@@ -840,7 +931,8 @@ fn get_pages(
                 // If the file has the pattern `\n\f`, don't treat the
                 // `\f` as its own line; instead ignore the empty line.
             } else {
-                let file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i])?;
+                let file_line =
+                    FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i], options);
                 page.push(file_line);
             }
 
@@ -865,7 +957,8 @@ fn get_pages(
                 // If the file has the pattern `\f\n`, don't treat the
                 // `\n` as its own line; instead ignore the empty line.
             } else {
-                let file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i])?;
+                let file_line =
+                    FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i], options);
                 page.push(file_line);
                 line_num += 1;
             }
@@ -887,7 +980,7 @@ fn get_pages(
 
     // Consider all trailing bytes as the last line.
     if prev < buf.len() {
-        let file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..])?;
+        let file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..], options);
         page.push(file_line);
     }
 
@@ -896,7 +989,7 @@ fn get_pages(
         pages.push((page_num, page.clone()));
     }
 
-    Ok(pages)
+    pages
 }
 
 /// Key used to group lines together according to their file and page number.
@@ -951,7 +1044,7 @@ fn get_file_line_groups(
 
         // Split the text into pages and collect each line for
         // subsequent grouping.
-        for (_, mut page) in get_pages(options, file_id, &buf)? {
+        for (_, mut page) in get_pages(options, file_id, &buf) {
             all_lines.append(&mut page);
         }
     }
@@ -1186,7 +1279,9 @@ fn get_line_for_printing(
     let blank_line = String::new();
     let formatted_line_number = get_formatted_line_number(options, file_line.line_number, index);
 
-    let mut complete_line = format!("{formatted_line_number}{}", file_line.line_content);
+    // TODO: support non-UTF-8 bytes (currently replaced with U+FFFD)
+    let content = String::from_utf8_lossy(&file_line.line_content);
+    let mut complete_line = format!("{formatted_line_number}{content}");
 
     let offset_spaces = &options.offset_spaces;
 
@@ -1226,7 +1321,7 @@ fn get_formatted_line_number(opts: &OutputOptions, line_number: usize, index: us
         let width = num_opt.width;
         let separator = &num_opt.separator;
         if line_str.len() >= width {
-            format!("{:>width$}{separator}", &line_str[line_str.len() - width..],)
+            format!("{:>width$}{separator}", &line_str[line_str.len() - width..])
         } else {
             format!("{line_str:>width$}{separator}")
         }

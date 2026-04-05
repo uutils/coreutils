@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, Command};
 #[cfg(unix)]
 use libc::S_IWUSR;
-use rand::{Rng, SeedableRng, rngs::StdRng, seq::SliceRandom};
+use rand::{RngExt as _, rngs::StdRng, seq::SliceRandom};
 use std::cell::RefCell;
 use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
@@ -189,7 +189,7 @@ impl BytesWriter {
         match pass {
             PassType::Random => match random_source {
                 None => Ok(Self::Random {
-                    rng: StdRng::from_os_rng(),
+                    rng: rand::make_rng(),
                     buffer: [0; BLOCK_SIZE],
                 }),
                 Some(file_cell) => {
@@ -318,9 +318,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("shred")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("shred"))
         .about(translate!("shred-about"))
         .after_help(translate!("shred-after-help"))
         .override_usage(format_usage(&translate!("shred-usage")))
@@ -590,7 +590,7 @@ fn create_standard_pass_sequence(num_passes: usize) -> Vec<PassType> {
     }
 
     // For standard sequence, use system randomness for shuffling
-    let mut rng = StdRng::from_os_rng();
+    let mut rng: StdRng = rand::make_rng();
     sequence[1..].shuffle(&mut rng);
 
     // Final pass is always random

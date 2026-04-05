@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) ints (linux) NOFILE dfgi
+// spell-checker:ignore (words) ints (linux) NOFILE dfgi abmon avril
 #![allow(clippy::cast_possible_wrap)]
 
 use std::env;
@@ -15,6 +15,8 @@ use std::time::Duration;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
+#[cfg(unix)]
+use uutests::util::is_locale_available;
 
 fn test_helper(file_name: &str, possible_args: &[&str]) {
     for args in possible_args {
@@ -478,8 +480,17 @@ fn test_non_printing_chars() {
 }
 
 #[test]
-fn test_exponents_positive_general_fixed() {
+fn test_exponents_general() {
     test_helper("exponents_general", &["-g"]);
+}
+
+#[test]
+fn test_exponents_positive_general() {
+    new_ucmd!()
+        .pipe_in("1\n2e3\n1e-5")
+        .arg("-g")
+        .succeeds()
+        .stdout_only("1e-5\n1\n2e3\n");
 }
 
 #[test]
@@ -592,6 +603,191 @@ fn test_month_default2() {
             .succeeds()
             .stdout_only("000may\nJAn\nFeb\nMAY\nJun\n");
     }
+}
+
+/// Query the system for abbreviated month names via `locale abmon`.
+/// Returns a vector of 12 month abbreviations in order (Jan..Dec),
+/// or None if the command fails or returns unexpected output.
+#[cfg(any(target_vendor = "apple", target_os = "openbsd"))]
+fn get_system_abmon(locale: &str) -> Option<Vec<String>> {
+    let output = Command::new("locale")
+        .env("LC_ALL", locale)
+        .arg("abmon")
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8(output.stdout).ok()?;
+    let months: Vec<String> = text
+        .trim()
+        .split(';')
+        .map(String::from)
+        .filter(|m| !m.is_empty())
+        .collect();
+    if months.len() == 12 {
+        Some(months)
+    } else {
+        None
+    }
+}
+
+/// Build shuffled input and sorted expected output from month names.
+#[cfg(any(target_vendor = "apple", target_os = "openbsd"))]
+fn month_sort_input_expected(months: &[String]) -> (String, String) {
+    // Shuffled order: May, Dec, Jan, Jun, Feb, Mar, Apr, Jul, Aug, Sep, Oct, Nov
+    let shuffle_order = [4, 11, 0, 5, 1, 2, 3, 6, 7, 8, 9, 10];
+    let input = shuffle_order
+        .iter()
+        .map(|&i| months[i].as_str())
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n";
+    let expected = months.join("\n") + "\n";
+    (input, expected)
+}
+
+#[test]
+#[cfg(unix)]
+fn test_month_sort_french_locale() {
+    let locale = "fr_FR.UTF-8";
+    if !is_locale_available(locale) {
+        return;
+    }
+    // spell-checker:disable
+    // On macOS/OpenBSD, abbreviated month names vary across OS versions (different CLDR data),
+    // so we query the system dynamically. On other platforms, glibc values are stable.
+    #[cfg(any(target_vendor = "apple", target_os = "openbsd"))]
+    let (input, expected) = {
+        let Some(months) = get_system_abmon(locale) else {
+            return;
+        };
+        month_sort_input_expected(&months)
+    };
+    #[cfg(not(any(target_vendor = "apple", target_os = "openbsd")))]
+    let (input, expected) = (
+        "mai\ndéc.\njanv.\njuin\nfévr.\nmars\navril\njuil.\naoût\nsept.\noct.\nnov.\n".to_string(),
+        "janv.\nfévr.\nmars\navril\nmai\njuin\njuil.\naoût\nsept.\noct.\nnov.\ndéc.\n".to_string(),
+    );
+    // spell-checker:enable
+    new_ucmd!()
+        .env("LC_ALL", locale)
+        .arg("-M")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_month_sort_hungarian_locale() {
+    let locale = "hu_HU.UTF-8";
+    if !is_locale_available(locale) {
+        return;
+    }
+    // spell-checker:disable
+    #[cfg(any(target_vendor = "apple", target_os = "openbsd"))]
+    let (input, expected) = {
+        let Some(months) = get_system_abmon(locale) else {
+            return;
+        };
+        month_sort_input_expected(&months)
+    };
+    #[cfg(not(any(target_vendor = "apple", target_os = "openbsd")))]
+    let (input, expected) = (
+        "máj\ndec\njan\njún\nfebr\nmárc\nápr\njúl\naug\nszept\nokt\nnov\n".to_string(),
+        "jan\nfebr\nmárc\nápr\nmáj\njún\njúl\naug\nszept\nokt\nnov\ndec\n".to_string(),
+    );
+    // spell-checker:enable
+    new_ucmd!()
+        .env("LC_ALL", locale)
+        .arg("-M")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
+/// Test that embedded blanks in month names cause a non-match (GNU compat).
+/// E.g. "av   ril" should NOT match "avril" — GNU treats it as unknown.
+#[test]
+#[cfg(unix)]
+fn test_month_sort_french_embedded_blanks() {
+    let locale = "fr_FR.UTF-8";
+    if !is_locale_available(locale) {
+        return;
+    }
+    // spell-checker:disable
+    // Pick three locale months (indices 2=March, 3=April, 5=June) and verify
+    // that inserting blanks into April's name causes a non-match.
+    // On glibc these are "mars", "avril", "juin"; on other systems they vary.
+    #[cfg(any(target_vendor = "apple", target_os = "openbsd"))]
+    let months = {
+        let Some(m) = get_system_abmon(locale) else {
+            return;
+        };
+        m
+    };
+    #[cfg(not(any(target_vendor = "apple", target_os = "openbsd")))]
+    let months = vec![
+        "janv.", "févr.", "mars", "avril", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.",
+        "déc.",
+    ]
+    .into_iter()
+    .map(String::from)
+    .collect::<Vec<_>>();
+
+    let march = &months[2];
+    let april = &months[3];
+    let june = &months[5];
+
+    // Build a mangled version of April with embedded spaces: e.g. "avril" -> "av   ril"
+    // Insert spaces after the second byte.
+    if april.len() < 3 {
+        // Month name too short to meaningfully insert blanks; skip.
+        return;
+    }
+    let mangled = format!("{}   {}", &april[..2], &april[2..]);
+
+    // Input: june, mangled-april, march
+    let input = format!("{june}\n{mangled}\n{march}\n");
+    // Expected: mangled sorts as unknown (first), then march (3), then june (6)
+    let expected = format!("{mangled}\n{march}\n{june}\n");
+    // spell-checker:enable
+    new_ucmd!()
+        .env("LC_ALL", locale)
+        .arg("-M")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_month_sort_japanese_locale() {
+    let locale = "ja_JP.UTF-8";
+    if !is_locale_available(locale) {
+        return;
+    }
+    // On macOS/OpenBSD, abbreviated month names may differ, so query dynamically.
+    #[cfg(any(target_vendor = "apple", target_os = "openbsd"))]
+    let (input, expected) = {
+        let Some(months) = get_system_abmon(locale) else {
+            return;
+        };
+        month_sort_input_expected(&months)
+    };
+    // Japanese abbreviated months are numeric (1月..12月) on glibc
+    #[cfg(not(any(target_vendor = "apple", target_os = "openbsd")))]
+    let (input, expected) = (
+        "5月\n12月\n1月\n6月\n2月\n3月\n4月\n7月\n8月\n9月\n10月\n11月\n".to_string(),
+        "1月\n2月\n3月\n4月\n5月\n6月\n7月\n8月\n9月\n10月\n11月\n12月\n".to_string(),
+    );
+    new_ucmd!()
+        .env("LC_ALL", locale)
+        .arg("-M")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
 }
 
 #[test]
@@ -1378,13 +1574,12 @@ fn test_tmp_files_deleted_on_sigint() {
     use std::{fs::read_dir, time::Duration};
 
     use nix::{sys::signal, unistd::Pid};
-    use rand::rngs::SmallRng;
+    use rand::{RngExt as _, SeedableRng, rngs::SmallRng};
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("tmp_dir");
     let file_name = "big_file_to_sort.txt";
     {
-        use rand::{Rng, SeedableRng};
         use std::io::Write;
         let mut file = at.make_file(file_name);
         // approximately 20 MB
@@ -1561,6 +1756,15 @@ fn test_files0_from_empty() {
         .stderr_only("sort: no input from 'file'\n");
 }
 
+#[test]
+#[cfg(unix)]
+fn test_files0_read_error() {
+    new_ucmd!()
+        .args(&["--files0-from", "."])
+        .fails_with_code(2)
+        .stderr_only("sort: cannot read: .: Is a directory\n");
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 // Test for GNU tests/sort/sort-files0-from.pl "empty-non-regular"
@@ -1709,7 +1913,7 @@ fn test_human_numeric_blank_thousands_sep_locale() {
         }
         let sep = String::from_utf8_lossy(&output.stdout);
         let sep = sep.trim_end_matches(&['\n', '\r'][..]);
-        if sep.is_empty() || sep.len() != 1 || !sep.chars().all(|c| c.is_whitespace()) {
+        if sep.is_empty() || sep.len() != 1 || !sep.chars().all(char::is_whitespace) {
             return None;
         }
         Some(sep.to_string())
@@ -2702,6 +2906,58 @@ fn test_locale_complex_utf8_sorting() {
         .pipe_in(input)
         .succeeds()
         .stdout_is("apple\nApple\nbanana\nBanana\nzebra\nZebra\n");
+}
+
+#[test]
+fn test_locale_posix_sort_debug_message() {
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .arg("--debug")
+        .pipe_in("a\nA\nb\nB\n")
+        .succeeds()
+        .stderr_contains("text ordering performed using simple byte comparison");
+}
+
+#[test]
+fn test_locale_utf8_sort_debug_message() {
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("--debug")
+        .pipe_in("a\nA\nb\nB\n")
+        .succeeds()
+        .stderr_contains("text ordering performed using ‘en_US.UTF-8’ sorting rules");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_failed_to_set_locale_debug_message() {
+    let result = new_ucmd!()
+        .env("LC_ALL", "not-valid-locale")
+        .arg("--debug")
+        .pipe_in("a\nA\nb\nB\n")
+        .succeeds();
+
+    result.stderr_contains("text ordering performed using simple byte comparison");
+
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    result.stderr_contains("failed to set locale");
+}
+
+#[test]
+fn test_locale_utf8_with_key_field() {
+    // Regression test for issue #10909
+    // Sort should not panic when using -k flag with UTF-8 locale
+    // The bug occurred when rayon worker threads tried to access an uninitialized collator
+    let input = "a b 5433 down data path1 path2 path3 path4 path5
+c d 5435 down data path1 path2 path3 path4 path5
+e f 5436 down data path1 path2 path3 path4 path5\n";
+
+    new_ucmd!()
+        .env("LANG", "en_US.utf8")
+        .arg("-k3")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(input);
 }
 
 /* spell-checker: enable */

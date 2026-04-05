@@ -142,7 +142,7 @@ enum OptionsError {
         .0.iter()
             .map(|t| translate!("df-error-filesystem-type-both-selected-and-excluded", "type" => t.quote()))
             .collect::<Vec<_>>()
-            .join(format!("\n{}: ", uucore::util_name()).as_str())
+            .join("\ndf: ")
     )]
     FilesystemTypeBothSelectedAndExcluded(Vec<String>),
 }
@@ -301,12 +301,7 @@ fn get_all_filesystems(opt: &Options) -> UResult<Vec<Filesystem>> {
     // Run a sync call before any operation if so instructed.
     if opt.sync {
         #[cfg(not(any(windows, target_os = "redox")))]
-        unsafe {
-            #[cfg(not(target_os = "android"))]
-            uucore::libc::sync();
-            #[cfg(target_os = "android")]
-            uucore::libc::syscall(uucore::libc::SYS_sync);
-        }
+        rustix::fs::sync();
     }
 
     let mut mounts = vec![];
@@ -456,7 +451,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if matches.get_flag(OPT_INODES) {
             println!(
                 "{}",
-                translate!("df-error-inodes-not-supported-windows", "program" => uucore::util_name())
+                translate!("df-error-inodes-not-supported-windows", "program" => "df")
             );
             return Ok(());
         }
@@ -503,7 +498,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("df")
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("df-about"))

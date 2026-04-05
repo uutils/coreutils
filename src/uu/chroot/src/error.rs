@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore NEWROOT Userspec userspec
 //! Errors returned by chroot.
+use std::ffi::OsString;
 use std::io::Error;
 use std::path::PathBuf;
 use thiserror::Error;
@@ -21,11 +22,11 @@ pub enum ChrootError {
 
     /// Failed to execute the specified command.
     #[error("{}", translate!("chroot-error-command-failed", "cmd" => _0.quote(), "err" => _1))]
-    CommandFailed(String, #[source] Error),
+    CommandFailed(OsString, #[source] Error),
 
     /// Failed to find the specified command.
     #[error("{}", translate!("chroot-error-command-not-found", "cmd" => _0.quote(), "err" => _1))]
-    CommandNotFound(String, #[source] Error),
+    CommandNotFound(OsString, #[source] Error),
 
     #[error("{}", translate!("chroot-error-groups-parsing-failed"))]
     GroupsParsingFailed,

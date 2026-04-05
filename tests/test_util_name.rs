@@ -27,6 +27,20 @@ fn init() {
 }
 
 #[test]
+#[cfg(all(feature = "env", any(target_os = "linux", target_os = "android")))]
+fn binary_name_protection() {
+    let ts = TestScenario::new("env");
+    let bin = ts.bin_path.clone();
+    ts.ucmd()
+        .arg("-a")
+        .arg("hijacked")
+        .arg(&bin)
+        .arg("--version")
+        .succeeds()
+        .stdout_contains("coreutils");
+}
+
+#[test]
 #[cfg(feature = "ls")]
 fn execution_phrase_double() {
     use std::process::Command;
@@ -234,4 +248,18 @@ fn test_musl_no_dynamic_deps() {
         "Found dynamic dependencies in musl binary:\n{}",
         stdout
     );
+}
+
+#[test]
+fn test_sorted_utils() {
+    let s = TestScenario::new("list_sorted");
+    let out = String::from_utf8(
+        std::process::Command::new(&s.bin_path)
+            .arg("--list")
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap();
+    assert!(out.lines().filter(|s| !s.is_empty()).is_sorted());
 }

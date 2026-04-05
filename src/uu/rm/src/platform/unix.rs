@@ -16,7 +16,7 @@ use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::FromIo;
 use uucore::prompt_yes;
-use uucore::safe_traversal::DirFd;
+use uucore::safe_traversal::{DirFd, SymlinkBehavior};
 use uucore::show_error;
 use uucore::translate;
 
@@ -120,7 +120,7 @@ pub fn safe_remove_file(
     let parent = path.parent().unwrap_or(Path::new("."));
     let file_name = path.file_name()?;
 
-    let dir_fd = DirFd::open(parent).ok()?;
+    let dir_fd = DirFd::open(parent, SymlinkBehavior::Follow).ok()?;
 
     match dir_fd.unlink_at(file_name, false) {
         Ok(_) => {
@@ -151,7 +151,7 @@ pub fn safe_remove_empty_dir(
     let parent = path.parent().unwrap_or(Path::new("."));
     let dir_name = path.file_name()?;
 
-    let dir_fd = DirFd::open(parent).ok()?;
+    let dir_fd = DirFd::open(parent, SymlinkBehavior::Follow).ok()?;
 
     match dir_fd.unlink_at(dir_name, true) {
         Ok(_) => {
@@ -197,21 +197,13 @@ fn handle_permission_denied(
     // When we can't open a subdirectory due to permission denied,
     // try to remove it directly (it might be empty).
     // This matches GNU rm behavior with -f flag.
-    if let Err(remove_err) = dir_fd.unlink_at(entry_name, true) {
-        // Failed to remove - show appropriate error
-        if remove_err.kind() == std::io::ErrorKind::PermissionDenied {
-            // Permission denied errors are always shown, even with force
-            show_permission_denied_error(entry_path);
-            return true;
-        } else if !options.force {
-            let remove_err = remove_err.map_err_context(
-                || translate!("rm-error-cannot-remove", "file" => entry_path.quote()),
-            );
-            show_error!("{remove_err}");
-            return true;
-        }
-        // With force mode, suppress non-permission errors
-        return !options.force;
+    if let Err(_remove_err) = dir_fd.unlink_at(entry_name, true) {
+        // The directory is not empty (or another error) and we can't read it
+        // to remove its contents. Report the original permission denied error.
+        // This matches GNU rm behavior — the real problem is we lack
+        // permission to traverse the directory.
+        show_permission_denied_error(entry_path);
+        return true;
     }
     // Successfully removed empty directory
     verbose_removed_directory(entry_path, options);
@@ -290,7 +282,7 @@ pub fn safe_remove_dir_recursive(
     };
 
     // Try to open the directory using DirFd for secure traversal
-    let dir_fd = match DirFd::open(path) {
+    let dir_fd = match DirFd::open(path, SymlinkBehavior::Follow) {
         Ok(fd) => fd,
         Err(e) => {
             // If we can't open the directory for safe traversal,
@@ -368,7 +360,7 @@ pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Opt
         let entry_path = path.join(&entry_name);
 
         // Get metadata for the entry using fstatat
-        let entry_stat = match dir_fd.stat_at(&entry_name, false) {
+        let entry_stat = match dir_fd.stat_at(&entry_name, SymlinkBehavior::NoFollow) {
             Ok(stat) => stat,
             Err(e) => {
                 error |= handle_error_with_force(e, &entry_path, options);
@@ -389,7 +381,7 @@ pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Opt
             }
 
             // Recursively remove subdirectory using safe traversal
-            let child_dir_fd = match dir_fd.open_subdir(&entry_name) {
+            let child_dir_fd = match dir_fd.open_subdir(&entry_name, SymlinkBehavior::Follow) {
                 Ok(fd) => fd,
                 Err(e) => {
                     // If we can't open the subdirectory for safe traversal,

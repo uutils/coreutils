@@ -17,14 +17,14 @@ mod options {
     pub const SILENT: &str = "silent";
 }
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let matches = uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 2)?;
+
     // Disable SIGPIPE so we can handle broken pipe errors gracefully
     // and exit with code 3 instead of being killed by the signal.
     #[cfg(unix)]
     let _ = uucore::signals::disable_pipe_errors();
-
-    let matches = uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 2)?;
 
     let silent = matches.get_flag(options::SILENT);
 
@@ -39,10 +39,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut stdout = std::io::stdout();
 
-    let name = nix::unistd::ttyname(std::io::stdin());
+    let name = rustix::termios::ttyname(std::io::stdin(), Vec::with_capacity(8));
 
     let write_result = if let Ok(name) = name {
-        stdout.write_all_os(name.as_os_str())
+        use std::os::unix::ffi::OsStrExt;
+        let os_name = std::ffi::OsStr::from_bytes(name.as_bytes());
+        stdout.write_all_os(os_name)
     } else {
         set_exit_code(1);
         writeln!(stdout, "{}", translate!("tty-not-a-tty"))
@@ -58,7 +60,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    let cmd = Command::new(uucore::util_name())
+    let cmd = Command::new("tty")
         .version(uucore::crate_version!())
         .about(translate!("tty-about"))
         .override_usage(format_usage(&translate!("tty-usage")))

@@ -548,7 +548,9 @@ impl ClosedTmpFile for ClosedCompressedTmpFile {
 
     fn reopen(self) -> UResult<Self::Reopened> {
         let mut command = Command::new(&self.compress_prog);
-        let file = File::open(&self.path).unwrap();
+        // mirroring what is done for ClosedPlainTmpFile
+        let file =
+            File::open(&self.path).map_err(|error| SortError::OpenTmpFileFailed { error })?;
         command.stdin(file).stdout(Stdio::piped()).arg("-d");
         let mut child = command
             .spawn()
@@ -569,6 +571,8 @@ impl MergeInput for CompressedTmpMergeInput {
     type InnerRead = ChildStdout;
 
     fn finished_reading(self) -> UResult<()> {
+        // Explicitly close stdout before waiting on the child process.
+        #[allow(clippy::drop_non_drop)]
         drop(self.child_stdout);
         check_child_success(self.child, &self.compress_prog)?;
         let _ = fs::remove_file(self.path);
