@@ -164,15 +164,16 @@ fn parse_unit(s: &str) -> Result<Unit> {
 /// Parses a unit size. Suffixes are turned into their integer representations. For example, 'K'
 /// will return `Ok(1000)`, and '2K' will return `Ok(2000)`.
 fn parse_unit_size(s: &str) -> Result<usize> {
-    let number: String = s.chars().take_while(char::is_ascii_digit).collect();
-    let suffix = &s[number.len()..];
+    let split = s.find(|c: char| !c.is_ascii_digit()).unwrap_or(s.len());
+    let (number, suffix) = s.split_at(split);
 
-    if number.is_empty() || "0".repeat(number.len()) != number {
+    // Reject all-zero numeric parts like "0" or "00K".
+    let all_zero = !number.is_empty() && number.bytes().all(|b| b == b'0');
+    if !all_zero {
         if let Some(multiplier) = parse_unit_size_suffix(suffix) {
             if number.is_empty() {
                 return Ok(multiplier);
             }
-
             if let Ok(n) = number.parse::<usize>() {
                 return Ok(n * multiplier);
             }
