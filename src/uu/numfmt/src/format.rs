@@ -173,29 +173,17 @@ fn parse_suffix(
     if with_i {
         iter.next_back();
     }
-    let suffix = match iter.next_back() {
-        Some('K') => Some((RawSuffix::K, with_i)),
-        Some('k') => Some((RawSuffix::K, with_i)),
-        Some('M') => Some((RawSuffix::M, with_i)),
-        Some('G') => Some((RawSuffix::G, with_i)),
-        Some('T') => Some((RawSuffix::T, with_i)),
-        Some('P') => Some((RawSuffix::P, with_i)),
-        Some('E') => Some((RawSuffix::E, with_i)),
-        Some('Z') => Some((RawSuffix::Z, with_i)),
-        Some('Y') => Some((RawSuffix::Y, with_i)),
-        Some('R') => Some((RawSuffix::R, with_i)),
-        Some('Q') => Some((RawSuffix::Q, with_i)),
-        Some('0'..='9') if !with_i => None,
-        _ => {
-            return Err(translate!("numfmt-error-invalid-number", "input" => s.quote()));
-        }
-    };
+    let last = iter.next_back();
+    let suffix = last
+        .and_then(|c| RawSuffix::try_from(&c).ok())
+        .map(|raw| (raw, with_i));
+    match (suffix, last) {
+        (Some(_), _) => {}
+        (None, Some(c)) if c.is_ascii_digit() && !with_i => {}
+        _ => return Err(translate!("numfmt-error-invalid-number", "input" => s.quote())),
+    }
 
-    let suffix_len = match suffix {
-        None => 0,
-        Some((_, false)) => 1,
-        Some((_, true)) => 2,
-    };
+    let suffix_len = suffix.map_or(0, |(_, with_i)| 1 + usize::from(with_i));
 
     let number_part = &trimmed[..trimmed.len() - suffix_len];
 
