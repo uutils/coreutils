@@ -29,7 +29,6 @@ env-error-expected-brace-or-colon = Caractère inattendu : '{ $char }', accolade
 env-error-cannot-specify-null-with-command = impossible de spécifier --null (-0) avec une commande
 env-error-invalid-signal = { $signal } : signal invalide
 
-env-error-config-file = { $file } : { $error }
 env-error-variable-name-issue = problème de nom de variable (à { $position }) : { $error }
 env-error-generic = Erreur : { $error }
 env-error-no-such-file = { $program } : Aucun fichier ou répertoire de ce type
