@@ -1,8 +1,8 @@
 tail-about = Afficher les 10 dernières lignes de chaque FICHIER sur la sortie standard.
   Avec plus d'un FICHIER, précéder chacun d'un en-tête donnant le nom du fichier.
   Sans FICHIER, ou quand FICHIER est -, lire l'entrée standard.
-  Les arguments obligatoires pour les drapeaux longs sont également obligatoires pour les drapeaux courts.
-tail-usage = tail [DRAPEAU]... [FICHIER]...
+  Les arguments obligatoires pour les options longues sont également obligatoires pour les options courtes.
+tail-usage = tail [OPTION]... [FICHIER]...
 
 # Messages d'aide
 tail-help-bytes = Nombre d'octets à afficher
