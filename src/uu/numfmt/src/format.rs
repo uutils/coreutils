@@ -343,40 +343,20 @@ fn parse_implicit_precision(s: &str) -> usize {
 }
 
 fn remove_suffix(i: f64, s: Option<Suffix>, u: Unit) -> Result<f64> {
-    match (s, u) {
-        (Some((raw_suffix, false)), Unit::Auto | Unit::Si) => match raw_suffix {
-            RawSuffix::K => Ok(i * 1e3),
-            RawSuffix::M => Ok(i * 1e6),
-            RawSuffix::G => Ok(i * 1e9),
-            RawSuffix::T => Ok(i * 1e12),
-            RawSuffix::P => Ok(i * 1e15),
-            RawSuffix::E => Ok(i * 1e18),
-            RawSuffix::Z => Ok(i * 1e21),
-            RawSuffix::Y => Ok(i * 1e24),
-            RawSuffix::R => Ok(i * 1e27),
-            RawSuffix::Q => Ok(i * 1e30),
-        },
-        (Some((raw_suffix, false)), Unit::Iec(false))
-        | (Some((raw_suffix, true)), Unit::Auto | Unit::Iec(true)) => match raw_suffix {
-            RawSuffix::K => Ok(i * IEC_BASES[1]),
-            RawSuffix::M => Ok(i * IEC_BASES[2]),
-            RawSuffix::G => Ok(i * IEC_BASES[3]),
-            RawSuffix::T => Ok(i * IEC_BASES[4]),
-            RawSuffix::P => Ok(i * IEC_BASES[5]),
-            RawSuffix::E => Ok(i * IEC_BASES[6]),
-            RawSuffix::Z => Ok(i * IEC_BASES[7]),
-            RawSuffix::Y => Ok(i * IEC_BASES[8]),
-            RawSuffix::R => Ok(i * IEC_BASES[9]),
-            RawSuffix::Q => Ok(i * IEC_BASES[10]),
-        },
-        (Some((raw_suffix, false)), Unit::Iec(true)) => Err(
+    let Some((raw_suffix, with_i)) = s else {
+        return Ok(i);
+    };
+    let idx = raw_suffix.index() + 1;
+    match (with_i, u) {
+        (false, Unit::Auto | Unit::Si) => Ok(i * SI_BASES[idx]),
+        (false, Unit::Iec(false)) | (true, Unit::Auto | Unit::Iec(true)) => Ok(i * IEC_BASES[idx]),
+        (false, Unit::Iec(true)) => Err(
             translate!("numfmt-error-missing-i-suffix", "number" => i, "suffix" => format!("{raw_suffix:?}")),
         ),
-        (Some((raw_suffix, with_i)), Unit::None) => Err(
+        (_, Unit::None) => Err(
             translate!("numfmt-error-rejecting-suffix", "number" => i, "suffix" => format!("{raw_suffix:?}{}", if with_i { "i" } else { "" })),
         ),
-        (None, _) => Ok(i),
-        (_, _) => Err(translate!("numfmt-error-suffix-unsupported-for-unit")),
+        _ => Err(translate!("numfmt-error-suffix-unsupported-for-unit")),
     }
 }
 
