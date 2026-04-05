@@ -2213,10 +2213,7 @@ fn print_paths(parents: bool, source: &Path, dest: &Path) {
         //     a/b -> d/a/b
         //
         for (x, y) in aligned_ancestors(source, dest) {
-            println!(
-                "{}",
-                translate!("cp-verbose-created-directory", "source" => x.display(), "dest" => y.display())
-            );
+            println!("{} -> {}", x.display(), y.display());
         }
     }
 
