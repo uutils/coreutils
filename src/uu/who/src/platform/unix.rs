@@ -379,7 +379,7 @@ impl Who {
         }
 
         let idle = if last_change == 0 {
-            translate!("who-idle-unknown").into()
+            "  ?".into()
         } else {
             idle_string(last_change, 0)
         };
