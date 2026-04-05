@@ -57,10 +57,8 @@ tail-status-has-been-replaced-following-new-file = { $file } a été remplacé ;
 tail-status-file-truncated = { $file } : fichier tronqué
 tail-status-replaced-with-untailable-file = { $file } a été remplacé par un fichier non suivable
 tail-status-replaced-with-untailable-file-giving-up = { $file } a été remplacé par un fichier non suivable ; abandon de ce nom
-tail-status-file-became-inaccessible = { $file } { $become_inaccessible } : { $no_such_file }
 tail-status-directory-containing-watched-file-removed = le répertoire contenant le fichier surveillé a été supprimé
 tail-status-backend-cannot-be-used-reverting-to-polling = { $backend } ne peut pas être utilisé, retour au sondage
-tail-status-file-no-such-file = { $file } : { $no_such_file }
 
 # Constantes de texte
 tail-bad-fd = Descripteur de fichier incorrect
