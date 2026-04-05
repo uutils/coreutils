@@ -319,12 +319,8 @@ fn load_config_file(opts: &mut Options) -> UResult<()> {
             Ini::load_from_file(file)
         };
 
-        let conf = conf.map_err(|e| {
-            USimpleError::new(
-                1,
-                translate!("env-error-config-file", "file" => file.maybe_quote(), "error" => e),
-            )
-        })?;
+        let conf =
+            conf.map_err(|e| USimpleError::new(1, format!("{}: {e}", file.maybe_quote())))?;
 
         for (_, prop) in &conf {
             // ignore all INI section lines (treat them as comments)
