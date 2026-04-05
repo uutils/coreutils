@@ -2444,6 +2444,247 @@ fn test_ls_time_recent_future() {
         .stdout_contains("RECENT");
 }
 
+/// Check whether a locale (possibly non-UTF-8) is available by asking `locale charmap`.
+#[cfg(unix)]
+fn is_any_locale_available(locale: &str) -> bool {
+    use std::process::Command;
+    Command::new("locale")
+        .env("LC_ALL", locale)
+        .arg("charmap")
+        .output()
+        .map(|o| o.status.success() && !o.stdout.is_empty())
+        .unwrap_or(false)
+}
+
+/// Tests for `ls -l --time-style=locale` with various locales.
+///
+/// GNU `ls --time-style=locale` uses `nl_langinfo` to look up the locale's
+/// month names and date format. Different locales produce substantially
+/// different output (different month names, different calendars, different
+/// byte encodings). These tests mirror the approach used in `test_date.rs`:
+/// each locale is probed with `locale charmap`; if unavailable the test is
+/// skipped (so CI without extra locales still passes).
+///
+/// Locales exercised:
+///   * `ru_RU.KOI8-R`  — non-UTF-8 single-byte encoding
+///   * `fa_IR.UTF-8`   — Persian calendar year (e.g. 1403)
+///   * `am_ET.UTF-8`   — Ethiopian calendar year
+///   * `th_TH.UTF-8`   — Buddhist calendar year (e.g. 2568)
+///   * `zh_CN.GB18030` — non-UTF-8 multi-byte encoding, year-first format
+#[test]
+#[ignore = "uutils ls does not yet honor LC_TIME for --time-style=locale"]
+#[cfg(unix)]
+fn test_ls_time_style_locale_ru_koi8r() {
+    if !is_any_locale_available("ru_RU.KOI8-R") {
+        println!("Skipping: ru_RU.KOI8-R locale not available");
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let f = at.make_file("ru_test");
+    // Fixed mtime: 2025-03-12 (so the month field is March)
+    f.set_modified(SystemTime::UNIX_EPOCH + Duration::from_secs(1_741_774_800))
+        .unwrap();
+
+    let result = scene
+        .ucmd()
+        .env("LC_ALL", "ru_RU.KOI8-R")
+        .env("TZ", "UTC")
+        .arg("-l")
+        .arg("--time-style=locale")
+        .arg("ru_test")
+        .succeeds();
+
+    // KOI8-R Russian month abbreviation for March ("ÍÁÒ") contains bytes
+    // outside the ASCII range (0x80..=0xFF). The output must not be the
+    // plain "Mar" that the C locale would emit.
+    let bytes = result.stdout();
+    let has_high_byte = bytes.iter().any(|&b| b >= 0x80);
+    let stdout_lossy = String::from_utf8_lossy(bytes);
+    assert!(
+        has_high_byte || !stdout_lossy.contains("Mar "),
+        "ru_RU.KOI8-R should produce a localized (non-ASCII) month, got: {stdout_lossy}"
+    );
+}
+
+#[test]
+#[ignore = "uutils ls does not yet honor LC_TIME for --time-style=locale"]
+#[cfg(unix)]
+fn test_ls_time_style_locale_fa_ir() {
+    if !is_any_locale_available("fa_IR.UTF-8") {
+        println!("Skipping: fa_IR.UTF-8 locale not available");
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let f = at.make_file("fa_test");
+    // 2025-03-12 -> Persian year 1403 (until ~March 20 2025).
+    f.set_modified(SystemTime::UNIX_EPOCH + Duration::from_secs(1_741_774_800))
+        .unwrap();
+
+    let result = scene
+        .ucmd()
+        .env("LC_ALL", "fa_IR.UTF-8")
+        .env("TZ", "UTC")
+        .arg("-l")
+        .arg("--time-style=locale")
+        .arg("fa_test")
+        .succeeds();
+
+    let stdout = result.stdout_str();
+    // GNU outputs Arabic/Persian script and the Persian calendar year 1403.
+    // The plain C-locale "Mar 12  2025" must not appear.
+    assert!(
+        !stdout.contains("Mar 12  2025"),
+        "fa_IR.UTF-8 should not produce C-locale output, got: {stdout}"
+    );
+    // Persian/Arabic script codepoints are in U+0600..=U+06FF
+    let has_arabic_script = stdout
+        .chars()
+        .any(|c| ('\u{0600}'..='\u{06FF}').contains(&c));
+    assert!(
+        has_arabic_script,
+        "fa_IR.UTF-8 output should contain Arabic/Persian script, got: {stdout}"
+    );
+}
+
+#[test]
+#[ignore = "uutils ls does not yet honor LC_TIME for --time-style=locale"]
+#[cfg(unix)]
+fn test_ls_time_style_locale_am_et() {
+    if !is_any_locale_available("am_ET.UTF-8") {
+        println!("Skipping: am_ET.UTF-8 locale not available");
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let f = at.make_file("am_test");
+    f.set_modified(SystemTime::UNIX_EPOCH + Duration::from_secs(1_741_774_800))
+        .unwrap();
+
+    let result = scene
+        .ucmd()
+        .env("LC_ALL", "am_ET.UTF-8")
+        .env("TZ", "UTC")
+        .arg("-l")
+        .arg("--time-style=locale")
+        .arg("am_test")
+        .succeeds();
+
+    let stdout = result.stdout_str();
+    assert!(
+        !stdout.contains("Mar 12  2025"),
+        "am_ET.UTF-8 should not produce C-locale output, got: {stdout}"
+    );
+    // Ethiopic script codepoints are in U+1200..=U+137F
+    let has_ethiopic = stdout
+        .chars()
+        .any(|c| ('\u{1200}'..='\u{137F}').contains(&c));
+    assert!(
+        has_ethiopic,
+        "am_ET.UTF-8 output should contain Ethiopic script, got: {stdout}"
+    );
+}
+
+#[test]
+#[ignore = "uutils ls does not yet honor LC_TIME for --time-style=locale"]
+#[cfg(unix)]
+fn test_ls_time_style_locale_th_th() {
+    if !is_any_locale_available("th_TH.UTF-8") {
+        println!("Skipping: th_TH.UTF-8 locale not available");
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let f = at.make_file("th_test");
+    f.set_modified(SystemTime::UNIX_EPOCH + Duration::from_secs(1_741_774_800))
+        .unwrap();
+
+    let result = scene
+        .ucmd()
+        .env("LC_ALL", "th_TH.UTF-8")
+        .env("TZ", "UTC")
+        .arg("-l")
+        .arg("--time-style=locale")
+        .arg("th_test")
+        .succeeds();
+
+    let stdout = result.stdout_str();
+    assert!(
+        !stdout.contains("Mar 12  2025"),
+        "th_TH.UTF-8 should not produce C-locale output, got: {stdout}"
+    );
+    // Thai script codepoints are in U+0E00..=U+0E7F
+    let has_thai = stdout
+        .chars()
+        .any(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c));
+    assert!(
+        has_thai,
+        "th_TH.UTF-8 output should contain Thai script, got: {stdout}"
+    );
+}
+
+#[test]
+#[ignore = "uutils ls does not yet honor LC_TIME for --time-style=locale"]
+#[cfg(unix)]
+fn test_ls_time_style_locale_zh_cn_gb18030() {
+    if !is_any_locale_available("zh_CN.GB18030") {
+        println!("Skipping: zh_CN.GB18030 locale not available");
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let f = at.make_file("zh_test");
+    f.set_modified(SystemTime::UNIX_EPOCH + Duration::from_secs(1_741_774_800))
+        .unwrap();
+
+    let result = scene
+        .ucmd()
+        .env("LC_ALL", "zh_CN.GB18030")
+        .env("TZ", "UTC")
+        .arg("-l")
+        .arg("--time-style=locale")
+        .arg("zh_test")
+        .succeeds();
+
+    // GB18030 is not UTF-8; output is expected to contain bytes >= 0x80.
+    let bytes = result.stdout();
+    let has_high_byte = bytes.iter().any(|&b| b >= 0x80);
+    let stdout_lossy = String::from_utf8_lossy(bytes);
+    assert!(
+        has_high_byte,
+        "zh_CN.GB18030 output should contain non-ASCII bytes, got: {stdout_lossy}"
+    );
+    // Must not fall back to the plain C-locale month.
+    assert!(
+        !stdout_lossy.contains("Mar 12  2025"),
+        "zh_CN.GB18030 should not produce C-locale output, got: {stdout_lossy}"
+    );
+}
+
+/// Sanity check: the C locale still produces the English month abbreviation
+/// with `--time-style=locale`, regardless of whether any of the above locales
+/// are installed.
+#[test]
+#[cfg(unix)]
+fn test_ls_time_style_locale_c() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let f = at.make_file("c_test");
+    f.set_modified(SystemTime::UNIX_EPOCH + Duration::from_secs(1_741_774_800))
+        .unwrap();
+
+    scene
+        .ucmd()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-l")
+        .arg("--time-style=locale")
+        .arg("c_test")
+        .succeeds()
+        .stdout_contains("Mar 12  2025");
+}
+
 #[test]
 fn test_ls_order_time() {
     let scene = TestScenario::new(util_name!());
