@@ -3,22 +3,18 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 use std::fmt;
+use uucore::parser::parse_size::{IEC_BASES, SI_BASES};
 
-pub const SI_BASES: [f64; 11] = [1., 1e3, 1e6, 1e9, 1e12, 1e15, 1e18, 1e21, 1e24, 1e27, 1e30];
+/// `f64` view of [`uucore::parser::parse_size::SI_BASES`] for numfmt's
+/// floating-point math paths.
+pub fn si_bases_f64() -> [f64; 11] {
+    SI_BASES.map(|b| b as f64)
+}
 
-pub const IEC_BASES: [f64; 11] = [
-    1.,
-    1_024.,
-    1_048_576.,
-    1_073_741_824.,
-    1_099_511_627_776.,
-    1_125_899_906_842_624.,
-    1_152_921_504_606_846_976.,
-    1_180_591_620_717_411_303_424.,
-    1_208_925_819_614_629_174_706_176.,
-    1_237_940_039_285_380_274_899_124_224.,
-    1_267_650_600_228_229_401_496_703_205_376.,
-];
+/// `f64` view of [`uucore::parser::parse_size::IEC_BASES`].
+pub fn iec_bases_f64() -> [f64; 11] {
+    IEC_BASES.map(|b| b as f64)
+}
 
 pub type WithI = bool;
 
@@ -48,7 +44,7 @@ pub enum RawSuffix {
 }
 
 impl RawSuffix {
-    /// Index of this suffix in [`SI_BASES`] / [`IEC_BASES`] minus one.
+    /// Index of this suffix in the base arrays, minus one.
     /// `K` is 0, `M` is 1, ..., `Q` is 9. The associated base is
     /// `BASES[self.index() + 1]`.
     pub fn index(self) -> usize {

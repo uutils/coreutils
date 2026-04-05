@@ -10,7 +10,9 @@ use uucore::i18n::decimal::locale_grouping_separator;
 use uucore::translate;
 
 use crate::options::{NumfmtOptions, RoundMethod, TransformOptions};
-use crate::units::{DisplayableSuffix, IEC_BASES, RawSuffix, Result, SI_BASES, Suffix, Unit};
+use crate::units::{
+    DisplayableSuffix, RawSuffix, Result, Suffix, Unit, iec_bases_f64, si_bases_f64,
+};
 
 fn find_numeric_beginning(s: &str) -> Option<&str> {
     let mut decimal_point_seen = false;
@@ -348,8 +350,10 @@ fn remove_suffix(i: f64, s: Option<Suffix>, u: Unit) -> Result<f64> {
     };
     let idx = raw_suffix.index() + 1;
     match (with_i, u) {
-        (false, Unit::Auto | Unit::Si) => Ok(i * SI_BASES[idx]),
-        (false, Unit::Iec(false)) | (true, Unit::Auto | Unit::Iec(true)) => Ok(i * IEC_BASES[idx]),
+        (false, Unit::Auto | Unit::Si) => Ok(i * si_bases_f64()[idx]),
+        (false, Unit::Iec(false)) | (true, Unit::Auto | Unit::Iec(true)) => {
+            Ok(i * iec_bases_f64()[idx])
+        }
         (false, Unit::Iec(true)) => Err(
             translate!("numfmt-error-missing-i-suffix", "number" => i, "suffix" => format!("{raw_suffix:?}")),
         ),
@@ -440,8 +444,8 @@ fn consider_suffix(
     let suffixes = [K, M, G, T, P, E, Z, Y, R, Q];
 
     let (bases, with_i) = match u {
-        Unit::Si => (&SI_BASES, false),
-        Unit::Iec(with_i) => (&IEC_BASES, with_i),
+        Unit::Si => (si_bases_f64(), false),
+        Unit::Iec(with_i) => (iec_bases_f64(), with_i),
         Unit::Auto => return Err(translate!("numfmt-error-unit-auto-not-supported-with-to")),
         Unit::None => return Ok((n, None)),
     };
@@ -850,13 +854,14 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 1e27);
 
+        let iec = iec_bases_f64();
         let result = remove_suffix(1.0, Some((RawSuffix::Q, true)), Unit::Iec(true));
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), IEC_BASES[10]);
+        assert_eq!(result.unwrap(), iec[10]);
 
         let result = remove_suffix(1.0, Some((RawSuffix::R, true)), Unit::Iec(true));
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), IEC_BASES[9]);
+        assert_eq!(result.unwrap(), iec[9]);
     }
 
     #[test]

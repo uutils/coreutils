@@ -18,10 +18,10 @@ use std::ffi::OsString;
 use std::io::{BufRead, Write as _, stderr};
 use std::str::FromStr;
 
-use units::{IEC_BASES, SI_BASES};
 use uucore::display::Quotable;
 use uucore::error::UResult;
 use uucore::i18n::decimal::locale_grouping_separator;
+use uucore::parser::parse_size::{IEC_BASES, SI_BASES};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::ranges::Range;
 use uucore::{format_usage, os_str_as_bytes, show, translate};
