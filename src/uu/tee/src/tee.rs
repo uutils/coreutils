@@ -118,33 +118,37 @@ fn copy(mut input: impl Read, mut output: impl Write) -> Result<usize> {
     // the standard library:
     // https://github.com/rust-lang/rust/blob/2feb91181882e525e698c4543063f4d0296fcf91/library/std/src/io/copy.rs#L271-L297
 
-    // Use small buffer size from std implementation for small input
+    // Use buffer size from std implementation
     // https://github.com/rust-lang/rust/blob/2feb91181882e525e698c4543063f4d0296fcf91/library/std/src/sys/io/mod.rs#L44
-    const FIRST_BUF_SIZE: usize = if cfg!(target_os = "espidf") {
+    const BUF_SIZE: usize = if cfg!(target_os = "espidf") {
         512
     } else {
         8 * 1024
     };
-    let mut buffer = [0u8; FIRST_BUF_SIZE];
+    let mut buffer = [0u8; BUF_SIZE];
     let mut len = 0;
-    match input.read(&mut buffer) {
-        Ok(0) => return Ok(0),
-        Ok(bytes_count) => {
-            output.write_all(&buffer[0..bytes_count])?;
-            len = bytes_count;
-            if bytes_count < FIRST_BUF_SIZE {
+
+    loop {
+        match input.read(&mut buffer) {
+            Ok(0) => return Ok(len), // end of file
+            Ok(received) => {
+                output.write_all(&buffer[..received])?;
                 // flush the buffer to comply with POSIX requirement that
                 // `tee` does not buffer the input.
                 output.flush()?;
-                return Ok(len);
+                len += received;
+                if len > 2 * BUF_SIZE {
+                    // buffer is too small
+                    break;
+                }
             }
+            Err(e) if e.kind() == ErrorKind::Interrupted => {}
+            Err(e) => return Err(e),
         }
-        Err(e) if e.kind() == ErrorKind::Interrupted => (),
-        Err(e) => return Err(e),
     }
-
-    // but optimize buffer size also for large file
-    let mut buffer = vec![0u8; 4 * FIRST_BUF_SIZE]; //stack array makes code path for smaller file slower
+    // optimize for large input
+    //stack array makes code path for smaller file slower
+    let mut buffer = vec![0u8; 4 * BUF_SIZE];
     loop {
         match input.read(&mut buffer) {
             Ok(0) => return Ok(len), // end of file
