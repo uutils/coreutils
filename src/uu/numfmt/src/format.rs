@@ -374,11 +374,12 @@ fn transform_from(s: &str, opts: &TransformOptions, options: &NumfmtOptions) -> 
     .map_err(|original| {
         detailed_error_message(s, opts.from, &options.unit_separator).unwrap_or(original)
     })?;
+    let had_no_suffix = suffix.is_none();
     let i = i * (opts.from_unit as f64);
 
     remove_suffix(i, suffix, opts.from).map(|n| {
         // GNU numfmt doesn't round values if no --from argument is provided by the user
-        if opts.from == Unit::None {
+        if opts.from == Unit::None || had_no_suffix {
             if n == -0.0 { 0.0 } else { n }
         } else if n < 0.0 {
             -n.abs().ceil()
@@ -541,7 +542,12 @@ fn format_string(
 
     let precision = if let Some(p) = options.format.precision {
         p
-    } else if options.transform.from == Unit::None && options.transform.to == Unit::None {
+    } else if options.transform.to == Unit::None
+        && !source_without_suffix
+            .chars()
+            .last()
+            .is_some_and(char::is_alphabetic)
+    {
         parse_implicit_precision(source_without_suffix)
     } else {
         0

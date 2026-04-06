@@ -1417,7 +1417,6 @@ fn test_to_auto_rejected_at_parse_time_issue_11662() {
 // `--from-unit` multiplication with fractional input rounds to an integer;
 // GNU preserves the fractional digits.
 #[test]
-#[ignore = "GNU compat: see uutils/coreutils#11663"]
 fn test_from_unit_fractional_precision_issue_11663() {
     new_ucmd!()
         .args(&["--from=iec", "--from-unit=959", "--", "-615484.454"])
