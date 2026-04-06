@@ -263,6 +263,13 @@ fn test_zero_multiplier_warning() {
             .succeeds()
             .no_stdout()
             .stderr_contains("warning: '0x' is a zero multiplier; use '00x' if that is intended");
+
+        new_ucmd!()
+            .args(&[format!("{arg}=0x0x0").as_str(), "status=none"])
+            .pipe_in("")
+            .succeeds()
+            .no_stdout()
+            .stderr_is("dd: warning: '0x' is a zero multiplier; use '00x' if that is intended\ndd: warning: '0x' is a zero multiplier; use '00x' if that is intended\n");
     }
 }
 
