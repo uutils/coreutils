@@ -489,6 +489,10 @@ fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
     // If we're not on Linux or Android, or the splice() call failed,
     // fall back on slower writing.
     let mut stdout_lock = stdout.lock();
+    // stack allocation is overhead when splice succeed
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    let mut buf = vec![0; 1024 * 64];
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
     let mut buf = [0; 1024 * 64];
     loop {
         match handle.reader.read(&mut buf) {
