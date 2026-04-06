@@ -1027,6 +1027,7 @@ mod tests {
     #[test]
     fn test_algo_based_parser() {
         #[allow(clippy::type_complexity)]
+        // Tuple format: (input line, option(algo name, option(algo bit size), filename, checksum)
         let test_cases: &[(&[u8], Option<(&[u8], Option<&[u8]>, &[u8], &[u8])>)] = &[
             (b"SHA256 (example.txt) = d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2", Some((b"SHA256", None, b"example.txt", b"d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2"))),
             // cspell:disable
@@ -1044,6 +1045,10 @@ mod tests {
             (b" MD5(weirdfilename6) = ) = fds65dsf46as5df4d6f54asds5d7f7g9", None),
             (b" MD5 (weirdfilename7)= )= fds65dsf46as5df4d6f54asds5d7f7g9", None),
             (b" MD5 (weirdfilename8) = )= fds65dsf46as5df4d6f54asds5d7f7g9", None),
+            // test that missing algorithm
+            (b"(filename) = fds65dsf46as5df4d6f54asds5d7f7g9", None),
+            (b"filename) = fds65dsf46as5df4d6f54asds5d7f7g9", None),
+            (b"filename = fds65dsf46as5df4d6f54asds5d7f7g9", None),
         ];
 
         // cspell:enable
