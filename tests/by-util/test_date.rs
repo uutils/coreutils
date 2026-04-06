@@ -1888,7 +1888,6 @@ fn test_date_input_trailing_tz_abbrev_rezones() {
 }
 
 #[test]
-#[ignore = "https://github.com/uutils/coreutils/issues/11659 — GNU date treats the `#` case-swap flag as no-op on `%P` (already-lowercase alt); uutils uppercases it to `PM`."]
 fn test_date_strftime_case_flag_on_alt_ampm() {
     // `%P` is GNU's lowercase am/pm. `%#P` should stay lowercase in GNU; uutils flips to `PM`.
     new_ucmd!()
