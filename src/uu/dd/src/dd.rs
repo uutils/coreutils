@@ -184,13 +184,14 @@ impl Num {
 /// directly in `buf_size`-sized chunks, matching GNU dd's behavior.
 /// Returns the total number of bytes actually read.
 fn read_and_discard<R: Read>(reader: &mut R, n: u64, buf_size: usize) -> io::Result<u64> {
-    let mut buf = vec![0u8; buf_size];
+    // todo: consider splice()ing to /dev/null on Linux
+    let mut buf = Vec::with_capacity(buf_size);
     let mut total = 0u64;
     let mut remaining = n;
-
     while remaining > 0 {
-        let to_read = cmp::min(remaining, buf_size as u64) as usize;
-        match reader.read(&mut buf[..to_read]) {
+        let to_read = cmp::min(remaining, buf_size as u64);
+        buf.clear();
+        match reader.by_ref().take(to_read).read_to_end(&mut buf) {
             Ok(0) => break, // EOF
             Ok(bytes_read) => {
                 total += bytes_read as u64;
@@ -1166,10 +1167,6 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         );
     }
 
-    // Create a common buffer with a capacity of the block size.
-    // This is the max size needed.
-    let mut buf = vec![BUF_INIT_BYTE; bsize];
-
     // Spawn a timer thread to provide a scheduled signal indicating when we
     // should send an update of our progress to the reporting thread.
     //
@@ -1200,6 +1197,11 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     } else {
         BlockWriter::Unbuffered(o)
     };
+
+    // Create a common empty buffer with a capacity of the block size.
+    // This is the max size needed.
+    let mut buf = Vec::new();
+    buf.try_reserve(bsize)?; // try_with_capacity is unstable https://github.com/rust-lang/rust/issues/91913
 
     // The main read/write loop.
     //
@@ -1366,6 +1368,7 @@ fn read_helper(i: &mut Input, buf: &mut Vec<u8>, bsize: usize) -> io::Result<Rea
     // ------------------------------------------------------------------
     // Read
     // Resize the buffer to the bsize. Any garbage data in the buffer is overwritten or truncated, so there is no need to fill with BUF_INIT_BYTE first.
+    // resizing buf cause serious performance drop https://github.com/uutils/coreutils/issues/11544
     buf.resize(bsize, BUF_INIT_BYTE);
 
     let mut rstat = match i.settings.iconv.sync {
@@ -1535,7 +1538,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("dd")
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("dd-about"))

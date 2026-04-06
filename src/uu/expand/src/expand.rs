@@ -249,7 +249,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     uucore::clap_localization::configure_localized_command(
-        Command::new(uucore::util_name())
+        Command::new("expand")
             .version(uucore::crate_version!())
             .about(translate!("expand-about"))
             .override_usage(format_usage(&translate!("expand-usage"))),

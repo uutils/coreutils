@@ -317,6 +317,14 @@ fn test_should_report_invalid_number_with_interior_junk() {
 }
 
 #[test]
+fn test_should_report_invalid_number_with_sign_after_decimal() {
+    new_ucmd!()
+        .args(&["--", "-0.-1"])
+        .fails_with_code(2)
+        .stderr_is("numfmt: invalid number: '-0.-1'\n");
+}
+
+#[test]
 fn test_should_skip_leading_space_from_stdin() {
     new_ucmd!()
         .args(&["--from=auto"])
@@ -1106,6 +1114,14 @@ fn test_format_grouping_conflicts_with_to_option() {
 }
 
 #[test]
+fn test_grouping_conflicts_with_format_option() {
+    new_ucmd!()
+        .args(&["--format=%f", "--grouping"])
+        .fails_with_code(1)
+        .stderr_contains("--grouping cannot be combined with --format");
+}
+
+#[test]
 fn test_zero_terminated_command_line_args() {
     new_ucmd!()
         .args(&["--zero-terminated", "--to=si", "1000"])
@@ -1200,6 +1216,68 @@ fn test_debug_warnings() {
         .succeeds()
         .stdout_is("4.0K\n")
         .stderr_is("numfmt: --header ignored with command-line input\n");
+
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .args(&["--debug", "--grouping", "--from=si", "4.0K"])
+        .succeeds()
+        .stdout_is("4000\n")
+        .stderr_is("numfmt: grouping has no effect in this locale\n");
+}
+
+#[test]
+fn test_debug_reports_failed_conversions_summary() {
+    new_ucmd!()
+        .args(&[
+            "--invalid=fail",
+            "--debug",
+            "--to=si",
+            "1000",
+            "Foo",
+            "3000",
+        ])
+        .fails_with_code(2)
+        .stdout_is("1.0k\nFoo\n3.0k\n")
+        .stderr_is(
+            "numfmt: invalid number: 'Foo'\nnumfmt: failed to convert some of the input numbers\n",
+        );
+}
+
+#[test]
+fn test_invalid_fail_with_fields_does_not_duplicate_output() {
+    new_ucmd!()
+        .args(&["--invalid=fail", "--field=2", "--from=si", "--to=iec"])
+        .pipe_in("A 1K x\nB Foo y\nC 3G z\n")
+        .fails_with_code(2)
+        .stdout_is("A 1000 x\nB Foo y\nC 2.8G z\n")
+        .stderr_is("numfmt: invalid number: 'Foo'\n");
+}
+
+#[test]
+fn test_abort_with_fields_preserves_partial_output() {
+    new_ucmd!()
+        .args(&["--field=3", "--from=auto", "Hello 40M World 90G"])
+        .fails_with_code(2)
+        .stdout_is("Hello 40M ")
+        .stderr_is("numfmt: invalid number: 'World'\n");
+}
+
+#[test]
+fn test_rejects_malformed_number_forms() {
+    new_ucmd!()
+        .args(&["--from=si", "12.K"])
+        .fails_with_code(2)
+        .stderr_contains("invalid number: '12.K'");
+
+    new_ucmd!()
+        .args(&["--from=si", "--delimiter=,", "12.  2"])
+        .fails_with_code(2)
+        .stderr_contains("invalid number: '12.  2'");
+
+    new_ucmd!()
+        .arg("..1")
+        .fails_with_code(2)
+        .stderr_contains("invalid suffix in input: '..1'");
 }
 
 #[test]
@@ -1238,6 +1316,21 @@ fn test_empty_delimiter_multi_char_unit_separator() {
 }
 
 #[test]
+fn test_whitespace_mode_parses_custom_unit_separator_inputs() {
+    new_ucmd!()
+        .args(&["--from=iec", "--unit-separator=::"])
+        .pipe_in("4::K\n")
+        .succeeds()
+        .stdout_only("4096\n");
+
+    new_ucmd!()
+        .args(&["--from=iec", "--unit-separator=\u{a0}"])
+        .pipe_in("4\u{a0}K\n")
+        .succeeds()
+        .stdout_only("4096\n");
+}
+
+#[test]
 fn test_empty_delimiter_whitespace_rejection() {
     new_ucmd!()
         .args(&["-d", "", "--from=auto", "2  K"])
@@ -1271,6 +1364,101 @@ fn test_null_byte_input_multiline() {
         .pipe_in("1000\x002000\n3000")
         .succeeds()
         .stdout_is("1000\n3000");
+}
+
+// https://github.com/uutils/coreutils/issues/11653
+// GNU rejects `-9923868` as an invalid short option (leading `-9`) and
+// requires `--` separator; uutils accepts it as a negative positional number.
+#[test]
+#[ignore = "GNU compat: see uutils/coreutils#11653"]
+fn test_negative_number_without_double_dash_gnu_compat_issue_11653() {
+    new_ucmd!()
+        .args(&["--to=iec", "-9923868"])
+        .fails_with_code(1)
+        .stderr_contains("invalid option");
+}
+
+// https://github.com/uutils/coreutils/issues/11654
+// uutils parses large integers through f64, losing precision past 2^53.
+#[test]
+#[ignore = "GNU compat: see uutils/coreutils#11654"]
+fn test_large_integer_precision_loss_issue_11654() {
+    new_ucmd!()
+        .args(&["--from=iec", "9153396227555392131"])
+        .succeeds()
+        .stdout_is("9153396227555392131\n");
+}
+
+// https://github.com/uutils/coreutils/issues/11655
+// uutils accepts scientific notation (`1e9`, `5e-3`, ...); GNU rejects it
+// as "invalid suffix in input".
+#[test]
+#[ignore = "GNU compat: see uutils/coreutils#11655"]
+fn test_scientific_notation_rejected_by_gnu_issue_11655() {
+    new_ucmd!()
+        .arg("1e9")
+        .fails_with_code(2)
+        .stderr_contains("invalid suffix in input");
+}
+
+// https://github.com/uutils/coreutils/issues/11662
+// `--to=auto` is accepted at parse time by uutils then rejected at runtime
+// with exit code 2; GNU rejects it in option parsing with exit code 1.
+#[test]
+#[ignore = "GNU compat: see uutils/coreutils#11662"]
+fn test_to_auto_rejected_at_parse_time_issue_11662() {
+    new_ucmd!()
+        .args(&["--to=auto", "100"])
+        .fails_with_code(1)
+        .stderr_contains("invalid argument 'auto' for '--to'");
+}
+
+// https://github.com/uutils/coreutils/issues/11663
+// `--from-unit` multiplication with fractional input rounds to an integer;
+// GNU preserves the fractional digits.
+#[test]
+#[ignore = "GNU compat: see uutils/coreutils#11663"]
+fn test_from_unit_fractional_precision_issue_11663() {
+    new_ucmd!()
+        .args(&["--from=iec", "--from-unit=959", "--", "-615484.454"])
+        .succeeds()
+        .stdout_is("-590249591.386\n");
+}
+
+// https://github.com/uutils/coreutils/issues/11664
+// Zero-padded `--format` places padding zeros before the sign for negative
+// numbers; GNU (and C printf) puts the sign first.
+#[test]
+#[ignore = "GNU compat: see uutils/coreutils#11664"]
+fn test_zero_pad_sign_order_issue_11664() {
+    new_ucmd!()
+        .args(&["--from=none", "--format=%018.2f", "--", "-9869647"])
+        .succeeds()
+        .stdout_is("-00000009869647.00\n");
+}
+
+// https://github.com/uutils/coreutils/issues/11666
+// `--to-unit=N` selects the output prefix based on the unscaled value
+// instead of `value / N`.
+#[test]
+#[ignore = "GNU compat: see uutils/coreutils#11666"]
+fn test_to_unit_prefix_selection_issue_11666() {
+    new_ucmd!()
+        .args(&["--to=iec-i", "--to-unit=885", "100000"])
+        .succeeds()
+        .stdout_is("113\n");
+}
+
+// https://github.com/uutils/coreutils/issues/11667
+// `--format='%.0f'` with `--to=<scale>` still prints one fractional digit;
+// the precision specifier `.0` is ignored.
+#[test]
+#[ignore = "GNU compat: see uutils/coreutils#11667"]
+fn test_format_precision_zero_with_to_scale_issue_11667() {
+    new_ucmd!()
+        .args(&["--to=iec", "--format=%.0f", "5183776"])
+        .succeeds()
+        .stdout_is("5M\n");
 }
 
 #[test]
