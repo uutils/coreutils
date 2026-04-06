@@ -496,16 +496,7 @@ fn transform_to(
                 round_with_precision(i2, round_method, precision),
             )
         }
-        Some(s) if precision > 0 => {
-            format!(
-                "{i2:.precision$}{unit_separator}{}",
-                DisplayableSuffix(s, opts.to),
-            )
-        }
-        Some(s) if i2.abs() < 10.0 => {
-            format!("{i2:.1}{unit_separator}{}", DisplayableSuffix(s, opts.to))
-        }
-        Some(s) => format!("{i2:.0}{unit_separator}{}", DisplayableSuffix(s, opts.to)),
+        Some(s) => format!("{i2:.precision$}{unit_separator}{}", DisplayableSuffix(s, opts.to)),
     })
 }
 
