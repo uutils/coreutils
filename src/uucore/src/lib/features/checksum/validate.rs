@@ -1045,7 +1045,7 @@ mod tests {
             (b" MD5(weirdfilename6) = ) = fds65dsf46as5df4d6f54asds5d7f7g9", None),
             (b" MD5 (weirdfilename7)= )= fds65dsf46as5df4d6f54asds5d7f7g9", None),
             (b" MD5 (weirdfilename8) = )= fds65dsf46as5df4d6f54asds5d7f7g9", None),
-            // test that missing algorithm
+            // test for missing algorithm
             (b"(filename) = fds65dsf46as5df4d6f54asds5d7f7g9", None),
             (b"filename) = fds65dsf46as5df4d6f54asds5d7f7g9", None),
             (b"filename = fds65dsf46as5df4d6f54asds5d7f7g9", None),
