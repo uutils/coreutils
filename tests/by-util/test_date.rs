@@ -1827,7 +1827,6 @@ fn test_date_parenthesis_comment() {
 }
 
 #[test]
-#[ignore = "https://github.com/uutils/coreutils/issues/11660 — GNU date pads to the requested width when it is narrower than the default (e.g. `%02j` on day-1 -> `01`); uutils strips leading zeros to `1`."]
 fn test_date_strftime_narrow_width_on_wide_default() {
     // `%j` has a default width of 3. Requesting `%02j` on day 1 should yield `01`.
     // uutils currently yields `1`.
