@@ -366,6 +366,7 @@ uutests
 uutils
 
 # * function names
+execfn
 getcwd
 setpipe
 

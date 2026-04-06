@@ -67,9 +67,9 @@ impl UError for HeadError {
 type HeadResult<T> = Result<T, HeadError>;
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("head")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("head"))
         .about(translate!("head-about"))
         .override_usage(format_usage(&translate!("head-usage")))
         .infer_long_args(true)

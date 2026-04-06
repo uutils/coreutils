@@ -9,8 +9,6 @@ use uucore::hardware::SimdPolicy;
 
 use super::WordCountable;
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use std::fs::OpenOptions;
 use std::io::{self, ErrorKind, Read};
 
 #[cfg(unix)]
@@ -41,18 +39,7 @@ const BUF_SIZE: usize = 256 * 1024;
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn count_bytes_using_splice(fd: &impl AsFd) -> Result<usize, usize> {
-    let null_file = OpenOptions::new()
-        .write(true)
-        .open("/dev/null")
-        .map_err(|_| 0_usize)?;
-    let null_rdev = rustix::fs::fstat(null_file.as_fd())
-        .map_err(|_| 0_usize)?
-        .st_rdev as libc::dev_t;
-    if (libc::major(null_rdev), libc::minor(null_rdev)) != (1, 3) {
-        // This is not a proper /dev/null, writing to it is probably bad
-        // Bit of an edge case, but it has been known to happen
-        return Err(0);
-    }
+    let null_file = uucore::pipes::dev_null().ok_or(0_usize)?;
     // todo: avoid generating broker if input is pipe (fcntl_setpipe_size succeed) and directly splice() to /dev/null to save RAM usage
     let (pipe_rd, pipe_wr) = pipe().map_err(|_| 0_usize)?;
 
@@ -65,7 +52,6 @@ fn count_bytes_using_splice(fd: &impl AsFd) -> Result<usize, usize> {
             Ok(res) => {
                 byte_count += res;
                 // Silent the warning as we want to the error message
-                #[allow(clippy::question_mark)]
                 if splice_exact(&pipe_rd, &null_file, res).is_err() {
                     return Err(byte_count);
                 }

@@ -104,7 +104,8 @@ fn mknod(file_name: &str, config: Config) -> i32 {
         ) {
             // if it fails, delete the file
             let _ = std::fs::remove_file(file_name);
-            eprintln!("{}: {e}", uucore::util_name());
+            use std::io::{Write, stderr};
+            let _ = writeln!(stderr(), "mknod: {e}");
             return 1;
         }
     }
@@ -117,7 +118,8 @@ fn mknod(file_name: &str, config: Config) -> i32 {
                 std::fs::remove_file(p)
             })
         {
-            eprintln!("{}: {e}", uucore::util_name());
+            use std::io::{Write, stderr};
+            let _ = writeln!(stderr(), "mknod: {e}");
             return 1;
         }
     }
@@ -189,9 +191,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("mknod")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("mknod"))
         .override_usage(format_usage(&translate!("mknod-usage")))
         .after_help(translate!("mknod-after-help"))
         .about(translate!("mknod-about"))

@@ -49,7 +49,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 translate!(
                     "tsort-error-extra-operand",
                     "operand" => extra.quote(),
-                    "util" => uucore::util_name()
+                    "util" => "tsort"
                 ),
             ));
         }
@@ -107,9 +107,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("tsort")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("tsort"))
         .override_usage(format_usage(&translate!("tsort-usage")))
         .about(translate!("tsort-about"))
         .infer_long_args(true)

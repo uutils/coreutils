@@ -268,11 +268,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("cat")
         .version(uucore::crate_version!())
         .override_usage(format_usage(&translate!("cat-usage")))
         .about(translate!("cat-about"))
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("cat"))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(
@@ -420,11 +420,11 @@ where
         Ok(())
     } else {
         // each next line is expected to display "cat: …"
-        let line_joiner = format!("\n{}: ", uucore::util_name());
+        let line_joiner = "\ncat: ";
 
         Err(uucore::error::USimpleError::new(
             error_messages.len() as i32,
-            error_messages.join(&line_joiner),
+            error_messages.join(line_joiner),
         ))
     }
 }
@@ -478,17 +478,17 @@ fn get_input_type(path: &OsString) -> CatResult<InputType> {
 /// simple memory copy.
 fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
     let stdout = io::stdout();
-    let mut stdout_lock = stdout.lock();
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         // If we're on Linux or Android, try to use the splice() system call
         // for faster writing. If it works, we're done.
-        if !splice::write_fast_using_splice(handle, &stdout_lock)? {
+        if !splice::write_fast_using_splice(handle, &stdout)? {
             return Ok(());
         }
     }
     // If we're not on Linux or Android, or the splice() call failed,
     // fall back on slower writing.
+    let mut stdout_lock = stdout.lock();
     let mut buf = [0; 1024 * 64];
     loop {
         match handle.reader.read(&mut buf) {

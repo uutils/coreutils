@@ -521,7 +521,7 @@ pub fn uu_app() -> Command {
         options::ATTRIBUTES_ONLY,
         options::COPY_CONTENTS,
     ];
-    Command::new(uucore::util_name())
+    Command::new("cp")
         .version(uucore::crate_version!())
         .about(translate!("cp-about"))
         .help_template(uucore::localized_help_template(uucore::util_name()))
@@ -1404,7 +1404,7 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
                 )
                 .unwrap(),
             )
-            .with_message(uucore::util_name());
+            .with_message("cp");
         pb.tick();
         Some(pb)
     } else {
@@ -2213,10 +2213,7 @@ fn print_paths(parents: bool, source: &Path, dest: &Path) {
         //     a/b -> d/a/b
         //
         for (x, y) in aligned_ancestors(source, dest) {
-            println!(
-                "{}",
-                translate!("cp-verbose-created-directory", "source" => x.display(), "dest" => y.display())
-            );
+            println!("{} -> {}", x.display(), y.display());
         }
     }
 

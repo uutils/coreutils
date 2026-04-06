@@ -1265,7 +1265,19 @@ fn depth_first_list(
                 false,
             ),
             PathData::new(
-                path_data.path().join("..").into(),
+                // On WASI the sandbox may block access to ".." at the
+                // preopened root.  Fall back to "." so the entry still
+                // appears with valid metadata instead of an error.
+                {
+                    let dotdot = path_data.path().join("..");
+                    #[cfg(target_os = "wasi")]
+                    let dotdot = if dotdot.metadata().is_err() {
+                        path_data.path().into()
+                    } else {
+                        dotdot
+                    };
+                    dotdot.into()
+                },
                 None,
                 Some(OsStr::new("..").into()),
                 config,

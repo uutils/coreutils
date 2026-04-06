@@ -347,6 +347,47 @@ fn embed_locale_file(
 ///
 /// Returns an error if `for_each_locale` fails, which typically happens if
 /// reading a locale file or writing to the `embedded_file` fails.
+/// Check if we are cross-compiling for WASI (build.rs runs on the host,
+/// so `#[cfg(target_os = "wasi")]` does not work here).
+fn is_wasi_target() -> bool {
+    env::var("CARGO_CFG_TARGET_OS")
+        .map(|os| os == "wasi")
+        .unwrap_or(false)
+}
+
+/// For WASI/WASM builds, embed ALL available .ftl files in a locale
+/// directory so the playground can switch languages at runtime.
+fn embed_all_locales_for_component<F>(
+    embedded_file: &mut File,
+    component_name: &str,
+    path_builder: &F,
+) -> Result<(), Box<dyn std::error::Error>>
+where
+    F: Fn(&str) -> PathBuf,
+{
+    let en_path = path_builder("en-US");
+    if let Some(locale_dir) = en_path.parent() {
+        if locale_dir.exists() {
+            for entry in std::fs::read_dir(locale_dir)? {
+                let entry = entry?;
+                let path = entry.path();
+                if path.extension().is_some_and(|e| e == "ftl") {
+                    if let Some(locale) = path.file_stem().and_then(|s| s.to_str()) {
+                        embed_locale_file(
+                            embedded_file,
+                            &path,
+                            &format!("{component_name}/{locale}.ftl"),
+                            locale,
+                            component_name,
+                        )?;
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 fn embed_component_locales<F>(
     embedded_file: &mut File,
     locales: &(String, Option<String>),
@@ -356,6 +397,10 @@ fn embed_component_locales<F>(
 where
     F: Fn(&str) -> PathBuf,
 {
+    if is_wasi_target() {
+        return embed_all_locales_for_component(embedded_file, component_name, &path_builder);
+    }
+
     for_each_locale(locales, |locale| {
         let locale_path = path_builder(locale);
         embed_locale_file(

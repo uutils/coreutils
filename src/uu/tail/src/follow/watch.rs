@@ -394,8 +394,10 @@ impl Observer {
                         if let Some(old_md) = self.files.get_mut_metadata(event_path) {
                             if old_md.is_tailable() && self.files.get(event_path).reader.is_some() {
                                 show_error!(
-                                    "{}",
-                                    translate!("tail-status-file-became-inaccessible", "file" => display_name.quote(), "become_inaccessible" => translate!("tail-become-inaccessible"), "no_such_file" => translate!("tail-no-such-file-or-directory"))
+                                    "{} {}: {}",
+                                    display_name.quote(),
+                                    translate!("tail-become-inaccessible"),
+                                    translate!("tail-no-such-file-or-directory")
                                 );
                             }
                         }
@@ -410,8 +412,9 @@ impl Observer {
                         }
                     } else {
                         show_error!(
-                            "{}",
-                            translate!("tail-status-file-no-such-file", "file" => display_name, "no_such_file" => translate!("tail-no-such-file-or-directory"))
+                            "{}: {}",
+                            display_name,
+                            translate!("tail-no-such-file-or-directory")
                         );
                         if !self.files.files_remaining() && self.use_polling {
                             // NOTE: GNU's tail exits here for `---disable-inotify`
