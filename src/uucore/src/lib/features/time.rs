@@ -130,7 +130,7 @@ pub fn format_system_time_locale_aware<W: Write>(
         use crate::i18n::datetime::{localize_format_string, should_use_icu_locale};
         if should_use_icu_locale() {
             if let Ok(zoned) = <SystemTime as TryInto<Zoned>>::try_into(time) {
-                let localized = localize_format_string(fmt, zoned.date());
+                let localized = localize_format_string(fmt, zoned.date(), padding);
                 return format_zoned(out, zoned, &localized);
             }
             // Out-of-range: fall through to the plain fallback below.

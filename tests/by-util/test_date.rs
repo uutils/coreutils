@@ -2224,6 +2224,67 @@ fn test_date_thai_locale_solar_calendar() {
     assert!(rfc_output.starts_with(&current_year.to_string()));
 }
 
+/// Regression test: `date +%B` / `+%b` / `+%A` / `+%a` must not have trailing
+/// padding spaces. The ls-specific column alignment padding must not leak into
+/// date output.
+#[cfg(unix)]
+#[test]
+fn test_date_month_weekday_names_no_trailing_spaces() {
+    let current_year: i32 = new_ucmd!()
+        .env("LC_ALL", "C")
+        .arg("+%Y")
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .parse()
+        .unwrap();
+
+    for locale in ["fr_FR.UTF-8", "th_TH.UTF-8", "fi_FI.UTF-8"] {
+        if !is_locale_available(locale) {
+            continue;
+        }
+        // Check month names (%B, %b) for all 12 months
+        for month in 1..=12 {
+            for fmt in ["+%B", "+%b"] {
+                let output = new_ucmd!()
+                    .env("LC_ALL", locale)
+                    .arg("--date")
+                    .arg(format!("{current_year}-{month:02}-01"))
+                    .arg(fmt)
+                    .succeeds()
+                    .stdout_str()
+                    .to_string();
+                let name = output.trim_end_matches('\n');
+                assert_eq!(
+                    name,
+                    name.trim_end(),
+                    "[{locale}] {fmt} month {month:02} has trailing spaces: {name:?}"
+                );
+            }
+        }
+        // Check weekday names (%A, %a) for 7 consecutive days (Apr 6–12)
+        for day_offset in 0..7 {
+            let day = 6 + day_offset;
+            for fmt in ["+%A", "+%a"] {
+                let output = new_ucmd!()
+                    .env("LC_ALL", locale)
+                    .arg("--date")
+                    .arg(format!("{current_year}-04-{day:02}"))
+                    .arg(fmt)
+                    .succeeds()
+                    .stdout_str()
+                    .to_string();
+                let name = output.trim_end_matches('\n');
+                assert_eq!(
+                    name,
+                    name.trim_end(),
+                    "[{locale}] {fmt} day offset {day_offset} has trailing spaces: {name:?}"
+                );
+            }
+        }
+    }
+}
+
 #[cfg(unix)]
 fn check_date(locale: &str, date: &str, fmt: &str, expected: &str) {
     let actual = new_ucmd!()

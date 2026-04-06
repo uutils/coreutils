@@ -17,6 +17,14 @@ use jiff_icu::ConvertFrom;
 use std::sync::OnceLock;
 
 use crate::i18n::get_locale_from_env;
+/// Controls whether locale name lookups return raw or padded names.
+#[derive(Clone, Copy)]
+pub enum NamePadding {
+    /// Raw names with no trailing padding — for `date` and similar utilities.
+    Raw,
+    /// Names padded to uniform display width — for columnar output like `ls`.
+    Padded,
+}
 
 /// Get the locale for time/date formatting from LC_TIME environment variable
 pub fn get_time_locale() -> &'static (Locale, super::UEncoding) {
@@ -104,15 +112,26 @@ fn pad_names<const N: usize>(names: [String; N]) -> [String; N] {
 /// Cached locale name arrays, computed once per process. Each variant is
 /// `None` when the ICU formatter for that field width cannot be created
 /// (should only happen for truly broken locale data).
+///
+/// Both raw and padded variants are stored: `date` needs raw names (no
+/// trailing spaces) while `ls` needs padded names for column alignment.
 struct CachedLocaleNames {
-    /// `%B` — full month names, padded to uniform display width
+    /// `%B` — full month names, raw
     month_long: Option<[String; 12]>,
-    /// `%b` / `%h` — abbreviated month names (trailing dots stripped), padded
+    /// `%B` — full month names, padded to uniform display width
+    month_long_padded: Option<[String; 12]>,
+    /// `%b` / `%h` — abbreviated month names (trailing dots stripped), raw
     month_abbrev: Option<[String; 12]>,
-    /// `%A` — full weekday names, padded
+    /// `%b` / `%h` — abbreviated month names, padded
+    month_abbrev_padded: Option<[String; 12]>,
+    /// `%A` — full weekday names, raw
     weekday_long: Option<[String; 7]>,
-    /// `%a` — abbreviated weekday names, padded
+    /// `%A` — full weekday names, padded
+    weekday_long_padded: Option<[String; 7]>,
+    /// `%a` — abbreviated weekday names, raw
     weekday_short: Option<[String; 7]>,
+    /// `%a` — abbreviated weekday names, padded
+    weekday_short_padded: Option<[String; 7]>,
 }
 
 /// Return the cached, pre-padded locale names (computed once per process).
@@ -141,7 +160,8 @@ fn get_cached_locale_names() -> &'static CachedLocaleNames {
 
         let month_long = DateTimeFormatter::try_new(locale_prefs, fieldsets::M::long())
             .ok()
-            .map(|f| pad_names(month_dates.each_ref().map(|d| f.format(d).to_string())));
+            .map(|f| month_dates.each_ref().map(|d| f.format(d).to_string()));
+        let month_long_padded = month_long.clone().map(pad_names);
 
         // ICU's medium format may include trailing periods (e.g., "febr."
         // for Hungarian). The standard C/POSIX locale via nl_langinfo
@@ -149,32 +169,41 @@ fn get_cached_locale_names() -> &'static CachedLocaleNames {
         let month_abbrev = DateTimeFormatter::try_new(locale_prefs, fieldsets::M::medium())
             .ok()
             .map(|f| {
-                pad_names(
-                    month_dates
-                        .each_ref()
-                        .map(|d| f.format(d).to_string().trim_end_matches('.').to_string()),
-                )
+                month_dates
+                    .each_ref()
+                    .map(|d| f.format(d).to_string().trim_end_matches('.').to_string())
             });
+        let month_abbrev_padded = month_abbrev.clone().map(pad_names);
 
         let weekday_long = DateTimeFormatter::try_new(locale_prefs, fieldsets::E::long())
             .ok()
-            .map(|f| pad_names(weekday_dates.each_ref().map(|d| f.format(d).to_string())));
+            .map(|f| weekday_dates.each_ref().map(|d| f.format(d).to_string()));
+        let weekday_long_padded = weekday_long.clone().map(pad_names);
 
         let weekday_short = DateTimeFormatter::try_new(locale_prefs, fieldsets::E::short())
             .ok()
-            .map(|f| pad_names(weekday_dates.each_ref().map(|d| f.format(d).to_string())));
+            .map(|f| weekday_dates.each_ref().map(|d| f.format(d).to_string()));
+        let weekday_short_padded = weekday_short.clone().map(pad_names);
 
         CachedLocaleNames {
             month_long,
+            month_long_padded,
             month_abbrev,
+            month_abbrev_padded,
             weekday_long,
+            weekday_long_padded,
             weekday_short,
+            weekday_short_padded,
         }
     })
 }
 
-/// Transform a strftime format string to use locale-specific calendar values
-pub fn localize_format_string(format: &str, date: JiffDate) -> String {
+/// Transform a strftime format string to use locale-specific calendar values.
+///
+/// When `padding` is [`NamePadding::Padded`], month and weekday names are
+/// padded to uniform display width (for columnar output like `ls`). When
+/// [`NamePadding::Raw`], raw names are used (for `date` and similar utilities).
+pub fn localize_format_string(format: &str, date: JiffDate, padding: NamePadding) -> String {
     const PERCENT_PLACEHOLDER: &str = "\x00\x00";
 
     let (locale, _) = get_time_locale();
@@ -219,30 +248,51 @@ pub fn localize_format_string(format: &str, date: JiffDate) -> String {
             .replace("%e", &format!("{cal_day:2}"));
     }
 
-    // Look up the pre-padded locale name from the once-per-process cache.
+    // Look up locale names from the once-per-process cache.
+    let pad = matches!(padding, NamePadding::Padded);
     let cached = get_cached_locale_names();
     let month_idx = date.month() as usize - 1;
     let weekday_idx = date.weekday().to_monday_zero_offset() as usize;
 
     if fmt.contains("%B") {
-        if let Some(names) = &cached.month_long {
+        let src = if pad {
+            &cached.month_long_padded
+        } else {
+            &cached.month_long
+        };
+        if let Some(names) = src {
             fmt = fmt.replace("%B", &names[month_idx]);
         }
     }
     if fmt.contains("%b") || fmt.contains("%h") {
-        if let Some(names) = &cached.month_abbrev {
+        let src = if pad {
+            &cached.month_abbrev_padded
+        } else {
+            &cached.month_abbrev
+        };
+        if let Some(names) = src {
             fmt = fmt
                 .replace("%b", &names[month_idx])
                 .replace("%h", &names[month_idx]);
         }
     }
     if fmt.contains("%A") {
-        if let Some(names) = &cached.weekday_long {
+        let src = if pad {
+            &cached.weekday_long_padded
+        } else {
+            &cached.weekday_long
+        };
+        if let Some(names) = src {
             fmt = fmt.replace("%A", &names[weekday_idx]);
         }
     }
     if fmt.contains("%a") {
-        if let Some(names) = &cached.weekday_short {
+        let src = if pad {
+            &cached.weekday_short_padded
+        } else {
+            &cached.weekday_short
+        };
+        if let Some(names) = src {
             fmt = fmt.replace("%a", &names[weekday_idx]);
         }
     }
