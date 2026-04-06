@@ -487,8 +487,8 @@ fn transform_to(
     precision: usize,
     unit_separator: &str,
 ) -> Result<String> {
-    let (i2, s) = consider_suffix(s, opts.to, round_method, precision)?;
-    let i2 = i2 / (opts.to_unit as f64);
+    let i2 = s / (opts.to_unit as f64);
+    let (i2, s) = consider_suffix(i2, opts.to, round_method, precision)?;
     Ok(match s {
         None => {
             format!(
