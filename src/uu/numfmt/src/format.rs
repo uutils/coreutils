@@ -542,7 +542,12 @@ fn format_string(
 
     let precision = if let Some(p) = options.format.precision {
         p
-    } else if options.transform.to == Unit::None {
+    } else if options.transform.to == Unit::None
+        && !source_without_suffix
+            .chars()
+            .last()
+            .is_some_and(char::is_alphabetic)
+    {
         parse_implicit_precision(source_without_suffix)
     } else {
         0
