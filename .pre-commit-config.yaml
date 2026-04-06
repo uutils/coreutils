@@ -3,7 +3,7 @@
 exclude: ^tests/fixtures/
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: check-added-large-files
       - id: check-executables-have-shebangs
@@ -22,7 +22,7 @@ repos:
       - id: trailing-whitespace
 
   - repo: https://github.com/mozilla-l10n/moz-fluent-linter
-    rev: v0.4.8
+    rev: v0.4.9
     hooks:
       - id: fluent_linter
         files: \.ftl$
