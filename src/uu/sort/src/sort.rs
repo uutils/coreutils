@@ -2046,27 +2046,29 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 error,
             })?;
 
+            if line.is_empty() {
+                return Err(SortError::ZeroLengthFileName {
+                    file: files0_from,
+                    line_num: line_num + 1,
+                }
+                .into());
+            }
+
             let f: OsString = {
                 #[cfg(unix)]
                 {
+                    use std::os::unix::ffi::OsStrExt;
                     OsStr::from_bytes(&line).to_os_string()
                 }
                 #[cfg(not(unix))]
                 {
-                    String::from_utf8_lossy(&line).into_owned().into()
+                    OsString::from(String::from_utf8_lossy(&line).into_owned())
                 }
             };
 
             match f.to_str() {
                 Some(s) if s == STDIN_FILE => {
                     return Err(SortError::MinusInStdIn.into());
-                }
-                Some("") => {
-                    return Err(SortError::ZeroLengthFileName {
-                        file: files0_from,
-                        line_num: line_num + 1,
-                    }
-                    .into());
                 }
                 _ => {}
             }
