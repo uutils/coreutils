@@ -337,7 +337,10 @@ fn apply_modifiers(
             .all(|c| !c.is_alphabetic() || c.is_uppercase())
         {
             result = result.to_lowercase();
-        } else {
+        } else if !result
+            .chars()
+            .all(|c| !c.is_alphabetic() || c.is_lowercase())
+        {
             result = result.to_uppercase();
         }
     }
