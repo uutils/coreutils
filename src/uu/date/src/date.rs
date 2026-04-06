@@ -60,8 +60,6 @@ const UNICODE_REPLACEMENT: char = '\u{FFFD}';
 struct Settings {
     utc: bool,
     format: Format,
-    /// Raw format bytes for Custom format, to preserve non-UTF-8 bytes in output
-    format_raw: Option<Vec<u8>>,
     date_source: DateSource,
     set_to: Option<Zoned>,
     debug: bool,
@@ -91,7 +89,11 @@ enum Format {
     Rfc5322,
     Rfc3339(Rfc3339Format),
     Resolution,
-    Custom(String),
+    /// A user-supplied format string (after stripping the leading `+`).
+    /// The `String` is a lossy-UTF-8 copy used by strftime; the optional
+    /// `Vec<u8>` holds the original bytes when they contained non-UTF-8
+    /// sequences, so that those bytes can be restored in the output.
+    Custom(String, Option<Vec<u8>>),
     Default,
 }
 
@@ -323,7 +325,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    let mut format_raw: Option<Vec<u8>> = None;
     let format = if let Some(form) = matches.get_one::<OsString>(OPT_FORMAT) {
         let raw_bytes = form.as_encoded_bytes();
         if raw_bytes.first() != Some(&b'+') {
@@ -344,11 +345,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             ));
         }
         let bytes_after_plus = &raw_bytes[1..];
-        if std::str::from_utf8(bytes_after_plus).is_err() {
-            format_raw = Some(bytes_after_plus.to_vec());
-        }
+        let format_raw = if std::str::from_utf8(bytes_after_plus).is_err() {
+            Some(bytes_after_plus.to_vec())
+        } else {
+            None
+        };
         let form = String::from_utf8_lossy(bytes_after_plus).into_owned();
-        Format::Custom(form)
+        Format::Custom(form, format_raw)
     } else if let Some(fmt) = matches
         .get_many::<String>(OPT_ISO_8601)
         .map(|mut iter| iter.next().unwrap_or(&DATE.to_string()).as_str().into())
@@ -394,7 +397,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let settings = Settings {
         utc,
         format,
-        format_raw,
         date_source,
         set_to,
         debug: debug_mode,
@@ -561,7 +563,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Pre-extract non-UTF-8 chunks from the raw format bytes (if any).
     // from_utf8_lossy emits one U+FFFD per ill-formed subsequence (WTF-8 spec),
     // so we can match them 1:1 when restoring original bytes in the output.
-    let raw_chunks: Option<Vec<&[u8]>> = settings.format_raw.as_ref().map(|raw| {
+    let format_raw_ref = match &settings.format {
+        Format::Custom(_, Some(raw)) => Some(raw),
+        _ => None,
+    };
+    let raw_chunks: Option<Vec<&[u8]>> = format_raw_ref.map(|raw| {
         let mut chunks = Vec::new();
         let mut i = 0;
         while i < raw.len() {
@@ -812,7 +818,7 @@ fn make_format_string(settings: &Settings) -> &str {
             Rfc3339Format::Ns => "%F %T.%N%:z",
         },
         Format::Resolution => "%s.%N",
-        Format::Custom(ref fmt) => fmt,
+        Format::Custom(ref fmt, _) => fmt,
         Format::Default => locale::get_locale_default_format(),
     }
 }
