@@ -486,7 +486,9 @@ fn transform_to(
     round_method: RoundMethod,
     precision: usize,
     unit_separator: &str,
+    is_specified: bool,
 ) -> Result<String> {
+
     let (i2, s) = consider_suffix(s, opts.to, round_method, precision)?;
     let i2 = i2 / (opts.to_unit as f64);
     Ok(match s {
@@ -496,7 +498,22 @@ fn transform_to(
                 round_with_precision(i2, round_method, precision),
             )
         }
-        Some(s) => format!("{i2:.precision$}{unit_separator}{}", DisplayableSuffix(s, opts.to)),
+        Some(s) if precision > 0 => {
+            format!(
+                "{i2:.precision$}{unit_separator}{}",
+                DisplayableSuffix(s, opts.to),
+            )
+        }
+        Some(s) if is_specified => {
+            format!("{i2:.0}{unit_separator}{}", DisplayableSuffix(s, opts.to))
+        }
+        Some(s) if i2.abs() < 10.0 => {
+            //when there's a single digit before the dot.
+            format!("{i2:.1}{unit_separator}{}", DisplayableSuffix(s, opts.to))
+        }
+        Some(s) => {
+            format!("{i2:.0}{unit_separator}{}", DisplayableSuffix(s, opts.to))
+        }
     })
 }
 
@@ -530,8 +547,9 @@ fn format_string(
         Some(suffix) => source.strip_suffix(suffix).unwrap_or(source),
         None => source,
     };
-
+    let mut is_specified = true;
     let precision = if let Some(p) = options.format.precision {
+
         p
     } else if options.transform.to == Unit::None
         && !source_without_suffix
@@ -539,9 +557,11 @@ fn format_string(
             .last()
             .is_some_and(char::is_alphabetic)
     {
+
         parse_implicit_precision(source_without_suffix)
     } else {
-        0
+    is_specified = false;
+    0
     };
 
     let number = transform_to(
@@ -550,6 +570,7 @@ fn format_string(
         options.round,
         precision,
         &options.unit_separator,
+        is_specified
     )?;
 
     // bring back the suffix before applying padding
@@ -589,7 +610,6 @@ fn format_string(
         options.format.prefix, options.format.suffix
     ))
 }
-
 /// Encodes a byte slice as a string, representing non-UTF-8 bytes and non-printable ASCII
 /// bytes as octal escapes. Valid UTF-8 multi-byte characters pass through unchanged.
 /// Used to safely format invalid input in error messages.
