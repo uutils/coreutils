@@ -5,13 +5,12 @@
 //! Types for representing and displaying block sizes.
 use crate::{OPT_BLOCKSIZE, OPT_PORTABILITY};
 use clap::ArgMatches;
-use std::{env, fmt};
+use std::fmt;
 
 use uucore::{
     display::Quotable,
-    parser::parse_size::{
-        IEC_BASES, ParseSizeError, SI_BASES, parse_size_non_zero_u64, parse_size_u64,
-    },
+    parser::parse_block_size,
+    parser::parse_size::{IEC_BASES, ParseSizeError, SI_BASES, parse_size_u64},
 };
 
 /// A `SuffixType` determines whether the suffixes are 1000 or 1024 based, and whether they are
@@ -157,11 +156,7 @@ impl BlockSize {
 
 impl Default for BlockSize {
     fn default() -> Self {
-        if env::var("POSIXLY_CORRECT").is_ok() {
-            Self::Bytes(512)
-        } else {
-            Self::Bytes(1024)
-        }
+        Self::Bytes(parse_block_size::default_block_size())
     }
 }
 
@@ -177,21 +172,13 @@ pub(crate) fn read_block_size(matches: &ArgMatches) -> Result<BlockSize, ParseSi
         }
     } else if matches.get_flag(OPT_PORTABILITY) {
         Ok(BlockSize::default())
-    } else if let Some(bytes) = block_size_from_env() {
+    } else if let Some(bytes) =
+        parse_block_size::block_size_from_env(&["DF_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"]).found()
+    {
         Ok(BlockSize::Bytes(bytes))
     } else {
         Ok(BlockSize::default())
     }
-}
-
-fn block_size_from_env() -> Option<u64> {
-    for env_var in ["DF_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
-        if let Ok(env_size) = env::var(env_var) {
-            return parse_size_non_zero_u64(&env_size).ok();
-        }
-    }
-
-    None
 }
 
 impl fmt::Display for BlockSize {
