@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fieldsets prefs febr abmon langinfo uppercased
+// spell-checker:ignore fieldsets prefs febr abmon langinfo uppercased wcswidth alef
 
 //! Locale-aware datetime formatting utilities using ICU and jiff-icu
 
@@ -67,6 +67,112 @@ pub enum CalendarType {
     Ethiopian,
 }
 
+/// Sum per-character Unicode display widths.
+///
+/// We intentionally avoid `UnicodeWidthStr::width` because its string-level
+/// API applies Arabic lam-alef ligature detection (ل+أ → 1 cell) which
+/// glibc's `wcswidth` does not. GNU ls pads via `wcswidth`, so we must
+/// match that behavior.
+fn display_width(s: &str) -> usize {
+    use unicode_width::UnicodeWidthChar;
+    s.chars()
+        .map(|c| UnicodeWidthChar::width(c).unwrap_or(0))
+        .sum()
+}
+
+/// Pad every entry in `names` with trailing spaces so all entries share the
+/// same Unicode display width (the maximum across the array). This mirrors
+/// GNU ls's `abmon_len` / weekday alignment logic.
+fn pad_names<const N: usize>(names: [String; N]) -> [String; N] {
+    let widths: [usize; N] = std::array::from_fn(|i| display_width(&names[i]));
+    let max = widths.iter().copied().max().unwrap_or(0);
+    if max == 0 || widths.iter().all(|&w| w == max) {
+        return names;
+    }
+    let mut i = 0;
+    names.map(|s| {
+        let cur = widths[i];
+        i += 1;
+        if cur >= max {
+            s
+        } else {
+            format!("{s}{:width$}", "", width = max - cur)
+        }
+    })
+}
+
+/// Cached locale name arrays, computed once per process. Each variant is
+/// `None` when the ICU formatter for that field width cannot be created
+/// (should only happen for truly broken locale data).
+struct CachedLocaleNames {
+    /// `%B` — full month names, padded to uniform display width
+    month_long: Option<[String; 12]>,
+    /// `%b` / `%h` — abbreviated month names (trailing dots stripped), padded
+    month_abbrev: Option<[String; 12]>,
+    /// `%A` — full weekday names, padded
+    weekday_long: Option<[String; 7]>,
+    /// `%a` — abbreviated weekday names, padded
+    weekday_short: Option<[String; 7]>,
+}
+
+/// Return the cached, pre-padded locale names (computed once per process).
+///
+/// Like [`get_time_locale`], the result is frozen at first access.
+/// If `LC_TIME` changes after that point the cached names will be stale.
+/// This is acceptable: each coreutils invocation is a fresh process.
+fn get_cached_locale_names() -> &'static CachedLocaleNames {
+    static CACHE: OnceLock<CachedLocaleNames> = OnceLock::new();
+    CACHE.get_or_init(|| {
+        let (locale, _) = get_time_locale();
+        let locale_prefs: icu_datetime::DateTimeFormatterPreferences = locale.clone().into();
+
+        // Hardcoded dates that are guaranteed valid — month 1..=12 day 1,
+        // and day 1..=7 of January 2001. Any failure is a bug, not a
+        // recoverable condition.
+        let month_dates: [Date<Iso>; 12] = std::array::from_fn(|i| {
+            Date::<Iso>::try_new_iso(2001, (i + 1) as u8, 1)
+                .expect("month 1..=12 day 1 is always valid")
+        });
+        // Jan 1 2001 is a Monday, so Jan 1..=7 yields Mon(0)..Sun(6)
+        // when indexed via `to_monday_zero_offset()`.
+        let weekday_dates: [Date<Iso>; 7] = std::array::from_fn(|i| {
+            Date::<Iso>::try_new_iso(2001, 1, (i + 1) as u8).expect("Jan 1..=7 is always valid")
+        });
+
+        let month_long = DateTimeFormatter::try_new(locale_prefs, fieldsets::M::long())
+            .ok()
+            .map(|f| pad_names(month_dates.each_ref().map(|d| f.format(d).to_string())));
+
+        // ICU's medium format may include trailing periods (e.g., "febr."
+        // for Hungarian). The standard C/POSIX locale via nl_langinfo
+        // returns abbreviations WITHOUT trailing periods, so we strip them.
+        let month_abbrev = DateTimeFormatter::try_new(locale_prefs, fieldsets::M::medium())
+            .ok()
+            .map(|f| {
+                pad_names(
+                    month_dates
+                        .each_ref()
+                        .map(|d| f.format(d).to_string().trim_end_matches('.').to_string()),
+                )
+            });
+
+        let weekday_long = DateTimeFormatter::try_new(locale_prefs, fieldsets::E::long())
+            .ok()
+            .map(|f| pad_names(weekday_dates.each_ref().map(|d| f.format(d).to_string())));
+
+        let weekday_short = DateTimeFormatter::try_new(locale_prefs, fieldsets::E::short())
+            .ok()
+            .map(|f| pad_names(weekday_dates.each_ref().map(|d| f.format(d).to_string())));
+
+        CachedLocaleNames {
+            month_long,
+            month_abbrev,
+            weekday_long,
+            weekday_short,
+        }
+    })
+}
+
 /// Transform a strftime format string to use locale-specific calendar values
 pub fn localize_format_string(format: &str, date: JiffDate) -> String {
     const PERCENT_PLACEHOLDER: &str = "\x00\x00";
@@ -113,36 +219,31 @@ pub fn localize_format_string(format: &str, date: JiffDate) -> String {
             .replace("%e", &format!("{cal_day:2}"));
     }
 
-    // Format localized names using ICU DateTimeFormatter
-    let locale_prefs = locale.clone().into();
+    // Look up the pre-padded locale name from the once-per-process cache.
+    let cached = get_cached_locale_names();
+    let month_idx = date.month() as usize - 1;
+    let weekday_idx = date.weekday().to_monday_zero_offset() as usize;
 
     if fmt.contains("%B") {
-        if let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::M::long()) {
-            fmt = fmt.replace("%B", &f.format(&iso_date).to_string());
+        if let Some(names) = &cached.month_long {
+            fmt = fmt.replace("%B", &names[month_idx]);
         }
     }
     if fmt.contains("%b") || fmt.contains("%h") {
-        if let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::M::medium()) {
-            // ICU's medium format may include trailing periods (e.g., "febr." for Hungarian),
-            // which when combined with locale format strings that also add periods after
-            // %b (e.g., "%Y. %b. %d") results in double periods ("febr..").
-            // The standard C/POSIX locale via nl_langinfo returns abbreviations
-            // WITHOUT trailing periods, so we strip them here for consistency.
-            let month_abbrev = f.format(&iso_date).to_string();
-            let month_abbrev = month_abbrev.trim_end_matches('.').to_string();
+        if let Some(names) = &cached.month_abbrev {
             fmt = fmt
-                .replace("%b", &month_abbrev)
-                .replace("%h", &month_abbrev);
+                .replace("%b", &names[month_idx])
+                .replace("%h", &names[month_idx]);
         }
     }
     if fmt.contains("%A") {
-        if let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::E::long()) {
-            fmt = fmt.replace("%A", &f.format(&iso_date).to_string());
+        if let Some(names) = &cached.weekday_long {
+            fmt = fmt.replace("%A", &names[weekday_idx]);
         }
     }
     if fmt.contains("%a") {
-        if let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::E::short()) {
-            fmt = fmt.replace("%a", &f.format(&iso_date).to_string());
+        if let Some(names) = &cached.weekday_short {
+            fmt = fmt.replace("%a", &names[weekday_idx]);
         }
     }
 

@@ -3,7 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo timefile
-// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons NOFILE
+// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons NOFILE abmon alef wcswidth
+
 #![allow(
     clippy::similar_names,
     clippy::too_many_lines,
@@ -2610,6 +2611,87 @@ fn test_ls_time_style_locale() {
                  (alternate calendar expected), got: {stdout_lossy}"
             );
         }
+    }
+}
+
+/// Regression test for GNU `tests/ls/abmon-align.sh`: abbreviated month
+/// names must be padded to uniform display width and all be distinct.
+#[cfg(unix)]
+#[test]
+fn test_ls_abmon_align() {
+    use std::collections::HashSet;
+    use unicode_width::UnicodeWidthChar;
+
+    let filenames: Vec<String> = (1..=12).map(|i| format!("{i:02}.ts")).collect();
+    let timestamps: Vec<u64> = (1..=12)
+        .map(|mon| {
+            jiff::civil::date(2025, mon, 15)
+                .to_zoned(jiff::tz::TimeZone::UTC)
+                .unwrap()
+                .timestamp()
+                .as_second() as u64
+        })
+        .collect();
+
+    for locale in ["C", "fi_FI.UTF-8", "fr_FR.UTF-8", "ar_SY.UTF-8"] {
+        if !is_locale_available(locale) {
+            continue;
+        }
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        for (name, &ts) in filenames.iter().zip(timestamps.iter()) {
+            at.make_file(name)
+                .set_modified(SystemTime::UNIX_EPOCH + Duration::from_secs(ts))
+                .unwrap();
+        }
+
+        let mut cmd = scene.ucmd();
+        cmd.env("LC_ALL", locale)
+            .env("TZ", "UTC")
+            .args(&["-lgG", "--time-style=+%b"]);
+        for f in &filenames {
+            cmd.arg(f);
+        }
+        let stdout = String::from_utf8_lossy(cmd.succeeds().stdout()).to_string();
+
+        // Extract the month field from each line of `-lgG --time-style=+%b`
+        // output. The format is: permissions links size month filename
+        // We strip the filename suffix first, then split on whitespace.
+        let months: Vec<String> = stdout
+            .lines()
+            .filter_map(|l| {
+                // Strip the " NN.ts" suffix (6 bytes) to isolate the month.
+                let l = &l[..l.len() - 6];
+                let fields: Vec<&str> = l.splitn(4, char::is_whitespace).collect();
+
+                if fields.len() < 4 {
+                    return None;
+                }
+
+                Some(fields[3].to_string())
+            })
+            .collect();
+
+        // Use per-character width (not UnicodeWidthStr::width) to match
+        // the display_width() function used by pad_names() — the string-level
+        // API applies Arabic lam-alef ligature detection that glibc's wcswidth
+        // (and our padding code) does not.
+        let widths: Vec<usize> = months
+            .iter()
+            .map(|m| {
+                m.chars()
+                    .map(|c| UnicodeWidthChar::width(c).unwrap_or(0))
+                    .sum::<usize>()
+            })
+            .collect();
+        let unique: HashSet<&str> = months.iter().map(|m| m.trim_end()).collect();
+
+        assert_eq!(months.len(), 12, "[{locale}] expected 12 lines");
+        assert!(
+            widths.iter().all(|&w| w == widths[0]),
+            "[{locale}] widths not uniform: {widths:?}\n{stdout}"
+        );
+        assert_eq!(unique.len(), 12, "[{locale}] duplicate months\n{stdout}");
     }
 }
 
