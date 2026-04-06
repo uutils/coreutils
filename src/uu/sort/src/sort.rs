@@ -2057,7 +2057,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let f: OsString = {
                 #[cfg(unix)]
                 {
-                    use std::os::unix::ffi::OsStrExt;
                     OsStr::from_bytes(&line).to_os_string()
                 }
                 #[cfg(not(unix))]
