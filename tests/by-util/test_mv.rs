@@ -3006,3 +3006,157 @@ fn test_mv_cross_device_file_symlink_preserved() {
         "target content"
     );
 }
+
+/// Find a supplementary group that differs from `current`.
+/// Non-root users can chgrp to any group they belong to.
+#[cfg(target_os = "linux")]
+fn find_other_group(current: u32) -> Option<u32> {
+    nix::unistd::getgroups().ok()?.iter().find_map(|group| {
+        let gid = group.as_raw();
+        (gid != current).then_some(gid)
+    })
+}
+
+/// Test that group ownership is preserved during cross-device file moves.
+/// Uses chgrp to a supplementary group (no root needed).
+/// See https://github.com/uutils/coreutils/issues/9714
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_preserves_ownership() {
+    use std::fs;
+    use std::os::unix::fs::MetadataExt;
+    use tempfile::TempDir;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("owned_file", "owned content");
+    let file_path = at.plus("owned_file");
+
+    let original_meta = fs::metadata(&file_path).expect("Failed to get metadata");
+    let Some(other_gid) = find_other_group(original_meta.gid()) else {
+        println!("SKIPPED: no supplementary group available for chgrp");
+        return;
+    };
+
+    // chgrp to a different group (non-root users can do this for their own groups)
+    uucore::perms::wrap_chown(
+        &file_path,
+        &original_meta,
+        None,
+        Some(other_gid),
+        false,
+        uucore::perms::Verbosity::default(),
+    )
+    .expect("Failed to chgrp file");
+
+    let meta = fs::metadata(&file_path).expect("Failed to get metadata");
+    assert_eq!(meta.gid(), other_gid, "chgrp should have changed the gid");
+
+    // Force cross-filesystem move using /dev/shm (tmpfs)
+    let target_dir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let target_file = target_dir.path().join("owned_file");
+
+    scene
+        .ucmd()
+        .arg("owned_file")
+        .arg(target_file.to_str().unwrap())
+        .succeeds()
+        .no_stderr();
+
+    let moved_meta = fs::metadata(&target_file).expect("Failed to get metadata of moved file");
+    assert_eq!(
+        moved_meta.gid(),
+        other_gid,
+        "gid should be preserved after cross-device move (expected {other_gid}, got {})",
+        moved_meta.gid()
+    );
+    assert_eq!(
+        moved_meta.uid(),
+        meta.uid(),
+        "uid should be preserved after cross-device move"
+    );
+}
+
+/// Test that group ownership is preserved for files inside directories during cross-device moves.
+/// Uses chgrp to a supplementary group (no root needed).
+/// See https://github.com/uutils/coreutils/issues/9714
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_preserves_ownership_recursive() {
+    use std::fs;
+    use std::os::unix::fs::MetadataExt;
+    use tempfile::TempDir;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("owned_dir");
+    at.mkdir("owned_dir/sub");
+    at.write("owned_dir/file1", "content1");
+    at.write("owned_dir/sub/file2", "content2");
+
+    let dir_meta = fs::metadata(at.plus("owned_dir")).expect("Failed to get metadata");
+    let Some(other_gid) = find_other_group(dir_meta.gid()) else {
+        println!("SKIPPED: no supplementary group available for chgrp");
+        return;
+    };
+
+    // chgrp all entries to a different group
+    for path in &[
+        "owned_dir",
+        "owned_dir/sub",
+        "owned_dir/file1",
+        "owned_dir/sub/file2",
+    ] {
+        let p = at.plus(path);
+        let m = fs::metadata(&p).expect("Failed to get metadata");
+        uucore::perms::wrap_chown(
+            &p,
+            &m,
+            None,
+            Some(other_gid),
+            false,
+            uucore::perms::Verbosity::default(),
+        )
+        .expect("Failed to chgrp");
+    }
+
+    // Force cross-filesystem move using /dev/shm (tmpfs)
+    let target_dir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let target_path = target_dir.path().join("owned_dir");
+
+    scene
+        .ucmd()
+        .arg("owned_dir")
+        .arg(target_path.to_str().unwrap())
+        .succeeds()
+        .no_stderr();
+
+    // Check ownership of the directory itself
+    let moved_dir_meta = fs::metadata(&target_path).expect("Failed to get dir metadata");
+    assert_eq!(
+        moved_dir_meta.gid(),
+        other_gid,
+        "directory gid should be preserved after cross-device move"
+    );
+
+    // Check ownership of a file inside the directory
+    let file1_meta = fs::metadata(target_path.join("file1")).expect("Failed to get file1 metadata");
+    assert_eq!(
+        file1_meta.gid(),
+        other_gid,
+        "file gid should be preserved after cross-device move"
+    );
+
+    // Check ownership of a file in a subdirectory
+    let file2_meta =
+        fs::metadata(target_path.join("sub/file2")).expect("Failed to get file2 metadata");
+    assert_eq!(
+        file2_meta.gid(),
+        other_gid,
+        "nested file gid should be preserved after cross-device move"
+    );
+}
