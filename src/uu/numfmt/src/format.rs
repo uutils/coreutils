@@ -507,7 +507,7 @@ fn transform_to(
             format!("{i2:.0}{unit_separator}{}", DisplayableSuffix(s, opts.to))
         }
         Some(s) if i2.abs() < 10.0 => {
-            //when there's a single digit before the dot.
+            // when there's a single digit before the dot.
             format!("{i2:.1}{unit_separator}{}", DisplayableSuffix(s, opts.to))
         }
         Some(s) => {
