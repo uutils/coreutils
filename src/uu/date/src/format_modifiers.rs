@@ -337,7 +337,10 @@ fn apply_modifiers(
             .all(|c| !c.is_alphabetic() || c.is_uppercase())
         {
             result = result.to_lowercase();
-        } else {
+        } else if !result
+            .chars()
+            .all(|c| !c.is_alphabetic() || c.is_lowercase())
+        {
             result = result.to_uppercase();
         }
     }
@@ -356,9 +359,9 @@ fn apply_modifiers(
         width
     };
 
-    // Handle width smaller than result: strip default padding to fit
+    // When the requested width is narrower than the default formatted width, GNU first removes default padding and then reapplies the requested width.
     if effective_width > 0 && effective_width < result.len() {
-        return Ok(strip_default_padding(&result));
+        result = strip_default_padding(&result);
     }
 
     // Strip default padding when switching pad characters on numeric fields

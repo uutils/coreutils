@@ -709,31 +709,27 @@ fn format_date_with_locale_aware_months(
     #[cfg(feature = "i18n-datetime")] skip_localization: bool,
     #[cfg(not(feature = "i18n-datetime"))] _skip_localization: bool,
 ) -> Result<String, String> {
-    // First check if format string has GNU modifiers (width/flags) and format if present
-    // This optimization combines detection and formatting in a single pass
-    if let Some(result) =
-        format_modifiers::format_with_modifiers_if_present(date, format_string, config)
-    {
+    // Apply locale-aware name substitution (month/day names) before modifier
+    // processing, so that formats like "%-e" don't bypass localization of "%b"/"%A".
+    // The owned String is kept in `localized` so `fmt` can borrow from it for the
+    // rest of the function without a dangling reference.
+    #[cfg(feature = "i18n-datetime")]
+    let localized: Option<String> = (!skip_localization && should_use_icu_locale())
+        .then(|| localize_format_string(format_string, date.date()));
+    #[cfg(feature = "i18n-datetime")]
+    let fmt: &str = localized.as_deref().unwrap_or(format_string);
+    #[cfg(not(feature = "i18n-datetime"))]
+    let fmt = format_string;
+
+    // Check if format string has GNU modifiers (width/flags) and format if present
+    if let Some(result) = format_modifiers::format_with_modifiers_if_present(date, fmt, config) {
         return result.map_err(|e| e.to_string());
     }
 
     let broken_down = BrokenDownTime::from(date);
-
-    // When the i18n-datetime feature is enabled (default), use ICU locale-aware
-    // formatting if the locale requires it. Without the feature (e.g. wasi/wasm
-    // builds that use --no-default-features), skip localization entirely and
-    // format with the raw strftime string.
-    #[cfg(feature = "i18n-datetime")]
-    let result = if !should_use_icu_locale() || skip_localization {
-        broken_down.to_string_with_config(config, format_string)
-    } else {
-        let fmt = localize_format_string(format_string, date.date());
-        broken_down.to_string_with_config(config, &fmt)
-    };
-    #[cfg(not(feature = "i18n-datetime"))]
-    let result = broken_down.to_string_with_config(config, format_string);
-
-    result.map_err(|e| e.to_string())
+    broken_down
+        .to_string_with_config(config, fmt)
+        .map_err(|e| e.to_string())
 }
 
 /// Return the appropriate format string for the given settings.

@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker: ignore: AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado febr MEST KST uueuu ueuu
+// spell-checker: ignore: AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado febr MEST KST uueuu ueuu vasárnap június január distros
 // spell-checker: ignore: uppercases
 
 use std::cmp::Ordering;
@@ -1623,6 +1623,32 @@ fn test_date_locale_en_us_vs_c_difference() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_date_locale_hu_hungarian() {
+    // Regression test for uutils/coreutils#11240: the GNU modifier fast-path
+    // ("%-e") used to run before ICU localization, so "%b"/"%A" came out in
+    // English even under hu_HU.UTF-8. Pin an explicit format string so the
+    // assertion is deterministic across glibc versions (the default D_T_FMT
+    // for hu_HU differs between distros).
+    if !is_locale_available("hu_HU.UTF-8") {
+        return;
+    }
+
+    let result = new_ucmd!()
+        .env("LC_ALL", "hu_HU.UTF-8")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-12-14T13:00:00")
+        .arg("+%Y. %b %-e., %A, %H:%M:%S %Z")
+        .succeeds();
+
+    assert_eq!(
+        result.stdout_str(),
+        "2025. dec 14., vasárnap, 13:00:00 UTC\n"
+    );
+}
+
+#[test]
 #[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
 fn test_date_locale_fr_french() {
     // Test French locale (fr_FR.UTF-8) behavior
@@ -1827,7 +1853,6 @@ fn test_date_parenthesis_comment() {
 }
 
 #[test]
-#[ignore = "https://github.com/uutils/coreutils/issues/11660 — GNU date pads to the requested width when it is narrower than the default (e.g. `%02j` on day-1 -> `01`); uutils strips leading zeros to `1`."]
 fn test_date_strftime_narrow_width_on_wide_default() {
     // `%j` has a default width of 3. Requesting `%02j` on day 1 should yield `01`.
     // uutils currently yields `1`.
@@ -1888,7 +1913,6 @@ fn test_date_input_trailing_tz_abbrev_rezones() {
 }
 
 #[test]
-#[ignore = "https://github.com/uutils/coreutils/issues/11659 — GNU date treats the `#` case-swap flag as no-op on `%P` (already-lowercase alt); uutils uppercases it to `PM`."]
 fn test_date_strftime_case_flag_on_alt_ampm() {
     // `%P` is GNU's lowercase am/pm. `%#P` should stay lowercase in GNU; uutils flips to `PM`.
     new_ucmd!()
@@ -2275,6 +2299,7 @@ fn test_locale_month_names() {
         ("es_ES.UTF-8", "enero", "junio", "diciembre"),
         ("it_IT.UTF-8", "gennaio", "giugno", "dicembre"),
         ("pt_BR.UTF-8", "janeiro", "junho", "dezembro"),
+        ("hu_HU.UTF-8", "január", "június", "december"),
         ("ja_JP.UTF-8", "1月", "6月", "12月"),
         ("zh_CN.UTF-8", "一月", "六月", "十二月"),
     ] {

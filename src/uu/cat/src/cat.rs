@@ -229,26 +229,26 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let show_nonprint = [
-        options::SHOW_ALL.to_owned(),
-        options::SHOW_NONPRINTING_ENDS.to_owned(),
-        options::SHOW_NONPRINTING_TABS.to_owned(),
-        options::SHOW_NONPRINTING.to_owned(),
+        options::SHOW_ALL,
+        options::SHOW_NONPRINTING_ENDS,
+        options::SHOW_NONPRINTING_TABS,
+        options::SHOW_NONPRINTING,
     ]
     .iter()
     .any(|v| matches.get_flag(v));
 
     let show_ends = [
-        options::SHOW_ENDS.to_owned(),
-        options::SHOW_ALL.to_owned(),
-        options::SHOW_NONPRINTING_ENDS.to_owned(),
+        options::SHOW_ENDS,
+        options::SHOW_ALL,
+        options::SHOW_NONPRINTING_ENDS,
     ]
     .iter()
     .any(|v| matches.get_flag(v));
 
     let show_tabs = [
-        options::SHOW_ALL.to_owned(),
-        options::SHOW_TABS.to_owned(),
-        options::SHOW_NONPRINTING_TABS.to_owned(),
+        options::SHOW_ALL,
+        options::SHOW_TABS,
+        options::SHOW_NONPRINTING_TABS,
     ]
     .iter()
     .any(|v| matches.get_flag(v));
