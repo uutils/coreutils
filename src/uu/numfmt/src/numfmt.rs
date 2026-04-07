@@ -166,7 +166,7 @@ fn handle_buffer<R: BufRead>(mut input: R, options: &NumfmtOptions) -> UResult<b
 }
 
 fn parse_unit(s: &str, opt: &str) -> Result<Unit> {
-    let opt_with_dash = format!("--{}", opt);
+    let opt_with_dash = format!("--{opt}");
     match s {
         "auto" if opt != TO => Ok(Unit::Auto),
         "si" => Ok(Unit::Si),
