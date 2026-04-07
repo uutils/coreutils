@@ -825,4 +825,14 @@ fn test_emoji_output() {
         .args(&["🦀", "loves", "🚀", "and", "🌟"])
         .succeeds()
         .stdout_only("🦀 loves 🚀 and 🌟\n");
+
+    new_ucmd!()
+        .arg("🍎,🍌,🍒,🥝")
+        .succeeds()
+        .stdout_only("🍎,🍌,🍒,🥝\n");
+
+    new_ucmd!()
+        .arg("こんにちは世界")
+        .succeeds()
+        .stdout_only("こんにちは世界\n");
 }

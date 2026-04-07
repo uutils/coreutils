@@ -7,9 +7,8 @@ use super::{CatResult, FdReadable, InputHandle};
 use rustix::io::{read, write};
 use std::os::{fd::AsFd, unix::io::AsRawFd};
 
-use uucore::pipes::{pipe, splice, splice_exact};
+use uucore::pipes::{MAX_ROOTLESS_PIPE_SIZE, pipe, splice, splice_exact};
 
-const SPLICE_SIZE: usize = 1024 * 128;
 const BUF_SIZE: usize = 1024 * 16;
 
 /// This function is called from `write_fast()` on Linux and Android. The
@@ -24,28 +23,38 @@ pub(super) fn write_fast_using_splice<R: FdReadable, S: AsRawFd + AsFd>(
     handle: &InputHandle<R>,
     write_fd: &S,
 ) -> CatResult<bool> {
-    let (pipe_rd, pipe_wr) = pipe()?;
-
-    loop {
-        match splice(&handle.reader, &pipe_wr, SPLICE_SIZE) {
-            Ok(n) => {
-                if n == 0 {
-                    return Ok(false);
-                }
-                if splice_exact(&pipe_rd, write_fd, n).is_err() {
-                    // If the first splice manages to copy to the intermediate
-                    // pipe, but the second splice to stdout fails for some reason
-                    // we can recover by copying the data that we have from the
-                    // intermediate pipe to stdout using normal read/write. Then
-                    // we tell the caller to fall back.
-                    copy_exact(&pipe_rd, write_fd, n)?;
-                    return Ok(true);
-                }
-            }
-            Err(_) => {
-                return Ok(true);
+    if splice(&handle.reader, &write_fd, MAX_ROOTLESS_PIPE_SIZE).is_ok() {
+        // fcntl improves throughput
+        // todo: avoid fcntl overhead for small input, but don't fcntl inside of the loop
+        let _ = rustix::pipe::fcntl_setpipe_size(write_fd, MAX_ROOTLESS_PIPE_SIZE);
+        loop {
+            match splice(&handle.reader, &write_fd, MAX_ROOTLESS_PIPE_SIZE) {
+                Ok(1..) => {}
+                Ok(0) => return Ok(false),
+                Err(_) => return Ok(true),
             }
         }
+    } else if let Ok((pipe_rd, pipe_wr)) = pipe() {
+        // both of in/output are not pipe. needs broker to use splice() with additional costs
+        loop {
+            match splice(&handle.reader, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
+                Ok(0) => return Ok(false),
+                Ok(n) => {
+                    if splice_exact(&pipe_rd, write_fd, n).is_err() {
+                        // If the first splice manages to copy to the intermediate
+                        // pipe, but the second splice to stdout fails for some reason
+                        // we can recover by copying the data that we have from the
+                        // intermediate pipe to stdout using normal read/write. Then
+                        // we tell the caller to fall back.
+                        copy_exact(&pipe_rd, write_fd, n)?;
+                        return Ok(true);
+                    }
+                }
+                Err(_) => return Ok(true),
+            }
+        }
+    } else {
+        Ok(true)
     }
 }
 

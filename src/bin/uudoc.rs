@@ -495,7 +495,7 @@ impl MDWriter<'_, '_> {
                     .iter()
                     .any(|u| u == self.name)
             {
-                writeln!(self.w, "<i class=\"fa fa-brands fa-{icon}\"></i>")?;
+                writeln!(self.w, "<i class=\"fa-brands fa-{icon}\"></i>")?;
             }
         }
         writeln!(self.w, "</div>")?;

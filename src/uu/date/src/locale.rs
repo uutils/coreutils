@@ -28,7 +28,6 @@ macro_rules! cfg_langinfo {
 cfg_langinfo! {
     use std::ffi::CStr;
     use std::sync::OnceLock;
-    use nix::libc;
 
     #[cfg(test)]
     use std::sync::Mutex;

@@ -226,7 +226,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("mv")
         .version(uucore::crate_version!())
         .about(translate!("mv-about"))
         .help_template(uucore::localized_help_template(uucore::util_name()))
@@ -821,6 +821,8 @@ fn rename_with_fallback(
         const EXDEV: i32 = windows_sys::Win32::Foundation::ERROR_NOT_SAME_DEVICE as _;
         #[cfg(unix)]
         const EXDEV: i32 = libc::EXDEV as _;
+        #[cfg(target_os = "wasi")]
+        const EXDEV: i32 = 18; // POSIX EXDEV value
 
         // We will only copy if:
         // 1. Files are on different devices (EXDEV error)
@@ -926,13 +928,9 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     }
 }
 
-#[cfg(not(any(windows, unix)))]
-fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
-    let path_symlink_points_to = fs::read_link(from)?;
-    Err(io::Error::new(
-        io::ErrorKind::Other,
-        translate!("mv-error-no-symlink-support"),
-    ))
+#[cfg(target_os = "wasi")]
+fn rename_symlink_fallback(_from: &Path, _to: &Path) -> io::Result<()> {
+    Err(io::Error::other(translate!("mv-error-no-symlink-support")))
 }
 
 fn rename_dir_fallback(

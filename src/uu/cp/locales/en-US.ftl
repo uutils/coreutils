@@ -109,10 +109,8 @@ cp-debug-enum-seek-hole-zeros = SEEK_HOLE + zeros
 cp-warning-source-specified-more-than-once = source { $file_type } { $source } specified more than once
 
 # Verbose and debug messages
-cp-verbose-copied = { $source } -> { $dest }
 cp-debug-skipped = skipped { $path }
 cp-verbose-removed = removed { $path }
-cp-verbose-created-directory = { $source } -> { $dest }
 cp-debug-copy-offload = copy offload: { $offload }, reflink: { $reflink }, sparse detection: { $sparse }
 
 # Prompts

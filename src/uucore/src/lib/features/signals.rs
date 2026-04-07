@@ -538,6 +538,9 @@ static STDERR_WAS_CLOSED: AtomicBool = AtomicBool::new(false);
 #[cfg(unix)]
 static SIGPIPE_WAS_IGNORED: AtomicBool = AtomicBool::new(false);
 
+#[cfg(unix)]
+static STARTUP_STATE_WAS_CAPTURED: AtomicBool = AtomicBool::new(false);
+
 /// Captures stdio and SIGPIPE state at process initialization, before main() runs.
 ///
 /// # Safety
@@ -548,6 +551,11 @@ pub unsafe extern "C" fn capture_startup_state() {
     use nix::libc;
     use std::mem::MaybeUninit;
     use std::ptr;
+
+    // No spinlock because we're single-threaded at this point
+    if STARTUP_STATE_WAS_CAPTURED.swap(true, Ordering::Relaxed) {
+        return;
+    }
 
     // Capture stdio state
     unsafe {

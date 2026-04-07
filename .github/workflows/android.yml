@@ -1,6 +1,6 @@
 name: Android
 
-# spell-checker:ignore (people) reactivecircus Swatinem dtolnay juliangruber
+# spell-checker:ignore (people) reactivecircus juliangruber
 # spell-checker:ignore (shell/tools) TERMUX nextest udevadm pkill
 # spell-checker:ignore (misc) swiftshader playstore DATALOSS noaudio
 
