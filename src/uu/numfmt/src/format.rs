@@ -488,7 +488,6 @@ fn transform_to(
     unit_separator: &str,
     is_specified: bool,
 ) -> Result<String> {
-
     let (i2, s) = consider_suffix(s, opts.to, round_method, precision)?;
     let i2 = i2 / (opts.to_unit as f64);
     Ok(match s {
@@ -549,7 +548,6 @@ fn format_string(
     };
     let mut is_specified = true;
     let precision = if let Some(p) = options.format.precision {
-
         p
     } else if options.transform.to == Unit::None
         && !source_without_suffix
@@ -557,11 +555,10 @@ fn format_string(
             .last()
             .is_some_and(char::is_alphabetic)
     {
-
         parse_implicit_precision(source_without_suffix)
     } else {
-    is_specified = false;
-    0
+        is_specified = false;
+        0
     };
 
     let number = transform_to(
@@ -570,7 +567,7 @@ fn format_string(
         options.round,
         precision,
         &options.unit_separator,
-        is_specified
+        is_specified,
     )?;
 
     // bring back the suffix before applying padding
