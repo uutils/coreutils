@@ -581,7 +581,13 @@ fn format_string(
     let padded_number = match padding {
         0 => number_with_suffix,
         p if p > 0 && options.format.zero_padding => {
-            let zero_padded = pad_string(&number_with_suffix, p as usize, '0', true);
+            let zero_padded = if let Some(unsigned) = number_with_suffix.strip_prefix('-') {
+                format!("-{}", pad_string(unsigned, p as usize - 1, '0', true))
+            } else if let Some(unsigned) = number_with_suffix.strip_prefix('+') {
+                format!("+{}", pad_string(unsigned, p as usize - 1, '0', true))
+            } else {
+                pad_string(&number_with_suffix, p as usize, '0', true)
+            };
 
             match implicit_padding.unwrap_or(options.padding) {
                 0 => zero_padded,

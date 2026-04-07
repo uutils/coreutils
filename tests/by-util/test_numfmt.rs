@@ -1428,7 +1428,6 @@ fn test_from_unit_fractional_precision_issue_11663() {
 // Zero-padded `--format` places padding zeros before the sign for negative
 // numbers; GNU (and C printf) puts the sign first.
 #[test]
-#[ignore = "GNU compat: see uutils/coreutils#11664"]
 fn test_zero_pad_sign_order_issue_11664() {
     new_ucmd!()
         .args(&["--from=none", "--format=%018.2f", "--", "-9869647"])
