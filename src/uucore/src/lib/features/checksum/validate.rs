@@ -281,6 +281,11 @@ impl LineFormat {
         // tagged format does not put a space before (filename)
 
         let par_idx = rest.iter().position(|&b| b == b'(')?;
+        // If the parenthesis is the first character (minus whitespace, which has already been stripped out), then,
+        // it's not a validly formatted line.
+        if par_idx < 1 {
+            return None;
+        }
         let sub_case = if rest[par_idx - 1] == b' ' {
             SubCase::Posix
         } else {
@@ -1041,6 +1046,10 @@ mod tests {
             (b" MD5(weirdfilename6) = ) = fds65dsf46as5df4d6f54asds5d7f7g9", None),
             (b" MD5 (weirdfilename7)= )= fds65dsf46as5df4d6f54asds5d7f7g9", None),
             (b" MD5 (weirdfilename8) = )= fds65dsf46as5df4d6f54asds5d7f7g9", None),
+            // test for missing algorithm
+            (b"(filename) = fds65dsf46as5df4d6f54asds5d7f7g9", None),
+            (b"filename) = fds65dsf46as5df4d6f54asds5d7f7g9", None),
+            (b"filename = fds65dsf46as5df4d6f54asds5d7f7g9", None),
         ];
 
         // cspell:enable
