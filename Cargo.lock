@@ -2692,9 +2692,9 @@ checksum = "b12e76d157a900eb52e81bc6e9f3069344290341720e9178cde2407113ac8d89"
 
 [[package]]
 name = "selinux"
-version = "0.6.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f4d7a0c34b924081f7fbdcb93121399f0d4182c0ec4bf9c01bfe4e7e21fcf16"
+checksum = "90fee6a6e1169aaaedef3a34850d69fd01e80500bc9cf6c0681c4df5968f5822"
 dependencies = [
  "bitflags 2.11.0",
  "errno",
@@ -2707,9 +2707,9 @@ dependencies = [
 
 [[package]]
 name = "selinux-sys"
-version = "0.6.15"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "debaba5832b4831ffe0ba9118b526c752c960f41c46c4ef197d9a15f5179d6fd"
+checksum = "acf9f7ddcfd31f0558b246d6ddc4a34fb4550668f364a09dd51f28409157e754"
 dependencies = [
  "bindgen",
  "cc",
