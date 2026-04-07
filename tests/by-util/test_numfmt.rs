@@ -1452,7 +1452,6 @@ fn test_to_unit_prefix_selection_issue_11666() {
 // `--format='%.0f'` with `--to=<scale>` still prints one fractional digit;
 // the precision specifier `.0` is ignored.
 #[test]
-#[ignore = "GNU compat: see uutils/coreutils#11667"]
 fn test_format_precision_zero_with_to_scale_issue_11667() {
     new_ucmd!()
         .args(&["--to=iec", "--format=%.0f", "5183776"])
