@@ -39,4 +39,4 @@ pinky-project-label = Projet :
 pinky-plan-label = Plan
 
 # Messages de statut
-pinky-unsupported-openbsd = commande non supportée sur OpenBSD
+pinky-unsupported-openbsd = commande non prise en charge sur OpenBSD

@@ -116,6 +116,14 @@ fn help() {
 }
 
 #[test]
+fn test_out_of_memory() {
+    new_ucmd!()
+        .arg("bs=1PB")
+        .fails_with_code(1)
+        .stderr_contains("memory"); //todo: improve error message at all platforms
+}
+
+#[test]
 fn test_stdin_stdout() {
     let input = build_ascii_block(521);
     let output = String::from_utf8(input.clone()).unwrap();
@@ -255,6 +263,13 @@ fn test_zero_multiplier_warning() {
             .succeeds()
             .no_stdout()
             .stderr_contains("warning: '0x' is a zero multiplier; use '00x' if that is intended");
+
+        new_ucmd!()
+            .args(&[format!("{arg}=0x0x0").as_str(), "status=none"])
+            .pipe_in("")
+            .succeeds()
+            .no_stdout()
+            .stderr_is("dd: warning: '0x' is a zero multiplier; use '00x' if that is intended\ndd: warning: '0x' is a zero multiplier; use '00x' if that is intended\n");
     }
 }
 

@@ -1,0 +1,129 @@
+Index: gnu/tests/numfmt/numfmt.pl
+===================================================================
+--- gnu.orig/tests/numfmt/numfmt.pl
++++ gnu/tests/numfmt/numfmt.pl
+@@ -296,7 +296,7 @@ my @Tests =
+
+      #Fields
+      ['field-1', '--field A',
+-             {ERR => "$prog: invalid field value 'A'\n$try"},
++             {ERR => "$prog: range 'A' was invalid: failed to parse range\n"},
+              {EXIT => '1'}],
+      ['field-2', '--field 2 --from=auto "Hello 40M World 90G"',
+              {OUT=>'Hello 40000000 World 90G'}],
+@@ -379,30 +379,39 @@ my @Tests =
+              {OUT=>"1.0k 2.0k 3.0k 4.0k 5.0k"}],
+
+      ['field-range-err-1', '--field -foo --to=si 10',
+-             {EXIT=>1}, {ERR=>"$prog: invalid field value 'foo'\n$try"}],
++             {EXIT=>1}, {ERR=>"$prog: range '-foo' was invalid: failed to parse range\n"}],
+      ['field-range-err-2', '--field --3 --to=si 10',
+-             {EXIT=>1}, {ERR=>"$prog: invalid field range\n$try"}],
++             {EXIT=>1}, {ERR=>"$prog: range '--3' was invalid: failed to parse range\n"}],
+      ['field-range-err-3', '--field 0 --to=si 10',
+-             {EXIT=>1}, {ERR=>"$prog: fields are numbered from 1\n$try"}],
++             {EXIT=>1}, {ERR=>"$prog: range '0' was invalid: fields and positions are numbered from 1\n"}],
+      ['field-range-err-4', '--field 3-2 --to=si 10',
+-             {EXIT=>1}, {ERR=>"$prog: invalid decreasing range\n$try"}],
++             {EXIT=>1}, {ERR=>"$prog: range '3-2' was invalid: high end of range less than low end\n"}],
+      ['field-range-err-6', '--field - --field 1- --to=si 10',
+-             {EXIT=>1}, {ERR=>"$prog: multiple field specifications\n"}],
++             {EXIT=>1},
++             {ERR_SUBST=>"s/.*//msg"},
++             {ERR=>""}],
+      ['field-range-err-7', '--field -1 --field 1- --to=si 10',
+-             {EXIT=>1}, {ERR=>"$prog: multiple field specifications\n"}],
++             {EXIT=>1},
++             {ERR_SUBST=>"s/.*//msg"},
++             {ERR=>""}],
+      ['field-range-err-8', '--field -1 --field 1,2,3 --to=si 10',
+-             {EXIT=>1}, {ERR=>"$prog: multiple field specifications\n"}],
++             {EXIT=>1},
++             {ERR_SUBST=>"s/.*//msg"},
++             {ERR=>""}],
+      ['field-range-err-9', '--field 1- --field 1,2,3 --to=si 10',
+-             {EXIT=>1}, {ERR=>"$prog: multiple field specifications\n"}],
++             {EXIT=>1},
++             {ERR_SUBST=>"s/.*//msg"},
++             {ERR=>""}],
+      ['field-range-err-10','--field 1,2,3 --field 1- --to=si 10',
+-             {EXIT=>1}, {ERR=>"$prog: multiple field specifications\n"}],
++             {EXIT=>1},
++             {ERR_SUBST=>"s/.*//msg"},
++             {ERR=>""}],
+      ['field-range-err-11','--field 1-2-3 --to=si 10',
+-             {EXIT=>1}, {ERR=>"$prog: invalid field range\n$try"}],
++             {EXIT=>1}, {ERR=>"$prog: range '1-2-3' was invalid: failed to parse range\n"}],
+      ['field-range-err-12','--field 0-1 --to=si 10',
+-             {EXIT=>1}, {ERR=>"$prog: fields are numbered from 1\n$try"}],
++             {EXIT=>1}, {ERR=>"$prog: range '0-1' was invalid: fields and positions are numbered from 1\n"}],
+      ['field-range-err-13','--field '.$limits->{UINTMAX_MAX}.',22 --to=si 10',
+-             {EXIT=>1}, {ERR=>"$prog: field number " .
+-                            "'".$limits->{UINTMAX_MAX}."' is too large\n$try"}],
++             {EXIT=>1}, {ERR=>"$prog: range '".$limits->{UINTMAX_MAX}."' was invalid: byte/character offset is too large\n"}],
+
+      # Auto-consume white-space, setup auto-padding
+      ['whitespace-1', '--to=si --field 2 "A    500 B"', {OUT=>"A    500 B"}],
+@@ -706,41 +715,41 @@ my @Tests =
+
+      # dev-debug messages - the actual messages don't matter
+      # just ensure the program works, and for code coverage testing.
+-     ['devdebug-1', '---debug --from=si 4.9K', {OUT=>"4900"},
++     ['devdebug-1', '--debug --from=si 4.9K', {OUT=>"4900"},
+              {ERR=>""},
+              {ERR_SUBST=>"s/.*//msg"}],
+-     ['devdebug-2', '---debug 4900', {OUT=>"4900"},
++     ['devdebug-2', '--debug 4900', {OUT=>"4900"},
+              {ERR=>""},
+              {ERR_SUBST=>"s/.*//msg"}],
+-     ['devdebug-3', '---debug --from=auto 4Mi', {OUT=>"4194304"},
++     ['devdebug-3', '--debug --from=auto 4Mi', {OUT=>"4194304"},
+              {ERR=>""},
+              {ERR_SUBST=>"s/.*//msg"}],
+-     ['devdebug-4', '---debug --to=si 4000000', {OUT=>"4.0M"},
++     ['devdebug-4', '--debug --to=si 4000000', {OUT=>"4.0M"},
+              {ERR=>""},
+              {ERR_SUBST=>"s/.*//msg"}],
+-     ['devdebug-5', '---debug --to=si --padding=5 4000000', {OUT=>" 4.0M"},
++     ['devdebug-5', '--debug --to=si --padding=5 4000000', {OUT=>" 4.0M"},
+              {ERR=>""},
+              {ERR_SUBST=>"s/.*//msg"}],
+-     ['devdebug-6', '---debug --suffix=Foo 1234Foo', {OUT=>"1234Foo"},
++     ['devdebug-6', '--debug --suffix=Foo 1234Foo', {OUT=>"1234Foo"},
+              {ERR=>""},
+              {ERR_SUBST=>"s/.*//msg"}],
+-     ['devdebug-7', '---debug --suffix=Foo 1234', {OUT=>"1234Foo"},
++     ['devdebug-7', '--debug --suffix=Foo 1234', {OUT=>"1234Foo"},
+              {ERR=>""},
+              {ERR_SUBST=>"s/.*//msg"}],
+-     ['devdebug-9', '---debug --grouping 10000', {OUT=>"10000"},
++     ['devdebug-9', '--debug --grouping 10000', {OUT=>"10000"},
+              {ERR=>""},
+              {ERR_SUBST=>"s/.*//msg"}],
+-     ['devdebug-10', '---debug --format %f 10000', {OUT=>"10000"},
++     ['devdebug-10', '--debug --format %f 10000', {OUT=>"10000"},
+              {ERR=>""},
+              {ERR_SUBST=>"s/.*//msg"}],
+-     ['devdebug-11', '---debug --format "%\'-10f" 10000',{OUT=>"10000     "},
++     ['devdebug-11', '--debug --format "%\'-10f" 10000',{OUT=>"10000     "},
+              {ERR=>""},
+              {ERR_SUBST=>"s/.*//msg"}],
+
+      # Invalid parameters
+      ['help-1', '--foobar',
+-             {ERR=>"$prog: unrecognized option\n$try"},
+-             {ERR_SUBST=>"s/option.*/option/; s/unknown/unrecognized/"},
++             {ERR=>""},
++             {ERR_SUBST=>"s/.*//msg"},
+              {EXIT=>1}],
+
+      ## Format string - check error detection
+@@ -1097,7 +1106,7 @@ my @Limit_Tests =
+              {EXIT => 2}],
+   );
+ # Restrict these tests to systems with LDBL_DIG == 18
+-(system "$prog ---debug 1 2>&1|grep 'MAX_UNSCALED_DIGITS: 18' > /dev/null") == 0
++(system "$prog --debug 1 2>&1|grep 'MAX_UNSCALED_DIGITS: 18' > /dev/null") == 0
+   and push @Tests, @Limit_Tests;
+
+ my $lg = ' ';

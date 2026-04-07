@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (vars) fperm srwx
 
-#[cfg(not(unix))]
+#[cfg(windows)]
 use libc::umask;
 
 pub fn parse_numeric(fperm: u32, mut mode: &str, considering_dir: bool) -> Result<u32, String> {
@@ -185,13 +185,19 @@ pub fn get_umask() -> u32 {
         mask.bits() as u32
     }
 
-    #[cfg(not(unix))]
+    #[cfg(windows)]
     {
         // SAFETY: umask always succeeds and doesn't operate on memory. Races are
         // possible but it can't violate Rust's guarantees.
         let mask = unsafe { umask(0) };
         unsafe { umask(mask) };
         mask as u32
+    }
+
+    // WASI has no umask; return a typical default (022).
+    #[cfg(not(any(unix, windows)))]
+    {
+        0o022
     }
 }
 

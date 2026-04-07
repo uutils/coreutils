@@ -12,13 +12,11 @@ use uucore::translate;
 use uucore::{error::UResult, show_error};
 
 fn get_userlogin() -> Option<String> {
-    unsafe {
-        let login: *const libc::c_char = libc::getlogin();
-        if login.is_null() {
-            None
-        } else {
-            Some(String::from_utf8_lossy(CStr::from_ptr(login).to_bytes()).to_string())
-        }
+    let login_ptr = unsafe { libc::getlogin() };
+    if login_ptr.is_null() {
+        None
+    } else {
+        Some(String::from_utf8_lossy(unsafe { CStr::from_ptr(login_ptr) }.to_bytes()).to_string())
     }
 }
 
@@ -36,9 +34,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("logname")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("logname"))
         .override_usage(translate!("logname-usage"))
         .about(translate!("logname-about"))
         .infer_long_args(true)

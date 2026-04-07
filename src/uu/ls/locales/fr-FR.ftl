@@ -55,7 +55,7 @@ ls-help-escape-quoting-style = Utiliser le style de citation d'échappement. Éq
 ls-help-c-quoting-style = Utiliser le style de citation C. Équivalent à `--quoting-style=c`
 ls-help-replace-control-chars = Remplacer les caractères de contrôle par '?' s'ils ne sont pas échappés.
 ls-help-show-control-chars = Afficher les caractères de contrôle 'tels quels' s'ils ne sont pas échappés.
-ls-help-show-time-field = Afficher l'heure dans <champ> :
+ls-help-show-time-field = Afficher l'heure dans `<champ>` :
     heure d'accès (-u) : atime, access, use ;
     heure de changement (-t) : ctime, status.
     heure de modification : mtime, modification.
@@ -71,7 +71,7 @@ ls-help-time-access = Si le format de liste long (par ex., -l, -o) est utilisé,
 ls-help-hide-pattern = ne pas lister les entrées implicites correspondant au MOTIF shell (surchargé par -a ou -A)
 ls-help-ignore-pattern = ne pas lister les entrées implicites correspondant au MOTIF shell
 ls-help-ignore-backups = Ignorer les entrées qui se terminent par ~.
-ls-help-sort-by-field = Trier par <champ> : name, none (-U), time (-t), size (-S), extension (-X) ou width
+ls-help-sort-by-field = Trier par `<champ>` : name, none (-U), time (-t), size (-S), extension (-X) ou width
 ls-help-sort-by-size = Trier par taille de fichier, le plus grand en premier.
 ls-help-sort-by-time = Trier par heure de modification (le 'mtime' dans l'inode), le plus récent en premier.
 ls-help-sort-by-version = Tri naturel des numéros (de version) dans les noms de fichiers.
@@ -85,7 +85,7 @@ ls-help-dereference-dir-args = Ne pas suivre les liens symboliques sauf quand il
   donnés comme arguments de ligne de commande.
 ls-help-dereference-args = Ne pas suivre les liens symboliques sauf quand ils sont donnés comme arguments de ligne de commande.
 ls-help-no-group = Ne pas afficher le groupe en format long.
-ls-help-author = Afficher l'auteur en format long. Sur les plateformes supportées,
+ls-help-author = Afficher l'auteur en format long. Sur les plateformes prises en charge,
   l'auteur correspond toujours au propriétaire du fichier.
 ls-help-all-files = Ne pas ignorer les fichiers cachés (fichiers dont les noms commencent par '.').
 ls-help-almost-all = Dans un répertoire, ne pas ignorer tous les noms de fichiers qui commencent par '.',

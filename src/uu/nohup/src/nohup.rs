@@ -14,6 +14,7 @@ use std::os::unix::prelude::*;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
+use std::sync::LazyLock;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult, set_exit_code};
@@ -55,20 +56,20 @@ impl UError for NohupError {
     }
 }
 
-fn failure_code() -> i32 {
-    if env::var("POSIXLY_CORRECT").is_ok() {
+static FAILURE_CODE: LazyLock<i32> = LazyLock::new(|| {
+    if env::var_os("POSIXLY_CORRECT").is_some() {
         POSIX_NOHUP_FAILURE
     } else {
         EXIT_CANCELED
     }
-}
+});
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result_with_exit_code(
         uu_app(),
         args,
-        failure_code(),
+        *FAILURE_CODE,
     )?;
 
     replace_fds()?;
@@ -94,9 +95,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("nohup")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("nohup"))
         .about(translate!("nohup-about"))
         .after_help(translate!("nohup-after-help"))
         .override_usage(format_usage(&translate!("nohup-usage")))
@@ -136,8 +137,6 @@ fn replace_fds() -> UResult<()> {
 }
 
 fn find_stdout() -> UResult<File> {
-    let internal_failure_code = failure_code();
-
     match OpenOptions::new()
         .create(true)
         .append(true)
@@ -152,7 +151,7 @@ fn find_stdout() -> UResult<File> {
         }
         Err(e1) => {
             let Ok(home) = env::var("HOME") else {
-                return Err(NohupError::OpenFailed(internal_failure_code, e1).into());
+                return Err(NohupError::OpenFailed(*FAILURE_CODE, e1).into());
             };
             let mut homeout = PathBuf::from(home);
             homeout.push(NOHUP_OUT);
@@ -165,13 +164,12 @@ fn find_stdout() -> UResult<File> {
                     );
                     Ok(t)
                 }
-                Err(e2) => Err(NohupError::OpenFailed2(
-                    internal_failure_code,
-                    e1,
-                    homeout_str.to_string(),
-                    e2,
-                )
-                .into()),
+                Err(e2) => {
+                    Err(
+                        NohupError::OpenFailed2(*FAILURE_CODE, e1, homeout_str.to_string(), e2)
+                            .into(),
+                    )
+                }
             }
         }
     }
@@ -187,7 +185,8 @@ unsafe extern "C" {
     target_os = "android",
     target_os = "freebsd",
     target_os = "openbsd",
-    target_os = "cygwin"
+    target_os = "cygwin",
+    target_os = "netbsd"
 ))]
 /// # Safety
 /// This function is unsafe because it dereferences a raw pointer.

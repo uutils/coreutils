@@ -9,18 +9,15 @@ use clap::Command;
 
 use uu_checksum_common::{standalone_checksum_app_with_length, standalone_with_length_main};
 
-use uucore::checksum::{AlgoKind, calculate_blake2b_length_str};
+use uucore::checksum::{AlgoKind, BlakeLength, parse_blake_length};
 use uucore::error::UResult;
 use uucore::translate;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    standalone_with_length_main(
-        AlgoKind::Blake2b,
-        uu_app(),
-        args,
-        calculate_blake2b_length_str,
-    )
+    let calculate_blake2b_length =
+        |s: &str| parse_blake_length(AlgoKind::Blake2b, BlakeLength::String(s));
+    standalone_with_length_main(AlgoKind::Blake2b, uu_app(), args, calculate_blake2b_length)
 }
 
 #[inline]

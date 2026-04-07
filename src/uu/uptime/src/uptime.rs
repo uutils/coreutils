@@ -74,9 +74,9 @@ pub fn uu_app() -> Command {
     #[cfg(target_env = "musl")]
     let about = translate!("uptime-about") + &translate!("uptime-about-musl-warning");
 
-    let cmd = Command::new(uucore::util_name())
+    let cmd = Command::new("uptime")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("uptime"))
         .about(about)
         .override_usage(format_usage(&translate!("uptime-usage")))
         .infer_long_args(true)
@@ -246,8 +246,8 @@ fn process_utmpx(file: Option<&OsString>) -> (Option<time_t>, usize) {
 
     for line in records {
         match line.record_type() {
-            USER_PROCESS => nusers += 1,
-            BOOT_TIME => {
+            x if x == USER_PROCESS => nusers += 1,
+            x if x == BOOT_TIME => {
                 let dt = line.login_time();
                 if dt.unix_timestamp() > 0 {
                     boot_time = Some(dt.unix_timestamp() as time_t);

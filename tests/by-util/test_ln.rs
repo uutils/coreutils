@@ -1065,3 +1065,19 @@ fn test_ln_no_dereference_symbolic() {
         assert!(at.is_symlink("b~"));
     }
 }
+
+#[test]
+fn test_ln_backup_nonexistent_rollback() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("dst");
+
+    scene
+        .ucmd()
+        .args(&["--backup", "/non/existent/path", "dst"])
+        .fails();
+
+    assert!(!at.file_exists("dst~"));
+    assert!(at.file_exists("dst"));
+}

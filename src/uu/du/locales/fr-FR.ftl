@@ -10,7 +10,7 @@ du-after-help = Les valeurs affichées sont en unités de la première TAILLE di
   de 1000). Les unités peuvent être décimales, hexadécimales, octales, binaires.
 
   MOTIF permet des exclusions avancées. Par exemple, les syntaxes suivantes
-  sont supportées :
+  sont prises en charge :
   ? correspondra à un seul caractère
   { "*" } correspondra à zéro ou plusieurs caractères
   {"{"}a,b{"}"} correspondra à a ou b
@@ -54,7 +54,7 @@ du-error-invalid-time-style = argument invalide { $style } pour 'style de temps'
     - 'iso'
     - +FORMAT (e.g., +%H:%M) pour un format de type 'date'
   Essayez '{ $help }' pour plus d'informations.
-du-error-invalid-time-arg = les arguments 'birth' et 'creation' pour --time ne sont pas supportés sur cette plateforme.
+du-error-invalid-time-arg = les arguments 'birth' et 'creation' pour --time ne sont pas pris en charge sur cette plateforme.
 du-error-invalid-glob = Syntaxe d'exclusion invalide : { $error }
 du-error-cannot-read-directory = impossible de lire le répertoire { $path }
 du-error-cannot-access = impossible d'accéder à { $path }
