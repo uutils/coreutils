@@ -1436,12 +1436,8 @@ fn test_zero_pad_sign_order_issue_11664() {
         .stdout_is("-00000009869647.00\n");
 }
 
-// https://github.com/uutils/coreutils/issues/11666
-// `--to-unit=N` selects the output prefix based on the unscaled value
-// instead of `value / N`.
 #[test]
-#[ignore = "GNU compat: see uutils/coreutils#11666"]
-fn test_to_unit_prefix_selection_issue_11666() {
+fn test_to_unit_prefix_selection() {
     new_ucmd!()
         .args(&["--to=iec-i", "--to-unit=885", "100000"])
         .succeeds()
