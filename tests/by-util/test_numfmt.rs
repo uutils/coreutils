@@ -11,10 +11,12 @@ fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
+// This test failed when fixing #11653.
+// Add a `--` separator to ensure floats are not rounded(it match the gnu pattern).
 #[test]
 fn test_should_not_round_floats() {
     new_ucmd!()
-        .args(&["0.99", "1.01", "1.1", "1.22", ".1", "-0.1"])
+        .args(&["--", "0.99", "1.01", "1.1", "1.22", ".1", "-0.1"])
         .succeeds()
         .stdout_is("0.99\n1.01\n1.1\n1.22\n0.1\n-0.1\n");
 }
@@ -1370,12 +1372,22 @@ fn test_null_byte_input_multiline() {
 // GNU rejects `-9923868` as an invalid short option (leading `-9`) and
 // requires `--` separator; uutils accepts it as a negative positional number.
 #[test]
-#[ignore = "GNU compat: see uutils/coreutils#11653"]
 fn test_negative_number_without_double_dash_gnu_compat_issue_11653() {
     new_ucmd!()
         .args(&["--to=iec", "-9923868"])
         .fails_with_code(1)
-        .stderr_contains("invalid option");
+        .stderr_contains("unexpected argument");
+}
+
+// https://github.com/uutils/coreutils/issues/11653
+// GNU rejects `-9923868` as an invalid short option (leading `-9`) and
+// requires `--` separator; uutils accepts it as a negative positional number.
+#[test]
+fn test_negative_number_with_double_dash_gnu_compat_issue_11653() {
+    new_ucmd!()
+        .args(&["--to=iec", "--", "-9923868"])
+        .succeeds()
+        .stdout_is("-9.5M\n");
 }
 
 // https://github.com/uutils/coreutils/issues/11654
