@@ -23,6 +23,8 @@ pub(super) fn write_fast_using_splice<R: FdReadable, S: AsRawFd + AsFd>(
     handle: &InputHandle<R>,
     write_fd: &S,
 ) -> CatResult<bool> {
+    use std::{fs::File, sync::OnceLock};
+    static PIPE_CACHE: OnceLock<Option<(File, File)>> = OnceLock::new();
     if splice(&handle.reader, &write_fd, MAX_ROOTLESS_PIPE_SIZE).is_ok() {
         // fcntl improves throughput
         // todo: avoid fcntl overhead for small input, but don't fcntl inside of the loop
@@ -34,7 +36,7 @@ pub(super) fn write_fast_using_splice<R: FdReadable, S: AsRawFd + AsFd>(
                 Err(_) => return Ok(true),
             }
         }
-    } else if let Ok((pipe_rd, pipe_wr)) = pipe() {
+    } else if let Some((pipe_rd, pipe_wr)) = PIPE_CACHE.get_or_init(|| pipe().ok()).as_ref() {
         // both of in/output are not pipe. needs broker to use splice() with additional costs
         loop {
             match splice(&handle.reader, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
