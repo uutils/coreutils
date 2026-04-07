@@ -4228,7 +4228,8 @@ version = "0.8.0"
 dependencies = [
  "clap",
  "fluent",
- "nix",
+ "libc",
+ "rustix",
  "uucore",
  "windows-sys 0.61.2",
 ]
