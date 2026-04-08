@@ -458,35 +458,40 @@ pub fn uu_app() -> Command {
 }
 
 pub fn parse_args_from_str(text: &NativeIntStr) -> UResult<Vec<NativeIntString>> {
-    split_iterator::split(text).map_err(|e| match e {
-        EnvError::EnvBackslashCNotAllowedInDoubleQuotes(_) => USimpleError::new(125, e.to_string()),
-        EnvError::EnvInvalidBackslashAtEndOfStringInMinusS(_, _) => {
-            USimpleError::new(125, e.to_string())
+    split_iterator::split(text).map_err(|e| {
+        let var_error = |pos: usize| {
+            // Find the '$' that started this variable reference and format
+            // the error like GNU: "only ${VARNAME} expansion is supported, error at: $..."
+            let dollar_pos = text[..pos]
+                .iter()
+                .rposition(|&c| c == b'$')
+                .unwrap_or(pos);
+            let rest = String::from_utf8_lossy(&text[dollar_pos..]);
+            USimpleError::new(
+                125,
+                translate!("env-error-only-braced-variable-at", "rest" => rest),
+            )
+        };
+        match e {
+            EnvError::EnvBackslashCNotAllowedInDoubleQuotes(_) => {
+                USimpleError::new(125, e.to_string())
+            }
+            EnvError::EnvInvalidBackslashAtEndOfStringInMinusS(_, _) => {
+                USimpleError::new(125, e.to_string())
+            }
+            EnvError::EnvInvalidSequenceBackslashXInMinusS(_, _) => {
+                USimpleError::new(125, e.to_string())
+            }
+            EnvError::EnvMissingClosingQuote(_, _) => USimpleError::new(125, e.to_string()),
+            EnvError::EnvParsingOfVariableMissingClosingBrace(pos)
+            | EnvError::EnvParsingOfMissingVariable(pos)
+            | EnvError::EnvParsingOfVariableOnlyBracedName(pos)
+            | EnvError::EnvParsingOfVariableUnexpectedNumber(pos, _) => var_error(pos),
+            _ => USimpleError::new(
+                125,
+                translate!("env-error-generic", "error" => format!("{e:?}")),
+            ),
         }
-        EnvError::EnvInvalidSequenceBackslashXInMinusS(_, _) => {
-            USimpleError::new(125, e.to_string())
-        }
-        EnvError::EnvMissingClosingQuote(_, _) => USimpleError::new(125, e.to_string()),
-        EnvError::EnvParsingOfVariableMissingClosingBrace(pos) => USimpleError::new(
-            125,
-            translate!("env-error-variable-name-issue", "position" => pos, "error" => e),
-        ),
-        EnvError::EnvParsingOfMissingVariable(pos) => USimpleError::new(
-            125,
-            translate!("env-error-variable-name-issue", "position" => pos, "error" => e),
-        ),
-        EnvError::EnvParsingOfVariableOnlyBracedName(pos) => USimpleError::new(
-            125,
-            translate!("env-error-variable-name-issue", "position" => pos, "error" => e),
-        ),
-        EnvError::EnvParsingOfVariableUnexpectedNumber(pos, _) => USimpleError::new(
-            125,
-            translate!("env-error-variable-name-issue", "position" => pos, "error" => e),
-        ),
-        _ => USimpleError::new(
-            125,
-            translate!("env-error-generic", "error" => format!("{e:?}")),
-        ),
     })
 }
 
