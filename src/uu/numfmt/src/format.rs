@@ -612,6 +612,7 @@ fn format_string(
         options.format.prefix, options.format.suffix
     ))
 }
+
 /// Encodes a byte slice as a string, representing non-UTF-8 bytes and non-printable ASCII
 /// bytes as octal escapes. Valid UTF-8 multi-byte characters pass through unchanged.
 /// Used to safely format invalid input in error messages.
