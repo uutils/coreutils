@@ -308,7 +308,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let size_arg = matches
         .get_one::<String>(options::SIZE)
         .map(ToOwned::to_owned);
-    let size = get_size(size_arg);
+    let size = get_size(size_arg)?;
     let exact = matches.get_flag(options::EXACT) || size.is_some();
     let zero = matches.get_flag(options::ZERO);
     let verbose = matches.get_flag(options::VERBOSE);
@@ -417,21 +417,17 @@ pub fn uu_app() -> Command {
         )
 }
 
-fn get_size(size_str_opt: Option<String>) -> Option<u64> {
-    size_str_opt
-        .as_ref()
-        .and_then(|size| parse_size_u64(size.as_str()).ok())
-        .or_else(|| {
-            if let Some(size) = size_str_opt {
-                show_error!(
-                    "{}",
-                    translate!("shred-invalid-file-size", "size" => size.quote())
-                );
-                // TODO: replace with our error management
-                std::process::exit(1);
-            }
-            None
-        })
+fn get_size(size_str_opt: Option<String>) -> UResult<Option<u64>> {
+    match size_str_opt {
+        Some(size_str) => match parse_size_u64(&size_str) {
+            Ok(size) => Ok(Some(size)),
+            Err(_) => Err(USimpleError::new(
+                1,
+                translate!("shred-invalid-file-size", "size" => size_str.quote()),
+            )),
+        },
+        None => Ok(None),
+    }
 }
 
 fn pass_name(pass_type: &PassType) -> String {
@@ -683,6 +679,7 @@ fn target_size(
         Err(_) => Ok(None),
     }
 }
+
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::cognitive_complexity)]
 fn wipe_file(
@@ -988,6 +985,7 @@ fn is_eio(err: &io::Error) -> bool {
         false
     }
 }
+
 fn do_pass(
     file: &mut File,
     pass_type: &PassType,
@@ -1165,9 +1163,9 @@ fn cstring_from_path(path: &Path) -> io::Result<CString> {
     })
 }
 
-/// Repeatedly renames the file with strings of decreasing length (most likely all 0s)
-/// Return the path of the file after its last renaming or None in case of an error
-fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> PathBuf {
+/// Repeatedly renames the file with strings of decreasing length (most likely all 0s).
+/// Returns the path of the file after its last renaming, or an error if a rename fails.
+fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> io::Result<PathBuf> {
     let file_name_len = orig_path
         .file_name()
         .expect("wipe_name called on a path with no filename component")
@@ -1209,16 +1207,17 @@ fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> Pa
                 }
                 Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
                 Err(e) => {
-                    let msg = translate!("shred-couldnt-rename", "file" => last_path.maybe_quote(), "new_name" => new_path.quote(), "error" => e);
-                    show_error!("{msg}");
-                    // TODO: replace with our error management
-                    std::process::exit(1);
+                    show_error!(
+                        "{}",
+                        translate!("shred-couldnt-rename", "file" => last_path.maybe_quote(), "new_name" => new_path.quote(), "error" => e)
+                    );
+                    return Err(e);
                 }
             }
         }
     }
 
-    last_path
+    Ok(last_path)
 }
 
 fn do_remove(
@@ -1237,7 +1236,7 @@ fn do_remove(
     let remove_path = if remove_method == RemoveMethod::Unlink {
         path.with_file_name(orig_filename)
     } else {
-        wipe_name(path, verbose, remove_method)
+        wipe_name(path, verbose, remove_method)?
     };
 
     fs::remove_file(&remove_path)?;
@@ -1357,6 +1356,7 @@ mod tests {
             b"A"
         );
     }
+
     #[cfg(unix)]
     #[test]
     fn test_finalize_file_does_not_remove_on_close_error() {
@@ -1390,6 +1390,7 @@ mod tests {
         std::fs::remove_file(&file_path).expect("test file cleanup succeeds");
         std::fs::remove_dir(&temp_dir).expect("test directory cleanup succeeds");
     }
+
     #[test]
     fn test_align_exact_cycle() {
         for size in 1..BLOCK_SIZE as u64 * 2 {

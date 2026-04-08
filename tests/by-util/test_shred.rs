@@ -245,6 +245,7 @@ fn test_shred_rejects_fifo() {
         .fails()
         .stderr_contains("invalid file type");
 }
+
 #[test]
 fn test_shred_verbose_no_padding_1() {
     let (at, mut ucmd) = at_and_ucmd!();
