@@ -506,9 +506,10 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
         // here paths will not be removed from orphans if the path becomes available.
         if observer.follow_name_retry() {
             for new_path in &observer.orphans {
-                if new_path.exists() {
+                // Use metadata() directly instead of exists() + metadata().unwrap()
+                // to avoid a TOCTOU race where the file is removed between the two calls.
+                if let Ok(md) = new_path.metadata() {
                     let pd = observer.files.get(new_path);
-                    let md = new_path.metadata().unwrap();
                     if md.is_tailable() && pd.reader.is_none() {
                         show_error!(
                             "{}",
