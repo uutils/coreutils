@@ -649,8 +649,9 @@ fn test_follow_name_multiple() {
 
         #[cfg(target_os = "linux")]
         let delay = 100;
-        // unstable on macOS
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(target_os = "macos")]
+        let delay = 2000;
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         let delay = 1000;
 
         child
