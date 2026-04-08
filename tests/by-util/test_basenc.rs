@@ -39,15 +39,15 @@ fn test_z85_not_padded_encode() {
 
 #[test]
 fn test_invalid_input() {
-    let error_message = if cfg!(windows) {
-        "basenc: .: Permission denied\n"
+    let cmd = new_ucmd!().args(&["--base32", "."]).fails();
+    if cfg!(windows) {
+        cmd.stderr_only("basenc: .: Permission denied\n");
+    } else if std::env::var("UUTESTS_WASM_RUNNER").is_ok() {
+        // wasi-libc may report a different error string than the host libc
+        cmd.stderr_contains("basenc: read error:");
     } else {
-        "basenc: read error: Is a directory\n"
-    };
-    new_ucmd!()
-        .args(&["--base32", "."])
-        .fails()
-        .stderr_only(error_message);
+        cmd.stderr_only("basenc: read error: Is a directory\n");
+    }
 }
 
 #[test]

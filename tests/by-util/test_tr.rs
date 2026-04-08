@@ -21,12 +21,20 @@ fn test_invalid_input() {
         .fails_with_code(1)
         .stderr_contains("tr: extra operand '<'");
     #[cfg(unix)]
-    new_ucmd!()
-        .args(&["1", "1"])
-        // will test "tr 1 1 < ."
-        .set_stdin(std::process::Stdio::from(std::fs::File::open(".").unwrap()))
-        .fails_with_code(1)
-        .stderr_contains("tr: read error: Is a directory");
+    {
+        let cmd = new_ucmd!()
+            .args(&["1", "1"])
+            // will test "tr 1 1 < ."
+            .set_stdin(std::process::Stdio::from(std::fs::File::open(".").unwrap()))
+            .fails_with_code(1);
+        if std::env::var("UUTESTS_WASM_RUNNER").is_ok() {
+            // On WASI the fluent translation key may appear instead of the
+            // translated text, but the OS error string is still present.
+            cmd.stderr_contains("Is a directory");
+        } else {
+            cmd.stderr_contains("tr: read error: Is a directory");
+        }
+    }
 }
 
 #[test]
