@@ -68,7 +68,7 @@ impl FileInformation {
     pub fn from_file(file: &fs::File) -> IOResult<Self> {
         use std::os::fd::AsRawFd;
         let mut stat: libc::stat = unsafe { std::mem::zeroed() };
-        if unsafe { libc::fstat(file.as_raw_fd(), &mut stat) } != 0 {
+        if unsafe { libc::fstat(file.as_raw_fd(), &raw mut stat) } != 0 {
             return Err(Error::last_os_error());
         }
         Ok(Self(stat))
@@ -111,9 +111,9 @@ impl FileInformation {
                 .map_err(|e| Error::new(ErrorKind::InvalidInput, e))?;
             let mut stat: libc::stat = unsafe { std::mem::zeroed() };
             let res = if dereference {
-                unsafe { libc::stat(path_c.as_ptr(), &mut stat) }
+                unsafe { libc::stat(path_c.as_ptr(), &raw mut stat) }
             } else {
-                unsafe { libc::lstat(path_c.as_ptr(), &mut stat) }
+                unsafe { libc::lstat(path_c.as_ptr(), &raw mut stat) }
             };
             if res != 0 {
                 return Err(Error::last_os_error());
