@@ -74,8 +74,12 @@ impl FileInformation {
     /// Get information from a currently open file
     #[cfg(target_os = "wasi")]
     pub fn from_file(file: &fs::File) -> IOResult<Self> {
-        let meta = file.metadata()?;
-        Ok(Self(meta))
+        use std::os::fd::AsRawFd;
+        let mut stat: libc::stat = unsafe { std::mem::zeroed() };
+        if unsafe { libc::fstat(file.as_raw_fd(), &mut stat) } != 0 {
+            return Err(Error::last_os_error());
+        }
+        Ok(Self(stat))
     }
 
     /// Get information for a given path.
@@ -201,8 +205,7 @@ impl PartialEq for FileInformation {
 #[cfg(target_os = "wasi")]
 impl PartialEq for FileInformation {
     fn eq(&self, other: &Self) -> bool {
-        use std::os::wasi::fs::MetadataExt;
-        self.0.dev() == other.0.dev() && self.0.ino() == other.0.ino()
+        self.0.st_dev == other.0.st_dev && self.0.st_ino == other.0.st_ino
     }
 }
 
