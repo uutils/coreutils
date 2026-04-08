@@ -413,7 +413,6 @@ pub fn uu_app() -> Command {
         .about(translate!("numfmt-about"))
         .after_help(translate!("numfmt-after-help"))
         .override_usage(format_usage(&translate!("numfmt-usage")))
-        .allow_negative_numbers(true)
         .infer_long_args(true)
         .arg(
             Arg::new(DEBUG)

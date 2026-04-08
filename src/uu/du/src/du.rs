@@ -29,8 +29,9 @@ use uucore::line_ending::LineEnding;
 use uucore::safe_traversal::{DirFd, SymlinkBehavior};
 use uucore::translate;
 
+use uucore::parser::parse_block_size;
 use uucore::parser::parse_glob;
-use uucore::parser::parse_size::{ParseSizeError, parse_size_non_zero_u64, parse_size_u64};
+use uucore::parser::parse_size::{ParseSizeError, parse_size_u64};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::time::{FormatSystemTimeFallback, format, format_system_time};
 use uucore::{format_usage, show, show_error, show_warning};
@@ -274,26 +275,16 @@ fn get_file_info(path: &Path, _metadata: &Metadata) -> Option<FileInfo> {
     result
 }
 
-fn block_size_from_env() -> Option<u64> {
-    for env_var in ["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
-        if let Ok(env_size) = env::var(env_var) {
-            return parse_size_non_zero_u64(&env_size).ok();
-        }
-    }
-
-    None
-}
-
 fn read_block_size(s: Option<&str>) -> UResult<u64> {
     if let Some(s) = s {
         parse_size_u64(s)
             .map_err(|e| USimpleError::new(1, format_error_message(&e, s, options::BLOCK_SIZE)))
-    } else if let Some(bytes) = block_size_from_env() {
+    } else if let Some(bytes) =
+        parse_block_size::block_size_from_env(&["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"]).found()
+    {
         Ok(bytes)
-    } else if env::var("POSIXLY_CORRECT").is_ok() {
-        Ok(512)
     } else {
-        Ok(1024)
+        Ok(parse_block_size::default_block_size())
     }
 }
 

@@ -488,8 +488,8 @@ fn transform_to(
     unit_separator: &str,
     is_specified: bool,
 ) -> Result<String> {
-    let (i2, s) = consider_suffix(s, opts.to, round_method, precision)?;
-    let i2 = i2 / (opts.to_unit as f64);
+    let i2 = s / (opts.to_unit as f64);
+    let (i2, s) = consider_suffix(i2, opts.to, round_method, precision)?;
     Ok(match s {
         None => {
             format!(
@@ -590,7 +590,12 @@ fn format_string(
     let padded_number = match padding {
         0 => number_with_suffix,
         p if p > 0 && options.format.zero_padding => {
-            let zero_padded = pad_string(&number_with_suffix, p as usize, '0', true);
+            let zero_padded = if let Some(unsigned) = number_with_suffix.strip_prefix(['-', '+']) {
+                let sign = &number_with_suffix[..1];
+                format!("{sign}{}", pad_string(unsigned, p as usize - 1, '0', true))
+            } else {
+                pad_string(&number_with_suffix, p as usize, '0', true)
+            };
 
             match implicit_padding.unwrap_or(options.padding) {
                 0 => zero_padded,

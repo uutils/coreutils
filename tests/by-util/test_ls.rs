@@ -5781,6 +5781,53 @@ fn test_ls_block_size_override() {
         .stdout_contains_line("total 8");
 }
 
+#[cfg(unix)]
+#[test]
+#[cfg(not(target_os = "openbsd"))]
+fn test_ls_block_size_si_file_size() {
+    // Verify --si and --block-size interaction for file size display in -l
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write_bytes("file", &[0u8; 1024]);
+
+    // --si last: file size shown as human-readable SI
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--block-size=512")
+        .arg("--si")
+        .succeeds()
+        .stdout_contains("1.1k");
+
+    // --block-size last: file size shown in 512-byte blocks
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--si")
+        .arg("--block-size=512")
+        .succeeds()
+        .stdout_contains(" 2 ");
+
+    // --human-readable last: file size shown as human-readable IEC
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--block-size=512")
+        .arg("--human-readable")
+        .succeeds()
+        .stdout_contains("1.0K");
+
+    // --block-size last: file size shown in 512-byte blocks
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--human-readable")
+        .arg("--block-size=512")
+        .succeeds()
+        .stdout_contains(" 2 ");
+}
+
 #[test]
 fn test_ls_block_size_override_self() {
     new_ucmd!()
