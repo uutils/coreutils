@@ -1852,6 +1852,25 @@ fn test_files0_from_2a() {
 }
 
 #[test]
+// Test for GNU tests/sort/sort-files0-from.pl "non-utf8"
+#[cfg(unix)]
+fn test_files0_from_non_utf8() {
+    use std::os::unix::ffi::OsStringExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // non-UTF-8 bytes (0xFF)
+    let filename = std::ffi::OsString::from_vec(b"a\xffb".into());
+    std::fs::write(at.plus(&filename), b"20\n10\n").unwrap();
+
+    let list_contents = vec![b'a', 0xFF, b'b', 0];
+    at.write_bytes("list0", &list_contents);
+
+    ucmd.args(&["--files0-from", "list0"])
+        .succeeds()
+        .stdout_only("10\n20\n");
+}
+
+#[test]
 // Test for GNU tests/sort/sort-files0-from.pl "zero-len"
 fn test_files0_from_zero_length() {
     new_ucmd!()
