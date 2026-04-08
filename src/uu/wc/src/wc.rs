@@ -18,12 +18,12 @@ use std::{
     fs::{self, File},
     io::{self, Write, stderr},
     iter,
-    os::fd::AsFd,
     path::{Path, PathBuf},
     sync::LazyLock,
 };
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
+use rustix::fd::AsFd;
 use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use utf8::{BufReadDecoder, BufReadDecoderError};
@@ -49,7 +49,7 @@ const MINIMUM_WIDTH: usize = 7;
 
 /// Returns the byte size of stdin if it is a regular file (e.g. `wc -c < file`).
 /// Returns `None` for pipes, terminals, sockets, etc. so we fall back to normal counting.
-fn try_get_stding_size() -> Option<usize> {
+fn try_get_stdin_size() -> Option<usize> {
     #[cfg(unix)]
     {
         let stdin = io::stdin();
@@ -507,7 +507,7 @@ fn word_count_from_reader<T: WordCountable>(
         // show_bytes
         (true, false, false, false, false) => {
             // Fast path: if stdin is a regular file, get size from metadata (no reading needed)
-            if let Some(bytes) = try_get_stding_size() {
+            if let Some(bytes) = try_get_stdin_size() {
                 return (
                     WordCount {
                         bytes,
