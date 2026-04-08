@@ -23,7 +23,6 @@ use std::{
 };
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
-use rustix::fd::AsFd;
 use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use utf8::{BufReadDecoder, BufReadDecoderError};
@@ -52,6 +51,8 @@ const MINIMUM_WIDTH: usize = 7;
 fn try_get_stdin_size() -> Option<usize> {
     #[cfg(unix)]
     {
+        use rustix::fd::AsFd;
+
         let stdin = io::stdin();
         let fd = stdin.as_fd();
 
