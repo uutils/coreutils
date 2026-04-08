@@ -3,9 +3,9 @@ name: CICD
 # spell-checker:ignore (abbrev/names) CACHEDIR CICD CodeCOV MacOS MinGW MSVC musl taiki
 # spell-checker:ignore (env/flags) Awarnings Ccodegen Coverflow Cpanic Dwarnings RUSTDOCFLAGS RUSTFLAGS Zpanic CARGOFLAGS CLEVEL nodocs
 # spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain fuzzers dedupe devel profdata
-# spell-checker:ignore (people) Peltoche rivy dtolnay Anson dawidd
+# spell-checker:ignore (people) Peltoche rivy Anson dawidd
 # spell-checker:ignore (shell/tools) binutils choco clippy dmake esac fakeroot fdesc fdescfs gmake grcov halium lcov libclang libfuse libssl limactl nextest nocross pacman popd printf pushd redoxer rsync rustc rustfmt rustup shopt sccache utmpdump xargs zstd
-# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos getenforce gnueabihf issuecomment maint manpages msys multisize noconfirm nofeatures nullglob onexitbegin onexitend pell runtest Swatinem tempfile testsuite toybox uutils libsystemd codspeed wasip libexecinfo
+# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos getenforce gnueabihf issuecomment maint manpages msys multisize noconfirm nofeatures nullglob onexitbegin onexitend pell runtest tempfile testsuite toybox uutils libsystemd codspeed wasip libexecinfo
 
 env:
   PROJECT_NAME: coreutils
@@ -102,7 +102,7 @@ jobs:
 # for now, don't build it on mac & windows because the doc is only published from linux
 # + it needs a bunch of duplication for build
 # and I don't want to add a doc step in the regular build to avoid long builds
-#          - { os: macos-latest   , features: feat_os_macos }
+#          - { os: macos-latest   , features: feat_os_unix }
 #          - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v6
@@ -277,7 +277,7 @@ jobs:
       matrix:
         job:
           - { os: ubuntu-latest  , features: feat_os_unix }
-          - { os: macos-latest   , features: feat_os_macos }
+          - { os: macos-latest   , features: feat_os_unix }
           - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v6
@@ -320,7 +320,7 @@ jobs:
       matrix:
         job:
           - { os: ubuntu-latest  , features: feat_os_unix }
-          - { os: macos-latest   , features: feat_os_macos }
+          - { os: macos-latest   , features: feat_os_unix }
           - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v6
@@ -381,10 +381,10 @@ jobs:
           - { os: ubuntu-latest  , target: x86_64-unknown-netbsd, features: "feat_os_unix", use-cross: use-cross , skip-tests: true , check-only: true }
           - { os: ubuntu-latest  , target: x86_64-unknown-redox        , features: feat_os_unix_redox     , use-cross: redoxer , skip-tests: true , check-only: true }
           - { os: ubuntu-latest  , target: wasm32-wasip1, default-features: false, features: feat_wasm, skip-tests: true }
-          - { os: macos-latest   , target: aarch64-apple-darwin        , features: feat_os_macos, workspace-tests: true } # M1 CPU
+          - { os: macos-latest   , target: aarch64-apple-darwin        , features: feat_os_unix, workspace-tests: true } # M1 CPU
           # PR #7964: chcon should not break build without the feature. cargo check is enough to detect it.
           - { os: macos-latest   , target: aarch64-apple-darwin        , workspace-tests: true, check-only: true } # M1 CPU
-          - { os: macos-latest   , target: x86_64-apple-darwin         , features: feat_os_macos, workspace-tests: true }
+          - { os: macos-latest   , target: x86_64-apple-darwin         , features: feat_os_unix, workspace-tests: true }
           - { os: windows-latest , target: i686-pc-windows-msvc        , features: feat_os_windows }
           - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows }
           - { os: windows-latest , target: x86_64-pc-windows-msvc      , features: feat_os_windows }
@@ -511,13 +511,9 @@ jobs:
       if: steps.vars.outputs.CARGO_CMD == 'cross' && matrix.job.target != 'x86_64-unknown-netbsd'
       with:
         tool: cross@0.2.5
-    - uses: dtolnay/rust-toolchain@master
-      if: steps.vars.outputs.CARGO_CMD == 'cross' && matrix.job.target == 'x86_64-unknown-netbsd'
-      with:
-        toolchain: "1.92.0"
     - name: Install cross from git (NetBSD)
       if: steps.vars.outputs.CARGO_CMD == 'cross' && matrix.job.target == 'x86_64-unknown-netbsd'
-      run: cargo +1.92.0 install cross --git https://github.com/cross-rs/cross --rev 588b3c99db52b5a9c5906fab96cfadcf1bde7863
+      run: cargo install cross --git https://github.com/cross-rs/cross --rev f86fd03bb70b4c6802847c18087e21391498b0b4
     - name: Create all needed build/work directories
       shell: bash
       run: |
@@ -635,7 +631,7 @@ jobs:
         ${{ steps.vars.outputs.CARGO_CMD }} ${{ steps.vars.outputs.CARGO_CMD_OPTIONS }} build --release --config=profile.release.strip=true \
         --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.vars.outputs.CARGO_DEFAULT_FEATURES_OPTION }}
     # We don't want to have many duplicated long jobs at here
-    # So we build individual binaries for few platforms until we deduplicate many release build for Linux 
+    # So we build individual binaries for few platforms until we deduplicate many release build for Linux
     - name: Build individual binaries
       if: matrix.job.skip-tests != true && matrix.job.target == 'x86_64-pc-windows-msvc'
       shell: bash
@@ -870,7 +866,7 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { os: macos-latest   , features: feat_os_macos }
+          - { os: macos-latest   , features: feat_os_unix }
           - { os: windows-latest , features: feat_os_windows }
 
     steps:

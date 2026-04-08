@@ -15,7 +15,7 @@ use std::io::{self, BufReader, Read, Write, stderr, stdin};
 use os_display::Quotable;
 
 use crate::checksum::{
-    AlgoKind, BlakeLength, ChecksumError, ReadingMode, SizedAlgoKind, digest_reader,
+    AlgoKind, BlakeLength, ChecksumError, ReadingMode, ShaLength, SizedAlgoKind, digest_reader,
     parse_blake_length, unescape_filename,
 };
 use crate::error::{FromIo, UError, UIoError, UResult, USimpleError};
@@ -490,13 +490,15 @@ impl LineInfo {
 }
 
 /// Extract the expected digest from the checksum string and decode it
-fn get_raw_expected_digest(checksum: &str, byte_len_hint: Option<usize>) -> Option<Vec<u8>> {
+fn get_raw_expected_digest(checksum: &str, bit_len_hint: Option<usize>) -> Option<Vec<u8>> {
     // If the length of the digest is not a multiple of 2, then it must be
     // improperly formatted (1 byte is 2 hex digits, and base64 strings should
     // always be a multiple of 4).
     if !checksum.len().is_multiple_of(2) {
         return None;
     }
+
+    let byte_len_hint = bit_len_hint.map(|n| n.div_ceil(8));
 
     let checks_hint = |len| byte_len_hint.is_none_or(|hint| hint == len);
 
@@ -741,23 +743,23 @@ fn process_algo_based_line(
 ) -> Result<(), LineCheckError> {
     let filename_to_check = line_info.filename.as_slice();
 
-    let (algo_kind, algo_byte_len) =
-        identify_algo_name_and_length(line_info, cli_algo_kind, last_algo)?;
+    let (algo_kind, algo_len) = identify_algo_name_and_length(line_info, cli_algo_kind, last_algo)?;
 
     // If the digest bitlen is known, we can check the format of the expected
     // checksum with it.
-    let digest_char_length_hint = match (algo_kind, algo_byte_len) {
-        (AlgoKind::Blake2b | AlgoKind::Blake3, Some(byte_len)) => Some(byte_len),
-        (AlgoKind::Shake128 | AlgoKind::Shake256, Some(bit_len)) => Some(bit_len.div_ceil(8)),
-        (AlgoKind::Shake128, None) => Some(sum::Shake128::DEFAULT_BIT_SIZE.div_ceil(8)),
-        (AlgoKind::Shake256, None) => Some(sum::Shake256::DEFAULT_BIT_SIZE.div_ceil(8)),
+    let digest_bit_length_hint = match (algo_kind, algo_len) {
+        (AlgoKind::Blake2b | AlgoKind::Blake3, Some(byte_len)) => Some(byte_len * 8),
+        (AlgoKind::Shake128 | AlgoKind::Shake256, Some(bit_len)) => Some(bit_len),
+        (AlgoKind::Shake128, None) => Some(sum::Shake128::DEFAULT_BIT_SIZE),
+        (AlgoKind::Shake256, None) => Some(sum::Shake256::DEFAULT_BIT_SIZE),
         _ => None,
     };
 
-    let expected_checksum = get_raw_expected_digest(&line_info.checksum, digest_char_length_hint)
+    let expected_checksum = get_raw_expected_digest(&line_info.checksum, digest_bit_length_hint)
         .ok_or(LineCheckError::ImproperlyFormatted)?;
 
-    let algo = SizedAlgoKind::from_unsized(algo_kind, algo_byte_len)?;
+    let algo = SizedAlgoKind::from_unsized(algo_kind, algo_len)
+        .map_err(|_| LineCheckError::ImproperlyFormatted)?;
 
     compute_and_check_digest_from_file(filename_to_check, &expected_checksum, algo, opts)
 }
@@ -779,7 +781,9 @@ fn process_non_algo_based_line(
         // Remove the leading asterisk if present - only for the first line
         filename_to_check = &filename_to_check[1..];
     }
-    let expected_checksum = get_raw_expected_digest(&line_info.checksum, None)
+
+    let expected_digest_sum = cli_algo_kind.expected_digest_bit_len();
+    let expected_checksum = get_raw_expected_digest(&line_info.checksum, expected_digest_sum)
         .ok_or(LineCheckError::ImproperlyFormatted)?;
 
     // When a specific algorithm name is input, use it and use the provided
@@ -789,7 +793,11 @@ fn process_non_algo_based_line(
         ak::Blake2b | ak::Blake3 => Some(expected_checksum.len()),
         ak::Sha2 | ak::Sha3 => {
             // multiplication by 8 to get the number of bits
-            Some(expected_checksum.len() * 8)
+            Some(
+                ShaLength::try_from(expected_checksum.len() * 8)
+                    .map_err(|_| LineCheckError::ImproperlyFormatted)?
+                    .as_usize(),
+            )
         }
         _ => cli_algo_length,
     };

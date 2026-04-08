@@ -1,6 +1,6 @@
 name: Code Quality
 
-# spell-checker:ignore (people) dtolnay juliangruber pell reactivecircus Swatinem taiki-e taplo
+# spell-checker:ignore (people) juliangruber pell reactivecircus taiki-e taplo
 # spell-checker:ignore (misc) TERMUX noaudio pkill swiftshader esac sccache pcoreutils shopt subshell dequote libsystemd
 
 on:
@@ -72,8 +72,9 @@ jobs:
       matrix:
         job:
           - { os: ubuntu-latest  , features: all             , workspace: true }
-          - { os: macos-latest   , features: feat_os_macos }
+          - { os: macos-latest   , features: feat_os_unix }
           - { os: windows-latest , features: feat_os_windows }
+          - { os: ubuntu-latest  , features: feat_wasm , target: wasm32-wasip1 }
     steps:
     - uses: actions/checkout@v6
       with:
@@ -82,6 +83,7 @@ jobs:
       with:
         toolchain: stable
         components: clippy
+        targets: ${{ matrix.job.target || '' }}
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       id: sccache-setup
@@ -105,6 +107,7 @@ jobs:
         esac;
         outputs FAIL_ON_FAULT FAULT_TYPE
     - name: Install/setup prerequisites
+      if: ${{ ! matrix.job.target }}
       shell: bash
       run: |
         ## Install/setup prerequisites
@@ -124,31 +127,20 @@ jobs:
         shell: bash
         command: |
           ## `cargo clippy` lint testing
-          unset fault
-          fault_type="${{ steps.vars.outputs.FAULT_TYPE }}"
-          fault_prefix=$(echo "$fault_type" | tr '[:lower:]' '[:upper:]')
-          # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-          if [[ "${{ matrix.job.features }}" == "all" ]]; then
-            extra="--all-features"
-          else
-            extra="--features ${{ matrix.job.features }}"
+          ARGS="--features ${{ matrix.job.features }}"
+          ARGS="${ARGS} --fault-type ${{ steps.vars.outputs.FAULT_TYPE }}"
+          if [[ "${{ matrix.job.workspace }}" =~ ^(1|t|true|y|yes)$ ]]; then
+            ARGS="${ARGS} --workspace"
           fi
-          case '${{ matrix.job.workspace }}' in
-          1|t|true|y|yes)
-            extra="${extra} --workspace"
-            ;;
-          esac
-          # * determine sub-crate utility list (similar to FreeBSD workflow)
-          if [[ "${{ matrix.job.features }}" == "all" ]]; then
-            UTILITY_LIST="$(./util/show-utils.sh --all-features)"
-          else
-            UTILITY_LIST="$(./util/show-utils.sh --features ${{ matrix.job.features }})"
+          if [[ -n "${{ matrix.job.target }}" ]]; then
+            ARGS="${ARGS} --target ${{ matrix.job.target }}"
           fi
-          CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo -n "-puu_${u} "; done;)"
-          S=$(cargo clippy --all-targets $extra --tests --benches -pcoreutils ${CARGO_UTILITY_LIST_OPTIONS} -- -D warnings 2>&1) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+(.*):([0-9]+):([0-9]+).*$/::${fault_type} file=\2,line=\3,col=\4::${fault_prefix}: \`cargo clippy\`: \1 (file:'\2', line:\3)/p;" -e '}' ; fault=true ; }
-          if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
+          if [[ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ]]; then
+            ARGS="${ARGS} --fail-on-fault"
+          fi
+          python3 util/run-clippy.py ${ARGS}
     - name: "cargo clippy on fuzz dir"
-      if: runner.os != 'Windows'
+      if: runner.os != 'Windows' && !matrix.job.target
       shell: bash
       run: |
         cd fuzz

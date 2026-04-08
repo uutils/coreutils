@@ -179,16 +179,14 @@ fn time_string(ut: &UtmpxRecord) -> String {
 
 #[inline]
 fn current_tty() -> String {
-    unsafe {
-        let res = ttyname(STDIN_FILENO);
-        if res.is_null() {
-            String::new()
-        } else {
-            CStr::from_ptr(res.cast_const())
-                .to_string_lossy()
-                .trim_start_matches("/dev/")
-                .to_owned()
-        }
+    let p = unsafe { ttyname(STDIN_FILENO) };
+    if p.is_null() {
+        String::new()
+    } else {
+        unsafe { CStr::from_ptr(p) }
+            .to_string_lossy()
+            .trim_start_matches("/dev/")
+            .to_owned()
     }
 }
 
@@ -381,7 +379,7 @@ impl Who {
         }
 
         let idle = if last_change == 0 {
-            translate!("who-idle-unknown").into()
+            "  ?".into()
         } else {
             idle_string(last_change, 0)
         };

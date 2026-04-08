@@ -508,6 +508,49 @@ fn test_check_untagged_sha_multiple_files(algo: &str, len: u32) {
         .stdout_contains("alice_in_wonderland.txt: OK\n");
 }
 
+#[rstest]
+#[case::sha2("sha2", &[
+    "d14a028c2a3a2bc9476102bb288234c415a2b01f828ea62ac5b3e42f",
+    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0cc7bf63f6e1da274edebfe76f65fbd51ad2f14898b95b",
+    "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e"
+])]
+#[case::sha3("sha3", &[
+    "6b4e03423667dbb73b6e15454f0eb1abd4597f9a1b078e3f5b5a6bc7",
+    "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a",
+    "0c63a75b845e4f7d01107d852e4c2485c51a50aaaa94fc61995e71bbee983a2ac3713831264adb47fb6bd1e058d5f004",
+    "a69f73cca23a9ac5c8b567dc185a756e97c982164fe25859e0d1dcc1475c80a615b2123af1f5f94c11e3e9402c3ac558f500199d95b6d3e301758586281dcd26"
+])]
+fn test_check_untagged_sha_invalid_length(#[case] algo: &str, #[case] digests: &[&str; 4]) {
+    // When checking with --algorithm sha2/sha3, Guess the length from the provided
+    // digest. Raise "improperly formatted" if the digest is not af adequate
+    // size (224, 256, 384 or 512 bits).
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    at.touch("b");
+    at.touch("c");
+    at.touch("d");
+    at.touch("e");
+
+    let invalid = "xxxx  e";
+
+    ucmd.arg("-a")
+        .arg(algo)
+        .arg("-c")
+        .pipe_in(format!(
+            "{}  a\n{}  b\n{}  c\n{}  d\n{invalid}",
+            digests[0], digests[1], digests[2], digests[3]
+        ))
+        .succeeds()
+        .stdout_contains("a: OK")
+        .stdout_contains("b: OK")
+        .stdout_contains("c: OK")
+        .stdout_contains("d: OK")
+        .stdout_does_not_contain("e: FAILED")
+        .stderr_contains("improperly formatted");
+}
+
 #[test]
 fn test_check_sha2_tagged_variant() {
     let scene = TestScenario::new(util_name!());
@@ -560,6 +603,73 @@ fn test_check_sha2_tagged_variant() {
             .succeeds()
             .stdout_is("f: OK\n");
     }
+}
+
+#[test]
+fn test_check_sha2_tagged_missing_hint() {
+    // SHA2 (<file>) = <digest>
+    //
+    // should fail and raise "improperly formatted" because SHA2 expects a
+    // mandatory length hint.
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    at.touch("b");
+
+    // valid digest but missing hint
+    let invalid_sha224 = "SHA2 (a) = d14a028c2a3a2bc9476102bb288234c415a2b01f828ea62ac5b3e42f";
+    // invalid digest
+    let invalid = "SHA2 (b) = xxxx";
+
+    ucmd.arg("-c")
+        .pipe_in(format!("{invalid_sha224}\n{invalid}"))
+        .fails()
+        .stderr_contains("no properly formatted checksum lines found");
+}
+
+#[rstest]
+#[case::md5("md5", "d41d8cd98f00b204e9800998ecf8427e")]
+#[case::sha1("sha1", "da39a3ee5e6b4b0d3255bfef95601890afd80709")]
+#[case::sha224("sha224", "d14a028c2a3a2bc9476102bb288234c415a2b01f828ea62ac5b3e42f")]
+#[case::sha256(
+    "sha256",
+    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+)]
+#[case::sha384(
+    "sha384",
+    "38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0cc7bf63f6e1da274edebfe76f65fbd51ad2f14898b95b"
+)]
+#[case::sha512(
+    "sha512",
+    "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e"
+)]
+#[case::sm3(
+    "sm3",
+    "1ab21d8355cfa17f8e61194831e81a8f22bec8c728fefb747ed035eb5082aa2b"
+)]
+fn test_check_untagged_with_invalid_length(#[case] algo: &str, #[case] digest: &str) {
+    // issue #11202
+
+    // Ensures that when checking untagged lines, if the provided algorithm is
+    // one of `sha(224|256|384|512)`, digests whose length mismatches the
+    // length of the given algorithm will report as "improperly formatted"
+    // rather than a  FAILED check.
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    at.touch("b");
+
+    let good_checksum = format!("{digest}  a");
+    let invalid_checksum = "e3b0  b";
+
+    ucmd.arg("-a")
+        .arg(algo)
+        .arg("-c")
+        .pipe_in(format!("{invalid_checksum}\n{good_checksum}"))
+        .succeeds()
+        .stdout_contains("a: OK")
+        .stdout_does_not_contain("b: FAILED")
+        .stderr_contains("WARNING: 1 line is improperly formatted");
 }
 
 #[test]

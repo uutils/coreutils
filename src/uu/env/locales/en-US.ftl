@@ -29,7 +29,6 @@ env-error-unexpected-number = Unexpected character: '{ $char }', expected variab
 env-error-expected-brace-or-colon = Unexpected character: '{ $char }', expected a closing brace ('{"}"}') or colon (':') at position { $position }
 env-error-cannot-specify-null-with-command = cannot specify --null (-0) with command
 env-error-invalid-signal = { $signal }: invalid signal
-env-error-config-file = { $file }: { $error }
 env-error-variable-name-issue = variable name issue (at { $position }): { $error }
 env-error-generic = Error: { $error }
 env-error-no-such-file = { $program }: No such file or directory

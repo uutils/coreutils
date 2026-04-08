@@ -100,6 +100,19 @@ pub fn is_ci() -> bool {
     env::var("CI").is_ok_and(|s| s.eq_ignore_ascii_case("true"))
 }
 
+/// Check if a locale is available on the system by verifying that
+/// `locale charmap` returns `"UTF-8"` when `LC_ALL` is set to the given locale.
+#[cfg(unix)]
+pub fn is_locale_available(locale: &str) -> bool {
+    use std::process::Command;
+    Command::new("locale")
+        .env("LC_ALL", locale)
+        .arg("charmap")
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "UTF-8")
+        .unwrap_or(false)
+}
+
 /// Read a test scenario fixture, returning its bytes
 fn read_scenario_fixture<S: AsRef<OsStr>>(tmpd: Option<&Rc<TempDir>>, file_rel_path: S) -> Vec<u8> {
     let tmpdir_path = tmpd.as_ref().unwrap().as_ref().path();

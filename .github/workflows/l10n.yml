@@ -31,7 +31,7 @@ jobs:
       matrix:
         job:
           - { os: ubuntu-latest  , features: "feat_os_unix" }
-          - { os: macos-latest   , features: "feat_os_macos" }
+          - { os: macos-latest   , features: "feat_os_unix" }
           - { os: windows-latest , features: "feat_os_windows" }
     steps:
     - uses: actions/checkout@v6
@@ -56,6 +56,18 @@ jobs:
           ubuntu-*)
             # selinux headers needed for testing
             sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
+            # Locales required by tests/by-util/test_date.rs and
+            # tests/by-util/test_dd.rs (fr_FR is the ISO-8859-1 variant
+            # used by test_iso8859_1_case_conversion).
+            sudo locale-gen --keep-existing fr_FR
+            sudo locale-gen --keep-existing fr_FR.UTF-8
+            sudo locale-gen --keep-existing es_ES.UTF-8
+            sudo locale-gen --keep-existing en_US.UTF-8
+            sudo locale-gen --keep-existing fa_IR.UTF-8 # Iran
+            sudo locale-gen --keep-existing am_ET.UTF-8 # Ethiopia
+            sudo locale-gen --keep-existing th_TH.UTF-8 # Thailand
+            sudo locale-gen --keep-existing hu_HU.UTF-8 # Hungary
+            sudo update-locale
           ;;
           macos-*)
             # needed for testing
@@ -397,7 +409,7 @@ jobs:
       matrix:
         job:
           - { os: ubuntu-latest  , features: "feat_os_unix" }
-          - { os: macos-latest   , features: "feat_os_macos" }
+          - { os: macos-latest   , features: "feat_os_unix" }
     steps:
     - uses: actions/checkout@v6
       with:
@@ -550,7 +562,7 @@ jobs:
       matrix:
         job:
           - { os: ubuntu-latest  , features: "feat_os_unix" }
-          - { os: macos-latest   , features: "feat_os_macos" }
+          - { os: macos-latest   , features: "feat_os_unix" }
     steps:
     - uses: actions/checkout@v6
       with:

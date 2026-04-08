@@ -33,7 +33,8 @@ use uucore::translate;
 pub fn uu_app() -> Command {
     // Disable printing of -h and -v as valid alternatives for --help and --version,
     // since we don't recognize -h and -v as help/version flags.
-    Command::new(uucore::util_name())
+    // We change the name to test later
+    Command::new("[")
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("test-about"))
@@ -64,8 +65,10 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
                 translate!("test-error-missing-closing-bracket"),
             ));
         }
+    } else {
+        // Show actual name with error
+        let _ = uu_app().name("test");
     }
-
     let result = parse(args).map(|mut stack| eval(&mut stack))??;
 
     if result { Ok(()) } else { Err(1.into()) }

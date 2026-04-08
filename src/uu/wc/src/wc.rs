@@ -297,12 +297,11 @@ impl<'a> Input<'a> {
 
 #[cfg(unix)]
 fn is_stdin_small_file() -> bool {
-    use nix::sys::stat;
     use std::os::fd::AsFd;
 
     matches!(
-        stat::fstat(io::stdin().as_fd()),
-        Ok(meta) if meta.st_mode & libc::S_IFMT == libc::S_IFREG && meta.st_size <= (10 << 20)
+        rustix::fs::fstat(io::stdin().as_fd()),
+        Ok(meta) if meta.st_mode as libc::mode_t & libc::S_IFMT == libc::S_IFREG && meta.st_size <= (10 << 20)
     )
 }
 
@@ -393,7 +392,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("wc")
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("wc-about"))

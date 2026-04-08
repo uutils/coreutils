@@ -1,7 +1,7 @@
 # coreutils (uutils)
 # * see the repository LICENSE, README, and CONTRIBUTING files for more information
 
-# spell-checker:ignore (libs) bigdecimal datetime foldhash serde gethostid kqueue libselinux mangen memmap uuhelp startswith constness expl unnested logind cfgs interner
+# spell-checker:ignore (libs) bigdecimal datetime foldhash serde gethostid kqueue libselinux mangen memmap uuhelp startswith constness expl unnested logind cfgs interner getauxval
 
 [package]
 name = "coreutils"
@@ -23,7 +23,6 @@ all-features = true
 [features]
 default = ["feat_common_core"]
 ## OS feature shortcodes
-macos = ["feat_os_macos"]
 unix = ["feat_os_unix"]
 windows = ["feat_os_windows"]
 ## project-specific feature shortcodes
@@ -132,6 +131,7 @@ feat_common_core = [
   "numfmt",
   "od",
   "paste",
+  "pathchk",
   "pr",
   "printenv",
   "printf",
@@ -179,12 +179,19 @@ feat_Tier1 = [
 # We don't need to support all of wasm targets. So the ambiguous name is used at here
 # It is bit complex to deduplicate with other lists
 feat_wasm = [
-  "basename",
+  "arch",
   "base32",
   "base64",
   "basenc",
+  "basename",
+  "cat",
+  "comm",
+  "cp",
+  "csplit",
   "cut",
+  "ls",
   "date",
+  "dir",
   "dircolors",
   "dirname",
   "echo",
@@ -193,28 +200,49 @@ feat_wasm = [
   "false",
   "fmt",
   "fold",
+  "head",
   "join",
   "link",
+  "ln",
+  "ls",
+  "mkdir",
+  "mv",
   "nl",
+  "nproc",
   "numfmt",
   "od",
   "paste",
+  "pathchk",
   "pr",
   "printenv",
+  "head",
   "printf",
   "ptx",
   "pwd",
+  "readlink",
+  "realpath",
+  "rm",
+  "rmdir",
   "seq",
+  "sort",
+  "split",
   "shred",
   "shuf",
   "sleep",
+  "sort",
   "sum",
+  "tail",
   "tee",
+  "touch",
+  "tr",
   "true",
   "truncate",
+  "tsort",
+  "uname",
   "unexpand",
   "uniq",
   "unlink",
+  "vdir",
   "wc",
   "yes",
   # cksum family
@@ -226,13 +254,6 @@ feat_wasm = [
   "sha256sum",
   "sha384sum",
   "sha512sum",
-  # useless?
-  "arch",
-  "uname",
-]
-# "feat_os_macos" == set of utilities which can be built/run on the MacOS platform
-feat_os_macos = [
-  "feat_os_unix", ## == a modern/usual *nix platform
 ]
 # "feat_os_unix" == set of utilities which can be built/run on modern/usual *nix platforms.
 feat_os_unix = [
@@ -292,7 +313,6 @@ feat_require_unix_core = [
   "mknod",
   "nice",
   "nohup",
-  "pathchk",
   "stat",
   "stty",
   "timeout",
@@ -321,7 +341,6 @@ feat_os_unix_fuchsia = [
   "mkfifo",
   "mknod",
   "nice",
-  "pathchk",
   "tty",
   "uname",
   "unlink",
@@ -379,10 +398,10 @@ bytecount = "0.6.8"
 byteorder = "1.5.0"
 clap = { version = "4.5", features = ["wrap_help", "cargo", "color"] }
 clap_complete = "4.4"
-clap_mangen = "0.2"
+clap_mangen = "0.3"
 compare = "0.1.0"
 crossterm = { version = "0.29.0", default-features = false }
-ctor = "0.6.0"
+ctor = "0.8.0"
 ctrlc = { version = "3.5.2", features = ["termination"] }
 divan = { package = "codspeed-divan-compat", version = "4.4.1" }
 dns-lookup = { version = "3.0.0" }
@@ -435,9 +454,12 @@ rstest = "0.26.0"
 rstest_reuse = "0.7.0"
 rustc-hash = "2.1.1"
 rust-ini = "0.21.0"
+# binary name of coreutils can be hijacked by overriding getauxval via LD_PRELOAD
+# So we use param and avoid libc backend
+rustix = { version = "1.1.4", features = ["param"] }
 same-file = "1.0.6"
 self_cell = "1.0.4"
-selinux = "=0.6.0"
+selinux = "=0.6.1"
 string-interner = "0.19.0"
 tempfile = "3.15.0"
 terminal_size = "0.4.0"
@@ -447,7 +469,7 @@ time = { version = "0.3.36" }
 unicode-width = "0.2.0"
 unit-prefix = "0.5"
 utmp-classic = "0.1.6"
-uutils_term_grid = "0.7"
+uutils_term_grid = "0.8"
 walkdir = "2.5"
 winapi-util = "0.1.8"
 windows-sys = { version = "0.61.0", default-features = false }
@@ -461,7 +483,7 @@ sha2 = "0.10.8"
 sha3 = "0.10.8"
 blake2b_simd = "1.0.2"
 blake3 = "1.5.1"
-sm3 = "0.4.2"
+sm3 = "0.5.0"
 crc-fast = { version = "1.5.0", default-features = false }
 digest = "0.10.7"
 
@@ -603,6 +625,9 @@ wc = { optional = true, version = "0.8.0", package = "uu_wc", path = "src/uu/wc"
 who = { optional = true, version = "0.8.0", package = "uu_who", path = "src/uu/who" }
 whoami = { optional = true, version = "0.8.0", package = "uu_whoami", path = "src/uu/whoami" }
 yes = { optional = true, version = "0.8.0", package = "uu_yes", path = "src/uu/yes" }
+
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+rustix.workspace = true
 
 # this breaks clippy linting with: "tests/by-util/test_factor_benches.rs: No such file or directory (os error 2)"
 # factor_benches = { optional = true, version = "0.0.0", package = "uu_factor_benches", path = "tests/benches/factor" }
