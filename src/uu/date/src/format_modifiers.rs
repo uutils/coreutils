@@ -79,7 +79,7 @@ impl From<jiff::Error> for FormatError {
 /// Specifier: any letter or special sequence like :z, ::z, :::z
 fn format_spec_regex() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"%([_0^#+-]*)(\d*)(:*[a-zA-Z])").unwrap())
+    RE.get_or_init(|| Regex::new(r"%([_0OE^#+-]*)(\d*)(:*[a-zA-Z])").unwrap())
 }
 
 /// Check if format string contains any GNU modifiers and format if present.
