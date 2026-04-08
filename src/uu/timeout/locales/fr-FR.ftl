@@ -22,7 +22,6 @@ timeout-after-help = À l'expiration du délai, le signal TERM est envoyé à CO
 # Messages d'erreur
 timeout-error-invalid-signal = { $signal } : signal invalide
 timeout-error-failed-to-execute-process = échec d'exécution du processus : { $error }
-timeout-error-monitor-exited-before-child-exec = le processus de délai s'est terminé avant l'exécution du processus enfant
 
 # Messages détaillés
 timeout-verbose-sending-signal = envoi du signal { $signal } à la commande { $command }
