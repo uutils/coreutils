@@ -45,8 +45,7 @@ macro_rules! has {
 pub struct FileInformation(
     #[cfg(unix)] rustix::fs::Stat,
     #[cfg(windows)] winapi_util::file::Information,
-    // WASI does not have nix::sys::stat, so we store std::fs::Metadata instead.
-    #[cfg(target_os = "wasi")] fs::Metadata,
+    #[cfg(target_os = "wasi")] libc::stat,
 );
 
 impl FileInformation {
@@ -67,8 +66,12 @@ impl FileInformation {
     /// Get information from a currently open file
     #[cfg(target_os = "wasi")]
     pub fn from_file(file: &fs::File) -> IOResult<Self> {
-        let meta = file.metadata()?;
-        Ok(Self(meta))
+        use std::os::fd::AsRawFd;
+        let mut stat: libc::stat = unsafe { std::mem::zeroed() };
+        if unsafe { libc::fstat(file.as_raw_fd(), &mut stat) } != 0 {
+            return Err(Error::last_os_error());
+        }
+        Ok(Self(stat))
     }
 
     /// Get information for a given path.
@@ -100,15 +103,22 @@ impl FileInformation {
             let file = open_options.read(true).open(path.as_ref())?;
             Self::from_file(&file)
         }
-        // WASI: use std::fs::metadata / symlink_metadata since nix is not available
         #[cfg(target_os = "wasi")]
         {
-            let metadata = if dereference {
-                fs::metadata(path.as_ref())
+            use std::ffi::CString;
+            use std::os::wasi::ffi::OsStrExt;
+            let path_c = CString::new(path.as_ref().as_os_str().as_bytes())
+                .map_err(|e| Error::new(ErrorKind::InvalidInput, e))?;
+            let mut stat: libc::stat = unsafe { std::mem::zeroed() };
+            let res = if dereference {
+                unsafe { libc::stat(path_c.as_ptr(), &mut stat) }
             } else {
-                fs::symlink_metadata(path.as_ref())
+                unsafe { libc::lstat(path_c.as_ptr(), &mut stat) }
             };
-            Ok(Self(metadata?))
+            if res != 0 {
+                return Err(Error::last_os_error());
+            }
+            Ok(Self(stat))
         }
     }
 
@@ -124,7 +134,8 @@ impl FileInformation {
         }
         #[cfg(target_os = "wasi")]
         {
-            self.0.len()
+            assert!(self.0.st_size >= 0, "File size is negative");
+            self.0.st_size.try_into().unwrap()
         }
     }
 
@@ -177,10 +188,7 @@ impl FileInformation {
         #[cfg(windows)]
         return self.0.number_of_links();
         #[cfg(target_os = "wasi")]
-        {
-            use std::os::wasi::fs::MetadataExt;
-            return self.0.nlink();
-        }
+        return self.0.st_nlink as u64;
     }
 
     #[cfg(unix)]
@@ -211,8 +219,7 @@ impl PartialEq for FileInformation {
 #[cfg(target_os = "wasi")]
 impl PartialEq for FileInformation {
     fn eq(&self, other: &Self) -> bool {
-        use std::os::wasi::fs::MetadataExt;
-        self.0.dev() == other.0.dev() && self.0.ino() == other.0.ino()
+        self.0.st_dev == other.0.st_dev && self.0.st_ino == other.0.st_ino
     }
 }
 
@@ -232,9 +239,8 @@ impl Hash for FileInformation {
         }
         #[cfg(target_os = "wasi")]
         {
-            use std::os::wasi::fs::MetadataExt;
-            self.0.dev().hash(state);
-            self.0.ino().hash(state);
+            self.0.st_dev.hash(state);
+            self.0.st_ino.hash(state);
         }
     }
 }

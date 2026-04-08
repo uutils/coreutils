@@ -2,7 +2,6 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-#![cfg_attr(target_os = "wasi", feature(wasi_ext))]
 // spell-checker:ignore (ToDO) copydir ficlone fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO sflag
 
 use std::cmp::Ordering;
@@ -1340,9 +1339,9 @@ fn parse_path_args(
 /// Check if an error is ENOTSUP/EOPNOTSUPP (operation not supported).
 /// This is used to suppress xattr errors on filesystems that don't support them.
 fn is_enotsup_error(error: &CpError) -> bool {
-    #[cfg(unix)]
+    #[cfg(any(unix, target_os = "wasi"))]
     const EOPNOTSUPP: i32 = libc::EOPNOTSUPP;
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, target_os = "wasi")))]
     const EOPNOTSUPP: i32 = 95;
 
     match error {
@@ -1846,7 +1845,7 @@ pub(crate) fn copy_attributes(
         // so return ENOTSUP. handle_preserve silently suppresses ENOTSUP for
         // optional preservation (-a) and reports it for required (--preserve=timestamps).
         #[cfg(target_os = "wasi")]
-        return Err(io::Error::from_raw_os_error(95).into()); // 95 = EOPNOTSUPP
+        return Err(io::Error::from_raw_os_error(libc::EOPNOTSUPP).into());
 
         #[cfg(not(target_os = "wasi"))]
         {
@@ -1936,14 +1935,20 @@ fn symlink_file(
     }
     #[cfg(target_os = "wasi")]
     {
-        std::os::wasi::fs::symlink_path(source, dest).map_err(|e| {
-            CpError::IoErrContext(
-                e,
+        use std::ffi::CString;
+        use std::os::wasi::ffi::OsStrExt;
+        let src_c = CString::new(source.as_os_str().as_bytes())
+            .map_err(|e| CpError::Error(e.to_string()))?;
+        let dst_c =
+            CString::new(dest.as_os_str().as_bytes()).map_err(|e| CpError::Error(e.to_string()))?;
+        if unsafe { libc::symlink(src_c.as_ptr(), dst_c.as_ptr()) } != 0 {
+            return Err(CpError::IoErrContext(
+                io::Error::last_os_error(),
                 translate!("cp-error-cannot-create-symlink",
                            "dest" => get_filename(dest).unwrap_or("?").quote(),
                            "source" => get_filename(source).unwrap_or("?").quote()),
-            )
-        })?;
+            ));
+        }
     }
     if let Ok(file_info) = FileInformation::from_path(dest, false) {
         symlinked_files.insert(file_info);
