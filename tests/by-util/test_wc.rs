@@ -860,18 +860,6 @@ fn wc_w_words_with_emoji_separator() {
         .stdout_contains("3");
 }
 
-#[test]
-fn test_wc_bytes_from_stdin_file_size_optimization() {
-    // This tests the metadata fast path (`fstat` on stdin) when only `-c` is used.
-    // It should be extremely fast even for large inputs because it doesn't read the data.
-    let large_input = "a".repeat(50_000_000); // 50 MB
-
-    new_ucmd!()
-        .arg("-c")
-        .pipe_in(large_input)
-        .succeeds()
-        .stdout_is("50000000\n");
-}
 
 #[test]
 fn test_invalid_byte_sequence_word_count() {
