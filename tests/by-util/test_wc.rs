@@ -860,7 +860,6 @@ fn wc_w_words_with_emoji_separator() {
         .stdout_contains("3");
 }
 
-
 #[test]
 fn test_invalid_byte_sequence_word_count() {
     // wc should count invalid byte sequences as words
