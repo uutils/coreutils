@@ -21,6 +21,7 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
+libc = { workspace = true }
 uucore = { workspace = true, features = ["backup-control", "fs"] }
 thiserror = { workspace = true }
 fluent = { workspace = true }
