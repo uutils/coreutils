@@ -24,13 +24,10 @@ env-error-invalid-sequence = séquence invalide '\\{ $char }' dans -S à la posi
 env-error-missing-closing-brace = Accolade fermante manquante à la position { $position }
 env-error-missing-variable = Nom de variable manquant à la position { $position }
 env-error-only-braced-variable = seule l'expansion ${VARNAME} est prise en charge à la position { $position }
-env-error-missing-closing-brace-after-value = Accolade fermante manquante après la valeur par défaut à la position { $position }
+env-error-only-braced-variable-at = seule l'expansion {"${VARNAME}"} est prise en charge, erreur à : { $rest }
 env-error-unexpected-number = Caractère inattendu : '{ $char }', le nom de variable attendu ne doit pas commencer par 0..9 à la position { $position }
-env-error-expected-brace-or-colon = Caractère inattendu : '{ $char }', accolade fermante ('{"\\}"}') ou deux-points (':') attendu à la position { $position }
 env-error-cannot-specify-null-with-command = impossible de spécifier --null (-0) avec une commande
 env-error-invalid-signal = { $signal } : signal invalide
-
-env-error-variable-name-issue = problème de nom de variable (à { $position }) : { $error }
 env-error-generic = Erreur : { $error }
 env-error-no-such-file = { $program } : Aucun fichier ou répertoire de ce type
 env-error-use-s-shebang = utilisez -[v]S pour passer des options dans les lignes shebang
