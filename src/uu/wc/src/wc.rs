@@ -18,6 +18,7 @@ use std::{
     fs::{self, File},
     io::{self, Write, stderr},
     iter,
+    os::fd::AsFd,
     path::{Path, PathBuf},
     sync::LazyLock,
 };
@@ -46,6 +47,26 @@ use crate::{
 /// The minimum character width for formatting counts when reading from stdin.
 const MINIMUM_WIDTH: usize = 7;
 
+/// Returns the byte size of stdin if it is a regular file (e.g. `wc -c < file`).
+/// Returns `None` for pipes, terminals, sockets, etc. so we fall back to normal counting.
+fn try_get_stding_size() -> Option<usize> {
+    #[cfg(unix)]
+    {
+        let stdin = io::stdin();
+        let fd = stdin.as_fd();
+
+        let Ok(stat) = rustix::fs::fstat(fd) else { return  None};
+
+        if rustix::fs::FileType::from_raw_mode(stat.st_mode) == rustix::fs::FileType::RegularFile {
+            return Some(stat.st_size as usize);
+        }
+        None
+    }
+    #[cfg(not(unix))]
+    {
+        None // TODO: Implement Windows support 
+    }
+}
 struct Settings<'a> {
     show_bytes: bool,
     show_chars: bool,
@@ -483,6 +504,16 @@ fn word_count_from_reader<T: WordCountable>(
 
         // show_bytes
         (true, false, false, false, false) => {
+            // Fast path: if stdin is a regular file, get size from metadata (no reading needed)
+            if let Some(bytes) = try_get_stding_size() {
+                return (
+                    WordCount {
+                        bytes,
+                        ..WordCount::default()
+                    },
+                    None,
+                );
+            }
             // Fast path when only show_bytes is true.
             let (bytes, error) = count_bytes_fast(&mut reader);
             (
