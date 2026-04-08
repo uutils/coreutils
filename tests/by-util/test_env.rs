@@ -1984,7 +1984,7 @@ fn test_braced_variable_error_missing_closing_brace() {
     new_ucmd!()
         .arg("-Secho ${FOO")
         .fails_with_code(125)
-        .stderr_contains("Missing closing brace");
+        .stderr_contains("only ${VARNAME} expansion is supported, error at: ${FOO");
 }
 
 #[test]
@@ -2000,7 +2000,7 @@ fn test_braced_variable_error_starts_with_digit() {
     new_ucmd!()
         .arg("-Secho ${1FOO}")
         .fails_with_code(125)
-        .stderr_contains("Unexpected character: '1'");
+        .stderr_contains("only ${VARNAME} expansion is supported, error at: ${1FOO}");
 }
 
 #[test]
