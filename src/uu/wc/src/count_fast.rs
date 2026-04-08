@@ -12,7 +12,7 @@ use super::WordCountable;
 use std::io::{self, ErrorKind, Read};
 
 #[cfg(unix)]
-use libc::{_SC_PAGESIZE, S_IFREG, sysconf};
+use libc::S_IFREG;
 #[cfg(unix)]
 use std::io::{Seek, SeekFrom};
 #[cfg(unix)]
@@ -122,7 +122,7 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
                 && (stat.st_mode as libc::mode_t & S_IFREG) != 0
                 && stat.st_size > 0
             {
-                let sys_page_size = unsafe { sysconf(_SC_PAGESIZE) as usize };
+                let sys_page_size = rustix::param::page_size();
                 if !(stat.st_size as usize).is_multiple_of(sys_page_size) {
                     // regular file or file from /proc, /sys and similar pseudo-filesystems
                     // with size that is NOT a multiple of system page size
