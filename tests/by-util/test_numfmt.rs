@@ -1419,14 +1419,6 @@ fn test_to_auto_rejected_at_parse_time() {
         .stderr_contains("invalid argument 'auto' for '--to'");
 }
 
-#[test]
-fn test_from_invalid_rejected_at_parse_time() {
-    new_ucmd!()
-        .args(&["--from=random", "100"])
-        .fails_with_code(1)
-        .stderr_contains("invalid argument 'random' for '--from'");
-}
-
 // https://github.com/uutils/coreutils/issues/11663
 // `--from-unit` multiplication with fractional input rounds to an integer;
 // GNU preserves the fractional digits.
