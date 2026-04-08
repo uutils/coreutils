@@ -3,8 +3,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-#![cfg_attr(target_os = "wasi", feature(wasi_ext))]
-
 // spell-checker:ignore (ToDO) srcpath targetpath EEXIST
 
 use clap::{Arg, ArgAction, Command};
@@ -21,10 +19,12 @@ use std::ffi::OsString;
 use std::fs;
 use thiserror::Error;
 
+#[cfg(target_os = "wasi")]
+use std::ffi::CString;
+#[cfg(target_os = "wasi")]
+use std::io;
 #[cfg(any(unix, target_os = "redox"))]
 use std::os::unix::fs::symlink;
-#[cfg(target_os = "wasi")]
-use std::os::wasi::fs::symlink_path as symlink;
 #[cfg(windows)]
 use std::os::windows::fs::{symlink_dir, symlink_file};
 use std::path::{Path, PathBuf};
@@ -490,5 +490,21 @@ pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> std::io::R
         symlink_dir(src, dst)
     } else {
         symlink_file(src, dst)
+    }
+}
+
+#[cfg(target_os = "wasi")]
+pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> io::Result<()> {
+    use std::os::wasi::ffi::OsStrExt;
+
+    let src_c = CString::new(src.as_ref().as_os_str().as_bytes())
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+    let dst_c = CString::new(dst.as_ref().as_os_str().as_bytes())
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+
+    if unsafe { libc::symlink(src_c.as_ptr(), dst_c.as_ptr()) } == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
     }
 }
