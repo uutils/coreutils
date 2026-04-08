@@ -55,7 +55,9 @@ fn try_get_stding_size() -> Option<usize> {
         let stdin = io::stdin();
         let fd = stdin.as_fd();
 
-        let Ok(stat) = rustix::fs::fstat(fd) else { return  None};
+        let Ok(stat) = rustix::fs::fstat(fd) else {
+            return None;
+        };
 
         if rustix::fs::FileType::from_raw_mode(stat.st_mode) == rustix::fs::FileType::RegularFile {
             return Some(stat.st_size as usize);
