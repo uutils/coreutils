@@ -807,7 +807,10 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
 ///
 /// On Windows, uses `GetFinalPathNameByHandleW` to attempt to get the path
 /// from the stdout handle.
-#[cfg_attr(not(windows), expect(clippy::unnecessary_wraps))]
+#[cfg_attr(
+    not(any(windows, target_os = "wasi")),
+    expect(clippy::unnecessary_wraps)
+)]
 fn pathbuf_from_stdout() -> Result<PathBuf, TouchError> {
     #[cfg(all(unix, not(target_os = "android")))]
     {
@@ -818,11 +821,9 @@ fn pathbuf_from_stdout() -> Result<PathBuf, TouchError> {
         Ok(PathBuf::from("/proc/self/fd/1"))
     }
     #[cfg(target_os = "wasi")]
-    {
-        return Err(TouchError::UnsupportedPlatformFeature(
-            "touch - (stdout) is not supported on WASI".to_string(),
-        ));
-    }
+    return Err(TouchError::UnsupportedPlatformFeature(
+        "touch - (stdout) is not supported on WASI".to_string(),
+    ));
     #[cfg(windows)]
     {
         use std::os::windows::prelude::AsRawHandle;

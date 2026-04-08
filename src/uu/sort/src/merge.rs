@@ -779,10 +779,10 @@ impl<M: MergeInput> SyncFileMerger<'_, M> {
 }
 
 #[cfg(wasi_no_threads)]
-fn merge_without_limit_sync<'a, M: MergeInput + 'static, F: Iterator<Item = UResult<M>>>(
+fn merge_without_limit_sync<M: MergeInput + 'static, F: Iterator<Item = UResult<M>>>(
     files: F,
-    settings: &'a GlobalSettings,
-) -> UResult<SyncFileMerger<'a, M>> {
+    settings: &GlobalSettings,
+) -> UResult<SyncFileMerger<'_, M>> {
     let separator = settings.line_ending.into();
     let mut readers: Vec<Option<SyncReaderFile<M>>> = Vec::new();
     let mut mergeable_files = Vec::new();

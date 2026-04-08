@@ -188,7 +188,7 @@ impl FileInformation {
         #[cfg(windows)]
         return self.0.number_of_links();
         #[cfg(target_os = "wasi")]
-        return self.0.st_nlink as u64;
+        return self.0.st_nlink;
     }
 
     #[cfg(unix)]
