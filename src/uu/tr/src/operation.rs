@@ -319,8 +319,7 @@ impl Sequence {
                     // GNU applies -t before complementing a character class.
                     // That means we must first truncate the expanded, non-complemented
                     // source set, then complement the truncated prefix to recover the
-                    // final translation domain. Complementing first would incorrectly
-                    // shrink the complemented domain to the prefix length.
+                    // final translation domain.
                     let truncated_set1: Vec<_> = set1
                         .iter()
                         .flat_map(Self::flatten)
@@ -329,6 +328,11 @@ impl Sequence {
                     set1_solved = (0..=u8::MAX)
                         .filter(|x| !truncated_set1.contains(x))
                         .collect();
+                    // After expansion the complemented domain may be larger than set2.
+                    // Re-check the complement validity constraint.
+                    if set2_uniques.len() > 1 || set1_solved.len() > set2_solved.len() {
+                        return Err(BadSequence::ComplementMoreThanOneUniqueInSet2);
+                    }
                 } else {
                     set1_solved.truncate(set2_solved.len());
                 }
