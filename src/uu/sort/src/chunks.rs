@@ -9,12 +9,12 @@
 #![allow(dead_code)]
 // Ignores non-used warning for `borrow_buffer` in `Chunk`
 
+#[cfg(not(wasi_no_threads))]
+use std::sync::mpsc::SyncSender;
 use std::{
     io::{ErrorKind, Read},
     ops::Range,
 };
-#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
-use std::sync::mpsc::SyncSender;
 
 use memchr::memchr_iter;
 use self_cell::self_cell;
@@ -246,7 +246,7 @@ pub fn read_to_chunk<T: Read>(
 /// Read a chunk, parse lines and send them via channel.
 ///
 /// Wrapper around [`read_to_chunk`] for the threaded code path.
-#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+#[cfg(not(wasi_no_threads))]
 #[allow(clippy::too_many_arguments)]
 pub fn read<T: Read>(
     sender: &SyncSender<Chunk>,
@@ -445,4 +445,3 @@ fn read_to_buffer<T: Read>(
         }
     }
 }
-

@@ -10,19 +10,19 @@ use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{Read, Write, stderr};
 use std::path::PathBuf;
-#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+#[cfg(not(wasi_no_threads))]
 use std::sync::mpsc::{Receiver, SyncSender};
-#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+#[cfg(not(wasi_no_threads))]
 use std::thread;
 
 use itertools::Itertools;
 use uucore::error::UResult;
-#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+#[cfg(not(wasi_no_threads))]
 use uucore::error::strip_errno;
 
 use crate::Output;
 use crate::chunks::RecycledChunk;
-#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+#[cfg(not(wasi_no_threads))]
 use crate::merge::WriteableCompressedTmpFile;
 use crate::merge::WriteablePlainTmpFile;
 use crate::merge::WriteableTmpFile;
@@ -41,7 +41,7 @@ const DEFAULT_BUF_SIZE: usize = 8 * 1024;
 ///
 /// Uses the same chunked sort-write-merge strategy as the threaded version,
 /// but reads and sorts each chunk sequentially on the calling thread.
-#[cfg(all(target_os = "wasi", not(target_feature = "atomics")))]
+#[cfg(wasi_no_threads)]
 pub fn ext_sort(
     files: &mut impl Iterator<Item = UResult<Box<dyn Read + Send>>>,
     settings: &GlobalSettings,
@@ -159,17 +159,12 @@ pub fn ext_sort(
 }
 
 /// Print a single sorted chunk.
-#[cfg(all(target_os = "wasi", not(target_feature = "atomics")))]
-fn print_chunk(
-    chunk: &Chunk,
-    settings: &GlobalSettings,
-    output: Output,
-) -> UResult<()> {
+#[cfg(wasi_no_threads)]
+fn print_chunk(chunk: &Chunk, settings: &GlobalSettings, output: Output) -> UResult<()> {
     if settings.unique {
         print_sorted(
             chunk.lines().iter().dedup_by(|a, b| {
-                compare_by(a, b, settings, chunk.line_data(), chunk.line_data())
-                    == Ordering::Equal
+                compare_by(a, b, settings, chunk.line_data(), chunk.line_data()) == Ordering::Equal
             }),
             settings,
             output,
@@ -180,18 +175,12 @@ fn print_chunk(
 }
 
 /// Merge two in-memory chunks and print.
-#[cfg(all(target_os = "wasi", not(target_feature = "atomics")))]
-fn print_two_chunks(
-    a: Chunk,
-    b: Chunk,
-    settings: &GlobalSettings,
-    output: Output,
-) -> UResult<()> {
+#[cfg(wasi_no_threads)]
+fn print_two_chunks(a: Chunk, b: Chunk, settings: &GlobalSettings, output: Output) -> UResult<()> {
     let merged_iter = a.lines().iter().map(|line| (line, &a)).merge_by(
         b.lines().iter().map(|line| (line, &b)),
         |(line_a, a), (line_b, b)| {
-            compare_by(line_a, line_b, settings, a.line_data(), b.line_data())
-                != Ordering::Greater
+            compare_by(line_a, line_b, settings, a.line_data(), b.line_data()) != Ordering::Greater
         },
     );
     if settings.unique {
@@ -215,7 +204,7 @@ fn print_two_chunks(
 /// Two threads cooperate: one reads input and writes temporary chunk files,
 /// while the other sorts each chunk in memory. Once all chunks are written,
 /// they are merged back together for final output.
-#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+#[cfg(not(wasi_no_threads))]
 pub fn ext_sort(
     files: &mut impl Iterator<Item = UResult<Box<dyn Read + Send>>>,
     settings: &GlobalSettings,
@@ -276,7 +265,7 @@ pub fn ext_sort(
     }
 }
 
-#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+#[cfg(not(wasi_no_threads))]
 fn reader_writer<
     F: Iterator<Item = UResult<Box<dyn Read + Send>>>,
     Tmp: WriteableTmpFile + 'static,
@@ -362,7 +351,7 @@ fn reader_writer<
 }
 
 /// The function that is executed on the sorter thread.
-#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+#[cfg(not(wasi_no_threads))]
 fn sorter(receiver: &Receiver<Chunk>, sender: &SyncSender<Chunk>, settings: &GlobalSettings) {
     while let Ok(mut payload) = receiver.recv() {
         payload.with_dependent_mut(|_, contents| {
@@ -377,7 +366,7 @@ fn sorter(receiver: &Receiver<Chunk>, sender: &SyncSender<Chunk>, settings: &Glo
 }
 
 /// Describes how we read the chunks from the input.
-#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+#[cfg(not(wasi_no_threads))]
 enum ReadResult<I: WriteableTmpFile> {
     /// The input was empty. Nothing was read.
     EmptyInput,
@@ -389,7 +378,7 @@ enum ReadResult<I: WriteableTmpFile> {
     WroteChunksToFile { tmp_files: Vec<I::Closed> },
 }
 /// The function that is executed on the reader/writer thread.
-#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+#[cfg(not(wasi_no_threads))]
 fn read_write_loop<I: WriteableTmpFile>(
     mut files: impl Iterator<Item = UResult<Box<dyn Read + Send>>>,
     tmp_dir: &mut TmpDirWrapper,
