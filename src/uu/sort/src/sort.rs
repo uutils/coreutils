@@ -29,7 +29,7 @@ use foldhash::fast::FoldHasher;
 use foldhash::{HashMap, SharedSeed};
 use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
 use rand::{RngExt as _, rng};
-#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+#[cfg(not(wasi_no_threads))]
 use rayon::slice::ParallelSliceMut;
 use std::cmp::Ordering;
 use std::env;
@@ -2615,14 +2615,14 @@ fn sort_by<'a>(unsorted: &mut Vec<Line<'a>>, settings: &GlobalSettings, line_dat
     // WASI does not support threads, so use non-parallel sort to avoid
     // rayon's thread pool which triggers an unreachable trap.
     if settings.stable || settings.unique {
-        #[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+        #[cfg(not(wasi_no_threads))]
         unsorted.par_sort_by(cmp);
-        #[cfg(all(target_os = "wasi", not(target_feature = "atomics")))]
+        #[cfg(wasi_no_threads)]
         unsorted.sort_by(cmp);
     } else {
-        #[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+        #[cfg(not(wasi_no_threads))]
         unsorted.par_sort_unstable_by(cmp);
-        #[cfg(all(target_os = "wasi", not(target_feature = "atomics")))]
+        #[cfg(wasi_no_threads)]
         unsorted.sort_unstable_by(cmp);
     }
 }
