@@ -64,7 +64,7 @@ fn try_get_stding_size() -> Option<usize> {
     }
     #[cfg(not(unix))]
     {
-        None // TODO: Implement Windows support 
+        None // TODO: Implement Windows support
     }
 }
 struct Settings<'a> {
