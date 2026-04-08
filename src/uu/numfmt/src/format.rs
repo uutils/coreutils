@@ -486,7 +486,7 @@ fn transform_to(
     round_method: RoundMethod,
     precision: usize,
     unit_separator: &str,
-    is_specified: bool,
+    is_precision_specified: bool,
 ) -> Result<String> {
     let i2 = s / (opts.to_unit as f64);
     let (i2, s) = consider_suffix(i2, opts.to, round_method, precision)?;
@@ -503,7 +503,7 @@ fn transform_to(
                 DisplayableSuffix(s, opts.to),
             )
         }
-        Some(s) if is_specified => {
+        Some(s) if is_precision_specified => {
             format!("{i2:.0}{unit_separator}{}", DisplayableSuffix(s, opts.to))
         }
         Some(s) if i2.abs() < 10.0 => {
@@ -546,7 +546,7 @@ fn format_string(
         Some(suffix) => source.strip_suffix(suffix).unwrap_or(source),
         None => source,
     };
-    let mut is_specified = true;
+    let mut is_precision_specified = true;
     let precision = if let Some(p) = options.format.precision {
         p
     } else if options.transform.to == Unit::None
@@ -557,7 +557,7 @@ fn format_string(
     {
         parse_implicit_precision(source_without_suffix)
     } else {
-        is_specified = false;
+        is_precision_specified = false;
         0
     };
 
@@ -567,7 +567,7 @@ fn format_string(
         options.round,
         precision,
         &options.unit_separator,
-        is_specified,
+        is_precision_specified,
     )?;
 
     // bring back the suffix before applying padding
