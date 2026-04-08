@@ -11,16 +11,11 @@ use crate::{
     compare_by, open,
 };
 use itertools::Itertools;
-use std::{
-    cmp::Ordering,
-    ffi::OsStr,
-    io::Read,
-    iter,
-};
-#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
-use std::sync::mpsc::{sync_channel, SyncSender, Receiver};
-#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+#[cfg(not(wasi_no_threads))]
+use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
+#[cfg(not(wasi_no_threads))]
 use std::thread;
+use std::{cmp::Ordering, ffi::OsStr, io::Read, iter};
 use uucore::error::UResult;
 
 /// Check if the file at `path` is ordered.
@@ -41,17 +36,17 @@ pub fn check(path: &OsStr, settings: &GlobalSettings) -> UResult<()> {
         100 * 1024
     };
 
-    #[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+    #[cfg(not(wasi_no_threads))]
     {
         check_threaded(path, settings, max_allowed_cmp, file, chunk_size)
     }
-    #[cfg(all(target_os = "wasi", not(target_feature = "atomics")))]
+    #[cfg(wasi_no_threads)]
     {
         check_sync(path, settings, max_allowed_cmp, file, chunk_size)
     }
 }
 
-#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+#[cfg(not(wasi_no_threads))]
 fn check_threaded(
     path: &OsStr,
     settings: &GlobalSettings,
@@ -115,7 +110,7 @@ fn check_threaded(
 }
 
 /// The function running on the reader thread.
-#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+#[cfg(not(wasi_no_threads))]
 fn reader(
     mut file: Box<dyn Read + Send>,
     receiver: &Receiver<RecycledChunk>,
@@ -142,7 +137,7 @@ fn reader(
 }
 
 /// Synchronous check for targets without thread support.
-#[cfg(all(target_os = "wasi", not(target_feature = "atomics")))]
+#[cfg(wasi_no_threads)]
 fn check_sync(
     path: &OsStr,
     settings: &GlobalSettings,

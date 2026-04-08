@@ -21,14 +21,14 @@ use std::{
     process::{Child, ChildStdin, ChildStdout, Command, Stdio},
     rc::Rc,
 };
-#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+#[cfg(not(wasi_no_threads))]
 use std::{
     sync::mpsc::{Receiver, Sender, SyncSender, channel, sync_channel},
     thread::{self, JoinHandle},
 };
 
 use compare::Compare;
-#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+#[cfg(not(wasi_no_threads))]
 use uucore::error::FromIo;
 use uucore::error::UResult;
 
@@ -108,7 +108,7 @@ pub fn merge(
     let files = files
         .iter()
         .map(|file| open(file).map(|file| PlainMergeInput { inner: file }));
-    #[cfg(all(target_os = "wasi", not(target_feature = "atomics")))]
+    #[cfg(wasi_no_threads)]
     if settings.compress_prog.is_some() {
         let _ = writeln!(
             std::io::stderr(),
@@ -132,9 +132,9 @@ fn do_merge_to_output<M: MergeInput + 'static>(
     settings: &GlobalSettings,
     output: Output,
 ) -> UResult<()> {
-    #[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+    #[cfg(not(wasi_no_threads))]
     return merge_without_limit(files, settings)?.write_all(settings, output);
-    #[cfg(all(target_os = "wasi", not(target_feature = "atomics")))]
+    #[cfg(wasi_no_threads)]
     return merge_without_limit_sync(files, settings)?.write_all(settings, output);
 }
 
@@ -144,9 +144,9 @@ fn do_merge_to_writer<M: MergeInput + 'static>(
     settings: &GlobalSettings,
     out: &mut impl Write,
 ) -> UResult<()> {
-    #[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+    #[cfg(not(wasi_no_threads))]
     return merge_without_limit(files, settings)?.write_all_to(settings, out);
-    #[cfg(all(target_os = "wasi", not(target_feature = "atomics")))]
+    #[cfg(wasi_no_threads)]
     return merge_without_limit_sync(files, settings)?.write_all_to(settings, out);
 }
 
@@ -208,7 +208,7 @@ pub fn merge_with_file_limit<
 ///
 /// It is the responsibility of the caller to ensure that `files` yields only
 /// as many files as we are allowed to open concurrently.
-#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+#[cfg(not(wasi_no_threads))]
 fn merge_without_limit<M: MergeInput + 'static, F: Iterator<Item = UResult<M>>>(
     files: F,
     settings: &GlobalSettings,
@@ -273,7 +273,7 @@ fn merge_without_limit<M: MergeInput + 'static, F: Iterator<Item = UResult<M>>>(
     })
 }
 /// The struct on the reader thread representing an input file
-#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+#[cfg(not(wasi_no_threads))]
 struct ReaderFile<M: MergeInput> {
     file: M,
     sender: SyncSender<Chunk>,
@@ -281,7 +281,7 @@ struct ReaderFile<M: MergeInput> {
 }
 
 /// The function running on the reader thread.
-#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+#[cfg(not(wasi_no_threads))]
 fn reader(
     recycled_receiver: &Receiver<(usize, RecycledChunk)>,
     files: &mut [Option<ReaderFile<impl MergeInput>>],
@@ -316,7 +316,7 @@ fn reader(
     Ok(())
 }
 /// The struct on the main thread representing an input file
-#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+#[cfg(not(wasi_no_threads))]
 pub struct MergeableFile {
     current_chunk: Rc<Chunk>,
     line_idx: usize,
@@ -330,12 +330,12 @@ pub struct MergeableFile {
 struct PreviousLine {
     chunk: Rc<Chunk>,
     line_idx: usize,
-    #[cfg_attr(all(target_os = "wasi", not(target_feature = "atomics")), allow(dead_code))]
+    #[cfg_attr(wasi_no_threads, allow(dead_code))]
     file_number: usize,
 }
 
 /// Merges files together. This is **not** an iterator because of lifetime problems.
-#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+#[cfg(not(wasi_no_threads))]
 struct FileMerger<'a> {
     heap: binary_heap_plus::BinaryHeap<MergeableFile, FileComparator<'a>>,
     request_sender: Sender<(usize, RecycledChunk)>,
@@ -343,7 +343,7 @@ struct FileMerger<'a> {
     reader_join_handle: JoinHandle<UResult<()>>,
 }
 
-#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+#[cfg(not(wasi_no_threads))]
 impl FileMerger<'_> {
     /// Write the merged contents to the output file.
     fn write_all(self, settings: &GlobalSettings, output: Output) -> UResult<()> {
@@ -425,7 +425,7 @@ struct FileComparator<'a> {
     settings: &'a GlobalSettings,
 }
 
-#[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+#[cfg(not(wasi_no_threads))]
 impl Compare<MergeableFile> for FileComparator<'_> {
     fn compare(&self, a: &MergeableFile, b: &MergeableFile) -> Ordering {
         let mut cmp = compare_by(
@@ -646,20 +646,20 @@ impl<R: Read + Send> MergeInput for PlainMergeInput<R> {
 // Synchronous merge for targets without thread support (e.g. wasm32-wasip1).
 // ---------------------------------------------------------------------------
 
-#[cfg(all(target_os = "wasi", not(target_feature = "atomics")))]
+#[cfg(wasi_no_threads)]
 struct SyncReaderFile<M: MergeInput> {
     file: M,
     carry_over: Vec<u8>,
 }
 
-#[cfg(all(target_os = "wasi", not(target_feature = "atomics")))]
+#[cfg(wasi_no_threads)]
 struct SyncMergeableFile {
     current_chunk: Rc<Chunk>,
     line_idx: usize,
     file_number: usize,
 }
 
-#[cfg(all(target_os = "wasi", not(target_feature = "atomics")))]
+#[cfg(wasi_no_threads)]
 impl Compare<SyncMergeableFile> for FileComparator<'_> {
     fn compare(&self, a: &SyncMergeableFile, b: &SyncMergeableFile) -> Ordering {
         let mut cmp = compare_by(
@@ -676,7 +676,7 @@ impl Compare<SyncMergeableFile> for FileComparator<'_> {
     }
 }
 
-#[cfg(all(target_os = "wasi", not(target_feature = "atomics")))]
+#[cfg(wasi_no_threads)]
 struct SyncFileMerger<'a, M: MergeInput> {
     heap: binary_heap_plus::BinaryHeap<SyncMergeableFile, FileComparator<'a>>,
     readers: Vec<Option<SyncReaderFile<M>>>,
@@ -685,7 +685,7 @@ struct SyncFileMerger<'a, M: MergeInput> {
     settings: &'a GlobalSettings,
 }
 
-#[cfg(all(target_os = "wasi", not(target_feature = "atomics")))]
+#[cfg(wasi_no_threads)]
 impl<M: MergeInput> SyncFileMerger<'_, M> {
     fn write_all(self, settings: &GlobalSettings, output: Output) -> UResult<()> {
         let mut out = output.into_write();
@@ -700,11 +700,7 @@ impl<M: MergeInput> SyncFileMerger<'_, M> {
         Ok(())
     }
 
-    fn write_next(
-        &mut self,
-        settings: &GlobalSettings,
-        out: &mut impl Write,
-    ) -> UResult<bool> {
+    fn write_next(&mut self, settings: &GlobalSettings, out: &mut impl Write) -> UResult<bool> {
         if let Some(file) = self.heap.peek() {
             let prev = self.prev.replace(PreviousLine {
                 chunk: file.current_chunk.clone(),
@@ -782,7 +778,7 @@ impl<M: MergeInput> SyncFileMerger<'_, M> {
     }
 }
 
-#[cfg(all(target_os = "wasi", not(target_feature = "atomics")))]
+#[cfg(wasi_no_threads)]
 fn merge_without_limit_sync<'a, M: MergeInput + 'static, F: Iterator<Item = UResult<M>>>(
     files: F,
     settings: &'a GlobalSettings,
