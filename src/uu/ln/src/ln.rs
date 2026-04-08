@@ -20,8 +20,6 @@ use std::ffi::OsString;
 use std::fs;
 use thiserror::Error;
 
-#[cfg(target_os = "wasi")]
-use std::ffi::CString;
 #[cfg(any(unix, target_os = "redox"))]
 use std::os::unix::fs::symlink;
 #[cfg(windows)]
@@ -527,16 +525,5 @@ pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> io::Result
 
 #[cfg(target_os = "wasi")]
 pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> io::Result<()> {
-    use std::os::wasi::ffi::OsStrExt;
-
-    let src_c = CString::new(src.as_ref().as_os_str().as_bytes())
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
-    let dst_c = CString::new(dst.as_ref().as_os_str().as_bytes())
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
-
-    if unsafe { libc::symlink(src_c.as_ptr(), dst_c.as_ptr()) } == 0 {
-        Ok(())
-    } else {
-        Err(io::Error::last_os_error())
-    }
+    rustix::fs::symlink(src.as_ref(), dst.as_ref()).map_err(io::Error::from)
 }

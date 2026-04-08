@@ -3681,7 +3681,7 @@ version = "0.9.0"
 dependencies = [
  "clap",
  "fluent",
- "libc",
+ "rustix",
  "thiserror 2.0.18",
  "uucore",
 ]
