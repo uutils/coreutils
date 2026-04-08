@@ -47,6 +47,14 @@ fn format_and_write<W: std::io::Write>(
         None => input_line,
     };
 
+    // Return false if the input is in scientific notation.
+    if line.contains(&101) {
+        let _ = writeln!(stderr(), "numfmt: {}",translate!(
+                "numfmt-error-invalid-number",
+                "input" => escape_line(line).quote()));
+        return Ok(false);
+    }
+    
     // In non-abort modes we buffer the formatted output so that on error we
     // can emit the original line instead.
     let buffer_output = !matches!(options.invalid, InvalidModes::Abort);
