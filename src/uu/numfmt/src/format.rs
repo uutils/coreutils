@@ -831,7 +831,7 @@ mod tests {
         let result = parse_suffix("1Q", Unit::Auto, "", false);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
-        assert_eq!(number, ParsedNumber::Float(1.0));
+        assert_eq!(number.to_f64(), 1.0);
         assert!(suffix.is_some());
         let (raw_suffix, with_i) = suffix.unwrap();
         assert_eq!(raw_suffix as i32, RawSuffix::Q as i32);
@@ -840,7 +840,7 @@ mod tests {
         let result = parse_suffix("2R", Unit::Auto, "", false);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
-        assert_eq!(number, ParsedNumber::Float(2.0));
+        assert_eq!(number.to_f64(), 2.0);
         assert!(suffix.is_some());
         let (raw_suffix, with_i) = suffix.unwrap();
         assert_eq!(raw_suffix as i32, RawSuffix::R as i32);
@@ -849,7 +849,7 @@ mod tests {
         let result = parse_suffix("3k", Unit::Auto, "", false);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
-        assert_eq!(number, ParsedNumber::Float(3.0));
+        assert_eq!(number.to_f64(), 3.0);
         assert!(suffix.is_some());
         let (raw_suffix, with_i) = suffix.unwrap();
         assert_eq!(raw_suffix as i32, RawSuffix::K as i32);
@@ -858,7 +858,7 @@ mod tests {
         let result = parse_suffix("4Qi", Unit::Auto, "", false);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
-        assert_eq!(number, ParsedNumber::Float(4.0));
+        assert_eq!(number.to_f64(), 4.0);
         assert!(suffix.is_some());
         let (raw_suffix, with_i) = suffix.unwrap();
         assert_eq!(raw_suffix as i32, RawSuffix::Q as i32);
@@ -867,7 +867,7 @@ mod tests {
         let result = parse_suffix("5Ri", Unit::Auto, "", false);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
-        assert_eq!(number, ParsedNumber::Float(5.0));
+        assert_eq!(number.to_f64(), 5.0);
         assert!(suffix.is_some());
         let (raw_suffix, with_i) = suffix.unwrap();
         assert_eq!(raw_suffix as i32, RawSuffix::R as i32);
@@ -1083,18 +1083,9 @@ mod tests {
 
     #[test]
     fn test_parse_number_part_valid() {
-        assert_eq!(
-            parse_number_part("42", "42").unwrap(),
-            ParsedNumber::Float(42.0)
-        );
-        assert_eq!(
-            parse_number_part("-3.5", "-3.5").unwrap(),
-            ParsedNumber::Float(-3.5)
-        );
-        assert_eq!(
-            parse_number_part("0", "0").unwrap(),
-            ParsedNumber::Float(0.0)
-        );
+        assert_eq!(parse_number_part("42", "42").unwrap().to_f64(), 42.0);
+        assert_eq!(parse_number_part("-3.5", "-3.5").unwrap().to_f64(), -3.5);
+        assert_eq!(parse_number_part("0", "0").unwrap().to_f64(), 0.0);
     }
 
     #[test]
@@ -1163,16 +1154,22 @@ mod tests {
     #[test]
     fn test_parse_number_part_large_and_tiny() {
         assert_eq!(
-            parse_number_part("999999999999", "999999999999").unwrap(),
-            ParsedNumber::Float(999_999_999_999.0)
+            parse_number_part("999999999999", "999999999999")
+                .unwrap()
+                .to_f64(),
+            999_999_999_999.0
         );
         assert_eq!(
-            parse_number_part("0.000000001", "0.000000001").unwrap(),
-            ParsedNumber::Float(0.000_000_001)
+            parse_number_part("0.000000001", "0.000000001")
+                .unwrap()
+                .to_f64(),
+            0.000_000_001
         );
         assert_eq!(
-            parse_number_part("-99999999", "-99999999").unwrap(),
-            ParsedNumber::Float(-99_999_999.0)
+            parse_number_part("-99999999", "-99999999")
+                .unwrap()
+                .to_f64(),
+            -99_999_999.0
         );
     }
 }
