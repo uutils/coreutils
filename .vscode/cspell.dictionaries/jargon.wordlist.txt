@@ -135,6 +135,7 @@ ROOTFS
 reparse
 rposition
 seedable
+seekable
 semver
 semiprime
 semiprimes
