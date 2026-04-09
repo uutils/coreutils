@@ -975,7 +975,7 @@ jobs:
         lima ls
         lima bash -c "cd work && cargo test --features 'feat_selinux' --no-default-features"
     - name: Lint with SELinux
-      run: lima bash -c "cd work && cargo clippy --all-targets --features 'feat_selinux' --no-default-features -- -D warnings"
+      run: lima bash -c "cd work && cargo clippy --workspace --all-targets --features 'feat_selinux' --no-default-features -- -D warnings"
 
   test_safe_traversal:
     name: Safe Traversal Security Check
