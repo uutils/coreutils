@@ -47,6 +47,14 @@ fn format_and_write<W: std::io::Write>(
         None => input_line,
     };
 
+    // Return false if the input is in scientific notation
+    if line.contains(&101) && line[line.len() - 1] != 69 && line.contains(&69) && line[line.len() - 1] != 101 && line[0] >= 48 && line[0] <= 57 {
+        let err = NumfmtError::FormattingError(String::from_utf8_lossy(line).to_string());
+        let _ = writeln!(stderr(), "numfmt: invalid number: '{err}'");
+
+        return Ok(false);
+    }
+    
     // In non-abort modes we buffer the formatted output so that on error we
     // can emit the original line instead.
     let buffer_output = !matches!(options.invalid, InvalidModes::Abort);
