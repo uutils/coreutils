@@ -54,7 +54,7 @@ fn format_and_write<W: std::io::Write>(
 
         return Ok(false);
     }
-    
+
     // In non-abort modes we buffer the formatted output so that on error we
     // can emit the original line instead.
     let buffer_output = !matches!(options.invalid, InvalidModes::Abort);
