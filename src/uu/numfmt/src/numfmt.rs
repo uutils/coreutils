@@ -48,11 +48,16 @@ fn format_and_write<W: std::io::Write>(
     };
 
     // Return false if the input is in scientific notation
-    if line.contains(&101) && line[line.len() - 1] != 69 && line.contains(&69) && line[line.len() - 1] != 101 && line[0] >= 48 && line[0] <= 57 {
-        let err = NumfmtError::FormattingError(String::from_utf8_lossy(line).to_string());
-        let _ = writeln!(stderr(), "numfmt: invalid number: '{err}'");
-
-        return Ok(false);
+    if let Some(pos) = line.iter().position(|&b| b == b'E' || b == b'e') {
+        if pos < line.len() - 1 {
+            if line[pos + 1] >= 48 && line[pos + 1] <= 57 {
+                let errormsg = format!(
+                    "invalid suffix in input: '{}'",
+                    NumfmtError::FormattingError(String::from_utf8_lossy(line).to_string())
+                );
+                return Err(Box::new(NumfmtError::FormattingError(errormsg)));
+            }
+        }
     }
 
     // In non-abort modes we buffer the formatted output so that on error we
