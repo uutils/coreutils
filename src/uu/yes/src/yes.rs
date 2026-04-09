@@ -3,8 +3,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// cSpell:ignore strs
-
 use clap::{Arg, ArgAction, Command, builder::ValueParser};
 use std::ffi::OsString;
 use std::io::{self, Write};
