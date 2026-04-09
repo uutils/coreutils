@@ -367,6 +367,7 @@ uutils
 
 # * function names
 execfn
+fstatfs
 getcwd
 setpipe
 
