@@ -1220,6 +1220,12 @@ fn combo_to_flags(combo: &str) -> Vec<ArgOptions<'_>> {
                 (S::VDISCARD, "^O"),
             ];
         }
+        "tabs" => {
+            flags = vec!["tab0"];
+        }
+        "-tabs" => {
+            flags = vec!["tab3"];
+        }
         _ => unreachable!("invalid combination setting: must have been caught earlier"),
     }
     let mut flags = flags
