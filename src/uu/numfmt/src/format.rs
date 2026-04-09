@@ -370,15 +370,10 @@ fn remove_suffix(i: f64, s: Option<Suffix>, u: Unit) -> Result<f64> {
     }
 }
 
-fn try_scale_exact_int_without_suffix(
+fn try_scale_exact_int_with_from_unit(
     value: ParsedNumber,
     from_unit: usize,
-    had_no_suffix: bool,
 ) -> Option<ParsedNumber> {
-    if !had_no_suffix {
-        return None;
-    }
-
     let integer = value.exact_int()?;
     let from_unit = i128::try_from(from_unit).ok()?;
     let scaled = integer.checked_mul(from_unit)?;
@@ -402,8 +397,10 @@ fn transform_from(
     })?;
     let had_no_suffix = suffix.is_none();
 
-    if let Some(scaled) = try_scale_exact_int_without_suffix(i, opts.from_unit, had_no_suffix) {
-        return Ok(scaled);
+    if had_no_suffix {
+        if let Some(scaled) = try_scale_exact_int_with_from_unit(i, opts.from_unit) {
+            return Ok(scaled);
+        }
     }
 
     let i = i.to_f64() * (opts.from_unit as f64);
@@ -511,7 +508,7 @@ fn consider_suffix(
     }
 }
 
-fn try_format_exact_int_without_output_scaling(
+fn try_format_exact_int_without_suffix_scaling(
     value: ParsedNumber,
     opts: &TransformOptions,
     precision: usize,
@@ -543,7 +540,7 @@ fn transform_to(
     precision: usize,
     unit_separator: &str,
 ) -> Result<String> {
-    if let Some(result) = try_format_exact_int_without_output_scaling(s, opts, precision) {
+    if let Some(result) = try_format_exact_int_without_suffix_scaling(s, opts, precision) {
         return Ok(result);
     }
 
