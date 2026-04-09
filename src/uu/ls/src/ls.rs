@@ -15,7 +15,7 @@ use std::cell::RefCell;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::{
     cell::OnceCell,
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     cmp::Reverse,
     ffi::{OsStr, OsString},
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
@@ -825,7 +825,7 @@ impl<'a> PathData<'a> {
     pub fn to_entry_info(&self, config: &Config) -> EntryInfo {
         EntryInfo {
             path: self.p_buf.clone().into_owned(),
-            display_name: self.display_name.clone(),
+            display_name: self.display_name().to_os_string(),
             file_type: self.file_type().copied(),
             metadata: self.metadata().cloned(),
             security_context: self.security_context(config).to_string(),
@@ -1043,6 +1043,10 @@ impl<'a> TextOutput<'a> {
                 gid_cache: HashMap::default(),
                 recent_time_range: (SystemTime::now() - Duration::new(31_556_952 / 2, 0))
                     ..=SystemTime::now(),
+                stack: Vec::new(),
+                listed_ancestors: FxHashSet::default(),
+                initial_locs_len: 0,
+                display_buf: Vec::new(),
             },
             dired: DiredOutput::default(),
         }
@@ -1159,7 +1163,7 @@ pub fn list_with_output<O: LsOutput>(
     let mut files = Vec::<PathData>::new();
     let mut dirs = Vec::<PathData>::new();
     let initial_locs_len = locs.len();
-    let now = SystemTime::now();
+    let _now = SystemTime::now();
 
     for loc in locs {
         let path_data = PathData::new(loc.into(), None, None, config, true);
@@ -1197,7 +1201,7 @@ pub fn list_with_output<O: LsOutput>(
     output.write_entries(&files, config)?;
 
     for (pos, path_data) in dirs.iter().enumerate() {
-        let needs_blank_line = pos != 0 || !files.is_empty();
+        let _needs_blank_line = pos != 0 || !files.is_empty();
         // Do read_dir call here to match GNU semantics by printing
         // read_dir errors before directory headings, names and totals
         let read_dir = match fs::read_dir(path_data.path()) {
@@ -1243,16 +1247,16 @@ fn enter_directory<O: LsOutput>(
     let mut entries: Vec<PathData> = if config.files == Files::All {
         vec![
             PathData::new(
-                path_data.path().to_path_buf(),
+                path_data.path().to_path_buf().into(),
                 None,
-                Some(".".into()),
+                Some(OsStr::new(".").into()),
                 config,
                 false,
             ),
             PathData::new(
-                path_data.path().join(".."),
+                path_data.path().join("..").into(),
                 None,
-                Some("..".into()),
+                Some(OsStr::new("..").into()),
                 config,
                 false,
             ),
@@ -1274,7 +1278,7 @@ fn enter_directory<O: LsOutput>(
 
         if should_display(&dir_entry, config) {
             let entry_path_data =
-                PathData::new(dir_entry.path(), Some(dir_entry), None, config, false);
+                PathData::new(dir_entry.path().into(), Some(dir_entry), None, config, false);
             entries.push(entry_path_data);
         }
     }
@@ -1422,38 +1426,6 @@ fn is_hidden(file_path: &DirEntry) -> bool {
     }
 }
 
-fn should_display(entry: &DirEntry, config: &Config) -> bool {
-    // check if hidden
-    if config.files == Files::Normal && is_hidden(entry) {
-        return false;
-    }
-
-    // check if it is among ignore_patterns
-    let options = MatchOptions {
-        // setting require_literal_leading_dot to match behavior in GNU ls
-        require_literal_leading_dot: true,
-        require_literal_separator: false,
-        case_sensitive: true,
-    };
-
-    let file_name = entry.file_name();
-    // If the decoding fails, still match best we can
-    // FIXME: use OsStrings or Paths once we have a glob crate that supports it:
-    // https://github.com/rust-lang/glob/issues/23
-    // https://github.com/rust-lang/glob/issues/78
-    // https://github.com/BurntSushi/ripgrep/issues/1250
-
-    let file_name = match file_name.to_str() {
-        Some(s) => Cow::Borrowed(s),
-        None => file_name.to_string_lossy(),
-    };
-
-    !config
-        .ignore_patterns
-        .iter()
-        .any(|p| p.matches_with(&file_name, options))
-}
-
 #[allow(clippy::cognitive_complexity)]
 fn get_metadata_with_deref_opt(p_buf: &Path, dereference: bool) -> std::io::Result<Metadata> {
     if dereference {
@@ -1461,252 +1433,6 @@ fn get_metadata_with_deref_opt(p_buf: &Path, dereference: bool) -> std::io::Resu
     } else {
         p_buf.symlink_metadata()
     }
-}
-
-fn write_total(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout>) -> UResult<usize> {
-    let mut total_size = 0;
-    for item in items {
-        total_size += item
-            .metadata()
-            .as_ref()
-            .map_or(0, |md| get_block_size(md, config));
-    }
-    if config.dired {
-        dired::indent(out)?;
-    }
-    let total = translate!("ls-total", "size" => display_size(total_size, config));
-    out.write_all(total.as_bytes())?;
-    out.write_all(&[config.line_ending as u8])?;
-    Ok(total.len() + 1)
-}
-
-fn display_dir_entry_size(
-    entry: &PathData,
-    config: &Config,
-    state: &mut ListState,
-) -> (usize, usize, usize, usize, usize, usize) {
-    // TODO: Cache/memorize the display_* results so we don't have to recalculate them.
-    if let Some(md) = entry.metadata() {
-        let (size_len, major_len, minor_len) = match display_len_or_rdev(md, config) {
-            SizeOrDeviceId::Device(major, minor) => {
-                (major.len() + minor.len() + 2usize, major.len(), minor.len())
-            }
-            SizeOrDeviceId::Size(size) => (size.len(), 0usize, 0usize),
-        };
-        (
-            display_symlink_count(md).len(),
-            display_uname(md, config, state).len(),
-            display_group(md, config, state).len(),
-            size_len,
-            major_len,
-            minor_len,
-        )
-    } else {
-        (0, 0, 0, 0, 0, 0)
-    }
-}
-
-// A simple, performant, ExtendPad trait to add a string to a Vec<u8>, padding with spaces
-// on the left or right, without making additional copies, or using formatting functions.
-trait ExtendPad {
-    fn extend_pad_left(&mut self, string: &str, count: usize);
-    fn extend_pad_right(&mut self, string: &str, count: usize);
-}
-
-impl ExtendPad for Vec<u8> {
-    fn extend_pad_left(&mut self, string: &str, count: usize) {
-        if string.len() < count {
-            self.extend(iter::repeat_n(b' ', count - string.len()));
-        }
-        self.extend(string.as_bytes());
-    }
-
-    fn extend_pad_right(&mut self, string: &str, count: usize) {
-        self.extend(string.as_bytes());
-        if string.len() < count {
-            self.extend(iter::repeat_n(b' ', count - string.len()));
-        }
-    }
-}
-
-// TODO: Consider converting callers to use ExtendPad instead, as it avoids
-// additional copies.
-fn pad_left(string: &str, count: usize) -> String {
-    format!("{string:>count$}")
-}
-
-fn display_additional_leading_info(
-    item: &PathData,
-    padding: &PaddingCollection,
-    config: &Config,
-) -> UResult<String> {
-    let mut result = String::new();
-    #[cfg(unix)]
-    {
-        if config.inode {
-            let i = if let Some(md) = item.metadata() {
-                get_inode(md)
-            } else {
-                "?".to_owned()
-            };
-            write!(result, "{} ", pad_left(&i, padding.inode)).unwrap();
-        }
-    }
-
-    if config.alloc_size {
-        let s = if let Some(md) = item.metadata() {
-            display_size(get_block_size(md, config), config)
-        } else {
-            "?".to_owned()
-        };
-        // extra space is insert to align the sizes, as needed for all formats, except for the comma format.
-        if config.format == Format::Commas {
-            write!(result, "{s} ").unwrap();
-        } else {
-            write!(result, "{} ", pad_left(&s, padding.block_size)).unwrap();
-        }
-    }
-    Ok(result)
-}
-
-#[allow(clippy::cognitive_complexity)]
-fn display_items(
-    items: &[PathData],
-    config: &Config,
-    state: &mut ListState,
-    dired: &mut DiredOutput,
-) -> UResult<()> {
-    // `-Z`, `--context`:
-    // Display the SELinux security context or '?' if none is found. When used with the `-l`
-    // option, print the security context to the left of the size column.
-
-    let quoted = items.iter().any(|item| {
-        let name = locale_aware_escape_name(item.display_name(), config.quoting_style);
-        os_str_starts_with(&name, b"'")
-    });
-
-    if config.format == Format::Long {
-        let padding_collection = calculate_padding_collection(items, config, state);
-
-        for item in items {
-            #[cfg(unix)]
-            let should_display_leading_info = config.inode || config.alloc_size;
-            #[cfg(not(unix))]
-            let should_display_leading_info = config.alloc_size;
-
-            if should_display_leading_info {
-                let more_info = display_additional_leading_info(item, &padding_collection, config)?;
-
-                write!(state.out, "{more_info}")?;
-            }
-
-            display_item_long(item, &padding_collection, config, state, dired, quoted)?;
-        }
-    } else {
-        let mut longest_context_len = 1;
-        let prefix_context = if config.context {
-            for item in items {
-                let context_len = item.security_context(config).len();
-                longest_context_len = context_len.max(longest_context_len);
-            }
-            Some(longest_context_len)
-        } else {
-            None
-        };
-
-        let padding = calculate_padding_collection(items, config, state);
-
-        // we need to apply normal color to non filename output
-        if let Some(style_manager) = &mut state.style_manager {
-            write!(state.out, "{}", style_manager.apply_normal())?;
-        }
-
-        let mut names_vec = Vec::new();
-
-        #[cfg(unix)]
-        let should_display_leading_info = config.inode || config.alloc_size;
-        #[cfg(not(unix))]
-        let should_display_leading_info = config.alloc_size;
-
-        for i in items {
-            let more_info = if should_display_leading_info {
-                Some(display_additional_leading_info(i, &padding, config)?)
-            } else {
-                None
-            };
-            // it's okay to set current column to zero which is used to decide
-            // whether text will wrap or not, because when format is grid or
-            // column ls will try to place the item name in a new line if it
-            // wraps.
-            let cell = display_item_name(
-                i,
-                config,
-                prefix_context,
-                more_info,
-                state,
-                LazyCell::new(Box::new(|| 0)),
-            );
-
-            names_vec.push(cell);
-        }
-
-        let mut names = names_vec.into_iter();
-
-        match config.format {
-            Format::Columns => {
-                display_grid(
-                    names,
-                    config.width,
-                    Direction::TopToBottom,
-                    &mut state.out,
-                    quoted,
-                    config.tab_size,
-                )?;
-            }
-            Format::Across => {
-                display_grid(
-                    names,
-                    config.width,
-                    Direction::LeftToRight,
-                    &mut state.out,
-                    quoted,
-                    config.tab_size,
-                )?;
-            }
-            Format::Commas => {
-                let mut current_col = 0;
-                if let Some(name) = names.next() {
-                    write_os_str(&mut state.out, &name)?;
-                    current_col = ansi_width(&name.to_string_lossy()) as u16 + 2;
-                }
-                for name in names {
-                    let name_width = ansi_width(&name.to_string_lossy()) as u16;
-                    // If the width is 0 we print one single line
-                    if config.width != 0 && current_col + name_width + 1 > config.width {
-                        current_col = name_width + 2;
-                        writeln!(state.out, ",")?;
-                    } else {
-                        current_col += name_width + 2;
-                        write!(state.out, ", ")?;
-                    }
-                    write_os_str(&mut state.out, &name)?;
-                }
-                // Current col is never zero again if names have been printed.
-                // So we print a newline.
-                if current_col > 0 {
-                    write!(state.out, "{}", config.line_ending)?;
-                }
-            }
-            _ => {
-                for name in names {
-                    write_os_str(&mut state.out, &name)?;
-                    write!(state.out, "{}", config.line_ending)?;
-                }
-            }
-        }
-    }
-
-    Ok(())
 }
 
 #[allow(unused_variables)]
