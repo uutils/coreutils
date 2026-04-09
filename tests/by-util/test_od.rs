@@ -897,6 +897,7 @@ fn test_skip_bytes_prints_after_consuming_multiple_inputs() {
 
 #[cfg(target_os = "linux")]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/proc) not visible")]
 fn test_skip_bytes_proc_file_without_seeking() {
     let proc_path = Path::new("/proc/version");
     if !proc_path.exists() {
@@ -934,6 +935,10 @@ fn test_skip_bytes_error() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: stdin file position not preserved through wasmtime"
+)]
 fn test_read_bytes() {
     let scene = TestScenario::new(util_name!());
     let fixtures = &scene.fixtures;

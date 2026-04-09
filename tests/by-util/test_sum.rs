@@ -85,6 +85,7 @@ fn test_invalid_metadata() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_sum_non_utf8_paths() {
     let (at, mut ucmd) = at_and_ucmd!();
 

@@ -658,6 +658,7 @@ fn test_comm_eintr_handling() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_output_lossy_utf8() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -683,6 +684,7 @@ fn test_output_lossy_utf8() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_comm_anonymous_pipes() {
     use std::{io::Write, os::fd::AsRawFd, process};
     use uucore::pipes::pipe;
@@ -722,6 +724,7 @@ fn test_comm_anonymous_pipes() {
 
 #[test]
 #[cfg(all(target_os = "linux", not(target_env = "musl")))]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_read_error() {
     new_ucmd!()
         .arg("/proc/self/mem")

@@ -69,6 +69,7 @@ fn test_trim_null_chars() {
 #[test]
 #[cfg(feature = "sort")]
 #[cfg(not(target_os = "android"))]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_parallel() {
     use hex_literal::hex;
     use sha1::{Digest, Sha1};

@@ -1504,6 +1504,7 @@ fn check_complement_set2_too_big() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_truncate_non_utf8_set() {
     let stdin = b"\x01amp\xfe\xff";
     let set1 = OsStr::from_bytes(b"a\xfe\xffz"); // spell-checker:disable-line
@@ -1595,6 +1596,7 @@ fn test_non_digit_repeat() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_octal_escape_ambiguous_followed_by_non_utf8() {
     // This case does not trigger the panic
     let set1 = OsStr::from_bytes(b"\\501a");
@@ -1629,6 +1631,7 @@ fn test_failed_write_is_reported() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no pipe/signal support")]
 fn test_broken_pipe_no_error() {
     new_ucmd!()
         .args(&["e", "a"])

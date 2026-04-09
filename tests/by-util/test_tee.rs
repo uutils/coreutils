@@ -125,6 +125,7 @@ fn test_tee_multiple_append_flags() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_readonly() {
     let (at, mut ucmd) = at_and_ucmd!();
     let content_tee = "hello";
@@ -146,6 +147,7 @@ fn test_readonly() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no pipe/signal support")]
 fn test_tee_output_not_buffered() {
     // POSIX says: The tee utility shall not buffer output
 
@@ -191,7 +193,7 @@ fn test_tee_output_not_buffered() {
     handle.join().unwrap();
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(wasi_runner)))]
 mod linux_only {
     use uutests::util::{AtPath, CmdResult, UCommand};
 

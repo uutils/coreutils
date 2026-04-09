@@ -718,6 +718,7 @@ workspace = true
 unexpected_cfgs = { level = "warn", check-cfg = [
   'cfg(fuzzing)',
   'cfg(target_os, values("cygwin"))',
+  'cfg(wasi_runner)',
 ] }
 unused_qualifications = "warn"
 
