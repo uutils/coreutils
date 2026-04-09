@@ -7195,3 +7195,81 @@ fn test_ls_a_dotdot_no_error_on_wasi() {
         .stdout_contains("..")
         .no_stderr();
 }
+
+/// Verify that ls correctly detects encoding from locale environment variables.
+/// Non-ASCII filenames should be escaped in C/POSIX/non-UTF-8 locales
+/// and displayed as-is in UTF-8 locales.
+#[cfg(not(any(target_vendor = "apple", target_os = "windows", target_os = "openbsd")))]
+mod locale_encoding {
+    use uutests::util::TestScenario;
+    use uutests::util_name;
+
+    /// Create a file with a non-ASCII name and check ls output with the given locale.
+    /// If `expect_utf8` is true, assert the filename is shown as-is (UTF-8 locale).
+    /// Otherwise, assert the non-ASCII character is escaped (ASCII locale).
+    fn check_locale(locale: &str, expect_utf8: bool) {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        let filename = uucore::os_str_from_bytes("é".as_bytes())
+            .expect("should be valid Unicode");
+        at.touch(filename);
+
+        let result = scene
+            .ucmd()
+            .env("LC_ALL", locale)
+            .arg("--quoting-style=shell-escape")
+            .succeeds();
+
+        if expect_utf8 {
+            result.stdout_contains("é");
+        } else {
+            result.stdout_does_not_contain("é");
+        }
+    }
+
+    #[test]
+    fn test_ls_locale_c_escapes_non_ascii() {
+        check_locale("C", false);
+    }
+
+    #[test]
+    fn test_ls_locale_posix_escapes_non_ascii() {
+        check_locale("POSIX", false);
+    }
+
+    #[test]
+    fn test_ls_locale_utf8_suffix_shows_non_ascii() {
+        check_locale("en_US.UTF-8", true);
+    }
+
+    #[test]
+    fn test_ls_locale_utf8_lowercase_shows_non_ascii() {
+        check_locale("en_US.utf8", true);
+    }
+
+    #[test]
+    fn test_ls_locale_iso8859_escapes_non_ascii() {
+        check_locale("en_US.ISO-8859-1", false);
+    }
+
+    #[test]
+    fn test_ls_locale_no_encoding_suffix_escapes_non_ascii() {
+        check_locale("en_US", false);
+    }
+}
+
+/// On Windows, verify that ls can display non-ASCII filenames correctly
+/// when the system ANSI code page is set to UTF-8 (ACP 65001).
+#[cfg(target_os = "windows")]
+#[test]
+fn test_ls_windows_non_ascii_filename() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("文件1");
+
+    scene
+        .ucmd()
+        .succeeds()
+        .stdout_contains("文件1")
+        .no_stderr();
+}
