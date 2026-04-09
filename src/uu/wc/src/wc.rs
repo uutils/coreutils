@@ -52,31 +52,21 @@ fn try_get_stdin_size() -> Option<usize> {
     #[cfg(unix)]
     {
         use rustix::fd::AsFd;
-
         let stdin = io::stdin();
         let fd = stdin.as_fd();
-
         let Ok(stat) = rustix::fs::fstat(fd) else {
             return None;
         };
-
-        if rustix::fs::FileType::from_raw_mode(stat.st_mode) != rustix::fs::FileType::RegularFile {
-            return None;
+        let file_type = rustix::fs::FileType::from_raw_mode(stat.st_mode);
+        if file_type == rustix::fs::FileType::RegularFile && stat.st_size > 0 && stat.st_blocks > 0
+        {
+            return Some(stat.st_size as usize);
         }
-
-        let Ok(fs) = rustix::fs::fstatfs(fd) else {
-            return None;
-        };
-
-        if fs.f_type == rustix::fs::PROC_SUPER_MAGIC {
-            return None;
-        }
-
-        Some(stat.st_size as usize)
+        None
     }
     #[cfg(not(unix))]
     {
-        None // TODO: Implement Windows support
+        None
     }
 }
 struct Settings<'a> {
