@@ -510,6 +510,7 @@ fn consider_suffix(
         Ok((v, Some((suffixes[i - 1], with_i))))
     }
 }
+
 fn try_format_exact_int_without_output_scaling(
     value: ParsedNumber,
     opts: &TransformOptions,
