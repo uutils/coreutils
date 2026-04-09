@@ -779,7 +779,7 @@ fn test_traditional_offset_overflow_diagnosed() {
         .pipe_in(Vec::<u8>::new())
         .fails_with_code(1);
     if wasm {
-        cmd.stderr_contains(&format!("od: {long_octal}:"));
+        cmd.stderr_contains(format!("od: {long_octal}:"));
     } else {
         cmd.stderr_only(format!("od: {long_octal}: {erange}\n"));
     }
@@ -790,7 +790,7 @@ fn test_traditional_offset_overflow_diagnosed() {
         .pipe_in(Vec::<u8>::new())
         .fails_with_code(1);
     if wasm {
-        cmd.stderr_contains(&format!("od: {long_decimal}:"));
+        cmd.stderr_contains(format!("od: {long_decimal}:"));
     } else {
         cmd.stderr_only(format!("od: {long_decimal}: {erange}\n"));
     }
@@ -801,7 +801,7 @@ fn test_traditional_offset_overflow_diagnosed() {
         .pipe_in(Vec::<u8>::new())
         .fails_with_code(1);
     if wasm {
-        cmd.stderr_contains(&format!("od: {long_hex}:"));
+        cmd.stderr_contains(format!("od: {long_hex}:"));
     } else {
         cmd.stderr_only(format!("od: {long_hex}: {erange}\n"));
     }
