@@ -7210,8 +7210,7 @@ mod locale_encoding {
     fn check_locale(locale: &str, expect_utf8: bool) {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
-        let filename = uucore::os_str_from_bytes("é".as_bytes())
-            .expect("should be valid Unicode");
+        let filename = uucore::os_str_from_bytes("é".as_bytes()).expect("should be valid Unicode");
         at.touch(filename);
 
         let result = scene
@@ -7267,9 +7266,5 @@ fn test_ls_windows_non_ascii_filename() {
     let at = &scene.fixtures;
     at.touch("文件1");
 
-    scene
-        .ucmd()
-        .succeeds()
-        .stdout_contains("文件1")
-        .no_stderr();
+    scene.ucmd().succeeds().stdout_contains("文件1").no_stderr();
 }
