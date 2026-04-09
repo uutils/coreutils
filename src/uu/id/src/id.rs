@@ -361,9 +361,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("id")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("id"))
         .about(translate!("id-about"))
         .override_usage(format_usage(&translate!("id-usage")))
         .infer_long_args(true)
@@ -562,7 +562,8 @@ fn pline(possible_uid: Option<uid_t>) -> io::Result<()> {
     target_os = "linux",
     target_os = "android",
     target_os = "openbsd",
-    target_os = "cygwin"
+    target_os = "cygwin",
+    target_os = "netbsd"
 ))]
 fn pline(possible_uid: Option<uid_t>) -> io::Result<()> {
     let uid = possible_uid.unwrap_or_else(getuid);
@@ -586,7 +587,8 @@ fn pline(possible_uid: Option<uid_t>) -> io::Result<()> {
     target_os = "linux",
     target_os = "android",
     target_os = "openbsd",
-    target_os = "cygwin"
+    target_os = "cygwin",
+    target_os = "netbsd"
 ))]
 #[allow(clippy::unnecessary_wraps)]
 fn auditid() -> io::Result<()> {
@@ -597,7 +599,8 @@ fn auditid() -> io::Result<()> {
     target_os = "linux",
     target_os = "android",
     target_os = "openbsd",
-    target_os = "cygwin"
+    target_os = "cygwin",
+    target_os = "netbsd"
 )))]
 fn auditid() -> io::Result<()> {
     use std::mem::MaybeUninit;

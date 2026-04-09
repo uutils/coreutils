@@ -32,6 +32,11 @@ fn test_sync_fs() {
 }
 
 #[test]
+fn test_sync_fs_without_files_falls_back_to_full_sync() {
+    new_ucmd!().arg("--file-system").succeeds();
+}
+
+#[test]
 fn test_sync_data() {
     // Todo add a second arg
     let temporary_directory = tempdir().unwrap();

@@ -6,6 +6,42 @@
 
 //! Parser for sizes in SI or IEC units (multiples of 1000 or 1024 bytes).
 
+/// The first eleven powers of 1000: `1, 10^3, 10^6, ..., 10^30`.
+///
+/// Index `n` is the SI base for the `n`-th suffix (0 → no suffix, 1 → K/kB,
+/// 2 → M/MB, ...).
+pub const SI_BASES: [u128; 11] = [
+    1,
+    1_000,
+    1_000_000,
+    1_000_000_000,
+    1_000_000_000_000,
+    1_000_000_000_000_000,
+    1_000_000_000_000_000_000,
+    1_000_000_000_000_000_000_000,
+    1_000_000_000_000_000_000_000_000,
+    1_000_000_000_000_000_000_000_000_000,
+    1_000_000_000_000_000_000_000_000_000_000,
+];
+
+/// The first eleven powers of 1024: `1, 1024, 1024^2, ..., 1024^10`.
+///
+/// Index `n` is the IEC base for the `n`-th suffix (0 → no suffix, 1 → Ki,
+/// 2 → Mi, ...).
+pub const IEC_BASES: [u128; 11] = [
+    1,
+    1_024,
+    1_048_576,
+    1_073_741_824,
+    1_099_511_627_776,
+    1_125_899_906_842_624,
+    1_152_921_504_606_846_976,
+    1_180_591_620_717_411_303_424,
+    1_208_925_819_614_629_174_706_176,
+    1_237_940_039_285_380_274_899_124_224,
+    1_267_650_600_228_229_401_496_703_205_376,
+];
+
 use std::error::Error;
 use std::fmt;
 use std::num::{IntErrorKind, ParseIntError};
@@ -244,16 +280,16 @@ impl<'parser> Parser<'parser> {
             "YiB" | "yiB" | "Y" | "y" => (1024, 8),
             "RiB" | "riB" | "R" | "r" => (1024, 9),
             "QiB" | "qiB" | "Q" | "q" => (1024, 10),
-            "KB" | "kB" => (1000, 1),
-            "MB" | "mB" => (1000, 2),
-            "GB" | "gB" => (1000, 3),
-            "TB" | "tB" => (1000, 4),
-            "PB" | "pB" => (1000, 5),
-            "EB" | "eB" => (1000, 6),
-            "ZB" | "zB" => (1000, 7),
-            "YB" | "yB" => (1000, 8),
-            "RB" | "rB" => (1000, 9),
-            "QB" | "qB" => (1000, 10),
+            "KB" | "kB" | "KD" | "kD" => (1000, 1),
+            "MB" | "mB" | "MD" | "mD" => (1000, 2),
+            "GB" | "gB" | "GD" | "gD" => (1000, 3),
+            "TB" | "tB" | "TD" | "tD" => (1000, 4),
+            "PB" | "pB" | "PD" | "pD" => (1000, 5),
+            "EB" | "eB" | "ED" | "eD" => (1000, 6),
+            "ZB" | "zB" | "ZD" | "zD" => (1000, 7),
+            "YB" | "yB" | "YD" | "yD" => (1000, 8),
+            "RB" | "rB" | "RD" | "rD" => (1000, 9),
+            "QB" | "qB" | "QD" | "qD" => (1000, 10),
             _ if numeric_string.is_empty() => return Err(ParseSizeError::parse_failure(size)),
             _ => return Err(ParseSizeError::invalid_suffix(size)),
         };
@@ -371,6 +407,16 @@ impl<'parser> Parser<'parser> {
             _ => ParseSizeError::ParseFailure(original_size.to_string()),
         })
     }
+}
+
+pub fn allow_list_with_all_suffixes(units: &str) -> Vec<String> {
+    let mut allow_list = Vec::with_capacity(4 * units.len());
+    for unit in units.chars() {
+        for suffix in &["", "iB", "B", "D"] {
+            allow_list.push(format!("{unit}{suffix}"));
+        }
+    }
+    allow_list
 }
 
 /// Parse a size string into a number of bytes

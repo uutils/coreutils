@@ -65,19 +65,19 @@ include!(concat!(env!("OUT_DIR"), "/embedded_locales.rs"));
 
 // A struct to handle localization with optional English fallback
 struct Localizer {
-    primary_bundle: FluentBundle<FluentResource>,
-    fallback_bundle: Option<FluentBundle<FluentResource>>,
+    primary_bundle: FluentBundle<&'static FluentResource>,
+    fallback_bundle: Option<FluentBundle<&'static FluentResource>>,
 }
 
 impl Localizer {
-    fn new(primary_bundle: FluentBundle<FluentResource>) -> Self {
+    fn new(primary_bundle: FluentBundle<&'static FluentResource>) -> Self {
         Self {
             primary_bundle,
             fallback_bundle: None,
         }
     }
 
-    fn with_fallback(mut self, fallback_bundle: FluentBundle<FluentResource>) -> Self {
+    fn with_fallback(mut self, fallback_bundle: FluentBundle<&'static FluentResource>) -> Self {
         self.fallback_bundle = Some(fallback_bundle);
         self
     }
@@ -107,7 +107,10 @@ impl Localizer {
     }
 }
 
-// Global localizer stored in thread-local OnceLock
+// Cache localizer. FluentResource cannot be shared between threads while FluentBundle can be shared
+static UUCORE_FLUENT: OnceLock<FluentResource> = OnceLock::new();
+static CHECKSUM_FLUENT: OnceLock<FluentResource> = OnceLock::new();
+static UTIL_FLUENT: OnceLock<FluentResource> = OnceLock::new();
 thread_local! {
     static LOCALIZER: OnceLock<Localizer> = const { OnceLock::new() };
 }
@@ -136,8 +139,8 @@ fn create_bundle(
     locale: &LanguageIdentifier,
     locales_dir: &Path,
     util_name: &str,
-) -> Result<FluentBundle<FluentResource>, LocalizationError> {
-    let mut bundle = FluentBundle::new(vec![locale.clone()]);
+) -> Result<FluentBundle<&'static FluentResource>, LocalizationError> {
+    let mut bundle: FluentBundle<&'static FluentResource> = FluentBundle::new(vec![locale.clone()]);
 
     // Disable Unicode directional isolate characters
     bundle.set_use_isolating(false);
@@ -148,7 +151,8 @@ fn create_bundle(
             .and_then(|locale_path| fs::read_to_string(locale_path).ok())
             .and_then(|ftl| FluentResource::try_new(ftl).ok())
         {
-            bundle.add_resource_overriding(resource);
+            // use Box::leak to provide 'static lifetime for shared FluentBundle between threads
+            bundle.add_resource_overriding(Box::leak(Box::new(resource)));
         }
     };
 
@@ -193,10 +197,11 @@ fn init_localization(
         .expect("Default locale should always be valid");
 
     // Try to create a bundle that combines common and utility-specific strings
-    let english_bundle = create_bundle(&default_locale, locales_dir, util_name).or_else(|_| {
-        // Fallback to embedded utility-specific and common strings
-        create_english_bundle_from_embedded(&default_locale, util_name)
-    })?;
+    let english_bundle: FluentBundle<&'static FluentResource> =
+        create_bundle(&default_locale, locales_dir, util_name).or_else(|_| {
+            // Fallback to embedded utility-specific and common strings
+            create_english_bundle_from_embedded(&default_locale, util_name)
+        })?;
 
     let loc = if locale == &default_locale {
         // If requesting English, just use English as primary (no fallback needed)
@@ -220,8 +225,18 @@ fn init_localization(
 }
 
 /// Helper function to parse FluentResource from content string
-fn parse_fluent_resource(content: &str) -> Result<FluentResource, LocalizationError> {
-    FluentResource::try_new(content.to_string()).map_err(
+fn parse_fluent_resource(
+    content: &str,
+    cache: &'static OnceLock<FluentResource>,
+) -> Result<&'static FluentResource, LocalizationError> {
+    // global cache breaks unit tests
+    if cfg!(not(test)) {
+        if let Some(res) = cache.get() {
+            return Ok(res);
+        }
+    }
+
+    let resource = FluentResource::try_new(content.to_string()).map_err(
         |(_partial_resource, errs): (FluentResource, Vec<ParserError>)| {
             if let Some(first_err) = errs.into_iter().next() {
                 let snippet = first_err
@@ -238,14 +253,20 @@ fn parse_fluent_resource(content: &str) -> Result<FluentResource, LocalizationEr
                 LocalizationError::LocalesDirNotFound("Parse error without details".to_string())
             }
         },
-    )
+    )?;
+    // global cache breaks unit tests
+    if cfg!(not(test)) {
+        Ok(cache.get_or_init(|| resource))
+    } else {
+        Ok(Box::leak(Box::new(resource)))
+    }
 }
 
 /// Create a bundle from embedded English locale files with common uucore strings
 fn create_english_bundle_from_embedded(
     locale: &LanguageIdentifier,
     util_name: &str,
-) -> Result<FluentBundle<FluentResource>, LocalizationError> {
+) -> Result<FluentBundle<&'static FluentResource>, LocalizationError> {
     // Only support English from embedded files
     if *locale != "en-US" {
         return Err(LocalizationError::LocalesDirNotFound(
@@ -253,19 +274,19 @@ fn create_english_bundle_from_embedded(
         ));
     }
 
-    let mut bundle = FluentBundle::new(vec![locale.clone()]);
+    let mut bundle: FluentBundle<&'static FluentResource> = FluentBundle::new(vec![locale.clone()]);
     bundle.set_use_isolating(false);
 
     // First, try to load common uucore strings
     if let Some(uucore_content) = get_embedded_locale("uucore/en-US.ftl") {
-        let uucore_resource = parse_fluent_resource(uucore_content)?;
+        let uucore_resource = parse_fluent_resource(uucore_content, &UUCORE_FLUENT)?;
         bundle.add_resource_overriding(uucore_resource);
     }
 
     // Checksum algorithms need locale messages from checksum_common
     if util_name.ends_with("sum") {
         if let Some(uucore_content) = get_embedded_locale("checksum_common/en-US.ftl") {
-            let uucore_resource = parse_fluent_resource(uucore_content)?;
+            let uucore_resource = parse_fluent_resource(uucore_content, &CHECKSUM_FLUENT)?;
             bundle.add_resource_overriding(uucore_resource);
         }
     }
@@ -273,7 +294,7 @@ fn create_english_bundle_from_embedded(
     // Then, try to load utility-specific strings
     let locale_key = format!("{util_name}/en-US.ftl");
     if let Some(ftl_content) = get_embedded_locale(&locale_key) {
-        let resource = parse_fluent_resource(ftl_content)?;
+        let resource = parse_fluent_resource(ftl_content, &UTIL_FLUENT)?;
         bundle.add_resource_overriding(resource);
     }
 
@@ -283,6 +304,41 @@ fn create_english_bundle_from_embedded(
     } else {
         Err(LocalizationError::LocalesDirNotFound(format!(
             "No embedded locale found for {util_name} and no common strings found"
+        )))
+    }
+}
+
+/// Create a bundle from embedded locale files for any locale on WASI.
+/// Bypasses the global OnceLock cache (uses Box::leak) so it can be
+/// called for multiple locales in the same process.
+#[cfg(target_os = "wasi")]
+fn create_wasi_bundle_from_embedded(
+    locale: &LanguageIdentifier,
+    util_name: &str,
+) -> Result<FluentBundle<&'static FluentResource>, LocalizationError> {
+    let locale_str = locale.to_string();
+    let mut bundle: FluentBundle<&'static FluentResource> = FluentBundle::new(vec![locale.clone()]);
+    bundle.set_use_isolating(false);
+
+    let mut try_add = |key: &str| {
+        if let Some(content) = get_embedded_locale(key) {
+            if let Ok(resource) = FluentResource::try_new(content.to_string()) {
+                bundle.add_resource_overriding(Box::leak(Box::new(resource)));
+            }
+        }
+    };
+
+    try_add(&format!("uucore/{locale_str}.ftl"));
+    if util_name.ends_with("sum") {
+        try_add(&format!("checksum_common/{locale_str}.ftl"));
+    }
+    try_add(&format!("{util_name}/{locale_str}.ftl"));
+
+    if bundle.has_message("common-error") || bundle.has_message(&format!("{util_name}-about")) {
+        Ok(bundle)
+    } else {
+        Err(LocalizationError::LocalesDirNotFound(format!(
+            "No embedded locale found for {util_name}/{locale_str}"
         )))
     }
 }
@@ -425,11 +481,27 @@ pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
         // Load both utility-specific and common strings
         init_localization(&locale, &locales_dir, p)?;
     } else {
-        // No locales directory found, use embedded English with common strings directly
+        // No locales directory found, use embedded locales
         let default_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
             .expect("Default locale should always be valid");
-        let english_bundle = create_english_bundle_from_embedded(&default_locale, p)?;
-        let localizer = Localizer::new(english_bundle);
+
+        #[cfg(target_os = "wasi")]
+        let localizer = {
+            let english_bundle = create_wasi_bundle_from_embedded(&default_locale, p)?;
+            if locale == default_locale {
+                Localizer::new(english_bundle)
+            } else if let Ok(localized) = create_wasi_bundle_from_embedded(&locale, p) {
+                Localizer::new(localized).with_fallback(english_bundle)
+            } else {
+                Localizer::new(english_bundle)
+            }
+        };
+
+        #[cfg(not(target_os = "wasi"))]
+        let localizer = {
+            let english_bundle = create_english_bundle_from_embedded(&default_locale, p)?;
+            Localizer::new(english_bundle)
+        };
 
         LOCALIZER.with(|lock| {
             lock.set(localizer)
@@ -593,14 +665,15 @@ mod tests {
     fn create_test_bundle(
         locale: &LanguageIdentifier,
         test_locales_dir: &Path,
-    ) -> Result<FluentBundle<FluentResource>, LocalizationError> {
-        let mut bundle = FluentBundle::new(vec![locale.clone()]);
+    ) -> Result<FluentBundle<&'static FluentResource>, LocalizationError> {
+        let mut bundle: FluentBundle<&'static FluentResource> =
+            FluentBundle::new(vec![locale.clone()]);
         bundle.set_use_isolating(false);
 
         // Only load from the test directory - no common strings or utility-specific paths
         let locale_path = test_locales_dir.join(format!("{locale}.ftl"));
         if let Ok(ftl_content) = fs::read_to_string(&locale_path) {
-            let resource = parse_fluent_resource(&ftl_content)?;
+            let resource = parse_fluent_resource(&ftl_content, &UUCORE_FLUENT)?;
             bundle.add_resource_overriding(resource);
             return Ok(bundle);
         }
@@ -763,7 +836,7 @@ invalid-syntax = This is { $missing
     #[test]
     fn test_localizer_format_primary_bundle() {
         let temp_dir = create_test_locales_dir();
-        let en_bundle = create_test_bundle(
+        let en_bundle: FluentBundle<&'static FluentResource> = create_test_bundle(
             &LanguageIdentifier::from_str("en-US").unwrap(),
             temp_dir.path(),
         )

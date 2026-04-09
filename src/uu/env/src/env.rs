@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) chdir progname subcommand subcommands unsets setenv putenv spawnp SIGSEGV SIGBUS sigaction Sigmask sigprocmask
+// spell-checker:ignore (ToDO) chdir progname subcommand subcommands unsets setenv putenv spawnp SIGSEGV SIGBUS sigaction Sigmask sigprocmask elidable
 
 pub mod native_int_str;
 pub mod split_iterator;
@@ -12,7 +12,7 @@ pub mod string_parser;
 pub mod variable_parser;
 
 use clap::builder::ValueParser;
-use clap::{Arg, ArgAction, Command, crate_name};
+use clap::{Arg, ArgAction, Command};
 use ini::Ini;
 use native_int_str::{
     Convert, NCvt, NativeIntStr, NativeIntString, NativeStr, from_native_int_representation_owned,
@@ -168,10 +168,6 @@ fn parse_signal_opt(target: &mut SignalRequest, opt: &OsStr) -> UResult<()> {
     if opt.is_empty() {
         return Ok(());
     }
-    if opt == "__ALL__" {
-        target.apply_all = true;
-        return Ok(());
-    }
 
     for sig in opt
         .as_bytes()
@@ -193,7 +189,7 @@ fn parse_signal_opt(target: &mut SignalRequest, opt: &OsStr) -> UResult<()> {
 }
 
 #[cfg(unix)]
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct SignalRequest {
     apply_all: bool,
     signals: BTreeSet<usize>,
@@ -268,7 +264,11 @@ impl SignalActionLog {
 }
 
 #[cfg(unix)]
-fn build_signal_request(matches: &clap::ArgMatches, option: &str) -> UResult<SignalRequest> {
+fn build_signal_request(
+    matches: &clap::ArgMatches,
+    option: &str,
+    signal_apply_all: &BTreeSet<&str>,
+) -> UResult<SignalRequest> {
     let mut request = SignalRequest::default();
     let mut provided_values = 0usize;
 
@@ -276,7 +276,9 @@ fn build_signal_request(matches: &clap::ArgMatches, option: &str) -> UResult<Sig
     if let Some(iter) = matches.get_many::<OsString>(option) {
         for opt in iter {
             if opt.is_empty() {
-                explicit_empty = true;
+                if !signal_apply_all.contains(option) {
+                    explicit_empty = true;
+                }
                 continue;
             }
             provided_values += 1;
@@ -317,12 +319,8 @@ fn load_config_file(opts: &mut Options) -> UResult<()> {
             Ini::load_from_file(file)
         };
 
-        let conf = conf.map_err(|e| {
-            USimpleError::new(
-                1,
-                translate!("env-error-config-file", "file" => file.maybe_quote(), "error" => e),
-            )
-        })?;
+        let conf =
+            conf.map_err(|e| USimpleError::new(1, format!("{}: {e}", file.maybe_quote())))?;
 
         for (_, prop) in &conf {
             // ignore all INI section lines (treat them as comments)
@@ -338,9 +336,9 @@ fn load_config_file(opts: &mut Options) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(crate_name!())
+    Command::new("env")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("env"))
         .about(translate!("env-about"))
         .override_usage(format_usage(&translate!("env-usage")))
         .after_help(translate!("env-after-help"))
@@ -538,6 +536,13 @@ struct EnvAppData {
     had_string_argument: bool,
 }
 
+struct ParsedArguments {
+    original_args: Vec<OsString>,
+    matches: clap::ArgMatches,
+    #[cfg(unix)]
+    signal_apply_all: BTreeSet<&'static str>,
+}
+
 impl EnvAppData {
     fn make_error_no_such_file_or_dir(&self, prog: &OsStr) -> Box<dyn UError> {
         uucore::show_error!(
@@ -634,17 +639,20 @@ impl EnvAppData {
     fn parse_arguments(
         &mut self,
         original_args: impl uucore::Args,
-    ) -> Result<(Vec<OsString>, clap::ArgMatches), Box<dyn UError>> {
+    ) -> Result<ParsedArguments, Box<dyn UError>> {
         let original_args: Vec<OsString> = original_args.collect();
-        let mut args = self.process_all_string_arguments(&original_args)?;
+        let args = self.process_all_string_arguments(&original_args)?;
+        #[cfg(unix)]
+        let mut signal_apply_all = BTreeSet::new();
 
-        for arg in &mut args {
+        #[cfg(unix)]
+        for arg in &args {
             if arg == "--ignore-signal" {
-                *arg = OsString::from("--ignore-signal=__ALL__");
+                signal_apply_all.insert(options::IGNORE_SIGNAL);
             } else if arg == "--default-signal" {
-                *arg = OsString::from("--default-signal=__ALL__");
+                signal_apply_all.insert(options::DEFAULT_SIGNAL);
             } else if arg == "--block-signal" {
-                *arg = OsString::from("--block-signal=__ALL__");
+                signal_apply_all.insert(options::BLOCK_SIGNAL);
             }
         }
 
@@ -657,12 +665,11 @@ impl EnvAppData {
                     | clap::error::ErrorKind::DisplayVersion => return Err(e.into()),
                     _ => {
                         // Use ErrorFormatter directly to handle error with shebang message callback
-                        let formatter =
-                            uucore::clap_localization::ErrorFormatter::new(uucore::util_name());
+                        let formatter = uucore::clap_localization::ErrorFormatter::new("env");
                         formatter.print_error_and_exit_with_callback(&e, 125, || {
-                            eprintln!(
-                                "{}: {}",
-                                uucore::util_name(),
+                            let _ = writeln!(
+                                stderr(),
+                                "env: {}",
                                 translate!("env-error-use-s-shebang")
                             );
                         });
@@ -670,11 +677,21 @@ impl EnvAppData {
                 }
             }
         };
-        Ok((original_args, matches))
+        Ok(ParsedArguments {
+            original_args,
+            matches,
+            #[cfg(unix)]
+            signal_apply_all,
+        })
     }
 
     fn run_env(&mut self, original_args: impl uucore::Args) -> UResult<()> {
-        let (original_args, matches) = self.parse_arguments(original_args)?;
+        let ParsedArguments {
+            original_args,
+            matches,
+            #[cfg(unix)]
+            signal_apply_all,
+        } = self.parse_arguments(original_args)?;
 
         self.do_debug_printing = self.do_debug_printing || (0 != matches.get_count("debug"));
         self.do_input_debug_printing = self
@@ -687,7 +704,11 @@ impl EnvAppData {
             }
         }
 
-        let mut opts = make_options(&matches)?;
+        let mut opts = make_options(
+            &matches,
+            #[cfg(unix)]
+            &signal_apply_all,
+        )?;
 
         apply_change_directory(&opts)?;
 
@@ -889,7 +910,11 @@ fn apply_removal_of_all_env_vars(opts: &Options<'_>) {
     }
 }
 
-fn make_options(matches: &clap::ArgMatches) -> UResult<Options<'_>> {
+#[cfg_attr(not(unix), allow(clippy::elidable_lifetime_names))]
+fn make_options<'a>(
+    matches: &'a clap::ArgMatches,
+    #[cfg(unix)] signal_apply_all: &BTreeSet<&'static str>,
+) -> UResult<Options<'a>> {
     let ignore_env = matches.get_flag("ignore-environment");
     let line_ending = LineEnding::from_zero_flag(matches.get_flag("null"));
     let running_directory = matches
@@ -908,11 +933,11 @@ fn make_options(matches: &clap::ArgMatches) -> UResult<Options<'_>> {
         .map(OsString::as_os_str);
 
     #[cfg(unix)]
-    let ignore_signal = build_signal_request(matches, options::IGNORE_SIGNAL)?;
+    let ignore_signal = build_signal_request(matches, options::IGNORE_SIGNAL, signal_apply_all)?;
     #[cfg(unix)]
-    let default_signal = build_signal_request(matches, options::DEFAULT_SIGNAL)?;
+    let default_signal = build_signal_request(matches, options::DEFAULT_SIGNAL, signal_apply_all)?;
     #[cfg(unix)]
-    let block_signal = build_signal_request(matches, options::BLOCK_SIGNAL)?;
+    let block_signal = build_signal_request(matches, options::BLOCK_SIGNAL, signal_apply_all)?;
     #[cfg(unix)]
     let list_signal_handling = matches.get_flag(options::LIST_SIGNAL_HANDLING);
 

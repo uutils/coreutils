@@ -136,8 +136,8 @@ pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
 #[cfg(unix)]
 #[cfg(not(target_os = "openbsd"))]
 pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
+    use crate::utmpx::BOOT_TIME;
     use crate::utmpx::Utmpx;
-    use libc::BOOT_TIME;
     use std::fs::File;
     use std::io::Read;
 
@@ -253,6 +253,7 @@ impl FormattedUptime {
 ///
 /// Returns a UResult with the uptime in seconds if successful, otherwise an UptimeError.
 #[cfg(windows)]
+#[allow(clippy::unnecessary_wraps, reason = "needed on some platforms")]
 pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
     use windows_sys::Win32::System::SystemInformation::GetTickCount;
     // SAFETY: always return u32
@@ -298,8 +299,8 @@ pub fn get_formatted_uptime(
 #[cfg(not(target_os = "openbsd"))]
 // see: https://gitlab.com/procps-ng/procps/-/blob/4740a0efa79cade867cfc7b32955fe0f75bf5173/library/uptime.c#L63-L115
 pub fn get_nusers() -> usize {
+    use crate::utmpx::USER_PROCESS;
     use crate::utmpx::Utmpx;
-    use libc::USER_PROCESS;
 
     let mut num_user = 0;
     Utmpx::iter_all_records().for_each(|ut| {
@@ -345,7 +346,10 @@ pub fn get_nusers(file: &str) -> usize {
 #[cfg(target_os = "windows")]
 pub fn get_nusers() -> usize {
     use std::ptr;
-    use windows_sys::Win32::System::RemoteDesktop::*;
+    use windows_sys::Win32::System::RemoteDesktop::{
+        WTS_CURRENT_SERVER_HANDLE, WTSEnumerateSessionsW, WTSFreeMemory,
+        WTSQuerySessionInformationW,
+    };
 
     let mut num_user = 0;
 
@@ -358,8 +362,8 @@ pub fn get_nusers() -> usize {
             WTS_CURRENT_SERVER_HANDLE,
             0,
             1,
-            &mut session_info_ptr,
-            &mut session_count,
+            &raw mut session_info_ptr,
+            &raw mut session_count,
         );
         if result == 0 {
             return 0;
@@ -375,8 +379,8 @@ pub fn get_nusers() -> usize {
                 WTS_CURRENT_SERVER_HANDLE,
                 session.SessionId,
                 5,
-                &mut buffer,
-                &mut bytes_returned,
+                &raw mut buffer,
+                &raw mut bytes_returned,
             );
             if result == 0 || buffer.is_null() {
                 continue;
@@ -387,10 +391,10 @@ pub fn get_nusers() -> usize {
                 num_user += 1;
             }
 
-            WTSFreeMemory(buffer as _);
+            WTSFreeMemory(buffer.cast());
         }
 
-        WTSFreeMemory(session_info_ptr as _);
+        WTSFreeMemory(session_info_ptr.cast());
     }
 
     num_user

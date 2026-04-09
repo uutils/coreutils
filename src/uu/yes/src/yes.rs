@@ -9,7 +9,7 @@ use clap::{Arg, ArgAction, Command, builder::ValueParser};
 use std::error::Error;
 use std::ffi::OsString;
 use std::io::{self, Write};
-use uucore::error::{UResult, USimpleError};
+use uucore::error::{UResult, USimpleError, strip_errno};
 use uucore::format_usage;
 use uucore::translate;
 
@@ -33,15 +33,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Err(err) if err.kind() == io::ErrorKind::BrokenPipe => Ok(()),
         Err(err) => Err(USimpleError::new(
             1,
-            translate!("yes-error-standard-output", "error" => err),
+            translate!("yes-error-standard-output", "error" => strip_errno(&err)),
         )),
     }
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("yes")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("yes"))
         .about(translate!("yes-about"))
         .override_usage(format_usage(&translate!("yes-usage")))
         .arg(
@@ -92,14 +92,9 @@ fn args_into_buffer<'a>(
 /// Assumes buf holds a single output line forged from the command line arguments, copies it
 /// repeatedly until the buffer holds as many copies as it can under [`BUF_SIZE`].
 fn prepare_buffer(buf: &mut Vec<u8>) {
-    if buf.len() * 2 > BUF_SIZE {
-        return;
-    }
-
-    assert!(!buf.is_empty());
-
     let line_len = buf.len();
-    let target_size = line_len * (BUF_SIZE / line_len);
+    debug_assert!(line_len > 0, "buffer is not empty since we have newline");
+    let target_size = line_len * (BUF_SIZE / line_len); // 0 if line_len is already large enough
 
     while buf.len() < target_size {
         let to_copy = std::cmp::min(target_size - buf.len(), buf.len());

@@ -5,7 +5,7 @@ name: make
 # spell-checker:ignore (jargon) deps softprops toolchain
 # spell-checker:ignore (people) dawidd
 # spell-checker:ignore (shell/tools) nextest sccache zstd
-# spell-checker:ignore (misc) bindir busytest defconfig DESTDIR manpages multisize runtest Swatinem testsuite toybox uutils
+# spell-checker:ignore (misc) bindir busytest defconfig DESTDIR manpages multisize runtest testsuite toybox uutils
 
 env:
   PROJECT_NAME: coreutils
@@ -85,7 +85,7 @@ jobs:
         RUST_BACKTRACE: "1"
     - name: Upload test results to Codecov
       if: ${{ !cancelled() }}
-      uses: codecov/codecov-action@v5
+      uses: codecov/codecov-action@v6
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         report_type: test_results
@@ -201,14 +201,14 @@ jobs:
               --arg multisize "$SIZE_MULTI" \
               '{($date): { sha: $sha, size: $size, multisize: $multisize, }}' > size-result.json
     - name: Download the previous individual size result
-      uses: dawidd6/action-download-artifact@v18
+      uses: dawidd6/action-download-artifact@v20
       with:
         workflow: make.yml
         name: individual-size-result
         repo: uutils/coreutils
         path: dl
     - name: Download the previous size result
-      uses: dawidd6/action-download-artifact@v18
+      uses: dawidd6/action-download-artifact@v20
       with:
         workflow: make.yml
         name: size-result
@@ -265,6 +265,40 @@ jobs:
         # feature: feat_external_libstdbuf"
         # 2. the makefile doesn't try to install libstdbuf even though stdbuf is skipped
         DESTDIR=/tmp/ make SKIP_UTILS="stdbuf" install
+
+  # keep this job minimal to avoid have many duplicated build with CICD
+  build_makefile-other:
+    name: Build/Makefile
+    runs-on: ${{ matrix.job.os }}
+    env:
+      CARGO_INCREMENTAL: 0
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: windows-latest , features: feat_os_windows }
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        persist-credentials: false
+    - uses: Swatinem/rust-cache@v2
+    - name: Run sccache-cache
+      id: sccache-setup
+      uses: mozilla-actions/sccache-action@v0.0.9
+      continue-on-error: true
+    - name: Export sccache
+      if: steps.sccache-setup.outcome == 'success'
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+    - name: "`make build`"
+      shell: bash
+      run: |
+        set -x
+        # Check that we exclude unix programs to avoid build failure
+        make PREFIX=/tmp/usr MULTICALL=y COMPLETIONS=n MANPAGES=n LOCALES=n \
+         SKIP_UTILS="arch b2sum base32 base64 basename basenc cat cksum comm cp csplit cut date dd df dir dircolors dirname du echo env expand expr factor false fmt fold head hostname join link ln ls md5sum mkdir mktemp more mv nl nproc numfmt od paste pr printenv printf ptx pwd readlink realpath rm rmdir seq sha1sum sha224sum sha256sum sha384sum sha512sum shred shuf sleep sort split sum sync tac tail tee test touch tr truncate tsort uname unexpand uniq unlink vdir wc whoami yes"
+        target/debug/coreutils.exe true
 
   test_busybox:
     name: Tests/BusyBox test suite

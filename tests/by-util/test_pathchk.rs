@@ -4,9 +4,11 @@
 // file that was distributed with this source code.
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
+#[cfg(unix)]
 use uutests::new_ucmd;
 
 #[test]
+#[cfg(unix)]
 fn test_no_args() {
     new_ucmd!()
         .fails()
@@ -15,11 +17,13 @@ fn test_no_args() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
+#[cfg(unix)]
 fn test_default_mode() {
     // accept some reasonable default
     new_ucmd!().args(&["dir/file"]).succeeds().no_stdout();
@@ -55,6 +59,7 @@ fn test_default_mode() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_posix_mode() {
     // accept some reasonable default
     new_ucmd!().args(&["-p", "dir/file"]).succeeds().no_stdout();
@@ -79,6 +84,7 @@ fn test_posix_mode() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_posix_special() {
     // accept some reasonable default
     new_ucmd!().args(&["-P", "dir/file"]).succeeds().no_stdout();
@@ -118,6 +124,7 @@ fn test_posix_special() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_posix_all() {
     // accept some reasonable default
     new_ucmd!()
