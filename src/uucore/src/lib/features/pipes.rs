@@ -62,6 +62,16 @@ pub fn splice_exact(source: &impl AsFd, target: &impl AsFd, len: usize) -> std::
     Ok(())
 }
 
+/// check that source is FUSE
+/// we fallback to read() at FUSE <https://github.com/uutils/coreutils/issues/9609>
+#[inline]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn might_fuse(source: &impl AsFd) -> bool {
+    rustix::fs::fstatfs(source)
+        .map(|stats| stats.f_type == 0x6573_5546) // FUSE magic number, too many platform specific clippy warning with const
+        .unwrap_or(true)
+}
+
 /// Return verified /dev/null
 ///
 /// `splice` to /dev/null is faster than `read` when we skip or count the non-seekable input
