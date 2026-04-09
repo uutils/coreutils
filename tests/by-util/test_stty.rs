@@ -948,6 +948,23 @@ fn test_combo_crt() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_combo_tabs() {
+    // Test tabs combination setting - tabs is an alias for tab0, -tabs for tab3
+    new_ucmd!()
+        .terminal_simulation(true)
+        .args(&["tabs"])
+        .succeeds()
+        .no_stderr();
+
+    new_ucmd!()
+        .terminal_simulation(true)
+        .args(&["-tabs"])
+        .succeeds()
+        .no_stderr();
+}
+
+#[test]
 #[cfg(unix)]
 #[ignore = "Fails because cargo test does not run in a tty"]
 fn test_multiple_settings() {
