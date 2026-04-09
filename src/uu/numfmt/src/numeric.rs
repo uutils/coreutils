@@ -1,5 +1,11 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+
+// spell-checker:ignore powf seps
+
 // This file is written to solve #11654
-// This file is related to all code changes for GitHub Issue #11654.
 // This mod is to preserve numeric precision for large integers.
 // GNU numfmt has a better precision on floats due to 'long double'.
 
