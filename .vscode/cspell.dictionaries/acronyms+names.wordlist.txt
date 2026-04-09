@@ -74,3 +74,4 @@ Yargs
 
 # Product
 codspeed
+wasmtime

@@ -158,6 +158,7 @@ SIGTTOU
 sigttou
 sigusr
 strcasecmp
+strcoll
 subcommand
 subexpression
 submodule

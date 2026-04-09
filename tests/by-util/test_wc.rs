@@ -812,9 +812,7 @@ fn files0_from_dir() {
     #[cfg(not(windows))]
     const DOT_ERR: &str = dir_err!(".");
 
-    let cmd = new_ucmd!()
-        .args(&["--files0-from=dir with spaces"])
-        .fails();
+    let cmd = new_ucmd!().args(&["--files0-from=dir with spaces"]).fails();
     if wasm {
         cmd.stderr_contains("wc: 'dir with spaces': read error:");
     } else {

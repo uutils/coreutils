@@ -464,9 +464,7 @@ fn test_sorted() {
         cmd.failure()
             .code_is(1)
             .stdout_is("1\n\t\t3\n\t2\n")
-            .stderr_is(
-                "comm: file 2 is not in sorted order\ncomm: input is not in sorted order\n",
-            );
+            .stderr_is("comm: file 2 is not in sorted order\ncomm: input is not in sorted order\n");
     }
 }
 

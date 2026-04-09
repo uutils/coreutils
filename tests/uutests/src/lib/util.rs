@@ -1846,7 +1846,11 @@ impl UCommand {
         // apply to the coreutils binary under test, not to helper commands like
         // sh or seq that should run natively on the host.
         let wasm_runner = env::var("UUTESTS_WASM_RUNNER").ok().filter(|_| {
-            self.bin_path.as_deref() == env::var("UUTESTS_BINARY_PATH").ok().map(PathBuf::from).as_deref()
+            self.bin_path.as_deref()
+                == env::var("UUTESTS_BINARY_PATH")
+                    .ok()
+                    .map(PathBuf::from)
+                    .as_deref()
         });
 
         // Collect environment variables for the command.
