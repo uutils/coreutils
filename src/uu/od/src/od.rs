@@ -659,7 +659,7 @@ fn extract_strings_from_input(
                         string_start_offset = current_offset;
                         offset_preloaded = true;
                     } else {
-                        // Any other non-printable (like \n) resets the prelod logic, representig the GNU bug
+                        // Any other non-printable (like \n) resets the preload logic, representing the GNU bug
                         offset_preloaded = false;
                     }
 
