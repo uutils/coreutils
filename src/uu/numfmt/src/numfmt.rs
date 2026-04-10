@@ -50,7 +50,7 @@ fn format_and_write<W: std::io::Write>(
     // Return false if the input is in scientific notation
     if let Some(pos) = line.iter().position(|&b| b == b'E' || b == b'e') {
         if pos < line.len() - 1 {
-            if line[pos + 1] >= 48 && line[pos + 1] <= 57 {
+            if line[pos + 1].is_ascii_digit() {
                 let err = format!(
                     "invalid suffix in input: '{}'",
                     NumfmtError::FormattingError(String::from_utf8_lossy(line).to_string())
