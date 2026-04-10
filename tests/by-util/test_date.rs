@@ -1950,7 +1950,6 @@ fn test_date_strftime_n_width_and_flags() {
 }
 
 #[test]
-#[ignore = "https://github.com/uutils/coreutils/issues/11657 — GNU date treats composite strftime specifiers (%D, %F, %T, ...) as atomic; flags like `-` should not propagate to sub-fields."]
 fn test_date_strftime_flag_on_composite() {
     // GNU `%-D` keeps `06/15/24` (flag ignored on composite).
     // uutils applies `-` to inner `%m`, producing `6/15/24`.
@@ -1962,6 +1961,40 @@ fn test_date_strftime_flag_on_composite() {
         .arg("+%-D")
         .succeeds()
         .stdout_is("06/15/24\n");
+}
+
+#[test]
+fn test_date_strftime_composite_modifiers_are_atomic() {
+    let test_cases = [
+        ("+%-D", "06/15/24\n"),
+        ("+%-F", "2024-06-15\n"),
+        ("+%-T", "03:04:05\n"),
+        ("+%-r", "03:04:05 AM\n"),
+        ("+%-R", "03:04\n"),
+        ("+%-c", "Sat Jun 15 03:04:05 2024\n"),
+        ("+%-x", "06/15/24\n"),
+        ("+%-X", "03:04:05\n"),
+        ("+%_D", "06/15/24\n"),
+        ("+%10D", "  06/15/24\n"),
+        ("+%010D", "0006/15/24\n"),
+        ("+%-10D", "06/15/24\n"),
+        ("+%10T", "  03:04:05\n"),
+        ("+%10R", "     03:04\n"),
+        ("+%10x", "  06/15/24\n"),
+        ("+%10X", "  03:04:05\n"),
+        ("+%+10D", "0006/15/24\n"),
+    ];
+
+    for (format, expected) in test_cases {
+        new_ucmd!()
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg("2024-06-15 03:04:05")
+            .arg(format)
+            .succeeds()
+            .stdout_is(expected);
+    }
 }
 
 #[test]
