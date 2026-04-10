@@ -12,6 +12,7 @@ mod hardlink;
 use clap::builder::ValueParser;
 use clap::error::ErrorKind;
 use clap::{Arg, ArgAction, ArgMatches, Command};
+use filetime::FileTime;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
@@ -1153,12 +1154,16 @@ fn copy_file_with_hardlinks_helper(
         make_fifo(to)?;
     } else {
         // Copy a regular file.
+        let source_metadata = fs::symlink_metadata(from)?;
         fs::copy(from, to)?;
         // Copy xattrs, ignoring ENOTSUP errors (filesystem doesn't support xattrs)
         #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
         {
             let _ = copy_xattrs_if_supported(from, to);
         }
+        // Preserve mtime/atime from the source — `fs::copy` resets them
+        // to "now", and we'll unlink the source shortly.
+        preserve_times(to, &source_metadata);
     }
 
     Ok(())
@@ -1198,6 +1203,11 @@ fn rename_file_fallback(
         }
     }
 
+    // Capture source timestamps before the copy so we can restore them on
+    // the destination — `fs::copy` does not preserve mtime/atime, and once
+    // we delete the source the original times are lost.
+    let source_metadata = fs::symlink_metadata(from)?;
+
     // Regular file copy
     fs::copy(from, to)
         .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
@@ -1208,9 +1218,38 @@ fn rename_file_fallback(
         let _ = copy_xattrs_if_supported(from, to);
     }
 
+    // Restore the source mtime/atime onto the new file. If the destination
+    // happens to be a symlink, this is a no-op (we already know `to` was
+    // unlinked above for symlinks), so we don't need the symlink variant.
+    preserve_times(to, &source_metadata);
+
     fs::remove_file(from)
         .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
     Ok(())
+}
+
+/// Copy mtime and atime from `source_metadata` onto `dest`.
+///
+/// `mv` does not document timestamp preservation, but the GNU-compatible
+/// behavior — and the user expectation — is that moving a file across
+/// filesystems should keep its modification and access times. The cross-fs
+/// fallback in `mv` falls back to `fs::copy` + `unlink`, and `fs::copy`
+/// resets the destination's timestamps to "now", so without this restore
+/// the move silently rewrites mtime.
+///
+/// Time-restore failures are logged via the standard error path through
+/// `show!`, but they do not abort the move — the data has already been
+/// copied successfully, and a stricter behavior would surprise users on
+/// filesystems that don't support precise timestamps.
+fn preserve_times(dest: &Path, source_metadata: &fs::Metadata) {
+    let atime = FileTime::from_last_access_time(source_metadata);
+    let mtime = FileTime::from_last_modification_time(source_metadata);
+    if let Err(e) = filetime::set_file_times(dest, atime, mtime) {
+        show!(USimpleError::new(
+            0,
+            translate!("mv-error-preserve-times", "path" => dest.quote(), "err" => e),
+        ));
+    }
 }
 
 /// Copy xattrs from source to destination, ignoring ENOTSUP/EOPNOTSUPP errors.

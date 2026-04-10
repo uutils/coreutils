@@ -2472,6 +2472,93 @@ mod inter_partition_copying {
         let moved_fifo = other_fs_tempdir.path().join("dir/fifo");
         assert!(moved_fifo.symlink_metadata().unwrap().file_type().is_fifo());
     }
+
+    // Regression test for issue #11738: moving a file across filesystems
+    // should preserve the source's mtime/atime, not reset them to "now".
+    // The cross-fs path falls back to fs::copy + unlink, and fs::copy
+    // does not preserve timestamps, so without an explicit restore the
+    // new file ends up with the move's wall-clock time.
+    #[test]
+    pub(crate) fn test_mv_preserves_timestamps_across_filesystems() {
+        use filetime::FileTime;
+
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        // Create a source file in the current partition with a known
+        // mtime/atime well in the past.
+        at.write("src", "src contents");
+        let past = FileTime::from_unix_time(1_600_000_000, 0);
+        filetime::set_file_times(at.plus("src"), past, past)
+            .expect("Unable to set source mtime/atime");
+
+        // Move it to /dev/shm (a different filesystem) to force the
+        // cross-fs fallback.
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+
+        scene
+            .ucmd()
+            .arg("src")
+            .arg(other_fs_tempdir.path().to_str().unwrap())
+            .succeeds()
+            .no_output();
+
+        // Source must be gone, destination must exist with the original
+        // contents and — critically — the original mtime/atime.
+        assert!(!at.file_exists("src"));
+
+        let moved = other_fs_tempdir.path().join("src");
+        let metadata = fs::metadata(&moved).expect("Unable to stat moved file");
+        let mtime = FileTime::from_last_modification_time(&metadata);
+        let atime = FileTime::from_last_access_time(&metadata);
+
+        assert_eq!(
+            mtime, past,
+            "mv should preserve mtime across filesystems (got {mtime:?}, expected {past:?})",
+        );
+        assert_eq!(
+            atime, past,
+            "mv should preserve atime across filesystems (got {atime:?}, expected {past:?})",
+        );
+    }
+
+    // Same as above, but for the directory case which goes through a
+    // different code path (`copy_file_with_hardlinks_helper`).
+    #[test]
+    pub(crate) fn test_mv_preserves_timestamps_across_filesystems_dir() {
+        use filetime::FileTime;
+
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        at.mkdir("dir");
+        at.write("dir/file", "contents");
+        let past = FileTime::from_unix_time(1_600_000_000, 0);
+        filetime::set_file_times(at.plus("dir/file"), past, past)
+            .expect("Unable to set source mtime/atime");
+
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+
+        scene
+            .ucmd()
+            .arg("dir")
+            .arg(other_fs_tempdir.path().to_str().unwrap())
+            .succeeds()
+            .no_output();
+
+        assert!(!at.dir_exists("dir"));
+
+        let moved_file = other_fs_tempdir.path().join("dir/file");
+        let metadata = fs::metadata(&moved_file).expect("Unable to stat moved file");
+        let mtime = FileTime::from_last_modification_time(&metadata);
+
+        assert_eq!(
+            mtime, past,
+            "mv -r should preserve mtime across filesystems (got {mtime:?}, expected {past:?})",
+        );
+    }
 }
 
 #[test]
