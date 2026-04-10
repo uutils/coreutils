@@ -1982,7 +1982,6 @@ fn test_date_strftime_composite_modifiers_are_atomic() {
         ("+%10R", "     03:04\n"),
         ("+%10x", "  06/15/24\n"),
         ("+%10X", "  03:04:05\n"),
-        ("+%+10D", "0006/15/24\n"),
     ];
 
     for (format, expected) in test_cases {
@@ -1995,6 +1994,20 @@ fn test_date_strftime_composite_modifiers_are_atomic() {
             .succeeds()
             .stdout_is(expected);
     }
+}
+
+#[test]
+fn test_date_strftime_plus_width_on_composite() {
+    // GNU applies %+10D to the full composite output with zero padding,
+    // and does not inject a leading sign into the composite string.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2024-06-15 03:04:05")
+        .arg("+%+10D")
+        .succeeds()
+        .stdout_is("0006/15/24\n");
 }
 
 #[test]
