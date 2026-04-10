@@ -49,6 +49,19 @@ fn format_and_write<W: std::io::Write>(
         None => input_line,
     };
 
+    // Return false if the input is in scientific notation
+    if let Some(pos) = line.iter().position(|&b| b == b'E' || b == b'e') {
+        if pos < line.len() - 1 {
+            if line[pos + 1].is_ascii_digit() {
+                let err = format!(
+                    "invalid suffix in input: '{}'",
+                    String::from_utf8_lossy(line)
+                );
+                return Err(Box::new(NumfmtError::FormattingError(err)));
+            }
+        }
+    }
+
     // In non-abort modes we buffer the formatted output so that on error we
     // can emit the original line instead.
     let buffer_output = !matches!(options.invalid, InvalidModes::Abort);

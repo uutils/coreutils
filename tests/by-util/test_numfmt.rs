@@ -1404,7 +1404,6 @@ fn test_large_integer_precision_loss_issue_11654() {
 // uutils accepts scientific notation (`1e9`, `5e-3`, ...); GNU rejects it
 // as "invalid suffix in input".
 #[test]
-#[ignore = "GNU compat: see uutils/coreutils#11655"]
 fn test_scientific_notation_rejected_by_gnu_issue_11655() {
     new_ucmd!()
         .arg("1e9")
