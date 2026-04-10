@@ -788,13 +788,10 @@ impl Config {
         };
         let width = parse_width(options.get_one::<String>(options::WIDTH))?;
 
-        #[allow(clippy::needless_bool)]
         let mut show_control = if options.get_flag(options::HIDE_CONTROL_CHARS) {
             false
-        } else if options.get_flag(options::SHOW_CONTROL_CHARS) {
-            true
         } else {
-            !stdout().is_terminal()
+            options.get_flag(options::SHOW_CONTROL_CHARS) || !stdout().is_terminal()
         };
 
         let (mut quoting_style, mut locale_quoting) = extract_quoting_style(options, show_control);
