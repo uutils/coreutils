@@ -53,7 +53,7 @@ fn format_and_write<W: std::io::Write>(
             if line[pos + 1].is_ascii_digit() {
                 let err = format!(
                     "invalid suffix in input: '{}'",
-                    NumfmtError::FormattingError(String::from_utf8_lossy(line).to_string())
+                    String::from_utf8_lossy(line)
                 );
                 return Err(Box::new(NumfmtError::FormattingError(err)));
             }
