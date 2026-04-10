@@ -640,7 +640,8 @@ fn extract_strings_from_input(
 
                 // Check if it's a printable character (including space)
                 if (0x20..=0x7E).contains(&byte) {
-                    if current_string.is_empty() && !offset_preloaded { //changed this
+                    if current_string.is_empty() && !offset_preloaded {
+                        //changed this
                         string_start_offset = current_offset;
                     }
                     current_string.push(byte);
