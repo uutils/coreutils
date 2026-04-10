@@ -788,7 +788,7 @@ fn build_options(
             msg: format!("invalid -column argument '0'"),
         });
     }
-    
+
     let column_mode_options = column_option_value.map(|columns| ColumnModeOptions {
         columns,
         width: column_width,
