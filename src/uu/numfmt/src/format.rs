@@ -539,6 +539,7 @@ fn transform_to(
     round_method: RoundMethod,
     precision: usize,
     unit_separator: &str,
+    is_precision_specified: bool,
 ) -> Result<String> {
     if let Some(result) = try_format_exact_int_without_suffix_scaling(s, opts, precision) {
         return Ok(result);
@@ -560,10 +561,16 @@ fn transform_to(
                 DisplayableSuffix(s, opts.to),
             )
         }
+        Some(s) if is_precision_specified => {
+            format!("{i2:.0}{unit_separator}{}", DisplayableSuffix(s, opts.to))
+        }
         Some(s) if i2.abs() < 10.0 => {
+            // when there's a single digit before the dot.
             format!("{i2:.1}{unit_separator}{}", DisplayableSuffix(s, opts.to))
         }
-        Some(s) => format!("{i2:.0}{unit_separator}{}", DisplayableSuffix(s, opts.to)),
+        Some(s) => {
+            format!("{i2:.0}{unit_separator}{}", DisplayableSuffix(s, opts.to))
+        }
     })
 }
 
@@ -597,7 +604,7 @@ fn format_string(
         Some(suffix) => source.strip_suffix(suffix).unwrap_or(source),
         None => source,
     };
-
+    let mut is_precision_specified = true;
     let precision = if let Some(p) = options.format.precision {
         p
     } else if options.transform.to == Unit::None
@@ -608,6 +615,7 @@ fn format_string(
     {
         parse_implicit_precision(source_without_suffix)
     } else {
+        is_precision_specified = false;
         0
     };
 
@@ -617,6 +625,7 @@ fn format_string(
         options.round,
         precision,
         &options.unit_separator,
+        is_precision_specified,
     )?;
 
     // bring back the suffix before applying padding
