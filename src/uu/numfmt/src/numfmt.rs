@@ -166,7 +166,6 @@ fn handle_buffer<R: BufRead>(mut input: R, options: &NumfmtOptions) -> UResult<b
 }
 
 fn parse_unit(s: &str, opt: &str) -> Result<Unit> {
-    let opt_with_dash = format!("--{opt}");
     match s {
         "auto" if opt != TO => Ok(Unit::Auto),
         "si" => Ok(Unit::Si),
@@ -174,7 +173,7 @@ fn parse_unit(s: &str, opt: &str) -> Result<Unit> {
         "iec-i" => Ok(Unit::Iec(true)),
         "none" => Ok(Unit::None),
         value => Err(
-            translate!("numfmt-error-invalid-unit-argument", "arg" => value, "opt" => opt_with_dash),
+            translate!("numfmt-error-invalid-unit-argument", "arg" => value, "opt" => format!("--{opt}")),
         ),
     }
 }
