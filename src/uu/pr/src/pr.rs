@@ -782,6 +782,13 @@ fn build_options(
         None => start_column_option,
     };
 
+    // exit with code 1 if column argument is 0.
+    if column_option_value == Some(0) {
+        return Err(PrError::EncounteredErrors {
+            msg: format!("invalid -column argument '0'"),
+        });
+    }
+    
     let column_mode_options = column_option_value.map(|columns| ColumnModeOptions {
         columns,
         width: column_width,
