@@ -779,15 +779,11 @@ fn build_options(
 
     let column_option_value = match parse_usize(matches, options::COLUMN) {
         Some(Ok(0)) => {
-            // if --column is zero, exit with code 1.
             return Err(PrError::EncounteredErrors {
                 msg: "invalid -column argument '0'".to_string(),
             });
         }
-        Some(res) => {
-            println!("{:?}", res);
-            Some(res?)
-        }
+        Some(res) => Some(res?),
         None => start_column_option,
     };
 
