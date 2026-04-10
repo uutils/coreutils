@@ -362,7 +362,7 @@ fn is_emfile(e: &io::Error) -> bool {
 /// A frame starts as `Live` (fd open, lazy iteration via `DirIter`).  When
 /// the process runs out of file descriptors — which limits tree depth to
 /// approximately `RLIMIT_NOFILE` (≈ 1 024) — `try_reclaim_fd` demotes the
-/// oldest live frame to `Drained` by materialising its remaining entries into
+/// oldest live frame to `Drained` by materializing its remaining entries into
 /// a `Vec` and closing the fd.  Subsequent entry-yielding uses the vec; fd
 /// operations (stat, unlink, open-child) temporarily re-open the directory
 /// from `StackFrame::dir_path`.
@@ -419,7 +419,7 @@ struct StackFrame {
 /// Returns `true` if a frame was demoted; `false` if all non-top frames are
 /// already `Drained` (which means we are genuinely out of fds).
 ///
-/// Materialising the oldest frame first minimises the chance of collecting a
+/// Materializing the oldest frame first minimizes the chance of collecting a
 /// large sibling list: for deep linear chains the bottom frames have already
 /// exhausted their children before a new level is pushed.
 ///
@@ -562,7 +562,7 @@ pub(super) fn safe_remove_dir_recursive_impl(
     options: &Options,
     progress_bar: Option<&ProgressBar>,
 ) -> bool {
-    // Iterative, allocation-minimising implementation.
+    // Iterative, allocation-minimizing implementation.
     //
     // Design goals (see https://github.com/uutils/coreutils/issues/11222):
     //   • One shared `PathBuf` for the entire traversal instead of one `join()`
@@ -577,7 +577,7 @@ pub(super) fn safe_remove_dir_recursive_impl(
     //
     // Fd budget: each `Live` frame holds exactly one open fd.  When the process
     // runs out of file descriptors (`EMFILE`/`ENFILE`), `try_reclaim_fd` demotes
-    // the oldest live frame to `Drained` — its remaining entries are materialised
+    // the oldest live frame to `Drained` — its remaining entries are materialized
     // into a `Vec<OsString>` and its fd is closed.  Subsequent fd-requiring
     // operations on a `Drained` frame re-open the directory from `dir_path` on
     // demand.  This allows traversal of trees of arbitrary depth at the cost of
@@ -681,7 +681,7 @@ pub(super) fn safe_remove_dir_recursive_impl(
 
             // ── Normal child entry ────────────────────────────────────────────
             Some(Ok(entry)) => {
-                // Extend the shared path accumulator in-place — amortised O(1),
+                // Extend the shared path accumulator in-place — amortized O(1),
                 // no heap allocation if there is spare capacity.
                 current_path.push(&entry.name);
 
@@ -696,19 +696,18 @@ pub(super) fn safe_remove_dir_recursive_impl(
                 //
                 // Fallback: stat when in interactive mode (need mode/size for
                 // the prompt) or when the filesystem reports DT_UNKNOWN.
-                let needs_stat = options.interactive != InteractiveMode::Never
-                    || entry.file_type.is_none();
+                let needs_stat =
+                    options.interactive != InteractiveMode::Never || entry.file_type.is_none();
 
                 let (is_dir, stat_opt) = if needs_stat {
                     match frame_stat_at(stack.last().unwrap(), entry.name.as_ref()) {
                         Ok(s) => {
-                            let is_dir = ((s.st_mode as libc::mode_t) & libc::S_IFMT)
-                                == libc::S_IFDIR;
+                            let is_dir =
+                                ((s.st_mode as libc::mode_t) & libc::S_IFMT) == libc::S_IFDIR;
                             (is_dir, Some(s))
                         }
                         Err(e) => {
-                            let err =
-                                handle_error_with_force(e, current_path.as_path(), options);
+                            let err = handle_error_with_force(e, current_path.as_path(), options);
                             stack.last_mut().unwrap().had_error |= err;
                             current_path.pop();
                             continue;
@@ -832,9 +831,7 @@ pub(super) fn safe_remove_dir_recursive_impl(
                     // File or symlink: prompt then unlink.
                     // In Never mode stat_opt is None and we always remove.
                     let should_remove = match stat_opt {
-                        Some(ref s) => {
-                            prompt_file_with_stat(current_path.as_path(), s, options)
-                        }
+                        Some(ref s) => prompt_file_with_stat(current_path.as_path(), s, options),
                         None => true,
                     };
                     if should_remove {

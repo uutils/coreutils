@@ -34,6 +34,15 @@ dequeue
 dev
 EINTR
 eintr
+EMFILE
+emfile
+ENFILE
+ENOMEM
+getdents
+btrfs
+diriter
+NOFILE
+readdir
 nextest
 SIGUSR
 nonprinting

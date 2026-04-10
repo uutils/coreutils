@@ -1471,7 +1471,11 @@ mod tests {
         fs::write(temp_dir.path().join("gamma"), "c").unwrap();
 
         let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
-        let mut names: Vec<OsString> = dir_fd.iter_dir().unwrap().map(|r| r.unwrap().name).collect();
+        let mut names: Vec<OsString> = dir_fd
+            .iter_dir()
+            .unwrap()
+            .map(|r| r.unwrap().name)
+            .collect();
         names.sort();
 
         assert_eq!(
@@ -1498,7 +1502,11 @@ mod tests {
         fs::write(temp_dir.path().join("file"), "x").unwrap();
 
         let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
-        let names: Vec<OsString> = dir_fd.iter_dir().unwrap().map(|r| r.unwrap().name).collect();
+        let names: Vec<OsString> = dir_fd
+            .iter_dir()
+            .unwrap()
+            .map(|r| r.unwrap().name)
+            .collect();
 
         assert!(!names.contains(&OsString::from(".")));
         assert!(!names.contains(&OsString::from("..")));
@@ -1533,7 +1541,7 @@ mod tests {
         // A sentinel file ensures the directory is non-empty, so the first
         // `getdents64` call is deferred until after we close the fd below.
         // Without it, an empty directory may return EOF (0) during Dir::from_fd
-        // initialisation, making iter.next() return None instead of Some(Err(_)).
+        // initialization, making iter.next() return None instead of Some(Err(_)).
         fs::write(temp_dir.path().join("sentinel"), "x").unwrap();
 
         let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
@@ -1555,7 +1563,7 @@ mod tests {
         // the destructor would attempt on the already-closed fd.
         match iter.next() {
             Some(Err(_)) => {} // expected: EBADF propagated as io::Error
-            other => panic!("expected Some(Err(_)) after fd close, got {:?}", other),
+            other => panic!("expected Some(Err(_)) after fd close, got {other:?}"),
         }
     }
 }

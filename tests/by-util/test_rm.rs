@@ -1012,7 +1012,7 @@ fn test_recursive_interactive() {
 
 // When the user declines to remove a subdirectory in interactive mode, rm
 // should NOT report an error.  The parent directory is left behind (because it
-// is non-empty), but the process should exit 0 — matching GNU rm behaviour.
+// is non-empty), but the process should exit 0 — matching GNU rm behavior.
 #[cfg(not(windows))]
 #[test]
 fn test_recursive_interactive_decline_child_no_error() {
