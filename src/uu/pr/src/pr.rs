@@ -785,7 +785,7 @@ fn build_options(
     // exit with code 1 if column argument is 0.
     if column_option_value == Some(0) {
         return Err(PrError::EncounteredErrors {
-            msg: format!("invalid -column argument '0'"),
+            msg: "invalid -column argument '0'".to_string(),
         });
     }
 
