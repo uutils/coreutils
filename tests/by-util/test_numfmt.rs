@@ -1393,7 +1393,6 @@ fn test_negative_number_with_double_dash_gnu_compat_issue_11653() {
 // https://github.com/uutils/coreutils/issues/11654
 // uutils parses large integers through f64, losing precision past 2^53.
 #[test]
-#[ignore = "GNU compat: see uutils/coreutils#11654"]
 fn test_large_integer_precision_loss_issue_11654() {
     new_ucmd!()
         .args(&["--from=iec", "9153396227555392131"])

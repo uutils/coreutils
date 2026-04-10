@@ -29,6 +29,8 @@ use uucore::{format_usage, os_str_as_bytes, show, translate};
 pub mod errors;
 pub mod format;
 pub mod options;
+
+mod numeric;
 mod units;
 
 /// Format a single line and write it, handling `--invalid` error modes.

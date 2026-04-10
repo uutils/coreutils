@@ -9,6 +9,7 @@ use uucore::display::Quotable;
 use uucore::i18n::decimal::locale_grouping_separator;
 use uucore::translate;
 
+use crate::numeric::ParsedNumber;
 use crate::options::{NumfmtOptions, RoundMethod, TransformOptions};
 use crate::units::{
     DisplayableSuffix, RawSuffix, Result, Suffix, Unit, iec_bases_f64, si_bases_f64,
@@ -147,12 +148,17 @@ fn detailed_error_message(s: &str, unit: Unit, unit_separator: &str) -> Option<S
     None
 }
 
-fn parse_number_part(s: &str, input: &str) -> Result<f64> {
+fn parse_number_part(s: &str, input: &str) -> Result<ParsedNumber> {
     if s.ends_with('.') {
         return Err(translate!("numfmt-error-invalid-number", "input" => input.quote()));
     }
 
+    if let Ok(n) = s.parse::<i128>() {
+        return Ok(ParsedNumber::ExactInt(n));
+    }
+
     s.parse::<f64>()
+        .map(ParsedNumber::Float)
         .map_err(|_| translate!("numfmt-error-invalid-number", "input" => input.quote()))
 }
 
@@ -161,7 +167,7 @@ fn parse_suffix(
     unit: Unit,
     unit_separator: &str,
     explicit_unit_separator: bool,
-) -> Result<(f64, Option<Suffix>)> {
+) -> Result<(ParsedNumber, Option<Suffix>)> {
     let trimmed = s.trim_end();
     if trimmed.is_empty() {
         return Err(translate!("numfmt-error-invalid-number-empty"));
@@ -364,7 +370,22 @@ fn remove_suffix(i: f64, s: Option<Suffix>, u: Unit) -> Result<f64> {
     }
 }
 
-fn transform_from(s: &str, opts: &TransformOptions, options: &NumfmtOptions) -> Result<f64> {
+fn try_scale_exact_int_with_from_unit(
+    value: ParsedNumber,
+    from_unit: usize,
+) -> Option<ParsedNumber> {
+    let integer = value.exact_int()?;
+    let from_unit = i128::try_from(from_unit).ok()?;
+    let scaled = integer.checked_mul(from_unit)?;
+
+    Some(ParsedNumber::ExactInt(scaled))
+}
+
+fn transform_from(
+    s: &str,
+    opts: &TransformOptions,
+    options: &NumfmtOptions,
+) -> Result<ParsedNumber> {
     let (i, suffix) = parse_suffix(
         s,
         opts.from,
@@ -375,17 +396,24 @@ fn transform_from(s: &str, opts: &TransformOptions, options: &NumfmtOptions) -> 
         detailed_error_message(s, opts.from, &options.unit_separator).unwrap_or(original)
     })?;
     let had_no_suffix = suffix.is_none();
-    let i = i * (opts.from_unit as f64);
+
+    if had_no_suffix {
+        if let Some(scaled) = try_scale_exact_int_with_from_unit(i, opts.from_unit) {
+            return Ok(scaled);
+        }
+    }
+
+    let i = i.to_f64() * (opts.from_unit as f64);
 
     remove_suffix(i, suffix, opts.from).map(|n| {
-        // GNU numfmt doesn't round values if no --from argument is provided by the user
-        if opts.from == Unit::None || had_no_suffix {
+        let n = if opts.from == Unit::None || had_no_suffix {
             if n == -0.0 { 0.0 } else { n }
         } else if n < 0.0 {
             -n.abs().ceil()
         } else {
             n.ceil()
-        }
+        };
+        ParsedNumber::Float(n)
     })
 }
 
@@ -480,13 +508,43 @@ fn consider_suffix(
     }
 }
 
+fn try_format_exact_int_without_suffix_scaling(
+    value: ParsedNumber,
+    opts: &TransformOptions,
+    precision: usize,
+) -> Option<String> {
+    if opts.to != Unit::None {
+        return None;
+    }
+
+    let integer = value.exact_int()?;
+    let to_unit = i128::try_from(opts.to_unit).ok()?;
+
+    if integer % to_unit != 0 {
+        return None;
+    }
+
+    let scaled = integer / to_unit;
+
+    Some(if precision == 0 {
+        scaled.to_string()
+    } else {
+        format!("{scaled}.{}", "0".repeat(precision))
+    })
+}
+
 fn transform_to(
-    s: f64,
+    s: ParsedNumber,
     opts: &TransformOptions,
     round_method: RoundMethod,
     precision: usize,
     unit_separator: &str,
 ) -> Result<String> {
+    if let Some(result) = try_format_exact_int_without_suffix_scaling(s, opts, precision) {
+        return Ok(result);
+    }
+
+    let s = s.to_f64();
     let i2 = s / (opts.to_unit as f64);
     let (i2, s) = consider_suffix(i2, opts.to, round_method, precision)?;
     Ok(match s {
@@ -771,7 +829,7 @@ mod tests {
         let result = parse_suffix("1Q", Unit::Auto, "", false);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
-        assert_eq!(number, 1.0);
+        assert_eq!(number.to_f64(), 1.0);
         assert!(suffix.is_some());
         let (raw_suffix, with_i) = suffix.unwrap();
         assert_eq!(raw_suffix as i32, RawSuffix::Q as i32);
@@ -780,7 +838,7 @@ mod tests {
         let result = parse_suffix("2R", Unit::Auto, "", false);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
-        assert_eq!(number, 2.0);
+        assert_eq!(number.to_f64(), 2.0);
         assert!(suffix.is_some());
         let (raw_suffix, with_i) = suffix.unwrap();
         assert_eq!(raw_suffix as i32, RawSuffix::R as i32);
@@ -789,7 +847,7 @@ mod tests {
         let result = parse_suffix("3k", Unit::Auto, "", false);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
-        assert_eq!(number, 3.0);
+        assert_eq!(number.to_f64(), 3.0);
         assert!(suffix.is_some());
         let (raw_suffix, with_i) = suffix.unwrap();
         assert_eq!(raw_suffix as i32, RawSuffix::K as i32);
@@ -798,7 +856,7 @@ mod tests {
         let result = parse_suffix("4Qi", Unit::Auto, "", false);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
-        assert_eq!(number, 4.0);
+        assert_eq!(number.to_f64(), 4.0);
         assert!(suffix.is_some());
         let (raw_suffix, with_i) = suffix.unwrap();
         assert_eq!(raw_suffix as i32, RawSuffix::Q as i32);
@@ -807,7 +865,7 @@ mod tests {
         let result = parse_suffix("5Ri", Unit::Auto, "", false);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
-        assert_eq!(number, 5.0);
+        assert_eq!(number.to_f64(), 5.0);
         assert!(suffix.is_some());
         let (raw_suffix, with_i) = suffix.unwrap();
         assert_eq!(raw_suffix as i32, RawSuffix::R as i32);
@@ -1023,9 +1081,9 @@ mod tests {
 
     #[test]
     fn test_parse_number_part_valid() {
-        assert_eq!(parse_number_part("42", "42").unwrap(), 42.0);
-        assert_eq!(parse_number_part("-3.5", "-3.5").unwrap(), -3.5);
-        assert_eq!(parse_number_part("0", "0").unwrap(), 0.0);
+        assert_eq!(parse_number_part("42", "42").unwrap().to_f64(), 42.0);
+        assert_eq!(parse_number_part("-3.5", "-3.5").unwrap().to_f64(), -3.5);
+        assert_eq!(parse_number_part("0", "0").unwrap().to_f64(), 0.0);
     }
 
     #[test]
@@ -1094,15 +1152,21 @@ mod tests {
     #[test]
     fn test_parse_number_part_large_and_tiny() {
         assert_eq!(
-            parse_number_part("999999999999", "999999999999").unwrap(),
+            parse_number_part("999999999999", "999999999999")
+                .unwrap()
+                .to_f64(),
             999_999_999_999.0
         );
         assert_eq!(
-            parse_number_part("0.000000001", "0.000000001").unwrap(),
+            parse_number_part("0.000000001", "0.000000001")
+                .unwrap()
+                .to_f64(),
             0.000_000_001
         );
         assert_eq!(
-            parse_number_part("-99999999", "-99999999").unwrap(),
+            parse_number_part("-99999999", "-99999999")
+                .unwrap()
+                .to_f64(),
             -99_999_999.0
         );
     }
