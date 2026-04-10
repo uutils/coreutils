@@ -20,7 +20,7 @@ use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::{
     cell::OnceCell,
     cmp::Reverse,
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     ffi::{OsStr, OsString},
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
     io::{BufWriter, ErrorKind, Stdout, Write, stdout},
@@ -1031,9 +1031,13 @@ impl<'a> TextOutput<'a> {
                 out: BufWriter::new(stdout()),
                 style_manager: config.color.as_ref().map(StyleManager::new),
                 #[cfg(unix)]
-                uid_cache: HashMap::default(),
+                uid_cache: FxHashMap::default(),
                 #[cfg(unix)]
-                gid_cache: HashMap::default(),
+                gid_cache: FxHashMap::default(),
+                #[cfg(not(unix))]
+                uid_cache: (),
+                #[cfg(not(unix))]
+                gid_cache: (),
                 recent_time_range: (SystemTime::now() - Duration::new(31_556_952 / 2, 0))
                     ..=SystemTime::now(),
                 display_buf: Vec::with_capacity(if config.format == Format::Long {
@@ -1065,16 +1069,17 @@ impl LsOutput for TextOutput<'_> {
             show_dir_name(path_data, &mut self.state.out, config)?;
             writeln!(self.state.out)?;
             if config.dired {
-                let dir_len = path_data.display_name().len();
+                let dir_len = path_data.path().as_os_str().len();
                 dired::calculate_subdired(&mut self.dired, dir_len);
                 dired::add_dir_name(&mut self.dired, dir_len);
             }
         } else {
             writeln!(self.state.out)?;
             if config.dired {
-                self.dired.padding = 2;
+                self.dired.line_offset += 1; // account for the blank line before recursive directory headings
+                self.dired.padding = 0;
                 dired::indent(&mut self.state.out)?;
-                let dir_name_size = path_data.path().to_string_lossy().len();
+                let dir_name_size = path_data.path().as_os_str().len();
                 dired::calculate_subdired(&mut self.dired, dir_name_size);
                 dired::add_dir_name(&mut self.dired, dir_name_size);
             }
@@ -1341,18 +1346,17 @@ fn enter_directory<O: LsOutput>(
         path: PathBuf,
         command_line: bool,
         is_first: bool,
-        read_dir: ReadDir,
     }
 
     let mut stack = Vec::new();
-    stack.push(StackEntry {
+    let mut current = Some(StackEntry {
         path: path_data.path().to_path_buf(),
         command_line: path_data.command_line,
         is_first: true,
-        read_dir,
     });
+    let mut initial_read_dir = Some(read_dir);
 
-    while let Some(entry) = stack.pop() {
+    while let Some(entry) = current.take().or_else(|| stack.pop()) {
         let path_data = PathData::new(
             entry.path.clone().into(),
             None,
@@ -1365,7 +1369,26 @@ fn enter_directory<O: LsOutput>(
             output.write_dir_header(&path_data, config, false)?;
         }
 
-        collect_directory_entries(entries, &path_data, config, output, entry.read_dir)?;
+        let current_read_dir = if entry.is_first {
+            initial_read_dir
+                .take()
+                .expect("initial read_dir is present for first entry")
+        } else {
+            match fs::read_dir(&entry.path) {
+                Err(err) => {
+                    output.flush()?;
+                    show!(LsError::IOErrorContext(
+                        entry.path.clone(),
+                        err,
+                        entry.command_line,
+                    ));
+                    continue;
+                }
+                Ok(rd) => rd,
+            }
+        };
+
+        collect_directory_entries(entries, &path_data, config, output, current_read_dir)?;
         write_directory_entries(entries, config, output)?;
 
         if config.recursive {
@@ -1390,7 +1413,7 @@ fn enter_directory<O: LsOutput>(
                             child_command_line,
                         ));
                     }
-                    Ok(read_dir) => {
+                    Ok(_) => {
                         if listed_ancestors.insert(FileInformation::from_path(
                             &child_path,
                             child_must_dereference,
@@ -1399,7 +1422,6 @@ fn enter_directory<O: LsOutput>(
                                 path: child_path,
                                 command_line: child_command_line,
                                 is_first: false,
-                                read_dir,
                             });
                         } else {
                             output.flush()?;
