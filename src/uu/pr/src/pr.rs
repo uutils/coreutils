@@ -778,16 +778,18 @@ fn build_options(
     // --column has more priority than -column
 
     let column_option_value = match parse_usize(matches, options::COLUMN) {
-        Some(res) => Some(res?),
+        Some(Ok(0)) => {
+            // if --column is zero, exit with code 1. 
+            return Err(PrError::EncounteredErrors {
+                msg: "invalid -column argument '0'".to_string(),
+            });
+        }
+        Some(res) => {
+            println!("{:?}", res);
+            Some(res?)
+        }
         None => start_column_option,
     };
-
-    // exit with code 1 if column argument is 0.
-    if column_option_value == Some(0) {
-        return Err(PrError::EncounteredErrors {
-            msg: "invalid -column argument '0'".to_string(),
-        });
-    }
 
     let column_mode_options = column_option_value.map(|columns| ColumnModeOptions {
         columns,
