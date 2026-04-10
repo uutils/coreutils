@@ -165,14 +165,16 @@ fn handle_buffer<R: BufRead>(mut input: R, options: &NumfmtOptions) -> UResult<b
     Ok(saw_invalid)
 }
 
-fn parse_unit(s: &str) -> Result<Unit> {
+fn parse_unit(s: &str, opt: &str) -> Result<Unit> {
     match s {
-        "auto" => Ok(Unit::Auto),
+        "auto" if opt != TO => Ok(Unit::Auto),
         "si" => Ok(Unit::Si),
         "iec" => Ok(Unit::Iec(false)),
         "iec-i" => Ok(Unit::Iec(true)),
         "none" => Ok(Unit::None),
-        _ => Err(translate!("numfmt-error-unsupported-unit")),
+        value => Err(
+            translate!("numfmt-error-invalid-unit-argument", "arg" => value, "opt" => format!("--{opt}")),
+        ),
     }
 }
 
@@ -237,8 +239,8 @@ fn parse_delimiter(arg: &OsString) -> Result<Vec<u8>> {
 }
 
 fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
-    let from = parse_unit(args.get_one::<String>(FROM).unwrap())?;
-    let to = parse_unit(args.get_one::<String>(TO).unwrap())?;
+    let from = parse_unit(args.get_one::<String>(FROM).unwrap(), FROM)?;
+    let to = parse_unit(args.get_one::<String>(TO).unwrap(), TO)?;
     let from_unit = parse_unit_size(args.get_one::<String>(FROM_UNIT).unwrap())?;
     let to_unit = parse_unit_size(args.get_one::<String>(TO_UNIT).unwrap())?;
 

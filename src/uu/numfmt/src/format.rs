@@ -475,7 +475,11 @@ fn consider_suffix(
     let (bases, with_i) = match u {
         Unit::Si => (si_bases_f64(), false),
         Unit::Iec(with_i) => (iec_bases_f64(), with_i),
-        Unit::Auto => return Err(translate!("numfmt-error-unit-auto-not-supported-with-to")),
+        Unit::Auto => {
+            return Err(
+                translate!("numfmt-error-invalid-unit-argument", "arg" => "auto", "opt" => "--to"),
+            );
+        }
         Unit::None => return Ok((n, None)),
     };
 
