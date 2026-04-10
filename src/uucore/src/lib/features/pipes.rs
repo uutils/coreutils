@@ -41,15 +41,8 @@ pub fn pipe() -> std::io::Result<(File, File)> {
 /// this is still very efficient.
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn splice(source: &impl AsFd, target: &impl AsFd, len: usize) -> std::io::Result<usize> {
-    Ok(rustix::pipe::splice(
-        source,
-        None,
-        target,
-        None,
-        len,
-        SpliceFlags::empty(),
-    )?)
+pub fn splice(source: &impl AsFd, target: &impl AsFd, len: usize) -> rustix::io::Result<usize> {
+    rustix::pipe::splice(source, None, target, None, len, SpliceFlags::empty())
 }
 
 /// Splice wrapper which fully finishes the write.
