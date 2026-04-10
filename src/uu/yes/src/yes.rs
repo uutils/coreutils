@@ -71,12 +71,9 @@ fn args_into_buffer<'a>(i: impl Iterator<Item = &'a OsString>) -> UResult<Vec<u8
     #[cfg(not(any(unix, target_os = "wasi")))]
     {
         for part in itertools::intersperse(i.map(|a| a.to_str()), Some(" ")) {
-            let bytes = match part {
-                Some(part) => part.as_bytes(),
-                None => {
-                    return Err(USimpleError::new(1, translate!("yes-error-invalid-utf8")));
-                }
-            };
+            let bytes = part
+                .ok_or_else(|| USimpleError::new(1, translate!("yes-error-invalid-utf8")))?
+                .as_bytes();
             buf.extend_from_slice(bytes);
         }
     }
