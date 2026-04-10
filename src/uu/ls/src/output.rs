@@ -12,27 +12,45 @@
 //! # Example
 //!
 //! ```ignore
-//! use uu_ls::{Config, list_with_output, CollectorOutput};
 //! use std::path::Path;
+//! use uu_ls::{Config, list_with_output, EntryInfo, LsOutput, StreamingOutput};
+//!
+//! struct MySink {
+//!     pub count: usize,
+//! }
+//!
+//! impl MySink {
+//!     fn new() -> Self {
+//!         Self { count: 0 }
+//!     }
+//! }
+//!
+//! impl LsOutput for MySink {
+//!     fn stream_mode(&self) -> StreamMode {
+//!         StreamMode::Streaming
+//!     }
+//!
+//!     fn write_entry(&mut self, entry: &EntryInfo) -> uucore::error::UResult<()> {
+//!         println!("{} -> {:?}", entry.path.display(), entry.file_type);
+//!         self.count += 1;
+//!         Ok(())
+//!     }
+//! }
 //!
 //! let config = Config::from(&matches)?;
-//! let mut output = CollectorOutput::new();
+//! let mut output = MySink::new();
 //! list_with_output(vec![Path::new(".")], &config, &mut output)?;
-//!
-//! for entry in output.entries() {
-//!     println!("{}: {} bytes",
-//!         entry.display_name.to_string_lossy(),
-//!         entry.size().unwrap_or(0));
-//! }
+//! println!("processed {} entries", output.count);
 //! ```
 
+//! Alternatively, use [`StreamingOutput`] when you want a reusable streaming sink
+//! that collects `EntryInfo` objects as they arrive.
+
+use crate::{Config, PathData};
 use std::ffi::OsString;
 use std::fs::{FileType, Metadata};
 use std::path::PathBuf;
-
 use uucore::error::UResult;
-
-use crate::{Config, PathData};
 
 /// Information about a single file/directory entry.
 ///
@@ -59,28 +77,38 @@ pub struct EntryInfo {
 impl EntryInfo {
     /// Returns true if this entry represents a directory
     pub fn is_dir(&self) -> bool {
-        self.file_type.as_ref().is_some_and(|ft| ft.is_dir())
+        self.file_type.as_ref().is_some_and(FileType::is_dir)
     }
 
     /// Returns true if this entry represents a regular file
     pub fn is_file(&self) -> bool {
-        self.file_type.as_ref().is_some_and(|ft| ft.is_file())
+        self.file_type.as_ref().is_some_and(FileType::is_file)
     }
 
     /// Returns true if this entry represents a symbolic link
     pub fn is_symlink(&self) -> bool {
-        self.file_type.as_ref().is_some_and(|ft| ft.is_symlink())
+        self.file_type.as_ref().is_some_and(FileType::is_symlink)
     }
 
     /// Returns the file size in bytes, if metadata is available
     pub fn size(&self) -> Option<u64> {
-        self.metadata.as_ref().map(|m| m.len())
+        self.metadata.as_ref().map(Metadata::len)
     }
 
     /// Returns the file name as a string slice, if valid UTF-8
     pub fn file_name(&self) -> Option<&str> {
         self.display_name.to_str()
     }
+}
+
+/// Streaming mode for `LsOutput` sinks.
+///
+/// `Batch` sinks receive a directory's entries all at once via
+/// [`write_entries`]. `Streaming` sinks receive one entry at a time via
+/// [`write_entry`].
+pub enum StreamMode {
+    Batch,
+    Streaming,
 }
 
 /// Trait for receiving ls output entries.
@@ -95,6 +123,15 @@ impl EntryInfo {
 /// The internal `TextOutput` implementation uses [`write_entries`](LsOutput::write_entries)
 /// to receive batches for proper column alignment and grid formatting.
 pub trait LsOutput {
+    /// Returns the preferred output mode for this sink.
+    ///
+    /// Default is `Batch` so text-formatting sinks can continue to receive full
+    /// directory batches. Streaming sinks should override this to return
+    /// `StreamMode::Streaming`.
+    fn stream_mode(&self) -> StreamMode {
+        StreamMode::Batch
+    }
+
     /// Called for each file/directory entry (streaming mode).
     ///
     /// Default implementation does nothing. Override this for programmatic access
@@ -157,18 +194,19 @@ pub trait LsOutput {
     }
 }
 
-/// A simple output sink that collects all entries into a Vec.
+/// A dedicated streaming output sink.
 ///
-/// This is useful for programmatic access where you want to collect
-/// all entries and process them after enumeration is complete.
+/// This sink is intended for programmatic consumers that want to receive
+/// `EntryInfo` objects one at a time as they are emitted. It implements
+/// [`LsOutput::stream_mode`] as `StreamMode::Streaming`.
 ///
 /// # Example
 ///
 /// ```ignore
-/// use uu_ls::{Config, list_with_output, CollectorOutput};
+/// use uu_ls::{Config, list_with_output, StreamingOutput};
 /// use std::path::Path;
 ///
-/// let mut output = CollectorOutput::new();
+/// let mut output = StreamingOutput::new();
 /// list_with_output(vec![Path::new(".")], &config, &mut output)?;
 ///
 /// for entry in output.entries() {
@@ -178,14 +216,14 @@ pub trait LsOutput {
 /// }
 /// ```
 #[derive(Debug, Default)]
-pub struct CollectorOutput {
+pub struct StreamingOutput {
     entries: Vec<EntryInfo>,
     directories: Vec<PathBuf>,
     totals: Vec<u64>,
 }
 
-impl CollectorOutput {
-    /// Create a new empty collector
+impl StreamingOutput {
+    /// Create a new empty streaming sink.
     pub fn new() -> Self {
         Self::default()
     }
@@ -218,7 +256,11 @@ impl CollectorOutput {
     }
 }
 
-impl LsOutput for CollectorOutput {
+impl LsOutput for StreamingOutput {
+    fn stream_mode(&self) -> StreamMode {
+        StreamMode::Streaming
+    }
+
     fn write_entry(&mut self, entry: &EntryInfo) -> UResult<()> {
         self.entries.push(entry.clone());
         Ok(())
@@ -287,16 +329,16 @@ mod tests {
     }
 
     #[test]
-    fn test_collector_output_new() {
-        let collector = CollectorOutput::new();
+    fn test_streaming_output_new() {
+        let collector = StreamingOutput::new();
         assert!(collector.entries().is_empty());
         assert!(collector.directories().is_empty());
         assert!(collector.totals().is_empty());
     }
 
     #[test]
-    fn test_collector_output_write_entry() {
-        let mut collector = CollectorOutput::new();
+    fn test_streaming_output_write_entry() {
+        let mut collector = StreamingOutput::new();
         let entry = EntryInfo {
             path: PathBuf::from("/test/file"),
             display_name: OsString::from("file"),
@@ -312,8 +354,8 @@ mod tests {
     }
 
     #[test]
-    fn test_collector_output_clear() {
-        let mut collector = CollectorOutput::new();
+    fn test_streaming_output_clear() {
+        let mut collector = StreamingOutput::new();
         let entry = EntryInfo {
             path: PathBuf::from("/test/file"),
             display_name: OsString::from("file"),
@@ -332,8 +374,8 @@ mod tests {
     }
 
     #[test]
-    fn test_collector_output_into_entries() {
-        let mut collector = CollectorOutput::new();
+    fn test_streaming_output_into_entries() {
+        let mut collector = StreamingOutput::new();
         let entry = EntryInfo {
             path: PathBuf::from("/test/file"),
             display_name: OsString::from("file"),
@@ -351,8 +393,8 @@ mod tests {
     }
 
     #[test]
-    fn test_collector_output_flush() {
-        let mut collector = CollectorOutput::new();
+    fn test_streaming_output_flush() {
+        let mut collector = StreamingOutput::new();
         assert!(collector.flush().is_ok());
     }
 }

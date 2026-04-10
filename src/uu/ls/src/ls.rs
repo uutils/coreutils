@@ -6,17 +6,21 @@
 // spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly
 // spell-checker:ignore nohash strtime clocale
 
+use clap::{
+    Arg, ArgAction, Command,
+    builder::{NonEmptyStringValueParser, PossibleValue, ValueParser},
+};
+use lscolors::Colorable;
 #[cfg(unix)]
 use rustc_hash::FxHashMap;
-use rustc_hash::FxHashSet;
 use std::borrow::Cow;
 use std::cell::RefCell;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::{
     cell::OnceCell,
-    collections::{HashMap, HashSet},
     cmp::Reverse,
+    collections::{HashMap, HashSet},
     ffi::{OsStr, OsString},
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
     io::{BufWriter, ErrorKind, Stdout, Write, stdout},
@@ -24,12 +28,6 @@ use std::{
     path::{Path, PathBuf},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-
-use clap::{
-    Arg, ArgAction, Command,
-    builder::{NonEmptyStringValueParser, PossibleValue, ValueParser},
-};
-use lscolors::Colorable;
 use thiserror::Error;
 
 #[cfg(unix)]
@@ -52,9 +50,9 @@ mod dired;
 mod display;
 
 pub mod output;
-pub use output::{CollectorOutput, EntryInfo, LsOutput};
 pub use config::{Config, options};
 pub use display::Format;
+pub use output::{EntryInfo, LsOutput, StreamMode, StreamingOutput};
 
 use colors::StyleManager;
 use config::options::QUOTING_STYLE;
@@ -995,8 +993,6 @@ impl Colorable for PathData<'_> {
     }
 }
 
-type DirData = (PathBuf, bool);
-
 // A struct to encapsulate state that is passed around from `list` functions.
 #[cfg_attr(not(unix), allow(dead_code))]
 struct ListState<'a> {
@@ -1016,9 +1012,6 @@ struct ListState<'a> {
     #[cfg(not(unix))]
     gid_cache: (),
     recent_time_range: RangeInclusive<SystemTime>,
-    stack: Vec<DirData>,
-    listed_ancestors: FxHashSet<FileInformation>,
-    initial_locs_len: usize,
     display_buf: Vec<u8>,
 }
 
@@ -1026,13 +1019,13 @@ struct ListState<'a> {
 ///
 /// This is the default output sink used by [`list`] for standard ls behavior.
 /// It handles all text formatting including colors, columns, long format, etc.
-struct TextOutput<'a> {
+pub struct TextOutput<'a> {
     state: ListState<'a>,
     dired: DiredOutput,
 }
 
 impl<'a> TextOutput<'a> {
-    fn new(config: &'a Config) -> Self {
+    pub fn new(config: &'a Config) -> Self {
         Self {
             state: ListState {
                 out: BufWriter::new(stdout()),
@@ -1043,10 +1036,11 @@ impl<'a> TextOutput<'a> {
                 gid_cache: HashMap::default(),
                 recent_time_range: (SystemTime::now() - Duration::new(31_556_952 / 2, 0))
                     ..=SystemTime::now(),
-                stack: Vec::new(),
-                listed_ancestors: FxHashSet::default(),
-                initial_locs_len: 0,
-                display_buf: Vec::new(),
+                display_buf: Vec::with_capacity(if config.format == Format::Long {
+                    128
+                } else {
+                    0
+                }),
             },
             dired: DiredOutput::default(),
         }
@@ -1144,11 +1138,11 @@ impl LsOutput for TextOutput<'_> {
 /// # Example
 ///
 /// ```ignore
-/// use uu_ls::{Config, list_with_output, CollectorOutput};
+/// use uu_ls::{Config, list_with_output, StreamingOutput};
 /// use std::path::Path;
 ///
 /// let config = Config::from(&matches)?;
-/// let mut output = CollectorOutput::new();
+/// let mut output = StreamingOutput::new();
 /// list_with_output(vec![Path::new(".")], &config, &mut output)?;
 ///
 /// for entry in output.entries() {
@@ -1160,10 +1154,9 @@ pub fn list_with_output<O: LsOutput>(
     config: &Config,
     output: &mut O,
 ) -> UResult<()> {
-    let mut files = Vec::<PathData>::new();
-    let mut dirs = Vec::<PathData>::new();
+    let mut files = Vec::with_capacity(locs.len());
+    let mut dirs = Vec::with_capacity(locs.len());
     let initial_locs_len = locs.len();
-    let _now = SystemTime::now();
 
     for loc in locs {
         let path_data = PathData::new(loc.into(), None, None, config, true);
@@ -1197,11 +1190,18 @@ pub fn list_with_output<O: LsOutput>(
 
     output.initialize(config)?;
 
-    // Write file entries
-    output.write_entries(&files, config)?;
+    // Write file entries.
+    if matches!(output.stream_mode(), StreamMode::Streaming) {
+        for file_entry in &files {
+            output.write_entry(&file_entry.to_entry_info(config))?;
+        }
+    } else {
+        output.write_entries(&files, config)?;
+    }
+
+    let mut entries = Vec::<PathData>::with_capacity(2);
 
     for (pos, path_data) in dirs.iter().enumerate() {
-        let _needs_blank_line = pos != 0 || !files.is_empty();
         // Do read_dir call here to match GNU semantics by printing
         // read_dir errors before directory headings, names and totals
         let read_dir = match fs::read_dir(path_data.path()) {
@@ -1224,48 +1224,51 @@ pub fn list_with_output<O: LsOutput>(
             output.write_dir_header(path_data, config, is_first)?;
         }
 
-        let mut listed_ancestors = HashSet::default();
+        let mut listed_ancestors = HashSet::with_capacity(1);
         listed_ancestors.insert(FileInformation::from_path(
             path_data.path(),
             path_data.must_dereference,
         )?);
-        enter_directory(path_data, read_dir, config, &mut listed_ancestors, output)?;
+        enter_directory(
+            path_data,
+            read_dir,
+            config,
+            &mut listed_ancestors,
+            output,
+            &mut entries,
+        )?;
     }
 
     output.finalize(config)?;
     Ok(())
 }
 
-fn enter_directory<O: LsOutput>(
+fn collect_directory_entries<O: LsOutput>(
+    entries: &mut Vec<PathData>,
     path_data: &PathData,
-    mut read_dir: ReadDir,
     config: &Config,
-    listed_ancestors: &mut HashSet<FileInformation>,
     output: &mut O,
+    mut read_dir: ReadDir,
 ) -> UResult<()> {
-    // Create vec of entries with initial dot files
-    let mut entries: Vec<PathData> = if config.files == Files::All {
-        vec![
-            PathData::new(
-                path_data.path().to_path_buf().into(),
-                None,
-                Some(OsStr::new(".").into()),
-                config,
-                false,
-            ),
-            PathData::new(
-                path_data.path().join("..").into(),
-                None,
-                Some(OsStr::new("..").into()),
-                config,
-                false,
-            ),
-        ]
-    } else {
-        vec![]
-    };
+    entries.clear();
 
-    // Convert those entries to the PathData struct
+    if config.files == Files::All {
+        entries.push(PathData::new(
+            path_data.path().to_path_buf().into(),
+            None,
+            Some(OsStr::new(".").into()),
+            config,
+            false,
+        ));
+        entries.push(PathData::new(
+            path_data.path().join("..").into(),
+            None,
+            Some(OsStr::new("..").into()),
+            config,
+            false,
+        ));
+    }
+
     for raw_entry in read_dir.by_ref() {
         let dir_entry = match raw_entry {
             Ok(path) => path,
@@ -1277,56 +1280,131 @@ fn enter_directory<O: LsOutput>(
         };
 
         if should_display(&dir_entry, config) {
-            let entry_path_data =
-                PathData::new(dir_entry.path().into(), Some(dir_entry), None, config, false);
-            entries.push(entry_path_data);
+            entries.push(PathData::new(
+                dir_entry.path().into(),
+                Some(dir_entry),
+                None,
+                config,
+                false,
+            ));
         }
     }
 
-    sort_entries(&mut entries, config);
+    sort_entries(entries, config);
+    if entries.capacity() > entries.len().saturating_mul(2) {
+        entries.shrink_to_fit();
+    }
 
-    // Print total after any error display
+    Ok(())
+}
+
+fn write_directory_entries<O: LsOutput>(
+    entries: &[PathData],
+    config: &Config,
+    output: &mut O,
+) -> UResult<()> {
     if config.format == Format::Long || config.alloc_size {
-        let mut total_size = 0u64;
-        for item in &entries {
-            total_size += item
-                .metadata()
-                .as_ref()
-                .map_or(0, |md| get_block_size(md, config));
-        }
+        let total_size: u64 = entries
+            .iter()
+            .map(|item| {
+                item.metadata()
+                    .as_ref()
+                    .map_or(0, |md| get_block_size(md, config))
+            })
+            .sum();
         output.write_total(total_size, config)?;
     }
 
-    output.write_entries(&entries, config)?;
+    if matches!(output.stream_mode(), StreamMode::Streaming) {
+        for entry in entries {
+            output.write_entry(&entry.to_entry_info(config))?;
+        }
+        Ok(())
+    } else {
+        output.write_entries(entries, config)
+    }
+}
 
-    if config.recursive {
-        for e in entries
-            .iter()
-            .skip(if config.files == Files::All { 2 } else { 0 })
-            .filter(|p| p.file_type().is_some_and(|ft| ft.is_dir()))
-        {
-            match fs::read_dir(e.path()) {
-                Err(err) => {
-                    output.flush()?;
-                    show!(LsError::IOErrorContext(
-                        e.path().to_path_buf(),
-                        err,
-                        e.command_line
-                    ));
-                }
-                Ok(rd) => {
-                    if listed_ancestors
-                        .insert(FileInformation::from_path(e.path(), e.must_dereference)?)
-                    {
-                        // when listing several directories in recursive mode, we show
-                        // "dirname:" at the beginning of the file list
-                        output.write_dir_header(e, config, false)?;
-                        enter_directory(e, rd, config, listed_ancestors, output)?;
-                        listed_ancestors
-                            .remove(&FileInformation::from_path(e.path(), e.must_dereference)?);
-                    } else {
+/// Recursively traverse directories using an explicit stack.
+///
+/// This avoids deep recursive call chains while preserving GNU-style
+/// directory traversal order and ancestor detection.
+fn enter_directory<O: LsOutput>(
+    path_data: &PathData,
+    read_dir: ReadDir,
+    config: &Config,
+    listed_ancestors: &mut HashSet<FileInformation>,
+    output: &mut O,
+    entries: &mut Vec<PathData>,
+) -> UResult<()> {
+    struct StackEntry {
+        path: PathBuf,
+        command_line: bool,
+        is_first: bool,
+        read_dir: ReadDir,
+    }
+
+    let mut stack = Vec::new();
+    stack.push(StackEntry {
+        path: path_data.path().to_path_buf(),
+        command_line: path_data.command_line,
+        is_first: true,
+        read_dir,
+    });
+
+    while let Some(entry) = stack.pop() {
+        let path_data = PathData::new(
+            entry.path.clone().into(),
+            None,
+            None,
+            config,
+            entry.command_line,
+        );
+
+        if !entry.is_first {
+            output.write_dir_header(&path_data, config, false)?;
+        }
+
+        collect_directory_entries(entries, &path_data, config, output, entry.read_dir)?;
+        write_directory_entries(entries, config, output)?;
+
+        if config.recursive {
+            let start = if config.files == Files::All { 2 } else { 0 };
+
+            for child in entries
+                .iter()
+                .skip(start)
+                .filter(|p| p.file_type().is_some_and(FileType::is_dir))
+                .rev()
+            {
+                let child_path = child.path().to_path_buf();
+                let child_must_dereference = child.must_dereference;
+                let child_command_line = child.command_line;
+
+                match fs::read_dir(&child_path) {
+                    Err(err) => {
                         output.flush()?;
-                        show!(LsError::AlreadyListedError(e.path().to_path_buf()));
+                        show!(LsError::IOErrorContext(
+                            child_path.clone(),
+                            err,
+                            child_command_line,
+                        ));
+                    }
+                    Ok(read_dir) => {
+                        if listed_ancestors.insert(FileInformation::from_path(
+                            &child_path,
+                            child_must_dereference,
+                        )?) {
+                            stack.push(StackEntry {
+                                path: child_path,
+                                command_line: child_command_line,
+                                is_first: false,
+                                read_dir,
+                            });
+                        } else {
+                            output.flush()?;
+                            show!(LsError::AlreadyListedError(child_path));
+                        }
                     }
                 }
             }
@@ -1407,22 +1485,6 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
                 Some(ft) => ft.is_dir(),
             }
         });
-    }
-}
-
-fn is_hidden(file_path: &DirEntry) -> bool {
-    #[cfg(windows)]
-    {
-        let metadata = file_path.metadata().unwrap();
-        let attr = metadata.file_attributes();
-        (attr & 0x2) > 0
-    }
-    #[cfg(not(windows))]
-    {
-        file_path
-            .file_name()
-            .to_str()
-            .is_some_and(|res| res.starts_with('.'))
     }
 }
 
