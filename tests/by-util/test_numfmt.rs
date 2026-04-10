@@ -1411,12 +1411,8 @@ fn test_scientific_notation_rejected_by_gnu_issue_11655() {
         .stderr_contains("invalid suffix in input");
 }
 
-// https://github.com/uutils/coreutils/issues/11662
-// `--to=auto` is accepted at parse time by uutils then rejected at runtime
-// with exit code 2; GNU rejects it in option parsing with exit code 1.
 #[test]
-#[ignore = "GNU compat: see uutils/coreutils#11662"]
-fn test_to_auto_rejected_at_parse_time_issue_11662() {
+fn test_to_auto_rejected_at_parse_time() {
     new_ucmd!()
         .args(&["--to=auto", "100"])
         .fails_with_code(1)
