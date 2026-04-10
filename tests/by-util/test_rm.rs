@@ -236,6 +236,64 @@ fn test_recursive_long_filepath() {
     assert!(!at.file_exists(file_a));
 }
 
+// Regression test: the iterative traversal must not overflow the call stack on
+// deeply-nested directory trees.  The old recursive implementation would panic
+// (stack overflow) at depths around 10 000 with default stack sizes.
+//
+// We use a single-character child name "d" at every level (valid because each
+// directory contains exactly one child) so the absolute path stays well below
+// PATH_MAX even at depth 800.
+//
+// Depth is capped at 800 to stay comfortably within the fd-budget: each active
+// StackFrame now holds exactly one open file descriptor (the DirIter fd —
+// DirFd::into_iter_dir transfers ownership without dup), so the effective
+// traversal depth is bounded by RLIMIT_NOFILE (≈ 1 024 on systems with a
+// default 1 024 soft limit).
+//
+// Marked `#[ignore]` because creating 800 directories is slow in CI.
+// Run manually with: cargo test -- --ignored test_recursive_deep_tree
+#[cfg(not(windows))]
+#[test]
+#[ignore = "slow: creates 800 nested directories; run manually with --ignored"]
+fn test_recursive_deep_tree_no_stack_overflow() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    // "deep/d/d/.../d" — 800 single-char levels, one mkdir_all call.
+    let deep_path = "deep/".to_string() + &"d/".repeat(799) + "d";
+    at.mkdir_all(&deep_path);
+    ucmd.arg("-r").arg("deep").succeeds().no_stderr();
+    assert!(!at.dir_exists("deep"));
+}
+
+// Regression test: FrameIter::Drained / try_reclaim_fd must be exercised when
+// the process runs out of file descriptors mid-traversal.
+//
+// We cap RLIMIT_NOFILE at 30 for the child process.  stdin/stdout/stderr
+// consume 3 fds; rm opens a handful more internally.  A tree of depth 40
+// guarantees that EMFILE is hit before the leaf is reached, forcing
+// try_reclaim_fd to demote a Live frame to Drained.  The full tree must still
+// be removed successfully.
+//
+// Only runs on Unix (not Redox) because the iterative traversal and fd
+// recycling live in platform/unix.rs.
+#[cfg(all(unix, not(target_os = "redox")))]
+#[test]
+fn test_recursive_emfile_fd_recycling() {
+    use rlimit::Resource;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    // 40-level chain: "deep/d/d/.../d"
+    let deep_path = "deep/".to_string() + &"d/".repeat(39) + "d";
+    at.mkdir_all(&deep_path);
+
+    ucmd.arg("-r")
+        .arg("deep")
+        .limit(Resource::NOFILE, 30, 30)
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.dir_exists("deep"));
+}
+
 #[test]
 fn test_directory_without_flag() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -952,7 +1010,29 @@ fn test_recursive_interactive() {
     assert!(!at.dir_exists("a"));
 }
 
-// Avoid an infinite recursion due to a symbolic link to the current directory.
+// When the user declines to remove a subdirectory in interactive mode, rm
+// should NOT report an error.  The parent directory is left behind (because it
+// is non-empty), but the process should exit 0 — matching GNU rm behaviour.
+#[cfg(not(windows))]
+#[test]
+fn test_recursive_interactive_decline_child_no_error() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("parent");
+    at.mkdir("parent/child");
+    // Inputs: descend parent? y, remove child? n, remove parent? y
+    // 'parent' still contains 'child', so rm silently skips removing 'parent'.
+    let expected = "rm: descend into directory 'parent'? \
+                    rm: remove directory 'parent/child'? \
+                    rm: remove directory 'parent'? ";
+    ucmd.args(&["-r", "-i", "parent"])
+        .pipe_in("y\nn\ny\n")
+        .succeeds()
+        .stderr_only(expected);
+    // Both directories must still be present.
+    assert!(at.dir_exists("parent/child"));
+    assert!(at.dir_exists("parent"));
+}
+
 #[test]
 fn test_recursive_symlink_loop() {
     let (at, mut ucmd) = at_and_ucmd!();
