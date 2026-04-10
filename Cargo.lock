@@ -3831,6 +3831,7 @@ version = "0.8.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
+ "filetime",
  "fluent",
  "fs_extra",
  "indicatif",
