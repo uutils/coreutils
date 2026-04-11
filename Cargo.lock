@@ -3451,7 +3451,6 @@ dependencies = [
  "jiff-icu",
  "libc",
  "parse_datetime",
- "regex",
  "rustix",
  "tempfile",
  "uucore",
