@@ -226,7 +226,7 @@ jobs:
       - name: Run Python unit tests
         shell: bash
         run: |
-          python3 -m unittest util/test_compare_test_results.py
+          python3 -m unittest util/test_compare_test_results.py util/test_compare_size_results.py
 
   pre_commit:
     name: Pre-commit hooks
