@@ -13,6 +13,7 @@ use clap::{
 use lscolors::Colorable;
 #[cfg(unix)]
 use rustc_hash::FxHashMap;
+use rustc_hash::FxHashSet;
 use std::borrow::Cow;
 use std::cell::RefCell;
 #[cfg(unix)]
@@ -20,7 +21,7 @@ use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::{
     cell::OnceCell,
     cmp::Reverse,
-    collections::HashSet,
+
     ffi::{OsStr, OsString},
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
     io::{BufWriter, ErrorKind, Stdout, Write, stdout},
@@ -1229,7 +1230,7 @@ pub fn list_with_output<O: LsOutput>(
             output.write_dir_header(path_data, config, is_first)?;
         }
 
-        let mut listed_ancestors = HashSet::with_capacity(1);
+        let mut listed_ancestors = FxHashSet::default();
         listed_ancestors.insert(FileInformation::from_path(
             path_data.path(),
             path_data.must_dereference,
@@ -1338,7 +1339,7 @@ fn enter_directory<O: LsOutput>(
     path_data: &PathData,
     read_dir: ReadDir,
     config: &Config,
-    listed_ancestors: &mut HashSet<FileInformation>,
+    listed_ancestors: &mut FxHashSet<FileInformation>,
     output: &mut O,
     entries: &mut Vec<PathData>,
 ) -> UResult<()> {
@@ -1358,7 +1359,7 @@ fn enter_directory<O: LsOutput>(
 
     while let Some(entry) = current.take().or_else(|| stack.pop()) {
         let path_data = PathData::new(
-            entry.path.clone().into(),
+            entry.path.as_path().into(),
             None,
             None,
             config,
