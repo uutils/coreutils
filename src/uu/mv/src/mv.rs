@@ -226,7 +226,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("mv")
         .version(uucore::crate_version!())
         .about(translate!("mv-about"))
         .help_template(uucore::localized_help_template(uucore::util_name()))
@@ -929,11 +929,8 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
 }
 
 #[cfg(target_os = "wasi")]
-fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
-    Err(io::Error::new(
-        io::ErrorKind::Other,
-        translate!("mv-error-no-symlink-support"),
-    ))
+fn rename_symlink_fallback(_from: &Path, _to: &Path) -> io::Result<()> {
+    Err(io::Error::other(translate!("mv-error-no-symlink-support")))
 }
 
 fn rename_dir_fallback(

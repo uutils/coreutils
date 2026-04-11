@@ -3,7 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker: ignore: AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado febr MEST KST
+// spell-checker: ignore: AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado febr MEST KST uueuu ueuu vasárnap június január distros
+// spell-checker: ignore: uppercases
 
 use std::cmp::Ordering;
 
@@ -1622,6 +1623,32 @@ fn test_date_locale_en_us_vs_c_difference() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_date_locale_hu_hungarian() {
+    // Regression test for uutils/coreutils#11240: the GNU modifier fast-path
+    // ("%-e") used to run before ICU localization, so "%b"/"%A" came out in
+    // English even under hu_HU.UTF-8. Pin an explicit format string so the
+    // assertion is deterministic across glibc versions (the default D_T_FMT
+    // for hu_HU differs between distros).
+    if !is_locale_available("hu_HU.UTF-8") {
+        return;
+    }
+
+    let result = new_ucmd!()
+        .env("LC_ALL", "hu_HU.UTF-8")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2025-12-14T13:00:00")
+        .arg("+%Y. %b %-e., %A, %H:%M:%S %Z")
+        .succeeds();
+
+    assert_eq!(
+        result.stdout_str(),
+        "2025. dec 14., vasárnap, 13:00:00 UTC\n"
+    );
+}
+
+#[test]
 #[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
 fn test_date_locale_fr_french() {
     // Test French locale (fr_FR.UTF-8) behavior
@@ -1822,6 +1849,166 @@ fn test_date_parenthesis_comment() {
             .arg(format)
             .succeeds()
             .stdout_only(expected);
+    }
+}
+
+#[test]
+fn test_date_strftime_narrow_width_on_wide_default() {
+    // `%j` has a default width of 3. Requesting `%02j` on day 1 should yield `01`.
+    // uutils currently yields `1`.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2024-01-01")
+        .arg("+%02j")
+        .succeeds()
+        .stdout_is("01\n");
+}
+
+#[test]
+#[ignore = "https://github.com/uutils/parse_datetime/issues/283 — GNU date floors negative fractional epochs (`@-1.5` -> -2); uutils truncates toward zero (-> -1)."]
+fn test_date_negative_fractional_epoch_flooring() {
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("@-1.5")
+        .arg("+%s")
+        .succeeds()
+        .stdout_is("-2\n");
+}
+
+#[test]
+#[ignore = "https://github.com/uutils/parse_datetime/issues/282 — parse_datetime rejects `HH:MM am/pm` forms (e.g. `2024-06-15 12:00 PM`, `2024-06-15 11:30am`). GNU date accepts them."]
+fn test_date_input_hhmm_ampm() {
+    for input in [
+        "2024-06-15 12:00 PM",
+        "2024-06-15 11:30am",
+        "2024-06-15 3:00 PM",
+    ] {
+        new_ucmd!()
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg(input)
+            .arg("+%H:%M")
+            .succeeds();
+    }
+}
+
+#[test]
+#[ignore = "https://github.com/uutils/parse_datetime/issues/281 — GNU date re-zones input with trailing TZ abbreviation (e.g. `2024-01-01 EST`) into the local TZ; uutils keeps the input TZ on output."]
+fn test_date_input_trailing_tz_abbrev_rezones() {
+    // `TZ=UTC+1 date -d '2024-01-01 EST'` should display the instant in UTC+1
+    // (GNU: 04:00:00 UTC), not leave it in EST (uutils: 00:00:00 -05).
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC+1")
+        .arg("-d")
+        .arg("2024-01-01 EST")
+        .arg("+%H:%M:%S %:z")
+        .succeeds()
+        .stdout_is("04:00:00 -01:00\n");
+}
+
+#[test]
+fn test_date_strftime_case_flag_on_alt_ampm() {
+    // `%P` is GNU's lowercase am/pm. `%#P` should stay lowercase in GNU; uutils flips to `PM`.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2024-06-15 13:45:30")
+        .arg("+%#P")
+        .succeeds()
+        .stdout_is("pm\n");
+}
+
+#[test]
+#[ignore = "https://github.com/uutils/coreutils/issues/11658 — GNU date applies flags/widths to `%N` (nanoseconds); uutils ignores/mishandles them."]
+fn test_date_strftime_n_width_and_flags() {
+    // `%_3N` should space-pad nanoseconds to width 3. GNU outputs `0  `; uutils outputs `0`.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("@0")
+        .arg("+%_3N")
+        .succeeds()
+        .stdout_is("0  \n");
+    // `%-N` (no-padding flag) should still output the full 9-digit default.
+    // GNU: `000000000`; uutils: `0`.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("@0")
+        .arg("+%-N")
+        .succeeds()
+        .stdout_is("000000000\n");
+}
+
+#[test]
+#[ignore = "https://github.com/uutils/coreutils/issues/11657 — GNU date treats composite strftime specifiers (%D, %F, %T, ...) as atomic; flags like `-` should not propagate to sub-fields."]
+fn test_date_strftime_flag_on_composite() {
+    // GNU `%-D` keeps `06/15/24` (flag ignored on composite).
+    // uutils applies `-` to inner `%m`, producing `6/15/24`.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2024-06-15")
+        .arg("+%-D")
+        .succeeds()
+        .stdout_is("06/15/24\n");
+}
+
+#[test]
+#[ignore = "https://github.com/uutils/coreutils/issues/11656 — GNU date strips the `O` strftime modifier in C locale (e.g. `%Om` -> `%m`); uutils leaks it as literal `%om`."]
+fn test_date_strftime_o_modifier() {
+    // In C locale the `O` modifier is a no-op (alternative numeric symbols).
+    // GNU renders `%Om` as `06` for June; uutils renders it as the literal `%Om`.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2024-06-15")
+        .arg("+%Om-%Oy-%Ol")
+        .succeeds()
+        .stdout_is("06-24-12\n");
+}
+
+#[test]
+#[ignore = "https://github.com/uutils/parse_datetime/issues/280 — GNU date accepts bare timezone abbreviations (UT, GMT, ...) meaning `now in that TZ`; parse_datetime rejects them."]
+fn test_date_bare_timezone_abbreviation() {
+    // GNU: `date -d ut`, `date -d UT`, `date -d gmt` → current time in UTC.
+    // uutils: "invalid date" error.
+    for input in ["ut", "UT", "gmt", "GMT"] {
+        new_ucmd!()
+            .env("TZ", "UTC+1")
+            .arg("-d")
+            .arg(input)
+            .arg("+%Z")
+            .succeeds()
+            .stdout_is("UTC\n");
+    }
+}
+
+#[test]
+#[ignore = "https://github.com/uutils/parse_datetime/issues/279 — GNU date silently ignores unrecognized trailing tokens (e.g. `8j`), but parse_datetime rejects them."]
+fn test_date_ignores_unrecognized_trailing_tokens() {
+    // GNU compatibility: trailing unknown word-tokens after a valid number are ignored.
+    // GNU parses `8j`, `8 j`, etc. as hour 8; our parse_datetime crate errors out.
+    for input in ["8j", "8 j"] {
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .arg("-u")
+            .arg("-d")
+            .arg(input)
+            .arg("+%H:%M:%S")
+            .succeeds()
+            .stdout_only("08:00:00\n");
     }
 }
 
@@ -2112,6 +2299,7 @@ fn test_locale_month_names() {
         ("es_ES.UTF-8", "enero", "junio", "diciembre"),
         ("it_IT.UTF-8", "gennaio", "giugno", "dicembre"),
         ("pt_BR.UTF-8", "janeiro", "junho", "dezembro"),
+        ("hu_HU.UTF-8", "január", "június", "december"),
         ("ja_JP.UTF-8", "1月", "6月", "12月"),
         ("zh_CN.UTF-8", "一月", "六月", "十二月"),
     ] {
@@ -2385,6 +2573,47 @@ fn test_date_format_modifier_percent_escape() {
         .args(&["-d", "1999-06-01", "+%%Y=%10Y"])
         .succeeds()
         .stdout_is("%Y=0000001999\n");
+}
+
+#[test]
+fn test_date_format_modifier_huge_width_fails_without_abort() {
+    // GNU date also exits with failure for extremely large width.
+    // Assert exit code only to avoid coupling to implementation-specific error text.
+    let format = format!("+%{}c", usize::MAX);
+    new_ucmd!().arg(&format).fails().code_is(1);
+}
+
+#[test]
+fn test_date_format_large_width_no_oom() {
+    // Regression: very large width like %8888888888r caused OOM.
+    // GNU caps width to i32::MAX; verify we don't crash.
+    // Use a moderate width with a fixed date to check the code path works.
+    new_ucmd!()
+        .arg("-d")
+        .arg("2024-01-01")
+        .arg("+%300S")
+        .succeeds()
+        .stdout_is(format!("{}\n", format_args!("{:0>300}", "00")));
+
+    // Test with a larger width to exercise the code path without producing
+    // gigabytes of output (the original %8888888888r would produce ~2GB).
+    new_ucmd!()
+        .arg("-d")
+        .arg("2024-01-01")
+        .arg("+%10000S")
+        .succeeds()
+        .stdout_is(format!("{}\n", format_args!("{:0>10000}", "00")));
+
+    // Mixed literal text with multiple width-modified specifiers.
+    // 2024-01-01 is Monday (day-of-week 1).
+    // %2u → "01", literal "ueuu", %6666u → "1" zero-padded to 6666, literal "-r".
+    let expected = format!("01ueuu{}-r\n", format_args!("{:0>6666}", "1"));
+    new_ucmd!()
+        .arg("-d")
+        .arg("2024-01-01")
+        .arg("+%2uueuu%6666u-r")
+        .succeeds()
+        .stdout_is(expected);
 }
 
 // Tests for format modifier edge cases (flags without explicit width)

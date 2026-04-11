@@ -16,11 +16,11 @@ use jiff::fmt::strtime;
 use jiff::tz::TimeZone;
 use jiff::{Timestamp, ToSpan, Zoned};
 #[cfg(unix)]
-use nix::libc::O_NONBLOCK;
+use libc::O_NONBLOCK;
 #[cfg(unix)]
-use nix::sys::stat::futimens;
+use rustix::fs::Timestamps;
 #[cfg(unix)]
-use nix::sys::time::TimeSpec;
+use rustix::fs::futimens;
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
 #[cfg(unix)]
@@ -263,9 +263,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("touch")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("touch"))
         .about(translate!("touch-about"))
         .override_usage(format_usage(&translate!("touch-usage")))
         .infer_long_args(true)
@@ -617,28 +617,18 @@ fn try_futimens_via_write_fd(path: &Path, atime: FileTime, mtime: FileTime) -> s
         .custom_flags(O_NONBLOCK)
         .open(path)?;
 
-    let atime_sec = atime.unix_seconds();
-    let atime_nsec = i64::from(atime.nanoseconds());
-    let mtime_sec = mtime.unix_seconds();
-    let mtime_nsec = i64::from(mtime.nanoseconds());
+    let timestamps = Timestamps {
+        last_access: rustix::fs::Timespec {
+            tv_sec: atime.unix_seconds(),
+            tv_nsec: atime.nanoseconds() as _,
+        },
+        last_modification: rustix::fs::Timespec {
+            tv_sec: mtime.unix_seconds(),
+            tv_nsec: mtime.nanoseconds() as _,
+        },
+    };
 
-    #[cfg(target_pointer_width = "32")]
-    let atime_spec = TimeSpec::new(
-        atime_sec.try_into().unwrap(),
-        atime_nsec.try_into().unwrap(),
-    );
-    #[cfg(target_pointer_width = "64")]
-    let atime_spec = TimeSpec::new(atime_sec, atime_nsec);
-
-    #[cfg(target_pointer_width = "32")]
-    let mtime_spec = TimeSpec::new(
-        mtime_sec.try_into().unwrap(),
-        mtime_nsec.try_into().unwrap(),
-    );
-    #[cfg(target_pointer_width = "64")]
-    let mtime_spec = TimeSpec::new(mtime_sec, mtime_nsec);
-
-    futimens(&file, &atime_spec, &mtime_spec).map_err(Error::from)
+    futimens(&file, &timestamps).map_err(|e| Error::from_raw_os_error(e.raw_os_error()))
 }
 
 /// Get metadata of the provided path
@@ -882,6 +872,10 @@ fn pathbuf_from_stdout() -> Result<PathBuf, TouchError> {
         Ok(String::from_utf16(&file_path_buffer[0..buffer_size])
             .map_err(|e| TouchError::WindowsStdoutPathError(e.to_string()))?
             .into())
+    }
+    #[cfg(target_os = "wasi")]
+    {
+        Ok(PathBuf::from("/dev/stdout"))
     }
 }
 

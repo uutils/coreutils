@@ -1,7 +1,7 @@
 # coreutils (uutils)
 # * see the repository LICENSE, README, and CONTRIBUTING files for more information
 
-# spell-checker:ignore (libs) bigdecimal datetime foldhash serde gethostid kqueue libselinux mangen memmap uuhelp startswith constness expl unnested logind cfgs interner
+# spell-checker:ignore (libs) bigdecimal datetime foldhash serde gethostid kqueue libselinux mangen memmap uuhelp startswith constness expl unnested logind cfgs interner getauxval
 
 [package]
 name = "coreutils"
@@ -180,15 +180,17 @@ feat_Tier1 = [
 # It is bit complex to deduplicate with other lists
 feat_wasm = [
   "arch",
-  "basename",
   "base32",
   "base64",
+  "basename",
   "basenc",
   "cat",
+  "comm",
   "cp",
+  "csplit",
   "cut",
-  "ls",
   "date",
+  "dir",
   "dircolors",
   "dirname",
   "echo",
@@ -197,33 +199,47 @@ feat_wasm = [
   "false",
   "fmt",
   "fold",
+  "head",
   "join",
   "link",
+  "ln",
+  "ls",
+  "mkdir",
   "mv",
   "nl",
+  "nproc",
   "numfmt",
   "od",
   "paste",
   "pathchk",
   "pr",
   "printenv",
-  "head",
   "printf",
   "ptx",
   "pwd",
+  "readlink",
+  "realpath",
+  "rm",
+  "rmdir",
   "seq",
   "shred",
   "shuf",
   "sleep",
+  "sort",
+  "split",
   "sum",
+  "tail",
   "tee",
+  "touch",
   "tr",
   "true",
   "truncate",
+  "tsort",
   "uname",
   "unexpand",
   "uniq",
   "unlink",
+  "vdir",
   "wc",
   "yes",
   # cksum family
@@ -382,7 +398,7 @@ clap_complete = "4.4"
 clap_mangen = "0.3"
 compare = "0.1.0"
 crossterm = { version = "0.29.0", default-features = false }
-ctor = "0.8.0"
+ctor = "0.9.0"
 ctrlc = { version = "3.5.2", features = ["termination"] }
 divan = { package = "codspeed-divan-compat", version = "4.4.1" }
 dns-lookup = { version = "3.0.0" }
@@ -407,7 +423,8 @@ itertools = "0.14.0"
 itoa = "1.0.15"
 jiff = "0.2.18"
 jiff-icu = "0.2.2"
-libc = "0.2.172"
+# Pin due to https://github.com/nix-rust/nix/issues/2750
+libc = "=0.2.182"
 lscolors = { version = "0.21.0", default-features = false, features = [
   "gnu_legacy",
 ] }
@@ -426,7 +443,7 @@ phf_codegen = "0.13.1"
 platform-info = "2.0.3"
 pretty_assertions = "1.4.1"
 procfs = "0.18"
-rand = { version = "0.10.0", features = ["std_rng"] }
+rand = { version = "0.10.1", features = ["std_rng"] }
 rand_chacha = { version = "0.10.0" }
 rayon = "1.10"
 regex = "1.10.4"
@@ -435,10 +452,12 @@ rstest = "0.26.0"
 rstest_reuse = "0.7.0"
 rustc-hash = "2.1.1"
 rust-ini = "0.21.0"
-rustix = "1.1.4"
+# binary name of coreutils can be hijacked by overriding getauxval via LD_PRELOAD
+# So we use param and avoid libc backend
+rustix = { version = "1.1.4", features = ["param"] }
 same-file = "1.0.6"
 self_cell = "1.0.4"
-selinux = "=0.6.0"
+selinux = "=0.6.1"
 string-interner = "0.19.0"
 tempfile = "3.15.0"
 terminal_size = "0.4.0"
@@ -604,6 +623,9 @@ wc = { optional = true, version = "0.8.0", package = "uu_wc", path = "src/uu/wc"
 who = { optional = true, version = "0.8.0", package = "uu_who", path = "src/uu/who" }
 whoami = { optional = true, version = "0.8.0", package = "uu_whoami", path = "src/uu/whoami" }
 yes = { optional = true, version = "0.8.0", package = "uu_yes", path = "src/uu/yes" }
+
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+rustix.workspace = true
 
 # this breaks clippy linting with: "tests/by-util/test_factor_benches.rs: No such file or directory (os error 2)"
 # factor_benches = { optional = true, version = "0.0.0", package = "uu_factor_benches", path = "tests/benches/factor" }

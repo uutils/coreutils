@@ -3,9 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-#[cfg(not(target_os = "redox"))]
+#[cfg(not(any(target_os = "redox", target_os = "wasi")))]
 use std::path::Path;
-#[cfg(not(target_os = "redox"))]
+#[cfg(not(any(target_os = "redox", target_os = "wasi")))]
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
     fs::File,
@@ -15,7 +15,7 @@ use std::{
 
 use tempfile::TempDir;
 use uucore::error::UResult;
-#[cfg(not(target_os = "redox"))]
+#[cfg(not(any(target_os = "redox", target_os = "wasi")))]
 use uucore::{error::USimpleError, show_error, translate};
 
 use crate::{SortError, current_open_fd_count, fd_soft_limit};
@@ -54,7 +54,7 @@ fn should_install_signal_handler() -> bool {
     open_fds.saturating_add(CTRL_C_FDS + RESERVED_FOR_MERGE) <= limit
 }
 
-#[cfg(not(target_os = "redox"))]
+#[cfg(not(any(target_os = "redox", target_os = "wasi")))]
 fn ensure_signal_handler_installed(state: Arc<Mutex<HandlerRegistration>>) -> UResult<()> {
     // This shared state must originate from `HANDLER_STATE` so the handler always sees
     // the current lock/path pair and can clean up the active temp directory on SIGINT.
@@ -104,7 +104,8 @@ fn ensure_signal_handler_installed(state: Arc<Mutex<HandlerRegistration>>) -> UR
     Ok(())
 }
 
-#[cfg(target_os = "redox")]
+#[cfg(any(target_os = "redox", target_os = "wasi"))]
+#[allow(clippy::unnecessary_wraps)]
 fn ensure_signal_handler_installed(_state: Arc<Mutex<HandlerRegistration>>) -> UResult<()> {
     Ok(())
 }
@@ -184,7 +185,7 @@ impl Drop for TmpDirWrapper {
 
 /// Remove the directory at `path` by deleting its child files and then itself.
 /// Errors while deleting child files are ignored.
-#[cfg(not(target_os = "redox"))]
+#[cfg(not(any(target_os = "redox", target_os = "wasi")))]
 fn remove_tmp_dir(path: &Path) -> std::io::Result<()> {
     if let Ok(read_dir) = std::fs::read_dir(path) {
         for file in read_dir.flatten() {

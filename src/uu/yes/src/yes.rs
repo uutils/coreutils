@@ -6,24 +6,21 @@
 // cSpell:ignore strs
 
 use clap::{Arg, ArgAction, Command, builder::ValueParser};
-use std::error::Error;
 use std::ffi::OsString;
 use std::io::{self, Write};
 use uucore::error::{UResult, USimpleError, strip_errno};
 use uucore::format_usage;
 use uucore::translate;
 
-// it's possible that using a smaller or larger buffer might provide better performance on some
-// systems, but honestly this is good enough
+// it's possible that using a smaller or larger buffer might provide better performance
 const BUF_SIZE: usize = 16 * 1024;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
-    let mut buffer = Vec::with_capacity(BUF_SIZE);
     #[allow(clippy::unwrap_used, reason = "clap provides 'y' by default")]
-    let _ = args_into_buffer(&mut buffer, matches.get_many::<OsString>("STRING").unwrap());
+    let mut buffer = args_into_buffer(matches.get_many::<OsString>("STRING").unwrap())?;
     prepare_buffer(&mut buffer);
 
     match exec(&buffer) {
@@ -39,9 +36,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("yes")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("yes"))
         .about(translate!("yes-about"))
         .override_usage(format_usage(&translate!("yes-usage")))
         .arg(
@@ -53,12 +50,10 @@ pub fn uu_app() -> Command {
         .infer_long_args(true)
 }
 
-/// Copies words from `i` into `buf`, separated by spaces.
+/// create a buffer filled by words `i` separated by spaces.
 #[allow(clippy::unnecessary_wraps, reason = "needed on some platforms")]
-fn args_into_buffer<'a>(
-    buf: &mut Vec<u8>,
-    i: impl Iterator<Item = &'a OsString>,
-) -> Result<(), Box<dyn Error>> {
+fn args_into_buffer<'a>(i: impl Iterator<Item = &'a OsString>) -> UResult<Vec<u8>> {
+    let mut buf = Vec::with_capacity(BUF_SIZE);
     // On Unix (and wasi), OsStrs are just &[u8]'s underneath...
     #[cfg(any(unix, target_os = "wasi"))]
     {
@@ -76,25 +71,24 @@ fn args_into_buffer<'a>(
     #[cfg(not(any(unix, target_os = "wasi")))]
     {
         for part in itertools::intersperse(i.map(|a| a.to_str()), Some(" ")) {
-            let bytes = match part {
-                Some(part) => part.as_bytes(),
-                None => return Err(translate!("yes-error-invalid-utf8").into()),
-            };
+            let bytes = part
+                .ok_or_else(|| USimpleError::new(1, translate!("yes-error-invalid-utf8")))?
+                .as_bytes();
             buf.extend_from_slice(bytes);
         }
     }
 
     buf.push(b'\n');
 
-    Ok(())
+    Ok(buf)
 }
 
 /// Assumes buf holds a single output line forged from the command line arguments, copies it
-/// repeatedly until the buffer holds as many copies as it can under [`BUF_SIZE`].
+/// repeatedly until the buffer holds as many copies as it can
 fn prepare_buffer(buf: &mut Vec<u8>) {
     let line_len = buf.len();
     debug_assert!(line_len > 0, "buffer is not empty since we have newline");
-    let target_size = line_len * (BUF_SIZE / line_len); // 0 if line_len is already large enough
+    let target_size = line_len * (buf.capacity() / line_len); // 0 if line_len is already large enough
 
     while buf.len() < target_size {
         let to_copy = std::cmp::min(target_size - buf.len(), buf.len());
@@ -137,7 +131,8 @@ mod tests {
         ];
 
         for (line, final_len) in tests {
-            let mut v = std::iter::repeat_n(b'a', line).collect::<Vec<_>>();
+            let mut v = Vec::with_capacity(BUF_SIZE);
+            v.extend(std::iter::repeat_n(b'a', line));
             prepare_buffer(&mut v);
             assert_eq!(v.len(), final_len);
         }
@@ -146,23 +141,20 @@ mod tests {
     #[test]
     fn test_args_into_buf() {
         {
-            let mut v = Vec::with_capacity(BUF_SIZE);
             let default_args = ["y".into()];
-            args_into_buffer(&mut v, default_args.iter()).unwrap();
+            let v = args_into_buffer(default_args.iter()).unwrap();
             assert_eq!(String::from_utf8(v).unwrap(), "y\n");
         }
 
         {
-            let mut v = Vec::with_capacity(BUF_SIZE);
             let args = ["foo".into()];
-            args_into_buffer(&mut v, args.iter()).unwrap();
+            let v = args_into_buffer(args.iter()).unwrap();
             assert_eq!(String::from_utf8(v).unwrap(), "foo\n");
         }
 
         {
-            let mut v = Vec::with_capacity(BUF_SIZE);
             let args = ["foo".into(), "bar    baz".into(), "qux".into()];
-            args_into_buffer(&mut v, args.iter()).unwrap();
+            let v = args_into_buffer(args.iter()).unwrap();
             assert_eq!(String::from_utf8(v).unwrap(), "foo bar    baz qux\n");
         }
     }

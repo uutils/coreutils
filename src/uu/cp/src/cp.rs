@@ -521,7 +521,7 @@ pub fn uu_app() -> Command {
         options::ATTRIBUTES_ONLY,
         options::COPY_CONTENTS,
     ];
-    Command::new(uucore::util_name())
+    Command::new("cp")
         .version(uucore::crate_version!())
         .about(translate!("cp-about"))
         .help_template(uucore::localized_help_template(uucore::util_name()))
@@ -1404,7 +1404,7 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
                 )
                 .unwrap(),
             )
-            .with_message(uucore::util_name());
+            .with_message("cp");
         pb.tick();
         Some(pb)
     } else {
@@ -1896,17 +1896,17 @@ pub(crate) fn copy_attributes(
 fn symlink_file(
     source: &Path,
     dest: &Path,
-    symlinked_files: &mut HashSet<FileInformation>,
+    #[cfg(not(target_os = "wasi"))] symlinked_files: &mut HashSet<FileInformation>,
+    #[cfg(target_os = "wasi")] _symlinked_files: &mut HashSet<FileInformation>,
 ) -> CopyResult<()> {
     #[cfg(target_os = "wasi")]
     {
-        return Err(CpError::IoErrContext(
-            std::io::Error::new(std::io::ErrorKind::Unsupported, "symlinks not supported"),
+        Err(CpError::IoErrContext(
+            io::Error::new(io::ErrorKind::Unsupported, "symlinks not supported"),
             translate!("cp-error-cannot-create-symlink",
                        "dest" => get_filename(dest).unwrap_or("?").quote(),
                        "source" => get_filename(source).unwrap_or("?").quote()),
-        )
-        .into());
+        ))
     }
     #[cfg(not(any(windows, target_os = "wasi")))]
     {
@@ -1930,10 +1930,13 @@ fn symlink_file(
             )
         })?;
     }
-    if let Ok(file_info) = FileInformation::from_path(dest, false) {
-        symlinked_files.insert(file_info);
+    #[cfg(not(target_os = "wasi"))]
+    {
+        if let Ok(file_info) = FileInformation::from_path(dest, false) {
+            symlinked_files.insert(file_info);
+        }
+        Ok(())
     }
-    Ok(())
 }
 
 fn context_for(src: &Path, dest: &Path) -> String {
@@ -2210,10 +2213,7 @@ fn print_paths(parents: bool, source: &Path, dest: &Path) {
         //     a/b -> d/a/b
         //
         for (x, y) in aligned_ancestors(source, dest) {
-            println!(
-                "{}",
-                translate!("cp-verbose-created-directory", "source" => x.display(), "dest" => y.display())
-            );
+            println!("{} -> {}", x.display(), y.display());
         }
     }
 

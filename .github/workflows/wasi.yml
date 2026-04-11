@@ -1,0 +1,42 @@
+# spell-checker:ignore wasip wasmtime
+name: WASI
+
+# spell-checker:ignore TRIGGERPATH
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+# End the current execution if there is a new changeset in the PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  test_wasi:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: wasm32-wasip1
+    - uses: Swatinem/rust-cache@v2
+    - name: Install wasmtime
+      run: |
+        curl https://wasmtime.dev/install.sh -sSf | bash
+        echo "$HOME/.wasmtime/bin" >> $GITHUB_PATH
+    - name: Run tests
+      env:
+        CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime
+      run: |
+        # Get all utilities and exclude ones that don't compile for wasm32-wasip1
+        EXCLUDE="dd|df|du|env|expr|mktemp|more|tac|test"
+        UTILS=$(./util/show-utils.sh | tr ' ' '\n' | grep -vE "^($EXCLUDE)$" | sed 's/^/-p uu_/' | tr '\n' ' ')
+        cargo test --target wasm32-wasip1 --no-default-features $UTILS
