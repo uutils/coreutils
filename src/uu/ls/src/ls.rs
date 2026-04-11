@@ -1253,7 +1253,7 @@ fn collect_directory_entries<O: LsOutput>(
     path_data: &PathData,
     config: &Config,
     output: &mut O,
-    mut read_dir: ReadDir,
+    read_dir: &mut ReadDir,
 ) -> UResult<()> {
     entries.clear();
 
@@ -1369,7 +1369,7 @@ fn enter_directory<O: LsOutput>(
             output.write_dir_header(&path_data, config, false)?;
         }
 
-        let current_read_dir = if entry.is_first {
+        let mut current_read_dir = if entry.is_first {
             initial_read_dir
                 .take()
                 .expect("initial read_dir is present for first entry")
@@ -1388,7 +1388,7 @@ fn enter_directory<O: LsOutput>(
             }
         };
 
-        collect_directory_entries(entries, &path_data, config, output, current_read_dir)?;
+        collect_directory_entries(entries, &path_data, config, output, &mut current_read_dir)?;
         write_directory_entries(entries, config, output)?;
 
         if config.recursive {
