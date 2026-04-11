@@ -104,8 +104,8 @@ impl EntryInfo {
 /// Streaming mode for `LsOutput` sinks.
 ///
 /// `Batch` sinks receive a directory's entries all at once via
-/// [`write_entries`]. `Streaming` sinks receive one entry at a time via
-/// [`write_entry`].
+/// [`LsOutput::write_entries`]. `Streaming` sinks receive one entry at a time via
+/// [`LsOutput::write_entry`].
 pub enum StreamMode {
     Batch,
     Streaming,
