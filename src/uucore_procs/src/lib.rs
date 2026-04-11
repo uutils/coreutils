@@ -16,16 +16,39 @@ use quote::quote;
 //* ref: [path construction from LitStr](https://oschwald.github.io/maxminddb-rust/syn/struct.LitStr.html) @@ <http://archive.is/8YDua>
 
 /// A procedural macro to define the main function of a uutils binary.
+///
+/// This macro handles:
+/// - SIGPIPE state capture at process startup (before Rust runtime overrides it)
+/// - SIGPIPE restoration to default if parent didn't explicitly ignore it
+/// - Disabling Rust signal handlers for proper core dumps
+/// - Error handling and exit code management
 #[proc_macro_attribute]
-pub fn main(_args: TokenStream, stream: TokenStream) -> TokenStream {
+pub fn main(args: TokenStream, stream: TokenStream) -> TokenStream {
     let stream = proc_macro2::TokenStream::from(stream);
+    // Some utils e.g. true does not require signals
+    let signals = !args.to_string().contains("no_signals");
 
     let new = quote!(
+        // Initialize SIGPIPE state capture at process startup (Unix only).
+        // This must be at module level to set up the .init_array static that runs
+        // before main() to capture whether SIGPIPE was ignored by the parent process.
+        #[cfg(all(#signals, unix))]
+        uucore::init_startup_state_capture!();
+
         pub fn uumain(args: impl uucore::Args) -> i32 {
             #stream
 
-            // disable rust signal handlers (otherwise processes don't dump core after e.g. one SIGSEGV)
+            // Restore SIGPIPE to default if it wasn't explicitly ignored by parent.
+            // The Rust runtime ignores SIGPIPE, but we need to respect the parent's
+            // signal disposition for proper pipeline behavior (GNU compatibility).
+            // needed even for true --version
             #[cfg(unix)]
+            if !uucore::signals::sigpipe_was_ignored() {
+                let _ = uucore::signals::enable_pipe_errors();
+            }
+
+            // disable rust signal handlers (otherwise processes don't dump core after e.g. one SIGSEGV)
+            #[cfg(all(#signals, unix))]
             uucore::disable_rust_signal_handlers().expect("Disabling rust signal handlers failed");
             let result = uumain(args);
             match result {
@@ -36,7 +59,8 @@ pub fn main(_args: TokenStream, stream: TokenStream) -> TokenStream {
                         uucore::show_error!("{s}");
                     }
                     if e.usage() {
-                        eprintln!("Try '{} --help' for more information.", uucore::execution_phrase());
+                        use std::io::{stderr, Write as _};
+                        let _ = writeln!(stderr(),"Try '{} --help' for more information.", uucore::execution_phrase());
                     }
                     e.code()
                 }

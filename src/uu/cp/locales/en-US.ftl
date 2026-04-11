@@ -85,12 +85,15 @@ cp-error-selinux-not-enabled = SELinux was not enabled during the compile time!
 cp-error-selinux-set-context = failed to set the security context of { $path }: { $error }
 cp-error-selinux-get-context = failed to get security context of { $path }
 cp-error-selinux-error = SELinux error: { $error }
+cp-error-selinux-context-conflict = cannot combine --context (-Z) with --preserve=context
 cp-error-cannot-create-fifo = cannot create fifo { $path }: File exists
+cp-error-cannot-create-special-file = cannot create special file { $path }: { $error }
 cp-error-invalid-attribute = invalid attribute { $value }
 cp-error-failed-to-create-whole-tree = failed to create whole tree
 cp-error-failed-to-create-directory = Failed to create directory: { $error }
 cp-error-backup-format = cp: { $error }
   Try '{ $exec } --help' for more information.
+cp-error-setting-attributes = setting attributes for { $path }
 
 # Debug enum strings
 cp-debug-enum-no = no
@@ -106,10 +109,8 @@ cp-debug-enum-seek-hole-zeros = SEEK_HOLE + zeros
 cp-warning-source-specified-more-than-once = source { $file_type } { $source } specified more than once
 
 # Verbose and debug messages
-cp-verbose-copied = { $source } -> { $dest }
 cp-debug-skipped = skipped { $path }
 cp-verbose-removed = removed { $path }
-cp-verbose-created-directory = { $source } -> { $dest }
 cp-debug-copy-offload = copy offload: { $offload }, reflink: { $reflink }, sparse detection: { $sparse }
 
 # Prompts

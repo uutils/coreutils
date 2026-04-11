@@ -1,6 +1,6 @@
 name: FixPR
 
-# spell-checker:ignore Swatinem dtolnay dedupe
+# spell-checker:ignore dedupe
 
 # Trigger automated fixes for PRs being merged (with associated commits)
 
@@ -46,7 +46,7 @@ jobs:
         # Ensure updated '*/Cargo.lock'
         # * '*/Cargo.lock' is required to be in a format that `cargo` of MinSRV can interpret (eg, v1-format for MinSRV < v1.38)
         for dir in "." "fuzz"; do
-          ( cd "$dir" && (cargo fetch --locked --quiet || cargo +${{ steps.vars.outputs.RUST_MIN_SRV }} update) )
+          ( cd "$dir" && (cargo fetch --locked --quiet --target $(rustc --print host-tuple) || cargo +${{ steps.vars.outputs.RUST_MIN_SRV }} update) )
         done
     - name: Info
       shell: bash
@@ -65,11 +65,11 @@ jobs:
         cargo tree -V
         ## dependencies
         echo "## dependency list"
-        cargo fetch --locked --quiet
+        cargo fetch --locked --quiet --target $(rustc --print host-tuple)
         ## * using the 'stable' toolchain is necessary to avoid "unexpected '--filter-platform'" errors
-        RUSTUP_TOOLCHAIN=stable cargo tree --locked --no-dedupe -e=no-dev --prefix=none --features ${{ matrix.job.features }} | grep -vE "$PWD" | sort --unique
+        cargo +stable tree --locked --no-dedupe -e=no-dev --prefix=none --features ${{ matrix.job.features }} | grep -vE "$PWD" | sort --unique
     - name: Commit any changes (to '${{ env.BRANCH_TARGET }}')
-      uses: EndBug/add-and-commit@v9
+      uses: EndBug/add-and-commit@v10
       with:
         new_branch: ${{ env.BRANCH_TARGET }}
         default_author: github_actions

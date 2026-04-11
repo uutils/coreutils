@@ -5,20 +5,24 @@
 
 // spell-checker:ignore rsplit hexdigit bitlen invalidchecksum inva idchecksum xffname
 
+use crate::util_name;
+
 use std::ffi::OsStr;
 use std::fmt::Display;
 use std::fs::File;
-use std::io::{self, BufReader, Read, Write, stdin};
+use std::io::{self, BufReader, Read, Write, stderr, stdin};
 
 use os_display::Quotable;
 
-use crate::checksum::{AlgoKind, ChecksumError, SizedAlgoKind, digest_reader, unescape_filename};
-use crate::error::{FromIo, UError, UResult, USimpleError};
+use crate::checksum::{
+    AlgoKind, BlakeLength, ChecksumError, ReadingMode, ShaLength, SizedAlgoKind, digest_reader,
+    parse_blake_length, unescape_filename,
+};
+use crate::error::{FromIo, UError, UIoError, UResult, USimpleError};
 use crate::quoting_style::{QuotingStyle, locale_aware_escape_name};
-use crate::sum::DigestOutput;
+use crate::sum::{self, Blake2b, Blake3, DigestOutput};
 use crate::{
-    os_str_as_bytes, os_str_from_bytes, read_os_string_lines, show, show_error, show_warning_caps,
-    translate,
+    os_str_as_bytes, os_str_from_bytes, read_os_string_lines, show, show_warning_caps, translate,
 };
 
 /// To what level should checksum validation print logging info.
@@ -173,8 +177,10 @@ fn print_cksum_report(res: &ChecksumResult) {
 /// Print a "no properly formatted lines" message in stderr
 #[inline]
 fn log_no_properly_formatted(filename: impl Display) {
-    show_error!(
-        "{}",
+    let _ = writeln!(
+        stderr(),
+        "{}: {}",
+        util_name(),
         translate!("checksum-no-properly-formatted", "checksum_file" => filename)
     );
 }
@@ -182,8 +188,10 @@ fn log_no_properly_formatted(filename: impl Display) {
 /// Print a "no file was verified" message in stderr
 #[inline]
 fn log_no_file_verified(filename: impl Display) {
-    show_error!(
-        "{}",
+    let _ = writeln!(
+        stderr(),
+        "{}: {}",
+        util_name(),
         translate!("checksum-no-file-verified", "checksum_file" => filename)
     );
 }
@@ -210,7 +218,7 @@ impl FileChecksumResult {
 
     /// The cli options might prevent to display on the outcome of the
     /// comparison on STDOUT.
-    fn can_display(&self, verbose: ChecksumVerbose) -> bool {
+    fn can_display(self, verbose: ChecksumVerbose) -> bool {
         match self {
             Self::Ok => verbose.over_quiet(),
             Self::Failed => verbose.over_status(),
@@ -229,9 +237,9 @@ impl Display for FileChecksumResult {
     }
 }
 
-/// Print to the given buffer the checksum validation status of a file which
+/// Write to the given buffer the checksum validation status of a file which
 /// name might contain non-utf-8 characters.
-fn print_file_report<W: Write>(
+fn write_file_report<W: Write>(
     mut w: W,
     filename: &[u8],
     result: FileChecksumResult,
@@ -410,7 +418,7 @@ impl LineFormat {
         // checksums that are fully alphanumeric. Another check happens later
         // when we are provided with a length hint to detect ambiguous
         // base64-encoded checksums.
-        if is_base64 && checksum.len() % 4 != 0 {
+        if is_base64 && !checksum.len().is_multiple_of(4) {
             return None;
         }
 
@@ -456,7 +464,7 @@ impl LineInfo {
     /// In case of non-algo-based format, if `cached_line_format` is Some, it must take the priority
     /// over the detected format. Otherwise, we must set it the the detected format.
     /// This specific behavior is emphasized by the test
-    /// `test_hashsum::test_check_md5sum_only_one_space`.
+    /// `test_md5sum::test_check_md5sum_only_one_space`.
     fn parse(s: impl AsRef<OsStr>, cached_line_format: &mut Option<LineFormat>) -> Option<Self> {
         let line_bytes = os_str_as_bytes(s.as_ref()).ok()?;
 
@@ -482,13 +490,15 @@ impl LineInfo {
 }
 
 /// Extract the expected digest from the checksum string and decode it
-fn get_raw_expected_digest(checksum: &str, byte_len_hint: Option<usize>) -> Option<Vec<u8>> {
+fn get_raw_expected_digest(checksum: &str, bit_len_hint: Option<usize>) -> Option<Vec<u8>> {
     // If the length of the digest is not a multiple of 2, then it must be
     // improperly formatted (1 byte is 2 hex digits, and base64 strings should
     // always be a multiple of 4).
-    if checksum.len() % 2 != 0 {
+    if !checksum.len().is_multiple_of(2) {
         return None;
     }
+
+    let byte_len_hint = bit_len_hint.map(|n| n.div_ceil(8));
 
     let checks_hint = |len| byte_len_hint.is_none_or(|hint| hint == len);
 
@@ -509,7 +519,7 @@ fn get_raw_expected_digest(checksum: &str, byte_len_hint: Option<usize>) -> Opti
     // It is important to check it before trying to decode, because the
     // forgiving mode of decoding will ignore if padding characters '=' are
     // MISSING, but to match GNU's behavior, we must reject it.
-    if checksum.len() % 4 != 0 {
+    if !checksum.len().is_multiple_of(4) {
         return None;
     }
 
@@ -530,10 +540,10 @@ fn get_file_to_check(
     let filename_bytes = os_str_as_bytes(filename).map_err(|e| LineCheckError::UError(e.into()))?;
 
     if filename == "-" {
-        Ok(Box::new(io::stdin())) // Use stdin if "-" is specified in the checksum file
+        Ok(Box::new(stdin())) // Use stdin if "-" is specified in the checksum file
     } else {
         let failed_open = || {
-            print_file_report(
+            write_file_report(
                 io::stdout(),
                 filename_bytes,
                 FileChecksumResult::CantOpen,
@@ -607,6 +617,7 @@ fn identify_algo_name_and_length(
     algo_name_input: Option<AlgoKind>,
     last_algo: &mut Option<String>,
 ) -> Result<(AlgoKind, Option<usize>), LineCheckError> {
+    use AlgoKind as ak;
     let algo_from_line = line_info.algo_name.clone().unwrap_or_default();
     let Ok(line_algo) = AlgoKind::from_cksum(algo_from_line.to_lowercase()) else {
         // Unknown algorithm
@@ -622,23 +633,25 @@ fn identify_algo_name_and_length(
         match (algo_name_input, line_algo) {
             (l, r) if l == r => (),
             // Edge case for SHA2, which matches SHA(224|256|384|512)
-            (
-                AlgoKind::Sha2,
-                AlgoKind::Sha224 | AlgoKind::Sha256 | AlgoKind::Sha384 | AlgoKind::Sha512,
-            ) => (),
+            (ak::Sha2, ak::Sha224 | ak::Sha256 | ak::Sha384 | ak::Sha512) => (),
             _ => return Err(LineCheckError::ImproperlyFormatted),
         }
     }
 
     let bytes = if let Some(bitlen) = line_info.algo_bit_len {
         match line_algo {
-            AlgoKind::Blake2b if bitlen % 8 == 0 => Some(bitlen / 8),
-            AlgoKind::Sha2 | AlgoKind::Sha3 if [224, 256, 384, 512].contains(&bitlen) => {
-                Some(bitlen)
+            algo @ (ak::Blake2b | ak::Blake3) => {
+                match parse_blake_length(algo, BlakeLength::Int(bitlen)) {
+                    Ok(len) => Some(len),
+                    Err(_) => return Err(LineCheckError::ImproperlyFormatted),
+                }
             }
+            ak::Sha2 | ak::Sha3 if [224, 256, 384, 512].contains(&bitlen) => Some(bitlen),
+            ak::Shake128 | ak::Shake256 => Some(bitlen),
             // Either
-            //  the algo based line is provided with a bit length
-            //  with an algorithm that does not support it (only Blake2B does).
+            //  the algo based line is provided with a bit length with an
+            //  algorithm that does not support it (only Blake2b, Blake3, sha2,
+            //  and sha3 do).
             //
             //  eg: MD5-128 (foo.txt) = fffffffff
             //          ^ This is illegal
@@ -646,9 +659,12 @@ fn identify_algo_name_and_length(
             //  the given length is wrong because it's not a multiple of 8.
             _ => return Err(LineCheckError::ImproperlyFormatted),
         }
-    } else if line_algo == AlgoKind::Blake2b {
+    } else if line_algo == ak::Blake2b {
         // Default length with BLAKE2b,
-        Some(64)
+        Some(Blake2b::DEFAULT_BYTE_SIZE)
+    } else if line_algo == ak::Blake3 {
+        // Default length with BLAKE3,
+        Some(Blake3::DEFAULT_BYTE_SIZE)
     } else {
         None
     };
@@ -674,10 +690,28 @@ fn compute_and_check_digest_from_file(
     // Read the file and calculate the checksum
     let mut digest = algo.create_digest();
 
-    // TODO: improve function signature to use ReadingMode instead of binary bool
     // Set binary to false because --binary is not supported with --check
+
     let (calculated_checksum, _) =
-        digest_reader(&mut digest, &mut file_reader, /* binary */ false).unwrap();
+        match digest_reader(&mut digest, &mut file_reader, ReadingMode::Text) {
+            Ok(result) => result,
+            Err(err) => {
+                show!(err.map_err_context(|| {
+                    locale_aware_escape_name(&real_filename_to_check, QuotingStyle::SHELL_ESCAPE)
+                        .to_string_lossy()
+                        .to_string()
+                }));
+
+                write_file_report(
+                    io::stdout(),
+                    filename,
+                    FileChecksumResult::CantOpen,
+                    prefix,
+                    opts.verbose,
+                );
+                return Err(LineCheckError::CantOpenFile);
+            }
+        };
 
     // Do the checksum validation
     let checksum_correct = match calculated_checksum {
@@ -685,8 +719,8 @@ fn compute_and_check_digest_from_file(
         DigestOutput::Crc(n) => n.to_be_bytes() == expected_checksum,
         DigestOutput::U16(n) => n.to_be_bytes() == expected_checksum,
     };
-    print_file_report(
-        std::io::stdout(),
+    write_file_report(
+        io::stdout(),
         filename,
         FileChecksumResult::from_bool(checksum_correct),
         prefix,
@@ -709,20 +743,23 @@ fn process_algo_based_line(
 ) -> Result<(), LineCheckError> {
     let filename_to_check = line_info.filename.as_slice();
 
-    let (algo_kind, algo_byte_len) =
-        identify_algo_name_and_length(line_info, cli_algo_kind, last_algo)?;
+    let (algo_kind, algo_len) = identify_algo_name_and_length(line_info, cli_algo_kind, last_algo)?;
 
     // If the digest bitlen is known, we can check the format of the expected
     // checksum with it.
-    let digest_char_length_hint = match (algo_kind, algo_byte_len) {
-        (AlgoKind::Blake2b, Some(byte_len)) => Some(byte_len),
+    let digest_bit_length_hint = match (algo_kind, algo_len) {
+        (AlgoKind::Blake2b | AlgoKind::Blake3, Some(byte_len)) => Some(byte_len * 8),
+        (AlgoKind::Shake128 | AlgoKind::Shake256, Some(bit_len)) => Some(bit_len),
+        (AlgoKind::Shake128, None) => Some(sum::Shake128::DEFAULT_BIT_SIZE),
+        (AlgoKind::Shake256, None) => Some(sum::Shake256::DEFAULT_BIT_SIZE),
         _ => None,
     };
 
-    let expected_checksum = get_raw_expected_digest(&line_info.checksum, digest_char_length_hint)
+    let expected_checksum = get_raw_expected_digest(&line_info.checksum, digest_bit_length_hint)
         .ok_or(LineCheckError::ImproperlyFormatted)?;
 
-    let algo = SizedAlgoKind::from_unsized(algo_kind, algo_byte_len)?;
+    let algo = SizedAlgoKind::from_unsized(algo_kind, algo_len)
+        .map_err(|_| LineCheckError::ImproperlyFormatted)?;
 
     compute_and_check_digest_from_file(filename_to_check, &expected_checksum, algo, opts)
 }
@@ -735,6 +772,7 @@ fn process_non_algo_based_line(
     cli_algo_length: Option<usize>,
     opts: ChecksumValidateOptions,
 ) -> Result<(), LineCheckError> {
+    use AlgoKind as ak;
     let mut filename_to_check = line_info.filename.as_slice();
     if filename_to_check.starts_with(b"*")
         && line_number == 0
@@ -743,22 +781,28 @@ fn process_non_algo_based_line(
         // Remove the leading asterisk if present - only for the first line
         filename_to_check = &filename_to_check[1..];
     }
-    let expected_checksum = get_raw_expected_digest(&line_info.checksum, None)
+
+    let expected_digest_sum = cli_algo_kind.expected_digest_bit_len();
+    let expected_checksum = get_raw_expected_digest(&line_info.checksum, expected_digest_sum)
         .ok_or(LineCheckError::ImproperlyFormatted)?;
 
     // When a specific algorithm name is input, use it and use the provided
     // bits except when dealing with blake2b, sha2 and sha3, where we will
     // detect the length.
-    let (algo_kind, algo_byte_len) = match cli_algo_kind {
-        AlgoKind::Blake2b => (AlgoKind::Blake2b, Some(expected_checksum.len())),
-        algo @ (AlgoKind::Sha2 | AlgoKind::Sha3) => {
+    let algo_byte_len = match cli_algo_kind {
+        ak::Blake2b | ak::Blake3 => Some(expected_checksum.len()),
+        ak::Sha2 | ak::Sha3 => {
             // multiplication by 8 to get the number of bits
-            (algo, Some(expected_checksum.len() * 8))
+            Some(
+                ShaLength::try_from(expected_checksum.len() * 8)
+                    .map_err(|_| LineCheckError::ImproperlyFormatted)?
+                    .as_usize(),
+            )
         }
-        _ => (cli_algo_kind, cli_algo_length),
+        _ => cli_algo_length,
     };
 
-    let algo = SizedAlgoKind::from_unsized(algo_kind, algo_byte_len)?;
+    let algo = SizedAlgoKind::from_unsized(cli_algo_kind, algo_byte_len)?;
 
     compute_and_check_digest_from_file(filename_to_check, &expected_checksum, algo, opts)
 }
@@ -821,14 +865,13 @@ fn process_checksum_file(
             Ok(f) => f,
             Err(e) => {
                 // Could not read the file, show the error and continue to the next file
-                show_error!("{e}");
+                let _ = writeln!(stderr(), "{}: {e}", util_name());
                 return Err(FileCheckError::CantOpenChecksumFile);
             }
         }
     };
 
     let reader = BufReader::new(file);
-    let lines = read_os_string_lines(reader).collect::<Vec<_>>();
 
     // cached_line_format is used to ensure that several non algo-based checksum line
     // will use the same parser.
@@ -838,9 +881,16 @@ fn process_checksum_file(
     // Behavior tested in gnu_cksum_c::test_warn
     let mut last_algo = None;
 
-    for (i, line) in lines.iter().enumerate() {
+    for (i, line_res) in read_os_string_lines(reader).enumerate() {
+        let line = line_res.map_err(|e| {
+            USimpleError::new(
+                UIoError::from(e).code(),
+                format!("{}: read error", filename_input.maybe_quote()),
+            )
+        })?;
+
         let line_result = process_checksum_line(
-            line,
+            &line,
             i,
             cli_algo_kind,
             cli_algo_length,
@@ -873,8 +923,10 @@ fn process_checksum_file(
                     } else {
                         "Unknown algorithm"
                     };
-                    show_error!(
-                        "{}",
+                    let _ = writeln!(
+                        stderr(),
+                        "{}: {}",
+                        util_name(),
                         translate!("checksum-error-algo-bad-format", "file" => filename_input.maybe_quote(), "line" => i + 1, "algo" => algo)
                     );
                 }
@@ -1012,7 +1064,7 @@ mod tests {
                         line_info
                             .algo_bit_len
                             .map(|m| m.to_string().as_bytes().to_owned()),
-                        bits.map(|b| b.to_owned()),
+                        bits.map(ToOwned::to_owned),
                         "failed for {}",
                         String::from_utf8_lossy(filename)
                     );
@@ -1212,7 +1264,7 @@ mod tests {
     }
 
     #[test]
-    fn test_print_file_report() {
+    fn test_write_file_report() {
         let opts = ChecksumValidateOptions::default();
 
         let cases: &[(&[u8], FileChecksumResult, &str, &[u8])] = &[
@@ -1245,7 +1297,7 @@ mod tests {
 
         for (filename, result, prefix, expected) in cases {
             let mut buffer: Vec<u8> = vec![];
-            print_file_report(&mut buffer, filename, *result, prefix, opts.verbose);
+            write_file_report(&mut buffer, filename, *result, prefix, opts.verbose);
             assert_eq!(&buffer, expected);
         }
     }

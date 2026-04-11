@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker:ignore contenta
+// spell-checker:ignore contenta edgecase behaviour
 
 use uutests::{at_and_ucmd, new_ucmd};
 
@@ -284,6 +284,15 @@ fn test_one_nonexisting_file() {
 }
 
 #[test]
+#[cfg(all(target_os = "linux", not(target_env = "musl")))]
+fn test_read_error() {
+    new_ucmd!()
+        .arg("/proc/self/mem")
+        .fails()
+        .stderr_contains("unexpand: /proc/self/mem: Input/output error");
+}
+
+#[test]
 #[cfg(target_os = "linux")]
 fn test_non_utf8_filename() {
     use std::os::unix::ffi::OsStringExt;
@@ -294,4 +303,153 @@ fn test_non_utf8_filename() {
     std::fs::write(at.plus(&filename), b"        a\n").unwrap();
 
     ucmd.arg(&filename).succeeds().stdout_is("\ta\n");
+}
+
+#[test]
+fn unexpand_multibyte_utf8_gnu_compat() {
+    // Verifies GNU-compatible behavior: column position uses byte count, not display width
+    // "1ΔΔΔ5" is 8 bytes (1 + 2*3 + 1), already at tab stop 8
+    // So 3 spaces should NOT convert to tab (would need 8 more to reach tab stop 16)
+    new_ucmd!()
+        .args(&["-a"])
+        .pipe_in("1ΔΔΔ5   99999\n")
+        .succeeds()
+        .stdout_is("1ΔΔΔ5   99999\n");
+}
+
+#[test]
+fn test_blanks_ext1() {
+    // Test case from GNU test suite: blanks-ext1
+    // ['blanks-ext1', '-t', '3,+6', {IN=> "\t      "}, {OUT=> "\t\t"}],
+    new_ucmd!()
+        .args(&["-t", "3,+6"])
+        .pipe_in("\t      ")
+        .succeeds()
+        .stdout_is("\t\t");
+}
+
+#[test]
+fn test_blanks_ext2() {
+    // Test case from GNU test suite: blanks-ext2
+    // ['blanks-ext2', '-t', '3,/9', {IN=> "\t      "}, {OUT=> "\t\t"}],
+    new_ucmd!()
+        .args(&["-t", "3,/9"])
+        .pipe_in("\t      ")
+        .succeeds()
+        .stdout_is("\t\t");
+}
+
+#[test]
+fn test_extended_tabstop_syntax() {
+    let test_cases = [
+        // Standalone /N: tabs at multiples of N
+        ("-t /9", "         ", "\t"),            // 9 spaces -> 1 tab
+        ("-t /9", "                  ", "\t\t"), // 18 spaces -> 2 tabs
+        // Standalone +N: tabs at multiples of N
+        ("-t +6", "      ", "\t"),         // 6 spaces -> 1 tab
+        ("-t +6", "            ", "\t\t"), // 12 spaces -> 2 tabs
+        // 3,/0 and 3,+0 should behave like just 3
+        ("-t 3,/0", "          ", "\t\t\t "), // 10 spaces -> 3 tabs + 1 space
+        ("-t 3,+0", "          ", "\t\t\t "), // 10 spaces -> 3 tabs + 1 space
+        ("-t 3", "          ", "\t\t\t "),    // 10 spaces -> 3 tabs + 1 space
+        // 3,/0 with text
+        ("-t 3,/0", "   test", "\ttest"), // 3 spaces + text -> 1 tab + text
+        // 3,+6 means tab stops at 3, 9, 15, 21, ...
+        ("-t 3,+6", "                    ", "\t\t\t     "), // 20 spaces -> 3 tabs + 5 spaces
+    ];
+
+    for (args, input, expected) in test_cases {
+        new_ucmd!()
+            .args(&args.split_whitespace().collect::<Vec<_>>())
+            .pipe_in(input)
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+#[test]
+fn test_buffered_read_edgecase_behaviour() {
+    // reads are done in 4096 chunks. Tests edgecase spaces around chunk bounds
+    let test_cases = [
+        {
+            // input has newlines in first chunk and has leading spaces after newline in chunk
+            let mut input = vec![b'0'; 180];
+            input.push(b'\n');
+            input.extend([b' '; 8]);
+            input.extend([b'0'; 3897]);
+            input.push(b'\n'); // 180 '0' -> 'n' -> 8 spaces -> 3897 '0' -> \n
+
+            let mut expected = vec![b'0'; 180];
+            expected.push(b'\n');
+            expected.push(b'\t');
+            expected.extend([b'0'; 3897]);
+            expected.push(b'\n'); // 180 '0' -> 'n' -> 1 tab -> 3897 '0' -> \n
+            (input, expected)
+        },
+        {
+            // input has newline after first chunk with leading spaces
+            let mut input = vec![b'0'; 4096];
+            input.extend("\n        0000\n".as_bytes()); // 4096 '0' -> \n -> 8 spaces -> 4 '0' -> \n
+
+            let mut expected = vec![b'0'; 4096];
+            expected.extend("\n\t0000\n".as_bytes()); // 4096 '0' -> \n -> 1 tab -> 4 '0' -> \n
+            (input, expected)
+        },
+        {
+            // fixture has newlines in first chunk and has leading spaces after newline in chunk
+            let mut input = vec![b'0'; 4095];
+            input.extend("\n        0000\n".as_bytes()); // 4095 '0' -> \n -> 8 spaces -> 4 '0' -> \n
+
+            let mut expected = vec![b'0'; 4095];
+            expected.extend("\n\t0000\n".as_bytes()); // 4095 '0' -> \n -> 1 tab -> 4 '0' -> \n
+            (input, expected)
+        },
+        {
+            // input has trailing spaces in the first chunk (should not be unexpanded) into newline with leading
+            // spaces which should be unexpanded
+            let mut input = vec![b'0'; 4088];
+            input.extend("        \n        0000\n".as_bytes()); // 4088 '0' -> 8 spaces -> \n -> 8 spaces -> 4 '0' -> \n
+
+            let mut expected = vec![b'0'; 4088];
+            expected.extend("        \n\t0000\n".as_bytes()); // 4088 '0' -> 8 spaces -> \n -> 8 spaces -> 4 '0' -> \n
+            (input, expected)
+        },
+        {
+            // input has a trailing normal chars after new line in first chunk into leading spaces for new
+            // chunk (should not be unexpanded)
+            let mut input = vec![b'0'; 4087];
+            input.extend("\n00000000        \n".as_bytes()); // 4087 '0' -> \n -> 8 '0' -> 8 spaces -> \n
+
+            let mut expected = vec![b'0'; 4087];
+            expected.extend("\n00000000        \n".as_bytes()); // 4087 '0' -> \n -> 8 '0' -> 8 spaces -> \n
+            (input, expected)
+        },
+        {
+            // input has a trailing blanks after new line in first chunk (should be unexpanded) into leading spaces for new
+            // chunk (should be unexpanded)
+            let mut input = vec![b'0'; 4087];
+            input.extend("\n                \n".as_bytes()); // 4087 '0' -> 16 spaces -> \n
+
+            let mut expected = vec![b'0'; 4087];
+            expected.extend("\n\t\t\n".as_bytes()); // 4087 '0' -> 2 tabs -> \n
+            (input, expected)
+        },
+        {
+            // input has a trailing blanks after new line in first chunk (should be unexpanded) into leading spaces for new
+            // chunk (should be unexpanded) (tests space counting is done over chunk bounds)
+            let mut input = vec![b'0'; 4091];
+            input.extend("\n        \n".as_bytes()); // 4091 '0' -> 8 spaces -> \n
+
+            let mut expected = vec![b'0'; 4091];
+            expected.extend("\n\t\n".as_bytes()); // 4091 '0' -> 1 tab -> \n
+            (input, expected)
+        },
+    ];
+
+    for (input, expected) in test_cases {
+        new_ucmd!()
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only(String::from_utf8(expected).unwrap());
+    }
 }

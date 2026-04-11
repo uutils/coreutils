@@ -25,6 +25,12 @@ $ ls -w=80
 With GNU coreutils, `--help` usually prints the help message and `--version` prints the version.
 We also commonly provide short options: `-h` for help and `-V` for version.
 
+## `coreutils`
+
+Our `coreutils` calls utility by `coreutils utility-name` and has `--list` to run against busybox test suite.
+Our `coreutils` is called as `utility-name` if its binary name ends with `utility-name` to support prefixed names.
+Longer name is prioritized e.g. `sum` with the prefix `ck` is called as `cksum`.
+
 ## `env`
 
 GNU `env` allows the empty string to be used as an environment variable name.
@@ -46,13 +52,6 @@ packages.
 ## `rm`
 
 `rm` can display a progress bar when the `-g`/`--progress` flag is set.
-
-## `hashsum` (deprecated)
-
-This utility does not exist in GNU coreutils. `hashsum` is a utility that
-supports computing the checksums with several algorithms. The flags and options
-are identical to the `*sum` family of utils (`sha1sum`, `sha256sum`, `b2sum`,
-etc.). This utility will be removed in the future and it is advised to use `cksum --untagged` instead.
 
 ## `more`
 
@@ -184,7 +183,9 @@ also provides a `-v`/`--verbose` flag.
 
 ## `uptime`
 
-Similar to the proc-ps implementation and unlike GNU/Coreutils, `uptime` provides `-s`/`--since` to show since when the system is up.
+Similar to the proc-ps implementation and unlike GNU/Coreutils, `uptime` provides:
+ * `-s`/`--since` to show since when the system is up
+ * `-p`/`--pretty` to display uptime in a pretty-printed format
 
 ## `base32/base64/basenc`
 
@@ -200,3 +201,7 @@ With `-U`/`--no-utf8`, you can interpret input files as 8-bit ASCII rather than 
 ## `expand`
 
 `expand` also offers the `-U`/`--no-utf8` option to interpret input files as 8-bit ASCII instead of UTF-8.
+
+## `install`
+
+`install` offers FreeBSD's `-U` unprivileged option to not change the owner, the group, or the file flags of the destination.

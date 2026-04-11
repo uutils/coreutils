@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore plass samp
+// spell-checker:ignore plass samp FFFD
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use uutests::new_ucmd;
@@ -48,6 +48,21 @@ fn test_fmt_width() {
         .args(&["one-word-per-line.txt", "-w50", "--width", "10"])
         .succeeds()
         .stdout_is("this is a\nfile with\none word\nper line\n");
+}
+
+#[test]
+fn test_fmt_width_max_display_width() {
+    let input = "aa bb cc dd ee";
+    new_ucmd!()
+        .args(&["-w", "8"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("aa bb cc\ndd ee\n");
+    new_ucmd!()
+        .args(&["-w", "7"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("aa\nbb cc\ndd ee\n");
 }
 
 #[test]
@@ -323,6 +338,8 @@ fn test_fmt_unicode_whitespace_handling() {
         ("non-breaking space", non_breaking_space),
         ("figure space", figure_space),
         ("narrow no-break space", narrow_no_break_space),
+        ("word joiner", "\u{2060}"),
+        ("cyrillic kha", "\u{0445}"),
     ] {
         let input = format!("={char}=");
         let result = new_ucmd!()
@@ -396,4 +413,18 @@ fn fmt_reflow_unicode() {
         .pipe_in("漢字漢字 💐 日本語の文字\n")
         .succeeds()
         .stdout_is("漢字漢字\n💐\n日本語の文字\n");
+}
+
+#[test]
+fn test_fmt_invalid_utf8() {
+    // Regression test for handling invalid UTF-8 input (e.g. ISO-8859-1)
+    // fmt should not drop lines with invalid UTF-8.
+    // \xA0 is non-breaking space in ISO-8859-1, but invalid in UTF-8.
+    // We expect GNU-compatible passthrough of the raw byte, not lossy replacement.
+    let input = b"=\xA0=";
+    new_ucmd!()
+        .args(&["-s", "-w1"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is_bytes(b"=\xA0=\n");
 }

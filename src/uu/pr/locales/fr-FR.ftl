@@ -16,15 +16,15 @@ pr-help-header =
 pr-help-date-format =
   Utiliser le FORMAT de style 'date' pour la date dans la ligne d'en-tête.
 pr-help-double-space =
-  Produire une sortie avec double espacement. Un caractère <saut de ligne>
-                  supplémentaire est affiché après chaque <saut de ligne> trouvé dans l'entrée.
+  Produire une sortie avec double espacement. Un caractère `<saut de ligne>`
+                  supplémentaire est affiché après chaque `<saut de ligne>` trouvé dans l'entrée.
 pr-help-number-lines =
   Fournir une numérotation de ligne avec largeur de chiffres. La valeur par défaut
                   pour la largeur, si non spécifiée, est 5. Le numéro occupe les premières
                   largeur positions de colonne de chaque colonne de texte ou de chaque ligne
                   de sortie -m. Si char (tout caractère non numérique) est donné, il est
                   ajouté au numéro de ligne pour le séparer de ce qui suit. La valeur par
-                  défaut pour char est une <tabulation>. Les numéros de ligne plus longs
+                  défaut pour char est une `<tabulation>`. Les numéros de ligne plus longs
                   que largeur colonnes sont tronqués.
 pr-help-first-line-number = commencer le comptage avec NUMÉRO à la 1ère ligne de la première page imprimée
 pr-help-omit-header =
@@ -39,8 +39,8 @@ pr-help-page-length =
                   était en vigueur.
 pr-help-no-file-warnings = omettre l'avertissement lorsqu'un fichier ne peut pas être ouvert
 pr-help-form-feed =
-  Utiliser un <saut de page> pour les nouvelles pages, au lieu du comportement par défaut
-                  qui utilise une séquence de <sauts de ligne>.
+  Utiliser un `<saut de page>` pour les nouvelles pages, au lieu du comportement par défaut
+                  qui utilise une séquence de `<sauts de ligne>`.
 pr-help-column-width =
   Définir la largeur de la ligne à largeur positions de colonne pour la sortie
                   multi-colonnes de texte seulement. Si l'option -w n'est pas spécifiée et
@@ -66,10 +66,10 @@ pr-help-column =
                   utiliser le nombre minimum de lignes pour écrire la sortie.
 pr-help-column-char-separator =
   Séparer les colonnes de texte par le caractère unique char au lieu du nombre
-                  approprié d'<espaces> (par défaut pour char est le caractère de <tabulation>).
+                  approprié d'`<espaces>` (par défaut pour char est le caractère de `<tabulation>`).
 pr-help-column-string-separator =
   séparer les colonnes par CHAÎNE,
-                  sans -S : Séparateur par défaut <TAB> avec -J et <espace>
+                  sans -S : Séparateur par défaut `<TAB>` avec -J et `<espace>`
                   sinon (même que -S\" \"), aucun effet sur les options de colonne
 pr-help-merge =
   Fusionner les fichiers. La sortie standard sera formatée pour que l'utilitaire pr
@@ -77,23 +77,27 @@ pr-help-merge =
                   dans des colonnes de texte de largeurs fixes égales, en termes du nombre de positions
                   de colonne. Les implémentations doivent supporter la fusion d'au moins neuf opérandes de fichier.
 pr-help-indent =
-  Chaque ligne de sortie sera précédée par décalage <espaces>. Si l'option -o
+  Chaque ligne de sortie sera précédée par décalage `<espaces>`. Si l'option -o
                   n'est pas spécifiée, le décalage par défaut sera zéro. L'espace pris est
                   en plus de la largeur de ligne de sortie (voir l'option -w ci-dessous).
 pr-help-join-lines =
   fusionner les lignes complètes, désactive la troncature de ligne -W, aucun
                   alignement de colonne, --sep-string[=CHAÎNE] définit les séparateurs
+pr-help-expand-tabs = convertir les CHARs d'entrée (TABs) en largeur de tabulation WIDTH (8)
 pr-help-help = Afficher les informations d'aide
 
 # Texte d'en-tête de page
 pr-page = Page
 
+pr-try-help-message = Essayez 'pr --help' pour plus d'informations.
+
 # Messages d'erreur
 pr-error-reading-input = pr : La lecture depuis l'entrée {$file} a donné une erreur
 pr-error-unknown-filetype = pr : {$file} : type de fichier inconnu
 pr-error-is-directory = pr : {$file} : Est un répertoire
-pr-error-socket-not-supported = pr : impossible d'ouvrir {$file}, Opération non supportée sur socket
+pr-error-socket-not-supported = pr : impossible d'ouvrir {$file}, Opération non prise en charge sur socket
 pr-error-no-such-file = pr : impossible d'ouvrir {$file}, Aucun fichier ou répertoire de ce type
 pr-error-column-merge-conflict = impossible de spécifier le nombre de colonnes lors de l'impression en parallèle
 pr-error-across-merge-conflict = impossible de spécifier à la fois l'impression transversale et l'impression en parallèle
 pr-error-invalid-pages-range = argument --pages invalide '{$start}:{$end}'
+pr-error-invalid-expand-tab-argument = Caractères supplémentaires ou nombre invalide dans l'argument de '-e': '{$arg}'

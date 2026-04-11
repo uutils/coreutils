@@ -6,6 +6,7 @@
 // spell-checker:ignore (paths) wtmp
 
 use std::ffi::OsString;
+use std::io::{Write, stdout};
 use std::path::Path;
 
 use clap::builder::ValueParser;
@@ -33,7 +34,7 @@ fn get_long_usage() -> String {
     translate!("users-long-usage", "default_path" => default_path)
 }
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
@@ -66,14 +67,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let filename = maybe_file.unwrap_or(utmpx::DEFAULT_FILE.as_ref());
 
         users = Utmpx::iter_all_records_from(filename)
-            .filter(|ut| ut.is_user_process())
+            .filter(utmpx::UtmpxRecord::is_user_process)
             .map(|ut| ut.user())
             .collect::<Vec<_>>();
     };
 
     if !users.is_empty() {
         users.sort();
-        println!("{}", users.join(" "));
+        writeln!(stdout().lock(), "{}", users.join(" "))?;
     }
 
     Ok(())
@@ -85,9 +86,9 @@ pub fn uu_app() -> Command {
     #[cfg(target_env = "musl")]
     let about = translate!("users-about") + &translate!("users-about-musl-warning");
 
-    Command::new(uucore::util_name())
+    Command::new("users")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("users"))
         .about(about)
         .override_usage(format_usage(&translate!("users-usage")))
         .infer_long_args(true)

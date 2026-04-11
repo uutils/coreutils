@@ -140,7 +140,7 @@ fn test_env_version() {
         .arg("--version")
         .succeeds()
         .no_stderr()
-        .stdout_contains(util_name!());
+        .stdout_is(format!("env {}\n", uucore::crate_version!()));
 }
 
 #[test]
@@ -721,133 +721,102 @@ fn test_env_with_empty_executable_double_quotes() {
         .stderr_is("env: '': No such file or directory\n");
 }
 
+// Do not assume that coreutils uses argv0
 #[test]
-#[cfg(all(unix, feature = "dirname", feature = "echo"))]
+#[cfg(unix)]
 fn test_env_overwrite_arg0() {
     let ts = TestScenario::new(util_name!());
 
-    let bin = ts.bin_path.clone();
-
     ts.ucmd()
-        .args(&["--argv0", "echo"])
-        .arg(&bin)
-        .args(&["-n", "hello", "world!"])
+        .args(&["--argv0", "hijacked", "sh", "-c", "echo $0"])
         .succeeds()
-        .stdout_is("hello world!")
-        .stderr_is("");
-
-    ts.ucmd()
-        .args(&["-a", "dirname"])
-        .arg(bin)
-        .args(&["aa/bb/cc"])
-        .succeeds()
-        .stdout_is("aa/bb\n")
+        .stdout_is("hijacked\n")
         .stderr_is("");
 }
 
+// Do not assume that coreutils uses argv0
 #[test]
-#[cfg(all(unix, feature = "echo"))]
+#[cfg(unix)]
 fn test_env_arg_argv0_overwrite() {
     let ts = TestScenario::new(util_name!());
-
-    let bin = &ts.bin_path;
 
     // overwrite --argv0 by --argv0
     ts.ucmd()
         .args(&["--argv0", "dirname"])
-        .args(&["--argv0", "echo"])
-        .arg(bin)
-        .args(&["aa/bb/cc"])
+        .args(&["--argv0", "hijacked", "sh", "-c", "echo $0"])
         .succeeds()
-        .stdout_is("aa/bb/cc\n")
+        .stdout_is("hijacked\n")
         .stderr_is("");
 
     // overwrite -a by -a
     ts.ucmd()
         .args(&["-a", "dirname"])
-        .args(&["-a", "echo"])
-        .arg(bin)
-        .args(&["aa/bb/cc"])
+        .args(&["-a", "hijacked", "sh", "-c", "echo $0"])
         .succeeds()
-        .stdout_is("aa/bb/cc\n")
+        .stdout_is("hijacked\n")
         .stderr_is("");
 
     // overwrite --argv0 by -a
     ts.ucmd()
         .args(&["--argv0", "dirname"])
-        .args(&["-a", "echo"])
-        .arg(bin)
-        .args(&["aa/bb/cc"])
+        .args(&["-a", "hijacked", "sh", "-c", "echo $0"])
         .succeeds()
-        .stdout_is("aa/bb/cc\n")
+        .stdout_is("hijacked\n")
         .stderr_is("");
 
     // overwrite -a by --argv0
     ts.ucmd()
         .args(&["-a", "dirname"])
-        .args(&["--argv0", "echo"])
-        .arg(bin)
-        .args(&["aa/bb/cc"])
+        .args(&["--argv0", "hijacked", "sh", "-c", "echo $0"])
         .succeeds()
-        .stdout_is("aa/bb/cc\n")
+        .stdout_is("hijacked\n")
         .stderr_is("");
 }
 
+// Do not assume that coreutils uses argv0
 #[test]
-#[cfg(all(unix, feature = "echo"))]
+#[cfg(unix)]
 fn test_env_arg_argv0_overwrite_mixed_with_string_args() {
     let ts = TestScenario::new(util_name!());
-
-    let bin = &ts.bin_path;
 
     // string arg following normal
     ts.ucmd()
         .args(&["-S--argv0 dirname"])
-        .args(&["--argv0", "echo"])
-        .arg(bin)
-        .args(&["aa/bb/cc"])
+        .args(&["--argv0", "hijacked", "sh", "-c", "echo $0"])
         .succeeds()
-        .stdout_is("aa/bb/cc\n")
+        .stdout_is("hijacked\n")
         .stderr_is("");
 
     // normal following string arg
     ts.ucmd()
         .args(&["-a", "dirname"])
-        .args(&["-S-a echo"])
-        .arg(bin)
-        .args(&["aa/bb/cc"])
+        .args(&["-S-a hijacked sh -c 'echo $0'"])
         .succeeds()
-        .stdout_is("aa/bb/cc\n")
+        .stdout_is("hijacked\n")
         .stderr_is("");
 
     // one large string arg
     ts.ucmd()
-        .args(&["-S--argv0 dirname -a echo"])
-        .arg(bin)
-        .args(&["aa/bb/cc"])
+        .args(&["-S--argv0 dirname -a hijacked sh -c 'echo $0'"])
         .succeeds()
-        .stdout_is("aa/bb/cc\n")
+        .stdout_is("hijacked\n")
         .stderr_is("");
 
     // two string args
     ts.ucmd()
         .args(&["-S-a dirname"])
-        .args(&["-S--argv0 echo"])
-        .arg(bin)
-        .args(&["aa/bb/cc"])
+        .args(&["-S--argv0 hijacked sh -c 'echo $0'"])
         .succeeds()
-        .stdout_is("aa/bb/cc\n")
+        .stdout_is("hijacked\n")
         .stderr_is("");
 
     // three args: normal, string, normal
     ts.ucmd()
         .args(&["-a", "sleep"])
         .args(&["-S-a dirname"])
-        .args(&["-a", "echo"])
-        .arg(bin)
-        .args(&["aa/bb/cc"])
+        .args(&["-a", "hijacked", "sh", "-c", "echo $0"])
         .succeeds()
-        .stdout_is("aa/bb/cc\n")
+        .stdout_is("hijacked\n")
         .stderr_is("");
 }
 
@@ -1961,4 +1930,101 @@ fn test_non_utf8_env_vars() {
         .env("NON_UTF8_VAR", &non_utf8_value)
         .succeeds()
         .stdout_contains_bytes(b"NON_UTF8_VAR=hello\x80world");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_ignore_signal_pipe_broken_pipe_regression() {
+    // Test that --ignore-signal=PIPE properly ignores SIGPIPE in child processes.
+    // When SIGPIPE is ignored, processes should handle broken pipes gracefully
+    // instead of being terminated by the signal.
+    //
+    // Regression test for: https://github.com/uutils/coreutils/issues/9617
+
+    use std::io::{BufRead, BufReader};
+    use std::process::{Command, Stdio};
+
+    let scene = TestScenario::new(util_name!());
+
+    // Helper function to simulate a broken pipe scenario (like "seq 1000000 | head -n1")
+    let test_sigpipe_behavior = |use_ignore_signal: bool| -> i32 {
+        let mut cmd = Command::new(&scene.bin_path);
+        cmd.arg("env");
+
+        if use_ignore_signal {
+            cmd.arg("--ignore-signal=PIPE");
+        }
+
+        // Use seq instead of yes - writes bounded output but enough to trigger SIGPIPE
+        cmd.arg("seq")
+            .arg("1")
+            .arg("1000000")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null());
+
+        let mut child = cmd.spawn().expect("Failed to spawn env process");
+
+        // Read exactly one line then close the pipe to trigger SIGPIPE
+        if let Some(stdout) = child.stdout.take() {
+            let mut reader = BufReader::new(stdout);
+            let mut line = String::new();
+            let _ = reader.read_line(&mut line);
+            // Pipe closes when reader is dropped, sending SIGPIPE to writing process
+        }
+
+        // seq should exit quickly (either from SIGPIPE or after handling EPIPE)
+        match child.wait() {
+            Ok(status) => status.code().unwrap_or(141), // 128 + 13
+            Err(_) => 141,
+        }
+    };
+
+    // Test without signal ignoring - should be killed by SIGPIPE
+    let normal_exit_code = test_sigpipe_behavior(false);
+    println!("Normal 'env seq' exit code: {normal_exit_code}");
+
+    // Test with --ignore-signal=PIPE - should handle broken pipe gracefully
+    let ignore_signal_exit_code = test_sigpipe_behavior(true);
+    println!("With --ignore-signal=PIPE exit code: {ignore_signal_exit_code}");
+
+    // Verify the --ignore-signal=PIPE flag changes the behavior
+    assert!(
+        ignore_signal_exit_code != 141,
+        "--ignore-signal=PIPE had no effect! Process was still killed by SIGPIPE (exit code 141). Normal: {normal_exit_code}, --ignore-signal: {ignore_signal_exit_code}"
+    );
+
+    // Expected behavior:
+    assert_eq!(
+        normal_exit_code, 141,
+        "Without --ignore-signal, process should be killed by SIGPIPE"
+    );
+    assert_ne!(
+        ignore_signal_exit_code, 141,
+        "With --ignore-signal=PIPE, process should NOT be killed by SIGPIPE"
+    );
+
+    // Process should exit gracefully when SIGPIPE is ignored
+    assert!(
+        ignore_signal_exit_code == 0 || ignore_signal_exit_code == 1,
+        "With --ignore-signal=PIPE, process should exit gracefully (0 or 1), got: {ignore_signal_exit_code}"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_disallow_double_underscore_all() {
+    new_ucmd!()
+        .args(&["--ignore-signal=__ALL__", "true"])
+        .fails()
+        .stderr_contains("invalid signal");
+
+    new_ucmd!()
+        .args(&["--default-signal=__ALL__", "true"])
+        .fails()
+        .stderr_contains("invalid signal");
+
+    new_ucmd!()
+        .args(&["--block-signal=__ALL__", "true"])
+        .fails()
+        .stderr_contains("invalid signal");
 }

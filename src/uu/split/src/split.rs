@@ -14,7 +14,7 @@ use crate::filenames::{FilenameIterator, Suffix, SuffixError};
 use crate::strategy::{NumberType, Strategy, StrategyError};
 use clap::{Arg, ArgAction, ArgMatches, Command, ValueHint, parser::ValueSource};
 use std::env;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs::{File, metadata};
 use std::io;
 use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write, stdin};
@@ -54,7 +54,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     match Settings::from(&matches, obs_lines.as_deref()) {
-        Ok(settings) => split(&settings),
+        Ok(settings) => {
+            // When using --filter, we write to a child process's stdin which may
+            // close early. Disable SIGPIPE so we get EPIPE errors instead of
+            // being terminated, allowing graceful handling of broken pipes.
+            #[cfg(unix)]
+            if settings.filter.is_some() {
+                let _ = uucore::signals::disable_pipe_errors();
+            }
+            split(&settings)
+        }
         Err(e) if e.requires_usage() => Err(UUsageError::new(1, format!("{e}"))),
         Err(e) => Err(USimpleError::new(1, format!("{e}"))),
     }
@@ -97,8 +106,8 @@ fn filter_args(
     if let Some(slice) = os_slice.to_str() {
         if should_extract_obs_lines(
             slice,
-            preceding_long_opt_req_value,
-            preceding_short_opt_req_value,
+            *preceding_long_opt_req_value,
+            *preceding_short_opt_req_value,
         ) {
             // start of the short option string
             // that can have obsolete lines option value in it
@@ -128,8 +137,8 @@ fn filter_args(
 /// and if so, a short option that can contain obsolete lines value
 fn should_extract_obs_lines(
     slice: &str,
-    preceding_long_opt_req_value: &bool,
-    preceding_short_opt_req_value: &bool,
+    preceding_long_opt_req_value: bool,
+    preceding_short_opt_req_value: bool,
 ) -> bool {
     slice.starts_with('-')
         && !slice.starts_with("--")
@@ -225,7 +234,7 @@ fn handle_preceding_options(
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("split")
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("split-about"))
@@ -531,10 +540,10 @@ impl Settings {
 
     fn instantiate_current_writer(
         &self,
-        filename: &str,
+        filename: &OsStr,
         is_new: bool,
     ) -> io::Result<BufWriter<Box<dyn Write>>> {
-        if platform::paths_refer_to_same_file(&self.input, filename.as_ref()) {
+        if platform::paths_refer_to_same_file(&self.input, filename) {
             return Err(io::Error::other(
                 translate!("split-error-would-overwrite-input", "file" => filename.quote()),
             ));
@@ -911,7 +920,7 @@ impl Write for LineChunkWriter<'_> {
 
 /// Output file parameters
 struct OutFile {
-    filename: String,
+    filename: OsString,
     maybe_writer: Option<BufWriter<Box<dyn Write>>>,
     is_new: bool,
 }
@@ -965,7 +974,7 @@ impl ManageOutFiles for OutFiles {
             let maybe_writer = if is_writer_optional {
                 None
             } else {
-                let instantiated = settings.instantiate_current_writer(filename.as_str(), true);
+                let instantiated = settings.instantiate_current_writer(&filename, true);
                 // If there was an error instantiating the writer for a file,
                 // it could be due to hitting the system limit of open files,
                 // so record it as None and let [`get_writer`] function handle closing/re-opening
@@ -1002,7 +1011,7 @@ impl ManageOutFiles for OutFiles {
         // might "steel" the freed fd and open a file on its side. Then it would be beneficial
         // if split would be able to close another fd before cancellation.
         'loop1: loop {
-            let filename_to_open = self[idx].filename.as_str();
+            let filename_to_open = &self[idx].filename;
             let file_to_open_is_new = self[idx].is_new;
             let maybe_writer =
                 settings.instantiate_current_writer(filename_to_open, file_to_open_is_new);
@@ -1019,14 +1028,16 @@ impl ManageOutFiles for OutFiles {
             // Could have hit system limit for open files.
             // Try to close one previously instantiated writer first
             for (i, out_file) in self.iter_mut().enumerate() {
-                if i != idx && out_file.maybe_writer.is_some() {
-                    out_file.maybe_writer.as_mut().unwrap().flush()?;
-                    out_file.maybe_writer = None;
-                    out_file.is_new = false;
-                    count += 1;
+                if i != idx {
+                    if let Some(writer) = out_file.maybe_writer.as_mut() {
+                        writer.flush()?;
+                        out_file.maybe_writer = None;
+                        out_file.is_new = false;
+                        count += 1;
 
-                    // And then try to instantiate the writer again
-                    continue 'loop1;
+                        // And then try to instantiate the writer again
+                        continue 'loop1;
+                    }
                 }
             }
 
@@ -1145,9 +1156,10 @@ where
         out_files = OutFiles::init(num_chunks, settings, false)?;
     }
 
+    let mut buf = Vec::with_capacity((chunk_size_base + 1) as usize);
     for i in 1_u64..=num_chunks {
         let chunk_size = chunk_size_base + (chunk_size_reminder > i - 1) as u64;
-        let buf = &mut Vec::new();
+        buf.clear();
         if num_bytes > 0 {
             // Read `chunk_size` bytes from the reader into `buf`
             // except the last.
@@ -1163,7 +1175,7 @@ where
                 }
             };
 
-            let n_bytes_read = reader.by_ref().take(limit).read_to_end(buf);
+            let n_bytes_read = reader.by_ref().take(limit).read_to_end(&mut buf);
 
             match n_bytes_read {
                 Ok(n_bytes) => {
@@ -1177,18 +1189,15 @@ where
                 }
             }
 
-            match kth_chunk {
-                Some(chunk_number) => {
-                    if i == chunk_number {
-                        stdout_writer.write_all(buf)?;
-                        break;
-                    }
+            if let Some(chunk_number) = kth_chunk {
+                if i == chunk_number {
+                    stdout_writer.write_all(&buf)?;
+                    break;
                 }
-                None => {
-                    let idx = (i - 1) as usize;
-                    let writer = out_files.get_writer(idx, settings)?;
-                    writer.write_all(buf)?;
-                }
+            } else {
+                let idx = (i - 1) as usize;
+                let writer = out_files.get_writer(idx, settings)?;
+                writer.write_all(&buf)?;
             }
         } else {
             break;
@@ -1289,18 +1298,15 @@ where
         }
         let bytes = line.as_slice();
 
-        match kth_chunk {
-            Some(kth) => {
-                if chunk_number == kth {
-                    stdout_writer.write_all(bytes)?;
-                }
+        if let Some(kth) = kth_chunk {
+            if chunk_number == kth {
+                stdout_writer.write_all(bytes)?;
             }
-            None => {
-                // Should write into a file
-                let idx = (chunk_number - 1) as usize;
-                let writer = out_files.get_writer(idx, settings)?;
-                custom_write_all(bytes, writer, settings)?;
-            }
+        } else {
+            // Should write into a file
+            let idx = (chunk_number - 1) as usize;
+            let writer = out_files.get_writer(idx, settings)?;
+            custom_write_all(bytes, writer, settings)?;
         }
 
         // Advance to the next chunk if the current one is filled.

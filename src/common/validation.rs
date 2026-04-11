@@ -3,9 +3,10 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore prefixcat testcat
+// spell-checker:ignore memfd_create prefixcat rsplit testcat
 
 use std::ffi::{OsStr, OsString};
+use std::io::{Write, stderr};
 use std::path::{Path, PathBuf};
 use std::process;
 
@@ -25,7 +26,21 @@ pub fn get_all_utilities<T: Args>(
 
 /// Prints a "utility not found" error and exits
 pub fn not_found(util: &OsStr) -> ! {
-    eprintln!("{}: function/utility not found", util.maybe_quote());
+    let _ = writeln!(
+        stderr(),
+        "coreutils: unknown program '{}'",
+        util.maybe_quote()
+    );
+    process::exit(1);
+}
+
+/// Prints an "unrecognized option" error and exits
+pub fn unrecognized_option(binary_name: &str, option: &OsStr) -> ! {
+    let _ = writeln!(
+        stderr(),
+        "{binary_name}: unrecognized option '{}'",
+        option.to_string_lossy()
+    );
     process::exit(1);
 }
 
@@ -49,42 +64,50 @@ fn get_canonical_util_name(util_name: &str) -> &str {
     match util_name {
         // uu_test aliases - '[' is an alias for test
         "[" => "test",
-
-        // hashsum aliases - all these hash commands are aliases for hashsum
-        "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum" | "b2sum" => {
-            "hashsum"
-        }
-
-        "dir" => "ls", // dir is an alias for ls
+        "dir" => "ls",  // dir is an alias for ls
+        "vdir" => "ls", // vdir is an alias for ls
 
         // Default case - return the util name as is
         _ => util_name,
     }
 }
 
-/// Finds a utility with a prefix (e.g., "uu_test" -> "test")
-pub fn find_prefixed_util<'a>(
-    binary_name: &str,
-    mut util_keys: impl Iterator<Item = &'a str>,
-) -> Option<&'a str> {
-    util_keys.find(|util| {
-        binary_name.ends_with(*util)
-            && binary_name.len() > util.len() // Ensure there's actually a prefix
-            && !binary_name[..binary_name.len() - (*util).len()]
-                .ends_with(char::is_alphanumeric)
-    })
-}
-
 /// Gets the binary path from command line arguments
-/// # Panics
 /// Panics if the binary path cannot be determined
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn binary_path(args: &mut impl Iterator<Item = OsString>) -> PathBuf {
     match args.next() {
         Some(ref s) if !s.is_empty() => PathBuf::from(s),
+        // the fallback is valid only for hardlinks
         _ => std::env::current_exe().unwrap(),
     }
 }
-
+/// Get actual binary path from kernel, not argv0, to prevent `env -a` from bypassing
+/// AppArmor, SELinux policies on hard-linked binaries
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn binary_path(args: &mut impl Iterator<Item = OsString>) -> PathBuf {
+    use std::fs::File;
+    use std::io::Read;
+    use std::os::unix::ffi::OsStrExt;
+    let execfn = rustix::param::linux_execfn();
+    let execfn_bytes = execfn.to_bytes();
+    let exec_path = Path::new(OsStr::from_bytes(execfn_bytes));
+    let argv0 = args.next().unwrap();
+    let mut shebang_buf = [0u8; 2];
+    // exec_path is wrong when called from shebang or memfd_create (/proc/self/fd/*)
+    // argv0 is not full-path when called from PATH
+    if execfn_bytes.rsplit(|&b| b == b'/').next() == argv0.as_bytes().rsplit(|&b| b == b'/').next()
+        || execfn_bytes.starts_with(b"/proc/")
+        || (File::open(Path::new(exec_path))
+            .and_then(|mut f| f.read_exact(&mut shebang_buf))
+            .is_ok()
+            && &shebang_buf == b"#!")
+    {
+        argv0.into()
+    } else {
+        exec_path.into()
+    }
+}
 /// Extracts the binary name from a path
 pub fn name(binary_path: &Path) -> Option<&str> {
     binary_path.file_stem()?.to_str()
@@ -98,7 +121,6 @@ mod tests {
     fn test_get_canonical_util_name() {
         // Test a few key aliases
         assert_eq!(get_canonical_util_name("["), "test");
-        assert_eq!(get_canonical_util_name("md5sum"), "hashsum");
         assert_eq!(get_canonical_util_name("dir"), "ls");
 
         // Test passthrough case
@@ -122,36 +144,5 @@ mod tests {
         // Test edge cases
         assert_eq!(name(Path::new("")), None);
         assert_eq!(name(Path::new("/")), None);
-    }
-
-    #[test]
-    fn test_find_prefixed_util() {
-        let utils = ["test", "cat", "ls", "cp"];
-
-        // Test exact prefixed matches
-        assert_eq!(
-            find_prefixed_util("uu_test", utils.iter().copied()),
-            Some("test")
-        );
-        assert_eq!(
-            find_prefixed_util("my-cat", utils.iter().copied()),
-            Some("cat")
-        );
-        assert_eq!(
-            find_prefixed_util("prefix_ls", utils.iter().copied()),
-            Some("ls")
-        );
-
-        // Test non-alphanumeric separator requirement
-        assert_eq!(find_prefixed_util("prefixcat", utils.iter().copied()), None); // no separator
-        assert_eq!(find_prefixed_util("testcat", utils.iter().copied()), None); // no separator
-
-        // Test no match
-        assert_eq!(find_prefixed_util("unknown", utils.iter().copied()), None);
-        assert_eq!(find_prefixed_util("", utils.iter().copied()), None);
-
-        // Test exact util name (should not match as prefixed)
-        assert_eq!(find_prefixed_util("test", utils.iter().copied()), None);
-        assert_eq!(find_prefixed_util("cat", utils.iter().copied()), None);
     }
 }

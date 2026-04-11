@@ -90,5 +90,5 @@ od-help-s = decimal 2-byte units
 od-help-capital-x = hexadecimal 4-byte units
 od-help-capital-h = hexadecimal 4-byte units
 od-help-e = floating point double precision (64-bit) units
-od-help-f = floating point double precision (32-bit) units
+od-help-f = floating point single precision (32-bit) units
 od-help-capital-f = floating point double precision (64-bit) units

@@ -623,6 +623,29 @@ fn test_mv_symlink_into_target() {
     ucmd.arg("dir-link").arg("dir").succeeds();
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn test_mv_broken_symlink_to_another_fs() {
+    use tempfile::TempDir;
+
+    let scene = TestScenario::new(util_name!());
+
+    scene.fixtures.mkdir("foo");
+    scene.fixtures.symlink_file("missing", "foo/dangling");
+
+    let other_fs_tempdir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let dest = other_fs_tempdir.path().join("foo");
+
+    scene
+        .ucmd()
+        .arg("foo")
+        .arg(dest)
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+}
+
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
 fn test_mv_hardlink_to_symlink() {
@@ -1898,7 +1921,7 @@ fn test_move_should_not_fallback_to_copy() {
 
 #[cfg(target_os = "linux")]
 mod inter_partition_copying {
-    use std::fs::{read_to_string, set_permissions, write};
+    use std::fs::{self, set_permissions, write};
     use std::os::unix::fs::{PermissionsExt, symlink};
     use tempfile::TempDir;
     use uutests::util::TestScenario;
@@ -1941,13 +1964,13 @@ mod inter_partition_copying {
 
         // make sure that file contents in other_fs_file didn't change.
         assert_eq!(
-            read_to_string(&other_fs_file_path).expect("Unable to read other_fs_file"),
+            fs::read_to_string(&other_fs_file_path).expect("Unable to read other_fs_file"),
             "other fs file contents"
         );
 
         // make sure that src file contents got copied into new file created in symlink_path
         assert_eq!(
-            read_to_string(&symlink_path).expect("Unable to read other_fs_file"),
+            fs::read_to_string(&symlink_path).expect("Unable to read other_fs_file"),
             "src contents"
         );
     }
@@ -1988,7 +2011,7 @@ mod inter_partition_copying {
     #[test]
     #[cfg(unix)]
     pub(crate) fn test_mv_preserves_hardlinks_across_partitions() {
-        use std::fs::metadata;
+        use std::fs;
         use std::os::unix::fs::MetadataExt;
         use tempfile::TempDir;
         use uutests::util::TestScenario;
@@ -1999,8 +2022,8 @@ mod inter_partition_copying {
         at.write("file1", "test content");
         at.hard_link("file1", "file2");
 
-        let metadata1 = metadata(at.plus("file1")).expect("Failed to get metadata for file1");
-        let metadata2 = metadata(at.plus("file2")).expect("Failed to get metadata for file2");
+        let metadata1 = fs::metadata(at.plus("file1")).expect("Failed to get metadata for file1");
+        let metadata2 = fs::metadata(at.plus("file2")).expect("Failed to get metadata for file2");
         assert_eq!(
             metadata1.ino(),
             metadata2.ino(),
@@ -2032,9 +2055,9 @@ mod inter_partition_copying {
         assert!(moved_file2.exists(), "file2 should exist in destination");
 
         let moved_metadata1 =
-            metadata(&moved_file1).expect("Failed to get metadata for moved file1");
+            fs::metadata(&moved_file1).expect("Failed to get metadata for moved file1");
         let moved_metadata2 =
-            metadata(&moved_file2).expect("Failed to get metadata for moved file2");
+            fs::metadata(&moved_file2).expect("Failed to get metadata for moved file2");
 
         assert_eq!(
             moved_metadata1.ino(),
@@ -2049,11 +2072,11 @@ mod inter_partition_copying {
 
         // Verify content is preserved
         assert_eq!(
-            std::fs::read_to_string(&moved_file1).expect("Failed to read moved file1"),
+            fs::read_to_string(&moved_file1).expect("Failed to read moved file1"),
             "test content"
         );
         assert_eq!(
-            std::fs::read_to_string(&moved_file2).expect("Failed to read moved file2"),
+            fs::read_to_string(&moved_file2).expect("Failed to read moved file2"),
             "test content"
         );
     }
@@ -2163,24 +2186,12 @@ mod inter_partition_copying {
             "Single file should still have nlink=1"
         );
 
+        assert_eq!(fs::read_to_string(&moved_g1f1).unwrap(), "content group 1");
+        assert_eq!(fs::read_to_string(&moved_g1f2).unwrap(), "content group 1");
+        assert_eq!(fs::read_to_string(&moved_g2f1).unwrap(), "content group 2");
+        assert_eq!(fs::read_to_string(&moved_g2f2).unwrap(), "content group 2");
         assert_eq!(
-            std::fs::read_to_string(&moved_g1f1).unwrap(),
-            "content group 1"
-        );
-        assert_eq!(
-            std::fs::read_to_string(&moved_g1f2).unwrap(),
-            "content group 1"
-        );
-        assert_eq!(
-            std::fs::read_to_string(&moved_g2f1).unwrap(),
-            "content group 2"
-        );
-        assert_eq!(
-            std::fs::read_to_string(&moved_g2f2).unwrap(),
-            "content group 2"
-        );
-        assert_eq!(
-            std::fs::read_to_string(&moved_single).unwrap(),
+            fs::read_to_string(&moved_single).unwrap(),
             "single file content"
         );
     }
@@ -2273,14 +2284,14 @@ mod inter_partition_copying {
             "a/1 should have nlink=2 after move"
         );
 
-        assert_eq!(std::fs::read_to_string(&moved_f).unwrap(), "file content");
-        assert_eq!(std::fs::read_to_string(&moved_g).unwrap(), "file content");
+        assert_eq!(fs::read_to_string(&moved_f).unwrap(), "file content");
+        assert_eq!(fs::read_to_string(&moved_g).unwrap(), "file content");
         assert_eq!(
-            std::fs::read_to_string(&moved_dir_a_file).unwrap(),
+            fs::read_to_string(&moved_dir_a_file).unwrap(),
             "directory file content"
         );
         assert_eq!(
-            std::fs::read_to_string(&moved_dir_second_file).unwrap(),
+            fs::read_to_string(&moved_dir_second_file).unwrap(),
             "directory file content"
         );
     }
@@ -2413,28 +2424,53 @@ mod inter_partition_copying {
             "nested file group should still have nlink=2"
         );
 
-        assert_eq!(std::fs::read_to_string(&moved_file_a).unwrap(), "content A");
+        assert_eq!(fs::read_to_string(&moved_file_a).unwrap(), "content A");
         assert_eq!(
-            std::fs::read_to_string(&moved_file_a_link1).unwrap(),
+            fs::read_to_string(&moved_file_a_link1).unwrap(),
             "content A"
         );
         assert_eq!(
-            std::fs::read_to_string(&moved_file_a_link2).unwrap(),
+            fs::read_to_string(&moved_file_a_link2).unwrap(),
             "content A"
         );
-        assert_eq!(std::fs::read_to_string(&moved_file_b).unwrap(), "content B");
+        assert_eq!(fs::read_to_string(&moved_file_b).unwrap(), "content B");
         assert_eq!(
-            std::fs::read_to_string(&moved_file_b_hardlink).unwrap(),
+            fs::read_to_string(&moved_file_b_hardlink).unwrap(),
             "content B"
         );
+        assert_eq!(fs::read_to_string(&moved_nested).unwrap(), "nested content");
         assert_eq!(
-            std::fs::read_to_string(&moved_nested).unwrap(),
+            fs::read_to_string(&moved_nested_link).unwrap(),
             "nested content"
         );
-        assert_eq!(
-            std::fs::read_to_string(&moved_nested_link).unwrap(),
-            "nested content"
-        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    pub(crate) fn test_mv_dir_with_fifo_across_partitions() {
+        use std::os::unix::fs::FileTypeExt;
+        use tempfile::TempDir;
+        use uutests::util::TestScenario;
+
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        at.mkdir("dir");
+        at.mkfifo("dir/fifo");
+
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+
+        scene
+            .ucmd()
+            .arg("dir")
+            .arg(other_fs_tempdir.path().to_str().unwrap())
+            .succeeds()
+            .no_output();
+
+        assert!(!at.dir_exists("dir"));
+        let moved_fifo = other_fs_tempdir.path().join("dir/fifo");
+        assert!(moved_fifo.symlink_metadata().unwrap().file_type().is_fifo());
     }
 }
 
@@ -2803,4 +2839,170 @@ fn test_mv_no_prompt_unwriteable_file_with_no_tty() {
 
     assert!(!at.file_exists("source_notty"));
     assert!(at.file_exists("target_notty"));
+}
+
+/// Test mv silently succeeds when dest filesystem doesn't support xattrs (ENOTSUP)
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_xattr_enotsup_silent() {
+    use std::process::Command;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("src", "x");
+
+    if Command::new("setfattr")
+        .args(["-n", "user.t", "-v", "v", &at.plus_as_string("src")])
+        .status()
+        .is_ok_and(|s| s.success())
+    {
+        scene
+            .ucmd()
+            .arg(at.plus_as_string("src"))
+            .arg("/dev/shm/mv_test")
+            .succeeds()
+            .no_stderr();
+        std::fs::remove_file("/dev/shm/mv_test").ok();
+    }
+}
+
+/// Test that symlinks inside directories are preserved during cross-device moves
+/// (not expanded into full copies of their targets)
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_symlink_preserved() {
+    use std::fs;
+    use std::os::unix::fs::symlink;
+    use tempfile::TempDir;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create a directory with a symlink to /etc inside
+    at.mkdir("src_dir");
+    at.write("src_dir/local.txt", "local content");
+    symlink("/etc", at.plus("src_dir/etc_link")).expect("Failed to create symlink");
+
+    assert!(at.is_symlink("src_dir/etc_link"));
+
+    // Force cross-filesystem move using /dev/shm (tmpfs)
+    let target_dir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let target_path = target_dir.path().join("dst_dir");
+
+    scene
+        .ucmd()
+        .arg("src_dir")
+        .arg(target_path.to_str().unwrap())
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.dir_exists("src_dir"));
+
+    // Verify the symlink was preserved (not expanded)
+    let moved_symlink = target_path.join("etc_link");
+    assert!(
+        moved_symlink.is_symlink(),
+        "etc_link should still be a symlink after cross-device move"
+    );
+    assert_eq!(
+        fs::read_link(&moved_symlink).expect("Failed to read symlink"),
+        Path::new("/etc"),
+        "symlink should still point to /etc"
+    );
+
+    assert!(target_path.join("local.txt").exists());
+}
+
+/// Test that broken/dangling symlinks are preserved during cross-device moves
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_broken_symlink_preserved() {
+    use std::fs;
+    use std::os::unix::fs::symlink;
+    use tempfile::TempDir;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create a directory with a broken symlink inside
+    at.mkdir("src_dir");
+    symlink("/nonexistent/path", at.plus("src_dir/broken_link"))
+        .expect("Failed to create broken symlink");
+
+    assert!(at.is_symlink("src_dir/broken_link"));
+    assert!(!at.file_exists("src_dir/broken_link"));
+
+    // Force cross-filesystem move using /dev/shm (tmpfs)
+    let target_dir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let target_path = target_dir.path().join("dst_dir");
+
+    scene
+        .ucmd()
+        .arg("src_dir")
+        .arg(target_path.to_str().unwrap())
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.dir_exists("src_dir"));
+
+    let moved_symlink = target_path.join("broken_link");
+    assert!(
+        moved_symlink.is_symlink(),
+        "broken_link should still be a symlink after cross-device move"
+    );
+    assert_eq!(
+        fs::read_link(&moved_symlink).expect("Failed to read broken symlink"),
+        Path::new("/nonexistent/path"),
+        "broken symlink should still point to its original (nonexistent) target"
+    );
+}
+
+/// Test that symlinks to regular files are preserved during cross-device moves
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_file_symlink_preserved() {
+    use std::fs;
+    use std::os::unix::fs::symlink;
+    use tempfile::TempDir;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create a directory with a file and a symlink to it
+    at.mkdir("src_dir");
+    at.write("src_dir/target.txt", "target content");
+    symlink(at.plus("src_dir/target.txt"), at.plus("src_dir/file_link"))
+        .expect("Failed to create file symlink");
+
+    assert!(at.is_symlink("src_dir/file_link"));
+
+    // Force cross-filesystem move using /dev/shm (tmpfs)
+    let target_dir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let target_path = target_dir.path().join("dst_dir");
+
+    scene
+        .ucmd()
+        .arg("src_dir")
+        .arg(target_path.to_str().unwrap())
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.dir_exists("src_dir"));
+
+    // Verify the symlink was preserved (not expanded)
+    let moved_symlink = target_path.join("file_link");
+    assert!(
+        moved_symlink.is_symlink(),
+        "file_link should still be a symlink after cross-device move"
+    );
+
+    // Verify the target file was also moved
+    let moved_target = target_path.join("target.txt");
+    assert!(moved_target.exists());
+    assert_eq!(
+        fs::read_to_string(&moved_target).expect("Failed to read target file"),
+        "target content"
+    );
 }

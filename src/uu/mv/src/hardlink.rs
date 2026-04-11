@@ -9,7 +9,7 @@
 //! This module provides functionality to preserve hardlink relationships
 //! when moving files across different filesystems/partitions.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -19,14 +19,14 @@ use uucore::display::Quotable;
 #[derive(Debug, Default)]
 pub struct HardlinkTracker {
     /// Maps (device, inode) -> destination path for the first occurrence
-    inode_map: HashMap<(u64, u64), PathBuf>,
+    inode_map: FxHashMap<(u64, u64), PathBuf>,
 }
 
 /// Pre-scans files to identify hardlink groups with optimized memory usage
 #[derive(Debug, Default)]
 pub struct HardlinkGroupScanner {
     /// Maps (device, inode) -> list of source paths that are hardlinked together
-    hardlink_groups: HashMap<(u64, u64), Vec<PathBuf>>,
+    hardlink_groups: FxHashMap<(u64, u64), Vec<PathBuf>>,
     /// List of source files/directories being moved (for destination mapping)
     source_files: Vec<PathBuf>,
     /// Whether scanning has been performed
@@ -39,9 +39,6 @@ pub struct HardlinkOptions {
     /// Whether to show verbose output about hardlink operations
     pub verbose: bool,
 }
-
-/// Result type for hardlink operations
-pub type HardlinkResult<T> = Result<T, HardlinkError>;
 
 /// Errors that can occur during hardlink operations
 #[derive(Debug)]
@@ -68,7 +65,7 @@ impl std::fmt::Display for HardlinkError {
                 )
             }
             Self::Metadata { path, error } => {
-                write!(f, "Metadata access error for {}: {}", path.quote(), error)
+                write!(f, "Metadata access error for {}: {error}", path.quote())
             }
         }
     }
@@ -102,9 +99,8 @@ impl From<HardlinkError> for io::Error {
             )),
 
             HardlinkError::Metadata { path, error } => Self::other(format!(
-                "Metadata access error for {}: {}",
+                "Metadata access error for {}: {error}",
                 path.quote(),
-                error
             )),
         }
     }
@@ -122,7 +118,7 @@ impl HardlinkTracker {
         dest: &Path,
         scanner: &HardlinkGroupScanner,
         options: &HardlinkOptions,
-    ) -> HardlinkResult<Option<PathBuf>> {
+    ) -> Option<PathBuf> {
         use std::os::unix::fs::MetadataExt;
 
         let metadata = match source.metadata() {
@@ -130,9 +126,9 @@ impl HardlinkTracker {
             Err(e) => {
                 // Gracefully handle metadata errors by logging and continuing without hardlink tracking
                 if options.verbose {
-                    eprintln!("warning: cannot get metadata for {}: {}", source.quote(), e);
+                    eprintln!("warning: cannot get metadata for {}: {e}", source.quote());
                 }
-                return Ok(None);
+                return None;
             }
         };
 
@@ -154,14 +150,14 @@ impl HardlinkTracker {
                         existing_path.quote()
                     );
                 }
-                return Ok(Some(existing_path.clone()));
+                return Some(existing_path.clone());
             }
         }
 
         // This is the first time we see this file, record its destination
         self.inode_map.insert(key, dest.to_path_buf());
 
-        Ok(None)
+        None
     }
 }
 
@@ -171,13 +167,9 @@ impl HardlinkGroupScanner {
     }
 
     /// Scan files and group them by hardlinks, including recursive directory scanning
-    pub fn scan_files(
-        &mut self,
-        files: &[PathBuf],
-        options: &HardlinkOptions,
-    ) -> HardlinkResult<()> {
+    pub fn scan_files(&mut self, files: &[PathBuf], options: &HardlinkOptions) {
         if self.scanned {
-            return Ok(());
+            return;
         }
 
         // Store the source files for destination mapping
@@ -187,12 +179,11 @@ impl HardlinkGroupScanner {
             if let Err(e) = self.scan_single_path(file) {
                 if options.verbose {
                     // Only show warnings for verbose mode
-                    eprintln!("warning: failed to scan {}: {}", file.quote(), e);
+                    eprintln!("warning: failed to scan {}: {e}", file.quote());
                 }
                 // For non-verbose mode, silently continue for missing files
                 // This provides graceful degradation - we'll lose hardlink info for this file
                 // but can still preserve hardlinks for other files
-                continue;
             }
         }
 
@@ -207,8 +198,6 @@ impl HardlinkGroupScanner {
                 );
             }
         }
-
-        Ok(())
     }
 
     /// Scan a single path (file or directory)
@@ -276,7 +265,7 @@ impl HardlinkGroupScanner {
     #[cfg(unix)]
     pub fn stats(&self) -> ScannerStats {
         let total_groups = self.hardlink_groups.len();
-        let total_files = self.hardlink_groups.values().map(|group| group.len()).sum();
+        let total_files = self.hardlink_groups.values().map(Vec::len).sum();
 
         ScannerStats {
             total_groups,
@@ -306,12 +295,11 @@ pub fn with_optional_hardlink_context<F, R>(
 where
     F: FnOnce(&mut HardlinkTracker, &HardlinkGroupScanner) -> R,
 {
-    match (tracker, scanner) {
-        (Some(tracker), Some(scanner)) => operation(tracker, scanner),
-        _ => {
-            let (mut dummy_tracker, dummy_scanner) = create_hardlink_context();
-            operation(&mut dummy_tracker, &dummy_scanner)
-        }
+    if let (Some(tracker), Some(scanner)) = (tracker, scanner) {
+        operation(tracker, scanner)
+    } else {
+        let (mut dummy_tracker, dummy_scanner) = create_hardlink_context();
+        operation(&mut dummy_tracker, &dummy_scanner)
     }
 }
 

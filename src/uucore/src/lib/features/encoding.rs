@@ -88,11 +88,11 @@ impl SupportsFastDecodeAndEncode for Base64SimdWrapper {
                     let segment_len = blocks * 4;
 
                     if segment_len > remaining.len() {
-                        return Err(USimpleError::new(1, "error: invalid input".to_owned()));
+                        return Err(USimpleError::new(1, "error: invalid input"));
                     }
 
                     if Self::decode_with_standard(&remaining[..segment_len], output).is_err() {
-                        return Err(USimpleError::new(1, "error: invalid input".to_owned()));
+                        return Err(USimpleError::new(1, "error: invalid input"));
                     }
 
                     start += segment_len;
@@ -100,14 +100,14 @@ impl SupportsFastDecodeAndEncode for Base64SimdWrapper {
                     // If there are no more '=' bytes the tail might still be padded
                     // (len % 4 == 0) or purposely unpadded (GNU --ignore-garbage or
                     // concatenated streams), so select the matching alphabet.
-                    let decoder = if remaining.len() % 4 == 0 {
+                    let decoder = if remaining.len().is_multiple_of(4) {
                         Self::decode_with_standard
                     } else {
                         Self::decode_with_no_pad
                     };
 
                     if decoder(remaining, output).is_err() {
-                        return Err(USimpleError::new(1, "error: invalid input".to_owned()));
+                        return Err(USimpleError::new(1, "error: invalid input"));
                     }
 
                     break;
@@ -117,7 +117,7 @@ impl SupportsFastDecodeAndEncode for Base64SimdWrapper {
             Ok(())
         } else {
             Self::decode_with_no_pad(input, output)
-                .map_err(|_| USimpleError::new(1, "error: invalid input".to_owned()))
+                .map_err(|_| USimpleError::new(1, "error: invalid input"))
         };
 
         if let Err(err) = decode_result {
@@ -295,7 +295,7 @@ impl SupportsFastDecodeAndEncode for Base58Wrapper {
             let digit = alphabet
                 .iter()
                 .position(|&b| b == byte)
-                .ok_or_else(|| USimpleError::new(1, "error: invalid input".to_owned()))?;
+                .ok_or_else(|| USimpleError::new(1, "error: invalid input"))?;
 
             // Multiply by 58 and add digit
             let mut carry = digit as u32;
@@ -426,13 +426,13 @@ impl SupportsFastDecodeAndEncode for Z85Wrapper {
 
     fn decode_into_vec(&self, input: &[u8], output: &mut Vec<u8>) -> UResult<()> {
         if input.first() == Some(&b'#') {
-            return Err(USimpleError::new(1, "error: invalid input".to_owned()));
+            return Err(USimpleError::new(1, "error: invalid input"));
         }
 
         let decode_result = match z85::decode(input) {
             Ok(ve) => ve,
             Err(_de) => {
-                return Err(USimpleError::new(1, "error: invalid input".to_owned()));
+                return Err(USimpleError::new(1, "error: invalid input"));
             }
         };
 
@@ -448,10 +448,10 @@ impl SupportsFastDecodeAndEncode for Z85Wrapper {
     fn encode_to_vec_deque(&self, input: &[u8], output: &mut VecDeque<u8>) -> UResult<()> {
         // According to the spec we should not accept inputs whose len is not a multiple of 4.
         // However, the z85 crate implements a padded encoding and accepts such inputs. We have to manually check for them.
-        if input.len() % 4 != 0 {
+        if !input.len().is_multiple_of(4) {
             return Err(USimpleError::new(
                 1,
-                "error: invalid input (length must be multiple of 4 characters)".to_owned(),
+                "error: invalid input (length must be multiple of 4 characters)",
             ));
         }
 
@@ -477,7 +477,7 @@ impl SupportsFastDecodeAndEncode for EncodingWrapper {
         let decode_len_result = match self.encoding.decode_len(input.len()) {
             Ok(us) => us,
             Err(_de) => {
-                return Err(USimpleError::new(1, "error: invalid input".to_owned()));
+                return Err(USimpleError::new(1, "error: invalid input"));
             }
         };
 
@@ -493,7 +493,7 @@ impl SupportsFastDecodeAndEncode for EncodingWrapper {
                 output.truncate(output_len + us);
             }
             Err(_de) => {
-                return Err(USimpleError::new(1, "error: invalid input".to_owned()));
+                return Err(USimpleError::new(1, "error: invalid input"));
             }
         }
 

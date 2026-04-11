@@ -19,9 +19,7 @@ use std::os::fd::AsFd;
 use std::os::unix::fs::FileTypeExt;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::UResult;
-#[cfg(not(target_os = "windows"))]
-use uucore::libc;
+use uucore::error::{UResult, strip_errno};
 use uucore::translate;
 use uucore::{fast_inc::fast_inc_one, format_usage};
 
@@ -84,12 +82,12 @@ impl LineNumber {
 #[derive(Error, Debug)]
 enum CatError {
     /// Wrapper around `io::Error`
-    #[error("{0}")]
+    #[error("{}", strip_errno(.0))]
     Io(#[from] io::Error),
-    /// Wrapper around `nix::Error`
+    /// Wrapper around `rustix::io::Errno`
     #[cfg(any(target_os = "linux", target_os = "android"))]
     #[error("{0}")]
-    Nix(#[from] nix::Error),
+    Rustix(#[from] rustix::io::Errno),
     /// Unknown file type; it's not a regular file, socket, etc.
     #[error("{}", translate!("cat-error-unknown-filetype", "ft_debug" => .ft_debug))]
     UnknownFiletype {
@@ -220,15 +218,6 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    // When we receive a SIGPIPE signal, we want to terminate the process so
-    // that we don't print any error messages to stderr. Rust ignores SIGPIPE
-    // (see https://github.com/rust-lang/rust/issues/62569), so we restore it's
-    // default action here.
-    #[cfg(not(target_os = "windows"))]
-    unsafe {
-        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
-    }
-
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let number_mode = if matches.get_flag(options::NUMBER_NONBLANK) {
@@ -240,35 +229,33 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let show_nonprint = [
-        options::SHOW_ALL.to_owned(),
-        options::SHOW_NONPRINTING_ENDS.to_owned(),
-        options::SHOW_NONPRINTING_TABS.to_owned(),
-        options::SHOW_NONPRINTING.to_owned(),
+        options::SHOW_ALL,
+        options::SHOW_NONPRINTING_ENDS,
+        options::SHOW_NONPRINTING_TABS,
+        options::SHOW_NONPRINTING,
     ]
     .iter()
     .any(|v| matches.get_flag(v));
 
     let show_ends = [
-        options::SHOW_ENDS.to_owned(),
-        options::SHOW_ALL.to_owned(),
-        options::SHOW_NONPRINTING_ENDS.to_owned(),
+        options::SHOW_ENDS,
+        options::SHOW_ALL,
+        options::SHOW_NONPRINTING_ENDS,
     ]
     .iter()
     .any(|v| matches.get_flag(v));
 
     let show_tabs = [
-        options::SHOW_ALL.to_owned(),
-        options::SHOW_TABS.to_owned(),
-        options::SHOW_NONPRINTING_TABS.to_owned(),
+        options::SHOW_ALL,
+        options::SHOW_TABS,
+        options::SHOW_NONPRINTING_TABS,
     ]
     .iter()
     .any(|v| matches.get_flag(v));
 
     let squeeze_blank = matches.get_flag(options::SQUEEZE_BLANK);
-    let files: Vec<OsString> = match matches.get_many::<OsString>(options::FILE) {
-        Some(v) => v.cloned().collect(),
-        None => vec![OsString::from("-")],
-    };
+    #[allow(clippy::unwrap_used, reason = "clap provides '-' by default")]
+    let files = matches.get_many::<OsString>(options::FILE).unwrap();
 
     let options = OutputOptions {
         show_ends,
@@ -277,15 +264,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         show_tabs,
         squeeze_blank,
     };
-    cat_files(&files, &options)
+    cat_files(files, &options)
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("cat")
         .version(uucore::crate_version!())
         .override_usage(format_usage(&translate!("cat-usage")))
         .about(translate!("cat-about"))
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("cat"))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(
@@ -293,6 +280,7 @@ pub fn uu_app() -> Command {
                 .hide(true)
                 .action(ArgAction::Append)
                 .value_parser(clap::value_parser!(OsString))
+                .default_value("-")
                 .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
@@ -408,7 +396,10 @@ fn cat_path(path: &OsString, options: &OutputOptions, state: &mut OutputState) -
     }
 }
 
-fn cat_files(files: &[OsString], options: &OutputOptions) -> UResult<()> {
+fn cat_files<'a, I>(files: I, options: &OutputOptions) -> UResult<()>
+where
+    I: IntoIterator<Item = &'a OsString>,
+{
     let mut state = OutputState {
         line_number: LineNumber::new(),
         at_line_start: true,
@@ -429,11 +420,11 @@ fn cat_files(files: &[OsString], options: &OutputOptions) -> UResult<()> {
         Ok(())
     } else {
         // each next line is expected to display "cat: …"
-        let line_joiner = format!("\n{}: ", uucore::util_name());
+        let line_joiner = "\ncat: ";
 
         Err(uucore::error::USimpleError::new(
             error_messages.len() as i32,
-            error_messages.join(&line_joiner),
+            error_messages.join(line_joiner),
         ))
     }
 }
@@ -487,17 +478,17 @@ fn get_input_type(path: &OsString) -> CatResult<InputType> {
 /// simple memory copy.
 fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
     let stdout = io::stdout();
-    let mut stdout_lock = stdout.lock();
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         // If we're on Linux or Android, try to use the splice() system call
         // for faster writing. If it works, we're done.
-        if !splice::write_fast_using_splice(handle, &stdout_lock)? {
+        if !splice::write_fast_using_splice(handle, &stdout)? {
             return Ok(());
         }
     }
     // If we're not on Linux or Android, or the splice() call failed,
     // fall back on slower writing.
+    let mut stdout_lock = stdout.lock();
     let mut buf = [0; 1024 * 64];
     loop {
         match handle.reader.read(&mut buf) {
@@ -509,7 +500,7 @@ fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
                     .write_all(&buf[..n])
                     .inspect_err(handle_broken_pipe)?;
             }
-            Err(e) if e.kind() == ErrorKind::Interrupted => continue,
+            Err(e) if e.kind() == ErrorKind::Interrupted => {}
             Err(e) => return Err(e.into()),
         }
     }
@@ -565,7 +556,7 @@ fn write_lines<R: FdReadable>(
             }
 
             // print to end of line or end of buffer
-            let offset = write_end(&mut writer, &in_buf[pos..], options);
+            let offset = write_end(&mut writer, &in_buf[pos..], options)?;
 
             // end of buffer?
             if offset + pos == in_buf.len() {
@@ -628,7 +619,11 @@ fn write_new_line<W: Write>(
     Ok(())
 }
 
-fn write_end<W: Write>(writer: &mut W, in_buf: &[u8], options: &OutputOptions) -> usize {
+fn write_end<W: Write>(
+    writer: &mut W,
+    in_buf: &[u8],
+    options: &OutputOptions,
+) -> io::Result<usize> {
     if options.show_nonprint {
         write_nonprint_to_end(in_buf, writer, options.tab().as_bytes())
     } else if options.show_tabs {
@@ -644,47 +639,41 @@ fn write_end<W: Write>(writer: &mut W, in_buf: &[u8], options: &OutputOptions) -
 // however, write_nonprint_to_end doesn't need to stop at \r because it will always write \r as ^M.
 // Return the number of written symbols
 
-fn write_to_end<W: Write>(in_buf: &[u8], writer: &mut W) -> usize {
+fn write_to_end<W: Write>(in_buf: &[u8], writer: &mut W) -> io::Result<usize> {
     // using memchr2 significantly improves performances
-    match memchr2(b'\n', b'\r', in_buf) {
-        Some(p) => {
-            writer.write_all(&in_buf[..p]).unwrap();
-            p
-        }
-        None => {
-            writer.write_all(in_buf).unwrap();
-            in_buf.len()
-        }
+    if let Some(p) = memchr2(b'\n', b'\r', in_buf) {
+        writer.write_all(&in_buf[..p])?;
+        Ok(p)
+    } else {
+        writer.write_all(in_buf)?;
+        Ok(in_buf.len())
     }
 }
 
-fn write_tab_to_end<W: Write>(mut in_buf: &[u8], writer: &mut W) -> usize {
+fn write_tab_to_end<W: Write>(mut in_buf: &[u8], writer: &mut W) -> io::Result<usize> {
     let mut count = 0;
     loop {
-        match in_buf
+        if let Some(p) = in_buf
             .iter()
             .position(|c| *c == b'\n' || *c == b'\t' || *c == b'\r')
         {
-            Some(p) => {
-                writer.write_all(&in_buf[..p]).unwrap();
-                if in_buf[p] == b'\t' {
-                    writer.write_all(b"^I").unwrap();
-                    in_buf = &in_buf[p + 1..];
-                    count += p + 1;
-                } else {
-                    // b'\n' or b'\r'
-                    return count + p;
-                }
+            writer.write_all(&in_buf[..p])?;
+            if in_buf[p] == b'\t' {
+                writer.write_all(b"^I")?;
+                in_buf = &in_buf[p + 1..];
+                count += p + 1;
+            } else {
+                // b'\n' or b'\r'
+                return Ok(count + p);
             }
-            None => {
-                writer.write_all(in_buf).unwrap();
-                return in_buf.len() + count;
-            }
+        } else {
+            writer.write_all(in_buf)?;
+            return Ok(in_buf.len() + count);
         }
     }
 }
 
-fn write_nonprint_to_end<W: Write>(in_buf: &[u8], writer: &mut W, tab: &[u8]) -> usize {
+fn write_nonprint_to_end<W: Write>(in_buf: &[u8], writer: &mut W, tab: &[u8]) -> io::Result<usize> {
     let mut count = 0;
 
     for byte in in_buf.iter().copied() {
@@ -699,11 +688,10 @@ fn write_nonprint_to_end<W: Write>(in_buf: &[u8], writer: &mut W, tab: &[u8]) ->
             128..=159 => writer.write_all(&[b'M', b'-', b'^', byte - 64]),
             160..=254 => writer.write_all(&[b'M', b'-', byte - 128]),
             _ => writer.write_all(b"M-^?"),
-        }
-        .unwrap();
+        }?;
         count += 1;
     }
-    count
+    Ok(count)
 }
 
 fn write_end_of_line<W: Write>(
@@ -733,14 +721,14 @@ mod tests {
     fn test_write_tab_to_end_with_newline() {
         let mut writer = BufWriter::with_capacity(1024 * 64, stdout());
         let in_buf = b"a\tb\tc\n";
-        assert_eq!(super::write_tab_to_end(in_buf, &mut writer), 5);
+        assert_eq!(super::write_tab_to_end(in_buf, &mut writer).unwrap(), 5);
     }
 
     #[test]
     fn test_write_tab_to_end_no_newline() {
         let mut writer = BufWriter::with_capacity(1024 * 64, stdout());
         let in_buf = b"a\tb\tc";
-        assert_eq!(super::write_tab_to_end(in_buf, &mut writer), 5);
+        assert_eq!(super::write_tab_to_end(in_buf, &mut writer).unwrap(), 5);
     }
 
     #[test]
@@ -748,7 +736,7 @@ mod tests {
         let mut writer = BufWriter::with_capacity(1024 * 64, stdout());
         let in_buf = b"\n";
         let tab = b"";
-        super::write_nonprint_to_end(in_buf, &mut writer, tab);
+        super::write_nonprint_to_end(in_buf, &mut writer, tab).unwrap();
         assert_eq!(writer.buffer().len(), 0);
     }
 
@@ -757,7 +745,7 @@ mod tests {
         let mut writer = BufWriter::with_capacity(1024 * 64, stdout());
         let in_buf = &[9u8];
         let tab = b"tab";
-        super::write_nonprint_to_end(in_buf, &mut writer, tab);
+        super::write_nonprint_to_end(in_buf, &mut writer, tab).unwrap();
         assert_eq!(writer.buffer(), tab);
     }
 
@@ -767,7 +755,7 @@ mod tests {
             let mut writer = BufWriter::with_capacity(1024 * 64, stdout());
             let in_buf = &[byte];
             let tab = b"";
-            super::write_nonprint_to_end(in_buf, &mut writer, tab);
+            super::write_nonprint_to_end(in_buf, &mut writer, tab).unwrap();
             assert_eq!(writer.buffer(), [b'^', byte + 64]);
         }
     }
@@ -778,7 +766,7 @@ mod tests {
             let mut writer = BufWriter::with_capacity(1024 * 64, stdout());
             let in_buf = &[byte];
             let tab = b"";
-            super::write_nonprint_to_end(in_buf, &mut writer, tab);
+            super::write_nonprint_to_end(in_buf, &mut writer, tab).unwrap();
             assert_eq!(writer.buffer(), [b'^', byte + 64]);
         }
     }

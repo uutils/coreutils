@@ -33,9 +33,6 @@ pub(crate) enum ExitStatus {
 
     /// When a signal is sent to the child process or `timeout` itself.
     SignalSent(usize),
-
-    /// When `SIGTERM` signal received.
-    Terminated,
 }
 
 impl From<ExitStatus> for i32 {
@@ -46,7 +43,6 @@ impl From<ExitStatus> for i32 {
             ExitStatus::CannotInvoke => 126,
             ExitStatus::CommandNotFound => 127,
             ExitStatus::SignalSent(s) => 128 + s as Self,
-            ExitStatus::Terminated => 143,
         }
     }
 }

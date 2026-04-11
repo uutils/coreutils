@@ -648,3 +648,97 @@ fn test_comm_eintr_handling() {
         .stdout_contains("line2")
         .stdout_contains("line3");
 }
+
+#[test]
+fn test_output_lossy_utf8() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create files with invalid UTF-8
+    // A: \xfe\n\xff\n
+    // B: \xff\n\xfe\n
+    at.write_bytes("a", b"\xfe\n\xff\n");
+    at.write_bytes("b", b"\xff\n\xfe\n");
+
+    // GNU comm output (and uutils with fix):
+    // \xfe\n (col 1)
+    // \t\t\xff\n (col 3)
+    // \t\xfe\n (col 2)
+    // Hex: fe 0a 09 09 ff 0a 09 fe 0a
+
+    scene
+        .ucmd()
+        .args(&["a", "b"])
+        .fails() // Fails because of unsorted input
+        .stdout_is_bytes(b"\xfe\n\t\t\xff\n\t\xfe\n");
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_comm_anonymous_pipes() {
+    use std::{io::Write, os::fd::AsRawFd, process};
+    use uucore::pipes::pipe;
+
+    let scene = TestScenario::new(util_name!());
+
+    // Open two anonymous pipes
+    let (comm1_reader, mut comm1_writer) = pipe().unwrap();
+    let (comm2_reader, mut comm2_writer) = pipe().unwrap();
+
+    // comm reads the data in chunks
+    // make content large enough, so that at least two chunks are read
+    // default buffer size is 8192, so with 6 characters (5 digits + \n) per line we need to write at least 1366 lines
+
+    // write 1500 lines into comm1: 00000\n00001\n...01500\n
+    let mut content = String::new();
+    for i in 0..1500 {
+        content.push_str(&format!("{i:05}\n"));
+    }
+    assert!(comm1_writer.write_all(content.as_bytes()).is_ok());
+    drop(comm1_writer);
+
+    // write into comm2: 00000\n00001\n...01500\n99999\n
+    content.push_str("99999\n");
+    assert!(comm2_writer.write_all(content.as_bytes()).is_ok());
+    drop(comm2_writer);
+
+    // run comm, showing unique lines in second input
+    let comm1_fd = format!("/proc/{}/fd/{}", process::id(), comm1_reader.as_raw_fd());
+    let comm2_fd = format!("/proc/{}/fd/{}", process::id(), comm2_reader.as_raw_fd());
+    scene
+        .ucmd()
+        .args(&["-13", &comm1_fd, &comm2_fd])
+        .succeeds()
+        .stdout_is("99999\n");
+}
+
+#[test]
+#[cfg(all(target_os = "linux", not(target_env = "musl")))]
+fn test_read_error() {
+    new_ucmd!()
+        .arg("/proc/self/mem")
+        .arg("/dev/null")
+        .fails()
+        .stderr_contains("comm: /proc/self/mem: Input/output error");
+
+    new_ucmd!()
+        .arg("/dev/null")
+        .arg("/proc/self/mem")
+        .fails()
+        .stderr_contains("comm: /proc/self/mem: Input/output error");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_comm_write_error_dev_full() {
+    use std::fs::OpenOptions;
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("a", "a\n");
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+    scene
+        .ucmd()
+        .args(&["a", "a"])
+        .set_stdout(dev_full)
+        .fails()
+        .stderr_contains("No space left on device");
+}

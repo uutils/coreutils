@@ -5,8 +5,7 @@
 
 // spell-checker:ignore lseek seekable
 
-use nix::fcntl::{FcntlArg, OFlag, fcntl};
-use nix::unistd::{Whence, lseek};
+use rustix::fs::{OFlags, SeekFrom, fcntl_getfl};
 use std::os::fd::AsFd;
 use uucore::fs::FileInformation;
 
@@ -31,10 +30,10 @@ pub fn is_unsafe_overwrite<I: AsFd, O: AsFd>(input: &I, output: &O) -> bool {
     if file_size == 0 {
         return false;
     }
-    // `lseek` returns an error if the file descriptor is closed or it refers to
+    // `seek` returns an error if the file descriptor is closed or it refers to
     // a non-seekable resource (e.g., pipe, socket, or some devices).
-    let input_pos = lseek(input.as_fd(), 0, Whence::SeekCur);
-    let output_pos = lseek(output.as_fd(), 0, Whence::SeekCur);
+    let input_pos = rustix::fs::seek(input, SeekFrom::Current(0)).map(|v| v as i64);
+    let output_pos = rustix::fs::seek(output, SeekFrom::Current(0)).map(|v| v as i64);
     if is_appending(output) {
         if let Ok(pos) = input_pos {
             if pos >= 0 && (pos as u64) >= file_size {
@@ -54,9 +53,8 @@ pub fn is_unsafe_overwrite<I: AsFd, O: AsFd>(input: &I, output: &O) -> bool {
 
 /// Whether the file is opened with the `O_APPEND` flag
 fn is_appending<F: AsFd>(file: &F) -> bool {
-    let flags_raw = fcntl(file.as_fd(), FcntlArg::F_GETFL).unwrap_or_default();
-    let flags = OFlag::from_bits_truncate(flags_raw);
-    flags.contains(OFlag::O_APPEND)
+    let flags = fcntl_getfl(file).unwrap_or(OFlags::empty());
+    flags.contains(OFlags::APPEND)
 }
 
 #[cfg(test)]

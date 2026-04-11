@@ -6,61 +6,54 @@
 // cSpell:ignore strs
 
 use clap::{Arg, ArgAction, Command, builder::ValueParser};
-use std::error::Error;
 use std::ffi::OsString;
 use std::io::{self, Write};
-use uucore::error::{UResult, USimpleError};
+use uucore::error::{UResult, USimpleError, strip_errno};
 use uucore::format_usage;
-#[cfg(unix)]
-use uucore::signals::enable_pipe_errors;
 use uucore::translate;
 
-// it's possible that using a smaller or larger buffer might provide better performance on some
-// systems, but honestly this is good enough
+// it's possible that using a smaller or larger buffer might provide better performance
 const BUF_SIZE: usize = 16 * 1024;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
-    let mut buffer = Vec::with_capacity(BUF_SIZE);
-    args_into_buffer(&mut buffer, matches.get_many::<OsString>("STRING")).unwrap();
+    #[allow(clippy::unwrap_used, reason = "clap provides 'y' by default")]
+    let mut buffer = args_into_buffer(matches.get_many::<OsString>("STRING").unwrap())?;
     prepare_buffer(&mut buffer);
 
     match exec(&buffer) {
         Ok(()) => Ok(()),
+        // On Windows, silently handle broken pipe since there's no SIGPIPE
+        #[cfg(windows)]
         Err(err) if err.kind() == io::ErrorKind::BrokenPipe => Ok(()),
         Err(err) => Err(USimpleError::new(
             1,
-            translate!("yes-error-standard-output", "error" => err),
+            translate!("yes-error-standard-output", "error" => strip_errno(&err)),
         )),
     }
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("yes")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("yes"))
         .about(translate!("yes-about"))
         .override_usage(format_usage(&translate!("yes-usage")))
         .arg(
             Arg::new("STRING")
+                .default_value("y")
                 .value_parser(ValueParser::os_string())
                 .action(ArgAction::Append),
         )
         .infer_long_args(true)
 }
 
-/// Copies words from `i` into `buf`, separated by spaces.
-fn args_into_buffer<'a>(
-    buf: &mut Vec<u8>,
-    i: Option<impl Iterator<Item = &'a OsString>>,
-) -> Result<(), Box<dyn Error>> {
-    let Some(i) = i else {
-        buf.extend_from_slice(b"y\n");
-        return Ok(());
-    };
-
+/// create a buffer filled by words `i` separated by spaces.
+#[allow(clippy::unnecessary_wraps, reason = "needed on some platforms")]
+fn args_into_buffer<'a>(i: impl Iterator<Item = &'a OsString>) -> UResult<Vec<u8>> {
+    let mut buf = Vec::with_capacity(BUF_SIZE);
     // On Unix (and wasi), OsStrs are just &[u8]'s underneath...
     #[cfg(any(unix, target_os = "wasi"))]
     {
@@ -78,30 +71,24 @@ fn args_into_buffer<'a>(
     #[cfg(not(any(unix, target_os = "wasi")))]
     {
         for part in itertools::intersperse(i.map(|a| a.to_str()), Some(" ")) {
-            let bytes = match part {
-                Some(part) => part.as_bytes(),
-                None => return Err(translate!("yes-error-invalid-utf8").into()),
-            };
+            let bytes = part
+                .ok_or_else(|| USimpleError::new(1, translate!("yes-error-invalid-utf8")))?
+                .as_bytes();
             buf.extend_from_slice(bytes);
         }
     }
 
     buf.push(b'\n');
 
-    Ok(())
+    Ok(buf)
 }
 
 /// Assumes buf holds a single output line forged from the command line arguments, copies it
-/// repeatedly until the buffer holds as many copies as it can under [`BUF_SIZE`].
+/// repeatedly until the buffer holds as many copies as it can
 fn prepare_buffer(buf: &mut Vec<u8>) {
-    if buf.len() * 2 > BUF_SIZE {
-        return;
-    }
-
-    assert!(!buf.is_empty());
-
     let line_len = buf.len();
-    let target_size = line_len * (BUF_SIZE / line_len);
+    debug_assert!(line_len > 0, "buffer is not empty since we have newline");
+    let target_size = line_len * (buf.capacity() / line_len); // 0 if line_len is already large enough
 
     while buf.len() < target_size {
         let to_copy = std::cmp::min(target_size - buf.len(), buf.len());
@@ -113,8 +100,6 @@ fn prepare_buffer(buf: &mut Vec<u8>) {
 pub fn exec(bytes: &[u8]) -> io::Result<()> {
     let stdout = io::stdout();
     let mut stdout = stdout.lock();
-    #[cfg(unix)]
-    enable_pipe_errors()?;
 
     loop {
         stdout.write_all(bytes)?;
@@ -146,7 +131,8 @@ mod tests {
         ];
 
         for (line, final_len) in tests {
-            let mut v = std::iter::repeat_n(b'a', line).collect::<Vec<_>>();
+            let mut v = Vec::with_capacity(BUF_SIZE);
+            v.extend(std::iter::repeat_n(b'a', line));
             prepare_buffer(&mut v);
             assert_eq!(v.len(), final_len);
         }
@@ -155,31 +141,20 @@ mod tests {
     #[test]
     fn test_args_into_buf() {
         {
-            let mut v = Vec::with_capacity(BUF_SIZE);
-            args_into_buffer(&mut v, None::<std::slice::Iter<OsString>>).unwrap();
+            let default_args = ["y".into()];
+            let v = args_into_buffer(default_args.iter()).unwrap();
             assert_eq!(String::from_utf8(v).unwrap(), "y\n");
         }
 
         {
-            let mut v = Vec::with_capacity(BUF_SIZE);
-            args_into_buffer(&mut v, Some([OsString::from("foo")].iter())).unwrap();
+            let args = ["foo".into()];
+            let v = args_into_buffer(args.iter()).unwrap();
             assert_eq!(String::from_utf8(v).unwrap(), "foo\n");
         }
 
         {
-            let mut v = Vec::with_capacity(BUF_SIZE);
-            args_into_buffer(
-                &mut v,
-                Some(
-                    [
-                        OsString::from("foo"),
-                        OsString::from("bar    baz"),
-                        OsString::from("qux"),
-                    ]
-                    .iter(),
-                ),
-            )
-            .unwrap();
+            let args = ["foo".into(), "bar    baz".into(), "qux".into()];
+            let v = args_into_buffer(args.iter()).unwrap();
             assert_eq!(String::from_utf8(v).unwrap(), "foo bar    baz qux\n");
         }
     }

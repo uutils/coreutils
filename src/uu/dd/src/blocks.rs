@@ -23,10 +23,9 @@ const SPACE: u8 = b' ';
 /// all-spaces block at the end. Otherwise, remove the last block if
 /// it is all spaces.
 fn block(buf: &[u8], cbs: usize, sync: bool, rstat: &mut ReadStat) -> Vec<Vec<u8>> {
-    let mut blocks = buf
-        .split(|&e| e == NEWLINE)
-        .map(|split| split.to_vec())
-        .fold(Vec::new(), |mut blocks, mut split| {
+    let mut blocks = buf.split(|&e| e == NEWLINE).map(<[u8]>::to_vec).fold(
+        Vec::new(),
+        |mut blocks, mut split| {
             if split.len() > cbs {
                 rstat.records_truncated += 1;
             }
@@ -34,16 +33,14 @@ fn block(buf: &[u8], cbs: usize, sync: bool, rstat: &mut ReadStat) -> Vec<Vec<u8
             blocks.push(split);
 
             blocks
-        });
+        },
+    );
 
     // If `sync` is true and there has been at least one partial
     // record read from the input, then leave the all-spaces block at
     // the end. Otherwise, remove it.
-    if let Some(last) = blocks.last() {
-        if (!sync || rstat.reads_partial == 0) && last.iter().all(|&e| e == SPACE) {
-            blocks.pop();
-        }
-    }
+    let _ = blocks
+        .pop_if(|last| (!sync || rstat.reads_partial == 0) && last.iter().all(|&e| e == SPACE));
 
     blocks
 }

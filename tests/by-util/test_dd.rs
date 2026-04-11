@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname seekable
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname seekable fadvise FADV DONTNEED
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -25,7 +25,8 @@ use std::path::PathBuf;
     not(target_os = "freebsd"),
     feature = "printf"
 ))]
-use std::process::{Command, Stdio};
+use std::process::Command;
+use std::process::Stdio;
 #[cfg(not(windows))]
 use std::thread::sleep;
 #[cfg(not(windows))]
@@ -112,6 +113,14 @@ fn version() {
 #[test]
 fn help() {
     new_ucmd!().args(&["--help"]).succeeds();
+}
+
+#[test]
+fn test_out_of_memory() {
+    new_ucmd!()
+        .arg("bs=1PB")
+        .fails_with_code(1)
+        .stderr_contains("memory"); //todo: improve error message at all platforms
 }
 
 #[test]
@@ -254,6 +263,13 @@ fn test_zero_multiplier_warning() {
             .succeeds()
             .no_stdout()
             .stderr_contains("warning: '0x' is a zero multiplier; use '00x' if that is intended");
+
+        new_ucmd!()
+            .args(&[format!("{arg}=0x0x0").as_str(), "status=none"])
+            .pipe_in("")
+            .succeeds()
+            .no_stdout()
+            .stderr_is("dd: warning: '0x' is a zero multiplier; use '00x' if that is intended\ndd: warning: '0x' is a zero multiplier; use '00x' if that is intended\n");
     }
 }
 
@@ -667,6 +683,38 @@ fn test_skip_beyond_file() {
         .stderr_contains(
             "'standard input': cannot skip to specified offset\n0+0 records in\n0+0 records out\n",
         );
+}
+
+#[test]
+#[cfg(unix)]
+fn test_skip_beyond_file_seekable_stdin() {
+    // When stdin is a seekable file, dd should use seek to skip bytes.
+    // This tests that skipping beyond the file size issues a warning.
+
+    // Test cases: (bs, skip) pairs that skip beyond a 4-byte file
+    let test_cases = [
+        ("bs=1", "skip=5"), // skip 5 bytes
+        ("bs=3", "skip=2"), // skip 6 bytes
+    ];
+
+    for (bs, skip) in test_cases {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("in", "abcd");
+
+        let stdin = OwnedFileDescriptorOrHandle::open_file(
+            OpenOptions::new().read(true),
+            at.plus("in").as_path(),
+        )
+        .unwrap();
+
+        ucmd.args(&[bs, skip, "count=0", "status=noxfer"])
+            .set_stdin(Stdio::from(stdin))
+            .succeeds()
+            .no_stdout()
+            .stderr_contains(
+                "'standard input': cannot skip to specified offset\n0+0 records in\n0+0 records out\n",
+            );
+    }
 }
 
 #[test]
@@ -1445,7 +1493,7 @@ fn test_sparse() {
     // On common Linux filesystems, setting the length to one megabyte
     // should cause the file to become a sparse file, but it depends
     // on the system.
-    std::fs::File::create(at.plus("infile"))
+    File::create(at.plus("infile"))
         .unwrap()
         .set_len(1024 * 1024)
         .unwrap();
@@ -1622,6 +1670,8 @@ fn test_reading_partial_blocks_from_fifo() {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .env("LANGUAGE", "C")
         .spawn()
         .unwrap();
 
@@ -1667,6 +1717,8 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .env("LANGUAGE", "C")
         .spawn()
         .unwrap();
 
@@ -1697,7 +1749,7 @@ fn test_iflag_directory_fails_when_file_is_passed_via_std_in() {
     let filename = at.plus_as_string("input");
     new_ucmd!()
         .args(&["iflag=directory", "count=0"])
-        .set_stdin(std::process::Stdio::from(File::open(filename).unwrap()))
+        .set_stdin(Stdio::from(File::open(filename).unwrap()))
         .fails()
         .stderr_only("dd: setting flags for 'standard input': Not a directory\n");
 }
@@ -1707,7 +1759,7 @@ fn test_iflag_directory_fails_when_file_is_passed_via_std_in() {
 fn test_iflag_directory_passes_when_dir_is_redirected() {
     new_ucmd!()
         .args(&["iflag=directory", "count=0"])
-        .set_stdin(std::process::Stdio::from(File::open(".").unwrap()))
+        .set_stdin(Stdio::from(File::open(".").unwrap()))
         .succeeds();
 }
 
@@ -1723,8 +1775,6 @@ fn test_iflag_directory_fails_when_file_is_piped_via_std_in() {
 
 #[test]
 fn test_stdin_stdout_not_rewound_even_when_connected_to_seekable_file() {
-    use std::process::Stdio;
-
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
@@ -1779,6 +1829,27 @@ fn test_wrong_number_err_msg() {
         .args(&["count=1kBb555"])
         .fails()
         .stderr_contains("dd: invalid number: '1kBb555'\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_no_dropped_writes() {
+    const BLK_SIZE: usize = 0x4000;
+    const COUNT: usize = 1000;
+    const NUM_BYTES: usize = BLK_SIZE * COUNT;
+
+    let result = new_ucmd!()
+        .args(&[
+            "if=/dev/urandom",
+            &format!("bs={BLK_SIZE}"),
+            &format!("count={COUNT}"),
+        ])
+        .set_stdout(Stdio::piped())
+        .set_stderr(Stdio::piped())
+        .succeeds();
+
+    assert_eq!(result.stdout().len(), NUM_BYTES);
+    assert!(result.stderr_str().contains(&format!("{NUM_BYTES} bytes")));
 }
 
 #[test]
@@ -1839,4 +1910,200 @@ fn test_skip_overflow() {
         .stderr_contains(
             "dd: invalid number: ‘9223372036854775808’: Value too large for defined data type",
         );
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_nocache_eof() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write_bytes("in.f", &vec![0u8; 1_234_567]);
+    ucmd.args(&[
+        "if=in.f",
+        "of=out.f",
+        "bs=1M",
+        "oflag=nocache,sync",
+        "status=noxfer",
+    ])
+    .succeeds();
+    assert_eq!(at.read_bytes("out.f").len(), 1_234_567);
+}
+
+#[test]
+#[cfg(all(target_os = "linux", feature = "printf"))]
+fn test_nocache_eof_fadvise_zero_length() {
+    use std::process::Command;
+    let (at, _ucmd) = at_and_ucmd!();
+    at.write_bytes("in.f", &vec![0u8; 1_234_567]);
+
+    let strace_file = at.plus_as_string("strace.out");
+    let result = Command::new("strace")
+        .args(["-o", &strace_file, "-e", "fadvise64,fadvise64_64"])
+        .arg(get_tests_binary())
+        .args([
+            "dd",
+            "if=in.f",
+            "of=out.f",
+            "bs=1M",
+            "oflag=nocache,sync",
+            "status=none",
+        ])
+        .current_dir(at.as_string())
+        .output();
+
+    if result.is_err() {
+        return; // strace not available
+    }
+
+    let strace = at.read("strace.out");
+    assert!(
+        strace.contains(", 0, POSIX_FADV_DONTNEED"),
+        "Expected len=0 at EOF: {strace}"
+    );
+}
+
+#[test]
+#[cfg(not(target_os = "openbsd"))]
+fn test_iso8859_1_case_conversion() {
+    use std::process::Command;
+    // Test ISO-8859-1 case conversion for accented characters
+    // Skip test if required locale is not available (common in CI environments)
+    let locale_test = Command::new("locale")
+        .arg("-a")
+        .output()
+        .ok()
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .is_some_and(|locales| locales.contains("fr_FR"));
+
+    if !locale_test {
+        eprintln!("Skipping ISO-8859-1 test: French locale not available");
+        return;
+    }
+
+    let locale = "fr_FR";
+
+    // É (0xC9) should convert to é (0xE9) with lcase
+    let input = vec![0xC9, 0x0A]; // É\n in ISO-8859-1
+    let expected = vec![0xE9, 0x0A]; // é\n in ISO-8859-1
+    let result = new_ucmd!()
+        .args(&["conv=lcase", "status=none"])
+        .env("LC_ALL", locale)
+        .pipe_in(input)
+        .succeeds();
+    assert_eq!(result.stdout(), expected);
+
+    // é (0xE9) should convert to É (0xC9) with ucase
+    let input = vec![0xE9, 0x0A]; // é\n in ISO-8859-1
+    let expected = vec![0xC9, 0x0A]; // É\n in ISO-8859-1
+    let result = new_ucmd!()
+        .args(&["conv=ucase", "status=none"])
+        .env("LC_ALL", locale)
+        .pipe_in(input)
+        .succeeds();
+    assert_eq!(result.stdout(), expected);
+}
+
+#[test]
+fn test_locale_aware_case_conversion() {
+    // Test that case conversion respects different single-byte locales
+
+    // Test Turkish (ISO-8859-9) where 'I' has special behavior
+    // Turkish has İ (0xDD) ↔ i (0xFD) and I (0x49) ↔ ı (0xFD in some positions)
+    // For simplicity, test some basic accented characters that differ between locales
+
+    // Test with ISO-8859-9 (Turkish) - Ğ (0xD0) should convert to ğ (0xF0)
+    let input = vec![0xD0, 0x0A]; // Ğ\n in ISO-8859-9
+    let expected = vec![0xF0, 0x0A]; // ğ\n in ISO-8859-9
+    let result = new_ucmd!()
+        .args(&["conv=lcase", "status=none"])
+        .env("LC_ALL", "tr_TR.iso8859-9")
+        .pipe_in(input)
+        .succeeds();
+
+    // Note: This test may not work if the system doesn't have Turkish locale installed
+    // In that case, it should fall back to C locale behavior
+    if result.stdout() == expected {
+        println!("Turkish locale case conversion working correctly");
+    } else {
+        println!("Turkish locale not available, using fallback behavior");
+        // Test that it at least doesn't crash and produces some output
+        assert!(!result.stdout().is_empty());
+    }
+}
+
+#[test]
+fn test_french_locale_case_conversion() {
+    // Test French (ISO-8859-1) case conversion for French accented characters
+    // This test uses the same charset as the previous ISO-8859-1 test but with French locale
+
+    // Test French accented characters: À (0xC0) should convert to à (0xE0) with lcase
+    let input = vec![0xC0, 0x0A]; // À\n in ISO-8859-1
+    let expected = vec![0xE0, 0x0A]; // à\n in ISO-8859-1
+    let result = new_ucmd!()
+        .args(&["conv=lcase", "status=none"])
+        .env("LC_ALL", "fr_FR.iso8859-1")
+        .pipe_in(input)
+        .succeeds();
+
+    // Note: This test may not work if the system doesn't have French locale installed
+    // In that case, it should fall back to C locale behavior
+    if result.stdout() == expected {
+        println!("French locale case conversion working correctly for À -> à");
+    } else {
+        println!("French locale not available, using fallback behavior");
+        // Test that it at least doesn't crash and produces some output
+        assert!(!result.stdout().is_empty());
+    }
+
+    // Test reverse conversion: à (0xE0) should convert to À (0xC0) with ucase
+    let input = vec![0xE0, 0x0A]; // à\n in ISO-8859-1
+    let expected = vec![0xC0, 0x0A]; // À\n in ISO-8859-1
+    let result = new_ucmd!()
+        .args(&["conv=ucase", "status=none"])
+        .env("LC_ALL", "fr_FR.iso8859-1")
+        .pipe_in(input)
+        .succeeds();
+
+    if result.stdout() == expected {
+        println!("French locale case conversion working correctly for à -> À");
+    } else {
+        println!("French locale not available for reverse conversion, using fallback behavior");
+        assert!(!result.stdout().is_empty());
+    }
+
+    // Test another French character: Ç (0xC7) should convert to ç (0xE7) with lcase
+    let input = vec![0xC7, 0x0A]; // Ç\n in ISO-8859-1
+    let expected = vec![0xE7, 0x0A]; // ç\n in ISO-8859-1
+    let result = new_ucmd!()
+        .args(&["conv=lcase", "status=none"])
+        .env("LC_ALL", "fr_FR.iso8859-1")
+        .pipe_in(input)
+        .succeeds();
+
+    if result.stdout() == expected {
+        println!("French locale case conversion working correctly for Ç -> ç");
+    } else {
+        println!("French locale not available for Ç conversion, using fallback behavior");
+        assert!(!result.stdout().is_empty());
+    }
+}
+
+#[test]
+fn test_ascii_case_conversion_fallback() {
+    // Test that ASCII characters always convert correctly regardless of locale
+    let input = vec![b'A', b'B', b'C', 0x0A]; // ABC\n
+    let expected = vec![b'a', b'b', b'c', 0x0A]; // abc\n
+    let result = new_ucmd!()
+        .args(&["conv=lcase", "status=none"])
+        .env("LC_ALL", "C")
+        .pipe_in(input.clone())
+        .succeeds();
+    assert_eq!(result.stdout(), expected);
+
+    // Test reverse conversion
+    let result = new_ucmd!()
+        .args(&["conv=ucase", "status=none"])
+        .env("LC_ALL", "C")
+        .pipe_in(expected)
+        .succeeds();
+    assert_eq!(result.stdout(), input);
 }

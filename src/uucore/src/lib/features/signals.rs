@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars/api) fcntl setrlimit setitimer rubout pollable sysconf pgrp
+// spell-checker:ignore (vars/api) fcntl setrlimit setitimer rubout pollable sysconf pgrp GETFD pfds revents POLLRDBAND POLLERR
 // spell-checker:ignore (vars/signals) ABRT ALRM CHLD SEGV SIGABRT SIGALRM SIGBUS SIGCHLD SIGCONT SIGDANGER SIGEMT SIGFPE SIGHUP SIGILL SIGINFO SIGINT SIGIO SIGIOT SIGKILL SIGMIGRATE SIGMSG SIGPIPE SIGPRE SIGPROF SIGPWR SIGQUIT SIGSEGV SIGSTOP SIGSYS SIGTALRM SIGTERM SIGTRAP SIGTSTP SIGTHR SIGTTIN SIGTTOU SIGURG SIGUSR SIGVIRT SIGVTALRM SIGWINCH SIGXCPU SIGXFSZ STKFLT PWR THR TSTP TTIN TTOU VIRT VTALRM XCPU XFSZ SIGCLD SIGPOLL SIGWAITING SIGAIOCANCEL SIGLWP SIGFREEZE SIGTHAW SIGCANCEL SIGLOST SIGXRES SIGJVM SIGRTMIN SIGRT SIGRTMAX TALRM AIOCANCEL XRES RTMIN RTMAX LTOSTOP
 
 //! This module provides a way to handle signals in a platform-independent way.
@@ -12,9 +12,12 @@
 
 #[cfg(unix)]
 use nix::errno::Errno;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use nix::libc;
 #[cfg(unix)]
 use nix::sys::signal::{
-    SigHandler::SigDfl, SigHandler::SigIgn, Signal::SIGINT, Signal::SIGPIPE, signal,
+    SaFlags, SigAction, SigHandler, SigHandler::SigDfl, SigHandler::SigIgn, SigSet, Signal,
+    Signal::SIGINT, Signal::SIGPIPE, sigaction, signal,
 };
 
 /// The default signal value.
@@ -393,11 +396,24 @@ pub static ALL_SIGNALS: [&str; 32] = [
 pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
     let signal_name_upcase = signal_name_or_value.to_uppercase();
     if let Ok(value) = signal_name_upcase.parse() {
-        return if is_signal(value) { Some(value) } else { None };
+        if is_signal(value) {
+            return Some(value);
+        }
+        return realtime_signal_bounds()
+            .filter(|&(rtmin, rtmax)| value >= rtmin && value <= rtmax)
+            .map(|_| value);
     }
     let signal_name = signal_name_upcase.trim_start_matches("SIG");
 
-    ALL_SIGNALS.iter().position(|&s| s == signal_name)
+    if let Some(pos) = ALL_SIGNALS.iter().position(|&s| s == signal_name) {
+        return Some(pos);
+    }
+
+    realtime_signal_bounds().and_then(|(rtmin, rtmax)| match signal_name {
+        "RTMIN" => Some(rtmin),
+        "RTMAX" => Some(rtmax),
+        _ => None,
+    })
 }
 
 /// Returns true if the given number is a valid signal number.
@@ -410,12 +426,78 @@ pub fn signal_name_by_value(signal_value: usize) -> Option<&'static str> {
     ALL_SIGNALS.get(signal_value).copied()
 }
 
-/// Returns the default signal value.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn realtime_signal_bounds() -> Option<(usize, usize)> {
+    let rtmin = libc::SIGRTMIN();
+    let rtmax = libc::SIGRTMAX();
+
+    (0 < rtmin && rtmin <= rtmax).then_some((rtmin as usize, rtmax as usize))
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+fn realtime_signal_bounds() -> Option<(usize, usize)> {
+    None
+}
+
+/// Returns the largest signal number that list-style interfaces should accept.
+pub fn signal_number_upper_bound() -> usize {
+    let base = ALL_SIGNALS.len() - 1;
+
+    realtime_signal_bounds().map_or(base, |(_, rtmax)| rtmax.max(base))
+}
+
+/// Returns the signal name for list-style interfaces.
+pub fn signal_list_name_by_value(signal_value: usize) -> Option<String> {
+    if let Some(signal_name) = signal_name_by_value(signal_value) {
+        return Some(signal_name.to_string());
+    }
+
+    realtime_signal_bounds().and_then(|(rtmin, rtmax)| {
+        if signal_value == rtmin {
+            Some("RTMIN".to_string())
+        } else if signal_value == rtmax {
+            Some("RTMAX".to_string())
+        } else {
+            None
+        }
+    })
+}
+
+/// Returns the signal value for list-style interfaces.
+pub fn signal_list_value_by_name_or_number(spec: &str) -> Option<usize> {
+    let spec_upcase = spec.to_uppercase();
+
+    if let Ok(value) = spec_upcase.parse::<usize>() {
+        return (value <= signal_number_upper_bound()).then_some(value);
+    }
+
+    if let Some(value) = signal_by_name_or_value(&spec_upcase) {
+        return Some(value);
+    }
+
+    let signal_name = spec_upcase.trim_start_matches("SIG");
+    realtime_signal_bounds().and_then(|(rtmin, rtmax)| match signal_name {
+        "RTMIN" => Some(rtmin),
+        "RTMAX" => Some(rtmax),
+        _ => None,
+    })
+}
+
+/// Restores SIGPIPE to default behavior (process terminates on broken pipe).
 #[cfg(unix)]
 pub fn enable_pipe_errors() -> Result<(), Errno> {
     // We pass the error as is, the return value would just be Ok(SigDfl), so we can safely ignore it.
     // SAFETY: this function is safe as long as we do not use a custom SigHandler -- we use the default one.
     unsafe { signal(SIGPIPE, SigDfl) }.map(|_| ())
+}
+
+/// Ignores SIGPIPE signal (broken pipe errors are returned instead of terminating).
+/// Use this to override the default SIGPIPE handling when you need to handle
+/// broken pipe errors gracefully (e.g., tee with --output-error).
+#[cfg(unix)]
+pub fn disable_pipe_errors() -> Result<(), Errno> {
+    // SAFETY: this function is safe as long as we do not use a custom SigHandler -- we use the default one.
+    unsafe { signal(SIGPIPE, SigIgn) }.map(|_| ())
 }
 
 /// Ignores the SIGINT signal.
@@ -424,6 +506,189 @@ pub fn ignore_interrupts() -> Result<(), Errno> {
     // We pass the error as is, the return value would just be Ok(SigIgn), so we can safely ignore it.
     // SAFETY: this function is safe as long as we do not use a custom SigHandler -- we use the default one.
     unsafe { signal(SIGINT, SigIgn) }.map(|_| ())
+}
+
+/// Installs a signal handler. The handler must be async-signal-safe.
+#[cfg(unix)]
+pub fn install_signal_handler(
+    sig: Signal,
+    handler: extern "C" fn(std::os::raw::c_int),
+) -> Result<(), Errno> {
+    let action = SigAction::new(
+        SigHandler::Handler(handler),
+        SaFlags::SA_RESTART,
+        SigSet::empty(),
+    );
+    unsafe { sigaction(sig, &action) }?;
+    Ok(())
+}
+
+// Detect closed stdin/stdout before Rust reopens them as /dev/null (see issue #2873)
+#[cfg(unix)]
+use std::sync::atomic::{AtomicBool, Ordering};
+
+#[cfg(unix)]
+static STDIN_WAS_CLOSED: AtomicBool = AtomicBool::new(false);
+#[cfg(unix)]
+static STDOUT_WAS_CLOSED: AtomicBool = AtomicBool::new(false);
+#[cfg(unix)]
+static STDERR_WAS_CLOSED: AtomicBool = AtomicBool::new(false);
+
+// SIGPIPE state capture - captures whether SIGPIPE was ignored at process startup
+#[cfg(unix)]
+static SIGPIPE_WAS_IGNORED: AtomicBool = AtomicBool::new(false);
+
+#[cfg(unix)]
+static STARTUP_STATE_WAS_CAPTURED: AtomicBool = AtomicBool::new(false);
+
+/// Captures stdio and SIGPIPE state at process initialization, before main() runs.
+///
+/// # Safety
+/// Called from `.init_array` before main(). Only reads current state.
+#[cfg(unix)]
+#[allow(clippy::missing_safety_doc)]
+pub unsafe extern "C" fn capture_startup_state() {
+    use nix::libc;
+    use std::mem::MaybeUninit;
+    use std::ptr;
+
+    // No spinlock because we're single-threaded at this point
+    if STARTUP_STATE_WAS_CAPTURED.swap(true, Ordering::Relaxed) {
+        return;
+    }
+
+    // Capture stdio state
+    unsafe {
+        STDIN_WAS_CLOSED.store(
+            libc::fcntl(libc::STDIN_FILENO, libc::F_GETFD) == -1,
+            Ordering::Relaxed,
+        );
+        STDOUT_WAS_CLOSED.store(
+            libc::fcntl(libc::STDOUT_FILENO, libc::F_GETFD) == -1,
+            Ordering::Relaxed,
+        );
+        STDERR_WAS_CLOSED.store(
+            libc::fcntl(libc::STDERR_FILENO, libc::F_GETFD) == -1,
+            Ordering::Relaxed,
+        );
+    }
+
+    // Capture SIGPIPE state
+    let mut current = MaybeUninit::<libc::sigaction>::uninit();
+    // SAFETY: sigaction with null new-action just queries current state
+    if unsafe { libc::sigaction(libc::SIGPIPE, ptr::null(), current.as_mut_ptr()) } == 0 {
+        // SAFETY: sigaction succeeded, so current is initialized
+        let ignored = unsafe { current.assume_init() }.sa_sigaction == libc::SIG_IGN;
+        SIGPIPE_WAS_IGNORED.store(ignored, Ordering::Release);
+    }
+}
+
+/// Initializes startup state capture. Call once at crate root level.
+#[macro_export]
+#[cfg(unix)]
+macro_rules! init_startup_state_capture {
+    () => {
+        #[cfg(not(target_os = "macos"))]
+        #[used]
+        #[unsafe(link_section = ".init_array")]
+        static CAPTURE_STARTUP_STATE: unsafe extern "C" fn() =
+            $crate::signals::capture_startup_state;
+
+        #[cfg(target_os = "macos")]
+        #[used]
+        #[unsafe(link_section = "__DATA,__mod_init_func")]
+        static CAPTURE_STARTUP_STATE: unsafe extern "C" fn() =
+            $crate::signals::capture_startup_state;
+    };
+}
+
+#[macro_export]
+#[cfg(not(unix))]
+macro_rules! init_startup_state_capture {
+    () => {};
+}
+
+#[cfg(unix)]
+pub fn stdin_was_closed() -> bool {
+    STDIN_WAS_CLOSED.load(Ordering::Relaxed)
+}
+
+#[cfg(not(unix))]
+pub const fn stdin_was_closed() -> bool {
+    false
+}
+
+#[cfg(unix)]
+pub fn stdout_was_closed() -> bool {
+    STDOUT_WAS_CLOSED.load(Ordering::Relaxed)
+}
+
+#[cfg(not(unix))]
+pub const fn stdout_was_closed() -> bool {
+    false
+}
+
+#[cfg(unix)]
+pub fn stderr_was_closed() -> bool {
+    STDERR_WAS_CLOSED.load(Ordering::Relaxed)
+}
+
+#[cfg(not(unix))]
+pub const fn stderr_was_closed() -> bool {
+    false
+}
+
+/// Returns whether SIGPIPE was ignored at process startup.
+#[cfg(unix)]
+pub fn sigpipe_was_ignored() -> bool {
+    SIGPIPE_WAS_IGNORED.load(Ordering::Acquire)
+}
+
+#[cfg(not(unix))]
+pub const fn sigpipe_was_ignored() -> bool {
+    false
+}
+
+#[cfg(target_os = "linux")]
+pub fn ensure_stdout_not_broken() -> std::io::Result<bool> {
+    use nix::{
+        poll::{PollFd, PollFlags, PollTimeout, poll},
+        sys::stat::{SFlag, fstat},
+    };
+    use std::io::stdout;
+    use std::os::fd::AsFd;
+
+    let out = stdout();
+
+    // First, check that stdout is a fifo and return true if it's not the case
+    let stat = fstat(out.as_fd())?;
+    if !SFlag::from_bits_truncate(stat.st_mode).contains(SFlag::S_IFIFO) {
+        return Ok(true);
+    }
+
+    // POLLRDBAND is the flag used by GNU tee.
+    let mut pfds = [PollFd::new(out.as_fd(), PollFlags::POLLRDBAND)];
+
+    // Then, ensure that the pipe is not broken.
+    // Use ZERO timeout to return immediately - we just want to check the current state.
+    let res = poll(&mut pfds, PollTimeout::ZERO)?;
+
+    if res > 0 {
+        // poll returned with events ready - check if POLLERR is set (pipe broken)
+        let error = pfds.iter().any(|pfd| {
+            if let Some(revents) = pfd.revents() {
+                revents.contains(PollFlags::POLLERR)
+            } else {
+                true
+            }
+        });
+        return Ok(!error);
+    }
+
+    // res == 0 means no events ready (timeout reached immediately with ZERO timeout).
+    // This means the pipe is healthy (not broken).
+    // res < 0 would be an error, but nix returns Err in that case.
+    Ok(true)
 }
 
 #[test]
@@ -456,4 +721,73 @@ fn name() {
     for (value, signal) in ALL_SIGNALS.iter().enumerate() {
         assert_eq!(signal_name_by_value(value), Some(*signal));
     }
+}
+
+#[test]
+fn list_signal_names_match_static_signal_names() {
+    for (value, signal) in ALL_SIGNALS.iter().enumerate() {
+        assert_eq!(signal_list_name_by_value(value), Some(signal.to_string()));
+    }
+}
+
+#[test]
+fn list_signal_numbers_follow_upper_bound() {
+    assert_eq!(
+        signal_list_value_by_name_or_number(&signal_number_upper_bound().to_string()),
+        Some(signal_number_upper_bound())
+    );
+    assert_eq!(
+        signal_list_value_by_name_or_number(&(signal_number_upper_bound() + 1).to_string()),
+        None
+    );
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn linux_realtime_signal_upper_bound_includes_rtmax() {
+    let (_, rtmax) = realtime_signal_bounds().unwrap();
+    assert!(signal_number_upper_bound() >= rtmax);
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn linux_realtime_signal_names_are_listed() {
+    let (rtmin, rtmax) = realtime_signal_bounds().unwrap();
+
+    assert_eq!(signal_list_name_by_value(rtmin), Some("RTMIN".to_string()));
+    assert_eq!(signal_list_name_by_value(rtmax), Some("RTMAX".to_string()));
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn linux_realtime_signal_names_resolve_to_runtime_values() {
+    let (rtmin, rtmax) = realtime_signal_bounds().unwrap();
+
+    assert_eq!(signal_list_value_by_name_or_number("RTMIN"), Some(rtmin));
+    assert_eq!(signal_list_value_by_name_or_number("RTMAX"), Some(rtmax));
+    assert_eq!(signal_list_value_by_name_or_number("SIGRTMIN"), Some(rtmin));
+    assert_eq!(signal_list_value_by_name_or_number("SIGRTMAX"), Some(rtmax));
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn linux_unnamed_signal_numbers_are_valid_for_lists() {
+    assert_eq!(signal_list_value_by_name_or_number("32"), Some(32));
+    assert_eq!(signal_list_value_by_name_or_number("33"), Some(33));
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn linux_realtime_signals_resolve_by_name_or_value() {
+    let (rtmin, rtmax) = realtime_signal_bounds().unwrap();
+
+    // By name
+    assert_eq!(signal_by_name_or_value("RTMIN"), Some(rtmin));
+    assert_eq!(signal_by_name_or_value("RTMAX"), Some(rtmax));
+    assert_eq!(signal_by_name_or_value("SIGRTMIN"), Some(rtmin));
+    assert_eq!(signal_by_name_or_value("SIGRTMAX"), Some(rtmax));
+
+    // By numeric value
+    assert_eq!(signal_by_name_or_value(&rtmin.to_string()), Some(rtmin));
+    assert_eq!(signal_by_name_or_value(&rtmax.to_string()), Some(rtmax));
 }

@@ -9,18 +9,16 @@ homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 readme.workspace = true
 
 [lints]
 workspace = true
 
-[build-dependencies]
-num-traits = { workspace = true } # used in src/numerics.rs, which is included by build.rs
-
 [dependencies]
 clap = { workspace = true }
-num-traits = { workspace = true }
 uucore = { workspace = true }
+memchr = { workspace = true }
 num-bigint = { workspace = true }
 num-prime = { workspace = true }
 fluent = { workspace = true }
@@ -31,7 +29,6 @@ path = "src/main.rs"
 
 [dev-dependencies]
 divan = { workspace = true }
-rand = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }
 
 [lib]

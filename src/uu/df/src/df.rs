@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore itotal iused iavail ipcent pcent tmpfs squashfs lofs
+// spell-checker:ignore itotal iused iavail ipcent pcent tmpfs squashfs lofs sysfs
 mod blocks;
 mod columns;
 mod filesystem;
@@ -16,7 +16,7 @@ use uucore::error::{UError, UResult, USimpleError, get_exit_code};
 use uucore::fsext::{MountInfo, read_fs_list};
 use uucore::parser::parse_size::ParseSizeError;
 use uucore::translate;
-use uucore::{format_usage, show};
+use uucore::{format_usage, show, show_warning};
 
 use clap::{Arg, ArgAction, ArgMatches, Command, parser::ValueSource};
 
@@ -111,6 +111,13 @@ impl Default for Options {
     }
 }
 
+impl Options {
+    /// Whether -a, -l, -t, or -x options require the mount table.
+    fn requires_mount_table(&self) -> bool {
+        self.show_all_fs || self.show_local_fs || self.include.is_some() || self.exclude.is_some()
+    }
+}
+
 #[derive(Debug, Error)]
 enum OptionsError {
     // TODO This needs to vary based on whether `--block-size`
@@ -135,7 +142,7 @@ enum OptionsError {
         .0.iter()
             .map(|t| translate!("df-error-filesystem-type-both-selected-and-excluded", "type" => t.quote()))
             .collect::<Vec<_>>()
-            .join(format!("\n{}: ", uucore::util_name()).as_str())
+            .join("\ndf: ")
     )]
     FilesystemTypeBothSelectedAndExcluded(Vec<String>),
 }
@@ -294,12 +301,7 @@ fn get_all_filesystems(opt: &Options) -> UResult<Vec<Filesystem>> {
     // Run a sync call before any operation if so instructed.
     if opt.sync {
         #[cfg(not(any(windows, target_os = "redox")))]
-        unsafe {
-            #[cfg(not(target_os = "android"))]
-            uucore::libc::sync();
-            #[cfg(target_os = "android")]
-            uucore::libc::syscall(uucore::libc::SYS_sync);
-        }
+        rustix::fs::sync();
     }
 
     let mut mounts = vec![];
@@ -311,7 +313,11 @@ fn get_all_filesystems(opt: &Options) -> UResult<Vec<Filesystem>> {
         // but `vmi` is probably not very long in practice.
         if is_included(&mi, opt) && is_best(&mounts, &mi) {
             let dev_path: &Path = Path::new(&mi.dev_name);
-            if dev_path.is_symlink() {
+            // Only check is_symlink() for absolute paths. For non-absolute paths
+            // like "tmpfs", "sysfs", etc., is_symlink() would resolve relative to
+            // the current working directory, which is extremely slow in deeply
+            // nested directories (O(n) syscalls where n is the directory depth).
+            if dev_path.is_absolute() && dev_path.is_symlink() {
                 if let Ok(canonicalized_symlink) = uucore::fs::canonicalize(
                     dev_path,
                     uucore::fs::MissingHandling::Existing,
@@ -354,14 +360,38 @@ where
     P: AsRef<Path>,
 {
     // The list of all mounted filesystems.
-    let mounts: Vec<MountInfo> = read_fs_list()?;
+    let mounts_result = read_fs_list();
+
+    #[allow(unused_variables)]
+    let (mounts, use_fallback) = match mounts_result {
+        Ok(m) => (m, false),
+        Err(e) => {
+            if opt.requires_mount_table() {
+                return Err(e);
+            }
+            show_warning!(
+                "{}",
+                translate!("df-error-cannot-read-table-of-mounted-filesystems")
+            );
+            (vec![], true)
+        }
+    };
 
     let mut result = vec![];
 
     // Convert each path into a `Filesystem`, which contains
     // both the mount information and usage information.
     for path in paths {
-        match Filesystem::from_path(&mounts, path) {
+        #[cfg(unix)]
+        let fs_result = if use_fallback {
+            Filesystem::from_path_direct(path)
+        } else {
+            Filesystem::from_path(&mounts, path)
+        };
+        #[cfg(not(unix))]
+        let fs_result = Filesystem::from_path(&mounts, path);
+
+        match fs_result {
             Ok(fs) => {
                 if is_included(&fs.mount_info, opt) {
                     result.push(fs);
@@ -421,7 +451,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if matches.get_flag(OPT_INODES) {
             println!(
                 "{}",
-                translate!("df-error-inodes-not-supported-windows", "program" => uucore::util_name())
+                translate!("df-error-inodes-not-supported-windows", "program" => "df")
             );
             return Ok(());
         }
@@ -468,7 +498,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("df")
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("df-about"))

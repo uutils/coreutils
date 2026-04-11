@@ -12,7 +12,7 @@ fn generate_linear_chain(num_nodes: usize) -> Vec<u8> {
     let mut data = Vec::new();
 
     for i in 0..num_nodes.saturating_sub(1) {
-        data.extend_from_slice(format!("node{} node{}\n", i, i + 1).as_bytes());
+        data.extend_from_slice(format!("node{i} node{}\n", i + 1).as_bytes());
     }
 
     data
@@ -85,10 +85,8 @@ fn generate_wide_dag(num_nodes: usize) -> Vec<u8> {
         for i in chain_start..chain_end.saturating_sub(1) {
             data.extend_from_slice(
                 format!(
-                    "chain{}_{} chain{}_{}\n",
-                    chain,
+                    "chain{chain}_{} chain{chain}_{}\n",
                     i - chain_start,
-                    chain,
                     i + 1 - chain_start
                 )
                 .as_bytes(),
@@ -102,32 +100,12 @@ fn generate_wide_dag(num_nodes: usize) -> Vec<u8> {
             let curr_mid = chain_start + chain_length / 4;
             data.extend_from_slice(
                 format!(
-                    "chain{}_{} chain{}_{}\n",
-                    prev_chain,
+                    "chain{prev_chain}_{} chain{chain}_{}\n",
                     prev_end - prev_chain * chain_length,
-                    chain,
                     curr_mid - chain_start
                 )
                 .as_bytes(),
             );
-        }
-    }
-
-    data
-}
-
-/// Generate DAG data for input parsing stress tests
-fn generate_input_parsing_heavy(num_edges: usize) -> Vec<u8> {
-    // Create a scenario with many edges but relatively few unique nodes
-    // This stresses the input parsing and graph construction optimizations
-    let num_unique_nodes = (num_edges as f64).sqrt() as usize;
-    let mut data = Vec::new();
-
-    for i in 0..num_edges {
-        let from = i % num_unique_nodes;
-        let to = (i / num_unique_nodes) % num_unique_nodes;
-        if from != to {
-            data.extend_from_slice(format!("n{from} n{to}\n").as_bytes());
         }
     }
 
@@ -184,6 +162,28 @@ fn tsort_wide_dag(bencher: Bencher, num_nodes: usize) {
     });
 }
 
+/*
+/// silent for now because too much variance
+
+
+/// Generate DAG data for input parsing stress tests
+fn generate_input_parsing_heavy(num_edges: usize) -> Vec<u8> {
+    // Create a scenario with many edges but relatively few unique nodes
+    // This stresses the input parsing and graph construction optimizations
+    let num_unique_nodes = (num_edges as f64).sqrt() as usize;
+    let mut data = Vec::new();
+
+    for i in 0..num_edges {
+        let from = i % num_unique_nodes;
+        let to = (i / num_unique_nodes) % num_unique_nodes;
+        if from != to {
+            data.extend_from_slice(format!("n{from} n{to}\n").as_bytes());
+        }
+    }
+
+    data
+}
+
 /// Benchmark input parsing vs computation by using files with different edge densities
 #[divan::bench(args = [5_000])]
 fn tsort_input_parsing_heavy(bencher: Bencher, num_edges: usize) {
@@ -195,6 +195,7 @@ fn tsort_input_parsing_heavy(bencher: Bencher, num_edges: usize) {
         black_box(run_util_function(uumain, &[file_path_str]));
     });
 }
+*/
 
 fn main() {
     divan::main();

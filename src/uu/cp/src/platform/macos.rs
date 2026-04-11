@@ -85,37 +85,32 @@ pub(crate) fn copy_on_write(
     if raw_pfn.is_null() || error != 0 {
         // clonefile(2) is either not supported or it errored out (possibly because the FS does not
         // support COW).
-        match reflink_mode {
-            ReflinkMode::Always => {
-                return Err(translate!("cp-error-failed-to-clone", "source" => source.quote(), "dest" => dest.quote(), "error" => error)
+        if reflink_mode == ReflinkMode::Always {
+            return Err(translate!("cp-error-failed-to-clone", "source" => source.quote(), "dest" => dest.quote(), "error" => error)
                 .into());
-            }
-            _ => {
-                copy_debug.reflink = OffloadReflinkDebug::Yes;
-                if source_is_stream {
-                    let mut src_file = File::open(source)?;
-                    let mode = 0o622 & !get_umask();
-                    let mut dst_file = OpenOptions::new()
-                        .create(true)
-                        .write(true)
-                        .mode(mode)
-                        .open(dest)?;
+        }
+        copy_debug.reflink = OffloadReflinkDebug::Yes;
+        if source_is_stream {
+            let mut src_file = File::open(source)?;
+            let mode = 0o622 & !get_umask();
+            let mut dst_file = OpenOptions::new()
+                .create(true)
+                .write(true)
+                .mode(mode)
+                .open(dest)?;
 
-                    let dest_is_stream = is_stream(&dst_file.metadata()?);
-                    if !dest_is_stream {
-                        // `copy_stream` doesn't clear the dest file, if dest is not a stream, we should clear it manually.
-                        dst_file.set_len(0)?;
-                    }
-
-                    buf_copy::copy_stream(&mut src_file, &mut dst_file)
-                        .map_err(|_| std::io::Error::from(std::io::ErrorKind::Other))
-                        .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?
-                } else {
-                    fs::copy(source, dest)
-                        .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?
-                }
+            let dest_is_stream = is_stream(&dst_file.metadata()?);
+            if !dest_is_stream {
+                // `copy_stream` doesn't clear the dest file, if dest is not a stream, we should clear it manually.
+                dst_file.set_len(0)?;
             }
-        };
+
+            buf_copy::copy_stream(&mut src_file, &mut dst_file)
+                .map_err(|_| std::io::Error::from(std::io::ErrorKind::Other))
+                .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+        } else {
+            fs::copy(source, dest).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+        }
     }
 
     Ok(copy_debug)

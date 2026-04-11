@@ -233,6 +233,28 @@ fn test_nc_0_wo_follow2() {
         .no_output();
 }
 
+#[test]
+#[cfg(not(target_os = "windows"))]
+fn test_n0_with_follow() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let test_file = "test.txt";
+    // Create file with multiple lines
+    at.write(test_file, "line1\nline2\nline3\n");
+
+    let mut child = ucmd.arg("-n0").arg("-f").arg(test_file).run_no_wait();
+    child.make_assertion_with_delay(500).is_alive();
+
+    // Append a new line
+    at.append(test_file, "new\n");
+
+    // Should only print the newly appended line
+    child
+        .make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
+        .with_current_output()
+        .stdout_only("new\n");
+    child.kill();
+}
+
 // TODO: Add similar test for windows
 #[test]
 #[cfg(unix)]
@@ -519,6 +541,31 @@ fn test_follow_non_utf8_bytes() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_permission_denied_is_not_reported_as_not_found() {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+
+    if unsafe { libc::geteuid() } == 0 {
+        return;
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("noexec");
+    at.touch("noexec/file");
+
+    let dir = at.plus("noexec");
+    fs::set_permissions(&dir, fs::Permissions::from_mode(0o000)).unwrap();
+
+    ucmd.arg("noexec/file")
+        .fails()
+        .stderr_contains("Permission denied");
+
+    fs::set_permissions(&dir, fs::Permissions::from_mode(0o700)).unwrap();
+}
+
+#[test]
 #[cfg(not(target_os = "windows"))] // FIXME: test times out
 fn test_follow_multiple() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -566,8 +613,15 @@ fn test_follow_name_multiple() {
             .arg(FOOBAR_2_TXT)
             .run_no_wait();
 
+        #[cfg(target_os = "linux")]
+        let delay = 100;
+        #[cfg(target_os = "macos")]
+        let delay = 2000;
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        let delay = 1000;
+
         child
-            .make_assertion_with_delay(500)
+            .make_assertion_with_delay(delay)
             .is_alive()
             .with_current_output()
             .stdout_only_fixture("foobar_follow_multiple.expected");
@@ -576,7 +630,7 @@ fn test_follow_name_multiple() {
         at.append(FOOBAR_2_TXT, first_append);
 
         child
-            .make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
+            .make_assertion_with_delay(delay)
             .with_current_output()
             .stdout_only(first_append);
 
@@ -584,7 +638,7 @@ fn test_follow_name_multiple() {
         at.append(FOOBAR_TXT, second_append);
 
         child
-            .make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
+            .make_assertion_with_delay(delay)
             .with_current_output()
             .stdout_only_fixture("foobar_follow_multiple_appended.expected");
 
@@ -1091,6 +1145,16 @@ fn test_obsolete_syntax_small_file() {
         .stdout_is("a\nb\nc\nd\ne\n");
 }
 
+/// Test for obsolete syntax `tail -0 FILE`: print nothing and exit cleanly.
+#[test]
+fn test_obsolete_syntax_zero_lines_file() {
+    new_ucmd!()
+        .args(&["-0", "foobar.txt"])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+}
+
 /// Test for reading all lines, specified by `tail -n +0`.
 #[test]
 fn test_positive_zero_lines() {
@@ -1121,21 +1185,61 @@ fn test_invalid_num() {
         .fails()
         .stderr_str()
         .starts_with("tail: invalid number of lines: '1024R'");
+    // 1Y overflows to u64::MAX (like GNU tail 9.9.x), so it succeeds
     new_ucmd!()
-        .args(&["-c", "1Y", "emptyfile.txt"])
-        .fails()
-        .stderr_str()
-        .starts_with("tail: invalid number of bytes: '1Y': Value too large for defined data type");
+        .args(&["-c", "1Y"])
+        .pipe_in("x")
+        .succeeds()
+        .stdout_is("x");
     new_ucmd!()
-        .args(&["-n", "1Y", "emptyfile.txt"])
-        .fails()
-        .stderr_str()
-        .starts_with("tail: invalid number of lines: '1Y': Value too large for defined data type");
+        .args(&["-n", "1Y"])
+        .pipe_in("x\n")
+        .succeeds()
+        .stdout_is("x\n");
     new_ucmd!()
         .args(&["-c", "-³"])
         .fails()
         .stderr_str()
         .starts_with("tail: invalid number of bytes: '³'");
+}
+
+#[test]
+fn test_oversized_num() {
+    const BIG: &str = "99999999999999999999999999999";
+    const DATA: &str = "abcd";
+    // -c <big> and -n <big>: output all (request more than available)
+    new_ucmd!()
+        .args(&["-c", BIG])
+        .pipe_in(DATA)
+        .succeeds()
+        .stdout_is(DATA);
+    new_ucmd!()
+        .args(&["-n", BIG])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_is("a\nb\n");
+    // +<big>: skip beyond input (empty output)
+    new_ucmd!()
+        .args(&["-c", &format!("+{BIG}")])
+        .pipe_in(DATA)
+        .succeeds()
+        .no_stdout();
+    new_ucmd!()
+        .args(&["-n", &format!("+{BIG}")])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .no_stdout();
+    // Obsolete syntax
+    new_ucmd!()
+        .arg(format!("+{BIG}c"))
+        .pipe_in(DATA)
+        .succeeds()
+        .no_stdout();
+    new_ucmd!()
+        .arg(format!("-{BIG}c"))
+        .pipe_in(DATA)
+        .succeeds()
+        .stdout_is(DATA);
 }
 
 #[test]
@@ -1290,7 +1394,7 @@ fn test_retry4() {
         missing,
         "---disable-inotify",
     ];
-    let mut delay = 1500;
+    let mut delay = 150;
     for _ in 0..2 {
         let mut p = ts.ucmd().args(&args).run_no_wait();
 
@@ -1440,7 +1544,7 @@ fn test_retry7() {
         "--use-polling",
     ];
 
-    let mut delay = 1500;
+    let mut delay = 100;
     for _ in 0..2 {
         at.mkdir(untailable);
 
@@ -1588,14 +1692,14 @@ fn test_retry9() {
     );
     let expected_stdout = "foo\nbar\nfoo\nbar\n";
 
-    let delay = 1000;
+    let delay = 400;
 
     at.mkdir(parent_dir);
     at.truncate(user_path, "foo\n");
     let mut p = ts
         .ucmd()
         .arg("-F")
-        .arg("-s.1")
+        .arg("-s.2")
         .arg("--max-unchanged-stats=1")
         .arg(user_path)
         .run_no_wait();
@@ -1664,7 +1768,7 @@ fn test_follow_descriptor_vs_rename1() {
         "---disable-inotify",
     ];
 
-    let mut delay = 1500;
+    let mut delay = 100;
     for _ in 0..2 {
         at.touch(file_a);
 
@@ -1726,7 +1830,7 @@ fn test_follow_descriptor_vs_rename2() {
         "---disable-inotify",
     ];
 
-    let mut delay = 1500;
+    let mut delay = 150;
     for _ in 0..2 {
         at.touch(file_a);
         at.touch(file_b);
@@ -1791,7 +1895,7 @@ fn test_follow_name_retry_headers() {
         "---disable-inotify",
     ];
 
-    let mut delay = 1500;
+    let mut delay = 150;
     for _ in 0..2 {
         let mut p = ts.ucmd().args(&args).run_no_wait();
 
@@ -2181,7 +2285,7 @@ fn test_follow_name_move_create2() {
         "9",
     ];
 
-    let mut delay = 500;
+    let mut delay = 100;
     for i in 0..2 {
         let mut p = ts.ucmd().args(&args).run_no_wait();
 
@@ -2494,7 +2598,7 @@ fn test_follow_name_move_retry2() {
 
     let mut args = vec!["-s.1", "--max-unchanged-stats=1", "-F", file1, file2];
 
-    let mut delay = 500;
+    let mut delay = 60;
     for i in 0..2 {
         at.touch(file1);
         at.touch(file2);
@@ -2623,6 +2727,45 @@ fn test_fifo() {
             .no_stderr()
             .no_stdout();
     }
+}
+
+/// Test that tail with --pid exits when the monitored process dies, even with a FIFO.
+/// Without non-blocking FIFO open, tail would block forever waiting for a writer.
+#[test]
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "android"),
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
+))]
+fn test_fifo_with_pid() {
+    use std::process::{Command, Stdio};
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("FIFO");
+
+    let mut dummy = Command::new("sh").stdin(Stdio::null()).spawn().unwrap();
+    let pid = dummy.id();
+
+    let mut child = ucmd
+        .arg("-f")
+        .arg(format!("--pid={pid}"))
+        .arg("FIFO")
+        .run_no_wait();
+
+    child.make_assertion_with_delay(500).is_alive();
+
+    kill(Pid::from_raw(i32::try_from(pid).unwrap()), Signal::SIGUSR1).unwrap();
+    let _ = dummy.wait();
+
+    child
+        .make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
+        .is_not_alive()
+        .with_all_output()
+        .no_stderr()
+        .no_stdout()
+        .success();
 }
 
 #[test]
@@ -3601,10 +3744,10 @@ fn test_when_argument_file_is_non_existent_unix_socket_address_then_error() {
         format!("tail: cannot open '{socket}' for reading: No such device or address\n");
     #[cfg(target_os = "freebsd")]
     let expected_stderr =
-        format!("tail: cannot open '{socket}' for reading: Operation not supported\n",);
+        format!("tail: cannot open '{socket}' for reading: Operation not supported\n");
     #[cfg(target_os = "macos")]
     let expected_stderr =
-        format!("tail: cannot open '{socket}' for reading: Operation not supported on socket\n",);
+        format!("tail: cannot open '{socket}' for reading: Operation not supported on socket\n");
 
     ts.ucmd()
         .arg(socket)
@@ -4694,13 +4837,13 @@ fn test_gnu_args_err() {
         .fails_with_code(1)
         .no_stdout()
         .stderr_is("tail: option used in invalid context -- 2\n");
-    // err-5
+    // err-5: large numbers now clamp to u64::MAX
     scene
         .ucmd()
         .arg("-c99999999999999999999")
-        .fails_with_code(1)
-        .no_stdout()
-        .stderr_is("tail: invalid number of bytes: '99999999999999999999'\n");
+        .pipe_in("x")
+        .succeeds()
+        .stdout_is("x");
     // err-6
     scene
         .ucmd()
@@ -4714,20 +4857,19 @@ fn test_gnu_args_err() {
         .fails_with_code(1)
         .no_stdout()
         .stderr_is("tail: option used in invalid context -- 5\n");
+    // Large obsolete-syntax numbers clamp to u64::MAX
     scene
         .ucmd()
         .arg("-9999999999999999999b")
-        .fails_with_code(1)
-        .no_stdout()
-        .stderr_is("tail: invalid number: '-9999999999999999999b'\n");
+        .pipe_in("x")
+        .succeeds()
+        .stdout_is("x");
     scene
         .ucmd()
         .arg("-999999999999999999999b")
-        .fails_with_code(1)
-        .no_stdout()
-        .stderr_is(
-            "tail: invalid number: '-999999999999999999999b': Numerical result out of range\n",
-        );
+        .pipe_in("x")
+        .succeeds()
+        .stdout_is("x");
 }
 
 #[test]
@@ -4905,7 +5047,7 @@ fn test_child_when_run_with_stderr_to_stdout() {
 fn test_failed_write_is_reported() {
     new_ucmd!()
         .pipe_in("hello")
-        .set_stdout(std::fs::File::create("/dev/full").unwrap())
+        .set_stdout(File::create("/dev/full").unwrap())
         .fails()
         .stderr_is("tail: No space left on device\n");
 }
@@ -4926,4 +5068,118 @@ fn tail_n_lines_with_emoji() {
         .pipe_in("a\n💐\n")
         .succeeds()
         .stdout_only("💐\n");
+}
+
+#[test]
+fn test_tail_bytes_exceeds_file_size() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    // Should be > 4096 bytes (block size can vary):
+    at.write("test_file.txt", &"x".repeat(5000));
+
+    ts.ucmd()
+        .arg("-c")
+        .arg("1048576")
+        .arg("test_file.txt")
+        .succeeds()
+        .stdout_only("x".repeat(5000));
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_follow_pipe_f() {
+    new_ucmd!()
+        .args(&["-f", "-c3", "-s.1", "--max-unchanged-stats=1"])
+        .pipe_in("foo\n")
+        .succeeds()
+        .stdout_only("oo\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_follow_stdout_pipe_close() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "line1\nline2\n");
+
+    let mut child = ucmd
+        .args(&["-f", "-s.1", "--max-unchanged-stats=1", "f"])
+        .set_stdout(Stdio::piped())
+        .run_no_wait();
+
+    child.stdout_exact_bytes(6); // read "line1\n"
+    child.close_stdout();
+    child.delay(2000).make_assertion().is_not_alive();
+}
+
+#[test]
+fn test_debug_flag_with_polling() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("f");
+
+    let mut child = ts
+        .ucmd()
+        .args(&["--debug", "-f", "--use-polling", "f"])
+        .run_no_wait();
+
+    child.make_assertion_with_delay(500).is_alive();
+    child
+        .kill()
+        .make_assertion()
+        .with_all_output()
+        .stderr_contains("tail: using polling mode");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_debug_flag_with_inotify() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("f");
+
+    let mut child = ts.ucmd().args(&["--debug", "-f", "f"]).run_no_wait();
+
+    child.make_assertion_with_delay(500).is_alive();
+    child
+        .kill()
+        .make_assertion()
+        .with_all_output()
+        .stderr_contains("tail: using notification mode");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_follow_dangling_symlink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.symlink_file("target", "link");
+    let mut p = ucmd
+        .args(&["-s.1", "--max-unchanged-stats=1", "-F", "link"])
+        .run_no_wait();
+    p.delay(500);
+    at.write("target", "X\n");
+    p.delay(500);
+    p.kill().make_assertion().with_all_output().stdout_is("X\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_follow_symlink_target_change() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("t1", "A\n");
+    at.symlink_file("t1", "link");
+    let mut p = ucmd
+        .args(&["-s.1", "--max-unchanged-stats=1", "-F", "link"])
+        .run_no_wait();
+    p.delay(500);
+    at.remove("link");
+    at.symlink_file("t2", "link");
+    p.delay(500);
+    at.write("t2", "B\n");
+    p.delay(500);
+    p.kill()
+        .make_assertion()
+        .with_all_output()
+        .stdout_contains("A\n")
+        .stdout_contains("B\n");
 }

@@ -2,8 +2,10 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (vars) RFILE
-#![cfg(target_os = "linux")]
+
+#![cfg(any(target_os = "linux", target_os = "android"))]
 #![allow(clippy::upper_case_acronyms)]
 
 use clap::builder::ValueParser;
@@ -23,7 +25,7 @@ use std::{fs, io};
 mod errors;
 mod fts;
 
-use errors::*;
+use errors::{Error, Result, report_full_error};
 
 pub mod options {
     pub static HELP: &str = "help";
@@ -154,7 +156,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    let cmd = Command::new(uucore::util_name())
+    let cmd = Command::new("chcon")
         .version(uucore::crate_version!())
         .about(translate!("chcon-about"))
         .override_usage(format_usage(&translate!("chcon-usage")))
@@ -611,7 +613,7 @@ fn process_file(
         if options.verbose {
             println!(
                 "{}",
-                translate!("chcon-verbose-changing-context", "util_name" => uucore::util_name(), "file" => file_full_name.quote())
+                translate!("chcon-verbose-changing-context", "util_name" => "chcon", "file" => file_full_name.quote())
             );
         }
 

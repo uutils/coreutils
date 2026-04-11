@@ -138,6 +138,22 @@ fn test_posixly_correct_regular_file() {
         .fails_with_code(1)
         .stderr_contains("Invalid argument")
         .no_stdout();
+
+    // GNU behavior is to ignore -s and -q when POSIXLY_CORRECT is set.
+    scene
+        .ucmd()
+        .env("POSIXLY_CORRECT", "1")
+        .args(&["-s", "regfile"])
+        .fails_with_code(1)
+        .stderr_contains("Invalid argument")
+        .no_stdout();
+    scene
+        .ucmd()
+        .env("POSIXLY_CORRECT", "1")
+        .args(&["-q", "regfile"])
+        .fails_with_code(1)
+        .stderr_contains("Invalid argument")
+        .no_stdout();
 }
 
 #[test]
@@ -432,4 +448,45 @@ fn test_readlink_non_utf8_paths() {
 
     let output = result.stdout_str_lossy();
     assert!(output.contains(file_name));
+}
+
+#[test]
+fn test_verbose_or_silent() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("regfile");
+    scene
+        .ucmd()
+        .arg("regfile")
+        .fails_with_code(1)
+        .no_stderr()
+        .no_stdout();
+    scene
+        .ucmd()
+        .args(&["-v", "regfile"])
+        .fails_with_code(1)
+        .stderr_contains(
+            #[cfg(not(windows))]
+            "Invalid argument",
+            #[cfg(windows)]
+            "regfile: The file or directory is not a reparse point.",
+        )
+        .no_stdout();
+    scene
+        .ucmd()
+        .args(&["-vs", "regfile"])
+        .fails_with_code(1)
+        .no_stderr()
+        .no_stdout();
+    scene
+        .ucmd()
+        .args(&["-sv", "regfile"])
+        .fails_with_code(1)
+        .stderr_contains(
+            #[cfg(not(windows))]
+            "Invalid argument",
+            #[cfg(windows)]
+            "regfile: The file or directory is not a reparse point.",
+        )
+        .no_stdout();
 }

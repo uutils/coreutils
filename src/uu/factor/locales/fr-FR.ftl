@@ -10,3 +10,4 @@ factor-help-help = Afficher les informations d'aide.
 factor-error-factorization-incomplete = Factorisation incomplète. Des restes existent.
 factor-error-write-error = erreur d'écriture
 factor-error-reading-input = erreur de lecture de l'entrée : { $error }
+factor-error-invalid-int = chiffre invalide trouvé dans la chaîne

@@ -26,7 +26,7 @@ mod options {
     pub const HELP: &str = "help";
 }
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 use platform::uumain;
 
 pub fn uu_app() -> Command {
@@ -35,7 +35,7 @@ pub fn uu_app() -> Command {
     #[cfg(target_env = "musl")]
     let about = translate!("pinky-about") + &translate!("pinky-about-musl-warning");
 
-    let cmd = Command::new(uucore::util_name())
+    let cmd = Command::new("pinky")
         .version(uucore::crate_version!())
         .about(about)
         .override_usage(format_usage(&translate!("pinky-usage")))

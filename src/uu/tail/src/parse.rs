@@ -26,8 +26,6 @@ impl Default for ObsoleteArgs {
 
 #[derive(PartialEq, Eq, Debug)]
 pub enum ParseError {
-    OutOfRange,
-    Overflow,
     Context,
     InvalidEncoding,
 }
@@ -52,11 +50,7 @@ pub fn parse_obsolete(src: &OsString) -> Option<Result<ObsoleteArgs, ParseError>
         .unwrap_or(rest.len());
     let has_num = !rest[..end_num].is_empty();
     let num: u64 = if has_num {
-        if let Ok(num) = rest[..end_num].parse() {
-            num
-        } else {
-            return Some(Err(ParseError::OutOfRange));
-        }
+        rest[..end_num].parse().unwrap_or(u64::MAX)
     } else {
         10
     };
@@ -85,9 +79,7 @@ pub fn parse_obsolete(src: &OsString) -> Option<Result<ObsoleteArgs, ParseError>
     }
 
     let multiplier = if mode == 'b' { 512 } else { 1 };
-    let Some(num) = num.checked_mul(multiplier) else {
-        return Some(Err(ParseError::Overflow));
-    };
+    let num = num.saturating_mul(multiplier);
 
     Some(Ok(ObsoleteArgs {
         num,

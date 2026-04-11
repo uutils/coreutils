@@ -2,12 +2,12 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (ToDO) getreent reent IOFBF IOLBF IONBF setvbuf stderrp stdinp stdoutp
+// spell-checker:ignore (ToDO) getreent reent IOFBF IOLBF IONBF setvbuf stderrp stdinp stdoutp fdopen
 
 use ctor::ctor;
 use libc::{_IOFBF, _IOLBF, _IONBF, FILE, c_char, c_int, fileno, size_t};
-use std::env;
-use std::ptr;
+use std::io::{Write, stderr};
+use std::{env, ptr};
 
 // This runs automatically when the library is loaded via LD_PRELOAD
 #[ctor]
@@ -33,6 +33,11 @@ pub unsafe extern "C" fn __stdbuf_get_stdin() -> *mut FILE {
             static mut __stdin: *mut FILE;
         }
         unsafe { __stdin }
+    }
+
+    #[cfg(target_os = "netbsd")]
+    {
+        unsafe { libc::fdopen(0, c"r".as_ptr()) }
     }
 
     #[cfg(target_os = "cygwin")]
@@ -61,6 +66,7 @@ pub unsafe extern "C" fn __stdbuf_get_stdin() -> *mut FILE {
     #[cfg(not(any(
         target_os = "macos",
         target_os = "freebsd",
+        target_os = "netbsd",
         target_os = "openbsd",
         target_os = "cygwin"
     )))]
@@ -92,6 +98,11 @@ pub unsafe extern "C" fn __stdbuf_get_stdout() -> *mut FILE {
         unsafe { __stdout }
     }
 
+    #[cfg(target_os = "netbsd")]
+    {
+        unsafe { libc::fdopen(1, c"w".as_ptr()) }
+    }
+
     #[cfg(target_os = "cygwin")]
     {
         // _getreent()->_std{in,out,err}
@@ -118,6 +129,7 @@ pub unsafe extern "C" fn __stdbuf_get_stdout() -> *mut FILE {
     #[cfg(not(any(
         target_os = "macos",
         target_os = "freebsd",
+        target_os = "netbsd",
         target_os = "openbsd",
         target_os = "cygwin"
     )))]
@@ -149,6 +161,11 @@ pub unsafe extern "C" fn __stdbuf_get_stderr() -> *mut FILE {
         unsafe { __stderr }
     }
 
+    #[cfg(target_os = "netbsd")]
+    {
+        unsafe { libc::fdopen(2, c"w".as_ptr()) }
+    }
+
     #[cfg(target_os = "cygwin")]
     {
         // _getreent()->_std{in,out,err}
@@ -175,6 +192,7 @@ pub unsafe extern "C" fn __stdbuf_get_stderr() -> *mut FILE {
     #[cfg(not(any(
         target_os = "macos",
         target_os = "freebsd",
+        target_os = "netbsd",
         target_os = "openbsd",
         target_os = "cygwin"
     )))]
@@ -191,12 +209,9 @@ fn set_buffer(stream: *mut FILE, value: &str) {
         "0" => (_IONBF, 0_usize),
         "L" => (_IOLBF, 0_usize),
         input => {
-            let buff_size: usize = match input.parse() {
-                Ok(num) => num,
-                Err(_) => {
-                    eprintln!("failed to allocate a {value} byte stdio buffer");
-                    std::process::exit(1);
-                }
+            let Ok(buff_size) = input.parse::<usize>() else {
+                let _ = writeln!(stderr(), "failed to allocate a {value} byte stdio buffer");
+                std::process::exit(1);
             };
             (_IOFBF, buff_size as size_t)
         }
@@ -208,9 +223,11 @@ fn set_buffer(stream: *mut FILE, value: &str) {
         res = libc::setvbuf(stream, buffer, mode, size);
     }
     if res != 0 {
-        eprintln!("could not set buffering of {} to mode {mode}", unsafe {
-            fileno(stream)
-        },);
+        let _ = writeln!(
+            stderr(),
+            "could not set buffering of {} to mode {mode}",
+            unsafe { fileno(stream) }
+        );
     }
 }
 

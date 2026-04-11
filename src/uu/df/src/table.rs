@@ -18,7 +18,7 @@ use uucore::translate;
 
 use std::ffi::OsString;
 use std::iter;
-use std::ops::AddAssign;
+use std::ops::{Add, AddAssign};
 
 /// A row in the filesystem usage data table.
 ///
@@ -38,13 +38,13 @@ pub(crate) struct Row {
     fs_mount: OsString,
 
     /// Total number of bytes in the filesystem regardless of whether they are used.
-    bytes: u64,
+    bytes: BytesCell,
 
     /// Number of used bytes.
-    bytes_used: u64,
+    bytes_used: BytesCell,
 
     /// Number of available bytes.
-    bytes_avail: u64,
+    bytes_avail: BytesCell,
 
     /// Percentage of bytes that are used, given as a float between 0 and 1.
     ///
@@ -81,9 +81,9 @@ impl Row {
             fs_device: source.into(),
             fs_type: "-".into(),
             fs_mount: "-".into(),
-            bytes: 0,
-            bytes_used: 0,
-            bytes_avail: 0,
+            bytes: BytesCell::default(),
+            bytes_used: BytesCell::default(),
+            bytes_avail: BytesCell::default(),
             bytes_usage: None,
             #[cfg(target_os = "macos")]
             bytes_capacity: None,
@@ -114,13 +114,13 @@ impl AddAssign for Row {
             bytes,
             bytes_used,
             bytes_avail,
-            bytes_usage: if bytes == 0 {
+            bytes_usage: if bytes.bytes == 0 {
                 None
             } else {
                 // We use "(bytes_used + bytes_avail)" instead of "bytes" because on some filesystems (e.g.
                 // ext4) "bytes" also includes reserved blocks we ignore for the usage calculation.
                 // https://www.gnu.org/software/coreutils/faq/coreutils-faq.html#df-Size-and-Used-and-Available-do-not-add-up
-                Some(bytes_used as f64 / (bytes_used + bytes_avail) as f64)
+                Some(bytes_used.bytes as f64 / (bytes_used.bytes + bytes_avail.bytes) as f64)
             },
             // TODO Figure out how to compute this.
             #[cfg(target_os = "macos")]
@@ -137,8 +137,8 @@ impl AddAssign for Row {
     }
 }
 
-impl From<Filesystem> for Row {
-    fn from(fs: Filesystem) -> Self {
+impl Row {
+    fn from_filesystem(fs: Filesystem, row_block_size: &BlockSize) -> Self {
         let MountInfo {
             dev_name,
             fs_type,
@@ -163,9 +163,9 @@ impl From<Filesystem> for Row {
             fs_device: dev_name,
             fs_type,
             fs_mount: mount_dir,
-            bytes: blocksize * blocks,
-            bytes_used: blocksize * bused,
-            bytes_avail: blocksize * bavail,
+            bytes: BytesCell::new(blocks * blocksize, row_block_size),
+            bytes_used: BytesCell::new(bused * blocksize, row_block_size),
+            bytes_avail: BytesCell::new(bavail * blocksize, row_block_size),
             bytes_usage: if blocks == 0 {
                 None
             } else {
@@ -188,6 +188,48 @@ impl From<Filesystem> for Row {
             } else {
                 Some(fused as f64 / files as f64)
             },
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+struct BytesCell {
+    bytes: u64,
+    scaled: u64,
+}
+
+/// A bytes column in the filesystem usage data table.
+///
+/// This is used to keep track of the scaled values to properly compute
+/// the total values.
+impl Default for BytesCell {
+    fn default() -> Self {
+        Self {
+            bytes: 0,
+            scaled: 0,
+        }
+    }
+}
+
+impl BytesCell {
+    fn new(bytes: u64, block_size: &BlockSize) -> Self {
+        Self {
+            bytes,
+            scaled: {
+                let BlockSize::Bytes(d) = block_size;
+                (bytes as f64 / *d as f64).ceil() as u64
+            },
+        }
+    }
+}
+
+impl Add for BytesCell {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self {
+        Self {
+            bytes: self.bytes + rhs.bytes,
+            scaled: self.scaled + rhs.scaled,
         }
     }
 }
@@ -262,12 +304,18 @@ impl<'a> RowFormatter<'a> {
     /// Get a string giving the scaled version of the input number.
     ///
     /// The scaling factor is defined in the `options` field.
-    fn scaled_bytes(&self, size: u64) -> Cell {
+    fn scaled_bytes(&self, bytes_column: &BytesCell) -> Cell {
+        let size = bytes_column.scaled;
         let s = if let Some(h) = self.options.human_readable {
+            let size = if self.is_total_row {
+                let BlockSize::Bytes(d) = self.options.block_size;
+                d * size
+            } else {
+                bytes_column.bytes
+            };
             to_magnitude_and_suffix(size.into(), SuffixType::HumanReadable(h), true)
         } else {
-            let BlockSize::Bytes(d) = self.options.block_size;
-            (size as f64 / d as f64).ceil().to_string()
+            size.to_string()
         };
         Cell::from_ascii_string(s)
     }
@@ -308,9 +356,9 @@ impl<'a> RowFormatter<'a> {
                         Cell::from_string(&self.row.fs_device)
                     }
                 }
-                Column::Size => self.scaled_bytes(self.row.bytes),
-                Column::Used => self.scaled_bytes(self.row.bytes_used),
-                Column::Avail => self.scaled_bytes(self.row.bytes_avail),
+                Column::Size => self.scaled_bytes(&self.row.bytes),
+                Column::Used => self.scaled_bytes(&self.row.bytes_used),
+                Column::Avail => self.scaled_bytes(&self.row.bytes_avail),
                 Column::Pcent => Self::percentage(self.row.bytes_usage),
 
                 Column::Target => {
@@ -426,7 +474,7 @@ impl Table {
             .columns
             .iter()
             .enumerate()
-            .map(|(i, col)| Column::min_width(col).max(headers[i].len()))
+            .map(|(i, col)| col.min_width().max(headers[i].len()))
             .collect();
 
         let mut rows = vec![headers.iter().map(Cell::from_string).collect()];
@@ -442,10 +490,12 @@ impl Table {
             // showing all filesystems, then print the data as a row in
             // the output table.
             if options.show_all_fs || filesystem.usage.blocks > 0 {
-                let row = Row::from(filesystem);
+                let row = Row::from_filesystem(filesystem, &options.block_size);
                 let fmt = RowFormatter::new(&row, options, false);
                 let values = fmt.get_cells();
-                total += row;
+                if options.show_total {
+                    total += row;
+                }
 
                 rows.push(values);
             }
@@ -477,7 +527,7 @@ impl Table {
         let mut alignments = Vec::new();
 
         for column in columns {
-            alignments.push(Column::alignment(column));
+            alignments.push(column.alignment());
         }
 
         alignments
@@ -527,7 +577,7 @@ mod tests {
 
     use crate::blocks::HumanReadable;
     use crate::columns::Column;
-    use crate::table::{Cell, Header, HeaderMode, Row, RowFormatter, Table};
+    use crate::table::{BytesCell, Cell, Header, HeaderMode, Row, RowFormatter, Table};
     use crate::{BlockSize, Options};
 
     fn init() {
@@ -563,9 +613,9 @@ mod tests {
                 fs_type: "my_type".to_string(),
                 fs_mount: "my_mount".into(),
 
-                bytes: 100,
-                bytes_used: 25,
-                bytes_avail: 75,
+                bytes: BytesCell::new(100, &BlockSize::Bytes(1)),
+                bytes_used: BytesCell::new(25, &BlockSize::Bytes(1)),
+                bytes_avail: BytesCell::new(75, &BlockSize::Bytes(1)),
                 bytes_usage: Some(0.25),
 
                 #[cfg(target_os = "macos")]
@@ -729,9 +779,9 @@ mod tests {
             fs_device: "my_device".to_string(),
             fs_mount: "my_mount".into(),
 
-            bytes: 100,
-            bytes_used: 25,
-            bytes_avail: 75,
+            bytes: BytesCell::new(100, &BlockSize::Bytes(1)),
+            bytes_used: BytesCell::new(25, &BlockSize::Bytes(1)),
+            bytes_avail: BytesCell::new(75, &BlockSize::Bytes(1)),
             bytes_usage: Some(0.25),
 
             ..Default::default()
@@ -756,9 +806,9 @@ mod tests {
             fs_type: "my_type".to_string(),
             fs_mount: "my_mount".into(),
 
-            bytes: 100,
-            bytes_used: 25,
-            bytes_avail: 75,
+            bytes: BytesCell::new(100, &BlockSize::Bytes(1)),
+            bytes_used: BytesCell::new(25, &BlockSize::Bytes(1)),
+            bytes_avail: BytesCell::new(75, &BlockSize::Bytes(1)),
             bytes_usage: Some(0.25),
 
             ..Default::default()
@@ -805,7 +855,7 @@ mod tests {
             ..Default::default()
         };
         let row = Row {
-            bytes: 100,
+            bytes: BytesCell::new(100, &BlockSize::Bytes(100)),
             inodes: 10,
             ..Default::default()
         };
@@ -826,9 +876,9 @@ mod tests {
             fs_type: "my_type".to_string(),
             fs_mount: "my_mount".into(),
 
-            bytes: 40000,
-            bytes_used: 1000,
-            bytes_avail: 39000,
+            bytes: BytesCell::new(40000, &BlockSize::default()),
+            bytes_used: BytesCell::new(1000, &BlockSize::default()),
+            bytes_avail: BytesCell::new(39000, &BlockSize::default()),
             bytes_usage: Some(0.025),
 
             ..Default::default()
@@ -861,9 +911,9 @@ mod tests {
             fs_type: "my_type".to_string(),
             fs_mount: "my_mount".into(),
 
-            bytes: 4096,
-            bytes_used: 1024,
-            bytes_avail: 3072,
+            bytes: BytesCell::new(4096, &BlockSize::default()),
+            bytes_used: BytesCell::new(1024, &BlockSize::default()),
+            bytes_avail: BytesCell::new(3072, &BlockSize::default()),
             bytes_usage: Some(0.25),
 
             ..Default::default()
@@ -909,9 +959,9 @@ mod tests {
             };
 
             let row = Row {
-                bytes,
-                bytes_used,
-                bytes_avail,
+                bytes: BytesCell::new(bytes, &BlockSize::Bytes(1000)),
+                bytes_used: BytesCell::new(bytes_used, &BlockSize::Bytes(1000)),
+                bytes_avail: BytesCell::new(bytes_avail, &BlockSize::Bytes(1000)),
                 ..Default::default()
             };
             RowFormatter::new(&row, &options, false).get_cells()
@@ -962,7 +1012,7 @@ mod tests {
             },
         };
 
-        let row = Row::from(d);
+        let row = Row::from_filesystem(d, &BlockSize::default());
 
         assert_eq!(row.inodes_used, 0);
     }

@@ -6,25 +6,17 @@
 // spell-checker:ignore (ToDO) NPROCESSORS nprocs numstr sysconf
 
 use clap::{Arg, ArgAction, Command};
+use std::io::{Write, stdout};
 use std::{env, thread};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
 use uucore::translate;
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
-pub const _SC_NPROCESSORS_CONF: libc::c_int = 83;
-#[cfg(target_vendor = "apple")]
-pub const _SC_NPROCESSORS_CONF: libc::c_int = libc::_SC_NPROCESSORS_CONF;
-#[cfg(target_os = "freebsd")]
-pub const _SC_NPROCESSORS_CONF: libc::c_int = 57;
-#[cfg(target_os = "netbsd")]
-pub const _SC_NPROCESSORS_CONF: libc::c_int = 1001;
-
 static OPT_ALL: &str = "all";
 static OPT_IGNORE: &str = "ignore";
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
@@ -67,7 +59,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 // If OMP_NUM_THREADS=0, rejects the value
                 match threads.split_terminator(',').next() {
                     None => available_parallelism(),
-                    Some(s) => match s.parse() {
+                    Some(s) => match s.trim().parse() {
                         Ok(0) | Err(_) => available_parallelism(),
                         Ok(n) => n,
                     },
@@ -85,14 +77,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         cores -= ignore;
     }
-    println!("{cores}");
+    //discard error about stdout flush
+    stdout()
+        .lock()
+        .write_all(format!("{cores}\n").as_bytes())
+        .map_err(|e| USimpleError::new(1, e.to_string()))?;
     Ok(())
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("nproc")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("nproc"))
         .about(translate!("nproc-about"))
         .override_usage(format_usage(&translate!("nproc-usage")))
         .infer_long_args(true)
@@ -110,32 +106,19 @@ pub fn uu_app() -> Command {
         )
 }
 
-#[cfg(any(
-    target_os = "linux",
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "netbsd"
-))]
+#[cfg(unix)]
 fn num_cpus_all() -> usize {
-    let nprocs = unsafe { libc::sysconf(_SC_NPROCESSORS_CONF) };
-    if nprocs == 1 {
-        // In some situation, /proc and /sys are not mounted, and sysconf returns 1.
-        // However, we want to guarantee that `nproc --all` >= `nproc`.
-        available_parallelism()
-    } else if nprocs > 0 {
-        nprocs as usize
-    } else {
-        1
-    }
+    // In some situation, /proc and /sys are not mounted, and sysconf returns 1.
+    // However, we want to guarantee that `nproc --all` >= `nproc`.
+    unsafe { libc::sysconf(libc::_SC_NPROCESSORS_CONF) }
+        .try_into()
+        .ok()
+        .filter(|&n: &isize| n > 1)
+        .map_or_else(available_parallelism, |n| n as usize)
 }
 
 // Other platforms (e.g., windows), available_parallelism() directly.
-#[cfg(not(any(
-    target_os = "linux",
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "netbsd"
-)))]
+#[cfg(not(unix))]
 fn num_cpus_all() -> usize {
     available_parallelism()
 }
@@ -143,8 +126,5 @@ fn num_cpus_all() -> usize {
 /// In some cases, [`thread::available_parallelism`]() may return an Err
 /// In this case, we will return 1 (like GNU)
 fn available_parallelism() -> usize {
-    match thread::available_parallelism() {
-        Ok(n) => n.get(),
-        Err(_) => 1,
-    }
+    thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get)
 }

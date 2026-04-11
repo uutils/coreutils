@@ -10,7 +10,9 @@ use std::fs::File;
 use std::io::{self, BufReader, Read, Write};
 use std::path::Path;
 
-use crate::checksum::{ChecksumError, SizedAlgoKind, digest_reader, escape_filename};
+use crate::checksum::{
+    AlgoKind, ChecksumError, ReadingMode, SizedAlgoKind, digest_reader, escape_filename,
+};
 use crate::error::{FromIo, UResult, USimpleError};
 use crate::line_ending::LineEnding;
 use crate::sum::DigestOutput;
@@ -36,33 +38,6 @@ pub struct ChecksumComputeOptions {
     pub line_ending: LineEnding,
 }
 
-/// Reading mode used to compute digest.
-///
-/// On most linux systems, this is irrelevant, as there is no distinction
-/// between text and binary files. Refer to GNU's cksum documentation for more
-/// information.
-///
-/// As discussed in #9168, we decide to ignore the reading mode to compute the
-/// digest, both on Windows and UNIX. The reason for that is that this is a
-/// legacy feature that is poorly documented and used. This enum is kept
-/// nonetheless to still take into account the flags passed to cksum when
-/// generating untagged lines.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ReadingMode {
-    Binary,
-    Text,
-}
-
-impl ReadingMode {
-    #[inline]
-    fn as_char(&self) -> char {
-        match self {
-            Self::Binary => '*',
-            Self::Text => ' ',
-        }
-    }
-}
-
 /// Whether to write the digest as hexadecimal or encoded in base64.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DigestFormat {
@@ -72,8 +47,8 @@ pub enum DigestFormat {
 
 impl DigestFormat {
     #[inline]
-    fn is_base64(&self) -> bool {
-        *self == Self::Base64
+    fn is_base64(self) -> bool {
+        self == Self::Base64
     }
 }
 
@@ -103,42 +78,56 @@ impl OutputFormat {
     fn is_raw(&self) -> bool {
         *self == Self::Raw
     }
-}
 
-/// Use already-processed arguments to decide the output format.
-pub fn figure_out_output_format(
-    algo: SizedAlgoKind,
-    tag: bool,
-    binary: bool,
-    raw: bool,
-    base64: bool,
-) -> OutputFormat {
-    // Raw output format takes precedence over anything else.
-    if raw {
-        return OutputFormat::Raw;
-    }
+    /// Find the correct output format for cksum.
+    pub fn from_cksum(algo: AlgoKind, tag: bool, binary: bool, raw: bool, base64: bool) -> Self {
+        // Raw output format takes precedence over anything else.
+        if raw {
+            return Self::Raw;
+        }
 
-    // Then, if the algo is legacy, takes precedence over the rest
-    if algo.is_legacy() {
-        return OutputFormat::Legacy;
-    }
+        // Then, if the algo is legacy, takes precedence over the rest
+        if algo.is_legacy() {
+            return Self::Legacy;
+        }
 
-    let digest_format = if base64 {
-        DigestFormat::Base64
-    } else {
-        DigestFormat::Hexadecimal
-    };
-
-    // After that, decide between tagged and untagged output
-    if tag {
-        OutputFormat::Tagged(digest_format)
-    } else {
-        let reading_mode = if binary {
-            ReadingMode::Binary
+        let digest_format = if base64 {
+            DigestFormat::Base64
         } else {
-            ReadingMode::Text
+            DigestFormat::Hexadecimal
         };
-        OutputFormat::Untagged(digest_format, reading_mode)
+
+        // After that, decide between tagged and untagged output
+        if tag {
+            Self::Tagged(digest_format)
+        } else {
+            let reading_mode = if binary {
+                ReadingMode::Binary
+            } else {
+                ReadingMode::Text
+            };
+            Self::Untagged(digest_format, reading_mode)
+        }
+    }
+
+    /// Find the correct output format for a standalone checksum util (b2sum,
+    /// md5sum, etc)
+    ///
+    /// Since standalone utils can't use the Raw or Legacy output format, it is
+    /// decided only using the --tag, --binary and --text arguments.
+    pub fn from_standalone(text: bool, tag: bool) -> Self {
+        if tag {
+            Self::Tagged(DigestFormat::Hexadecimal)
+        } else {
+            Self::Untagged(
+                DigestFormat::Hexadecimal,
+                if text {
+                    ReadingMode::Text
+                } else {
+                    ReadingMode::Binary
+                },
+            )
+        }
     }
 }
 
@@ -147,7 +136,7 @@ fn print_legacy_checksum(
     filename: &OsStr,
     sum: &DigestOutput,
     size: usize,
-) -> UResult<()> {
+) {
     debug_assert!(options.algo_kind.is_legacy());
     debug_assert!(matches!(sum, DigestOutput::U16(_) | DigestOutput::Crc(_)));
 
@@ -182,15 +171,9 @@ fn print_legacy_checksum(
         print!(" ");
         let _dropped_result = io::stdout().write_all(escaped_filename.as_bytes());
     }
-
-    Ok(())
 }
 
-fn print_tagged_checksum(
-    options: &ChecksumComputeOptions,
-    filename: &OsStr,
-    sum: &String,
-) -> UResult<()> {
+fn print_tagged_checksum(options: &ChecksumComputeOptions, filename: &OsStr, sum: &String) {
     let (escaped_filename, prefix) = if options.line_ending == LineEnding::Nul {
         (filename.to_string_lossy().to_string(), "")
     } else {
@@ -205,8 +188,6 @@ fn print_tagged_checksum(
 
     // Print closing parenthesis and sum
     print!(") = {sum}");
-
-    Ok(())
 }
 
 fn print_untagged_checksum(
@@ -214,7 +195,7 @@ fn print_untagged_checksum(
     filename: &OsStr,
     sum: &String,
     reading_mode: ReadingMode,
-) -> UResult<()> {
+) {
     let (escaped_filename, prefix) = if options.line_ending == LineEnding::Nul {
         (filename.to_string_lossy().to_string(), "")
     } else {
@@ -226,8 +207,6 @@ fn print_untagged_checksum(
 
     // Print filename
     let _dropped_result = io::stdout().write_all(escaped_filename.as_bytes());
-
-    Ok(())
 }
 
 /// Calculate checksum
@@ -281,7 +260,7 @@ where
 
         // Always compute the "binary" version of the digest, i.e. on Windows,
         // never handle CRLFs specifically.
-        let (digest_output, sz) = digest_reader(&mut digest, &mut file, /* binary: */ true)
+        let (digest_output, sz) = digest_reader(&mut digest, &mut file, ReadingMode::Binary)
             .map_err_context(|| translate!("checksum-error-failed-to-read-input"))?;
 
         // Encodes the sum if df is Base64, leaves as-is otherwise.
@@ -300,14 +279,14 @@ where
                 return Ok(());
             }
             OutputFormat::Legacy => {
-                print_legacy_checksum(&options, filename, &digest_output, sz)?;
+                print_legacy_checksum(&options, filename, &digest_output, sz);
             }
             OutputFormat::Tagged(digest_format) => {
                 print_tagged_checksum(
                     &options,
                     filename,
                     &encode_sum(digest_output, digest_format)?,
-                )?;
+                );
             }
             OutputFormat::Untagged(digest_format, reading_mode) => {
                 print_untagged_checksum(
@@ -315,7 +294,7 @@ where
                     filename,
                     &encode_sum(digest_output, digest_format)?,
                     reading_mode,
-                )?;
+                );
             }
         }
 

@@ -224,6 +224,52 @@ fn test_bfloat16_compact() {
 }
 
 #[test]
+fn test_tf_default_is_double() {
+    let input: [u8; 8] = [0x00, 0x00, 0x80, 0x3f, 0x00, 0x00, 0x00, 0x40];
+    let default_output = new_ucmd!()
+        .arg("--endian=little")
+        .arg("-An")
+        .arg("-tf")
+        .run_piped_stdin(&input[..])
+        .success()
+        .stdout_str()
+        .to_string();
+
+    let explicit_double_output = new_ucmd!()
+        .arg("--endian=little")
+        .arg("-An")
+        .arg("-tfD")
+        .run_piped_stdin(&input[..])
+        .success()
+        .stdout_str()
+        .to_string();
+
+    let explicit_float_output = new_ucmd!()
+        .arg("--endian=little")
+        .arg("-An")
+        .arg("-tfF")
+        .run_piped_stdin(&input[..])
+        .success()
+        .stdout_str()
+        .to_string();
+
+    assert_eq!(default_output, explicit_double_output);
+    assert_ne!(default_output, explicit_float_output);
+}
+
+#[test]
+fn test_tf_explicit_float_still_uses_4_bytes() {
+    let input: [u8; 8] = [0x00, 0x00, 0x80, 0x3f, 0x00, 0x00, 0x00, 0x40];
+    new_ucmd!()
+        .arg("--endian=little")
+        .arg("-An")
+        .arg("-tfF")
+        .run_piped_stdin(&input[..])
+        .success()
+        .stdout_only("       1.0000000       2.0000000\n");
+}
+
+#[test]
 fn test_f16() {
     let input: [u8; 14] = [
         0x00, 0x3c, // 0x3C00 1.0
@@ -1258,4 +1304,21 @@ fn test_od_eintr_handling() {
         .succeeds()
         .no_stderr()
         .stdout_contains("e"); // Should contain 'e' from "ello"
+}
+
+// Regression test: od should handle write errors to /dev/full without aborting.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_write_error_dev_full() {
+    use std::fs::File;
+
+    let dev_full = File::create("/dev/full").expect("Failed to open /dev/full");
+
+    new_ucmd!()
+        .arg("-An")
+        .pipe_in("abcd")
+        .set_stdout(dev_full)
+        .fails()
+        .code_is(1)
+        .stderr_contains("No space left on device");
 }

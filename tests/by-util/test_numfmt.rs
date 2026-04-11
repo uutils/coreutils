@@ -11,10 +11,12 @@ fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
+// This test failed when fixing #11653.
+// Add a `--` separator to ensure floats are not rounded(it match the gnu pattern).
 #[test]
 fn test_should_not_round_floats() {
     new_ucmd!()
-        .args(&["0.99", "1.01", "1.1", "1.22", ".1", "-0.1"])
+        .args(&["--", "0.99", "1.01", "1.1", "1.22", ".1", "-0.1"])
         .succeeds()
         .stdout_is("0.99\n1.01\n1.1\n1.22\n0.1\n-0.1\n");
 }
@@ -33,7 +35,7 @@ fn test_from_si() {
         .args(&["--from=si"])
         .pipe_in("1000\n1.1M\n0.1G")
         .succeeds()
-        .stdout_is("1000\n1100000\n100000000\n");
+        .stdout_is("1000\n1100000\n100000000");
 }
 
 #[test]
@@ -42,7 +44,7 @@ fn test_from_iec() {
         .args(&["--from=iec"])
         .pipe_in("1024\n1.1M\n0.1G")
         .succeeds()
-        .stdout_is("1024\n1153434\n107374183\n");
+        .stdout_is("1024\n1153434\n107374183");
 }
 
 #[test]
@@ -51,7 +53,7 @@ fn test_from_iec_i() {
         .args(&["--from=iec-i"])
         .pipe_in("1.1Mi\n0.1Gi")
         .succeeds()
-        .stdout_is("1153434\n107374183\n");
+        .stdout_is("1153434\n107374183");
 }
 
 #[test]
@@ -60,6 +62,14 @@ fn test_from_iec_i_requires_suffix() {
         .args(&["--from=iec-i", "10M"])
         .fails_with_code(2)
         .stderr_is("numfmt: missing 'i' suffix in input: '10M' (e.g Ki/Mi/Gi)\n");
+}
+
+#[test]
+fn test_from_iec_fails_if_i_suffix() {
+    new_ucmd!()
+        .args(&["--from=iec", "10Mi"])
+        .fails_with_code(2)
+        .stderr_is("numfmt: invalid suffix in input '10Mi': 'i'\n");
 }
 
 #[test]
@@ -76,7 +86,7 @@ fn test_from_auto() {
         .args(&["--from=auto"])
         .pipe_in("1K\n1Ki")
         .succeeds()
-        .stdout_is("1000\n1024\n");
+        .stdout_is("1000\n1024");
 }
 
 #[test]
@@ -85,7 +95,7 @@ fn test_to_si() {
         .args(&["--to=si"])
         .pipe_in("1000\n1100000\n100000000")
         .succeeds()
-        .stdout_is("1.0k\n1.1M\n100M\n");
+        .stdout_is("1.0k\n1.1M\n100M");
 }
 
 #[test]
@@ -94,7 +104,7 @@ fn test_to_iec() {
         .args(&["--to=iec"])
         .pipe_in("1024\n1153434\n107374182")
         .succeeds()
-        .stdout_is("1.0K\n1.2M\n103M\n");
+        .stdout_is("1.0K\n1.2M\n103M");
 }
 
 #[test]
@@ -103,7 +113,7 @@ fn test_to_iec_i() {
         .args(&["--to=iec-i"])
         .pipe_in("1024\n1153434\n107374182")
         .succeeds()
-        .stdout_is("1.0Ki\n1.2Mi\n103Mi\n");
+        .stdout_is("1.0Ki\n1.2Mi\n103Mi");
 }
 
 #[test]
@@ -120,7 +130,7 @@ fn test_padding() {
         .args(&["--from=si", "--padding=8"])
         .pipe_in("1K\n1.1M\n0.1G")
         .succeeds()
-        .stdout_is("    1000\n 1100000\n100000000\n");
+        .stdout_is("    1000\n 1100000\n100000000");
 }
 
 #[test]
@@ -129,7 +139,7 @@ fn test_negative_padding() {
         .args(&["--from=si", "--padding=-8"])
         .pipe_in("1K\n1.1M\n0.1G")
         .succeeds()
-        .stdout_is("1000    \n1100000 \n100000000\n");
+        .stdout_is("1000    \n1100000 \n100000000");
 }
 
 #[test]
@@ -138,7 +148,7 @@ fn test_header() {
         .args(&["--from=si", "--header=2"])
         .pipe_in("header\nheader2\n1K\n1.1M\n0.1G")
         .succeeds()
-        .stdout_is("header\nheader2\n1000\n1100000\n100000000\n");
+        .stdout_is("header\nheader2\n1000\n1100000\n100000000");
 }
 
 #[test]
@@ -147,7 +157,7 @@ fn test_header_default() {
         .args(&["--from=si", "--header"])
         .pipe_in("header\n1K\n1.1M\n0.1G")
         .succeeds()
-        .stdout_is("header\n1000\n1100000\n100000000\n");
+        .stdout_is("header\n1000\n1100000\n100000000");
 }
 
 #[test]
@@ -180,12 +190,12 @@ fn test_negative() {
         .args(&["--from=si"])
         .pipe_in("-1000\n-1.1M\n-0.1G")
         .succeeds()
-        .stdout_is("-1000\n-1100000\n-100000000\n");
+        .stdout_is("-1000\n-1100000\n-100000000");
     new_ucmd!()
         .args(&["--to=iec-i"])
         .pipe_in("-1024\n-1153434\n-107374182")
         .succeeds()
-        .stdout_is("-1.0Ki\n-1.2Mi\n-103Mi\n");
+        .stdout_is("-1.0Ki\n-1.2Mi\n-103Mi");
 }
 
 #[test]
@@ -193,7 +203,7 @@ fn test_negative_zero() {
     new_ucmd!()
         .pipe_in("-0\n-0.0")
         .succeeds()
-        .stdout_is("0\n0.0\n");
+        .stdout_is("0\n0.0");
 }
 
 #[test]
@@ -201,7 +211,7 @@ fn test_no_op() {
     new_ucmd!()
         .pipe_in("1024\n1234567")
         .succeeds()
-        .stdout_is("1024\n1234567\n");
+        .stdout_is("1024\n1234567");
 }
 
 #[test]
@@ -210,7 +220,7 @@ fn test_normalize() {
         .args(&["--from=si", "--to=si"])
         .pipe_in("10000000K\n0.001K")
         .succeeds()
-        .stdout_is("10G\n1\n");
+        .stdout_is("10G\n1");
 }
 
 #[test]
@@ -262,6 +272,34 @@ fn test_suffixes() {
 }
 
 #[test]
+fn test_invalid_following_valid_suffix() {
+    let valid_suffixes = ['K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y', 'R', 'Q', 'k'];
+
+    for valid_suffix in valid_suffixes {
+        for c in ('A'..='Z').chain('a'..='z') {
+            let args = ["--from=si", "--to=si", &format!("1{valid_suffix}{c}")];
+
+            new_ucmd!()
+                .args(&args)
+                .fails_with_code(2)
+                .stderr_only(format!(
+                    "numfmt: invalid suffix in input '1{valid_suffix}{c}': '{c}'\n"
+                ));
+        }
+    }
+}
+
+#[test]
+fn test_long_invalid_suffix() {
+    let args = ["--from=si", "--to=si", "1500VVVVVVVV"];
+
+    new_ucmd!()
+        .args(&args)
+        .fails_with_code(2)
+        .stderr_only("numfmt: invalid suffix in input: '1500VVVVVVVV'\n");
+}
+
+#[test]
 fn test_should_report_invalid_suffix_on_nan() {
     // GNU numfmt reports this one as "invalid number"
     new_ucmd!()
@@ -273,12 +311,19 @@ fn test_should_report_invalid_suffix_on_nan() {
 
 #[test]
 fn test_should_report_invalid_number_with_interior_junk() {
-    // GNU numfmt reports this as “invalid suffix”
     new_ucmd!()
         .args(&["--from=auto"])
         .pipe_in("1x0K")
         .fails()
-        .stderr_is("numfmt: invalid number: '1x0K'\n");
+        .stderr_is("numfmt: invalid suffix in input: '1x0K'\n");
+}
+
+#[test]
+fn test_should_report_invalid_number_with_sign_after_decimal() {
+    new_ucmd!()
+        .args(&["--", "-0.-1"])
+        .fails_with_code(2)
+        .stderr_is("numfmt: invalid number: '-0.-1'\n");
 }
 
 #[test]
@@ -287,14 +332,14 @@ fn test_should_skip_leading_space_from_stdin() {
         .args(&["--from=auto"])
         .pipe_in(" 2Ki")
         .succeeds()
-        .stdout_is("2048\n");
+        .stdout_is("2048");
 
     // multi-line
     new_ucmd!()
         .args(&["--from=auto"])
         .pipe_in("\t1Ki\n  2K")
         .succeeds()
-        .stdout_is("1024\n2000\n");
+        .stdout_is("1024\n2000");
 }
 
 #[test]
@@ -303,7 +348,7 @@ fn test_should_convert_only_first_number_in_line() {
         .args(&["--from=auto"])
         .pipe_in("1Ki 2M 3G")
         .succeeds()
-        .stdout_is("1024 2M 3G\n");
+        .stdout_is("1024 2M 3G");
 }
 
 #[test]
@@ -312,13 +357,13 @@ fn test_leading_whitespace_should_imply_padding() {
         .args(&["--from=auto"])
         .pipe_in("   1K")
         .succeeds()
-        .stdout_is(" 1000\n");
+        .stdout_is(" 1000");
 
     new_ucmd!()
         .args(&["--from=auto"])
         .pipe_in("    202Ki")
         .succeeds()
-        .stdout_is("   206848\n");
+        .stdout_is("   206848");
 }
 
 #[test]
@@ -327,7 +372,7 @@ fn test_should_calculate_implicit_padding_per_line() {
         .args(&["--from=auto"])
         .pipe_in("   1Ki\n        2K")
         .succeeds()
-        .stdout_is("  1024\n      2000\n");
+        .stdout_is("  1024\n      2000");
 }
 
 #[test]
@@ -485,7 +530,7 @@ fn test_delimiter_only() {
         .args(&["-d", ","])
         .pipe_in("1234,56")
         .succeeds()
-        .stdout_only("1234,56\n");
+        .stdout_only("1234,56");
 }
 
 #[test]
@@ -494,7 +539,7 @@ fn test_line_is_field_with_no_delimiter() {
         .args(&["-d,", "--to=iec"])
         .pipe_in("123456")
         .succeeds()
-        .stdout_only("121K\n");
+        .stdout_only("121K");
 }
 
 #[test]
@@ -503,7 +548,7 @@ fn test_delimiter_to_si() {
         .args(&["-d=,", "--to=si"])
         .pipe_in("1234,56")
         .succeeds()
-        .stdout_only("1.3k,56\n");
+        .stdout_only("1.3k,56");
 }
 
 #[test]
@@ -512,7 +557,7 @@ fn test_delimiter_skips_leading_whitespace() {
         .args(&["-d=,", "--to=si"])
         .pipe_in("     \t               1234,56")
         .succeeds()
-        .stdout_only("1.3k,56\n");
+        .stdout_only("1.3k,56");
 }
 
 #[test]
@@ -521,7 +566,7 @@ fn test_delimiter_preserves_leading_whitespace_in_unselected_fields() {
         .args(&["-d=|", "--to=si"])
         .pipe_in("             1000|   2000")
         .succeeds()
-        .stdout_only("1.0k|   2000\n");
+        .stdout_only("1.0k|   2000");
 }
 
 #[test]
@@ -530,17 +575,16 @@ fn test_delimiter_from_si() {
         .args(&["-d=,", "--from=si"])
         .pipe_in("1.2K,56")
         .succeeds()
-        .stdout_only("1200,56\n");
+        .stdout_only("1200,56");
 }
 
 #[test]
 fn test_delimiter_overrides_whitespace_separator() {
-    // GNU numfmt reports this as “invalid suffix”
     new_ucmd!()
         .args(&["-d,"])
         .pipe_in("1 234,56")
         .fails()
-        .stderr_is("numfmt: invalid number: '1 234'\n");
+        .stderr_is("numfmt: invalid suffix in input: '1 234'\n");
 }
 
 #[test]
@@ -549,7 +593,7 @@ fn test_delimiter_with_padding() {
         .args(&["-d=|", "--to=si", "--padding=5"])
         .pipe_in("1000|2000")
         .succeeds()
-        .stdout_only(" 1.0k|2000\n");
+        .stdout_only(" 1.0k|2000");
 }
 
 #[test]
@@ -558,7 +602,7 @@ fn test_delimiter_with_padding_and_fields() {
         .args(&["-d=|", "--to=si", "--padding=5", "--field=-"])
         .pipe_in("1000|2000")
         .succeeds()
-        .stdout_only(" 1.0k| 2.0k\n");
+        .stdout_only(" 1.0k| 2.0k");
 }
 
 #[test]
@@ -621,7 +665,7 @@ fn test_suffix_is_added_if_not_supplied() {
         .args(&["--suffix=TEST"])
         .pipe_in("1000")
         .succeeds()
-        .stdout_only("1000TEST\n");
+        .stdout_only("1000TEST");
 }
 
 #[test]
@@ -630,7 +674,7 @@ fn test_suffix_is_preserved() {
         .args(&["--suffix=TEST"])
         .pipe_in("1000TEST")
         .succeeds()
-        .stdout_only("1000TEST\n");
+        .stdout_only("1000TEST");
 }
 
 #[test]
@@ -639,7 +683,7 @@ fn test_suffix_is_only_applied_to_selected_field() {
         .args(&["--suffix=TEST", "--field=2"])
         .pipe_in("1000 2000 3000")
         .succeeds()
-        .stdout_only("1000 2000TEST 3000\n");
+        .stdout_only("1000 2000TEST 3000");
 }
 
 #[test]
@@ -648,7 +692,7 @@ fn test_transform_with_suffix_on_input() {
         .args(&["--suffix=b", "--to=si"])
         .pipe_in("2000b")
         .succeeds()
-        .stdout_only("2.0kb\n");
+        .stdout_only("2.0kb");
 }
 
 #[test]
@@ -657,7 +701,7 @@ fn test_transform_without_suffix_on_input() {
         .args(&["--suffix=b", "--to=si"])
         .pipe_in("2000")
         .succeeds()
-        .stdout_only("2.0kb\n");
+        .stdout_only("2.0kb");
 }
 
 #[test]
@@ -666,7 +710,7 @@ fn test_transform_with_suffix_and_delimiter() {
         .args(&["--suffix=b", "--to=si", "-d=|"])
         .pipe_in("1000b|2000|3000")
         .succeeds()
-        .stdout_only("1.0kb|2000|3000\n");
+        .stdout_only("1.0kb|2000|3000");
 }
 
 #[test]
@@ -675,7 +719,7 @@ fn test_suffix_with_padding() {
         .args(&["--suffix=pad", "--padding=12"])
         .pipe_in("1000 2000 3000")
         .succeeds()
-        .stdout_only("     1000pad 2000 3000\n");
+        .stdout_only("     1000pad 2000 3000");
 }
 
 #[test]
@@ -698,7 +742,7 @@ fn test_invalid_stdin_number_with_warn_returns_status_0() {
         .args(&["--invalid=warn"])
         .pipe_in("4Q")
         .succeeds()
-        .stdout_is("4Q\n")
+        .stdout_is("4Q")
         .stderr_is("numfmt: rejecting suffix in input: '4Q' (consider using --from)\n");
 }
 
@@ -708,7 +752,7 @@ fn test_invalid_stdin_number_with_ignore_returns_status_0() {
         .args(&["--invalid=ignore"])
         .pipe_in("4Q")
         .succeeds()
-        .stdout_only("4Q\n");
+        .stdout_only("4Q");
 }
 
 #[test]
@@ -726,7 +770,7 @@ fn test_invalid_stdin_number_with_fail_returns_status_2() {
         .args(&["--invalid=fail"])
         .pipe_in("4Q")
         .fails_with_code(2)
-        .stdout_is("4Q\n")
+        .stdout_is("4Q")
         .stderr_is("numfmt: rejecting suffix in input: '4Q' (consider using --from)\n");
 }
 
@@ -1072,6 +1116,14 @@ fn test_format_grouping_conflicts_with_to_option() {
 }
 
 #[test]
+fn test_grouping_conflicts_with_format_option() {
+    new_ucmd!()
+        .args(&["--format=%f", "--grouping"])
+        .fails_with_code(1)
+        .stderr_contains("--grouping cannot be combined with --format");
+}
+
+#[test]
 fn test_zero_terminated_command_line_args() {
     new_ucmd!()
         .args(&["--zero-terminated", "--to=si", "1000"])
@@ -1092,7 +1144,7 @@ fn test_zero_terminated_command_line_args() {
 #[test]
 fn test_zero_terminated_input() {
     let values = vec![
-        ("1000", "1.0k\x00"),
+        ("1000", "1.0k"),
         ("1000\x00", "1.0k\x00"),
         ("1000\x002000\x00", "1.0k\x002.0k\x00"),
     ];
@@ -1114,4 +1166,306 @@ fn test_zero_terminated_embedded_newline() {
         .succeeds()
         // Newlines get replaced by a single space
         .stdout_is("1000 2000\x003000 4000\x00");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_non_utf8_delimiter() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    // Single-byte non-UTF8 (0xFF) and multi-byte (0xA2E3, e.g. GB18030)
+    for delim in [&[0xFFu8][..], &[0xA2, 0xE3]] {
+        let input: Vec<u8> = [b"1", delim, b"2K"].concat();
+        let expected: Vec<u8> = [b"1", delim, b"2000\n"].concat();
+        new_ucmd!()
+            .args(&["--from=si", "--field=2", "-d"])
+            .arg(OsStr::from_bytes(delim))
+            .arg(OsStr::from_bytes(&input))
+            .succeeds()
+            .stdout_is_bytes(expected);
+    }
+}
+
+#[test]
+fn test_unit_separator() {
+    for (args, expected) in [
+        (&["--to=si", "--unit-separator= ", "1000"][..], "1.0 k\n"),
+        (&["--to=iec", "--unit-separator= ", "1024"], "1.0 K\n"),
+        (&["--to=iec-i", "--unit-separator= ", "2048"], "2.0 Ki\n"),
+        (&["--to=si", "--unit-separator=__", "1000"], "1.0__k\n"),
+        (&["--to=si", "--unit-separator= ", "500"], "500\n"), // no unit = no separator
+    ] {
+        new_ucmd!().args(args).succeeds().stdout_only(expected);
+    }
+}
+
+#[test]
+fn test_debug_warnings() {
+    new_ucmd!()
+        .args(&["--debug", "4096"])
+        .succeeds()
+        .stdout_is("4096\n")
+        .stderr_is("numfmt: no conversion option specified\n");
+
+    new_ucmd!()
+        .args(&["--debug", "--padding=10", "4096"])
+        .succeeds()
+        .stdout_only("      4096\n");
+
+    new_ucmd!()
+        .args(&["--debug", "--header", "--to=iec", "4096"])
+        .succeeds()
+        .stdout_is("4.0K\n")
+        .stderr_is("numfmt: --header ignored with command-line input\n");
+
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .args(&["--debug", "--grouping", "--from=si", "4.0K"])
+        .succeeds()
+        .stdout_is("4000\n")
+        .stderr_is("numfmt: grouping has no effect in this locale\n");
+}
+
+#[test]
+fn test_debug_reports_failed_conversions_summary() {
+    new_ucmd!()
+        .args(&[
+            "--invalid=fail",
+            "--debug",
+            "--to=si",
+            "1000",
+            "Foo",
+            "3000",
+        ])
+        .fails_with_code(2)
+        .stdout_is("1.0k\nFoo\n3.0k\n")
+        .stderr_is(
+            "numfmt: invalid number: 'Foo'\nnumfmt: failed to convert some of the input numbers\n",
+        );
+}
+
+#[test]
+fn test_invalid_fail_with_fields_does_not_duplicate_output() {
+    new_ucmd!()
+        .args(&["--invalid=fail", "--field=2", "--from=si", "--to=iec"])
+        .pipe_in("A 1K x\nB Foo y\nC 3G z\n")
+        .fails_with_code(2)
+        .stdout_is("A 1000 x\nB Foo y\nC 2.8G z\n")
+        .stderr_is("numfmt: invalid number: 'Foo'\n");
+}
+
+#[test]
+fn test_abort_with_fields_preserves_partial_output() {
+    new_ucmd!()
+        .args(&["--field=3", "--from=auto", "Hello 40M World 90G"])
+        .fails_with_code(2)
+        .stdout_is("Hello 40M ")
+        .stderr_is("numfmt: invalid number: 'World'\n");
+}
+
+#[test]
+fn test_rejects_malformed_number_forms() {
+    new_ucmd!()
+        .args(&["--from=si", "12.K"])
+        .fails_with_code(2)
+        .stderr_contains("invalid number: '12.K'");
+
+    new_ucmd!()
+        .args(&["--from=si", "--delimiter=,", "12.  2"])
+        .fails_with_code(2)
+        .stderr_contains("invalid number: '12.  2'");
+
+    new_ucmd!()
+        .arg("..1")
+        .fails_with_code(2)
+        .stderr_contains("invalid suffix in input: '..1'");
+}
+
+#[test]
+fn test_empty_delimiter_success() {
+    for (args, expected) in [
+        // Single space between number and suffix is allowed by default
+        (&["-d", "", "--from=si", "4.0 K"][..], "4000\n"),
+        // Trailing spaces without suffix are allowed
+        (&["-d", "", "--from=si", "4  "], "4\n"),
+        (&["-d", "", "--from=auto", "2 "], "2\n"),
+        (&["-d", "", "--from=auto", "2  "], "2\n"),
+        // Trailing space after suffix is allowed
+        (&["-d", "", "--from=auto", "2K "], "2000\n"),
+        // Explicit --unit-separator=" " allows single space
+        (
+            &["-d", "", "--from=si", "--unit-separator= ", "1 K"],
+            "1000\n",
+        ),
+        (
+            &["-d", "", "--from=iec", "--unit-separator= ", "2 M"],
+            "2097152\n",
+        ),
+    ] {
+        new_ucmd!().args(args).succeeds().stdout_only(expected);
+    }
+}
+
+#[test]
+fn test_empty_delimiter_multi_char_unit_separator() {
+    // Two-space unit separator allows two spaces between number and suffix
+    new_ucmd!()
+        .args(&["-d", "", "--from=si", "--unit-separator=  "])
+        .pipe_in("1  K\n2  M\n3  G\n")
+        .succeeds()
+        .stdout_only("1000\n2000000\n3000000000\n");
+}
+
+#[test]
+fn test_whitespace_mode_parses_custom_unit_separator_inputs() {
+    new_ucmd!()
+        .args(&["--from=iec", "--unit-separator=::"])
+        .pipe_in("4::K\n")
+        .succeeds()
+        .stdout_only("4096\n");
+
+    new_ucmd!()
+        .args(&["--from=iec", "--unit-separator=\u{a0}"])
+        .pipe_in("4\u{a0}K\n")
+        .succeeds()
+        .stdout_only("4096\n");
+}
+
+#[test]
+fn test_empty_delimiter_whitespace_rejection() {
+    new_ucmd!()
+        .args(&["-d", "", "--from=auto", "2  K"])
+        .fails_with_code(2)
+        .stderr_contains("invalid suffix in input");
+
+    new_ucmd!()
+        .args(&["-d", "", "--from=si", "--unit-separator=", "1 K"])
+        .fails_with_code(2)
+        .stderr_contains("invalid suffix in input");
+}
+
+#[test]
+fn test_null_byte_input() {
+    new_ucmd!()
+        .pipe_in("1000\x00\n")
+        .succeeds()
+        .stdout_is("1000\n");
+
+    new_ucmd!().pipe_in("1000\x00").succeeds().stdout_is("1000");
+}
+
+#[test]
+fn test_null_byte_input_multiline() {
+    new_ucmd!()
+        .pipe_in("1000\x00\n2000\x00")
+        .succeeds()
+        .stdout_is("1000\n2000");
+
+    new_ucmd!()
+        .pipe_in("1000\x002000\n3000")
+        .succeeds()
+        .stdout_is("1000\n3000");
+}
+
+// https://github.com/uutils/coreutils/issues/11653
+// GNU rejects `-9923868` as an invalid short option (leading `-9`) and
+// requires `--` separator; uutils accepts it as a negative positional number.
+#[test]
+fn test_negative_number_without_double_dash_gnu_compat_issue_11653() {
+    new_ucmd!()
+        .args(&["--to=iec", "-9923868"])
+        .fails_with_code(1)
+        .stderr_contains("unexpected argument");
+}
+
+// https://github.com/uutils/coreutils/issues/11653
+// GNU rejects `-9923868` as an invalid short option (leading `-9`) and
+// requires `--` separator; uutils accepts it as a negative positional number.
+#[test]
+fn test_negative_number_with_double_dash_gnu_compat_issue_11653() {
+    new_ucmd!()
+        .args(&["--to=iec", "--", "-9923868"])
+        .succeeds()
+        .stdout_is("-9.5M\n");
+}
+
+// https://github.com/uutils/coreutils/issues/11654
+// uutils parses large integers through f64, losing precision past 2^53.
+#[test]
+fn test_large_integer_precision_loss_issue_11654() {
+    new_ucmd!()
+        .args(&["--from=iec", "9153396227555392131"])
+        .succeeds()
+        .stdout_is("9153396227555392131\n");
+}
+
+// https://github.com/uutils/coreutils/issues/11655
+// uutils accepts scientific notation (`1e9`, `5e-3`, ...); GNU rejects it
+// as "invalid suffix in input".
+#[test]
+fn test_scientific_notation_rejected_by_gnu_issue_11655() {
+    new_ucmd!()
+        .arg("1e9")
+        .fails_with_code(2)
+        .stderr_contains("invalid suffix in input");
+}
+
+#[test]
+fn test_to_auto_rejected_at_parse_time() {
+    new_ucmd!()
+        .args(&["--to=auto", "100"])
+        .fails_with_code(1)
+        .stderr_contains("invalid argument 'auto' for '--to'");
+}
+
+// https://github.com/uutils/coreutils/issues/11663
+// `--from-unit` multiplication with fractional input rounds to an integer;
+// GNU preserves the fractional digits.
+#[test]
+fn test_from_unit_fractional_precision_issue_11663() {
+    new_ucmd!()
+        .args(&["--from=iec", "--from-unit=959", "--", "-615484.454"])
+        .succeeds()
+        .stdout_is("-590249591.386\n");
+}
+
+// https://github.com/uutils/coreutils/issues/11664
+// Zero-padded `--format` places padding zeros before the sign for negative
+// numbers; GNU (and C printf) puts the sign first.
+#[test]
+fn test_zero_pad_sign_order_issue_11664() {
+    new_ucmd!()
+        .args(&["--from=none", "--format=%018.2f", "--", "-9869647"])
+        .succeeds()
+        .stdout_is("-00000009869647.00\n");
+}
+
+#[test]
+fn test_to_unit_prefix_selection() {
+    new_ucmd!()
+        .args(&["--to=iec-i", "--to-unit=885", "100000"])
+        .succeeds()
+        .stdout_is("113\n");
+}
+
+// https://github.com/uutils/coreutils/issues/11667
+// `--format='%.0f'` with `--to=<scale>` still prints one fractional digit;
+// the precision specifier `.0` is ignored.
+#[test]
+fn test_format_precision_zero_with_to_scale_issue_11667() {
+    new_ucmd!()
+        .args(&["--to=iec", "--format=%.0f", "5183776"])
+        .succeeds()
+        .stdout_is("5M\n");
+}
+
+#[test]
+fn test_invalid_utf8_input() {
+    // 0xFF is invalid UTF-8
+    new_ucmd!()
+        .pipe_in([b'1', b'0', b'\n', b'\xFF'])
+        .fails_with_code(2)
+        .stdout_is("10\n")
+        .stderr_is("numfmt: invalid number: '\\377'\n");
 }

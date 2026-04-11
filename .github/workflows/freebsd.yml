@@ -1,6 +1,6 @@
 name: FreeBSD
 
-# spell-checker:ignore sshfs usesh vmactions taiki Swatinem esac fdescfs fdesc sccache nextest copyback logind
+# spell-checker:ignore sshfs usesh vmactions taiki esac fdescfs fdesc nextest copyback logind
 
 env:
   # * style job configuration
@@ -30,26 +30,18 @@ jobs:
       matrix:
         job:
           - { os: ubuntu-24.04 , features: unix }
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
     steps:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.9
-      with:
-        disable_annotations: true
     - name: Prepare, build and test
-      uses: vmactions/freebsd-vm@v1.2.9
+      uses: vmactions/freebsd-vm@v1.3.9
       with:
         usesh: true
         sync: rsync
         copyback: false
         # We need jq and GNU coreutils to run show-utils.sh and bash to use inline shell string replacement
-        prepare: pkg install -y curl sudo jq coreutils bash
+        prepare: pkg install -y curl sudo jq coreutils bash python3
         run: |
           ## Prepare, build, and test
           # implementation modelled after ref: <https://github.com/rust-lang/rustup/pull/2783>
@@ -81,7 +73,6 @@ jobs:
           FAULT_PREFIX=\$(echo "\${FAULT_TYPE}" | tr '[:lower:]' '[:upper:]')
           # * determine sub-crate utility list
           UTILITY_LIST="\$(./util/show-utils.sh --features ${{ matrix.job.features }})"
-          CARGO_UTILITY_LIST_OPTIONS="\$(for u in \${UTILITY_LIST}; do echo -n "-puu_\${u} "; done;)"
           ## Info
           # environment
           echo "## environment"
@@ -101,6 +92,7 @@ jobs:
           # To ensure that files are cleaned up, we don't want to exit on error
           set +e
           unset FAULT
+          export CARGO_INCREMENTAL=0
           ## cargo fmt testing
           echo "## cargo fmt testing"
           # * convert any errors/warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
@@ -108,8 +100,9 @@ jobs:
           ## cargo clippy lint testing
           if [ -z "\${FAULT}" ]; then
             echo "## cargo clippy lint testing"
-            # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-            S=\$(cargo clippy --all-targets \${CARGO_UTILITY_LIST_OPTIONS} -- -D warnings 2>&1) && printf "%s\n" "\$S" || { printf "%s\n" "\$S" ; printf "%s" "\$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+(.*):([0-9]+):([0-9]+).*\$/::\${FAULT_TYPE} file=\2,line=\3,col=\4::\${FAULT_PREFIX}: \\\`cargo clippy\\\`: \1 (file:'\2', line:\3)/p;" -e '}' ; FAULT=true ; }
+            CLIPPY_ARGS="--features ${{ matrix.job.features }} --fault-type \${FAULT_TYPE}"
+            if [ -n "\${FAIL_ON_FAULT}" ]; then CLIPPY_ARGS="\${CLIPPY_ARGS} --fail-on-fault"; fi
+            python3 util/run-clippy.py \${CLIPPY_ARGS} || FAULT=true
           fi
           # Clean to avoid to rsync back the files
           cargo clean
@@ -127,19 +120,14 @@ jobs:
           - { os: ubuntu-24.04 , features: unix }
     env:
       mem: 4096
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
     steps:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.9
-      with:
-        disable_annotations: true
+    - name: Avoid no space left on device (Ubuntu runner)
+      run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android &
     - name: Prepare, build and test
-      uses: vmactions/freebsd-vm@v1.2.9
+      uses: vmactions/freebsd-vm@v1.3.9
       with:
         usesh: true
         sync: rsync
@@ -192,6 +180,8 @@ jobs:
           set +e
           cd "${WORKSPACE}"
           unset FAULT
+          export CARGO_INCREMENTAL=0
+          export RUSTFLAGS="-C strip=symbols" # for disk space
           cargo build || FAULT=1
           export PATH=~/.cargo/bin:${PATH}
           export RUST_BACKTRACE=1

@@ -8,7 +8,7 @@
 use std::ffi::{OsStr, OsString};
 
 use clap::{Arg, ArgAction, Command};
-use platform_info::*;
+use platform_info::{PlatformInfo, PlatformInfoAPI, UNameAPI};
 use uucore::display::println_verbatim;
 use uucore::translate;
 use uucore::{
@@ -53,7 +53,7 @@ impl UNameOutput {
         ]
         .into_iter()
         .flatten()
-        .map(|name| name.as_os_str())
+        .map(OsString::as_os_str)
         .collect::<Vec<_>>()
         .join(OsStr::new(" "))
     }
@@ -119,7 +119,7 @@ pub struct Options {
     pub os: bool,
 }
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
@@ -135,14 +135,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         os: matches.get_flag(options::OS),
     };
     let output = UNameOutput::new(&options)?;
-    println_verbatim(output.display().as_os_str()).unwrap();
+    println_verbatim(output.display().as_os_str())
+        .map_err(|e| USimpleError::new(1, e.to_string()))?;
     Ok(())
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("uname")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("uname"))
         .about(translate!("uname-about"))
         .override_usage(format_usage(&translate!("uname-usage")))
         .infer_long_args(true)

@@ -524,8 +524,8 @@ pub fn parse_bytes_with_opt_multiplier(s: &str) -> Result<u64, ParseError> {
         parse_bytes_no_x(s, parts[0])
     } else {
         let mut total: u64 = 1;
-        for part in parts {
-            if part == "0" {
+        for (i, part) in parts.iter().enumerate() {
+            if *part == "0" && i != parts.len() - 1 {
                 show_zero_multiplier_warning();
             }
             let num = parse_bytes_no_x(s, part)?;
@@ -541,7 +541,9 @@ fn get_ctable(
     conversion: Option<Conversion>,
     case: Option<Case>,
 ) -> Option<&'static ConversionTable> {
+    #[allow(clippy::wildcard_imports)]
     use crate::conversion_tables::*;
+
     Some(match (conversion, case) {
         (None, None) => return None,
         (Some(conv), None) => match conv {
@@ -550,8 +552,8 @@ fn get_ctable(
             Conversion::Ibm => &ASCII_TO_IBM,
         },
         (None, Some(case)) => match case {
-            Case::Lower => &ASCII_UCASE_TO_LCASE,
-            Case::Upper => &ASCII_LCASE_TO_UCASE,
+            Case::Lower => get_ucase_to_lcase_table(),
+            Case::Upper => get_lcase_to_ucase_table(),
         },
         (Some(conv), Some(case)) => match (conv, case) {
             (Conversion::Ascii, Case::Upper) => &EBCDIC_TO_ASCII_LCASE_TO_UCASE,

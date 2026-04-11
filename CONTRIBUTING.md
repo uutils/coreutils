@@ -51,6 +51,8 @@ crates is as follows:
 We have separated repositories for crates that we maintain but also publish for
 use by others:
 
+- [coreutils-i10n](https://github.com/uutils/coreutils-l10n)
+- [num-prime](https://github.com/uutils/num-prime)
 - [uutils-term-grid](https://github.com/uutils/uutils-term-grid)
 - [parse_datetime](https://github.com/uutils/parse_datetime)
 
@@ -78,11 +80,12 @@ issues and writing documentation are just as important as writing code.
 We can't fix bugs we don't know about, so good issues are super helpful! Here
 are some tips for writing good issues:
 
-- If you find a bug, make sure it's still a problem on the `main` branch.
+- Confirm the bug is in coreutils; some tools (e.g., `find`, `sed`) are maintained in separate repositories under the uutils project.
+- If you find a bug, make sure it's still a problem on the [`main` branch](https://github.com/uutils/coreutils/releases/tag/latest-commit).
 - Search through the existing issues to see whether it has already been
   reported.
 - Make sure to include all relevant information, such as:
-  - Which version of uutils did you check?
+  - Which version or commit hash of uutils did you check?
   - Which version of GNU coreutils are you comparing with?
   - What platform are you on?
 - Provide a way to reliably reproduce the issue.
@@ -123,7 +126,7 @@ submit a patch!
 ### Don't `panic!`
 
 The coreutils should be very reliable. This means that we should never `panic!`.
-Therefore, you should avoid using `.unwrap()` and `panic!`. Sometimes the use of
+Therefore, you should avoid using `println!`, `.unwrap()` and `panic!`. Sometimes the use of
 `unreachable!` can be justified with a comment explaining why that code is
 unreachable.
 
@@ -250,8 +253,8 @@ gitignore: add temporary files
   - It's up to you whether you want to use `git merge main` or
     `git rebase main`.
   - Feel free to ask for help with merge conflicts.
-- You do not need to ping maintainers to request a review, but it's fine to do
-  so if you don't get a response within a few days.
+- You do not need to ping maintainers to request a review immediately after submission. If you do not get a response to your patch within a few days, it is fine to request a review.
+  - If after a week your patch has still not been reviewed, we recommend that you ping the maintainers on our Discord channel in `#coreutils-chat`.
 
 ## Platforms
 
@@ -259,9 +262,6 @@ We take pride in supporting many operating systems and architectures. Any code
 you contribute must at least compile without warnings for all platforms in the
 CI. However, you can use `#[cfg(...)]` attributes to create platform dependent
 features.
-
-**Tip:** For Windows, Microsoft provides some images (VMWare, Hyper-V,
-VirtualBox and Parallels) for development [on their official download page](https://developer.microsoft.com/windows/downloads/virtual-machines/).
 
 ## Improving the GNU compatibility
 

@@ -20,6 +20,11 @@ fn test_no_trailing_newline() {
 }
 
 #[test]
+fn test_empty_args() {
+    new_ucmd!().succeeds().stdout_only("\n");
+}
+
+#[test]
 fn test_escape_alert() {
     new_ucmd!()
         .args(&["-e", "\\a"])
@@ -524,9 +529,27 @@ fn full_version_argument() {
 }
 
 #[test]
+fn multiple_version_argument() {
+    new_ucmd!()
+        .arg("--version")
+        .arg("--version")
+        .succeeds()
+        .stdout_is("--version --version\n");
+}
+
+#[test]
 fn full_help_argument() {
     assert_ne!(new_ucmd!().arg("--help").succeeds().stdout(), b"--help\n");
     assert_ne!(new_ucmd!().arg("--help").succeeds().stdout(), b"--help"); // This one is just in case.
+}
+
+#[test]
+fn multiple_help_argument() {
+    new_ucmd!()
+        .arg("--help")
+        .arg("--help")
+        .succeeds()
+        .stdout_is("--help --help\n");
 }
 
 #[test]
@@ -802,4 +825,14 @@ fn test_emoji_output() {
         .args(&["🦀", "loves", "🚀", "and", "🌟"])
         .succeeds()
         .stdout_only("🦀 loves 🚀 and 🌟\n");
+
+    new_ucmd!()
+        .arg("🍎,🍌,🍒,🥝")
+        .succeeds()
+        .stdout_only("🍎,🍌,🍒,🥝\n");
+
+    new_ucmd!()
+        .arg("こんにちは世界")
+        .succeeds()
+        .stdout_only("こんにちは世界\n");
 }

@@ -17,6 +17,15 @@ use std::time::Duration;
 // spell-checker:ignore nopipe
 
 #[test]
+#[cfg(unix)]
+fn test_error_stdin_directory() {
+    new_ucmd!()
+        .set_stdin(std::fs::File::open(".").unwrap())
+        .fails_with_code(1)
+        .stderr_is("tee: read error: Is a directory\n");
+}
+
+#[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
@@ -89,6 +98,30 @@ fn test_tee_append() {
         .stdout_is(content);
     assert!(at.file_exists(file));
     assert_eq!(at.read(file), content.repeat(2));
+}
+
+#[test]
+fn test_tee_multiple_append_flags() {
+    // Test for bug: https://bugs.launchpad.net/ubuntu/+source/rust-coreutils/+bug/2134578
+    // The command should accept multiple -a flags for different files
+    let (at, mut ucmd) = at_and_ucmd!();
+    let content = "don't fail me now rust";
+    let file1 = "log1";
+    let file2 = "log2";
+
+    // Pre-populate files with some content to verify append behavior
+    at.write(file1, "existing1\n");
+    at.write(file2, "existing2\n");
+
+    ucmd.args(&["-a", file1, "-a", file2])
+        .pipe_in(content)
+        .succeeds()
+        .stdout_is(content);
+
+    assert!(at.file_exists(file1));
+    assert!(at.file_exists(file2));
+    assert_eq!(at.read(file1), format!("existing1\n{content}"));
+    assert_eq!(at.read(file2), format!("existing2\n{content}"));
 }
 
 #[test]
@@ -174,8 +207,9 @@ mod linux_only {
         use std::os::unix::io::FromRawFd;
 
         let mut fds: [c_int; 2] = [0, 0];
-        assert!(
-            (unsafe { libc::pipe(std::ptr::from_mut::<c_int>(&mut fds[0])) } == 0),
+        assert_eq!(
+            unsafe { libc::pipe(std::ptr::from_mut::<c_int>(&mut fds[0])) },
+            0,
             "Failed to create pipe"
         );
 
@@ -191,8 +225,9 @@ mod linux_only {
         use std::os::unix::io::FromRawFd;
 
         let mut fds: [c_int; 2] = [0, 0];
-        assert!(
-            (unsafe { libc::pipe(std::ptr::from_mut::<c_int>(&mut fds[0])) } == 0),
+        assert_eq!(
+            unsafe { libc::pipe(std::ptr::from_mut::<c_int>(&mut fds[0])) },
+            0,
             "Failed to create pipe"
         );
 

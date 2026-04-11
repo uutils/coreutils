@@ -14,7 +14,8 @@
 
 use crate::error::{UError, UResult};
 use crate::translate;
-use chrono::Local;
+use jiff::Timestamp;
+use jiff::tz::TimeZone;
 use libc::time_t;
 use thiserror::Error;
 
@@ -38,7 +39,10 @@ impl UError for UptimeError {
 
 /// Returns the formatted time string, e.g. "12:34:56"
 pub fn get_formatted_time() -> String {
-    Local::now().time().format("%H:%M:%S").to_string()
+    Timestamp::now()
+        .to_zoned(TimeZone::system())
+        .strftime("%H:%M:%S")
+        .to_string()
 }
 
 /// Safely get macOS boot time using sysctl command
@@ -132,8 +136,8 @@ pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
 #[cfg(unix)]
 #[cfg(not(target_os = "openbsd"))]
 pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
+    use crate::utmpx::BOOT_TIME;
     use crate::utmpx::Utmpx;
-    use libc::BOOT_TIME;
     use std::fs::File;
     use std::io::Read;
 
@@ -151,19 +155,11 @@ pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
 
     // Try provided boot_time or derive from utmpx
     let derived_boot_time = boot_time.or_else(|| {
-        let records = Utmpx::iter_all_records();
-        for line in records {
-            match line.record_type() {
-                BOOT_TIME => {
-                    let dt = line.login_time();
-                    if dt.unix_timestamp() > 0 {
-                        return Some(dt.unix_timestamp() as time_t);
-                    }
-                }
-                _ => continue,
-            }
-        }
-        None
+        Utmpx::iter_all_records()
+            .filter(|r| r.record_type() == BOOT_TIME)
+            .map(|r| r.login_time().unix_timestamp())
+            .find(|&ts| ts > 0)
+            .map(|ts| ts as time_t)
     });
 
     // macOS-specific fallback: use sysctl kern.boottime when utmpx did not provide BOOT_TIME
@@ -187,7 +183,7 @@ pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
     };
 
     if let Some(t) = derived_boot_time {
-        let now = Local::now().timestamp();
+        let now = Timestamp::now().as_second();
         #[cfg(target_pointer_width = "64")]
         let boottime: i64 = t;
         #[cfg(not(target_pointer_width = "64"))]
@@ -201,6 +197,52 @@ pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
     Err(UptimeError::SystemUptime)?
 }
 
+/// The format used to display a FormattedUptime.
+pub enum OutputFormat {
+    /// Typical `uptime` output (e.g. 2 days, 3:04).
+    HumanReadable,
+
+    /// Pretty printed output (e.g. 2 days, 3 hours, 04 minutes).
+    PrettyPrint,
+}
+
+struct FormattedUptime {
+    days: i64,
+    hours: i64,
+    mins: i64,
+}
+
+impl FormattedUptime {
+    fn new(seconds: i64) -> Self {
+        let days = seconds / 86400;
+        let hours = (seconds - (days * 86400)) / 3600;
+        let mins = (seconds - (days * 86400) - (hours * 3600)) / 60;
+
+        Self { days, hours, mins }
+    }
+
+    fn get_human_readable_uptime(&self) -> String {
+        translate!(
+        "uptime-format",
+        "days" => self.days,
+        "time" => format!("{:02}:{:02}", self.hours, self.mins))
+    }
+
+    fn get_pretty_print_uptime(&self) -> String {
+        let mut parts = Vec::new();
+        if self.days > 0 {
+            parts.push(translate!("uptime-format-pretty-day", "day" => self.days));
+        }
+        if self.hours > 0 {
+            parts.push(translate!("uptime-format-pretty-hour", "hour" => self.hours));
+        }
+        if self.mins > 0 || parts.is_empty() {
+            parts.push(translate!("uptime-format-pretty-min", "min" => self.mins));
+        }
+        parts.join(", ")
+    }
+}
+
 /// Get the system uptime
 ///
 /// # Arguments
@@ -211,6 +253,7 @@ pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
 ///
 /// Returns a UResult with the uptime in seconds if successful, otherwise an UptimeError.
 #[cfg(windows)]
+#[allow(clippy::unnecessary_wraps, reason = "needed on some platforms")]
 pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
     use windows_sys::Win32::System::SystemInformation::GetTickCount;
     // SAFETY: always return u32
@@ -223,26 +266,28 @@ pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
 /// # Arguments
 ///
 /// boot_time: Option<time_t> - Manually specify the boot time, or None to try to get it from the system.
+/// output_format: OutputFormat - Selects the format of the output string.
 ///
 /// # Returns
 ///
 /// Returns a UResult with the uptime in a human-readable format(e.g. "1 day, 3:45") if successful, otherwise an UptimeError.
 #[inline]
-pub fn get_formatted_uptime(boot_time: Option<time_t>) -> UResult<String> {
-    let up_secs = get_uptime(boot_time)?;
+pub fn get_formatted_uptime(
+    boot_time: Option<time_t>,
+    output_format: OutputFormat,
+) -> UResult<String> {
+    let uptime = get_uptime(boot_time)?;
 
-    if up_secs < 0 {
+    if uptime < 0 {
         Err(UptimeError::SystemUptime)?;
     }
-    let up_days = up_secs / 86400;
-    let up_hours = (up_secs - (up_days * 86400)) / 3600;
-    let up_mins = (up_secs - (up_days * 86400) - (up_hours * 3600)) / 60;
 
-    Ok(translate!(
-        "uptime-format",
-        "days" => up_days,
-        "time" => format!("{up_hours:02}:{up_mins:02}")
-    ))
+    let formatted_uptime = FormattedUptime::new(uptime);
+
+    match output_format {
+        OutputFormat::HumanReadable => Ok(formatted_uptime.get_human_readable_uptime()),
+        OutputFormat::PrettyPrint => Ok(formatted_uptime.get_pretty_print_uptime()),
+    }
 }
 
 /// Get the number of users currently logged in
@@ -254,8 +299,8 @@ pub fn get_formatted_uptime(boot_time: Option<time_t>) -> UResult<String> {
 #[cfg(not(target_os = "openbsd"))]
 // see: https://gitlab.com/procps-ng/procps/-/blob/4740a0efa79cade867cfc7b32955fe0f75bf5173/library/uptime.c#L63-L115
 pub fn get_nusers() -> usize {
+    use crate::utmpx::USER_PROCESS;
     use crate::utmpx::Utmpx;
-    use libc::USER_PROCESS;
 
     let mut num_user = 0;
     Utmpx::iter_all_records().for_each(|ut| {
@@ -301,7 +346,10 @@ pub fn get_nusers(file: &str) -> usize {
 #[cfg(target_os = "windows")]
 pub fn get_nusers() -> usize {
     use std::ptr;
-    use windows_sys::Win32::System::RemoteDesktop::*;
+    use windows_sys::Win32::System::RemoteDesktop::{
+        WTS_CURRENT_SERVER_HANDLE, WTSEnumerateSessionsW, WTSFreeMemory,
+        WTSQuerySessionInformationW,
+    };
 
     let mut num_user = 0;
 
@@ -314,8 +362,8 @@ pub fn get_nusers() -> usize {
             WTS_CURRENT_SERVER_HANDLE,
             0,
             1,
-            &mut session_info_ptr,
-            &mut session_count,
+            &raw mut session_info_ptr,
+            &raw mut session_count,
         );
         if result == 0 {
             return 0;
@@ -331,27 +379,22 @@ pub fn get_nusers() -> usize {
                 WTS_CURRENT_SERVER_HANDLE,
                 session.SessionId,
                 5,
-                &mut buffer,
-                &mut bytes_returned,
+                &raw mut buffer,
+                &raw mut bytes_returned,
             );
             if result == 0 || buffer.is_null() {
                 continue;
             }
 
-            let username = if !buffer.is_null() {
-                let cstr = std::ffi::CStr::from_ptr(buffer as *const i8);
-                cstr.to_string_lossy().to_string()
-            } else {
-                String::new()
-            };
-            if !username.is_empty() {
+            let cstr = std::ffi::CStr::from_ptr(buffer.cast());
+            if !cstr.is_empty() {
                 num_user += 1;
             }
 
-            WTSFreeMemory(buffer as _);
+            WTSFreeMemory(buffer.cast());
         }
 
-        WTSFreeMemory(session_info_ptr as _);
+        WTSFreeMemory(session_info_ptr.cast());
     }
 
     num_user
@@ -426,11 +469,13 @@ pub fn get_loadavg() -> UResult<(f64, f64, f64)> {
 #[inline]
 pub fn get_formatted_loadavg() -> UResult<String> {
     let loadavg = get_loadavg()?;
-    Ok(translate!(
+    let mut args = fluent::FluentArgs::new();
+    args.set("avg1", format!("{:.2}", loadavg.0));
+    args.set("avg5", format!("{:.2}", loadavg.1));
+    args.set("avg15", format!("{:.2}", loadavg.2));
+    Ok(crate::locale::get_message_with_args(
         "uptime-lib-format-loadavg",
-        "avg1" => format!("{:.2}", loadavg.0),
-        "avg5" => format!("{:.2}", loadavg.1),
-        "avg15" => format!("{:.2}", loadavg.2),
+        args,
     ))
 }
 
@@ -470,10 +515,13 @@ mod tests {
         assert!(boot_time > 0, "Boot time should be positive");
 
         // Boot time should be after 2000-01-01 (946684800 seconds since epoch)
-        assert!(boot_time > 946684800, "Boot time should be after year 2000");
+        assert!(
+            boot_time > 946_684_800,
+            "Boot time should be after year 2000"
+        );
 
         // Boot time should be before current time
-        let now = chrono::Local::now().timestamp();
+        let now = Timestamp::now().as_second();
         assert!(
             (boot_time as i64) < now,
             "Boot time should be before current time"
@@ -501,8 +549,7 @@ mod tests {
         // (This is just a sanity check)
         assert!(
             uptime < 365 * 86400,
-            "Uptime seems unreasonably high: {} seconds",
-            uptime
+            "Uptime seems unreasonably high: {uptime} seconds"
         );
     }
 
@@ -518,9 +565,7 @@ mod tests {
         let diff = (uptime1 - uptime2).abs();
         assert!(
             diff <= 1,
-            "Consecutive uptime calls should be consistent, got {} and {}",
-            uptime1,
-            uptime2
+            "Consecutive uptime calls should be consistent, got {uptime1} and {uptime2}"
         );
     }
 }

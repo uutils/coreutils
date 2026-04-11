@@ -15,8 +15,8 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-use std::collections::HashMap;
-use std::collections::HashSet;
+use rustc_hash::FxHashMap;
+use rustc_hash::FxHashSet;
 use std::env;
 use std::ffi::OsString;
 use std::fs;
@@ -47,7 +47,7 @@ use uucore::fs::{
 };
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
 use uucore::fsxattr;
-#[cfg(feature = "selinux")]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::set_selinux_security_context;
 use uucore::translate;
 use uucore::update_control;
@@ -226,7 +226,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("mv")
         .version(uucore::crate_version!())
         .about(translate!("mv-about"))
         .help_template(uucore::localized_help_template(uucore::util_name()))
@@ -360,7 +360,7 @@ fn parse_paths(files: &[OsString], opts: &Options) -> Vec<PathBuf> {
             .map(|p| p.components().as_path().to_owned())
             .collect::<Vec<PathBuf>>()
     } else {
-        paths.map(|p| p.to_owned()).collect::<Vec<PathBuf>>()
+        paths.map(ToOwned::to_owned).collect::<Vec<PathBuf>>()
     }
 }
 
@@ -431,7 +431,7 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
             OverwriteMode::Force => {}
             OverwriteMode::Default => {
                 let (writable, mode) = is_writable(target);
-                if !writable && std::io::stdin().is_terminal() {
+                if !writable && io::stdin().is_terminal() {
                     prompt_overwrite(target, mode)?;
                 }
             }
@@ -575,7 +575,8 @@ pub fn mv(files: &[OsString], opts: &Options) -> UResult<()> {
 #[allow(clippy::cognitive_complexity)]
 fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) -> UResult<()> {
     // remember the moved destinations for further usage
-    let mut moved_destinations: HashSet<PathBuf> = HashSet::with_capacity(files.len());
+    let mut moved_destinations: FxHashSet<PathBuf> =
+        FxHashSet::with_capacity_and_hasher(files.len(), rustc_hash::FxBuildHasher);
     // Create hardlink tracking context
     #[cfg(unix)]
     let (mut hardlink_tracker, hardlink_scanner) = {
@@ -587,19 +588,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
         };
 
         // Pre-scan files if needed
-        if let Err(e) = scanner.scan_files(files, &hardlink_options) {
-            if hardlink_options.verbose {
-                eprintln!("mv: warning: failed to scan files for hardlinks: {e}");
-                eprintln!("mv: continuing without hardlink preservation");
-            } else {
-                // Show warning in non-verbose mode for serious errors
-                eprintln!(
-                    "mv: warning: hardlink scanning failed, continuing without hardlink preservation"
-                );
-            }
-            // Continue without hardlink tracking on scan failure
-            // This provides graceful degradation rather than failing completely
-        }
+        scanner.scan_files(files, &hardlink_options);
 
         (tracker, scanner)
     };
@@ -641,12 +630,11 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
             pb.set_message(msg);
         }
 
-        let targetpath = match sourcepath.file_name() {
-            Some(name) => target_dir.join(name),
-            None => {
-                show!(MvError::NoSuchFile(sourcepath.quote().to_string()));
-                continue;
-            }
+        let targetpath = if let Some(name) = sourcepath.file_name() {
+            target_dir.join(name)
+        } else {
+            show!(MvError::NoSuchFile(sourcepath.quote().to_string()));
+            continue;
         };
 
         if moved_destinations.contains(&targetpath) && options.backup != BackupMode::Numbered {
@@ -683,9 +671,10 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
                 let e = e.map_err_context(|| {
                     translate!("mv-error-cannot-move", "source" => sourcepath.quote(), "target" => targetpath.quote())
                 });
-                match display_manager {
-                    Some(ref pb) => pb.suspend(|| show!(e)),
-                    None => show!(e),
+                if let Some(ref pb) = display_manager {
+                    pb.suspend(|| show!(e));
+                } else {
+                    show!(e);
                 }
             }
             Ok(()) => (),
@@ -741,7 +730,7 @@ fn rename(
             OverwriteMode::Default => {
                 // GNU mv prompts when stdin is a TTY and target is not writable
                 let (writable, mode) = is_writable(to);
-                if !writable && std::io::stdin().is_terminal() {
+                if !writable && io::stdin().is_terminal() {
                     prompt_overwrite(to, mode)?;
                 }
             }
@@ -782,18 +771,17 @@ fn rename(
         rename_with_fallback(from, to, display_manager, opts.verbose, None, None)?;
     }
 
-    #[cfg(feature = "selinux")]
+    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
     if let Some(ref context) = opts.context {
         set_selinux_security_context(to, Some(context))
             .map_err(|e| io::Error::other(e.to_string()))?;
     }
 
     if opts.verbose {
-        let message = match backup_path {
-            Some(path) => {
-                translate!("mv-verbose-renamed-with-backup", "from" => from.quote(), "to" => to.quote(), "backup" => path.quote())
-            }
-            None => translate!("mv-verbose-renamed", "from" => from.quote(), "to" => to.quote()),
+        let message = if let Some(path) = backup_path {
+            translate!("mv-verbose-renamed-with-backup", "from" => from.quote(), "to" => to.quote(), "backup" => path.quote())
+        } else {
+            translate!("mv-verbose-renamed", "from" => from.quote(), "to" => to.quote())
         };
 
         match display_manager {
@@ -833,6 +821,8 @@ fn rename_with_fallback(
         const EXDEV: i32 = windows_sys::Win32::Foundation::ERROR_NOT_SAME_DEVICE as _;
         #[cfg(unix)]
         const EXDEV: i32 = libc::EXDEV as _;
+        #[cfg(target_os = "wasi")]
+        const EXDEV: i32 = 18; // POSIX EXDEV value
 
         // We will only copy if:
         // 1. Files are on different devices (EXDEV error)
@@ -899,6 +889,10 @@ fn rename_fifo_fallback(from: &Path, to: &Path) -> io::Result<()> {
 }
 
 #[cfg(not(unix))]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "fn sig must match on all platforms"
+)]
 fn rename_fifo_fallback(_from: &Path, _to: &Path) -> io::Result<()> {
     Ok(())
 }
@@ -908,7 +902,12 @@ fn rename_fifo_fallback(_from: &Path, _to: &Path) -> io::Result<()> {
 #[cfg(unix)]
 fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     let path_symlink_points_to = fs::read_link(from)?;
-    unix::fs::symlink(path_symlink_points_to, to).and_then(|_| fs::remove_file(from))
+    unix::fs::symlink(path_symlink_points_to, to)?;
+    #[cfg(not(any(target_os = "macos", target_os = "redox")))]
+    {
+        let _ = copy_xattrs_if_supported(from, to);
+    }
+    fs::remove_file(from)
 }
 
 #[cfg(windows)]
@@ -929,13 +928,9 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     }
 }
 
-#[cfg(not(any(windows, unix)))]
-fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
-    let path_symlink_points_to = fs::read_link(from)?;
-    Err(io::Error::new(
-        io::ErrorKind::Other,
-        translate!("mv-error-no-symlink-support"),
-    ))
+#[cfg(target_os = "wasi")]
+fn rename_symlink_fallback(_from: &Path, _to: &Path) -> io::Result<()> {
+    Err(io::Error::other(translate!("mv-error-no-symlink-support")))
 }
 
 fn rename_dir_fallback(
@@ -971,7 +966,7 @@ fn rename_dir_fallback(
     };
 
     #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-    let xattrs = fsxattr::retrieve_xattrs(from).unwrap_or_else(|_| HashMap::new());
+    let xattrs = fsxattr::retrieve_xattrs(from).unwrap_or_else(|_| FxHashMap::default());
 
     // Use directory copying (with or without hardlink support)
     let result = copy_dir_contents(
@@ -1027,7 +1022,7 @@ fn copy_dir_contents(
     }
     #[cfg(not(unix))]
     {
-        copy_dir_contents_recursive(from, to, None, None, verbose, progress_bar, display_manager)?;
+        copy_dir_contents_recursive(from, to, verbose, progress_bar, display_manager)?;
     }
 
     Ok(())
@@ -1038,12 +1033,24 @@ fn copy_dir_contents_recursive(
     to_dir: &Path,
     #[cfg(unix)] hardlink_tracker: &mut HardlinkTracker,
     #[cfg(unix)] hardlink_scanner: &HardlinkGroupScanner,
-    #[cfg(not(unix))] _hardlink_tracker: Option<()>,
-    #[cfg(not(unix))] _hardlink_scanner: Option<()>,
     verbose: bool,
     progress_bar: Option<&ProgressBar>,
     display_manager: Option<&MultiProgress>,
 ) -> io::Result<()> {
+    // Helper closure to print verbose messages
+    let print_verbose = |from: &Path, to: &Path| {
+        if verbose {
+            let message =
+                translate!("mv-verbose-renamed", "from" => from.quote(), "to" => to.quote());
+            match display_manager {
+                Some(pb) => pb.suspend(|| {
+                    println!("{message}");
+                }),
+                None => println!("{message}"),
+            }
+        }
+    };
+
     let entries = fs::read_dir(from_dir)?;
 
     for entry in entries {
@@ -1056,20 +1063,29 @@ fn copy_dir_contents_recursive(
             pb.set_message(from_path.to_string_lossy().to_string());
         }
 
-        if from_path.is_dir() {
-            // Recursively copy subdirectory
+        if from_path.is_symlink() {
+            // Handle symlinks first, before checking is_dir() which follows symlinks.
+            // This prevents symlinks to directories from being expanded into full copies.
+            #[cfg(unix)]
+            {
+                copy_file_with_hardlinks_helper(
+                    &from_path,
+                    &to_path,
+                    hardlink_tracker,
+                    hardlink_scanner,
+                )?;
+            }
+            #[cfg(not(unix))]
+            {
+                rename_symlink_fallback(&from_path, &to_path)?;
+            }
+
+            print_verbose(&from_path, &to_path);
+        } else if from_path.is_dir() {
+            // Recursively copy subdirectory (only real directories, not symlinks)
             fs::create_dir_all(&to_path)?;
 
-            // Print verbose message for directory
-            if verbose {
-                let message = translate!("mv-verbose-renamed", "from" => from_path.quote(), "to" => to_path.quote());
-                match display_manager {
-                    Some(pb) => pb.suspend(|| {
-                        println!("{message}");
-                    }),
-                    None => println!("{message}"),
-                }
-            }
+            print_verbose(&from_path, &to_path);
 
             copy_dir_contents_recursive(
                 &from_path,
@@ -1078,10 +1094,6 @@ fn copy_dir_contents_recursive(
                 hardlink_tracker,
                 #[cfg(unix)]
                 hardlink_scanner,
-                #[cfg(not(unix))]
-                _hardlink_tracker,
-                #[cfg(not(unix))]
-                _hardlink_scanner,
                 verbose,
                 progress_bar,
                 display_manager,
@@ -1099,19 +1111,11 @@ fn copy_dir_contents_recursive(
             }
             #[cfg(not(unix))]
             {
+                // Symlinks are already handled above, so this is always a regular file
                 fs::copy(&from_path, &to_path)?;
             }
 
-            // Print verbose message for file
-            if verbose {
-                let message = translate!("mv-verbose-renamed", "from" => from_path.quote(), "to" => to_path.quote());
-                match display_manager {
-                    Some(pb) => pb.suspend(|| {
-                        println!("{message}");
-                    }),
-                    None => println!("{message}"),
-                }
-            }
+            print_verbose(&from_path, &to_path);
         }
 
         if let Some(pb) = progress_bar {
@@ -1136,20 +1140,25 @@ fn copy_file_with_hardlinks_helper(
     let hardlink_options = HardlinkOptions::default();
     // Create a hardlink instead of copying
     if let Some(existing_target) =
-        hardlink_tracker.check_hardlink(from, to, hardlink_scanner, &hardlink_options)?
+        hardlink_tracker.check_hardlink(from, to, hardlink_scanner, &hardlink_options)
     {
         fs::hard_link(&existing_target, to)?;
         return Ok(());
     }
 
-    // Regular file copy
-    #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-    {
-        fs::copy(from, to).and_then(|_| fsxattr::copy_xattrs(&from, &to))?;
-    }
-    #[cfg(any(target_os = "macos", target_os = "redox"))]
-    {
+    if from.is_symlink() {
+        // Copy a symlink file (no-follow).
+        rename_symlink_fallback(from, to)?;
+    } else if is_fifo(from.symlink_metadata()?.file_type()) {
+        make_fifo(to)?;
+    } else {
+        // Copy a regular file.
         fs::copy(from, to)?;
+        // Copy xattrs, ignoring ENOTSUP errors (filesystem doesn't support xattrs)
+        #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
+        {
+            let _ = copy_xattrs_if_supported(from, to);
+        }
     }
 
     Ok(())
@@ -1179,7 +1188,7 @@ fn rename_file_fallback(
             use crate::hardlink::HardlinkOptions;
             let hardlink_options = HardlinkOptions::default();
             if let Some(existing_target) =
-                tracker.check_hardlink(from, to, scanner, &hardlink_options)?
+                tracker.check_hardlink(from, to, scanner, &hardlink_options)
             {
                 // Create a hardlink to the first moved file instead of copying
                 fs::hard_link(&existing_target, to)?;
@@ -1190,16 +1199,30 @@ fn rename_file_fallback(
     }
 
     // Regular file copy
-    #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
     fs::copy(from, to)
-        .and_then(|_| fsxattr::copy_xattrs(&from, &to))
-        .and_then(|_| fs::remove_file(from))
         .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
-    #[cfg(any(target_os = "macos", target_os = "redox", not(unix)))]
-    fs::copy(from, to)
-        .and_then(|_| fs::remove_file(from))
+
+    // Copy xattrs, ignoring ENOTSUP errors (filesystem doesn't support xattrs)
+    #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
+    {
+        let _ = copy_xattrs_if_supported(from, to);
+    }
+
+    fs::remove_file(from)
         .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
     Ok(())
+}
+
+/// Copy xattrs from source to destination, ignoring ENOTSUP/EOPNOTSUPP errors.
+/// These errors indicate the filesystem doesn't support extended attributes,
+/// which is acceptable when moving files across filesystems.
+#[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
+fn copy_xattrs_if_supported(from: &Path, to: &Path) -> io::Result<()> {
+    match fsxattr::copy_xattrs(from, to) {
+        Ok(()) => Ok(()),
+        Err(e) if e.raw_os_error() == Some(libc::EOPNOTSUPP) => Ok(()),
+        Err(e) => Err(e),
+    }
 }
 
 fn is_empty_dir(path: &Path) -> bool {
@@ -1230,14 +1253,13 @@ fn is_writable(path: &Path) -> (bool, Option<u32>) {
 
 #[cfg(unix)]
 fn get_interactive_prompt(to: &Path, cached_mode: Option<u32>) -> String {
-    use libc::mode_t;
     // Use cached mode if available, otherwise fetch it
     let mode = cached_mode.or_else(|| to.metadata().ok().map(|m| m.permissions().mode()));
     if let Some(mode) = mode {
         let file_mode = mode & 0o777;
         // Check if file is not writable by user
         if (mode & 0o200) == 0 {
-            let perms = display_permissions_unix(mode as mode_t, false);
+            let perms = display_permissions_unix(mode, false);
             let mode_info = format!("{file_mode:04o} ({perms})");
             return translate!("mv-prompt-overwrite-mode", "target" => to.quote(), "mode_info" => mode_info);
         }

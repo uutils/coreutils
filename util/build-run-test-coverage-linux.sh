@@ -28,6 +28,8 @@
 set -e
 # Treat unset variables as errors
 set -u
+# Ensure pipeline failures are caught (not just the last command's exit code)
+set -o pipefail
 # Print expanded commands to stdout before running them
 set -x
 
@@ -39,7 +41,12 @@ REPO_main_dir="$(dirname -- "${ME_dir}")"
 FEATURES_OPTION=${FEATURES_OPTION:-"--features=feat_os_unix"}
 COVERAGE_DIR=${COVERAGE_DIR:-"${REPO_main_dir}/coverage"}
 
+# Find llvm-profdata (which is used for coverage builds)
 LLVM_PROFDATA="$(find "$(rustc --print sysroot)" -name llvm-profdata)"
+if [ -z "${LLVM_PROFDATA}" ]; then
+    echo "Error: llvm-profdata not found. Install it with: rustup component add llvm-tools"
+    exit 1
+fi
 
 PROFRAW_DIR="${COVERAGE_DIR}/traces"
 PROFDATA_DIR="${COVERAGE_DIR}/data"
@@ -53,10 +60,10 @@ rm -rf "${REPORT_DIR}" && mkdir -p "${REPORT_DIR}"
 #shellcheck disable=SC2086
 UTIL_LIST=$("${ME_dir}"/show-utils.sh ${FEATURES_OPTION})
 
+export RUSTC_BOOTSTRAP=1
 export CARGO_INCREMENTAL=0
 export RUSTFLAGS="-Cinstrument-coverage -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
 export RUSTDOCFLAGS="-Cpanic=abort"
-export RUSTUP_TOOLCHAIN="nightly-gnu"
 export LLVM_PROFILE_FILE="${PROFRAW_DIR}/coverage-%4m.profraw"
 
 # Disable expanded command printing for the rest of the program

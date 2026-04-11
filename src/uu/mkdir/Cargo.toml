@@ -9,6 +9,7 @@ homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 readme.workspace = true
 
 [lints]
@@ -22,8 +23,12 @@ clap = { workspace = true }
 uucore = { workspace = true, features = ["fs", "mode", "fsxattr"] }
 fluent = { workspace = true }
 
+[target.'cfg(unix)'.dependencies]
+rustix = { workspace = true, features = ["process", "fs"] }
+
 [features]
 selinux = ["uucore/selinux"]
+smack = ["uucore/smack"]
 
 [[bin]]
 name = "mkdir"

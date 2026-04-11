@@ -10,6 +10,15 @@ use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 
 #[test]
+fn test_version() {
+    new_ucmd!()
+        .arg("--version")
+        .succeeds()
+        .no_stderr()
+        .stdout_is(format!("base64 {}\n", uucore::crate_version!()));
+}
+
+#[test]
 #[cfg(target_os = "linux")]
 fn test_base64_non_utf8_paths() {
     use std::os::unix::ffi::OsStringExt;
@@ -264,4 +273,13 @@ cyBvdmVyIHRoZSBsYXp5IGRvZy4=
 ",
             // cSpell:enable
         );
+}
+
+#[test]
+#[cfg(all(target_os = "linux", not(target_env = "musl")))]
+fn test_read_error() {
+    new_ucmd!()
+        .arg("/proc/self/mem")
+        .fails()
+        .stderr_is("base64: read error: Input/output error\n");
 }

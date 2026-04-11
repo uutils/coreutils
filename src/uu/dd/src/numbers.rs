@@ -5,36 +5,9 @@
 
 //! Functions for formatting a number as a magnitude and a unit suffix.
 
-/// The first ten powers of 1024.
-const IEC_BASES: [u128; 10] = [
-    1,
-    1_024,
-    1_048_576,
-    1_073_741_824,
-    1_099_511_627_776,
-    1_125_899_906_842_624,
-    1_152_921_504_606_846_976,
-    1_180_591_620_717_411_303_424,
-    1_208_925_819_614_629_174_706_176,
-    1_237_940_039_285_380_274_899_124_224,
-];
+use uucore::parser::parse_size::{IEC_BASES, SI_BASES};
 
 const IEC_SUFFIXES: [&str; 9] = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"];
-
-/// The first ten powers of 1000.
-const SI_BASES: [u128; 10] = [
-    1,
-    1_000,
-    1_000_000,
-    1_000_000_000,
-    1_000_000_000_000,
-    1_000_000_000_000_000,
-    1_000_000_000_000_000_000,
-    1_000_000_000_000_000_000_000,
-    1_000_000_000_000_000_000_000_000,
-    1_000_000_000_000_000_000_000_000_000,
-];
-
 const SI_SUFFIXES: [&str; 9] = ["B", "kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
 
 /// A `SuffixType` determines whether the suffixes are 1000 or 1024 based.
@@ -45,7 +18,7 @@ pub(crate) enum SuffixType {
 }
 
 impl SuffixType {
-    fn base_and_suffix(&self, n: u128) -> (u128, &'static str) {
+    fn base_and_suffix(self, n: u128) -> (u128, &'static str) {
         let (bases, suffixes) = match self {
             Self::Iec => (IEC_BASES, IEC_SUFFIXES),
             Self::Si => (SI_BASES, SI_SUFFIXES),

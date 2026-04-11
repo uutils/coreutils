@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase ghijkl mnopq rstuv wxyz fivelines twohundredfortyonebytes onehundredlines nbbbb dxen ncccc rlimit NOFILE
 
-use rand::{Rng, SeedableRng, rng};
+use rand::{RngExt as _, SeedableRng, rng};
 use regex::Regex;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rlimit::Resource;
@@ -14,7 +14,7 @@ use std::env;
 use std::os::unix::ffi::OsStringExt;
 use std::path::Path;
 use std::{
-    fs::{File, read_dir},
+    fs::{self, File},
     io::{BufWriter, Read, Write},
 };
 use uutests::util::{AtPath, TestScenario};
@@ -48,7 +48,7 @@ impl Glob {
 
     /// Get all files in `self.directory` that match `self.regex`
     fn collect(&self) -> Vec<String> {
-        read_dir(Path::new(&self.directory.subdir))
+        fs::read_dir(Path::new(&self.directory.subdir))
             .unwrap()
             .filter_map(|entry| {
                 let path = entry.unwrap().path();
@@ -2011,7 +2011,7 @@ fn test_split_non_utf8_paths() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     let filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
-    std::fs::write(at.plus(&filename), b"line1\nline2\nline3\nline4\nline5\n").unwrap();
+    fs::write(at.plus(&filename), b"line1\nline2\nline3\nline4\nline5\n").unwrap();
 
     ucmd.arg(&filename).succeeds();
 
@@ -2021,60 +2021,86 @@ fn test_split_non_utf8_paths() {
 
 #[test]
 #[cfg(target_os = "linux")]
-fn test_split_non_utf8_prefix() {
-    use std::os::unix::ffi::OsStrExt;
+fn test_split_non_utf8_prefix_is_byte_preserving() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::{OsStrExt, OsStringExt};
+
     let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input.txt", "AB");
 
-    at.write("input.txt", "line1\nline2\nline3\nline4\n");
+    let invalid_prefix_bytes = b"p\xFF";
+    at.write("p�aa", "keep-aa");
+    at.write("p�ab", "keep-ab");
 
-    let prefix = std::ffi::OsStr::from_bytes(b"\xFF\xFE");
-    ucmd.arg("input.txt").arg(prefix).succeeds();
+    ucmd.args(&["-b", "1", "input.txt"])
+        .arg(OsStr::from_bytes(invalid_prefix_bytes))
+        .succeeds();
 
-    // Check that split files were created (functionality works)
-    // The actual filename may be converted due to lossy conversion, but the command should succeed
-    let entries: Vec<_> = std::fs::read_dir(at.as_string()).unwrap().collect();
-    let split_files = entries
-        .iter()
-        .filter_map(|e| e.as_ref().ok())
-        .filter(|entry| {
-            let name = entry.file_name();
-            let name_str = name.to_string_lossy();
-            name_str.starts_with("�") || name_str.len() > 2 // split files should exist
+    let mut produced_split_files: Vec<Vec<u8>> = fs::read_dir(at.as_string())
+        .expect("temporary split directory should be readable")
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            let name = entry.file_name().into_vec();
+            if name.starts_with(invalid_prefix_bytes) {
+                Some(name)
+            } else {
+                None
+            }
         })
-        .count();
-    assert!(
-        split_files > 0,
-        "Expected at least one split file to be created"
+        .collect();
+    produced_split_files.sort();
+
+    assert_eq!(
+        produced_split_files,
+        vec![b"p\xFFaa".to_vec(), b"p\xFFab".to_vec()]
     );
+    assert_eq!(at.read("p�aa"), "keep-aa");
+    assert_eq!(at.read("p�ab"), "keep-ab");
 }
 
 #[test]
 #[cfg(target_os = "linux")]
-fn test_split_non_utf8_additional_suffix() {
-    use std::os::unix::ffi::OsStrExt;
+fn test_split_non_utf8_additional_suffix_is_byte_preserving() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::{OsStrExt, OsStringExt};
+
     let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input.txt", "AB");
 
-    at.write("input.txt", "line1\nline2\nline3\nline4\n");
-
-    let suffix = std::ffi::OsStr::from_bytes(b"\xFF\xFE");
-    ucmd.args(&["input.txt", "--additional-suffix"])
-        .arg(suffix)
+    let suffix_bytes = b"\xFF\xFE";
+    ucmd.args(&["-b", "1", "input.txt", "--additional-suffix"])
+        .arg(OsStr::from_bytes(suffix_bytes))
         .succeeds();
 
-    // Check that split files were created (functionality works)
-    // The actual filename may be converted due to lossy conversion, but the command should succeed
-    let entries: Vec<_> = std::fs::read_dir(at.as_string()).unwrap().collect();
-    let split_files = entries
-        .iter()
-        .filter_map(|e| e.as_ref().ok())
-        .filter(|entry| {
-            let name = entry.file_name();
-            let name_str = name.to_string_lossy();
-            name_str.ends_with("�") || name_str.starts_with('x') // split files should exist
+    let mut produced_with_suffix: Vec<Vec<u8>> = fs::read_dir(at.as_string())
+        .expect("temporary split directory should be readable")
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            let name = entry.file_name().into_vec();
+            if name.starts_with(b"xa") && name.ends_with(suffix_bytes) {
+                Some(name)
+            } else {
+                None
+            }
         })
-        .count();
-    assert!(
-        split_files > 0,
-        "Expected at least one split file to be created"
+        .collect();
+    produced_with_suffix.sort();
+
+    assert_eq!(
+        produced_with_suffix,
+        vec![b"xaa\xFF\xFE".to_vec(), b"xab\xFF\xFE".to_vec()]
     );
+}
+
+#[test]
+#[cfg(target_os = "linux")] // To re-enable on Windows once I work out what goes wrong with it.
+fn test_split_directory_already_exists() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("xaa"); // For collision with.
+    at.touch("file");
+    ucmd.args(&["file"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_is("split: 'xaa': Is a directory\n");
 }

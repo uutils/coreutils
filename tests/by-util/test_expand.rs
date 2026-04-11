@@ -428,6 +428,15 @@ fn test_nonexisting_file() {
 }
 
 #[test]
+#[cfg(all(target_os = "linux", not(target_env = "musl")))]
+fn test_read_error() {
+    new_ucmd!()
+        .arg("/proc/self/mem")
+        .fails()
+        .stderr_contains("expand: /proc/self/mem: Input/output error");
+}
+
+#[test]
 #[cfg(target_os = "linux")]
 fn test_expand_non_utf8_paths() {
     use std::os::unix::ffi::OsStringExt;
@@ -441,4 +450,14 @@ fn test_expand_non_utf8_paths() {
     ucmd.arg(&filename)
         .succeeds()
         .stdout_is("hello   world\ntest    line\n");
+}
+
+#[test]
+fn test_buffered_reads_new_line_no_tabs_in_first_chunk() {
+    // test includes tabs after 1 full chunk of no tabs with new line
+    // checks that the tabstop calculation is done to correct column
+    new_ucmd!()
+        .args(&["new_line_in_chunk.txt"])
+        .succeeds()
+        .stdout_is_fixture("new_line_in_chunk_expected.txt");
 }

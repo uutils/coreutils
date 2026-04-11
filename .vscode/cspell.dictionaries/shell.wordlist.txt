@@ -101,6 +101,7 @@ flamegraph
 flamegraphs
 gcov
 gmake
+gnuls
 grcov
 grep
 markdownlint

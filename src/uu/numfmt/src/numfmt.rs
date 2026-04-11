@@ -2,118 +2,195 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+// spell-checker:ignore behavior
 
-use crate::errors::*;
-use crate::format::format_and_print;
-use crate::options::*;
+use crate::errors::NumfmtError;
+use crate::format::{escape_line, write_formatted_with_delimiter, write_formatted_with_whitespace};
+use crate::options::{
+    DEBUG, DELIMITER, FIELD, FIELD_DEFAULT, FORMAT, FROM, FROM_DEFAULT, FROM_UNIT,
+    FROM_UNIT_DEFAULT, FormatOptions, GROUPING, HEADER, HEADER_DEFAULT, INVALID, InvalidModes,
+    NUMBER, NumfmtOptions, PADDING, ROUND, RoundMethod, SUFFIX, TO, TO_DEFAULT, TO_UNIT,
+    TO_UNIT_DEFAULT, TransformOptions, UNIT_SEPARATOR, ZERO_TERMINATED,
+};
 use crate::units::{Result, Unit};
-use clap::{Arg, ArgAction, ArgMatches, Command, parser::ValueSource};
-use std::io::{BufRead, Error, Write};
-use std::result::Result as StdResult;
+use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, parser::ValueSource};
+use std::ffi::OsString;
+use std::io::{BufRead, Write as _, stderr};
 use std::str::FromStr;
 
-use units::{IEC_BASES, SI_BASES};
 use uucore::display::Quotable;
 use uucore::error::UResult;
-use uucore::translate;
-
+use uucore::i18n::decimal::locale_grouping_separator;
+use uucore::parser::parse_size::{IEC_BASES, SI_BASES};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::ranges::Range;
-use uucore::{format_usage, show, show_error};
+use uucore::{format_usage, os_str_as_bytes, show, translate};
 
 pub mod errors;
 pub mod format;
 pub mod options;
+
+mod numeric;
 mod units;
 
-fn handle_args<'a>(args: impl Iterator<Item = &'a str>, options: &NumfmtOptions) -> UResult<()> {
-    for l in args {
-        format_and_handle_validation(l, options)?;
-    }
-    Ok(())
-}
-
-fn handle_buffer<R>(input: R, options: &NumfmtOptions) -> UResult<()>
-where
-    R: BufRead,
-{
-    if options.zero_terminated {
-        handle_buffer_iterator(
-            input
-                .split(0)
-                // FIXME: This panics on UTF8 decoding, but this util in general doesn't handle
-                // invalid UTF8
-                .map(|bytes| Ok(String::from_utf8(bytes?).unwrap())),
-            options,
-        )
-    } else {
-        handle_buffer_iterator(input.lines(), options)
-    }
-}
-
-fn handle_buffer_iterator(
-    iter: impl Iterator<Item = StdResult<String, Error>>,
+/// Format a single line and write it, handling `--invalid` error modes.
+///
+/// Returns `true` if the line contained invalid input (only possible in
+/// non-abort modes).
+fn format_and_write<W: std::io::Write>(
+    writer: &mut W,
+    input_line: &[u8],
     options: &NumfmtOptions,
-) -> UResult<()> {
-    let eol = if options.zero_terminated { '\0' } else { '\n' };
-    for (idx, line_result) in iter.enumerate() {
-        match line_result {
-            Ok(line) if idx < options.header => {
-                print!("{line}{eol}");
-                Ok(())
+    eol: Option<u8>,
+) -> UResult<bool> {
+    // GNU truncates at the first embedded null byte.
+    let line = match memchr::memchr(b'\0', input_line) {
+        Some(i) => &input_line[..i],
+        None => input_line,
+    };
+
+    // Return false if the input is in scientific notation
+    if let Some(pos) = line.iter().position(|&b| b == b'E' || b == b'e') {
+        if pos < line.len() - 1 {
+            if line[pos + 1].is_ascii_digit() {
+                let err = format!(
+                    "invalid suffix in input: '{}'",
+                    String::from_utf8_lossy(line)
+                );
+                return Err(Box::new(NumfmtError::FormattingError(err)));
             }
-            Ok(line) => format_and_handle_validation(line.as_ref(), options),
-            Err(err) => return Err(Box::new(NumfmtError::IoError(err.to_string()))),
-        }?;
+        }
     }
-    Ok(())
-}
 
-fn format_and_handle_validation(input_line: &str, options: &NumfmtOptions) -> UResult<()> {
-    let handled_line = format_and_print(input_line, options);
+    // In non-abort modes we buffer the formatted output so that on error we
+    // can emit the original line instead.
+    let buffer_output = !matches!(options.invalid, InvalidModes::Abort);
+    let mut buf = Vec::new();
+    let dest: &mut dyn std::io::Write = if buffer_output { &mut buf } else { writer };
 
-    if let Err(error_message) = handled_line {
+    let result = if options.delimiter.is_some() {
+        write_formatted_with_delimiter(dest, line, options, eol)
+    } else {
+        match std::str::from_utf8(line) {
+            Ok(s) => write_formatted_with_whitespace(dest, s, options, eol),
+            Err(_) => Err(translate!(
+                "numfmt-error-invalid-number",
+                "input" => escape_line(line).quote()
+            )),
+        }
+    };
+
+    if let Err(msg) = result {
         match options.invalid {
             InvalidModes::Abort => {
-                return Err(Box::new(NumfmtError::FormattingError(error_message)));
+                return Err(Box::new(NumfmtError::FormattingError(msg)));
             }
             InvalidModes::Fail => {
-                show!(NumfmtError::FormattingError(error_message));
+                show!(NumfmtError::FormattingError(msg));
             }
             InvalidModes::Warn => {
-                show_error!("{error_message}");
+                let _ = writeln!(stderr(), "numfmt: {msg}");
             }
             InvalidModes::Ignore => {}
         }
-        println!("{input_line}");
+        // On error, echo the original line unchanged.
+        writer.write_all(input_line)?;
+        if let Some(eol) = eol {
+            writer.write_all(&[eol])?;
+        }
+        return Ok(true);
     }
 
-    Ok(())
+    if buffer_output {
+        writer.write_all(&buf)?;
+    }
+    Ok(false)
 }
 
-fn parse_unit(s: &str) -> Result<Unit> {
+/// Process command-line number arguments.
+///
+/// Returns `true` if any line contained invalid input.
+fn handle_args<'a>(args: impl Iterator<Item = &'a [u8]>, options: &NumfmtOptions) -> UResult<bool> {
+    let mut stdout = std::io::stdout().lock();
+    let terminator = if options.zero_terminated { 0u8 } else { b'\n' };
+    let mut saw_invalid = false;
+    for l in args {
+        saw_invalid |= format_and_write(&mut stdout, l, options, Some(terminator))?;
+    }
+    Ok(saw_invalid)
+}
+
+/// Process lines read from stdin.
+///
+/// Returns `true` if any line contained invalid input.
+fn handle_buffer<R: BufRead>(mut input: R, options: &NumfmtOptions) -> UResult<bool> {
+    let terminator = if options.zero_terminated { 0u8 } else { b'\n' };
+    let mut stdout = std::io::stdout().lock();
+    let mut buf = Vec::new();
+    let mut line_idx = 0;
+    let mut saw_invalid = false;
+
+    loop {
+        buf.clear();
+        let n = input
+            .read_until(terminator, &mut buf)
+            .map_err(|e| NumfmtError::IoError(e.to_string()))?;
+        if n == 0 {
+            break;
+        }
+
+        let has_terminator = buf.last() == Some(&terminator);
+        let line = if has_terminator {
+            &buf[..buf.len() - 1]
+        } else {
+            &buf[..]
+        };
+        // Emit the terminator only when the input line had one (preserve
+        // missing final newline).
+        let eol = has_terminator.then_some(terminator);
+
+        if line_idx < options.header {
+            // Pass header lines through unchanged.
+            stdout.write_all(line)?;
+            if let Some(t) = eol {
+                stdout.write_all(&[t])?;
+            }
+        } else {
+            saw_invalid |= format_and_write(&mut stdout, line, options, eol)?;
+        }
+
+        line_idx += 1;
+    }
+
+    Ok(saw_invalid)
+}
+
+fn parse_unit(s: &str, opt: &str) -> Result<Unit> {
     match s {
-        "auto" => Ok(Unit::Auto),
+        "auto" if opt != TO => Ok(Unit::Auto),
         "si" => Ok(Unit::Si),
         "iec" => Ok(Unit::Iec(false)),
         "iec-i" => Ok(Unit::Iec(true)),
         "none" => Ok(Unit::None),
-        _ => Err(translate!("numfmt-error-unsupported-unit")),
+        value => Err(
+            translate!("numfmt-error-invalid-unit-argument", "arg" => value, "opt" => format!("--{opt}")),
+        ),
     }
 }
 
 /// Parses a unit size. Suffixes are turned into their integer representations. For example, 'K'
 /// will return `Ok(1000)`, and '2K' will return `Ok(2000)`.
 fn parse_unit_size(s: &str) -> Result<usize> {
-    let number: String = s.chars().take_while(char::is_ascii_digit).collect();
-    let suffix = &s[number.len()..];
+    let split = s.find(|c: char| !c.is_ascii_digit()).unwrap_or(s.len());
+    let (number, suffix) = s.split_at(split);
 
-    if number.is_empty() || "0".repeat(number.len()) != number {
+    // Reject all-zero numeric parts like "0" or "00K".
+    let all_zero = !number.is_empty() && number.bytes().all(|b| b == b'0');
+    if !all_zero {
         if let Some(multiplier) = parse_unit_size_suffix(suffix) {
             if number.is_empty() {
                 return Ok(multiplier);
             }
-
             if let Ok(n) = number.parse::<usize>() {
                 return Ok(n * multiplier);
             }
@@ -134,25 +211,36 @@ fn parse_unit_size_suffix(s: &str) -> Option<usize> {
         return Some(1);
     }
 
-    let suffix = s.chars().next().unwrap();
-
-    if let Some(i) = ['K', 'M', 'G', 'T', 'P', 'E']
+    let i = ['K', 'M', 'G', 'T', 'P', 'E']
         .iter()
-        .position(|&ch| ch == suffix)
-    {
-        return match s.len() {
-            1 => Some(SI_BASES[i + 1] as usize),
-            2 if s.ends_with('i') => Some(IEC_BASES[i + 1] as usize),
-            _ => None,
-        };
-    }
+        .position(|&ch| s.starts_with(ch))?;
 
-    None
+    match s.len() {
+        1 => Some(SI_BASES[i + 1] as usize),
+        2 if s.ends_with('i') => Some(IEC_BASES[i + 1] as usize),
+        _ => None,
+    }
+}
+
+/// Parse delimiter argument, ensuring it's a single character.
+/// For non-UTF8 locales, we allow up to 4 bytes (max UTF-8 char length).
+fn parse_delimiter(arg: &OsString) -> Result<Vec<u8>> {
+    let bytes = os_str_as_bytes(arg).map_err(|e| e.to_string())?;
+    // TODO: Cut, NL and here need to find a better way to do locale specific character count
+    if arg.to_str().is_some_and(|s| s.chars().count() > 1)
+        || (arg.to_str().is_none() && bytes.len() > 4)
+    {
+        Err(translate!(
+            "numfmt-error-delimiter-must-be-single-character"
+        ))
+    } else {
+        Ok(bytes.to_vec())
+    }
 }
 
 fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
-    let from = parse_unit(args.get_one::<String>(FROM).unwrap())?;
-    let to = parse_unit(args.get_one::<String>(TO).unwrap())?;
+    let from = parse_unit(args.get_one::<String>(FROM).unwrap(), FROM)?;
+    let to = parse_unit(args.get_one::<String>(TO).unwrap(), TO)?;
     let from_unit = parse_unit_size(args.get_one::<String>(FROM_UNIT).unwrap())?;
     let to_unit = parse_unit_size(args.get_one::<String>(TO_UNIT).unwrap())?;
 
@@ -201,26 +289,30 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         Range::from_list(fields)?
     };
 
+    let grouping = args.get_flag(GROUPING);
     let format = match args.get_one::<String>(FORMAT) {
         Some(s) => s.parse()?,
         None => FormatOptions::default(),
     };
 
-    if format.grouping && to != Unit::None {
+    if grouping && args.contains_id(FORMAT) {
+        return Err(translate!(
+            "numfmt-error-grouping-cannot-be-combined-with-format"
+        ));
+    }
+
+    let grouping = grouping || format.grouping;
+
+    if grouping && to != Unit::None {
         return Err(translate!(
             "numfmt-error-grouping-cannot-be-combined-with-to"
         ));
     }
 
-    let delimiter = args.get_one::<String>(DELIMITER).map_or(Ok(None), |arg| {
-        if arg.len() == 1 {
-            Ok(Some(arg.to_owned()))
-        } else {
-            Err(translate!(
-                "numfmt-error-delimiter-must-be-single-character"
-            ))
-        }
-    })?;
+    let delimiter = args
+        .get_one::<OsString>(DELIMITER)
+        .map(parse_delimiter)
+        .transpose()?;
 
     // unwrap is fine because the argument has a default value
     let round = match args.get_one::<String>(ROUND).unwrap().as_str() {
@@ -234,9 +326,19 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
 
     let suffix = args.get_one::<String>(SUFFIX).cloned();
 
+    let unit_separator = args
+        .get_one::<String>(UNIT_SEPARATOR)
+        .cloned()
+        .unwrap_or_default();
+
+    let explicit_unit_separator = args.contains_id(UNIT_SEPARATOR)
+        && args.value_source(UNIT_SEPARATOR) == Some(ValueSource::CommandLine);
+
     let invalid = InvalidModes::from_str(args.get_one::<String>(INVALID).unwrap()).unwrap();
 
     let zero_terminated = args.get_flag(ZERO_TERMINATED);
+
+    let debug = args.get_flag(DEBUG);
 
     Ok(NumfmtOptions {
         transform,
@@ -246,50 +348,107 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         delimiter,
         round,
         suffix,
+        unit_separator,
+        grouping,
+        explicit_unit_separator,
         format,
         invalid,
         zero_terminated,
+        debug,
     })
+}
+
+fn print_debug_warnings(options: &NumfmtOptions, matches: &ArgMatches) {
+    fn print_warning(msg_key: &str) {
+        let _ = writeln!(stderr(), "numfmt: {}", translate!(msg_key));
+    }
+
+    // Warn if no conversion option is specified
+    // 2>/dev/full does not abort
+    if options.transform.from == Unit::None
+        && options.transform.to == Unit::None
+        && options.padding == 0
+        && !options.grouping
+    {
+        print_warning("numfmt-debug-no-conversion");
+    }
+
+    if options.grouping && locale_grouping_separator().is_empty() {
+        print_warning("numfmt-debug-grouping-no-effect");
+    }
+
+    // Warn if --header is used with command-line input
+    if options.header > 0 && matches.get_many::<OsString>(NUMBER).is_some() {
+        print_warning("numfmt-debug-header-ignored");
+    }
 }
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
-
     let options = parse_options(&matches).map_err(NumfmtError::IllegalArgument)?;
 
-    let result = match matches.get_many::<String>(NUMBER) {
-        Some(values) => handle_args(values.map(|s| s.as_str()), &options),
-        None => {
-            let stdin = std::io::stdin();
-            let mut locked_stdin = stdin.lock();
-            handle_buffer(&mut locked_stdin, &options)
-        }
+    if options.debug {
+        print_debug_warnings(&options, &matches);
+    }
+
+    let result = if let Some(values) = matches.get_many::<OsString>(NUMBER) {
+        let byte_args: Vec<&[u8]> = values
+            .map(|s| os_str_as_bytes(s).map_err(|e| e.to_string()))
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(NumfmtError::IllegalArgument)?;
+        handle_args(byte_args.into_iter(), &options)
+    } else {
+        let stdin = std::io::stdin();
+        handle_buffer(stdin.lock(), &options)
     };
 
     match result {
         Err(e) => {
-            std::io::stdout().flush().expect("error flushing stdout");
+            // Flush stdout before returning the error so any partial output is
+            // visible (matches GNU behavior).
+            let _ = std::io::stdout().flush();
             Err(e)
         }
-        _ => Ok(()),
+        Ok(saw_invalid) => {
+            if options.debug && saw_invalid {
+                let _ = writeln!(
+                    stderr(),
+                    "numfmt: {}",
+                    translate!("numfmt-debug-failed-to-convert")
+                );
+            }
+            Ok(())
+        }
     }
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("numfmt")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("numfmt"))
         .about(translate!("numfmt-about"))
         .after_help(translate!("numfmt-after-help"))
         .override_usage(format_usage(&translate!("numfmt-usage")))
-        .allow_negative_numbers(true)
         .infer_long_args(true)
+        .arg(
+            Arg::new(DEBUG)
+                .long(DEBUG)
+                .help(translate!("numfmt-help-debug"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(GROUPING)
+                .long(GROUPING)
+                .help(translate!("numfmt-help-grouping"))
+                .action(ArgAction::SetTrue),
+        )
         .arg(
             Arg::new(DELIMITER)
                 .short('d')
                 .long(DELIMITER)
                 .value_name("X")
+                .value_parser(ValueParser::os_string())
                 .help(translate!("numfmt-help-delimiter")),
         )
         .arg(
@@ -371,6 +530,12 @@ pub fn uu_app() -> Command {
                 .value_name("SUFFIX"),
         )
         .arg(
+            Arg::new(UNIT_SEPARATOR)
+                .long(UNIT_SEPARATOR)
+                .help(translate!("numfmt-help-unit-separator"))
+                .value_name("STRING"),
+        )
+        .arg(
             Arg::new(INVALID)
                 .long(INVALID)
                 .help(translate!("numfmt-help-invalid"))
@@ -385,7 +550,12 @@ pub fn uu_app() -> Command {
                 .help(translate!("numfmt-help-zero-terminated"))
                 .action(ArgAction::SetTrue),
         )
-        .arg(Arg::new(NUMBER).hide(true).action(ArgAction::Append))
+        .arg(
+            Arg::new(NUMBER)
+                .hide(true)
+                .action(ArgAction::Append)
+                .value_parser(ValueParser::os_string()),
+        )
 }
 
 #[cfg(test)]
@@ -419,9 +589,13 @@ mod tests {
             delimiter: None,
             round: RoundMethod::Nearest,
             suffix: None,
+            unit_separator: String::new(),
+            grouping: false,
+            explicit_unit_separator: false,
             format: FormatOptions::default(),
             invalid: InvalidModes::Abort,
             zero_terminated: false,
+            debug: false,
         }
     }
 
@@ -515,7 +689,7 @@ mod tests {
 
     #[test]
     fn args_fail_returns_status_2_for_invalid_input() {
-        let input_value = ["5", "4Q"].into_iter();
+        let input_value = [b"5".as_slice(), b"4Q"].into_iter();
         let mut options = get_valid_options();
         options.invalid = InvalidModes::Fail;
         handle_args(input_value, &options).unwrap();
@@ -528,7 +702,7 @@ mod tests {
 
     #[test]
     fn args_warn_returns_status_0_for_invalid_input() {
-        let input_value = ["5", "4Q"].into_iter();
+        let input_value = [b"5".as_slice(), b"4Q"].into_iter();
         let mut options = get_valid_options();
         options.invalid = InvalidModes::Warn;
         let result = handle_args(input_value, &options);

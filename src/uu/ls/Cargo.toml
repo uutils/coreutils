@@ -11,6 +11,7 @@ homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 readme.workspace = true
 
 [lints]
@@ -23,9 +24,8 @@ path = "src/ls.rs"
 ansi-width = { workspace = true }
 clap = { workspace = true, features = ["env"] }
 glob = { workspace = true }
-hostname = { workspace = true }
-fnv = { workspace = true }
 lscolors = { workspace = true }
+rustc-hash = { workspace = true }
 selinux = { workspace = true, optional = true }
 terminal_size = { workspace = true }
 thiserror = { workspace = true }
@@ -44,6 +44,10 @@ uucore = { workspace = true, features = [
 ] }
 uutils_term_grid = { workspace = true }
 fluent = { workspace = true }
+
+# hostname crate does not support WASI (no OS-level hostname API)
+[target.'cfg(not(target_os = "wasi"))'.dependencies]
+hostname = { workspace = true }
 
 [[bin]]
 name = "ls"

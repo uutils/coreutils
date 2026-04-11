@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore axxbxx bxxaxx axxx axxxx xxaxx xxax xxxxa axyz zyax zyxa
+// spell-checker:ignore axxbxx bxxaxx axxx axxxx xxaxx xxax xxxxa axyz zyax zyxa bbaaa aaabc bcdddd cddddaaabc xyzabc abcxyzabc nbbaaa EISDIR
 #[cfg(target_os = "linux")]
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -29,8 +29,6 @@ fn test_invalid_arg() {
 }
 
 #[test]
-// FIXME: See https://github.com/uutils/coreutils/issues/4204
-#[cfg(not(windows))]
 fn test_stdin_default() {
     new_ucmd!()
         .pipe_in("100\n200\n300\n400\n500")
@@ -39,8 +37,6 @@ fn test_stdin_default() {
 }
 
 #[test]
-// FIXME: See https://github.com/uutils/coreutils/issues/4204
-#[cfg(not(windows))]
 fn test_stdin_non_newline_separator() {
     new_ucmd!()
         .args(&["-s", ":"])
@@ -50,8 +46,6 @@ fn test_stdin_non_newline_separator() {
 }
 
 #[test]
-// FIXME: See https://github.com/uutils/coreutils/issues/4204
-#[cfg(not(windows))]
 fn test_stdin_non_newline_separator_before() {
     new_ucmd!()
         .args(&["-b", "-s", ":"])
@@ -89,29 +83,31 @@ fn test_invalid_input() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    scene
-        .ucmd()
-        .arg("b")
-        .fails()
-        .stderr_contains("failed to open 'b' for reading: No such file or directory");
+    #[cfg(not(windows))]
+    let not_found_err = "failed to open 'b' for reading: No such file or directory";
+    #[cfg(windows)]
+    let not_found_err =
+        "failed to open 'b' for reading: The system cannot find the file specified.";
+
+    scene.ucmd().arg("b").fails().stderr_contains(not_found_err);
 
     at.mkdir("a");
-    scene
-        .ucmd()
-        .arg("a")
-        .fails()
-        .stderr_contains("a: read error: Invalid argument");
+    // On Unix, File::open succeeds on directories but read_to_end fails with EISDIR.
+    // On Windows, File::open on a directory fails with "Access is denied".
+    #[cfg(not(windows))]
+    let dir_err = "a: read error: Is a directory";
+    #[cfg(windows)]
+    let dir_err = "failed to open 'a' for reading: Access is denied";
+
+    scene.ucmd().arg("a").fails().stderr_contains(dir_err);
 }
 
 #[test]
-#[cfg(not(windows))] // FIXME: https://github.com/uutils/coreutils/issues/4204
 fn test_no_line_separators() {
     new_ucmd!().pipe_in("a").succeeds().stdout_is("a");
 }
 
 #[test]
-// FIXME: See https://github.com/uutils/coreutils/issues/4204
-#[cfg(not(windows))]
 fn test_before_trailing_separator_no_leading_separator() {
     new_ucmd!()
         .arg("-b")
@@ -121,8 +117,6 @@ fn test_before_trailing_separator_no_leading_separator() {
 }
 
 #[test]
-// FIXME: See https://github.com/uutils/coreutils/issues/4204
-#[cfg(not(windows))]
 fn test_before_trailing_separator_and_leading_separator() {
     new_ucmd!()
         .arg("-b")
@@ -132,8 +126,6 @@ fn test_before_trailing_separator_and_leading_separator() {
 }
 
 #[test]
-// FIXME: See https://github.com/uutils/coreutils/issues/4204
-#[cfg(not(windows))]
 fn test_before_leading_separator_no_trailing_separator() {
     new_ucmd!()
         .arg("-b")
@@ -143,8 +135,6 @@ fn test_before_leading_separator_no_trailing_separator() {
 }
 
 #[test]
-// FIXME: See https://github.com/uutils/coreutils/issues/4204
-#[cfg(not(windows))]
 fn test_before_no_separator() {
     new_ucmd!()
         .arg("-b")
@@ -154,15 +144,11 @@ fn test_before_no_separator() {
 }
 
 #[test]
-// FIXME: See https://github.com/uutils/coreutils/issues/4204
-#[cfg(not(windows))]
 fn test_before_empty_file() {
     new_ucmd!().arg("-b").pipe_in("").succeeds().stdout_is("");
 }
 
 #[test]
-// FIXME: See https://github.com/uutils/coreutils/issues/4204
-#[cfg(not(windows))]
 fn test_multi_char_separator() {
     new_ucmd!()
         .args(&["-s", "xx"])
@@ -204,8 +190,6 @@ fn test_multi_char_separator_overlap() {
 }
 
 #[test]
-// FIXME: See https://github.com/uutils/coreutils/issues/4204
-#[cfg(not(windows))]
 fn test_multi_char_separator_overlap_before() {
     // With the "-b" option, the line separator is assumed to be at the
     // beginning of the line. In this case, That is, "axxx" is
@@ -248,8 +232,6 @@ fn test_multi_char_separator_overlap_before() {
 }
 
 #[test]
-// FIXME: See https://github.com/uutils/coreutils/issues/4204
-#[cfg(not(windows))]
 fn test_null_separator() {
     new_ucmd!()
         .args(&["-s", ""])
@@ -259,8 +241,87 @@ fn test_null_separator() {
 }
 
 #[test]
-// FIXME: See https://github.com/uutils/coreutils/issues/4204
-#[cfg(not(windows))]
+#[cfg(unix)]
+fn test_non_utf8_separator() {
+    use std::os::unix::ffi::OsStringExt;
+    new_ucmd!()
+        .arg("-s")
+        .arg(std::ffi::OsString::from_vec(b"\xe9".to_vec()))
+        .pipe_in(b"1\xe92".to_vec())
+        .succeeds()
+        .no_stderr()
+        .stdout_is_bytes(b"21\xe9");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_non_utf8_regex_separator() {
+    use std::os::unix::ffi::OsStringExt;
+
+    new_ucmd!()
+        .args(&["-r", "-s"])
+        .arg(std::ffi::OsString::from_vec(b"\xe9".to_vec()))
+        .pipe_in(b"a.b.\xe9c.d?".to_vec())
+        .succeeds()
+        .no_stderr()
+        .stdout_is_bytes(b"c.d?a.b.\xe9");
+
+    new_ucmd!()
+        .args(&["-r", "-s"])
+        .arg(std::ffi::OsString::from_vec(b"[.\xe9?]".to_vec()))
+        .pipe_in(b"a.b.\xe9c.d?".to_vec())
+        .succeeds()
+        .no_stderr()
+        .stdout_is_bytes(b"d?\xe9c.b.a.");
+
+    new_ucmd!()
+        .args(&["-r", "-s"])
+        .arg(std::ffi::OsString::from_vec(b"[.?]\xe9".to_vec()))
+        .pipe_in(b"a.b\xe9c.d?")
+        .succeeds()
+        .no_stderr()
+        .stdout_is_bytes(b"a.b\xe9c.d?");
+
+    new_ucmd!()
+        .args(&["-r", "-s"])
+        .arg(std::ffi::OsString::from_vec(b"[.?]\xe9".to_vec()))
+        .pipe_in(b"a.b[.?]\xe9c.d?")
+        .succeeds()
+        .no_stderr()
+        .stdout_is_bytes(b"a.b[.?]\xe9c.d?");
+
+    new_ucmd!()
+        .args(&["-r", "-s"])
+        .arg(std::ffi::OsString::from_vec(b"[.?]\xe9".to_vec()))
+        .pipe_in(b"a.\xe9b")
+        .succeeds()
+        .no_stderr()
+        .stdout_is_bytes(b"ba.\xe9");
+}
+
+#[test]
+fn test_regex_bare_anchors() {
+    new_ucmd!()
+        .args(&["-r", "-s", "^"])
+        .pipe_in("a\nb\nc\n")
+        .succeeds()
+        .no_stderr()
+        .stdout_is_bytes(b"c\nb\na\n");
+
+    new_ucmd!()
+        .args(&["-r", "-s", "$"])
+        .pipe_in("a\nb\nc\n")
+        .succeeds()
+        .stdout_is_bytes(b"\n\nc\nba");
+
+    new_ucmd!()
+        .args(&["-r", "-s", "^$"])
+        .pipe_in("a\nb\nc\n")
+        .succeeds()
+        .stdout_is_bytes(b"a\nb\nc\n");
+}
+
+#[test]
 fn test_regex() {
     new_ucmd!()
         .args(&["-r", "-s", "[xyz]+"])
@@ -289,8 +350,6 @@ fn test_regex() {
 }
 
 #[test]
-// FIXME: See https://github.com/uutils/coreutils/issues/4204
-#[cfg(not(windows))]
 fn test_regex_before() {
     new_ucmd!()
         .args(&["-b", "-r", "-s", "[xyz]+"])
@@ -333,5 +392,86 @@ fn test_failed_write_is_reported() {
         .pipe_in("hello")
         .set_stdout(std::fs::File::create("/dev/full").unwrap())
         .fails()
-        .stderr_is("tac: failed to write to stdout: No space left on device (os error 28)\n");
+        .stderr_is("tac: failed to write to stdout: No space left on device\n");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_stdin_bad_tmpdir_fallback() {
+    // When TMPDIR is invalid, tac falls back to reading stdin directly into memory
+    new_ucmd!()
+        .env("TMPDIR", "/nonexistent/dir")
+        .arg("-")
+        .pipe_in("a\nb\nc\n")
+        .succeeds()
+        .stdout_is("c\nb\na\n");
+}
+
+#[test]
+fn test_regex_or_operator() {
+    new_ucmd!()
+        .args(&["-r", "-s", r"[^x]\|x"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_is("cba");
+}
+
+#[test]
+fn test_unescaped_middle_anchor() {
+    new_ucmd!()
+        .args(&["-r", "-s", r"1^2"])
+        .pipe_in("111^222")
+        .succeeds()
+        .stdout_is("22111^2");
+
+    new_ucmd!()
+        .args(&["-r", "-s", r"a$b"])
+        .pipe_in("aaa$bbb")
+        .succeeds()
+        .stdout_is("bbaaa$b");
+}
+
+#[test]
+fn test_escaped_middle_anchor() {
+    new_ucmd!()
+        .args(&["-r", "-s", r"c\^b"])
+        .pipe_in("aaabc^bcdddd")
+        .succeeds()
+        .stdout_is("cddddaaabc^b");
+
+    new_ucmd!()
+        .args(&["-r", "-s", r"c\$b"])
+        .pipe_in("aaabc$bcdddd")
+        .succeeds()
+        .stdout_is("cddddaaabc$b");
+}
+
+#[test]
+fn test_regular_start_anchor() {
+    new_ucmd!()
+        .args(&["-r", "-s", r"^abc"])
+        .pipe_in("xyzabc123abc")
+        .succeeds()
+        .stdout_is("xyzabc123abc");
+
+    new_ucmd!()
+        .args(&["-r", "-s", r"^b"])
+        .pipe_in("aaa\nbbb\nccc\n")
+        .succeeds()
+        .stdout_is("bb\nccc\naaa\nb");
+}
+
+#[test]
+fn test_regular_end_anchor() {
+    new_ucmd!()
+        .args(&["-r", "-s", r"abc$"])
+        .pipe_in("123abcxyzabc")
+        .succeeds()
+        .stdout_is("123abcxyzabc");
+
+    new_ucmd!()
+        .args(&["-r", "-s", r"b$"])
+        .pipe_in("aaa\nbbb\nccc\n")
+        .succeeds()
+        .stdout_is("\nccc\nbbaaa\nb");
 }

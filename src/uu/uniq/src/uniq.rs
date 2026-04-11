@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore badoption
+// spell-checker:ignore badoption CTYPE
 use clap::{
     Arg, ArgAction, ArgMatches, Command, builder::ValueParser, error::ContextKind, error::Error,
     error::ErrorKind,
@@ -61,8 +61,6 @@ struct Uniq {
 struct LineMeta {
     key_start: usize,
     key_end: usize,
-    lowercase: Vec<u8>,
-    use_lowercase: bool,
 }
 
 macro_rules! write_line_terminator {
@@ -74,7 +72,7 @@ macro_rules! write_line_terminator {
 }
 
 impl Uniq {
-    pub fn print_uniq(&self, mut reader: impl BufRead, mut writer: impl Write) -> UResult<()> {
+    pub fn write_uniq(&self, mut reader: impl BufRead, mut writer: impl Write) -> UResult<()> {
         let mut first_line_printed = false;
         let mut group_count = 1;
         let line_terminator = self.get_line_terminator();
@@ -97,30 +95,30 @@ impl Uniq {
 
             self.build_meta(&next_buf, &mut next_meta);
 
-            if self.keys_differ(&current_buf, &current_meta, &next_buf, &next_meta) {
-                if (group_count == 1 && !self.repeats_only)
-                    || (group_count > 1 && !self.uniques_only)
-                {
-                    self.print_line(writer, &current_buf, group_count, first_line_printed)?;
-                    first_line_printed = true;
-                }
-                std::mem::swap(&mut current_buf, &mut next_buf);
-                std::mem::swap(&mut current_meta, &mut next_meta);
-                group_count = 1;
-            } else {
+            if self.keys_are_equal(&current_buf, &current_meta, &next_buf, &next_meta) {
                 if self.all_repeated {
-                    self.print_line(writer, &current_buf, group_count, first_line_printed)?;
+                    self.write_line(writer, &current_buf, group_count, first_line_printed)?;
                     first_line_printed = true;
                     std::mem::swap(&mut current_buf, &mut next_buf);
                     std::mem::swap(&mut current_meta, &mut next_meta);
                 }
                 group_count += 1;
+            } else {
+                if (group_count == 1 && !self.repeats_only)
+                    || (group_count > 1 && !self.uniques_only)
+                {
+                    self.write_line(writer, &current_buf, group_count, first_line_printed)?;
+                    first_line_printed = true;
+                }
+                std::mem::swap(&mut current_buf, &mut next_buf);
+                std::mem::swap(&mut current_meta, &mut next_meta);
+                group_count = 1;
             }
             next_buf.clear();
         }
 
         if (group_count == 1 && !self.repeats_only) || (group_count > 1 && !self.uniques_only) {
-            self.print_line(writer, &current_buf, group_count, first_line_printed)?;
+            self.write_line(writer, &current_buf, group_count, first_line_printed)?;
             first_line_printed = true;
         }
         if (self.delimiters == Delimiters::Append || self.delimiters == Delimiters::Both)
@@ -138,7 +136,7 @@ impl Uniq {
         if self.zero_terminated { 0 } else { b'\n' }
     }
 
-    fn keys_differ(
+    fn keys_are_equal(
         &self,
         first_line: &[u8],
         first_meta: &LineMeta,
@@ -148,22 +146,11 @@ impl Uniq {
         let first_slice = &first_line[first_meta.key_start..first_meta.key_end];
         let second_slice = &second_line[second_meta.key_start..second_meta.key_end];
 
-        if !self.ignore_case {
-            return first_slice != second_slice;
+        if self.ignore_case {
+            first_slice.eq_ignore_ascii_case(second_slice)
+        } else {
+            first_slice == second_slice
         }
-
-        let first_cmp = if first_meta.use_lowercase {
-            first_meta.lowercase.as_slice()
-        } else {
-            first_slice
-        };
-        let second_cmp = if second_meta.use_lowercase {
-            second_meta.lowercase.as_slice()
-        } else {
-            second_slice
-        };
-
-        first_cmp != second_cmp
     }
 
     fn key_bounds(&self, line: &[u8]) -> (usize, usize) {
@@ -199,6 +186,17 @@ impl Uniq {
         }
     }
 
+    fn is_c_locale() -> bool {
+        for key in ["LC_ALL", "LC_CTYPE", "LANG"] {
+            if let Some(v) = std::env::var_os(key) {
+                if !v.is_empty() {
+                    return v == "C" || v == "POSIX";
+                }
+            }
+        }
+        true
+    }
+
     fn key_end_index(&self, line: &[u8], key_start: usize) -> usize {
         let remainder = &line[key_start..];
         match self.slice_stop {
@@ -207,10 +205,15 @@ impl Uniq {
                 if remainder.is_empty() {
                     return key_start;
                 }
-                if let Ok(valid) = std::str::from_utf8(remainder) {
+                if Self::is_c_locale() {
+                    // for C or POSIX we count bytes
+                    key_start + remainder.len().min(limit)
+                } else if let Ok(valid) = std::str::from_utf8(remainder) {
+                    // for UTF-8 we count characters
                     let prefix_len = Self::char_prefix_len(valid, limit);
                     key_start + prefix_len
                 } else {
+                    // for invalid UTF-8 we count bytes
                     key_start + remainder.len().min(limit)
                 }
             }
@@ -230,20 +233,6 @@ impl Uniq {
         let (key_start, key_end) = self.key_bounds(line);
         meta.key_start = key_start;
         meta.key_end = key_end;
-
-        if self.ignore_case && key_start < key_end {
-            let slice = &line[key_start..key_end];
-            if slice.iter().any(|b| b.is_ascii_uppercase()) {
-                meta.lowercase.clear();
-                meta.lowercase.reserve(slice.len());
-                meta.lowercase
-                    .extend(slice.iter().map(|b| b.to_ascii_lowercase()));
-                meta.use_lowercase = true;
-                return;
-            }
-        }
-
-        meta.use_lowercase = false;
     }
 
     fn read_line(
@@ -258,9 +247,7 @@ impl Uniq {
         if bytes_read == 0 {
             return Ok(false);
         }
-        if buffer.last().is_some_and(|last| *last == line_terminator) {
-            buffer.pop();
-        }
+        let _ = buffer.pop_if(|last| *last == line_terminator);
         Ok(true)
     }
 
@@ -277,7 +264,7 @@ impl Uniq {
                 || self.delimiters == Delimiters::Both)
     }
 
-    fn print_line(
+    fn write_line(
         &self,
         writer: &mut impl Write,
         line: &[u8],
@@ -414,16 +401,16 @@ fn filter_args(
     if let Some(slice) = os_slice.to_str() {
         if should_extract_obs_skip_fields(
             slice,
-            preceding_long_opt_req_value,
-            preceding_short_opt_req_value,
+            *preceding_long_opt_req_value,
+            *preceding_short_opt_req_value,
         ) {
             // start of the short option string
             // that can have obsolete skip fields option value in it
             filter = handle_extract_obs_skip_fields(slice, skip_fields_old);
         } else if should_extract_obs_skip_chars(
             slice,
-            preceding_long_opt_req_value,
-            preceding_short_opt_req_value,
+            *preceding_long_opt_req_value,
+            *preceding_short_opt_req_value,
         ) {
             // the obsolete skip chars option
             filter = handle_extract_obs_skip_chars(slice, skip_chars_old);
@@ -463,8 +450,8 @@ fn filter_args(
 /// and if so, a short option that can contain obsolete skip fields value
 fn should_extract_obs_skip_fields(
     slice: &str,
-    preceding_long_opt_req_value: &bool,
-    preceding_short_opt_req_value: &bool,
+    preceding_long_opt_req_value: bool,
+    preceding_short_opt_req_value: bool,
 ) -> bool {
     slice.starts_with('-')
         && !slice.starts_with("--")
@@ -479,8 +466,8 @@ fn should_extract_obs_skip_fields(
 /// Checks if the slice is a true obsolete skip chars short option
 fn should_extract_obs_skip_chars(
     slice: &str,
-    preceding_long_opt_req_value: &bool,
-    preceding_short_opt_req_value: &bool,
+    preceding_long_opt_req_value: bool,
+    preceding_short_opt_req_value: bool,
 ) -> bool {
     slice.starts_with('+')
         && posix_version().is_some_and(|v| v <= OBSOLETE)
@@ -668,7 +655,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 return Err(map_clap_errors(clap_error));
             }
             // Use ErrorFormatter directly to handle error
-            let formatter = uucore::clap_localization::ErrorFormatter::new(uucore::util_name());
+            let formatter = uucore::clap_localization::ErrorFormatter::new("uniq");
             formatter.print_error_and_exit_with_callback(&clap_error, 1, || {});
         }
     };
@@ -705,14 +692,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     }
 
-    uniq.print_uniq(
+    uniq.write_uniq(
         open_input_file(in_file_name)?,
         open_output_file(out_file_name)?,
     )
 }
 
 pub fn uu_app() -> Command {
-    let cmd = Command::new(uucore::util_name())
+    let cmd = Command::new("uniq")
         .version(uucore::crate_version!())
         .about(translate!("uniq-about"))
         .override_usage(format_usage(&translate!("uniq-usage")))

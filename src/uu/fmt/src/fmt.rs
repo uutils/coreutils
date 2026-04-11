@@ -234,7 +234,7 @@ fn process_file(
         match para_result {
             Err(s) => {
                 ostream
-                    .write_all(s.as_bytes())
+                    .write_all(&s)
                     .map_err_context(|| translate!("fmt-error-failed-to-write-output"))?;
                 ostream
                     .write_all(b"\n")
@@ -288,7 +288,7 @@ fn extract_files(matches: &ArgMatches) -> UResult<Vec<OsString>> {
         })
         .collect();
 
-    if files.as_ref().is_ok_and(|f| f.is_empty()) {
+    if files.as_ref().is_ok_and(Vec::is_empty) {
         Ok(vec![OsString::from("-")])
     } else {
         files
@@ -356,9 +356,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("fmt")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("fmt"))
         .about(translate!("fmt-about"))
         .override_usage(format_usage(&translate!("fmt-usage")))
         .infer_long_args(true)

@@ -8,7 +8,7 @@ use uu_wc::uumain;
 use uucore::benchmark::{create_test_file, run_util_function, text_data};
 
 /// Benchmark different file sizes for byte counting
-#[divan::bench(args = [500])]
+#[divan::bench(args = [1, 500])] //todo: add 10kb to measure splice() overhead
 fn wc_bytes_synthetic(bencher: Bencher, size_mb: usize) {
     let temp_dir = tempfile::tempdir().unwrap();
     let data = text_data::generate_by_size(size_mb, 80);

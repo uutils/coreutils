@@ -3,16 +3,20 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) ints (linux) NOFILE
+// spell-checker:ignore (words) ints (linux) NOFILE dfgi abmon avril
 #![allow(clippy::cast_possible_wrap)]
 
 use std::env;
 use std::fmt::Write as FmtWrite;
+#[cfg(unix)]
+use std::process::Command;
 use std::time::Duration;
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
+#[cfg(unix)]
+use uutests::util::is_locale_available;
 
 fn test_helper(file_name: &str, possible_args: &[&str]) {
     for args in possible_args {
@@ -209,6 +213,24 @@ fn test_version_sort_stable() {
 }
 
 #[test]
+fn test_ignore_case_orders_punctuation_after_letters() {
+    new_ucmd!()
+        .arg("-f")
+        .pipe_in("A\na\n_\n")
+        .succeeds()
+        .stdout_is("A\na\n_\n");
+}
+
+#[test]
+fn test_ignore_case_unique_orders_punctuation_after_letters() {
+    new_ucmd!()
+        .arg("-fu")
+        .pipe_in("a\n_\n")
+        .succeeds()
+        .stdout_is("a\n_\n");
+}
+
+#[test]
 fn test_human_numeric_whitespace() {
     test_helper(
         "human-numeric-whitespace",
@@ -254,6 +276,14 @@ fn test_multiple_decimals_general() {
 fn test_multiple_decimals_numeric() {
     test_helper(
         "multiple_decimals_numeric",
+        &["-n", "--numeric-sort", "--sort=numeric", "--sort=n"],
+    );
+}
+
+#[test]
+fn test_multiple_groupings_numeric() {
+    test_helper(
+        "multiple_groupings_numeric",
         &["-n", "--numeric-sort", "--sort=numeric", "--sort=n"],
     );
 }
@@ -450,8 +480,17 @@ fn test_non_printing_chars() {
 }
 
 #[test]
-fn test_exponents_positive_general_fixed() {
+fn test_exponents_general() {
     test_helper("exponents_general", &["-g"]);
+}
+
+#[test]
+fn test_exponents_positive_general() {
+    new_ucmd!()
+        .pipe_in("1\n2e3\n1e-5")
+        .arg("-g")
+        .succeeds()
+        .stdout_only("1e-5\n1\n2e3\n");
 }
 
 #[test]
@@ -566,6 +605,191 @@ fn test_month_default2() {
     }
 }
 
+/// Query the system for abbreviated month names via `locale abmon`.
+/// Returns a vector of 12 month abbreviations in order (Jan..Dec),
+/// or None if the command fails or returns unexpected output.
+#[cfg(any(target_vendor = "apple", target_os = "openbsd"))]
+fn get_system_abmon(locale: &str) -> Option<Vec<String>> {
+    let output = Command::new("locale")
+        .env("LC_ALL", locale)
+        .arg("abmon")
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8(output.stdout).ok()?;
+    let months: Vec<String> = text
+        .trim()
+        .split(';')
+        .map(String::from)
+        .filter(|m| !m.is_empty())
+        .collect();
+    if months.len() == 12 {
+        Some(months)
+    } else {
+        None
+    }
+}
+
+/// Build shuffled input and sorted expected output from month names.
+#[cfg(any(target_vendor = "apple", target_os = "openbsd"))]
+fn month_sort_input_expected(months: &[String]) -> (String, String) {
+    // Shuffled order: May, Dec, Jan, Jun, Feb, Mar, Apr, Jul, Aug, Sep, Oct, Nov
+    let shuffle_order = [4, 11, 0, 5, 1, 2, 3, 6, 7, 8, 9, 10];
+    let input = shuffle_order
+        .iter()
+        .map(|&i| months[i].as_str())
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n";
+    let expected = months.join("\n") + "\n";
+    (input, expected)
+}
+
+#[test]
+#[cfg(unix)]
+fn test_month_sort_french_locale() {
+    let locale = "fr_FR.UTF-8";
+    if !is_locale_available(locale) {
+        return;
+    }
+    // spell-checker:disable
+    // On macOS/OpenBSD, abbreviated month names vary across OS versions (different CLDR data),
+    // so we query the system dynamically. On other platforms, glibc values are stable.
+    #[cfg(any(target_vendor = "apple", target_os = "openbsd"))]
+    let (input, expected) = {
+        let Some(months) = get_system_abmon(locale) else {
+            return;
+        };
+        month_sort_input_expected(&months)
+    };
+    #[cfg(not(any(target_vendor = "apple", target_os = "openbsd")))]
+    let (input, expected) = (
+        "mai\ndéc.\njanv.\njuin\nfévr.\nmars\navril\njuil.\naoût\nsept.\noct.\nnov.\n".to_string(),
+        "janv.\nfévr.\nmars\navril\nmai\njuin\njuil.\naoût\nsept.\noct.\nnov.\ndéc.\n".to_string(),
+    );
+    // spell-checker:enable
+    new_ucmd!()
+        .env("LC_ALL", locale)
+        .arg("-M")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_month_sort_hungarian_locale() {
+    let locale = "hu_HU.UTF-8";
+    if !is_locale_available(locale) {
+        return;
+    }
+    // spell-checker:disable
+    #[cfg(any(target_vendor = "apple", target_os = "openbsd"))]
+    let (input, expected) = {
+        let Some(months) = get_system_abmon(locale) else {
+            return;
+        };
+        month_sort_input_expected(&months)
+    };
+    #[cfg(not(any(target_vendor = "apple", target_os = "openbsd")))]
+    let (input, expected) = (
+        "máj\ndec\njan\njún\nfebr\nmárc\nápr\njúl\naug\nszept\nokt\nnov\n".to_string(),
+        "jan\nfebr\nmárc\nápr\nmáj\njún\njúl\naug\nszept\nokt\nnov\ndec\n".to_string(),
+    );
+    // spell-checker:enable
+    new_ucmd!()
+        .env("LC_ALL", locale)
+        .arg("-M")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
+/// Test that embedded blanks in month names cause a non-match (GNU compat).
+/// E.g. "av   ril" should NOT match "avril" — GNU treats it as unknown.
+#[test]
+#[cfg(unix)]
+fn test_month_sort_french_embedded_blanks() {
+    let locale = "fr_FR.UTF-8";
+    if !is_locale_available(locale) {
+        return;
+    }
+    // spell-checker:disable
+    // Pick three locale months (indices 2=March, 3=April, 5=June) and verify
+    // that inserting blanks into April's name causes a non-match.
+    // On glibc these are "mars", "avril", "juin"; on other systems they vary.
+    #[cfg(any(target_vendor = "apple", target_os = "openbsd"))]
+    let months = {
+        let Some(m) = get_system_abmon(locale) else {
+            return;
+        };
+        m
+    };
+    #[cfg(not(any(target_vendor = "apple", target_os = "openbsd")))]
+    let months = vec![
+        "janv.", "févr.", "mars", "avril", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.",
+        "déc.",
+    ]
+    .into_iter()
+    .map(String::from)
+    .collect::<Vec<_>>();
+
+    let march = &months[2];
+    let april = &months[3];
+    let june = &months[5];
+
+    // Build a mangled version of April with embedded spaces: e.g. "avril" -> "av   ril"
+    // Insert spaces after the second byte.
+    if april.len() < 3 {
+        // Month name too short to meaningfully insert blanks; skip.
+        return;
+    }
+    let mangled = format!("{}   {}", &april[..2], &april[2..]);
+
+    // Input: june, mangled-april, march
+    let input = format!("{june}\n{mangled}\n{march}\n");
+    // Expected: mangled sorts as unknown (first), then march (3), then june (6)
+    let expected = format!("{mangled}\n{march}\n{june}\n");
+    // spell-checker:enable
+    new_ucmd!()
+        .env("LC_ALL", locale)
+        .arg("-M")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_month_sort_japanese_locale() {
+    let locale = "ja_JP.UTF-8";
+    if !is_locale_available(locale) {
+        return;
+    }
+    // On macOS/OpenBSD, abbreviated month names may differ, so query dynamically.
+    #[cfg(any(target_vendor = "apple", target_os = "openbsd"))]
+    let (input, expected) = {
+        let Some(months) = get_system_abmon(locale) else {
+            return;
+        };
+        month_sort_input_expected(&months)
+    };
+    // Japanese abbreviated months are numeric (1月..12月) on glibc
+    #[cfg(not(any(target_vendor = "apple", target_os = "openbsd")))]
+    let (input, expected) = (
+        "5月\n12月\n1月\n6月\n2月\n3月\n4月\n7月\n8月\n9月\n10月\n11月\n".to_string(),
+        "1月\n2月\n3月\n4月\n5月\n6月\n7月\n8月\n9月\n10月\n11月\n12月\n".to_string(),
+    );
+    new_ucmd!()
+        .env("LC_ALL", locale)
+        .arg("-M")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
 #[test]
 fn test_default_unsorted_ints2() {
     let input = "9\n1909888\n000\n1\n2";
@@ -620,7 +844,7 @@ fn test_keys_invalid_field() {
     new_ucmd!()
         .args(&["-k", "1."])
         .fails()
-        .stderr_only("sort: failed to parse key '1.': failed to parse character index '': cannot parse integer from empty string\n");
+        .stderr_only("sort: invalid number after '.': invalid count at start of ''\n");
 }
 
 #[test]
@@ -628,7 +852,7 @@ fn test_keys_invalid_field_option() {
     new_ucmd!()
         .args(&["-k", "1.1x"])
         .fails()
-        .stderr_only("sort: failed to parse key '1.1x': invalid option: 'x'\n");
+        .stderr_only("sort: stray character in field spec: invalid field specification '1.1x'\n");
 }
 
 #[test]
@@ -636,7 +860,7 @@ fn test_keys_invalid_field_zero() {
     new_ucmd!()
         .args(&["-k", "0.1"])
         .fails()
-        .stderr_only("sort: failed to parse key '0.1': field index can not be 0\n");
+        .stderr_only("sort: field number is zero: invalid field specification '0.1'\n");
 }
 
 #[test]
@@ -644,7 +868,73 @@ fn test_keys_invalid_char_zero() {
     new_ucmd!()
         .args(&["-k", "1.0"])
         .fails()
-        .stderr_only("sort: failed to parse key '1.0': invalid character index 0 for the start position of a field\n");
+        .stderr_only("sort: character offset is zero: invalid field specification '1.0'\n");
+}
+
+#[test]
+fn test_keys_invalid_number_formats() {
+    new_ucmd!()
+        .args(&["-k", "0"])
+        .fails_with_code(2)
+        .stderr_only("sort: field number is zero: invalid field specification '0'\n");
+
+    new_ucmd!()
+        .args(&["-k", "2.,3"])
+        .fails_with_code(2)
+        .stderr_only("sort: invalid number after '.': invalid count at start of ',3'\n");
+
+    new_ucmd!()
+        .args(&["-k", "2,"])
+        .fails_with_code(2)
+        .stderr_only("sort: invalid number after ',': invalid count at start of ''\n");
+
+    new_ucmd!()
+        .args(&["-k", "1.1,-k0"])
+        .fails_with_code(2)
+        .stderr_only("sort: invalid number after ',': invalid count at start of '-k0'\n");
+}
+
+#[test]
+fn test_incompatible_options() {
+    new_ucmd!()
+        .arg("-hn")
+        .fails_with_code(2)
+        .stderr_only("sort: options '-hn' are incompatible\n");
+
+    new_ucmd!()
+        .arg("-in")
+        .fails_with_code(2)
+        .stderr_only("sort: options '-in' are incompatible\n");
+
+    new_ucmd!()
+        .arg("-nR")
+        .fails_with_code(2)
+        .stderr_only("sort: options '-nR' are incompatible\n");
+
+    new_ucmd!()
+        .arg("-dfgiMnR")
+        .fails_with_code(2)
+        .stderr_only("sort: options '-dfgMnR' are incompatible\n");
+
+    new_ucmd!()
+        .args(&["--sort=random", "-n"])
+        .fails_with_code(2)
+        .stderr_only("sort: options '-nR' are incompatible\n");
+
+    new_ucmd!()
+        .args(&["-c", "-o", "out"])
+        .fails_with_code(2)
+        .stderr_only("sort: options '-co' are incompatible\n");
+
+    new_ucmd!()
+        .args(&["-C", "-o", "out"])
+        .fails_with_code(2)
+        .stderr_only("sort: options '-Co' are incompatible\n");
+
+    new_ucmd!()
+        .args(&["-c", "-C"])
+        .fails_with_code(2)
+        .stderr_only("sort: options '-cC' are incompatible\n");
 }
 
 #[test]
@@ -1154,16 +1444,22 @@ fn test_sigpipe_panic() {
 
 #[test]
 fn test_conflict_check_out() {
-    let check_flags = ["-c=silent", "-c=quiet", "-c=diagnose-first", "-c", "-C"];
-    for check_flag in &check_flags {
+    let cases = [
+        ("-c=silent", "sort: options '-Co' are incompatible\n"),
+        ("-c=quiet", "sort: options '-Co' are incompatible\n"),
+        (
+            "-c=diagnose-first",
+            "sort: options '-co' are incompatible\n",
+        ),
+        ("-c", "sort: options '-co' are incompatible\n"),
+        ("-C", "sort: options '-Co' are incompatible\n"),
+    ];
+    for (check_flag, expected) in &cases {
         new_ucmd!()
             .arg(check_flag)
             .arg("-o=/dev/null")
             .fails()
-            .stderr_contains(
-                // the rest of the message might be subject to change
-                "error: the argument",
-            );
+            .stderr_contains(expected);
     }
 }
 
@@ -1204,7 +1500,7 @@ fn test_verifies_files_after_keys() {
             "nonexistent_dir/input_file",
         ])
         .fails_with_code(2)
-        .stderr_contains("failed to parse key");
+        .stderr_contains("invalid field specification '0'");
 }
 
 #[test]
@@ -1278,13 +1574,12 @@ fn test_tmp_files_deleted_on_sigint() {
     use std::{fs::read_dir, time::Duration};
 
     use nix::{sys::signal, unistd::Pid};
-    use rand::rngs::SmallRng;
+    use rand::{RngExt as _, SeedableRng, rngs::SmallRng};
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("tmp_dir");
     let file_name = "big_file_to_sort.txt";
     {
-        use rand::{Rng, SeedableRng};
         use std::io::Write;
         let mut file = at.make_file(file_name);
         // approximately 20 MB
@@ -1379,6 +1674,16 @@ fn test_multiple_output_files() {
 }
 
 #[test]
+// Test for GNU tests/sort/sort.pl "o3"
+fn test_duplicate_output_files_allowed() {
+    new_ucmd!()
+        .args(&["-o", "foo", "-o", "foo"])
+        .pipe_in("")
+        .succeeds()
+        .no_stderr();
+}
+
+#[test]
 fn test_output_file_with_leading_dash() {
     let test_cases = [
         (
@@ -1449,6 +1754,15 @@ fn test_files0_from_empty() {
     ucmd.args(&["--files0-from", "file"])
         .fails_with_code(2)
         .stderr_only("sort: no input from 'file'\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_files0_read_error() {
+    new_ucmd!()
+        .args(&["--files0-from", "."])
+        .fails_with_code(2)
+        .stderr_only("sort: cannot read: .: Is a directory\n");
 }
 
 #[cfg(target_os = "linux")]
@@ -1557,6 +1871,95 @@ fn test_g_float() {
         .pipe_in(input)
         .succeeds()
         .stdout_is(output);
+}
+
+#[test]
+fn test_g_float_locale_decimal_separator() {
+    let Ok(locale_fr_utf8) = env::var("LOCALE_FR_UTF8") else {
+        return;
+    };
+    if locale_fr_utf8 == "none" {
+        return;
+    }
+
+    let ts = TestScenario::new("sort");
+
+    ts.ucmd()
+        .env("LC_ALL", &locale_fr_utf8)
+        .args(&["-g", "--stable"])
+        .pipe_in("1,9\n1,10\n")
+        .succeeds()
+        .stdout_is("1,10\n1,9\n");
+
+    ts.ucmd()
+        .env("LC_ALL", &locale_fr_utf8)
+        .args(&["-g", "--stable"])
+        .pipe_in("1.9\n1.10\n")
+        .succeeds()
+        .stdout_is("1.10\n1.9\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_human_numeric_blank_thousands_sep_locale() {
+    fn thousands_sep_for(locale: &str) -> Option<String> {
+        let output = Command::new("locale")
+            .arg("thousands_sep")
+            .env("LC_ALL", locale)
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let sep = String::from_utf8_lossy(&output.stdout);
+        let sep = sep.trim_end_matches(&['\n', '\r'][..]);
+        if sep.is_empty() || sep.len() != 1 || !sep.chars().all(char::is_whitespace) {
+            return None;
+        }
+        Some(sep.to_string())
+    }
+
+    let candidates = ["sv_SE.UTF-8", "sv_SE"];
+    let mut selected_locale = None;
+    let mut thousands_sep = None;
+    for candidate in candidates {
+        if let Some(sep) = thousands_sep_for(candidate) {
+            selected_locale = Some(candidate.to_string());
+            thousands_sep = Some(sep);
+            break;
+        }
+    }
+
+    let (Some(locale), Some(sep)) = (selected_locale, thousands_sep) else {
+        return;
+    };
+
+    let line1 = format!("1 1k 1 M 4{sep}003 1M");
+    let line2 = format!("2k 2M 2 k 4{sep}002 2");
+    let line3 = format!("3M 3 3 G 4{sep}001 3k");
+    let input = format!("{line1}\n{line2}\n{line3}\n");
+
+    let ts = TestScenario::new("sort");
+    ts.fixtures.write("blank-thousands.txt", &input);
+
+    let cases = [
+        (1, format!("{line1}\n{line2}\n{line3}\n")),
+        (2, format!("{line3}\n{line1}\n{line2}\n")),
+        (3, format!("{line1}\n{line2}\n{line3}\n")),
+        (5, format!("{line3}\n{line2}\n{line1}\n")),
+    ];
+
+    for (key, expected) in cases {
+        let key_str = key.to_string();
+        ts.ucmd()
+            .env("LC_ALL", &locale)
+            .arg("-h")
+            .arg("-k")
+            .arg(&key_str)
+            .arg("blank-thousands.txt")
+            .succeeds()
+            .stdout_is(expected);
+    }
 }
 
 #[test]
@@ -1735,8 +2138,14 @@ fn test_clap_localization_missing_required_argument() {
 #[test]
 fn test_clap_localization_invalid_value() {
     let test_cases = vec![
-        ("en_US.UTF-8", "sort: failed to parse key 'invalid'"),
-        ("fr_FR.UTF-8", "sort: échec d'analyse de la clé 'invalid'"),
+        (
+            "en_US.UTF-8",
+            "sort: invalid number at field start: invalid count at start of 'invalid'",
+        ),
+        (
+            "fr_FR.UTF-8",
+            "sort: nombre invalide au début du champ: nombre invalide au début de 'invalid'",
+        ),
     ];
 
     for (locale, expected_message) in test_cases {
@@ -2357,6 +2766,198 @@ fn test_start_buffer() {
     ucmd.args(&["b", "a"])
         .succeeds()
         .stdout_only_bytes(&expected);
+}
+
+#[test]
+fn test_locale_collation_c_locale() {
+    // C locale uses byte order - this is deterministic and tests the fix for #9148
+    // Accented characters (UTF-8 multibyte) sort after ASCII letters
+    let input = "é\ne\nE\na\nA\nz\n";
+    // C locale byte order: A=0x41, E=0x45, a=0x61, e=0x65, z=0x7A, é=0xC3 0xA9
+    let expected = "A\nE\na\ne\nz\né\n";
+
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
+fn test_locale_collation_utf8() {
+    // Test French UTF-8 locale handling - behavior depends on i18n-collator feature
+    // With feature: locale-aware collation (é sorts near e)
+    // Without feature: byte order (é after z, since 0xC3A9 > 0x7A)
+    let input = "z\né\ne\na\n";
+
+    let result = new_ucmd!()
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .pipe_in(input)
+        .succeeds();
+
+    let output = result.stdout_str();
+    let lines: Vec<&str> = output.lines().collect();
+
+    assert_eq!(lines.len(), 4, "Expected 4 sorted lines");
+    assert_eq!(lines[0], "a", "'a' (0x61) should always sort first");
+
+    // Validate based on which collation mode is active
+    if lines[3] == "é" {
+        // Byte order mode: é (0xC3A9) > z (0x7A)
+        assert_eq!(
+            lines,
+            vec!["a", "e", "z", "é"],
+            "Byte order mode: expected a < e < z < é"
+        );
+    } else {
+        // Locale collation mode: é sorts with base letter e
+        assert_eq!(lines[3], "z", "Locale mode: 'z' should sort last");
+        let z_pos = lines.iter().position(|&x| x == "z").unwrap();
+        let e_pos = lines.iter().position(|&x| x == "e").unwrap();
+        let e_accent_pos = lines.iter().position(|&x| x == "é").unwrap();
+        assert!(
+            e_pos < z_pos && e_accent_pos < z_pos,
+            "Locale mode: 'e' ({e_pos}) and 'é' ({e_accent_pos}) should sort before 'z' ({z_pos})"
+        );
+    }
+}
+
+#[test]
+fn test_locale_interleaved_en_us_utf8() {
+    // Test case for issue: locale-based collation support
+    // In en_US.UTF-8, lowercase and uppercase letters should interleave
+    // Expected: a, A, b, B (locale-aware)
+    // Not: A, B, a, b (ASCII byte order)
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .pipe_in("a\nA\nb\nB\n")
+        .succeeds()
+        .stdout_is("a\nA\nb\nB\n");
+}
+
+#[test]
+fn test_locale_c_byte_order() {
+    // Test case for issue: C locale should use ASCII byte order
+    // In C locale: A < B < a < b (uppercase before lowercase)
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .pipe_in("a\nA\nb\nB\n")
+        .succeeds()
+        .stdout_is("A\nB\na\nb\n");
+}
+
+#[test]
+fn test_locale_posix_byte_order() {
+    // POSIX locale should behave like C locale
+    new_ucmd!()
+        .env("LC_ALL", "POSIX")
+        .pipe_in("a\nA\nb\nB\n")
+        .succeeds()
+        .stdout_is("A\nB\na\nb\n");
+}
+
+#[test]
+fn test_locale_with_ignore_case_flag() {
+    // When -f (ignore case) is used, the comparison uses custom_str_cmp
+    // which converts to uppercase for comparison. With -f flag, all letters
+    // are treated as equivalent regardless of case, so original order is preserved
+    // for equal keys (stable sort behavior within equal elements).
+    // Note: This may differ slightly from GNU in tie-breaking behavior.
+    let result = new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("-f")
+        .pipe_in("a\nA\nb\nB\n")
+        .succeeds();
+
+    // Verify that a/A come before b/B (case-insensitive grouping works)
+    let output = result.stdout_str();
+    let lines: Vec<&str> = output.lines().collect();
+    assert_eq!(lines.len(), 4);
+    // a and A should come before b and B
+    let a_positions: Vec<usize> = lines
+        .iter()
+        .enumerate()
+        .filter(|(_, l)| **l == "a" || **l == "A")
+        .map(|(i, _)| i)
+        .collect();
+    let b_positions: Vec<usize> = lines
+        .iter()
+        .enumerate()
+        .filter(|(_, l)| **l == "b" || **l == "B")
+        .map(|(i, _)| i)
+        .collect();
+    assert!(
+        a_positions
+            .iter()
+            .all(|&a| b_positions.iter().all(|&b| a < b)),
+        "All 'a'/'A' should come before 'b'/'B' with -f flag"
+    );
+}
+
+#[test]
+fn test_locale_complex_utf8_sorting() {
+    // More complex test with mixed case and special characters
+    // In en_US.UTF-8, should respect locale collation rules
+    // Locale collation is case-insensitive by default, with lowercase < uppercase for same base letter
+    let input = "zebra\nApple\napple\nBanana\nbanana\nZebra\n";
+
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is("apple\nApple\nbanana\nBanana\nzebra\nZebra\n");
+}
+
+#[test]
+fn test_locale_posix_sort_debug_message() {
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .arg("--debug")
+        .pipe_in("a\nA\nb\nB\n")
+        .succeeds()
+        .stderr_contains("text ordering performed using simple byte comparison");
+}
+
+#[test]
+fn test_locale_utf8_sort_debug_message() {
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("--debug")
+        .pipe_in("a\nA\nb\nB\n")
+        .succeeds()
+        .stderr_contains("text ordering performed using ‘en_US.UTF-8’ sorting rules");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_failed_to_set_locale_debug_message() {
+    let result = new_ucmd!()
+        .env("LC_ALL", "not-valid-locale")
+        .arg("--debug")
+        .pipe_in("a\nA\nb\nB\n")
+        .succeeds();
+
+    result.stderr_contains("text ordering performed using simple byte comparison");
+
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    result.stderr_contains("failed to set locale");
+}
+
+#[test]
+fn test_locale_utf8_with_key_field() {
+    // Regression test for issue #10909
+    // Sort should not panic when using -k flag with UTF-8 locale
+    // The bug occurred when rayon worker threads tried to access an uninitialized collator
+    let input = "a b 5433 down data path1 path2 path3 path4 path5
+c d 5435 down data path1 path2 path3 path4 path5
+e f 5436 down data path1 path2 path3 path4 path5\n";
+
+    new_ucmd!()
+        .env("LANG", "en_US.utf8")
+        .arg("-k3")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(input);
 }
 
 /* spell-checker: enable */

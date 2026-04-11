@@ -9,6 +9,7 @@ homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 readme.workspace = true
 
 [lints]
@@ -29,3 +30,4 @@ path = "src/main.rs"
 
 [features]
 feat_selinux = ["selinux"]
+smack = ["uucore/smack"]

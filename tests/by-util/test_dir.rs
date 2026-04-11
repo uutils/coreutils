@@ -56,3 +56,30 @@ fn test_long_output() {
 fn test_invalid_option_exit_code() {
     new_ucmd!().arg("-/").fails().code_is(2);
 }
+
+#[test]
+fn test_help_shows_dir_not_ls() {
+    let result = new_ucmd!().arg("--help").succeeds();
+    let output = result.stdout_str();
+
+    // Verify help text contains "dir" in the usage line
+    assert!(
+        output.contains("dir [OPTION]"),
+        "Help should show 'dir [OPTION]'"
+    );
+
+    // Verify help text does not incorrectly show "ls"
+    assert!(
+        !output.contains("ls [OPTION]"),
+        "Help should not show 'ls [OPTION]'"
+    );
+}
+
+#[test]
+fn test_version() {
+    new_ucmd!()
+        .arg("--version")
+        .succeeds()
+        .no_stderr()
+        .stdout_is(format!("dir {}\n", uucore::crate_version!()));
+}

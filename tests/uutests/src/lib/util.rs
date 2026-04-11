@@ -20,6 +20,8 @@ use libc::mode_t;
 use nix::pty::OpenptyResult;
 #[cfg(unix)]
 use nix::sys;
+#[cfg(not(windows))]
+use nix::sys::stat::{self, SFlag};
 use pretty_assertions::assert_eq;
 #[cfg(unix)]
 use rlimit::setrlimit;
@@ -95,7 +97,20 @@ const DEFAULT_ENV: [(&str, &str); 2] = [("LC_ALL", "C"), ("TZ", "UTC")];
 
 /// Test if the program is running under CI
 pub fn is_ci() -> bool {
-    std::env::var("CI").is_ok_and(|s| s.eq_ignore_ascii_case("true"))
+    env::var("CI").is_ok_and(|s| s.eq_ignore_ascii_case("true"))
+}
+
+/// Check if a locale is available on the system by verifying that
+/// `locale charmap` returns `"UTF-8"` when `LC_ALL` is set to the given locale.
+#[cfg(unix)]
+pub fn is_locale_available(locale: &str) -> bool {
+    use std::process::Command;
+    Command::new("locale")
+        .env("LC_ALL", locale)
+        .arg("charmap")
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "UTF-8")
+        .unwrap_or(false)
 }
 
 /// Read a test scenario fixture, returning its bytes
@@ -940,7 +955,7 @@ pub fn get_root_path() -> &'static str {
 ///
 /// `true` if both paths have the same set of extended attributes, `false` otherwise.
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "openbsd"))))]
-pub fn compare_xattrs<P: AsRef<std::path::Path>>(path1: P, path2: P) -> bool {
+pub fn compare_xattrs<P: AsRef<Path>>(path1: P, path2: P) -> bool {
     let get_sorted_xattrs = |path: P| {
         xattr::list(path)
             .map(|attrs| {
@@ -1029,13 +1044,13 @@ impl AtPath {
 
     pub fn write(&self, name: &str, contents: &str) {
         log_info("write(default)", self.plus_as_string(name));
-        std::fs::write(self.plus(name), contents)
+        fs::write(self.plus(name), contents)
             .unwrap_or_else(|e| panic!("Couldn't write {name}: {e}"));
     }
 
     pub fn write_bytes(&self, name: &str, contents: &[u8]) {
         log_info("write(default)", self.plus_as_string(name));
-        std::fs::write(self.plus(name), contents)
+        fs::write(self.plus(name), contents)
             .unwrap_or_else(|e| panic!("Couldn't write {name}: {e}"));
     }
 
@@ -1077,23 +1092,37 @@ impl AtPath {
     pub fn rename(&self, source: &str, target: &str) {
         let source = self.plus(source);
         let target = self.plus(target);
-        log_info("rename", format!("{source:?} {target:?}"));
-        std::fs::rename(&source, &target)
-            .unwrap_or_else(|e| panic!("Couldn't rename {source:?} -> {target:?}: {e}"));
+        log_info(
+            "rename",
+            format!("{} {}", source.display(), target.display()),
+        );
+        fs::rename(&source, &target).unwrap_or_else(|e| {
+            panic!(
+                "Couldn't rename {} -> {}: {e}",
+                source.display(),
+                target.display()
+            )
+        });
     }
 
     pub fn remove(&self, source: &str) {
         let source = self.plus(source);
-        log_info("remove", format!("{source:?}"));
-        std::fs::remove_file(&source).unwrap_or_else(|e| panic!("Couldn't remove {source:?}: {e}"));
+        log_info("remove", format!("{}", source.display()));
+        remove_file(&source)
+            .unwrap_or_else(|e| panic!("Couldn't remove {}: {e}", source.display()));
     }
 
     pub fn copy(&self, source: &str, target: &str) {
         let source = self.plus(source);
         let target = self.plus(target);
-        log_info("copy", format!("{source:?} {target:?}"));
-        std::fs::copy(&source, &target)
-            .unwrap_or_else(|e| panic!("Couldn't copy {source:?} -> {target:?}: {e}"));
+        log_info("copy", format!("{} {}", source.display(), target.display()));
+        fs::copy(&source, &target).unwrap_or_else(|e| {
+            panic!(
+                "Couldn't copy {} -> {}: {e}",
+                source.display(),
+                target.display()
+            )
+        });
     }
 
     pub fn rmdir(&self, dir: &str) {
@@ -1144,28 +1173,14 @@ impl AtPath {
 
     #[cfg(not(windows))]
     pub fn is_fifo(&self, fifo: &str) -> bool {
-        unsafe {
-            let name = CString::new(self.plus_as_string(fifo)).unwrap();
-            let mut stat: libc::stat = std::mem::zeroed();
-            if libc::stat(name.as_ptr(), &raw mut stat) >= 0 {
-                libc::S_IFIFO & stat.st_mode as libc::mode_t != 0
-            } else {
-                false
-            }
-        }
+        stat::stat(&self.plus(fifo))
+            .is_ok_and(|s| SFlag::from_bits_truncate(s.st_mode).contains(SFlag::S_IFIFO))
     }
 
     #[cfg(not(windows))]
     pub fn is_char_device(&self, char_dev: &str) -> bool {
-        unsafe {
-            let name = CString::new(self.plus_as_string(char_dev)).unwrap();
-            let mut stat: libc::stat = std::mem::zeroed();
-            if libc::stat(name.as_ptr(), &raw mut stat) >= 0 {
-                libc::S_IFCHR & stat.st_mode as libc::mode_t != 0
-            } else {
-                false
-            }
-        }
+        stat::stat(&self.plus(char_dev))
+            .is_ok_and(|s| SFlag::from_bits_truncate(s.st_mode).contains(SFlag::S_IFCHR))
     }
 
     pub fn hard_link(&self, original: &str, link: &str) {
@@ -1320,9 +1335,9 @@ impl AtPath {
     #[cfg(not(windows))]
     pub fn set_mode(&self, filename: &str, mode: u32) {
         let path = self.plus(filename);
-        let mut perms = std::fs::metadata(&path).unwrap().permissions();
+        let mut perms = fs::metadata(&path).unwrap().permissions();
         perms.set_mode(mode);
-        std::fs::set_permissions(&path, perms).unwrap();
+        fs::set_permissions(&path, perms).unwrap();
     }
 }
 
@@ -1703,11 +1718,11 @@ impl UCommand {
     }
 
     #[cfg(unix)]
-    fn read_from_pty(pty_fd: std::os::fd::OwnedFd, out: File) {
-        let read_file = std::fs::File::from(pty_fd);
-        let mut reader = std::io::BufReader::new(read_file);
-        let mut writer = std::io::BufWriter::new(out);
-        let result = std::io::copy(&mut reader, &mut writer);
+    fn read_from_pty(pty_fd: OwnedFd, out: File) {
+        let read_file = File::from(pty_fd);
+        let mut reader = io::BufReader::new(read_file);
+        let mut writer = BufWriter::new(out);
+        let result = io::copy(&mut reader, &mut writer);
         match result {
             Ok(_) => {}
             // Input/output error (os error 5) is returned due to pipe closes. Buffer gets content anyway.
@@ -1728,7 +1743,7 @@ impl UCommand {
         if let Some(mut captured_output_i) = captured_output {
             let fd = captured_output_i.try_clone().unwrap();
 
-            let handle = std::thread::Builder::new()
+            let handle = thread::Builder::new()
                 .name(name)
                 .spawn(move || {
                     Self::read_from_pty(pty_fd_master, fd);
@@ -1800,7 +1815,7 @@ impl UCommand {
             {
                 self.args.push_front(c_arg);
             }
-        };
+        }
 
         // unwrap is safe here because we have set `self.bin_path` before
         let mut command = Command::new(self.bin_path.as_ref().unwrap());
@@ -1821,6 +1836,12 @@ impl UCommand {
         }
 
         command.env_clear();
+
+        // Preserve PATH
+        if let Some(path) = env::var_os("PATH") {
+            command.env("PATH", path);
+        }
+
         if cfg!(windows) {
             // spell-checker:ignore (dll) rsaenh
             // %SYSTEMROOT% is required on Windows to initialize crypto provider
@@ -1887,7 +1908,7 @@ impl UCommand {
                 .stdin(self.stdin.take().unwrap_or_else(Stdio::null))
                 .stdout(stdout)
                 .stderr(stderr);
-        };
+        }
 
         #[cfg(unix)]
         if let Some(simulated_terminal) = &self.terminal_simulation {
@@ -2062,7 +2083,7 @@ impl std::fmt::Display for UCommand {
 struct CapturedOutput {
     current_file: File,
     output: tempfile::NamedTempFile, // drop last
-    reader_thread_handle: Option<thread::JoinHandle<()>>,
+    reader_thread_handle: Option<JoinHandle<()>>,
 }
 
 impl CapturedOutput {
@@ -2076,7 +2097,7 @@ impl CapturedOutput {
     }
 
     /// Try to clone the file pointer.
-    fn try_clone(&mut self) -> io::Result<File> {
+    fn try_clone(&mut self) -> Result<File> {
         self.output.as_file().try_clone()
     }
 
@@ -2277,7 +2298,7 @@ pub struct UChild {
     stdin_pty: Option<File>,
     ignore_stdin_write_error: bool,
     stderr_to_stdout: bool,
-    join_handle: Option<JoinHandle<io::Result<()>>>,
+    join_handle: Option<JoinHandle<Result<()>>>,
     timeout: Option<Duration>,
     tmpd: Option<Rc<TempDir>>, // drop last
 }
@@ -2353,7 +2374,7 @@ impl UChild {
     ///
     /// If [`Child::kill`] returned an error or if the child process could not be terminated within
     /// `self.timeout` or the default of 60s.
-    pub fn try_kill(&mut self) -> io::Result<()> {
+    pub fn try_kill(&mut self) -> Result<()> {
         let start = Instant::now();
         self.raw.kill()?;
 
@@ -2414,10 +2435,7 @@ impl UChild {
     /// If [`Child::kill`] returned an error or if the child process could not be terminated within
     /// `self.timeout` or the default of 60s.
     #[cfg(unix)]
-    pub fn try_kill_with_custom_signal(
-        &mut self,
-        signal_name: sys::signal::Signal,
-    ) -> io::Result<()> {
+    pub fn try_kill_with_custom_signal(&mut self, signal_name: sys::signal::Signal) -> Result<()> {
         let start = Instant::now();
         sys::signal::kill(
             nix::unistd::Pid::from_raw(self.raw.id().try_into().unwrap()),
@@ -2474,7 +2492,7 @@ impl UChild {
     /// # Errors
     ///
     /// Returns the error from the call to `wait_with_output` if any
-    pub fn wait(self) -> io::Result<CmdResult> {
+    pub fn wait(self) -> Result<CmdResult> {
         let (bin_path, util_name, tmpd) = (
             self.bin_path.clone(),
             self.util_name.clone(),
@@ -2503,7 +2521,7 @@ impl UChild {
     ///
     /// If `self.timeout` is reached while waiting or [`Child::wait_with_output`] returned an
     /// error.
-    fn wait_with_output(mut self) -> io::Result<Output> {
+    fn wait_with_output(mut self) -> Result<Output> {
         // some apps do not stop execution until their stdin gets closed.
         // to prevent a endless waiting here, we close the stdin.
         self.join(); // ensure that all pending async input is piped in
@@ -2545,7 +2563,7 @@ impl UChild {
                 .join()
                 .expect("Error joining with the piping stdin thread")
                 .unwrap();
-        };
+        }
 
         if let Some(stdout) = self.captured_stdout.as_mut() {
             if let Some(handle) = stdout.reader_thread_handle.take() {
@@ -2766,7 +2784,7 @@ impl UChild {
         }
         let mut writer = self.take_stdin_as_writer();
 
-        let join_handle = std::thread::Builder::new()
+        let join_handle = thread::Builder::new()
             .name("pipe_in".to_string())
             .spawn(
                 move || match writer.write_all(&content).and_then(|()| writer.flush()) {
@@ -2809,7 +2827,7 @@ impl UChild {
     ///
     /// # Errors
     /// If [`std::process::ChildStdin::write_all`] or [`std::process::ChildStdin::flush`] returned an error
-    pub fn try_write_in<T: Into<Vec<u8>>>(&mut self, data: T) -> io::Result<()> {
+    pub fn try_write_in<T: Into<Vec<u8>>>(&mut self, data: T) -> Result<()> {
         let ignore_stdin_write_error = self.ignore_stdin_write_error;
         let mut writer = self.access_stdin_as_writer();
 
@@ -2879,8 +2897,8 @@ pub fn whoami() -> String {
 
     // Use environment variable to get current user instead of
     // invoking `whoami` and fall back to user "nobody" on error.
-    std::env::var("USER")
-        .or_else(|_| std::env::var("USERNAME"))
+    env::var("USER")
+        .or_else(|_| env::var("USERNAME"))
         .unwrap_or_else(|e| {
             println!("{UUTILS_WARNING}: {e}, using \"nobody\" instead");
             "nobody".to_string()
@@ -3194,7 +3212,7 @@ mod tests {
     #[ctor::ctor]
     fn init() {
         unsafe {
-            std::env::set_var("UUTESTS_BINARY_PATH", "");
+            env::set_var("UUTESTS_BINARY_PATH", "");
         }
     }
 
@@ -3441,7 +3459,7 @@ mod tests {
         match check_coreutil_version("id", VERSION_MIN) {
             Ok(s) => assert!(s.starts_with("uutils-tests-")),
             Err(s) => assert!(s.starts_with("uutils-tests-warning")),
-        };
+        }
         #[cfg(target_os = "linux")]
         std::assert_eq!(
             check_coreutil_version("no test name", VERSION_MIN),

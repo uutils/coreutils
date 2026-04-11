@@ -12,6 +12,7 @@ use std::io::{Seek, SeekFrom};
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::{Path, PathBuf};
+#[cfg(not(target_os = "wasi"))]
 use uucore::error::UResult;
 use uucore::translate;
 
@@ -176,7 +177,9 @@ impl FileExtTail for File {
 
 pub trait MetadataExtTail {
     fn is_tailable(&self) -> bool;
+    #[cfg(not(target_os = "wasi"))]
     fn got_truncated(&self, other: &Metadata) -> UResult<bool>;
+    #[cfg(not(target_os = "wasi"))]
     fn file_id_eq(&self, other: &Metadata) -> bool;
 }
 
@@ -194,14 +197,16 @@ impl MetadataExtTail for Metadata {
     }
 
     /// Return true if the file was modified and is now shorter
+    #[cfg(not(target_os = "wasi"))]
     fn got_truncated(&self, other: &Metadata) -> UResult<bool> {
         Ok(other.len() < self.len() && other.modified()? != self.modified()?)
     }
 
-    fn file_id_eq(&self, _other: &Metadata) -> bool {
+    #[cfg(not(target_os = "wasi"))]
+    fn file_id_eq(&self, #[cfg(unix)] other: &Metadata, #[cfg(not(unix))] _: &Metadata) -> bool {
         #[cfg(unix)]
         {
-            self.ino().eq(&_other.ino())
+            self.ino().eq(&other.ino())
         }
         #[cfg(windows)]
         {
@@ -219,12 +224,14 @@ impl MetadataExtTail for Metadata {
     }
 }
 
+#[cfg(not(target_os = "wasi"))]
 pub trait PathExtTail {
     fn is_stdin(&self) -> bool;
     fn is_orphan(&self) -> bool;
     fn is_tailable(&self) -> bool;
 }
 
+#[cfg(not(target_os = "wasi"))]
 impl PathExtTail for Path {
     fn is_stdin(&self) -> bool {
         self.eq(Self::new(text::DASH))
@@ -248,15 +255,14 @@ pub fn path_is_tailable(path: &Path) -> bool {
 }
 
 #[inline]
+#[cfg(unix)]
 pub fn stdin_is_bad_fd() -> bool {
-    // FIXME : Rust's stdlib is reopening fds as /dev/null
-    // see also: https://github.com/uutils/coreutils/issues/2873
-    // (gnu/tests/tail-2/follow-stdin.sh fails because of this)
-    //#[cfg(unix)]
-    {
-        //platform::stdin_is_bad_fd()
-    }
-    //#[cfg(not(unix))]
+    uucore::signals::stdin_was_closed()
+}
+
+#[inline]
+#[cfg(not(unix))]
+pub fn stdin_is_bad_fd() -> bool {
     false
 }
 

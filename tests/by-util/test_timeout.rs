@@ -1,14 +1,15 @@
-use std::time::Duration;
-
 // This file is part of the uutils coreutils package.
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore dont
-use rstest::rstest;
 
+// spell-checker:ignore dont
+
+use rstest::rstest;
+use std::time::Duration;
 use uucore::display::Quotable;
-use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::{new_ucmd, util_name};
 
 #[test]
 fn test_invalid_arg() {
@@ -58,7 +59,7 @@ fn test_verbose() {
         new_ucmd!()
             .args(&[verbose_flag, "-s0", "-k.1", ".1", "sleep", "1"])
             .fails()
-            .stderr_only("timeout: sending signal EXIT to command 'sleep'\ntimeout: sending signal KILL to command 'sleep'\n");
+            .stderr_only("timeout: sending signal 0 to command 'sleep'\ntimeout: sending signal KILL to command 'sleep'\n");
     }
 }
 
@@ -103,6 +104,13 @@ fn test_preserve_status() {
     }
 }
 
+#[test]
+fn test_kill_after_preserves_timeout_exit_without_preserve_status() {
+    new_ucmd!()
+        .args(&["-k", "1", "1", "sleep", "10"])
+        .fails_with_code(124)
+        .no_output();
+}
 #[test]
 fn test_preserve_status_even_when_send_signal() {
     // When sending CONT signal, process doesn't get killed or stopped.
@@ -234,4 +242,72 @@ fn test_command_cannot_invoke() {
     // Test exit code 126 when command exists but cannot be invoked
     // Try to execute a directory (should give permission denied or similar)
     new_ucmd!().args(&["1", "/"]).fails_with_code(126);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_sigchld_ignored_by_parent() {
+    let ts = TestScenario::new(util_name!());
+    let bin_path = ts.bin_path.to_string_lossy();
+    ts.ucmd()
+        .args(&[
+            "10",
+            "sh",
+            "-c",
+            &format!("trap '' CHLD; exec {bin_path} timeout 1 true"),
+        ])
+        .succeeds();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_with_background_child() {
+    new_ucmd!()
+        .args(&[".5", "sh", "-c", "sleep .1 & sleep 2"])
+        .fails_with_code(124)
+        .no_stdout();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_forward_sigint_to_child() {
+    let mut cmd = new_ucmd!()
+        .args(&[
+            "10",
+            "sh",
+            "-c",
+            "trap 'echo got_int; exit 42' INT; sleep 5",
+        ])
+        .run_no_wait();
+    cmd.delay(100);
+    cmd.kill_with_custom_signal(nix::sys::signal::Signal::SIGINT);
+    cmd.make_assertion()
+        .is_not_alive()
+        .with_current_output()
+        .stdout_contains("got_int");
+}
+
+#[test]
+fn test_foreground_signal0_kill_after() {
+    new_ucmd!()
+        .args(&["--foreground", "-s0", "-k.1", ".1", "sleep", "10"])
+        .fails_with_code(137);
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_realtime_signal_names() {
+    // timeout should accept RTMIN and RTMAX as valid signal names
+    new_ucmd!()
+        .args(&["-v", "-s", "RTMAX", ".1", "sleep", "1"])
+        .fails()
+        .stderr_contains("sending signal RTMAX to command");
+    new_ucmd!()
+        .args(&["-v", "-s", "RTMIN", ".1", "sleep", "1"])
+        .fails()
+        .stderr_contains("sending signal RTMIN to command");
+    new_ucmd!()
+        .args(&["-v", "-s", "SIGRTMAX", ".1", "sleep", "1"])
+        .fails()
+        .stderr_contains("sending signal RTMAX to command");
 }
