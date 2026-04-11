@@ -127,23 +127,32 @@ fn copy(mut input: impl Read, mut output: impl Write) -> Result<usize> {
     };
     let mut buffer = [0u8; FIRST_BUF_SIZE];
     let mut len = 0;
-    match input.read(&mut buffer) {
-        Ok(0) => return Ok(0),
-        Ok(bytes_count) => {
-            output.write_all(&buffer[0..bytes_count])?;
-            len = bytes_count;
-            if bytes_count < FIRST_BUF_SIZE {
+    // Read with the stack buffer until we observe a full-sized read, which
+    // is a hint that the input is big enough to benefit from a larger
+    // buffer. A *short* read does not imply EOF: `read(2)` only returns 0
+    // at end-of-file, and a pipeline whose writer pauses between writes
+    // will commonly return less than the buffer size per call. We must
+    // therefore keep looping until we either see a full-sized read (and
+    // upgrade to the larger buffer) or `read` returns 0.
+    loop {
+        match input.read(&mut buffer) {
+            Ok(0) => return Ok(len), // end of file
+            Ok(bytes_count) => {
+                output.write_all(&buffer[..bytes_count])?;
                 // flush the buffer to comply with POSIX requirement that
                 // `tee` does not buffer the input.
                 output.flush()?;
-                return Ok(len);
+                len += bytes_count;
+                if bytes_count == FIRST_BUF_SIZE {
+                    break;
+                }
             }
+            Err(e) if e.kind() == ErrorKind::Interrupted => {}
+            Err(e) => return Err(e),
         }
-        Err(e) if e.kind() == ErrorKind::Interrupted => (),
-        Err(e) => return Err(e),
     }
 
-    // but optimize buffer size also for large file
+    // Optimize buffer size for large files.
     let mut buffer = vec![0u8; 4 * FIRST_BUF_SIZE]; //stack array makes code path for smaller file slower
     loop {
         match input.read(&mut buffer) {
