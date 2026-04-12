@@ -5,7 +5,7 @@
 
 //! Set of functions to manage regular files, special files, and links.
 
-// spell-checker:ignore backport
+// spell-checker:ignore backport preopen
 
 #[cfg(unix)]
 use libc::mkfifo;

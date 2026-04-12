@@ -1,3 +1,5 @@
+<!-- spell-checker:ignore tzdata preopen setrlimit NOFILE filestat kqueue sysinfo EISDIR ELOOP -->
+
 # WASI integration test gaps
 
 Tests annotated with `#[cfg_attr(wasi_runner, ignore = "...")]` are skipped when running integration tests against a WASI binary via wasmtime. This document tracks the reasons so that gaps in WASI support are visible in one place.
@@ -46,7 +48,7 @@ The WASI sandbox does not ship locale data, so `setlocale`/`LC_ALL` have no effe
 
 ## WASI: tail follow mode disabled
 
-`tail -f` / `tail -F` (follow mode) requires change-notification mechanisms (`inotify`, `kqueue`) and signal handling that WASI does not provide, so follow is disabled on WASI and a warning is emitted. Tests that exercise follow behaviour are skipped.
+`tail -f` / `tail -F` (follow mode) requires change-notification mechanisms (`inotify`, `kqueue`) and signal handling that WASI does not provide, so follow is disabled on WASI and a warning is emitted. Tests that exercise follow behavior are skipped.
 
 ## WASI: cannot detect unsafe overwrite
 
@@ -62,7 +64,7 @@ wasi-libc does not ship tzdata, so `TZ` is not honoured and timezone-dependent v
 
 ## WASI: guest root is a writable preopen
 
-The test harness maps the per-test working directory as the guest's `/`. That makes `/` writable inside the guest, so GNU-style protections against operating on the system root (e.g. `touch /` failing) cannot be exercised. It also means guest-visible absolute paths are rooted at `/`, not at the host tempdir. Tests that compare against host `canonicalize()` results or pass host absolute paths into the guest (for example some `cp --parents`, `readlink`, `realpath`, `pwd`, and `ls` cases) need guest-aware expectations or separate coverage. Tests that assert the root-protection behaviour are skipped.
+The test harness maps the per-test working directory as the guest's `/`. That makes `/` writable inside the guest, so GNU-style protections against operating on the system root (e.g. `touch /` failing) cannot be exercised. It also means guest-visible absolute paths are rooted at `/`, not at the host tempdir. Tests that compare against host `canonicalize()` results or pass host absolute paths into the guest (for example some `cp --parents`, `readlink`, `realpath`, `pwd`, and `ls` cases) need guest-aware expectations or separate coverage. Tests that assert the root-protection behavior are skipped.
 
 ## WASI: `touch -` (stdout) unsupported
 
@@ -70,7 +72,7 @@ On WASI, `touch -` returns `UnsupportedPlatformFeature` because the guest cannot
 
 ## WASI: rlimit/setrlimit not supported
 
-WASI has no concept of per-process resource limits, so `setrlimit` (and the `rlimit` crate that wraps it) has no effect. Tests that set `RLIMIT_NOFILE` to verify behaviour under restricted file-descriptor budgets are skipped.
+WASI has no concept of per-process resource limits, so `setrlimit` (and the `rlimit` crate that wraps it) has no effect. Tests that set `RLIMIT_NOFILE` to verify behavior under restricted file-descriptor budgets are skipped.
 
 ## WASI: sysinfo/meminfo not available
 
