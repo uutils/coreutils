@@ -61,10 +61,10 @@ fn generate_cksum_args() -> Vec<String> {
         args.push("-c".to_string());
     }
 
-    if rng.random_bool(0.25) {
-        if let Ok(file_path) = generate_random_file() {
-            args.push(file_path);
-        }
+    if rng.random_bool(0.25)
+        && let Ok(file_path) = generate_random_file()
+    {
+        args.push(file_path);
     }
 
     if args.is_empty() || !args.iter().any(|arg| arg.starts_with("file_")) {
