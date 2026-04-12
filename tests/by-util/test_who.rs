@@ -290,5 +290,5 @@ fn test_piped_to_dev_full() {
         .arg("--heading")
         .set_stdout(dev_full)
         .fails()
-        .stderr_contains("No space left on device");
+        .stderr_is("who: No space left on device\n");
 }
