@@ -64,7 +64,7 @@ pub fn splice_exact(source: &impl AsFd, target: &impl AsFd, len: usize) -> std::
 
 /// Return verified /dev/null
 ///
-/// `splice` to /dev/null is faster than `read` when we skip or count the input which is not able to seek
+/// `splice` to /dev/null is faster than `read` when we skip or count the non-seekable input
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn dev_null() -> Option<File> {
