@@ -31,10 +31,10 @@ impl<T> FdWritable for T where T: Write + AsFd + AsRawFd {}
 const SPLICE_SIZE: usize = 1024 * 128;
 const BUF_SIZE: usize = 1024 * 16;
 
-/// Conversion from a `nix::Error` into our `Error` which implements `UError`.
-impl From<nix::Error> for Error {
-    fn from(error: nix::Error) -> Self {
-        Self::Io(std::io::Error::from_raw_os_error(error as i32))
+/// Conversion from a `rustix::io::Errno` into our `Error` which implements `UError`.
+impl From<rustix::io::Errno> for Error {
+    fn from(error: rustix::io::Errno) -> Self {
+        Self::Io(std::io::Error::from(error))
     }
 }
 
@@ -126,19 +126,19 @@ pub(crate) fn copy_exact(
     write_fd: &impl AsFd,
     num_bytes: usize,
 ) -> std::io::Result<usize> {
-    use nix::unistd;
-
     let mut left = num_bytes;
     let mut buf = [0; BUF_SIZE];
-    let mut written = 0;
+    let mut total_written = 0;
     while left > 0 {
-        let read = unistd::read(read_fd, &mut buf)?;
-        assert_ne!(read, 0, "unexpected end of pipe");
-        while written < read {
-            let n = unistd::write(write_fd, &buf[written..read])?;
+        let n_read = rustix::io::read(read_fd, &mut buf)?;
+        assert_ne!(n_read, 0, "unexpected end of pipe");
+        let mut written = 0;
+        while written < n_read {
+            let n = rustix::io::write(write_fd, &buf[written..n_read])?;
             written += n;
         }
-        left -= read;
+        total_written += written;
+        left -= n_read;
     }
-    Ok(written)
+    Ok(total_written)
 }
