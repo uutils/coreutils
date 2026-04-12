@@ -1093,14 +1093,12 @@ impl LsOutput for TextOutput<'_> {
         if config.dired {
             dired::indent(&mut self.state.out)?;
         }
-        let total_str = format!(
-            "{}{}",
-            translate!("ls-total", "size" => display_size(total_size, config)),
-            config.line_ending
-        );
-        write!(self.state.out, "{total_str}")?;
+        let total = translate!("ls-total", "size" => display_size(total_size, config));
+        let total_len = total.len() + 1;
+        self.state.out.write_all(total.as_bytes())?;
+        self.state.out.write_all(&[config.line_ending as u8])?;
         if config.dired {
-            dired::add_total(&mut self.dired, total_str.len());
+            dired::add_total(&mut self.dired, total_len);
         }
         Ok(())
     }
@@ -1296,9 +1294,7 @@ fn collect_directory_entries<O: LsOutput>(
     }
 
     sort_entries(entries, config);
-    if entries.capacity() > entries.len().saturating_mul(2) {
-        entries.shrink_to_fit();
-    }
+    entries.shrink_to_fit();
 
     Ok(())
 }
