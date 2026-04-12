@@ -71,17 +71,6 @@ impl FileInformation {
         Ok(Self(info))
     }
 
-    /// Get information from a currently open file
-    #[cfg(target_os = "wasi")]
-    pub fn from_file(file: &fs::File) -> IOResult<Self> {
-        use std::os::fd::AsRawFd;
-        let mut stat: libc::stat = unsafe { std::mem::zeroed() };
-        if unsafe { libc::fstat(file.as_raw_fd(), &mut stat) } != 0 {
-            return Err(Error::last_os_error());
-        }
-        Ok(Self(stat))
-    }
-
     /// Get information for a given path.
     ///
     /// If `path` points to a symlink and `dereference` is true, information about
@@ -202,13 +191,6 @@ impl PartialEq for FileInformation {
     }
 }
 
-#[cfg(target_os = "wasi")]
-impl PartialEq for FileInformation {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.st_dev == other.0.st_dev && self.0.st_ino == other.0.st_ino
-    }
-}
-
 impl Eq for FileInformation {}
 
 impl Hash for FileInformation {
@@ -250,6 +232,26 @@ pub enum ResolveMode {
 
     /// Resolve '..' elements before symlinks
     Logical,
+}
+
+/// WASI fallback used when neither `--tmp-dir` nor `TMPDIR` is set and
+/// `env::temp_dir()` would be inapplicable.
+///
+/// The WASI sandbox only exposes explicitly preopened directories, and
+/// `/tmp` is not one by default. This returns `/tmp` when a host preopen
+/// has made it visible as a directory, and the current directory otherwise
+/// — the current directory is always accessible under a preopen mapped
+/// to `/`.
+///
+/// Callers on WASI should prefer `--tmp-dir` and `TMPDIR` before falling
+/// back to this helper.
+#[cfg(target_os = "wasi")]
+pub fn wasi_default_tmp_dir() -> PathBuf {
+    if fs::metadata("/tmp").is_ok_and(|m| m.is_dir()) {
+        PathBuf::from("/tmp")
+    } else {
+        PathBuf::from(".")
+    }
 }
 
 /// Normalize a path by removing relative information
