@@ -32,9 +32,9 @@ WASI does not support spawning child processes. Tests that shell out to other co
 
 When stdin is a seekable file, wasmtime does not preserve the file position between the host and guest. Tests that validate stdin offset behavior after `head` reads are skipped.
 
-## WASI: read_link fails under wasmtime via spawned test harness
+## WASI: absolute symlink targets fail under wasmtime
 
-When the WASI binary is spawned via `std::process::Command` from the cargo-test harness, `fs::read_link` (and operations that follow symlinks, such as opening a symlink to a FIFO or traversing a symlink loop) can return `EPERM` on absolute paths — paths that work when wasmtime is invoked directly. Individual symptom tests skipped under this umbrella are annotated with narrower reasons describing the observed errno mismatch.
+Under wasmtime, symlinks whose stored target is an absolute guest path (for example `bar -> /foo`) fail in cases that work on POSIX: `readlink bar` exits 1 and `readlink -v bar` reports `Permission denied`, while the equivalent relative symlink (`bar -> foo`) succeeds. This reproduces even when `wasmtime` is invoked directly, so it is not specific to the cargo-test harness. `realpath` and symlink-heavy `cp` paths inherit the same limitation, and individual symptom tests under this umbrella are annotated with narrower reasons describing the observed errno mismatch.
 
 ## WASI: no Unix domain socket support
 
@@ -62,7 +62,7 @@ wasi-libc does not ship tzdata, so `TZ` is not honoured and timezone-dependent v
 
 ## WASI: guest root is a writable preopen
 
-The test harness maps the per-test working directory as the guest's `/`. That makes `/` writable inside the guest, so GNU-style protections against operating on the system root (e.g. `touch /` failing) cannot be exercised. Tests that assert these protections are skipped.
+The test harness maps the per-test working directory as the guest's `/`. That makes `/` writable inside the guest, so GNU-style protections against operating on the system root (e.g. `touch /` failing) cannot be exercised. It also means guest-visible absolute paths are rooted at `/`, not at the host tempdir. Tests that compare against host `canonicalize()` results or pass host absolute paths into the guest (for example some `cp --parents`, `readlink`, `realpath`, `pwd`, and `ls` cases) need guest-aware expectations or separate coverage. Tests that assert the root-protection behaviour are skipped.
 
 ## WASI: `touch -` (stdout) unsupported
 
