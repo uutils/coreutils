@@ -53,10 +53,6 @@ jobs:
             const issue_number = Number(fs.readFileSync('./NR'));
             const content = fs.readFileSync('./result.txt').toString();
 
-            if (content.trim().length <= 7) { // 7 because we have backquote + \n
-              return;
-            }
-
             const marker = '<!-- gnu-comment-bot -->';
             const body = `${marker}\nGNU testsuite comparison:\n\`\`\`\n${content}\n\`\`\``;
 
@@ -77,6 +73,9 @@ jobs:
                 body
               });
             } else {
+              if (content.trim().length <= 7) { // 7 because we have backquote + \n
+                return;
+              }
               await github.rest.issues.createComment({
                 ...context.repo,
                 issue_number,
