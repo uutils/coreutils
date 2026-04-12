@@ -167,7 +167,7 @@ jobs:
         strip -s /tmp/individual/usr/local/bin/*
         ZSTD_CLEVEL=19 tar --zstd -caf individual-x86_64-unknown-linux-gnu.tar.zst -C /tmp/individual/usr/local bin
     - name: Publish
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@v3
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       with:
         tag_name: latest-commit
