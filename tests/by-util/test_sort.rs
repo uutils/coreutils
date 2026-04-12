@@ -36,6 +36,7 @@ fn test_helper(file_name: &str, possible_args: &[&str]) {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: sysinfo/meminfo not available")]
 fn test_buffer_sizes() {
     #[cfg(target_os = "linux")]
     let buffer_sizes = ["0", "50K", "50k", "1M", "100M", "0%", "10%"];
@@ -1327,6 +1328,7 @@ fn sort_empty_chunk() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg_attr(wasi_runner, ignore = "WASI: no subprocess spawning")]
 fn test_compress() {
     new_ucmd!()
         .args(&[
@@ -1343,6 +1345,7 @@ fn test_compress() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg_attr(wasi_runner, ignore = "WASI: no subprocess spawning")]
 fn test_compress_merge() {
     new_ucmd!()
         .args(&[
@@ -1420,6 +1423,7 @@ fn test_batch_size_invalid() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: rlimit/setrlimit not supported")]
 fn test_batch_size_too_large() {
     let large_batch_size = "18446744073709551616";
     new_ucmd!()
@@ -1456,6 +1460,7 @@ fn test_merge_batch_size() {
 // TODO(#7542): Re-enable on Android once we figure out why setting limit is broken.
 // #[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: rlimit/setrlimit not supported")]
 fn test_merge_batch_size_with_limit() {
     use rlimit::Resource;
     // Currently need...
@@ -1818,6 +1823,7 @@ fn test_files0_read_error() {
 
 #[cfg(target_os = "linux")]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 // Test for GNU tests/sort/sort-files0-from.pl "empty-non-regular"
 fn test_files0_from_empty_non_regular() {
     new_ucmd!()
@@ -2984,6 +2990,7 @@ fn test_locale_utf8_sort_debug_message() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no locale data")]
 fn test_failed_to_set_locale_debug_message() {
     let result = new_ucmd!()
         .env("LC_ALL", "not-valid-locale")

@@ -68,6 +68,14 @@ The test harness maps the per-test working directory as the guest's `/`. That ma
 
 On WASI, `touch -` returns `UnsupportedPlatformFeature` because the guest cannot reliably locate the host file backing stdout. Tests that exercise `touch -` are skipped.
 
+## WASI: rlimit/setrlimit not supported
+
+WASI has no concept of per-process resource limits, so `setrlimit` (and the `rlimit` crate that wraps it) has no effect. Tests that set `RLIMIT_NOFILE` to verify behaviour under restricted file-descriptor budgets are skipped.
+
+## WASI: sysinfo/meminfo not available
+
+WASI has no `sysinfo`/`/proc/meminfo` equivalent, so features that size buffers as a percentage of system memory (e.g. `sort -S 10%`) cannot resolve the limit and fail. Tests that exercise percentage-based sizing are skipped.
+
 ## WASI: errno/error-message mismatches
 
 Several error paths surface different errno values (and therefore different error messages) through wasmtime than on POSIX. Observed cases:
