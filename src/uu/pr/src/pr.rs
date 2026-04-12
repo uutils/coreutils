@@ -8,7 +8,6 @@
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use itertools::Itertools;
-use regex::Regex;
 use std::ffi::OsStr;
 use std::fs::metadata;
 use std::io::{Read, Write, stderr, stdin, stdout};
@@ -426,20 +425,64 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
+/// Extract the `digits[:digits]` part from a `+digits[:digits]` token found anywhere in the string.
+fn extract_plus_page(s: &str) -> Option<String> {
+    for token in s.split_whitespace() {
+        if let Some(rest) = token.strip_prefix('+') {
+            if rest.starts_with(|c: char| c.is_ascii_digit()) {
+                return Some(rest.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Extract the digits part from a `-digits` token found anywhere in the string.
+/// Equivalent to the regex `\s*-(\d+)\s*` capture group 1.
+fn extract_minus_col(s: &str) -> Option<String> {
+    for token in s.split_whitespace() {
+        if let Some(rest) = token.strip_prefix('-') {
+            if !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()) {
+                return Some(rest.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Check if string matches `^[-+]\d+.*` (starts with `-` or `+` followed by a digit).
+fn is_column_page_option(s: &str) -> bool {
+    let mut chars = s.chars();
+    matches!(chars.next(), Some('-' | '+')) && matches!(chars.next(), Some('0'..='9'))
+}
+
+/// Check if string matches `^[^-]\d*$` (doesn't start with `-`, rest are all digits).
+fn is_num_value(s: &str) -> bool {
+    let mut chars = s.chars();
+    match chars.next() {
+        Some('-') | None => false,
+        Some(_) => chars.all(|c| c.is_ascii_digit()),
+    }
+}
+
+/// Check if string matches `^-n\s*$` (is `-n` optionally followed by whitespace).
+fn is_n_flag(s: &str) -> bool {
+    s.trim().trim_end() == "-n"
+}
+
+/// Check if string matches `^-e` (starts with `-e`).
+fn is_e_flag(s: &str) -> bool {
+    s.trim().starts_with("-e")
+}
+
 /// Returns re-written arguments which are passed to the program.
-/// Removes -column and +page option as getopts cannot parse things like -3 etc
-/// # Arguments
-/// * `args` - Command line arguments
+/// Removes -column and +page option as getopts cannot parse things like -3 etc.
 fn recreate_arguments(args: &[String]) -> Vec<String> {
-    let column_page_option = Regex::new(r"^[-+]\d+.*").unwrap();
-    let num_regex = Regex::new(r"^[^-]\d*$").unwrap();
-    let n_regex = Regex::new(r"^-n\s*$").unwrap();
-    let e_regex = Regex::new(r"^-e").unwrap();
     let mut arguments = args.to_owned();
-    let num_option = args.iter().find_position(|x| n_regex.is_match(x.trim()));
+    let num_option = args.iter().find_position(|x| is_n_flag(x.trim()));
     if let Some((pos, _value)) = num_option {
         if let Some(num_val_opt) = args.get(pos + 1) {
-            if !num_regex.is_match(num_val_opt) {
+            if !is_num_value(num_val_opt) {
                 let could_be_file = arguments.remove(pos + 1);
                 arguments.insert(pos + 1, format!("{}", NumberingMode::default().width));
                 arguments.insert(pos + 2, could_be_file);
@@ -449,9 +492,7 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
 
     // To ensure not to accidentally delete the next argument after a short flag for -e we insert
     // the default values for the -e flag is '-e' is present without direct arguments.
-    let expand_tabs_option = arguments
-        .iter()
-        .find_position(|x| e_regex.is_match(x.trim()));
+    let expand_tabs_option = arguments.iter().find_position(|x| is_e_flag(x.trim()));
     if let Some((pos, value)) = expand_tabs_option {
         if value.trim().len() <= 2 {
             arguments[pos] = "-e\t8".to_string();
@@ -460,7 +501,7 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
 
     arguments
         .into_iter()
-        .filter(|i| !column_page_option.is_match(i))
+        .filter(|i| !is_column_page_option(i))
         .collect()
 }
 
@@ -632,35 +673,36 @@ fn build_options(
     };
 
     // +page option is less priority than --pages
-    let page_plus_re = Regex::new(r"\s*\+(\d+:*\d*)\s*").unwrap();
-    let res = page_plus_re.captures(free_args).map(|i| {
-        let unparsed_num = i.get(1).unwrap().as_str().trim();
-        let x: Vec<_> = unparsed_num.split(':').collect();
-        x[0].to_string()
-            .parse::<usize>()
-            .map_err(|_e| PrError::EncounteredErrors {
-                msg: format!("invalid {} argument {}", "+", unparsed_num.quote()),
-            })
-    });
-    let start_page_in_plus_option = match res {
-        Some(res) => res?,
+    // Extract the page spec from a "+digits[:digits]" token in free_args.
+    let page_plus_match = extract_plus_page(free_args);
+
+    let start_page_in_plus_option = match page_plus_match {
+        Some(ref s) => {
+            let unparsed_num = s.as_str();
+            let x: Vec<_> = unparsed_num.split(':').collect();
+            x[0].parse::<usize>()
+                .map_err(|_e| PrError::EncounteredErrors {
+                    msg: format!("invalid {} argument {}", "+", unparsed_num.quote()),
+                })?
+        }
         None => 1,
     };
 
-    let res = page_plus_re
-        .captures(free_args)
-        .map(|i| i.get(1).unwrap().as_str().trim())
-        .filter(|i| i.contains(':'))
-        .map(|unparsed_num| {
-            let x: Vec<_> = unparsed_num.split(':').collect();
-            x[1].to_string()
-                .parse::<usize>()
-                .map_err(|_e| PrError::EncounteredErrors {
-                    msg: format!("invalid {} argument {}", "+", unparsed_num.quote()),
-                })
-        });
-    let end_page_in_plus_option = match res {
-        Some(res) => Some(res?),
+    let end_page_in_plus_option = match page_plus_match {
+        Some(ref s) => {
+            let unparsed_num = s.as_str();
+            if unparsed_num.contains(':') {
+                let x: Vec<_> = unparsed_num.split(':').collect();
+                Some(
+                    x[1].parse::<usize>()
+                        .map_err(|_e| PrError::EncounteredErrors {
+                            msg: format!("invalid {} argument {}", "+", unparsed_num.quote()),
+                        })?,
+                )
+            } else {
+                None
+            }
+        }
         None => None,
     };
 
@@ -760,20 +802,16 @@ fn build_options(
         }
     };
 
-    let re_col = Regex::new(r"\s*-(\d+)\s*").unwrap();
-
-    let res = re_col.captures(free_args).map(|i| {
-        let unparsed_num = i.get(1).unwrap().as_str().trim();
-        unparsed_num
-            .parse::<usize>()
-            .map_err(|_e| PrError::EncounteredErrors {
-                msg: format!("invalid {} argument {}", "-", unparsed_num.quote()),
-            })
-    });
-    let start_column_option = match res {
-        Some(res) => Some(res?),
-        None => None,
-    };
+    // Extract column count from a "-digits" token in free_args.
+    let start_column_option = extract_minus_col(free_args)
+        .map(|unparsed_num| {
+            unparsed_num
+                .parse::<usize>()
+                .map_err(|_e| PrError::EncounteredErrors {
+                    msg: format!("invalid {} argument {}", "-", unparsed_num.quote()),
+                })
+        })
+        .transpose()?;
 
     // --column has more priority than -column
 
