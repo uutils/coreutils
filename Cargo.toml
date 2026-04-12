@@ -388,7 +388,7 @@ version = "0.8.0"
 ansi-width = "0.1.0"
 bigdecimal = "0.4"
 binary-heap-plus = "0.5.0"
-bstr = "1.9.1"
+bstr = { version = "1.9.1", default-features = false, features = ["std"] }
 bytecount = "0.6.8"
 byteorder = "1.5.0"
 clap = { version = "4.5", features = ["wrap_help", "cargo", "color"] }
