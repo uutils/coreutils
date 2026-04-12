@@ -2115,7 +2115,6 @@ dependencies = [
  "digest 0.10.7",
  "dunce",
  "fluent",
- "fluent-bundle",
  "fluent-syntax",
  "glob",
  "hex",
