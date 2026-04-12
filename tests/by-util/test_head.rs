@@ -4,7 +4,6 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (words) bogusfile emptyfile abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstu
-// spell-checker:ignore (words) seekable
 
 #[cfg(all(
     not(target_os = "windows"),
