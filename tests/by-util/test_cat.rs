@@ -96,6 +96,7 @@ fn test_no_options_big_input() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO/mkfifo support")]
 fn test_fifo_symlink() {
     use std::io::Write;
     use std::thread;
@@ -147,6 +148,7 @@ fn test_closes_file_descriptors() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no pipe/signal support")]
 fn test_broken_pipe() {
     let mut cmd = new_ucmd!();
     let mut child = cmd
@@ -523,6 +525,7 @@ fn test_squeeze_blank_before_numbering() {
 /// This tests reading from Unix character devices
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_dev_random() {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     const DEV_RANDOM: &str = "/dev/urandom";
@@ -602,6 +605,7 @@ fn test_write_fast_fallthrough_uses_flush() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no Unix domain socket support")]
 fn test_domain_socket() {
     use std::os::unix::net::UnixListener;
 
@@ -616,6 +620,7 @@ fn test_domain_socket() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_write_to_self_empty() {
     // it's ok if the input file is also the output file if it's empty
     let s = TestScenario::new(util_name!());
@@ -631,6 +636,7 @@ fn test_write_to_self_empty() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: cannot detect unsafe overwrite")]
 fn test_write_to_self() {
     let s = TestScenario::new(util_name!());
     let file_path = s.fixtures.plus("first_file");
@@ -687,6 +693,7 @@ fn test_successful_write_to_read_write_self() {
 ///
 /// `cat fx fx3 1<>fx3`
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: cannot detect unsafe overwrite")]
 fn test_failed_write_to_read_write_self() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("fx", "g");
@@ -712,6 +719,10 @@ fn test_failed_write_to_read_write_self() {
 #[test]
 #[cfg(unix)]
 #[cfg(not(target_os = "openbsd"))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: symlink loop traversal does not surface ELOOP ('Too many levels of symbolic links')"
+)]
 fn test_error_loop() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.symlink_file("2", "1");

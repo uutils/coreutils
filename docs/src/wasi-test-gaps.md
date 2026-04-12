@@ -6,7 +6,7 @@ To find all annotated tests: `grep -rn 'wasi_runner, ignore' tests/`
 
 ## Tools not yet covered by integration tests
 
-arch, b2sum, cat, cksum, cp, csplit, date, dir, dircolors, fmt, join, ln, ls, md5sum, mkdir, mv, nproc, pathchk, pr, printenv, ptx, pwd, readlink, realpath, rm, rmdir, seq, sha1sum, sha224sum, sha256sum, sha384sum, sha512sum, shred, sleep, sort, split, tail, touch, tsort, uname, uniq, vdir, yes
+arch, b2sum, cksum, cp, csplit, date, dir, dircolors, fmt, join, ln, ls, md5sum, mkdir, mv, nproc, pathchk, pr, printenv, ptx, pwd, readlink, realpath, rm, rmdir, seq, sha1sum, sha224sum, sha256sum, sha384sum, sha512sum, shred, sleep, split, tsort, uname, uniq, vdir, yes
 
 ## WASI sandbox: host paths not visible
 
@@ -31,3 +31,51 @@ WASI does not support spawning child processes. Tests that shell out to other co
 ## WASI: stdin file position not preserved through wasmtime
 
 When stdin is a seekable file, wasmtime does not preserve the file position between the host and guest. Tests that validate stdin offset behavior after `head` reads are skipped.
+
+## WASI: read_link fails under wasmtime via spawned test harness
+
+When the WASI binary is spawned via `std::process::Command` from the cargo-test harness, `fs::read_link` (and operations that follow symlinks, such as opening a symlink to a FIFO or traversing a symlink loop) can return `EPERM` on absolute paths — paths that work when wasmtime is invoked directly. Individual symptom tests skipped under this umbrella are annotated with narrower reasons describing the observed errno mismatch.
+
+## WASI: no Unix domain socket support
+
+WASI does not support Unix domain sockets. Tests that create or read from `AF_UNIX` sockets are skipped.
+
+## WASI: no locale data
+
+The WASI sandbox does not ship locale data, so `setlocale`/`LC_ALL` have no effect and sorting falls back to byte comparison. Tests that depend on locale-aware collation or month-name translation are skipped.
+
+## WASI: tail follow mode disabled
+
+`tail -f` / `tail -F` (follow mode) requires change-notification mechanisms (`inotify`, `kqueue`) and signal handling that WASI does not provide, so follow is disabled on WASI and a warning is emitted. Tests that exercise follow behaviour are skipped.
+
+## WASI: cannot detect unsafe overwrite
+
+`is_unsafe_overwrite` (used by `cat` to detect input-is-output situations) is stubbed to return `false` on WASI because the required `stat` / device-and-inode comparison is not available. Tests that assert this error path are skipped.
+
+## WASI: pre-epoch timestamps not representable
+
+WASI Preview 1 `Timestamp` is a `u64` nanosecond count since the Unix epoch, so `path_filestat_set_times` (and therefore `touch -t` with a two-digit year ≥ 69) cannot express dates before 1970. Tests that set pre-epoch timestamps are skipped.
+
+## WASI: no timezone database
+
+wasi-libc does not ship tzdata, so `TZ` is not honoured and timezone-dependent validation (e.g. `touch -t` rejecting a nonexistent local time during a DST transition) does not happen. Tests that rely on this are skipped.
+
+## WASI: guest root is a writable preopen
+
+The test harness maps the per-test working directory as the guest's `/`. That makes `/` writable inside the guest, so GNU-style protections against operating on the system root (e.g. `touch /` failing) cannot be exercised. Tests that assert these protections are skipped.
+
+## WASI: `touch -` (stdout) unsupported
+
+On WASI, `touch -` returns `UnsupportedPlatformFeature` because the guest cannot reliably locate the host file backing stdout. Tests that exercise `touch -` are skipped.
+
+## WASI: errno/error-message mismatches
+
+Several error paths surface different errno values (and therefore different error messages) through wasmtime than on POSIX. Observed cases:
+
+- Opening a directory as a file returns `EBADF` rather than `EISDIR`.
+- Redirecting a directory into stdin returns `ENOENT` rather than `EISDIR`.
+- Filesystem permission errors surface as `ENOENT` rather than `EACCES`.
+- Symlink-loop traversal does not reliably surface `ELOOP` ("Too many levels of symbolic links").
+- Opening a symlink-to-directory does not reliably surface `EISDIR`.
+
+Tests that assert specific error text for these paths are skipped.

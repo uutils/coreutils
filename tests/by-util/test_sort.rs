@@ -52,7 +52,10 @@ fn test_buffer_sizes() {
             .stdout_is_fixture("ext_sort.expected");
     }
 
-    #[cfg(not(target_pointer_width = "32"))]
+    // The test runner compiles for the host (often 64-bit), but the binary
+    // under test may be 32-bit (e.g. wasm32-wasip1), which rejects very
+    // large buffer sizes.
+    #[cfg(all(not(target_pointer_width = "32"), not(wasi_runner)))]
     {
         let buffer_sizes = ["1000G", "10T"];
         for buffer_size in &buffer_sizes {
@@ -649,6 +652,7 @@ fn month_sort_input_expected(months: &[String]) -> (String, String) {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no locale data")]
 fn test_month_sort_french_locale() {
     let locale = "fr_FR.UTF-8";
     if !is_locale_available(locale) {
@@ -680,6 +684,7 @@ fn test_month_sort_french_locale() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no locale data")]
 fn test_month_sort_hungarian_locale() {
     let locale = "hu_HU.UTF-8";
     if !is_locale_available(locale) {
@@ -711,6 +716,7 @@ fn test_month_sort_hungarian_locale() {
 /// E.g. "av   ril" should NOT match "avril" — GNU treats it as unknown.
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no locale data")]
 fn test_month_sort_french_embedded_blanks() {
     let locale = "fr_FR.UTF-8";
     if !is_locale_available(locale) {
@@ -763,6 +769,7 @@ fn test_month_sort_french_embedded_blanks() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no locale data")]
 fn test_month_sort_japanese_locale() {
     let locale = "ja_JP.UTF-8";
     if !is_locale_available(locale) {
@@ -1321,6 +1328,7 @@ fn test_compress_merge() {
 
 #[test]
 #[cfg(not(target_os = "android"))]
+#[cfg_attr(wasi_runner, ignore = "WASI: no subprocess spawning")]
 fn test_compress_fail() {
     let result = new_ucmd!()
         .args(&[
@@ -1505,6 +1513,7 @@ fn test_verifies_files_after_keys() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_verifies_input_files() {
     new_ucmd!()
         .args(&["/dev/random", "nonexistent_file"])
@@ -1536,6 +1545,7 @@ fn test_output_is_input() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_output_device() {
     new_ucmd!()
         .args(&["-o", "/dev/null"])
@@ -1570,6 +1580,7 @@ fn test_wrong_args_exit_code() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no pipe/signal support")]
 fn test_tmp_files_deleted_on_sigint() {
     use std::{fs::read_dir, time::Duration};
 
@@ -1758,6 +1769,10 @@ fn test_files0_from_empty() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: opening a directory as a file reports EBADF instead of EISDIR"
+)]
 fn test_files0_read_error() {
     new_ucmd!()
         .args(&["--files0-from", "."])
@@ -2823,6 +2838,7 @@ fn test_locale_collation_utf8() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no locale data")]
 fn test_locale_interleaved_en_us_utf8() {
     // Test case for issue: locale-based collation support
     // In en_US.UTF-8, lowercase and uppercase letters should interleave
@@ -2895,6 +2911,7 @@ fn test_locale_with_ignore_case_flag() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no locale data")]
 fn test_locale_complex_utf8_sorting() {
     // More complex test with mixed case and special characters
     // In en_US.UTF-8, should respect locale collation rules
@@ -2919,6 +2936,7 @@ fn test_locale_posix_sort_debug_message() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no locale data")]
 fn test_locale_utf8_sort_debug_message() {
     new_ucmd!()
         .env("LC_ALL", "en_US.UTF-8")

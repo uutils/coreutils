@@ -166,6 +166,10 @@ fn test_touch_2_digit_years_2038() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: pre-epoch timestamps not representable by path_filestat_set_times"
+)]
 fn test_touch_2_digit_years_69() {
     // 69 and after are 19xx
     let (at, mut ucmd) = at_and_ucmd!();
@@ -770,6 +774,10 @@ fn test_touch_mtime_dst_succeeds() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no tzdb; TZ env var is not honoured so DST validation is skipped"
+)]
 fn test_touch_mtime_dst_fails() {
     let file = "test_touch_set_mtime_dst_fails";
 
@@ -787,6 +795,10 @@ fn test_touch_mtime_dst_fails() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: guest root is a writable preopen, not the protected system root"
+)]
 fn test_touch_system_fails() {
     let file = "/";
     new_ucmd!()
@@ -828,6 +840,7 @@ fn test_touch_no_such_file_error_msg() {
 
 #[test]
 #[cfg(not(any(target_os = "freebsd", target_os = "openbsd")))]
+#[cfg_attr(wasi_runner, ignore = "WASI: touch - (stdout) is unsupported")]
 fn test_touch_changes_time_of_file_in_stdout() {
     // command like: `touch - 1< ./c`
     // should change the timestamp of c
@@ -850,6 +863,10 @@ fn test_touch_changes_time_of_file_in_stdout() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: filesystem permission errors surface as ENOENT rather than EACCES"
+)]
 fn test_touch_permission_denied_error_msg() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -970,6 +987,7 @@ fn test_touch_no_dereference_dangling() {
 
 #[test]
 #[cfg(not(target_os = "openbsd"))]
+#[cfg_attr(wasi_runner, ignore = "WASI: touch - (stdout) is unsupported")]
 fn test_touch_dash() {
     new_ucmd!().args(&["-h", "-"]).succeeds().no_output();
 }

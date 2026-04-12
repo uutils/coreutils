@@ -2154,11 +2154,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .map(PathBuf::from)
             .or_else(|| env::var_os("TMPDIR").map(PathBuf::from))
             .unwrap_or_else(|| {
-                // env::temp_dir() panics on WASI; default to /tmp
                 #[cfg(target_os = "wasi")]
-                return PathBuf::from("/tmp");
+                {
+                    uucore::fs::wasi_default_tmp_dir()
+                }
                 #[cfg(not(target_os = "wasi"))]
-                env::temp_dir()
+                {
+                    env::temp_dir()
+                }
             }),
     );
 

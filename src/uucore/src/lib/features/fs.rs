@@ -22,7 +22,7 @@ use std::fs::read_dir;
 use std::hash::Hash;
 use std::io::Stdin;
 use std::io::{Error, ErrorKind, Result as IOResult};
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "wasi"))]
 use std::os::fd::AsFd;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
@@ -43,14 +43,13 @@ macro_rules! has {
 
 /// Information to uniquely identify a file
 pub struct FileInformation(
-    #[cfg(unix)] rustix::fs::Stat,
+    #[cfg(any(unix, target_os = "wasi"))] rustix::fs::Stat,
     #[cfg(windows)] winapi_util::file::Information,
-    #[cfg(target_os = "wasi")] libc::stat,
 );
 
 impl FileInformation {
     /// Get information from a currently open file
-    #[cfg(unix)]
+    #[cfg(any(unix, target_os = "wasi"))]
     pub fn from_file(file: &impl AsFd) -> IOResult<Self> {
         let stat = rustix::fs::fstat(file)?;
         Ok(Self(stat))
@@ -63,23 +62,12 @@ impl FileInformation {
         Ok(Self(info))
     }
 
-    /// Get information from a currently open file
-    #[cfg(target_os = "wasi")]
-    pub fn from_file(file: &fs::File) -> IOResult<Self> {
-        use std::os::fd::AsRawFd;
-        let mut stat: libc::stat = unsafe { std::mem::zeroed() };
-        if unsafe { libc::fstat(file.as_raw_fd(), &raw mut stat) } != 0 {
-            return Err(Error::last_os_error());
-        }
-        Ok(Self(stat))
-    }
-
     /// Get information for a given path.
     ///
     /// If `path` points to a symlink and `dereference` is true, information about
     /// the link's target will be returned.
     pub fn from_path(path: impl AsRef<Path>, dereference: bool) -> IOResult<Self> {
-        #[cfg(unix)]
+        #[cfg(any(unix, target_os = "wasi"))]
         {
             let stat = if dereference {
                 rustix::fs::stat(path.as_ref())
@@ -103,27 +91,10 @@ impl FileInformation {
             let file = open_options.read(true).open(path.as_ref())?;
             Self::from_file(&file)
         }
-        #[cfg(target_os = "wasi")]
-        {
-            use std::ffi::CString;
-            use std::os::wasi::ffi::OsStrExt;
-            let path_c = CString::new(path.as_ref().as_os_str().as_bytes())
-                .map_err(|e| Error::new(ErrorKind::InvalidInput, e))?;
-            let mut stat: libc::stat = unsafe { std::mem::zeroed() };
-            let res = if dereference {
-                unsafe { libc::stat(path_c.as_ptr(), &raw mut stat) }
-            } else {
-                unsafe { libc::lstat(path_c.as_ptr(), &raw mut stat) }
-            };
-            if res != 0 {
-                return Err(Error::last_os_error());
-            }
-            Ok(Self(stat))
-        }
     }
 
     pub fn file_size(&self) -> u64 {
-        #[cfg(unix)]
+        #[cfg(any(unix, target_os = "wasi"))]
         {
             assert!(self.0.st_size >= 0, "File size is negative");
             self.0.st_size.try_into().unwrap()
@@ -131,11 +102,6 @@ impl FileInformation {
         #[cfg(target_os = "windows")]
         {
             self.0.file_size()
-        }
-        #[cfg(target_os = "wasi")]
-        {
-            assert!(self.0.st_size >= 0, "File size is negative");
-            self.0.st_size.try_into().unwrap()
         }
     }
 
@@ -163,6 +129,8 @@ impl FileInformation {
             target_pointer_width = "64"
         ))]
         return self.0.st_nlink;
+        #[cfg(target_os = "wasi")]
+        return self.0.st_nlink;
         #[cfg(all(
             unix,
             any(
@@ -187,11 +155,9 @@ impl FileInformation {
         return self.0.st_nlink.try_into().unwrap();
         #[cfg(windows)]
         return self.0.number_of_links();
-        #[cfg(target_os = "wasi")]
-        return self.0.st_nlink;
     }
 
-    #[cfg(unix)]
+    #[cfg(any(unix, target_os = "wasi"))]
     pub fn inode(&self) -> u64 {
         #[cfg(all(not(any(target_os = "netbsd")), target_pointer_width = "64"))]
         return self.0.st_ino;
@@ -201,7 +167,7 @@ impl FileInformation {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "wasi"))]
 impl PartialEq for FileInformation {
     fn eq(&self, other: &Self) -> bool {
         self.0.st_dev == other.0.st_dev && self.0.st_ino == other.0.st_ino
@@ -216,18 +182,11 @@ impl PartialEq for FileInformation {
     }
 }
 
-#[cfg(target_os = "wasi")]
-impl PartialEq for FileInformation {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.st_dev == other.0.st_dev && self.0.st_ino == other.0.st_ino
-    }
-}
-
 impl Eq for FileInformation {}
 
 impl Hash for FileInformation {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        #[cfg(unix)]
+        #[cfg(any(unix, target_os = "wasi"))]
         {
             self.0.st_dev.hash(state);
             self.0.st_ino.hash(state);
@@ -236,11 +195,6 @@ impl Hash for FileInformation {
         {
             self.0.volume_serial_number().hash(state);
             self.0.file_index().hash(state);
-        }
-        #[cfg(target_os = "wasi")]
-        {
-            self.0.st_dev.hash(state);
-            self.0.st_ino.hash(state);
         }
     }
 }
@@ -269,6 +223,26 @@ pub enum ResolveMode {
 
     /// Resolve '..' elements before symlinks
     Logical,
+}
+
+/// WASI fallback used when neither `--tmp-dir` nor `TMPDIR` is set and
+/// `env::temp_dir()` would be inapplicable.
+///
+/// The WASI sandbox only exposes explicitly preopened directories, and
+/// `/tmp` is not one by default. This returns `/tmp` when a host preopen
+/// has made it visible as a directory, and the current directory otherwise
+/// — the current directory is always accessible under a preopen mapped
+/// to `/`.
+///
+/// Callers on WASI should prefer `--tmp-dir` and `TMPDIR` before falling
+/// back to this helper.
+#[cfg(target_os = "wasi")]
+pub fn wasi_default_tmp_dir() -> PathBuf {
+    if fs::metadata("/tmp").is_ok_and(|m| m.is_dir()) {
+        PathBuf::from("/tmp")
+    } else {
+        PathBuf::from(".")
+    }
 }
 
 /// Normalize a path by removing relative information

@@ -897,12 +897,7 @@ impl Attributes {
         #[cfg(unix)]
         ownership: Preserve::Yes { required: true },
         mode: Preserve::Yes { required: true },
-        // WASI: filetime panics in from_last_{access,modification}_time,
-        // so timestamps cannot be preserved. Mark as optional so -a works.
-        #[cfg(not(target_os = "wasi"))]
         timestamps: Preserve::Yes { required: true },
-        #[cfg(target_os = "wasi")]
-        timestamps: Preserve::Yes { required: false },
         context: {
             #[cfg(feature = "feat_selinux")]
             {
@@ -1841,11 +1836,37 @@ pub(crate) fn copy_attributes(
     })?;
 
     handle_preserve(attributes.timestamps, || -> CopyResult<()> {
-        // filetime's WASI backend panics in from_last_{access,modification}_time,
-        // so return ENOTSUP. handle_preserve silently suppresses ENOTSUP for
-        // optional preservation (-a) and reports it for required (--preserve=timestamps).
         #[cfg(target_os = "wasi")]
-        return Err(io::Error::from_raw_os_error(libc::EOPNOTSUPP).into());
+        {
+            // `filetime`'s WASI backend panics in
+            // `from_last_{access,modification}_time`. Reach `utimensat` directly
+            // through `rustix`, converting `SystemTime` → `Timespec` via
+            // `UNIX_EPOCH` (which matches the `path_filestat_set_times` contract).
+            use std::time::UNIX_EPOCH;
+            let to_timespec = |t: std::time::SystemTime| -> io::Result<rustix::fs::Timespec> {
+                // Pre-epoch source times can't be represented by WASI's
+                // `path_filestat_set_times` (unsigned nanosecond count).
+                let d = t
+                    .duration_since(UNIX_EPOCH)
+                    .map_err(|e| io::Error::new(io::ErrorKind::Unsupported, e))?;
+                Ok(rustix::fs::Timespec {
+                    tv_sec: d.as_secs() as _,
+                    tv_nsec: d.subsec_nanos() as _,
+                })
+            };
+            let timestamps = rustix::fs::Timestamps {
+                last_access: to_timespec(source_metadata.accessed()?)?,
+                last_modification: to_timespec(source_metadata.modified()?)?,
+            };
+            let flags = if dest.is_symlink() {
+                rustix::fs::AtFlags::SYMLINK_NOFOLLOW
+            } else {
+                rustix::fs::AtFlags::empty()
+            };
+            rustix::fs::utimensat(rustix::fs::CWD, dest, &timestamps, flags)
+                .map_err(io::Error::from)?;
+            Ok(())
+        }
 
         #[cfg(not(target_os = "wasi"))]
         {
@@ -1935,20 +1956,14 @@ fn symlink_file(
     }
     #[cfg(target_os = "wasi")]
     {
-        use std::ffi::CString;
-        use std::os::wasi::ffi::OsStrExt;
-        let src_c = CString::new(source.as_os_str().as_bytes())
-            .map_err(|e| CpError::Error(e.to_string()))?;
-        let dst_c =
-            CString::new(dest.as_os_str().as_bytes()).map_err(|e| CpError::Error(e.to_string()))?;
-        if unsafe { libc::symlink(src_c.as_ptr(), dst_c.as_ptr()) } != 0 {
-            return Err(CpError::IoErrContext(
-                io::Error::last_os_error(),
+        rustix::fs::symlink(source, dest).map_err(|e| {
+            CpError::IoErrContext(
+                io::Error::from(e),
                 translate!("cp-error-cannot-create-symlink",
                            "dest" => get_filename(dest).unwrap_or("?").quote(),
                            "source" => get_filename(source).unwrap_or("?").quote()),
-            ));
-        }
+            )
+        })?;
     }
     if let Ok(file_info) = FileInformation::from_path(dest, false) {
         symlinked_files.insert(file_info);
