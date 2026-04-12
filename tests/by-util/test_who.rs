@@ -275,3 +275,20 @@ fn test_locale() {
         .succeeds()
         .stdout_is(&expected_stdout);
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_piped_to_dev_full() {
+    let ts = TestScenario::new(util_name!());
+
+    let dev_full = std::fs::OpenOptions::new()
+        .write(true)
+        .open("/dev/full")
+        .unwrap();
+
+    ts.ucmd()
+        .arg("--heading")
+        .set_stdout(dev_full)
+        .fails()
+        .stderr_contains("No space left on device");
+}
