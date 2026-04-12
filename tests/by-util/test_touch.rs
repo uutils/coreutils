@@ -634,6 +634,10 @@ fn test_touch_set_date7() {
 /// (which uses i64 `tv_sec` natively), this should succeed on all targets.
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: pre-epoch timestamps not representable by path_filestat_set_times"
+)]
 fn test_touch_set_date_year_zero() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_year_zero";
@@ -1076,6 +1080,7 @@ fn test_touch_f_option() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_touch_non_utf8_paths() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -1092,6 +1097,7 @@ fn test_touch_non_utf8_paths() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_touch_device_files() {
     let (_, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["/dev/null", "/dev/zero", "/dev/full", "/dev/random"])
