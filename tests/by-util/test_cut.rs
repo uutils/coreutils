@@ -291,6 +291,7 @@ fn test_single_quote_pair_as_delimiter_is_invalid() {
     for args in [&["-d", "''", "-f2"][..], &["--delimiter=''", "-f2"][..]] {
         new_ucmd!()
             .args(args)
+            .ignore_stdin_write_error()
             .pipe_in("a''b\n")
             .fails()
             .stderr_contains("cut: the delimiter must be a single character")
