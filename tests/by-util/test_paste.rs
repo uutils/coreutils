@@ -417,6 +417,7 @@ fn test_data() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_non_utf8_delimiter() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("f1", "1\n2\n");
@@ -432,6 +433,7 @@ fn test_non_utf8_delimiter() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_paste_non_utf8_paths() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -466,6 +468,7 @@ fn make_broken_pipe() -> std::fs::File {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/dev) not visible")]
 fn test_dev_zero_write_error_dev_full() {
     use std::fs::File;
 
@@ -482,6 +485,7 @@ fn test_dev_zero_write_error_dev_full() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/dev) not visible")]
 fn test_dev_zero_closed_pipe() {
     new_ucmd!()
         .arg("/dev/zero")
