@@ -672,7 +672,7 @@ jobs:
         rm share/zsh/site-functions/_[ # not supported
         tar --zstd -cf docs.tar.zst share
     - name: Publish
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@v3
       if: steps.vars.outputs.DEPLOY && matrix.job.skip-publish != true && matrix.job.check-only != true
       with:
         draft: true
@@ -682,7 +682,7 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     - name: Publish latest commit
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@v3
       if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.job.skip-publish != true && matrix.job.check-only != true
       with:
         tag_name: latest-commit
