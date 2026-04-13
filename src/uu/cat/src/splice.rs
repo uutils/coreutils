@@ -4,12 +4,9 @@
 // file that was distributed with this source code.
 use super::{CatResult, FdReadable, InputHandle};
 
-use rustix::io::{read, write};
 use std::os::{fd::AsFd, unix::io::AsRawFd};
 
-use uucore::pipes::{MAX_ROOTLESS_PIPE_SIZE, might_fuse, pipe, splice, splice_exact};
-
-const BUF_SIZE: usize = 1024 * 16;
+use uucore::pipes::{MAX_ROOTLESS_PIPE_SIZE, copy_exact, might_fuse, pipe, splice, splice_exact};
 
 /// This function is called from `write_fast()` on Linux and Android. The
 /// function `splice()` is used to move data between two file descriptors
@@ -56,25 +53,4 @@ pub(super) fn write_fast_using_splice<R: FdReadable, S: AsRawFd + AsFd>(
     } else {
         Ok(true)
     }
-}
-
-/// Move exactly `num_bytes` bytes from `read_fd` to `write_fd`.
-///
-/// Panics if not enough bytes can be read.
-fn copy_exact(read_fd: &impl AsFd, write_fd: &impl AsFd, num_bytes: usize) -> std::io::Result<()> {
-    let mut left = num_bytes;
-    let mut buf = [0; BUF_SIZE];
-    while left > 0 {
-        let n = read(read_fd, &mut buf)?;
-        assert_ne!(n, 0, "unexpected end of pipe");
-        let mut written = 0;
-        while written < n {
-            match write(write_fd, &buf[written..n])? {
-                0 => unreachable!("fd should be writable"),
-                w => written += w,
-            }
-        }
-        left -= n;
-    }
-    Ok(())
 }

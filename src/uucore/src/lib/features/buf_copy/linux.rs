@@ -7,7 +7,7 @@
 
 use crate::{
     error::UResult,
-    pipes::{pipe, splice, splice_exact},
+    pipes::{copy_exact, pipe, splice, splice_exact},
 };
 
 /// Buffer-based copying utilities for unix (excluding Linux).
@@ -29,7 +29,6 @@ pub trait FdWritable: Write + AsFd + AsRawFd {}
 impl<T> FdWritable for T where T: Write + AsFd + AsRawFd {}
 
 const SPLICE_SIZE: usize = 1024 * 128;
-const BUF_SIZE: usize = 1024 * 16;
 
 /// Conversion from a `rustix::io::Errno` into our `Error` which implements `UError`.
 impl From<rustix::io::Errno> for Error {
@@ -116,29 +115,4 @@ where
             }
         }
     }
-}
-
-/// Move exactly `num_bytes` bytes from `read_fd` to `write_fd` using the `read`
-/// and `write` calls.
-#[cfg(any(target_os = "linux", target_os = "android"))]
-pub(crate) fn copy_exact(
-    read_fd: &impl AsFd,
-    write_fd: &impl AsFd,
-    num_bytes: usize,
-) -> std::io::Result<usize> {
-    let mut left = num_bytes;
-    let mut buf = [0; BUF_SIZE];
-    let mut total_written = 0;
-    while left > 0 {
-        let n_read = rustix::io::read(read_fd, &mut buf)?;
-        assert_ne!(n_read, 0, "unexpected end of pipe");
-        let mut written = 0;
-        while written < n_read {
-            let n = rustix::io::write(write_fd, &buf[written..n_read])?;
-            written += n;
-        }
-        total_written += written;
-        left -= n_read;
-    }
-    Ok(total_written)
 }

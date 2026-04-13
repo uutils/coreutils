@@ -62,6 +62,32 @@ pub fn splice_exact(source: &impl AsFd, target: &impl AsFd, len: usize) -> std::
     Ok(())
 }
 
+/// Move exactly `left` bytes from `pipe_fd` to `write_fd`.
+/// write_all-like operation with rustix's raw-syscall without io::copy's internal splice call
+/// used to move content of pipe if splice from broker pipe failed
+/// Panics if not enough bytes can be read (e.g. wrong size was given)
+#[inline]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn copy_exact(pipe_fd: &impl AsFd, write_fd: &impl AsFd, left: usize) -> std::io::Result<()> {
+    debug_assert!(
+        left <= MAX_ROOTLESS_PIPE_SIZE,
+        "use this function with pipe input"
+    );
+    let mut buf = vec![0; left];
+    let mut left = left;
+    while left > 0 {
+        let n = rustix::io::read(pipe_fd, &mut buf)?;
+        debug_assert!(n > 0, "incorrect size of content of pipe was given");
+        let mut written = 0;
+        while written < n {
+            written += rustix::io::write(write_fd, &buf[written..n])?;
+        }
+        left -= n;
+    }
+    debug_assert!(left == 0, "incorrect size of content of pipe was given");
+    Ok(())
+}
+
 /// check that source is FUSE
 /// we fallback to read() at FUSE <https://github.com/uutils/coreutils/issues/9609>
 #[inline]

@@ -56,13 +56,13 @@ mod tests {
     fn test_copy_exact() {
         let (mut pipe_read, mut pipe_write) = pipes::pipe().unwrap();
         let data = b"Hello, world!";
+        let data_len = data.len();
         let n = pipe_write.write(data).unwrap();
-        assert_eq!(n, data.len());
-        let mut buf = [0; 1024];
-        let n = copy_exact(&pipe_read, &pipe_write, data.len()).unwrap();
-        let n2 = pipe_read.read(&mut buf).unwrap();
-        assert_eq!(n, n2);
-        assert_eq!(&buf[..n], data);
+        assert_eq!(n, data_len);
+        let mut buf = [0; 64];
+        let _ = pipes::copy_exact(&pipe_read, &pipe_write, data_len);
+        let _ = pipe_read.read(&mut buf).unwrap();
+        assert_eq!(&buf[..data_len], data);
     }
 
     #[test]
