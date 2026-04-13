@@ -336,7 +336,7 @@ fn strip_default_padding(value: &str) -> String {
 /// than minimum field width, and the digit zeros are significant content,
 /// not padding.
 fn is_nanosecond_specifier(specifier: &str) -> bool {
-    specifier.chars().last() == Some('N')
+    specifier.ends_with('N')
 }
 
 /// Apply modifiers specifically for the `%N` (nanoseconds) specifier.
@@ -356,11 +356,10 @@ fn apply_nanosecond_modifiers(
     no_pad: bool,
     underscore_flag: bool,
     pad_char: char,
-    width: usize,
-    explicit_width: bool,
-) -> Result<String, FormatError> {
+    width: Option<usize>,
+) -> String {
     let default_width = 9;
-    let precision = if explicit_width { width } else { default_width };
+    let precision = width.unwrap_or(default_width);
 
     // Truncate or extend to the requested precision
     let mut result: String = if precision <= value.len() {
@@ -390,7 +389,7 @@ fn apply_nanosecond_modifiers(
     // Otherwise (default '0' padding or no flags): result already has the
     // right number of zero-padded digits from the truncation/extension above.
 
-    Ok(result)
+    result
 }
 
 /// Apply width and flag modifiers to a formatted value.
@@ -475,7 +474,13 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
     // (number of fractional digits), not minimum field width, and the
     // digit zeros are significant content rather than padding.
     if is_nanosecond_specifier(specifier) {
-        return apply_nanosecond_modifiers(&result, no_pad, underscore_flag, pad_char, width, explicit_width);
+        return Ok(apply_nanosecond_modifiers(
+            &result,
+            no_pad,
+            underscore_flag,
+            pad_char,
+            width,
+        ));
     }
 
     // If no_pad flag is active, suppress all padding and return
@@ -1124,7 +1129,10 @@ mod tests {
 
         // %_N: space-pad without width → 9 digits, trailing zeros → spaces
         let result = format_with_modifiers(&date, "%_N", &config).unwrap();
-        assert_eq!(result, "0        ", "GNU: %_N at @0 should be '0' + 8 spaces");
+        assert_eq!(
+            result, "0        ",
+            "GNU: %_N at @0 should be '0' + 8 spaces"
+        );
     }
 
     #[test]
