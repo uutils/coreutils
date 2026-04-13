@@ -532,7 +532,7 @@ fn test_du_soft_link() {
         // FreeBSD may have different block allocations depending on filesystem
         // Accept both common sizes
         let valid_sizes = ["12\tsubdir/links\n", "16\tsubdir/links\n"];
-        assert_valid_size(&s, &valid_sizes);
+        assert_valid_size(s, &valid_sizes);
     }
 
     #[cfg(all(
