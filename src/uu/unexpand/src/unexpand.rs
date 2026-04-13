@@ -231,7 +231,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches =
         uucore::clap_localization::handle_clap_result(uu_app(), expand_shortcuts(args.collect()))?;
 
-    unexpand(&Options::new(&matches)?)
+    unexpand(&mut [0u8; 128], &Options::new(&matches)?)
 }
 
 pub fn uu_app() -> Command {
@@ -581,8 +581,7 @@ fn unexpand_file(
     Ok(())
 }
 
-fn unexpand(options: &Options) -> UResult<()> {
-    let mut buf = [0u8; 128];
+fn unexpand(buf: &mut [u8], options: &Options) -> Result<(), Box<dyn UError>> {
     let mut output = BufWriter::new(stdout());
     let tab_config = &options.tab_config;
     let lastcol = if tab_config.tabstops.len() > 1
@@ -595,7 +594,7 @@ fn unexpand(options: &Options) -> UResult<()> {
     };
 
     for file in &options.files {
-        if let Err(e) = unexpand_file(file, &mut output, options, lastcol, tab_config, &mut buf) {
+        if let Err(e) = unexpand_file(file, &mut output, options, lastcol, tab_config, buf) {
             show!(e);
             set_exit_code(1);
         }
