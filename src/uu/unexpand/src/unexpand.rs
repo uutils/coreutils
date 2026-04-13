@@ -595,7 +595,7 @@ fn unexpand_file(
 }
 
 fn unexpand(options: &Options) -> UResult<()> {
-    let mut buf = [0u8; 128];
+    let mut buf = vec![0u8; 128]; // stack spill with stack array and codegen-units=1 <https://github.com/rust-lang/rust/issues/148670>
     let mut output = BufWriter::new(stdout());
     let tab_config = &options.tab_config;
     let lastcol = if tab_config.tabstops.len() > 1
