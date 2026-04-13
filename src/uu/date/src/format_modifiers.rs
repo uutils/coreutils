@@ -264,7 +264,7 @@ fn strip_default_padding(value: &str) -> String {
 /// than minimum field width, and the digit zeros are significant content,
 /// not padding.
 fn is_nanosecond_specifier(specifier: &str) -> bool {
-    specifier.chars().last() == Some('N')
+    specifier.ends_with('N')
 }
 
 /// Apply modifiers specifically for the `%N` (nanoseconds) specifier.
@@ -286,7 +286,7 @@ fn apply_nanosecond_modifiers(
     pad_char: char,
     width: usize,
     explicit_width: bool,
-) -> Result<String, FormatError> {
+) -> String {
     let default_width = 9;
     let precision = if explicit_width { width } else { default_width };
 
@@ -318,7 +318,7 @@ fn apply_nanosecond_modifiers(
     // Otherwise (default '0' padding or no flags): result already has the
     // right number of zero-padded digits from the truncation/extension above.
 
-    Ok(result)
+    result
 }
 
 /// Apply width and flag modifiers to a formatted value.
@@ -411,7 +411,7 @@ fn apply_modifiers(
     // (number of fractional digits), not minimum field width, and the
     // digit zeros are significant content rather than padding.
     if is_nanosecond_specifier(specifier) {
-        return apply_nanosecond_modifiers(&result, no_pad, underscore_flag, pad_char, width, explicit_width);
+        return Ok(apply_nanosecond_modifiers(&result, no_pad, underscore_flag, pad_char, width, explicit_width));
     }
 
     // If no_pad flag is active, suppress all padding and return
