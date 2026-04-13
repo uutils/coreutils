@@ -2723,6 +2723,7 @@ fn test_follow_name_move_retry2() {
 
 #[test]
 #[cfg(not(target_os = "windows"))] // FIXME: for currently not working platforms
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_inotify_only_regular() {
     // The GNU test inotify-only-regular.sh uses strace to ensure that `tail -f`
     // doesn't make inotify syscalls and only uses inotify for regular files or fifos.
