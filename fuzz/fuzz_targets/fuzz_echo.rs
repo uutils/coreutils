@@ -8,7 +8,7 @@
 use libfuzzer_sys::fuzz_target;
 use uu_echo::uumain;
 
-use rand::Rng;
+use rand::RngExt;
 use rand::prelude::IndexedRandom;
 use std::ffi::OsString;
 
@@ -51,7 +51,7 @@ fn generate_echo() -> String {
     echo_str
 }
 
-fn generate_escape_sequence(rng: &mut impl Rng) -> String {
+fn generate_escape_sequence(rng: &mut impl RngExt) -> String {
     let escape_sequences = [
         "\\\\", "\\a", "\\b", "\\c", "\\e", "\\f", "\\n", "\\r", "\\t", "\\v", "\\0NNN", "\\xHH",
     ];

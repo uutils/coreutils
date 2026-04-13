@@ -135,6 +135,7 @@ ROOTFS
 reparse
 rposition
 seedable
+seekable
 semver
 semiprime
 semiprimes
@@ -158,6 +159,7 @@ SIGTTOU
 sigttou
 sigusr
 strcasecmp
+strcoll
 subcommand
 subexpression
 submodule
@@ -214,6 +216,13 @@ val
 vals
 inval
 nofield
+
+# ci
+dtolnay
+Swatinem
+
+preopened
+dotdot
 
 # * clippy
 uninlined

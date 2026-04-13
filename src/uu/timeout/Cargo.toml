@@ -30,3 +30,11 @@ nix = { workspace = true, features = ["signal"] }
 [[bin]]
 name = "timeout"
 path = "src/main.rs"
+
+[dev-dependencies]
+divan = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
+[[bench]]
+name = "timeout_bench"
+harness = false

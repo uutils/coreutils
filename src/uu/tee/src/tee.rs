@@ -3,52 +3,24 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use clap::{Arg, ArgAction, Command, builder::PossibleValue};
+// spell-checker:ignore espidf nopipe
+
 use std::ffi::OsString;
 use std::fs::OpenOptions;
 use std::io::{Error, ErrorKind, Read, Result, Write, stderr, stdin, stdout};
 use std::path::PathBuf;
 use uucore::display::Quotable;
-use uucore::error::UResult;
-use uucore::format_usage;
-use uucore::parser::shortcut_value_parser::ShortcutValueParser;
+use uucore::error::{UResult, strip_errno};
 use uucore::translate;
 
-// spell-checker:ignore nopipe
+mod cli;
+pub use crate::cli::uu_app;
+use crate::cli::{Options, OutputErrorMode, options};
 
 #[cfg(target_os = "linux")]
 use uucore::signals::ensure_stdout_not_broken;
 #[cfg(unix)]
 use uucore::signals::{disable_pipe_errors, ignore_interrupts};
-
-mod options {
-    pub const APPEND: &str = "append";
-    pub const IGNORE_INTERRUPTS: &str = "ignore-interrupts";
-    pub const FILE: &str = "file";
-    pub const IGNORE_PIPE_ERRORS: &str = "ignore-pipe-errors";
-    pub const OUTPUT_ERROR: &str = "output-error";
-}
-
-#[allow(dead_code)]
-struct Options {
-    append: bool,
-    ignore_interrupts: bool,
-    ignore_pipe_errors: bool,
-    files: Vec<OsString>,
-    output_error: Option<OutputErrorMode>,
-}
-
-#[derive(Clone, Debug)]
-enum OutputErrorMode {
-    /// Diagnose write error on any output
-    Warn,
-    /// Diagnose write error on any output that is not a pipe
-    WarnNoPipe,
-    /// Exit upon write error on any output
-    Exit,
-    /// Exit upon write error on any output that is not a pipe
-    ExitNoPipe,
-}
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -57,24 +29,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let append = matches.get_flag(options::APPEND);
     let ignore_interrupts = matches.get_flag(options::IGNORE_INTERRUPTS);
     let ignore_pipe_errors = matches.get_flag(options::IGNORE_PIPE_ERRORS);
-    let output_error = if matches.contains_id(options::OUTPUT_ERROR) {
-        match matches
-            .get_one::<String>(options::OUTPUT_ERROR)
-            .map(String::as_str)
-        {
-            Some("warn") => Some(OutputErrorMode::Warn),
-            // If no argument is specified for --output-error,
-            // defaults to warn-nopipe
-            None | Some("warn-nopipe") => Some(OutputErrorMode::WarnNoPipe),
-            Some("exit") => Some(OutputErrorMode::Exit),
-            Some("exit-nopipe") => Some(OutputErrorMode::ExitNoPipe),
-            _ => unreachable!(),
-        }
-    } else if ignore_pipe_errors {
-        Some(OutputErrorMode::WarnNoPipe)
-    } else {
-        None
-    };
+    let output_error = matches
+        .get_one::<String>(options::OUTPUT_ERROR)
+        .map(|s| match s.as_str() {
+            "warn" => OutputErrorMode::Warn,
+            "warn-nopipe" => OutputErrorMode::WarnNoPipe,
+            "exit" => OutputErrorMode::Exit,
+            "exit-nopipe" => OutputErrorMode::ExitNoPipe,
+            _ => unreachable!("clap excluded it"),
+        })
+        .or_else(|| ignore_pipe_errors.then_some(OutputErrorMode::WarnNoPipe));
 
     let files = matches
         .get_many::<OsString>(options::FILE)
@@ -90,68 +54,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     tee(&options).map_err(|_| 1.into())
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
-        .about(translate!("tee-about"))
-        .override_usage(format_usage(&translate!("tee-usage")))
-        .after_help(translate!("tee-after-help"))
-        .infer_long_args(true)
-        // Since we use value-specific help texts for "--output-error", clap's "short help" and "long help" differ.
-        // However, this is something that the GNU tests explicitly test for, so we *always* show the long help instead.
-        .disable_help_flag(true)
-        .arg(
-            Arg::new("--help")
-                .short('h')
-                .long("help")
-                .help(translate!("tee-help-help"))
-                .action(ArgAction::HelpLong),
-        )
-        .arg(
-            Arg::new(options::APPEND)
-                .long(options::APPEND)
-                .short('a')
-                .help(translate!("tee-help-append"))
-                .action(ArgAction::SetTrue)
-                .overrides_with(options::APPEND),
-        )
-        .arg(
-            Arg::new(options::IGNORE_INTERRUPTS)
-                .long(options::IGNORE_INTERRUPTS)
-                .short('i')
-                .help(translate!("tee-help-ignore-interrupts"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::FILE)
-                .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::FilePath)
-                .value_parser(clap::value_parser!(OsString)),
-        )
-        .arg(
-            Arg::new(options::IGNORE_PIPE_ERRORS)
-                .short('p')
-                .help(translate!("tee-help-ignore-pipe-errors"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::OUTPUT_ERROR)
-                .long(options::OUTPUT_ERROR)
-                .require_equals(true)
-                .num_args(0..=1)
-                .value_parser(ShortcutValueParser::new([
-                    PossibleValue::new("warn").help(translate!("tee-help-output-error-warn")),
-                    PossibleValue::new("warn-nopipe")
-                        .help(translate!("tee-help-output-error-warn-nopipe")),
-                    PossibleValue::new("exit").help(translate!("tee-help-output-error-exit")),
-                    PossibleValue::new("exit-nopipe")
-                        .help(translate!("tee-help-output-error-exit-nopipe")),
-                ]))
-                .help(translate!("tee-help-output-error")),
-        )
 }
 
 fn tee(options: &Options) -> Result<()> {
@@ -178,14 +80,12 @@ fn tee(options: &Options) -> Result<()> {
         0,
         NamedWriter {
             name: translate!("tee-standard-output").into(),
-            inner: Box::new(stdout()),
+            inner: Writer::Stdout(stdout()),
         },
     );
 
     let mut output = MultiWriter::new(writers, options.output_error.clone());
-    let input = &mut NamedReader {
-        inner: Box::new(stdin()) as Box<dyn Read>,
-    };
+    let input = NamedReader { inner: stdin() };
 
     #[cfg(target_os = "linux")]
     if options.ignore_pipe_errors && !ensure_stdout_not_broken()? && output.writers.len() == 1 {
@@ -218,18 +118,37 @@ fn copy(mut input: impl Read, mut output: impl Write) -> Result<usize> {
     // the standard library:
     // https://github.com/rust-lang/rust/blob/2feb91181882e525e698c4543063f4d0296fcf91/library/std/src/io/copy.rs#L271-L297
 
-    // Use buffer size from std implementation:
+    // Use buffer size from std implementation
     // https://github.com/rust-lang/rust/blob/2feb91181882e525e698c4543063f4d0296fcf91/library/std/src/sys/io/mod.rs#L44
-    // spell-checker:ignore espidf
-    const DEFAULT_BUF_SIZE: usize = if cfg!(target_os = "espidf") {
+    const BUF_SIZE: usize = if cfg!(target_os = "espidf") {
         512
     } else {
         8 * 1024
     };
-
-    let mut buffer = [0u8; DEFAULT_BUF_SIZE];
+    let mut buffer = [0u8; BUF_SIZE];
     let mut len = 0;
 
+    loop {
+        match input.read(&mut buffer) {
+            Ok(0) => return Ok(len), // end of file
+            Ok(received) => {
+                output.write_all(&buffer[..received])?;
+                // flush the buffer to comply with POSIX requirement that
+                // `tee` does not buffer the input.
+                output.flush()?;
+                len += received;
+                if len > 2 * BUF_SIZE {
+                    // buffer is too small
+                    break;
+                }
+            }
+            Err(e) if e.kind() == ErrorKind::Interrupted => {}
+            Err(e) => return Err(e),
+        }
+    }
+    // optimize for large input
+    //stack array makes code path for smaller file slower
+    let mut buffer = vec![0u8; 4 * BUF_SIZE];
     loop {
         match input.read(&mut buffer) {
             Ok(0) => return Ok(len), // end of file
@@ -263,7 +182,7 @@ fn open(
     };
     match mode.write(true).create(true).open(path.as_path()) {
         Ok(file) => Some(Ok(NamedWriter {
-            inner: Box::new(file),
+            inner: Writer::File(file),
             name: name.clone(),
         })),
         Err(f) => {
@@ -389,8 +308,29 @@ impl Write for MultiWriter {
     }
 }
 
+enum Writer {
+    File(std::fs::File),
+    Stdout(std::io::Stdout),
+}
+
+impl Write for Writer {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+        match self {
+            Self::File(f) => f.write(buf),
+            Self::Stdout(s) => s.write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> Result<()> {
+        match self {
+            Self::File(f) => f.flush(),
+            Self::Stdout(s) => s.flush(),
+        }
+    }
+}
+
 struct NamedWriter {
-    inner: Box<dyn Write>,
+    inner: Writer,
     pub name: OsString,
 }
 
@@ -405,14 +345,18 @@ impl Write for NamedWriter {
 }
 
 struct NamedReader {
-    inner: Box<dyn Read>,
+    inner: std::io::Stdin,
 }
 
 impl Read for NamedReader {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         match self.inner.read(buf) {
             Err(f) => {
-                let _ = writeln!(stderr(), "{}", translate!("tee-error-stdin", "error" => f));
+                let _ = writeln!(
+                    stderr(),
+                    "tee: {}",
+                    translate!("tee-error-stdin", "error" => strip_errno(&f))
+                );
                 Err(f)
             }
             okay => okay,

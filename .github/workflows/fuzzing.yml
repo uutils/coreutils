@@ -1,6 +1,6 @@
 name: Fuzzing
 
-# spell-checker:ignore (people) dtolnay Swatinem taiki-e
+# spell-checker:ignore (people) taiki-e
 # spell-checker:ignore (misc) fuzzer
 
 env:
