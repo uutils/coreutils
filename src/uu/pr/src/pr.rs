@@ -767,7 +767,7 @@ fn build_options(
         unparsed_num
             .parse::<usize>()
             .map_err(|_e| PrError::EncounteredErrors {
-                msg: format!("invalid {} argument {}", "-", unparsed_num.quote()),
+                msg: format!("invalid {} argument {}", "--", unparsed_num.quote()),
             })
     });
     let start_column_option = match res {
