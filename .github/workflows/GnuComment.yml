@@ -50,7 +50,15 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
+            if (!fs.existsSync('./NR') || !fs.existsSync('./result.txt')) {
+              core.info("No GNU comment payload to post.");
+              return;
+            }
             const issue_number = Number(fs.readFileSync('./NR'));
+            if (!issue_number) {
+              core.info('No PR number; skipping.');
+              return;
+            }
             const content = fs.readFileSync('./result.txt').toString();
 
             const marker = '<!-- gnu-comment-bot -->';
