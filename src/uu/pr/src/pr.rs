@@ -475,7 +475,7 @@ fn parse_usize(matches: &ArgMatches, opt: &str) -> Option<Result<usize, PrError>
         let i = value_to_parse.0;
         let option = value_to_parse.1;
         i.parse().map_err(|_e| PrError::EncounteredErrors {
-            msg: format!("invalid {option} argument {}", i.quote()),
+            msg: format!("invalid -{option} argument {}", i.quote()),
         })
     };
     matches
@@ -767,7 +767,7 @@ fn build_options(
         unparsed_num
             .parse::<usize>()
             .map_err(|_e| PrError::EncounteredErrors {
-                msg: format!("invalid {} argument {}", "--", unparsed_num.quote()),
+                msg: format!("invalid {} argument {}", "-", unparsed_num.quote()),
             })
     });
     let start_column_option = match res {
