@@ -4962,6 +4962,7 @@ fn test_gnu_args_err() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_gnu_args_f() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
