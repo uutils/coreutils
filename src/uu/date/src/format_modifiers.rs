@@ -198,29 +198,11 @@ fn is_atomic_composite_specifier(specifier: &str) -> bool {
 /// This includes text specifiers and numeric specifiers like %e and %k
 /// that use blank-padding by default in GNU date.
 fn is_space_padded_specifier(specifier: &str) -> bool {
-    matches!(
-        specifier.chars().last(),
-        Some(
-            'A' | 'a'
-                | 'B'
-                | 'b'
-                | 'h'
-                | 'Z'
-                | 'p'
-                | 'P'
-                | 'e'
-                | 'k'
-                | 'l'
-                | 'D'
-                | 'F'
-                | 'T'
-                | 'r'
-                | 'R'
-                | 'c'
-                | 'x'
-                | 'X'
+    is_atomic_composite_specifier(specifier)
+        || matches!(
+            specifier.chars().last(),
+            Some('A' | 'a' | 'B' | 'b' | 'h' | 'Z' | 'p' | 'P' | 'e' | 'k' | 'l')
         )
-    )
 }
 
 /// Returns the default width for a specifier.

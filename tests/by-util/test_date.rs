@@ -1967,11 +1967,14 @@ fn test_date_strftime_flag_on_composite() {
 fn test_date_strftime_composite_modifiers_are_atomic() {
     let test_cases = [
         ("+%-D", "06/15/24\n"),
+        ("+%^D", "06/15/24\n"),
         ("+%-F", "2024-06-15\n"),
         ("+%-T", "03:04:05\n"),
         ("+%-r", "03:04:05 AM\n"),
         ("+%-R", "03:04\n"),
         ("+%-c", "Sat Jun 15 03:04:05 2024\n"),
+        ("+%^c", "SAT JUN 15 03:04:05 2024\n"),
+        ("+%#c", "SAT JUN 15 03:04:05 2024\n"),
         ("+%-x", "06/15/24\n"),
         ("+%-X", "03:04:05\n"),
         ("+%_D", "06/15/24\n"),
