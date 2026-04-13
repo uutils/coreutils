@@ -1926,7 +1926,6 @@ fn test_date_strftime_case_flag_on_alt_ampm() {
 }
 
 #[test]
-#[ignore = "https://github.com/uutils/coreutils/issues/11658 — GNU date applies flags/widths to `%N` (nanoseconds); uutils ignores/mishandles them."]
 fn test_date_strftime_n_width_and_flags() {
     // `%_3N` should space-pad nanoseconds to width 3. GNU outputs `0  `; uutils outputs `0`.
     new_ucmd!()

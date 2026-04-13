@@ -259,6 +259,68 @@ fn strip_default_padding(value: &str) -> String {
     value.to_string()
 }
 
+/// Returns true if the specifier is `%N` (nanoseconds), which needs special
+/// treatment: width controls precision (number of fractional digits) rather
+/// than minimum field width, and the digit zeros are significant content,
+/// not padding.
+fn is_nanosecond_specifier(specifier: &str) -> bool {
+    specifier.chars().last() == Some('N')
+}
+
+/// Apply modifiers specifically for the `%N` (nanoseconds) specifier.
+///
+/// Unlike other numeric specifiers, `%N` treats width as precision
+/// (number of fractional-second digits) and its zeros are significant
+/// content, not padding.
+///
+/// GNU behaviour:
+/// - `%N`   → all 9 digits (e.g. "000000000")
+/// - `%-N`  → all 9 digits unchanged (zeros are content, not padding)
+/// - `%3N`  → first 3 digits, zero-padded on the right (e.g. "000")
+/// - `%_3N` → first 3 digits, trailing zeros replaced with spaces (e.g. "0  ")
+/// - `%_N`  → all 9 digits, trailing zeros replaced with spaces
+fn apply_nanosecond_modifiers(
+    value: &str,
+    no_pad: bool,
+    underscore_flag: bool,
+    pad_char: char,
+    width: usize,
+    explicit_width: bool,
+) -> Result<String, FormatError> {
+    let default_width = 9;
+    let precision = if explicit_width { width } else { default_width };
+
+    // Truncate or extend to the requested precision
+    let mut result: String = if precision <= value.len() {
+        value[..precision].to_string()
+    } else {
+        // Extend with trailing zeros to requested precision
+        let mut s = value.to_string();
+        s.extend(std::iter::repeat_n('0', precision - value.len()));
+        s
+    };
+
+    if no_pad {
+        // `-` flag on %N: the zeros in nanoseconds are significant content,
+        // not padding, so return the digits unchanged.
+    } else if underscore_flag || pad_char == ' ' {
+        // `_` flag: replace trailing zeros with spaces
+        let trimmed = result.trim_end_matches('0');
+        let content_len = if trimmed.is_empty() { 1 } else { trimmed.len() };
+        let trailing_spaces = precision - content_len;
+        if trimmed.is_empty() {
+            result = "0".to_string();
+        } else {
+            result = trimmed.to_string();
+        }
+        result.extend(std::iter::repeat_n(' ', trailing_spaces));
+    }
+    // Otherwise (default '0' padding or no flags): result already has the
+    // right number of zero-padded digits from the truncation/extension above.
+
+    Ok(result)
+}
+
 /// Apply width and flag modifiers to a formatted value.
 ///
 /// The `specifier` parameter is the format specifier (e.g., "d", "B", "Y")
@@ -343,6 +405,13 @@ fn apply_modifiers(
         {
             result = result.to_uppercase();
         }
+    }
+
+    // Special handling for %N (nanoseconds): width controls precision
+    // (number of fractional digits), not minimum field width, and the
+    // digit zeros are significant content rather than padding.
+    if is_nanosecond_specifier(specifier) {
+        return apply_nanosecond_modifiers(&result, no_pad, underscore_flag, pad_char, width, explicit_width);
     }
 
     // If no_pad flag is active, suppress all padding and return
@@ -795,5 +864,73 @@ mod tests {
             result, "19",
             "GNU: %_C should produce '19', not '  19' (default width is 2, not 4)"
         );
+    }
+
+    #[test]
+    fn test_nanosecond_width_and_flags() {
+        // %N: nanoseconds at epoch 0 → "000000000" (9 digits, all zeros)
+        use jiff::Timestamp;
+
+        let ts = Timestamp::from_second(0).unwrap();
+        let date = ts.to_zoned(TimeZone::UTC);
+        let config = get_config();
+
+        // %N without modifiers: full 9-digit nanoseconds
+        let result = format_with_modifiers(&date, "%N", &config).unwrap();
+        assert_eq!(result, "000000000");
+
+        // %-N: no-pad flag should NOT strip zeros (they are content)
+        let result = format_with_modifiers(&date, "%-N", &config).unwrap();
+        assert_eq!(result, "000000000", "GNU: %-N at @0 should be '000000000'");
+
+        // %_3N: space-pad, width 3 → truncate to 3 digits, trailing zeros → spaces
+        let result = format_with_modifiers(&date, "%_3N", &config).unwrap();
+        assert_eq!(result, "0  ", "GNU: %_3N at @0 should be '0  '");
+
+        // %3N: width 3 → truncate to 3 digits
+        let result = format_with_modifiers(&date, "%3N", &config).unwrap();
+        assert_eq!(result, "000", "GNU: %3N at @0 should be '000'");
+
+        // %_N: space-pad without width → 9 digits, trailing zeros → spaces
+        let result = format_with_modifiers(&date, "%_N", &config).unwrap();
+        assert_eq!(result, "0        ", "GNU: %_N at @0 should be '0' + 8 spaces");
+    }
+
+    #[test]
+    fn test_nanosecond_with_nonzero_nanos() {
+        use jiff::Timestamp;
+
+        // 1.123456789 seconds since epoch → nanoseconds = 123456789
+        let ts = Timestamp::new(1, 123_456_789).unwrap();
+        let date = ts.to_zoned(TimeZone::UTC);
+        let config = get_config();
+
+        // %N: full 9-digit nanoseconds
+        let result = format_with_modifiers(&date, "%N", &config).unwrap();
+        assert_eq!(result, "123456789");
+
+        // %3N: first 3 digits
+        let result = format_with_modifiers(&date, "%3N", &config).unwrap();
+        assert_eq!(result, "123");
+
+        // %-N: no-pad, all 9 digits shown
+        let result = format_with_modifiers(&date, "%-N", &config).unwrap();
+        assert_eq!(result, "123456789");
+
+        // %_3N: first 3 digits, trailing zeros → spaces (no trailing zeros here)
+        let result = format_with_modifiers(&date, "%_3N", &config).unwrap();
+        assert_eq!(result, "123");
+
+        // Test with trailing zeros: 1.120000000
+        let ts2 = Timestamp::new(1, 120_000_000).unwrap();
+        let date2 = ts2.to_zoned(TimeZone::UTC);
+
+        // %_N: trailing zeros become spaces
+        let result = format_with_modifiers(&date2, "%_N", &config).unwrap();
+        assert_eq!(result, "12       ");
+
+        // %_3N: first 3 digits "120", trailing zero becomes space
+        let result = format_with_modifiers(&date2, "%_3N", &config).unwrap();
+        assert_eq!(result, "12 ");
     }
 }
