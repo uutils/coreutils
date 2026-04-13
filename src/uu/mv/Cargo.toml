@@ -20,6 +20,7 @@ path = "src/mv.rs"
 
 [dependencies]
 clap = { workspace = true }
+filetime = { workspace = true }
 fs_extra = { workspace = true }
 indicatif = { workspace = true }
 libc = { workspace = true }
