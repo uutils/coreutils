@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{self, BufReader, BufWriter, Read, Stdin, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
@@ -287,10 +287,23 @@ pub fn uu_app() -> Command {
     )
 }
 
-fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read + 'static>>> {
-    let file_buf;
+enum ExpandInput {
+    Stdin(Stdin),
+    File(File),
+}
+
+impl Read for ExpandInput {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Self::Stdin(s) => s.read(buf),
+            Self::File(f) => f.read(buf),
+        }
+    }
+}
+
+fn open(path: &OsString) -> UResult<BufReader<ExpandInput>> {
     if path == "-" {
-        Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))
+        Ok(BufReader::new(ExpandInput::Stdin(stdin())))
     } else {
         let path_ref = Path::new(path);
         if path_ref.is_dir() {
@@ -299,8 +312,8 @@ fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read + 'static>>> {
                 translate!("expand-error-is-directory", "file" => path.maybe_quote()),
             ));
         }
-        file_buf = File::open(path_ref).map_err_context(|| path.maybe_quote().to_string())?;
-        Ok(BufReader::new(Box::new(file_buf) as Box<dyn Read>))
+        let f = File::open(path_ref).map_err_context(|| path.maybe_quote().to_string())?;
+        Ok(BufReader::new(ExpandInput::File(f)))
     }
 }
 
@@ -391,10 +404,10 @@ fn classify_char(buf: &[u8], byte: usize, utf8: bool) -> (CharType, usize, usize
 /// Write spaces for a tab expansion.
 #[inline]
 fn write_tab_spaces(
-    output: &mut BufWriter<std::io::Stdout>,
+    output: &mut BufWriter<io::Stdout>,
     nts: usize,
     tspaces: &str,
-) -> std::io::Result<()> {
+) -> io::Result<()> {
     if nts <= tspaces.len() {
         output.write_all(&tspaces.as_bytes()[..nts])
     } else {
@@ -404,11 +417,11 @@ fn write_tab_spaces(
 
 fn expand_buf(
     buf: &[u8],
-    output: &mut BufWriter<std::io::Stdout>,
+    output: &mut BufWriter<io::Stdout>,
     tabstops: &[usize],
     options: &Options,
     col: &mut usize,
-) -> std::io::Result<()> {
+) -> io::Result<()> {
     use self::CharType::{Backspace, Other, Tab};
 
     // Fast path: if there are no tabs, backspaces, and (in UTF-8 mode or no carriage returns),
@@ -478,7 +491,7 @@ fn expand_buf(
 
 fn expand_file(
     file: &OsString,
-    output: &mut BufWriter<std::io::Stdout>,
+    output: &mut BufWriter<io::Stdout>,
     options: &Options,
 ) -> UResult<()> {
     let mut buf = [0u8; 4096];
