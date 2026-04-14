@@ -479,10 +479,12 @@ fn get_input_type(path: &OsString) -> CatResult<InputType> {
 fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
     let stdout = io::stdout();
     #[cfg(any(target_os = "linux", target_os = "android"))]
+    let mut stdout = stdout;
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         // If we're on Linux or Android, try to use the splice() system call
         // for faster writing. If it works, we're done.
-        if !splice::write_fast_using_splice(handle, &stdout)? {
+        if !splice::write_fast_using_splice(handle, &mut stdout)? {
             return Ok(());
         }
     }
