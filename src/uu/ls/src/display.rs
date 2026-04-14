@@ -907,10 +907,16 @@ fn display_item_long(
             state.display_buf.push(b' ');
         }
 
-        state.display_buf.extend_pad_left(
-            &display_symlink_count(md),
-            padding.link_count + usize::from(padding.has_alt_access),
-        );
+        // When any listed item carries an ACL or security-context marker,
+        // emit an extra separator space so the link-count column starts at
+        // a stable position regardless of this row's marker character.
+        if padding.has_alt_access {
+            state.display_buf.push(b' ');
+        }
+
+        state
+            .display_buf
+            .extend_pad_left(&display_symlink_count(md), padding.link_count);
 
         if config.long.owner {
             state.display_buf.push(b' ');
@@ -1061,10 +1067,10 @@ fn display_item_long(
             state.display_buf.push(b'.');
         }
         state.display_buf.push(b' ');
-        state.display_buf.extend_pad_left(
-            "?",
-            padding.link_count + usize::from(padding.has_alt_access),
-        );
+        if padding.has_alt_access {
+            state.display_buf.push(b' ');
+        }
+        state.display_buf.extend_pad_left("?", padding.link_count);
 
         if config.long.owner {
             state.display_buf.push(b' ');
