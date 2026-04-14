@@ -1436,6 +1436,24 @@ mod tests {
         assert_eq!(parse_rows_cols("65537"), Some(1)); // wraps to 1
     }
 
+    #[test]
+    fn test_sane_parse_saved_state() {
+        let expected_parts = 4 + nix::libc::NCCS;
+        let mut parts: Vec<String> = ["00", "01", "ff", "7f"].map(str::to_string).into();
+        parts.resize(expected_parts, "00".to_string());
+        let input = parts.join(":");
+        assert!(parse_saved_state(&input).is_some());
+    }
+
+    #[test]
+    fn test_parse_saved_state_no_plus() {
+        let expected_parts = 4 + nix::libc::NCCS;
+        let mut parts: Vec<String> = ["+00", "00", "00", "00"].map(str::to_string).into();
+        parts.resize(expected_parts, "00".to_string());
+        let input = parts.join(":");
+        assert_eq!(parse_saved_state(&input), None);
+    }
+
     // Sane control character defaults
     #[test]
     fn test_get_sane_control_char_values() {
