@@ -6263,6 +6263,71 @@ fn test_acl_padding_not_inflated() {
     assert!(checked > 0, "no ACL lines were validated");
 }
 
+// Regression test for https://github.com/uutils/coreutils/issues/11789
+// When listing a directory that contains ACL files from a *different* cwd,
+// ls must still reserve a column for the `+` marker and print a space
+// between it and the link count. Previously ls called listxattr() on the
+// bare filenames (relative to cwd, not to the listed directory), failed
+// to detect the ACLs during the width-measuring pass, and emitted output
+// like `-rw-r--r--+1` with no separator before the link count.
+#[cfg(all(unix, not(target_os = "macos")))]
+#[test]
+fn test_acl_display_from_different_cwd() {
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("target");
+    at.mkdir("other");
+
+    let uid = unsafe { libc::getuid() };
+    let names = ["a", "b", "c", "d", "e", "f", "g"];
+    for name in &names {
+        let path = format!("target/{name}");
+        at.touch(&path);
+        let status = Command::new("setfacl")
+            .args(["-m", &format!("u:{uid}:r"), &at.plus_as_string(&path)])
+            .status()
+            .map(|s| s.code());
+        if !matches!(status, Ok(Some(0))) {
+            println!("test skipped: setfacl failed");
+            return;
+        }
+    }
+
+    let out = scene
+        .ucmd()
+        .current_dir(at.plus_as_string("other"))
+        .arg("-l")
+        .arg(at.plus_as_string("target"))
+        .succeeds()
+        .stdout_move_str();
+
+    // Each listed file has an ACL, so every data line must contain `+ `
+    // (the ACL marker followed by a space before the link count), never
+    // `+` directly against a digit.
+    let re_bad = Regex::new(r"\+\d").unwrap();
+    assert!(
+        !re_bad.is_match(&out),
+        "found '+' directly followed by a digit (missing separator) in output:\n{out}"
+    );
+
+    let mut checked = 0;
+    for line in out.lines() {
+        if line.starts_with('-') && line.contains('+') {
+            let after_plus = line.split_once('+').unwrap().1;
+            let leading_spaces = after_plus.len() - after_plus.trim_start().len();
+            assert_eq!(
+                leading_spaces, 1,
+                "expected exactly 1 space between '+' and link count, got {leading_spaces} in line: {line:?}"
+            );
+            checked += 1;
+        }
+    }
+    assert_eq!(checked, names.len(), "expected one ACL line per file");
+}
+
 // Make sure that "ls --color" correctly applies color "normal" to text and
 // files. Specifically, it should use the NORMAL setting to format non-file name
 // output and file names that don't have a designated color (unless the FILE
