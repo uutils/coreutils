@@ -97,9 +97,10 @@ fn parse_format_spec(s: &str) -> Option<ParsedSpec<'_>> {
 
     let mut pos = 1;
 
-    // Flags: any of [_0^#+-], zero or more.
+    // Flags: any of [_0^#+-EO], zero or more.
+    // O = alternative numeric symbols, E = alternative format (no-op in C locale)
     let flags_start = pos;
-    while pos < bytes.len() && matches!(bytes[pos], b'_' | b'0' | b'^' | b'#' | b'+' | b'-') {
+    while pos < bytes.len() && matches!(bytes[pos], b'_' | b'0' | b'^' | b'#' | b'+' | b'-' | b'E' | b'O') {
         pos += 1;
     }
     let flags = &s[flags_start..pos];
