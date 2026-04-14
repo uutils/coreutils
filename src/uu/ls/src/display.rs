@@ -1286,7 +1286,7 @@ fn calculate_padding_collection(
                 // TODO: See how Mac should work here
                 let is_acl_set = false;
                 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-                let is_acl_set = has_acl(item.display_name());
+                let is_acl_set = has_acl(item.path());
                 if context_len > 1 || is_acl_set {
                     padding_collections.has_alt_access = true;
                 }
