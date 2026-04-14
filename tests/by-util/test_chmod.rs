@@ -1439,3 +1439,26 @@ fn test_chmod_colored_output() {
         .stderr_contains("\x1b[31merreur\x1b[0m") // Red "erreur" in French
         .stderr_contains("\x1b[33m--invalid-option\x1b[0m"); // Yellow invalid option
 }
+
+#[test]
+fn test_chmod_symlink_cycles() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir_all("a/b/c");
+    at.symlink_dir("a", "a/b/c/d");
+
+    scene
+        .ucmd()
+        .arg("-vRL")
+        .arg("+r")
+        .arg("a")
+        .succeeds()
+        .stdout_contains_line("mode of 'a' retained as 0755 (rwxr-xr-x)")
+        .stdout_contains_line("mode of 'a/b' retained as 0755 (rwxr-xr-x)")
+        .stdout_contains_line("mode of 'a/b/c' retained as 0755 (rwxr-xr-x)")
+        .stdout_contains_line("mode of 'a/b/c/d' retained as 0755 (rwxr-xr-x)")
+        .stdout_does_not_contain("mode of 'a/b/c/d/b' retained as 0755 (rwxr-xr-x)")
+        .stdout_does_not_contain("mode of 'a/b/c/d/b/c' retained as 0755 (rwxr-xr-x)")
+        .stdout_does_not_contain("mode of 'a/b/c/d/b/c/d' retained as 0755 (rwxr-xr-x)");
+}
