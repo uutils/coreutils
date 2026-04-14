@@ -16,7 +16,7 @@ use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::{fmt, io};
 #[cfg(all(unix, not(target_os = "android")))]
-use uucore::fsxattr::{copy_xattrs, copy_xattrs_skip_selinux};
+use uucore::fsxattr::{copy_xattrs_fd, copy_xattrs_skip_selinux};
 use uucore::translate;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, value_parser};
@@ -1715,6 +1715,8 @@ pub(crate) fn set_selinux_context(path: &Path, context: Option<&String>) -> Copy
 /// or if xattr copying fails.
 #[cfg(all(unix, not(target_os = "android")))]
 fn copy_extended_attrs(source: &Path, dest: &Path, skip_selinux: bool) -> CopyResult<()> {
+    use std::fs::File;
+    use uucore::fsxattr::copy_xattrs;
     let metadata = fs::symlink_metadata(dest)?;
 
     // Check if the destination file is currently read-only for the user.
@@ -1734,6 +1736,13 @@ fn copy_extended_attrs(source: &Path, dest: &Path, skip_selinux: bool) -> CopyRe
         // When -Z is used, skip copying security.selinux xattr so that
         // the default context can be set instead of preserving from source
         copy_xattrs_skip_selinux(source, dest)
+    } else if metadata.is_file() {
+        // Use file descriptor-based operations for regular files to avoid TOCTOU races.
+        // Directories cannot be opened with write mode for xattr operations
+        // Symlinks (especially dangling ones) cannot be opened via File::open
+        let source_file = File::open(source)?;
+        let dest_file = OpenOptions::new().write(true).open(dest)?;
+        copy_xattrs_fd(&source_file, &dest_file)
     } else {
         copy_xattrs(source, dest)
     };
@@ -2601,7 +2610,45 @@ fn copy_file(
         fs::set_permissions(dest, dest_permissions).ok();
     }
 
-    let copy_attributes_result = if options.dereference(source_in_command_line) {
+    let copy_attributes_result = if source_is_stream && options.copy_contents {
+        // When copying contents from a stream (like a FIFO with --copy-contents),
+        // we can't re-access the source as it may block. Use the metadata we
+        // already have to preserve ownership and permissions.
+        #[cfg(unix)]
+        {
+            if let Preserve::Yes { .. } = options.attributes.ownership {
+                use std::os::unix::prelude::MetadataExt;
+                use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
+
+                let dest_uid = source_metadata.uid();
+                let dest_gid = source_metadata.gid();
+                if let Ok(dest_meta) = dest.symlink_metadata() {
+                    let try_chown = |uid| {
+                        wrap_chown(
+                            dest,
+                            &dest_meta,
+                            uid,
+                            Some(dest_gid),
+                            false,
+                            Verbosity {
+                                groups_only: false,
+                                level: VerbosityLevel::Silent,
+                            },
+                        )
+                    };
+                    // gnu compatibility: cp doesn't report an error if it fails to set the
+                    // ownership, and will fall back to changing only the gid if possible.
+                    if try_chown(Some(dest_uid)).is_err() {
+                        let _ = try_chown(None);
+                    }
+                }
+            }
+            if let Preserve::Yes { .. } = options.attributes.mode {
+                fs::set_permissions(dest, source_metadata.permissions()).ok();
+            }
+        }
+        Ok(())
+    } else if options.dereference(source_in_command_line) {
         // Try to canonicalize, but if it fails (e.g., due to inaccessible parent directories),
         // fall back to the original source path
         let src_for_attrs = canonicalize(source, MissingHandling::Normal, ResolveMode::Physical)
@@ -2615,12 +2662,6 @@ fn copy_file(
             false,
             options.set_selinux_context,
         )
-    } else if source_is_stream && !source.exists() {
-        // Some stream files may not exist after we have copied it,
-        // like anonymous pipes. Thus, we can't really copy its
-        // attributes. However, this is already handled in the stream
-        // copy function (see `copy_stream` under platform/linux.rs).
-        Ok(())
     } else {
         copy_attributes(
             source,
