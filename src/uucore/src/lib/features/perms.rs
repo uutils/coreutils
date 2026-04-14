@@ -16,11 +16,15 @@ use clap::{Arg, ArgMatches, Command};
 
 use libc::{gid_t, uid_t};
 use options::traverse;
+#[cfg(target_os = "linux")]
+use std::collections::HashSet;
 use std::ffi::OsString;
 
 #[cfg(not(target_os = "linux"))]
 use walkdir::WalkDir;
 
+#[cfg(target_os = "linux")]
+use crate::features::fs::FileInformation;
 #[cfg(target_os = "linux")]
 use crate::features::safe_traversal::{DirFd, SymlinkBehavior};
 
@@ -449,13 +453,28 @@ impl ChownExecutor {
             return 1;
         };
 
+        let mut ancestors = HashSet::new();
         let mut ret = 0;
-        self.safe_traverse_dir(&dir_fd, root, &mut ret);
+        self.safe_traverse_dir(&dir_fd, root, &mut ret, &mut ancestors);
         ret
     }
 
     #[cfg(target_os = "linux")]
-    fn safe_traverse_dir(&self, dir_fd: &DirFd, dir_path: &Path, ret: &mut i32) {
+    fn safe_traverse_dir(
+        &self,
+        dir_fd: &DirFd,
+        dir_path: &Path,
+        ret: &mut i32,
+        ancestors: &mut HashSet<FileInformation>,
+    ) {
+        // Cycle detection: resolve through symlinks so a symlink-to-ancestor is caught.
+        if let Ok(info) = FileInformation::from_path(dir_path, true) {
+            if ancestors.contains(&info) {
+                return; // cycle detected, stop silently
+            }
+            ancestors.insert(info);
+        }
+
         // Read directory entries
         let entries = match dir_fd.read_dir() {
             Ok(entries) => entries,
@@ -539,7 +558,7 @@ impl ChownExecutor {
             if meta.is_dir() && (follow || !meta.file_type().is_symlink()) {
                 match dir_fd.open_subdir(&entry_name, SymlinkBehavior::Follow) {
                     Ok(subdir_fd) => {
-                        self.safe_traverse_dir(&subdir_fd, &entry_path, ret);
+                        self.safe_traverse_dir(&subdir_fd, &entry_path, ret, ancestors);
                     }
                     Err(e) => {
                         *ret = 1;
@@ -553,6 +572,11 @@ impl ChownExecutor {
                     }
                 }
             }
+        }
+
+        // Backtrack: remove this directory so sibling subtrees are not falsely flagged.
+        if let Ok(info) = FileInformation::from_path(dir_path, true) {
+            ancestors.remove(&info);
         }
     }
 
