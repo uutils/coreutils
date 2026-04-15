@@ -1967,7 +1967,7 @@ fn test_date_strftime_flag_on_composite() {
 #[test]
 fn test_date_strftime_o_modifier() {
     // In C locale the `O` modifier is a no-op (alternative numeric symbols).
-    // GNU renders `%Om` as `06` for June; uutils renders it as the literal `%Om`.
+    // GNU renders `%Om` as `06` for June.
     new_ucmd!()
         .env("LC_ALL", "C")
         .env("TZ", "UTC")
@@ -1981,15 +1981,15 @@ fn test_date_strftime_o_modifier() {
 #[test]
 fn test_date_strftime_e_modifier() {
     // In C locale the `E` modifier is a no-op (alternative era).
-    // GNU does not render `%Em`; uutils renders it as the literal `%Em` as `06` for June.
+    // GNU renders `%Ex` as `06/15/24` for 2024-06-15.
     new_ucmd!()
         .env("LC_ALL", "C")
         .env("TZ", "UTC")
         .arg("-d")
         .arg("2024-06-15")
-        .arg("+%Em-%Ey-%El")
+        .arg("+%EC-%Ey-%Ex")
         .succeeds()
-        .stdout_is("06-24-12\n");
+        .stdout_is("20-24-06/15/24\n");
 }
 
 #[test]
