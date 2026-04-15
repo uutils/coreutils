@@ -166,6 +166,14 @@ fn wrap_in_stdout_error(err: io::Error) -> io::Error {
     )
 }
 
+// zero-copy fast-path
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn read_n_bytes(input: impl Read + AsFd, n: u64) -> io::Result<u64> {
+    let out = io::stdout();
+    uucore::pipes::send_n_bytes(input, out, n).map_err(wrap_in_stdout_error)
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 fn read_n_bytes(input: impl Read, n: u64) -> io::Result<u64> {
     // Read the first `n` bytes from the `input` reader.
     let mut reader = input.take(n);
@@ -606,6 +614,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(any(target_os = "linux", target_os = "android")))] // missing trait for AsFd
     fn read_early_exit() {
         let mut empty = io::BufReader::new(Cursor::new(Vec::new()));
         assert!(read_n_bytes(&mut empty, 0).is_ok());
