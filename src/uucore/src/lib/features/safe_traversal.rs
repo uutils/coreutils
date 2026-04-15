@@ -10,6 +10,7 @@
 //
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
 // spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod mkdirat CREAT WRONLY ELOOP ENOTDIR
+// spell-checker:ignore atimensec mtimensec ctimensec
 
 #[cfg(test)]
 use std::os::unix::ffi::OsStringExt;
@@ -24,7 +25,7 @@ use std::path::{Path, PathBuf};
 use nix::dir::Dir;
 use nix::fcntl::{OFlag, openat};
 use nix::libc;
-use nix::sys::stat::{FchmodatFlags, FileStat, Mode, fchmodat, fstatat};
+use nix::sys::stat::{FchmodatFlags, FileStat, Mode, fchmodat, fstatat, mkdirat};
 use nix::unistd::{Gid, Uid, UnlinkatFlags, fchown, fchownat, unlinkat};
 use os_display::Quotable;
 
@@ -323,12 +324,10 @@ impl DirFd {
     pub fn mkdir_at(&self, name: &OsStr, mode: u32) -> io::Result<()> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
-        let mode = mode as libc::mode_t;
-        let fd = self.fd.as_raw_fd();
+        let mode = Mode::from_bits_truncate(mode as libc::mode_t);
 
-        let result = unsafe { libc::mkdirat(fd, name_cstr.as_ptr(), mode) };
-        if result == -1 {
-            let err = io::Error::last_os_error();
+        if let Err(e) = mkdirat(self.fd.as_fd(), name_cstr.as_c_str(), mode) {
+            let err = io::Error::from_raw_os_error(e as i32);
             return Err(SafeTraversalError::OpenFailed {
                 path: name.into(),
                 source: err,
@@ -706,13 +705,21 @@ impl std::os::unix::fs::MetadataExt for Metadata {
     }
 
     fn atime_nsec(&self) -> i64 {
-        #[cfg(target_pointer_width = "32")]
+        #[cfg(target_os = "netbsd")]
         {
-            self.stat.st_atime_nsec.into()
+            self.stat.st_atimensec
         }
-        #[cfg(not(target_pointer_width = "32"))]
+
+        #[cfg(not(target_os = "netbsd"))]
         {
-            self.stat.st_atime_nsec
+            #[cfg(target_pointer_width = "32")]
+            {
+                self.stat.st_atime_nsec.into()
+            }
+            #[cfg(not(target_pointer_width = "32"))]
+            {
+                self.stat.st_atime_nsec
+            }
         }
     }
 
@@ -728,13 +735,21 @@ impl std::os::unix::fs::MetadataExt for Metadata {
     }
 
     fn mtime_nsec(&self) -> i64 {
-        #[cfg(target_pointer_width = "32")]
+        #[cfg(target_os = "netbsd")]
         {
-            self.stat.st_mtime_nsec.into()
+            self.stat.st_mtimensec
         }
-        #[cfg(not(target_pointer_width = "32"))]
+
+        #[cfg(not(target_os = "netbsd"))]
         {
-            self.stat.st_mtime_nsec
+            #[cfg(target_pointer_width = "32")]
+            {
+                self.stat.st_mtime_nsec.into()
+            }
+            #[cfg(not(target_pointer_width = "32"))]
+            {
+                self.stat.st_mtime_nsec
+            }
         }
     }
 
@@ -750,13 +765,21 @@ impl std::os::unix::fs::MetadataExt for Metadata {
     }
 
     fn ctime_nsec(&self) -> i64 {
-        #[cfg(target_pointer_width = "32")]
+        #[cfg(target_os = "netbsd")]
         {
-            self.stat.st_ctime_nsec.into()
+            self.stat.st_ctimensec
         }
-        #[cfg(not(target_pointer_width = "32"))]
+
+        #[cfg(not(target_os = "netbsd"))]
         {
-            self.stat.st_ctime_nsec
+            #[cfg(target_pointer_width = "32")]
+            {
+                self.stat.st_ctime_nsec.into()
+            }
+            #[cfg(not(target_pointer_width = "32"))]
+            {
+                self.stat.st_ctime_nsec
+            }
         }
     }
 

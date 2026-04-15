@@ -575,6 +575,31 @@ fn test_follow_non_utf8_bytes() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_permission_denied_is_not_reported_as_not_found() {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+
+    if unsafe { libc::geteuid() } == 0 {
+        return;
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("noexec");
+    at.touch("noexec/file");
+
+    let dir = at.plus("noexec");
+    fs::set_permissions(&dir, fs::Permissions::from_mode(0o000)).unwrap();
+
+    ucmd.arg("noexec/file")
+        .fails()
+        .stderr_contains("Permission denied");
+
+    fs::set_permissions(&dir, fs::Permissions::from_mode(0o700)).unwrap();
+}
+
+#[test]
 #[cfg(not(target_os = "windows"))] // FIXME: test times out
 fn test_follow_multiple() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -622,8 +647,15 @@ fn test_follow_name_multiple() {
             .arg(FOOBAR_2_TXT)
             .run_no_wait();
 
+        #[cfg(target_os = "linux")]
+        let delay = 100;
+        #[cfg(target_os = "macos")]
+        let delay = 2000;
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        let delay = 1000;
+
         child
-            .make_assertion_with_delay(500)
+            .make_assertion_with_delay(delay)
             .is_alive()
             .with_current_output()
             .stdout_only_fixture("foobar_follow_multiple.expected");
@@ -632,7 +664,7 @@ fn test_follow_name_multiple() {
         at.append(FOOBAR_2_TXT, first_append);
 
         child
-            .make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
+            .make_assertion_with_delay(delay)
             .with_current_output()
             .stdout_only(first_append);
 
@@ -640,7 +672,7 @@ fn test_follow_name_multiple() {
         at.append(FOOBAR_TXT, second_append);
 
         child
-            .make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
+            .make_assertion_with_delay(delay)
             .with_current_output()
             .stdout_only_fixture("foobar_follow_multiple_appended.expected");
 
@@ -1396,7 +1428,7 @@ fn test_retry4() {
         missing,
         "---disable-inotify",
     ];
-    let mut delay = 1500;
+    let mut delay = 150;
     for _ in 0..2 {
         let mut p = ts.ucmd().args(&args).run_no_wait();
 
@@ -1546,7 +1578,7 @@ fn test_retry7() {
         "--use-polling",
     ];
 
-    let mut delay = 1500;
+    let mut delay = 100;
     for _ in 0..2 {
         at.mkdir(untailable);
 
@@ -1694,14 +1726,14 @@ fn test_retry9() {
     );
     let expected_stdout = "foo\nbar\nfoo\nbar\n";
 
-    let delay = 1000;
+    let delay = 400;
 
     at.mkdir(parent_dir);
     at.truncate(user_path, "foo\n");
     let mut p = ts
         .ucmd()
         .arg("-F")
-        .arg("-s.1")
+        .arg("-s.2")
         .arg("--max-unchanged-stats=1")
         .arg(user_path)
         .run_no_wait();
@@ -1770,7 +1802,7 @@ fn test_follow_descriptor_vs_rename1() {
         "---disable-inotify",
     ];
 
-    let mut delay = 1500;
+    let mut delay = 100;
     for _ in 0..2 {
         at.touch(file_a);
 
@@ -1832,7 +1864,7 @@ fn test_follow_descriptor_vs_rename2() {
         "---disable-inotify",
     ];
 
-    let mut delay = 1500;
+    let mut delay = 150;
     for _ in 0..2 {
         at.touch(file_a);
         at.touch(file_b);
@@ -1897,7 +1929,7 @@ fn test_follow_name_retry_headers() {
         "---disable-inotify",
     ];
 
-    let mut delay = 1500;
+    let mut delay = 150;
     for _ in 0..2 {
         let mut p = ts.ucmd().args(&args).run_no_wait();
 
@@ -2287,7 +2319,7 @@ fn test_follow_name_move_create2() {
         "9",
     ];
 
-    let mut delay = 500;
+    let mut delay = 100;
     for i in 0..2 {
         let mut p = ts.ucmd().args(&args).run_no_wait();
 
@@ -2600,7 +2632,7 @@ fn test_follow_name_move_retry2() {
 
     let mut args = vec!["-s.1", "--max-unchanged-stats=1", "-F", file1, file2];
 
-    let mut delay = 500;
+    let mut delay = 60;
     for i in 0..2 {
         at.touch(file1);
         at.touch(file2);
@@ -3746,10 +3778,10 @@ fn test_when_argument_file_is_non_existent_unix_socket_address_then_error() {
         format!("tail: cannot open '{socket}' for reading: No such device or address\n");
     #[cfg(target_os = "freebsd")]
     let expected_stderr =
-        format!("tail: cannot open '{socket}' for reading: Operation not supported\n",);
+        format!("tail: cannot open '{socket}' for reading: Operation not supported\n");
     #[cfg(target_os = "macos")]
     let expected_stderr =
-        format!("tail: cannot open '{socket}' for reading: Operation not supported on socket\n",);
+        format!("tail: cannot open '{socket}' for reading: Operation not supported on socket\n");
 
     ts.ucmd()
         .arg(socket)

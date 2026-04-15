@@ -42,9 +42,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("paste")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("paste"))
         .about(translate!("paste-about"))
         .override_usage(format_usage(&translate!("paste-usage")))
         .infer_long_args(true)
@@ -113,12 +113,14 @@ fn paste(
 
     let line_ending_byte = u8::from(line_ending);
     let input_source_vec_len = input_source_vec.len();
+    let mut stdout = stdout().lock();
 
     if !serial && input_source_vec_len == 1 {
         // With a single input source (no -s), `paste` output is identical to input,
         // except that a missing final line ending must be added.
         // Stream directly to avoid unbounded line buffering on inputs like /dev/zero.
-        return paste_single_input_source(
+        return write_single_input_source(
+            &mut stdout,
             input_source_vec
                 .pop()
                 .expect("input_source_vec_len was checked to be exactly one"),
@@ -126,7 +128,6 @@ fn paste(
         );
     }
 
-    let mut stdout = stdout().lock();
     let line_ending_byte_array_ref = &[line_ending_byte];
 
     let mut delimiter_state = DelimiterState::new(&unescaped_and_encoded_delimiters);
@@ -198,8 +199,11 @@ fn paste(
     Ok(())
 }
 
-fn paste_single_input_source(mut input_source: InputSource, line_ending_byte: u8) -> UResult<()> {
-    let mut stdout = stdout().lock();
+fn write_single_input_source(
+    writer: &mut impl Write,
+    mut input_source: InputSource,
+    line_ending_byte: u8,
+) -> UResult<()> {
     let mut buffer = [0_u8; 8 * 1024];
     let mut has_data = false;
     let mut last_byte = line_ending_byte;
@@ -214,11 +218,11 @@ fn paste_single_input_source(mut input_source: InputSource, line_ending_byte: u8
         has_data = true;
         last_byte = buffer[bytes_read - 1];
 
-        stdout.write_all(&buffer[..bytes_read])?;
+        writer.write_all(&buffer[..bytes_read])?;
     }
 
     if has_data && last_byte != line_ending_byte {
-        stdout.write_all(&[line_ending_byte])?;
+        writer.write_all(&[line_ending_byte])?;
     }
 
     Ok(())
@@ -269,11 +273,7 @@ fn parse_delimiters(delimiters: &OsString) -> UResult<Box<[Box<[u8]>]>> {
 }
 
 fn remove_trailing_line_ending_byte(line_ending_byte: u8, output: &mut Vec<u8>) {
-    if let Some(&byte) = output.last() {
-        if byte == line_ending_byte {
-            assert_eq!(output.pop(), Some(line_ending_byte));
-        }
-    }
+    let _ = output.pop_if(|byte| *byte == line_ending_byte);
 }
 
 enum DelimiterState<'a> {

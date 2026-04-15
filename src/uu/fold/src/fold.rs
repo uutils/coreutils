@@ -82,7 +82,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("fold")
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .override_usage(format_usage(&translate!("fold-usage")))
@@ -204,7 +204,7 @@ fn fold_file_bytewise<T: Read, W: Write>(
 
         if line == [NL] {
             output.write_all(&[NL])?;
-            line.truncate(0);
+            line.clear();
             continue;
         }
 
@@ -249,7 +249,7 @@ fn fold_file_bytewise<T: Read, W: Write>(
             }
         }
 
-        line.truncate(0);
+        line.clear();
     }
 
     Ok(())

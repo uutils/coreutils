@@ -112,11 +112,11 @@ fn generate_ls_colors(fmt: &OutputFmt, sep: &str) -> String {
         }
         let (prefix, suffix) = get_colors_format_strings(fmt);
         let ls_colors = parts.join(sep);
-        format!("{prefix}{}:{ls_colors}:{suffix}", generate_type_output(fmt),)
+        format!("{prefix}{}:{ls_colors}:{suffix}", generate_type_output(fmt))
     }
 }
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
@@ -238,9 +238,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("dircolors")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("dircolors"))
         .about(translate!("dircolors-about"))
         .after_help(translate!("dircolors-after-help"))
         .override_usage(format_usage(&translate!("dircolors-usage")))

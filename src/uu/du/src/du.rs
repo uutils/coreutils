@@ -29,8 +29,9 @@ use uucore::line_ending::LineEnding;
 use uucore::safe_traversal::{DirFd, SymlinkBehavior};
 use uucore::translate;
 
+use uucore::parser::parse_block_size;
 use uucore::parser::parse_glob;
-use uucore::parser::parse_size::{ParseSizeError, parse_size_non_zero_u64, parse_size_u64};
+use uucore::parser::parse_size::{ParseSizeError, parse_size_u64};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::time::{FormatSystemTimeFallback, format, format_system_time};
 use uucore::{format_usage, show, show_error, show_warning};
@@ -274,26 +275,16 @@ fn get_file_info(path: &Path, _metadata: &Metadata) -> Option<FileInfo> {
     result
 }
 
-fn block_size_from_env() -> Option<u64> {
-    for env_var in ["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
-        if let Ok(env_size) = env::var(env_var) {
-            return parse_size_non_zero_u64(&env_size).ok();
-        }
-    }
-
-    None
-}
-
 fn read_block_size(s: Option<&str>) -> UResult<u64> {
     if let Some(s) = s {
         parse_size_u64(s)
             .map_err(|e| USimpleError::new(1, format_error_message(&e, s, options::BLOCK_SIZE)))
-    } else if let Some(bytes) = block_size_from_env() {
+    } else if let Some(bytes) =
+        parse_block_size::block_size_from_env(&["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"]).found()
+    {
         Ok(bytes)
-    } else if env::var("POSIXLY_CORRECT").is_ok() {
-        Ok(512)
     } else {
-        Ok(1024)
+        Ok(parse_block_size::default_block_size())
     }
 }
 
@@ -435,12 +426,11 @@ fn safe_du(
     };
 
     'file_loop: for entry_name in entries {
-        let entry_path = path.join(&entry_name);
-
         // First get the lstat (without following symlinks) to check if it's a symlink
         let lstat = match dir_fd.stat_at(&entry_name, SymlinkBehavior::NoFollow) {
             Ok(stat) => stat,
             Err(e) => {
+                let entry_path = path.join(&entry_name);
                 print_tx.send(Err(e.map_err_context(
                     || translate!("du-error-cannot-access", "path" => entry_path.quote()),
                 )))?;
@@ -479,7 +469,7 @@ fn safe_du(
         let this_stat = if is_dir {
             // For directories, recurse using safe_du
             Stat {
-                path: entry_path.clone(),
+                path: path.join(&entry_name),
                 size: 0,
                 #[allow(clippy::unnecessary_cast)]
                 blocks: entry_stat.st_blocks as u64,
@@ -492,7 +482,7 @@ fn safe_du(
         } else {
             // For files
             Stat {
-                path: entry_path.clone(),
+                path: path.join(&entry_name),
                 #[allow(clippy::unnecessary_cast)]
                 size: entry_stat.st_size as u64,
                 #[allow(clippy::unnecessary_cast)]
@@ -537,7 +527,7 @@ fn safe_du(
             }
 
             let this_stat = safe_du(
-                &entry_path,
+                &this_stat.path,
                 options,
                 depth + 1,
                 seen_inodes,
@@ -1288,7 +1278,7 @@ fn parse_depth(max_depth_str: Option<&str>, summarize: bool) -> UResult<Option<u
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("du")
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("du-about"))

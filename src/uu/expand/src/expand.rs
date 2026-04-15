@@ -111,10 +111,10 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
                             }
 
                             // Tab sizes must be ascending.
-                            if let Some(last_stop) = nums.last() {
-                                if *last_stop >= num {
-                                    return Err(ParseError::TabSizesMustBeAscending);
-                                }
+                            if let Some(last_stop) = nums.last()
+                                && *last_stop >= num
+                            {
+                                return Err(ParseError::TabSizesMustBeAscending);
                             }
 
                             if is_specifier_already_used {
@@ -223,14 +223,15 @@ fn expand_shortcuts(args: Vec<OsString>) -> Vec<OsString> {
     let mut processed_args = Vec::with_capacity(args.len());
 
     for arg in args {
-        if let Some(arg) = arg.to_str() {
-            if arg.starts_with('-') && arg[1..].chars().all(is_digit_or_comma) {
-                arg[1..]
-                    .split(',')
-                    .filter(|s| !s.is_empty())
-                    .for_each(|s| processed_args.push(OsString::from(format!("--tabs={s}"))));
-                continue;
-            }
+        if let Some(arg) = arg.to_str()
+            && arg.starts_with('-')
+            && arg[1..].chars().all(is_digit_or_comma)
+        {
+            arg[1..]
+                .split(',')
+                .filter(|s| !s.is_empty())
+                .for_each(|s| processed_args.push(OsString::from(format!("--tabs={s}"))));
+            continue;
         }
         processed_args.push(arg);
     }
@@ -248,7 +249,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     uucore::clap_localization::configure_localized_command(
-        Command::new(uucore::util_name())
+        Command::new("expand")
             .version(uucore::crate_version!())
             .about(translate!("expand-about"))
             .override_usage(format_usage(&translate!("expand-usage"))),
@@ -362,39 +363,29 @@ enum CharType {
 fn classify_char(buf: &[u8], byte: usize, utf8: bool) -> (CharType, usize, usize) {
     use self::CharType::{Backspace, Other, Tab};
 
-    if utf8 {
-        let nbytes = char::from(buf[byte]).len_utf8();
+    let b = buf[byte];
+    if b.is_ascii() {
+        return match b {
+            b'\t' => (Tab, 0, 1),
+            b'\x08' => (Backspace, 0, 1),
+            _ => (Other, 1, 1),
+        };
+    }
 
-        if byte + nbytes > buf.len() {
+    if utf8 {
+        let nbytes = char::from(b).len_utf8();
+        let Some(slice) = buf.get(byte..byte + nbytes) else {
             // don't overrun buffer because of invalid UTF-8
             return (Other, 1, 1);
-        }
+        };
 
-        if let Ok(t) = from_utf8(&buf[byte..byte + nbytes]) {
-            match t.chars().next() {
-                Some('\t') => (Tab, 0, 1),
-                Some('\x08') => (Backspace, 0, 1),
-                Some(c) => (Other, UnicodeWidthChar::width(c).unwrap_or(0), nbytes),
-                None => {
-                    // no valid char at start of t, so take 1 byte
-                    (Other, 1, 1)
-                }
-            }
-        } else {
-            (Other, 1, 1) // implicit assumption: non-UTF-8 char is 1 col wide
+        if let Ok(t) = from_utf8(slice)
+            && let Some(c) = t.chars().next()
+        {
+            return (Other, UnicodeWidthChar::width(c).unwrap_or(0), nbytes);
         }
-    } else {
-        (
-            match buf.get(byte) {
-                // always take exactly 1 byte in strict ASCII mode
-                Some(0x09) => Tab,
-                Some(0x08) => Backspace,
-                _ => Other,
-            },
-            0,
-            1,
-        )
     }
+    (Other, 1, 1) // implicit assumption: non-UTF-8 char is 1 col wide
 }
 
 /// Write spaces for a tab expansion.

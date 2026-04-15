@@ -58,10 +58,8 @@ tail-status-has-been-replaced-following-new-file = { $file } has been replaced; 
 tail-status-file-truncated = { $file }: file truncated
 tail-status-replaced-with-untailable-file = { $file } has been replaced with an untailable file
 tail-status-replaced-with-untailable-file-giving-up = { $file } has been replaced with an untailable file; giving up on this name
-tail-status-file-became-inaccessible = { $file } { $become_inaccessible }: { $no_such_file }
 tail-status-directory-containing-watched-file-removed = directory containing watched file was removed
 tail-status-backend-cannot-be-used-reverting-to-polling = { $backend } cannot be used, reverting to polling
-tail-status-file-no-such-file = { $file }: { $no_such_file }
 
 # Text constants
 tail-bad-fd = Bad file descriptor

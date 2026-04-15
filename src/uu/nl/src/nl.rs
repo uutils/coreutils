@@ -265,7 +265,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("nl")
         .about(translate!("nl-about"))
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
@@ -395,9 +395,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
             break;
         }
 
-        if line.last().copied() == Some(b'\n') {
-            line.pop();
-        }
+        let _ = line.pop_if(|byte| *byte == b'\n');
 
         if line.is_empty() {
             stats.consecutive_empty_lines += 1;

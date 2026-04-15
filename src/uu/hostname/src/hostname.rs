@@ -38,10 +38,8 @@ mod wsa {
     pub(super) struct WsaHandle(());
 
     pub(super) fn start() -> io::Result<WsaHandle> {
-        let err = unsafe {
-            let mut data = std::mem::MaybeUninit::<WSADATA>::uninit();
-            WSAStartup(0x0202, data.as_mut_ptr())
-        };
+        let mut data = std::mem::MaybeUninit::<WSADATA>::uninit();
+        let err = unsafe { WSAStartup(0x0202, data.as_mut_ptr()) };
         if err == 0 {
             Ok(WsaHandle(()))
         } else {
@@ -51,15 +49,13 @@ mod wsa {
 
     impl Drop for WsaHandle {
         fn drop(&mut self) {
-            unsafe {
-                // This possibly returns an error but we can't handle it
-                let _err = WSACleanup();
-            }
+            // This possibly returns an error but we can't handle it
+            let _ = unsafe { WSACleanup() };
         }
     }
 }
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
@@ -75,7 +71,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("hostname")
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("hostname-about"))

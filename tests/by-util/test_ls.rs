@@ -58,6 +58,20 @@ const COMMA_ARGS: &[&str] = &["-m", "--format=commas", "--for=commas"];
 const COLUMN_ARGS: &[&str] = &["-C", "--format=columns", "--for=columns"];
 
 #[test]
+#[cfg(unix)]
+fn test_directory_in_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+
+    scene
+        .ucmd()
+        .arg("file/missing")
+        .fails_with_code(2)
+        .stderr_is("ls: cannot access 'file/missing': Not a directory\n");
+}
+
+#[test]
 fn test_invalid_flag() {
     new_ucmd!()
         .arg("--invalid-argument")
@@ -5767,6 +5781,53 @@ fn test_ls_block_size_override() {
         .stdout_contains_line("total 8");
 }
 
+#[cfg(unix)]
+#[test]
+#[cfg(not(target_os = "openbsd"))]
+fn test_ls_block_size_si_file_size() {
+    // Verify --si and --block-size interaction for file size display in -l
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write_bytes("file", &[0u8; 1024]);
+
+    // --si last: file size shown as human-readable SI
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--block-size=512")
+        .arg("--si")
+        .succeeds()
+        .stdout_contains("1.1k");
+
+    // --block-size last: file size shown in 512-byte blocks
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--si")
+        .arg("--block-size=512")
+        .succeeds()
+        .stdout_contains(" 2 ");
+
+    // --human-readable last: file size shown as human-readable IEC
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--block-size=512")
+        .arg("--human-readable")
+        .succeeds()
+        .stdout_contains("1.0K");
+
+    // --block-size last: file size shown in 512-byte blocks
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--human-readable")
+        .arg("--block-size=512")
+        .succeeds()
+        .stdout_contains(" 2 ");
+}
+
 #[test]
 fn test_ls_block_size_override_self() {
     new_ucmd!()
@@ -7106,4 +7167,31 @@ fn test_ls_recursive_no_fd_leak() {
         .limit(Resource::NOFILE, 20, 20)
         .succeeds()
         .stderr_is("");
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "macos")))]
+fn test_ls_non_utf8_hidden() {
+    use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch(OsStr::from_bytes(b".hidden\x80"));
+
+    scene.ucmd().succeeds().stdout_does_not_contain(".hidden");
+}
+
+#[test]
+#[cfg(target_os = "wasi")]
+fn test_ls_a_dotdot_no_error_on_wasi() {
+    // On WASI the sandbox may block access to ".." at the preopened root.
+    // ls -a should still succeed and show ".." without an error message.
+    let scene = TestScenario::new(util_name!());
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("-1")
+        .succeeds()
+        .stdout_contains("..")
+        .no_stderr();
 }

@@ -28,8 +28,9 @@ pub const BASE_CMD_PARSE_ERROR: i32 = 1;
 ///
 /// This default is only used if no "-w"/"--wrap" argument is passed
 pub const WRAP_DEFAULT: usize = 76;
-// Fixed to 8 KiB (equivalent to std::io::DEFAULT_BUF_SIZE on most targets)
-pub const DEFAULT_BUFFER_SIZE: usize = 8 * 1024;
+
+// Fixed to 8 KiB (equivalent to `std::sys::io::DEFAULT_BUF_SIZE` on most targets)
+pub const DEFAULT_BUF_SIZE: usize = 8 * 1024;
 
 pub struct Config {
     pub decode: bool,
@@ -103,7 +104,7 @@ pub fn parse_base_cmd_args(args: impl uucore::Args, command: Command) -> UResult
 }
 
 pub fn base_app(about: String, usage: String) -> Command {
-    let cmd = Command::new(uucore::util_name())
+    let cmd = Command::new("")
         .version(uucore::crate_version!())
         .about(about)
         .override_usage(format_usage(&usage))
@@ -151,15 +152,12 @@ pub fn get_input(config: &Config) -> UResult<Box<dyn BufRead>> {
         Some(path_buf) => {
             let file =
                 File::open(path_buf).map_err_context(|| path_buf.maybe_quote().to_string())?;
-            Ok(Box::new(BufReader::with_capacity(
-                DEFAULT_BUFFER_SIZE,
-                file,
-            )))
+            Ok(Box::new(BufReader::with_capacity(DEFAULT_BUF_SIZE, file)))
         }
         None => {
             // Stdin is already buffered by the OS; wrap once more to reduce syscalls per read.
             Ok(Box::new(BufReader::with_capacity(
-                DEFAULT_BUFFER_SIZE,
+                DEFAULT_BUF_SIZE,
                 io::stdin(),
             )))
         }
@@ -457,39 +455,37 @@ pub mod fast_encode {
             .iter()
             .enumerate()
             .step_by(encode_in_chunks_of_size)
-            .map(|(idx, _)| {
+            .filter_map(|(idx, _)| {
                 // The part of `input_buffer` that was actually filled by the call
                 // to `read`
-                &input[idx..min(input_size, idx + encode_in_chunks_of_size)]
-            })
-            .map(|buffer| {
+                let buffer = &input[idx..min(input_size, idx + encode_in_chunks_of_size)];
+
                 if buffer.len() < encode_in_chunks_of_size {
                     leftover_buffer.extend(buffer);
                     assert!(leftover_buffer.len() < encode_in_chunks_of_size);
-                    return None;
+                    None
+                } else {
+                    Some(buffer)
                 }
-                Some(buffer)
             })
-            .for_each(|buffer| {
-                if let Some(read_buffer) = buffer {
-                    // Encode data in chunks, then place it in `encoded_buffer`
-                    assert_eq!(read_buffer.len(), encode_in_chunks_of_size);
-                    encode_in_chunks_to_buffer(
-                        supports_fast_decode_and_encode,
-                        read_buffer,
-                        &mut encoded_buffer,
-                    )
-                    .unwrap();
-                    // Write all data in `encoded_buffer` to `output`
-                    write_to_output(
-                        &mut line_wrapping,
-                        &mut encoded_buffer,
-                        output,
-                        false,
-                        wrap == Some(0),
-                    )
-                    .unwrap();
-                }
+            .for_each(|read_buffer| {
+                // Encode data in chunks, then place it in `encoded_buffer`
+                assert_eq!(read_buffer.len(), encode_in_chunks_of_size);
+                encode_in_chunks_to_buffer(
+                    supports_fast_decode_and_encode,
+                    read_buffer,
+                    &mut encoded_buffer,
+                )
+                .unwrap();
+                // Write all data in `encoded_buffer` to `output`
+                write_to_output(
+                    &mut line_wrapping,
+                    &mut encoded_buffer,
+                    output,
+                    false,
+                    wrap == Some(0),
+                )
+                .unwrap();
             });
 
         // Cleanup
@@ -743,7 +739,7 @@ pub mod fast_decode {
             } else if ignore_garbage {
                 continue;
             } else {
-                return Err(USimpleError::new(1, "error: invalid input".to_owned()));
+                return Err(USimpleError::new(1, "error: invalid input"));
             }
 
             if supports_partial_decode {
@@ -792,7 +788,7 @@ pub mod fast_decode {
             write_to_output(&mut decoded_buffer, output)?;
 
             if had_invalid_tail {
-                return Err(USimpleError::new(1, "error: invalid input".to_owned()));
+                return Err(USimpleError::new(1, "error: invalid input"));
             }
         }
 
@@ -859,7 +855,7 @@ pub mod fast_decode {
                             buffer.drain(..decode_in_chunks_of_size);
                         }
                     }
-                    return Err(USimpleError::new(1, "error: invalid input".to_owned()));
+                    return Err(USimpleError::new(1, "error: invalid input"));
                 }
 
                 if supports_partial_decode {
@@ -911,7 +907,7 @@ pub mod fast_decode {
             write_to_output(&mut decoded_buffer, output)?;
 
             if had_invalid_tail {
-                return Err(USimpleError::new(1, "error: invalid input".to_owned()));
+                return Err(USimpleError::new(1, "error: invalid input"));
             }
         }
 
