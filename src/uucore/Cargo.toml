@@ -37,7 +37,7 @@ jiff = { workspace = true, optional = true, features = [
   "tzdb-concatenated",
 ] }
 rustc-hash = { workspace = true }
-rustix = { workspace = true, features = ["fs", "pipe"] }
+rustix = { workspace = true, features = ["fs", "pipe", "process"] }
 time = { workspace = true, optional = true, features = [
   "formatting",
   "local-offset",
@@ -91,7 +91,6 @@ jiff-icu = { workspace = true, optional = true }
 fluent = { workspace = true }
 fluent-syntax = { workspace = true }
 unic-langid = { workspace = true }
-fluent-bundle = { workspace = true }
 thiserror = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]

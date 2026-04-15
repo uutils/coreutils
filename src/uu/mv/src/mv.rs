@@ -907,6 +907,8 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     {
         let _ = copy_xattrs_if_supported(from, to);
     }
+    // Preserve ownership (uid/gid) from the source symlink
+    let _ = preserve_ownership(from, to);
     fs::remove_file(from)
 }
 
@@ -1005,6 +1007,12 @@ fn copy_dir_contents(
     // Create the destination directory
     fs::create_dir_all(to)?;
 
+    // Preserve ownership (uid/gid) of the top-level directory
+    #[cfg(unix)]
+    {
+        let _ = preserve_ownership(from, to);
+    }
+
     // Recursively copy contents
     #[cfg(unix)]
     {
@@ -1085,6 +1093,12 @@ fn copy_dir_contents_recursive(
             // Recursively copy subdirectory (only real directories, not symlinks)
             fs::create_dir_all(&to_path)?;
 
+            // Preserve ownership (uid/gid) of the subdirectory
+            #[cfg(unix)]
+            {
+                let _ = preserve_ownership(&from_path, &to_path);
+            }
+
             print_verbose(&from_path, &to_path);
 
             copy_dir_contents_recursive(
@@ -1148,9 +1162,12 @@ fn copy_file_with_hardlinks_helper(
 
     if from.is_symlink() {
         // Copy a symlink file (no-follow).
+        // rename_symlink_fallback already preserves ownership and removes the source.
         rename_symlink_fallback(from, to)?;
     } else if is_fifo(from.symlink_metadata()?.file_type()) {
         make_fifo(to)?;
+        // Preserve ownership (uid/gid) from the source
+        let _ = preserve_ownership(from, to);
     } else {
         // Copy a regular file.
         fs::copy(from, to)?;
@@ -1159,6 +1176,8 @@ fn copy_file_with_hardlinks_helper(
         {
             let _ = copy_xattrs_if_supported(from, to);
         }
+        // Preserve ownership (uid/gid) from the source
+        let _ = preserve_ownership(from, to);
     }
 
     Ok(())
@@ -1208,8 +1227,51 @@ fn rename_file_fallback(
         let _ = copy_xattrs_if_supported(from, to);
     }
 
+    // Preserve ownership (uid/gid) from the source file
+    #[cfg(unix)]
+    {
+        let _ = preserve_ownership(from, to);
+    }
+
     fs::remove_file(from)
         .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
+    Ok(())
+}
+
+/// Preserve ownership (uid/gid) from source to destination.
+/// Uses lchown so it works on symlinks without following them.
+/// Errors are silently ignored for non-root users who cannot chown.
+#[cfg(unix)]
+fn preserve_ownership(from: &Path, to: &Path) -> io::Result<()> {
+    use std::os::unix::fs::MetadataExt;
+
+    let source_meta = from.symlink_metadata()?;
+    let uid = source_meta.uid();
+    let gid = source_meta.gid();
+
+    let dest_meta = to.symlink_metadata()?;
+    let dest_uid = dest_meta.uid();
+    let dest_gid = dest_meta.gid();
+
+    // Only chown if ownership actually differs
+    if uid != dest_uid || gid != dest_gid {
+        use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
+        // Use follow=false so lchown is used (works on symlinks)
+        // Silently ignore errors: non-root users typically cannot chown to
+        // arbitrary uid, matching GNU mv behavior which also uses best-effort.
+        let _ = wrap_chown(
+            to,
+            &dest_meta,
+            Some(uid),
+            Some(gid),
+            false,
+            Verbosity {
+                groups_only: false,
+                level: VerbosityLevel::Silent,
+            },
+        );
+    }
+
     Ok(())
 }
 

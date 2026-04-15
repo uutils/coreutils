@@ -49,14 +49,44 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            var fs = require('fs');
-            var issue_number = Number(fs.readFileSync('./NR'));
-            var content = fs.readFileSync('./result.txt');
-            if (content.toString().trim().length > 7) { // 7 because we have backquote + \n
+            const fs = require('fs');
+            if (!fs.existsSync('./NR') || !fs.existsSync('./result.txt')) {
+              core.info("No GNU comment payload to post.");
+              return;
+            }
+            const issue_number = Number(fs.readFileSync('./NR'));
+            if (!issue_number) {
+              core.info('No PR number; skipping.');
+              return;
+            }
+            const content = fs.readFileSync('./result.txt').toString();
+
+            const marker = '<!-- gnu-comment-bot -->';
+            const body = `${marker}\nGNU testsuite comparison:\n\`\`\`\n${content}\n\`\`\``;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              ...context.repo,
+              issue_number
+            });
+
+            const existing = comments.find(c =>
+              c.user.login === 'github-actions[bot]' &&
+              c.body.includes(marker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                ...context.repo,
+                comment_id: existing.id,
+                body
+              });
+            } else {
+              if (content.trim().length <= 7) { // 7 because we have backquote + \n
+                return;
+              }
               await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: issue_number,
-                body: 'GNU testsuite comparison:\n```\n' + content + '```'
+                ...context.repo,
+                issue_number,
+                body
               });
             }

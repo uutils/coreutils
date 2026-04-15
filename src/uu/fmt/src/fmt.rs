@@ -305,10 +305,9 @@ fn extract_width(matches: &ArgMatches) -> UResult<Option<usize>> {
         };
     }
 
-    if let Some(1) = matches.index_of(options::FILES_OR_WIDTH) {
-        let width_arg = matches
-            .get_one::<OsString>(options::FILES_OR_WIDTH)
-            .unwrap();
+    if let Some(width_arg) = matches.get_one::<OsString>(options::FILES_OR_WIDTH)
+        && Some(1) == matches.index_of(options::FILES_OR_WIDTH)
+    {
         let width_str = width_arg.to_string_lossy();
         if let Some(num) = width_str.strip_prefix('-') {
             Ok(num.parse::<usize>().ok())
@@ -334,7 +333,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             && first_arg.chars().skip(2).any(|c| !c.is_ascii_digit());
         if malformed_number {
             return Err(FmtError::InvalidWidthMalformed(
-                first_arg.strip_prefix('-').unwrap().to_string(),
+                // strip 1st -
+                first_arg[1..].to_string(),
             )
             .into());
         }

@@ -466,7 +466,7 @@ install_packages_via_adb_shell_using_apt() {
     run_termux_command "$command" "$probe"
 
     probe="$dev_probe_dir/adb_install.probe"
-    command="'mkdir -vp ~/.cargo/bin; apt update; yes | apt install $install_package_list -y; echo \$? > $probe'"
+    command="'mkdir -vp ~/.cargo/bin; apt-get update; yes | apt-get install $install_package_list -y; echo \$? > $probe'"
     run_termux_command "$command" "$probe"
 }
 
@@ -478,7 +478,7 @@ install_packages_via_ssh_using_apt() {
     echo "set apt repository url: $repo_url"
     run_command_via_ssh "echo $repo_url | dd of=\$PREFIX/etc/apt/sources.list"
 
-    run_command_via_ssh "apt update; yes | apt install $install_package_list -y"
+    run_command_via_ssh "apt-get update; yes | apt-get install $install_package_list -y"
 }
 
 apt_upgrade_all_packages() {
@@ -487,7 +487,7 @@ apt_upgrade_all_packages() {
     echo "set apt repository url: $repo_url"
     run_command_via_ssh "echo $repo_url | dd of=\$PREFIX/etc/apt/sources.list"
 
-    run_command_via_ssh "apt update; yes | apt upgrade -y"
+    run_command_via_ssh "apt-get update; yes | apt-get upgrade -y"
 }
 
 generate_and_install_public_key() {

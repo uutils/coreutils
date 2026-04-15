@@ -752,16 +752,7 @@ enum DuError {
     InvalidGlob(String),
 }
 
-impl UError for DuError {
-    fn code(&self) -> i32 {
-        match self {
-            Self::InvalidMaxDepthArg(_)
-            | Self::SummarizeDepthConflict(_)
-            | Self::InvalidTimeStyleArg(_)
-            | Self::InvalidGlob(_) => 1,
-        }
-    }
-}
+impl UError for DuError {}
 
 /// Read a file and return each line in a vector of String
 fn file_as_vec(filename: impl AsRef<Path>) -> Vec<String> {
