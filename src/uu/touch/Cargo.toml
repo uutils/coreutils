@@ -4,7 +4,6 @@ name = "uu_touch"
 description = "touch ~ (uutils) change FILE timestamps"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/touch"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true

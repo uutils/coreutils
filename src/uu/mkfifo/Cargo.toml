@@ -3,7 +3,6 @@ name = "uu_mkfifo"
 description = "mkfifo ~ (uutils) create FIFOs (named pipes)"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/mkfifo"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true

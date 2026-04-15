@@ -3,7 +3,6 @@ name = "uu_id"
 description = "id ~ (uutils) display user and group information for USER"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/id"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true

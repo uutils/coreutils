@@ -3,7 +3,6 @@ name = "uu_more"
 description = "more ~ (uutils) input perusal filter"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/more"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true

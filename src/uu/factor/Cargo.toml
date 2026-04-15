@@ -3,7 +3,6 @@ name = "uu_factor"
 description = "factor ~ (uutils) display the prime factors of each NUMBER"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true

@@ -3,7 +3,6 @@ name = "uu_kill"
 description = "kill ~ (uutils) send a signal to a process"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/kill"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true

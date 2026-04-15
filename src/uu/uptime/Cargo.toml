@@ -5,7 +5,6 @@ name = "uu_uptime"
 description = "uptime ~ (uutils) display dynamic system information"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/uptime"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true

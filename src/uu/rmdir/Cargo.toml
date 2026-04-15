@@ -3,7 +3,6 @@ name = "uu_rmdir"
 description = "rmdir ~ (uutils) remove empty DIRECTORY"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/rmdir"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true

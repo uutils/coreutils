@@ -3,7 +3,6 @@ name = "uu_chgrp"
 description = "chgrp ~ (uutils) change the group ownership of FILE"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/chgrp"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true

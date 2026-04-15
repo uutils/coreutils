@@ -3,7 +3,6 @@ name = "uu_b2sum"
 description = "b2sum ~ (uutils) Print or check the BLAKE2b checksums"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/b2sum"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true

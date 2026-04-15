@@ -4,7 +4,6 @@ description = "chcon ~ (uutils) change file security context"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/chcon"
 keywords = ["coreutils", "uutils", "cli", "utility"]
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 categories.workspace = true

@@ -3,7 +3,6 @@ name = "uu_mv"
 description = "mv ~ (uutils) move (rename) SOURCE to DESTINATION"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/mv"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
