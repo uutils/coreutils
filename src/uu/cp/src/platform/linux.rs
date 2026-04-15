@@ -214,7 +214,7 @@ fn check_dest_is_fifo(dest: &Path) -> bool {
 }
 
 /// Copy the contents of a stream from `source` to `dest`.
-fn copy_stream<P>(source: P, dest: P) -> std::io::Result<u64>
+fn copy_stream<P>(source: P, dest: P) -> std::io::Result<()>
 where
     P: AsRef<Path>,
 {
@@ -250,10 +250,10 @@ where
         dst_file.set_len(0)?;
     }
 
-    let num_bytes_copied = buf_copy::copy_stream(&mut src_file, &mut dst_file)
+    buf_copy::copy_stream(&mut src_file, &mut dst_file)
         .map_err(|e| std::io::Error::other(format!("{e}")))?;
 
-    Ok(num_bytes_copied)
+    Ok(())
 }
 
 /// Copies `source` to `dest` using copy-on-write if possible.

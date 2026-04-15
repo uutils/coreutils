@@ -48,12 +48,7 @@ impl From<rustix::io::Errno> for Error {
 /// # Arguments
 /// * `source` - `Read` implementor to copy data from.
 /// * `dest` - `Write` implementor to copy data to.
-///
-/// # Returns
-///
-/// Result of operation and bytes successfully written (as a `u64`) when
-/// operation is successful.
-pub fn copy_stream<R, S>(src: &mut R, dest: &mut S) -> UResult<u64>
+pub fn copy_stream<R, S>(src: &mut R, dest: &mut S) -> UResult<()>
 where
     R: Read + AsFd + AsRawFd,
     S: Write + AsFd + AsRawFd,
@@ -62,11 +57,11 @@ where
     // for faster writing. If it works, we're done.
     let result = splice_write(src, &dest.as_fd())?;
     if !result.1 {
-        return Ok(result.0);
+        return Ok(());
     }
 
     // If the splice() call failed, fall back on slower writing.
-    let result = std::io::copy(src, dest)?;
+    std::io::copy(src, dest)?;
 
     // If the splice() call failed and there has been some data written to
     // stdout via while loop above AND there will be second splice() call
@@ -74,7 +69,7 @@ where
     // the data buffered in stdout.lock. Therefore additional explicit flush
     // is required here.
     dest.flush()?;
-    Ok(result)
+    Ok(())
 }
 
 /// Write from source `handle` into destination `write_fd` using Linux-specific
