@@ -19,14 +19,14 @@ mod flags;
 use crate::flags::AllFlags;
 use crate::flags::COMBINATION_SETTINGS;
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use nix::libc::{O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ, c_ushort};
+use libc::{O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ, c_ushort};
 
 #[cfg(all(
     target_os = "linux",
     not(target_arch = "powerpc"),
     not(target_arch = "powerpc64")
 ))]
-use nix::libc::{TCGETS2, termios2};
+use libc::{TCGETS2, termios2};
 
 use rustix::termios::{
     ControlModes as ControlFlags, InputModes as InputFlags, LocalModes as LocalFlags,
@@ -528,7 +528,7 @@ fn parse_rows_cols(arg: &str) -> Option<u16> {
 /// - Returns `None` if format is invalid
 fn parse_saved_state(arg: &str) -> Option<Vec<u32>> {
     let parts: Vec<&str> = arg.split(':').collect();
-    let expected_parts = 4 + nix::libc::NCCS;
+    let expected_parts = 4 + libc::NCCS;
 
     // GNU requires exactly the right number of parts for this platform
     if parts.len() != expected_parts {

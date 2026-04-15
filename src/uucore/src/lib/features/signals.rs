@@ -704,7 +704,6 @@ static STARTUP_STATE_WAS_CAPTURED: AtomicBool = AtomicBool::new(false);
 #[cfg(unix)]
 #[allow(clippy::missing_safety_doc)]
 pub unsafe extern "C" fn capture_startup_state() {
-    use nix::libc;
     use std::mem::MaybeUninit;
     use std::ptr;
 

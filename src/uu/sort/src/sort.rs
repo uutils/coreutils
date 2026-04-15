@@ -1411,7 +1411,7 @@ pub(crate) fn fd_soft_limit() -> Option<usize> {
 
 #[cfg(unix)]
 pub(crate) fn current_open_fd_count() -> Option<usize> {
-    use nix::libc;
+    use libc;
 
     fn count_dir(path: &str) -> Option<usize> {
         let entries = std::fs::read_dir(path).ok()?;
@@ -1771,7 +1771,7 @@ fn locale_failed_to_set() -> bool {
 
 #[cfg(unix)]
 fn locale_failed_to_set() -> bool {
-    use nix::libc;
+    use libc;
     unsafe { libc::setlocale(libc::LC_COLLATE, c"".as_ptr()).is_null() }
 }
 
