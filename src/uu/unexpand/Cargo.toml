@@ -3,7 +3,6 @@ name = "uu_unexpand"
 description = "unexpand ~ (uutils) convert input spaces to tabs"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/unexpand"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true

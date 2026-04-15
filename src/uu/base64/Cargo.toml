@@ -3,7 +3,6 @@ name = "uu_base64"
 description = "base64 ~ (uutils) decode/encode input (base64-encoding)"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/base64"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true

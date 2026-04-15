@@ -3,7 +3,6 @@ name = "uu_readlink"
 description = "readlink ~ (uutils) display resolved path of PATHNAME"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/readlink"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true

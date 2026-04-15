@@ -3,7 +3,6 @@ name = "uu_sleep"
 description = "sleep ~ (uutils) pause for DURATION"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/sleep"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true

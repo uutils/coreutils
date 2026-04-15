@@ -3,7 +3,6 @@ name = "uu_fmt"
 description = "fmt ~ (uutils) reformat each paragraph of input"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/fmt"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true

@@ -3,7 +3,6 @@ name = "uu_runcon"
 description = "runcon ~ (uutils) run command with specified security context"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/runcon"
 keywords = ["coreutils", "uutils", "cli", "utility"]
-authors.workspace = true
 categories.workspace = true
 edition.workspace = true
 rust-version.workspace = true

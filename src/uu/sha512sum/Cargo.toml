@@ -3,7 +3,6 @@ name = "uu_sha512sum"
 description = "sha512sum ~ (uutils) Print or check the SHA512 checksums"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/sha512sum"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true

@@ -5,7 +5,6 @@ name = "uu_sort"
 description = "sort ~ (uutils) sort input lines"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/sort"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true

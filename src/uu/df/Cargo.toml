@@ -3,7 +3,6 @@ name = "uu_df"
 description = "df ~ (uutils) display file system information"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/df"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true

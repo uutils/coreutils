@@ -3,7 +3,6 @@ name = "uu_mknod"
 description = "mknod ~ (uutils) create special file NAME of TYPE"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/mknod"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true

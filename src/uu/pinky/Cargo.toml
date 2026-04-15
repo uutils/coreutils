@@ -5,7 +5,6 @@ name = "uu_pinky"
 description = "pinky ~ (uutils) display user information"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/pinky"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true

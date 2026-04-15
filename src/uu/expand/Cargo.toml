@@ -3,7 +3,6 @@ name = "uu_expand"
 description = "expand ~ (uutils) convert input tabs to spaces"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/expand"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true

@@ -4,7 +4,6 @@ name = "uu_tsort"
 description = "tsort ~ (uutils) topologically sort input (partially ordered) pairs"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/tsort"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true

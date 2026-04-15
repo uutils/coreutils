@@ -3,7 +3,6 @@ name = "uu_printf"
 description = "printf ~ (uutils) FORMAT and display ARGUMENTS"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/printf"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true

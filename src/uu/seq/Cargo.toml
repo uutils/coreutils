@@ -4,7 +4,6 @@ name = "uu_seq"
 description = "seq ~ (uutils) display a sequence of numbers"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/seq"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true

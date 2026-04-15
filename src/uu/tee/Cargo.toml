@@ -3,7 +3,6 @@ name = "uu_tee"
 description = "tee ~ (uutils) display input and copy to FILE"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/tee"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true

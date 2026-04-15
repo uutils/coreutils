@@ -2,7 +2,6 @@
 name = "uu_checksum_common"
 description = "Base for checksum utils"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true

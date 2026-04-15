@@ -3,7 +3,6 @@ name = "uu_sum"
 description = "sum ~ (uutils) display checksum and block counts for input"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/sum"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
