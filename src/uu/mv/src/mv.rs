@@ -1007,15 +1007,11 @@ fn copy_dir_contents(
     // Create the destination directory
     fs::create_dir_all(to)?;
 
-    // Preserve ownership (uid/gid) of the top-level directory
     #[cfg(unix)]
     {
+        // Preserve ownership (uid/gid) of the top-level directory
         let _ = preserve_ownership(from, to);
-    }
 
-    // Recursively copy contents
-    #[cfg(unix)]
-    {
         if let (Some(tracker), Some(scanner)) = (hardlink_tracker, hardlink_scanner) {
             copy_dir_contents_recursive(
                 from,
