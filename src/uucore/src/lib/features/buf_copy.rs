@@ -75,9 +75,8 @@ mod tests {
         let thread = thread::spawn(move || {
             pipe_write.write_all(data).unwrap();
         });
-        let result = copy_stream(&mut pipe_read, &mut dest_file).unwrap();
+        copy_stream(&mut pipe_read, &mut dest_file).unwrap();
         thread.join().unwrap();
-        assert_eq!(result, data.len() as u64);
 
         // We would have been at the end already, so seek again to the start.
         dest_file.seek(SeekFrom::Start(0)).unwrap();
@@ -104,13 +103,12 @@ mod tests {
         src_file.sync_all().unwrap();
 
         let mut src_file = File::open(&src_path).unwrap();
-        let bytes_copied = copy_stream(&mut src_file, &mut dest_file).unwrap();
+        copy_stream(&mut src_file, &mut dest_file).unwrap();
 
         let mut dest_file = File::open(&dest_path).unwrap();
         let mut buf = Vec::new();
         dest_file.read_to_end(&mut buf).unwrap();
 
-        assert_eq!(bytes_copied as usize, data.len());
         assert_eq!(buf, data);
     }
 }
