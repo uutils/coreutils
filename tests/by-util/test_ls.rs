@@ -2045,6 +2045,26 @@ fn test_ls_sort_name() {
         .stdout_is(".a\n.b\na\nb\n");
 }
 
+// https://github.com/uutils/coreutils/issues/11831
+// In a UTF-8 locale, GNU ls places "." and ".." before names starting with
+// punctuation such as '#' due to locale-aware collation.
+#[test]
+fn test_ls_sort_dot_first_utf8_locale() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("#asdf");
+    at.touch("bar");
+    at.touch("foo");
+
+    scene
+        .ucmd()
+        .env("LANG", "en_US.UTF-8")
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("-1a")
+        .succeeds()
+        .stdout_is(".\n..\n#asdf\nbar\nfoo\n");
+}
+
 #[test]
 fn test_ls_sort_width() {
     let scene = TestScenario::new(util_name!());
