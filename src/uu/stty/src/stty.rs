@@ -646,20 +646,21 @@ fn print_terminal_size(
 
     let mut printer = WrappedPrinter::new(window_size);
 
-    // BSDs and Linux (not ppc/big-endian ppc64) use a u32 for the baud rate, so we can simply
-    // print it.
+    // On Linux and BSD, most architectures represent baud rate as a numeric value (u32),
+    // so it can be printed directly.
     #[cfg(any(target_os = "linux", bsd))]
     #[cfg(all(
         not(target_arch = "powerpc"),
-        not(all(target_arch = "powerpc64", target_endian = "big"))
+        not(target_arch = "powerpc64")
     ))]
     printer.print(&translate!("stty-output-speed", "speed" => speed));
 
-    // Big-endian Linux PowerPC uses BaudRate enum, need to convert to display format
+    // On PowerPC (including powerpc64 and ppc64le), baud rates are represented as enum values,
+    // so we need to map them to their corresponding numeric strings for display.
     #[cfg(target_os = "linux")]
     #[cfg(any(
         target_arch = "powerpc",
-        all(target_arch = "powerpc64", target_endian = "big")
+        target_arch = "powerpc64"
     ))]
     {
         // On PowerPC, find the corresponding baud rate string for display
