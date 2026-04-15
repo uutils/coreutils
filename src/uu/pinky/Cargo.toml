@@ -22,6 +22,7 @@ feat_systemd_logind = ["uucore/feat_systemd_logind"]
 
 [lib]
 path = "src/pinky.rs"
+doctest = false
 
 [dependencies]
 clap = { workspace = true }

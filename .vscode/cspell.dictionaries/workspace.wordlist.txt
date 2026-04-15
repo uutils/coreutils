@@ -1,5 +1,6 @@
 # * cargo
 cdylib
+doctest
 rlib
 
 # * crates

@@ -17,6 +17,8 @@ workspace = true
 
 [lib]
 path = "src/logname.rs"
+test = false
+doctest = false
 
 [dependencies]
 libc = { workspace = true }

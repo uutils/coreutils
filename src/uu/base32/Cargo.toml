@@ -17,6 +17,7 @@ workspace = true
 
 [lib]
 path = "src/base32.rs"
+doctest = false
 
 [dependencies]
 clap = { workspace = true }

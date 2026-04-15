@@ -22,6 +22,8 @@ feat_systemd_logind = ["uucore/feat_systemd_logind"]
 
 [lib]
 path = "src/users.rs"
+test = false
+doctest = false
 
 [dependencies]
 clap = { workspace = true }

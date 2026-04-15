@@ -18,6 +18,7 @@ workspace = true
 
 [lib]
 path = "src/touch.rs"
+doctest = false
 
 [dependencies]
 filetime = { workspace = true }

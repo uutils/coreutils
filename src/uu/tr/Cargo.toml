@@ -17,6 +17,8 @@ workspace = true
 
 [lib]
 path = "src/tr.rs"
+test = false
+doctest = false
 
 [dependencies]
 nom = { workspace = true }

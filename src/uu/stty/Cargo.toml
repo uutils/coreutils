@@ -17,6 +17,7 @@ workspace = true
 
 [lib]
 path = "src/stty.rs"
+doctest = false
 
 [dependencies]
 clap = { workspace = true }

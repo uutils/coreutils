@@ -19,6 +19,7 @@ workspace = true
 
 [lib]
 path = "src/tac.rs"
+doctest = false
 
 [dependencies]
 memchr = { workspace = true }

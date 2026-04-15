@@ -18,6 +18,7 @@ workspace = true
 
 [lib]
 path = "src/date.rs"
+doctest = false
 
 [features]
 default = ["i18n-datetime"]

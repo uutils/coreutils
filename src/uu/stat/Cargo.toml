@@ -17,6 +17,7 @@ workspace = true
 
 [lib]
 path = "src/stat.rs"
+doctest = false
 
 [dependencies]
 clap = { workspace = true }

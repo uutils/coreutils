@@ -18,6 +18,8 @@ workspace = true
 
 [lib]
 path = "src/false.rs"
+test = false
+doctest = false
 
 [dependencies]
 clap = { workspace = true }

@@ -17,6 +17,8 @@ workspace = true
 
 [lib]
 path = "src/nice.rs"
+test = false
+doctest = false
 
 [dependencies]
 clap = { workspace = true }

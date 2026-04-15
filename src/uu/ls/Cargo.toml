@@ -19,6 +19,7 @@ workspace = true
 
 [lib]
 path = "src/ls.rs"
+doctest = false
 
 [dependencies]
 ansi-width = { workspace = true }
