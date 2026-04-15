@@ -56,7 +56,7 @@ use uucore::{
     os_str_as_bytes_lossy,
     quoting_style::{QuotingStyle, locale_aware_escape_dir_name, locale_aware_escape_name},
     show,
-    time::{FormatSystemTimeFallback, format_system_time},
+    time::{FormatSystemTimeFallback, NamePadding, format_system_time_locale_aware},
 };
 
 use crate::colors::{StyleManager, color_name};
@@ -624,7 +624,13 @@ fn display_date(
         _ => &config.time_format_recent,
     };
 
-    format_system_time(out, time, fmt, FormatSystemTimeFallback::Integer)
+    format_system_time_locale_aware(
+        out,
+        time,
+        fmt,
+        FormatSystemTimeFallback::Integer,
+        NamePadding::Padded,
+    )
 }
 
 fn display_len_or_rdev(metadata: &Metadata, config: &Config) -> SizeOrDeviceId {

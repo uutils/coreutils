@@ -22,7 +22,7 @@ use uucore::display::Quotable;
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
 #[cfg(feature = "i18n-datetime")]
-use uucore::i18n::datetime::{localize_format_string, should_use_icu_locale};
+use uucore::i18n::datetime::{NamePadding, localize_format_string, should_use_icu_locale};
 use uucore::translate;
 use uucore::{format_usage, show};
 #[cfg(windows)]
@@ -715,7 +715,7 @@ fn format_date_with_locale_aware_months(
     // rest of the function without a dangling reference.
     #[cfg(feature = "i18n-datetime")]
     let localized: Option<String> = (!skip_localization && should_use_icu_locale())
-        .then(|| localize_format_string(format_string, date.date()));
+        .then(|| localize_format_string(format_string, date.date(), NamePadding::Raw));
     #[cfg(feature = "i18n-datetime")]
     let fmt: &str = localized.as_deref().unwrap_or(format_string);
     #[cfg(not(feature = "i18n-datetime"))]

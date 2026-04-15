@@ -100,16 +100,29 @@ pub fn is_ci() -> bool {
     env::var("CI").is_ok_and(|s| s.eq_ignore_ascii_case("true"))
 }
 
-/// Check if a locale is available on the system by verifying that
-/// `locale charmap` returns `"UTF-8"` when `LC_ALL` is set to the given locale.
+/// Check if a locale is available on the system by verifying that `locale
+/// charmap` returns the charmap implied by the locale name when `LC_ALL` is
+/// set to it.
+///
+/// The expected charmap is derived from the portion of the locale name after
+/// the `.` (e.g. `"fa_IR.UTF-8"` → `"UTF-8"`, `"ru_RU.KOI8-R"` → `"KOI8-R"`,
+/// `"zh_CN.GB18030"` → `"GB18030"`). A locale name with no suffix defaults to
+/// `"UTF-8"`. This avoids false positives when the requested locale is not
+/// installed and `locale` silently falls back to C (which would otherwise
+/// report `"ANSI_X3.4-1968"`).
 #[cfg(unix)]
 pub fn is_locale_available(locale: &str) -> bool {
     use std::process::Command;
+    // C / POSIX are always available.
+    if locale == "C" || locale == "POSIX" {
+        return true;
+    }
+    let expected = locale.split_once('.').map_or("UTF-8", |(_, enc)| enc);
     Command::new("locale")
         .env("LC_ALL", locale)
         .arg("charmap")
         .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "UTF-8")
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim() == expected)
         .unwrap_or(false)
 }
 
