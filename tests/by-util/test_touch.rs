@@ -622,6 +622,25 @@ fn test_touch_set_date7() {
     assert_eq!(mtime, expected);
 }
 
+/// Regression test for https://github.com/uutils/coreutils/issues/11804
+///
+/// Setting a pre-epoch date like `0000-01-01` used to panic on 32-bit targets
+/// because the i64 Unix timestamp (~-62 billion) overflowed the i32 `tv_sec`
+/// expected by the old nix-based implementation. After switching to rustix
+/// (which uses i64 `tv_sec` natively), this should succeed on all targets.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_touch_set_date_year_zero() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_year_zero";
+
+    ucmd.args(&["-d", "0000-01-01", file])
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file));
+}
+
 /// Test for setting the date by a relative time unit.
 #[test]
 fn test_touch_set_date_relative_smoke() {
