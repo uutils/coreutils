@@ -649,19 +649,13 @@ fn print_terminal_size(
     // On Linux and BSD, most architectures represent baud rate as a numeric value (u32),
     // so it can be printed directly.
     #[cfg(any(target_os = "linux", bsd))]
-    #[cfg(all(
-        not(target_arch = "powerpc"),
-        not(target_arch = "powerpc64")
-    ))]
+    #[cfg(all(not(target_arch = "powerpc"), not(target_arch = "powerpc64")))]
     printer.print(&translate!("stty-output-speed", "speed" => speed));
 
     // On PowerPC (including powerpc64 and ppc64le), baud rates are represented as enum values,
     // so we need to map them to their corresponding numeric strings for display.
     #[cfg(target_os = "linux")]
-    #[cfg(any(
-        target_arch = "powerpc",
-        target_arch = "powerpc64"
-    ))]
+    #[cfg(any(target_arch = "powerpc", target_arch = "powerpc64"))]
     {
         // On PowerPC, find the corresponding baud rate string for display
         let speed_str = BAUD_RATES
