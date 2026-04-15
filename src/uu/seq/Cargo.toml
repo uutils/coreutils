@@ -18,6 +18,7 @@ workspace = true
 
 [lib]
 path = "src/seq.rs"
+doctest = false
 
 [dependencies]
 bigdecimal = { workspace = true }

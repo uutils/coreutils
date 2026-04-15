@@ -19,6 +19,7 @@ workspace = true
 
 [lib]
 path = "src/sort.rs"
+doctest = false
 
 [features]
 default = ["i18n-collator"]

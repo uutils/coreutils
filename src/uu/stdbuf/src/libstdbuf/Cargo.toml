@@ -18,6 +18,7 @@ workspace = true
 name = "stdbuf"
 path = "src/libstdbuf.rs"
 crate-type = ["cdylib"]
+test = false
 
 [dependencies]
 ctor = { workspace = true }

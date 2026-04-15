@@ -17,6 +17,7 @@ workspace = true
 
 [lib]
 path = "src/dircolors.rs"
+doctest = false
 
 [dependencies]
 clap = { workspace = true }

@@ -17,6 +17,7 @@ workspace = true
 
 [lib]
 path = "src/yes.rs"
+doctest = false
 
 [dependencies]
 clap = { workspace = true }

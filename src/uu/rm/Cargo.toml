@@ -17,6 +17,7 @@ workspace = true
 
 [lib]
 path = "src/rm.rs"
+doctest = false
 
 [dependencies]
 thiserror = { workspace = true }

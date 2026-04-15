@@ -17,6 +17,8 @@ workspace = true
 
 [lib]
 path = "src/uname.rs"
+test = false
+doctest = false
 
 [dependencies]
 platform-info = { workspace = true }

@@ -22,6 +22,8 @@ feat_systemd_logind = ["uucore/feat_systemd_logind"]
 
 [lib]
 path = "src/uptime.rs"
+test = false
+doctest = false
 
 [dependencies]
 clap = { workspace = true }
@@ -29,8 +31,6 @@ thiserror = { workspace = true }
 uucore = { workspace = true, features = ["libc", "utmpx", "uptime"] }
 fluent = { workspace = true }
 jiff = { workspace = true }
-
-[target.'cfg(target_os = "openbsd")'.dependencies]
 
 [[bin]]
 name = "uptime"

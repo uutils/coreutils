@@ -33,6 +33,7 @@ uucore = { workspace = true, features = ["benchmark"] }
 
 [lib]
 path = "src/factor.rs"
+doctest = false
 
 [[bench]]
 name = "factor_bench"

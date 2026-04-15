@@ -17,6 +17,8 @@ workspace = true
 
 [lib]
 path = "src/runcon.rs"
+test = false
+doctest = false
 
 # TODO: block fetching crates without feat_selinux
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
