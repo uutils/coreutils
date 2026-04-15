@@ -595,7 +595,7 @@ fn unexpand_file(
 }
 
 fn unexpand(options: &Options) -> UResult<()> {
-    let mut buf = [0u8; 8 * 1024];
+    let mut buf = [0u8; 256];
     let mut output = BufWriter::new(stdout());
     let tab_config = &options.tab_config;
     let lastcol = if tab_config.tabstops.len() > 1
