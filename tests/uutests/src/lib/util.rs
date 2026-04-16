@@ -109,8 +109,7 @@ pub fn is_locale_available(locale: &str) -> bool {
         .env("LC_ALL", locale)
         .arg("charmap")
         .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "UTF-8")
-        .unwrap_or(false)
+        .is_ok_and(|o| String::from_utf8_lossy(&o.stdout).trim() == "UTF-8")
 }
 
 /// Read a test scenario fixture, returning its bytes
