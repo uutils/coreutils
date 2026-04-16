@@ -726,9 +726,6 @@ collapsible_if = { level = "allow", priority = 127 } # remove me
 #     | jq -r '.message.code.code | select(. != null and startswith("clippy::"))' \
 #     | sort | uniq -c | sort -h -r
 #
-# TODO:
-#  remove large_stack_arrays when https://github.com/rust-lang/rust-clippy/issues/13774 is fixed
-#
 all = { level = "warn", priority = -1 }
 cargo = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
@@ -748,7 +745,6 @@ cast_precision_loss = "allow"                # 52
 cast_lossless = "allow"                      # 35
 ignored_unit_patterns = "allow"              # 21
 similar_names = "allow"                      # 20
-large_stack_arrays = "allow"                 # 20
 needless_pass_by_value = "allow"             # 16
 float_cmp = "allow"                          # 12
 items_after_statements = "allow"             # 11
