@@ -811,6 +811,8 @@ struct PathData<'a> {
     p_buf: Cow<'a, Path>,
     must_dereference: bool,
     command_line: bool,
+    // True if it is one of the two dot dirs: `.` and `..`.
+    is_dot_dir: bool,
 }
 
 impl<'a> PathData<'a> {
@@ -820,6 +822,7 @@ impl<'a> PathData<'a> {
         file_name: Option<Cow<'a, OsStr>>,
         config: &Config,
         command_line: bool,
+        synthetic: bool,
     ) -> Self {
         // We cannot use `Path::ends_with` or `Path::Components`, because they remove occurrences of '.'
         // For '..', the filename is None
@@ -886,6 +889,7 @@ impl<'a> PathData<'a> {
             p_buf,
             must_dereference,
             command_line,
+            is_dot_dir: synthetic,
         }
     }
 
@@ -975,7 +979,11 @@ impl Colorable for PathData<'_> {
     }
 }
 
-type DirData = (PathBuf, bool);
+struct LsNode {
+    path: PathBuf,
+    needs_blank_line: bool,
+    fi: FileInformation,
+}
 
 // A struct to encapsulate state that is passed around from `list` functions.
 #[cfg_attr(not(unix), allow(dead_code))]
@@ -996,7 +1004,7 @@ struct ListState<'a> {
     #[cfg(not(unix))]
     gid_cache: (),
     recent_time_range: RangeInclusive<SystemTime>,
-    stack: Vec<DirData>,
+    stack: Vec<LsNode>,
     listed_ancestors: FxHashSet<FileInformation>,
     initial_locs_len: usize,
     display_buf: Vec<u8>,
@@ -1036,7 +1044,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     };
 
     for loc in locs {
-        let path_data = PathData::new(loc.into(), None, None, config, true);
+        let path_data = PathData::new(loc.into(), None, None, config, true, false);
 
         // Getting metadata here is no big deal as it's just the CWD
         // and we really just want to know if the strings exist as files/dirs
@@ -1110,22 +1118,19 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         )?;
 
         // Only runs if it must list recursively.
-        while let Some(dir_data) = state.stack.pop() {
-            let read_dir = match fs::read_dir(&dir_data.0) {
+        while let Some(node) = state.stack.pop() {
+            let read_dir = match fs::read_dir(&node.path) {
                 Err(err) => {
                     // flush stdout buffer before the error to preserve formatting and order
                     state.out.flush()?;
-                    show!(LsError::IOErrorContext(
-                        path_data.path().to_path_buf(),
-                        err,
-                        path_data.command_line
-                    ));
+                    show!(LsError::IOErrorContext(node.path, err, false));
                     continue;
                 }
                 Ok(rd) => rd,
             };
 
-            depth_first_list(dir_data, read_dir, config, &mut state, &mut dired, false)?;
+            state.listed_ancestors.remove(&node.fi);
+            depth_first_list(node.into(), read_dir, config, &mut state, &mut dired, false)?;
 
             // Heuristic to ensure stack does not keep its capacity forever if there is
             // combinatorial explosion; we decrease it logarithmically here.
@@ -1141,6 +1146,13 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     if config.dired && !config.hyperlink {
         dired::print_dired_output(config, &dired, &mut state.out)?;
     }
+
+    // Check all nodes are cleared after recursive listing in integration tests.
+    // FIXME: Turn into a proper test; integration testing most likely requires
+    // hard-linked directories, so it is a no-go. A unit test may be more
+    // feasible given a heavy refactor that decouples [`depth_first_list`].
+    debug_assert!(state.listed_ancestors.is_empty());
+
     Ok(())
 }
 
@@ -1209,14 +1221,14 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
 }
 
 fn depth_first_list(
-    (dir_path, needs_blank_line): DirData,
+    (dir_path, needs_blank_line): (PathBuf, bool),
     mut read_dir: ReadDir,
     config: &Config,
     state: &mut ListState,
     dired: &mut DiredOutput,
     is_top_level: bool,
 ) -> UResult<()> {
-    let path_data = PathData::new(dir_path.as_path().into(), None, None, config, false);
+    let path_data = PathData::new(dir_path.into(), None, None, config, false, false);
 
     // Print dir heading - name... 'total' comes after error display
     if state.initial_locs_len > 1 || config.recursive {
@@ -1254,15 +1266,15 @@ fn depth_first_list(
     }
 
     // Append entries with initial dot files and record their existence
-    let (ref mut buf, trim) = if config.files == Files::All {
-        const DOT_DIRECTORIES: usize = 2;
-        let v = vec![
+    let mut buf = if config.files == Files::All {
+        vec![
             PathData::new(
                 path_data.path().into(),
                 None,
                 Some(OsStr::new(".").into()),
                 config,
                 false,
+                true,
             ),
             PathData::new(
                 // On WASI the sandbox may block access to ".." at the
@@ -1282,11 +1294,11 @@ fn depth_first_list(
                 Some(OsStr::new("..").into()),
                 config,
                 false,
+                true,
             ),
-        ];
-        (v, DOT_DIRECTORIES)
+        ]
     } else {
-        (Vec::new(), 0)
+        Vec::new()
     };
 
     // Convert those entries to the PathData struct
@@ -1300,6 +1312,7 @@ fn depth_first_list(
                         None,
                         config,
                         false,
+                        false,
                     ));
                 }
             }
@@ -1312,22 +1325,21 @@ fn depth_first_list(
     // Relinquish unused space since we won't need it anymore.
     buf.shrink_to_fit();
 
-    sort_entries(buf, config);
+    sort_entries(&mut buf, config);
 
     if config.format == Format::Long || config.alloc_size {
-        let total = write_total(buf, config, &mut state.out)?;
+        let total = write_total(&buf, config, &mut state.out)?;
         if config.dired {
             dired::add_total(dired, total);
         }
     }
 
-    display_items(buf, config, state, dired)?;
+    display_items(&buf, config, state, dired)?;
 
     if config.recursive {
         for e in buf
-            .iter()
-            .skip(trim)
-            .filter(|p| p.file_type().is_some_and(FileType::is_dir))
+            .into_iter()
+            .filter(|p| p.file_type().is_some_and(FileType::is_dir) && !p.is_dot_dir)
             .rev()
         {
             // Try to open only to report any errors in order to match GNU semantics.
@@ -1340,13 +1352,13 @@ fn depth_first_list(
                 ));
             } else {
                 let fi = FileInformation::from_path(e.path(), e.must_dereference)?;
-                if state.listed_ancestors.insert(fi) {
+                if state.listed_ancestors.insert(fi.clone()) {
                     // Push to stack, but with a less aggressive growth curve.
                     let (cap, len) = (state.stack.capacity(), state.stack.len());
                     if cap == len {
                         state.stack.reserve_exact(len / 4 + 4);
                     }
-                    state.stack.push((e.path().to_path_buf(), true));
+                    state.stack.push(LsNode::new(e.p_buf, needs_blank_line, fi));
                 } else {
                     state.out.flush()?;
                     show!(LsError::AlreadyListedError(e.path().to_path_buf()));
@@ -1355,6 +1367,22 @@ fn depth_first_list(
         }
     }
     Ok(())
+}
+
+impl LsNode {
+    fn new(path: impl Into<PathBuf>, needs_blank_line: bool, fi: FileInformation) -> Self {
+        Self {
+            path: path.into(),
+            needs_blank_line,
+            fi,
+        }
+    }
+}
+
+impl From<LsNode> for (PathBuf, bool) {
+    fn from(val: LsNode) -> Self {
+        (val.path, val.needs_blank_line)
+    }
 }
 
 fn get_metadata_with_deref_opt(p_buf: &Path, dereference: bool) -> std::io::Result<Metadata> {
