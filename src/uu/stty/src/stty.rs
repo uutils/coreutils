@@ -646,35 +646,18 @@ fn print_terminal_size(
 
     let mut printer = WrappedPrinter::new(window_size);
 
-    // On Linux and BSD, most architectures represent baud rate as a numeric value (u32),
-    // so it can be printed directly.
-    #[cfg(any(target_os = "linux", bsd))]
-    #[cfg(all(not(target_arch = "powerpc"), not(target_arch = "powerpc64")))]
-    printer.print(&translate!("stty-output-speed", "speed" => speed));
+    //We have chosen to go with a platform independent approach due to issues caused in issue
+    //#11708 for ppc64le.
 
-    // On PowerPC (including powerpc64 and ppc64le), baud rates are represented as enum values,
-    // so we need to map them to their corresponding numeric strings for display.
-    #[cfg(target_os = "linux")]
-    #[cfg(any(target_arch = "powerpc", target_arch = "powerpc64"))]
-    {
-        // On PowerPC, find the corresponding baud rate string for display
-        let speed_str = BAUD_RATES
-            .iter()
-            .find(|(_, rate)| *rate == speed)
-            .map(|(text, _)| *text)
-            .unwrap_or("unknown");
-        printer.print(&translate!("stty-output-speed", "speed" => speed_str));
-    }
+    let speed_val = speed as u32;
 
-    // Other platforms need to use the baud rate enum, so printing the right value
-    // becomes slightly more complicated.
-    #[cfg(not(any(target_os = "linux", bsd)))]
-    for (text, baud_rate) in BAUD_RATES {
-        if *baud_rate == speed {
-            printer.print(&translate!("stty-output-speed", "speed" => (*text)));
-            break;
-        }
-    }
+    let speed_str = BAUD_RATES
+        .iter()
+        .find(|(_, rate)| (*rate as u32) == speed_val)
+        .map(|(text, _)| *text)
+        .unwrap_or("unknown");
+
+    printer.print(&translate!("stty-output-speed", "speed" => speed_str));
 
     if opts.all {
         let term_size = term_size.as_ref().expect("terminal size should be set");
