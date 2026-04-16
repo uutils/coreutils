@@ -379,11 +379,9 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
                 uppercase = true;
                 swap_case = false; // ^ overrides #
             }
-            '#' => {
-                if !uppercase {
-                    // Only apply # if ^ hasn't been set
-                    swap_case = true;
-                }
+            '#' if !uppercase => {
+                // Only apply # if ^ hasn't been set
+                swap_case = true;
             }
             '+' => {
                 force_sign = true;

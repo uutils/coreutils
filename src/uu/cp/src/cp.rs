@@ -1134,10 +1134,8 @@ impl Options {
                 options::PRESERVE => {
                     attributes = attributes.union(&Attributes::parse_iter(val.into_iter())?);
                 }
-                options::NO_PRESERVE => {
-                    if !val.is_empty() {
-                        attributes = attributes.diff(&Attributes::parse_iter(val.into_iter())?);
-                    }
+                options::NO_PRESERVE if !val.is_empty() => {
+                    attributes = attributes.diff(&Attributes::parse_iter(val.into_iter())?);
                 }
                 _ => (),
             }
