@@ -1038,6 +1038,8 @@ impl<'a> TextOutput<'a> {
                 uid_cache: (),
                 #[cfg(not(unix))]
                 gid_cache: (),
+                // Use "recent" format for files modified within the last ~0.5 years (31556952s).
+                // According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
                 recent_time_range: (SystemTime::now() - Duration::new(31_556_952 / 2, 0))
                     ..=SystemTime::now(),
                 display_buf: Vec::with_capacity(if config.format == Format::Long {
