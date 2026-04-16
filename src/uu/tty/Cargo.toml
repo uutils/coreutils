@@ -3,7 +3,6 @@ name = "uu_tty"
 description = "tty ~ (uutils) display the name of the terminal connected to standard input"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/tty"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -17,6 +16,8 @@ workspace = true
 
 [lib]
 path = "src/tty.rs"
+test = false
+doctest = false
 
 [dependencies]
 clap = { workspace = true }

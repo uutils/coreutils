@@ -52,6 +52,10 @@ impl Target {
             .spawn()
             .expect("failed to send signal")
             .wait();
+        // macOS CI needs a longer delay for process teardown after signal delivery
+        #[cfg(target_os = "macos")]
+        self.child.delay(500);
+        #[cfg(not(target_os = "macos"))]
         self.child.delay(100);
     }
     fn is_alive(&mut self) -> bool {

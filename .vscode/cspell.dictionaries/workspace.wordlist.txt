@@ -1,12 +1,9 @@
 # * cargo
 cdylib
-rlib
+doctest
 
 # * crates
-advapi
-advapi32-sys
 aho-corasick
-backtrace
 blake2b_simd
 rustix
 
@@ -149,7 +146,6 @@ EROFS
 
 # * vars/fcntl
 F_GETFL
-    GETFL
 fcntl
 vmsplice
 
@@ -184,7 +180,6 @@ IXUSR
 LINESIZE
 NAMESIZE
 RTLD_NEXT
-    RTLD
 RTMAX
 RTMIN
 SIGABRT
@@ -239,11 +234,12 @@ strlen
 syncfs
 umask
 waitpid
-wcslen
 
 # * vars/nix
-iovec
 unistd
+
+# * vars/rustix
+fcntl_getfl
 
 # * vars/signals
 SIGPIPE

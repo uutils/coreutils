@@ -3,7 +3,6 @@ name = "uu_truncate"
 description = "truncate ~ (uutils) truncate (or extend) FILE to SIZE"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/truncate"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -17,6 +16,7 @@ workspace = true
 
 [lib]
 path = "src/truncate.rs"
+doctest = false
 
 [dependencies]
 clap = { workspace = true }

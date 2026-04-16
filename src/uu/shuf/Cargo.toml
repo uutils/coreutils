@@ -3,7 +3,6 @@ name = "uu_shuf"
 description = "shuf ~ (uutils) display random permutations of input lines"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/shuf"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -17,6 +16,7 @@ workspace = true
 
 [lib]
 path = "src/shuf.rs"
+doctest = false
 
 [dependencies]
 clap = { workspace = true }

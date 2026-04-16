@@ -111,9 +111,7 @@ fn tee(options: &Options) -> Result<()> {
 }
 
 /// Copies all bytes from the input buffer to the output buffer.
-///
-/// Returns the number of written bytes.
-fn copy(mut input: impl Read, mut output: impl Write) -> Result<usize> {
+fn copy(mut input: impl Read, mut output: impl Write) -> Result<()> {
     // The implementation for this function is adopted from the generic buffer copy implementation from
     // the standard library:
     // https://github.com/rust-lang/rust/blob/2feb91181882e525e698c4543063f4d0296fcf91/library/std/src/io/copy.rs#L271-L297
@@ -126,38 +124,31 @@ fn copy(mut input: impl Read, mut output: impl Write) -> Result<usize> {
         8 * 1024
     };
     let mut buffer = [0u8; BUF_SIZE];
-    let mut len = 0;
 
-    loop {
+    for _ in 0..2 {
         match input.read(&mut buffer) {
-            Ok(0) => return Ok(len), // end of file
+            Ok(0) => return Ok(()), // end of file
             Ok(received) => {
                 output.write_all(&buffer[..received])?;
                 // flush the buffer to comply with POSIX requirement that
                 // `tee` does not buffer the input.
                 output.flush()?;
-                len += received;
-                if len > 2 * BUF_SIZE {
-                    // buffer is too small
-                    break;
-                }
             }
             Err(e) if e.kind() == ErrorKind::Interrupted => {}
             Err(e) => return Err(e),
         }
     }
-    // optimize for large input
+    // buffer is too small optimize for large input
     //stack array makes code path for smaller file slower
     let mut buffer = vec![0u8; 4 * BUF_SIZE];
     loop {
         match input.read(&mut buffer) {
-            Ok(0) => return Ok(len), // end of file
+            Ok(0) => return Ok(()), // end of file
             Ok(received) => {
                 output.write_all(&buffer[..received])?;
                 // flush the buffer to comply with POSIX requirement that
                 // `tee` does not buffer the input.
                 output.flush()?;
-                len += received;
             }
             Err(e) if e.kind() == ErrorKind::Interrupted => {}
             Err(e) => return Err(e),

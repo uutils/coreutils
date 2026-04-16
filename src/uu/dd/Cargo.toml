@@ -3,7 +3,6 @@ name = "uu_dd"
 description = "dd ~ (uutils) copy and convert files"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/dd"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -17,6 +16,7 @@ workspace = true
 
 [lib]
 path = "src/dd.rs"
+doctest = false
 
 [dependencies]
 clap = { workspace = true }

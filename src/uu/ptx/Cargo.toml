@@ -3,7 +3,6 @@ name = "uu_ptx"
 description = "ptx ~ (uutils) display a permuted index of input"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/ptx"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -17,6 +16,8 @@ workspace = true
 
 [lib]
 path = "src/ptx.rs"
+test = false
+doctest = false
 
 [dependencies]
 clap = { workspace = true }

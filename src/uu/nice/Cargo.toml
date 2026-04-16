@@ -3,7 +3,6 @@ name = "uu_nice"
 description = "nice ~ (uutils) run PROGRAM with modified scheduling priority"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/nice"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -17,6 +16,8 @@ workspace = true
 
 [lib]
 path = "src/nice.rs"
+test = false
+doctest = false
 
 [dependencies]
 clap = { workspace = true }

@@ -5,7 +5,6 @@ name = "uu_ls"
 description = "ls ~ (uutils) display directory contents"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/ls"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -19,6 +18,7 @@ workspace = true
 
 [lib]
 path = "src/ls.rs"
+doctest = false
 
 [dependencies]
 ansi-width = { workspace = true }
