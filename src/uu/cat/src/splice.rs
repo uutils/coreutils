@@ -24,7 +24,7 @@ pub(super) fn write_fast_using_splice<R: FdReadable, S: AsRawFd + AsFd + Write>(
     if splice(&handle.reader, &write_fd, MAX_ROOTLESS_PIPE_SIZE).is_ok() {
         // fcntl improves throughput
         // todo: avoid fcntl overhead for small input, but don't fcntl inside of the loop
-        let _ = rustix::pipe::fcntl_setpipe_size(&mut *write_fd, MAX_ROOTLESS_PIPE_SIZE);
+        //let _ = rustix::pipe::fcntl_setpipe_size(&mut *write_fd, MAX_ROOTLESS_PIPE_SIZE);
         loop {
             match splice(&handle.reader, &write_fd, MAX_ROOTLESS_PIPE_SIZE) {
                 Ok(1..) => {}
