@@ -93,13 +93,13 @@ impl Localizer {
         }
 
         // Fall back to English bundle if available
-        if let Some(ref fallback) = self.fallback_bundle {
-            if let Some(message) = fallback.get_message(id).and_then(|m| m.value()) {
-                let mut errs = Vec::new();
-                return fallback
-                    .format_pattern(message, args, &mut errs)
-                    .to_string();
-            }
+        if let Some(ref fallback) = self.fallback_bundle
+            && let Some(message) = fallback.get_message(id).and_then(|m| m.value())
+        {
+            let mut errs = Vec::new();
+            return fallback
+                .format_pattern(message, args, &mut errs)
+                .to_string();
         }
 
         // Return the key ID if not found anywhere
@@ -230,10 +230,9 @@ fn parse_fluent_resource(
     cache: &'static OnceLock<FluentResource>,
 ) -> Result<&'static FluentResource, LocalizationError> {
     // global cache breaks unit tests
-    if cfg!(not(test)) {
-        if let Some(res) = cache.get() {
-            return Ok(res);
-        }
+    #[cfgnot(test)]
+    if let Some(res) = cache.get() {
+        return Ok(res);
     }
 
     let resource = FluentResource::try_new(content.to_string()).map_err(
@@ -284,11 +283,12 @@ fn create_english_bundle_from_embedded(
     }
 
     // Checksum algorithms need locale messages from checksum_common
-    if util_name.ends_with("sum") {
-        if let Some(uucore_content) = get_embedded_locale("checksum_common/en-US.ftl") {
-            let uucore_resource = parse_fluent_resource(uucore_content, &CHECKSUM_FLUENT)?;
-            bundle.add_resource_overriding(uucore_resource);
-        }
+    // todo: sum is not checksum_common family. Should we avoid the case?
+    if util_name.ends_with("sum")
+        && let Some(uucore_content) = get_embedded_locale("checksum_common/en-US.ftl")
+    {
+        let uucore_resource = parse_fluent_resource(uucore_content, &CHECKSUM_FLUENT)?;
+        bundle.add_resource_overriding(uucore_resource);
     }
 
     // Then, try to load utility-specific strings

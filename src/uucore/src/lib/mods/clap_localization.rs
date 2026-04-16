@@ -219,17 +219,17 @@ impl<'a> ErrorFormatter<'a> {
             }
 
             // Show possible values for InvalidValue errors
-            if matches!(err.kind(), ErrorKind::InvalidValue) {
-                if let Some(valid_values) = err.get(ContextKind::ValidValue) {
-                    if !valid_values.to_string().is_empty() {
-                        let _ = writeln!(
-                            stderr(),
-                            "\n  [{}: {valid_values}]",
-                            translate!("clap-error-possible-values")
-                        );
-                    }
-                }
+            if matches!(err.kind(), ErrorKind::InvalidValue)
+                && let Some(valid_values) = err.get(ContextKind::ValidValue)
+                && !valid_values.to_string().is_empty()
+            {
+                let _ = writeln!(
+                    stderr(),
+                    "\n  [{}: {valid_values}]",
+                    translate!("clap-error-possible-values")
+                );
             }
+
             let _ = writeln!(stderr(), "\n{}", translate!("common-help-suggestion"));
         } else {
             self.print_simple_error_msg(&err.render().to_string());

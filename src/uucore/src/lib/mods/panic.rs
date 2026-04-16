@@ -18,9 +18,7 @@ use std::panic::{self, PanicHookInfo};
 /// Decide whether a panic was caused by a broken pipe (SIGPIPE) error.
 fn is_broken_pipe(info: &PanicHookInfo) -> bool {
     if let Some(res) = info.payload().downcast_ref::<String>() {
-        if res.contains("BrokenPipe") || res.contains("Broken pipe") {
-            return true;
-        }
+        return res.contains("BrokenPipe") || res.contains("Broken pipe");
     }
     false
 }
@@ -55,14 +53,12 @@ pub fn preserve_inherited_sigpipe() {
     use nix::libc;
 
     // Check if parent specified that SIGPIPE should be default
-    if let Ok(val) = std::env::var("RUST_SIGPIPE") {
-        if val == "default" {
-            unsafe {
-                libc::signal(libc::SIGPIPE, libc::SIG_DFL);
-                // Remove the environment variable so child processes don't inherit it incorrectly
-                std::env::remove_var("RUST_SIGPIPE");
-            }
-        }
+    if let Ok(val) = std::env::var("RUST_SIGPIPE")
+        && val == "default"
+    {
+        unsafe { libc::signal(libc::SIGPIPE, libc::SIG_DFL) };
+        // Remove the environment variable so child processes don't inherit it incorrectly
+        unsafe { std::env::remove_var("RUST_SIGPIPE") };
     }
 }
 
