@@ -230,10 +230,9 @@ fn parse_fluent_resource(
     cache: &'static OnceLock<FluentResource>,
 ) -> Result<&'static FluentResource, LocalizationError> {
     // global cache breaks unit tests
-    if cfg!(not(test)) {
-        if let Some(res) = cache.get() {
-            return Ok(res);
-        }
+    #[cfg(not(test))]
+    if let Some(res) = cache.get() {
+        return Ok(res);
     }
 
     let resource = FluentResource::try_new(content.to_string()).map_err(
