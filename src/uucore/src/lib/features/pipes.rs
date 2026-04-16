@@ -67,9 +67,7 @@ pub fn splice_exact(source: &impl AsFd, target: &impl AsFd, len: usize) -> std::
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn might_fuse(source: &impl AsFd) -> bool {
-    rustix::fs::fstatfs(source)
-        .map(|stats| stats.f_type == 0x6573_5546) // FUSE magic number, too many platform specific clippy warning with const
-        .unwrap_or(true)
+    rustix::fs::fstatfs(source).map_or(true, |stats| stats.f_type == 0x6573_5546) // FUSE magic number, too many platform specific clippy warning with const
 }
 
 /// Return verified /dev/null
