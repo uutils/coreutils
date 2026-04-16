@@ -3376,7 +3376,7 @@ fn test_check_blake3_tagged(
         None => String::new(),
     };
 
-    let tagged = format!("BLAKE3{len} (FILE) = {digest}",);
+    let tagged = format!("BLAKE3{len} (FILE) = {digest}");
 
     ucmd.arg("-c")
         .arg("-a")
