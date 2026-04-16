@@ -1,5 +1,5 @@
 allow-mixed-uninlined-format-args = false
-array-size-threshold = 262144
+array-size-threshold = 65538
 avoid-breaking-exported-api = false
 check-private-items = true
 cognitive-complexity-threshold = 24
