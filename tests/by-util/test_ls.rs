@@ -3409,6 +3409,33 @@ fn test_ls_indicator_style_symlink_target_long() {
         .stdout_contains("/dir/");
 }
 
+#[test]
+#[cfg(unix)]
+fn test_ls_indicator_style_slash_symlink_target_long() {
+    // GNU `ls -lp` does NOT append `/` to a symlink target that resolves to a
+    // directory — the slash indicator style only applies to real directories.
+    use std::os::unix::fs::symlink;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("dir");
+    assert!(at.dir_exists("dir"));
+
+    // Use a relative-path symlink so the displayed target matches GNU output.
+    symlink("dir", at.plus("dir_link")).unwrap();
+    assert!(at.is_symlink("dir_link"));
+
+    scene
+        .ucmd()
+        .arg("-lp")
+        .arg("dir_link")
+        .succeeds()
+        .stdout_contains("dir_link -> dir\n")
+        .stdout_does_not_contain("dir_link/")
+        .stdout_does_not_contain("-> dir/");
+}
+
 // Essentially the same test as above, but only test symlinks and directories,
 // not pipes or sockets.
 #[test]
