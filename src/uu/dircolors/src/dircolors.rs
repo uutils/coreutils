@@ -364,7 +364,7 @@ where
     let mut state = ParseState::Global;
     let mut saw_colorterm_match = false;
 
-    for (num, line) in (1..).zip(user_input.into_iter()) {
+    for (num, line) in (1..).zip(user_input) {
         let line = line.borrow().purify();
         if line.is_empty() {
             continue;
