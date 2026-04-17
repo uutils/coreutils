@@ -118,11 +118,7 @@ fn copy(mut input: impl Read, mut output: impl Write) -> Result<()> {
 
     // Use buffer size from std implementation
     // https://github.com/rust-lang/rust/blob/2feb91181882e525e698c4543063f4d0296fcf91/library/std/src/sys/io/mod.rs#L44
-    const BUF_SIZE: usize = if cfg!(target_os = "espidf") {
-        512
-    } else {
-        8 * 1024
-    };
+    const BUF_SIZE: usize = 8 * 1024;
     let mut buffer = [0u8; BUF_SIZE];
 
     for _ in 0..2 {
