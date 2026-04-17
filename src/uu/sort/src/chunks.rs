@@ -286,7 +286,7 @@ fn parse_lines<'a>(
         let count = if read.is_empty() {
             1
         } else {
-            memchr_iter(separator, read).count() + 1
+            bytecount::count(read, separator) + 1
         };
         exact_line_count = Some(count);
         estimated = count;

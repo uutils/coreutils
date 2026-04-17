@@ -19,7 +19,9 @@ path = "src/head.rs"
 doctest = false
 
 [dependencies]
+bytecount = { workspace = true }
 clap = { workspace = true }
+fluent = { workspace = true }
 memchr = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = [
@@ -28,7 +30,6 @@ uucore = { workspace = true, features = [
   "lines",
   "fs",
 ] }
-fluent = { workspace = true }
 
 [[bin]]
 name = "head"

@@ -371,7 +371,7 @@ impl LinesChunk {
     /// assert_eq!(2, chunk.count_lines());
     /// ```
     fn count_lines(&self) -> usize {
-        memchr::memchr_iter(self.delimiter, self.get_buffer()).count()
+        bytecount::count(self.get_buffer(), self.delimiter)
     }
 
     /// Creates a new [`LinesChunk`] from an existing one with an offset in lines. The new chunk

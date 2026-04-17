@@ -20,11 +20,12 @@ path = "src/tail.rs"
 doctest = false
 
 [dependencies]
+bytecount = { workspace = true }
 clap = { workspace = true }
-memchr = { workspace = true }
-uucore = { workspace = true, features = ["fs", "parser-size", "signals"] }
-same-file = { workspace = true }
 fluent = { workspace = true }
+memchr = { workspace = true }
+same-file = { workspace = true }
+uucore = { workspace = true, features = ["fs", "parser-size", "signals"] }
 
 [target.'cfg(not(target_os = "wasi"))'.dependencies]
 libc = { workspace = true }

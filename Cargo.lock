@@ -3635,6 +3635,7 @@ dependencies = [
 name = "uu_head"
 version = "0.8.0"
 dependencies = [
+ "bytecount",
  "clap",
  "fluent",
  "memchr",
@@ -4148,6 +4149,7 @@ version = "0.8.0"
 dependencies = [
  "bigdecimal",
  "binary-heap-plus",
+ "bytecount",
  "clap",
  "codspeed-divan-compat",
  "compare",
@@ -4258,6 +4260,7 @@ dependencies = [
 name = "uu_tail"
 version = "0.8.0"
 dependencies = [
+ "bytecount",
  "clap",
  "fluent",
  "libc",

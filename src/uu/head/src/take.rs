@@ -166,7 +166,7 @@ impl TakeAllLinesBuffer {
         self.partial_line = false;
         let bytes_read = self.inner.fill_buffer(reader)?;
         // Count the number of lines...
-        self.terminated_lines = memchr_iter(separator, self.inner.remaining_buffer()).count();
+        self.terminated_lines = bytecount::count(self.inner.remaining_buffer(), separator);
         if let Some(last_char) = self.inner.remaining_buffer().last() {
             if *last_char != separator {
                 self.partial_line = true;

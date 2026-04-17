@@ -27,8 +27,11 @@ i18n-collator = ["uucore/i18n-collator"]
 [dependencies]
 bigdecimal = { workspace = true }
 binary-heap-plus = { workspace = true }
+bytecount = { workspace = true }
 clap = { workspace = true }
 compare = { workspace = true }
+fluent = { workspace = true }
+foldhash = { workspace = true }
 itertools = { workspace = true }
 memchr = { workspace = true }
 rand = { workspace = true }
@@ -44,8 +47,6 @@ uucore = { workspace = true, features = [
   "i18n-collator",
   "i18n-datetime",
 ] }
-fluent = { workspace = true }
-foldhash = { workspace = true }
 
 [target.'cfg(not(any(target_os = "redox", target_os = "wasi")))'.dependencies]
 ctrlc = { workspace = true }

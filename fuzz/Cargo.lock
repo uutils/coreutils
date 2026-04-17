@@ -2004,6 +2004,7 @@ version = "0.8.0"
 dependencies = [
  "bigdecimal",
  "binary-heap-plus",
+ "bytecount",
  "clap",
  "compare",
  "ctrlc",
