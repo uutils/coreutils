@@ -5,6 +5,7 @@
 
 // cSpell:ignore sysconf
 use crate::{wc_simd_allowed, word_count::WordCount};
+use memchr::memchr_iter;
 use uucore::hardware::SimdPolicy;
 
 use super::WordCountable;
@@ -238,9 +239,9 @@ pub(crate) fn count_bytes_chars_and_lines_fast<
                 }
                 if COUNT_LINES {
                     total.lines += if simd_allowed {
-                        bytecount::count(&buf[..n], b'\n')
+                        memchr_iter(b'\n', &buf[..n]).count()
                     } else {
-                        bytecount::naive_count(&buf[..n], b'\n')
+                        buf[..n].iter().filter(|&&c| c == b'\n').count()
                     };
                 }
             }
