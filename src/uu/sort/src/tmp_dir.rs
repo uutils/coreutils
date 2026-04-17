@@ -18,7 +18,7 @@ use uucore::error::UResult;
 #[cfg(not(any(target_os = "redox", target_os = "wasi")))]
 use uucore::{error::USimpleError, show_error, translate};
 
-use crate::{SortError, current_open_fd_count, fd_soft_limit};
+use crate::SortError;
 
 /// A wrapper around [`TempDir`] that may only exist once in a process.
 ///
@@ -43,16 +43,6 @@ struct HandlerRegistration {
 // SIGINT handler operate on the same lock/path snapshot.
 static HANDLER_STATE: LazyLock<Arc<Mutex<HandlerRegistration>>> =
     LazyLock::new(|| Arc::new(Mutex::new(HandlerRegistration::default())));
-
-fn should_install_signal_handler() -> bool {
-    const CTRL_C_FDS: usize = 2;
-    const RESERVED_FOR_MERGE: usize = 3; // temp output + minimum inputs
-    let Some(limit) = fd_soft_limit() else {
-        return true;
-    };
-    let open_fds = current_open_fd_count().unwrap_or(3);
-    open_fds.saturating_add(CTRL_C_FDS + RESERVED_FOR_MERGE) <= limit
-}
 
 #[cfg(not(any(target_os = "redox", target_os = "wasi")))]
 fn ensure_signal_handler_installed(state: Arc<Mutex<HandlerRegistration>>) -> UResult<()> {
@@ -140,9 +130,10 @@ impl TmpDirWrapper {
             guard.path = Some(path);
         }
 
-        if should_install_signal_handler() {
-            ensure_signal_handler_installed(state)?;
-        }
+        // Always attempt to install the signal handler so that Ctrl+C
+        // triggers cleanup. Failure is non-fatal: sort still works,
+        // just without SIGINT-triggered temp directory removal.
+        let _ = ensure_signal_handler_installed(state);
         Ok(())
     }
 
