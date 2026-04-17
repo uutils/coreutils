@@ -246,18 +246,13 @@ impl Write for MultiWriter {
         let mode = self.output_error_mode.clone();
         let mut errors = 0;
         self.writers.retain_mut(|writer| {
-            let result = writer.write_all(buf);
-            match result {
-                Err(f) => {
-                    if let Err(e) = process_error(mode.as_ref(), f, writer, &mut errors) {
-                        if aborted.is_none() {
-                            aborted = Some(e);
-                        }
-                    }
-                    false
-                }
-                _ => true,
-            }
+            writer
+                .write_all(buf)
+                .map_err(|f| {
+                    let _ = process_error(mode.as_ref(), f, writer, &mut errors)
+                        .map_err(|e| aborted.get_or_insert(e));
+                })
+                .is_ok()
         });
         self.ignored_errors += errors;
         if let Some(e) = aborted {
@@ -277,18 +272,13 @@ impl Write for MultiWriter {
         let mode = self.output_error_mode.clone();
         let mut errors = 0;
         self.writers.retain_mut(|writer| {
-            let result = writer.flush();
-            match result {
-                Err(f) => {
-                    if let Err(e) = process_error(mode.as_ref(), f, writer, &mut errors) {
-                        if aborted.is_none() {
-                            aborted = Some(e);
-                        }
-                    }
-                    false
-                }
-                _ => true,
-            }
+            writer
+                .flush()
+                .map_err(|f| {
+                    let _ = process_error(mode.as_ref(), f, writer, &mut errors)
+                        .map_err(|e| aborted.get_or_insert(e));
+                })
+                .is_ok()
         });
         self.ignored_errors += errors;
         if let Some(e) = aborted {
