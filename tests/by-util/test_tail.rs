@@ -5091,9 +5091,9 @@ fn test_failed_write_is_reported() {
 fn test_failed_write_is_reported_on_seekable_input() {
     let ts = TestScenario::new("tail");
     let at = &ts.fixtures;
-    
+
     at.write("bigfile", &"x\n".repeat(100_000));
-    
+
     ts.ucmd()
         .arg("bigfile")
         .set_stdout(File::create("/dev/full").unwrap())
