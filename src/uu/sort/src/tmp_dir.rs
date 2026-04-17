@@ -171,6 +171,15 @@ impl Drop for TmpDirWrapper {
             guard.lock = None;
             guard.path = None;
         }
+        drop(guard);
+
+        // Explicitly attempt cleanup before TempDir's Drop runs silently.
+        // TempDir::drop uses `let _ = remove_dir_all()` which silently
+        // ignores errors, potentially leaking the directory.
+        #[cfg(not(any(target_os = "redox", target_os = "wasi")))]
+        if let Some(ref temp_dir) = self.temp_dir {
+            let _ = remove_tmp_dir(temp_dir.path());
+        }
     }
 }
 
