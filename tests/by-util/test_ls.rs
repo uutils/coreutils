@@ -5340,7 +5340,7 @@ fn test_ls_dired_recursive_multiple() {
         .map(|chunk| {
             let start_pos = chunk[0];
             let end_pos = chunk[1];
-            let filename = String::from_utf8(output.as_bytes()[start_pos..=end_pos].to_vec())
+            let filename = String::from_utf8(output.as_bytes()[start_pos..end_pos].to_vec())
                 .unwrap()
                 .trim()
                 .to_string();
@@ -5486,7 +5486,7 @@ fn test_ls_dired_complex() {
         .map(|chunk| {
             let start_pos = chunk[0];
             let end_pos = chunk[1];
-            let filename = String::from_utf8(output.as_bytes()[start_pos..=end_pos].to_vec())
+            let filename = String::from_utf8(output.as_bytes()[start_pos..end_pos].to_vec())
                 .unwrap()
                 .trim()
                 .to_string();
