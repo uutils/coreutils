@@ -11,10 +11,12 @@ fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
+// This test failed when fixing #11653.
+// Add a `--` separator to ensure floats are not rounded(it match the gnu pattern).
 #[test]
 fn test_should_not_round_floats() {
     new_ucmd!()
-        .args(&["0.99", "1.01", "1.1", "1.22", ".1", "-0.1"])
+        .args(&["--", "0.99", "1.01", "1.1", "1.22", ".1", "-0.1"])
         .succeeds()
         .stdout_is("0.99\n1.01\n1.1\n1.22\n0.1\n-0.1\n");
 }
@@ -1168,6 +1170,7 @@ fn test_zero_terminated_embedded_newline() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_non_utf8_delimiter() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -1370,18 +1373,27 @@ fn test_null_byte_input_multiline() {
 // GNU rejects `-9923868` as an invalid short option (leading `-9`) and
 // requires `--` separator; uutils accepts it as a negative positional number.
 #[test]
-#[ignore = "GNU compat: see uutils/coreutils#11653"]
 fn test_negative_number_without_double_dash_gnu_compat_issue_11653() {
     new_ucmd!()
         .args(&["--to=iec", "-9923868"])
         .fails_with_code(1)
-        .stderr_contains("invalid option");
+        .stderr_contains("unexpected argument");
+}
+
+// https://github.com/uutils/coreutils/issues/11653
+// GNU rejects `-9923868` as an invalid short option (leading `-9`) and
+// requires `--` separator; uutils accepts it as a negative positional number.
+#[test]
+fn test_negative_number_with_double_dash_gnu_compat_issue_11653() {
+    new_ucmd!()
+        .args(&["--to=iec", "--", "-9923868"])
+        .succeeds()
+        .stdout_is("-9.5M\n");
 }
 
 // https://github.com/uutils/coreutils/issues/11654
 // uutils parses large integers through f64, losing precision past 2^53.
 #[test]
-#[ignore = "GNU compat: see uutils/coreutils#11654"]
 fn test_large_integer_precision_loss_issue_11654() {
     new_ucmd!()
         .args(&["--from=iec", "9153396227555392131"])
@@ -1393,7 +1405,6 @@ fn test_large_integer_precision_loss_issue_11654() {
 // uutils accepts scientific notation (`1e9`, `5e-3`, ...); GNU rejects it
 // as "invalid suffix in input".
 #[test]
-#[ignore = "GNU compat: see uutils/coreutils#11655"]
 fn test_scientific_notation_rejected_by_gnu_issue_11655() {
     new_ucmd!()
         .arg("1e9")
@@ -1401,12 +1412,8 @@ fn test_scientific_notation_rejected_by_gnu_issue_11655() {
         .stderr_contains("invalid suffix in input");
 }
 
-// https://github.com/uutils/coreutils/issues/11662
-// `--to=auto` is accepted at parse time by uutils then rejected at runtime
-// with exit code 2; GNU rejects it in option parsing with exit code 1.
 #[test]
-#[ignore = "GNU compat: see uutils/coreutils#11662"]
-fn test_to_auto_rejected_at_parse_time_issue_11662() {
+fn test_to_auto_rejected_at_parse_time() {
     new_ucmd!()
         .args(&["--to=auto", "100"])
         .fails_with_code(1)
@@ -1428,7 +1435,6 @@ fn test_from_unit_fractional_precision_issue_11663() {
 // Zero-padded `--format` places padding zeros before the sign for negative
 // numbers; GNU (and C printf) puts the sign first.
 #[test]
-#[ignore = "GNU compat: see uutils/coreutils#11664"]
 fn test_zero_pad_sign_order_issue_11664() {
     new_ucmd!()
         .args(&["--from=none", "--format=%018.2f", "--", "-9869647"])
@@ -1448,7 +1454,6 @@ fn test_to_unit_prefix_selection() {
 // `--format='%.0f'` with `--to=<scale>` still prints one fractional digit;
 // the precision specifier `.0` is ignored.
 #[test]
-#[ignore = "GNU compat: see uutils/coreutils#11667"]
 fn test_format_precision_zero_with_to_scale_issue_11667() {
     new_ucmd!()
         .args(&["--to=iec", "--format=%.0f", "5183776"])

@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore lseek seekable
+// spell-checker:ignore lseek
 
 use rustix::fs::{OFlags, SeekFrom, fcntl_getfl};
 use std::os::fd::AsFd;

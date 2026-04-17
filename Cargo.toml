@@ -11,7 +11,6 @@ repository = "https://github.com/uutils/coreutils"
 edition.workspace = true
 rust-version.workspace = true
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -182,14 +181,13 @@ feat_wasm = [
   "arch",
   "base32",
   "base64",
-  "basenc",
   "basename",
+  "basenc",
   "cat",
   "comm",
   "cp",
   "csplit",
   "cut",
-  "ls",
   "date",
   "dir",
   "dircolors",
@@ -215,7 +213,6 @@ feat_wasm = [
   "pathchk",
   "pr",
   "printenv",
-  "head",
   "printf",
   "ptx",
   "pwd",
@@ -224,12 +221,11 @@ feat_wasm = [
   "rm",
   "rmdir",
   "seq",
-  "sort",
-  "split",
   "shred",
   "shuf",
   "sleep",
   "sort",
+  "split",
   "sum",
   "tail",
   "tee",
@@ -379,7 +375,6 @@ members = [
 ]
 
 [workspace.package]
-authors = ["uutils developers"]
 categories = ["command-line-utilities"]
 edition = "2024"
 rust-version = "1.88.0"
@@ -401,7 +396,7 @@ clap_complete = "4.4"
 clap_mangen = "0.3"
 compare = "0.1.0"
 crossterm = { version = "0.29.0", default-features = false }
-ctor = "0.8.0"
+ctor = "0.10.0"
 ctrlc = { version = "3.5.2", features = ["termination"] }
 divan = { package = "codspeed-divan-compat", version = "4.4.1" }
 dns-lookup = { version = "3.0.0" }
@@ -426,7 +421,8 @@ itertools = "0.14.0"
 itoa = "1.0.15"
 jiff = "0.2.18"
 jiff-icu = "0.2.2"
-libc = "0.2.172"
+# Pin due to https://github.com/nix-rust/nix/issues/2750
+libc = "=0.2.182"
 lscolors = { version = "0.21.0", default-features = false, features = [
   "gnu_legacy",
 ] }
@@ -445,7 +441,7 @@ phf_codegen = "0.13.1"
 platform-info = "2.0.3"
 pretty_assertions = "1.4.1"
 procfs = "0.18"
-rand = { version = "0.10.0", features = ["std_rng"] }
+rand = { version = "0.10.1", features = ["std_rng"] }
 rand_chacha = { version = "0.10.0" }
 rayon = "1.10"
 regex = "1.10.4"
@@ -459,7 +455,7 @@ rust-ini = "0.21.0"
 rustix = { version = "1.1.4", features = ["param"] }
 same-file = "1.0.6"
 self_cell = "1.0.4"
-selinux = "=0.6.0"
+selinux = "0.6"
 string-interner = "0.19.0"
 tempfile = "3.15.0"
 terminal_size = "0.4.0"
@@ -489,7 +485,6 @@ digest = "0.10.7"
 
 # Fluent dependencies
 fluent = "0.17.0"
-fluent-bundle = "0.16.0"
 unic-langid = "0.9.6"
 fluent-syntax = "0.12.0"
 
@@ -720,6 +715,7 @@ workspace = true
 unexpected_cfgs = { level = "warn", check-cfg = [
   'cfg(fuzzing)',
   'cfg(target_os, values("cygwin"))',
+  'cfg(wasi_runner)',
 ] }
 unused_qualifications = "warn"
 

@@ -9,6 +9,7 @@ use uucore::display::Quotable;
 use uucore::i18n::decimal::locale_grouping_separator;
 use uucore::translate;
 
+use crate::numeric::ParsedNumber;
 use crate::options::{NumfmtOptions, RoundMethod, TransformOptions};
 use crate::units::{
     DisplayableSuffix, RawSuffix, Result, Suffix, Unit, iec_bases_f64, si_bases_f64,
@@ -147,12 +148,17 @@ fn detailed_error_message(s: &str, unit: Unit, unit_separator: &str) -> Option<S
     None
 }
 
-fn parse_number_part(s: &str, input: &str) -> Result<f64> {
+fn parse_number_part(s: &str, input: &str) -> Result<ParsedNumber> {
     if s.ends_with('.') {
         return Err(translate!("numfmt-error-invalid-number", "input" => input.quote()));
     }
 
+    if let Ok(n) = s.parse::<i128>() {
+        return Ok(ParsedNumber::ExactInt(n));
+    }
+
     s.parse::<f64>()
+        .map(ParsedNumber::Float)
         .map_err(|_| translate!("numfmt-error-invalid-number", "input" => input.quote()))
 }
 
@@ -161,7 +167,7 @@ fn parse_suffix(
     unit: Unit,
     unit_separator: &str,
     explicit_unit_separator: bool,
-) -> Result<(f64, Option<Suffix>)> {
+) -> Result<(ParsedNumber, Option<Suffix>)> {
     let trimmed = s.trim_end();
     if trimmed.is_empty() {
         return Err(translate!("numfmt-error-invalid-number-empty"));
@@ -364,7 +370,22 @@ fn remove_suffix(i: f64, s: Option<Suffix>, u: Unit) -> Result<f64> {
     }
 }
 
-fn transform_from(s: &str, opts: &TransformOptions, options: &NumfmtOptions) -> Result<f64> {
+fn try_scale_exact_int_with_from_unit(
+    value: ParsedNumber,
+    from_unit: usize,
+) -> Option<ParsedNumber> {
+    let integer = value.exact_int()?;
+    let from_unit = i128::try_from(from_unit).ok()?;
+    let scaled = integer.checked_mul(from_unit)?;
+
+    Some(ParsedNumber::ExactInt(scaled))
+}
+
+fn transform_from(
+    s: &str,
+    opts: &TransformOptions,
+    options: &NumfmtOptions,
+) -> Result<ParsedNumber> {
     let (i, suffix) = parse_suffix(
         s,
         opts.from,
@@ -375,17 +396,24 @@ fn transform_from(s: &str, opts: &TransformOptions, options: &NumfmtOptions) -> 
         detailed_error_message(s, opts.from, &options.unit_separator).unwrap_or(original)
     })?;
     let had_no_suffix = suffix.is_none();
-    let i = i * (opts.from_unit as f64);
+
+    if had_no_suffix {
+        if let Some(scaled) = try_scale_exact_int_with_from_unit(i, opts.from_unit) {
+            return Ok(scaled);
+        }
+    }
+
+    let i = i.to_f64() * (opts.from_unit as f64);
 
     remove_suffix(i, suffix, opts.from).map(|n| {
-        // GNU numfmt doesn't round values if no --from argument is provided by the user
-        if opts.from == Unit::None || had_no_suffix {
+        let n = if opts.from == Unit::None || had_no_suffix {
             if n == -0.0 { 0.0 } else { n }
         } else if n < 0.0 {
             -n.abs().ceil()
         } else {
             n.ceil()
-        }
+        };
+        ParsedNumber::Float(n)
     })
 }
 
@@ -447,7 +475,11 @@ fn consider_suffix(
     let (bases, with_i) = match u {
         Unit::Si => (si_bases_f64(), false),
         Unit::Iec(with_i) => (iec_bases_f64(), with_i),
-        Unit::Auto => return Err(translate!("numfmt-error-unit-auto-not-supported-with-to")),
+        Unit::Auto => {
+            return Err(
+                translate!("numfmt-error-invalid-unit-argument", "arg" => "auto", "opt" => "--to"),
+            );
+        }
         Unit::None => return Ok((n, None)),
     };
 
@@ -480,13 +512,44 @@ fn consider_suffix(
     }
 }
 
+fn try_format_exact_int_without_suffix_scaling(
+    value: ParsedNumber,
+    opts: &TransformOptions,
+    precision: usize,
+) -> Option<String> {
+    if opts.to != Unit::None {
+        return None;
+    }
+
+    let integer = value.exact_int()?;
+    let to_unit = i128::try_from(opts.to_unit).ok()?;
+
+    if integer % to_unit != 0 {
+        return None;
+    }
+
+    let scaled = integer / to_unit;
+
+    Some(if precision == 0 {
+        scaled.to_string()
+    } else {
+        format!("{scaled}.{}", "0".repeat(precision))
+    })
+}
+
 fn transform_to(
-    s: f64,
+    s: ParsedNumber,
     opts: &TransformOptions,
     round_method: RoundMethod,
     precision: usize,
     unit_separator: &str,
+    is_precision_specified: bool,
 ) -> Result<String> {
+    if let Some(result) = try_format_exact_int_without_suffix_scaling(s, opts, precision) {
+        return Ok(result);
+    }
+
+    let s = s.to_f64();
     let i2 = s / (opts.to_unit as f64);
     let (i2, s) = consider_suffix(i2, opts.to, round_method, precision)?;
     Ok(match s {
@@ -502,10 +565,16 @@ fn transform_to(
                 DisplayableSuffix(s, opts.to),
             )
         }
+        Some(s) if is_precision_specified => {
+            format!("{i2:.0}{unit_separator}{}", DisplayableSuffix(s, opts.to))
+        }
         Some(s) if i2.abs() < 10.0 => {
+            // when there's a single digit before the dot.
             format!("{i2:.1}{unit_separator}{}", DisplayableSuffix(s, opts.to))
         }
-        Some(s) => format!("{i2:.0}{unit_separator}{}", DisplayableSuffix(s, opts.to)),
+        Some(s) => {
+            format!("{i2:.0}{unit_separator}{}", DisplayableSuffix(s, opts.to))
+        }
     })
 }
 
@@ -539,7 +608,7 @@ fn format_string(
         Some(suffix) => source.strip_suffix(suffix).unwrap_or(source),
         None => source,
     };
-
+    let mut is_precision_specified = true;
     let precision = if let Some(p) = options.format.precision {
         p
     } else if options.transform.to == Unit::None
@@ -550,6 +619,7 @@ fn format_string(
     {
         parse_implicit_precision(source_without_suffix)
     } else {
+        is_precision_specified = false;
         0
     };
 
@@ -559,6 +629,7 @@ fn format_string(
         options.round,
         precision,
         &options.unit_separator,
+        is_precision_specified,
     )?;
 
     // bring back the suffix before applying padding
@@ -581,7 +652,12 @@ fn format_string(
     let padded_number = match padding {
         0 => number_with_suffix,
         p if p > 0 && options.format.zero_padding => {
-            let zero_padded = pad_string(&number_with_suffix, p as usize, '0', true);
+            let zero_padded = if let Some(unsigned) = number_with_suffix.strip_prefix(['-', '+']) {
+                let sign = &number_with_suffix[..1];
+                format!("{sign}{}", pad_string(unsigned, p as usize - 1, '0', true))
+            } else {
+                pad_string(&number_with_suffix, p as usize, '0', true)
+            };
 
             match implicit_padding.unwrap_or(options.padding) {
                 0 => zero_padded,
@@ -766,7 +842,7 @@ mod tests {
         let result = parse_suffix("1Q", Unit::Auto, "", false);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
-        assert_eq!(number, 1.0);
+        assert_eq!(number.to_f64(), 1.0);
         assert!(suffix.is_some());
         let (raw_suffix, with_i) = suffix.unwrap();
         assert_eq!(raw_suffix as i32, RawSuffix::Q as i32);
@@ -775,7 +851,7 @@ mod tests {
         let result = parse_suffix("2R", Unit::Auto, "", false);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
-        assert_eq!(number, 2.0);
+        assert_eq!(number.to_f64(), 2.0);
         assert!(suffix.is_some());
         let (raw_suffix, with_i) = suffix.unwrap();
         assert_eq!(raw_suffix as i32, RawSuffix::R as i32);
@@ -784,7 +860,7 @@ mod tests {
         let result = parse_suffix("3k", Unit::Auto, "", false);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
-        assert_eq!(number, 3.0);
+        assert_eq!(number.to_f64(), 3.0);
         assert!(suffix.is_some());
         let (raw_suffix, with_i) = suffix.unwrap();
         assert_eq!(raw_suffix as i32, RawSuffix::K as i32);
@@ -793,7 +869,7 @@ mod tests {
         let result = parse_suffix("4Qi", Unit::Auto, "", false);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
-        assert_eq!(number, 4.0);
+        assert_eq!(number.to_f64(), 4.0);
         assert!(suffix.is_some());
         let (raw_suffix, with_i) = suffix.unwrap();
         assert_eq!(raw_suffix as i32, RawSuffix::Q as i32);
@@ -802,7 +878,7 @@ mod tests {
         let result = parse_suffix("5Ri", Unit::Auto, "", false);
         assert!(result.is_ok());
         let (number, suffix) = result.unwrap();
-        assert_eq!(number, 5.0);
+        assert_eq!(number.to_f64(), 5.0);
         assert!(suffix.is_some());
         let (raw_suffix, with_i) = suffix.unwrap();
         assert_eq!(raw_suffix as i32, RawSuffix::R as i32);
@@ -1018,9 +1094,9 @@ mod tests {
 
     #[test]
     fn test_parse_number_part_valid() {
-        assert_eq!(parse_number_part("42", "42").unwrap(), 42.0);
-        assert_eq!(parse_number_part("-3.5", "-3.5").unwrap(), -3.5);
-        assert_eq!(parse_number_part("0", "0").unwrap(), 0.0);
+        assert_eq!(parse_number_part("42", "42").unwrap().to_f64(), 42.0);
+        assert_eq!(parse_number_part("-3.5", "-3.5").unwrap().to_f64(), -3.5);
+        assert_eq!(parse_number_part("0", "0").unwrap().to_f64(), 0.0);
     }
 
     #[test]
@@ -1089,15 +1165,21 @@ mod tests {
     #[test]
     fn test_parse_number_part_large_and_tiny() {
         assert_eq!(
-            parse_number_part("999999999999", "999999999999").unwrap(),
+            parse_number_part("999999999999", "999999999999")
+                .unwrap()
+                .to_f64(),
             999_999_999_999.0
         );
         assert_eq!(
-            parse_number_part("0.000000001", "0.000000001").unwrap(),
+            parse_number_part("0.000000001", "0.000000001")
+                .unwrap()
+                .to_f64(),
             0.000_000_001
         );
         assert_eq!(
-            parse_number_part("-99999999", "-99999999").unwrap(),
+            parse_number_part("-99999999", "-99999999")
+                .unwrap()
+                .to_f64(),
             -99_999_999.0
         );
     }

@@ -42,6 +42,7 @@ discoverability
 duplicative
 dsync
 endianness
+endgroup
 enqueue
 ERANGE
 errored
@@ -135,6 +136,7 @@ ROOTFS
 reparse
 rposition
 seedable
+seekable
 semver
 semiprime
 semiprimes
@@ -158,6 +160,7 @@ SIGTTOU
 sigttou
 sigusr
 strcasecmp
+strcoll
 subcommand
 subexpression
 submodule

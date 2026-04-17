@@ -5781,6 +5781,53 @@ fn test_ls_block_size_override() {
         .stdout_contains_line("total 8");
 }
 
+#[cfg(unix)]
+#[test]
+#[cfg(not(target_os = "openbsd"))]
+fn test_ls_block_size_si_file_size() {
+    // Verify --si and --block-size interaction for file size display in -l
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write_bytes("file", &[0u8; 1024]);
+
+    // --si last: file size shown as human-readable SI
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--block-size=512")
+        .arg("--si")
+        .succeeds()
+        .stdout_contains("1.1k");
+
+    // --block-size last: file size shown in 512-byte blocks
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--si")
+        .arg("--block-size=512")
+        .succeeds()
+        .stdout_contains(" 2 ");
+
+    // --human-readable last: file size shown as human-readable IEC
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--block-size=512")
+        .arg("--human-readable")
+        .succeeds()
+        .stdout_contains("1.0K");
+
+    // --block-size last: file size shown in 512-byte blocks
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--human-readable")
+        .arg("--block-size=512")
+        .succeeds()
+        .stdout_contains(" 2 ");
+}
+
 #[test]
 fn test_ls_block_size_override_self() {
     new_ucmd!()
@@ -6165,6 +6212,56 @@ fn test_acl_display() {
         .succeeds()
         .stdout_matches(&re_with_acl)
         .stdout_matches(&re_without_acl);
+}
+
+// Regression test for https://github.com/uutils/coreutils/issues/10980
+// Each file with an ACL must not inflate the link-count column width.
+#[cfg(all(unix, not(target_os = "macos")))]
+#[test]
+fn test_acl_padding_not_inflated() {
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let uid = unsafe { libc::getuid() };
+    let names = ["file1", "file2", "file3", "file4", "file5"];
+    for name in &names {
+        at.touch(name);
+        let status = Command::new("setfacl")
+            .args(["-m", &format!("u:{uid}:rw"), &at.plus_as_string(name)])
+            .status()
+            .map(|s| s.code());
+        if !matches!(status, Ok(Some(0))) {
+            println!("test skipped: setfacl failed");
+            return;
+        }
+    }
+
+    let out = scene
+        .ucmd()
+        .current_dir(at.as_string())
+        .arg("-l")
+        .succeeds()
+        .stdout_move_str();
+
+    // Each line with an ACL file should look like:
+    //   -rw-------+ 1 user group 0 <date> fileN
+    // i.e. single space between the `+` and the link count `1`.
+    // The bug inflates that gap to one extra space per ACL file.
+    let mut checked = 0;
+    for line in out.lines() {
+        if line.starts_with('-') && line.contains('+') {
+            let after_plus = line.split('+').nth(1).unwrap();
+            let leading_spaces = after_plus.len() - after_plus.trim_start().len();
+            assert_eq!(
+                leading_spaces, 1,
+                "expected exactly 1 space between '+' and link count, got {leading_spaces} in line: {line:?}"
+            );
+            checked += 1;
+        }
+    }
+    assert!(checked > 0, "no ACL lines were validated");
 }
 
 // Make sure that "ls --color" correctly applies color "normal" to text and

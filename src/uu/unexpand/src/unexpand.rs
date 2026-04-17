@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Read, Stdout, Write, stdin, stdout};
+use std::io::{self, BufReader, BufWriter, Read, Stdin, Stdout, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
@@ -279,8 +279,21 @@ pub fn uu_app() -> Command {
         )
 }
 
-fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read + 'static>>> {
-    let file_buf;
+enum Input {
+    Stdin(Stdin),
+    File(File),
+}
+
+impl Read for Input {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Self::Stdin(s) => s.read(buf),
+            Self::File(f) => f.read(buf),
+        }
+    }
+}
+
+fn open(path: &OsString) -> UResult<BufReader<Input>> {
     let filename = Path::new(path);
     if filename.is_dir() {
         Err(USimpleError::new(
@@ -288,10 +301,10 @@ fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read + 'static>>> {
             translate!("unexpand-error-is-directory", "path" => filename.maybe_quote()),
         ))
     } else if path == "-" {
-        Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))
+        Ok(BufReader::new(Input::Stdin(stdin())))
     } else {
-        file_buf = File::open(path).map_err_context(|| path.maybe_quote().to_string())?;
-        Ok(BufReader::new(Box::new(file_buf) as Box<dyn Read>))
+        let f = File::open(path).map_err_context(|| path.maybe_quote().to_string())?;
+        Ok(BufReader::new(Input::File(f)))
     }
 }
 

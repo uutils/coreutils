@@ -167,7 +167,7 @@ jobs:
         strip -s /tmp/individual/usr/local/bin/*
         ZSTD_CLEVEL=19 tar --zstd -caf individual-x86_64-unknown-linux-gnu.tar.zst -C /tmp/individual/usr/local bin
     - name: Publish
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@v3
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       with:
         tag_name: latest-commit
@@ -214,9 +214,33 @@ jobs:
         name: size-result
         repo: uutils/coreutils
         path: dl
-    - name: Check uutil release sizes
+    - name: Compare individual binary sizes VS reference
       shell: bash
       run: |
+        ## Produce a per-binary size comparison and a PR comment body.
+        ## The comment body is consumed by the SizeComment workflow, which
+        ## mirrors GnuComment for the GNU testsuite results.
+        COMMENT_DIR="size-comment"
+        mkdir -p "${COMMENT_DIR}"
+        # `github.event.number` is empty on non-PR events; the downstream
+        # workflow only posts comments when triggered for a pull request.
+        echo "${{ github.event.number }}" > "${COMMENT_DIR}/NR"
+        COMMENT_LOG="${COMMENT_DIR}/result.txt"
+
+        if test -f dl/individual-size-result.json; then
+          python3 util/compare_size_results.py \
+            individual-size-result.json \
+            dl/individual-size-result.json \
+            --output "${COMMENT_LOG}"
+        else
+          echo "::warning ::Skipping individual size comparison; no reference is available."
+        fi
+    - name: Check uutil release multi-binary sizes
+      shell: bash
+      run: |
+        ## The aggregate `multiple binaries` and `multicall binary` totals
+        ## are still checked inline; they are simple scalar comparisons and
+        ## do not feed into the per-binary PR comment.
         check() {
           # Warn if the size increases by more than 5%
           threshold='1.05'
@@ -232,11 +256,6 @@ jobs:
             echo "::warning file=$4::Size of $1 increases by more than 5%"
           fi
         }
-        ## Check individual size result
-        while read -r name previous_size; do
-          size=$(cat individual-size-result.json | jq -r ".[] | .sizes | .\"$name\"")
-          check "\`$name\` binary" "$size" "$previous_size" 'individual-size-result.json'
-        done < <(cat dl/individual-size-result.json | jq -r '.[] | .sizes | to_entries[] | "\(.key) \(.value)"')
         ## Check size result
         size=$(cat size-result.json | jq -r '.[] | .size')
         previous_size=$(cat dl/size-result.json | jq -r '.[] | .size')
@@ -244,6 +263,12 @@ jobs:
         multisize=$(cat size-result.json | jq -r '.[] | .multisize')
         previous_multisize=$(cat dl/size-result.json | jq -r '.[] | .multisize')
         check 'multicall binary' "$multisize" "$previous_multisize" 'size-result.json'
+    - name: Upload size comparison comment (for SizeComment workflow)
+      if: success() || failure() # run regardless of prior step success/failure
+      uses: actions/upload-artifact@v7
+      with:
+        name: size-comment
+        path: size-comment/
     - name: Upload the individual size result
       uses: actions/upload-artifact@v7
       with:

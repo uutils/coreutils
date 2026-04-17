@@ -43,7 +43,7 @@ macro_rules! has {
 
 /// Information to uniquely identify a file
 pub struct FileInformation(
-    #[cfg(unix)] nix::sys::stat::FileStat,
+    #[cfg(unix)] rustix::fs::Stat,
     #[cfg(windows)] winapi_util::file::Information,
     // WASI does not have nix::sys::stat, so we store std::fs::Metadata instead.
     #[cfg(target_os = "wasi")] fs::Metadata,
@@ -53,7 +53,7 @@ impl FileInformation {
     /// Get information from a currently open file
     #[cfg(unix)]
     pub fn from_file(file: &impl AsFd) -> IOResult<Self> {
-        let stat = nix::sys::stat::fstat(file)?;
+        let stat = rustix::fs::fstat(file)?;
         Ok(Self(stat))
     }
 
@@ -72,9 +72,9 @@ impl FileInformation {
         #[cfg(unix)]
         {
             let stat = if dereference {
-                nix::sys::stat::stat(path.as_ref())
+                rustix::fs::stat(path.as_ref())
             } else {
-                nix::sys::stat::lstat(path.as_ref())
+                rustix::fs::lstat(path.as_ref())
             };
             Ok(Self(stat?))
         }
@@ -435,12 +435,11 @@ pub fn canonicalize<P: AsRef<Path>>(
                 }
                 result.pop();
             }
-            Err(e) => {
-                if miss_mode == MissingHandling::Existing
-                    || (miss_mode == MissingHandling::Normal && !parts.is_empty())
-                {
-                    return Err(e);
-                }
+            Err(e)
+                if (miss_mode == MissingHandling::Existing
+                    || (miss_mode == MissingHandling::Normal && !parts.is_empty())) =>
+            {
+                return Err(e);
             }
             _ => {}
         }
@@ -798,8 +797,7 @@ pub fn is_stdin_directory(stdin: &Stdin) -> bool {
     #[cfg(unix)]
     {
         use mode::{S_IFDIR, S_IFMT};
-        use nix::sys::stat::fstat;
-        let mode = fstat(stdin.as_fd()).unwrap().st_mode as u32;
+        let mode = rustix::fs::fstat(stdin.as_fd()).unwrap().st_mode as u32;
         // We use the S_IFMT mask ala S_ISDIR() to avoid mistaking
         // sockets for directories.
         mode & S_IFMT == S_IFDIR

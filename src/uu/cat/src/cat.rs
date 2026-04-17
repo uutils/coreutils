@@ -479,16 +479,22 @@ fn get_input_type(path: &OsString) -> CatResult<InputType> {
 fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
     let stdout = io::stdout();
     #[cfg(any(target_os = "linux", target_os = "android"))]
+    let mut stdout = stdout;
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         // If we're on Linux or Android, try to use the splice() system call
         // for faster writing. If it works, we're done.
-        if !splice::write_fast_using_splice(handle, &stdout)? {
+        if !splice::write_fast_using_splice(handle, &mut stdout)? {
             return Ok(());
         }
     }
     // If we're not on Linux or Android, or the splice() call failed,
     // fall back on slower writing.
     let mut stdout_lock = stdout.lock();
+    // stack allocation is overhead when splice succeed
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    let mut buf = vec![0; 1024 * 64];
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
     let mut buf = [0; 1024 * 64];
     loop {
         match handle.reader.read(&mut buf) {

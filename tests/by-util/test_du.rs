@@ -372,6 +372,74 @@ fn test_du_invalid_binary_size() {
 }
 
 #[test]
+fn test_du_invalid_env_block_size_stops_lookup() {
+    // When DU_BLOCK_SIZE is set but invalid, it should stop the lookup
+    // and use the default block size — not fall through to BLOCK_SIZE.
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let dir = "a";
+
+    at.mkdir(dir);
+    at.write(&format!("{dir}/file"), "some content");
+
+    let default_output = ts
+        .ucmd()
+        .arg(dir)
+        .arg("--block-size=1024")
+        .succeeds()
+        .stdout_move_str();
+
+    // Invalid DU_BLOCK_SIZE should use default (1024), not BLOCK_SIZE=1
+    let result = ts
+        .ucmd()
+        .arg(dir)
+        .env("DU_BLOCK_SIZE", "invalid")
+        .env("BLOCK_SIZE", "1")
+        .succeeds()
+        .stdout_move_str();
+
+    assert_eq!(default_output, result);
+
+    // Empty DU_BLOCK_SIZE should also use default
+    let result = ts
+        .ucmd()
+        .arg(dir)
+        .env("DU_BLOCK_SIZE", "")
+        .env("BLOCK_SIZE", "1")
+        .succeeds()
+        .stdout_move_str();
+
+    assert_eq!(default_output, result);
+}
+
+#[test]
+fn test_du_posixly_correct_default() {
+    // With POSIXLY_CORRECT and no block size env vars, default is 512
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let dir = "a";
+
+    at.mkdir(dir);
+    at.write(&format!("{dir}/file"), "some content");
+
+    let expected = ts
+        .ucmd()
+        .arg(dir)
+        .arg("--block-size=512")
+        .succeeds()
+        .stdout_move_str();
+
+    let result = ts
+        .ucmd()
+        .arg(dir)
+        .env("POSIXLY_CORRECT", "1")
+        .succeeds()
+        .stdout_move_str();
+
+    assert_eq!(expected, result);
+}
+
+#[test]
 fn test_du_binary_edge_cases() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -464,7 +532,7 @@ fn test_du_soft_link() {
         // FreeBSD may have different block allocations depending on filesystem
         // Accept both common sizes
         let valid_sizes = ["12\tsubdir/links\n", "16\tsubdir/links\n"];
-        assert_valid_size(&s, &valid_sizes);
+        assert_valid_size(s, &valid_sizes);
     }
 
     #[cfg(all(

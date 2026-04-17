@@ -121,7 +121,7 @@ pub fn parse_format_flags(args: &[String]) -> Result<Vec<ParsedFormatterItemInfo
     for arg in arg_iter {
         if expect_type_string {
             let v = parse_type_string(arg)?;
-            formats.extend(v.into_iter());
+            formats.extend(v);
             expect_type_string = false;
         } else if arg.starts_with("--") {
             if arg.len() == 2 {
@@ -130,7 +130,7 @@ pub fn parse_format_flags(args: &[String]) -> Result<Vec<ParsedFormatterItemInfo
             if arg.starts_with("--format=") {
                 let params: String = arg.chars().skip_while(|c| *c != '=').skip(1).collect();
                 let v = parse_type_string(&params)?;
-                formats.extend(v.into_iter());
+                formats.extend(v);
             }
             if arg == "--format" {
                 expect_type_string = true;
@@ -154,7 +154,7 @@ pub fn parse_format_flags(args: &[String]) -> Result<Vec<ParsedFormatterItemInfo
             }
             if !format_spec.is_empty() {
                 let v = parse_type_string(&format_spec)?;
-                formats.extend(v.into_iter());
+                formats.extend(v);
                 expect_type_string = false;
             }
         }

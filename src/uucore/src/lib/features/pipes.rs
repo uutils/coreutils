@@ -7,7 +7,7 @@
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::pipe::{SpliceFlags, fcntl_setpipe_size};
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(target_os = "linux", target_os = "android", test))]
 use std::fs::File;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::fd::AsFd;
@@ -41,15 +41,8 @@ pub fn pipe() -> std::io::Result<(File, File)> {
 /// this is still very efficient.
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn splice(source: &impl AsFd, target: &impl AsFd, len: usize) -> std::io::Result<usize> {
-    Ok(rustix::pipe::splice(
-        source,
-        None,
-        target,
-        None,
-        len,
-        SpliceFlags::empty(),
-    )?)
+pub fn splice(source: &impl AsFd, target: &impl AsFd, len: usize) -> rustix::io::Result<usize> {
+    rustix::pipe::splice(source, None, target, None, len, SpliceFlags::empty())
 }
 
 /// Splice wrapper which fully finishes the write.
@@ -69,9 +62,17 @@ pub fn splice_exact(source: &impl AsFd, target: &impl AsFd, len: usize) -> std::
     Ok(())
 }
 
+/// check that source is FUSE
+/// we fallback to read() at FUSE <https://github.com/uutils/coreutils/issues/9609>
+#[inline]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn might_fuse(source: &impl AsFd) -> bool {
+    rustix::fs::fstatfs(source).map_or(true, |stats| stats.f_type == 0x6573_5546) // FUSE magic number, too many platform specific clippy warning with const
+}
+
 /// Return verified /dev/null
 ///
-/// `splice` to /dev/null is faster than `read` when we skip or count the input which is not able to seek
+/// `splice` to /dev/null is faster than `read` when we skip or count the non-seekable input
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn dev_null() -> Option<File> {

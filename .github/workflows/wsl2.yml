@@ -31,7 +31,7 @@ jobs:
       with:
         persist-credentials: false
     - name: Install WSL2
-      uses: Vampire/setup-wsl@v6.0.0
+      uses: Vampire/setup-wsl@v6.1.0
       with:
         additional-packages: build-essential
         distribution: ${{ matrix.job.distribution }}
@@ -42,7 +42,7 @@ jobs:
       run: |
         useradd -m -p password user
     - name: Set up WSL2 shell command
-      uses: Vampire/setup-wsl@v6.0.0
+      uses: Vampire/setup-wsl@v6.1.0
       with:
         distribution: ${{ matrix.job.distribution }}
         wsl-shell-command: bash -c "sudo -u user bash --noprofile --norc -euo pipefail '{0}'"

@@ -3,7 +3,6 @@ name = "uu_head"
 description = "head ~ (uutils) display the first lines of input"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/head"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -17,6 +16,7 @@ workspace = true
 
 [lib]
 path = "src/head.rs"
+doctest = false
 
 [dependencies]
 clap = { workspace = true }

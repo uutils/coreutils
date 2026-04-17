@@ -29,6 +29,8 @@ use uucore::{format_usage, os_str_as_bytes, show, translate};
 pub mod errors;
 pub mod format;
 pub mod options;
+
+mod numeric;
 mod units;
 
 /// Format a single line and write it, handling `--invalid` error modes.
@@ -46,6 +48,19 @@ fn format_and_write<W: std::io::Write>(
         Some(i) => &input_line[..i],
         None => input_line,
     };
+
+    // Return false if the input is in scientific notation
+    if let Some(pos) = line.iter().position(|&b| b == b'E' || b == b'e') {
+        if pos < line.len() - 1 {
+            if line[pos + 1].is_ascii_digit() {
+                let err = format!(
+                    "invalid suffix in input: '{}'",
+                    String::from_utf8_lossy(line)
+                );
+                return Err(Box::new(NumfmtError::FormattingError(err)));
+            }
+        }
+    }
 
     // In non-abort modes we buffer the formatted output so that on error we
     // can emit the original line instead.
@@ -150,14 +165,16 @@ fn handle_buffer<R: BufRead>(mut input: R, options: &NumfmtOptions) -> UResult<b
     Ok(saw_invalid)
 }
 
-fn parse_unit(s: &str) -> Result<Unit> {
+fn parse_unit(s: &str, opt: &str) -> Result<Unit> {
     match s {
-        "auto" => Ok(Unit::Auto),
+        "auto" if opt != TO => Ok(Unit::Auto),
         "si" => Ok(Unit::Si),
         "iec" => Ok(Unit::Iec(false)),
         "iec-i" => Ok(Unit::Iec(true)),
         "none" => Ok(Unit::None),
-        _ => Err(translate!("numfmt-error-unsupported-unit")),
+        value => Err(
+            translate!("numfmt-error-invalid-unit-argument", "arg" => value, "opt" => format!("--{opt}")),
+        ),
     }
 }
 
@@ -222,8 +239,8 @@ fn parse_delimiter(arg: &OsString) -> Result<Vec<u8>> {
 }
 
 fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
-    let from = parse_unit(args.get_one::<String>(FROM).unwrap())?;
-    let to = parse_unit(args.get_one::<String>(TO).unwrap())?;
+    let from = parse_unit(args.get_one::<String>(FROM).unwrap(), FROM)?;
+    let to = parse_unit(args.get_one::<String>(TO).unwrap(), TO)?;
     let from_unit = parse_unit_size(args.get_one::<String>(FROM_UNIT).unwrap())?;
     let to_unit = parse_unit_size(args.get_one::<String>(TO_UNIT).unwrap())?;
 
@@ -413,7 +430,6 @@ pub fn uu_app() -> Command {
         .about(translate!("numfmt-about"))
         .after_help(translate!("numfmt-after-help"))
         .override_usage(format_usage(&translate!("numfmt-usage")))
-        .allow_negative_numbers(true)
         .infer_long_args(true)
         .arg(
             Arg::new(DEBUG)
