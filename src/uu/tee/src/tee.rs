@@ -134,8 +134,8 @@ fn copy(mut input: impl Read, mut output: impl Write) -> Result<()> {
                 // `tee` does not buffer the input.
                 output.flush()?;
             }
-            Err(e) if e.kind() == ErrorKind::Interrupted => {}
-            Err(e) => return Err(e),
+            Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e),
+            _ => {}
         }
     }
     // buffer is too small optimize for large input
@@ -150,8 +150,8 @@ fn copy(mut input: impl Read, mut output: impl Write) -> Result<()> {
                 // `tee` does not buffer the input.
                 output.flush()?;
             }
-            Err(e) if e.kind() == ErrorKind::Interrupted => {}
-            Err(e) => return Err(e),
+            Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e),
+            _ => {}
         }
     }
 }
