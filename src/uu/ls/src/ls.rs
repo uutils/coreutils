@@ -1438,7 +1438,6 @@ fn enter_directory<O: LsOutput>(
 ///
 /// This is the standard ls entry point that formats output as text.
 /// It uses [`list_with_output`] internally with a text formatter.
-#[allow(clippy::cognitive_complexity)]
 pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     let mut output = TextOutput::new(config);
     list_with_output(locs, config, &mut output)
