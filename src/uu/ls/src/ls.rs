@@ -1507,7 +1507,6 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
     }
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn get_metadata_with_deref_opt(p_buf: &Path, dereference: bool) -> std::io::Result<Metadata> {
     if dereference {
         p_buf.metadata()
