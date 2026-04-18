@@ -205,31 +205,20 @@ fn process_error(
     writer: &NamedWriter,
     ignored_errors: &mut usize,
 ) -> Result<()> {
-    match mode {
-        Some(OutputErrorMode::Warn) => {
-            let _ = writeln!(stderr(), "{}: {f}", writer.name.maybe_quote());
-            *ignored_errors += 1;
-            Ok(())
-        }
-        Some(OutputErrorMode::WarnNoPipe) | None => {
-            if f.kind() != ErrorKind::BrokenPipe {
-                let _ = writeln!(stderr(), "{}: {f}", writer.name.maybe_quote());
-                *ignored_errors += 1;
-            }
-            Ok(())
-        }
-        Some(OutputErrorMode::Exit) => {
-            let _ = writeln!(stderr(), "{}: {f}", writer.name.maybe_quote());
-            Err(f)
-        }
-        Some(OutputErrorMode::ExitNoPipe) => {
-            if f.kind() == ErrorKind::BrokenPipe {
-                Ok(())
-            } else {
-                let _ = writeln!(stderr(), "{}: {f}", writer.name.maybe_quote());
-                Err(f)
-            }
-        }
+    let ignore_pipe = matches!(
+        mode,
+        None | Some(OutputErrorMode::WarnNoPipe) | Some(OutputErrorMode::ExitNoPipe)
+    );
+
+    if ignore_pipe && f.kind() == ErrorKind::BrokenPipe {
+        return Ok(());
+    }
+    let _ = writeln!(stderr(), "{}: {f}", writer.name.maybe_quote());
+    if let Some(OutputErrorMode::Exit | OutputErrorMode::ExitNoPipe) = mode {
+        Err(f)
+    } else {
+        *ignored_errors += 1;
+        Ok(())
     }
 }
 
@@ -274,11 +263,7 @@ impl Write for MultiWriter {
                 .is_ok()
         });
         self.ignored_errors += errors;
-        if let Some(e) = aborted {
-            Err(e)
-        } else {
-            Ok(())
-        }
+        aborted.map_or(Ok(()), Err)
     }
 }
 
@@ -324,16 +309,12 @@ struct NamedReader {
 
 impl Read for NamedReader {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
-        match self.inner.read(buf) {
-            Err(f) => {
-                let _ = writeln!(
-                    stderr(),
-                    "tee: {}",
-                    translate!("tee-error-stdin", "error" => strip_errno(&f))
-                );
-                Err(f)
-            }
-            okay => okay,
-        }
+        self.inner.read(buf).inspect_err(|e| {
+            let _ = writeln!(
+                stderr(),
+                "tee: {}",
+                translate!("tee-error-stdin", "error" => strip_errno(e))
+            );
+        })
     }
 }
