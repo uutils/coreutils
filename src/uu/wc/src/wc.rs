@@ -58,7 +58,7 @@ fn try_get_stdin_size() -> Option<usize> {
             return None;
         };
         let file_type = rustix::fs::FileType::from_raw_mode(stat.st_mode);
-        if file_type == rustix::fs::FileType::RegularFile && stat.st_size > 0 && stat.st_blocks > 0
+        if file_type == rustix::fs::FileType::RegularFile
         {
             return Some(stat.st_size as usize);
         }
