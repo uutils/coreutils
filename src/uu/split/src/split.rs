@@ -1028,16 +1028,16 @@ impl ManageOutFiles for OutFiles {
             // Could have hit system limit for open files.
             // Try to close one previously instantiated writer first
             for (i, out_file) in self.iter_mut().enumerate() {
-                if i != idx {
-                    if let Some(writer) = out_file.maybe_writer.as_mut() {
-                        writer.flush()?;
-                        out_file.maybe_writer = None;
-                        out_file.is_new = false;
-                        count += 1;
+                if i != idx
+                    && let Some(writer) = out_file.maybe_writer.as_mut()
+                {
+                    writer.flush()?;
+                    out_file.maybe_writer = None;
+                    out_file.is_new = false;
+                    count += 1;
 
-                        // And then try to instantiate the writer again
-                        continue 'loop1;
-                    }
+                    // And then try to instantiate the writer again
+                    continue 'loop1;
                 }
             }
 
@@ -1331,11 +1331,8 @@ where
         if settings.elide_empty_files && skipped > 0 && kth_chunk.is_none() {
             chunk_number -= skipped as u64;
         }
-
-        if let Some(kth) = kth_chunk {
-            if chunk_number > kth {
-                break;
-            }
+        if kth_chunk.is_some_and(|k| chunk_number > k) {
+            break;
         }
     }
     Ok(())
