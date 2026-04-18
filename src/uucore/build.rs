@@ -350,9 +350,7 @@ fn embed_locale_file(
 /// Check if we are cross-compiling for WASI (build.rs runs on the host,
 /// so `#[cfg(target_os = "wasi")]` does not work here).
 fn is_wasi_target() -> bool {
-    env::var("CARGO_CFG_TARGET_OS")
-        .map(|os| os == "wasi")
-        .unwrap_or(false)
+    env::var("CARGO_CFG_TARGET_OS").is_ok_and(|os| os == "wasi")
 }
 
 /// For WASI/WASM builds, embed ALL available .ftl files in a locale

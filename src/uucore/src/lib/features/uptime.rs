@@ -521,11 +521,9 @@ mod tests {
         );
 
         // Boot time should be before current time
-        let now = Timestamp::now().as_second();
-        assert!(
-            (boot_time as i64) < now,
-            "Boot time should be before current time"
-        );
+        let boot_time = Timestamp::from_second(boot_time).unwrap();
+        let now = Timestamp::now();
+        assert!(boot_time < now, "Boot time should be before current time");
     }
 
     /// Test that get_uptime always succeeds on macOS due to sysctl fallback.

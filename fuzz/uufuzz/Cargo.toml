@@ -1,6 +1,5 @@
 [package]
 name = "uufuzz"
-authors = ["uutils developers"]
 description = "uutils ~ 'core' uutils fuzzing library"
 repository = "https://github.com/uutils/coreutils/tree/main/fuzz/uufuzz"
 version = "0.8.0"

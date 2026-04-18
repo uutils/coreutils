@@ -3,7 +3,6 @@ name = "uu_cp"
 description = "cp ~ (uutils) copy SOURCE to DESTINATION"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/cp"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -17,6 +16,7 @@ workspace = true
 
 [lib]
 path = "src/cp.rs"
+doctest = false
 
 [dependencies]
 clap = { workspace = true }

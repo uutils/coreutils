@@ -230,10 +230,9 @@ fn parse_fluent_resource(
     cache: &'static OnceLock<FluentResource>,
 ) -> Result<&'static FluentResource, LocalizationError> {
     // global cache breaks unit tests
-    if cfg!(not(test)) {
-        if let Some(res) = cache.get() {
-            return Ok(res);
-        }
+    #[cfg(not(test))]
+    if let Some(res) = cache.get() {
+        return Ok(res);
     }
 
     let resource = FluentResource::try_new(content.to_string()).map_err(
@@ -516,21 +515,21 @@ pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
 fn resolve_locales_dir_from_exe_dir(exe_dir: &Path, p: &str) -> Option<PathBuf> {
     // 1. <bindir>/locales/<prog>
     let coreutils = exe_dir.join("locales").join(p);
-    if coreutils.exists() {
+    if coreutils.is_dir() {
         return Some(coreutils);
     }
 
     // 2. <prefix>/share/locales/<prog>
     if let Some(prefix) = exe_dir.parent() {
         let fhs = prefix.join("share").join("locales").join(p);
-        if fhs.exists() {
+        if fhs.is_dir() {
             return Some(fhs);
         }
     }
 
     // 3. <bindir>/<prog>   (legacy fall-back)
     let fallback = exe_dir.join(p);
-    if fallback.exists() {
+    if fallback.is_dir() {
         return Some(fallback);
     }
 

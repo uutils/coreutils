@@ -439,7 +439,7 @@ impl Observer {
                     */
                 }
             }
-            EventKind::Modify(ModifyKind::Name(RenameMode::Both)) => {
+            EventKind::Modify(ModifyKind::Name(RenameMode::Both))
                 /*
                 NOTE: For `tail -f a`, keep tracking additions to b after `mv a b`
                 (gnu/tests/tail-2/descriptor-vs-rename.sh)
@@ -457,7 +457,7 @@ impl Observer {
                 TODO: [2022-05; jhscheer] add test for this bug
                 */
 
-                if self.follow_descriptor() {
+                if self.follow_descriptor() => {
                     let new_path = event.paths.last().unwrap();
                     paths.push(new_path.clone());
 
@@ -472,7 +472,6 @@ impl Observer {
                     let _ = self.watcher_rx.as_mut().unwrap().unwatch(event_path);
                     self.watcher_rx.as_mut().unwrap().watch_with_parent(new_path)?;
                 }
-            }
             _ => {}
         }
         Ok(paths)

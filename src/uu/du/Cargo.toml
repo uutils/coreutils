@@ -3,7 +3,6 @@ name = "uu_du"
 description = "du ~ (uutils) display disk usage"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/du"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -17,6 +16,7 @@ workspace = true
 
 [lib]
 path = "src/du.rs"
+doctest = false
 
 [dependencies]
 # For the --exclude & --exclude-from options

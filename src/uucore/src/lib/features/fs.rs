@@ -435,12 +435,11 @@ pub fn canonicalize<P: AsRef<Path>>(
                 }
                 result.pop();
             }
-            Err(e) => {
-                if miss_mode == MissingHandling::Existing
-                    || (miss_mode == MissingHandling::Normal && !parts.is_empty())
-                {
-                    return Err(e);
-                }
+            Err(e)
+                if (miss_mode == MissingHandling::Existing
+                    || (miss_mode == MissingHandling::Normal && !parts.is_empty())) =>
+            {
+                return Err(e);
             }
             _ => {}
         }

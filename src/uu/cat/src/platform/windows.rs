@@ -20,9 +20,7 @@ pub fn is_unsafe_overwrite<I: AsHandleRef, O: AsHandleRef>(input: &I, output: &O
     }
 
     // Check if the output file is empty
-    FileInformation::from_file(output)
-        .map(|info| info.file_size() > 0)
-        .unwrap_or(false)
+    FileInformation::from_file(output).is_ok_and(|info| info.file_size() > 0)
 }
 
 /// Get the file path for a file handle

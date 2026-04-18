@@ -111,56 +111,43 @@ fn tee(options: &Options) -> Result<()> {
 }
 
 /// Copies all bytes from the input buffer to the output buffer.
-///
-/// Returns the number of written bytes.
-fn copy(mut input: impl Read, mut output: impl Write) -> Result<usize> {
+fn copy(mut input: impl Read, mut output: impl Write) -> Result<()> {
     // The implementation for this function is adopted from the generic buffer copy implementation from
     // the standard library:
     // https://github.com/rust-lang/rust/blob/2feb91181882e525e698c4543063f4d0296fcf91/library/std/src/io/copy.rs#L271-L297
 
     // Use buffer size from std implementation
     // https://github.com/rust-lang/rust/blob/2feb91181882e525e698c4543063f4d0296fcf91/library/std/src/sys/io/mod.rs#L44
-    const BUF_SIZE: usize = if cfg!(target_os = "espidf") {
-        512
-    } else {
-        8 * 1024
-    };
+    const BUF_SIZE: usize = 8 * 1024;
     let mut buffer = [0u8; BUF_SIZE];
-    let mut len = 0;
 
-    loop {
+    for _ in 0..2 {
         match input.read(&mut buffer) {
-            Ok(0) => return Ok(len), // end of file
+            Ok(0) => return Ok(()), // end of file
             Ok(received) => {
                 output.write_all(&buffer[..received])?;
                 // flush the buffer to comply with POSIX requirement that
                 // `tee` does not buffer the input.
                 output.flush()?;
-                len += received;
-                if len > 2 * BUF_SIZE {
-                    // buffer is too small
-                    break;
-                }
             }
-            Err(e) if e.kind() == ErrorKind::Interrupted => {}
-            Err(e) => return Err(e),
+            Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e),
+            _ => {}
         }
     }
-    // optimize for large input
+    // buffer is too small optimize for large input
     //stack array makes code path for smaller file slower
     let mut buffer = vec![0u8; 4 * BUF_SIZE];
     loop {
         match input.read(&mut buffer) {
-            Ok(0) => return Ok(len), // end of file
+            Ok(0) => return Ok(()), // end of file
             Ok(received) => {
                 output.write_all(&buffer[..received])?;
                 // flush the buffer to comply with POSIX requirement that
                 // `tee` does not buffer the input.
                 output.flush()?;
-                len += received;
             }
-            Err(e) if e.kind() == ErrorKind::Interrupted => {}
-            Err(e) => return Err(e),
+            Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e),
+            _ => {}
         }
     }
 }
@@ -255,18 +242,13 @@ impl Write for MultiWriter {
         let mode = self.output_error_mode.clone();
         let mut errors = 0;
         self.writers.retain_mut(|writer| {
-            let result = writer.write_all(buf);
-            match result {
-                Err(f) => {
-                    if let Err(e) = process_error(mode.as_ref(), f, writer, &mut errors) {
-                        if aborted.is_none() {
-                            aborted = Some(e);
-                        }
-                    }
-                    false
-                }
-                _ => true,
-            }
+            writer
+                .write_all(buf)
+                .map_err(|f| {
+                    let _ = process_error(mode.as_ref(), f, writer, &mut errors)
+                        .map_err(|e| aborted.get_or_insert(e));
+                })
+                .is_ok()
         });
         self.ignored_errors += errors;
         if let Some(e) = aborted {
@@ -286,18 +268,13 @@ impl Write for MultiWriter {
         let mode = self.output_error_mode.clone();
         let mut errors = 0;
         self.writers.retain_mut(|writer| {
-            let result = writer.flush();
-            match result {
-                Err(f) => {
-                    if let Err(e) = process_error(mode.as_ref(), f, writer, &mut errors) {
-                        if aborted.is_none() {
-                            aborted = Some(e);
-                        }
-                    }
-                    false
-                }
-                _ => true,
-            }
+            writer
+                .flush()
+                .map_err(|f| {
+                    let _ = process_error(mode.as_ref(), f, writer, &mut errors)
+                        .map_err(|e| aborted.get_or_insert(e));
+                })
+                .is_ok()
         });
         self.ignored_errors += errors;
         if let Some(e) = aborted {

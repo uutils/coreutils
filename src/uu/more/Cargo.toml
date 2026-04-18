@@ -3,7 +3,6 @@ name = "uu_more"
 description = "more ~ (uutils) input perusal filter"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/more"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -17,14 +16,13 @@ workspace = true
 
 [lib]
 path = "src/more.rs"
+doctest = false
 
 [dependencies]
 clap = { workspace = true }
 crossterm = { workspace = true, features = ["events"] }
 uucore = { workspace = true }
 fluent = { workspace = true }
-
-[target.'cfg(all(unix, not(target_os = "fuchsia")))'.dependencies]
 
 [target.'cfg(windows)'.dependencies]
 crossterm = { workspace = true, features = ["windows"] }

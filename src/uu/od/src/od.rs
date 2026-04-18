@@ -132,38 +132,35 @@ impl OdOptions {
 
         let formats = parse_format_flags(args).map_err(|e| USimpleError::new(1, e))?;
 
-        let mut line_bytes = match matches.get_one::<String>(options::WIDTH) {
-            None => 16,
-            Some(s) => {
-                if matches.value_source(options::WIDTH) == Some(ValueSource::CommandLine) {
-                    let width_display = option_display_name(args, options::WIDTH, Some('w'));
-                    let parsed = parse_number_of_bytes(s).map_err(|e| {
-                        USimpleError::new(1, format_error_message(&e, s, &width_display))
-                    })?;
-                    if parsed == 0 {
-                        return Err(USimpleError::new(
-                            1,
-                            translate!(
-                                "od-error-invalid-argument",
-                                "option" => width_display.clone(),
-                                "value" => s.quote()
-                            ),
-                        ));
-                    }
-                    usize::try_from(parsed).map_err(|_| {
-                        USimpleError::new(
-                            1,
-                            translate!(
-                                "od-error-argument-too-large",
-                                "option" => width_display.clone(),
-                                "value" => s.quote()
-                            ),
-                        )
-                    })?
-                } else {
-                    16
-                }
+        let mut line_bytes = if let (Some(s), Some(ValueSource::CommandLine)) = (
+            matches.get_one::<String>(options::WIDTH),
+            matches.value_source(options::WIDTH),
+        ) {
+            let width_display = option_display_name(args, options::WIDTH, Some('w'));
+            let parsed = parse_number_of_bytes(s)
+                .map_err(|e| USimpleError::new(1, format_error_message(&e, s, &width_display)))?;
+            if parsed == 0 {
+                return Err(USimpleError::new(
+                    1,
+                    translate!(
+                        "od-error-invalid-argument",
+                        "option" => width_display.clone(),
+                        "value" => s.quote()
+                    ),
+                ));
             }
+            usize::try_from(parsed).map_err(|_| {
+                USimpleError::new(
+                    1,
+                    translate!(
+                        "od-error-argument-too-large",
+                        "option" => width_display.clone(),
+                        "value" => s.quote()
+                    ),
+                )
+            })?
+        } else {
+            16
         };
 
         let min_bytes = formats.iter().fold(1, |max, next| {

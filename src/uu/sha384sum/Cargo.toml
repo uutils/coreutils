@@ -3,7 +3,6 @@ name = "uu_sha384sum"
 description = "sha384sum ~ (uutils) Print or check the SHA384 checksums"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/sha384sum"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -17,6 +16,8 @@ workspace = true
 
 [lib]
 path = "src/sha384sum.rs"
+test = false
+doctest = false
 
 [dependencies]
 clap = { workspace = true }
