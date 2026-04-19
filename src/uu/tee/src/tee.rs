@@ -93,7 +93,7 @@ fn tee(options: &Options) -> Result<()> {
     }
 
     // We cannot use std::io::copy here as it doesn't flush the output buffer
-    let res = match copy(input, &mut output) {
+    let res = match output.copy_unbuffered(input) {
         // ErrorKind::Other is raised by MultiWriter when all writers
         // have exited, so that copy will abort. It's equivalent to
         // success of this part (if there was an error that should
@@ -107,48 +107,6 @@ fn tee(options: &Options) -> Result<()> {
         Err(Error::from(ErrorKind::Other))
     } else {
         Ok(())
-    }
-}
-
-/// Copies all bytes from the input buffer to the output buffer.
-fn copy(mut input: impl Read, mut output: impl Write) -> Result<()> {
-    // The implementation for this function is adopted from the generic buffer copy implementation from
-    // the standard library:
-    // https://github.com/rust-lang/rust/blob/2feb91181882e525e698c4543063f4d0296fcf91/library/std/src/io/copy.rs#L271-L297
-
-    // Use buffer size from std implementation
-    // https://github.com/rust-lang/rust/blob/2feb91181882e525e698c4543063f4d0296fcf91/library/std/src/sys/io/mod.rs#L44
-    const BUF_SIZE: usize = 8 * 1024;
-    let mut buffer = [0u8; BUF_SIZE];
-
-    for _ in 0..2 {
-        match input.read(&mut buffer) {
-            Ok(0) => return Ok(()), // end of file
-            Ok(received) => {
-                output.write_all(&buffer[..received])?;
-                // flush the buffer to comply with POSIX requirement that
-                // `tee` does not buffer the input.
-                output.flush()?;
-            }
-            Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e),
-            _ => {}
-        }
-    }
-    // buffer is too small optimize for large input
-    //stack array makes code path for smaller file slower
-    let mut buffer = vec![0u8; 4 * BUF_SIZE];
-    loop {
-        match input.read(&mut buffer) {
-            Ok(0) => return Ok(()), // end of file
-            Ok(received) => {
-                output.write_all(&buffer[..received])?;
-                // flush the buffer to comply with POSIX requirement that
-                // `tee` does not buffer the input.
-                output.flush()?;
-            }
-            Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e),
-            _ => {}
-        }
     }
 }
 
@@ -189,6 +147,45 @@ struct MultiWriter {
 }
 
 impl MultiWriter {
+    /// Copies all bytes from the input buffer to the output buffer
+    /// without buffering which is POSIX requirement.
+    pub fn copy_unbuffered<R: Read>(&mut self, mut input: R) -> Result<()> {
+        // todo: support splice() and tee() fast-path at here
+        // The implementation for this function is adopted from the generic buffer copy implementation from
+        // the standard library:
+        // https://github.com/rust-lang/rust/blob/2feb91181882e525e698c4543063f4d0296fcf91/library/std/src/io/copy.rs#L271-L297
+
+        // Use buffer size from std implementation
+        // https://github.com/rust-lang/rust/blob/2feb91181882e525e698c4543063f4d0296fcf91/library/std/src/sys/io/mod.rs#L44
+        const BUF_SIZE: usize = 8 * 1024;
+        let mut buffer = [0u8; BUF_SIZE];
+        // fast-path for small input
+        match input.read(&mut buffer) {
+            Ok(0) => return Ok(()), // end of file
+            Ok(received) => {
+                self.write_all(&buffer[..received])?;
+                self.flush()?; // avoid buffering
+            }
+            Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e),
+            _ => {}
+        }
+        // buffer is too small optimize for large input
+        //stack array makes code path for smaller file slower
+        let mut buffer = vec![0u8; 4 * BUF_SIZE];
+        loop {
+            match input.read(&mut buffer) {
+                Ok(0) => return Ok(()), // end of file
+                Ok(received) => {
+                    self.write_all(&buffer[..received])?;
+                    // avoid buffering
+                    self.flush()?;
+                }
+                Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e),
+                _ => {}
+            }
+        }
+    }
+
     fn new(writers: Vec<NamedWriter>, output_error_mode: Option<OutputErrorMode>) -> Self {
         Self {
             writers,
