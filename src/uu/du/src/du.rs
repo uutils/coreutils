@@ -517,6 +517,7 @@ fn safe_du(
         }
 
         // Process directories recursively
+        #[allow(clippy::collapsible_if)]
         if is_dir {
             if options.one_file_system {
                 if let (Some(this_inode), Some(my_inode)) = (this_stat.inode, my_stat.inode) {
@@ -637,6 +638,7 @@ fn du_regular(
                                 && options.dereference == Deref::All
                                 && this_stat.metadata.is_dir()
                             {
+                                #[allow(clippy::collapsible_if)]
                                 if let Some(inode) = this_stat.inode {
                                     if ancestors.contains(&inode) {
                                         // This symlink points to an ancestor directory - skip to avoid cycle
@@ -674,7 +676,7 @@ fn du_regular(
                                 // Mark this inode as seen
                                 seen_inodes.insert(inode);
                             }
-
+                            #[allow(clippy::collapsible_if)]
                             if this_stat.metadata.is_dir() {
                                 if options.one_file_system {
                                     if let (Some(this_inode), Some(my_inode)) =
@@ -1143,6 +1145,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         // Pre-populate seen_inodes with the starting directory to detect cycles
         let stat = Stat::new(&path, None, &traversal_options);
+        #[allow(clippy::collapsible_if)]
         if let Ok(stat) = stat.as_ref() {
             if let Some(inode) = stat.inode {
                 if !traversal_options.count_links && seen_inodes.contains(&inode) {
@@ -1172,6 +1175,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     }
                     Err(e) => {
                         // Check if this is our "already handled" error
+                        #[allow(clippy::collapsible_if)]
                         if let mpsc::SendError(Err(simple_error)) = e.as_ref() {
                             if simple_error.code() == 0 {
                                 // Error already handled, continue to next file

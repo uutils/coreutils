@@ -535,6 +535,7 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
     }
 
     // Only finish progress bar if it was created and files were processed
+    #[allow(clippy::collapsible_if)]
     if let Some(pb) = progress_bar {
         if any_files_processed {
             pb.finish();

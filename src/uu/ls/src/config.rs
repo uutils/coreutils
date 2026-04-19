@@ -719,6 +719,7 @@ impl Config {
             {
                 format = Format::Long;
             } else if let Some(mut indices) = options.indices_of(options::format::ONE_LINE) {
+                #[allow(clippy::collapsible_if)]
                 if options.value_source(options::format::ONE_LINE)
                     == Some(clap::parser::ValueSource::CommandLine)
                     && indices.any(|i| i > idx)
@@ -918,6 +919,7 @@ impl Config {
             locale_quoting = None;
         }
 
+        #[allow(clippy::collapsible_if)]
         if needs_color {
             if let Err(err) = validate_ls_colors_env() {
                 if let LsColorsParseError::UnrecognizedPrefix(prefix) = &err {

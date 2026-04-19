@@ -518,6 +518,7 @@ fn evaluate_match_expression(left_bytes: Vec<u8>, right_bytes: Vec<u8>) -> ExprR
         let left_encoded = onig::EncodedBytes::ascii(&left_bytes);
         let pos = regex_search(&regex, left_encoded, left_bytes.len(), &mut region);
 
+        #[allow(clippy::collapsible_if)]
         if pos.is_some() {
             if let Some((start, end)) = region.pos(1) {
                 let capture_bytes = &left_bytes[start..end];

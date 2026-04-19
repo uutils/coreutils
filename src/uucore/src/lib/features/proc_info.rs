@@ -310,6 +310,7 @@ impl ProcessInformation {
         };
 
         for dir in result.flatten().filter(|it| it.path().is_symlink()) {
+            #[allow(clippy::collapsible_if)]
             if let Ok(path) = fs::read_link(dir.path()) {
                 if let Ok(tty) = Teletype::try_from(path) {
                     return tty;

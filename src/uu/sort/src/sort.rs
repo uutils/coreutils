@@ -764,6 +764,7 @@ impl<'a> Line<'a> {
                         selection.end += leading_whitespace;
                     } else {
                         // include a trailing si unit
+                        #[allow(clippy::collapsible_if)]
                         if selector.settings.mode == SortMode::HumanNumeric {
                             if let Some(
                                 b'k' | b'K' | b'M' | b'G' | b'T' | b'P' | b'E' | b'Z' | b'Y' | b'R'
@@ -1633,6 +1634,7 @@ where
 
         if starts_with_plus(&arg) {
             let as_str = arg.to_string_lossy();
+            #[allow(clippy::collapsible_if)]
             if let Some(from_spec) = as_str.strip_prefix('+') {
                 if let Some(from) = parse_legacy_part(from_spec) {
                     let mut to_part = None;
@@ -1715,6 +1717,7 @@ fn index_legacy_warnings(processed_args: &[OsString], legacy_warnings: &mut [Leg
             }
         } else {
             let as_str = arg.to_string_lossy();
+            #[allow(clippy::collapsible_if)]
             if let Some(spec) = as_str.strip_prefix("-k") {
                 if !spec.is_empty() {
                     key_index = key_index.saturating_add(1);
@@ -1728,7 +1731,7 @@ fn index_legacy_warnings(processed_args: &[OsString], legacy_warnings: &mut [Leg
             }
             i += 1;
         }
-
+        #[allow(clippy::collapsible_if)]
         if matched_key {
             if let Some(&warning_idx) = index_by_arg.get(&i.saturating_sub(1)) {
                 legacy_warnings[warning_idx].key_index = Some(key_index);
@@ -2010,6 +2013,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), processed_args, 2)?;
 
     // Prevent -o/--output to be specified multiple times
+    #[allow(clippy::collapsible_if)]
     if let Some(mut outputs) = matches.get_many::<OsString>(options::OUTPUT) {
         if let Some(first) = outputs.next() {
             if outputs.any(|out| out != first) {

@@ -93,6 +93,7 @@ impl Localizer {
         }
 
         // Fall back to English bundle if available
+        #[allow(clippy::collapsible_if)]
         if let Some(ref fallback) = self.fallback_bundle {
             if let Some(message) = fallback.get_message(id).and_then(|m| m.value()) {
                 let mut errs = Vec::new();
@@ -283,6 +284,7 @@ fn create_english_bundle_from_embedded(
     }
 
     // Checksum algorithms need locale messages from checksum_common
+    #[allow(clippy::collapsible_if)]
     if util_name.ends_with("sum") {
         if let Some(uucore_content) = get_embedded_locale("checksum_common/en-US.ftl") {
             let uucore_resource = parse_fluent_resource(uucore_content, &CHECKSUM_FLUENT)?;
@@ -320,6 +322,7 @@ fn create_wasi_bundle_from_embedded(
     bundle.set_use_isolating(false);
 
     let mut try_add = |key: &str| {
+        #[allow(clippy::collapsible_if)]
         if let Some(content) = get_embedded_locale(key) {
             if let Ok(resource) = FluentResource::try_new(content.to_string()) {
                 bundle.add_resource_overriding(Box::leak(Box::new(resource)));

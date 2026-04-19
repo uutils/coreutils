@@ -64,6 +64,7 @@ fn get_macos_boot_time_sysctl() -> Option<time_t> {
         .arg("kern.boottime")
         .output();
 
+    #[allow(clippy::collapsible_if)]
     if let Ok(output) = output {
         if output.status.success() {
             // Parse output format: { sec = 1729338352, usec = 0 } Wed Oct 19 08:25:52 2025

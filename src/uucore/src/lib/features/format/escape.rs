@@ -122,6 +122,7 @@ pub fn parse_escape_code(
     rest: &mut &[u8],
     zero_octal_parsing: OctalParsing,
 ) -> Result<EscapedChar, FormatError> {
+    #[allow(clippy::collapsible_if)]
     if let [c, new_rest @ ..] = rest {
         // This is for the \NNN syntax for octal sequences.
         // Note that '0' is intentionally omitted because that

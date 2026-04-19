@@ -219,6 +219,7 @@ impl<'a> ErrorFormatter<'a> {
             }
 
             // Show possible values for InvalidValue errors
+            #[allow(clippy::collapsible_if)]
             if matches!(err.kind(), ErrorKind::InvalidValue) {
                 if let Some(valid_values) = err.get(ContextKind::ValidValue) {
                     if !valid_values.to_string().is_empty() {

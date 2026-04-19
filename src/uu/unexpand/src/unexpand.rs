@@ -115,6 +115,7 @@ fn parse_tabstops(s: &str) -> Result<TabConfig, ParseError> {
 
     // Handle the increment if specified
     // Only add an extra tab stop if increment is non-zero
+    #[allow(clippy::collapsible_if)]
     if let Some(inc) = increment_size {
         if inc > 0 {
             let last = *nums.last().unwrap();

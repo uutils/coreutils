@@ -389,6 +389,7 @@ impl Observer {
 
                 // | EventKind::Modify(ModifyKind::Name(RenameMode::Any))
                 | EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
+				#[allow(clippy::collapsible_if)]
                 if self.follow_name() {
                     if settings.retry {
                         if let Some(old_md) = self.files.get_mut_metadata(event_path) {
@@ -548,6 +549,7 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
                              settings: &Settings,
                              paths: &mut Vec<PathBuf>|
          -> UResult<()> {
+            #[allow(clippy::collapsible_if)]
             if let Some(event_path) = event.paths.first() {
                 if observer.files.contains_key(event_path) {
                     // Handle Event if it is about a path that we are monitoring
@@ -586,6 +588,7 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
                 kind: notify::ErrorKind::Io(ref e),
                 paths,
             })) if e.kind() == std::io::ErrorKind::NotFound => {
+                #[allow(clippy::collapsible_if)]
                 if let Some(event_path) = paths.first() {
                     if observer.files.contains_key(event_path) {
                         let _ = observer

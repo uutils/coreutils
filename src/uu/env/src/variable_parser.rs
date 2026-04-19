@@ -18,6 +18,7 @@ impl<'a> VariableParser<'a, '_> {
     }
 
     fn check_variable_name_start(&self) -> Result<(), EnvError> {
+        #[allow(clippy::collapsible_if)]
         if let Some(c) = self.get_current_char() {
             if c.is_ascii_digit() {
                 return Err(EnvError::EnvParsingOfVariableUnexpectedNumber(

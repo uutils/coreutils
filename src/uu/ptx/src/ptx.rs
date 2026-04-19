@@ -217,6 +217,7 @@ fn get_config(matches: &mut clap::ArgMatches) -> UResult<Config> {
         // In the future, we might want to switch to the onig crate (like expr does) for better compatibility.
 
         // Verify regex is valid and doesn't match empty string
+        #[allow(clippy::collapsible_if)]
         if let Ok(re) = Regex::new(&regex) {
             if re.is_match("") {
                 return Err(USimpleError::new(1, translate!("ptx-error-empty-regexp")));

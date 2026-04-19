@@ -550,6 +550,7 @@ impl<'a> Pager<'a> {
             return Ok(());
         }
         loop {
+            #[allow(clippy::collapsible_if)]
             if event::poll(Duration::from_millis(100))? {
                 if let Event::Key(KeyEvent {
                     code: KeyCode::Enter,

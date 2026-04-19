@@ -516,6 +516,7 @@ fn create_test_compatible_sequence(
             .seek(SeekFrom::Start(0))
             .map_err_context(|| translate!("shred-failed-to-seek-file"))?;
         let mut buffer = [0u8; 1024];
+        #[allow(clippy::collapsible_if)]
         if let Ok(bytes_read) = file_cell.borrow_mut().read(&mut buffer) {
             if bytes_read > 0 && buffer[..bytes_read].iter().all(|&b| b == 0x55) {
                 // This is the test scenario - replicate exact algorithm

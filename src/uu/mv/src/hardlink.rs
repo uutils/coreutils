@@ -176,6 +176,7 @@ impl HardlinkGroupScanner {
         self.source_files = files.to_vec();
 
         for file in files {
+            #[allow(clippy::collapsible_if)]
             if let Err(e) = self.scan_single_path(file) {
                 if options.verbose {
                     // Only show warnings for verbose mode

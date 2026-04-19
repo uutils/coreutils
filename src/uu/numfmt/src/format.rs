@@ -396,7 +396,7 @@ fn transform_from(
         detailed_error_message(s, opts.from, &options.unit_separator).unwrap_or(original)
     })?;
     let had_no_suffix = suffix.is_none();
-
+    #[allow(clippy::collapsible_if)]
     if had_no_suffix {
         if let Some(scaled) = try_scale_exact_int_with_from_unit(i, opts.from_unit) {
             return Ok(scaled);

@@ -367,6 +367,7 @@ fn read_to_buffer<T: Read>(
     loop {
         match file.read(read_target) {
             Ok(0) => {
+                #[allow(clippy::collapsible_if)]
                 if read_target.is_empty() {
                     // chunk is full
                     if let Some(max_buffer_size) = max_buffer_size {

@@ -697,6 +697,7 @@ impl EnvAppData {
         self.do_input_debug_printing = self
             .do_input_debug_printing
             .or(Some(matches.get_count("debug") >= 2));
+        #[allow(clippy::collapsible_if)]
         if let Some(value) = self.do_input_debug_printing {
             if value {
                 debug_print_args(&original_args);

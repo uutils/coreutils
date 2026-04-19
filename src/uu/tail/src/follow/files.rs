@@ -62,6 +62,7 @@ impl FileHandling {
 
     /// Canonicalize `path` if it is not already an absolute path
     fn canonicalize_path(path: &Path) -> PathBuf {
+        #[allow(clippy::collapsible_if)]
         if path.is_relative() && !path.is_stdin() {
             if let Ok(p) = path.canonicalize() {
                 return p;

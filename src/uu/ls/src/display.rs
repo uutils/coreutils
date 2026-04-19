@@ -700,6 +700,7 @@ fn display_item_name(
         name = color_name(name, path, style_manager, None, is_wrap(len));
     }
 
+    #[allow(clippy::collapsible_if)]
     if config.format != Format::Long {
         if let Some(info) = more_info {
             let old_name = name;
@@ -822,6 +823,7 @@ fn display_item_name(
 
     // Prepend the security context to the `name` and adjust `width` in order
     // to get correct alignment from later calls to`display_grid()`.
+    #[allow(clippy::collapsible_if)]
     if config.context {
         if let Some(pad_count) = prefix_context {
             let security_context: Cow<'_, str> = if matches!(config.format, Format::Commas) {
@@ -1263,6 +1265,7 @@ fn calculate_padding_collection(
             padding_collections.inode = inode_len.max(padding_collections.inode);
         }
 
+        #[allow(clippy::collapsible_if)]
         if config.alloc_size {
             if let Some(md) = item.metadata() {
                 let block_size_len = display_size(get_block_size(md, config), config).len();
@@ -1335,6 +1338,7 @@ fn calculate_padding_collection(
     };
 
     for item in items {
+        #[allow(clippy::collapsible_if)]
         if config.alloc_size {
             if let Some(md) = item.metadata() {
                 let block_size_len = display_size(get_block_size(md, config), config).len();

@@ -298,6 +298,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
             let remove_target = || {
                 // In that case, we don't want to do link resolution
                 // We need to clean the target
+                #[allow(clippy::collapsible_if)]
                 if target_dir.is_file() {
                     if let Err(e) = fs::remove_file(target_dir) {
                         show_error!(
@@ -374,6 +375,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
 }
 
 fn relative_path<'a>(src: &'a Path, dst: &Path) -> Cow<'a, Path> {
+    #[allow(clippy::collapsible_if)]
     if let Ok(src_abs) = canonicalize(src, MissingHandling::Missing, ResolveMode::Physical) {
         if let Ok(dst_abs) = canonicalize(
             dst.parent().unwrap(),

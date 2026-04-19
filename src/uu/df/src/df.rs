@@ -156,7 +156,7 @@ impl Options {
         let exclude: Option<Vec<_>> = matches
             .get_many::<OsString>(OPT_EXCLUDE_TYPE)
             .map(|v| v.map(|s| s.to_string_lossy().to_string()).collect());
-
+        #[allow(clippy::collapsible_if)]
         if let (Some(include), Some(exclude)) = (&include, &exclude) {
             if let Some(types) = Self::get_intersected_types(include, exclude) {
                 return Err(OptionsError::FilesystemTypeBothSelectedAndExcluded(types));
@@ -235,11 +235,13 @@ fn is_included(mi: &MountInfo, opt: &Options) -> bool {
     }
 
     // Don't show filesystems if they have been explicitly excluded.
+    #[allow(clippy::collapsible_if)]
     if let Some(ref excludes) = opt.exclude {
         if excludes.contains(&mi.fs_type) {
             return false;
         }
     }
+    #[allow(clippy::collapsible_if)]
     if let Some(ref includes) = opt.include {
         if !includes.contains(&mi.fs_type) {
             return false;
@@ -311,6 +313,7 @@ fn get_all_filesystems(opt: &Options) -> UResult<Vec<Filesystem>> {
         // this loop quadratic in the length of `vmi`. This could be
         // improved by a more efficient implementation of `is_best()`,
         // but `vmi` is probably not very long in practice.
+        #[allow(clippy::collapsible_if)]
         if is_included(&mi, opt) && is_best(&mounts, &mi) {
             let dev_path: &Path = Path::new(&mi.dev_name);
             // Only check is_symlink() for absolute paths. For non-absolute paths

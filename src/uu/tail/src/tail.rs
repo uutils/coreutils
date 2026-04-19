@@ -260,6 +260,7 @@ fn tail_stdin(
     // on macOS and Linux.
     #[cfg(target_os = "macos")]
     {
+        #[allow(clippy::collapsible_if)]
         if let Ok(mut stdin_handle) = same_file::Handle::stdin() {
             if let Ok(meta) = stdin_handle.as_file_mut().metadata() {
                 if meta.file_type().is_dir() {

@@ -116,11 +116,13 @@ pub fn localize_format_string(format: &str, date: JiffDate) -> String {
     // Format localized names using ICU DateTimeFormatter
     let locale_prefs = locale.clone().into();
 
+    #[allow(clippy::collapsible_if)]
     if fmt.contains("%B") {
         if let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::M::long()) {
             fmt = fmt.replace("%B", &f.format(&iso_date).to_string());
         }
     }
+    #[allow(clippy::collapsible_if)]
     if fmt.contains("%b") || fmt.contains("%h") {
         if let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::M::medium()) {
             // ICU's medium format may include trailing periods (e.g., "febr." for Hungarian),
@@ -135,11 +137,13 @@ pub fn localize_format_string(format: &str, date: JiffDate) -> String {
                 .replace("%h", &month_abbrev);
         }
     }
+    #[allow(clippy::collapsible_if)]
     if fmt.contains("%A") {
         if let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::E::long()) {
             fmt = fmt.replace("%A", &f.format(&iso_date).to_string());
         }
     }
+    #[allow(clippy::collapsible_if)]
     if fmt.contains("%a") {
         if let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::E::short()) {
             fmt = fmt.replace("%a", &f.format(&iso_date).to_string());

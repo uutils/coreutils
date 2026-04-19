@@ -73,6 +73,7 @@ impl<'a> StyleManager<'a> {
         let mut force_suffix_reset: bool = false;
         let mut applied_raw_code = false;
 
+        #[allow(clippy::collapsible_if)]
         if self.is_reset() {
             if let Some(norm_sty) = self.get_normal_style().copied() {
                 style_code.push_str(&self.get_style_code(&norm_sty));
@@ -324,6 +325,7 @@ impl<'a> StyleManager<'a> {
             return None;
         }
         let mut target = path.path().read_link().ok()?;
+        #[allow(clippy::collapsible_if)]
         if target.is_relative() {
             if let Some(parent) = path.path().parent() {
                 target = parent.join(target);
@@ -404,6 +406,7 @@ impl<'a> StyleManager<'a> {
 
     #[cfg(unix)]
     fn indicator_for_file(&self, path: &PathData) -> Option<Indicator> {
+        #[allow(clippy::collapsible_if)]
         if self.needs_file_metadata() {
             if let Some(metadata) = path.metadata() {
                 let mode = metadata.mode();
@@ -442,6 +445,7 @@ impl<'a> StyleManager<'a> {
 
     #[cfg(unix)]
     fn indicator_for_directory(&self, path: &PathData) -> Option<Indicator> {
+        #[allow(clippy::collapsible_if)]
         if self.needs_dir_metadata() {
             if let Some(metadata) = path.metadata() {
                 let mode = metadata.mode();
@@ -541,6 +545,7 @@ pub(crate) fn color_name(
         }
     }
 
+    #[allow(clippy::collapsible_if)]
     if target_symlink.is_none() && path.file_type().is_some_and(fs::FileType::is_symlink) {
         if let Some(colored) = style_manager.color_symlink_name(path, name.clone(), wrap) {
             return colored;

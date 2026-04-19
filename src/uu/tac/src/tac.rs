@@ -249,6 +249,7 @@ fn translate_regex_flavor(bytes: &[u8]) -> String {
                 continue;
             }
             // Unescape escaped (), |, {} when not inside brackets
+            #[allow(clippy::collapsible_if)]
             b'\\' if !inside_brackets && !is_escaped => {
                 if let Some(next) = bytes.get(i + 1) {
                     if matches!(next, b'(' | b')' | b'|' | b'{' | b'}') {

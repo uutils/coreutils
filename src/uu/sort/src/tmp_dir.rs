@@ -66,7 +66,7 @@ fn ensure_signal_handler_installed(state: Arc<Mutex<HandlerRegistration>>) -> UR
             let state = handler_state.lock().unwrap();
             (state.lock.clone(), state.path.clone())
         };
-
+        #[allow(clippy::collapsible_if)]
         if let Some(lock) = lock {
             let _guard = lock.lock().unwrap();
             if let Some(path) = path {

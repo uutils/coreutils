@@ -879,6 +879,7 @@ impl<'a> PathData<'a> {
         let security_context: OnceCell<Box<str>> = OnceCell::new();
 
         let de: RefCell<Option<DirEntry>> = if let Some(de) = dir_entry {
+            #[allow(clippy::collapsible_if)]
             if must_dereference {
                 if let Ok(md_pb) = p_buf.metadata() {
                     ft.get_or_init(|| Some(md_pb.file_type()));
@@ -910,6 +911,7 @@ impl<'a> PathData<'a> {
     fn metadata(&self) -> Option<&Metadata> {
         self.md
             .get_or_init(|| {
+                #[allow(clippy::collapsible_if)]
                 if !self.must_dereference {
                     if let Some(dir_entry) = RefCell::take(&self.de) {
                         return dir_entry.metadata().ok();
@@ -926,6 +928,7 @@ impl<'a> PathData<'a> {
                         // but GNU will not throw an error until a bad fd "dir"
                         // is entered, here we match that GNU behavior, by handing
                         // back the non-dereferenced metadata upon an EBADF
+                        #[allow(clippy::collapsible_if)]
                         if self.must_dereference && errno == 9i32 {
                             if let Ok(file) = self.path().read_link() {
                                 return file.symlink_metadata().ok();
@@ -1118,6 +1121,7 @@ impl LsOutput for TextOutput<'_> {
     }
 
     fn initialize(&mut self, _config: &Config) -> UResult<()> {
+        #[allow(clippy::collapsible_if)]
         if let Some(style_manager) = self.state.style_manager.as_mut() {
             if style_manager.get_normal_style().is_some() {
                 let to_write = style_manager.reset(true);
@@ -1564,6 +1568,7 @@ fn get_security_context<'a>(
     // If we must dereference, ensure that the symlink is actually valid even if the system
     // does not support SELinux.
     // Conforms to the GNU coreutils where a dangling symlink results in exit code 1.
+    #[allow(clippy::collapsible_if)]
     if must_dereference {
         if let Err(err) = get_metadata_with_deref_opt(path, must_dereference) {
             // The Path couldn't be dereferenced, so return early and set exit code 1

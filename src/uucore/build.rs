@@ -84,6 +84,7 @@ fn detect_target_utility() -> Option<String> {
     println!("cargo:rerun-if-env-changed=UUCORE_TARGET_UTIL");
 
     // First check if an explicit environment variable was set
+    #[allow(clippy::collapsible_if)]
     if let Ok(target_util) = env::var("UUCORE_TARGET_UTIL") {
         if !target_util.is_empty() {
             return Some(target_util);
@@ -91,6 +92,7 @@ fn detect_target_utility() -> Option<String> {
     }
 
     // Auto-detect utility name from CARGO_PKG_NAME if it's a uu_* package
+    #[allow(clippy::collapsible_if)]
     if let Ok(pkg_name) = env::var("CARGO_PKG_NAME") {
         if let Some(util_name) = pkg_name.strip_prefix("uu_") {
             println!("cargo:warning=Auto-detected utility name: {util_name}");
@@ -186,6 +188,7 @@ fn embed_all_utility_locales(
     let mut util_dirs = Vec::new();
     for entry in fs::read_dir(&src_uu_dir)? {
         let entry = entry?;
+        #[allow(clippy::collapsible_if)]
         if entry.file_type()?.is_dir() {
             if let Some(dir_name) = entry.file_name().to_str() {
                 util_dirs.push(dir_name.to_string());
@@ -247,6 +250,7 @@ fn embed_static_utility_locales(
 
     for entry in entries {
         let file_name = entry.file_name();
+        #[allow(clippy::collapsible_if)]
         if let Some(dir_name) = file_name.to_str() {
             // Match uu_<util>-<version>
             if let Some((util_part, _)) = dir_name.split_once('-') {
@@ -364,6 +368,7 @@ where
     F: Fn(&str) -> PathBuf,
 {
     let en_path = path_builder("en-US");
+    #[allow(clippy::collapsible_if)]
     if let Some(locale_dir) = en_path.parent() {
         if locale_dir.exists() {
             for entry in std::fs::read_dir(locale_dir)? {

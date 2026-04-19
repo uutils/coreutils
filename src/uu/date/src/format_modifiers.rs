@@ -316,6 +316,7 @@ fn strip_default_padding(value: &str) -> String {
         if stripped.is_empty() {
             return "0".to_string();
         }
+        #[allow(clippy::collapsible_if)]
         if let Some(first_char) = stripped.chars().next() {
             if first_char.is_ascii_digit() {
                 return stripped.to_string();
@@ -443,6 +444,7 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
     // GNU behavior: + only adds sign if:
     // 1. An explicit width is provided, OR
     // 2. The value exceeds the default width for that specifier (e.g., year > 4 digits)
+    #[allow(clippy::collapsible_if)]
     if force_sign && !result.starts_with('+') && !result.starts_with('-') {
         if result.chars().next().is_some_and(|c| c.is_ascii_digit()) {
             let default_w = get_default_width(specifier);

@@ -504,6 +504,7 @@ fn get_raw_expected_digest(checksum: &str, bit_len_hint: Option<usize>) -> Optio
 
     // If the length of the string matches the one to be expected (in case it's
     // given) AND the digest can be decoded as hexadecimal, just go with it.
+    #[allow(clippy::collapsible_if)]
     if checks_hint(checksum.len() / 2) {
         if let Ok(raw_ck) = hex::decode(checksum) {
             return Some(raw_ck);

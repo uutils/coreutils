@@ -44,6 +44,7 @@ fn replace_output_file_in_input_files(
     let mut copy: Option<PathBuf> = None;
     if let Some(Ok(output_path)) = output.map(|path| Path::new(path).canonicalize()) {
         for file in files {
+            #[allow(clippy::collapsible_if)]
             if let Ok(file_path) = Path::new(file).canonicalize() {
                 if file_path == output_path {
                     if let Some(copy) = &copy {
@@ -330,6 +331,7 @@ impl FileMerger<'_> {
 
             file.current_chunk.with_dependent(|_, contents| {
                 let current_line = &contents.lines[file.line_idx];
+                #[allow(clippy::collapsible_if)]
                 if settings.unique {
                     if let Some(prev) = &prev {
                         let cmp = compare_by(
@@ -361,7 +363,7 @@ impl FileMerger<'_> {
                 // This will cause the comparison to use a different line and the heap to readjust.
                 self.heap.peek_mut().unwrap().line_idx += 1;
             }
-
+            #[allow(clippy::collapsible_if)]
             if let Some(prev) = prev {
                 if let Ok(prev_chunk) = Rc::try_unwrap(prev.chunk) {
                     // If nothing is referencing the previous chunk anymore, this means that the previous line

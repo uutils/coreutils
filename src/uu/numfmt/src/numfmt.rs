@@ -50,6 +50,7 @@ fn format_and_write<W: std::io::Write>(
     };
 
     // Return false if the input is in scientific notation
+    #[allow(clippy::collapsible_if)]
     if let Some(pos) = line.iter().position(|&b| b == b'E' || b == b'e') {
         if pos < line.len() - 1 {
             if line[pos + 1].is_ascii_digit() {
@@ -186,6 +187,7 @@ fn parse_unit_size(s: &str) -> Result<usize> {
 
     // Reject all-zero numeric parts like "0" or "00K".
     let all_zero = !number.is_empty() && number.bytes().all(|b| b == b'0');
+    #[allow(clippy::collapsible_if)]
     if !all_zero {
         if let Some(multiplier) = parse_unit_size_suffix(suffix) {
             if number.is_empty() {

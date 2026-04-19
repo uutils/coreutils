@@ -14,6 +14,7 @@ pub fn is_wsl_1() -> bool {
         if is_wsl_2() {
             return false;
         }
+        #[allow(clippy::collapsible_if)]
         if let Ok(b) = std::fs::read("/proc/sys/kernel/osrelease") {
             if let Ok(s) = std::str::from_utf8(&b) {
                 let a = s.to_ascii_lowercase();
@@ -28,6 +29,7 @@ pub fn is_wsl_1() -> bool {
 pub fn is_wsl_2() -> bool {
     #[cfg(target_os = "linux")]
     {
+        #[allow(clippy::collapsible_if)]
         if let Ok(b) = std::fs::read("/proc/sys/kernel/osrelease") {
             if let Ok(s) = std::str::from_utf8(&b) {
                 let a = s.to_ascii_lowercase();

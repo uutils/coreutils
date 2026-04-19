@@ -708,6 +708,7 @@ fn parse_date(ref_zoned: Zoned, s: &str) -> Result<FileTime, TouchError> {
     }
 
     // "@%s" is "The number of seconds since the Epoch, 1970-01-01 00:00:00 +0000 (UTC). (TZ) (Calculated from mktime(tm).)"
+    #[allow(clippy::collapsible_if)]
     if s.bytes().next() == Some(b'@') {
         if let Ok(ts) = &s[1..].parse::<i64>() {
             return Ok(FileTime::from_unix_time(*ts, 0));
