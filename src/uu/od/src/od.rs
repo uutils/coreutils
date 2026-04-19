@@ -616,15 +616,13 @@ fn extract_strings_from_input(
 
     loop {
         // Check if we've reached the read_bytes limit
-        if let Some(limit) = read_bytes {
-            if bytes_read >= limit {
-                // Special case: when -N limit is reached with a pending string
-                // that meets min_length, output it even without null terminator
-                if current_string.len() >= min_length {
-                    print_string(string_start_offset, &current_string)?;
-                }
-                break;
+        if read_bytes.is_some_and(|l| bytes_read >= l) {
+            // Special case: when -N limit is reached with a pending string
+            // that meets min_length, output it even without null terminator
+            if current_string.len() >= min_length {
+                print_string(string_start_offset, &current_string)?;
             }
+            break;
         }
 
         // Read one byte at a time
