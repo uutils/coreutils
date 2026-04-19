@@ -1384,6 +1384,7 @@ pub fn uu_app() -> Command {
                 .long(options::NO_DEREFERENCE)
                 .help(translate!("du-help-no-dereference"))
                 .overrides_with(options::DEREFERENCE)
+                .overrides_with(options::NO_DEREFERENCE)
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -1455,7 +1456,8 @@ pub fn uu_app() -> Command {
                 .long(options::EXCLUDE)
                 .value_name("PATTERN")
                 .help(translate!("du-help-exclude"))
-                .action(ArgAction::Append),
+                .action(ArgAction::Append)
+                .overrides_with(options::EXCLUDE),
         )
         .arg(
             Arg::new(options::EXCLUDE_FROM)
@@ -1486,13 +1488,15 @@ pub fn uu_app() -> Command {
                     PossibleValue::new("ctime").alias("status"),
                     PossibleValue::new("creation").alias("birth"),
                 ]))
-                .help(translate!("du-help-time")),
+                .help(translate!("du-help-time"))
+                .overrides_with(options::TIME),
         )
         .arg(
             Arg::new(options::TIME_STYLE)
                 .long(options::TIME_STYLE)
                 .value_name("STYLE")
-                .help(translate!("du-help-time-style")),
+                .help(translate!("du-help-time-style"))
+                .overrides_with(options::TIME),
         )
         .arg(
             Arg::new(options::FILE)

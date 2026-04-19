@@ -2271,3 +2271,318 @@ fn test_overriding_block_size_arg_with_invalid_value_still_errors() {
         .fails_with_code(1)
         .stderr_contains("invalid --block-size argument 'abc'");
 }
+
+#[test]
+fn test_du_repeated_h() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.ucmd()
+        .args(&["-s", "-h", "-h"])
+        .succeeds()
+        .stdout_only("44K\t.\n");
+}
+
+#[test]
+fn test_du_repeated_a() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.ucmd()
+        .args(&["-s", "-a", "-a"])
+        .succeeds()
+        .stdout_only("44\t.\n");
+}
+
+#[test]
+fn test_du_repeated_apparent_size() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.ucmd()
+        .args(&["-s", "-A", "-A"])
+        .succeeds()
+        .stdout_only("6\t.\n");
+}
+
+#[test]
+fn test_du_repeated_block_size() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.ucmd()
+        .args(&["-s", "-B", "100", "-B", "100"])
+        .succeeds()
+        .stdout_only("451\t.\n");
+}
+
+#[test]
+fn test_du_repeated_b() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.ucmd()
+        .args(&["-s", "-b", "-b"])
+        .succeeds()
+        .stdout_only("5148\t.\n");
+}
+
+#[test]
+fn test_du_repeated_c() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.ucmd()
+        .args(&["-s", "-c", "-c"])
+        .succeeds()
+        .stdout_only("44\t.\n44\ttotal\n");
+}
+
+#[test]
+fn test_du_repeated_d() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.ucmd()
+        .args(&["-d", "2", "-d", "2"])
+        .succeeds()
+        .stdout_only("16\t./subdir/deeper\n16\t./subdir/links\n36\t./subdir\n44\t.\n");
+}
+
+#[test]
+fn test_du_repeated_inodes() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.ucmd()
+        .args(&["-s", "--inodes", "--inodes"])
+        .succeeds()
+        .stdout_only("11\t.\n");
+}
+
+#[test]
+fn test_du_repeated_k() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.ucmd()
+        .args(&["-s", "-k", "-k"])
+        .succeeds()
+        .stdout_only("44\t.\n");
+}
+
+#[test]
+fn test_du_repeated_l() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.ucmd()
+        .args(&["-s", "-l", "-l"])
+        .succeeds()
+        .stdout_only("44\t.\n");
+}
+
+#[test]
+fn test_du_repeated_dereference() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.ucmd()
+        .args(&["-s", "-L", "-L"])
+        .succeeds()
+        .stdout_only("44\t.\n");
+}
+
+#[test]
+fn test_du_repeated_dereference_args() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.ucmd()
+        .args(&["-s", "-D", "-D"])
+        .succeeds()
+        .stdout_only("44\t.\n");
+}
+
+#[test]
+fn test_du_repeated_no_dereference() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.ucmd()
+        .args(&["-s", "-P", "-P"])
+        .succeeds()
+        .stdout_only("44\t.\n");
+}
+
+#[test]
+fn test_du_repeated_m() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.ucmd()
+        .args(&["-s", "-m", "-m"])
+        .succeeds()
+        .stdout_only("1\t.\n");
+}
+
+#[test]
+fn test_du_repeated_0() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.ucmd()
+        .args(&["-s", "-0", "-0"])
+        .succeeds()
+        .stdout_only("44\t.\0");
+}
+
+#[test]
+fn test_du_repeated_separate_dirs() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.ucmd()
+        .args(&["-s", "-S", "-S"])
+        .succeeds()
+        .stdout_only("8\t.\n");
+}
+
+#[test]
+fn test_du_repeated_s() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.ucmd()
+        .args(&["-s", "-s"])
+        .succeeds()
+        .stdout_only("44\t.\n");
+}
+
+#[test]
+fn test_du_repeated_si() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.ucmd()
+        .args(&["-s", "--si", "--si"])
+        .succeeds()
+        .stdout_only("46k\t.\n");
+}
+
+#[test]
+fn test_du_repeated_x() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.ucmd()
+        .args(&["-s", "-x", "-x"])
+        .succeeds()
+        .stdout_only("44\t.\n");
+}
+
+#[test]
+fn test_du_repeated_t() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.ucmd()
+        .args(&["-s", "-t", "100", "-t", "100"])
+        .succeeds()
+        .stdout_only("44\t.\n");
+}
+
+#[test]
+fn test_du_repeated_v() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.ucmd()
+        .args(&["-s", "-v", "-v"])
+        .succeeds()
+        .stdout_only("44\t.\n");
+}
+
+#[test]
+fn test_du_repeated_exclude() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.ucmd()
+        .args(&["-s", "--exclude", "a*", "--exclude", "a*"])
+        .succeeds()
+        .stdout_only("44\t.\n");
+}
+
+#[test]
+fn test_du_repeated_exclude_from() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write(&format!("./somefile"), "*a");
+
+    ts.ucmd()
+        .args(&["-s", "-X", "somefile", "-X", "somefile"])
+        .succeeds()
+        .stdout_only("48\t.\n");
+}
+
+#[test]
+fn test_du_repeated_files0_from() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write(&format!("./somefile"), "file2");
+    at.write(&format!("./file2"), "a*");
+
+    ts.ucmd()
+        .args(&["-s", "--files0-from", "somefile", "--files0-from", "somefile"])
+        .succeeds()
+        .stdout_only("4\tfile2\n");
+}
+
+#[test]
+fn test_du_repeated_time() {
+    let ts = TestScenario::new(util_name!());
+
+    // du --time formats the timestamp according to the local timezone. We set the TZ
+    // environment variable to UTC in the commands below to ensure consistent outputs
+    // and test results regardless of the timezone of the machine this test runs in.
+
+    ts.ccmd("touch")
+        .env("TZ", "UTC")
+        .arg("-a")
+        .arg("-t")
+        .arg("201505150000")
+        .arg("date_test")
+        .succeeds();
+
+    ts.ccmd("touch")
+        .env("TZ", "UTC")
+        .arg("-m")
+        .arg("-t")
+        .arg("201606160000")
+        .arg("date_test")
+        .succeeds();
+
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("--time")
+        .arg("date_test")
+        .arg("--time")
+        .arg("date_test")
+        .succeeds();
+    result.stdout_only("0\t2016-06-16 00:00\tdate_test\n");
+}
+
+#[test]
+fn test_du_repeated_time_style() {
+    let ts = TestScenario::new(util_name!());
+
+    // du --time formats the timestamp according to the local timezone. We set the TZ
+    // environment variable to UTC in the commands below to ensure consistent outputs
+    // and test results regardless of the timezone of the machine this test runs in.
+
+    ts.ccmd("touch")
+        .env("TZ", "UTC")
+        .arg("-a")
+        .arg("-t")
+        .arg("201505150000")
+        .arg("date_test")
+        .succeeds();
+
+    ts.ccmd("touch")
+        .env("TZ", "UTC")
+        .arg("-m")
+        .arg("-t")
+        .arg("201606160000")
+        .arg("date_test")
+        .succeeds();
+
+    // full-iso
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("--time")
+        .arg("--time-style=full-iso")
+        .arg("date_test")
+        .succeeds();
+    result.stdout_only("0\tdate_test\n");
+}
