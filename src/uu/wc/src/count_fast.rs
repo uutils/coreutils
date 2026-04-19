@@ -173,7 +173,10 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
     }
 
     // Fall back on `read`, but without the overhead of counting words and lines.
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
     let mut buf = [0_u8; BUF_SIZE];
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    let mut buf = vec![0_u8; BUF_SIZE]; // avoid early stack allocation if splice succeed,
     loop {
         match handle.read(&mut buf) {
             Ok(0) => return (byte_count, None),
