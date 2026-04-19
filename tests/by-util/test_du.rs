@@ -2512,7 +2512,13 @@ fn test_du_repeated_files0_from() {
     at.write(&format!("./file2"), "a*");
 
     ts.ucmd()
-        .args(&["-s", "--files0-from", "somefile", "--files0-from", "somefile"])
+        .args(&[
+            "-s",
+            "--files0-from",
+            "somefile",
+            "--files0-from",
+            "somefile",
+        ])
         .succeeds()
         .stdout_only("4\tfile2\n");
 }
