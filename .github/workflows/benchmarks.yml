@@ -60,6 +60,9 @@ jobs:
           uu_false
         ]
     steps:
+      - name: reduce benchmark variance
+        run: |
+          sudo sysctl -w kernel.randomize_va_space=0
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
