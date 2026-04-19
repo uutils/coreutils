@@ -1383,7 +1383,7 @@ pub fn uu_app() -> Command {
                 .short('P')
                 .long(options::NO_DEREFERENCE)
                 .help(translate!("du-help-no-dereference"))
-                .overrides_with(options::NO_DEREFERENCE)
+                .overrides_with(options::DEREFERENCE)
                 .action(ArgAction::SetTrue),
         )
         .arg(
