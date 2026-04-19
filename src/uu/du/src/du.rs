@@ -1288,75 +1288,86 @@ pub fn uu_app() -> Command {
                 .short('a')
                 .long(options::ALL)
                 .help(translate!("du-help-all"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::ALL),
         )
         .arg(
             Arg::new(options::APPARENT_SIZE)
                 .short('A')
                 .long(options::APPARENT_SIZE)
                 .help(translate!("du-help-apparent-size"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::APPARENT_SIZE),
         )
         .arg(
             Arg::new(options::BLOCK_SIZE)
                 .short('B')
                 .long(options::BLOCK_SIZE)
                 .value_name("SIZE")
-                .help(translate!("du-help-block-size")),
+                .help(translate!("du-help-block-size"))
+                .overrides_with(options::BLOCK_SIZE),
         )
         .arg(
             Arg::new(options::BYTES)
                 .short('b')
                 .long("bytes")
                 .help(translate!("du-help-bytes"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::BYTES),
         )
         .arg(
             Arg::new(options::TOTAL)
                 .long("total")
                 .short('c')
                 .help(translate!("du-help-total"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::TOTAL),
         )
         .arg(
             Arg::new(options::MAX_DEPTH)
                 .short('d')
                 .long("max-depth")
                 .value_name("N")
-                .help(translate!("du-help-max-depth")),
+                .help(translate!("du-help-max-depth"))
+                .overrides_with(options::MAX_DEPTH),
         )
         .arg(
             Arg::new(options::HUMAN_READABLE)
                 .long("human-readable")
                 .short('h')
                 .help(translate!("du-help-human-readable"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::HUMAN_READABLE),
         )
         .arg(
             Arg::new(options::INODES)
                 .long(options::INODES)
                 .help(translate!("du-help-inodes"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::INODES),
         )
         .arg(
             Arg::new(options::BLOCK_SIZE_1K)
                 .short('k')
                 .help(translate!("du-help-block-size-1k"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::BLOCK_SIZE_1K),
         )
         .arg(
             Arg::new(options::COUNT_LINKS)
                 .short('l')
                 .long("count-links")
                 .help(translate!("du-help-count-links"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::COUNT_LINKS),
         )
         .arg(
             Arg::new(options::DEREFERENCE)
                 .short('L')
                 .long(options::DEREFERENCE)
                 .help(translate!("du-help-dereference"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::DEREFERENCE),
         )
         .arg(
             Arg::new(options::DEREFERENCE_ARGS)
@@ -1364,55 +1375,62 @@ pub fn uu_app() -> Command {
                 .visible_short_alias('H')
                 .long(options::DEREFERENCE_ARGS)
                 .help(translate!("du-help-dereference-args"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::DEREFERENCE_ARGS),
         )
         .arg(
             Arg::new(options::NO_DEREFERENCE)
                 .short('P')
                 .long(options::NO_DEREFERENCE)
                 .help(translate!("du-help-no-dereference"))
-                .overrides_with(options::DEREFERENCE)
+                .overrides_with(options::NO_DEREFERENCE)
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::BLOCK_SIZE_1M)
                 .short('m')
                 .help(translate!("du-help-block-size-1m"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::BLOCK_SIZE_1M),
         )
         .arg(
             Arg::new(options::NULL)
                 .short('0')
                 .long("null")
                 .help(translate!("du-help-null"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::NULL),
         )
         .arg(
             Arg::new(options::SEPARATE_DIRS)
                 .short('S')
                 .long("separate-dirs")
                 .help(translate!("du-help-separate-dirs"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::SEPARATE_DIRS),
         )
         .arg(
             Arg::new(options::SUMMARIZE)
                 .short('s')
                 .long("summarize")
                 .help(translate!("du-help-summarize"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::SUMMARIZE),
         )
         .arg(
             Arg::new(options::SI)
                 .long(options::SI)
                 .help(translate!("du-help-si"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::SI),
         )
         .arg(
             Arg::new(options::ONE_FILE_SYSTEM)
                 .short('x')
                 .long(options::ONE_FILE_SYSTEM)
                 .help(translate!("du-help-one-file-system"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::ONE_FILE_SYSTEM),
         )
         .arg(
             Arg::new(options::THRESHOLD)
@@ -1421,14 +1439,16 @@ pub fn uu_app() -> Command {
                 .value_name("SIZE")
                 .num_args(1)
                 .allow_hyphen_values(true)
-                .help(translate!("du-help-threshold")),
+                .help(translate!("du-help-threshold"))
+                .overrides_with(options::THRESHOLD),
         )
         .arg(
             Arg::new(options::VERBOSE)
                 .short('v')
                 .long("verbose")
                 .help(translate!("du-help-verbose"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::VERBOSE),
         )
         .arg(
             Arg::new(options::EXCLUDE)
