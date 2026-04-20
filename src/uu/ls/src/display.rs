@@ -780,7 +780,12 @@ fn display_item_name(
 
                         name.push(target_display);
                         if let Some(c) = indicator_char(&target_data, config.indicator_style) {
-                            let _ = name.write_char(c);
+                            if matches!(
+                                config.indicator_style,
+                                Some(IndicatorStyle::Classify) | Some(IndicatorStyle::FileType)
+                            ) {
+                                let _ = name.write_char(c);
+                            }
                         }
                     }
                     Err(_) => {
