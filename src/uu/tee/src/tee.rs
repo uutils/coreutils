@@ -164,7 +164,6 @@ impl MultiWriter {
             Ok(0) => return Ok(()), // end of file
             Ok(received) => {
                 self.write_all(&buffer[..received])?;
-                self.flush()?; // avoid buffering
             }
             Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e),
             _ => {}
@@ -177,8 +176,6 @@ impl MultiWriter {
                 Ok(0) => return Ok(()), // end of file
                 Ok(received) => {
                     self.write_all(&buffer[..received])?;
-                    // avoid buffering
-                    self.flush()?;
                 }
                 Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e),
                 _ => {}
@@ -230,6 +227,7 @@ impl Write for MultiWriter {
         self.writers.retain_mut(|writer| {
             writer
                 .write_all(buf)
+                .and_then(|_| writer.flush()) // avoid buffering
                 .map_err(|f| {
                     let _ = process_error(mode.as_ref(), f, writer, &mut errors)
                         .map_err(|e| aborted.get_or_insert(e));
@@ -248,22 +246,9 @@ impl Write for MultiWriter {
             Ok(buf.len())
         }
     }
-
+    // merged into write
     fn flush(&mut self) -> Result<()> {
-        let mut aborted = None;
-        let mode = self.output_error_mode.clone();
-        let mut errors = 0;
-        self.writers.retain_mut(|writer| {
-            writer
-                .flush()
-                .map_err(|f| {
-                    let _ = process_error(mode.as_ref(), f, writer, &mut errors)
-                        .map_err(|e| aborted.get_or_insert(e));
-                })
-                .is_ok()
-        });
-        self.ignored_errors += errors;
-        aborted.map_or(Ok(()), Err)
+        Ok(())
     }
 }
 
