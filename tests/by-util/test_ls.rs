@@ -1282,7 +1282,14 @@ fn test_ls_long_symlink_color() {
     ];
 
     // We are only interested in lines or the ls output that are symlinks. These start with "lrwx".
-    let result = scene.ucmd().arg("-laR").arg("--color").arg(".").succeeds();
+    // Use --file-type to ensure symlink targets are stat'd and colored
+    let result = scene
+        .ucmd()
+        .arg("-laR")
+        .arg("--color")
+        .arg("--file-type")
+        .arg(".")
+        .succeeds();
     let mut result_lines = result
         .stdout_str()
         .lines()
@@ -1521,6 +1528,41 @@ fn test_ls_dangling_symlink_or_and_missing_colors() {
 
     assert_eq!(captures.name("link").unwrap().as_str(), "40");
     assert_eq!(captures.name("target").unwrap().as_str(), "34");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_ls_symlink_to_dir_with_mi_colors() {
+    // When LS_COLORS contains mi=, ln=, di=, ls -lp should stat the symlink target,
+    // color the link with ln color, the target with di color, and append '/' to the target.
+    use std::os::unix::fs::symlink;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir("target_dir");
+    symlink("target_dir", at.plus("link")).unwrap();
+
+    let stdout = ts
+        .ucmd()
+        .env("LS_COLORS", "mi=41:ln=1;36:di=1;34")
+        .arg("-lp")
+        .arg("--color=always")
+        .arg("link")
+        .succeeds()
+        .stdout_str()
+        .to_string();
+
+    // Regex to capture link color and target color
+    let color_regex = Regex::new(
+        r"\x1b\[0m\x1b\[(?P<link>[0-9;]*)[m]link\x1b\[0m -> \x1b\[(?P<target>[0-9;]*)[m]target_dir\x1b\[0m/",
+    )
+    .unwrap();
+    let captures = color_regex
+        .captures(&stdout)
+        .expect("failed to capture symlink colors");
+
+    assert_eq!(captures.name("link").unwrap().as_str(), "1;36");
+    assert_eq!(captures.name("target").unwrap().as_str(), "1;34");
 }
 
 #[test]
@@ -5093,7 +5135,7 @@ fn test_symlink_target_extension_color() {
     at.touch("archive.tar.gz");
     at.relative_symlink_file("archive.tar.gz", "link");
     let out = ucmd
-        .env("LS_COLORS", "*.tar.gz=31")
+        .env("LS_COLORS", "*.tar.gz=31:or=33")
         .args(&["-l", "--color=always", "link"])
         .succeeds()
         .stdout_move_str();
@@ -6123,7 +6165,7 @@ fn test_ls_hyperlink_symlink_target_handling() {
 
     let result = scene
         .ucmd()
-        .args(&["-l", "--hyperlink", "--color"])
+        .args(&["-l", "--hyperlink", "--color", "--file-type"])
         .succeeds();
     let output = result.stdout_str();
 
