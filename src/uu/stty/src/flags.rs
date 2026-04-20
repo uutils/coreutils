@@ -241,7 +241,7 @@ pub const LOCAL_FLAGS: &[Flag<L>] = &[
     Flag::new("extproc", L::EXTPROC),
 ];
 
-// BSD's use u32 as baud rate, to using the enum is unnecessary.
+// BSD's use u32 as baud rate, so using the enum is unnecessary.
 #[cfg(not(bsd))]
 pub const BAUD_RATES: &[(&str, BaudRate)] = &[
     ("0", BaudRate::B0),
@@ -256,12 +256,14 @@ pub const BAUD_RATES: &[(&str, BaudRate)] = &[
     ("1200", BaudRate::B1200),
     ("1800", BaudRate::B1800),
     ("2400", BaudRate::B2400),
+    ("4800", BaudRate::B4800),
     ("9600", BaudRate::B9600),
     ("19200", BaudRate::B19200),
     ("38400", BaudRate::B38400),
     ("57600", BaudRate::B57600),
     ("115200", BaudRate::B115200),
     ("230400", BaudRate::B230400),
+    ("460800", BaudRate::B460800),
     #[cfg(any(target_os = "android", target_os = "linux"))]
     ("500000", BaudRate::B500000),
     #[cfg(any(target_os = "android", target_os = "linux"))]
