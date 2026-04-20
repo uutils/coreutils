@@ -107,7 +107,7 @@ pub fn send_n_bytes(
             // avoid unnecessary syscalls
             return Ok(bytes_written);
         }
-        
+
         // improve throughput or save RAM usage
         // expected that input is already extended if it is coming from splice
         // we can use pipe_size * N with some case e.g. head -c N inputs, but we need N splice call anyway
