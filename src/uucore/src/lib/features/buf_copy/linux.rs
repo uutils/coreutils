@@ -55,8 +55,7 @@ where
 {
     // If we're on Linux or Android, try to use the splice() system call
     // for faster writing. If it works, we're done.
-    let result = splice_write(src, &dest.as_fd())?;
-    if !result.1 {
+    if !splice_write(src, &dest.as_fd())? {
         return Ok(());
     }
 
@@ -79,13 +78,12 @@ where
 /// - `source` - source handle
 /// - `dest` - destination handle
 #[inline]
-pub(crate) fn splice_write<R, S>(source: &R, dest: &S) -> UResult<(u64, bool)>
+pub(crate) fn splice_write<R, S>(source: &R, dest: &S) -> UResult<bool>
 where
     R: Read + AsFd + AsRawFd,
     S: AsRawFd + AsFd,
 {
     let (pipe_rd, pipe_wr) = pipe()?;
-    let mut bytes: u64 = 0;
     // improve throughput
     // no need to increase pipe size of input fd since
     // - sender with splice probably increased size already
@@ -94,10 +92,8 @@ where
 
     loop {
         match splice(&source, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
+            Ok(0) => return Ok(false),
             Ok(n) => {
-                if n == 0 {
-                    return Ok((bytes, false));
-                }
                 if splice_exact(&pipe_rd, dest, n).is_err() {
                     // If the first splice manages to copy to the intermediate
                     // pipe, but the second splice to stdout fails for some reason
@@ -105,14 +101,10 @@ where
                     // intermediate pipe to stdout using normal read/write. Then
                     // we tell the caller to fall back.
                     copy_exact(&pipe_rd, dest, n)?;
-                    return Ok((bytes, true));
+                    return Ok(true);
                 }
-
-                bytes += n as u64;
             }
-            Err(_) => {
-                return Ok((bytes, true));
-            }
+            Err(_) => return Ok(true),
         }
     }
 }
