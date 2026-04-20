@@ -283,7 +283,7 @@ impl LineFormat {
         let par_idx = rest.iter().position(|&b| b == b'(')?;
         // If the parenthesis is the first character (minus whitespace, which has already been stripped out), then,
         // it's not a validly formatted line.
-        if par_idx < 1 {
+        if par_idx == 0 {
             return None;
         }
         let sub_case = if rest[par_idx - 1] == b' ' {
