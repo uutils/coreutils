@@ -2486,8 +2486,8 @@ fn test_du_repeated_v() {
 fn test_du_repeated_files0_from() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
-    at.write(&"./somefile".to_string(), "file2");
-    at.write(&"./file2".to_string(), "a*");
+    at.write("./somefile", "file2");
+    at.write("./file2", "a*");
 
     ts.ucmd()
         .args(&[
