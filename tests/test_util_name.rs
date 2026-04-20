@@ -206,7 +206,7 @@ fn util_version() {
         println!("Skipping test: Binary not found at {:?}", scenario.bin_path);
         return;
     }
-    for arg in ["-V", "--version"] {
+    for arg in ["-V", "--version", "--ver"] {
         let child = Command::new(&scenario.bin_path)
             .arg(arg)
             .stdin(Stdio::piped())

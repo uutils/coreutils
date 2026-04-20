@@ -49,7 +49,21 @@ Currently defined functions:
     }
 }
 
-#[allow(clippy::cognitive_complexity)]
+/// Entry into Coreutils
+///
+/// # Arguments
+/// * first arg needs to be the binary/executable. \
+///   This is usually coreutils, but can be the util name itself, e.g. 'ls'. \
+///   It can also be extended with "box" for some tests with busybox. \
+///   The util name will be checked against the list of enabled utils, where
+///   * the name exactly matches the name of an applet/util or
+///   * the name matches <PREFIX><UTIL_NAME> pattern, e.g.
+///     'my_own_directory_service_ls' as long as the last letters match the utility.
+/// * coreutils arg: --list, --version, -V, --help, -h (or shortened long versions): \
+///   Output information about coreutils itself. \
+/// * util name and any number of arguments: \
+///   Will get passed on to the selected utility. \
+///   Error if util name is not recognized.#[allow(clippy::cognitive_complexity)]
 fn main() {
     let utils = util_map();
     let mut args = uucore::args_os();
@@ -80,11 +94,46 @@ fn main() {
     // 0th argument equals util name?
     if let Some(util_os) = util_name {
         let Some(util) = util_os.to_str() else {
+            // Not UTF-8
             validation::not_found(&util_os)
         };
 
-        match util {
-            "--list" => {
+        // Util in known list?
+        if let Some(&(uumain, _)) = utils.get(util) {
+            // TODO: plug the deactivation of the translation
+            // and load the English strings directly at compilation time in the
+            // binary to avoid the load of the flt
+            // Could be something like:
+            // #[cfg(not(feature = "only_english"))]
+            validation::setup_localization_or_exit(util);
+            process::exit(uumain(vec![util_os].into_iter().chain(args)));
+        } else {
+            let l = util.len();
+            // GNU coreutils --help string shows help for coreutils
+            if util == "-h" || (l <= 6 && util[0..l] == "--help"[0..l]) {
+                // see if they want help on a specific util
+                if let Some(util_os) = args.next() {
+                    let Some(util) = util_os.to_str() else {
+                        validation::not_found(&util_os)
+                    };
+
+                    match utils.get(util) {
+                        Some(&(uumain, _)) => {
+                            let code = uumain(
+                                vec![util_os, OsString::from("--help")]
+                                    .into_iter()
+                                    .chain(args),
+                            );
+                            io::stdout().flush().expect("could not flush stdout");
+                            process::exit(code);
+                        }
+                        None => validation::not_found(&util_os),
+                    }
+                }
+                usage(&utils, binary_as_util);
+                process::exit(0);
+            // GNU coreutils --list string shows available utilities as list
+            } else if l <= 6 && util[0..l] == "--list"[0..l] {
                 // we should fail with additional args https://github.com/uutils/coreutils/issues/11383#issuecomment-4082564058
                 if args.next().is_some() {
                     let _ = writeln!(io::stderr(), "coreutils: invalid argument");
@@ -100,8 +149,8 @@ fn main() {
                     }
                 }
                 process::exit(0);
-            }
-            "--version" | "-V" => {
+            // GNU coreutils --version string shows version
+            } else if util == "-V" || (l <= 9 && util[0..l] == "--version"[0..l]) {
                 if let Err(e) = writeln!(io::stdout(), "coreutils {VERSION} (multi-call binary)")
                     && e.kind() != io::ErrorKind::BrokenPipe
                 {
@@ -109,50 +158,11 @@ fn main() {
                     process::exit(1);
                 }
                 process::exit(0);
-            }
-            // Not a special command: fallthrough to calling a util
-            _ => {}
-        }
-
-        match utils.get(util) {
-            Some(&(uumain, _)) => {
-                // TODO: plug the deactivation of the translation
-                // and load the English strings directly at compilation time in the
-                // binary to avoid the load of the flt
-                // Could be something like:
-                // #[cfg(not(feature = "only_english"))]
-                validation::setup_localization_or_exit(util);
-                process::exit(uumain(vec![util_os].into_iter().chain(args)));
-            }
-            None => {
-                if util == "--help" || util == "-h" {
-                    // see if they want help on a specific util
-                    if let Some(util_os) = args.next() {
-                        let Some(util) = util_os.to_str() else {
-                            validation::not_found(&util_os)
-                        };
-
-                        match utils.get(util) {
-                            Some(&(uumain, _)) => {
-                                let code = uumain(
-                                    vec![util_os, OsString::from("--help")]
-                                        .into_iter()
-                                        .chain(args),
-                                );
-                                io::stdout().flush().expect("could not flush stdout");
-                                process::exit(code);
-                            }
-                            None => validation::not_found(&util_os),
-                        }
-                    }
-                    usage(&utils, binary_as_util);
-                    process::exit(0);
-                } else if util.starts_with('-') {
-                    // Argument looks like an option but wasn't recognized
-                    validation::unrecognized_option(binary_as_util, &util_os);
-                } else {
-                    validation::not_found(&util_os);
-                }
+            } else if util.starts_with('-') {
+                // Argument looks like an option but wasn't recognized
+                validation::unrecognized_option(binary_as_util, &util_os);
+            } else {
+                validation::not_found(&util_os);
             }
         }
     } else {
