@@ -103,16 +103,16 @@ pub fn send_n_bytes(
     let fallback = if let Ok(b) = splice(&input, &target, n as usize) {
         bytes_written = b as u64;
         n -= bytes_written;
-        if n > 0 {
-            // improve throughput or save RAM usage
-            // expected that input is already extended if it is coming from splice
-            // we can use pipe_size * N with some case e.g. head -c N inputs, but we need N splice call anyway
-            if pipe_size > KERNEL_DEFAULT_PIPE_SIZE {
-                let _ = fcntl_setpipe_size(&target, pipe_size);
-            }
-        } else {
+        if n == 0 {
             // avoid unnecessary syscalls
             return Ok(bytes_written);
+        }
+        
+        // improve throughput or save RAM usage
+        // expected that input is already extended if it is coming from splice
+        // we can use pipe_size * N with some case e.g. head -c N inputs, but we need N splice call anyway
+        if pipe_size > KERNEL_DEFAULT_PIPE_SIZE {
+            let _ = fcntl_setpipe_size(&target, pipe_size);
         }
 
         loop {
