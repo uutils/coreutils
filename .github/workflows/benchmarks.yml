@@ -25,7 +25,7 @@ jobs:
       CARGO_INCREMENTAL: 0
     strategy:
       matrix:
-        type: [simulation, memory]
+        type: [simulation] # memory is disabled due to <https://github.com/uutils/coreutils/issues/11915>
         package: [
           uu_base64,
           uu_cksum,
@@ -56,8 +56,7 @@ jobs:
           uu_factor,
           uu_date,
           uu_csplit,
-          uu_true,
-          uu_false
+          uu_true
         ]
     steps:
       - uses: actions/checkout@v6
