@@ -201,7 +201,7 @@ impl MultiWriter {
 
 fn process_error(
     mode: Option<&OutputErrorMode>,
-    f: Error,
+    e: Error,
     writer: &NamedWriter,
     ignored_errors: &mut usize,
 ) -> Result<()> {
@@ -210,12 +210,12 @@ fn process_error(
         None | Some(OutputErrorMode::WarnNoPipe) | Some(OutputErrorMode::ExitNoPipe)
     );
 
-    if ignore_pipe && f.kind() == ErrorKind::BrokenPipe {
+    if ignore_pipe && e.kind() == ErrorKind::BrokenPipe {
         return Ok(());
     }
-    let _ = writeln!(stderr(), "{}: {f}", writer.name.maybe_quote());
+    let _ = writeln!(stderr(), "{}: {e}", writer.name.maybe_quote());
     if let Some(OutputErrorMode::Exit | OutputErrorMode::ExitNoPipe) = mode {
-        Err(f)
+        Err(e)
     } else {
         *ignored_errors += 1;
         Ok(())
@@ -256,8 +256,8 @@ impl Write for MultiWriter {
         self.writers.retain_mut(|writer| {
             writer
                 .flush()
-                .map_err(|f| {
-                    let _ = process_error(mode.as_ref(), f, writer, &mut errors)
+                .map_err(|e| {
+                    let _ = process_error(mode.as_ref(), e, writer, &mut errors)
                         .map_err(|e| aborted.get_or_insert(e));
                 })
                 .is_ok()
