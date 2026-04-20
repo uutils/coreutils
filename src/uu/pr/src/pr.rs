@@ -16,6 +16,7 @@ use std::num::IntErrorKind;
 use std::path::PathBuf;
 use std::str::Utf8Error;
 use std::string::FromUtf8Error;
+use std::sync::LazyLock;
 use std::time::SystemTime;
 use thiserror::Error;
 
@@ -563,7 +564,7 @@ fn get_date_format(matches: &ArgMatches) -> String {
         Some(format) => format,
         None => {
             // Replicate behavior from GNU manual.
-            if std::env::var("POSIXLY_CORRECT").is_ok()
+            if *IS_POSIXLY_CORRECT
                 // TODO: This needs to be moved to uucore and handled by icu?
                 && (std::env::var_os("LC_TIME").as_deref() == Some(OsStr::new("POSIX"))
                     || std::env::var_os("LC_ALL").as_deref() == Some(OsStr::new("POSIX")))
@@ -1700,3 +1701,6 @@ fn lines_to_read_for_page(opts: &OutputOptions) -> usize {
 fn get_columns(opts: &OutputOptions) -> usize {
     opts.column_mode_options.as_ref().map_or(1, |i| i.columns)
 }
+
+static IS_POSIXLY_CORRECT: LazyLock<bool> =
+    LazyLock::new(|| std::env::var_os("POSIXLY_CORRECT").is_some());
