@@ -164,7 +164,6 @@ impl MultiWriter {
             Ok(0) => return Ok(()), // end of file
             Ok(received) => {
                 self.write_all(&buffer[..received])?;
-                self.flush()?; // avoid buffering
             }
             Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e),
             _ => {}
@@ -177,8 +176,6 @@ impl MultiWriter {
                 Ok(0) => return Ok(()), // end of file
                 Ok(received) => {
                     self.write_all(&buffer[..received])?;
-                    // avoid buffering
-                    self.flush()?;
                 }
                 Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e),
                 _ => {}
@@ -228,42 +225,36 @@ impl Write for MultiWriter {
         let mode = self.output_error_mode.clone();
         let mut errors = 0;
         self.writers.retain_mut(|writer| {
-            writer
-                .write_all(buf)
-                .map_err(|f| {
-                    let _ = process_error(mode.as_ref(), f, writer, &mut errors)
-                        .map_err(|e| aborted.get_or_insert(e));
-                })
-                .is_ok()
+            let res = (|| {
+                writer.write_all(buf)?;
+                writer.flush()
+            })();
+            match res {
+                Ok(()) => true,
+                Err(e) => {
+                    if let Err(e) = process_error(mode.as_ref(), e, writer, &mut errors) {
+                        aborted.get_or_insert(e);
+                    }
+                    false
+                }
+            }
         });
         self.ignored_errors += errors;
-        if let Some(e) = aborted {
-            Err(e)
-        } else if self.writers.is_empty() {
-            // This error kind will never be raised by the standard
-            // library, so we can use it for early termination of
-            // `copy`
-            Err(Error::from(ErrorKind::Other))
-        } else {
-            Ok(buf.len())
-        }
+        aborted.map_or(
+            if self.writers.is_empty() {
+                // This error kind will never be raised by the standard
+                // library, so we can use it for early termination of
+                // `copy`
+                Err(Error::from(ErrorKind::Other))
+            } else {
+                Ok(buf.len())
+            },
+            Err,
+        )
     }
 
     fn flush(&mut self) -> Result<()> {
-        let mut aborted = None;
-        let mode = self.output_error_mode.clone();
-        let mut errors = 0;
-        self.writers.retain_mut(|writer| {
-            writer
-                .flush()
-                .map_err(|e| {
-                    let _ = process_error(mode.as_ref(), e, writer, &mut errors)
-                        .map_err(|e| aborted.get_or_insert(e));
-                })
-                .is_ok()
-        });
-        self.ignored_errors += errors;
-        aborted.map_or(Ok(()), Err)
+        Ok(())
     }
 }
 
