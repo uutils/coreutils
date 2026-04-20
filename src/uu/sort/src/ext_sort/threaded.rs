@@ -7,204 +7,26 @@
 //! thread, and spill to temporary files when memory is exceeded.
 
 use std::cmp::Ordering;
-use std::fs::File;
 use std::io::{Read, Write, stderr};
-use std::path::PathBuf;
-#[cfg(not(wasi_no_threads))]
 use std::sync::mpsc::{Receiver, SyncSender};
-#[cfg(not(wasi_no_threads))]
 use std::thread;
 
 use itertools::Itertools;
-use uucore::error::UResult;
-#[cfg(not(wasi_no_threads))]
-use uucore::error::strip_errno;
+use uucore::error::{UResult, strip_errno};
 
 use crate::Output;
-use crate::chunks::RecycledChunk;
-#[cfg(not(wasi_no_threads))]
-use crate::merge::WriteableCompressedTmpFile;
-use crate::merge::WriteablePlainTmpFile;
-use crate::merge::WriteableTmpFile;
+use crate::chunks::{self, Chunk, RecycledChunk};
+use crate::merge::{self, WriteableCompressedTmpFile, WriteablePlainTmpFile, WriteableTmpFile};
 use crate::tmp_dir::TmpDirWrapper;
-use crate::{
-    GlobalSettings, Line,
-    chunks::{self, Chunk},
-    compare_by, merge, print_sorted, sort_by,
-};
+use crate::{GlobalSettings, compare_by, print_sorted, sort_by};
 
-// Note: update `test_sort::test_start_buffer` if this size is changed
-// Fixed to 8 KiB (equivalent to `std::sys::io::DEFAULT_BUF_SIZE` on most targets)
-const DEFAULT_BUF_SIZE: usize = 8 * 1024;
-
-/// Synchronous sort for targets without thread support (e.g. wasm32-wasip1).
-///
-/// Uses the same chunked sort-write-merge strategy as the threaded version,
-/// but reads and sorts each chunk sequentially on the calling thread.
-#[cfg(wasi_no_threads)]
-pub fn ext_sort(
-    files: &mut impl Iterator<Item = UResult<Box<dyn Read + Send>>>,
-    settings: &GlobalSettings,
-    output: Output,
-    tmp_dir: &mut TmpDirWrapper,
-) -> UResult<()> {
-    let separator = settings.line_ending.into();
-    let mut buffer_size = match settings.buffer_size {
-        size if size <= 512 * 1024 * 1024 => size,
-        size => size / 2,
-    };
-    if !settings.buffer_size_is_explicit {
-        buffer_size = buffer_size.max(8 * 1024 * 1024);
-    }
-
-    if settings.compress_prog.is_some() {
-        let _ = writeln!(
-            stderr(),
-            "sort: warning: --compress-program is ignored on this platform"
-        );
-    }
-
-    let mut file = files.next().unwrap()?;
-    let mut carry_over = vec![];
-
-    // Read and sort first chunk.
-    let (first, cont) = chunks::read_to_chunk(
-        RecycledChunk::new(buffer_size.min(DEFAULT_BUF_SIZE)),
-        Some(buffer_size),
-        &mut carry_over,
-        &mut file,
-        files,
-        separator,
-        settings,
-    )?;
-    let Some(mut first) = first else {
-        return Ok(()); // empty input
-    };
-    first.with_dependent_mut(|_, c| sort_by(&mut c.lines, settings, &c.line_data));
-
-    if !cont {
-        // All input fits in one chunk.
-        return print_chunk(&first, settings, output);
-    }
-
-    // Read and sort second chunk.
-    let (second, cont) = chunks::read_to_chunk(
-        RecycledChunk::new(buffer_size.min(DEFAULT_BUF_SIZE)),
-        Some(buffer_size),
-        &mut carry_over,
-        &mut file,
-        files,
-        separator,
-        settings,
-    )?;
-    let Some(mut second) = second else {
-        return print_chunk(&first, settings, output);
-    };
-    second.with_dependent_mut(|_, c| sort_by(&mut c.lines, settings, &c.line_data));
-
-    if !cont {
-        // All input fits in two chunks — merge in memory.
-        return print_two_chunks(first, second, settings, output);
-    }
-
-    // More than two chunks: write sorted chunks to temp files, then merge.
-    let mut tmp_files: Vec<<WriteablePlainTmpFile as WriteableTmpFile>::Closed> = vec![];
-
-    tmp_files.push(write::<WriteablePlainTmpFile>(
-        &first,
-        tmp_dir.next_file()?,
-        settings.compress_prog.as_deref(),
-        separator,
-    )?);
-    drop(first);
-
-    tmp_files.push(write::<WriteablePlainTmpFile>(
-        &second,
-        tmp_dir.next_file()?,
-        settings.compress_prog.as_deref(),
-        separator,
-    )?);
-    let mut recycled = second.recycle();
-
-    loop {
-        let (chunk, cont) = chunks::read_to_chunk(
-            recycled,
-            None,
-            &mut carry_over,
-            &mut file,
-            files,
-            separator,
-            settings,
-        )?;
-        let Some(mut chunk) = chunk else { break };
-        chunk.with_dependent_mut(|_, c| sort_by(&mut c.lines, settings, &c.line_data));
-        tmp_files.push(write::<WriteablePlainTmpFile>(
-            &chunk,
-            tmp_dir.next_file()?,
-            settings.compress_prog.as_deref(),
-            separator,
-        )?);
-        recycled = chunk.recycle();
-        if !cont {
-            break;
-        }
-    }
-
-    merge::merge_with_file_limit::<_, _, WriteablePlainTmpFile>(
-        tmp_files.into_iter().map(merge::ClosedTmpFile::reopen),
-        settings,
-        output,
-        tmp_dir,
-    )
-}
-
-/// Print a single sorted chunk.
-#[cfg(wasi_no_threads)]
-fn print_chunk(chunk: &Chunk, settings: &GlobalSettings, output: Output) -> UResult<()> {
-    if settings.unique {
-        print_sorted(
-            chunk.lines().iter().dedup_by(|a, b| {
-                compare_by(a, b, settings, chunk.line_data(), chunk.line_data()) == Ordering::Equal
-            }),
-            settings,
-            output,
-        )
-    } else {
-        print_sorted(chunk.lines().iter(), settings, output)
-    }
-}
-
-/// Merge two in-memory chunks and print.
-#[cfg(wasi_no_threads)]
-fn print_two_chunks(a: Chunk, b: Chunk, settings: &GlobalSettings, output: Output) -> UResult<()> {
-    let merged_iter = a.lines().iter().map(|line| (line, &a)).merge_by(
-        b.lines().iter().map(|line| (line, &b)),
-        |(line_a, a), (line_b, b)| {
-            compare_by(line_a, line_b, settings, a.line_data(), b.line_data()) != Ordering::Greater
-        },
-    );
-    if settings.unique {
-        print_sorted(
-            merged_iter
-                .dedup_by(|(line_a, a), (line_b, b)| {
-                    compare_by(line_a, line_b, settings, a.line_data(), b.line_data())
-                        == Ordering::Equal
-                })
-                .map(|(line, _)| line),
-            settings,
-            output,
-        )
-    } else {
-        print_sorted(merged_iter.map(|(line, _)| line), settings, output)
-    }
-}
+use super::{DEFAULT_BUF_SIZE, write};
 
 /// Sort files by using auxiliary files for storing intermediate chunks (if needed), and output the result.
 ///
 /// Two threads cooperate: one reads input and writes temporary chunk files,
 /// while the other sorts each chunk in memory. Once all chunks are written,
 /// they are merged back together for final output.
-#[cfg(not(wasi_no_threads))]
 pub fn ext_sort(
     files: &mut impl Iterator<Item = UResult<Box<dyn Read + Send>>>,
     settings: &GlobalSettings,
@@ -265,7 +87,6 @@ pub fn ext_sort(
     }
 }
 
-#[cfg(not(wasi_no_threads))]
 fn reader_writer<
     F: Iterator<Item = UResult<Box<dyn Read + Send>>>,
     Tmp: WriteableTmpFile + 'static,
@@ -351,7 +172,6 @@ fn reader_writer<
 }
 
 /// The function that is executed on the sorter thread.
-#[cfg(not(wasi_no_threads))]
 fn sorter(receiver: &Receiver<Chunk>, sender: &SyncSender<Chunk>, settings: &GlobalSettings) {
     while let Ok(mut payload) = receiver.recv() {
         payload.with_dependent_mut(|_, contents| {
@@ -366,7 +186,6 @@ fn sorter(receiver: &Receiver<Chunk>, sender: &SyncSender<Chunk>, settings: &Glo
 }
 
 /// Describes how we read the chunks from the input.
-#[cfg(not(wasi_no_threads))]
 enum ReadResult<I: WriteableTmpFile> {
     /// The input was empty. Nothing was read.
     EmptyInput,
@@ -378,7 +197,6 @@ enum ReadResult<I: WriteableTmpFile> {
     WroteChunksToFile { tmp_files: Vec<I::Closed> },
 }
 /// The function that is executed on the reader/writer thread.
-#[cfg(not(wasi_no_threads))]
 fn read_write_loop<I: WriteableTmpFile>(
     mut files: impl Iterator<Item = UResult<Box<dyn Read + Send>>>,
     tmp_dir: &mut TmpDirWrapper,
@@ -453,25 +271,5 @@ fn read_write_loop<I: WriteableTmpFile>(
                 sender_option = None;
             }
         }
-    }
-}
-
-/// Write the lines in `chunk` to `file`, separated by `separator`.
-/// `compress_prog` is used to optionally compress file contents.
-fn write<I: WriteableTmpFile>(
-    chunk: &Chunk,
-    file: (File, PathBuf),
-    compress_prog: Option<&str>,
-    separator: u8,
-) -> UResult<I::Closed> {
-    let mut tmp_file = I::create(file, compress_prog)?;
-    write_lines(chunk.lines(), tmp_file.as_write(), separator);
-    tmp_file.finished_writing()
-}
-
-fn write_lines<T: Write>(lines: &[Line], writer: &mut T, separator: u8) {
-    for s in lines {
-        writer.write_all(s.line).unwrap();
-        writer.write_all(&[separator]).unwrap();
     }
 }
