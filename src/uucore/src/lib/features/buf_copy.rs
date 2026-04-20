@@ -51,20 +51,6 @@ mod tests {
             .unwrap()
     }
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    #[test]
-    fn test_copy_exact() {
-        let (mut pipe_read, mut pipe_write) = pipes::pipe().unwrap();
-        let data = b"Hello, world!";
-        let n = pipe_write.write(data).unwrap();
-        assert_eq!(n, data.len());
-        let mut buf = [0; 1024];
-        let n = copy_exact(&pipe_read, &pipe_write, data.len()).unwrap();
-        let n2 = pipe_read.read(&mut buf).unwrap();
-        assert_eq!(n, n2);
-        assert_eq!(&buf[..n], data);
-    }
-
     #[test]
     #[cfg(unix)]
     fn test_copy_stream() {

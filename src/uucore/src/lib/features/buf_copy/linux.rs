@@ -28,8 +28,6 @@ pub trait FdWritable: Write + AsFd + AsRawFd {}
 
 impl<T> FdWritable for T where T: Write + AsFd + AsRawFd {}
 
-const BUF_SIZE: usize = 1024 * 16;
-
 /// Conversion from a `rustix::io::Errno` into our `Error` which implements `UError`.
 impl From<rustix::io::Errno> for Error {
     fn from(error: rustix::io::Errno) -> Self {
@@ -55,7 +53,7 @@ where
 {
     // If we're on Linux or Android, try to use the splice() system call
     // for faster writing. If it works, we're done.
-    if !splice_write(src, &dest.as_fd())? {
+    if !splice_write(src, dest)? {
         return Ok(());
     }
 
@@ -78,17 +76,17 @@ where
 /// - `source` - source handle
 /// - `dest` - destination handle
 #[inline]
-pub(crate) fn splice_write<R, S>(source: &R, dest: &S) -> UResult<bool>
+pub(crate) fn splice_write<R, S>(source: &R, dest: &mut S) -> UResult<bool>
 where
     R: Read + AsFd + AsRawFd,
-    S: AsRawFd + AsFd,
+    S: AsRawFd + AsFd + Write,
 {
-    let (pipe_rd, pipe_wr) = pipe()?;
+    let (pipe_rd, pipe_wr) = pipe()?; // todo: bypass this if input or output is pipe. We use this mostly for stream.
     // improve throughput
     // no need to increase pipe size of input fd since
     // - sender with splice probably increased size already
     // - sender without splice is bottleneck
-    let _ = rustix::pipe::fcntl_setpipe_size(dest, MAX_ROOTLESS_PIPE_SIZE);
+    let _ = rustix::pipe::fcntl_setpipe_size(&mut *dest, MAX_ROOTLESS_PIPE_SIZE);
 
     loop {
         match splice(&source, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
@@ -100,36 +98,13 @@ where
                     // we can recover by copying the data that we have from the
                     // intermediate pipe to stdout using normal read/write. Then
                     // we tell the caller to fall back.
-                    copy_exact(&pipe_rd, dest, n)?;
+                    let mut drain = Vec::with_capacity(n); // bounded by pipe size
+                    pipe_rd.take(n as u64).read_to_end(&mut drain)?;
+                    dest.write_all(&drain)?;
                     return Ok(true);
                 }
             }
             Err(_) => return Ok(true),
         }
     }
-}
-
-/// Move exactly `num_bytes` bytes from `read_fd` to `write_fd` using the `read`
-/// and `write` calls.
-#[cfg(any(target_os = "linux", target_os = "android"))]
-pub(crate) fn copy_exact(
-    read_fd: &impl AsFd,
-    write_fd: &impl AsFd,
-    num_bytes: usize,
-) -> std::io::Result<usize> {
-    let mut left = num_bytes;
-    let mut buf = [0; BUF_SIZE];
-    let mut total_written = 0;
-    while left > 0 {
-        let n_read = rustix::io::read(read_fd, &mut buf)?;
-        assert_ne!(n_read, 0, "unexpected end of pipe");
-        let mut written = 0;
-        while written < n_read {
-            let n = rustix::io::write(write_fd, &buf[written..n_read])?;
-            written += n;
-        }
-        total_written += written;
-        left -= n_read;
-    }
-    Ok(total_written)
 }
