@@ -2297,7 +2297,9 @@ fn test_du_repeated_apparent_size() {
 
 #[test]
 fn test_du_repeated_block_size() {
-    new_ucmd!().args(&["-s", "-B", "100", "-B", "100"]).succeeds();
+    new_ucmd!()
+    .args(&["-s", "-B", "100", "-B", "100"])
+    .succeeds();
 }
 
 #[test]
@@ -2386,7 +2388,9 @@ fn test_du_repeated_x() {
 
 #[test]
 fn test_du_repeated_t() {
-    new_ucmd!().args(&["-s", "-t", "100", "-t", "100"]).succeeds();
+    new_ucmd!()
+    .args(&["-s", "-t", "100", "-t", "100"])
+    .succeeds();
 }
 
 #[test]
