@@ -1456,7 +1456,7 @@ pub fn uu_app() -> Command {
                 .long(options::EXCLUDE)
                 .value_name("PATTERN")
                 .help(translate!("du-help-exclude"))
-                .action(ArgAction::Append)
+                .action(ArgAction::Append),
         )
         .arg(
             Arg::new(options::EXCLUDE_FROM)
