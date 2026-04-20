@@ -8,6 +8,7 @@ use clap::{Arg, ArgAction, Command};
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::io::{StdoutLock, Write, stdout};
+use std::sync::LazyLock;
 use uucore::error::UResult;
 use uucore::format::{FormatChar, OctalParsing, parse_escape_only};
 use uucore::{crate_version, format_usage, os_str_as_bytes};
@@ -135,9 +136,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // > escapes are always enabled. To echo the string ‘-n’, one of the
     // > characters can be escaped in either octal or hexadecimal
     // > representation. For example, echo -e '\x2dn'.
-    let is_posixly_correct = env::var_os("POSIXLY_CORRECT").is_some();
 
-    let (args, options): (Box<dyn Iterator<Item = OsString>>, Options) = if is_posixly_correct {
+    let (args, options): (Box<dyn Iterator<Item = OsString>>, Options) = if *IS_POSIXLY_CORRECT {
         if args.peek().is_some_and(|arg| arg == "-n") {
             // if POSIXLY_CORRECT is set and the first argument is the "-n" flag
             // we filter flags normally but 'escaped' is activated nonetheless.
@@ -254,3 +254,6 @@ fn execute(
 
     Ok(())
 }
+
+static IS_POSIXLY_CORRECT: LazyLock<bool> =
+    LazyLock::new(|| env::var_os("POSIXLY_CORRECT").is_some());
