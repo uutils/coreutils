@@ -1288,8 +1288,8 @@ pub fn uu_app() -> Command {
                 .short('a')
                 .long(options::ALL)
                 .help(translate!("du-help-all"))
-                .action(ArgAction::SetTrue)
-                .overrides_with(options::ALL),
+                .conflicts_with(options::SUMMARIZE)
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::APPARENT_SIZE)

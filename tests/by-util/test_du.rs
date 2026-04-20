@@ -85,6 +85,11 @@ fn du_basics(s: &str) {
 }
 
 #[test]
+fn test_all_summarize() {
+    new_ucmd!().arg("-a").arg("-s").fails_with_code(1); //clap provided message
+}
+
+#[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }

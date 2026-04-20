@@ -885,7 +885,8 @@ fn rename_fifo_fallback(from: &Path, to: &Path) -> io::Result<()> {
     if to.try_exists()? {
         fs::remove_file(to)?;
     }
-    make_fifo(to).and_then(|_| fs::remove_file(from))
+    make_fifo(to)?;
+    fs::remove_file(from)
 }
 
 #[cfg(not(unix))]

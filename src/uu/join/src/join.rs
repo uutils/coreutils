@@ -1109,21 +1109,15 @@ fn exec<Sep: Separator>(
 /// Check that keys for both files and for a particular file are not
 /// contradictory and return the key index.
 fn get_field_number(keys: Option<usize>, key: Option<usize>) -> UResult<usize> {
-    if let Some(keys) = keys {
-        if let Some(key) = key {
-            if keys != key {
-                // Show zero-based field numbers as one-based.
-                return Err(USimpleError::new(
-                    1,
-                    translate!("join-error-incompatible-fields", "field1" => (keys + 1), "field2" => (key + 1)),
-                ));
-            }
-        }
-
-        return Ok(keys);
+    match (keys, key) {
+        // Show zero-based field numbers as one-based.
+        (Some(k1), Some(k2)) if k1 != k2 => Err(USimpleError::new(
+            1,
+            translate!("join-error-incompatible-fields", "field1" => (k1 + 1), "field2" => (k2 + 1)),
+        )),
+        (Some(k), _) | (_, Some(k)) => Ok(k),
+        (None, None) => Ok(0),
     }
-
-    Ok(key.unwrap_or(0))
 }
 
 /// Parse the specified field string as a natural number and return

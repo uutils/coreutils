@@ -5086,6 +5086,21 @@ fn test_failed_write_is_reported() {
         .stderr_is("tail: No space left on device\n");
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn test_failed_write_is_reported_on_seekable_input() {
+    let ts = TestScenario::new("tail");
+    let at = &ts.fixtures;
+
+    at.write("bigfile", &"x\n".repeat(1_100_000));
+
+    ts.ucmd()
+        .arg("bigfile")
+        .set_stdout(File::create("/dev/full").unwrap())
+        .fails()
+        .stderr_is("tail: No space left on device\n");
+}
+
 #[test]
 #[cfg(target_os = "linux")]
 fn test_dev_zero() {

@@ -29,7 +29,7 @@ use libc::S_IFIFO;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use uucore::pipes::{MAX_ROOTLESS_PIPE_SIZE, pipe, splice, splice_exact};
 
-const BUF_SIZE: usize = 256 * 1024;
+const BUF_SIZE: usize = 64 * 1024;
 
 /// This is a Linux-specific function to count the number of bytes using the
 /// `splice` system call, which is faster than using `read`.
