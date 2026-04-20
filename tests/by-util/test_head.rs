@@ -937,6 +937,7 @@ fn test_do_not_attempt_to_read_a_directory() {
 // When passed multiple files, process all files even if one fails
 #[cfg(target_os = "linux")]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/proc) not visible")]
 fn test_file_after_fail() {
     let scene = TestScenario::new(util_name!());
     let fixtures = &scene.fixtures;
