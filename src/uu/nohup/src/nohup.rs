@@ -59,15 +59,21 @@ impl UError for NohupError {
 }
 
 static FAILURE_CODE: LazyLock<i32> = LazyLock::new(|| {
-    if env::var_os("POSIXLY_CORRECT").is_some() {
+    if unsafe { IS_POSIXLY_CORRECT } {
         POSIX_NOHUP_FAILURE
     } else {
         EXIT_CANCELED
     }
 });
 
+static mut IS_POSIXLY_CORRECT: bool = false;
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    unsafe {
+        IS_POSIXLY_CORRECT = env::var_os("POSIXLY_CORRECT").is_some();
+    }
+
     let matches = uucore::clap_localization::handle_clap_result_with_exit_code(
         uu_app(),
         args,

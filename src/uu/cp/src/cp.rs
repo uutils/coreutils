@@ -809,8 +809,14 @@ pub fn uu_app() -> Command {
         )
 }
 
+static mut IS_POSIXLY_CORRECT: bool = false;
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    unsafe {
+        IS_POSIXLY_CORRECT = std::env::var_os("POSIXLY_CORRECT").is_some();
+    }
+
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let options = Options::from_matches(&matches)?;
@@ -2449,7 +2455,7 @@ fn copy_file(
                 OverwriteMode::Clobber(ClobberMode::RemoveDestination)
             )
             && !is_symlink_loop(dest)
-            && std::env::var_os("POSIXLY_CORRECT").is_none()
+            && !unsafe { IS_POSIXLY_CORRECT }
         {
             return Err(CpError::Error(
                 translate!("cp-error-not-writing-dangling-symlink", "dest" => dest.quote()),

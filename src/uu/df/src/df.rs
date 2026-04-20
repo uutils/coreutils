@@ -442,8 +442,25 @@ impl UError for DfError {
     }
 }
 
+/// Default block size when no env var or flag is set.
+///
+/// Returns 512 if `POSIXLY_CORRECT` is set, 1024 otherwise.
+pub(crate) fn default_block_size() -> u64 {
+    if unsafe { IS_POSIXLY_CORRECT } {
+        512
+    } else {
+        1024
+    }
+}
+
+static mut IS_POSIXLY_CORRECT: bool = false;
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    unsafe {
+        IS_POSIXLY_CORRECT = std::env::var_os("POSIXLY_CORRECT").is_some();
+    }
+
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     #[cfg(windows)]
