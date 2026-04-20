@@ -1288,6 +1288,7 @@ pub fn uu_app() -> Command {
                 .short('a')
                 .long(options::ALL)
                 .help(translate!("du-help-all"))
+                .conflicts_with(options::SUMMARIZE)
                 .action(ArgAction::SetTrue),
         )
         .arg(
