@@ -11,6 +11,7 @@ use std::{
     ffi::{OsStr, OsString},
     io::{IsTerminal, stdout},
     num::IntErrorKind,
+    sync::LazyLock,
 };
 
 use glob::Pattern;
@@ -156,7 +157,7 @@ fn resolve_block_sizes_from_env(opt_kb: bool) -> (u64, u64) {
                     (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
                 }
                 parse_block_size::BlockSizeEnv::NotSet => {
-                    if std::env::var_os("POSIXLY_CORRECT").is_some() && !opt_kb {
+                    if *IS_POSIXLY_CORRECT && !opt_kb {
                         (DEFAULT_FILE_SIZE_BLOCK_SIZE, POSIXLY_CORRECT_BLOCK_SIZE)
                     } else {
                         (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
@@ -166,6 +167,9 @@ fn resolve_block_sizes_from_env(opt_kb: bool) -> (u64, u64) {
         }
     }
 }
+
+static IS_POSIXLY_CORRECT: LazyLock<bool> =
+    LazyLock::new(|| std::env::var_os("POSIXLY_CORRECT").is_some());
 
 pub(crate) enum Dereference {
     None,
