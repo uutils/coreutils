@@ -156,10 +156,9 @@ fn invalid_baud_setting() {
     #[cfg(not(any(
         target_os = "freebsd",
         target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
         target_os = "netbsd",
-        target_os = "openbsd"
+        target_os = "openbsd",
+        target_vendor = "apple"
     )))]
     new_ucmd!()
         .args(&["100"])
@@ -184,10 +183,9 @@ fn invalid_baud_setting() {
     #[cfg(not(any(
         target_os = "freebsd",
         target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
         target_os = "netbsd",
-        target_os = "openbsd"
+        target_os = "openbsd",
+        target_vendor = "apple"
     )))]
     new_ucmd!()
         .args(&["ispeed", "995"])
@@ -197,10 +195,9 @@ fn invalid_baud_setting() {
     #[cfg(not(any(
         target_os = "freebsd",
         target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
         target_os = "netbsd",
-        target_os = "openbsd"
+        target_os = "openbsd",
+        target_vendor = "apple"
     )))]
     new_ucmd!()
         .args(&["ospeed", "995"])
@@ -479,10 +476,9 @@ fn baud_rate_validation() {
     #[cfg(any(
         target_os = "freebsd",
         target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
         target_os = "netbsd",
-        target_os = "openbsd"
+        target_os = "openbsd",
+        target_vendor = "apple"
     ))]
     {
         // BSD accepts numeric baud rates
@@ -1495,10 +1491,9 @@ fn invalid_baud_rate() {
     #[cfg(not(any(
         target_os = "freebsd",
         target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
         target_os = "netbsd",
-        target_os = "openbsd"
+        target_os = "openbsd",
+        target_vendor = "apple"
     )))]
     {
         new_ucmd!()
@@ -1661,10 +1656,9 @@ fn test_ispeed_ospeed_valid_speeds() {
     not(any(
         target_os = "freebsd",
         target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
         target_os = "netbsd",
-        target_os = "openbsd"
+        target_os = "openbsd",
+        target_vendor = "apple"
     ))
 ))]
 #[ignore = "Issue: #9547"]
