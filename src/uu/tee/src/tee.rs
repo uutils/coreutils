@@ -103,7 +103,7 @@ fn tee(options: &Options) -> Result<()> {
         _ => Ok(()),
     };
 
-    if had_open_errors || res.is_err() || output.flush().is_err() || output.error_occurred() {
+    if had_open_errors || res.is_err() || output.error_occurred() {
         Err(Error::from(ErrorKind::Other))
     } else {
         Ok(())
