@@ -933,3 +933,21 @@ fn test_do_not_attempt_to_read_a_directory() {
         .fails_with_code(1)
         .stderr_contains("error reading '.'");
 }
+
+// When passed multiple files, process all files even if one fails
+#[cfg(target_os = "linux")]
+#[test]
+fn test_file_after_fail() {
+    let scene = TestScenario::new(util_name!());
+    let fixtures = &scene.fixtures;
+
+    fixtures.write("a", "a");
+
+    scene
+        .ucmd()
+        .args(&["/proc/self/mem", "a"])
+        .fails_with_code(1)
+        .stdout_contains("==> /proc/self/mem <==\n")
+        .stderr_contains("head: error reading '/proc/self/mem'")
+        .stdout_contains("==> a <==\na");
+}
