@@ -162,9 +162,7 @@ impl MultiWriter {
         // fast-path for small input
         match input.read(&mut buffer) {
             Ok(0) => return Ok(()), // end of file
-            Ok(received) => {
-                self.write_all(&buffer[..received])?;
-            }
+            Ok(received) => self.write_flush(&buffer[..received])?,
             Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e),
             _ => {}
         }
@@ -174,9 +172,7 @@ impl MultiWriter {
         loop {
             match input.read(&mut buffer) {
                 Ok(0) => return Ok(()), // end of file
-                Ok(received) => {
-                    self.write_all(&buffer[..received])?;
-                }
+                Ok(received) => self.write_flush(&buffer[..received])?,
                 Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e),
                 _ => {}
             }
@@ -194,33 +190,8 @@ impl MultiWriter {
     fn error_occurred(&self) -> bool {
         self.ignored_errors != 0
     }
-}
 
-fn process_error(
-    mode: Option<OutputErrorMode>,
-    e: Error,
-    writer: &NamedWriter,
-    ignored_errors: &mut usize,
-) -> Result<()> {
-    let ignore_pipe = matches!(
-        mode,
-        None | Some(OutputErrorMode::WarnNoPipe) | Some(OutputErrorMode::ExitNoPipe)
-    );
-
-    if ignore_pipe && e.kind() == ErrorKind::BrokenPipe {
-        return Ok(());
-    }
-    let _ = writeln!(stderr(), "{}: {e}", writer.name.maybe_quote());
-    if let Some(OutputErrorMode::Exit | OutputErrorMode::ExitNoPipe) = mode {
-        Err(e)
-    } else {
-        *ignored_errors += 1;
-        Ok(())
-    }
-}
-
-impl Write for MultiWriter {
-    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+    fn write_flush(&mut self, buf: &[u8]) -> Result<()> {
         let mut aborted = None;
         let mut errors = 0;
         let mode = self.output_error_mode;
@@ -247,13 +218,32 @@ impl Write for MultiWriter {
                 // `copy`
                 Err(Error::from(ErrorKind::Other))
             } else {
-                Ok(buf.len())
+                Ok(())
             },
             Err,
         )
     }
+}
 
-    fn flush(&mut self) -> Result<()> {
+fn process_error(
+    mode: Option<OutputErrorMode>,
+    e: Error,
+    writer: &NamedWriter,
+    ignored_errors: &mut usize,
+) -> Result<()> {
+    let ignore_pipe = matches!(
+        mode,
+        None | Some(OutputErrorMode::WarnNoPipe) | Some(OutputErrorMode::ExitNoPipe)
+    );
+
+    if ignore_pipe && e.kind() == ErrorKind::BrokenPipe {
+        return Ok(());
+    }
+    let _ = writeln!(stderr(), "{}: {e}", writer.name.maybe_quote());
+    if let Some(OutputErrorMode::Exit | OutputErrorMode::ExitNoPipe) = mode {
+        Err(e)
+    } else {
+        *ignored_errors += 1;
         Ok(())
     }
 }
