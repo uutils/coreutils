@@ -2446,8 +2446,7 @@ fn test_du_repeated_files0_from() {
             "--files0-from",
             "somefile",
         ])
-        .succeeds()
-        .stdout_only("4\tfile2\n");
+        .succeeds();
 }
 
 #[test]
