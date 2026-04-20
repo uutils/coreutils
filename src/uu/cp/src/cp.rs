@@ -14,6 +14,7 @@ use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 #[cfg(unix)]
 use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf, StripPrefixError};
+use std::sync::LazyLock;
 use std::{fmt, io};
 #[cfg(all(unix, not(target_os = "android")))]
 use uucore::fsxattr::{copy_xattrs, copy_xattrs_skip_selinux};
@@ -2449,7 +2450,7 @@ fn copy_file(
                 OverwriteMode::Clobber(ClobberMode::RemoveDestination)
             )
             && !is_symlink_loop(dest)
-            && std::env::var_os("POSIXLY_CORRECT").is_none()
+            && !*IS_POSIXLY_CORRECT
         {
             return Err(CpError::Error(
                 translate!("cp-error-not-writing-dangling-symlink", "dest" => dest.quote()),
@@ -2902,6 +2903,9 @@ fn disk_usage_directory(p: &Path) -> io::Result<u64> {
 
     Ok(total)
 }
+
+static IS_POSIXLY_CORRECT: LazyLock<bool> =
+    LazyLock::new(|| std::env::var_os("POSIXLY_CORRECT").is_some());
 
 #[cfg(test)]
 mod tests {
