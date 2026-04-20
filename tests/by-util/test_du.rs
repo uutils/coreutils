@@ -2276,18 +2276,14 @@ fn test_overriding_block_size_arg_with_invalid_value_still_errors() {
 fn test_du_repeated_h() {
     let ts = TestScenario::new(util_name!());
 
-    ts.ucmd()
-        .args(&["-s", "-h", "-h"])
-        .succeeds();
+    ts.ucmd().args(&["-s", "-h", "-h"]).succeeds();
 }
 
 #[test]
 fn test_du_repeated_a() {
     let ts = TestScenario::new(util_name!());
 
-    ts.ucmd()
-        .args(&["-s", "-a", "-a"])
-        .succeeds();
+    ts.ucmd().args(&["-s", "-a", "-a"]).succeeds();
 }
 
 #[test]
@@ -2304,9 +2300,7 @@ fn test_du_repeated_apparent_size() {
 fn test_du_repeated_block_size() {
     let ts = TestScenario::new(util_name!());
 
-    ts.ucmd()
-        .args(&["-s", "-B", "100", "-B", "100"])
-        .succeeds();
+    ts.ucmd().args(&["-s", "-B", "100", "-B", "100"]).succeeds();
 }
 
 #[test]
@@ -2323,18 +2317,14 @@ fn test_du_repeated_b() {
 fn test_du_repeated_c() {
     let ts = TestScenario::new(util_name!());
 
-    ts.ucmd()
-        .args(&["-s", "-c", "-c"])
-        .succeeds();
+    ts.ucmd().args(&["-s", "-c", "-c"]).succeeds();
 }
 
 #[test]
 fn test_du_repeated_d() {
     let ts = TestScenario::new(util_name!());
 
-    ts.ucmd()
-        .args(&["-d", "2", "-d", "2"])
-        .succeeds();
+    ts.ucmd().args(&["-d", "2", "-d", "2"]).succeeds();
 }
 
 #[test]
@@ -2351,45 +2341,35 @@ fn test_du_repeated_inodes() {
 fn test_du_repeated_k() {
     let ts = TestScenario::new(util_name!());
 
-    ts.ucmd()
-        .args(&["-s", "-k", "-k"])
-        .succeeds();
+    ts.ucmd().args(&["-s", "-k", "-k"]).succeeds();
 }
 
 #[test]
 fn test_du_repeated_l() {
     let ts = TestScenario::new(util_name!());
 
-    ts.ucmd()
-        .args(&["-s", "-l", "-l"])
-        .succeeds();
+    ts.ucmd().args(&["-s", "-l", "-l"]).succeeds();
 }
 
 #[test]
 fn test_du_repeated_dereference() {
     let ts = TestScenario::new(util_name!());
 
-    ts.ucmd()
-        .args(&["-s", "-L", "-L"])
-        .succeeds();
+    ts.ucmd().args(&["-s", "-L", "-L"]).succeeds();
 }
 
 #[test]
 fn test_du_repeated_dereference_args() {
     let ts = TestScenario::new(util_name!());
 
-    ts.ucmd()
-        .args(&["-s", "-D", "-D"])
-        .succeeds();
+    ts.ucmd().args(&["-s", "-D", "-D"]).succeeds();
 }
 
 #[test]
 fn test_du_repeated_no_dereference() {
     let ts = TestScenario::new(util_name!());
 
-    ts.ucmd()
-        .args(&["-s", "-P", "-P"])
-        .succeeds();
+    ts.ucmd().args(&["-s", "-P", "-P"]).succeeds();
 }
 
 #[test]
@@ -2406,63 +2386,49 @@ fn test_du_repeated_m() {
 fn test_du_repeated_0() {
     let ts = TestScenario::new(util_name!());
 
-    ts.ucmd()
-        .args(&["-s", "-0", "-0"])
-        .succeeds();
+    ts.ucmd().args(&["-s", "-0", "-0"]).succeeds();
 }
 
 #[test]
 fn test_du_repeated_separate_dirs() {
     let ts = TestScenario::new(util_name!());
 
-    ts.ucmd()
-        .args(&["-s", "-S", "-S"])
-        .succeeds();
+    ts.ucmd().args(&["-s", "-S", "-S"]).succeeds();
 }
 
 #[test]
 fn test_du_repeated_s() {
     let ts = TestScenario::new(util_name!());
 
-    ts.ucmd()
-        .args(&["-s", "-s"])
-        .succeeds();
+    ts.ucmd().args(&["-s", "-s"]).succeeds();
 }
 
 #[test]
 fn test_du_repeated_si() {
     let ts = TestScenario::new(util_name!());
 
-    ts.ucmd()
-        .args(&["-s", "--si", "--si"])
-        .succeeds();
+    ts.ucmd().args(&["-s", "--si", "--si"]).succeeds();
 }
 
 #[test]
 fn test_du_repeated_x() {
     let ts = TestScenario::new(util_name!());
 
-    ts.ucmd()
-        .args(&["-s", "-x", "-x"])
-        .succeeds();
+    ts.ucmd().args(&["-s", "-x", "-x"]).succeeds();
 }
 
 #[test]
 fn test_du_repeated_t() {
     let ts = TestScenario::new(util_name!());
 
-    ts.ucmd()
-        .args(&["-s", "-t", "100", "-t", "100"])
-        .succeeds();
+    ts.ucmd().args(&["-s", "-t", "100", "-t", "100"]).succeeds();
 }
 
 #[test]
 fn test_du_repeated_v() {
     let ts = TestScenario::new(util_name!());
 
-    ts.ucmd()
-        .args(&["-s", "-v", "-v"])
-        .succeeds();
+    ts.ucmd().args(&["-s", "-v", "-v"]).succeeds();
 }
 
 #[test]
