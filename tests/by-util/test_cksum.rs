@@ -627,6 +627,24 @@ fn test_check_sha2_tagged_missing_hint() {
         .stderr_contains("no properly formatted checksum lines found");
 }
 
+#[test]
+fn test_check_tagged_missing_algo() {
+    // When checking tagged lines, if the algorithm is missing, print an "improperly
+    // formatted" message rather than panic.
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+
+    let invalid1 = "(a) = d14a028c2a3a2bc9476102bb288234c415a2b01f828ea62ac5b3e42f";
+    let invalid2 = "a) = d14a028c2a3a2bc9476102bb288234c415a2b01f828ea62ac5b3e42f";
+    let invalid3 = "(a = d14a028c2a3a2bc9476102bb288234c415a2b01f828ea62ac5b3e42f";
+
+    ucmd.arg("-c")
+        .pipe_in(format!("{invalid1}\n{invalid2}\n{invalid3}"))
+        .fails()
+        .stderr_contains("no properly formatted checksum lines found");
+}
+
 #[rstest]
 #[case::md5("md5", "d41d8cd98f00b204e9800998ecf8427e")]
 #[case::sha1("sha1", "da39a3ee5e6b4b0d3255bfef95601890afd80709")]
