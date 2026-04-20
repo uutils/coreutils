@@ -62,17 +62,6 @@ pub fn block_size_from_env(vars: &[&str]) -> BlockSizeEnv {
     BlockSizeEnv::NotSet
 }
 
-/// Default block size when no env var or flag is set.
-///
-/// Returns 512 if `POSIXLY_CORRECT` is set, 1024 otherwise.
-pub fn default_block_size() -> u64 {
-    if std::env::var("POSIXLY_CORRECT").is_ok() {
-        512
-    } else {
-        1024
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -343,35 +332,5 @@ mod tests {
         );
 
         clear_env_vars(&["BLOCKSIZE"]);
-    }
-
-    #[test]
-    fn test_default_block_size_without_posixly_correct() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        clear_env_vars(&["POSIXLY_CORRECT"]);
-        assert_eq!(default_block_size(), 1024);
-    }
-
-    #[test]
-    fn test_default_block_size_with_posixly_correct() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        clear_env_vars(&["POSIXLY_CORRECT"]);
-
-        set_env_var("POSIXLY_CORRECT", "1");
-        assert_eq!(default_block_size(), 512);
-
-        clear_env_vars(&["POSIXLY_CORRECT"]);
-    }
-
-    #[test]
-    fn test_default_block_size_with_posixly_correct_empty() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        clear_env_vars(&["POSIXLY_CORRECT"]);
-
-        // Even an empty value means POSIXLY_CORRECT is set
-        set_env_var("POSIXLY_CORRECT", "");
-        assert_eq!(default_block_size(), 512);
-
-        clear_env_vars(&["POSIXLY_CORRECT"]);
     }
 }

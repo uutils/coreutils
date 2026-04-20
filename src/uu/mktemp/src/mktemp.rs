@@ -379,8 +379,14 @@ impl ValueParserFactory for OptionalPathBufParser {
     }
 }
 
+static mut IS_POSIXLY_CORRECT: bool = false;
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    unsafe {
+        IS_POSIXLY_CORRECT = env::var_os("POSIXLY_CORRECT").is_some();
+    }
+
     let args: Vec<_> = args.collect();
     let matches = uu_app().try_get_matches_from(&args).map_err(|e| {
         use clap::error::{ContextKind, ContextValue, ErrorKind};
@@ -403,7 +409,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // application logic.
     let options = Options::from(&matches);
 
-    if env::var_os("POSIXLY_CORRECT").is_some() {
+    if unsafe { IS_POSIXLY_CORRECT } {
         // If POSIXLY_CORRECT was set, template MUST be the last argument.
         if matches.contains_id(ARG_TEMPLATE) {
             // Template argument was provided, check if was the last one.

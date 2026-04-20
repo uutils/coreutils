@@ -120,7 +120,6 @@ pub mod options {
 }
 
 const DEFAULT_TERM_WIDTH: u16 = 80;
-const POSIXLY_CORRECT_BLOCK_SIZE: u64 = 512;
 const DEFAULT_BLOCK_SIZE: u64 = 1024;
 const DEFAULT_FILE_SIZE_BLOCK_SIZE: u64 = 1;
 
@@ -156,10 +155,10 @@ fn resolve_block_sizes_from_env(opt_kb: bool) -> (u64, u64) {
                     (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
                 }
                 parse_block_size::BlockSizeEnv::NotSet => {
-                    if std::env::var_os("POSIXLY_CORRECT").is_some() && !opt_kb {
-                        (DEFAULT_FILE_SIZE_BLOCK_SIZE, POSIXLY_CORRECT_BLOCK_SIZE)
+                    if opt_kb {
+                        (DEFAULT_FILE_SIZE_BLOCK_SIZE, 1024)
                     } else {
-                        (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
+                        (DEFAULT_FILE_SIZE_BLOCK_SIZE, crate::default_block_size())
                     }
                 }
             }

@@ -119,8 +119,14 @@ fn filter_flags(args: impl Iterator<Item = OsString>) -> (impl Iterator<Item = O
     (args, options)
 }
 
+static mut IS_POSIXLY_CORRECT: bool = false;
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    unsafe {
+        IS_POSIXLY_CORRECT = env::var_os("POSIXLY_CORRECT").is_some();
+    }
+
     // args[0] is the name of the binary.
     let mut args = args.skip(1).peekable();
 
@@ -135,47 +141,47 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // > escapes are always enabled. To echo the string ‘-n’, one of the
     // > characters can be escaped in either octal or hexadecimal
     // > representation. For example, echo -e '\x2dn'.
-    let is_posixly_correct = env::var_os("POSIXLY_CORRECT").is_some();
 
-    let (args, options): (Box<dyn Iterator<Item = OsString>>, Options) = if is_posixly_correct {
-        if args.peek().is_some_and(|arg| arg == "-n") {
-            // if POSIXLY_CORRECT is set and the first argument is the "-n" flag
-            // we filter flags normally but 'escaped' is activated nonetheless.
-            let (args, _) = filter_flags(args);
-            (
-                Box::new(args),
-                Options {
-                    trailing_newline: false,
-                    ..Options::posixly_correct_default()
-                },
-            )
+    let (args, options): (Box<dyn Iterator<Item = OsString>>, Options) =
+        if unsafe { IS_POSIXLY_CORRECT } {
+            if args.peek().is_some_and(|arg| arg == "-n") {
+                // if POSIXLY_CORRECT is set and the first argument is the "-n" flag
+                // we filter flags normally but 'escaped' is activated nonetheless.
+                let (args, _) = filter_flags(args);
+                (
+                    Box::new(args),
+                    Options {
+                        trailing_newline: false,
+                        ..Options::posixly_correct_default()
+                    },
+                )
+            } else {
+                // if POSIXLY_CORRECT is set and the first argument is not the "-n" flag
+                // we just collect all arguments as no arguments are interpreted as flags.
+                (Box::new(args), Options::posixly_correct_default())
+            }
+        } else if let Some(first_arg) = args.next() {
+            if first_arg == "--help" && args.peek().is_none() {
+                // If POSIXLY_CORRECT is not set and the first argument
+                // is `--help`, GNU coreutils prints the help message.
+                //
+                // Verify this using:
+                //
+                //   POSIXLY_CORRECT=1 echo --help
+                //                     echo --help
+                uu_app().print_help()?;
+                return Ok(());
+            } else if first_arg == "--version" && args.peek().is_none() {
+                writeln!(stdout(), "echo {}", crate_version!())?;
+                return Ok(());
+            }
+
+            // if POSIXLY_CORRECT is not set we filter the flags normally
+            let (args, options) = filter_flags(std::iter::once(first_arg).chain(args));
+            (Box::new(args), options)
         } else {
-            // if POSIXLY_CORRECT is set and the first argument is not the "-n" flag
-            // we just collect all arguments as no arguments are interpreted as flags.
-            (Box::new(args), Options::posixly_correct_default())
-        }
-    } else if let Some(first_arg) = args.next() {
-        if first_arg == "--help" && args.peek().is_none() {
-            // If POSIXLY_CORRECT is not set and the first argument
-            // is `--help`, GNU coreutils prints the help message.
-            //
-            // Verify this using:
-            //
-            //   POSIXLY_CORRECT=1 echo --help
-            //                     echo --help
-            uu_app().print_help()?;
-            return Ok(());
-        } else if first_arg == "--version" && args.peek().is_none() {
-            writeln!(stdout(), "echo {}", crate_version!())?;
-            return Ok(());
-        }
-
-        // if POSIXLY_CORRECT is not set we filter the flags normally
-        let (args, options) = filter_flags(std::iter::once(first_arg).chain(args));
-        (Box::new(args), options)
-    } else {
-        (Box::new(args), Options::default())
-    };
+            (Box::new(args), Options::default())
+        };
 
     execute(&mut stdout().lock(), args, options)?;
 

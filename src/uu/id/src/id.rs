@@ -128,9 +128,15 @@ struct State {
     user_specified: bool,
 }
 
+static mut IS_POSIXLY_CORRECT: bool = false;
+
 #[uucore::main(no_signals)]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    unsafe {
+        IS_POSIXLY_CORRECT = std::env::var_os("POSIXLY_CORRECT").is_some();
+    }
+
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
     let mut lock = io::stdout().lock();
 
@@ -737,10 +743,7 @@ fn id_print(state: &State, groups: &[u32]) -> io::Result<()> {
     )?;
 
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-    if state.selinux_supported
-        && !state.user_specified
-        && std::env::var_os("POSIXLY_CORRECT").is_none()
-    {
+    if state.selinux_supported && !state.user_specified && !unsafe { IS_POSIXLY_CORRECT } {
         // print SElinux context (does not depend on "-Z")
         if let Ok(context) = selinux::SecurityContext::current(false) {
             let bytes = context.as_bytes();
@@ -749,10 +752,7 @@ fn id_print(state: &State, groups: &[u32]) -> io::Result<()> {
     }
 
     #[cfg(all(feature = "smack", target_os = "linux"))]
-    if state.smack_supported
-        && !state.user_specified
-        && std::env::var_os("POSIXLY_CORRECT").is_none()
-    {
+    if state.smack_supported && !state.user_specified && !unsafe { IS_POSIXLY_CORRECT } {
         // print SMACK label (does not depend on "-Z")
         if let Ok(label) = uucore::smack::get_smack_label_for_self() {
             write!(lock, " context={label}")?;
