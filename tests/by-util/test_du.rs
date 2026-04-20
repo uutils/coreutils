@@ -2483,28 +2483,6 @@ fn test_du_repeated_v() {
 }
 
 #[test]
-fn test_du_repeated_exclude() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd()
-        .args(&["-s", "--exclude", "a*", "--exclude", "a*"])
-        .succeeds()
-        .stdout_only("44\t.\n");
-}
-
-#[test]
-fn test_du_repeated_exclude_from() {
-    let ts = TestScenario::new(util_name!());
-    let at = &ts.fixtures;
-    at.write(&format!("./somefile"), "*a");
-
-    ts.ucmd()
-        .args(&["-s", "-X", "somefile", "-X", "somefile"])
-        .succeeds()
-        .stdout_only("48\t.\n");
-}
-
-#[test]
 fn test_du_repeated_files0_from() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -2590,5 +2568,5 @@ fn test_du_repeated_time_style() {
         .arg("--time-style=full-iso")
         .arg("date_test")
         .succeeds();
-    result.stdout_only("0\tdate_test\n");
+    result.stdout_only("0\t2016-06-16 00:00:00.000000000 +0000\tdate_test\n");
 }

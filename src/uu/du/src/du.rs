@@ -1457,7 +1457,6 @@ pub fn uu_app() -> Command {
                 .value_name("PATTERN")
                 .help(translate!("du-help-exclude"))
                 .action(ArgAction::Append)
-                .overrides_with(options::EXCLUDE),
         )
         .arg(
             Arg::new(options::EXCLUDE_FROM)
@@ -1496,7 +1495,7 @@ pub fn uu_app() -> Command {
                 .long(options::TIME_STYLE)
                 .value_name("STYLE")
                 .help(translate!("du-help-time-style"))
-                .overrides_with(options::TIME),
+                .overrides_with(options::TIME_STYLE),
         )
         .arg(
             Arg::new(options::FILE)
