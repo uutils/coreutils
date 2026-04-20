@@ -478,7 +478,7 @@ fn test_ls_devices() {
     at.mkdir("some-dir1");
 
     // Regex tests correct device ID and correct (no pad) spacing for a single file
-    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    #[cfg(target_vendor = "apple")]
     {
         scene
             .ucmd()
@@ -5056,14 +5056,13 @@ fn test_tabsize_formatting() {
 
 #[cfg(any(
     target_os = "linux",
-    target_os = "macos",
-    target_os = "ios",
     target_os = "freebsd",
     target_os = "dragonfly",
     target_os = "netbsd",
     target_os = "openbsd",
     target_os = "illumos",
-    target_os = "solaris"
+    target_os = "solaris",
+    target_vendor = "apple"
 ))]
 #[test]
 fn test_device_number() {

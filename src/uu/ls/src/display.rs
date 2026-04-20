@@ -37,15 +37,14 @@ use uucore::entries;
 use uucore::fsxattr::has_acl;
 #[cfg(any(
     target_os = "linux",
-    target_os = "macos",
     target_os = "android",
-    target_os = "ios",
     target_os = "freebsd",
     target_os = "dragonfly",
     target_os = "netbsd",
     target_os = "openbsd",
     target_os = "illumos",
-    target_os = "solaris"
+    target_os = "solaris",
+    target_vendor = "apple"
 ))]
 use uucore::libc::{dev_t, major, minor};
 use uucore::{
@@ -630,15 +629,14 @@ fn display_date(
 fn display_len_or_rdev(metadata: &Metadata, config: &Config) -> SizeOrDeviceId {
     #[cfg(any(
         target_os = "linux",
-        target_os = "macos",
         target_os = "android",
-        target_os = "ios",
         target_os = "freebsd",
         target_os = "dragonfly",
         target_os = "netbsd",
         target_os = "openbsd",
         target_os = "illumos",
-        target_os = "solaris"
+        target_os = "solaris",
+        target_vendor = "apple"
     ))]
     {
         let ft = metadata.file_type();
