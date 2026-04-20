@@ -3945,7 +3945,6 @@ dependencies = [
  "fluent",
  "itertools 0.14.0",
  "memchr",
- "regex",
  "thiserror 2.0.18",
  "uucore",
 ]
